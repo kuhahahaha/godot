@@ -540,6 +540,8 @@ public:
 	virtual Error particles_external_withdraw(RID p_particles, const PackedByteArray &p_generation) override;
 	virtual Dictionary particles_external_poll(RID p_particles, const PackedByteArray &p_generation) override;
 	bool particles_is_external(RID p_particles) const override;
+	// Validates the original immutable output owner; no tag grants custody.
+	Error particles_scene_validate_receiver(RID p_particles, uint64_t p_generation, const RenderingDevice *p_device) const;
 	// Core-only native cache/read providers. No ClassDB method or record grant.
 	uint32_t particles_external_surface_count(RID p_particles) const;
 	Error particles_external_surface_acquire(RID p_particles, uint32_t p_ordinal, ExternalSurfaceSelection &r_selection);

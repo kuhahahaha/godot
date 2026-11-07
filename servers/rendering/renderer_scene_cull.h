@@ -50,10 +50,15 @@
 #include "modules/modules_enabled.gen.h"
 
 class RenderingLightCuller;
+class ParticlesScenePairsTestFixture;
+class RenderingDevice;
 
 class RendererSceneCull : public RenderingMethod {
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 	friend class RenderCaptureTestAccess;
+#endif
+#if defined(TESTS_ENABLED) && defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+	friend class ParticlesScenePairsTestFixture;
 #endif
 public:
 	struct SceneSphereSource {
@@ -62,6 +67,17 @@ public:
 		Transform3D transform;
 		float radius = 0;
 	};
+	struct SceneSphereSnapshot {
+		Transform3D receiver_transform;
+		AABB query_bounds;
+		uint64_t pose_revision = 0, bounds_revision = 0, pair_revision = 0;
+		Vector<SceneSphereSource> sources;
+	};
+	// RT-only original owner entry; no phase or record permission is issued.
+	Error scene_receiver_commit_query(RID p_receiver, uint64_t p_generation, const RenderingDevice *p_device,
+			const Transform3D &p_transform, const AABB &p_local_envelope, const AABB &p_world_query, uint64_t p_bounds_revision);
+	Error scene_sphere_snapshot(RID p_receiver, uint64_t p_generation, const RenderingDevice *p_device,
+			uint32_t p_max_sources, SceneSphereSnapshot &r_snapshot) const;
 	bool scene_sphere_snapshot_pairs(RID p_receiver, uint32_t p_max_sources, Vector<SceneSphereSource> &r_sources) const;
 	struct SceneHeightfieldSource {
 		uint64_t source_key = 0;
@@ -431,6 +447,10 @@ public:
 		RID mesh_instance; //only used for meshes and when skeleton/blendshapes exist
 
 		Transform3D transform;
+		RID scene_query_base;
+		AABB scene_query_world;
+		uint64_t scene_query_generation = 0, scene_pose_revision = 0, scene_bounds_revision = 0, scene_pair_revision = 1;
+		bool scene_query_committed = false, scene_pair_exhausted = false;
 		bool teleported = false;
 
 		float lod_bias;
@@ -509,12 +529,26 @@ public:
 
 		DependencyTracker dependency_tracker;
 
+		// A kept physical BVH pair can change eligible kind/shape/pose. Revision
+		// follows the original source mutation, never a later snapshot hash.
+		void scene_source_changed() {
+			if (base_type != RSE::INSTANCE_PARTICLES_COLLISION) return;
+			for (const SelfList<InstancePair> *link = pairs.first(); link; link = link->next()) {
+				InstancePair *pair = link->self();
+				Instance *receiver = pair->a == this ? pair->b : pair->a;
+				if (receiver->base_type != RSE::INSTANCE_PARTICLES) continue;
+				if (receiver->scene_pair_revision == UINT64_MAX) receiver->scene_pair_exhausted = true;
+				else ++receiver->scene_pair_revision;
+			}
+		}
+
 		static void dependency_changed(Dependency::DependencyChangedNotification p_notification, DependencyTracker *tracker) {
 			Instance *instance = (Instance *)tracker->userdata;
 			switch (p_notification) {
 				case Dependency::DEPENDENCY_CHANGED_SKELETON_DATA:
 				case Dependency::DEPENDENCY_CHANGED_SKELETON_BONES:
 				case Dependency::DEPENDENCY_CHANGED_AABB: {
+					instance->scene_source_changed();
 					singleton->_instance_queue_update(instance, true, false);
 
 				} break;

@@ -173,6 +173,7 @@ private:
 
 public:
 	static Transform3D heightfield_capture_camera(const Transform3D &p_transform, float p_scaled_half_height);
+	static bool heightfield_capture_preflight(const Transform3D &p_transform, const Vector3 &p_extents, Transform3D &r_camera, Projection &r_projection);
 	static RendererSceneRenderRD *get_singleton() { return singleton; }
 
 	/* LIGHTING */

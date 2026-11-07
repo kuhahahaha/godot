@@ -35,6 +35,18 @@
 #include <limits>
 
 namespace RendererRD {
+Error ParticlesStorage::particles_scene_validate_receiver(RID p_particles, uint64_t p_generation, const RenderingDevice *p_device) const {
+	const Particles *particles = particles_owner.get_or_null(p_particles);
+	if (!particles || !particles->external || !p_generation || !p_device) return ERR_INVALID_PARAMETER;
+	const ExternalOutputOwner &owner = *particles->external;
+	if (owner.generation != p_generation || owner.device != p_device) return ERR_INVALID_DATA;
+	if (!owner.admits_work() || !owner.generation_registry || !owner.generation_root_matches(owner.generation_pin) ||
+			!owner.generation_registry->production_output_pin_matches(owner.generation_pin, owner.generation_request, *owner.device)) return ERR_UNAVAILABLE;
+	if (!owner.config.query_enabled || !owner.config.query_bounds.is_finite() ||
+			!owner.config.query_bounds.get_end().is_finite() || !owner.config.query_bounds.has_volume()) return ERR_INVALID_DATA;
+	return OK;
+}
+
 namespace {
 Dictionary output_error(Error p_error, const StringName &p_detail) {
 	Dictionary result;

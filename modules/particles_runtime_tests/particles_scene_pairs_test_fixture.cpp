@@ -44,11 +44,44 @@ void ParticlesScenePairsTestFixture::run() {
 	scene->update_dirty_instances();
 	Vector<RendererSceneCull::SceneSphereSource> a, b;
 	checks["same_base_receivers"] = scene->scene_sphere_snapshot_pairs(left, 4, a) && a.size() == 1 && scene->scene_sphere_snapshot_pairs(right, 4, b) && b.is_empty();
+	// The managed receiver entry must not promote ordinary particles to an
+	// ExternalOutput owner or mutate its transform/bounds on rejection.
+	RendererSceneCull::SceneSphereSnapshot rejected_snapshot;
+	rejected_snapshot.pose_revision = 99;
+	checks["ordinary_receiver_not_promoted"] = scene->scene_receiver_commit_query(left, 1, RenderingDevice::get_singleton(),
+			Transform3D(Basis(), Vector3(50, 0, 0)), AABB(Vector3(-1, -1, -1), Vector3(2, 2, 2)),
+			AABB(Vector3(49, -1, -1), Vector3(2, 2, 2)), 1) != OK;
+	checks["ordinary_snapshot_rejected_and_empty"] = scene->scene_sphere_snapshot(left, 1, RenderingDevice::get_singleton(), 4, rejected_snapshot) != OK &&
+			rejected_snapshot.pose_revision == 0 && rejected_snapshot.sources.is_empty();
+	scene->update_dirty_instances();
+	checks["rejected_commit_preserves_pairs"] = scene->scene_sphere_snapshot_pairs(left, 4, a) && a.size() == 1;
 	const uint64_t first_key = a.is_empty() ? 0 : a[0].source_key;
 	const uint64_t first_revision = a.is_empty() ? 0 : a[0].shape_revision;
+	const auto *left_instance = scene->instance_owner.get_or_null(left);
+	uint64_t membership_revision = left_instance->scene_pair_revision;
+	// Same broad AABB remains paired while eligible collider kind changes.
+	storage->particles_collision_set_box_extents(sphere, Vector3(0.5f, 0.5f, 0.5f));
+	storage->particles_collision_set_collision_type(sphere, RSE::PARTICLES_COLLISION_TYPE_BOX_COLLIDE);
+	scene->update_dirty_instances();
+	checks["kept_pair_type_revision"] = scene->scene_sphere_snapshot_pairs(left, 4, a) && a.is_empty() && left_instance->scene_pair_revision > membership_revision;
+	membership_revision = left_instance->scene_pair_revision;
+	storage->particles_collision_set_collision_type(sphere, RSE::PARTICLES_COLLISION_TYPE_SPHERE_COLLIDE);
+	scene->update_dirty_instances();
+	checks["kept_pair_type_restore_revision"] = scene->scene_sphere_snapshot_pairs(left, 4, a) && a.size() == 1 && left_instance->scene_pair_revision > membership_revision;
+	membership_revision = left_instance->scene_pair_revision;
+	scene->instance_set_transform(source, Transform3D(Basis(), Vector3(0.125f, 0, 0)));
+	scene->update_dirty_instances();
+	checks["kept_pair_pose_revision"] = scene->scene_sphere_snapshot_pairs(left, 4, a) && a.size() == 1 && left_instance->scene_pair_revision > membership_revision;
+	membership_revision = left_instance->scene_pair_revision;
+	storage->particles_collision_set_sphere_radius(sphere, 0.625f);
+	scene->update_dirty_instances();
+	checks["kept_pair_shape_revision"] = scene->scene_sphere_snapshot_pairs(left, 4, a) && a.size() == 1 && left_instance->scene_pair_revision > membership_revision;
+	membership_revision = left_instance->scene_pair_revision;
+
+
 	scene->instance_set_visible(source, false);
 	scene->update_dirty_instances();
-	checks["source_visibility"] = scene->scene_sphere_snapshot_pairs(left, 4, a) && a.is_empty();
+	checks["source_visibility"] = scene->scene_sphere_snapshot_pairs(left, 4, a) && a.is_empty() && left_instance->scene_pair_revision > membership_revision;
 	scene->instance_set_visible(source, true);
 	scene->instance_set_layer_mask(left, 2);
 	storage->particles_collision_set_cull_mask(sphere, 1);
