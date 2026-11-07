@@ -1925,6 +1925,18 @@ Error Registry::production_output_owner_bind(ProductionOutputPin &pin, Rendering
 	if (request.output_owner_cursor == UINT32_MAX) {
 		request.output_owner_cursor = pin.cell_index;
 	}
+	if (kind == ProductionOutputOwnerKind::GENERATION) {
+		for (uint32_t i = 0; i < request.resource_count; ++i) {
+			auto &resource = request.resources[i];
+			if (resource.request == &request && resource.request_serial == request.serial &&
+					resource.declaration.resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1 &&
+					resource.declaration.ownership == GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 &&
+					resource.metadata_created && !resource.metadata_returned && resource.metadata_data && resource.metadata_consumer &&
+					resource.metadata_root_serial == pin.serial) {
+				resource.metadata_generation_bound = true;
+			}
+		}
+	}
 	return OK;
 }
 
@@ -2067,13 +2079,19 @@ Error Registry::production_output_generation_return(ProductionOutputPin &pin, Re
 	if (projected != OK) {
 		return projected;
 	}
-	// The placement owner remains alive until the released particles RID is
-	// actually freed. Only this root's own CPU allocation may outlive its pin;
-	// the complete request report and reclaim gate still include that resource.
+	// Each installed generation's placement owner remains alive until its RID
+	// is actually freed. Sibling generations must be able to return their roots
+	// independently, including after a sibling root was unpinned but before its
+	// particles_free. A metadata bind to an uninstalled pin is not this proof.
+	// The complete request report and reclaim gate still count every allocation.
 	uint32_t owner_metadata_pending = 0;
 	for (uint32_t i = 0; i < request.resource_count; ++i) {
 		const auto &resource = request.resources[i];
-		owner_metadata_pending += resource.metadata_data && resource.metadata_root_serial == pin.serial;
+		owner_metadata_pending += resource.request == &request && resource.request_serial == request.serial &&
+				resource.declaration.resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1 &&
+				resource.declaration.ownership == GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 &&
+				resource.metadata_created && !resource.metadata_returned && resource.metadata_data && resource.metadata_consumer &&
+				resource.metadata_root_serial && resource.metadata_generation_bound;
 	}
 	if (request.source_device_lost || (request.compute_list_open || request.draw_list_open) || (!request.cancelled && request.next_action != request.action_count) ||
 			terminal.root_source.possible_obligations || terminal.root_source.physical_returns_pending != owner_metadata_pending ||

@@ -1,0 +1,22 @@
+{
+  "draw": {
+    "command": [
+      "bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*checked draw leaves require the public begin list ID before effects*,*original indirect draw retains exact identity native prefix and transfer*"
+    ],
+    "exit_code": 1,
+    "log": "work/checked-draw-red.log"
+  },
+  "metadata": {
+    "command": [
+      "bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*two actual SceneOnly generations terminal before either metadata allocation returns*"
+    ],
+    "exit_code": -6,
+    "log": "work/checked-metadata-red.log"
+  }
+}

@@ -1,0 +1,295 @@
+diff --git a/servers/rendering/rendering_device.cpp b/servers/rendering/rendering_device.cpp
+index ddc1e80e04..38638ef6d4 100644
+--- a/servers/rendering/rendering_device.cpp
++++ b/servers/rendering/rendering_device.cpp
+@@ -6880,6 +6880,9 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_bind_render_pipeli
+ 	DrawAppendResult result;
+ 	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+ 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
++	if (p_capture) {
++		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
++	}
+ 
+ 	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
+ 
+@@ -7724,6 +7727,9 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_indirect_reco
+ 	DrawAppendResult result;
+ 	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+ 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
++	if (p_capture) {
++		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
++	}
+ 
+ 	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
+ 
+@@ -7924,6 +7930,9 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_enable_scissor_rec
+ 	DrawAppendResult result;
+ 	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+ 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
++	if (p_capture) {
++		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
++	}
+ 
+ 	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
+ 
+@@ -14904,7 +14913,7 @@ RenderingDevice::SourceDrawAppendResult RenderingDevice::_record_source_draw_ind
+ 		result.native.error = result.observed.error;
+ 		return result;
+ 	}
+-	if (list != ID_TYPE_DRAW_LIST) {
++	if (list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT)) {
+ 		result.observed.error = ERR_INVALID_PARAMETER;
+ 		result.native.error = result.observed.error;
+ 		return result;
+diff --git a/tests/servers/rendering/test_checked_draw_bind.cpp b/tests/servers/rendering/test_checked_draw_bind.cpp
+index 7e400615de..3721735876 100644
+--- a/tests/servers/rendering/test_checked_draw_bind.cpp
++++ b/tests/servers/rendering/test_checked_draw_bind.cpp
+@@ -41,6 +41,14 @@ class TestCheckedBindAccess {
+ 	using RDG = RenderingDeviceGraph;
+ 	struct Driver : TransferTestDriverBase {
+ 		Vector<uint64_t> payload;
++		RenderPassID render_pass_create(VectorView<Attachment> p_attachments, VectorView<Subpass> p_subpasses, VectorView<SubpassDependency> p_dependencies, uint32_t p_view_count, AttachmentReference) override {
++			CHECK(p_attachments.size() == 0);
++			CHECK(p_subpasses.size() == 1);
++			CHECK(p_dependencies.size() == 0);
++			CHECK(p_view_count == 1);
++			return RenderPassID(71);
++		}
++		void render_pass_free(RenderPassID p_render_pass) override { CHECK(p_render_pass == RenderPassID(71)); }
+ 		uint64_t limit_get(Limit p_limit) override {
+ 			CHECK(p_limit == LIMIT_MAX_BOUND_UNIFORM_SETS);
+ 			return 8;
+@@ -171,6 +179,69 @@ class TestCheckedBindAccess {
+ 	}
+ 
+ public:
++	static void checked_list_ids() {
++		Fixture f;
++		f.end();
++		const RID framebuffer = f.rd.framebuffer_create_empty(Size2i(16, 16));
++		REQUIRE(framebuffer.is_valid());
++		// Success uses the public begin result, never a fabricated enum value.
++		const RD::DrawListID list = f.rd.draw_list_begin(framebuffer);
++		REQUIRE(list == Fixture::LIST);
++		REQUIRE(f.rd.draw_list.active);
++		REQUIRE(f.rd.draw_graph.contains_record(f.rd.draw_list.begin_handle));
++		RD::RenderPipeline pipeline;
++		pipeline.driver_id = RDD::PipelineID(81);
++		pipeline.validation.framebuffer_format = f.rd.draw_list_framebuffer_format;
++		const RID pipeline_rid = f.rd.render_pipeline_owner.make_rid(pipeline);
++		RD::Buffer buffer;
++		buffer.driver_id = RDD::BufferID(82);
++		buffer.size = 16;
++		buffer.usage = RDD::BUFFER_USAGE_INDIRECT_BIT;
++		const RID buffer_rid = f.rd.storage_buffer_owner.make_rid(buffer);
++		const Rect2 scissor(1, 1, 8, 8);
++		const RD::DrawListID wrong_lists[] = { RD::ID_TYPE_DRAW_LIST, RD::ID_TYPE_COMPUTE_LIST, int64_t(RD::ID_TYPE_COMPUTE_LIST) << RD::ID_BASE_SHIFT, list + 1 };
++		ERR_PRINT_OFF;
++		for (RD::DrawListID wrong : wrong_lists) {
++			const uint32_t before = f.rd.draw_graph.qualification_command_count();
++			const auto check_rejected = [&](const RD::DrawAppendResult &result) {
++				CHECK(result.error == ERR_INVALID_PARAMETER);
++				CHECK(result.effect == RD::NativeAppendEffect::NoNewEffect);
++				CHECK_FALSE(result.draw_handle.is_valid());
++				CHECK(result.prefix_count == 0);
++				CHECK_FALSE(result.capture_complete);
++				CHECK_FALSE(result.has_transfer);
++				CHECK(f.rd.draw_graph.qualification_command_count() == before);
++				CHECK_FALSE(f.rd.draw_list.state.pipeline.is_valid());
++				CHECK_FALSE(f.rd.draw_list.state.checked_push_constant_supplied);
++				CHECK(f.rd.draw_list.state.draw_count == 0);
++				CHECK(f.rd.draw_list.active);
++			};
++			check_rejected(f.rd._draw_list_bind_render_pipeline_recorded(wrong, pipeline_rid));
++			check_rejected(f.rd._draw_list_enable_scissor_recorded(wrong, scissor));
++			check_rejected(f.rd._draw_list_draw_indirect_recorded(wrong, false, buffer_rid, 0, 1, 0));
++		}
++		ERR_PRINT_ON;
++		for (const auto &result : {
++				 f.rd._draw_list_bind_render_pipeline_recorded(list, pipeline_rid),
++				 f.rd._draw_list_enable_scissor_recorded(list, scissor),
++				 f.rd._draw_list_draw_indirect_recorded(list, false, buffer_rid, 0, 1, 0) }) {
++			CHECK(result.error == OK);
++			CHECK(result.effect == RD::NativeAppendEffect::Recorded);
++			CHECK(result.capture_complete);
++			CHECK(f.rd.draw_graph.contains_record(result.draw_handle));
++		}
++		CHECK(f.rd.draw_list.state.pipeline == pipeline_rid);
++		CHECK(f.rd.draw_list.state.draw_count == 1);
++		f.end();
++		RDG::framebuffer_cache_free(&f.driver, f.rd.framebuffer_owner.get_or_null(framebuffer)->framebuffer_cache);
++		f.rd.framebuffer_owner.free(framebuffer);
++		for (const KeyValue<RD::FramebufferFormatID, RD::FramebufferFormat> &format : f.rd.framebuffer_formats) {
++			f.driver.render_pass_free(format.value.render_pass);
++		}
++		f.rd.framebuffer_formats.clear();
++		f.rd.render_pipeline_owner.free(pipeline_rid);
++		f.rd.storage_buffer_owner.free(buffer_rid);
++	}
+ 	static void uniform_state() {
+ 		Fixture f;
+ 		const RID first = f.uniform(51), next = f.uniform(52);
+@@ -352,6 +423,9 @@ public:
+ 	}
+ };
+ 
++TEST_CASE("[RenderingDevice][CheckedBind] checked draw leaves require the public begin list ID before effects") {
++	TestCheckedBindAccess::checked_list_ids();
++}
+ TEST_CASE("[RenderingDevice][CheckedBind] uniform acceptance records CPU state without a native instruction") {
+ 	TestCheckedBindAccess::uniform_state();
+ }
+diff --git a/tests/servers/rendering/test_external_output_contract.cpp b/tests/servers/rendering/test_external_output_contract.cpp
+index befe3859fa..62ea47047e 100644
+--- a/tests/servers/rendering/test_external_output_contract.cpp
++++ b/tests/servers/rendering/test_external_output_contract.cpp
+@@ -128,7 +128,7 @@ public:
+ 		return p_device._buffer_copy_recorded(p_source, p_destination, p_source_offset, p_destination_offset, p_size);
+ 	}
+ 	static auto draw(RenderingDevice &p_device, RID p_buffer, uint32_t p_offset, bool p_indices = false) {
+-		return p_device._draw_list_draw_indirect_recorded(0, p_indices, p_buffer, p_offset, 1, 20);
++		return p_device._draw_list_draw_indirect_recorded(int64_t(RenderingDevice::ID_TYPE_DRAW_LIST) << RenderingDevice::ID_BASE_SHIFT, p_indices, p_buffer, p_offset, 1, 20);
+ 	}
+ 	static bool contains(RenderingDevice &p_device, const RenderingDeviceGraph::RecordHandle &p_handle) { return p_device.draw_graph.contains_record(p_handle); }
+ 	static void suspended(RenderingDevice &p_device, Error p_error) { p_device.frame_wait_error = p_error; }
+diff --git a/tests/servers/rendering/test_record_source.cpp b/tests/servers/rendering/test_record_source.cpp
+index 7d2d6e2d18..2e0d32ff11 100644
+--- a/tests/servers/rendering/test_record_source.cpp
++++ b/tests/servers/rendering/test_record_source.cpp
+@@ -553,14 +553,28 @@ public:
+ 		using State = CheckedRecordAppend::State;
+ 		const OriginalOperationIdentity identity{ 31, 32, 33, 34, 4, 8 };
+ 		RenderingDevice device;
+-		Driver driver;
++		struct IndirectDrawDriver : Driver {
++			RenderPassID render_pass_create(VectorView<Attachment> p_attachments, VectorView<Subpass> p_subpasses, VectorView<SubpassDependency> p_dependencies, uint32_t p_view_count, AttachmentReference) override {
++				CHECK(p_attachments.size() == 0);
++				CHECK(p_subpasses.size() == 1);
++				CHECK(p_dependencies.size() == 0);
++				CHECK(p_view_count == 1);
++				return RenderPassID(71);
++			}
++			void render_pass_free(RenderPassID p_render_pass) override { CHECK(p_render_pass == RenderPassID(71)); }
++		} driver;
+ 		device.driver = &driver;
+ 		device.render_thread_id = Thread::get_caller_id();
+ 		device.is_main_instance = false; // Same owner-thread semantics as copy/dispatch.
+ 		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+ 		device.draw_graph.begin();
+-		device.draw_graph.add_draw_list_begin(RDD::RenderPassID(1), RDD::FramebufferID(2), Rect2i(), {}, {}, {}, 0, false);
+-		device.draw_list.active = true;
++		// Exercise the public begin path; every accepted call below uses its returned ID.
++		const RID framebuffer = device.framebuffer_create_empty(Size2i(16, 16));
++		REQUIRE(framebuffer.is_valid());
++		const RenderingDevice::DrawListID list = device.draw_list_begin(framebuffer);
++		REQUIRE(list == (int64_t(RenderingDevice::ID_TYPE_DRAW_LIST) << RenderingDevice::ID_BASE_SHIFT));
++		CHECK(list != RenderingDevice::ID_TYPE_DRAW_LIST);
++		REQUIRE(device.draw_list.active);
+ #ifdef DEBUG_ENABLED
+ 		device.draw_list.validation.pipeline_active = true;
+ 		device.draw_list.validation.pipeline_vertex_format = RenderingDevice::INVALID_ID;
+@@ -580,7 +594,7 @@ public:
+ 		device.transfer_worker_pool_size = 1;
+ 		device.transfer_worker_operation_used_by_draw.resize(1);
+ 		device.transfer_worker_operation_used_by_draw[0] = 0;
+-		const auto missing = device._record_source_draw_indirect({}, RenderingDevice::ID_TYPE_DRAW_LIST, false, rid, 0, 1, 20);
++		const auto missing = device._record_source_draw_indirect({}, list, false, rid, 0, 1, 20);
+ 		CHECK(missing.observed.error == ERR_INVALID_DATA);
+ 		CHECK(missing.observed.state == State::Rejected);
+ 		CHECK_FALSE(missing.observed.operation_bound);
+@@ -588,7 +602,7 @@ public:
+ 		CHECK(missing.native.prefix_count == 0);
+ 		CHECK_FALSE(missing.native.draw_handle.is_valid());
+ 		device.render_thread_id ^= 1;
+-		const auto wrong_thread = device._record_source_draw_indirect(identity, RenderingDevice::ID_TYPE_DRAW_LIST, false, rid, 0, 1, 20);
++		const auto wrong_thread = device._record_source_draw_indirect(identity, list, false, rid, 0, 1, 20);
+ 		device.render_thread_id = Thread::get_caller_id();
+ 		CHECK(wrong_thread.observed.error == ERR_UNAUTHORIZED);
+ 		CHECK(wrong_thread.observed.state == State::Rejected);
+@@ -596,6 +610,22 @@ public:
+ 		CHECK(same_original_operation_identity(wrong_thread.observed.operation, identity));
+ 		CHECK(wrong_thread.native.effect == RenderingDevice::NativeAppendEffect::NoNewEffect);
+ 		CHECK_FALSE(wrong_thread.native.draw_handle.is_valid());
++		const uint32_t command_count = device.draw_graph.qualification_command_count();
++		const auto bare_list = device._record_source_draw_indirect(identity, RenderingDevice::ID_TYPE_DRAW_LIST, false, rid, 0, 1, 20);
++		CHECK(bare_list.observed.error == ERR_INVALID_PARAMETER);
++		CHECK(bare_list.native.error == ERR_INVALID_PARAMETER);
++		CHECK(bare_list.observed.state == State::Rejected);
++		CHECK(bare_list.observed.operation_bound);
++		CHECK(same_original_operation_identity(bare_list.observed.operation, identity));
++		CHECK(bare_list.native.effect == RenderingDevice::NativeAppendEffect::NoNewEffect);
++		CHECK(bare_list.native.prefix_count == 0);
++		CHECK_FALSE(bare_list.native.capture_complete);
++		CHECK_FALSE(bare_list.observed.handle.is_valid());
++		CHECK_FALSE(bare_list.native.draw_handle.is_valid());
++		CHECK(device.draw_graph.qualification_command_count() == command_count);
++		CHECK(device.draw_list.state.draw_count == 0);
++		CHECK(device.storage_buffer_owner.get_or_null(rid)->transfer_worker_index == 0);
++		CHECK(device.transfer_worker_operation_used_by_draw[0] == 0);
+ 		const auto wrong_list = device._record_source_draw_indirect(identity, RenderingDevice::ID_TYPE_COMPUTE_LIST, false, rid, 0, 1, 20);
+ 		CHECK(wrong_list.observed.error == ERR_INVALID_PARAMETER);
+ 		CHECK(wrong_list.observed.state == State::Rejected);
+@@ -604,7 +634,7 @@ public:
+ 		CHECK_FALSE(wrong_list.native.draw_handle.is_valid());
+ 		CHECK(device.draw_list.state.draw_count == 0);
+ 		ERR_PRINT_OFF;
+-		const auto bad_span = device._record_source_draw_indirect(identity, RenderingDevice::ID_TYPE_DRAW_LIST, false, rid, 0, 2, 20);
++		const auto bad_span = device._record_source_draw_indirect(identity, list, false, rid, 0, 2, 20);
+ 		CHECK(bad_span.observed.error == ERR_INVALID_PARAMETER);
+ 		CHECK(bad_span.native.error == bad_span.observed.error);
+ 		CHECK(bad_span.observed.state == State::Rejected);
+@@ -615,13 +645,13 @@ public:
+ 		CHECK(device.draw_list.state.draw_count == 0);
+ 		CHECK(device.storage_buffer_owner.get_or_null(rid)->transfer_worker_index == 0);
+ 		device.frame_wait_error = ERR_CANT_ACQUIRE_RESOURCE;
+-		const auto suspended = device._record_source_draw_indirect(identity, RenderingDevice::ID_TYPE_DRAW_LIST, false, rid, 0, 1, 20);
++		const auto suspended = device._record_source_draw_indirect(identity, list, false, rid, 0, 1, 20);
+ 		device.frame_wait_error = OK;
+ 		ERR_PRINT_ON;
+ 		CHECK(suspended.observed.error == ERR_CANT_ACQUIRE_RESOURCE);
+ 		CHECK(suspended.native.error == ERR_CANT_ACQUIRE_RESOURCE);
+ 		CHECK(suspended.observed.state == State::Rejected);
+-		const auto drawn = device._record_source_draw_indirect(identity, RenderingDevice::ID_TYPE_DRAW_LIST, false, rid, 0, 1, 20);
++		const auto drawn = device._record_source_draw_indirect(identity, list, false, rid, 0, 1, 20);
+ 		CHECK(drawn.observed.error == OK);
+ 		CHECK(drawn.observed.state == State::Appended);
+ 		CHECK(drawn.observed.operation_bound);
+@@ -649,7 +679,7 @@ public:
+ 		binding.uniform_set_format = 1;
+ 		binding.bound = false;
+ 		ERR_PRINT_OFF;
+-		const auto prefix = device._record_source_draw_indirect(identity, RenderingDevice::ID_TYPE_DRAW_LIST, true, rid, 0, 1, 20);
++		const auto prefix = device._record_source_draw_indirect(identity, list, true, rid, 0, 1, 20);
+ 		ERR_PRINT_ON;
+ 		CHECK(prefix.observed.error == ERR_INVALID_PARAMETER);
+ 		CHECK(prefix.native.error == prefix.observed.error);
+@@ -663,20 +693,26 @@ public:
+ 		CHECK(device.draw_list.state.draw_count == 1);
+ 		device.draw_list.validation.index_array_count = 1;
+ 		binding.bound = false;
+-		const auto indexed = device._record_source_draw_indirect(identity, RenderingDevice::ID_TYPE_DRAW_LIST, true, rid, 0, 1, 20);
++		const auto indexed = device._record_source_draw_indirect(identity, list, true, rid, 0, 1, 20);
+ 		CHECK(indexed.observed.error == OK);
+ 		CHECK(indexed.observed.state == State::Appended);
+ 		CHECK(same_original_operation_identity(indexed.observed.operation, identity));
+ 		CHECK(device.draw_graph.contains_record(indexed.observed.handle));
+ 		CHECK(indexed.native.prefix_count == 1);
+ 		CHECK(device.draw_graph.contains_record(indexed.native.prefix_handles[0]));
+-		const auto zero = device._record_source_draw_indirect(identity, RenderingDevice::ID_TYPE_DRAW_LIST, false, rid, 0, 0, 0);
++		const auto zero = device._record_source_draw_indirect(identity, list, false, rid, 0, 0, 0);
+ 		CHECK(zero.observed.state == State::Appended);
+ 		CHECK(zero.observed.error == OK);
+ 		CHECK(device.draw_graph.contains_record(zero.native.draw_handle));
+ 		CHECK(device.draw_list.state.draw_count == 3);
+ 		device.draw_graph.add_draw_list_end();
+ 		device.draw_list.active = false;
++		RDG::framebuffer_cache_free(&driver, device.framebuffer_owner.get_or_null(framebuffer)->framebuffer_cache);
++		device.framebuffer_owner.free(framebuffer);
++		for (const KeyValue<RenderingDevice::FramebufferFormatID, RenderingDevice::FramebufferFormat> &format : device.framebuffer_formats) {
++			driver.render_pass_free(format.value.render_pass);
++		}
++		device.framebuffer_formats.clear();
+ 		RDG::resource_tracker_free(buffer.draw_tracker);
+ 		device.storage_buffer_owner.free(rid);
+ 		device.uniform_set_owner.free(set_rid);

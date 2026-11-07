@@ -224,6 +224,9 @@ class ProductionResourceSlot {
 	void *metadata_data = nullptr;
 	uint64_t metadata_root_serial = 0;
 	bool metadata_created = false, metadata_returned = false;
+	// Set only by successful real GENERATION owner installation. Survives root
+	// unpin until the actual placement allocation returns at particles_free.
+	bool metadata_generation_bound = false;
 	Error handoff_error = OK;
 };
 class ProductionActionCell {
