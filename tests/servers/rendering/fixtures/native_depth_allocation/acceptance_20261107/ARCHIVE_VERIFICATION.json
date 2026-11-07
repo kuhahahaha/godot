@@ -1,0 +1,47 @@
+{
+  "status": "PASS_ARCHIVE_R1_HISTORICAL_NOT_FINAL",
+  "copied_original_entries": 78,
+  "payload_files": 81,
+  "original_bytes": 4282567,
+  "stored_original_bytes": 729389,
+  "compared_original_workspace_files": false,
+  "final_source_pins": 19,
+  "final_host_sha256": "7e2c5796c813a48b7587fbec6356c0ae9f90f735abf621cf0c6ea8e17b317774",
+  "cpu": [
+    {
+      "suite": "FOCUSED",
+      "cases": 55,
+      "assertions": 6841,
+      "failures": 0,
+      "raw_sha256": "a64058efa1ac8fbd90e51bc07c69f175df981ef217d28ec965587f85228c779c"
+    },
+    {
+      "suite": "FULL",
+      "cases": 2269,
+      "assertions": 585450,
+      "failures": 0,
+      "raw_sha256": "4b756a634f7f77ed37c1bbdcdc5cede10e8020840fc0d0bee25844cfac5db0cb"
+    }
+  ],
+  "gpu": [
+    {
+      "case_index": 0,
+      "actual_bytes": 16512,
+      "reservation_bytes": 16640,
+      "checks": 29,
+      "target_red_failure": "only_framebuffer_driver_returned"
+    },
+    {
+      "case_index": 1,
+      "actual_bytes": 135266304,
+      "reservation_bytes": 135266304,
+      "checks": 29,
+      "target_red_failure": "only_framebuffer_driver_returned"
+    }
+  ],
+  "old_cpu_abort_and_r2_are_not_target_red": true,
+  "red_runtime_source_pins_are_restored_green_not_mutant_build_provenance": true,
+  "production_cross_dso_complete": false,
+  "pending_parent_neighbors_and_hooks": true,
+  "pending_r2_framebuffer_owner_reservation_acceptance": true
+}

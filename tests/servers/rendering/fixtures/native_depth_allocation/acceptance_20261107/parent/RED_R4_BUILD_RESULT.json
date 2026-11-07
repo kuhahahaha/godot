@@ -1,0 +1,14 @@
+{
+  "command": [
+    "scons",
+    "-Q",
+    "tests=yes",
+    "platform=macos",
+    "target=editor",
+    "debug_symbols=no",
+    "module_particles_runtime_tests_enabled=yes",
+    "-j2"
+  ],
+  "exit": 0,
+  "seconds": 12.14
+}

@@ -1,0 +1,11 @@
+--- R1/tests/servers/rendering/test_native_disposal.cpp
++++ R2/tests/servers/rendering/test_native_disposal.cpp
+@@ -3057,6 +3057,8 @@
+ 	REQUIRE(rd._native_disposal_depth_allocation_quote(8, 4, quote) == OK);
+ 	REQUIRE(rd._native_disposal_depth_allocation_quote_observe(quote, report) == OK);
+ 	CHECK(report.texture_owner_reservation.bytes == 8192);
++	CHECK(report.framebuffer_owner_reservation.knowledge == NativeDepthAllocationProjection::ByteKnowledge::Known);
++	CHECK(report.framebuffer_owner_reservation.bytes == 0);
+ 	CHECK(report.allocations == 2);
+ 	CHECK(report.parts == 1);
+ 	CHECK(report.shared_attachment_references == 1);

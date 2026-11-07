@@ -1,0 +1,16 @@
+{
+  "command": [
+    "bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--test-case=*NativeDisposal*,*D32*,*FrameWait*,*PhysicsWrapper2DR1Gates*",
+    "--reporters=console,xml",
+    "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/GREEN_FINAL_FOCUSED.xml"
+  ],
+  "environment": {
+    "GODOT_TEST_PHYSICS_3D_BACKEND": "GodotPhysics3D",
+    "GODOT_TEST_PHYSICS_3D_THREADED": "0"
+  },
+  "exit": 0,
+  "seconds": 1.45
+}

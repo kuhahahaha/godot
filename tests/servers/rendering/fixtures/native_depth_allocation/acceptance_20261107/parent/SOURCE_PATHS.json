@@ -1,0 +1,14 @@
+[
+  "core/extension/gdextension_production_owned.cpp",
+  "drivers/metal/metal_allocator.cpp",
+  "drivers/metal/metal_allocator.h",
+  "drivers/metal/rendering_device_driver_metal.cpp",
+  "drivers/metal/rendering_device_driver_metal.h",
+  "servers/rendering/rendering_device.cpp",
+  "servers/rendering/rendering_device.h",
+  "servers/rendering/rendering_device_driver.h",
+  "tests/servers/physics_2d/test_wrapper_r1_gates_2d.cpp",
+  "tests/servers/rendering/test_native_disposal.cpp",
+  "tests/servers/rendering/test_qualification_ticket.cpp",
+  "servers/rendering/native_depth_allocation_projection.h"
+]

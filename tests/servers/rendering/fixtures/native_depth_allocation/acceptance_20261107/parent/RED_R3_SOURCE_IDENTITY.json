@@ -1,0 +1,6 @@
+{
+  "path": "servers/rendering/rendering_device.cpp",
+  "final_sha256": "80a4827f1abc43102d5832e4d74d4477ddeb4f42167eb0c4b1032bf17c118790",
+  "negative_sha256": "540588c44268f225fd72f965f386c2b40fd21a1d4f0ffcb2e5e68104054226fe",
+  "mutation": "Only a pair incorrectly accepts framebuffer RETURNED without depth RETURNED; depth-only semantics remain exact."
+}

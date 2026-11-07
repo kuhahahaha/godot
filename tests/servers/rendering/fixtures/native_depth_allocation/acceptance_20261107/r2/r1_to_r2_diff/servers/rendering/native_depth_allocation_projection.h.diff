@@ -1,0 +1,13 @@
+--- R1/servers/rendering/native_depth_allocation_projection.h
++++ R2/servers/rendering/native_depth_allocation_projection.h
+@@ -88,6 +88,10 @@
+ 		Policy policy = Policy::Unavailable;
+ 		NativeDepthAllocationProjection::Bytes texture_native_requirement;
+ 		NativeDepthAllocationProjection::Bytes texture_owner_reservation;
++		// Explicit admission policy: the framebuffer reference has no separate
++		// Metal heap reservation credit. Known zero here is not physical FB cost;
++		// framebuffer backing/object and opaque actuals remain unexposed below.
++		NativeDepthAllocationProjection::Bytes framebuffer_owner_reservation;
+ 		NativeDepthAllocationProjection::Bytes framebuffer_driver_backing;
+ 		NativeDepthAllocationProjection::Bytes texture_object;
+ 		NativeDepthAllocationProjection::Bytes framebuffer_object;

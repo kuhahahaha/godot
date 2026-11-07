@@ -1,0 +1,78 @@
+{
+  "core/extension/gdextension_production_owned.cpp": {
+    "bytes": 52829,
+    "sha256": "1573a91edf768e4baf97956a09d349916ea86435ca47916f31bda3cfbbde91f3"
+  },
+  "drivers/metal/metal_allocator.cpp": {
+    "bytes": 15553,
+    "sha256": "a8ac57a2f0eea3c837ef7439de8ba76399074c9848fcf3563c57d25dd135e706"
+  },
+  "drivers/metal/metal_allocator.h": {
+    "bytes": 9765,
+    "sha256": "1440f26c7600ccdb20bfec559d500c71b085a6c89e965c2e49707fa4b109de5f"
+  },
+  "drivers/metal/rendering_device_driver_metal.cpp": {
+    "bytes": 150018,
+    "sha256": "fbf9b0a98735bb8efaed901ec7e5e6694576c39fc6f764601e9d5dc780ea3bad"
+  },
+  "drivers/metal/rendering_device_driver_metal.h": {
+    "bytes": 34682,
+    "sha256": "c05d74151123ed2bc8f07e7a600b99c10f1b6b395b6647beba71f1f27071a868"
+  },
+  "servers/rendering/rendering_device.cpp": {
+    "bytes": 724115,
+    "sha256": "80a4827f1abc43102d5832e4d74d4477ddeb4f42167eb0c4b1032bf17c118790"
+  },
+  "servers/rendering/rendering_device.h": {
+    "bytes": 129497,
+    "sha256": "656c0aaffda52743a4fd5fe9b5beaad53e161932a0544c18cc9f98dc3f1ace46"
+  },
+  "servers/rendering/rendering_device_driver.h": {
+    "bytes": 55236,
+    "sha256": "9446494541b4e828716880bc12ede7d3c1abb09b30fbeec0bce19cf106738025"
+  },
+  "tests/servers/physics_2d/test_wrapper_r1_gates_2d.cpp": {
+    "bytes": 18176,
+    "sha256": "81bc9e9c80cbf971316a245e80ac9ae1218f90e947c0a6e1e51e61dc04a6bdc7"
+  },
+  "tests/servers/rendering/test_native_disposal.cpp": {
+    "bytes": 144116,
+    "sha256": "67af86cc59065781b2026899c80cb6f4505d4a13e7a609fcee99cbc18dd8ee5d"
+  },
+  "tests/servers/rendering/test_qualification_ticket.cpp": {
+    "bytes": 73548,
+    "sha256": "6adae05908947cebe50b68f93339ca70fa4afae69422284c0c33d210608539b8"
+  },
+  "servers/rendering/native_depth_allocation_projection.h": {
+    "bytes": 4987,
+    "sha256": "1285d134f457fa0b9c06eed9723b795b8250e28ab7ead55df9f6cc19ee17b9fe"
+  },
+  "modules/particles_runtime_tests/native_depth_allocation_test_fixture.h": {
+    "bytes": 3622,
+    "sha256": "f1b52e9eaaa187793e21d86142cc7cb4012adeac4cfd4cc188265caeb9c9927c"
+  },
+  "modules/particles_runtime_tests/native_depth_allocation_test_fixture.cpp": {
+    "bytes": 21390,
+    "sha256": "d7783ea55a95cde34169193359bf9181fe00330d452df382f2678cb1a12c9fa4"
+  },
+  "modules/particles_runtime_tests/register_types.cpp": {
+    "bytes": 3208,
+    "sha256": "92f17951c89ac18cb57d013639001c556c93dd33f444aa1ef81f168091c84ddb"
+  },
+  "tests/servers/rendering/fixtures/native_depth_allocation/README.md": {
+    "bytes": 5028,
+    "sha256": "5b24ced032d818260bb3eef78317a14b605406bb7a4fe0db7bc5e54047bcde17"
+  },
+  "tests/servers/rendering/fixtures/native_depth_allocation/run_native.py": {
+    "bytes": 13392,
+    "sha256": "8bdcc06173533f4f838fd66426ab639d7d8b0c269d1399060e890ed232155d5a"
+  },
+  "tests/servers/rendering/fixtures/native_depth_allocation/run.gd": {
+    "bytes": 2516,
+    "sha256": "0814051d3a3d43a7be00f5af54ff9ccd86487f2d81fe70885bc9f33702f62450"
+  },
+  "tests/servers/rendering/fixtures/native_depth_allocation/project.godot": {
+    "bytes": 137,
+    "sha256": "490081240b5283b2de8dc90fd8414707c8f5e228dad89f10daa788009a4c6812"
+  }
+}

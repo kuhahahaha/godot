@@ -1,0 +1,19 @@
+--- R1/modules/particles_runtime_tests/native_depth_allocation_test_fixture.cpp
++++ R2/modules/particles_runtime_tests/native_depth_allocation_test_fixture.cpp
+@@ -191,6 +191,7 @@
+ 		quote_data["policy"] = int(quoted.policy);
+ 		quote_data["texture_native_requirement"] = bytes_data(quoted.texture_native_requirement);
+ 		quote_data["texture_owner_reservation"] = bytes_data(quoted.texture_owner_reservation);
++		quote_data["framebuffer_owner_reservation"] = bytes_data(quoted.framebuffer_owner_reservation);
+ 		quote_data["framebuffer_driver_backing"] = bytes_data(quoted.framebuffer_driver_backing);
+ 		quote_data["opaque_driver_overhead"] = bytes_data(quoted.opaque_driver_overhead);
+ 		quote_data["alignment"] = quoted.alignment;
+@@ -200,7 +201,7 @@
+ 	}
+ 	if (!check(quoted.width == width && quoted.height == height && quoted.policy == (p_case == 0 ? NativeDepthAllocationQuote::Policy::MetalHeapPool : NativeDepthAllocationQuote::Policy::MetalHeapDedicated), "quote_descriptor_policy") ||
+ 			!check(quoted.texture_native_requirement.knowledge == Knowledge::Known && quoted.texture_owner_reservation.knowledge == Knowledge::Known && quoted.texture_native_requirement.bytes > 0 && quoted.texture_native_requirement.bytes <= quoted.texture_owner_reservation.bytes && quoted.alignment && !(quoted.alignment & (quoted.alignment - 1)), "quote_native_bytes") ||
+-			!check(quoted.allocations == 2 && quoted.parts == 1 && quoted.shared_attachment_references == 1 && quoted.framebuffer_driver_backing.knowledge == Knowledge::UnknownNotExposed && quoted.opaque_driver_overhead.knowledge == Knowledge::UnknownNotExposed, "quote_scope_unknown")) {
++			!check(quoted.allocations == 2 && quoted.parts == 1 && quoted.shared_attachment_references == 1 && quoted.framebuffer_owner_reservation.knowledge == Knowledge::Known && quoted.framebuffer_owner_reservation.bytes == 0 && quoted.framebuffer_driver_backing.knowledge == Knowledge::UnknownNotExposed && quoted.opaque_driver_overhead.knowledge == Knowledge::UnknownNotExposed, "quote_scope_unknown")) {
+ 		return finish(ERR_BUG);
+ 	}
+ 	RID texture_rid;

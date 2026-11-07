@@ -1,0 +1,12 @@
+[
+  {
+    "path": "servers/rendering/rendering_device.cpp",
+    "restored": true,
+    "sha256": "80a4827f1abc43102d5832e4d74d4477ddeb4f42167eb0c4b1032bf17c118790"
+  },
+  {
+    "path": "tests/servers/rendering/test_qualification_ticket.cpp",
+    "restored": true,
+    "sha256": "6adae05908947cebe50b68f93339ca70fa4afae69422284c0c33d210608539b8"
+  }
+]

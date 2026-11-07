@@ -1,0 +1,265 @@
+{
+  "version": "R2_FINAL",
+  "files": {
+    "ORIGINAL_FILE_MAP.json": {
+      "bytes": 31295,
+      "sha256": "96a2b1c87bd682ef8c50ee9c3ff9799e32b6f4fd31f1859c8199b7da6fcc33b1"
+    },
+    "R1_TO_R2_SOURCE_DIFFERENCES.json": {
+      "bytes": 1983,
+      "sha256": "0fdf5ae6bbb372ede2b5032c23bc84df2c55c38c349c2253cdff4ce79282c44f"
+    },
+    "README.md": {
+      "bytes": 3237,
+      "sha256": "ca1dd038d6905165a052e34a792ede711176cda170472538e32fdbd1fa38389f"
+    },
+    "SOURCE_SNAPSHOT_MAP.json": {
+      "bytes": 5005,
+      "sha256": "645793db159d02ffa558bae294d0ff8f1ece55d3ba1a8efbe72aa5d13eb7d0db"
+    },
+    "final_source/core/extension/gdextension_production_owned.cpp.gz": {
+      "bytes": 10990,
+      "sha256": "cc4580731f60fbbae506182434b112878f1d4b46404e3eb4673b111f8e3dfcec"
+    },
+    "final_source/drivers/metal/metal_allocator.cpp.gz": {
+      "bytes": 4201,
+      "sha256": "f3f0f0daf2a7d491c0954c11073276a3a173349baf76416690f851b1b7d02404"
+    },
+    "final_source/drivers/metal/metal_allocator.h.gz": {
+      "bytes": 3298,
+      "sha256": "e074c85cd8240c8be81f26b7e3d6bf4f796fc8fa754129116edf4ebedc25eda3"
+    },
+    "final_source/drivers/metal/rendering_device_driver_metal.cpp.gz": {
+      "bytes": 34088,
+      "sha256": "5cb2f5e3d5f907c4722f4a8c6af03ac38ef5c60de098dcfbe07448703e59f6d1"
+    },
+    "final_source/drivers/metal/rendering_device_driver_metal.h.gz": {
+      "bytes": 8463,
+      "sha256": "b1e02000376dc84c36aa213efb1c239e12c2d765c441849b4a0f457cafd539e9"
+    },
+    "final_source/modules/particles_runtime_tests/native_depth_allocation_test_fixture.cpp.gz": {
+      "bytes": 5246,
+      "sha256": "e40f2a36ccc6f338a2439109cd066b363684082fdcc099c943926faed3a92766"
+    },
+    "final_source/modules/particles_runtime_tests/native_depth_allocation_test_fixture.h.gz": {
+      "bytes": 1443,
+      "sha256": "5716d34f45e23bf7ac30aa0390a0d64960a9323277b20cfb2f7c25a11c13df55"
+    },
+    "final_source/modules/particles_runtime_tests/register_types.cpp.gz": {
+      "bytes": 1105,
+      "sha256": "a451d9942135e405c2e7db026fb48203d6f2ca8750981423b4abe1747048734a"
+    },
+    "final_source/servers/rendering/native_depth_allocation_projection.h.gz": {
+      "bytes": 1938,
+      "sha256": "50dca433b1d14fc1c0d1473259adb639c54c177b0db6418bd0d1056aa5c13d2e"
+    },
+    "final_source/servers/rendering/rendering_device.cpp.gz": {
+      "bytes": 129902,
+      "sha256": "550ceee62c38065b8e9d5d9269e3be0cc66b17552e2394741943d25548178b75"
+    },
+    "final_source/servers/rendering/rendering_device.h.gz": {
+      "bytes": 28563,
+      "sha256": "3ee1cf1e04f382e21050c75f9ed25791c1a7c7ed526c060024eb19f3bbb64fbf"
+    },
+    "final_source/servers/rendering/rendering_device_driver.h.gz": {
+      "bytes": 13994,
+      "sha256": "1cd3fb360ed2c5977de758365a1d911e8b0ba536a6da53888b64f1e8bb0f700d"
+    },
+    "final_source/tests/servers/physics_2d/test_wrapper_r1_gates_2d.cpp.gz": {
+      "bytes": 4670,
+      "sha256": "bacf4cd5d5945973d780ecd2c29d1e57768ce79d7c7d56f0e3d808e65d7fe3ce"
+    },
+    "final_source/tests/servers/rendering/fixtures/native_depth_allocation/README.md": {
+      "bytes": 5696,
+      "sha256": "14292e593bd6c5e0cd51d4547cc3a0ca3a91b34f3a23305343ce2d1ba2709476"
+    },
+    "final_source/tests/servers/rendering/fixtures/native_depth_allocation/project.godot": {
+      "bytes": 137,
+      "sha256": "490081240b5283b2de8dc90fd8414707c8f5e228dad89f10daa788009a4c6812"
+    },
+    "final_source/tests/servers/rendering/fixtures/native_depth_allocation/run.gd": {
+      "bytes": 2516,
+      "sha256": "0814051d3a3d43a7be00f5af54ff9ccd86487f2d81fe70885bc9f33702f62450"
+    },
+    "final_source/tests/servers/rendering/fixtures/native_depth_allocation/run_native.py": {
+      "bytes": 13485,
+      "sha256": "755e3da7da233a495ebf6485ce1ec97c11a84100c19351f8e6a63b38fd9f5932"
+    },
+    "final_source/tests/servers/rendering/test_native_disposal.cpp.gz": {
+      "bytes": 25281,
+      "sha256": "e09fc3e0de05fb6a6b085f12b069152909ad8c600050fa5e8958638672d09ae9"
+    },
+    "final_source/tests/servers/rendering/test_qualification_ticket.cpp.gz": {
+      "bytes": 14262,
+      "sha256": "7f392150f639f5a4946a59ec03348326a80329e9702adc3ce7059fc97d89a711"
+    },
+    "historical_neighbor/GREEN_FINAL_LEGACY.log.txt.gz": {
+      "bytes": 888,
+      "sha256": "8ba56b990dfeb23f0524f3a0fb4cf5707cd7523bf95fa1dbea4948c1f934c882"
+    },
+    "historical_neighbor/GREEN_FINAL_LEGACY_RESULT.json": {
+      "bytes": 401,
+      "sha256": "b9fe773d94f97ece58504c61b0ef600789e7cbd8ad0e0d8bc828721e53065b33"
+    },
+    "historical_neighbor/GREEN_FINAL_NEIGHBORS.log.txt.gz": {
+      "bytes": 914,
+      "sha256": "d37c6f4f8fe7087a1903f9265a1b952f1bf7e8b84ed8b78d2f0579eafeb5a307"
+    },
+    "historical_neighbor/GREEN_FINAL_NEIGHBORS_RESULT.json": {
+      "bytes": 404,
+      "sha256": "e920d8520a787c8038d412f1e94dd3cea16f6b437c00b92ecc48ddaad00f16ae"
+    },
+    "historical_neighbor/GREEN_FINAL_VIEWPORT.log.txt.gz": {
+      "bytes": 1148,
+      "sha256": "516109ffa37f8835a4f14f4a2587dad6df919c93ee07f631fcf8547ca83f2474"
+    },
+    "historical_neighbor/GREEN_FINAL_VIEWPORT_RESULT.json": {
+      "bytes": 584,
+      "sha256": "8e407d79c397bde4f0b18093099c649dfcf2bdc332d36f6a7cda73ecb98d4681"
+    },
+    "historical_neighbor/viewport/forward_plus/side_after.png": {
+      "bytes": 450,
+      "sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    "historical_neighbor/viewport/forward_plus/side_before.png": {
+      "bytes": 450,
+      "sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    "historical_neighbor/viewport/forward_plus/top_after.png": {
+      "bytes": 450,
+      "sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    "historical_neighbor/viewport/forward_plus/top_before.png": {
+      "bytes": 450,
+      "sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    "historical_neighbor/viewport/mobile/side_after.png": {
+      "bytes": 450,
+      "sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    },
+    "historical_neighbor/viewport/mobile/side_before.png": {
+      "bytes": 450,
+      "sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    },
+    "historical_neighbor/viewport/mobile/top_after.png": {
+      "bytes": 450,
+      "sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    },
+    "historical_neighbor/viewport/mobile/top_before.png": {
+      "bytes": 450,
+      "sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    },
+    "independent_review/QUOTE_TEST_TEARDOWN.diff": {
+      "bytes": 1772,
+      "sha256": "5bfc29e4d21752f9ef93be702376b25d3c4c611d56fc1da0843325ea255b3331"
+    },
+    "independent_review/QUOTE_TEST_TEARDOWN_IDENTITY.json": {
+      "bytes": 234,
+      "sha256": "9d402adedb3d2574808f87f4a56e59fcd24b810c6a463b1504e69f4a2643337f"
+    },
+    "independent_review/REVIEW.md": {
+      "bytes": 5747,
+      "sha256": "6e1a09d6e008c63daf6ecc9c1df3e6fd7ae7bc519c7f3b35a971030fc2f50e59"
+    },
+    "independent_review/SOURCE_PINS.json": {
+      "bytes": 2969,
+      "sha256": "297ef9379e23dbb0ef810ce8df8d32aff753bfab1e81952cd491e579d0d43bf1"
+    },
+    "parent/CPU_R2_XML_AUDIT.json": {
+      "bytes": 283,
+      "sha256": "9ed9f6490cffadb195e2bd6ab55e8191dd87e6157ca11465fb520c7b8d4503e4"
+    },
+    "parent/FINAL_HOOKS_R3.json": {
+      "bytes": 1587,
+      "sha256": "424d195434038f907ba6f1bab3b820c37da63f97f57ae18ea84ca1b0aa7e473d"
+    },
+    "parent/FINAL_R2_DELIVERY_SOURCE_PINS.json": {
+      "bytes": 3154,
+      "sha256": "8a5e0a3c6d25e1d841f3db239da77676f78b5df49a49102a80b04848d8de02cd"
+    },
+    "parent/FINAL_R2_SOURCE_PINS.json": {
+      "bytes": 3154,
+      "sha256": "8a5e0a3c6d25e1d841f3db239da77676f78b5df49a49102a80b04848d8de02cd"
+    },
+    "parent/GREEN_R2_FINAL_BUILD.log.txt.gz": {
+      "bytes": 2218,
+      "sha256": "da0792c7a8fd19422675456f4767d08e25976cd2e9f5391707ae56cc2c721d4e"
+    },
+    "parent/GREEN_R2_FINAL_BUILD_RESULT.json": {
+      "bytes": 335,
+      "sha256": "c4eeb92d48c74e9e90c3b4c5a95de3405da97ec97e11d8652af81ba41f565894"
+    },
+    "parent/GREEN_R2_FULL.log.txt.gz": {
+      "bytes": 1319,
+      "sha256": "febd7f3b24b52946e27bdd09ea716cef86355b65944e94fa4fd5f157983bed90"
+    },
+    "parent/GREEN_R2_FULL.xml.gz": {
+      "bytes": 82437,
+      "sha256": "3bdffa1e2d4fae0e9a8c5a295d5de7259151d5a5b2daeca372d3b7522d67c4dc"
+    },
+    "parent/GREEN_R2_FULL_RESULT.json": {
+      "bytes": 628,
+      "sha256": "82f1217925bc13254ac9d3a96c105bcd587fbc190d6b1344129de60c8bc13be7"
+    },
+    "parent/GREEN_R2_GPU.log.txt.gz": {
+      "bytes": 3066,
+      "sha256": "a99326cb36dbf5195a68a1e8c8c7498888f35e6d59407be9ad4a89e95e5a3211"
+    },
+    "parent/GREEN_R2_GPU_RESULT.json": {
+      "bytes": 770,
+      "sha256": "91f7005c6033be76b00f79a07a416ca8ee0944a19fc1728688963d98a8680bd4"
+    },
+    "parent/RED_R4_CONTROLLED_MUTATION_RECEIPT.json": {
+      "bytes": 1004,
+      "sha256": "cec707d3a4cc8c14307c7f0215e48dc92dee45f75db1818212157a101da6abdc"
+    },
+    "parent/green_r2_gpu/0/stderr.log.gz": {
+      "bytes": 20,
+      "sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    "parent/green_r2_gpu/0/stdout.log.gz": {
+      "bytes": 1253,
+      "sha256": "3dccd729057ee0f4e6450869b410bdfc2083f9afe7d0b3151bb04a8e5b67e129"
+    },
+    "parent/green_r2_gpu/1/stderr.log.gz": {
+      "bytes": 20,
+      "sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    "parent/green_r2_gpu/1/stdout.log.gz": {
+      "bytes": 1267,
+      "sha256": "4bab456af7a9b2d9623c556887e82d173954a6276369478afe04027069a11601"
+    },
+    "parent/green_r2_gpu/result.json": {
+      "bytes": 26641,
+      "sha256": "9c7a12529e7afd824153f9ed6987d6d0faa82534b5fd22ad5ddcd7ba12577114"
+    },
+    "r1_to_r2_diff/modules/particles_runtime_tests/native_depth_allocation_test_fixture.cpp.diff": {
+      "bytes": 2094,
+      "sha256": "65aa50db2479ff55b92c6fc161e9648e469773c9c895509be5e8aee2b6df1a31"
+    },
+    "r1_to_r2_diff/servers/rendering/native_depth_allocation_projection.h.diff": {
+      "bytes": 814,
+      "sha256": "60c81c5a0d86c0b3568075ad1acf4e8016191176a24ca5bd7c1d55eb44dae517"
+    },
+    "r1_to_r2_diff/servers/rendering/rendering_device.cpp.diff": {
+      "bytes": 786,
+      "sha256": "b4ecb245cb32f1713e6a8f198a937e9ca385b10651b31e6dc9bebe08c0e01f42"
+    },
+    "r1_to_r2_diff/tests/servers/rendering/fixtures/native_depth_allocation/README.md.diff": {
+      "bytes": 1929,
+      "sha256": "81714ec95b85b5c853844a8cfb2a2c89052c03c868eefe9d5fa807276ea89625"
+    },
+    "r1_to_r2_diff/tests/servers/rendering/fixtures/native_depth_allocation/run_native.py.diff": {
+      "bytes": 626,
+      "sha256": "39d7c53cf73aa89becfdc37b0f5726feb218c6a3087a2173d8ecded7aacc7ab1"
+    },
+    "r1_to_r2_diff/tests/servers/rendering/test_native_disposal.cpp.diff": {
+      "bytes": 634,
+      "sha256": "81502b444ce259d623bf87aa7e224530854bd1359763c0ab82e6f88e23aebe75"
+    },
+    "verify_archive.py": {
+      "bytes": 7294,
+      "sha256": "db5fb3ad57841fea3c404fe839a293d68ef3da7b9c01c9091e902e2cb728d2fb"
+    }
+  }
+}
