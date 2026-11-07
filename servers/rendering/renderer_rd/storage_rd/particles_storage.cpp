@@ -790,6 +790,7 @@ void ParticlesStorage::particles_set_subemitter(RID p_particles, RID p_subemitte
 		RD::get_singleton()->free_rid(particles->particles_material_uniform_set);
 		particles->particles_material_uniform_set = RID(); //clear and force to re create sub emitting
 	}
+	particles->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_PARTICLES);
 }
 
 void ParticlesStorage::particles_emit(RID p_particles, const Transform3D &p_transform, const Vector3 &p_velocity, const Color &p_color, const Color &p_custom, uint32_t p_emit_flags) {

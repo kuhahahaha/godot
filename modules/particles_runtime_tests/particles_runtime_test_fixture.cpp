@@ -46,6 +46,12 @@
 
 using Storage = RendererRD::ParticlesStorage;
 
+void ParticlesRuntimeTestFixture::dependency_changed(Dependency::DependencyChangedNotification p_notification, DependencyTracker *p_tracker) {
+	if (p_notification == Dependency::DEPENDENCY_CHANGED_PARTICLES && p_tracker && p_tracker->userdata) {
+		static_cast<ParticlesRuntimeTestFixture *>(p_tracker->userdata)->dependency_notifications++;
+	}
+}
+
 void ParticlesRuntimeTestFixture::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("begin"), &ParticlesRuntimeTestFixture::begin);
 	ClassDB::bind_method(D_METHOD("advance"), &ParticlesRuntimeTestFixture::advance);
@@ -129,6 +135,16 @@ bool ParticlesRuntimeTestFixture::run_upload_boundaries() {
 	storage->particles_initialize(sub);
 	auto *p = storage->particles_owner.get_or_null(particle);
 	auto *s = storage->particles_owner.get_or_null(sub);
+	dependency_tracker.userdata = this;
+	dependency_tracker.changed_callback = dependency_changed;
+	dependency_tracker.update_begin();
+	storage->particles_update_dependency(particle, &dependency_tracker);
+	dependency_tracker.update_end();
+	dependency_notifications = 0;
+	storage->particles_set_subemitter(particle, sub);
+	if (!check(dependency_notifications == 1, "subemitter resource replacement notifies particle dependency")) {
+		return false;
+	}
 	p->amount = 4;
 	s->amount = 4;
 	storage->_particles_update_buffers(p);
@@ -149,7 +165,6 @@ bool ParticlesRuntimeTestFixture::run_upload_boundaries() {
 	if (!check(rd->buffer_update(p->particle_buffer, 0, sizeof(initial), initial.data()) == OK, "particle GPU witness sentinel upload")) {
 		return false;
 	}
-	p->sub_emitter = sub;
 	for (RID target : { s->emission_storage_buffer, p->emission_storage_buffer, p->frame_params_buffer }) {
 		p->phase = 0.25;
 		p->cycle_number = 7;
