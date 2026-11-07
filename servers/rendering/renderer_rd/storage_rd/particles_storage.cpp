@@ -1135,7 +1135,10 @@ bool ParticlesStorage::_particles_amount_is_valid(int p_amount) {
 }
 
 bool ParticlesStorage::_particles_lifetime_is_valid(double p_lifetime) {
-	return Math::is_finite(p_lifetime) && p_lifetime > 0.0;
+	// The shader push constant stores lifetime as a float. Reject finite doubles
+	// that would become zero or infinity when crossing the CPU/GPU boundary.
+	const float gpu_lifetime = (float)p_lifetime;
+	return Math::is_finite(p_lifetime) && Math::is_finite(gpu_lifetime) && gpu_lifetime > 0.0f;
 }
 
 bool ParticlesStorage::_particles_trail_lifetime_is_valid(double p_lifetime) {
