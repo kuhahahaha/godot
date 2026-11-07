@@ -8379,6 +8379,29 @@ struct Access {
 		GDExtensionInterfaceDeviceSessionProductionRasterPrepareReportV1 query = nullptr;
 		bool automatic_end = false;
 		uint32_t calls = 0;
+#ifdef THREADS_ENABLED
+		bool contend_return = false;
+		Thread holder;
+		Semaphore locked, release_lock;
+		Thread::ID holder_id = Thread::UNASSIGNED_ID;
+		static void hold_rd(void *opaque) {
+			auto &probe = *static_cast<RasterJoinProbe *>(opaque);
+			probe.holder_id = Thread::get_caller_id();
+			probe.fixture->rd._thread_safe_.lock();
+			probe.locked.post();
+			probe.release_lock.wait();
+			probe.fixture->rd._thread_safe_.unlock();
+		}
+		void release_holder() {
+			if (holder.is_started()) {
+				release_lock.post();
+				holder.wait_to_finish();
+			}
+		}
+		~RasterJoinProbe() {
+			release_holder(); // Also join before fixture destruction on assertion failure.
+		}
+#endif
 		static void receive(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
 			auto &probe = *static_cast<RasterJoinProbe *>(opaque);
 			++probe.calls;
@@ -8400,6 +8423,17 @@ struct Access {
 				CHECK_FALSE(probe.fixture->rd.draw_list.active);
 				CHECK(request.next_action == 1);
 			}
+#ifdef THREADS_ENABLED
+			if (probe.contend_return) {
+				// Begin has released RD. A different thread must hold its recursive
+				// mutex across the actual protected callback-return close attempt.
+				probe.holder.start(&RasterJoinProbe::hold_rd, &probe);
+				CHECK(probe.holder.is_started());
+				if (probe.holder.is_started()) {
+					probe.locked.wait();
+				}
+			}
+#endif
 		}
 	};
 	static void singleton_raster_prepare(uint32_t fail_stage, uint32_t quiesce_stage = 0, uint32_t record_mode = 0) {
@@ -8434,7 +8468,10 @@ struct Access {
 		probe.begin = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRasterBeginV1>("device_session_production_raster_begin_v1");
 		probe.end = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRasterEndV1>("device_session_production_raster_end_v1");
 		probe.query = query;
-		probe.automatic_end = record_mode == 2;
+		probe.automatic_end = record_mode >= 2;
+#ifdef THREADS_ENABLED
+		probe.contend_return = record_mode == 3;
+#endif
 		REQUIRE(probe.begin != nullptr);
 		REQUIRE(probe.end != nullptr);
 		REQUIRE(fixture.prepare_device(server) == OK);
@@ -8596,10 +8633,81 @@ struct Access {
 			uint64_t control = 0;
 			REQUIRE(fixture.port.record_schedule(ref, &control) == OK);
 			server->sync();
+#ifdef THREADS_ENABLED
+			// Sync must return while the other thread still owns RD. Always
+			// release/join it before any assertion can abort this test body.
+			probe.release_holder();
+			if (probe.contend_return) {
+				CHECK(probe.holder_id != Thread::UNASSIGNED_ID);
+				CHECK(probe.holder_id != server->server_thread);
+				CHECK(request.control.serial == control);
+				CHECK(request.control.state == ProductionControlState::RETURNED);
+			}
+#endif
 			GDExtensionProductionRecordReportV2 recorded{};
 			REQUIRE(consume(ref, control, &recorded).native_error == OK);
 			GDExtensionProductionRecordHistoryV1 history{};
 			REQUIRE(history_query(ref, control, &history).native_error == OK);
+			if (record_mode == 3) {
+				CHECK(recorded.request_serial == ref.handle_serial);
+				CHECK(recorded.control_serial == control);
+				CHECK(recorded.result.native_error == ERR_BUSY);
+				CHECK(recorded.pause == GDEXTENSION_PRODUCTION_RECORD_PAUSE_NONE_V1);
+				CHECK(recorded.segment.segment == 0);
+				CHECK(request.raster_started);
+				CHECK(request.draw_list_open);
+				CHECK(fixture.rd.draw_list.active);
+				CHECK(request.next_action == 0);
+				CHECK_FALSE(request.effects_pending);
+				REQUIRE(request.graph_count == 4);
+				CHECK(request.native_count == 0);
+				RDG::RecordHandle prefix[4];
+				for (uint32_t g = 0; g < 4; ++g) {
+					prefix[g] = request.graphs[g].handle;
+				}
+				// The same accepted request retains its original fixed mailbox.
+				// A new kind gets a new serial only after RECORD is consumed.
+				uint64_t cancel_control = 0;
+				REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::CANCEL, &cancel_control) == OK);
+				CHECK(cancel_control > control);
+				REQUIRE(fixture.registry.production_control_schedule(ref, cancel_control) == OK);
+				server->sync();
+				CHECK(request.control.serial == cancel_control);
+				CHECK(request.control.state == ProductionControlState::RETURNED);
+				ProductionControlOutput cancelled{};
+				REQUIRE(fixture.registry.production_control_consume(ref, cancel_control, &cancelled) == OK);
+				CHECK(cancelled.request_serial == ref.handle_serial);
+				CHECK(cancelled.control_serial == cancel_control);
+				CHECK(cancelled.result.native_error == OK);
+				CHECK(request.serial == ref.handle_serial);
+				CHECK(request.cancelled);
+				CHECK(request.control.state == ProductionControlState::OWNER_CONSUMED);
+				CHECK(request.operation.owner_request_nonce == plan.operation.owner_request_nonce);
+				CHECK(request.operation.record_generation == plan.operation.record_generation);
+				REQUIRE(request.graph_count >= 4);
+				for (uint32_t g = 0; g < 4; ++g) {
+					const auto &handle = request.graphs[g].handle;
+					CHECK(handle.graph_instance == prefix[g].graph_instance);
+					CHECK(handle.graph_frame == prefix[g].graph_frame);
+					CHECK(handle.kind == prefix[g].kind);
+					CHECK(handle.index == prefix[g].index);
+					CHECK(handle.offset == prefix[g].offset);
+				}
+				for (uint32_t i = 0; i < 4; ++i) {
+					const auto &slot = request.resources[i];
+					CHECK(slot.owned_physical.serial == serials[i]);
+					CHECK(slot.use_count == 1);
+					// Observe custody from the original physical owner's reverse
+					// edge; ProductionResourceUse's validation methods are private.
+					CHECK(slot.owned_physical.production_uses == &slot.uses[0]);
+					CHECK(slot.owned_physical.bridge == fixture.attachment.handle_serial);
+					CHECK(slot.owned_physical.child == slot.owned_serial);
+					CHECK(slot.owned_physical.rid == slot.primary.get_id());
+					CHECK_FALSE(slot.owned_physical.use_closed.load());
+					CHECK_FALSE(slot.returned);
+					CHECK(slot.owned_physical.free_event == 0);
+				}
+			}
 			if (record_mode) {
 				CHECK(probe.calls == 1);
 				CHECK(request.next_action == 1);
@@ -8632,8 +8740,8 @@ struct Access {
 				for (uint32_t kind = 0; kind < 8; ++kind) {
 					CHECK(kinds[kind] == expected_kinds[kind]);
 				}
-				REQUIRE(recorded.segment.segment != 0);
-				{
+				if (record_mode != 3) {
+					REQUIRE(recorded.segment.segment != 0);
 					CallbackScope owner_entry(fixture.reference);
 					REQUIRE(owner_entry.get_error() == OK);
 					REQUIRE(fixture.port.ack_segment(ref, recorded.segment.segment, recorded.segment.segment_revision).native_error == OK);
@@ -12303,6 +12411,12 @@ TEST_CASE("[SceneTree][ProductionRequest][RasterJoin] original prepared raster b
 		TestProductionRequest::Access::singleton_raster_prepare(0, 0, 2);
 	}
 }
+
+#ifdef THREADS_ENABLED
+TEST_CASE("[SceneTree][ProductionRequest][RasterJoin][CloseContention] callback return RD contention closes through original FIFO cancellation and retires") {
+	TestProductionRequest::Access::singleton_raster_prepare(0, 0, 3);
+}
+#endif
 
 TEST_CASE("[SceneTree][ProductionRequest][RecordHistory] exact empty RECORD history survives consume and expires on replacement") {
 	SUBCASE("Original FIFO accepts the exact control") {

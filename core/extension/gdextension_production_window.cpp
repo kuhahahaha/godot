@@ -578,9 +578,15 @@ Error Registry::production_record_receive_locked(ProductionRequest &request, Ren
 			// Actual protected frame return is a physical cutoff, not a caller
 			// list split or cancellation. Keep entry/CodeHold live through closure.
 			relock_mutex_after_call();
+			bool deferred_close_lock = false;
 			if (request.compute_list_open || request.draw_list_open) {
 				if (!device._thread_safe_.try_lock()) {
-					error = ERR_BUSY;
+					// No close was attempted; the known open list can retry through
+					// cancellation. Preserve any independently returned relay error.
+					deferred_close_lock = error == OK;
+					if (deferred_close_lock) {
+						error = ERR_BUSY;
+					}
 				} else {
 					error = production_close_lists_locked(request, device);
 					device._thread_safe_.unlock();
@@ -591,13 +597,13 @@ Error Registry::production_record_receive_locked(ProductionRequest &request, Ren
 			} else {
 				request.control.output.segment = request.segment;
 			}
-			if (error != OK || (request.compute_list_open || request.draw_list_open) || device.compute_list.active || device.draw_list.active) {
+			if (!deferred_close_lock && (error != OK || (request.compute_list_open || request.draw_list_open) || device.compute_list.active || device.draw_list.active)) {
 				request.effects_pending = true;
 				if (error == OK) {
 					error = ERR_BUSY;
 				}
 			}
-			if (!request.effects_pending && request.next_action < request.action_count) {
+			if (error == OK && !request.effects_pending && request.next_action < request.action_count) {
 				request.control.output.record_pause = request.control.output.append.state == GDEXTENSION_PRODUCTION_KNOWN_PREFIX_V1 ? ProductionRecordPause::UPLOAD_PREFIX : frame.append_calls >= 64 ? ProductionRecordPause::APPEND_LIMIT
 																																																	  : ProductionRecordPause::SCOPE_RETURN;
 			}
