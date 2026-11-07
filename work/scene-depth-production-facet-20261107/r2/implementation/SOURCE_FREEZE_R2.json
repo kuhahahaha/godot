@@ -1,0 +1,56 @@
+{
+  "status": "R2 candidate frozen for root build; first-admission P1 corrected, new actual Registry controls not executed by author",
+  "scope": "R2 original bridge authentication/private quote/no-native closure; missing Scene owner typed unavailable; not full native owner port",
+  "files": [
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/gdextension_interface.json",
+      "bytes": 858460,
+      "sha256": "34bda25f55d04d293b75c1cc7dec9fed2cb39e7c482d8a894cb2388fb9312de5"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/gdextension_interface.gen.h",
+      "bytes": 387148,
+      "sha256": "d4c03fdac562b680c1f830a88b3ba474c923e1d5a2a4379a635cdb2672038521"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/gdextension_library_exit_guard.h",
+      "bytes": 81813,
+      "sha256": "4360871a4dd09d930db14282384e2c1e79ddd58f960cd0bbec9044aa984e0d16"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/gdextension_qualification.cpp",
+      "bytes": 82774,
+      "sha256": "fd2ff4afa5b6bac7a76b517d47eacd1c6f0e99198b8bae00c66dc149b28d190b"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/gdextension_qualification_abi.cpp",
+      "bytes": 67146,
+      "sha256": "0ff7cc815df064e93294451d7fadf9a84e932e0cbd008b51567d2f4046f98fe5"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/gdextension_qualification_internal.h",
+      "bytes": 29488,
+      "sha256": "39c7d75249ad3a524d78b51ff050ebb7b0fe8a4ecb6d3b957f5d637b824a2739"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/gdextension_qualification_rt.cpp",
+      "bytes": 66004,
+      "sha256": "f9f6a908457e3168ac1991370e0ab57e3b2d7e06884c8a2e7ba477c8d081cad9"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/gdextension_qualification_scene_depth.cpp",
+      "bytes": 18823,
+      "sha256": "57643c52e404745ec01bd1e3aaf31fcf3ebf8b141a25a28578fc1450b062daf0"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/rendering_device.h",
+      "bytes": 131095,
+      "sha256": "0ffcdaed1330294d66fc6552fe11eb967e588ac398d602295e8d1ab223b918e5"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/core/extension/test_device_session_qualification_scene_depth.cpp",
+      "bytes": 28376,
+      "sha256": "e1147135ad7cfe16461b7ac235649398dd2bad931b778cfa838bd10f048810ad"
+    }
+  ]
+}

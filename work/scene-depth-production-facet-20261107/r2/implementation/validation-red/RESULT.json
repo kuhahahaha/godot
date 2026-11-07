@@ -1,0 +1,37 @@
+{
+  "source_before": "57643c52e404745ec01bd1e3aaf31fcf3ebf8b141a25a28578fc1450b062daf0",
+  "source_red": "22cc7b76cd86040981a9698dc788fc9bb44ea377b5acffd9de19891acded4594",
+  "mutation": "replace exactly canonical admit=true/kind21 and kind22 with admit=false",
+  "command": [
+    "scons",
+    "-Q",
+    "tests=yes",
+    "platform=macos",
+    "target=editor",
+    "debug_symbols=no",
+    "module_particles_runtime_tests_enabled=yes",
+    "-j6"
+  ],
+  "build_exit": 0,
+  "seconds": 15.91,
+  "host_sha256": "d84f0c27ba05188b73d1c4515ed518f105ed92e943c64bb3defd5172e6dbc64c",
+  "test_command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--test-case=[SceneDepthR2] canonical first admission denies revoked metadata and cleanup work",
+    "--reporters=xml",
+    "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-depth-production-facet-20261107/r2/implementation/validation-red/CPU.xml"
+  ],
+  "test_exit": 1,
+  "assertions": {
+    "successes": "31",
+    "failures": "33"
+  },
+  "cases": {
+    "successes": "0",
+    "failures": "1",
+    "skipped": "2293"
+  },
+  "restored_sha256": "57643c52e404745ec01bd1e3aaf31fcf3ebf8b141a25a28578fc1450b062daf0"
+}

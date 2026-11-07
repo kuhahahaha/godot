@@ -1,0 +1,14 @@
+{
+  "core/extension/gdextension_library_exit_guard.h": {
+    "baseline_format_replacements": 4,
+    "changed_line_hits": []
+  },
+  "core/extension/gdextension_qualification_abi.cpp": {
+    "baseline_format_replacements": 225,
+    "changed_line_hits": []
+  },
+  "core/extension/gdextension_qualification_internal.h": {
+    "baseline_format_replacements": 10,
+    "changed_line_hits": []
+  }
+}

@@ -1,0 +1,55 @@
+# Fixed original Scene owner source review: 8c6f2fb7
+
+Reviewed commit: `8c6f2fb72af1e9152beeaa3d45dba5afcaa88d1b`, fetched as a Git object and read with `git show`/`git grep`. No worktree merge, source import, implementation, build, GPU execution or commit was performed. Exact Git blob IDs, byte lengths and SHA-256 values are in `OWNER_8C6F_SOURCE_HASHES.json`. Current D comparison hashes are a read snapshot because other authorized work may change its headers.
+
+The earlier package's HTTP/stat-only evidence remains historical evidence of availability, not code validation. This review adds fixed actual-source evidence without retroactively strengthening those earlier results. The public-five/no-adapter slice is a separate agent's work and is not implemented or duplicated here.
+
+## Concrete D-compatible seams
+
+| Original fixed owner seam | Actual behavior and D compatibility |
+| --- | --- |
+| `HeightFrameResources::allocate_quoted(RenderingDevice &, const NativeDepthAllocationQuote &, Ref<HeightFrameResources> &, NativeDepthAllocationQuote::CreateOutcome &)` | Defined at `height_frame_resources.cpp:57`, private declaration at `.h:89`. Requires an empty output owner, resolves the exact original quote on the supplied RD, creates and publishes the owner Ref before native creation, stores that quote, calls the existing original quoted-depth factory, then the original FB factory and pair capture. Uses the same current D parameter/result signatures. |
+| `HeightFrameResources::observe_allocation(NativeDepthAllocationProjection::Report &) const` | Defined at `.cpp:90`, private declaration at `.h:90`. Uses the original retained pair projection when present; otherwise keeps the actual depth projection and observes original witnesses. Reports FB presence and shared attachment identity without inventing exposed bytes. Physical aggregate requires actual created children RETURNED. |
+| `HeightFrameResources::retire_step()` | Defined at `.cpp:116`. Original owner keeps one FB-then-depth cursor; `ERR_BUSY` retains the same owner. A free request is not RETURNED. It refuses while reference count exceeds one and never authorizes native last-use merely from refcount. |
+| `HeightCaptureCheckedSink::begin_quoted_target(const Ref<ParticlesStorage::HeightFrameResources> &, uint32_t, VectorView<Color>, float, uint32_t, const Rect2 &, uint32_t)` | Public sink entry at `.h:108`, `.cpp:46`. Rejects repeated/null target; requires identical RD address and `is_quoted_verified()`, observes both original children LIVE, then assigns `quoted_resources = p_resources` before delegating to original checked begin with that owner's FB. This is a retained Ref to the same object, not a second allocator or reconstructed owner. |
+
+The exact current RD private calls consumed by the owner are:
+
+```cpp
+Error _native_disposal_depth_allocation_quote_observe(const NativeDepthAllocationQuote &, NativeDepthAllocationQuote::Report &) const;
+Error _native_disposal_depth_texture_create_quoted(const NativeDepthAllocationQuote &, RID &, NativeDisposalWitness &, NativeDepthAllocationProjection &, NativeDepthAllocationQuote::CreateOutcome &);
+Error _native_disposal_depth_framebuffer_create(const NativeDisposalWitness &, RID &, NativeDisposalWitness &);
+Error _native_disposal_depth_allocation_capture(const NativeDisposalWitness &, const NativeDisposalWitness &, NativeDepthAllocationProjection &);
+Error _native_disposal_depth_allocation_observe(const NativeDepthAllocationProjection &, NativeDepthAllocationProjection::Report &) const;
+```
+
+Retirement additionally consumes the existing original `_native_disposal_observe` and `_native_disposal_free`. Signatures match. The fixed commit's `native_depth_allocation_projection.h` is byte-identical to current D at this review, including framebuffer Known-zero admission credit versus Unknown physical cost. D already owns the actual native quote/allocation implementation. Do not cherry-pick or reimplement Scene's copy of it into D.
+
+## Same-object and partial-prefix constraints
+
+`allocate_quoted` sets output outcome NotCreated before validation. A quote-resolution failure leaves the output owner absent. After validation it publishes the original owner before invoking the factory. The factory's NotCreated path marks the owner RELEASED; CreatedActualUnknown/CreatedOverReservation failures keep the original created depth/witness and owner. A framebuffer failure keeps that depth; a pair-capture failure keeps both witnesses. `creation_outcome` describes the depth factory outcome and must be read with `allocation_error` and actual `framebuffer_created`; CreatedVerified alone does not prove whole-pair allocation success.
+
+Creation preflight `ERR_BUSY` can occur after `allocate_quoted` has published the output Ref but before any native resource exists. In this case the outcome remains NotCreated and the nonempty owner becomes RELEASED; it is not an absent output owner and not a successful creation. Retrying `allocate_quoted` against that already-nonempty output immediately returns ERR_INVALID_PARAMETER at its first guard. The adapter must preserve the original R2 child/attempt result and apply its original retry protocol, not blindly invoke this allocator again, replace the owner or mint a new attempt from a copied quote. Any permitted future fresh-empty allocation must be explicitly governed by that same original cell protocol and cannot discard a resource-bearing prefix. Quote copies retain device/policy provenance, not a unique-use reservation or claim grant.
+
+The quote object is stored inside that original owner. `is_quoted_verified()` requires ALLOCATED, allocation_error OK, CreatedVerified and successful original quote observation. The sink additionally checks the same RD and LIVE original witnesses. No caller-provided RID, copied report, synthetic serial or boolean can replace those conditions. Its `quoted_resources` Ref survives checked failures, finish and unwind until sink destruction.
+
+`ParticlesStorage` privately declares nested `HeightFrameResources` and `HeightFrame` at `particles_storage.h:76-77`. Registry and the sink are friends of ParticlesStorage; both are also friends of the nested resources class. Fixed RD is friend to ParticlesStorage and HeightCaptureCheckedSink, allowing original internal calls. These are original C++ seams, not public C ABI ownership.
+
+A future Registry child must retain exactly that one owner object. Passing the same Ref into the actual producer is intentional additional custody. It must not create a second pair, owner wrapper, allocation projection owner or retirement cursor. When invoking `retire_step`, avoid a temporary extra owning Ref: reference count greater than one explicitly returns BUSY. A borrowed reference can be used only under the original accepted-call/child pin and lock/thread lifetime protocol. All producer/frame/reader refs must settle before the child resumes physical retirement. The owner holds a raw original RD reference; original RD lifetime and render-thread eligibility must outlive observation and retirement.
+
+## Missing production wiring — not solved by these source files
+
+1. Current D has no nested `HeightFrameResources`/`HeightFrame` declaration or class implementation in its ParticlesStorage tree. The fixed Scene classes cannot be named or called by the installed D facet as it stands. Current RD also lacks the fixed Scene sink's friend declaration. Importing only these files is not a validated compilation/integration recipe.
+2. At this fixed commit, `git grep` finds `allocate_quoted` and `begin_quoted_target` only at their declarations/definitions, with no production or test call sites. The new seams exist but have not been adopted by the original producer pipeline.
+3. `HeightFrame` retains its passed `Ref<HeightFrameResources>` (`height_frame.cpp:37-38`) and snapshots original witnesses in `create_candidate`, but its `capture` at line83 passes `resources->get_framebuffer()` to `render_particle_collider_heightfield_checked`. Mobile line2605 and Clustered line794 still call `r_sink.begin(p_framebuffer, DRAW_CLEAR_DEPTH)`, not `begin_quoted_target(same_ref, ...)`. Thus the quote-aware sink's same-owner validation and retention are not used in this production path. The HeightFrame Ref is real custody, but it does not establish that this quoted-target path was consumed.
+4. Neither these seams nor the checked sink enrolls a `NativeHeightRange`, original native source completion, original producer/reader close or public Scene-depth child into the actual owner lifecycle. Checked records and restored draw-list state are not native complete. D's standalone clear recipe does not by itself cover the actual geometry/hidden/worker/reader paths.
+5. There is no installed same-child authenticated Bridge-to-renderer dispatch that creates once and later observes/retires this exact owner. The immediate public-five slice must remain typed no-adapter/unavailable until an original compiled owner integration is independently authorized and implemented. Registry must not bypass the missing owner by calling the private RD factories itself.
+6. `retire_step` deliberately assumes the original owner's last-use protocol already permits retirement; refcount is only an additional gate. No production producer/reader authority, C-side reservation refund or complete output release follows from this source review.
+
+The precise future integration point is therefore the existing owner's `allocate_quoted` / `observe_allocation` / `retire_step` on a single retained object, plus an original producer entry that consumes the identical Ref into `begin_quoted_target` and actual frame/readers. If layering requires a neutral internal interface, that interface must refer to the same object; it must not add another owner. This is a seam description, not a request to add an unused adapter now.
+
+Conclusion: actual fixed-source review confirms a compatible quote-aware native-owner seam and preservation of partial prefixes. It also confirms that production consumption and same-Ref quote-aware capture remain unconnected. Keep the present public/no-adapter boundary and avoid any Scene native-quote implementation cherry-pick into D.
+
+## Corroborating main-session fixed-source review
+
+Also read `/Users/macbookair/Documents/Codex/2026-10-15/xu-y/scene-8c6f-fixed-source-review-20261107/REVIEW.md` and `REVIEW.json`, alongside that package's source manifest. The receipt SHA-256 is `135c733246b962b38af7d6ede0719dcc6267cf8425a5a13d8c3fd01b4c87aa1c`; its declared source-manifest hash is `683ccfafe9be4cf6c039e9fe9619f3a43817f53e876f41b76df4e28d4e072e34`. The receipt reports 13 source/blob matches and narrow source acceptance, no builds or executions. This review independently agrees on same original quote/device/Ref custody, partial-prefix preservation, Known-zero admission versus unknown physical cost, the refcount gate and the nonempty RELEASED NotCreated/ERR_BUSY retry constraint. It does not reinterpret that narrow acceptance as production wiring or public-five installation.
