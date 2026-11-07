@@ -24,3 +24,50 @@ A production implementation must connect this registration to the actual camera 
 ## Explicit non-adoption
 
 No fixture `ViewPresentationKey`, empty RID, unit bounds, global frame counter, or opaque view tag was promoted into production. No source change is safe until the original provider owner supplies the typed registration and its lifetime/lease contract.
+
+## Unique owner handoff proposal (interface only, not implemented)
+
+The single production handoff should be owned by the existing render-thread
+`RendererViewport` service and called by the original Host/World presentation
+owner after it has a live viewport and before `render_camera`:
+
+```cpp
+bool RendererViewport::viewport_register_presentation_source(
+        RID p_viewport,
+        const Viewport::ViewPresentationKey &p_key,
+        uint32_t p_eye,
+        RID p_render_buffer,
+        uint32_t p_max_inflight,
+        uint32_t p_metadata_limit,
+        const Ref<Viewport::PresentationLease> &p_owner_lease);
+```
+
+This is a contract proposal only; the type `PresentationLease` does not exist
+in the current source and must be supplied by the original owner rather than
+invented here. `p_key.view_id`, `view_epoch`, and `present_seq` must come from
+that owner; `p_viewport`, eye, and render-buffer must identify the same live
+presentation; limits must be the owner’s real bounded budget. The owner must
+retain the lease through `RenderDataRD::retain_native_camera_source` readers
+and call the matching render-thread close/invalidate operation only after the
+last reader and native presentation completion. No mesh/material/profile or
+empty-RID defaults are valid inputs to this handoff.
+
+Runnable validation once the owner contract exists:
+
+```sh
+rg -n 'viewport_register_presentation_source|viewport_register_presentation_key' \
+  servers/rendering modules core
+scons -Q tests=yes platform=macos target=editor debug_symbols=no \
+  module_particles_runtime_tests_enabled=yes -j2 \
+  bin/obj/servers/rendering/renderer_viewport.macos.editor.arm64.o \
+  bin/obj/servers/rendering/renderer_scene_cull.macos.editor.arm64.o
+bin/godot.macos.editor.arm64 --headless --test \
+  --test-case='*ParticlesScenePairs*' --reporters=xml \
+  --out=/tmp/viewport-live-source-20261108.xml
+```
+
+Acceptance requires the source owner’s fixed commit/hash, a non-fixture
+registration call, matching viewport/eye/buffer identity, lease retention
+through the final reader, and invalidation after native presentation return.
+The current tree intentionally fails the non-fixture-registration check and
+therefore remains an owner-input prerequisite, not a production pass.
