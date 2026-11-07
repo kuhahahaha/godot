@@ -1,0 +1,52 @@
+ERROR: Failed to reset particle sub-emitter buffer.
+   at: _particles_process (servers/rendering/renderer_rd/storage_rd/particles_storage.cpp:1631)
+   GDScript backtrace (most recent call first):
+       [0] _run (res://probe.gd:21)
+ERROR: Failed to reset particle sub-emitter buffer.
+   at: _particles_process (servers/rendering/renderer_rd/storage_rd/particles_storage.cpp:1631)
+   GDScript backtrace (most recent call first):
+       [0] _run (res://probe.gd:21)
+ERROR: Failed to update particle emission buffer.
+   at: _particles_process (servers/rendering/renderer_rd/storage_rd/particles_storage.cpp:1651)
+   GDScript backtrace (most recent call first):
+       [0] _run (res://probe.gd:21)
+ERROR: Failed to update particle emission buffer.
+   at: _particles_process (servers/rendering/renderer_rd/storage_rd/particles_storage.cpp:1651)
+   GDScript backtrace (most recent call first):
+       [0] _run (res://probe.gd:21)
+ERROR: Failed to update particle frame parameters buffer.
+   at: _particles_process (servers/rendering/renderer_rd/storage_rd/particles_storage.cpp:1676)
+   GDScript backtrace (most recent call first):
+       [0] _run (res://probe.gd:21)
+ERROR: Failed to update particle frame parameters buffer.
+   at: _particles_process (servers/rendering/renderer_rd/storage_rd/particles_storage.cpp:1676)
+   GDScript backtrace (most recent call first):
+       [0] _run (res://probe.gd:21)
+ERROR: Failed to update particle frame parameters buffer.
+   at: _particles_process (servers/rendering/renderer_rd/storage_rd/particles_storage.cpp:1676)
+   GDScript backtrace (most recent call first):
+       [0] _run (res://probe.gd:21)
+ERROR: Failed to update particle frame parameters buffer.
+   at: _particles_process (servers/rendering/renderer_rd/storage_rd/particles_storage.cpp:1676)
+   GDScript backtrace (most recent call first):
+       [0] _run (res://probe.gd:21)
+ERROR: Failed to update particle frame parameters buffer.
+   at: _particles_process (servers/rendering/renderer_rd/storage_rd/particles_storage.cpp:1676)
+   GDScript backtrace (most recent call first):
+       [0] _run (res://probe.gd:21)
+ERROR: Failed to update particle frame parameters buffer.
+   at: _particles_process (servers/rendering/renderer_rd/storage_rd/particles_storage.cpp:1676)
+   GDScript backtrace (most recent call first):
+       [0] _run (res://probe.gd:21)
+ERROR: Failed to create particle fallback trail buffer.
+   at: _particles_ensure_trail_uniform (servers/rendering/renderer_rd/storage_rd/particles_storage.cpp:759)
+   GDScript backtrace (most recent call first):
+       [0] _run (res://probe.gd:21)
+ERROR: Failed to update particle frame parameters buffer.
+   at: _particles_process (servers/rendering/renderer_rd/storage_rd/particles_storage.cpp:1676)
+   GDScript backtrace (most recent call first):
+       [0] _run (res://probe.gd:21)
+ERROR: Failed to update particle frame parameters buffer.
+   at: _particles_process (servers/rendering/renderer_rd/storage_rd/particles_storage.cpp:1676)
+   GDScript backtrace (most recent call first):
+       [0] _run (res://probe.gd:21)

@@ -1,0 +1,40 @@
+{
+  "local_host_not_tracked": {
+    "path": "editor.arm64",
+    "sha256": "2268e5108732f5295dc174743a1f5e92177725df652ef3b6279ef645632f9efb"
+  },
+  "files": {
+    "COMMAND.json": {
+      "bytes": 802,
+      "sha256": "0e0c70e8a6f8364e7133c2945068acd90c283dd44369557ae9b3c5e8bb27af1f"
+    },
+    "RECEIPT.md": {
+      "bytes": 1326,
+      "sha256": "ac9ba7aba2933cbedf8cec972bbd4e80f9e20838f2a327ed956db64c00548c89"
+    },
+    "controlled_build.json": {
+      "bytes": 530,
+      "sha256": "07a1bb8dc2513b3172ffad9602541e245d481ab04f07f196bfd27e5422239a1d"
+    },
+    "evidence/FILES.json": {
+      "bytes": 508,
+      "sha256": "4a0263a95403a1398e56faf18398389c64ce16cf8d2907469baede54b57eb67b"
+    },
+    "evidence/RESULT.json": {
+      "bytes": 44183,
+      "sha256": "eb318fa63cbeef22f323f484c632ccbe59c32f4bb2a99c3438403255c788fd8e"
+    },
+    "evidence/controlled_build.json": {
+      "bytes": 530,
+      "sha256": "07a1bb8dc2513b3172ffad9602541e245d481ab04f07f196bfd27e5422239a1d"
+    },
+    "evidence/stdout.log": {
+      "bytes": 25985,
+      "sha256": "01355a22ab69ab4e0a2fef3f61a5712b4df043bef98ea29b42d4020690bc9dcb"
+    },
+    "evidence/stderr.log": {
+      "bytes": 3076,
+      "sha256": "dfba6c7dba1c745f019394f1f8b19476f43c3c33b9dd64e2ce3d474b6a16735f"
+    }
+  }
+}
