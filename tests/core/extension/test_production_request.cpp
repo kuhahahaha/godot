@@ -7361,7 +7361,7 @@ struct Access {
 			CHECK_FALSE(f.request->readbacks[0].source.delivered);
 		}
 	};
-	static void output_alias_readback_complete(bool map_failure = false) {
+	static void output_alias_readback_complete(bool map_failure = false, bool cleanup_content = false) {
 		using namespace GDExtensionDeviceExit;
 		auto *server = ordinal_server();
 		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
@@ -7382,6 +7382,10 @@ struct Access {
 		OrdinalPlan pool;
 		pool.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 3, 5, 64, 16, 4096, 1, 5, 4, 4 };
 		pool.attachment_requests = 2;
+#ifdef THREADS_ENABLED
+		// The fixture may release retained content during fallback cleanup.
+		SceneReleaseState cleanup_state;
+#endif
 		SingletonEnrollment fixture;
 		fixture.public_port = true;
 		NativeAliasReadbackProbe probe;
@@ -7678,7 +7682,7 @@ struct Access {
 			REQUIRE(returned.state == 1);
 			REQUIRE(fixture.port.storage_release(ref, retired).native_error == OK);
 		}
-		if (map_failure) {
+		if (map_failure && !cleanup_content) {
 			REQUIRE(fixture.rd.native_disposal_active);
 			REQUIRE(fixture.rd.native_disposal_continuation.production_owner == &request);
 			REQUIRE(fixture.rd.native_disposal_continuation.serial == request.maintenance_serial);
@@ -7742,13 +7746,37 @@ struct Access {
 				fixture.rd.native_disposal_continuation.production_owner = saved_owner;
 			}
 		}
+#ifdef THREADS_ENABLED
+		cleanup_state.registry = &fixture.registry;
+		uint32_t spent_tail_slices = 0, finished_spent_tail_slices = 0, content_slices = 0;
+		if (cleanup_content) {
+			REQUIRE(map_failure);
+			REQUIRE(request.maintenance_serial != 0);
+			REQUIRE(fixture.rd.native_disposal_active);
+			REQUIRE(fixture.rd.native_disposal_continuation.serial == request.maintenance_serial);
+			REQUIRE(fixture.rd.native_disposal_continuation.production_owner == &request);
+			MutexLock lock(fixture.registry.mutex);
+			CHECK_FALSE(request.actions[0].scene_key_bound);
+			REQUIRE(request.actions[0].scene_attempt.content.is_null());
+			request.actions[0].scene_attempt.content = Ref<SceneReadContent>(memnew(SceneReleaseContent(&cleanup_state)));
+		}
+#endif
 		for (const auto target : { ref, probe.create_ref }) {
 			Request *original = target.handle_serial == ref.handle_serial ? &request : create_request;
 			for (uint32_t turn = 0; turn < 64 && original->serial; ++turn) {
 				auto offered = budget;
+				if (cleanup_content && target.handle_serial == ref.handle_serial) {
+					offered.passes = offered.receipts = 1;
+				}
 				offered.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
 				GDExtensionProductionServiceBudgetV1 remaining{};
+#ifdef THREADS_ENABLED
+				const uint32_t calls_before_owner = cleanup_state.calls;
+#endif
 				const Error e = Error(release(target, &offered, &remaining, &report).native_error);
+#ifdef THREADS_ENABLED
+				if (cleanup_content) CHECK(cleanup_state.calls == calls_before_owner);
+#endif
 				if (map_failure && target.handle_serial == ref.handle_serial) {
 					// The control report may describe bounded cleanup as Busy;
 					// its retained readback result must remain the map failure.
@@ -7763,10 +7791,53 @@ struct Access {
 					}
 				}
 				CHECK((e == OK || e == ERR_BUSY));
+#ifdef THREADS_ENABLED
+				const bool cleanup_target = cleanup_content && target.handle_serial == ref.handle_serial;
+				const bool queued_release = cleanup_target && original->serial && original->control.state == ProductionControlState::QUEUED;
+				const bool own_tail = queued_release && original->maintenance_serial && fixture.rd.native_disposal_active && fixture.rd.native_disposal_continuation.serial == original->maintenance_serial && fixture.rd.native_disposal_continuation.production_owner == original;
+				const uint32_t before_sync = cleanup_state.calls;
+#endif
 				server->sync();
+#ifdef THREADS_ENABLED
+				if (queued_release) {
+					REQUIRE(original->control.state == ProductionControlState::RETURNED);
+					const auto actual = original->control.output.service_usage;
+					INFO("own tail=", own_tail, " passes=", actual.passes, " receipts=", actual.receipts, " calls before=", before_sync, " after=", cleanup_state.calls);
+					CHECK(actual.controls == 1);
+					CHECK(actual.passes <= 1);
+					CHECK(actual.receipts <= 1);
+					CHECK_FALSE(original->actions[0].scene_key_bound);
+					if (own_tail) {
+						// Count only actual exhausted slices with no content callback.
+						// A zero-usage tail does not establish the spent-credit witness.
+						if (cleanup_state.calls == before_sync && (actual.passes == 1 || actual.receipts == 1)) {
+							++spent_tail_slices;
+							if (!fixture.rd.native_disposal_active) ++finished_spent_tail_slices;
+						}
+					}
+					if (cleanup_state.calls != before_sync) {
+						CHECK(cleanup_state.calls == before_sync + 1);
+						CHECK(actual.passes == 1);
+						CHECK(actual.receipts == 1);
+						CHECK(original->control.output.result.native_error == ERR_BUSY);
+						CHECK(cleanup_state.destroys == (cleanup_state.calls == 2 ? 1u : 0u));
+						++content_slices;
+					}
+				}
+#endif
 			}
 			CHECK(original->serial == 0);
 		}
+#ifdef THREADS_ENABLED
+		if (cleanup_content) {
+			CHECK(spent_tail_slices > 0);
+			CHECK(finished_spent_tail_slices > 0);
+			CHECK(content_slices == 2);
+			CHECK(cleanup_state.calls == 2);
+			CHECK(cleanup_state.destroys == 1);
+			CHECK(cleanup_state.unlocked_checks == 3);
+		}
+#endif
 		CHECK(fixture.driver.alias_allocations == 8);
 		CHECK(fixture.driver.alias_frees == 8);
 		for (auto &block : fixture.rd.upload_staging_buffers.blocks) {
@@ -12227,5 +12298,11 @@ TEST_CASE("[SceneTree][ProductionRequest][NativeScenePhaseCloseWaiting] actual u
 #ifdef THREADS_ENABLED
 TEST_CASE("[SceneTree][ProductionRequest][NativeSceneReleaseBudget] original RT RELEASE returns actual retained content outside Registry mutex") {
 	TestProductionRequest::Access::scene_release_content_budget();
+}
+#endif
+
+#ifdef THREADS_ENABLED
+TEST_CASE("[SceneTree][ProductionRequest][NativeSceneReleaseMaintenanceBudget] actual map failure maintenance consumes credit before cleanup content return") {
+	TestProductionRequest::Access::output_alias_readback_complete(true, true);
 }
 #endif
