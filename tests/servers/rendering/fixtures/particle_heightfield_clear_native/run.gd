@@ -12,15 +12,31 @@ func _initialize() -> void:
 	call_deferred("_start")
 
 func _start() -> void:
+	var transform_case := OS.get_environment("ANGE_HEIGHTFIELD_TRANSFORM_CASE")
 	var method := "run_geometry" if OS.get_environment("ANGE_HEIGHTFIELD_GEOMETRY") == "1" else "run"
 	if method == "run_geometry" and OS.get_environment("ANGE_HEIGHTFIELD_EXTENTS_Y") != "":
 		method = "run_geometry_params"
+	if transform_case != "":
+		method = "run_transformed"
 	if not fixture.has_method(method):
 		print("HEIGHTFIELD_GEOMETRY_MISSING ", method)
 		quit(1)
 		return
 	var callback := Callable(fixture, method)
-	if method == "run_geometry":
+	if method == "run_transformed":
+		var scale := Vector3.ONE
+		match transform_case:
+			"rotated":
+				scale = Vector3.ONE
+			"rotated_uniform":
+				scale = Vector3(2, 2, 2)
+			"rotated_nonuniform":
+				scale = Vector3(2, 3, 4)
+			_:
+				quit(1)
+				return
+		callback = callback.bind(scale)
+	elif method == "run_geometry":
 		callback = callback.bind(float(OS.get_environment("ANGE_HEIGHTFIELD_GEOMETRY_HEIGHT")))
 	elif method == "run_geometry_params":
 		callback = callback.bind(float(OS.get_environment("ANGE_HEIGHTFIELD_GEOMETRY_HEIGHT")), float(OS.get_environment("ANGE_HEIGHTFIELD_EXTENTS_Y")), float(OS.get_environment("ANGE_HEIGHTFIELD_TRANSFORM_Y")))

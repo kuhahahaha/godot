@@ -13,6 +13,7 @@
 
 void ParticlesHeightfieldClearTestFixture::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("run"), &ParticlesHeightfieldClearTestFixture::run);
+	ClassDB::bind_method(D_METHOD("run_transformed", "scale"), &ParticlesHeightfieldClearTestFixture::run_transformed);
 	ClassDB::bind_method(D_METHOD("run_geometry", "height"), &ParticlesHeightfieldClearTestFixture::run_geometry);
 	ClassDB::bind_method(D_METHOD("run_geometry_params", "height", "extents_y", "transform_y"), &ParticlesHeightfieldClearTestFixture::run_geometry_params);
 	ClassDB::bind_method(D_METHOD("result"), &ParticlesHeightfieldClearTestFixture::result);
@@ -21,6 +22,15 @@ void ParticlesHeightfieldClearTestFixture::_bind_methods() {
 Dictionary ParticlesHeightfieldClearTestFixture::result() const {
 	MutexLock lock(result_mutex);
 	return result_data.duplicate(true);
+}
+
+Error ParticlesHeightfieldClearTestFixture::run_transformed(const Vector3 &p_scale) {
+	if (started) {
+		return ERR_ALREADY_IN_USE;
+	}
+	transformed_capture = true;
+	capture_scale = p_scale;
+	return run_geometry(0.5f);
 }
 
 Error ParticlesHeightfieldClearTestFixture::run_geometry(float p_height) {
@@ -79,8 +89,11 @@ Error ParticlesHeightfieldClearTestFixture::run_capture() {
 	}
 	// Seed BOTH targets: an empty renderer pass that omits its clear must fail.
 	// The untouched first target also detects accidental target aliasing.
+	// Transformed captures expect .75: seed the second target differently so
+	// a renderer no-op cannot pass without actually clearing and drawing.
 	for (const RID framebuffer : { first_framebuffer, second_framebuffer }) {
-		const auto list = rd->draw_list_begin(framebuffer, RD::DRAW_CLEAR_DEPTH, {}, 0.75f);
+		const float seed = transformed_capture && framebuffer == second_framebuffer ? 0.125f : 0.75f;
+		const auto list = rd->draw_list_begin(framebuffer, RD::DRAW_CLEAR_DEPTH, {}, seed);
 		if (list == RD::INVALID_ID) {
 			return ERR_UNAVAILABLE;
 		}
@@ -89,6 +102,13 @@ Error ParticlesHeightfieldClearTestFixture::run_capture() {
 	PagedArrayPool<RenderGeometryInstance *> pool;
 	PagedArray<RenderGeometryInstance *> instances;
 	instances.set_page_pool(&pool);
+	Transform3D capture_transform;
+	capture_transform.origin.y = capture_transform_y;
+	if (transformed_capture) {
+		capture_transform.basis = Basis(Vector3(0, 0, 1), Math::PI / 2.0);
+		capture_transform.basis.scale_local(capture_scale);
+		capture_transform.origin = Vector3(10, 20, 30);
+	}
 	if (geometry_capture) {
 		// Live field transform/extents determine the reversed orthographic depth.
 		Array arrays;
@@ -111,11 +131,13 @@ Error ParticlesHeightfieldClearTestFixture::run_capture() {
 		}
 		Transform3D transform;
 		transform.origin.y = geometry_height;
+		if (transformed_capture) {
+			// Author geometry in field-local coordinates, then place it in world.
+			transform = capture_transform * transform;
+		}
 		geometry->set_transform(transform, surface.aabb, transform.xform(surface.aabb));
 		instances.push_back(geometry);
 	}
-	Transform3D capture_transform;
-	capture_transform.origin.y = capture_transform_y;
 	scene->render_particle_collider_heightfield(second_instance, capture_transform, instances);
 
 	const auto *first_data = storage->particles_collision_instance_owner.get_or_null(first_instance);
@@ -194,7 +216,9 @@ void ParticlesHeightfieldClearTestFixture::sample_done(const PackedByteArray &p_
 		MutexLock lock(result_mutex);
 		result_data["first_raw"] = raw[0];
 		result_data["second_raw"] = raw[1];
-		const float expected = geometry_capture ? (geometry_height - capture_transform_y + capture_extents_y) / (2.0f * capture_extents_y) : 0.0f;
+		// Independently specified local y=.5 with half-height 1 gives raw .75;
+		// do not derive this oracle through the production camera or projection.
+		const float expected = transformed_capture ? 0.75f : geometry_capture ? (geometry_height - capture_transform_y + capture_extents_y) / (2.0f * capture_extents_y) : 0.0f;
 		result_data["pass"] = p_bytes.size() == 8 && raw[0] >= 0.749f && raw[0] <= 0.751f && Math::abs(raw[1] - expected) <= 0.001f;
 	}
 }
