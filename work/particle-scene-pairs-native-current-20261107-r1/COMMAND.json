@@ -1,0 +1,17 @@
+[
+  "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/particle-scene-pairs-native-current-20261107-r1/editor.arm64",
+  "--render-thread",
+  "safe",
+  "--path",
+  "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_scene_pairs_native",
+  "--script",
+  "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_scene_pairs_native/run.gd",
+  "--rendering-driver",
+  "metal",
+  "--rendering-method",
+  "mobile",
+  "--resolution",
+  "64x64",
+  "--audio-driver",
+  "Dummy"
+]

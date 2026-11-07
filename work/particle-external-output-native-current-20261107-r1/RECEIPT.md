@@ -1,0 +1,3 @@
+# Native particle external output prefix Metal evidence
+
+The module-on editor SHA `2268e5108732f5295dc174743a1f5e92177725df652ef3b6279ef645632f9efb` ran `particle_external_output_native` on Apple M3 Pro Metal Mobile. The fixed output-prefix fixture passed 27/27 checks: seven original allocations were physically returned, 900 bytes were accounted for, repeat retire/observe was stable, and `no_next_draw=true`. The report records `physical_prefix_returned=true`, `whole_output_released=false`, `device_holder_claimed=false`, `source_authority_supplied=false`, and zero failures. This is prefix disposal evidence only and does not claim whole output release or product-holder qualification.

@@ -1,0 +1,40 @@
+{
+  "host_sha256": "2268e5108732f5295dc174743a1f5e92177725df652ef3b6279ef645632f9efb",
+  "tracked_files": [
+    {
+      "path": "COMMAND.json",
+      "bytes": 579,
+      "sha256": "d82338120802fb85051f41d4363f1a7bd879965dcee500215c26d5db682713f3"
+    },
+    {
+      "path": "RECEIPT.md",
+      "bytes": 691,
+      "sha256": "28fd51cf0348ed0cff145cac4cd74f479d8e7850f14ae5b44aa633cba90cb014"
+    },
+    {
+      "path": "evidence/result.json",
+      "bytes": 6851,
+      "sha256": "fcae77ccc94e30fcb9d2c4a7a7f26942067f813ebdc28738d41a145a712aa953"
+    },
+    {
+      "path": "evidence/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "evidence/stdout.log",
+      "bytes": 1924,
+      "sha256": "8c42ae96620c69e68c92350201acb0400dd79bc684d74b8b83b300c3ba04f451"
+    },
+    {
+      "path": "stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "stdout.log",
+      "bytes": 6851,
+      "sha256": "fcae77ccc94e30fcb9d2c4a7a7f26942067f813ebdc28738d41a145a712aa953"
+    }
+  ]
+}

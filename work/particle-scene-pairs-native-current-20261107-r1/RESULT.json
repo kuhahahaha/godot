@@ -1,0 +1,7 @@
+{
+  "returncode": 0,
+  "elapsed": 6.8114800453186035,
+  "host_sha256": "2268e5108732f5295dc174743a1f5e92177725df652ef3b6279ef645632f9efb",
+  "stdout": "Godot Engine v4.7.2.stable.custom_build.69c609c24 (2026-11-07 06:24:21 UTC) - https://godotengine.org\nMetal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)\n\nSCENE_PAIRS_NATIVE {\"checks\":{\"cull_mask\":true,\"height_cull_mask\":true,\"height_one_source\":true,\"height_two_sources_ambiguous\":true,\"height_update\":true,\"height_visibility\":true,\"kept_pair_pose_revision\":true,\"kept_pair_shape_revision\":true,\"kept_pair_type_restore_revision\":true,\"kept_pair_type_revision\":true,\"ordinary_receiver_not_promoted\":true,\"ordinary_snapshot_rejected_and_empty\":true,\"receiver_visibility\":true,\"rejected_commit_preserves_pairs\":true,\"same_base_receivers\":true,\"source_recreate\":true,\"source_release\":true,\"source_update\":true,\"source_visibility\":true},\"pass\":true}\n",
+  "stderr": ""
+}
