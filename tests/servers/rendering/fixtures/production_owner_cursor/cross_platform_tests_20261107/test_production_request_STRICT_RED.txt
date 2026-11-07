@@ -1,0 +1,22 @@
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/ci-scene117-20261107/test_production_request_CI_BASE.cpp:1026:25: error: missing field 'mutex' initializer [-Werror,-Wmissing-field-initializers]
+ 1026 |                 } contention{ fixture };
+      |                                       ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/ci-scene117-20261107/test_production_request_CI_BASE.cpp:7753:43: error: missing field 'ready' initializer [-Werror,-Wmissing-field-initializers]
+ 7753 |                 } contention{ &fixture.rd._thread_safe_ };
+      |                                                         ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/ci-scene117-20261107/test_production_request_CI_BASE.cpp:12324:43: error: missing field 'ready' initializer [-Werror,-Wmissing-field-initializers]
+ 12324 |                 } contention{ &fixture.rd._thread_safe_ };
+       |                                                         ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/ci-scene117-20261107/test_production_request_CI_BASE.cpp:12834:22: error: declaration shadows a field of 'TestProductionRequest::Access::ManagedSceneHarness' [-Werror,-Wshadow]
+ 12834 |                                 RenderingDevice *device = nullptr;
+       |                                                  ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/ci-scene117-20261107/test_production_request_CI_BASE.cpp:12734:20: note: previous declaration is here
+ 12734 |                 RenderingDevice *device = nullptr;
+       |                                  ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/ci-scene117-20261107/test_production_request_CI_BASE.cpp:12859:22: error: declaration shadows a field of 'TestProductionRequest::Access::ManagedSceneHarness' [-Werror,-Wshadow]
+ 12859 |                                 RenderingDevice *device = nullptr;
+       |                                                  ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/ci-scene117-20261107/test_production_request_CI_BASE.cpp:12734:20: note: previous declaration is here
+ 12734 |                 RenderingDevice *device = nullptr;
+       |                                  ^
+5 errors generated.

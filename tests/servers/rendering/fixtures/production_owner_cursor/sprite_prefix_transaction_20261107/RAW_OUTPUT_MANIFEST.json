@@ -1,0 +1,27 @@
+[
+  {
+    "path": "work/sprite-prefix-transaction-20261107/FOCUSED.xml",
+    "bytes": 364331,
+    "sha256": "8b43b230fc066f9b7aa91e6f51f3c259d91ec2324540e2593474ca6035eaf10f"
+  },
+  {
+    "path": "work/sprite-prefix-transaction-20261107/COMBINED.xml",
+    "bytes": 392604,
+    "sha256": "2357f4ef80488bb6e60d568be948cce35ebcf712ab1953b5051b7785f9134fb9"
+  },
+  {
+    "path": "work/sprite-prefix-transaction-20261107/BUILD_OUTPUT.txt",
+    "bytes": 4692,
+    "sha256": "c8bd1510d27428af0f5e434484564a68ed1298a73ace4c01f8cf908b145f2fe7"
+  },
+  {
+    "path": "work/sprite-prefix-transaction-20261107/FOCUSED_OUTPUT.txt",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "work/sprite-prefix-transaction-20261107/COMBINED_OUTPUT.txt",
+    "bytes": 495,
+    "sha256": "1fbf3d30a19652bfad6bc356bc349d15201ec079f2ea1a085db33445ab47d7ac"
+  }
+]

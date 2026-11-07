@@ -1,0 +1,46 @@
+[
+  {
+    "label": "FOCUSED",
+    "command": [
+      "bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*[AliasReadbackIntegration]*,*[AliasReadbackMapFailure]*,*[NativeSceneReleaseMaintenanceBudget]*,*[CheckedPipelineCompatibility]*,*[GeometryPrepared]*,*[MaterialNativeHold]*",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-prefix-transaction-20261107/FOCUSED.xml"
+    ],
+    "exit_code": 0,
+    "seconds": 2.35,
+    "assertions": {
+      "successes": "6415",
+      "failures": "0"
+    },
+    "cases": {
+      "successes": "11",
+      "failures": "0",
+      "skipped": "2248"
+    }
+  },
+  {
+    "label": "COMBINED",
+    "command": [
+      "bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*ProductionRequest*,*ProductionNativeObserve*,*RecordSource*,*ExternalOutput*,*[K03][P2]*,*EngineGuardLifecycle*,*GenerationMetadataLayout*,*SceneOnlyRouting*,*ReadbackSource*,*ScenePhase*,*[NativeDisposal]*,*[MaterialNativeHold]*",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-prefix-transaction-20261107/COMBINED.xml"
+    ],
+    "exit_code": 0,
+    "seconds": 4.23,
+    "assertions": {
+      "successes": "98810",
+      "failures": "0"
+    },
+    "cases": {
+      "successes": "247",
+      "failures": "0",
+      "skipped": "2012"
+    }
+  }
+]

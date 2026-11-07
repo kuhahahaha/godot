@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "receipt_commit": "55f00ae609433ca03f1a425dd3f7a906d922e21f",
+  "scope": "Metadata-only preservation of existing raw outputs; no new build/test/GPU execution",
+  "files": [
+    {
+      "path": "work/sprite-preparation-rows-20261107/FOCUSED.xml",
+      "bytes": 362487,
+      "sha256": "85997488cdfa07b29840a70f3a8159d27e9d668c75bcd758cabaf92f10c33f42"
+    },
+    {
+      "path": "work/sprite-preparation-rows-20261107/COMBINED.xml",
+      "bytes": 385705,
+      "sha256": "043ecaffb1f34dbbd599ec26d853f646a278b49daad21d4cac0f0a5fbf6f1f71"
+    },
+    {
+      "path": "work/sprite-preparation-rows-20261107/COMBINED_OUTPUT.txt",
+      "bytes": 495,
+      "sha256": "1fbf3d30a19652bfad6bc356bc349d15201ec079f2ea1a085db33445ab47d7ac"
+    },
+    {
+      "path": "work/sprite-preparation-rows-20261107/FOCUSED_OUTPUT.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "work/sprite-preparation-rows-20261107/FINAL_BUILD.log",
+      "bytes": 1934,
+      "sha256": "978cfcf7d88d332e3ba1c44329b257d7d46807a42466fac26fc9974df827b465"
+    },
+    {
+      "path": "work/sprite-preparation-rows-20261107/FINAL_BUILD_RESULT.json",
+      "bytes": 228,
+      "sha256": "f619bf1aa61a02bb39aa7eef70f24e003d2b98e63d6c5d4a585115d3af7db808"
+    },
+    {
+      "path": "work/sprite-preparation-rows-20261107/FINAL_HOST.json",
+      "bytes": 530,
+      "sha256": "deb92a48757d76ba8ebb89643502e80c0f213538c797058a785f169c463dba56"
+    },
+    {
+      "path": "work/sprite-preparation-rows-20261107/CPU_RESULT.json",
+      "bytes": 1501,
+      "sha256": "8f1bfab8a61c3c3be5631d06b446010e12672e5bc8d336bb94fe26f13183d722"
+    },
+    {
+      "path": "work/sprite-preparation-rows-20261107/FINAL_BUILD_SOURCE.json",
+      "bytes": 1664,
+      "sha256": "c86a50910dc1cea5ed4467922d467b0a8c25685c44af1af1c9344f53d6ea8552"
+    }
+  ]
+}

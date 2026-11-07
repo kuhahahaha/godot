@@ -1,3 +1,5 @@
+> Original implementation-agent handoff. Later parent execution is recorded in [RECEIPT.md](RECEIPT.md), [CPU_RESULT.json](CPU_RESULT.json), and [FINAL_BUILD_SOURCE.json](FINAL_BUILD_SOURCE.json). [RAW_OUTPUT_MANIFEST.json](RAW_OUTPUT_MANIFEST.json) indexes the original raw evidence.
+
 # Sprite preparation metadata slice — frozen for parent build
 
 Base HEAD: acd6310a0b84ff80ea90cec106f4a0e9ec7a855c. Exact eight changed source/test byte hashes are in SOURCE_FREEZE.json. No build, CPU test or GPU run was performed by this agent. No commit/stage/push. This is an implementation candidate, not runtime qualification or public Sprite admission.

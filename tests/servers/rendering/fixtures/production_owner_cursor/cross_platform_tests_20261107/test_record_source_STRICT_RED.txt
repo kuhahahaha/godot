@@ -1,0 +1,13 @@
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/ci-scene117-20261107/test_record_source_CI_BASE.cpp:255:91: error: missing field 'entered' initializer [-Werror,-Wmissing-field-initializers]
+  255 |   struct Contention { Registry *registry;Semaphore entered,release; } contention{&registry};
+      |                                                                                           ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/ci-scene117-20261107/test_record_source_CI_BASE.cpp:420:110: error: missing field 'entered' initializer [-Werror,-Wmissing-field-initializers]
+  420 |   struct PoolHolder { BinaryMutex *pool;Semaphore entered,release; } state{&device.transfer_worker_pool_mutex};
+      |                                                                                                              ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/ci-scene117-20261107/test_record_source_CI_BASE.cpp:421:48: warning: declaration shadows a local variable [-Wshadow-uncaptured-local]
+  421 |   Thread holder;holder.start([](void *p){auto &state=*static_cast<PoolHolder*>(p);state.pool->lock();state.entered.post();state.release.wait();state.pool->unlock();},&state);
+      |                                                ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/ci-scene117-20261107/test_record_source_CI_BASE.cpp:420:70: note: previous declaration is here
+  420 |   struct PoolHolder { BinaryMutex *pool;Semaphore entered,release; } state{&device.transfer_worker_pool_mutex};
+      |                                                                      ^
+1 warning and 2 errors generated.

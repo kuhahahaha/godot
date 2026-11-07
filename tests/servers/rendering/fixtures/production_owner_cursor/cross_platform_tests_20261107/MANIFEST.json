@@ -1,0 +1,37 @@
+[
+  {
+    "path": "CROSS_PLATFORM_REVIEW.md",
+    "bytes": 5188,
+    "sha256": "aae9d9efad166b0310c6490ee8d43300cae2bf6cd65512a8525ae2497f1f447c"
+  },
+  {
+    "path": "STRICT_RED.json",
+    "bytes": 4215,
+    "sha256": "d0919ce5bccb6e4fadc42726ea68789e009c7affa5f2e2b3acff9e79e29dbb87"
+  },
+  {
+    "path": "STRICT_GREEN.json",
+    "bytes": 4075,
+    "sha256": "c300d62db6f9666918e9a0c1154287760974a172d925eaa3766d474bfc3358bf"
+  },
+  {
+    "path": "test_production_request_STRICT_RED.txt",
+    "bytes": 2597,
+    "sha256": "0cdd709c7151f732d031f02967159dc26973637ae1c00bf9305ac543b637d959"
+  },
+  {
+    "path": "test_production_request_STRICT_GREEN.txt",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "test_record_source_STRICT_RED.txt",
+    "bytes": 1847,
+    "sha256": "ed419d5f1b38d250dc9705b000c4b9dcc7eaed8245804119e272d181a3542774"
+  },
+  {
+    "path": "test_record_source_STRICT_GREEN.txt",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+]
