@@ -36,6 +36,28 @@
 
 TEST_FORCE_LINK(test_viewport_camera_source)
 
+TEST_CASE("[B4][CameraCapture] withdrawn viewport cannot replace original view lineage") {
+	const RID viewport = RSG::viewport->viewport_allocate();
+	RSG::viewport->viewport_initialize(viewport);
+	RendererViewport::Viewport::ViewPresentationKey a{ 1001, 1, 1 };
+	RendererViewport::Viewport::ViewPresentationKey b{ 1002, 1, 1 };
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, a));
+	RSG::viewport->viewport_set_size(viewport, 64, 48, 1);
+	CHECK_FALSE(RSG::viewport->viewport_register_presentation_key(viewport, b));
+	RSG::viewport->viewport_set_size(viewport, 96, 48, 1);
+	CHECK_FALSE(RSG::viewport->viewport_register_presentation_key(viewport, a));
+	RSG::viewport->viewport_invalidate_presentation_key(viewport);
+	b.view_epoch = 100;
+	CHECK_FALSE(RSG::viewport->viewport_register_presentation_key(viewport, b));
+	CHECK_FALSE(RSG::viewport->viewport_register_presentation_key(viewport, a));
+	a.view_epoch = 2; // Only original issuer's later epoch restores this lineage.
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, a));
+	RSG::viewport->viewport_invalidate_presentation_key(viewport);
+	CHECK_FALSE(RSG::viewport->viewport_register_presentation_key(viewport, b));
+	CHECK(RSG::viewport->viewport_register_presentation_key(viewport, a));
+	RSG::viewport->free(viewport);
+}
+
 TEST_CASE("[B4][CameraCapture] actual invocation rejects foreign owner and revokes changed resources") {
 	const RID viewport = RSG::viewport->viewport_allocate();
 	RSG::viewport->viewport_initialize(viewport);

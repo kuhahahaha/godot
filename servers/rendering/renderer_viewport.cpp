@@ -1463,7 +1463,7 @@ bool RendererViewport::viewport_register_presentation_key(RID p_viewport, const 
 			(p_key.view_id == viewport->revoked_resource_key.view_id && p_key.view_epoch <= viewport->revoked_resource_key.view_epoch)) {
 		return false;
 	}
-	if (viewport->presentation_registered && viewport->presentation_key.view_id != p_key.view_id) {
+	if (viewport->presentation_view_id != 0 && viewport->presentation_view_id != p_key.view_id) {
 		return false;
 	}
 	if (viewport->presentation_registered && viewport->presentation_key.view_epoch != p_key.view_epoch) {
@@ -1480,6 +1480,7 @@ bool RendererViewport::viewport_register_presentation_key(RID p_viewport, const 
 		viewport->staged_camera_token = Viewport::CameraSourceToken();
 		viewport->staged_camera_data_valid = false;
 	}
+	viewport->presentation_view_id = p_key.view_id;
 	viewport->presentation_key = p_key;
 	viewport->presentation_registered = true;
 	return true;
