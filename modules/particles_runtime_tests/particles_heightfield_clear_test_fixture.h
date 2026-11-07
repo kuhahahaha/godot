@@ -17,9 +17,12 @@ class ParticlesHeightfieldClearTestFixture : public RefCounted {
 	bool geometry_capture = false;
 	bool transformed_capture = false;
 	bool legacy_normal_capture = false;
+	int legacy_transform_case = 0;
 	RID legacy_particle;
 	RID legacy_shader;
 	RID legacy_material;
+	int legacy_neighbor_case = -1;
+	RID legacy_texture;
 	Vector3 capture_scale = Vector3(1, 1, 1);
 	float geometry_height = 0;
 	float capture_extents_y = 1.0f;
@@ -41,6 +44,7 @@ class ParticlesHeightfieldClearTestFixture : public RefCounted {
 	void cleanup();
 	void sample_done(const PackedByteArray &p_bytes);
 	Error run_legacy_process(const Transform3D &p_field_transform);
+	Error run_neighbor_setup();
 	void legacy_sample_done(const PackedByteArray &p_bytes);
 
 protected:
@@ -49,6 +53,7 @@ protected:
 public:
 	Error run();
 	Error run_legacy_normal(int p_transform_case = 0);
+	Error run_legacy_neighbor(int p_case);
 	Error run_geometry(float p_height);
 	Error run_transformed(const Vector3 &p_scale);
 	Error run_geometry_params(float p_height, float p_extents_y, float p_transform_y);

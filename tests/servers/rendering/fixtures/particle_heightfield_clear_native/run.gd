@@ -21,22 +21,34 @@ func _start() -> void:
 		method = "run_transformed"
 	if OS.get_environment("ANGE_HEIGHTFIELD_LEGACY_NORMAL") == "1":
 		method = "run_legacy_normal"
+	var neighbor_case := OS.get_environment("ANGE_HEIGHTFIELD_LEGACY_NEIGHBOR_CASE")
+	if neighbor_case != "":
+		method = "run_legacy_neighbor"
 	if not fixture.has_method(method):
 		print("HEIGHTFIELD_GEOMETRY_MISSING ", method)
 		quit(1)
 		return
 	var callback := Callable(fixture, method)
-	if method == "run_legacy_normal":
+	if method == "run_legacy_neighbor":
+		var neighbor_names := ["sphere", "box", "sdf", "sphere_attractor", "box_attractor", "vector_attractor"]
+		var neighbor_index := neighbor_names.find(neighbor_case)
+		if neighbor_index < 0:
+			quit(1)
+			return
+		callback = callback.bind(neighbor_index)
+	elif method == "run_legacy_normal":
 		var legacy_transform_case := 0
 		match transform_case:
 			"", "identity":
 				legacy_transform_case = 0
-			"rotated":
+			"rotation":
 				legacy_transform_case = 1
-			"rotated_uniform":
+			"uniform":
 				legacy_transform_case = 2
-			"rotated_nonuniform":
+			"nonuniform":
 				legacy_transform_case = 3
+			"tilt_nonuniform_rotation":
+				legacy_transform_case = 4
 			_:
 				quit(1)
 				return

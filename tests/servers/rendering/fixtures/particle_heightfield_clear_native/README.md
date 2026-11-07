@@ -51,23 +51,66 @@ on resource identity or renderer metadata.
 
 ## Actual legacy height collision control
 
-`run_legacy_native.py` drives the same main-RD D32 capture with a local y=0
-plane, then runs the original `ParticlesStorage::_particles_process` for one
-ordinary legacy particle. Its ordinary particles material starts the particle
-at the field origin, observes the actual `COLLIDED`, `COLLISION_NORMAL` and
+`run_legacy_native.py` drives the same main-RD D32 capture with four flat local
+y=0 planes and one tilted local plane, then runs the original
+`ParticlesStorage::_particles_process` for one ordinary legacy particle. Its
+ordinary particles material starts the particle at a fixed per-case position,
+observes the actual `COLLIDED`, `COLLISION_NORMAL` and
 `COLLISION_DEPTH` builtins, writes normal into velocity and depth into custom.w,
 and corrects position by normal times depth. The fixture asynchronously reads
 the actual particle buffer before freeing particle, material, shader and capture
 resources. The initial velocity sentinel is -7, so no simulation cannot pass.
 
-Four scenes run on Mobile and Forward+ (eight cases): identity, plus Z rotation
-90 degrees with translation (10,20,30) and local scales (1,1,1), (2,2,2), or
-(2,3,4). Geometry and the actual collision instance use the same field transform;
-the particle itself has identity scale and world collision radius 0.1.
-Independent world-plane expectations are normal (0,1,0), depth 0.1 and corrected
-position (0,0.1,0) for identity; the other three expect normal (-1,0,0), depth
-0.1 and position (9.9,20,30). They are fixed values, not derived through the
-production capture or collider matrix code. The runner also requires active,
-one actual process frame, one collider, real renderer evidence and no errors or
-warnings. This verifies the transformed planar legacy height branch; H25 sloped
-geometry and sphere/box/SDF/attractor neighbor coverage remain unverified.
+Five exact CASESET scenes run on Mobile and Forward+ (ten cases): identity,
+rotation, uniform, nonuniform, and tilt_nonuniform_rotation. All have origin 0
+and a world-space particle radius of 0.25 without collision scale. Identity,
+uniform scale (2,2,2), and nonuniform scale (2,1,3) start at (0,0.125,0) over
+local plane y=0: expected normal (0,1,0), depth 0.125 and corrected position
+(0,0.25,0). Rotation is Z90 with particle (-0.125,0,0): expected normal (-1,0,0),
+depth 0.125 and position (-0.25,0,0).
+
+The tilted case uses raw extents (2,2,2), local plane y=0.5*x+0.25*z over
+x/z in [-2,2], field Rz90*diag(2,1,3), and particle (-0.125,0,0). Independent
+CASESET expectations are normal
+(-0.9669875568304565,-0.2417468892076141,-0.08058229640253803), depth
+0.12087344460380706 and corrected position (-149/616,-9/308,-3/308).
+Geometry and actual collider use the same field transform. Fixed world-space
+oracles do not call production capture or collider matrix helpers. Legacy
+normal/depth/position tolerances are 2^-12; actual COLLIDED, active, one process
+frame and one collider are also required. These are unconnected direct numerical
+controls; source/record/owner-use evidence is still required for complete H25
+acceptance. The separate 16-case D32 capture matrix retains its original
+transformed geometry cases and parameters.
+
+
+## Actual legacy neighbor controls
+
+`run_legacy_neighbors.py` runs six independent single-source scenes on both
+Mobile and Forward+ (12 cases), through the same original legacy particle
+process and actual particle-buffer asynchronous readback. No height capture is
+created for these controls, and no source shares a HashSet with another source.
+The inputs and independent raw oracles match the six `H25.numeric_*` rows in
+`SCENE_HEIGHTFIELD_CASESET.json`. Sphere center 0/radius 1 and particle
+(0,1,0)/radius 0.25 give normal (0,1,0), depth 0.25 and corrected position
+(0,1.25,0). Box center 0/extents 1 and particle (1.125,0,0)/radius 0.25 give
+normal (1,0,0), depth 0.125 and position (1.25,0,0). SDF extents 2 uses a real
+16×16×16 RF volume containing world x at texel centers; particle (0.125,0,0)
+and radius 0.25 give normal (1,0,0), depth 0.125 and position (0.25,0,0).
+
+Sphere/box attractors have center 0, radius/extents 2, strength 2, attenuation 1,
+directionality 0, and particle (1,0,0): expected force (-1,0,0). The vector
+attractor has extents 2, strength 2 and a real 2×2×2 RGBF volume filled with
+(0,0.5,0.5), with particle at the origin: expected force (-2,0,0). Their ordinary
+process shader writes actual ATTRACTOR_FORCE to CUSTOM and adds force times
+DELTA to velocity. First-frame velocities are (-1/60,0,0) and (-2/60,0,0), with
+position unchanged because native automatic integration precedes start/process.
+
+Every scene verifies active and exactly one frame, the actual collider/attractor
+counts, and actual cached 3D texture count. Textured scenes additionally verify
+TYPE_3D, a valid non-white RD texture, exact cached field RID and the original
+frame texture index 0. All resources remain alive until readback; particles are
+freed before their associated material, collider and texture. These are
+**unconnected direct legacy controls**: the CASESET's required external Scene
+connection, original record dependency and owner-use join remain absent. Numeric
+agreement cannot certify complete H25 acceptance, multi-source interaction order
+or the remaining sloped-height coverage.

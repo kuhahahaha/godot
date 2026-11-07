@@ -45,6 +45,7 @@ def main():
                 "res://run.gd",
             ]
             env = os.environ.copy()
+            env.pop("ANGE_HEIGHTFIELD_LEGACY_NEIGHBOR_CASE", None)
             env.pop("ANGE_HEIGHTFIELD_LEGACY_NORMAL", None)
             env["ANGE_HEIGHTFIELD_GEOMETRY"] = "0" if height is None else "1"
             env["ANGE_HEIGHTFIELD_GEOMETRY_HEIGHT"] = str(height or 0.0)
