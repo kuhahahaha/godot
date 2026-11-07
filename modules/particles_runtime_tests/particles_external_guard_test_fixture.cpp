@@ -114,7 +114,7 @@ Error ParticlesExternalGuardTestFixture::run() {
 		check(shader && bool(shader->driver_id) && pipeline && pipeline->shader_driver_id == shader->driver_id, label + ".original_shader_association");
 		check(pipeline && pipeline->push_constant_size == sizeof(Guard::PushConstant) && pipeline->local_group_size[0] == 64 && pipeline->local_group_size[1] == 1 && pipeline->local_group_size[2] == 1, label + ".reflected_compute_layout");
 		for (int j = 0; j < i; ++j) {
-			check(engine_pipelines[i] != engine_pipelines[j] && engine_shaders[i] != engine_shaders[j], label + ".distinct_engine_variant");
+			check(engine_pipelines[i] != engine_pipelines[j] && engine_shaders[i] != engine_shaders[j], label + ".distinct_engine_variant_" + String::num_int64(j));
 		}
 	}
 	Error first_error = OK;

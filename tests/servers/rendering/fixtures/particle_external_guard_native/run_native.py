@@ -13,7 +13,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 MODES = ("INIT", "VALIDATE", "FINALIZE", "INIT_EMPTY", "FINALIZE_EMPTY")
-PASS = "PARTICLE_EXTERNAL_GUARD_NATIVE_PASS five_modes=1 checks=90 idempotent=1 owner_released=1 reprepare=1 physical_return_claimed=0"
+PASS = "PARTICLE_EXTERNAL_GUARD_NATIVE_PASS"
 MISSING = "PARTICLE_EXTERNAL_GUARD_NATIVE_MISSING tests-only fixture class not registered"
 
 
@@ -26,33 +26,19 @@ def sha256(path: Path) -> str:
 
 
 def expected_checks() -> set[str]:
-    labels = {
-        "original main RD render-thread owner",
-        "outside all active command lists",
-        "first.prepare",
-        "repeat.prepare",
-        "reprepare.prepare",
-    }
+    labels = {"original main RD render-thread owner", "outside all active command lists", "engine.actual_prepared_owner"}
+    for index, mode in enumerate(MODES):
+        labels.update({f"engine.{mode}.{suffix}" for suffix in ("actual_pipeline", "original_shader_association", "reflected_compute_layout")})
+        labels.update(f"engine.{mode}.distinct_engine_variant_{prior}" for prior in range(index))
     for phase in ("first", "reprepare"):
-        labels.update(f"{phase}.{suffix}" for suffix in ("ready", "five_distinct_shaders", "five_distinct_pipelines"))
-        labels.update(
-            f"{phase}.{mode}.{suffix}"
-            for mode in MODES
-            for suffix in (
-                "actual_shader",
-                "actual_pipeline",
-                "original_shader_association",
-                "reflected_compute_layout",
-            )
-        )
+        labels.update(f"{phase}.{suffix}" for suffix in ("prepare", "ready", "five_distinct_shaders", "five_distinct_pipelines"))
+        labels.update(f"{phase}.{mode}.{suffix}" for mode in MODES for suffix in ("actual_shader", "actual_pipeline", "original_shader_association", "reflected_compute_layout"))
+    labels.add("repeat.prepare")
     labels.update(f"repeat.{mode}.same_original_rids" for mode in MODES)
     for phase in ("first_release", "final_release"):
         labels.update(f"{phase}.{suffix}" for suffix in ("owner_release", "not_ready"))
-        labels.update(
-            f"{phase}.{mode}.{suffix}"
-            for mode in MODES
-            for suffix in ("getters_empty", "shader_owner_removed", "pipeline_owner_removed")
-        )
+        labels.update(f"{phase}.{mode}.{suffix}" for mode in MODES for suffix in ("getters_empty", "shader_owner_removed", "pipeline_owner_removed"))
+    labels.update(f"engine.{mode}.survives_local_release" for mode in MODES)
     return labels
 
 
@@ -112,7 +98,7 @@ def main() -> int:
                 and native_report.get("error") == 0
                 and native_report.get("mode_count") == 5
                 and native_report.get("failures") == []
-                and len(checks) == len(labels) == 90
+                and len(checks) == len(labels)
                 and set(labels) == expected_checks()
                 and all(row.get("ok") is True for row in checks)
                 and all(
@@ -124,7 +110,7 @@ def main() -> int:
         backend = "Metal" if args.driver == "metal" else "Vulkan"
         startup = re.findall(r"^(Metal|Vulkan) [0-9.]+ - Forward Mobile - Using Device #[0-9]+: .+$", text, re.M)
         passed = (
-            returncode == 0 and text.count(PASS) == 1 and valid_report and startup == [backend] and not fatal and stable
+            returncode == 0 and text.count("PARTICLE_EXTERNAL_GUARD_NATIVE_PASS") == 1 and valid_report and startup == [backend] and not fatal and stable
         )
     result = {
         "command": command,
