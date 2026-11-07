@@ -57,6 +57,7 @@ class ParticlesExternalGuardTestFixture;
 namespace RendererRD {
 
 class SortEffects;
+class ParticlesExternalGuard;
 #ifdef TESTS_ENABLED
 class ExternalLinkedOwnerTest;
 #endif
@@ -103,6 +104,8 @@ private:
 
 	/* EFFECTS */
 	SortEffects *sort_effects = nullptr;
+	ParticlesExternalGuard *external_guard = nullptr;
+	Error external_guard_preparation_error = ERR_UNCONFIGURED;
 
 	/* PARTICLES */
 
@@ -516,6 +519,11 @@ public:
 
 	ParticlesStorage();
 	virtual ~ParticlesStorage();
+
+	// Engine-owned preparation only; this issues no producer capability.
+	const ParticlesExternalGuard *get_external_guard() const { return external_guard; }
+	Error get_external_guard_preparation_error() const { return external_guard_preparation_error; }
+	bool is_external_guard_prepared() const;
 
 	bool free(RID p_rid);
 

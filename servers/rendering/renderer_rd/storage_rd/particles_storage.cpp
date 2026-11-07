@@ -30,6 +30,7 @@
 
 #include "particles_storage.h"
 
+#include "servers/rendering/renderer_rd/effects/particles_external_guard.h"
 #include "servers/rendering/renderer_rd/effects/sort_effects.h"
 #include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
@@ -61,6 +62,8 @@ ParticlesStorage::ParticlesStorage() {
 	/* Effects */
 
 	sort_effects = memnew(SortEffects);
+	external_guard = memnew(ParticlesExternalGuard);
+	external_guard_preparation_error = external_guard->prepare_pipelines();
 
 	/* Particles */
 
@@ -217,12 +220,25 @@ ParticlesStorage::~ParticlesStorage() {
 	material_storage->material_free(particles_shader.default_material);
 	material_storage->shader_free(particles_shader.default_shader);
 
+	if (external_guard) {
+		// RenderingServer's service-stop gate has already required every
+		// original production attachment to return before storage teardown.
+		const Error released = external_guard->release_pipelines();
+		CRASH_COND_MSG(released != OK, "Engine external guard must be released by its main-RD render-thread owner.");
+		memdelete(external_guard);
+		external_guard = nullptr;
+	}
+
 	if (sort_effects) {
 		memdelete(sort_effects);
 		sort_effects = nullptr;
 	}
 
 	singleton = nullptr;
+}
+
+bool ParticlesStorage::is_external_guard_prepared() const {
+	return external_guard && external_guard->is_prepared();
 }
 
 bool ParticlesStorage::free(RID p_rid) {

@@ -814,3 +814,16 @@ TEST_CASE("[B4][ExternalOutput] finite slot preflight and withdrawal preserve oc
 TEST_CASE("[B4][ExternalOutput] finite custody cells refuse unissued acquisition and retain unknown metadata") {
 	RendererRD::TestExternalOutputOwnerStateAccess::finite_cells_and_unissued_refusal();
 }
+
+TEST_CASE("[B4][EngineGuardLifecycle] CPU component storage keeps engine preparation unavailable") {
+	RenderingDevice device;
+	{
+		RendererRD::ExternalLinkedOwnerTest fixture(device, true);
+		const RendererRD::ParticlesStorage *storage = RendererRD::ParticlesStorage::get_singleton();
+		REQUIRE(storage != nullptr);
+		CHECK(storage->get_external_guard() == nullptr);
+		CHECK(storage->get_external_guard_preparation_error() == ERR_UNCONFIGURED);
+		CHECK_FALSE(storage->is_external_guard_prepared());
+	}
+	CHECK(RendererRD::ParticlesStorage::get_singleton() == nullptr);
+}

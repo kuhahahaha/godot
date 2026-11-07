@@ -1,0 +1,7 @@
+# Engine-owned external guard lifecycle
+
+Normal ParticlesStorage construction now owns a real ParticlesExternalGuard, prepares its five shader/pipeline variants and retains the actual preparation Error. Normal render-thread teardown explicitly releases the bundle before deleting it. Public readonly getters expose actual component readiness; component-test construction deliberately has no bundle and remains unavailable. Public render profiles remain gated.
+
+Independent reviews verified the normal constructor's render-thread/main-RD identity and the existing RenderingServer service_stopping held-device refusal preceding renderer destruction. Explicit release followed by destruction cannot double-free the version. Failed prefix frees remain RD-deferred native ownership, not a physical-return claim.
+
+Root's editor build passed. Combined CPU/dummy suite passed204 cases/90441 assertions, exit0, with only the existing three pipeline failure, three foreign-camera refusal and invalid UTF8 negative diagnostics. The new case verifies only the deliberately unavailable component constructor and singleton cleanup. It does not execute normal renderer initialization, native five-variant success/failure prefixes, real GPU work or normal shutdown physical returns. Those are required downstream evidence before full Instance192 qualification. The source lifecycle integration is implemented; normal runtime lifecycle acceptance remains pending.
