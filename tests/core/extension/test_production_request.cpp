@@ -5451,6 +5451,189 @@ struct Access {
 		fixture.cleanup_owner();
 		CHECK(fixture.owner_cleaned);
 	}
+	struct GenerationSelectionProbe {
+		SingletonEnrollment *fixture = nullptr;
+		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
+		RendererRD::ExternalOutputConfig config;
+		int failure = 0;
+		uint32_t calls = 0;
+		static void receive(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
+			auto &p = *static_cast<GenerationSelectionProbe *>(opaque);
+			++p.calls;
+			uint64_t bytes = 0;
+			uint32_t alignment = 0;
+			REQUIRE(RendererRD::ExternalLinkedOwnerTest::selection_metadata_bytes(p.config, bytes, &alignment) == OK);
+			GDExtensionDeviceExit::ProductionOutputMetadataLease metadata;
+			REQUIRE(p.fixture->registry.production_output_metadata_create(context, ref, 0, p.fixture->rd, bytes, alignment, metadata, true) == OK);
+			const Error result = p.native->create_selection_component(context, ref, p.config, metadata, p.failure);
+			CHECK(metadata.is_empty());
+			CHECK(result == (p.failure == 0 ? OK : p.failure == 1 ? ERR_INVALID_DATA
+																  : ERR_UNAUTHORIZED));
+			REQUIRE(p.native->exists());
+			CHECK(p.native->selection_inline_matches(p.config));
+			CHECK(p.native->selection_meshes() == (p.failure == 2 ? 0u : 1u));
+			CHECK(p.native->selection_materials() == (p.failure == 0 ? 2u : p.failure == 1 ? 1u
+																						   : 0u));
+			CHECK(p.native->selection_faulted() == (p.failure != 0));
+			CHECK_FALSE(p.native->generation_pin().is_empty());
+			if (p.failure != 2) {
+				auto *meshes = RendererRD::MeshStorage::get_singleton();
+				auto *materials = RendererRD::MaterialStorage::get_singleton();
+				const RID mesh = p.config.surfaces[0], material = p.config.surface_materials[0];
+				const uint64_t before = materials->material_get_generation(material);
+				ERR_PRINT_OFF;
+				meshes->mesh_clear(mesh);
+				meshes->mesh_free(mesh);
+				materials->material_set_render_priority(material, 7);
+				materials->material_free(material);
+				ERR_PRINT_ON;
+				CHECK(meshes->owns_mesh(mesh));
+				CHECK(meshes->mesh_get_surface_count(mesh) == 2);
+				CHECK(materials->owns_material(material));
+				CHECK(materials->material_get_generation(material) == before);
+			}
+			if (!p.failure) {
+				p.native->withdraw_generation();
+			}
+		}
+	};
+	static void generation_selection_lifecycle(int failure) {
+		using namespace GDExtensionDeviceExit;
+		using MeshStorage = RendererRD::MeshStorage;
+		auto *server = ordinal_server();
+		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
+			return;
+		}
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		REQUIRE(fixture.prepare_device(server) == OK);
+		auto *previous_meshes = MeshStorage::get_singleton();
+		auto *meshes = memnew(MeshStorage(MeshStorage::NativeHoldTestTag{}));
+		const RID mesh = meshes->mesh_allocate();
+		meshes->mesh_initialize(mesh);
+		auto *mesh_owner = meshes->mesh_owner.get_or_null(mesh);
+		// Original CPU mesh/surface owners, deliberately no VA or physical profile.
+		mesh_owner->surfaces = static_cast<MeshStorage::Mesh::Surface **>(memalloc(2 * sizeof(MeshStorage::Mesh::Surface *)));
+		mesh_owner->surface_count = 2;
+		for (uint32_t i = 0; i < 2; ++i) {
+			mesh_owner->surfaces[i] = memnew(MeshStorage::Mesh::Surface);
+		}
+		void *materials = RendererRD::selection_materials_create();
+		GenerationSelectionProbe probe;
+		probe.failure = failure;
+		probe.config.profile = RendererRD::ExternalOutputConfig::INSTANCE_192;
+		probe.config.max_views = probe.config.max_inflight = 1;
+		probe.config.surfaces.push_back(mesh);
+		for (uint32_t i = 0; i < 2; ++i) {
+			probe.config.surface_materials.push_back(RendererRD::selection_material_rid(materials, i));
+		}
+		PackedByteArray *tags[] = { &probe.config.producer_tag, &probe.config.device_tag, &probe.config.layout_digest, &probe.config.mapping_digest, &probe.config.numeric_profile_digest };
+		for (uint32_t i = 0; i < 5; ++i) {
+			tags[i]->resize(32);
+			tags[i]->fill(i + 1);
+		}
+		uint64_t bytes = 0;
+		REQUIRE(RendererRD::ExternalLinkedOwnerTest::selection_metadata_bytes(probe.config, bytes) == OK);
+		OrdinalPlan plan;
+		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 1, 1, 0, 0, 0, 1, 0, 0 };
+		plan.action_count = plan.use_count = plan.readback_count = 0;
+		plan.resource_count = 1;
+		plan.resources[0] = { GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, bytes, 0 };
+		probe.fixture = &fixture;
+		REQUIRE(fixture.initialize_owner(1, false, false, &GenerationSelectionProbe::receive, &probe, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &plan) == OK);
+		{
+			RendererRD::ExternalLinkedOwnerTest native(fixture.rd, true);
+			probe.native = &native;
+			auto &request = *fixture.request;
+			const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request.serial };
+			uint64_t serial = 0;
+			REQUIRE(fixture.port.record_schedule(ref, &serial) == OK);
+			server->sync();
+			const auto consume = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
+			GDExtensionProductionRecordReportV2 recorded{};
+			REQUIRE(consume(ref, serial, &recorded).native_error == OK);
+			REQUIRE(probe.calls == 1);
+			CHECK(recorded.report.physical_returns_pending == 1);
+			CHECK(mesh_owner->selection_holds == (failure == 2 ? 0u : 1u));
+			CHECK(RendererRD::selection_material_holds(materials, 0) == (failure == 2 ? 0u : 1u));
+			CHECK(RendererRD::selection_material_holds(materials, 1) == (failure == 0 ? 1u : 0u));
+			const uint32_t initial_leases = failure == 0 ? 3 : failure == 1 ? 2
+																			: 0;
+			// Drop parser references: quoted row identity survives their lifetime.
+			probe.config.surfaces.clear();
+			probe.config.surface_materials.clear();
+			for (auto *tag : tags) {
+				*tag = PackedByteArray();
+			}
+			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+			for (uint32_t turn = 0; turn < initial_leases + 2; ++turn) {
+				REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &budget) == OK);
+				REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);
+				server->sync();
+				ProductionControlOutput out{};
+				REQUIRE(fixture.registry.production_control_consume(ref, serial, &out) == OK);
+				CHECK(out.result.native_error == OK);
+				CHECK(out.service_usage.passes == 1);
+				CHECK(out.service_usage.controls == 1);
+				CHECK(out.service_usage.receipts == 0);
+				if (turn < initial_leases) {
+					CHECK_FALSE(out.output_generation.native_released);
+					REQUIRE(native.exists());
+					CHECK(native.selection_meshes() + native.selection_materials() == initial_leases - turn - 1);
+					CHECK(RendererRD::selection_shader_holds(materials) == native.selection_materials());
+					const uint32_t initially_retained_materials = failure == 0 ? 2u : 1u;
+					const uint32_t remaining_materials = turn + 1 < initially_retained_materials ? initially_retained_materials - turn - 1 : 0;
+					// Exact original RID order: material1 returns before material0.
+					for (uint32_t i = 0; i < 2; ++i) {
+						CHECK(RendererRD::selection_material_holds(materials, i) == (i < remaining_materials ? 1u : 0u));
+					}
+					CHECK(mesh_owner->selection_holds == native.selection_meshes());
+					CHECK_FALSE(request.resources[0].metadata_returned);
+				} else if (turn == initial_leases) {
+					CHECK_FALSE(out.output_generation.native_released);
+					REQUIRE(native.exists());
+					CHECK(native.generation_directory_empty());
+				} else {
+					CHECK(out.output_generation.native_released);
+					CHECK(request.output_owner_head == UINT32_MAX);
+					if (failure) {
+						CHECK_FALSE(native.exists());
+						CHECK(request.resources[0].metadata_returned);
+						CHECK(request.resources[0].metadata_data == nullptr);
+						native.forget_auto_returned();
+					} else {
+						REQUIRE(native.exists());
+						CHECK(native.released());
+						CHECK_FALSE(request.resources[0].metadata_returned);
+						native.free_created();
+						CHECK(request.resources[0].metadata_returned);
+					}
+				}
+			}
+			CHECK(mesh_owner->selection_holds == 0);
+			CHECK(RendererRD::selection_shader_holds(materials) == 0);
+			CHECK(request.graph_count == 0);
+			CHECK(request.native_count == 0);
+			CHECK(fixture.driver.issues == 0);
+			const auto release = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReleaseV2>("device_session_production_release_v2");
+			for (uint32_t turn = 0; turn < 8 && request.serial; ++turn) {
+				GDExtensionProductionServiceBudgetV1 remaining{};
+				GDExtensionProductionReportV2 report{};
+				const Error error = Error(release(ref, &budget, &remaining, &report).native_error);
+				CHECK((error == OK || error == ERR_BUSY));
+				if (request.serial) {
+					server->sync();
+				}
+			}
+			CHECK(request.serial == 0);
+			fixture.cleanup_owner();
+			CHECK(fixture.owner_cleaned);
+		}
+		RendererRD::selection_materials_destroy(materials);
+		meshes->mesh_free(mesh);
+		memdelete(meshes);
+		MeshStorage::singleton = previous_meshes;
+	}
 	struct SceneMetadataDirectoryProbe {
 		SingletonEnrollment *fixture = nullptr;
 		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
@@ -10582,4 +10765,14 @@ TEST_CASE("[SceneTree][ProductionRequest][MetadataV3] exact accepted row size re
 }
 TEST_CASE("[SceneTree][ProductionRequest][MetadataV3] V2 preserves larger accepted metadata semantics") {
 	TestProductionRequest::Access::output_scene_metadata(false, false, false, 1);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][GenerationSelection] original slab and root retain CPU selection through bounded return") {
+	TestProductionRequest::Access::generation_selection_lifecycle(0);
+}
+TEST_CASE("[SceneTree][ProductionRequest][GenerationSelection] stale second material retains prefix until unpublished auto drain") {
+	TestProductionRequest::Access::generation_selection_lifecycle(1);
+}
+TEST_CASE("[SceneTree][ProductionRequest][GenerationSelection] transaction closes post root refusal before first selection lease") {
+	TestProductionRequest::Access::generation_selection_lifecycle(2);
 }

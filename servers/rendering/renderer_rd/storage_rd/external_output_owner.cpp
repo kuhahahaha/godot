@@ -30,11 +30,12 @@
 
 #include "external_output_owner.h"
 
+#include "external_output_storage.h"
+
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 
 #include <cstddef>
-#include "external_output_storage.h"
 
 namespace RendererRD {
 Error ExternalOutputOwner::validate_native_selection(const ExternalOutputConfig &config, uint32_t &surface_count) {
@@ -161,10 +162,9 @@ Error ExternalOutputOwner::select_slot(const ExternalOutputRequest &request, uin
 	if (request.common.generation != generation) {
 		return ERR_INVALID_PARAMETER;
 	}
-	const bool digests_match = config_tags_inline ?
-			(request.layout_digest.size() == 32 && request.mapping_digest.size() == 32 &&
-					memcmp(request.layout_digest.ptr(), frozen_config_tags[2], 32) == 0 && memcmp(request.mapping_digest.ptr(), frozen_config_tags[3], 32) == 0) :
-			(request.layout_digest == config.layout_digest && request.mapping_digest == config.mapping_digest);
+	const bool digests_match = config_tags_inline ? (request.layout_digest.size() == 32 && request.mapping_digest.size() == 32 &&
+															memcmp(request.layout_digest.ptr(), frozen_config_tags[2], 32) == 0 && memcmp(request.mapping_digest.ptr(), frozen_config_tags[3], 32) == 0)
+												  : (request.layout_digest == config.layout_digest && request.mapping_digest == config.mapping_digest);
 	if (!digests_match || (request.pass_mask & ~config.pass_mask)) {
 		return ERR_INVALID_DATA;
 	}
@@ -234,11 +234,15 @@ Error ExternalOutputOwner::select_slot(const ExternalOutputRequest &request, uin
 	return OK;
 }
 
-Error ExternalOutputOwner::plan_metadata_layout(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, MetadataLayout &r_layout) {
+Error ExternalOutputOwner::plan_metadata_layout(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, MetadataLayout &r_layout, uint32_t p_mesh_selections, uint32_t p_material_selections, uint32_t p_bindings, uint32_t p_storage) {
 	MetadataLayout layout;
 	layout.view_count = p_views;
 	layout.read_count = p_reads;
 	layout.surface_count = p_surfaces;
+	layout.mesh_selection_count = p_mesh_selections;
+	layout.material_selection_count = p_material_selections;
+	layout.binding_count = p_bindings == UINT32_MAX ? p_surfaces : p_bindings;
+	layout.storage_count = p_storage == UINT32_MAX ? (p_surfaces ? MAX_SLOTS : 0) : p_storage;
 	uint64_t cursor = sizeof(ExternalOutputOwner);
 	uint32_t alignment = alignof(ExternalOutputOwner);
 	auto append = [&](uint32_t count, size_t stride, size_t align, uint32_t &offset) {
@@ -258,8 +262,10 @@ Error ExternalOutputOwner::plan_metadata_layout(uint32_t p_views, uint32_t p_rea
 	if (cursor > UINT32_MAX ||
 			!append(p_views, sizeof(ViewCell), alignof(ViewCell), layout.view_offset) ||
 			!append(p_reads, sizeof(ReadCell), alignof(ReadCell), layout.read_offset) ||
-			!append(p_surfaces ? MAX_SLOTS : 0, sizeof(ExternalOutputStorage), alignof(ExternalOutputStorage), layout.storage_offset) ||
-			!append(p_surfaces, sizeof(SurfaceBinding), alignof(SurfaceBinding), layout.surface_binding_offset) ||
+			!append(layout.storage_count, sizeof(ExternalOutputStorage), alignof(ExternalOutputStorage), layout.storage_offset) ||
+			!append(layout.binding_count, sizeof(SurfaceBinding), alignof(SurfaceBinding), layout.surface_binding_offset) ||
+			!append(p_mesh_selections, sizeof(GenerationMeshSelection), alignof(GenerationMeshSelection), layout.mesh_selection_offset) ||
+			!append(p_material_selections, sizeof(GenerationMaterialSelection), alignof(GenerationMaterialSelection), layout.material_selection_offset) ||
 			!append(p_surfaces, sizeof(SurfaceCell), alignof(SurfaceCell), layout.surface_offset) ||
 			alignment > alignof(std::max_align_t)) {
 		return ERR_PARAMETER_RANGE_ERROR;
@@ -270,10 +276,30 @@ Error ExternalOutputOwner::plan_metadata_layout(uint32_t p_views, uint32_t p_rea
 	return OK;
 }
 
+Error ExternalOutputOwner::plan_generation_selection_layout(const ExternalOutputConfig &config, uint32_t views, uint32_t reads, uint32_t surface_consumers, MetadataLayout &out) {
+	if (config.profile != ExternalOutputConfig::INSTANCE_192) {
+		return ERR_UNAVAILABLE;
+	}
+	uint32_t flattened = 0;
+	const Error error = validate_native_selection(config, flattened);
+	if (error != OK) {
+		return error;
+	}
+	if (!config.max_views || config.max_views > MAX_VIEWS || !config.max_inflight || config.max_inflight > MAX_INFLIGHT) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const uint64_t slots = uint64_t(config.max_views) * config.max_inflight;
+	const uint64_t bindings = slots * flattened;
+	if (bindings > UINT32_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	return plan_metadata_layout(views, reads, surface_consumers, out, config.surfaces.size(), flattened, uint32_t(bindings), uint32_t(slots));
+}
+
 Error ExternalOutputOwner::install_metadata_directory(GDExtensionDeviceExit::ProductionPhysicalContextRef context,
 		GDExtensionProductionRequestRefV1 request, GDExtensionDeviceExit::Registry &registry,
 		const GDExtensionDeviceExit::ProductionOutputMetadataLease &lease,
-		uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces) {
+		uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, bool p_generation_selection) {
 	if (metadata_directory_installed || view_cells || read_cells || surface_cells || view_capacity || read_capacity || surface_capacity) {
 		return ERR_ALREADY_IN_USE;
 	}
@@ -292,8 +318,19 @@ Error ExternalOutputOwner::install_metadata_directory(GDExtensionDeviceExit::Pro
 			generation_request.handle_serial != request.handle_serial || !generation_root_matches(generation_pin)) {
 		return ERR_UNAUTHORIZED;
 	}
+	uint32_t mesh_selections = 0, material_selections = 0;
+	if (p_generation_selection) {
+		if (config.profile != ExternalOutputConfig::INSTANCE_192 || !config_tags_inline) {
+			return ERR_UNAVAILABLE;
+		}
+		const Error selection = validate_native_selection(config, material_selections);
+		if (selection != OK) {
+			return selection;
+		}
+		mesh_selections = config.surfaces.size();
+	}
 	MetadataLayout layout;
-	Error error = plan_metadata_layout(p_views, p_reads, p_surfaces, layout);
+	Error error = p_generation_selection ? plan_generation_selection_layout(config, p_views, p_reads, p_surfaces, layout) : plan_metadata_layout(p_views, p_reads, p_surfaces, layout);
 	if (error != OK) {
 		return error;
 	}
@@ -310,6 +347,27 @@ Error ExternalOutputOwner::install_metadata_directory(GDExtensionDeviceExit::Pro
 	}
 	for (uint32_t i = 0; i < p_surfaces; ++i) {
 		new (base + layout.surface_offset + size_t(i) * sizeof(SurfaceCell)) SurfaceCell;
+	}
+	for (uint32_t i = 0; i < mesh_selections; ++i) {
+		auto *row = new (base + layout.mesh_selection_offset + size_t(i) * sizeof(GenerationMeshSelection)) GenerationMeshSelection;
+		row->mesh = config.surfaces[i];
+	}
+	for (uint32_t i = 0; i < material_selections; ++i) {
+		auto *row = new (base + layout.material_selection_offset + size_t(i) * sizeof(GenerationMaterialSelection)) GenerationMaterialSelection;
+		row->material = config.surface_materials[i];
+		row->generation = MaterialStorage::get_singleton()->material_get_generation(row->material);
+	}
+	generation_meshes = mesh_selections ? reinterpret_cast<GenerationMeshSelection *>(base + layout.mesh_selection_offset) : nullptr;
+	generation_materials = material_selections ? reinterpret_cast<GenerationMaterialSelection *>(base + layout.material_selection_offset) : nullptr;
+	generation_mesh_count = mesh_selections;
+	generation_material_count = material_selections;
+	binding_capacity = layout.binding_count;
+	storage_capacity = layout.storage_count;
+	if (p_generation_selection) {
+		// Identity resides in quoted rows; do not retain parser Vector storage.
+		config.surfaces.clear();
+		config.surface_materials.clear();
+		generation_config_inline = true;
 	}
 	view_cells = p_views ? reinterpret_cast<ViewCell *>(base + layout.view_offset) : nullptr;
 	read_cells = p_reads ? reinterpret_cast<ReadCell *>(base + layout.read_offset) : nullptr;
@@ -358,7 +416,7 @@ Error ExternalOutputOwner::install_reserved_surface_cells(uint32_t p_surfaces) {
 }
 
 Error ExternalOutputOwner::return_reserved_cells() {
-	if (has_live_slots()) {
+	if (has_live_slots() || has_generation_selection_custody()) {
 		return ERR_BUSY;
 	}
 	for (uint32_t i = 0; i < view_capacity; ++i) {
@@ -379,6 +437,15 @@ Error ExternalOutputOwner::return_reserved_cells() {
 		}
 	}
 	if (metadata_directories_placement) {
+		for (uint32_t i = 0; i < generation_material_count; ++i) {
+			generation_materials[i].~GenerationMaterialSelection();
+		}
+		for (uint32_t i = 0; i < generation_mesh_count; ++i) {
+			generation_meshes[i].~GenerationMeshSelection();
+		}
+		generation_meshes = nullptr;
+		generation_materials = nullptr;
+		generation_mesh_count = generation_material_count = 0;
 		for (uint32_t i = 0; i < surface_capacity; ++i) {
 			surface_cells[i].~SurfaceCell();
 		}
@@ -670,5 +737,71 @@ void ExternalOutputOwner::surface_move(ExternalSurfaceSelection &p_to, ExternalS
 	p_from.serial = p_from.generation = 0;
 	p_from.cell = UINT32_MAX;
 	p_from.geometry_source = nullptr;
+}
+} // namespace RendererRD
+
+namespace RendererRD {
+Error ExternalOutputOwner::acquire_generation_selection(GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 request) {
+	if (generation_selection_attempted || state != GenerationState::CONFIGURED || has_live_slots()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	if (!generation_registry || !device || !generation_root_matches(generation_pin) ||
+			request.registry_instance != generation_request.registry_instance || request.handle_serial != generation_request.handle_serial ||
+			!generation_registry->production_output_pin_matches(generation_pin, request, *device)) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (config.profile != ExternalOutputConfig::INSTANCE_192 || !metadata_directories_placement || !generation_config_inline || !generation_meshes || !generation_materials || !generation_mesh_count || !generation_material_count) {
+		return ERR_INVALID_DATA;
+	}
+	MetadataLayout layout;
+	Error error = plan_metadata_layout(view_capacity, read_capacity, surface_capacity, layout, generation_mesh_count, generation_material_count, binding_capacity, storage_capacity);
+	if (error != OK) {
+		return error;
+	}
+	error = generation_registry->production_output_metadata_validate(context, request, metadata_lease, *device, layout.total_bytes, layout.alignment);
+	if (error != OK) {
+		return error;
+	}
+	auto *meshes = MeshStorage::get_singleton();
+	auto *materials = MaterialStorage::get_singleton();
+	if (!meshes || !materials) {
+		return ERR_UNAVAILABLE;
+	}
+	generation_selection_attempted = true;
+	auto fail = [&](Error reason) {
+		withdraw(); // Close every view/slot before setting the terminal failure state.
+		generation_selection_unpublished = true;
+		state = GenerationState::FAULTED_RETIRING;
+		return reason;
+	};
+	for (uint32_t i = 0; i < generation_mesh_count; ++i) {
+		auto &row = generation_meshes[i];
+		error = meshes->mesh_selection_acquire(row.mesh, row.lease);
+		if (error != OK) {
+			return fail(error);
+		}
+		++retained_mesh_count;
+	}
+	uint32_t flattened = 0;
+	for (uint32_t i = 0; i < generation_mesh_count; ++i) {
+		const int count = meshes->mesh_get_surface_count(generation_meshes[i].mesh);
+		if (count <= 0 || uint32_t(count) > generation_material_count - flattened) {
+			return fail(ERR_INVALID_DATA);
+		}
+		flattened += uint32_t(count);
+	}
+	if (flattened != generation_material_count) {
+		return fail(ERR_INVALID_DATA);
+	}
+	for (uint32_t i = 0; i < generation_material_count; ++i) {
+		auto &row = generation_materials[i];
+		error = materials->material_selection_acquire(row.material, row.lease, row.generation);
+		if (error != OK) {
+			return fail(error);
+		}
+		++retained_material_count;
+	}
+	generation_selection_complete = true;
+	return OK;
 }
 } // namespace RendererRD

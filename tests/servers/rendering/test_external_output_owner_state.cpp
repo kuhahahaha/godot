@@ -28,8 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
 #include "core/os/memory_allocation_test_hooks.h"
+#include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
@@ -121,6 +121,108 @@ bool ExternalLinkedOwnerTest::metadata_directory_in_slab(uint32_t views, uint32_
 			static_cast<const void *>(owner->read_cells) == (reads ? base + layout.read_offset : nullptr) &&
 			static_cast<const void *>(owner->surface_cells) == (surfaces ? base + layout.surface_offset : nullptr);
 }
+Error ExternalLinkedOwnerTest::selection_metadata_bytes(const ExternalOutputConfig &config, uint64_t &bytes, uint32_t *alignment) {
+	ExternalOutputOwner::MetadataLayout layout;
+	const Error error = ExternalOutputOwner::plan_generation_selection_layout(config, 1, 2, 7, layout);
+	if (error == OK) {
+		bytes = layout.total_bytes;
+		if (alignment) {
+			*alignment = layout.alignment;
+		}
+	}
+	return error;
+}
+Error ExternalLinkedOwnerTest::create_selection_component(GDExtensionDeviceExit::ProductionPhysicalContextRef context,
+		GDExtensionProductionRequestRefV1 request, const ExternalOutputConfig &config, GDExtensionDeviceExit::ProductionOutputMetadataLease &metadata, int failure) {
+	CRASH_COND(!empty_storage_mode || owner);
+	ExternalOutputOwner::MetadataLayout layout;
+	Error error = ExternalOutputOwner::plan_generation_selection_layout(config, 1, 2, 7, layout);
+	if (error != OK) {
+		return error;
+	}
+	auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
+	CRASH_COND(metadata.is_empty() || metadata.get_size() != layout.total_bytes);
+	owner = new (metadata.get_data()) ExternalOutputOwner(config, generation, true, true);
+	owner->device = expected_device;
+	CRASH_COND(owner->install_metadata_directory(context, request, registry, metadata, 1, 2, 7, true) != OK);
+	particles = storage->particles_owner.allocate_rid();
+	storage->particles_owner.initialize_rid(particles);
+	storage->particles_owner.get_or_null(particles)->external = owner;
+	CRASH_COND(owner->install_generation_root(context, request, registry, *expected_device, particles, &metadata) != OK);
+	owner->metadata_lease = static_cast<GDExtensionDeviceExit::ProductionOutputMetadataLease &&>(metadata);
+	if (failure == 1) {
+		// Real original mutation between snapshot and acquisition invalidates only
+		// the second material, retaining the successful mesh+first-material prefix.
+		MaterialStorage::get_singleton()->material_set_render_priority(config.surface_materials[1], 1);
+	}
+	if (failure == 2) {
+		// Installed original root, invalid callback context: no first lease yet.
+		error = owner->acquire_generation_selection({}, request);
+		CHECK_FALSE(owner->generation_selection_attempted);
+		CHECK(owner->state == ExternalOutputOwner::GenerationState::CONFIGURED);
+	} else {
+		error = owner->acquire_generation_selection(context, request);
+	}
+	if (error != OK) {
+		if (failure == 1) {
+			// Prove the component's own partial-prefix failure transition; the
+			// outer guard below must not conceal a missing in-loop fail().
+			CHECK(owner->generation_selection_attempted);
+			CHECK(owner->state == ExternalOutputOwner::GenerationState::FAULTED_RETIRING);
+			CHECK(owner->generation_selection_unpublished);
+			CHECK_FALSE(owner->admits_work());
+			for (uint32_t i = 0; i < owner->config.max_views; ++i) {
+				CHECK(owner->views[i].closed);
+			}
+			for (uint32_t i = 0; i < owner->slot_count; ++i) {
+				CHECK(owner->slots[i].publication_closed);
+				CHECK(owner->slots[i].pass_uses_closed);
+			}
+		}
+		// Explicit internal transaction owner guard, not implemented public Create.
+		// acquire's pre-attempt refusals do not perform this caller obligation.
+		owner->withdraw();
+		owner->generation_selection_unpublished = true;
+		owner->state = ExternalOutputOwner::GenerationState::FAULTED_RETIRING;
+	}
+	return error;
+}
+uint32_t ExternalLinkedOwnerTest::selection_meshes() const {
+	CRASH_COND(!exists());
+	return owner->retained_mesh_count;
+}
+uint32_t ExternalLinkedOwnerTest::selection_materials() const {
+	CRASH_COND(!exists());
+	return owner->retained_material_count;
+}
+bool ExternalLinkedOwnerTest::selection_faulted() const {
+	return exists() && owner->state == ExternalOutputOwner::GenerationState::FAULTED_RETIRING && owner->generation_selection_unpublished;
+}
+bool ExternalLinkedOwnerTest::selection_inline_matches(const ExternalOutputConfig &config) const {
+	if (!exists() || !owner->generation_config_inline || !owner->config_tags_inline || !owner->config.surfaces.is_empty() || !owner->config.surface_materials.is_empty() ||
+			owner->generation_mesh_count != uint32_t(config.surfaces.size()) || owner->generation_material_count != uint32_t(config.surface_materials.size()) || owner->binding_capacity != owner->slot_count * config.surface_materials.size() || owner->surface_capacity != 7) {
+		return false;
+	}
+	const uintptr_t start = uintptr_t(owner->metadata_lease.get_data()), end = start + owner->metadata_lease.get_size();
+	if (uintptr_t(owner->generation_meshes) < start || uintptr_t(owner->generation_meshes + owner->generation_mesh_count) > end || uintptr_t(owner->generation_materials) < start || uintptr_t(owner->generation_materials + owner->generation_material_count) > end) {
+		return false;
+	}
+	for (uint32_t i = 0; i < owner->generation_mesh_count; ++i) {
+		if (owner->generation_meshes[i].mesh != config.surfaces[i]) {
+			return false;
+		}
+	}
+	for (uint32_t i = 0; i < owner->generation_material_count; ++i) {
+		if (owner->generation_materials[i].material != config.surface_materials[i]) {
+			return false;
+		}
+	}
+	return memcmp(owner->frozen_config_tags[0], config.producer_tag.ptr(), 32) == 0;
+}
+void ExternalLinkedOwnerTest::forget_auto_returned() {
+	CRASH_COND(!empty_storage_mode || storage->particles_owner.get_or_null(particles));
+	owner = nullptr;
+}
 GDExtensionDeviceExit::ProductionOutputPin &ExternalLinkedOwnerTest::pin(uint32_t slot) {
 	CRASH_COND(slot >= 2);
 	return owner->slots[slot].original_pin;
@@ -158,7 +260,7 @@ Error ExternalLinkedOwnerTest::prepare_generation_directory() {
 	return owner->install_reserved_cells(1, 1);
 }
 bool ExternalLinkedOwnerTest::generation_directory_empty() const {
-	return !owner->view_cells && !owner->read_cells && !owner->surface_cells &&
+	return !owner->view_cells && !owner->read_cells && !owner->surface_cells && !owner->generation_meshes && !owner->generation_materials &&
 			!owner->view_capacity && !owner->read_capacity && !owner->surface_capacity;
 }
 GDExtensionDeviceExit::ProductionOutputPin &ExternalLinkedOwnerTest::generation_directory_pin() {
@@ -370,6 +472,79 @@ class TestExternalOutputOwnerStateAccess {
 	}
 
 public:
+	static void generation_selection_layout() {
+		using Owner = ExternalOutputOwner;
+		Owner::MetadataLayout base, selected;
+		REQUIRE(Owner::plan_metadata_layout(0, 0, 0, base) == OK);
+		CHECK(base.total_bytes == sizeof(Owner));
+		REQUIRE(Owner::plan_metadata_layout(1, 2, 7, selected, 2, 3, 12, 4) == OK);
+		CHECK(selected.view_count == 1);
+		CHECK(selected.read_count == 2);
+		CHECK(selected.surface_count == 7);
+		CHECK(selected.binding_count == 12);
+		CHECK(selected.storage_count == 4);
+		CHECK(selected.mesh_selection_count == 2);
+		CHECK(selected.material_selection_count == 3);
+		// Each exact next offset catches both short and oversized native slices.
+		uint64_t end = sizeof(Owner);
+		auto slice = [&](uint32_t offset, uint32_t count, size_t stride, size_t alignment) {
+			const uint64_t expected = (end + alignment - 1) & ~(uint64_t(alignment) - 1);
+			CHECK(offset % alignment == 0);
+			CHECK(offset == expected);
+			CHECK(end <= offset);
+			end = uint64_t(offset) + uint64_t(count) * stride;
+			CHECK(end <= selected.total_bytes);
+		};
+		slice(selected.view_offset, 1, sizeof(Owner::ViewCell), alignof(Owner::ViewCell));
+		slice(selected.read_offset, 2, sizeof(Owner::ReadCell), alignof(Owner::ReadCell));
+		slice(selected.storage_offset, 4, sizeof(ExternalOutputStorage), alignof(ExternalOutputStorage));
+		slice(selected.surface_binding_offset, 12, sizeof(Owner::SurfaceBinding), alignof(Owner::SurfaceBinding));
+		slice(selected.mesh_selection_offset, 2, sizeof(Owner::GenerationMeshSelection), alignof(Owner::GenerationMeshSelection));
+		slice(selected.material_selection_offset, 3, sizeof(Owner::GenerationMaterialSelection), alignof(Owner::GenerationMaterialSelection));
+		slice(selected.surface_offset, 7, sizeof(Owner::SurfaceCell), alignof(Owner::SurfaceCell));
+		CHECK(end == selected.total_bytes);
+		const Owner::MetadataLayout accepted = selected;
+		auto unchanged = [&]() {
+			CHECK(selected.view_count == accepted.view_count);
+			CHECK(selected.read_count == accepted.read_count);
+			CHECK(selected.surface_count == accepted.surface_count);
+			CHECK(selected.view_offset == accepted.view_offset);
+			CHECK(selected.read_offset == accepted.read_offset);
+			CHECK(selected.surface_offset == accepted.surface_offset);
+			CHECK(selected.storage_offset == accepted.storage_offset);
+			CHECK(selected.surface_binding_offset == accepted.surface_binding_offset);
+			CHECK(selected.total_bytes == accepted.total_bytes);
+			CHECK(selected.alignment == accepted.alignment);
+			CHECK(selected.mesh_selection_count == accepted.mesh_selection_count);
+			CHECK(selected.material_selection_count == accepted.material_selection_count);
+			CHECK(selected.mesh_selection_offset == accepted.mesh_selection_offset);
+			CHECK(selected.material_selection_offset == accepted.material_selection_offset);
+			CHECK(selected.binding_count == accepted.binding_count);
+			CHECK(selected.storage_count == accepted.storage_count);
+		};
+		CHECK(Owner::plan_metadata_layout(0, 0, 0, selected, UINT32_MAX, 0) == ERR_PARAMETER_RANGE_ERROR);
+		unchanged();
+		CHECK(Owner::plan_metadata_layout(0, 0, 0, selected, 0, UINT32_MAX) == ERR_PARAMETER_RANGE_ERROR);
+		unchanged();
+		CHECK(Owner::plan_metadata_layout(0, 0, 0, selected, 0, 0, UINT32_MAX - 1, 0) == ERR_PARAMETER_RANGE_ERROR);
+		unchanged();
+		CHECK(Owner::plan_metadata_layout(0, 0, 0, selected, 0, 0, 0, UINT32_MAX - 1) == ERR_PARAMETER_RANGE_ERROR);
+		unchanged();
+		// Largest accepted and first rejected counts for each new native row.
+		auto boundary = [&](bool meshes, size_t stride, size_t alignment) {
+			const uint64_t offset = (uint64_t(sizeof(Owner)) + alignment - 1) & ~(uint64_t(alignment) - 1);
+			const uint32_t maximum = uint32_t((UINT32_MAX - offset) / stride);
+			Owner::MetadataLayout result;
+			REQUIRE(Owner::plan_metadata_layout(0, 0, 0, result, meshes ? maximum : 0, meshes ? 0 : maximum) == OK);
+			CHECK(result.total_bytes == offset + uint64_t(maximum) * stride);
+			selected = accepted;
+			CHECK(Owner::plan_metadata_layout(0, 0, 0, selected, meshes ? maximum + 1 : 0, meshes ? 0 : maximum + 1) == ERR_PARAMETER_RANGE_ERROR);
+			unchanged();
+		};
+		boundary(true, sizeof(Owner::GenerationMeshSelection), alignof(Owner::GenerationMeshSelection));
+		boundary(false, sizeof(Owner::GenerationMaterialSelection), alignof(Owner::GenerationMaterialSelection));
+	}
+
 	static void metadata_layout() {
 		using Layout = ExternalOutputOwner::MetadataLayout;
 		Layout zero;
@@ -826,4 +1001,8 @@ TEST_CASE("[B4][EngineGuardLifecycle] CPU component storage keeps engine prepara
 		CHECK_FALSE(storage->is_external_guard_prepared());
 	}
 	CHECK(RendererRD::ParticlesStorage::get_singleton() == nullptr);
+}
+
+TEST_CASE("[B4][GenerationSelectionLayout] original mesh and material lease rows are separate checked native slices") {
+	RendererRD::TestExternalOutputOwnerStateAccess::generation_selection_layout();
 }

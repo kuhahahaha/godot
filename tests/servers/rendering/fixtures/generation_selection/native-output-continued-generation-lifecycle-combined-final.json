@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--test-case=*[ProductionRequest]*,*[ProductionNativeObserve]*,*[B4]*,*[ViewportHistory]*,*[CheckedBind]*,*[RecordSource]*,*[NativeDisposal]*,*[QualificationTicket]*,*[VertexArrayRange]*,*[VertexArrayRangeConstant]*,*[CheckedPipelineCompatibility]*,*[MaterialNativeHold]*,*[ShaderCompilePolicy]*,*[ExternalOutputGuard]*"
+  ],
+  "binary_bytes": 156961640,
+  "binary_sha256": "05d0d26604829e72b90e3f0f4a781d0ca5e63a1d27d67b23c7d44d8eb168297e",
+  "exit": 0,
+  "elapsed": 4.039652958046645,
+  "scope": "CPU/dummy only; acceptance requires diagnostic and assertion inspection"
+}

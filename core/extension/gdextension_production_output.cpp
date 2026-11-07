@@ -29,10 +29,10 @@
 /**************************************************************************/
 
 #include "core/extension/gdextension_production_request.h"
-#include "servers/rendering/rendering_device.h"
-#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/rendering_device.h"
 
 namespace GDExtensionDeviceExit {
 namespace {
@@ -462,7 +462,9 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 		}
 		const auto &slot = owner.slots[action.output_slot];
 		out->state = uint32_t(slot.state) + 1;
-		out->custody = action.output_state == ProductionActionCell::OutputState::UNKNOWN ? GDEXTENSION_OUTPUT_CUSTODY_UNKNOWN_V1 : action.output_state == ProductionActionCell::OutputState::RETIRING ? GDEXTENSION_OUTPUT_CUSTODY_RETAINED_PREFIX_V1 : action.output_state == ProductionActionCell::OutputState::RETURNED ? GDEXTENSION_OUTPUT_NO_CUSTODY_V1 : GDEXTENSION_OUTPUT_CUSTODY_ACCEPTED_V1;
+		out->custody = action.output_state == ProductionActionCell::OutputState::UNKNOWN ? GDEXTENSION_OUTPUT_CUSTODY_UNKNOWN_V1 : action.output_state == ProductionActionCell::OutputState::RETIRING ? GDEXTENSION_OUTPUT_CUSTODY_RETAINED_PREFIX_V1
+				: action.output_state == ProductionActionCell::OutputState::RETURNED																												  ? GDEXTENSION_OUTPUT_NO_CUSTODY_V1
+																																																	  : GDEXTENSION_OUTPUT_CUSTODY_ACCEPTED_V1;
 		if (slot.lease_token.size() == 32) {
 			memcpy(out->lease_token.bytes, slot.lease_token.ptr(), 32);
 		}
@@ -535,11 +537,15 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 		out->status = output_status(error, "output_slot_preflight");
 		return;
 	}
-	const uint32_t surfaces = owner.config.surface_materials.size();
+	if (owner.generation_config_inline && !owner.generation_selection_complete) {
+		out->status = output_status(ERR_UNAVAILABLE, "native_generation_selection_required");
+		return;
+	}
+	const uint32_t surfaces = owner.generation_config_inline ? owner.generation_material_count : uint32_t(owner.config.surface_materials.size());
 	Storage::Instance192Layout layout;
 	if (owner.config.profile == RendererRD::ExternalOutputConfig::INSTANCE_192) {
 		error = Storage::plan_instance192(owner.config.capacity, surfaces, layout);
-		if (error != OK || !surfaces || uint64_t(owner.slot_count) * surfaces > owner.surface_capacity) {
+		if (error != OK || !surfaces || uint64_t(owner.slot_count) * surfaces > (owner.generation_config_inline ? owner.binding_capacity : owner.surface_capacity)) {
 			out->status = output_status(error == OK ? ERR_OUT_OF_MEMORY : error, "output_surface_capacity");
 			return;
 		}
@@ -560,7 +566,7 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 		return;
 	}
 	Owner::MetadataLayout metadata;
-	error = Owner::plan_metadata_layout(owner.view_capacity, owner.read_capacity, owner.surface_capacity, metadata);
+	error = owner.generation_config_inline ? Owner::plan_metadata_layout(owner.view_capacity, owner.read_capacity, owner.surface_capacity, metadata, owner.generation_mesh_count, owner.generation_material_count, owner.binding_capacity, owner.storage_capacity) : Owner::plan_metadata_layout(owner.view_capacity, owner.read_capacity, owner.surface_capacity, metadata);
 	if (error != OK || metadata.total_bytes != owner.metadata_lease.get_size()) {
 		out->status = output_status(ERR_INVALID_DATA, "output_metadata_layout");
 		return;

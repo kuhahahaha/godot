@@ -799,6 +799,61 @@ private:
 	}
 
 public:
+	struct SelectionMaterials {
+		MaterialStorage *storage = nullptr, *previous = nullptr;
+		RID shader, materials[2];
+	};
+	class SelectionShaderData : public MaterialStorage::ShaderData {
+	public:
+		void set_code(const String &) override {}
+		bool is_animated() const override { return false; }
+		bool casts_shadows() const override { return false; }
+		RenderingServerTypes::ShaderNativeSourceCode get_native_source_code() const override { return {}; }
+		Pair<ShaderRD *, RID> get_native_shader_and_version() const override { return {}; }
+	};
+	class SelectionMaterialData : public MaterialStorage::MaterialData {
+	public:
+		void set_render_priority(int) override {}
+		void set_next_pass(RID) override {}
+		bool update_parameters(const HashMap<StringName, Variant> &, bool, bool) override { return false; }
+	};
+	static void *selection_create() {
+		auto *p = memnew(SelectionMaterials);
+		p->previous = MaterialStorage::get_singleton();
+		p->storage = memnew(MaterialStorage(MaterialStorage::NativeHoldTestTag{}));
+		auto &storage = *p->storage;
+		storage.shader_data_request_func[MaterialStorage::SHADER_TYPE_3D] = []() -> MaterialStorage::ShaderData * { return memnew(SelectionShaderData); };
+		storage.material_data_request_func[MaterialStorage::SHADER_TYPE_3D] = [](MaterialStorage::ShaderData *) -> MaterialStorage::MaterialData * { return memnew(SelectionMaterialData); };
+		p->shader = storage.shader_allocate();
+		storage.shader_initialize(p->shader, false);
+		storage.shader_set_code(p->shader, "shader_type spatial;");
+		for (RID &material : p->materials) {
+			material = storage.material_allocate();
+			storage.material_initialize(material);
+			storage.material_set_shader(material, p->shader);
+		}
+		storage._update_queued_materials();
+		return p;
+	}
+	static RID selection_rid(void *opaque, uint32_t index) { return static_cast<SelectionMaterials *>(opaque)->materials[index]; }
+	static uint32_t selection_holds(void *opaque, uint32_t index) {
+		auto &p = *static_cast<SelectionMaterials *>(opaque);
+		return p.storage->get_material(p.materials[index])->selection_holds;
+	}
+	static uint32_t selection_shader_count(void *opaque) {
+		auto &p = *static_cast<SelectionMaterials *>(opaque);
+		return p.storage->get_shader(p.shader)->selection_holds;
+	}
+	static void selection_destroy(void *opaque) {
+		auto *p = static_cast<SelectionMaterials *>(opaque);
+		for (RID material : p->materials) {
+			p->storage->material_free(material);
+		}
+		p->storage->shader_free(p->shader);
+		memdelete(p->storage);
+		MaterialStorage::singleton = p->previous;
+		memdelete(p);
+	}
 	static void run_preparation_data_boundary() {
 		class PreparationShaderData : public MaterialStorage::ShaderData {
 		public:
@@ -1422,6 +1477,21 @@ public:
 		TestMaterialStorageNativeHoldDeviceAccess::restore(previous);
 	}
 };
+void *selection_materials_create() {
+	return TestMaterialStorageNativeHoldAccess::selection_create();
+}
+RID selection_material_rid(void *p, uint32_t i) {
+	return TestMaterialStorageNativeHoldAccess::selection_rid(p, i);
+}
+uint32_t selection_material_holds(void *p, uint32_t i) {
+	return TestMaterialStorageNativeHoldAccess::selection_holds(p, i);
+}
+uint32_t selection_shader_holds(void *p) {
+	return TestMaterialStorageNativeHoldAccess::selection_shader_count(p);
+}
+void selection_materials_destroy(void *p) {
+	TestMaterialStorageNativeHoldAccess::selection_destroy(p);
+}
 void *pipeline_material_profile_create(RID shader) {
 	return TestMaterialStorageNativeHoldAccess::create_pipeline_profile(shader);
 }

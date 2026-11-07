@@ -1,0 +1,37 @@
+{
+  "base_commit": "f70990f9c167645a17dbfe043ada43205891334d",
+  "sources": [
+    {
+      "path": "core/extension/gdextension_production_output.cpp",
+      "sha256": "12e5202bebaf6ff493467476d43bb223b3360bb1c574237295490db9159b5712"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/external_output_owner.cpp",
+      "sha256": "9794aed21a46b0b5caa0aa73b22deab8abb2c3c784438ef6b61a734f95763b49"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/external_output_owner.h",
+      "sha256": "bc1505c901009fe625b95dc42566120356b0948626033b416d09695c89e5dbdf"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp",
+      "sha256": "e0601140ec1fff4793a51748010178321ea6b0c35d6d345241c9d7ecea59a99a"
+    },
+    {
+      "path": "tests/core/extension/test_production_request.cpp",
+      "sha256": "129bce3cd823bba635397a969888283864c5c7317ecc47391e66cda362a839d7"
+    },
+    {
+      "path": "tests/servers/rendering/test_external_output_custody_bridge.h",
+      "sha256": "ffb86cec8cb26f6facb0aff96757076757f0a993ad6d1f10aa0f2302d02cea8a"
+    },
+    {
+      "path": "tests/servers/rendering/test_external_output_owner_state.cpp",
+      "sha256": "3196a42d0a1ab060ab929c185f672c3a2ff56a0f1e66643bb94ba36e5eb0ff26"
+    },
+    {
+      "path": "tests/servers/rendering/test_material_storage_native_hold.cpp",
+      "sha256": "0777ecf8272f650853580df4eca6ea538b448cc8a316d61b040f26281fe37a8e"
+    }
+  ]
+}
