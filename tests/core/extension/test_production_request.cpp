@@ -4931,7 +4931,7 @@ struct Access {
 			}
 		}
 	};
-	static void native_scene_phase_infrastructure(bool close_before_draw = false) {
+	static void native_scene_phase_infrastructure(bool close_before_draw = false, bool close_fifo_full = false) {
 		using namespace GDExtensionDeviceExit;
 		auto *server = ordinal_server();
 		if (!server) {
@@ -5090,6 +5090,70 @@ struct Access {
 		if (close_before_draw) {
 			// Close two actual waiting RECORD mailboxes without issuing a phase.
 			GDExtensionScenePhaseCloseV1 close{};
+			if (close_fifo_full) {
+				ProductionRequest *originals[2]{};
+				ProductionControlInput inputs[2]{};
+				for (uint32_t i = 0; i < 2; ++i) {
+					MutexLock lock(fixture.registry.mutex);
+					RenderingDevice *device = nullptr;
+					REQUIRE(fixture.registry.production_request_locked(probe.requests[i], false, originals[i], device) == OK);
+					inputs[i] = originals[i]->control.input;
+				}
+				const auto registration = probe.registration;
+				const auto check_waiting = [&]() {
+					CHECK(memcmp(&probe.registration, &registration, sizeof(registration)) == 0);
+					for (uint32_t i = 0; i < 2; ++i) {
+						MutexLock lock(fixture.registry.mutex);
+						ProductionRequest *original = nullptr;
+						RenderingDevice *device = nullptr;
+						REQUIRE(fixture.registry.production_request_locked(probe.requests[i], false, original, device) == OK);
+						CHECK(original == originals[i]);
+						CHECK(original->serial == probe.requests[i].handle_serial);
+						CHECK(original->control.serial == controls[i]);
+						CHECK(original->control.input.request_serial == inputs[i].request_serial);
+						CHECK(original->control.input.record_generation == inputs[i].record_generation);
+						CHECK(original->control.input.kind == ProductionControlKind::RECORD);
+						CHECK(original->control.state == ProductionControlState::QUEUED);
+						CHECK(original->control.scene_waiting);
+					}
+					NormalRelaySnapshot waiting;
+					REQUIRE(fixture.registry.observe_normal_relay(probe.relay, waiting) == OK);
+					CHECK(waiting.active_deliveries == 0);
+					CHECK_FALSE(waiting.cancelled);
+					CHECK_FALSE(waiting.release_requested);
+					CHECK_FALSE(waiting.cell_released);
+					CHECK_FALSE(waiting.holder_closed);
+					CHECK(probe.typed_calls == 0);
+					CHECK(probe.ordinary_calls == 0);
+					CHECK(probe.legacy_calls == 0);
+					CHECK(probe.frees == 0);
+				};
+				check_waiting();
+				// Fill the real bounded Core FIFO with inert scalar commands. A full
+				// queue must retain both original waiting mailboxes for close retry.
+				uint32_t queued = 0;
+				for (; queued < 65536; ++queued) {
+					if (!server->_try_production_control_dispatch(0, 0, 0, 0)) {
+						break;
+					}
+				}
+				CHECK(queued > 0);
+				CHECK(queued < 65536);
+				CHECK(probe.unregister_port(registration, &close).native_error == ERR_BUSY);
+				CHECK(close.registration_closed == 1);
+				CHECK(close.active_deliveries == 0);
+				CHECK(close.relay_cell_released == 0);
+				CHECK(close.relay_holder_closed == 0);
+				check_waiting();
+				for (uint32_t i = 0; i < 2; ++i) {
+					CHECK(consume(probe.requests[i], controls[i], &recorded).native_error == ERR_BUSY);
+				}
+				server->sync(); // Drain only inert commands; no failed wake was enqueued.
+				check_waiting();
+				for (uint32_t i = 0; i < 2; ++i) {
+					CHECK(consume(probe.requests[i], controls[i], &recorded).native_error == ERR_BUSY);
+				}
+			}
 			bool consumed[2] = {};
 			for (uint32_t i = 0; i < 2; ++i) {
 				CHECK(probe.unregister_port(probe.registration, &close).native_error == ERR_BUSY);
@@ -12363,6 +12427,10 @@ TEST_CASE("[SceneTree][ProductionRequest][NativeScenePhase] actual early hook ow
 
 TEST_CASE("[SceneTree][ProductionRequest][NativeScenePhaseCloseWaiting] actual unregister returns two original waiting controls without a draw") {
 	TestProductionRequest::Access::native_scene_phase_infrastructure(true);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][NativeScenePhaseCloseFifoFull] actual full FIFO preserves waiting controls for unregister retry without a draw") {
+	TestProductionRequest::Access::native_scene_phase_infrastructure(true, true);
 }
 
 #ifdef THREADS_ENABLED
