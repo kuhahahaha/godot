@@ -31,6 +31,7 @@
 #include "rendering_device_driver.h"
 
 thread_local RenderingDeviceDriver::QueueCallReport *RenderingDeviceDriver::active_queue_call_report = nullptr;
+thread_local RenderingDeviceDriver::NativeSourceAdmission *RenderingDeviceDriver::active_native_source_admission = nullptr;
 
 /**************/
 /**** MISC ****/

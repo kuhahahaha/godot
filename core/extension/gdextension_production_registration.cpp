@@ -123,7 +123,7 @@ Error Registry::bind_host_producer(InitializationLevelContextRef p_initialize, L
 	if (r_ref.is_valid()) {
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	uint32_t slot = INVALID_SLOT;
 	Error error = validate_host_producer_binding_locked(p_initialize, p_code, p_attachment_identity, slot);
 	if (error != OK) {
@@ -145,7 +145,7 @@ Error Registry::clone_producer_registration(const ProducerRegistrationRef &p_ref
 	if (r_ref.is_valid()) {
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	Record *record = nullptr;
 	Error error = producer_registration_locked(p_ref, record);
 	if (error != OK) {
@@ -163,7 +163,7 @@ Error Registry::clone_producer_registration(const ProducerRegistrationRef &p_ref
 }
 
 Error Registry::copy_producer_registration(const ProducerRegistrationRef &p_ref, ProducerRegistrationIdentity &r_identity) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	Record *record = nullptr;
 	Error error = producer_registration_locked(p_ref, record);
 	return error == OK ? copy_producer_identity_locked(*record, r_identity) : error;
@@ -232,7 +232,7 @@ Error Registry::bind_host_producer_view(InitializationLevelContextRef p_initiali
 	if (r_ref.registry_instance || r_ref.handle_serial) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	uint32_t record_slot = INVALID_SLOT;
 	Error error = validate_host_producer_binding_locked(p_initialize, p_code, p_attachment_identity, record_slot);
 	if (error != OK) {
@@ -258,7 +258,7 @@ Error Registry::clone_producer_registration_view(GDExtensionProducerRegistration
 	if (r_ref.registry_instance || r_ref.handle_serial) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	uint32_t source = INVALID_SLOT;
 	Error error = producer_view_locked(p_source, source);
 	if (error != OK) {
@@ -278,14 +278,14 @@ Error Registry::clone_producer_registration_view(GDExtensionProducerRegistration
 }
 
 Error Registry::copy_producer_registration_view(GDExtensionProducerRegistrationRefV1 p_source, ProducerRegistrationIdentity &r_identity) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	uint32_t source = INVALID_SLOT;
 	Error error = producer_view_locked(p_source, source);
 	return error == OK ? copy_producer_identity_locked(records[views[source].record], r_identity) : error;
 }
 
 Error Registry::release_producer_registration_view(GDExtensionProducerRegistrationRefV1 p_source) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	uint32_t source = INVALID_SLOT;
 	Error error = producer_view_locked(p_source, source);
 	if (error != OK) {
@@ -302,7 +302,7 @@ Error Registry::import_producer_registration(GDExtensionProducerRegistrationRefV
 	if (r_ref.is_valid()) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	uint32_t source = INVALID_SLOT;
 	Error error = producer_view_locked(p_source, source);
 	if (error != OK) {

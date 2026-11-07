@@ -77,6 +77,7 @@ void add_graph(QualificationTicket *ticket, const RDG::RecordHandle &handle, uin
 		ticket->mapping_failed = true;
 		return;
 	}
+ if(ticket->credits.capacity && ticket->credits.commit_graph()!=OK){ticket->mapping_failed=true;return;}
 	GDExtensionQualificationFactV1 fact = {};
 	fact.graph_instance = handle.graph_instance;
 	fact.graph_frame = handle.graph_frame;
@@ -95,8 +96,34 @@ void add_graph(QualificationTicket *ticket, const RDG::RecordHandle &handle, uin
 	ticket->observation_dirty = true;
 }
 } //namespace
+namespace {
+Error qualification_reserve_fact_plan(QualificationTicket *ticket,RDD &driver,uint32_t current,uint64_t graphs) {
+ uint32_t main=0,copy=0;
+ if(!driver.qualification_incremental_accounting_supported())return OK;
+ if(!driver.qualification_incremental_fact_bound(graphs,current,main,copy) || graphs>QualificationTicket::FACT_CAPACITY)return ERR_PARAMETER_RANGE_ERROR;
+ if(!ticket->credits.capacity){
+  const Error error=ticket->credits.initialize(QualificationTicket::FACT_CAPACITY,graphs,main,5,copy);
+  if(error!=OK)return error;
+ }else{
+  if(graphs<ticket->credit_graph_plan)graphs=ticket->credit_graph_plan;
+  if(main<ticket->credit_main_plan)main=ticket->credit_main_plan;
+  if(copy<ticket->credit_copy_plan)copy=ticket->credit_copy_plan;
+  const Error error=ticket->credits.grow_plan(graphs-ticket->credit_graph_plan,main-ticket->credit_main_plan,copy-ticket->credit_copy_plan);
+  if(error!=OK)return error;
+ }
+ ticket->credit_graph_plan=uint32_t(graphs);ticket->credit_main_plan=main;ticket->credit_copy_plan=copy;
+ ticket->admitted_native_serials.reserve(QualificationTicket::FACT_CAPACITY);
+ ticket->worker_credits.reserve(QualificationTicket::FACT_CAPACITY);
+ return OK;
+}
+}
 Error qualification_native_capacity(RenderingDeviceDriver &driver, uint32_t current_commands, uint64_t graph_bound, uint32_t workers) {
 	const uint64_t capacity = QualificationTicket::FACT_CAPACITY;
+ uint32_t main=0,copy=0;
+ if(driver.qualification_incremental_accounting_supported()) {
+  if(!driver.qualification_incremental_fact_bound(graph_bound,current_commands,main,copy) || graph_bound+uint64_t(main)+copy+5>capacity)return ERR_PARAMETER_RANGE_ERROR;
+  return OK;
+ }
 	if (graph_bound > capacity) {
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
@@ -135,7 +162,9 @@ Error Registry::qualification_typed_upload_capacity(QualificationTicket *ticket,
 	for (auto *image : ticket->texture_uploads) {
 		bound += image->upload.max_segments;
 	}
-	return qualification_native_capacity(*rd->driver, rd->draw_graph.qualification_command_count(), bound, rd->transfer_worker_pool_max_size);
+ const Error capacity=qualification_native_capacity(*rd->driver,rd->draw_graph.qualification_command_count(),bound,rd->transfer_worker_pool_max_size);
+ if(capacity!=OK)return capacity;
+ return qualification_reserve_fact_plan(ticket,*rd->driver,rd->draw_graph.qualification_command_count(),bound);
 }
 void Registry::qualification_add_upload_graph(QualificationTicket *ticket, RenderingDevice *rd, uint64_t graph_instance, uint64_t frame, uint32_t kind, uint32_t index, uint32_t offset, uint64_t serial, uint64_t begin, uint64_t size) {
 	add_graph(ticket, { graph_instance, frame, kind, index, offset }, 6, rd->frame, rd->frames[rd->frame].qualification_epoch, serial, begin, size);
@@ -307,6 +336,8 @@ Error Registry::qualification_record_preflight(QualificationBridge *bridge, Rend
 	return OK;
 }
 void Registry::qualification_record_append(QualificationTicket *ticket, RenderingDevice *rd) {
+ const Error admission=rd->_qualification_admit_frame_ticket(ticket);
+ if(admission!=OK){Lock lock(*this);ticket->recording=false;ticket->append_failed=admission!=ERR_BUSY;ticket->report.native_error=admission;qualification_ticket_publish(ticket,rd);return;}
 	const auto &request = ticket->origin;
 	rd->qualification_recording = true;
 	auto capture = rd->compute_list_begin();
@@ -326,7 +357,7 @@ void Registry::qualification_record_append(QualificationTicket *ticket, Renderin
 		rd->compute_list_end();
 	}
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		add_graph(ticket, ticket->capture, 1, rd->frame, rd->frames[rd->frame].qualification_epoch);
 		rd->_qualification_add_frame_ticket(ticket);
 	}
@@ -349,7 +380,7 @@ void Registry::qualification_record_append(QualificationTicket *ticket, Renderin
 			rd->compute_list_end();
 		}
 		{
-			MutexLock lock(mutex);
+			Lock lock(*this);
 			add_graph(ticket, ticket->body, 2, rd->frame, rd->frames[rd->frame].qualification_epoch);
 		}
 	}
@@ -362,7 +393,7 @@ void Registry::qualification_record_append(QualificationTicket *ticket, Renderin
 	if (ticket->body.is_valid()) {
 		for (uint32_t i = 0; i < ticket->readback_count(); ++i) {
 			{
-				MutexLock lock(mutex);
+				Lock lock(*this);
 				if (ticket->admission_closed.load()) {
 					break;
 				}
@@ -371,7 +402,7 @@ void Registry::qualification_record_append(QualificationTicket *ticket, Renderin
 			auto &owned = ticket->readback_result(i);
 			const Error error = rd->_buffer_get_data_async(RID::from_uint64(range.readback_buffer), Callable(), range.readback_offset, range.readback_size, owned);
 			{
-				MutexLock lock(mutex);
+				Lock lock(*this);
 				auto &joined = ticket->readback_cursor(i);
 				for (; joined < owned->copies.size(); ++joined) {
 					const auto &copy = owned->copies[joined];
@@ -385,7 +416,7 @@ void Registry::qualification_record_append(QualificationTicket *ticket, Renderin
 		}
 	}
 	rd->qualification_recording = false;
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ticket->recorded = ticket->capture.is_valid() && ticket->body.is_valid();
 	ticket->recording = false;
 	if (first_error != OK) {
@@ -426,7 +457,9 @@ void Registry::qualification_ticket_publish(QualificationTicket *ticket, Renderi
 		for (const auto &native : ticket->natives) {
 			if (native.frame == graph.frame && native.epoch == graph.epoch && (native.slot == UINT32_MAX || native.slot == fact.command_slot)) {
 				success = success && ticket->facts[native.fact].completion == 2;
-				if (native.slot == fact.command_slot) {
+				// UINT32_MAX means a hidden source or an unsealed graph. Equality
+				// between two sentinels is never an actual main-slot mapping.
+				if (native.slot != UINT32_MAX && fact.command_slot != UINT32_MAX && native.slot == fact.command_slot) {
 					mapped = true;
 					if (!first) {
 						first = native.source.serial;
@@ -561,7 +594,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record(GDExtensionQuali
 	LocalVector<RID> resources;
 	RdUnlock rd_unlock;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error error = qualification_bridge_locked(ref, true, true, bridge, rd, 6);
 		if (error != OK) {
 			return result(error, error == ERR_UNAUTHORIZED ? 15 : 16);
@@ -601,6 +634,8 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record(GDExtensionQuali
 			return result(ERR_PARAMETER_RANGE_ERROR, 19);
 		}
 		ticket = memnew(QualificationTicket);
+  error=qualification_reserve_fact_plan(ticket,*rd->driver,rd->draw_graph.qualification_command_count(),(request->readback_size+31)/32+2);
+  if(error!=OK){memdelete(ticket);return result(error,19);}
 		ticket->origin = *request;
 		ticket->bridge_serial = bridge->serial;
 		ticket->library = bridge->library;
@@ -654,7 +689,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record(GDExtensionQuali
 		ticket->recording = true;
 	}
 	qualification_record_append(ticket, rd);
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	*out = { instance, ticket->serial };
 	*report = ticket->report;
 	return result(OK);
@@ -685,16 +720,18 @@ void Registry::qualification_ticket_step(QualificationTicket *ticket, RenderingD
 					continue;
 				}
 				{
-					MutexLock lock(mutex);
+					Lock lock(*this);
 					if (ticket->admission_closed.load()) {
 						break;
 					}
 					ticket->recording = true;
 				}
+    const Error admission=rd->_qualification_admit_frame_ticket(ticket);
+    if(admission!=OK){Lock lock(*this);ticket->recording=false;break;}
 				rd->qualification_recording = true;
 				const Error error = rd->_buffer_get_data_async(RID::from_uint64(range.readback_buffer), Callable(), range.readback_offset, range.readback_size, owned);
 				rd->qualification_recording = false;
-				MutexLock lock(mutex);
+				Lock lock(*this);
 				ticket->recording = false;
 				auto &joined = ticket->readback_cursor(i);
 				for (; joined < owned->copies.size(); ++joined) {
@@ -734,7 +771,7 @@ void Registry::qualification_ticket_step(QualificationTicket *ticket, RenderingD
 		}
 		const Error error = rd->_stall_for_frame(index, true);
 		if (error != OK && error != ERR_BUSY) {
-			MutexLock lock(mutex);
+			Lock lock(*this);
 			ticket->append_failed = true;
 			if (ticket->report.native_error == OK) {
 				ticket->report.native_error = error;
@@ -744,7 +781,7 @@ void Registry::qualification_ticket_step(QualificationTicket *ticket, RenderingD
 			}
 		}
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	qualification_ticket_publish(ticket, rd);
 }
 GDExtensionDeviceSessionResultV1 Registry::qualification_observe(GDExtensionQualificationBridgeRefV1 ref, GDExtensionQualificationTicketRefV1 ticket_ref, const GDExtensionQualificationBudgetV1 *budget, GDExtensionQualificationReportV1 *out) {
@@ -756,7 +793,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_observe(GDExtensionQual
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		QualificationBridge *bridge = nullptr;
 		RenderingDevice *rd = nullptr;
 		QualificationTicket *ticket = nullptr;
@@ -776,7 +813,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_observe(GDExtensionQual
 	if (error != OK) {
 		return result(error, 17);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	QualificationTicket *ticket = nullptr;
@@ -803,7 +840,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_facts(GDExtensionQualif
 	if (!aligned(facts) || !capacity || capacity > 64 || first > UINT32_MAX - capacity) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	QualificationTicket *ticket = nullptr;
@@ -836,7 +873,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_copy(GDExtensionQualifi
 	if (!destination || !capacity || capacity > 16384) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	QualificationTicket *ticket = nullptr;
@@ -874,7 +911,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_copy(GDExtensionQualifi
 	return result(OK);
 }
 GDExtensionDeviceSessionResultV1 Registry::qualification_release(GDExtensionQualificationBridgeRefV1 ref, GDExtensionQualificationTicketRefV1 ticket_ref, bool p_system_scalar) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	QualificationTicket *ticket = nullptr;
@@ -1064,7 +1101,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_prepare_uploads(GDExten
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	RdUnlock rd_unlock;
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = qualification_bridge_locked(ref, true, true, bridge, rd, p_multi_readback ? 11 : 7);
@@ -1138,6 +1175,8 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_prepare_uploads(GDExten
 		return result(ERR_PARAMETER_RANGE_ERROR, 19);
 	}
 	auto *ticket = memnew(QualificationTicket);
+ error=qualification_reserve_fact_plan(ticket,*rd->driver,rd->draw_graph.qualification_command_count(),graph_bound);
+ if(error!=OK){memdelete(ticket);return result(error,19);}
 	ticket->prepared = true;
 	ticket->multi_readback = p_multi_readback;
 	ticket->preparation = *request;
@@ -1235,7 +1274,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_upload(GDExtensionQuali
 	RdUnlock rd_unlock;
 	auto copy_report = [&]() {*out=upload->report;out->out_written=upload->progress.segments.size();for(uint32_t i=0;i<upload->progress.segments.size();++i){const auto &s=upload->progress.segments[i];auto &d=segments[i];d.abi={1,sizeof(GDExtensionDeviceExitAbi),0};d.upload_index=upload->plan.upload_index;d.segment_index=i;d.state=s.handle.is_valid()?1:2;d.byte_begin=upload->plan.byte_offset+s.begin;d.byte_end=upload->plan.byte_offset+s.end;d.graph_instance=s.handle.graph_instance;d.graph_frame=s.handle.graph_frame;d.graph_kind=s.handle.kind;d.graph_index=s.handle.index;d.graph_offset=s.handle.offset;d.backing_serial=upload->plan.backing_serial;} };
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error error = qualification_bridge_locked(ref, true, true, bridge, rd, 8);
 		if (error != OK) {
 			return result(error, error == ERR_UNAUTHORIZED ? 15 : 16);
@@ -1302,6 +1341,8 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_upload(GDExtensionQuali
 		if (error != OK) {
 			return result(error, 16);
 		}
+  error=rd->_qualification_admit_frame_ticket(ticket);
+  if(error!=OK)return result(error,19);
 		ticket->recording = true;
 		upload->attempted = true;
 		upload->last_request_revision = request->expected_revision;
@@ -1310,7 +1351,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_upload(GDExtensionQuali
 	rd->qualification_recording = true;
 	Error error = rd->_buffer_update(rd->storage_buffer_owner.get_or_null(RID::from_uint64(upload->plan.rid)), RID::from_uint64(upload->plan.rid), upload->plan.byte_offset, upload->plan.byte_size, copied.ptr(), &upload->progress);
 	rd->qualification_recording = false;
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ticket->recording = false;
 	ticket->continuation_pending = error == ERR_BUSY;
 	for (uint32_t i = previous; i < upload->progress.segments.size(); ++i) {
@@ -1358,7 +1399,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared(GDExten
 	QualificationTicket *ticket = nullptr;
 	RdUnlock rd_unlock;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error error = qualification_bridge_locked(ref, true, true, bridge, rd, 9);
 		if (error != OK) {
 			return result(error, error == ERR_UNAUTHORIZED ? 15 : 16);
@@ -1397,6 +1438,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared(GDExten
 			graph_bound += (upload.plan.byte_size + 31) / 32;
 		}
 		error = qualification_native_capacity(*rd->driver, rd->draw_graph.qualification_command_count(), graph_bound, rd->transfer_worker_pool_max_size);
+  if(error==OK)error=qualification_reserve_fact_plan(ticket,*rd->driver,0,graph_bound);
 		if (error != OK) {
 			return result(error, error == ERR_UNAVAILABLE ? 18 : 19);
 		}
@@ -1430,14 +1472,14 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared(GDExten
 	}
 	rd->draw_graph.add_synchronization();
 	qualification_record_append(ticket, rd);
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	*out = ticket->report;
 	return result(OK);
 }
 
 GDExtensionDeviceSessionResultV1 Registry::qualification_cancel(GDExtensionQualificationBridgeRefV1 ref, GDExtensionQualificationTicketRefV1 ticket_ref) {
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		QualificationBridge *bridge = nullptr;
 		RenderingDevice *rd = nullptr;
 		QualificationTicket *ticket = nullptr;
@@ -1498,7 +1540,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_prepare_uploads_v2(GDEx
 	if (status.native_error != OK) {
 		return status;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	QualificationTicket *ticket = nullptr;
@@ -1533,7 +1575,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_common(
 	QualificationBridge::Texture *depth_target = nullptr;
 	LocalVector<RID> depth_resources;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error error = qualification_bridge_locked(ref, true, true, bridge, rd, depth ? 20 : operation ? 17
 																									  : 10);
 		if (error != OK) {
@@ -1653,6 +1695,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_common(
 			graph_bound += image->upload.max_segments;
 		}
 		error = qualification_native_capacity(*rd->driver, rd->draw_graph.qualification_command_count(), graph_bound, rd->transfer_worker_pool_max_size);
+  if(error==OK)error=qualification_reserve_fact_plan(ticket,*rd->driver,0,graph_bound);
 		if (error != OK) {
 			return result(error, error == ERR_UNAVAILABLE ? 18 : 19);
 		}
@@ -1783,6 +1826,8 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_common(
 			ticket->operation = *operation;
 			ticket->operation_bound = true;
 		}
+  error=rd->_qualification_admit_frame_ticket(ticket);
+  if(error!=OK)return result(error,19);
 		ticket->origin = legacy;
 		ticket->range_origin = *request;
 		ticket->result = owned[0];
@@ -1802,7 +1847,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_common(
 		Error depth_error = OK;
 		auto invalidate = [&]() {
 			if (!invalidated) {
-				MutexLock lock(mutex);
+				Lock lock(*this);
 				depth_target->produced_ticket = depth_target->produced_raster = 0;
 				depth_target->produced_operation = {};
 				invalidated = true;
@@ -1813,7 +1858,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_common(
 				return UINT32_MAX;
 			}
 			invalidate();
-			MutexLock lock(mutex);
+			Lock lock(*this);
 			const uint32_t index = ticket->facts.size();
 			add_graph(ticket, handle, semantic, rd->frame, rd->frames[rd->frame].qualification_epoch, depth_target->object_serial);
 			const bool added = ticket->facts.size() == index + 1;
@@ -1838,7 +1883,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_common(
 				depth_error = append.error;
 			}
 			if (append.effect == RenderingDevice::NativeAppendEffect::Unknown || (append.effect != RenderingDevice::NativeAppendEffect::NoNewEffect && (!append.capture_complete || !append.draw_handle.is_valid()))) {
-				MutexLock lock(mutex);
+				Lock lock(*this);
 				ticket->mapping_failed = true;
 				if (depth_error == OK) {
 					depth_error = ERR_INVALID_DATA;
@@ -1869,7 +1914,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_common(
 		if (begun.error != OK || begun.effect != RenderingDevice::NativeAppendEffect::Recorded || !begun.capture_complete || report.begin_fact == UINT32_MAX || report.clear_fact == UINT32_MAX || begun.list == RenderingDevice::INVALID_ID) {
 			depth_error = begun.error == OK ? ERR_INVALID_DATA : begun.error;
 			if (begun.effect == RenderingDevice::NativeAppendEffect::Unknown || (begun.effect != RenderingDevice::NativeAppendEffect::NoNewEffect && !begun.capture_complete)) {
-				MutexLock lock(mutex);
+				Lock lock(*this);
 				ticket->mapping_failed = true;
 			}
 		}
@@ -1918,7 +1963,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_common(
 		if (rd->draw_list.active) {
 			// An unclosed recording list still owns its framebuffer resources.
 			// Failed-prefix retirement must not return those physical pins.
-			MutexLock lock(mutex);
+			Lock lock(*this);
 			ticket->mapping_failed = true;
 			if (depth_error == OK) {
 				depth_error = ERR_BUSY;
@@ -1926,7 +1971,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_common(
 		}
 		rd->qualification_recording = false;
 		{
-			MutexLock lock(mutex);
+			Lock lock(*this);
 			const bool complete = depth_error == OK && !ticket->admission_closed.load() && !ticket->mapping_failed && report.end_fact != UINT32_MAX && report.cleanup_end_fact == UINT32_MAX && report.known_draw_count == report.required_draw_count && !report.possible_draw_count && !rd->draw_list.active;
 			if (complete) {
 				depth_target->produced_ticket = ticket->serial;
@@ -1994,7 +2039,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_common(
 		rd->draw_graph.add_synchronization();
 	}
 	qualification_record_append(ticket, rd);
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	qualification_report_v2(ticket, *out);
 	return result(OK);
 }
@@ -2019,7 +2064,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_observe_v2(GDExtensionQ
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		QualificationBridge *bridge = nullptr;
 		RenderingDevice *rd = nullptr;
 		QualificationTicket *ticket = nullptr;
@@ -2039,7 +2084,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_observe_v2(GDExtensionQ
 	if (error != OK) {
 		return result(error, 17);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	QualificationTicket *ticket = nullptr;
@@ -2086,7 +2131,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v4(GDEx
 	if (status.native_error != OK) {
 		return status;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	QualificationTicket *ticket = nullptr;
@@ -2109,7 +2154,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_observe_v3(GDExtensionQ
 	}
 	*out = {};
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		QualificationBridge *bridge = nullptr;
 		RenderingDevice *rd = nullptr;
 		QualificationTicket *ticket = nullptr;
@@ -2129,7 +2174,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_observe_v3(GDExtensionQ
 	if (status.native_error != OK) {
 		return status;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	QualificationTicket *ticket = nullptr;

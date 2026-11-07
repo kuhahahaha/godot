@@ -334,9 +334,9 @@ Error Registry::production_retain_sources_locked(RenderingDevice &rd, uint32_t f
 				const uint64_t serial = request.serial;
 				auto member = native.member;
 				++request.capture_inflight;
-				mutex.unlock();
+				unlock_mutex_for_call();
 				const Error error = retain_native_source(*rd.driver, member);
-				mutex.lock();
+				relock_mutex_after_call();
 				CRASH_COND(request.serial != serial || !request.capture_inflight || native.request != &request);
 				native.member = member;
 				--request.capture_inflight;
@@ -522,7 +522,7 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 	production_append_effect_enter_locked(request);
 	transfer_effect_entered = true;
 	bool list_open = request.compute_list_open;
-	mutex.unlock();
+	unlock_mutex_for_call();
 	if (list_open && action.declaration.action_kind != GDEXTENSION_PRODUCTION_DISPATCH_V1) {
 		rd.compute_list_end();
 		list_open = rd.compute_list.active;
@@ -572,7 +572,7 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 		}
 	}
 	rd.production_recording_request = nullptr;
-	mutex.lock();
+	relock_mutex_after_call();
 	CRASH_COND(request.serial != serial || !request.capture_inflight);
 	--request.capture_inflight;
 	request.compute_list_open = list_open;
@@ -652,7 +652,7 @@ Error Registry::production_ack_segment_locked(ProductionRequest &request, uint64
 }
 
 Error Registry::production_readback_delivery(BufferReadbackSourceCapture &capture, bool begin) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *rd = nullptr;
 	if (capture.registry != this || !capture.request_serial) {
@@ -711,9 +711,9 @@ Error Registry::production_close_lists_locked(ProductionRequest &request, Render
 	}
 	++request.capture_inflight;
 	production_append_effect_enter_locked(request);
-	mutex.unlock();
+	unlock_mutex_for_call();
 	const auto closed = rd._compute_list_end_recorded();
-	mutex.lock();
+	relock_mutex_after_call();
 	CRASH_COND(!request.capture_inflight);
 	--request.capture_inflight;
 	request.compute_list_open = rd.compute_list.active;

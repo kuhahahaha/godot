@@ -342,6 +342,37 @@ private:
 	bool _qualification_resource_busy(RID p_rid);
 	Error _qualification_pin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket, const LocalVector<RID> &p_resources);
 	void _qualification_unpin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket);
+ Error _qualification_admit_frame_ticket(GDExtensionDeviceExit::QualificationTicket *p_ticket);
+ Error _qualification_admit_worker(uint32_t p_worker, uint64_t p_operation, const RDD::QueueCallReport &p_prefix, uint32_t p_future);
+ Error _qualification_admit_extra_main(uint32_t p_slots);
+ Error _qualification_activate_cleanup_credits();
+ Error _qualification_prepare_free(RID p_rid);
+ void _qualification_defer_free(RID p_rid);
+ void _qualification_retry_deferred_frees();
+ LocalVector<RID> qualification_deferred_frees;
+
+ Error _qualification_admit_native_serials(const uint64_t *p_serials,uint32_t p_count,uint32_t p_worker,bool p_copy=false);
+ void _qualification_cancel_native_serials(const uint64_t *p_serials,uint32_t p_count,uint32_t p_worker,bool p_copy=false);
+ bool _qualification_capture_hidden_source(const RDD::QueueCallReport &p_report);
+ struct QualificationSourceAdmissionScope {
+  RenderingDevice &rd;
+  uint32_t worker;
+  RDD::NativeSourceAdmission admission;
+  RDD::NativeSourceAdmissionScope scope;
+  QualificationSourceAdmissionScope(RenderingDevice &p_rd,uint32_t p_worker=UINT32_MAX) : rd(p_rd),worker(p_worker),admission{this,admit,cancel,OK,capture_hidden,can_block},scope(admission) {}
+  static Error admit(void *p_owner,const uint64_t *p_serials,uint32_t p_count,bool p_copy) {
+   auto &self=*static_cast<QualificationSourceAdmissionScope *>(p_owner);
+   return self.rd._qualification_admit_native_serials(p_serials,p_count,self.worker,p_copy);
+  }
+  static bool can_block(void *p_owner);
+  static bool capture_hidden(void *p_owner,const RDD::QueueCallReport &p_report) {
+   return static_cast<QualificationSourceAdmissionScope *>(p_owner)->rd._qualification_capture_hidden_source(p_report);
+  }
+  static void cancel(void *p_owner,const uint64_t *p_serials,uint32_t p_count,bool p_copy) {
+   auto &self=*static_cast<QualificationSourceAdmissionScope *>(p_owner);
+   self.rd._qualification_cancel_native_serials(p_serials,p_count,self.worker,p_copy);
+  }
+ };
 	void _qualification_add_frame_ticket(GDExtensionDeviceExit::QualificationTicket *p_ticket);
 	void _qualification_seal_tickets();
 	void _qualification_issue_tickets(uint32_t p_slot, const RDD::QueueCallReport &p_report, Error p_error);
@@ -829,9 +860,9 @@ public:
 	void _texture_free_shared_fallback(Texture *p_texture);
 	void _texture_copy_shared(RID p_src_texture_rid, Texture *p_src_texture, RID p_dst_texture_rid, Texture *p_dst_texture);
 	bool _texture_create_reinterpret_buffer(Texture *p_texture);
-	void _texture_check_pending_clear(RID p_texture_rid, Texture *p_texture);
-	void _texture_clear_color(RID p_texture_rid, Texture *p_texture, const Color &p_color, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers);
-	void _texture_clear_depth_stencil(RID p_texture_rid, Texture *p_texture, float p_depth, uint8_t p_stencil, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers);
+	Error _texture_check_pending_clear(RID p_texture_rid, Texture *p_texture);
+	Error _texture_clear_color(RID p_texture_rid, Texture *p_texture, const Color &p_color, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers);
+	Error _texture_clear_depth_stencil(RID p_texture_rid, Texture *p_texture, float p_depth, uint8_t p_stencil, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers);
 	uint32_t _texture_vrs_method_to_usage_bits() const;
 	void _texture_ensure_shareable_format(RID p_texture, const DataFormat &p_shareable_format);
 
@@ -1749,7 +1780,8 @@ private:
 	RID_Owner<UniformSet, true> uniform_set_owner;
 
 	void _uniform_set_update_shared(UniformSet *p_uniform_set);
-	void _uniform_set_update_clears(UniformSet *p_uniform_set);
+	Error _uniform_set_update_clears(UniformSet *p_uniform_set);
+	Error _uniform_set_admit_clear_transfers(UniformSet *p_set);
 
 public:
 	/** Bake a set of uniforms that can be bound at runtime with the given shader.
@@ -2298,6 +2330,9 @@ private:
 		bool recording = false;
 		bool submitted = false;
 		bool qualification_observer_pending = false;
+  // Immutable current batch after a qualification dependency reserves it.
+  // Cleared only after exact source join/retain; not a frame-wide exclusion.
+  bool qualification_batch_sealed = false;
 		bool production_observer_pending = false;
 		bool submission_pending = false;
 		bool poisoned = false;
@@ -2328,11 +2363,11 @@ private:
 	void _submit_transfer_worker(TransferWorker *p_transfer_worker, VectorView<RDD::SemaphoreID> p_signal_semaphores = VectorView<RDD::SemaphoreID>(), bool p_operations_locked = false);
 	bool _wait_for_transfer_worker(TransferWorker *p_transfer_worker, bool p_blocking = false);
 	void _flush_barriers_for_transfer_worker(TransferWorker *p_transfer_worker, bool p_barriers_locked = false);
-	void _check_transfer_worker_operation(uint32_t p_transfer_worker_index, uint64_t p_transfer_worker_operation);
-	void _check_transfer_worker_buffer(Buffer *p_buffer);
-	void _check_transfer_worker_texture(Texture *p_texture);
-	void _check_transfer_worker_vertex_array(VertexArray *p_vertex_array);
-	void _check_transfer_worker_index_array(IndexArray *p_index_array);
+	Error _check_transfer_worker_operation(uint32_t p_transfer_worker_index, uint64_t p_transfer_worker_operation);
+	Error _check_transfer_worker_buffer(Buffer *p_buffer);
+	Error _check_transfer_worker_texture(Texture *p_texture);
+	Error _check_transfer_worker_vertex_array(VertexArray *p_vertex_array);
+	Error _check_transfer_worker_index_array(IndexArray *p_index_array);
 	Error _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID(), bool p_nonblocking = false);
 	void _submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer);
 	bool _wait_for_transfer_workers();
@@ -2460,6 +2495,8 @@ private:
 		RDD::FenceID fence;
 		bool fence_signaled = false;
 		bool primary_command_buffer_begun = true;
+  bool qualification_graph_closed = false, qualification_segment_closed = false, qualification_issue_busy = false;
+  uint32_t qualification_issue_slot = 0;
 		LocalVector<RenderingDeviceDriver::QueueCallReport> chain_reports;
 		// Owns source observer references transferred by the original hidden queue.
 		LocalVector<RDD::QueueCallReport> qualification_hidden_reports;
@@ -2514,6 +2551,9 @@ private:
 		const Error issue_error = frame_issue_error.load();
 		if (issue_error != OK) {
 			return issue_error;
+		}
+		if (!frames.is_empty() && uint32_t(frame) < frames.size() && frames[frame].qualification_graph_closed) {
+			return ERR_BUSY; // A source retry cannot reopen the already closed graph.
 		}
 		const Error wait_error = frame_wait_error.load();
 		return wait_error != OK ? wait_error : ((frame_wait_draining.load() || qualification_frame_advance_pending.load() || native_disposal_active.load()) ? ERR_BUSY : OK);

@@ -357,6 +357,190 @@ void RenderingDevice::_qualification_unpin_resources(QualificationTicket *ticket
 	ticket->resource_pins.clear();
 	ticket->resources_returned = true;
 }
+namespace {
+bool qualification_knows_serial(const QualificationTicket &ticket,uint64_t serial) {
+ for(uint64_t existing:ticket.admitted_native_serials)if(existing==serial)return true;
+ for(const auto &member:ticket.natives)if(member.source.serial==serial)return true;
+ return false;
+}
+}
+Error RenderingDevice::_qualification_admit_native_serials(const uint64_t *serials,uint32_t count,uint32_t worker,bool p_copy) {
+ if(frames.is_empty() || uint32_t(frame)>=frames.size() || frames[frame].qualification_tickets.is_empty())return OK;
+ auto &registry=Registry::get_singleton();Registry::Lock lock(registry,Registry::Lock::TRY_OR_BORROW);if(!lock.is_locked())return ERR_BUSY;
+ auto needed=[&](QualificationTicket *ticket){uint64_t n=0;
+  for(uint32_t i=0;i<count;++i){if(qualification_knows_serial(*ticket,serials[i]))continue;bool duplicate=false;for(uint32_t j=0;j<i;++j)duplicate=duplicate||serials[j]==serials[i];if(!duplicate)++n;}return n;};
+ for(uint32_t i=0;i<count;++i)if(!serials[i])return ERR_INVALID_DATA;
+ // The entire native batch and all affected tickets are reserved atomically.
+ // No later callback in this batch can refuse after a wait/work prefix issued.
+ for(auto *ticket:frames[frame].qualification_tickets){
+  if(!ticket->credits.capacity)continue;const uint64_t n=needed(ticket);
+  if(p_copy){if(n>ticket->credits.copy)return ERR_PARAMETER_RANGE_ERROR;}
+  else if(worker==UINT32_MAX){if(n>ticket->credits.main)return ERR_PARAMETER_RANGE_ERROR;}
+  else {uint64_t remaining=0;for(const auto &quote:ticket->worker_credits)if(quote.worker==worker && quote.frame==uint32_t(frame) && quote.epoch==frames[frame].qualification_epoch)remaining+=quote.remaining;if(n>remaining)return ERR_PARAMETER_RANGE_ERROR;}
+ }
+ for(auto *ticket:frames[frame].qualification_tickets){
+  if(!ticket->credits.capacity)continue;
+  for(uint32_t i=0;i<count;++i){const uint64_t serial=serials[i];if(qualification_knows_serial(*ticket,serial))continue;
+   if(!p_copy && worker!=UINT32_MAX)for(auto &quote:ticket->worker_credits)if(quote.worker==worker && quote.frame==uint32_t(frame) && quote.epoch==frames[frame].qualification_epoch && quote.remaining){--quote.remaining;break;}
+   const Error admitted=ticket->credits.admit_native(1,!p_copy && worker!=UINT32_MAX,p_copy);CRASH_COND(admitted!=OK);ticket->admitted_native_serials.push_back(serial);
+  }
+ }
+ return OK;
+}
+bool RenderingDevice::QualificationSourceAdmissionScope::can_block(void *p_owner) {
+ auto &self=*static_cast<QualificationSourceAdmissionScope *>(p_owner);
+ // A Metal device-loss handler may reenter the original Registry. Never wait
+ // for that callback while this thread owns Registry or a bounded drain slice.
+ return !Registry::Lock::owns(Registry::get_singleton()) && !self.rd.native_disposal_budget;
+}
+bool RenderingDevice::_qualification_capture_hidden_source(const RDD::QueueCallReport &report) {
+ if(report.calls.is_empty())return false;
+ if(frames.is_empty() || uint32_t(frame)>=frames.size())return false;
+ // The original RD lock is held by resource creation/end-frame. Preserve the
+ // real original CompletionRecord observer in the existing Frame report list.
+ auto &registry=Registry::get_singleton();
+ Registry::Lock lock(registry,Registry::Lock::BLOCK_OR_BORROW);
+ frames[frame].qualification_hidden_reports.push_back(report);
+ registry.production_capture_issue_locked(*this,UINT32_MAX,{report},report.error);
+ _qualification_issue_tickets_locked(UINT32_MAX,report,report.error);
+ return true;
+}
+void RenderingDevice::_qualification_cancel_native_serials(const uint64_t *serials,uint32_t count,uint32_t worker,bool p_copy) {
+ if(frames.is_empty() || uint32_t(frame)>=frames.size())return;
+ auto &registry=Registry::get_singleton();Registry::Lock lock(registry,Registry::Lock::BLOCK_OR_BORROW);
+ // Only fresh serials which this exact backend batch never registered can
+ // return a reservation. No receipt fact or completion member is erased.
+ for(auto *ticket:frames[frame].qualification_tickets){if(!ticket->credits.capacity)continue;
+  for(uint32_t i=0;i<count;++i){
+   bool committed=false;for(const auto &member:ticket->natives)committed=committed||member.source.serial==serials[i];CRASH_COND(committed);
+   for(uint32_t j=0;j<ticket->admitted_native_serials.size();++j)if(ticket->admitted_native_serials[j]==serials[i]){
+    ticket->admitted_native_serials.remove_at(j);
+    const Error canceled=ticket->credits.cancel_native(1,!p_copy && worker!=UINT32_MAX,p_copy);CRASH_COND(canceled!=OK);
+    if(!p_copy && worker!=UINT32_MAX){bool found=false;for(auto &quote:ticket->worker_credits)if(quote.worker==worker && quote.frame==uint32_t(frame) && quote.epoch==frames[frame].qualification_epoch){++quote.remaining;found=true;break;}CRASH_COND(!found);}
+    break;
+   }
+  }
+ }
+}
+Error RenderingDevice::_qualification_admit_worker(uint32_t worker,uint64_t operation,const RDD::QueueCallReport &prefix,uint32_t future) {
+ auto &registry=Registry::get_singleton();Registry::Lock lock(registry,Registry::Lock::TRY_OR_BORROW);if(!lock.is_locked())return ERR_BUSY;
+ for(const auto &source:prefix.calls)if(!source.serial || !source.queue_index || !source.completion_serial || source.completion==RDD::CompletionCapability::Disabled || source.presentation_only)return ERR_INVALID_DATA;
+ auto quote_for=[&](QualificationTicket *ticket)->QualificationTicket::WorkerCredit* {
+  for(auto &quote:ticket->worker_credits)if(quote.worker==worker && quote.operation==operation && quote.frame==uint32_t(frame) && quote.epoch==frames[frame].qualification_epoch)return &quote;
+  return nullptr;
+ };
+ auto needed=[&](QualificationTicket *ticket)->uint64_t {
+  uint64_t count=future;
+  for(uint32_t i=0;i<prefix.calls.size();++i){const auto &source=prefix.calls[i];bool duplicate=false;for(uint32_t j=0;j<i;++j)duplicate=duplicate||prefix.calls[j].serial==source.serial;if(!duplicate && !qualification_knows_serial(*ticket,source.serial))++count;}
+  return count;
+ };
+ for(auto *ticket:frames[frame].qualification_tickets){
+  if(!ticket->credits.capacity || quote_for(ticket))continue;
+  const uint64_t count=needed(ticket);
+  if(count>UINT32_MAX || count>ticket->credits.capacity-ticket->credits.occupied())return ERR_PARAMETER_RANGE_ERROR;
+ }
+ for(auto *ticket:frames[frame].qualification_tickets){
+  if(!ticket->credits.capacity || quote_for(ticket))continue;
+  const Error reserved=ticket->credits.reserve_workers(uint32_t(needed(ticket)));CRASH_COND(reserved!=OK);
+  ticket->worker_credits.push_back({worker,uint32_t(frame),future,operation,frames[frame].qualification_epoch});
+  for(const auto &source:prefix.calls)if(!qualification_knows_serial(*ticket,source.serial)){
+   const Error admitted=ticket->credits.admit_native(1,true);CRASH_COND(admitted!=OK);
+   ticket->admitted_native_serials.push_back(source.serial);
+  }
+ }
+ return OK;
+}
+Error RenderingDevice::_qualification_activate_cleanup_credits() {
+ if(frames.is_empty() || uint32_t(frame)>=frames.size())return OK;
+ auto &registry=Registry::get_singleton();Registry::Lock lock(registry,Registry::Lock::TRY_OR_BORROW);
+ if(!lock.is_locked())return ERR_BUSY;
+ for(auto *ticket:frames[frame].qualification_tickets){
+  if(!ticket->admission_closed && !ticket->append_failed && !ticket->mapping_failed)continue;
+  const uint32_t main=MIN(ticket->credits.cleanup,3u);
+  ticket->credits.main+=main;ticket->credits.copy+=ticket->credits.cleanup-main;
+  ticket->credits.cleanup=0;
+ }
+ return OK;
+}
+Error RenderingDevice::_qualification_admit_extra_main(uint32_t slots) {
+ auto &registry=Registry::get_singleton();Registry::Lock lock(registry,Registry::Lock::BLOCK_OR_BORROW);
+ const uint64_t count=uint64_t(slots)*3;
+ for(auto *ticket:frames[frame].qualification_tickets)if(ticket->credits.capacity && count>ticket->credits.capacity-ticket->credits.occupied())return ERR_PARAMETER_RANGE_ERROR;
+ for(auto *ticket:frames[frame].qualification_tickets)if(ticket->credits.capacity){const Error reserved=ticket->credits.grow_plan(0,count);CRASH_COND(reserved!=OK);}
+ return OK;
+}
+Error RenderingDevice::_qualification_admit_frame_ticket(QualificationTicket *ticket) {
+ if(!ticket->credits.capacity)return OK;
+ auto &registry=Registry::get_singleton();
+ const bool caller_owned = Registry::Lock::owns(registry);
+ Registry::Lock ticket_lock(registry,Registry::Lock::TRY_OR_BORROW);
+ if(!ticket_lock.is_locked())return ERR_BUSY;
+ for(auto *existing:frames[frame].qualification_tickets)if(existing==ticket)return OK;
+ if(ticket->acknowledged || ticket->admission_closed)return ERR_BUSY;
+ // The original recording pin blocks ACK/destruction while Registry is dropped.
+ // Keep RD, then acquire pool/workers, and only then reacquire Registry.
+ const bool was_recording = ticket->recording;
+ ticket->recording = true;
+ if(caller_owned)registry.unlock_mutex_for_call();else ticket_lock.temp_unlock();
+ struct RestoreTicket {
+  Registry &registry;Registry::Lock &lock;QualificationTicket *ticket;RenderingDevice &device;
+  bool caller_owned,was_recording,relocked=false;
+  void relock(){if(relocked)return;if(caller_owned)registry.relock_mutex_after_call();else lock.temp_relock();relocked=true;}
+  ~RestoreTicket(){
+   relock();ticket->recording=was_recording;
+   // Cancellation may have observed the temporary original recording pin.
+   // Publish its real no-effect return once that pin is removed under Registry.
+   if(ticket->admission_closed && !ticket->recording)registry.qualification_ticket_publish(ticket,&device);
+  }
+ } restore{registry,ticket_lock,ticket,*this,caller_owned,was_recording};
+ // Publishing a new graph membership also adopts every already-issued hidden
+ // prefix and each currently required operation. Acquire all original worker
+ // locks before quoting; zero-effect refusal leaves the ticket unenrolled.
+ struct Locks {
+  LocalVector<BinaryMutex*> held;
+  bool take(BinaryMutex &mutex){if(!mutex.try_lock())return false;held.push_back(&mutex);return true;}
+  ~Locks(){for(uint32_t i=held.size();i;--i)held[i-1]->unlock();}
+ } locks;
+ if(!locks.take(transfer_worker_pool_mutex))return ERR_BUSY;
+ for(uint32_t i=0;i<transfer_worker_pool_size;++i){
+  auto *worker=transfer_worker_pool[i];
+  if(!locks.take(worker->thread_mutex) || !locks.take(worker->operations_mutex))return ERR_BUSY;
+ }
+ restore.relock();
+ if(ticket->acknowledged || ticket->admission_closed)return ERR_BUSY;
+ for(auto *existing:frames[frame].qualification_tickets)if(existing==ticket)return OK;
+ struct Quote { TransferWorker *worker;RDD::QueueCallReport prefix;uint32_t future; };
+ LocalVector<Quote> quotes;LocalVector<uint64_t> serials;uint64_t needed=0;
+ auto collect=[&](const RDD::QueueCallReport &report)->Error {
+  for(const auto &source:report.calls){
+   if(!source.serial || !source.queue_index || !source.completion_serial || source.completion==RDD::CompletionCapability::Disabled || source.presentation_only)return ERR_INVALID_DATA;
+   if(qualification_knows_serial(*ticket,source.serial))continue;
+   bool known=false;for(uint64_t serial:serials)if(serial==source.serial){known=true;break;}
+   if(!known){serials.push_back(source.serial);++needed;}
+  }
+  return OK;
+ };
+ for(const auto &report:frames[frame].qualification_hidden_reports){const Error error=collect(report);if(error!=OK)return error;}
+ for(uint32_t i=0;i<transfer_worker_pool_size;++i){
+  auto *worker=transfer_worker_pool[i];
+  if(worker->operations_processed>=transfer_worker_operation_used_by_draw[i])continue;
+  Quote quote{worker,{},0};
+  if(worker->recording || worker->submission_pending){const Error error=driver->qualification_worker_source_quote(worker->command_buffer,quote.prefix,quote.future);if(error!=OK)return error;}
+  else quote.prefix=worker->last_submission;
+  const Error error=collect(quote.prefix);if(error!=OK)return error;
+  needed+=quote.future;quotes.push_back(std::move(quote));
+ }
+ if(needed>UINT32_MAX || needed>ticket->credits.capacity-ticket->credits.occupied())return ERR_PARAMETER_RANGE_ERROR;
+ const Error reserved=ticket->credits.reserve_workers(uint32_t(needed));CRASH_COND(reserved!=OK);
+ for(uint64_t serial:serials){const Error admitted=ticket->credits.admit_native(1,true);CRASH_COND(admitted!=OK);ticket->admitted_native_serials.push_back(serial);}
+ for(const auto &quote:quotes){
+  ticket->worker_credits.push_back({quote.worker->index,uint32_t(frame),quote.future,quote.worker->operations_counter,frames[frame].qualification_epoch});
+  quote.worker->qualification_batch_sealed=true;
+ }
+ frames[frame].qualification_tickets.push_back(ticket);++ticket->frame_refs;
+ return OK;
+}
+
 void RenderingDevice::_qualification_add_frame_ticket(QualificationTicket *ticket) {
 	// Caller holds the original Registry mutex while publishing graph membership.
 	bool present = false;
@@ -367,6 +551,7 @@ void RenderingDevice::_qualification_add_frame_ticket(QualificationTicket *ticke
 		}
 	}
 	if (!present) {
+  CRASH_COND(ticket->credits.capacity); // exact admission must precede the graph effect
 		frames[frame].qualification_tickets.push_back(ticket);
 		++ticket->frame_refs;
 	}
@@ -377,14 +562,14 @@ void RenderingDevice::_qualification_add_frame_ticket(QualificationTicket *ticke
 void RenderingDevice::_qualification_seal_tickets() {
 	{
 		auto &registry = Registry::get_singleton();
-		MutexLock lock(registry.mutex);
+		GDExtensionDeviceExit::Registry::Lock lock(registry);
 		registry.production_seal_graphs_locked(*this);
 	}
 	if (frames[frame].qualification_tickets.is_empty()) {
 		return;
 	}
 	auto &registry = Registry::get_singleton();
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	for (auto *ticket : frames[frame].qualification_tickets) {
 		for (auto &member : ticket->graphs) {
 			if (member.frame != uint32_t(frame) || member.epoch != frames[frame].qualification_epoch || member.sealed) {
@@ -452,14 +637,14 @@ void RenderingDevice::_qualification_seal_tickets() {
 void RenderingDevice::_qualification_issue_tickets(uint32_t slot, const RDD::QueueCallReport &report, Error error) {
 	{
 		auto &registry = Registry::get_singleton();
-		MutexLock lock(registry.mutex);
+		GDExtensionDeviceExit::Registry::Lock lock(registry);
 		registry.production_capture_issue_locked(*this, slot, { report }, error);
 	}
 	if (frames[frame].qualification_tickets.is_empty()) {
 		return;
 	}
 	auto &registry = Registry::get_singleton();
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	_qualification_issue_tickets_locked(slot, report, error);
 }
 void RenderingDevice::_qualification_issue_tickets_locked(uint32_t slot, const RDD::QueueCallReport &report, Error error) {
@@ -472,7 +657,11 @@ void RenderingDevice::_qualification_issue_tickets_locked(uint32_t slot, const R
 				break;
 			}
 		}
-		if (parent == UINT32_MAX) {
+		// An already-admitted hidden source can precede this ticket's first
+		// graph. Keep its real native receipt as a permanent no-graph root;
+		// it declares no graph dependency and cannot satisfy main-slot mapping.
+		// Existing graph-backed and conservative receipts retain their policy.
+		if (parent == UINT32_MAX && !(ticket->credits.capacity && slot == UINT32_MAX)) {
 			continue;
 		}
 		for (const auto &source : report.calls) {
@@ -495,6 +684,9 @@ void RenderingDevice::_qualification_issue_tickets_locked(uint32_t slot, const R
 				ticket->mapping_failed = true;
 				continue;
 			}
+   if(ticket->credits.capacity){
+    if(!qualification_knows_serial(*ticket,source.serial) || ticket->credits.commit_native(1)!=OK){ticket->mapping_failed=true;continue;}
+   }
 			GDExtensionQualificationFactV1 fact = {};
 			fact.backend_queue = source.queue_index;
 			fact.semantic_kind = slot == UINT32_MAX ? 4 : 5;
@@ -532,7 +724,7 @@ Error RenderingDevice::_qualification_retain_tickets(uint32_t index) {
 		return production;
 	}
 	auto &registry = Registry::get_singleton();
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	for (auto *ticket : frames[index].qualification_tickets) {
 		for (auto &member : ticket->natives) {
 			if (member.retained || member.owner_released) {
@@ -564,7 +756,7 @@ Error RenderingDevice::_qualification_poll_tickets(uint32_t index) {
 			if (completion.error == ERR_BUSY) {
 				return ERR_BUSY;
 			}
-			MutexLock lock(registry.mutex);
+			GDExtensionDeviceExit::Registry::Lock lock(registry);
 			auto &fact = ticket->facts[member.fact];
 			const auto old = fact;
 			if (completion.error != OK) {
@@ -611,7 +803,7 @@ void RenderingDevice::_qualification_return_frame_tickets(uint32_t index) {
 		return;
 	}
 	auto &registry = Registry::get_singleton();
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	for (auto *ticket : frames[index].qualification_tickets) {
 		for (auto &member : ticket->graphs) {
 			if (member.frame == index && member.epoch == frames[index].qualification_epoch) {

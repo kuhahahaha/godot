@@ -500,7 +500,7 @@ Error RenderingDevice::_production_output_directory_capture(GDExtensionProductio
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock registry_lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock registry_lock(registry);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -547,7 +547,7 @@ Error RenderingDevice::_production_output_directory_return(GDExtensionDeviceExit
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock registry_lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock registry_lock(registry);
 	if (binding.registry_instance != registry.instance || binding.request_serial != pin.request_serial || binding.pin_serial != pin.serial || !registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -628,7 +628,7 @@ Error RenderingDevice::_production_output_directory_mark_root(GDExtensionDeviceE
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock registry_lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock registry_lock(registry);
 	if (binding.registry_instance != registry.instance || binding.request_serial != pin.request_serial || binding.pin_serial != pin.serial || !registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -710,7 +710,7 @@ Error RenderingDevice::_production_output_hold_capture(GDExtensionProductionPhys
 	if (!pin.registry) {
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock registry_lock(pin.registry->mutex);
+	GDExtensionDeviceExit::Registry::Lock registry_lock(*pin.registry);
 	return _production_output_hold_capture_locked(physical_context, pin, hold, group_serial);
 }
 
@@ -893,7 +893,7 @@ Error RenderingDevice::_production_output_hold_begin_return(GDExtensionDeviceExi
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -933,7 +933,7 @@ Error RenderingDevice::_production_output_hold_returned(GDExtensionDeviceExit::P
 		observation = {};
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock registry_lock(pin.registry->mutex);
+	GDExtensionDeviceExit::Registry::Lock registry_lock(*pin.registry);
 	return _production_output_hold_returned_locked(pin, serial, observation);
 }
 
@@ -1182,7 +1182,7 @@ Error RenderingDevice::_production_output_owned_reserve(GDExtensionProductionPhy
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -1236,7 +1236,7 @@ Error RenderingDevice::_production_output_owned_rollback(GDExtensionProductionPh
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -1302,7 +1302,7 @@ Error RenderingDevice::_production_output_owned_bind(GDExtensionProductionPhysic
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -1378,7 +1378,7 @@ Error RenderingDevice::_production_output_owned_cancel_unbound(GDExtensionDevice
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -1437,7 +1437,7 @@ bool RenderingDevice::_production_output_hold_contains(GDExtensionDeviceExit::Pr
 		return false;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return false;
 	}
@@ -1483,7 +1483,7 @@ bool RenderingDevice::_production_output_owned_storage_contains(GDExtensionDevic
 		return false;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return false;
 	}
@@ -1559,7 +1559,7 @@ Error RenderingDevice::_production_output_owned_storage_create(GDExtensionProduc
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	ProductionRequest *request = nullptr;
 	const Error ready = _production_output_owned_create_preflight_locked(physical_context, pin, group, ordinal, request);
 	if (ready != OK) {
@@ -1594,7 +1594,7 @@ Error RenderingDevice::_production_output_owned_uniform_set_create(GDExtensionPr
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	ProductionRequest *request = nullptr;
 	const Error ready = _production_output_owned_create_preflight_locked(physical_context, pin, group, ordinal, request);
 	if (ready != OK) {
@@ -1642,7 +1642,7 @@ Error RenderingDevice::_production_output_owned_seal(GDExtensionProductionPhysic
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -1735,7 +1735,7 @@ Error RenderingDevice::_production_output_owned_pipeline_preflight(GDExtensionPr
 	if (!pin.registry || !group) {
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock lock(pin.registry->mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(*pin.registry);
 	GDExtensionDeviceExit::ProductionRequest *request = nullptr;
 	const Error ready = _production_output_owned_create_preflight_locked(physical_context, pin, group, 0, request);
 	return ready == OK ? _native_disposal_preflight() : ready;
@@ -1747,7 +1747,7 @@ Error RenderingDevice::_production_output_owned_render_pipeline_create(GDExtensi
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	ProductionRequest *request = nullptr;
 	const Error ready = _production_output_owned_create_preflight_locked(physical_context, pin, group, ordinal, request);
 	if (ready != OK) {

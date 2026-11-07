@@ -53,7 +53,7 @@ Error Registry::scene_install_plan_locked(const Record &record,GDExtensionSceneI
 Error Registry::select_scene_install_plan(const RecordRef &ref,GDExtensionSceneInstallPlanV2 &out,SceneReadyFailureReason &reason) {
  out={};reason=SceneReadyFailureReason::ACTUAL_RD_UNSUPPORTED;
  if(ref.registry!=this)return ERR_INVALID_DATA;
- MutexLock lock(mutex);auto &record=records[ref.slot];
+ Lock lock(*this);auto &record=records[ref.slot];
  if(record.owner_thread!=Thread::get_caller_id())return ERR_UNAUTHORIZED;
  if(record.quiescing || record.close_started || record.active_callbacks)return ERR_BUSY;
  if(record.scene_ready_state!=Record::SceneReadyState::PENDING || record.guard_enrollment!=GuardEnrollment::QUALIFIED || !record.attached || !record.bootstrap_tuple_observed || record.scene_ready_flavor==Record::SceneReadyFlavor::NONE)return ERR_UNAVAILABLE;

@@ -65,7 +65,7 @@ Error Registry::production_install_record_receiver(GDExtensionDeviceExitSceneRea
 	if (!receiver) {
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionAttachment *attachment = nullptr;
 	RenderingDevice *device = nullptr;
 	Error error = production_attachment_locked(ref, true, attachment, device);
@@ -98,7 +98,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_reserve(GDExtensionProduct
 	if (!window_aligned(operation) || !window_aligned(capacity) || !window_aligned(out) || out->registry_instance || out->handle_serial) {
 		return window_result(ERR_INVALID_PARAMETER);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionAttachment *attachment = nullptr;
 	RenderingDevice *device = nullptr;
 	Error error = production_attachment_locked(ref, true, attachment, device);
@@ -124,7 +124,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_raster_reserve(GDExtension
 	if (!window_aligned(operation) || !window_aligned(capacity) || !window_aligned(action) || !window_aligned(out) || !operation || !capacity || !action || !out || out->registry_instance || out->handle_serial || !production_dto_valid(*operation) || !production_dto_valid(*capacity) || !production_dto_valid(*action) || action->reserved || action->target_content_revision || action->action_ordinal != 0 || action->framebuffer_resource_slot != 0 || action->depth_resource_slot != 1 || action->shader_serial || action->pipeline_serial || action->framebuffer_serial || capacity->suboperations < 1 || capacity->resources < 4 || capacity->return_cells < 4 || capacity->graph_memberships < 8 || action->canonical_suboperation < operation->canonical_begin || action->canonical_suboperation >= operation->canonical_end) {
 		return window_result(ERR_INVALID_PARAMETER);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionAttachment *attachment = nullptr;
 	RenderingDevice *device = nullptr;
 	Error error = production_attachment_locked(ref, true, attachment, device);
@@ -167,7 +167,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_raster_reserve(GDExtension
 	return window_result(OK);
 }
 GDExtensionDeviceSessionResultV1 Registry::production_raster_begin(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, uint64_t revision) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = production_physical_request_locked(context, ref, request, rd, true);
@@ -211,9 +211,9 @@ GDExtensionDeviceSessionResultV1 Registry::production_raster_begin(ProductionPhy
 	production_append_effect_enter_locked(*request);
 	rd->production_recording_request = request;
 	const OriginalOperationIdentity identity{ request->operation.owner_request_nonce, request->attachment->library_generation, device_records[request->attachment->device].session, request->operation.record_generation, request->operation.canonical_begin, request->operation.canonical_end };
-	mutex.unlock();
+	unlock_mutex_for_call();
 	const auto begun = rd->_draw_list_begin_recorded(request->resources[0].primary, RenderingDevice::DRAW_CLEAR_DEPTH, {}, 1.0f, 0, Rect2(), 0);
-	mutex.lock();
+	relock_mutex_after_call();
 	rd->production_recording_request = nullptr;
 	--request->capture_inflight;
 	request->draw_list_open = rd->draw_list.active;
@@ -246,7 +246,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_raster_begin(ProductionPhy
 }
 
 GDExtensionDeviceSessionResultV1 Registry::production_raster_end(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = production_physical_request_locked(context, ref, request, rd, false);
@@ -273,9 +273,9 @@ Error Registry::production_raster_close_locked(ProductionRequest &request, Rende
 	++request.capture_inflight;
 	production_append_effect_enter_locked(request);
 	rd.production_recording_request = &request;
-	mutex.unlock();
+	unlock_mutex_for_call();
 	const auto ended = rd._draw_list_end_recorded();
-	mutex.lock();
+	relock_mutex_after_call();
 	rd.production_recording_request = nullptr;
 	--request.capture_inflight;
 	request.draw_list_open = rd.draw_list.active;
@@ -308,7 +308,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_reserve_v2(GDExtensionProd
 	if (!window_aligned(operation) || !window_aligned(capacity) || !window_aligned(out) || out->registry_instance || out->handle_serial) {
 		return window_result(ERR_INVALID_PARAMETER);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionAttachment *attachment = nullptr;
 	RenderingDevice *device = nullptr;
 	Error error = production_attachment_locked(ref, true, attachment, device);
@@ -351,7 +351,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_record_history(GDExtension
 		return window_result(ERR_INVALID_PARAMETER);
 	}
 	*out = {};
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *device = nullptr;
 	const Error error = production_request_locked(ref, false, request, device);
@@ -440,7 +440,7 @@ Error Registry::production_record_schedule(GDExtensionProductionRequestRefV1 ref
 	}
 	uint64_t serial = 0;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		ProductionRequest *request = nullptr;
 		RenderingDevice *device = nullptr;
 		Error error = production_request_locked(ref, false, request, device);
@@ -492,7 +492,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_record_consume_v2(GDExtens
 	}
 	*out = {};
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		ProductionRequest *request = nullptr;
 		RenderingDevice *device = nullptr;
 		Error error = production_request_locked(ref, false, request, device);
@@ -545,7 +545,7 @@ Error Registry::production_record_receive_locked(ProductionRequest &request, Ren
 	const uint64_t serial = request.serial, control = request.control.serial;
 	++record.private_refs;
 	RecordRef reference(this, attachment.library);
-	mutex.unlock();
+	unlock_mutex_for_call();
 	Error error = OK;
 	{
 		// Original normal-entry protection surrounds the actual DSO invocation;
@@ -577,7 +577,7 @@ Error Registry::production_record_receive_locked(ProductionRequest &request, Ren
 			}
 			// Actual protected frame return is a physical cutoff, not a caller
 			// list split or cancellation. Keep entry/CodeHold live through closure.
-			mutex.lock();
+			relock_mutex_after_call();
 			if (request.compute_list_open || request.draw_list_open) {
 				if (!device._thread_safe_.try_lock()) {
 					error = ERR_BUSY;
@@ -601,16 +601,16 @@ Error Registry::production_record_receive_locked(ProductionRequest &request, Ren
 				request.control.output.record_pause = request.control.output.append.state == GDEXTENSION_PRODUCTION_KNOWN_PREFIX_V1 ? ProductionRecordPause::UPLOAD_PREFIX : frame.append_calls >= 64 ? ProductionRecordPause::APPEND_LIMIT
 																																																	  : ProductionRecordPause::SCOPE_RETURN;
 			}
-			mutex.unlock();
+			unlock_mutex_for_call();
 			if (frame.scene_occurrence) {
-				mutex.lock();
+				relock_mutex_after_call();
 				for (uint32_t i = 0; i < request.action_count; ++i) {
 					auto &attempt = request.actions[i].scene_attempt;
 					if (!attempt.consumed) {
 						attempt.occurrence = attempt.physical_frame = 0;
 					}
 				}
-				mutex.unlock();
+				unlock_mutex_for_call();
 			}
 			production_physical_frame = frame.previous; // This physical context expires here.
 		}
@@ -618,13 +618,13 @@ Error Registry::production_record_receive_locked(ProductionRequest &request, Ren
 	// The temporary original RecordRef is returned without holding Registry's
 	// nonrecursive lock; the accepted request remains live through EXECUTING.
 	reference.reset();
-	mutex.lock();
+	relock_mutex_after_call();
 	CRASH_COND(request.serial != serial || request.control.serial != control || request.control.state != ProductionControlState::EXECUTING);
 	return error;
 }
 
 Error Registry::scene_phase_encode_relay(NormalRelayToken token, GDExtensionNormalRelayRefV1 &out) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	const auto *relay = find_normal_relay_locked(token);
 	if (!relay || relay->cancelled || relay->releasing || relay->release_requested) {
 		return ERR_UNAVAILABLE;
@@ -639,7 +639,7 @@ Error Registry::scene_phase_encode_relay(NormalRelayToken token, GDExtensionNorm
 }
 
 Error Registry::scene_phase_capability(GDExtensionProductionAttachmentRefV1 ref, GDExtensionSceneOpaque32V1 &out) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionAttachment *attachment = nullptr;
 	RenderingDevice *device = nullptr;
 	const Error error = production_attachment_locked(ref, true, attachment, device);
@@ -655,7 +655,7 @@ Error Registry::scene_phase_register(GDExtensionNormalRelayRefV1 relay_ref, GDEx
 	if (!scene_phase_config_valid(config) || memcmp(&out, &empty, sizeof(out))) {
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionAttachment *attachment = nullptr;
 	RenderingDevice *device = nullptr;
 	Error error = production_attachment_locked(ref, true, attachment, device);
@@ -707,7 +707,7 @@ Error Registry::scene_phase_unregister(GDExtensionScenePhaseRegistrationRefV1 re
 	out = {};
 	NormalRelayToken token;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		if (scene_phase_word(ref.token, 0) != instance || !scene_phase_word(ref.token, 1) || scene_phase_word(ref.token, 2) != SCENE_REGISTRATION_KIND) {
 			return ERR_INVALID_DATA;
 		}
@@ -768,7 +768,7 @@ Error Registry::scene_phase_unregister(GDExtensionScenePhaseRegistrationRefV1 re
 	if (forgotten != OK) {
 		return forgotten;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	for (auto *attachment : production_attachments) {
 		if (attachment && attachment->scene_registration == scene_phase_word(ref.token, 1) && attachment->library_generation == scene_phase_word(ref.token, 3)) {
 			attachment->scene_relay_closed = true;
@@ -782,7 +782,7 @@ void Registry::scene_phase_dispatch(RenderingDevice &device) {
 	if (device.render_thread_id != Thread::get_caller_id() || !device.is_main_instance || device.production_finalization_started.load(std::memory_order_acquire) || device._recording_error() != OK) {
 		return;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (scene_phase_occurrence == UINT64_MAX) {
 		return;
 	} // Exhaustion never wraps.
@@ -822,7 +822,7 @@ Error Registry::scene_phase_bind_operation(GDExtensionProductionRequestRefV1 ref
 	if (!memcmp(&key.record_request, &empty, sizeof(empty)) || !memcmp(&key.operation_ref, &empty, sizeof(empty)) || !memcmp(&key.cursor_ref, &empty, sizeof(empty)) || !memcmp(&key.schedule_digest, &empty, sizeof(empty))) {
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *device = nullptr;
 	const Error error = production_request_locked(ref, true, request, device);
@@ -856,7 +856,7 @@ Error Registry::scene_phase_borrow(ProductionPhysicalContextRef context, GDExten
 	out = {};
 	out.abi = { 1, sizeof(out), 0 };
 	auto fail = [&](Error error) { out.native_error = error; return error; };
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *device = nullptr;
 	Error error = production_physical_request_locked(context, ref, request, device, false);
@@ -917,7 +917,7 @@ Error Registry::scene_phase_query_operation(GDExtensionProductionRequestRefV1 re
 	out = {};
 	out.abi = { 1, sizeof(out), 0 };
 	auto fail = [&](Error error) { out.native_error = error; return error; };
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *device = nullptr;
 	const Error error = production_request_locked(ref, false, request, device);
@@ -973,7 +973,7 @@ Error Registry::production_output_owner_context_locked(const ProductionOutputPin
 }
 
 Error Registry::production_output_pin(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, RenderingDevice &expected_device, ProductionOutputPin &pin) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (!pin.is_empty()) {
 		return ERR_ALREADY_IN_USE;
 	}
@@ -1055,7 +1055,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_append(ProductionPhysicalC
 	}
 	uint64_t begin = 0;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		ProductionRequest *request = nullptr;
 		RenderingDevice *device = nullptr;
 		const Error error = production_physical_request_locked(context, ref, request, device, true);
@@ -1081,7 +1081,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_append_v2(ProductionPhysic
 	if (!window_aligned(out)) {
 		return window_result(ERR_INVALID_PARAMETER);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *device = nullptr;
 	Error error = production_physical_request_locked(context, ref, request, device, true);
@@ -1150,7 +1150,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_close_segment(ProductionPh
 	}
 	uint64_t begin = 0;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		ProductionRequest *request = nullptr;
 		RenderingDevice *device = nullptr;
 		const Error error = production_physical_request_locked(context, ref, request, device, false);
@@ -1174,7 +1174,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_close_segment_v2(Productio
 	if (!window_aligned(out)) {
 		return window_result(ERR_INVALID_PARAMETER);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *device = nullptr;
 	Error error = production_physical_request_locked(context, ref, request, device, false);
@@ -1194,7 +1194,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_close_segment_v2(Productio
 	return window_result(error);
 }
 GDExtensionDeviceSessionResultV1 Registry::production_ack_segment(GDExtensionProductionRequestRefV1 ref, uint64_t segment, uint64_t revision) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *device = nullptr;
 	// Exact original owner/holder/producer/device association is still required.
@@ -1252,7 +1252,7 @@ bool Registry::production_metadata_engine_call_allowed(const StringName &class_n
 }
 
 void Registry::production_metadata_pump() {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	for (uint32_t slot = 0; slot < RECORD_CAPACITY; ++slot) {
 		auto *attachment = production_attachments[slot];
 		if (!attachment || !attachment->metadata_receiver || !attachment->metadata_pending || attachment->metadata_active) {
@@ -1280,12 +1280,12 @@ void Registry::production_metadata_pump() {
 		frame.enter(attachment->metadata_reference, false);
 		frame.frame_id = attachment->metadata_frame;
 		frame.level_phase = LevelPhase::PRODUCTION_METADATA;
-		mutex.unlock();
+		unlock_mutex_for_call();
 		receiver(userdata, ref);
 		// The attachment refuses Close while this accepted entry is active.
 		// Original borrowed views expire before its code/private credit returns.
 		frame.leave();
-		mutex.lock();
+		relock_mutex_after_call();
 		CRASH_COND(production_attachments[slot] != attachment || !attachment->metadata_active);
 		--record.active_cleanup_by_phase[uint8_t(CleanupPhase::BINDING)];
 		--record.active_callbacks;

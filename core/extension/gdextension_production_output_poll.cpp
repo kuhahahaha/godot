@@ -57,7 +57,7 @@ void Registry::production_output_poll(ProductionPhysicalContextRef p_context, GD
 	if (!production_dto_valid(*p_input) || !p_input->particles || !p_input->generation) {
 		return;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *rd = nullptr;
 	const Error authenticated = production_physical_request_locked(p_context, p_ref, request, rd, false);

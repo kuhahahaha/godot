@@ -155,6 +155,17 @@ struct QualificationTicket {
 	const NativeSourceOrigin source_origin;
 	LocalVector<GraphMember> graphs;
 	LocalVector<NativeMember> natives;
+ // Registry mutex owns the accounting. Facts and exact native identities
+ // remain append-only until the original ACK, including completed sources.
+ QualificationFactCredits credits;
+ uint32_t credit_graph_plan = 0, credit_main_plan = 0, credit_copy_plan = 0;
+ struct WorkerCredit {
+  uint32_t worker = 0, frame = 0, remaining = 0;
+  uint64_t operation = 0, epoch = 0;
+ };
+ LocalVector<WorkerCredit> worker_credits;
+ LocalVector<uint64_t> admitted_native_serials;
+
 	struct Upload {
 		GDExtensionQualificationUploadPlanV1 plan = {};
 		RenderingDevice::QualificationUploadProgress progress;

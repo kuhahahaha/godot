@@ -113,6 +113,28 @@ Error record_source_slot_bound(uint32_t p_contexts, uint64_t p_graphs, uint32_t 
 // The qualification policy retains its historical slot formula/cap. Sharing
 // overflow arithmetic does not make that fixed policy a production profile.
 Error qualification_source_slot_bound(uint64_t p_graphs, uint32_t p_current_commands, uint32_t p_workers, uint32_t p_capacity, uint32_t &r_slots);
+// Append-only qualification receipt credits. This is accounting inside the
+// original ticket; it cannot issue a source, graph, operation or observation.
+// Every mutation is made under Registry::mutex before its corresponding effect.
+struct QualificationFactCredits {
+ uint32_t graphs = 0;
+ uint32_t main = 0;
+ uint32_t copy = 0;
+ uint32_t workers = 0;
+ uint32_t cleanup = 0;
+ uint32_t pending = 0;
+ uint32_t committed = 0;
+ uint32_t capacity = 0;
+ Error initialize(uint32_t p_capacity, uint64_t p_graphs, uint64_t p_main, uint32_t p_cleanup, uint64_t p_copy = 0);
+ Error grow_plan(uint64_t p_graphs, uint64_t p_main, uint64_t p_copy = 0);
+ Error reserve_workers(uint32_t p_count);
+ Error admit_native(uint32_t p_count, bool p_worker, bool p_copy = false);
+ Error commit_native(uint32_t p_count);
+ Error cancel_native(uint32_t p_count,bool p_worker,bool p_copy = false);
+ Error commit_graph();
+ Error release_worker_quote(uint32_t p_count);
+ uint64_t occupied() const;
+};
 struct ReadbackSourceState {
 	uint64_t request_serial = 0;
 	uint64_t backing_serial = 0;

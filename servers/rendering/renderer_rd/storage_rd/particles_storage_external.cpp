@@ -239,7 +239,7 @@ Dictionary ParticlesStorage::particles_external_poll(RID p_particles, const Pack
 }
 Error ParticlesStorage::_external_typed_context(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, bool p_new_work) {
 	auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	GDExtensionDeviceExit::ProductionRequest *request = nullptr;
 	RenderingDevice *device = nullptr;
 	const Error error = registry.production_physical_request_locked(p_context, p_request, request, device, p_new_work);

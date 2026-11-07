@@ -303,7 +303,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_output(GDExtension
 	if (output_decode(input->input, decoded) != OK) {
 		return result(ERR_INVALID_PARAMETER);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = production_request_locked(ref, true, request, rd);
@@ -428,7 +428,7 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 	if (output_decode(*input, parsed) != OK) {
 		return;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = production_physical_request_locked(context, ref, request, rd, true);
@@ -617,9 +617,9 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 		}
 		// The executing original RECORD and installed independent root retain
 		// the action/slot while each factory reacquires the Registry lock.
-		mutex.unlock();
+		unlock_mutex_for_call();
 		error = slot.storage->allocate_instance192_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity, surfaces);
-		mutex.lock();
+		relock_mutex_after_call();
 		if (error == OK) {
 			uint32_t member = 0;
 			for (uint32_t i = 0; i < Storage::RESOURCE_COUNT; ++i) {

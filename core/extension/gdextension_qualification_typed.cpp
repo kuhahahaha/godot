@@ -128,7 +128,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_texture_create(GDExtens
 	uint32_t slot = 0;
 	RdUnlock guard;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error e = qualification_bridge_locked(ref, true, true, b, rd, 12);
 		if (e != OK) {
 			return result(e, 16);
@@ -196,7 +196,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_texture_create(GDExtens
 		f.usage_bits |= RenderingDevice::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 	}
 	RID rid = rd->_qualification_texture_create(f, RenderingDevice::TextureView(), &c->physical);
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (rid.is_null()) {
 		CRASH_COND(!c->cleanup_serial_reserved || !qualification_cleanup_serial_reservations);
 		--qualification_cleanup_serial_reservations;
@@ -227,7 +227,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_sampler_create(GDExtens
 	uint32_t slot = 0;
 	RdUnlock guard;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error e = qualification_bridge_locked(ref, true, true, b, rd, 13);
 		if (e != OK) {
 			return result(e, 16);
@@ -282,7 +282,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_sampler_create(GDExtens
 	state.repeat_v = RenderingDevice::SamplerRepeatMode(q->repeat_v);
 	state.repeat_w = RenderingDevice::SamplerRepeatMode(q->repeat_w);
 	RID rid = rd->_qualification_sampler_create(state, &c->physical);
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (rid.is_null()) {
 		CRASH_COND(!c->cleanup_serial_reserved || !qualification_cleanup_serial_reservations);
 		--qualification_cleanup_serial_reservations;
@@ -316,7 +316,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_set_create(GDExtensionQ
 	Vector<RenderingDevice::Uniform> uniforms;
 	LocalVector<QualificationPhysicalReturn *> children;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error e = qualification_bridge_locked(ref, true, true, b, rd, 15);
 		if (e != OK) {
 			return result(e, 16);
@@ -468,7 +468,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_set_create(GDExtensionQ
 		b->sets[slot] = c;
 	}
 	RID rid = rd->_qualification_uniform_set_create(uniforms, RID::from_uint64(q->shader_rid), q->shader_set, &c->physical, children);
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (rid.is_null()) {
 		CRASH_COND(!c->cleanup_serial_reserved || !qualification_cleanup_serial_reservations);
 		--qualification_cleanup_serial_reservations;
@@ -502,7 +502,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_texture_upload(GDExtens
 	RdUnlock guard;
 	auto snapshot = [&]() {*out=c->upload_report;out->out_written=c->upload.segments.size();for(uint32_t i=0;i<c->upload.segments.size();++i){const auto &x=c->upload.segments[i];auto &s=segments[i];s.abi={1,16,0};s.upload_index=UINT32_MAX;s.segment_index=i;s.state=x.handle.is_valid()?1:2;s.byte_begin=x.begin;s.byte_end=x.end;s.graph_instance=x.handle.graph_instance;s.graph_frame=x.handle.graph_frame;s.graph_kind=x.handle.kind;s.graph_index=x.handle.index;s.graph_offset=x.handle.offset;s.backing_serial=c->object_serial;} };
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error e = qualification_bridge_locked(ref, true, true, b, rd, 14);
 		if (e != OK) {
 			return result(e, 16);
@@ -594,6 +594,8 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_texture_upload(GDExtens
 			c->upload_origin = *q;
 			c->upload_ticket = ticket->serial;
 		}
+  e=rd->_qualification_admit_frame_ticket(ticket);
+  if(e!=OK)return result(e,19);
 		c->upload_attempted = true;
 		c->last_upload_revision = q->expected_revision;
 		ticket->recording = true;
@@ -602,7 +604,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_texture_upload(GDExtens
 	rd->qualification_recording = true;
 	const Error error = rd->_qualification_texture_upload(RID::from_uint64(c->rid), copied.ptr(), bytes, c->upload);
 	rd->qualification_recording = false;
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ticket->recording = false;
 	ticket->continuation_pending = error == ERR_BUSY;
 	for (uint32_t i = previous; i < c->upload.segments.size(); ++i) {
@@ -763,7 +765,7 @@ void Registry::qualification_resource_retire_step(QualificationBridge *b, Render
 	}
 	uint32_t reason = 0;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		if (c->accepted_rt_refs) {
 			reason = 3;
 		}
@@ -815,7 +817,7 @@ void Registry::qualification_resource_retire_step(QualificationBridge *b, Render
 			}
 		}
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	MutexLock physical_lock(c->physical.mutex);
 	auto next = c->report;
 	next.frame_slot = c->physical.frame_slot;
@@ -861,7 +863,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_resource_retire(GDExten
 	RenderingDevice *rd = nullptr;
 	QualificationResource *c = nullptr;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error e = qualification_bridge_locked(ref, true, false, b, rd);
 		if (e != OK) {
 			return result(e, 16);
@@ -897,7 +899,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_resource_retire(GDExten
 		r.kind = c->kind;
 	}
 	qualification_retire_step(b, rd, c->serial, 4);
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	*out = c->report;
 	return result(OK);
 }
@@ -911,7 +913,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_resource_retire_observe
 	}
 	uint64_t serial = 0;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		QualificationBridge *b = nullptr;
 		RenderingDevice *rd = nullptr;
 		QualificationResource *c = nullptr;
@@ -929,7 +931,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_resource_retire_observe
 	if (e != OK) {
 		return result(e, 17);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *b = nullptr;
 	RenderingDevice *rd = nullptr;
 	QualificationResource *c = nullptr;
@@ -945,7 +947,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_resource_retire_observe
 	return result(OK);
 }
 GDExtensionDeviceSessionResultV1 Registry::qualification_resource_retire_release(GDExtensionQualificationBridgeRefV1 ref, GDExtensionQualificationResourceRefV1 resource, uint64_t revision) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *b = nullptr;
 	RenderingDevice *rd = nullptr;
 	QualificationResource *c = nullptr;

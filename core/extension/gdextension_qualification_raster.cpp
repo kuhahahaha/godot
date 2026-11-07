@@ -61,7 +61,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_raster_unit_create(GDEx
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error error = qualification_bridge_locked(ref, true, false, bridge, rd, 18);
 		if (error != OK) {
 			return result(error, error == ERR_UNAUTHORIZED ? 15 : 16);
@@ -101,7 +101,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_raster_unit_create(GDEx
 	uint32_t slot = 0;
 	RID shader_reservation, pipeline_reservation, framebuffer_reservation;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error error = qualification_bridge_locked(ref, true, false, bridge, rd, 18);
 		if (error != OK) {
 			return result(error, 16);
@@ -244,7 +244,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_raster_unit_create(GDEx
 		rd->_qualification_release_free_event(&child->raster->framebuffer);
 		rd->framebuffer_owner.initialize_rid(framebuffer_reservation, RenderingDevice::Framebuffer());
 		rd->framebuffer_owner.free(framebuffer_reservation);
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		target->physical.dependent_children.fetch_sub(1);
 		CRASH_COND(!child->cleanup_serial_reserved || !qualification_cleanup_serial_reservations);
 		--qualification_cleanup_serial_reservations;
@@ -299,7 +299,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_raster_unit_create(GDEx
 		rd->_qualification_release_free_event(&child->pipeline);
 		child->pipeline.serial = 0;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	child->backing.known_mask = child->raster->backing.known_mask;
 	child->backing.possible_mask = child->raster->backing.possible_mask;
 	child->creating = false;
@@ -357,7 +357,7 @@ void Registry::qualification_raster_retire_step(QualificationBridge *bridge, Ren
 	auto &raster = *child->raster;
 	bool failed;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		if (raster.report.report_revision == UINT64_MAX) {
 			return;
 		}
@@ -430,7 +430,7 @@ void Registry::qualification_raster_retire_step(QualificationBridge *bridge, Ren
 			}
 		}
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	MutexLock shader_lock(child->shader.mutex);
 	MutexLock pipeline_lock(child->pipeline.mutex);
 	MutexLock framebuffer_lock(raster.framebuffer.mutex);
@@ -492,7 +492,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_raster_unit_retire(GDEx
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error error = qualification_bridge_locked(ref, true, false, bridge, rd, 19);
 		if (error != OK) {
 			return result(error, 16);
@@ -503,7 +503,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_raster_unit_retire(GDEx
 		}
 	}
 	qualification_retire_step(bridge, rd, q->raster.handle_serial, 2);
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	for (auto *child : bridge->units) {
 		if (child && child->raster && child->serial == q->raster.handle_serial) {
 			*out = { instance, child->retire_serial };
@@ -524,7 +524,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_raster_unit_retire_obse
 	}
 	uint64_t serial = 0;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		QualificationBridge *bridge = nullptr;
 		RenderingDevice *rd = nullptr;
 		Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
@@ -545,7 +545,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_raster_unit_retire_obse
 	if (error != OK) {
 		return result(error, 17);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	error = qualification_bridge_locked(ref, false, false, bridge, rd);
@@ -562,7 +562,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_raster_unit_retire_obse
 }
 
 GDExtensionDeviceSessionResultV1 Registry::qualification_raster_unit_retire_release(GDExtensionQualificationBridgeRefV1 ref, GDExtensionQualificationRasterRetireRefV1 retire) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = qualification_bridge_locked(ref, false, false, bridge, rd);

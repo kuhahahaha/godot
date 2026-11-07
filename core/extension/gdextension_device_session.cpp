@@ -61,7 +61,7 @@ bool Registry::scene_ready_main_device_available(const RecordRef &ref, Object *o
 	if (!rd || !rd->is_main_instance) {
 		return false;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	const auto &record = records[ref.slot];
 	if (record.owner_thread != Thread::get_caller_id() || record.quiescing || record.close_started || record.scene_ready_state != Record::SceneReadyState::PENDING) {
 		return false;
@@ -74,7 +74,7 @@ bool Registry::scene_ready_main_device_available(const RecordRef &ref, Object *o
 	return false;
 }
 Error Registry::device_created(Object *object) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (phase != Phase::RUNNING) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -98,7 +98,7 @@ Error Registry::device_created(Object *object) {
 	return ERR_PARAMETER_RANGE_ERROR;
 }
 Error Registry::device_execution_moved(Object *object, uint64_t previous, uint64_t next) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	for (auto &device : device_records) {
 		if (device.object != object || !object) {
 			continue;
@@ -122,7 +122,7 @@ Error Registry::device_begin_finalization(RenderingDevice *rd) {
 	if (!rd) {
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	Registry *owner = rd->production_entity_registry.load(std::memory_order_acquire);
 	if (owner && owner != this) {
 		return ERR_INVALID_DATA;
@@ -144,7 +144,7 @@ Error Registry::device_begin_finalization(RenderingDevice *rd) {
 	return OK;
 }
 void Registry::device_closed(Object *object) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	for (auto &d : device_records) {
 		if (d.object == object) {
 			d.live = false;
@@ -156,7 +156,9 @@ void Registry::device_lost(Object *object) {
 	device_closed(object);
 }
 void Registry::device_loss_identity(Object *object, uint64_t &registry, uint64_t &epoch) {
-	MutexLock lock(mutex);
+	// Original source registration can read this identity from a protected
+	// resource factory which already holds this same nonrecursive Registry.
+	Lock lock(*this, Lock::BLOCK_OR_BORROW);
 	registry = 0;
 	epoch = 0;
 	for (const auto &d : device_records) {
@@ -168,7 +170,7 @@ void Registry::device_loss_identity(Object *object, uint64_t &registry, uint64_t
 	}
 }
 void Registry::device_lost(uint64_t registry, uint64_t epoch) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (registry != instance || !epoch) {
 		return;
 	}
@@ -186,7 +188,7 @@ void Registry::reclaim_device_locked(uint32_t slot) {
 	}
 }
 void Registry::device_destroyed(Object *object) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	for (uint32_t i = 0; i < RECORD_CAPACITY; ++i) {
 		if (device_records[i].object == object && object) {
 			auto &d = device_records[i];
@@ -246,7 +248,7 @@ GDExtensionDeviceSessionResultV1 Registry::bind_device_session_in_frame(const GD
 	if (!aligned_pointer(abi) || abi->abi_version != 1 || abi->struct_size != sizeof(*abi) || abi->reserved || !aligned_pointer(context) || !aligned_pointer(session) || !separate(context, sizeof(*context), session, sizeof(*session)) || !separate(abi, sizeof(*abi), context, sizeof(*context)) || !separate(abi, sizeof(*abi), session, sizeof(*session)) || context->handle_serial || context->registry_instance || session->handle_serial || session->registry_instance) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	View *view = nullptr;
 	if (!frame_instance || !frame_serial) {
 		return result(ERR_INVALID_PARAMETER, 4);
@@ -329,7 +331,7 @@ GDExtensionDeviceSessionResultV1 Registry::bind_main_scene_ready_device_session(
 			!separate(context, sizeof(*context), session, sizeof(*session)) || !separate(context, sizeof(*context), object_id, sizeof(*object_id)) || !separate(session, sizeof(*session), object_id, sizeof(*object_id))) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	View *view = nullptr;
 	Error error = resolve_borrow_locked(frame.registry_instance, frame.handle_serial, ViewDomain::SCENE_READY, view);
 	if (error != OK) {
@@ -400,7 +402,7 @@ GDExtensionDeviceSessionResultV1 Registry::copy_device_session(GDExtensionDevice
 	if (!aligned_pointer(out)) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	DeviceRef *c = nullptr, *s = nullptr;
 	Error error = device_ref_locked(context.registry_instance, context.handle_serial, false, c);
 	if (error != OK) {
@@ -432,7 +434,7 @@ GDExtensionDeviceSessionResultV1 Registry::resolve_device_session(GDExtensionDev
 	if (!epoch || !session) {
 		return result(ERR_INVALID_PARAMETER, 3);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	DeviceRef *c = nullptr;
 	Error error = device_ref_locked(context.registry_instance, context.handle_serial, false, c);
 	if (error != OK) {
@@ -469,7 +471,7 @@ GDExtensionDeviceSessionResultV1 Registry::resolve_device_session(GDExtensionDev
 	return result(error, error == OK ? 0 : 11, private_limit, records[c->library].private_refs + 1);
 }
 GDExtensionDeviceSessionResultV1 Registry::release_device_reference(uint64_t registry, uint64_t serial, bool session) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	DeviceRef *ref = nullptr;
 	Error error = device_ref_locked(registry, serial, session, ref);
 	if (error != OK) {

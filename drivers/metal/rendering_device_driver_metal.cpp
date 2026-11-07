@@ -208,9 +208,10 @@ Error RenderingDeviceDriverMetal::native_call_release(uint64_t serial) {
 	return ERR_DOES_NOT_EXIST;
 }
 
-RenderingDeviceDriverMetal::CompletionRecord *RenderingDeviceDriverMetal::register_completion_record(MTL::CommandBuffer *p_command_buffer, uint64_t p_serial, bool p_collection_locked) {
-	const uint64_t serial = active_completion_records ? (active_native_serial_count ? (--active_native_serial_count, active_native_serial++) : 0) : reserve_native_call_serials(1);
-	if (!serial) {
+RenderingDeviceDriverMetal::CompletionRecord *RenderingDeviceDriverMetal::register_completion_record(MTL::CommandBuffer *p_command_buffer, uint64_t p_serial, bool p_collection_locked, bool p_independent_source) {
+	const bool batch_source = active_completion_records && !p_independent_source;
+	const uint64_t serial = batch_source ? (active_native_serial_count ? (--active_native_serial_count, active_native_serial++) : 0) : reserve_native_call_serials(1);
+	if (!serial || (!batch_source && admit_native_source(serial,p_independent_source)!=OK)) {
 		return nullptr;
 	}
 
@@ -235,7 +236,7 @@ RenderingDeviceDriverMetal::CompletionRecord *RenderingDeviceDriverMetal::regist
 		completion_records_mutex.lock();
 	}
 	completion_records.push_back(record);
-	if (active_completion_records != nullptr) {
+	if (batch_source) {
 		active_completion_records->push_back(record);
 	}
 	if (!p_collection_locked) {
@@ -1891,7 +1892,14 @@ RDD::UniformSetID RenderingDeviceDriverMetal::uniform_set_create(VectorView<Boun
 			snprintf(label, sizeof(label), "Uniform Set %u", p_set_index);
 			set->arg_buffer.buffer->setLabel(NS::String::string(label, NS::UTF8StringEncoding));
 #endif
-			_copy_queue_copy_to_buffer(arg_buffer_data, set->arg_buffer.buffer.get());
+			const Error copy_error = _copy_queue_copy_to_buffer(arg_buffer_data, set->arg_buffer.buffer.get());
+			if (copy_error != OK) {
+				// Refusal happens before this destination is encoded. Any earlier
+				// flushed prefix remains in the original Frame completion reports.
+				allocator->free_buffer(set->arg_buffer);
+				memdelete(set);
+				return UniformSetID();
+			}
 		} else {
 			// Store the arg buffer data for dynamic uniform sets.
 			// It will be copied and updated at bind time.
@@ -2875,8 +2883,13 @@ void RenderingDeviceDriverMetal::begin_segment(uint32_t p_frame_index, uint32_t 
 }
 
 void RenderingDeviceDriverMetal::end_segment() {
+	const Error error = end_segment_checked();
+	ERR_FAIL_COND_MSG(error != OK, "Metal copy queue segment completion was refused.");
+}
+
+Error RenderingDeviceDriverMetal::end_segment_checked(bool p_nonblocking) {
 	MutexLock lock(copy_queue_mutex);
-	_copy_queue_flush();
+	return _copy_queue_flush(p_nonblocking);
 }
 
 #pragma mark - Misc
@@ -2983,13 +2996,15 @@ uint64_t RenderingDeviceDriverMetal::get_resource_native_handle(DriverResource p
 	}
 }
 
-void RenderingDeviceDriverMetal::_copy_queue_copy_to_buffer(Span<uint8_t> p_src_data, MTL::Buffer *p_dst_buffer, uint64_t p_dst_offset) {
+Error RenderingDeviceDriverMetal::_copy_queue_copy_to_buffer(Span<uint8_t> p_src_data, MTL::Buffer *p_dst_buffer, uint64_t p_dst_offset) {
 	MutexLock lock(copy_queue_mutex);
 	if (copy_queue_completion_record) {
-		_copy_queue_flush();
+		const Error error = _copy_queue_flush();
+		if (error != OK) return error;
 	}
 	if (_copy_queue_buffer_available() < p_src_data.size()) {
-		_copy_queue_flush();
+		const Error error = _copy_queue_flush();
+		if (error != OK) return error;
 	}
 
 	MTL::BlitCommandEncoder *blit_encoder = _copy_queue_blit_encoder();
@@ -2999,6 +3014,7 @@ void RenderingDeviceDriverMetal::_copy_queue_copy_to_buffer(Span<uint8_t> p_src_
 	blit_encoder->copyFromBuffer(copy_queue_buffer.buffer.get(), copy_queue_buffer_offset, p_dst_buffer, p_dst_offset, p_src_data.size());
 
 	_copy_queue_buffer_consume(p_src_data.size());
+	return OK;
 }
 
 Error RenderingDeviceDriverMetal::qualification_prepare_segment(QueueCallReport &report, bool p_nonblocking) {
@@ -3028,9 +3044,9 @@ Error RenderingDeviceDriverMetal::qualification_prepare_segment(QueueCallReport 
 	if (!copy_queue_completion_record) {
 		// Reserve the exact callback identity and transfer one observer to the Frame
 		// before this original queue commits. Refusal is still zero native effects.
-		auto *record = register_completion_record(copy_queue_command_buffer.get(), 0, true);
+		auto *record = register_completion_record(copy_queue_command_buffer.get(), 0, true, true);
 		if (!record) {
-			return ERR_PARAMETER_RANGE_ERROR;
+   return active_native_source_admission && active_native_source_admission->error!=OK ? active_native_source_admission->error : ERR_PARAMETER_RANGE_ERROR;
 		}
 		record->observers = 1;
 		copy_queue_completion_record = record;
@@ -3079,28 +3095,29 @@ Error RenderingDeviceDriverMetal::qualification_prepare_segment(QueueCallReport 
 	return OK;
 }
 
-void RenderingDeviceDriverMetal::_copy_queue_flush() {
-	if (!copy_queue_blit_encoder && !copy_queue_completion_record) {
-		return;
+Error RenderingDeviceDriverMetal::_copy_queue_flush(bool p_nonblocking) {
+	// Reuse this original copy queue's existing CompletionRecord issuer and
+	// prepare path. Admission precedes registration, endEncoding and commit;
+	// refusal leaves the encoder, staging bytes and destination custody intact.
+	QueueCallReport report;
+	const Error error = qualification_prepare_segment(report,p_nonblocking || !native_source_can_block());
+	if (!report.calls.is_empty()) {
+		report.error = error == ERR_BUSY ? OK : error;
+		// prepare transfers one real observer. The existing Frame keeps it
+		// even on a failed native prefix; outside an RD scope return it here.
+#ifdef TESTS_ENABLED
+		if (OS::get_singleton()->has_environment("GODOT_QUALIFICATION_CAPACITY_TRACE")) {
+			print_line(vformat("QCAP source=copy_queue_flush original_completion_record=1 serial=%d native_issues=%d", report.calls[0].serial, report.native_issue_count));
+		}
+#endif
+		if (!capture_hidden_native_source(report)) {
+			for (const auto &call : report.calls) {
+				const Error released = native_call_release(call.serial);
+				CRASH_COND(released != OK);
+			}
+		}
 	}
-	if (copy_queue_blit_encoder) {
-		copy_queue_blit_encoder.get()->endEncoding();
-		copy_queue_blit_encoder.reset();
-		copy_queue_command_buffer.get()->commit();
-	}
-	copy_queue_command_buffer.get()->waitUntilCompleted();
-	NS::Error *copy_error = copy_queue_command_buffer.get()->error();
-	if (copy_error && copy_error->code() == MTL::CommandBufferErrorDeviceRemoved) {
-		notify_session_device_lost();
-	}
-	if (copy_queue_completion_record) {
-		LocalVector<CompletionRecord *> records;
-		records.push_back(copy_queue_completion_record);
-		retire_completion_records(records);
-		copy_queue_completion_record = nullptr;
-	}
-	copy_queue_command_buffer.reset();
-	copy_queue_buffer_offset = 0;
+	return error;
 }
 
 Error RenderingDeviceDriverMetal::_copy_queue_initialize() {

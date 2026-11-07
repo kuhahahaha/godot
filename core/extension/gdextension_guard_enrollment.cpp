@@ -68,7 +68,7 @@ Error Registry::check_entry_classes(const RecordRef &ref, uint64_t classes) {
 	if (ref.registry != this) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	const auto &record = records[ref.slot];
 	if (record.guard_enrollment == GuardEnrollment::UNAVAILABLE) {
 		return OK;
@@ -92,7 +92,7 @@ Error Registry::retain_callable_owner(void *token, RecordRef &out) {
 	}
 	const auto *frame = RegistrationContext::current;
 	if (!frame || !frame->reference || frame->reference->registry != this) {
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		for (const auto &binding : binding_owners) {
 			if (binding.token == token && token && (binding.record == INVALID_SLOT || records[binding.record].guard_enrollment != GuardEnrollment::UNAVAILABLE)) {
 				return ERR_UNAUTHORIZED;
@@ -100,7 +100,7 @@ Error Registry::retain_callable_owner(void *token, RecordRef &out) {
 		}
 		return OK;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	auto &record = records[frame->reference->slot];
 	if (record.guard_enrollment == GuardEnrollment::UNAVAILABLE) {
 		for (const auto &binding : binding_owners) {
@@ -130,7 +130,7 @@ Error Registry::register_callable_cleanup(const RecordRef &ref, uint64_t identit
 	}
 	uint64_t issued = 0;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		if (!action_serials.take(issued)) {
 			return ERR_PARAMETER_RANGE_ERROR;
 		}
@@ -144,11 +144,11 @@ Error Registry::register_callable_cleanup(const RecordRef &ref, uint64_t identit
 }
 
 void Registry::service_started(uint32_t service) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	live_services |= service;
 }
 Error Registry::service_stopping(uint32_t service) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (service & (1u << 5)) {
 		// Keep the original renderer service until every actual RD entity edge
 		// returns, including a quiesced/revoked owner's outstanding cleanup.
@@ -220,7 +220,7 @@ Error Registry::register_guard(GDExtensionClassLibraryPtr p_library, const Guard
 	if (!scope || scope->expected != p_library || context != &scope->context || !context->admitted || scope->reference.registry != this) {
 		return ERR_UNAUTHORIZED;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	auto &record = records[scope->reference.slot];
 	if (record.original_owner != p_library || record.owner_thread != Thread::get_caller_id()) {
 		return ERR_UNAUTHORIZED;
@@ -329,7 +329,7 @@ Error Registry::cancel_pending_scene_ready(const RecordRef &ref, CloseRoute rout
 	if (RegistrationContext::current) {
 		return ERR_UNAUTHORIZED;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	auto &record = records[ref.slot];
 	if (record.owner_thread != Thread::get_caller_id()) {
 		return ERR_UNAUTHORIZED;
@@ -357,7 +357,7 @@ Error Registry::register_scene_ready(const GDExtensionDeviceExitAbi *abi, Initia
 	if (!abi_valid(abi) || !callback) {
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	View *view = nullptr;
 	Error error = resolve_borrow_locked(context.registry_instance, context.handle_serial, ViewDomain::INITIALIZE, view);
 	if (error != OK) {
@@ -397,7 +397,7 @@ Error Registry::register_scene_ready_v2(const GDExtensionSceneInstallRequirement
 			!((requirements.required_features == 1 && requirements.optional_features == 2) || (requirements.required_features == 3 && requirements.optional_features == 0))) {
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	View *view = nullptr;
 	Error error = resolve_borrow_locked(context.registry_instance, context.handle_serial, ViewDomain::INITIALIZE, view);
 	if (error != OK) {
@@ -441,7 +441,7 @@ Error Registry::dispatch_scene_ready(const RecordRef &ref) {
 	void *userdata = nullptr;
 	GDExtensionDeviceExitSceneReadyContextRef ready{};
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		auto &record = records[ref.slot];
 		using State = Record::SceneReadyState;
 		if (record.owner_thread != Thread::get_caller_id()) {
@@ -498,7 +498,7 @@ Error Registry::dispatch_scene_ready(const RecordRef &ref) {
 	const Error error = returned >= OK && returned < ERR_MAX ? Error(returned) : ERR_INVALID_DATA;
 	context.leave(); // No borrowed Ready handle outlives the actual DSO return.
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		auto &record = records[ref.slot];
 		record.scene_ready_error = error;
 		record.scene_ready_state = error == OK ? Record::SceneReadyState::DONE : Record::SceneReadyState::FAILED_LATE_PARTIAL;
@@ -517,7 +517,7 @@ bool Registry::scene_ready_pending(const RecordRef &ref) {
 	if (ref.registry != this) {
 		return false;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	return records[ref.slot].scene_ready_state == Record::SceneReadyState::PENDING;
 }
 
@@ -525,7 +525,7 @@ Error Registry::scene_ready_initialization_result(const RecordRef &ref) {
 	if (ref.registry != this) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	auto &record = records[ref.slot];
 	if (!(record.guard.entry_classes & GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1)) {
 		return OK;
@@ -552,7 +552,7 @@ Error Registry::reject_pending_scene_ready_before_effects(const RecordRef &ref, 
 	if (ref.registry != this) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	auto &record = records[ref.slot];
 	if (record.owner_thread != Thread::get_caller_id()) {
 		return ERR_UNAUTHORIZED;
@@ -584,7 +584,7 @@ Error Registry::schedule_scene_ready_object_cleanup(const GDExtensionDeviceExitA
 	if (!abi_valid(abi)) {
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	View *view = nullptr;
 	Error error = resolve_borrow_locked(ready.registry_instance, ready.handle_serial, ViewDomain::SCENE_READY, view);
 	if (error != OK) {
@@ -616,7 +616,7 @@ Error Registry::scene_ready_abort_unscheduled_pair(const GDExtensionDeviceExitAb
 	if (!abi_valid(abi)) {
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	View *view = nullptr;
 	Error error = resolve_borrow_locked(ready.registry_instance, ready.handle_serial, ViewDomain::SCENE_READY, view);
 	if (error != OK) {
@@ -685,7 +685,7 @@ bool Registry::guard_qualified(const RecordRef &ref) {
 	if (ref.registry != this) {
 		return false;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	return records[ref.slot].guard_enrollment == GuardEnrollment::QUALIFIED;
 }
 Error Registry::issue_borrow_locked(ViewDomain domain, uint64_t action, uint64_t &out) {
@@ -740,7 +740,7 @@ Error Registry::borrow_guarded_library(const GDExtensionDeviceExitAbi *abi, GDEx
 	if (!abi_valid(abi) || !empty_output(out)) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	auto *frame = RegistrationContext::current;
 	if (!frame || !frame->admitted || frame->reference->registry != this) {
 		return ERR_UNAUTHORIZED;
@@ -763,7 +763,7 @@ Error Registry::borrow_initialize_level(const GDExtensionDeviceExitAbi *abi, GDE
 	if (!abi_valid(abi) || !empty_output(out) || level > 3) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	auto *frame = RegistrationContext::current;
 	if (!frame || frame->level_phase != LevelPhase::INITIALIZE || frame->level != int32_t(level) || frame->reference->registry != this) {
 		return ERR_UNAUTHORIZED;
@@ -782,7 +782,7 @@ Error Registry::borrow_deinit_level(const GDExtensionDeviceExitAbi *abi, GDExten
 	if (!abi_valid(abi) || !empty_output(out) || level > 3) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	auto *frame = RegistrationContext::current;
 	if (!frame || frame->level_phase != LevelPhase::DEINITIALIZE || frame->level != int32_t(level) || frame->reference->registry != this) {
 		return ERR_UNAUTHORIZED;
@@ -801,7 +801,7 @@ Error Registry::borrow_level_cleanup(const GDExtensionDeviceExitAbi *abi, Initia
 	if (!abi_valid(abi) || !empty_output(out) || p_phase > 1) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	View *view = nullptr;
 	Error error = resolve_borrow_locked(context.registry_instance, context.handle_serial, ViewDomain::INITIALIZE, view);
 	if (error != OK) {
@@ -828,7 +828,7 @@ Error Registry::after_binding_initialize(const GDExtensionDeviceExitAbi *abi, In
 	if (!abi_valid(abi)) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	View *view = nullptr;
 	Error error = resolve_borrow_locked(context.registry_instance, context.handle_serial, ViewDomain::INITIALIZE, view);
 	if (error != OK) {
@@ -915,7 +915,7 @@ Error Registry::schedule_object_cleanup(const GDExtensionDeviceExitAbi *abi, Ini
 	if (!abi_valid(abi) || !object_id) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	View *level_view = nullptr;
 	View *action_view = nullptr;
 	Error error = resolve_borrow_locked(context.registry_instance, context.handle_serial, ViewDomain::INITIALIZE, level_view);
@@ -941,7 +941,7 @@ Error Registry::begin_user_terminator(const GDExtensionDeviceExitAbi *abi, Guard
 	if (!abi_valid(abi)) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	View *view = nullptr;
 	Error error = resolve_borrow_locked(context.registry_instance, context.handle_serial, ViewDomain::DEINITIALIZE, view);
 	if (error != OK) {
@@ -958,7 +958,7 @@ Error Registry::after_user_terminator(const GDExtensionDeviceExitAbi *abi, Deini
 	if (!abi_valid(abi)) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	View *view = nullptr;
 	Error error = resolve_borrow_locked(context.registry_instance, context.handle_serial, ViewDomain::DEINITIALIZE, view);
 	if (error != OK) {
@@ -979,7 +979,7 @@ Error Registry::after_binding_deinit(const GDExtensionDeviceExitAbi *abi, Deinit
 	if (!abi_valid(abi)) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	View *view = nullptr;
 	Error error = resolve_borrow_locked(context.registry_instance, context.handle_serial, ViewDomain::DEINITIALIZE, view);
 	if (error != OK) {
@@ -1013,7 +1013,7 @@ Error Registry::acquire_code_hold(const GDExtensionDeviceExitAbi *abi, GuardedLi
 	if (!abi_valid(abi) || !empty_output(out)) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	View *lib = nullptr, *action_view = nullptr;
 	Error error = resolve_borrow_locked(library.registry_instance, library.handle_serial, ViewDomain::LIBRARY, lib);
 	if (error != OK) {
@@ -1055,7 +1055,7 @@ Error Registry::clone_code_hold(const GDExtensionDeviceExitAbi *abi, LibraryCode
 	if (!abi_valid(abi) || !empty_output(out) || source.registry_instance != instance || !source.handle_serial) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	for (uint32_t i = 0; i < record_limit; i++) {
 		auto &record = records[i];
 		for (auto *holder = record.holders; holder; holder = holder->record_next) {
@@ -1110,7 +1110,7 @@ Error Registry::release_code_hold(const GDExtensionDeviceExitAbi *abi, LibraryCo
 	if (!abi_valid(abi) || hold.registry_instance != instance || !hold.handle_serial) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	for (uint32_t i = 0; i < record_limit; i++) {
 		auto &record = records[i];
 		for (auto *holder = record.holders; holder; holder = holder->record_next) {
@@ -1173,7 +1173,7 @@ Error Registry::publish_exit_result(const GDExtensionDeviceExitAbi *abi, GuardTo
 			(diagnostic->disposition != OK && diagnostic->disposition != ERR_BUSY && diagnostic->disposition != ERR_UNAVAILABLE)) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	View *view = nullptr;
 	Error error = resolve_borrow_locked(context.registry_instance, context.handle_serial, ViewDomain::PREFLIGHT, view);
 	if (error != OK) {
@@ -1196,7 +1196,7 @@ Error Registry::guarded_preflight(const RecordRef &ref, CloseRoute route) {
 	void *userdata = nullptr;
 	DeinitPreflightContextRef borrowed{};
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		auto &record = records[ref.slot];
 		if (record.guard_enrollment != GuardEnrollment::QUALIFIED || record.owner_thread != Thread::get_caller_id()) {
 			return ERR_UNAUTHORIZED;
@@ -1289,7 +1289,7 @@ Error Registry::guarded_preflight(const RecordRef &ref, CloseRoute route) {
 	const bool empty = context.diagnostic_pending == 0;
 	context.leave();
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		auto &record = records[ref.slot];
 		record.active_callbacks--;
 		retained.registry = nullptr; // Return the reserved reference to Record.
@@ -1311,7 +1311,7 @@ Error Registry::guarded_preflight(const RecordRef &ref, CloseRoute route) {
 	int32_t level = -1;
 	Error error = ERR_INVALID_DATA;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		View *view = nullptr;
 		if (resolve_borrow_locked(context.registry_instance, context.handle_serial, ViewDomain::INITIALIZE, view) == OK) {
 			level = RegistrationContext::current->level;
@@ -1325,7 +1325,7 @@ Error Registry::guarded_preflight(const RecordRef &ref, CloseRoute route) {
 	int32_t level = -1;
 	Error error = ERR_INVALID_DATA;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		View *view = nullptr;
 		if (resolve_borrow_locked(context.registry_instance, context.handle_serial, ViewDomain::DEINITIALIZE, view) == OK) {
 			level = RegistrationContext::current->level;

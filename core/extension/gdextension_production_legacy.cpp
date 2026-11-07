@@ -122,7 +122,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_observe(GDExtensionProduct
 		return legacy_error(checked, 16);
 	}
 	const Error service = production_observe_service(ref, *budget);
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *r = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error e = production_request_locked(ref, false, r, rd);

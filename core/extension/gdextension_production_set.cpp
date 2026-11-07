@@ -59,7 +59,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_import_set(GDExtensionProd
 	if (!aligned(p_backing) || !abi(p_backing->abi) || (p_count && !aligned(p_bindings))) {
 		return result(ERR_INVALID_PARAMETER);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = production_request_locked(p_ref, true, request, rd);

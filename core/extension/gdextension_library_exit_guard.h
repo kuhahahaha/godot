@@ -50,6 +50,7 @@ class TestProductionResourceUseAccess;
 class TestQualificationPhysicalAccess;
 class TestQualificationAckAccess;
 class TestQualificationTicketAccess;
+class TestRecordSourceAccess;
 class TestQualificationRtAccess;
 class RenderingDeviceDriver;
 #ifdef TESTS_ENABLED
@@ -541,10 +542,24 @@ public:
 	Error get_error() const { return error; }
 };
 
+// TLS records only successfully held instances of the original Registry mutex.
+// It grants no record/source authority and does not alter mutex recursion.
+class RegistryMutexOwnership {
+	friend class Registry;
+	friend class BindingPublicationScope;
+	Registry *owner = nullptr;
+	RegistryMutexOwnership *previous = nullptr;
+	bool held = false;
+	static thread_local RegistryMutexOwnership *current;
+	void enter(Registry *p_owner);
+	void leave();
+};
+
 // Only core metadata publication may occur under this short gate lock.
 // The caller holds the Object metadata lock first; never call DSO code here.
 class BindingPublicationScope {
 	Registry *registry = nullptr;
+	RegistryMutexOwnership ownership;
 	Error error = ERR_INVALID_DATA;
 
 public:
@@ -601,6 +616,25 @@ class Registry {
 	friend class ::GDExtensionManager;
 
 public:
+	// Tracks ownership of the original BinaryMutex on this thread. Admission
+	// callbacks may borrow an existing scope without making the mutex recursive.
+	class Lock {
+	public:
+		enum Mode { BLOCK, TRY_OR_BORROW, BLOCK_OR_BORROW };
+	private:
+		Registry &owner;
+		mutable RegistryMutexOwnership ownership;
+		bool borrowed = false;
+	public:
+		explicit Lock(Registry &p_owner, Mode p_mode = BLOCK);
+		~Lock();
+		Lock(const Lock &) = delete;
+		Lock &operator=(const Lock &) = delete;
+		bool is_locked() const { return ownership.held || borrowed; }
+		void temp_unlock() const;
+		void temp_relock() const;
+		static bool owns(const Registry &p_owner);
+	};
 	static constexpr uint32_t MAX_LIVE_GENERATIONS = 1024;
 	static bool is_production_metadata_entry();
 	static bool production_metadata_engine_call_allowed(const StringName &, const StringName &);
@@ -768,6 +802,8 @@ private:
 		uint64_t action = 0;
 	};
 	BinaryMutex mutex;
+	void unlock_mutex_for_call();
+	void relock_mutex_after_call();
 	Phase phase = Phase::FINALIZED;
 	bool engine_cycle_ended = true;
 	uint32_t live_services = 0;
@@ -862,6 +898,7 @@ private:
 	friend class ::TestQualificationPhysicalAccess;
 	friend class ::TestQualificationAckAccess;
 	friend class ::TestQualificationTicketAccess;
+	friend class ::TestRecordSourceAccess;
 	friend class ::TestQualificationRtAccess;
 #endif
 	friend class ::RenderingDevice;

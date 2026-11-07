@@ -78,7 +78,7 @@ Error Registry::production_create_service(GDExtensionProductionRequestRefV1 ref,
 	uint64_t serial = 0;
 	bool returned = false;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		ProductionRequest *request = nullptr;
 		RenderingDevice *rd = nullptr;
 		const Error error = production_request_locked(ref, false, request, rd);
@@ -125,7 +125,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_storage_create(GDExtension
 	}
 	const auto origin = *input;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		ProductionRequest *request = nullptr;
 		RenderingDevice *rd = nullptr;
 		Error error = production_request_locked(ref, false, request, rd);
@@ -172,7 +172,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_storage_create(GDExtension
 		}
 	}
 	const Error service = production_create_service(ref, ProductionControlKind::STORAGE_CREATE, index);
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *rd = nullptr;
 	const Error error = production_request_locked(ref, false, request, rd);
@@ -188,7 +188,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_storage_retire(GDExtension
 		return result(ERR_INVALID_PARAMETER);
 	}
 	const auto origin = *input;
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = production_request_locked(ref, false, request, rd);
@@ -235,7 +235,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_storage_observe(GDExtensio
 	}
 	// Validate the exact retire identity before any request-wide maintenance.
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		ProductionRequest *request = nullptr;
 		RenderingDevice *rd = nullptr;
 		const Error error = production_request_locked(ref, false, request, rd);
@@ -252,7 +252,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_storage_observe(GDExtensio
 		}
 	}
 	const Error service = production_observe_service(ref, *budget);
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *rd = nullptr;
 	const Error error = production_request_locked(ref, false, request, rd);
@@ -270,7 +270,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_storage_observe(GDExtensio
 }
 
 GDExtensionDeviceSessionResultV1 Registry::production_storage_release(GDExtensionProductionRequestRefV1 ref, GDExtensionStorageRetireRefV1 retire) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = production_request_locked(ref, false, request, rd);
@@ -307,7 +307,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 		return result(ERR_INVALID_PARAMETER);
 	}
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		ProductionRequest *request = nullptr;
 		RenderingDevice *rd = nullptr;
 		Error error = production_request_locked(ref, false, request, rd);
@@ -413,7 +413,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_raster_prepare_report(GDEx
 		return result(ERR_INVALID_PARAMETER);
 	}
 	*out = {};
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = production_request_locked(ref, false, request, rd);
@@ -436,7 +436,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_raster_prepare(GDExtension
 		return result(ERR_INVALID_PARAMETER);
 	}
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		ProductionRequest *request = nullptr;
 		RenderingDevice *rd = nullptr;
 		Error error = production_request_locked(ref, false, request, rd);
@@ -604,7 +604,7 @@ Error Registry::production_raster_prepare_execute_locked(ProductionRequest &requ
 		auto &slot = request.resources[i];
 		request.raster_prepare_phase = step + 1;
 		production_native_effect_enter_locked(request); // Allocation is not append.
-		mutex.unlock();
+		unlock_mutex_for_call();
 		RID created;
 		switch (i) {
 			case 1:
@@ -620,7 +620,7 @@ Error Registry::production_raster_prepare_execute_locked(ProductionRequest &requ
 				created = rd._qualification_render_pipeline_create(request.resources[2].primary, rd.framebuffer_get_format(request.resources[0].primary), &slot.owned_physical, reserved[i]);
 				break;
 		}
-		mutex.lock();
+		relock_mutex_after_call();
 		if (created.is_null()) {
 			error = ERR_CANT_CREATE;
 			break;
@@ -701,9 +701,9 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 		const auto &origin = slot.create_origin;
 		production_native_effect_enter_locked(request);
 		++request.capture_inflight;
-		mutex.unlock();
+		unlock_mutex_for_call();
 		rid = rd._qualification_storage_create(uint32_t(origin.bytes), &slot.owned_physical);
-		mutex.lock();
+		relock_mutex_after_call();
 		CRASH_COND(!request.capture_inflight || slot.request != &request);
 		--request.capture_inflight;
 		if (rid.is_null()) {
@@ -754,9 +754,9 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 		}
 		production_native_effect_enter_locked(request);
 		++request.capture_inflight;
-		mutex.unlock();
+		unlock_mutex_for_call();
 		rid = rd._uniform_set_create_qualification(uniforms, unit.secondary, slot.shader_set, false, &slot.owned_physical, &dependencies, nullptr, &request);
-		mutex.lock();
+		relock_mutex_after_call();
 		CRASH_COND(!request.capture_inflight);
 		--request.capture_inflight;
 		if (rid.is_null()) {
@@ -853,7 +853,7 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 			usage.controls = 1;
 			production_native_effect_enter_locked(request);
 			++request.capture_inflight;
-			mutex.unlock();
+			unlock_mutex_for_call();
 			const bool previous = rd.qualification_retiring;
 			rd.qualification_retiring = true;
 			// The executing cell/capture pin retains this slot while free runs
@@ -862,7 +862,7 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 			rd.free_rid(slot.primary);
 			rd._thread_safe_.lock();
 			rd.qualification_retiring = previous;
-			mutex.lock();
+			relock_mutex_after_call();
 			CRASH_COND(!request.capture_inflight);
 			--request.capture_inflight;
 			++request.revision;
@@ -920,12 +920,12 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 		++request.capture_inflight;
 		// Native owner callbacks must inherit neither Registry nor RD locks.
 		rd._thread_safe_.unlock();
-		mutex.unlock();
+		unlock_mutex_for_call();
 		const Error dropped = rd._production_output_drop_step(request, slice, actual);
 		// Native capture and factory return can acquire Registry while holding
 		// RD. Restore that blocking order; Registry-held RD entry is try-only.
 		rd._thread_safe_.lock();
-		mutex.lock();
+		relock_mutex_after_call();
 		CRASH_COND(!request.capture_inflight);
 		--request.capture_inflight;
 		usage.controls = 1;
@@ -1087,10 +1087,10 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	usage.controls = 1;
 	production_native_effect_enter_locked(request);
 	++request.capture_inflight;
-	mutex.unlock();
+	unlock_mutex_for_call();
 	const bool starting = !rd.native_disposal_active;
 	const Error error = rd._native_disposal_maintenance_step(service, actual, &request);
-	mutex.lock();
+	relock_mutex_after_call();
 	if (starting && rd.native_disposal_active) {
 		request.maintenance_serial = rd.native_disposal_continuation.serial;
 	} else if (!rd.native_disposal_active) {

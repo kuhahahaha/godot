@@ -206,7 +206,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_configure(GDExtensio
 	if (total > SIZE_MAX) {
 		return result(ERR_PARAMETER_RANGE_ERROR, 19);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = qualification_bridge_locked(ref, false, true, bridge, rd);
@@ -332,7 +332,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_reserve(GDExtensionQ
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	*out = {};
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
@@ -568,7 +568,7 @@ Error Registry::qualification_rt_schedule(GDExtensionQualificationBridgeRefV1 re
 	RenderingDevice *rd = nullptr;
 	QualificationRtCell *cell = nullptr;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
 		if (error != OK) {
 			return error;
@@ -604,7 +604,7 @@ Error Registry::qualification_rt_schedule(GDExtensionQualificationBridgeRefV1 re
 	if (server && server->_try_qualification_rt_dispatch(bridge->serial, cell->serial)) {
 		return OK;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	CRASH_COND(!cell->queued);
 	if (cell->queue_ref_credit) {
 		bridge->release_cleanup_queue(cell->queued, cell->queue_ref_credit);
@@ -620,7 +620,7 @@ Error Registry::qualification_rt_schedule(GDExtensionQualificationBridgeRefV1 re
 }
 GDExtensionDeviceSessionResultV1 Registry::qualification_rt_activate(GDExtensionQualificationBridgeRefV1 ref, GDExtensionQualificationRtRefV1 rt_ref) {
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		QualificationBridge *bridge = nullptr;
 		RenderingDevice *rd = nullptr;
 		Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
@@ -705,7 +705,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_observe(GDExtensionQ
 		memset(segments, 0, sizeof(*segments) * segment_capacity);
 	}
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		QualificationBridge *bridge = nullptr;
 		RenderingDevice *rd = nullptr;
 		Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
@@ -724,7 +724,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_observe(GDExtensionQ
 	if (error != OK) {
 		return result(error, error == ERR_UNAUTHORIZED ? 15 : 17);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	error = qualification_bridge_locked(ref, false, false, bridge, rd);
@@ -758,7 +758,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_observe(GDExtensionQ
 	return result(OK);
 }
 GDExtensionDeviceSessionResultV1 Registry::qualification_rt_release(GDExtensionQualificationBridgeRefV1 ref, GDExtensionQualificationRtRefV1 rt_ref) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
@@ -877,7 +877,7 @@ void Registry::qualification_rt_dispatch(uint64_t bridge_serial, uint64_t serial
 	RenderingDevice *rd = nullptr;
 	Error admission = OK;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		for (auto *entry : qualification_bridges) {
 			if (entry && entry->serial == bridge_serial) {
 				bridge = entry;
@@ -1109,7 +1109,7 @@ void Registry::qualification_rt_dispatch(uint64_t bridge_serial, uint64_t serial
 		segment_count = cell->header.segment_capacity;
 	}
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		cell->call_result = called;
 		cell->result_bytes = cell->header.result_capacity;
 		cell->segment_count = segment_count;

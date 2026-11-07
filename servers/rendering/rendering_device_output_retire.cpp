@@ -44,7 +44,7 @@ Error RenderingDevice::_production_output_retire_service(GDExtensionDeviceExit::
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
