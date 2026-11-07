@@ -48,6 +48,7 @@ namespace RendererRD {
 class ExternalOutputStorage;
 class ExternalPipelinePreparation;
 class ParticlesStorage;
+class HeightCaptureCheckedSink;
 class MaterialStorage;
 class MeshStorage;
 } //namespace RendererRD
@@ -127,6 +128,7 @@ class RenderingDevice : public RenderingDeviceCommons {
 #endif
 
 	friend class RendererRD::MeshStorage;
+	friend class RendererRD::HeightCaptureCheckedSink;
 	GDCLASS(RenderingDevice, Object)
 
 	_THREAD_SAFE_CLASS_
@@ -1759,6 +1761,10 @@ private:
 	bool native_height_finalization_started = false;
 	bool native_height_finalization_drained = false;
 	Error _native_height_range_validate(const Ref<NativeHeightRange> &p_range) const;
+	Error _native_height_range_prepare_checked_capture(RendererRD::HeightCaptureCheckedSink &r_sink, Ref<NativeHeightRange> &r_range);
+	Error _native_height_range_enter_checked_call(const Ref<NativeHeightRange> &p_range, RendererRD::HeightCaptureCheckedSink &r_sink);
+	Error _native_height_range_enroll_original_record(const Ref<NativeHeightRange> &p_range, RendererRD::HeightCaptureCheckedSink &r_sink, uint32_t p_business_index, bool p_cleanup);
+	Error _native_height_range_close_checked_capture(const Ref<NativeHeightRange> &p_range, RendererRD::HeightCaptureCheckedSink &r_sink);
 	Error _native_height_range_prepare(Ref<NativeHeightRange> &r_range);
 	Error _native_height_range_record_depth_clear(const Ref<NativeHeightRange> &p_range, const NativeDisposalWitness &p_depth, const NativeDisposalWitness &p_framebuffer, float p_clear_depth);
 	Error _native_height_range_close(const Ref<NativeHeightRange> &p_range);

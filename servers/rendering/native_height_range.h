@@ -121,6 +121,14 @@ private:
 	uint32_t retain_cursor = 0;
 	uint32_t poll_cursor = 0;
 	uint32_t return_cursor = 0;
+	// Original sink identity is compared only; no dereference or native work
+	// survives the synchronous checked call or the sink's lifetime.
+	const void *capture_sink = nullptr;
+	uint32_t capture_frame = 0;
+	uint64_t capture_epoch = 0;
+	uint32_t capture_records = 0;
+	uint32_t capture_transfers = 0;
+	bool capture_cleanup = false;
 	bool recording_started = false;
 	bool recording_closed = false;
 	bool has_recorded_effect = false;

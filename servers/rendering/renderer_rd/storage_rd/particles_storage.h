@@ -57,6 +57,7 @@ class ParticlesExternalGuardTestFixture;
 namespace RendererRD {
 
 class SortEffects;
+class HeightCaptureCheckedSink;
 class ParticlesExternalGuard;
 #ifdef TESTS_ENABLED
 class ExternalLinkedOwnerTest;
@@ -71,7 +72,11 @@ enum class ExternalPacketPass : uint8_t;
 struct ExternalPacketPipelineRequest;
 
 class ParticlesStorage : public RendererParticlesStorage {
+	friend class HeightCaptureCheckedSink;
+
 private:
+	class HeightFrameResources;
+	class HeightFrame;
 #if defined(TESTS_ENABLED) && defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
 	friend class ::ParticlesRuntimeTestFixture;
 	friend class ::ParticlesHeightfieldClearTestFixture;

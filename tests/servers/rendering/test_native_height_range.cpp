@@ -32,6 +32,7 @@
 #include "core/os/os.h"
 #include "servers/rendering/native_height_range.h"
 #include "servers/rendering/rendering_device.h"
+#include "servers/rendering/renderer_rd/height_capture_checked_sink.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "tests/test_macros.h"
 
@@ -185,6 +186,134 @@ class TestNativeHeightRangeAccess {
 	}
 
 public:
+	static void checked_sink_failure_terminal_controls() {
+		using Sink = RendererRD::HeightCaptureCheckedSink;
+		using Effect = RenderingDevice::NativeAppendEffect;
+		{
+			Fixture f;
+			Sink sink(f.rd, 2, 0);
+			Ref<NativeHeightRange> range;
+			REQUIRE(sink.prepare_native_range(range) == OK);
+			CHECK(f.rd._native_height_range_close_checked_capture(range, sink) == ERR_INVALID_PARAMETER);
+			CHECK_FALSE(range->recording_closed);
+			// The original checked Begin refused before effect. Its error survives
+			// explicit unwind, but an empty physical prefix has nothing to poll.
+			sink.business_count = 1;
+			sink.begin_attempted = true;
+			sink.business[0].operation = Sink::Operation::Begin;
+			sink.business[0].begin.error = ERR_CANT_CREATE;
+			CHECK(f.rd._native_height_range_enroll_original_record(range, sink, 0, false) == ERR_CANT_CREATE);
+			sink.reject(ERR_CANT_CREATE);
+			CHECK(sink.unwind() == ERR_CANT_CREATE);
+			CHECK(range->recording_closed);
+			CHECK_FALSE(range->has_recorded_effect);
+			CHECK_FALSE(range->uncaptured_prefix);
+			CHECK(give_back(f, range) == OK);
+			CHECK_FALSE(range->native_complete);
+			CHECK(f.driver.polls == 0);
+		}
+		{
+			Fixture f;
+			Sink sink(f.rd, 2, 0);
+			Ref<NativeHeightRange> range;
+			REQUIRE(sink.prepare_native_range(range) == OK);
+			sink.business_count = 1;
+			sink.business[0].operation = Sink::Operation::Begin;
+			sink.business[0].begin.error = ERR_CANT_CREATE;
+			REQUIRE(f.rd._native_height_range_enroll_original_record(range, sink, 0, false) == ERR_CANT_CREATE);
+			sink.reject(ERR_CANT_CREATE);
+			sink.cleanup_attempted = true;
+			// Sticky business error does not refuse the independent cleanup call.
+			CHECK(sink.enter_checked_call() == OK);
+			sink.cleanup.draw.effect = Effect::Unknown;
+			sink.cleanup.draw.error = FAILED;
+			CHECK(f.rd._native_height_range_enroll_original_record(range, sink, 0, true) == ERR_CANT_CREATE);
+			sink.restoration_unknown = true;
+			CHECK(sink.unwind() == ERR_CANT_CREATE);
+			CHECK(range->recording_closed);
+			CHECK(range->has_recorded_effect);
+			CHECK(range->uncaptured_prefix);
+			CHECK(range->append_error == ERR_CANT_CREATE);
+			CHECK(give_back(f, range) == ERR_BUSY);
+			CHECK_FALSE(range->prefix_settled);
+			CHECK(f.driver.releases == 0);
+		}
+		{
+			// A physically settled original source does not make an unknown
+			// cleanup prefix returnable. Keep the source positive so this tests
+			// the terminal distinction rather than the empty-range fast path.
+			Fixture f;
+			auto range = sealed(f);
+			range->recording_closed = false;
+			CHECK(issue(f, 2, 45, OK, report()) == OK);
+			CHECK(f.rd._native_height_retain_frame_sources(0) == OK);
+			f.driver.completion.completed = true;
+			f.driver.completion.completed_serial = 901;
+			NativeHeightRange::Snapshot settled;
+			CHECK(observe(f, range, settled) == OK);
+			CHECK(settled.native_complete);
+			Sink sink(f.rd, 2, 0);
+			sink.native_range = range;
+			range->capture_sink = &sink;
+			range->capture_frame = 0;
+			range->capture_epoch = f.rd.frames[0].qualification_epoch;
+			sink.terminal_requested = true;
+			sink.cleanup_attempted = true;
+			sink.restoration_unknown = true;
+			sink.cleanup.draw.effect = Effect::Unknown;
+			sink.cleanup.draw.error = FAILED;
+			CHECK(f.rd._native_height_range_enroll_original_record(range, sink, 0, true) == OK);
+			CHECK(f.rd._native_height_range_close_checked_capture(range, sink) == ERR_INVALID_DATA);
+			CHECK(range->uncaptured_prefix);
+			range->native_complete = false;
+			range->prefix_settled = false;
+			NativeHeightRange::Snapshot out;
+			CHECK(observe(f, range, out) == ERR_INVALID_DATA);
+			CHECK_FALSE(out.native_complete);
+			CHECK(give_back(f, range) == ERR_BUSY);
+			CHECK_FALSE(range->observers_returned);
+			CHECK(f.driver.releases == 0);
+		}
+	}
+
+	static void checked_sink_provenance_and_missing_members() {
+		using Sink = RendererRD::HeightCaptureCheckedSink;
+		using Effect = RenderingDevice::NativeAppendEffect;
+		for (int fault = 0; fault < 4; ++fault) {
+			CAPTURE(fault);
+			Fixture f;
+			Sink sink(f.rd, 2, 1);
+			Ref<NativeHeightRange> range;
+			REQUIRE(sink.prepare_native_range(range) == OK);
+			sink.business_count = 1;
+			sink.business[0].operation = Sink::Operation::UniformSet;
+			sink.business[0].bind.capture_complete = true;
+			sink.business[0].bind.state_accepted = true;
+			if (fault == 0) {
+				// A copied valid-looking handle from a different graph is not a
+				// member. contains_record must reject it before source mapping.
+				sink.business[0].bind.effect = Effect::Recorded;
+				sink.business[0].bind.bind_handle = { 99, 1, 3, 0, 0 };
+			} else if (fault == 1) {
+				++f.rd.frames[0].qualification_epoch;
+			} else if (fault == 2) {
+				REQUIRE(f.rd._native_height_range_enroll_original_record(range, sink, 0, false) == OK);
+				CHECK(range->graph_count == 0); // Deferred bind adds no graph row.
+			} else {
+				sink.business[0].bind.transfer_count = 1;
+				sink.business[0].transfer_count = 1;
+				sink.transfer_count = 1;
+			}
+			CHECK(f.rd._native_height_range_enroll_original_record(range, sink, 0, false) != OK);
+			sink.reject(range->append_error);
+			sink.unwind();
+			CHECK(range->uncaptured_prefix);
+			CHECK(give_back(f, range) == ERR_BUSY);
+			CHECK_FALSE(range->native_complete);
+			CHECK(f.driver.polls == 0);
+		}
+	}
+
 	[[noreturn]] static void actual_finalize_child(const String &mode) {
 		Driver driver;
 		driver.finalize_sentinel = true;
@@ -472,6 +601,47 @@ public:
 		CHECK(f.driver.issues == issues);
 		CHECK(f.driver.polls == polls);
 	}
+	static void finalization_does_not_close_live_checked_sink() {
+		using Sink = RendererRD::HeightCaptureCheckedSink;
+		for (bool pending_result : { false, true }) {
+			CAPTURE(pending_result);
+			Fixture f;
+			Sink sink(f.rd, 2, 0);
+			Ref<NativeHeightRange> range;
+			REQUIRE(sink.prepare_native_range(range) == OK);
+			if (pending_result) {
+				// Model a checked call which has returned an unknown prefix but
+				// has not enrolled yet. Its empty range arrays are not no-effect.
+				sink.business_count = 1;
+				sink.business[0].begin.effect = RenderingDevice::NativeAppendEffect::Unknown;
+				sink.restoration_unknown = true;
+				sink.reject(ERR_CANT_CREATE);
+			}
+			for (int retry = 0; retry < 2; ++retry) {
+				CHECK(f.rd._native_height_ranges_prepare_finalization() == ERR_BUSY);
+				CHECK_FALSE(range->recording_closed);
+				CHECK_FALSE(range->observers_returned);
+				CHECK(f.rd.native_height_ranges.size() == 1);
+				CHECK(f.rd.frames[0].native_height_ranges.size() == 1);
+				CHECK(f.driver.polls == 0);
+				CHECK(f.driver.releases == 0);
+			}
+			sink.unwind(); // Only the original terminal path may freeze custody.
+			CHECK(range->recording_closed);
+			if (pending_result) {
+				CHECK(range->uncaptured_prefix);
+				CHECK(f.rd._native_height_ranges_prepare_finalization() != OK);
+				CHECK(f.rd.native_height_ranges.size() == 1);
+				CHECK_FALSE(range->observers_returned);
+			} else {
+				CHECK(f.rd._native_height_ranges_prepare_finalization() == OK);
+				CHECK(f.rd.native_height_ranges.is_empty());
+				CHECK(f.rd.frames[0].native_height_ranges.is_empty());
+				CHECK(range->observers_returned);
+				CHECK_FALSE(range->native_complete);
+			}
+		}
+	}
 	static void preflight_zero_effect_restrictions() {
 		Fixture f;
 		Ref<NativeHeightRange> range;
@@ -634,6 +804,12 @@ public:
 TEST_CASE("[RenderingDevice][NativeHeightRange] exact slot buffer and empty BUSY") {
 	TestNativeHeightRangeAccess::wrong_slot_buffer_and_empty_busy();
 }
+TEST_CASE("[RenderingDevice][NativeHeightRange] checked sink failed begin and unknown cleanup remain distinct") {
+	TestNativeHeightRangeAccess::checked_sink_failure_terminal_controls();
+}
+TEST_CASE("[RenderingDevice][NativeHeightRange] checked sink provenance duplicate and unsupported transfer quarantine") {
+	TestNativeHeightRangeAccess::checked_sink_provenance_and_missing_members();
+}
 TEST_CASE("[RenderingDevice][NativeHeightRange] original callback identity and observer return") {
 	TestNativeHeightRangeAccess::callback_identity_and_unknown_refinement();
 }
@@ -680,6 +856,9 @@ TEST_CASE("[RenderingDevice][NativeHeightRange] preflight refuses invalid witnes
 
 TEST_CASE("[RenderingDevice][NativeHeightRange] post-drain finalization BUSY resumes without reissue") {
 	TestNativeHeightRangeAccess::post_drain_finalization_busy_cursor();
+}
+TEST_CASE("[RenderingDevice][NativeHeightRange] finalization cannot guess live checked sink closed or empty") {
+	TestNativeHeightRangeAccess::finalization_does_not_close_live_checked_sink();
 }
 
 // The normal full suite performs no destructive work. Only the isolated runner

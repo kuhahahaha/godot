@@ -46,6 +46,7 @@
 #include "core/profiling/profiling.h"
 #include "core/templates/fixed_vector.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_rd/height_capture_checked_sink.h"
 #include "servers/rendering/rendering_device_binds.h"
 #include "servers/rendering/rendering_shader_container.h"
 #include "servers/rendering/shader_include_db.h"
@@ -10195,6 +10196,179 @@ Error RenderingDevice::_native_height_range_validate(const Ref<NativeHeightRange
 	return OK;
 }
 
+Error RenderingDevice::_native_height_range_prepare_checked_capture(RendererRD::HeightCaptureCheckedSink &r_sink, Ref<NativeHeightRange> &r_range) {
+	if (&r_sink.rd != this || r_sink.native_range.is_valid() || r_sink.begin_attempted || r_sink.business_count != 0 || r_sink.cleanup_attempted || r_sink.terminal_requested) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const Error error = _native_height_range_prepare(r_range);
+	if (error != OK) {
+		return error;
+	}
+	frames[frame].native_height_ranges.push_back(r_range);
+	r_range->recording_started = true;
+	r_range->capture_sink = &r_sink;
+	r_range->capture_frame = frame;
+	r_range->capture_epoch = frames[frame].qualification_epoch;
+	return OK;
+}
+
+Error RenderingDevice::_native_height_range_enter_checked_call(const Ref<NativeHeightRange> &p_range, RendererRD::HeightCaptureCheckedSink &r_sink) {
+	if (&r_sink.rd != this || r_sink.native_range != p_range) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const Error valid = _native_height_range_validate(p_range);
+	if (valid != OK) {
+		return valid;
+	}
+	if (p_range->capture_sink != &r_sink || p_range->capture_frame != frame || p_range->capture_epoch != frames[frame].qualification_epoch) {
+		p_range->uncaptured_prefix = true;
+		return ERR_INVALID_DATA;
+	}
+	if (!p_range->recording_started || p_range->recording_closed || p_range->observers_returned) {
+		return ERR_BUSY;
+	}
+	// An already captured business failure must still permit the original
+	// independent cleanup End. It never makes another business append legal.
+	return r_sink.cleanup_attempted ? OK : p_range->append_error;
+}
+
+Error RenderingDevice::_native_height_range_enroll_original_record(const Ref<NativeHeightRange> &p_range, RendererRD::HeightCaptureCheckedSink &p_sink, uint32_t p_business_index, bool p_cleanup) {
+	if (&p_sink.rd != this || p_sink.native_range != p_range) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const Error valid = _native_height_range_validate(p_range);
+	if (valid != OK) {
+		return valid;
+	}
+	if (p_range->recording_closed || p_range->observers_returned) {
+		return ERR_BUSY;
+	}
+	auto fail = [&](Error p_error, bool p_unknown = false) {
+		if (p_range->append_error == OK && p_error != OK) {
+			p_range->append_error = p_error;
+		}
+		p_range->uncaptured_prefix |= p_unknown;
+	};
+	if (p_range->capture_sink != &p_sink || p_range->capture_frame != frame || p_range->capture_epoch != frames[frame].qualification_epoch ||
+			(p_cleanup ? (!p_sink.cleanup_attempted || p_range->capture_cleanup) : (p_business_index != p_range->capture_records || p_business_index >= p_sink.business_count))) {
+		fail(ERR_INVALID_DATA, true);
+		return p_range->append_error;
+	}
+	if (p_cleanup) {
+		p_range->capture_cleanup = true;
+	} else {
+		++p_range->capture_records;
+	}
+	auto save = [&](const RDG::RecordHandle &p_handle) {
+		if (!p_handle.is_valid()) {
+			return;
+		}
+		p_range->has_recorded_effect = true;
+		if (!draw_graph.contains_record(p_handle)) {
+			fail(ERR_INVALID_DATA, true);
+			return;
+		}
+		for (uint32_t i = 0; i < p_range->graph_count; ++i) {
+			const auto &old = p_range->graphs[i].handle;
+			if (old.graph_instance == p_handle.graph_instance && old.graph_frame == p_handle.graph_frame && old.kind == p_handle.kind && old.index == p_handle.index && old.offset == p_handle.offset) {
+				return;
+			}
+		}
+		if (p_range->graph_count == p_range->limits.graph_members) {
+			fail(ERR_PARAMETER_RANGE_ERROR, true);
+			return;
+		}
+		auto &member = p_range->graphs[p_range->graph_count++];
+		member.handle = p_handle;
+		member.frame = frame;
+		member.frame_epoch = frames[frame].qualification_epoch;
+	};
+	auto result = [&](Error p_error, NativeAppendEffect p_effect, bool p_complete) {
+		fail(p_error);
+		if (p_effect != NativeAppendEffect::NoNewEffect) {
+			p_range->has_recorded_effect = true;
+		}
+		if (p_effect == NativeAppendEffect::Unknown || (p_effect != NativeAppendEffect::NoNewEffect && !p_complete)) {
+			fail(ERR_INVALID_DATA, true);
+		}
+	};
+	const auto &record = p_cleanup ? p_sink.cleanup : p_sink.business[p_business_index];
+	switch (record.operation) {
+		case RendererRD::HeightCaptureCheckedSink::Operation::Begin: {
+			result(record.begin.error, record.begin.effect, record.begin.capture_complete);
+			save(record.begin.begin_handle);
+			save(record.begin.clear_handle);
+			if (record.begin.preparation_count > std::size(record.begin.preparation_handles) || record.begin.prefix_count > std::size(record.begin.prefix_handles)) {
+				fail(ERR_INVALID_DATA, true);
+				break;
+			}
+			for (uint32_t i = 0; i < record.begin.preparation_count; ++i) {
+				save(record.begin.preparation_handles[i]);
+			}
+			for (uint32_t i = 0; i < record.begin.prefix_count; ++i) {
+				save(record.begin.prefix_handles[i]);
+			}
+		} break;
+		case RendererRD::HeightCaptureCheckedSink::Operation::UniformSet:
+		case RendererRD::HeightCaptureCheckedSink::Operation::VertexArray:
+		case RendererRD::HeightCaptureCheckedSink::Operation::IndexArray:
+			result(record.bind.error, record.bind.effect, record.bind.capture_complete);
+			save(record.bind.bind_handle);
+			if (record.transfer_offset != p_range->capture_transfers || record.transfer_count > p_sink.transfer_count - MIN(p_sink.transfer_count, record.transfer_offset)) {
+				fail(ERR_INVALID_DATA, true);
+			} else {
+				p_range->capture_transfers += record.transfer_count;
+			}
+			// A raw transfer copy is not an authenticated original worker join.
+			// Until that path is installed, never retire it as an empty prefix.
+			if (record.bind.transfer_count || record.transfer_count) {
+				fail(ERR_UNAVAILABLE, true);
+			}
+			break;
+		default:
+			result(record.draw.error, record.draw.effect, record.draw.capture_complete);
+			save(record.draw.draw_handle);
+			if (record.draw.prefix_count > std::size(record.draw.prefix_handles)) {
+				fail(ERR_INVALID_DATA, true);
+				break;
+			}
+			for (uint32_t i = 0; i < record.draw.prefix_count; ++i) {
+				save(record.draw.prefix_handles[i]);
+			}
+			if (record.draw.has_transfer) {
+				fail(ERR_UNAVAILABLE, true);
+			}
+			break;
+	}
+	return p_range->append_error;
+}
+
+Error RenderingDevice::_native_height_range_close_checked_capture(const Ref<NativeHeightRange> &p_range, RendererRD::HeightCaptureCheckedSink &r_sink) {
+	if (&r_sink.rd != this || r_sink.native_range != p_range) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const Error valid = _native_height_range_validate(p_range);
+	if (valid != OK) {
+		return valid;
+	}
+	if (p_range->capture_sink != &r_sink || !r_sink.terminal_requested) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (p_range->append_error == OK && r_sink.first_error != OK) {
+		p_range->append_error = r_sink.first_error;
+	}
+	if (p_range->capture_frame != frame || p_range->capture_epoch != frames[frame].qualification_epoch ||
+			r_sink.owns_list || r_sink.restoration_unknown || p_range->capture_records != r_sink.business_count ||
+			p_range->capture_transfers != r_sink.transfer_count || p_range->capture_cleanup != r_sink.cleanup_attempted ||
+			(p_range->has_recorded_effect && !r_sink.restored)) {
+		p_range->uncaptured_prefix = true;
+		if (p_range->append_error == OK) {
+			p_range->append_error = ERR_INVALID_DATA;
+		}
+	}
+	return _native_height_range_close(p_range); // Freezes recording only.
+}
+
 Error RenderingDevice::_native_height_range_prepare(Ref<NativeHeightRange> &r_range) {
 	const Error ready = _native_disposal_preflight();
 	if (ready != OK) {
@@ -10633,6 +10807,12 @@ Error RenderingDevice::_native_height_ranges_prepare_finalization() {
 	while (!native_height_ranges.is_empty()) {
 		// Keep a local Ref: explicit return removes the original RD/Frame refs.
 		const Ref<NativeHeightRange> range = native_height_ranges[0];
+		// Only the original sink's explicit finish/unwind can close its capture:
+		// there may be an actual checked result not yet enrolled when finalization
+		// is entered. Empty reducer arrays do not establish a no-effect prefix.
+		if (range->capture_sink && !range->recording_closed) {
+			return ERR_BUSY;
+		}
 		range->recording_closed = true;
 		if (!range->has_recorded_effect && !range->uncaptured_prefix && !range->graph_count && !range->source_count && !range->edge_count) {
 			const Error returned = _native_height_range_return(range, budget, usage);
