@@ -1,0 +1,31 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_vertex_array_range.cpp:189:
+TEST CASE:  [RenderingDevice][VertexArrayRangeConstant] public factories support zero stride instance elements
+  fitting constant instance element can repeat
+
+tests/servers/rendering/test_vertex_array_range.cpp:142: ERROR: CHECK( array->max_instances_allowed == p_instances ) is NOT correct!
+  values: CHECK( 1 == 4294967295 )
+
+===============================================================================
+tests/servers/rendering/test_vertex_array_range.cpp:189:
+TEST CASE:  [RenderingDevice][VertexArrayRangeConstant] public factories support zero stride instance elements
+  constant instance element still needs a complete element
+
+tests/servers/rendering/test_vertex_array_range.cpp:130: ERROR: CHECK( array_rid.is_valid() == p_accept ) is NOT correct!
+  values: CHECK( true == false )
+
+tests/servers/rendering/test_vertex_array_range.cpp:149: ERROR: CHECK( f.device.vertex_array_owner.get_rid_count() == arrays_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_vertex_array_range.cpp:150: ERROR: CHECK( f.device.dependency_map.size() == dependencies_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_vertex_array_range.cpp:151: ERROR: CHECK( f.device.reverse_dependency_map.size() == reverse_dependencies_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+===============================================================================
+[doctest] test cases:  1 |  0 passed | 1 failed | 2190 skipped
+[doctest] assertions: 47 | 42 passed | 5 failed |
+[doctest] Status: FAILURE!

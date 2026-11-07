@@ -1,0 +1,180 @@
+{
+  "base_commit": "e433d4ef40e1e6e3700412b82d76b10fc6206a91",
+  "source_changes": [
+    {
+      "path": "servers/rendering/renderer_rd/shader_rd.cpp",
+      "bytes": 44841,
+      "sha256": "00a5b7ecb9640a520f2a05263a0d2805afa5bd4c0a92267288260c4ea24f5a82"
+    },
+    {
+      "path": "servers/rendering/rendering_device.cpp",
+      "bytes": 691263,
+      "sha256": "c0b95e0c7b6cb2138b5e0e99fc4e99a45fdb046b1b35f66bdc73f30409a03936"
+    },
+    {
+      "path": "servers/rendering/rendering_device.h",
+      "bytes": 125342,
+      "sha256": "65facb3aa564583514d85749e726076bbe3418907705d1d3f4051d4841f41216"
+    },
+    {
+      "path": "tests/servers/rendering/test_native_disposal.cpp",
+      "bytes": 131981,
+      "sha256": "e6eb461c4de7049ff1b9ec5562f54ea69e445550cf05169f98c22091c318af4e"
+    },
+    {
+      "path": "tests/servers/rendering/test_vertex_array_range.cpp",
+      "bytes": 10187,
+      "sha256": "f9c8d02924221bf74832ea12be73cc93b8d295f651e3a7b079b70172f3e4fff1"
+    }
+  ],
+  "build_exit": 0,
+  "focused": {
+    "cases": 19,
+    "assertions": 7909,
+    "exit": 0
+  },
+  "combined": {
+    "cases": 198,
+    "assertions": 88268,
+    "exit": 0,
+    "expected_negative_diagnostics": {
+      "pipeline_creation_failure": 3,
+      "foreign_camera_source_token": 3
+    }
+  },
+  "red": {
+    "vertex": {
+      "cases": 2,
+      "assertions": 369,
+      "failed_assertions": 35,
+      "exit": 1
+    },
+    "constant": {
+      "cases": 1,
+      "assertions": 47,
+      "failed_assertions": 5,
+      "exit": 1
+    },
+    "pipeline": {
+      "cases": 1,
+      "assertions": 105,
+      "failed_assertions": 12,
+      "exit": 1
+    }
+  },
+  "limits": [
+    "CPU/dummy only, no GPU acceptance",
+    "Shader mutex red snapshot already contains fix; no deterministic race/TSan proof",
+    "Large stride/count fixture first fails offset guard; multiplication bounded by uint32 types"
+  ],
+  "binary": {
+    "argv": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*[VertexArrayRange]*,*[VertexArrayRangeConstant]*,*[CheckedPipelineCompatibility]*,*[MaterialNativeHold]*,*[ShaderCompilePolicy]*,*[ExternalOutputGuard]*"
+    ],
+    "binary_bytes": 156746616,
+    "binary_sha256": "1a9d51daf742439f4531e23053df4e1678caf680f9497e330429d7e125b3202d",
+    "exit": 0,
+    "elapsed": 0.28940534591674805
+  },
+  "artifact_hashes": {
+    "SOURCE_CHANGE.patch": {
+      "bytes": 24190,
+      "sha256": "d4390da7c5b6c0575f30f81a522a14286b2abe7a4e2d2ce2d06d660d559f8a94"
+    },
+    "shader-version-mutex-evidence.txt": {
+      "bytes": 16134,
+      "sha256": "a36c2725898e93d2510b2e3e0003fa6f5263ec703f264a41cbb77c83332bd837"
+    },
+    "native-preparation-constant-red.log": {
+      "bytes": 1760,
+      "sha256": "0a2ca840995e91538c4081aa3315723f995cd8cd9520a87f73380c12a3bbe36a"
+    },
+    "native-preparation-combined-green.log": {
+      "bytes": 1329,
+      "sha256": "0b9ee48ffa91de317270e5de85c96e35c45ff9f1d08fec35bd72630226f6825f"
+    },
+    "native-preparation-green-runs.json": {
+      "bytes": 1273,
+      "sha256": "e883b922930412bc410fc0415071fedd114733cc3e11e90efa73a8cdf2830d67"
+    },
+    "native-preparation-green-build.log": {
+      "bytes": 1906,
+      "sha256": "dbea5735f69dee69a3ce97abbb2c11342b921ee22eb94e05f2c6b66eb9cae979"
+    },
+    "native-preparation-red-build.log": {
+      "bytes": 2183,
+      "sha256": "d2b5162876f46c2ff02d458bf877ad4adbd2a921c318af41efd0e7f17c8cbb1c"
+    },
+    "native-preparation-vertex-red.log": {
+      "bytes": 9467,
+      "sha256": "cad002614dda751bb06863ec8488547cd05470752b45c89cb50f030325c7a911"
+    },
+    "native-preparation-pipeline-shader-scoped-receipt-draft.md": {
+      "bytes": 1825,
+      "sha256": "c65185aaa2ecbc5e0241e582cd2dca946151cddcacd0e19f816aa1204f3e81ce"
+    },
+    "native-preparation-vertex-review.md": {
+      "bytes": 5761,
+      "sha256": "e10a4dbf7c9ea2e9964abf1c26ac7d9088397bc95cf4a6d1de8b8d236ac2a09d"
+    },
+    "native-preparation-pipeline-red.log": {
+      "bytes": 2545,
+      "sha256": "1554af9b15c29360a80f1721fa3a28698108275c45fff0938a6d9897e6452757"
+    },
+    "native-preparation-pipeline-shader-review.md": {
+      "bytes": 5640,
+      "sha256": "17312aa2857dceffcbd13390316b1699c27d61529c821ea39016bd68f5d415de"
+    },
+    "native-preparation-vertex-scoped-receipt-draft.md": {
+      "bytes": 2063,
+      "sha256": "cf49bf7a8cca7e680b78007a2c83bf69ad492c0b08e92d40bf3b0e6a6140265a"
+    },
+    "native-preparation-focused-green.log": {
+      "bytes": 410,
+      "sha256": "f8f6cfc387c845897ca58f8076e90066f6b6bb8134f146dd8e6eea323b72511b"
+    },
+    "red/SOURCE_IDENTITY.json": {
+      "bytes": 1008,
+      "sha256": "e0e4c205d2cc754bd60a15454fc2305a5d01586d494f14ad3bb647731e895b36"
+    },
+    "red/engine_build_selection.gen.json": {
+      "bytes": 311,
+      "sha256": "b6461e0a27b8997050e0fa4ed331d5a02e48aacaf938a844c501e63aa7217ba0"
+    },
+    "red/godot.macos.editor.arm64.controlled_build.json": {
+      "bytes": 530,
+      "sha256": "791c7e53bb69f86b135034b2d551d7e0ec903416e8d0283c4fb623f182f4da7e"
+    },
+    "red/engine_build_identity.gen.json": {
+      "bytes": 86572,
+      "sha256": "2c7725ebff496fb94e4d6660edec6c5f9e94ffbab273864cd0bd035d37be2e72"
+    },
+    "red/RUNS.json": {
+      "bytes": 1117,
+      "sha256": "f10112f75870bd8c2511851e772dc9ff0b34e9e37a824ebaa189895b8814bae5"
+    },
+    "red/sources/servers/rendering/rendering_device.cpp": {
+      "bytes": 690626,
+      "sha256": "6e5ec272227a6b118cdc6207958b54d34344b7e3365636d40b5650b728060d17"
+    },
+    "red/sources/servers/rendering/rendering_device.h": {
+      "bytes": 125342,
+      "sha256": "65facb3aa564583514d85749e726076bbe3418907705d1d3f4051d4841f41216"
+    },
+    "red/sources/servers/rendering/renderer_rd/shader_rd.cpp": {
+      "bytes": 44841,
+      "sha256": "00a5b7ecb9640a520f2a05263a0d2805afa5bd4c0a92267288260c4ea24f5a82"
+    },
+    "red/sources/tests/servers/rendering/test_vertex_array_range.cpp": {
+      "bytes": 10187,
+      "sha256": "f9c8d02924221bf74832ea12be73cc93b8d295f651e3a7b079b70172f3e4fff1"
+    },
+    "red/sources/tests/servers/rendering/test_native_disposal.cpp": {
+      "bytes": 131981,
+      "sha256": "e6eb461c4de7049ff1b9ec5562f54ea69e445550cf05169f98c22091c318af4e"
+    }
+  }
+}

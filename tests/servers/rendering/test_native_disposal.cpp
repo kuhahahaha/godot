@@ -52,6 +52,7 @@ public:
 	static void depth_factory_failures();
 	static void depth_identity();
 	static void pipeline_rid_capacity();
+	static void checked_pipeline_compatibility();
 	static void foreign_pending_owner_lookup();
 	static void foreign_pending_uniform_sets();
 	static void foreign_pending_export_and_callback();
@@ -596,6 +597,7 @@ TEST_CASE("[RenderingDevice][NativeDisposal][PipelineRIDCapacity] ordinary facto
 	ERR_PRINT_ON;
 }
 
+
 TEST_CASE("[RenderingDevice][NativeDisposal] large accepted queue drains with single-call turns") {
 	RenderingDevice rd;
 	Driver driver;
@@ -795,6 +797,141 @@ TEST_CASE("[RenderingDevice][NativeDisposal] failed native creation leaves no wi
 }
 
 } // namespace TestNativeDisposal
+
+void TestNativeDisposalAccess::checked_pipeline_compatibility() {
+	using namespace TestNativeDisposal;
+	using RD = RenderingDevice;
+	using RDD = RenderingDeviceDriver;
+	using RDG = RenderingDeviceGraph;
+	struct TupleDriver : RasterCapacityDriver {
+		uint64_t next_pass = 500;
+		uint32_t created_passes = 0, created_pipelines = 0, freed_pipelines = 0;
+		uint64_t limit_get(Limit) override { return 8192; }
+		uint64_t api_trait_get(ApiTrait trait) override { return trait == API_TRAIT_HONORS_PIPELINE_BARRIERS ? 1 : 0; }
+		TextureID texture_create(const TextureFormat &, const TextureView &) override { return TextureID(51); }
+		void texture_free(TextureID id) override { CHECK(id == TextureID(51)); }
+		uint64_t texture_get_allocation_size(TextureID) override { return 128; }
+		BitField<TextureUsageBits> texture_get_usages_supported_by_format(DataFormat, bool) override { return TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT; }
+		void set_object_name(ObjectType, ID, const String &) override {}
+		RenderPassID render_pass_create(VectorView<Attachment>, VectorView<Subpass> subpasses, VectorView<SubpassDependency>, uint32_t, AttachmentReference) override {
+			CHECK((subpasses.size() == 2 || subpasses.size() == 3));
+			++created_passes;
+			return RenderPassID(next_pass++);
+		}
+		void render_pass_free(RenderPassID pass) override { CHECK((pass.id == 500 || pass.id == 501)); }
+		PipelineID render_pipeline_create(ShaderID shader, VertexFormatID, RenderPrimitive, PipelineRasterizationState, PipelineMultisampleState, PipelineDepthStencilState, PipelineColorBlendState, VectorView<int32_t>, BitField<PipelineDynamicStateFlags>, RenderPassID pass, uint32_t subpass, VectorView<PipelineSpecializationConstant>) override {
+			CHECK(shader == ShaderID(301));
+			CHECK((pass.id == 500 || pass.id == 501));
+			CHECK(subpass <= 1);
+			return PipelineID(600 + created_pipelines++);
+		}
+		void pipeline_free(PipelineID pipeline) override {
+			CHECK((pipeline.id >= 600 && pipeline.id < 604));
+			++freed_pipelines;
+		}
+	} driver;
+	RD rd;
+	attach(rd, driver);
+	Ref<RasterContainer> container;
+	container.instantiate();
+	container->initialize();
+	const RID shader = rd.shader_create_from_bytecode(container->to_bytes());
+	REQUIRE(shader.is_valid());
+	RD::TextureFormat texture_format;
+	texture_format.format = RD::DATA_FORMAT_D32_SFLOAT;
+	texture_format.width = 8;
+	texture_format.height = 4;
+	texture_format.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+	const RID texture = rd.texture_create(texture_format, RD::TextureView());
+	REQUIRE(texture.is_valid());
+	RD::FramebufferPass pass;
+	pass.depth_attachment = 0;
+	const RID framebuffer = rd.framebuffer_create_multipass(Vector<RID>{ texture }, Vector<RD::FramebufferPass>{ pass, pass });
+	const RID other_framebuffer = rd.framebuffer_create_multipass(Vector<RID>{ texture }, Vector<RD::FramebufferPass>{ pass, pass, pass });
+	REQUIRE(framebuffer.is_valid());
+	REQUIRE(other_framebuffer.is_valid());
+	const auto format = rd.framebuffer_get_format(framebuffer);
+	const auto other_format = rd.framebuffer_get_format(other_framebuffer);
+	REQUIRE(format != other_format);
+	const auto create_pipeline = [&](RD::FramebufferFormatID selected_format, uint32_t subpass) {
+		const RID pipeline = rd.render_pipeline_create(shader, selected_format, RD::INVALID_ID, RD::RENDER_PRIMITIVE_TRIANGLES,
+				RD::PipelineRasterizationState(), RD::PipelineMultisampleState(), RD::PipelineDepthStencilState(), RD::PipelineColorBlendState(), 0, subpass);
+		REQUIRE(pipeline.is_valid());
+		// Inspect original factory output; never overwrite its validation tuple.
+		CHECK(rd.render_pipeline_owner.get_or_null(pipeline)->validation.framebuffer_format == selected_format);
+		CHECK(rd.render_pipeline_owner.get_or_null(pipeline)->validation.render_pass == subpass);
+		return pipeline;
+	};
+	const RID right = create_pipeline(format, 0);
+	const RID wrong_format = create_pipeline(other_format, 0);
+	const RID wrong_pass = create_pipeline(format, 1);
+	const RID wrong_both = create_pipeline(other_format, 1);
+	CHECK(driver.created_passes == 2);
+	CHECK(driver.created_pipelines == 4);
+	rd.draw_graph.initialize(&driver, [](RDD *, VectorView<RDD::AttachmentLoadOp>, VectorView<RDD::AttachmentStoreOp>, void *) { return RDD::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+	rd.draw_graph.begin();
+	const auto list = rd.draw_list_begin(framebuffer);
+	REQUIRE(list != int64_t(RD::INVALID_ID));
+	REQUIRE(rd.draw_list.active);
+	REQUIRE(rd.draw_graph.contains_record(rd.draw_list.begin_handle));
+	CHECK(rd.draw_list_framebuffer_format == format);
+	CHECK(rd.draw_list_current_subpass == 0);
+	const auto rejected = [&](RID pipeline) {
+		const auto previous_pipeline = rd.draw_list.state.pipeline;
+		const auto previous_shader = rd.draw_list.state.pipeline_shader;
+		const auto previous_set_count = rd.draw_list.state.set_count;
+		const auto previous_push = rd.draw_list.state.checked_push_constant_supplied;
+		const uint32_t commands = rd.draw_graph.qualification_command_count();
+		ERR_PRINT_OFF;
+		const auto result = rd._draw_list_bind_render_pipeline_recorded(list, pipeline);
+		ERR_PRINT_ON;
+		CHECK(result.error == ERR_INVALID_PARAMETER);
+		CHECK(result.effect == RD::NativeAppendEffect::NoNewEffect);
+		CHECK_FALSE(result.draw_handle.is_valid());
+		CHECK(result.prefix_count == 0);
+		CHECK_FALSE(result.has_transfer);
+		CHECK_FALSE(result.capture_complete);
+		CHECK(rd.draw_graph.qualification_command_count() == commands);
+		CHECK(rd.draw_list.state.pipeline == previous_pipeline);
+		CHECK(rd.draw_list.state.pipeline_shader == previous_shader);
+		CHECK(rd.draw_list.state.set_count == previous_set_count);
+		CHECK(rd.draw_list.state.checked_push_constant_supplied == previous_push);
+		CHECK(rd.draw_list.state.draw_count == 0);
+	};
+	rejected(wrong_format);
+	rejected(wrong_pass);
+	rejected(wrong_both);
+	const auto accepted = rd._draw_list_bind_render_pipeline_recorded(list, right);
+	CHECK(accepted.error == OK);
+	CHECK(accepted.effect == RD::NativeAppendEffect::Recorded);
+	CHECK(accepted.capture_complete);
+	CHECK(rd.draw_graph.contains_record(accepted.draw_handle));
+	// Legacy ordinary binding permits a format-only mismatch. The checked
+	// call must still reject it when the same pipeline is already cached.
+	rd.draw_list_bind_render_pipeline(list, wrong_format);
+	REQUIRE(rd.draw_list.state.pipeline == wrong_format);
+	rejected(wrong_format);
+	rd.draw_list_end();
+	rd.draw_graph.begin();
+	for (RID pipeline : { right, wrong_format, wrong_pass, wrong_both }) { rd.free_rid(pipeline); }
+	rd.free_rid(shader);
+	rd.free_rid(framebuffer);
+	rd.free_rid(other_framebuffer);
+	rd.free_rid(texture);
+	dispose(rd);
+	CHECK(driver.freed_pipelines == 4);
+	CHECK(driver.shader_frees == 1);
+	CHECK(rd.dependency_map.is_empty());
+	CHECK(rd.reverse_dependency_map.is_empty());
+	for (const auto &entry : rd.framebuffer_formats) { driver.render_pass_free(entry.value.render_pass); }
+	rd.framebuffer_formats.clear();
+	rd.framebuffer_format_cache.clear();
+	detach(rd);
+}
+
+TEST_CASE("[RenderingDevice][NativeDisposal][CheckedPipelineCompatibility] original factories require exact framebuffer and pass before checked bind effects") {
+	TestNativeDisposalAccess::checked_pipeline_compatibility();
+}
 
 // GeometryDirect is a narrow capture profile over original draw-list state.
 // This fixture checks original factory provenance and graph execution against a

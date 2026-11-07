@@ -1,0 +1,26 @@
+{
+  "focused": {
+    "argv": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*[VertexArrayRange]*,*[VertexArrayRangeConstant]*,*[CheckedPipelineCompatibility]*,*[MaterialNativeHold]*,*[ShaderCompilePolicy]*,*[ExternalOutputGuard]*"
+    ],
+    "binary_bytes": 156746616,
+    "binary_sha256": "1a9d51daf742439f4531e23053df4e1678caf680f9497e330429d7e125b3202d",
+    "exit": 0,
+    "elapsed": 0.28940534591674805
+  },
+  "combined": {
+    "argv": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*[ProductionRequest]*,*[ProductionNativeObserve]*,*[B4]*,*[ViewportHistory]*,*[CheckedBind]*,*[RecordSource]*,*[NativeDisposal]*,*[QualificationTicket]*,*[VertexArrayRange]*,*[VertexArrayRangeConstant]*,*[CheckedPipelineCompatibility]*,*[MaterialNativeHold]*,*[ShaderCompilePolicy]*,*[ExternalOutputGuard]*"
+    ],
+    "binary_bytes": 156746616,
+    "binary_sha256": "1a9d51daf742439f4531e23053df4e1678caf680f9497e330429d7e125b3202d",
+    "exit": 0,
+    "elapsed": 4.264689922332764
+  }
+}

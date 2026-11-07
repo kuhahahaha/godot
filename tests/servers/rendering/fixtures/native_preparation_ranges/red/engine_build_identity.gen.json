@@ -1,0 +1,1969 @@
+{
+  "snapshot": {
+    "schema": 1,
+    "role": "Core",
+    "platform": "macos",
+    "architecture": "arm64",
+    "target_kind": "Executable",
+    "compiler_route": "BuiltinGlslangV1",
+    "inputs": [
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 0,
+        "bytes": 69194720,
+        "sha256": "153d65d2954c9b4275f8973f9bf056a9ac47f2cbe84ef99d9913b72e3ec7ed1f"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 1,
+        "bytes": 949,
+        "sha256": "3b8f8e94dfe7987d044dd703b0dad4a5d6f4184f92ad7f70b8405d87d00d256d"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 2,
+        "bytes": 618,
+        "sha256": "ab58459f637f2c9a588dc8963cb780dcb2365cee9e51aff09664ff762a9a49c4"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 3,
+        "bytes": 62344,
+        "sha256": "dd78a6736fddc334b41aaad8cae0fbfd201082b7bfd93c92dd028bede1a6857e"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 4,
+        "bytes": 17889,
+        "sha256": "04851ddd78ea6cc83d31e13a845b7a086dad73d86cf9a7a1c2263fc835f541d9"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 5,
+        "bytes": 40352,
+        "sha256": "78cbfd0cdef38c7b0c60f5b4c807fd34388cf964737e49a4cc0af85f3dc89a31"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 6,
+        "bytes": 9047,
+        "sha256": "38a640c8d63a0612e7e160f3b9d4d0f9b56a482ef07f58fe943a454fa4ec99a1"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 7,
+        "bytes": 102877,
+        "sha256": "a569330511ba008a4831a9b3e48841f1540cc65c5d33117e55e77a5af35437e3"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 8,
+        "bytes": 73295,
+        "sha256": "ef19003faa38bc2b404b914eb19b519c8db40375a684b2f634a2b88adc3e45a3"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 9,
+        "bytes": 4318,
+        "sha256": "6cda06ed550383945961f8387b05f37a7bbb19908c76cf7bdd06a7836499e0c2"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 10,
+        "bytes": 197286,
+        "sha256": "1365faa7cef48e11accf649db66c21978f5f79ec05b65a0cbd8aec28a31667c5"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 11,
+        "bytes": 160416,
+        "sha256": "476bb9f45a23c040e803b41397ce0b8ff35ccfc20fe074bd8b7c0eb2fed9adcc"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 12,
+        "bytes": 1686592,
+        "sha256": "5919acc570919f38fa8ef820dd39677a4ff47f667f656e5bcacb2986e51654cd"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 13,
+        "bytes": 77371,
+        "sha256": "f701130e7966f6a2f92be9a9af3c5c816a5c2ff7b97eaea346c6476bd39da58c"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 14,
+        "bytes": 192286,
+        "sha256": "90cb4473924ee6fbfebd0e968551edf0fc1cbd4580b6cf0b6243aebf91481a88"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 15,
+        "bytes": 8157,
+        "sha256": "191d0b74e9fb87ae4dd1d149324ee94c0eb3c398c26fe49a6abdaa08de87978b"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 16,
+        "bytes": 17433,
+        "sha256": "9768d34a3b2beef8c820b7e7d5c035d30a8110277c45beca22f0eed9266fe159"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 17,
+        "bytes": 7165056,
+        "sha256": "15a7549bb0546f328776f579291ce179a78d938e82475925a7602a4ac4c4eeb9"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 18,
+        "bytes": 54469,
+        "sha256": "098e91ea9f5c35f0e3bda4a7254409a8587b10c7733dcb26a68f58e8a1690d07"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 19,
+        "bytes": 1576,
+        "sha256": "d0f0d79d1c2b4535f26b1019d91f3b702d69fde62c1aa48519fde76a331d31c6"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 20,
+        "bytes": 1640,
+        "sha256": "8edfa163c9086966d7529bafb43320a4e41638d6c6c413e40d30869115d11e5f"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 21,
+        "bytes": 171936,
+        "sha256": "ff49e5638ccf5dab5b4a04ea9925779a41e755bcfd3c408c4819dbab14832638"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 22,
+        "bytes": 11856,
+        "sha256": "c4c712549485ddcb0b6ac4265dccb347b9abd78f04ec4594c96e2c054a390684"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 23,
+        "bytes": 58976,
+        "sha256": "c1e4f456b6e09c79a65d28e809cbf5b42e0c4ef02337f3028560a6e041dc91c3"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 24,
+        "bytes": 37456,
+        "sha256": "29c2298df82313d5fb8c26d46b7a86f1ecd7587a779704a9af0b477aeef01ee1"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 25,
+        "bytes": 106472,
+        "sha256": "9d63febcc031aad2591f526bc5c7251275a8e14c8db6b699ee762f8fe806f83e"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 26,
+        "bytes": 369912,
+        "sha256": "54e2bdede0dd4a72f1cd66cc539dc1e2c218b7afdb48979acf404e4d7aeeb339"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 27,
+        "bytes": 12384,
+        "sha256": "cb415445ab8309ce1edeb30593cf9f5e1fe7296568d934f5b855cda7b1ca8fb5"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 28,
+        "bytes": 83648,
+        "sha256": "bae440a1453948b26480a9297f746aa51f11d973519bcf3d93f3889e92b30e7a"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 29,
+        "bytes": 3648,
+        "sha256": "c7787ee6ad40cdf3c2fd9a43dac74ec4e9c012f62071904f11b53369f401b571"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 30,
+        "bytes": 11992,
+        "sha256": "8eeebd9d33c085e37abd48e74e8e201df04e85d9bcbbecf65ca8b5afa757d2a7"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 31,
+        "bytes": 31864,
+        "sha256": "fb70d6f120dcf559a6dd1205a6592586f13364a05c5fe9f8976f30bff24311ff"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 32,
+        "bytes": 5992,
+        "sha256": "e8f74813ae07e8bf2620b1fac5b5d0dc8bbb76a5057f753910b155f7cbe1e5c8"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 33,
+        "bytes": 30496,
+        "sha256": "14570542b5aef39844273b8a2d425398cd77858120d153be730ca07b6d704163"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 34,
+        "bytes": 22880,
+        "sha256": "49b5db47eeca05faea6c767c330697e71b82715e688448d1fe660197404e15a5"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 35,
+        "bytes": 7480,
+        "sha256": "a1282d1f1a8a0b6e9401afb8ba2c12fe2833d8b15787d6085a2eb6899252e14d"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 36,
+        "bytes": 68640,
+        "sha256": "fb5961be0764845160e8bb788ebcdad912c4f7f147d6bae5e80c1f831ce1a594"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 37,
+        "bytes": 167752,
+        "sha256": "e693894f1b640853d33451ee7a067d334159451fb6454b0ba6ac1c16cdeb6ed0"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 38,
+        "bytes": 38752,
+        "sha256": "759e667db5fff3775dbfeba79c5844e330ff9ee2d93c0994af3bf4ce462cb569"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 39,
+        "bytes": 38080,
+        "sha256": "3f1a3107b1d504f9c3dea993486e77f7be4aadf87b21280e7184de7d0adc5419"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 40,
+        "bytes": 7520,
+        "sha256": "09d983c67b5533a9163e3a63abefe61716a0fcdf29d926b0e390edb4a46a87d2"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 41,
+        "bytes": 18280,
+        "sha256": "44937ce9da247c9ff45acf9c3073d33b4c3359ca22327328d3c7e52ed0be73f5"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 42,
+        "bytes": 7920,
+        "sha256": "90887cfa49686900c719038bf219b283f2ee90d4c500c77bdecb13cce693c823"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 43,
+        "bytes": 123120,
+        "sha256": "08078c316cef988daa54e9f112d1d0154fa64177109a404e583a8f7cf1148145"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 44,
+        "bytes": 31136,
+        "sha256": "c2e208ba68a73b4858256340ef1069258c2595856da33eb33b28fd305b0bf8ed"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 45,
+        "bytes": 36256,
+        "sha256": "b1723aade1105c2d38b025c9fd7e553ae89d7045a307e287669c0d6ea7b807d9"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 46,
+        "bytes": 86456,
+        "sha256": "69c58e104fdeb30079c2754869ccb4288924a3121e1dc54e834b49171d0de90e"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 47,
+        "bytes": 93520,
+        "sha256": "4ee3ff18a4dbf1da46a0cd279245c6b08efd517bce73f05edd207ac72a5307b7"
+      },
+      {
+        "kind": "Object",
+        "ordinal": 48,
+        "bytes": 10528,
+        "sha256": "38c47ce896ad03484b9bf931c2a6745ef43663f578db0750233c6be088bcfbdf"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 49,
+        "bytes": 997544,
+        "sha256": "ea6550ff16fa220064bbde8be9343579c4d0172a584a7d6e5eb0693850bfccb0"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 50,
+        "bytes": 46209400,
+        "sha256": "173cbcbfa98e225c207044bbc548bd96a74c28755de5d668a85e31969f8e491f"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 51,
+        "bytes": 11344,
+        "sha256": "faf1897bebb744ad1a1d79f6eb5ade5e070790868cf17706b663bab60e3f5e50"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 52,
+        "bytes": 5730568,
+        "sha256": "811d82a75e029be7288b76f507550d68db4f227e11b139b3d1beff0ac95cce33"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 53,
+        "bytes": 1153648,
+        "sha256": "79ed8477c4aa219679507602a91a1dda7d3d274b875e80579b95e9ec09bb7ec6"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 54,
+        "bytes": 5924696,
+        "sha256": "b6e905486aa8ebb5e656aa988761f9662042487dc0bd9f2677a35c3d7b587a4d"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 55,
+        "bytes": 195560,
+        "sha256": "e66cbbafb4b76b676932b5e6b321e1ae3a23d93df29f8a272dabee049a221929"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 56,
+        "bytes": 515072,
+        "sha256": "7459e6968cab85ac893cc21abbe17f304f14a685f6f29d2767a241cab3f2926c"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 57,
+        "bytes": 405944,
+        "sha256": "d35ed67200d7a55d2234595ee736793d4ac925d4981d461696ec3c2af8f3c3c7"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 58,
+        "bytes": 1287888,
+        "sha256": "55338a7562afb6755d4edc2ea797773a973326f1b6f3b308b70954df633e8971"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 59,
+        "bytes": 232720,
+        "sha256": "68735863c534192cbcce75c6dc85981c23b80aa66141d5e36e53c9589ebc5cda"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 60,
+        "bytes": 2123264,
+        "sha256": "626d4bece4c4021028b11d356f650db957f1df4efe1ba76feac80390bd638a08"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 61,
+        "bytes": 37760,
+        "sha256": "32585a3a27730ea2b57ece14bbc22b96a63acb7ef6b8e81c22284d2dc1fba25a"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 62,
+        "bytes": 251336,
+        "sha256": "c38bc565ff9a1b88340370a2253df7646afbf6f218aa8eb0d751507364838ec3"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 63,
+        "bytes": 48392,
+        "sha256": "cf6cbee6b30bd1b0d08ca98c1850a1afa47f1126cf5c3a4bb3c8e8da076c6a62"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 64,
+        "bytes": 82296,
+        "sha256": "476236c5f1281d986067392d1b1a6e26cf84d6218d70e52c2e7640a3f5e3ab59"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 65,
+        "bytes": 1545312,
+        "sha256": "1f8cd82672cd613461d523b88dd6942c7a061aff8c945ddb50affd0ed042666a"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 66,
+        "bytes": 270656,
+        "sha256": "8f141ee4de449cf6a99931863cb9df14ac0073361a606aa6916b54f74d140542"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 67,
+        "bytes": 89072,
+        "sha256": "bb6d63cc2b0bc16e3232e20f3eaeafb08b6d87f2ac905cfa657baf6e56c261e0"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 68,
+        "bytes": 632600,
+        "sha256": "eb5ba13e2e9c7dae9fd9f0959729e90283cb94c2ad969f98a786fff71d513393"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 69,
+        "bytes": 92096,
+        "sha256": "fb10468fcd707279286c9622661202eedf996838766cab4cd2a308815791dd49"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 70,
+        "bytes": 6584232,
+        "sha256": "69a89ea2a16274dda0f6ed51704d1a5eab2f1ca04ebbe155ff3b13f41809f937"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 71,
+        "bytes": 4510888,
+        "sha256": "bb369cf63a1e768982a41b12a5e3f44cd1b6d13724a63eac1eaf820179cde834"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 72,
+        "bytes": 1873248,
+        "sha256": "98c6628b3f91bfea851cc73828e7525d70dc4eae39946277ed6c1f2def9599be"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 73,
+        "bytes": 1245992,
+        "sha256": "2365e7bd6545d2689ea60ddf7520888815524166c3713b13a9a033dd442a2bb1"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 74,
+        "bytes": 957072,
+        "sha256": "6527a69ea64d24ce2eabbad233a9082d5ec0375dc1035d20d310a6044be28f09"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 75,
+        "bytes": 42960,
+        "sha256": "1a8658a0e0f708d6057f0837a742103f1b4b122f5ec6a4af895b4612af3df78f"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 76,
+        "bytes": 901224,
+        "sha256": "9fabba49a619db3daac1c75ac12f3cd79944e0fdc35712de3e9a3ff6ca6d836d"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 77,
+        "bytes": 4316456,
+        "sha256": "07f668502664b912c8976018adaf92e1f1053568bcadb2403d045db6b4c1e585"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 78,
+        "bytes": 700272,
+        "sha256": "fc188f19c275b57d97b7c99ba6c89d13c5f5754f46a555b91de1714e3732ba36"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 79,
+        "bytes": 230280,
+        "sha256": "96926472d1e6f46c5577af02e4a4b2823cbf4c1d8948c76b8656d79d9acec80e"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 80,
+        "bytes": 529944,
+        "sha256": "95e4577dd1c7432f522b4135789c3d6f8b3890371c490b26a7bb953338392ddd"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 81,
+        "bytes": 1775464,
+        "sha256": "0fd1ce6384eee4245423a1e2ec6e801b2962efb10862acc31b925c0578d5761c"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 82,
+        "bytes": 133040,
+        "sha256": "cd0e332af2627d805d570a0267f4f8a1229c4db134540a721a9656c9aa30fa13"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 83,
+        "bytes": 138040,
+        "sha256": "27090160d06f4cd63960a0b44e7e8d32a8ba3befcc16caa8dc0a63cab08b6398"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 84,
+        "bytes": 297336,
+        "sha256": "6e4bdf4b9e5faca0778b66667ef100318c1907144c0015a510de7c20b547df59"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 85,
+        "bytes": 1815952,
+        "sha256": "3fc07075bcb4c299d6de9b581e6ea0989e847a919ee3b3287511a56ee9091252"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 86,
+        "bytes": 1023752,
+        "sha256": "a919f5cfac4fc0b3347415036d21ee354aa61644a4a877343a40d8b35fa93548"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 87,
+        "bytes": 1510392,
+        "sha256": "0f64820ac6e0958c9be15da4e4a0f9d3ff89f01fa440f7910424d3cf8ddcf096"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 88,
+        "bytes": 919936,
+        "sha256": "c25e7159a4e92ba7cc09e7099e1bdfd4a6d89440a9567142cbcfbc96bfbd3ffc"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 89,
+        "bytes": 1287512,
+        "sha256": "a5639f32a9ab3a0fffa0f05f8d4280c27069787d2b1bb2a4d92d949a2e22be59"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 90,
+        "bytes": 167272,
+        "sha256": "97f4388485b029637a093df57f55247b1e9f70815818ee5e15767f462c8668c7"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 91,
+        "bytes": 10628344,
+        "sha256": "9c84d17225e5ada8fb63f6362fed0afedba680b5088a0dc453dae6d9279e7f04"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 92,
+        "bytes": 368024,
+        "sha256": "aae030c8b2df3b6e3b3be849bb0ae9df14ccfcaaf0f47236a307e978630948f5"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 93,
+        "bytes": 3217592,
+        "sha256": "1f94deb9b862db85b79c4063256f8a34310739dc80cdcea7a1598c5d1aa9ba92"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 94,
+        "bytes": 1785944,
+        "sha256": "0c9173965425ab5f5cbf82bc568e8da9ca2fec277950b948355c5135a1d2d769"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 95,
+        "bytes": 43848,
+        "sha256": "99fb46c24ac99c97c8198e62487d93a46b75b9bdfd2cc5af74c46a4df44db5b9"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 96,
+        "bytes": 233144,
+        "sha256": "335d67da0285e61b382c731993feb0c2896c9ade931766a8df75ce8aa916be3b"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 97,
+        "bytes": 415744,
+        "sha256": "5c6ba504371bc407689bf59286e959942e87f76cb3afbd49befbe02520d849f8"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 98,
+        "bytes": 369304,
+        "sha256": "984d1df5879097d5319842a8dde74c788a62f2302f82a4f4ed04216b489a1afd"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 99,
+        "bytes": 8095624,
+        "sha256": "8373160a0cd8af726f0aada8ba53d387a7cae59552e6edc86b32afe4ecf2fb51"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 100,
+        "bytes": 767792,
+        "sha256": "1980d4375872aebc5dd9db06d1e7b0bb6649ed377d9f5c23d7a878873b165e3b"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 101,
+        "bytes": 734776,
+        "sha256": "ffc61d40291376de452ec89b1bd48993b83e640132e67ed8a9c90d63a8bda5ac"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 102,
+        "bytes": 694152,
+        "sha256": "93f9c666cf8e8f76bbf219f69d2aaf5f3ed24adc515f04369c3a451133218fde"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 103,
+        "bytes": 145528,
+        "sha256": "6dafeae649510c8cf6d861eedb9108e1ef60bf2678f31277e287e5bbde9f42d9"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 104,
+        "bytes": 203056,
+        "sha256": "137a554481b5b4999d3268512865064db269dd6085668bdf456b719ed40f0db3"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 105,
+        "bytes": 261232,
+        "sha256": "ec8bc3e4e0bfa96abb7cc7e835864e12dbedd5462008e3ce9c41bb1336222638"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 106,
+        "bytes": 321336,
+        "sha256": "180c60fb5f8bfcf734a04028da3e3c863fd261059708105bb3321f0643be3d01"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 107,
+        "bytes": 13194040,
+        "sha256": "5bc2ba2f7a4e806cc3680552ff4dda8450d693f4f45332e0e389840b1dc5be3a"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 108,
+        "bytes": 114080200,
+        "sha256": "050b46796048936bf7704e18616fc567e745d3897a4c2713c40e6a183ca3b1d8"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 109,
+        "bytes": 87124728,
+        "sha256": "6a9fbe6fa993ab80adf42ba55b62ec86352bd1c9cb5bf4d844c2562fffa1205e"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 110,
+        "bytes": 42639208,
+        "sha256": "b6bc24d31776ebfd64063bbb3afb96f7657e29c527789d39cea2d02bf515a61d"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 111,
+        "bytes": 31990448,
+        "sha256": "956202c1212534beb08ae0e2b773e786d49e31d0d830983d71122e3456db4cb9"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 112,
+        "bytes": 990224,
+        "sha256": "d3699df797aff8e0b7f83820dd993cf20e354a6a107e83c80f8e365b1beb1ede"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 113,
+        "bytes": 244656,
+        "sha256": "a323ce0101aa1c53f57ead3e9327b18744e22dd5b0d90656c4c34fe81e302ca1"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 114,
+        "bytes": 2695672,
+        "sha256": "405db4edd30f30522bcdaa4d21ac9388eba8fb36835a5032224aa36f283d8333"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 115,
+        "bytes": 159024,
+        "sha256": "126156085248c14b7b4727b32cf645147327ac97e5fb6573916bc325b8c5dbe0"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 116,
+        "bytes": 2296696,
+        "sha256": "e92fac587bcae64758bef78d223342ea6f5a84020c8980dbc7e3938934295fdb"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 117,
+        "bytes": 348607,
+        "sha256": "530128010020e5d9a9f76baddabf8a93dc0607632ba3787b7e43ced0152f5df5"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 118,
+        "bytes": 1985,
+        "sha256": "7326dfca9e65f8d74c70ec28496074b8285cecbbfde4172701fe66980a86275f"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 119,
+        "bytes": 156194,
+        "sha256": "b1bf25405e122bfcf3ca00c6cd458f0a51b14d170ce196def6893a320f7074d2"
+      },
+      {
+        "kind": "SharedLibrary",
+        "ordinal": 120,
+        "bytes": 348607,
+        "sha256": "530128010020e5d9a9f76baddabf8a93dc0607632ba3787b7e43ced0152f5df5"
+      },
+      {
+        "kind": "StaticArchive",
+        "ordinal": 121,
+        "bytes": 1099800,
+        "sha256": "230d523056bd96a6cf8f4569a0777d1f2e7fef0ac68161cab637f9b4efd769be"
+      }
+    ],
+    "arguments": [
+      {
+        "kind": "Tool",
+        "role": "linker"
+      },
+      "-demangle",
+      "-lto_library",
+      {
+        "kind": "Input",
+        "ordinal": 0
+      },
+      "-dynamic",
+      "-arch",
+      "arm64",
+      "-platform_version",
+      "macos",
+      "11.0.0",
+      "27.2",
+      "-syslibroot",
+      {
+        "kind": "SDK"
+      },
+      "-O2",
+      "-mllvm",
+      "-enable-linkonceodr-outlining",
+      "-o",
+      {
+        "kind": "Output"
+      },
+      "-L/opt/homebrew/Frameworks/MoltenVK.xcframework/macos-arm64",
+      "-stack_size",
+      "0x800000",
+      "-framework",
+      {
+        "kind": "Framework",
+        "name": "ForceFeedback",
+        "ordinal": 1
+      },
+      "-framework",
+      {
+        "kind": "Framework",
+        "name": "Cocoa",
+        "ordinal": 2
+      },
+      "-framework",
+      {
+        "kind": "Framework",
+        "name": "Carbon",
+        "ordinal": 3
+      },
+      "-framework",
+      {
+        "kind": "Framework",
+        "name": "AudioUnit",
+        "ordinal": 4
+      },
+      "-framework",
+      {
+        "kind": "Framework",
+        "name": "CoreAudio",
+        "ordinal": 5
+      },
+      "-framework",
+      {
+        "kind": "Framework",
+        "name": "CoreMIDI",
+        "ordinal": 6
+      },
+      "-framework",
+      {
+        "kind": "Framework",
+        "name": "IOKit",
+        "ordinal": 7
+      },
+      "-framework",
+      {
+        "kind": "Framework",
+        "name": "GameController",
+        "ordinal": 8
+      },
+      "-framework",
+      {
+        "kind": "Framework",
+        "name": "CoreHaptics",
+        "ordinal": 9
+      },
+      "-framework",
+      {
+        "kind": "Framework",
+        "name": "CoreVideo",
+        "ordinal": 10
+      },
+      "-framework",
+      {
+        "kind": "Framework",
+        "name": "AVFoundation",
+        "ordinal": 11
+      },
+      "-framework",
+      {
+        "kind": "Framework",
+        "name": "CoreMedia",
+        "ordinal": 12
+      },
+      "-framework",
+      {
+        "kind": "Framework",
+        "name": "QuartzCore",
+        "ordinal": 13
+      },
+      "-framework",
+      {
+        "kind": "Framework",
+        "name": "Security",
+        "ordinal": 14
+      },
+      "-framework",
+      {
+        "kind": "Framework",
+        "name": "UniformTypeIdentifiers",
+        "ordinal": 15
+      },
+      "-framework",
+      {
+        "kind": "Framework",
+        "name": "IOSurface",
+        "ordinal": 16
+      },
+      "-rpath",
+      "@executable_path/../Frameworks",
+      "-rpath",
+      "@executable_path",
+      {
+        "kind": "Input",
+        "ordinal": 17
+      },
+      "-framework",
+      {
+        "kind": "Framework",
+        "name": "Metal",
+        "ordinal": 18
+      },
+      "-framework",
+      {
+        "kind": "Framework",
+        "name": "MetalFX",
+        "ordinal": 19
+      },
+      "-framework",
+      {
+        "kind": "Framework",
+        "name": "MetalKit",
+        "ordinal": 20
+      },
+      "-S",
+      "-x",
+      "-dead_strip",
+      {
+        "kind": "Input",
+        "ordinal": 21
+      },
+      {
+        "kind": "Input",
+        "ordinal": 22
+      },
+      {
+        "kind": "Input",
+        "ordinal": 23
+      },
+      {
+        "kind": "Input",
+        "ordinal": 24
+      },
+      {
+        "kind": "Input",
+        "ordinal": 25
+      },
+      {
+        "kind": "Input",
+        "ordinal": 26
+      },
+      {
+        "kind": "Input",
+        "ordinal": 27
+      },
+      {
+        "kind": "Input",
+        "ordinal": 28
+      },
+      {
+        "kind": "Input",
+        "ordinal": 29
+      },
+      {
+        "kind": "Input",
+        "ordinal": 30
+      },
+      {
+        "kind": "Input",
+        "ordinal": 31
+      },
+      {
+        "kind": "Input",
+        "ordinal": 32
+      },
+      {
+        "kind": "Input",
+        "ordinal": 33
+      },
+      {
+        "kind": "Input",
+        "ordinal": 34
+      },
+      {
+        "kind": "Input",
+        "ordinal": 35
+      },
+      {
+        "kind": "Input",
+        "ordinal": 36
+      },
+      {
+        "kind": "Input",
+        "ordinal": 37
+      },
+      {
+        "kind": "Input",
+        "ordinal": 38
+      },
+      {
+        "kind": "Input",
+        "ordinal": 39
+      },
+      {
+        "kind": "Input",
+        "ordinal": 40
+      },
+      {
+        "kind": "Input",
+        "ordinal": 41
+      },
+      {
+        "kind": "Input",
+        "ordinal": 42
+      },
+      {
+        "kind": "Input",
+        "ordinal": 43
+      },
+      {
+        "kind": "Input",
+        "ordinal": 44
+      },
+      {
+        "kind": "Input",
+        "ordinal": 45
+      },
+      {
+        "kind": "Input",
+        "ordinal": 46
+      },
+      {
+        "kind": "Input",
+        "ordinal": 47
+      },
+      {
+        "kind": "Input",
+        "ordinal": 48
+      },
+      {
+        "kind": "Input",
+        "ordinal": 49
+      },
+      {
+        "kind": "Input",
+        "ordinal": 50
+      },
+      {
+        "kind": "Input",
+        "ordinal": 51
+      },
+      {
+        "kind": "Input",
+        "ordinal": 52
+      },
+      {
+        "kind": "Input",
+        "ordinal": 53
+      },
+      {
+        "kind": "Input",
+        "ordinal": 54
+      },
+      {
+        "kind": "Input",
+        "ordinal": 55
+      },
+      {
+        "kind": "Input",
+        "ordinal": 56
+      },
+      {
+        "kind": "Input",
+        "ordinal": 57
+      },
+      {
+        "kind": "Input",
+        "ordinal": 58
+      },
+      {
+        "kind": "Input",
+        "ordinal": 59
+      },
+      {
+        "kind": "Input",
+        "ordinal": 60
+      },
+      {
+        "kind": "Input",
+        "ordinal": 61
+      },
+      {
+        "kind": "Input",
+        "ordinal": 62
+      },
+      {
+        "kind": "Input",
+        "ordinal": 63
+      },
+      {
+        "kind": "Input",
+        "ordinal": 64
+      },
+      {
+        "kind": "Input",
+        "ordinal": 65
+      },
+      {
+        "kind": "Input",
+        "ordinal": 66
+      },
+      {
+        "kind": "Input",
+        "ordinal": 67
+      },
+      {
+        "kind": "Input",
+        "ordinal": 68
+      },
+      {
+        "kind": "Input",
+        "ordinal": 69
+      },
+      {
+        "kind": "Input",
+        "ordinal": 70
+      },
+      {
+        "kind": "Input",
+        "ordinal": 71
+      },
+      {
+        "kind": "Input",
+        "ordinal": 72
+      },
+      {
+        "kind": "Input",
+        "ordinal": 73
+      },
+      {
+        "kind": "Input",
+        "ordinal": 74
+      },
+      {
+        "kind": "Input",
+        "ordinal": 75
+      },
+      {
+        "kind": "Input",
+        "ordinal": 76
+      },
+      {
+        "kind": "Input",
+        "ordinal": 77
+      },
+      {
+        "kind": "Input",
+        "ordinal": 78
+      },
+      {
+        "kind": "Input",
+        "ordinal": 79
+      },
+      {
+        "kind": "Input",
+        "ordinal": 80
+      },
+      {
+        "kind": "Input",
+        "ordinal": 81
+      },
+      {
+        "kind": "Input",
+        "ordinal": 82
+      },
+      {
+        "kind": "Input",
+        "ordinal": 83
+      },
+      {
+        "kind": "Input",
+        "ordinal": 84
+      },
+      {
+        "kind": "Input",
+        "ordinal": 85
+      },
+      {
+        "kind": "Input",
+        "ordinal": 86
+      },
+      {
+        "kind": "Input",
+        "ordinal": 87
+      },
+      {
+        "kind": "Input",
+        "ordinal": 88
+      },
+      {
+        "kind": "Input",
+        "ordinal": 89
+      },
+      {
+        "kind": "Input",
+        "ordinal": 90
+      },
+      {
+        "kind": "Input",
+        "ordinal": 91
+      },
+      {
+        "kind": "Input",
+        "ordinal": 92
+      },
+      {
+        "kind": "Input",
+        "ordinal": 93
+      },
+      {
+        "kind": "Input",
+        "ordinal": 94
+      },
+      {
+        "kind": "Input",
+        "ordinal": 95
+      },
+      {
+        "kind": "Input",
+        "ordinal": 96
+      },
+      {
+        "kind": "Input",
+        "ordinal": 97
+      },
+      {
+        "kind": "Input",
+        "ordinal": 98
+      },
+      {
+        "kind": "Input",
+        "ordinal": 99
+      },
+      {
+        "kind": "Input",
+        "ordinal": 100
+      },
+      {
+        "kind": "Input",
+        "ordinal": 101
+      },
+      {
+        "kind": "Input",
+        "ordinal": 102
+      },
+      {
+        "kind": "Input",
+        "ordinal": 103
+      },
+      {
+        "kind": "Input",
+        "ordinal": 104
+      },
+      {
+        "kind": "Input",
+        "ordinal": 105
+      },
+      {
+        "kind": "Input",
+        "ordinal": 106
+      },
+      {
+        "kind": "Input",
+        "ordinal": 107
+      },
+      {
+        "kind": "Input",
+        "ordinal": 108
+      },
+      {
+        "kind": "Input",
+        "ordinal": 109
+      },
+      {
+        "kind": "Input",
+        "ordinal": 110
+      },
+      {
+        "kind": "Input",
+        "ordinal": 111
+      },
+      {
+        "kind": "Input",
+        "ordinal": 112
+      },
+      {
+        "kind": "Input",
+        "ordinal": 113
+      },
+      {
+        "kind": "Input",
+        "ordinal": 114
+      },
+      {
+        "kind": "Input",
+        "ordinal": 115
+      },
+      {
+        "kind": "Input",
+        "ordinal": 116
+      },
+      {
+        "kind": "Input",
+        "ordinal": 117
+      },
+      {
+        "kind": "Input",
+        "ordinal": 118
+      },
+      {
+        "kind": "Input",
+        "ordinal": 119
+      },
+      {
+        "kind": "Input",
+        "ordinal": 120
+      },
+      {
+        "kind": "Input",
+        "ordinal": 121
+      }
+    ],
+    "options": {
+      "CC": "OriginalSelectedInputs",
+      "CXX": "OriginalSelectedInputs",
+      "LINK": "OriginalSelectedInputs",
+      "MACOS_SDK_PATH": "OriginalSelectedInputs",
+      "SWIFT_FRONTEND": "Unselected",
+      "accesskit": "false",
+      "accesskit_sdk_path": "OriginalSelectedInputs",
+      "angle": "false",
+      "angle_libs": "OriginalSelectedInputs",
+      "arch": "arm64",
+      "betsy_export_templates": "false",
+      "brotli": "true",
+      "build_profile": "",
+      "builtin_brotli": "true",
+      "builtin_certs": "true",
+      "builtin_clipper2": "true",
+      "builtin_embree": "true",
+      "builtin_enet": "true",
+      "builtin_freetype": "true",
+      "builtin_glslang": "true",
+      "builtin_graphite": "true",
+      "builtin_harfbuzz": "true",
+      "builtin_icu4c": "true",
+      "builtin_libjpeg_turbo": "true",
+      "builtin_libogg": "true",
+      "builtin_libpng": "true",
+      "builtin_libtheora": "true",
+      "builtin_libvorbis": "true",
+      "builtin_libwebp": "true",
+      "builtin_mbedtls": "true",
+      "builtin_miniupnpc": "true",
+      "builtin_msdfgen": "true",
+      "builtin_openxr": "true",
+      "builtin_pcre2": "true",
+      "builtin_pcre2_with_jit": "true",
+      "builtin_recastnavigation": "true",
+      "builtin_rvo2_2d": "true",
+      "builtin_rvo2_3d": "true",
+      "builtin_sdl": "true",
+      "builtin_wslay": "true",
+      "builtin_xatlas": "true",
+      "builtin_zlib": "true",
+      "builtin_zstd": "true",
+      "custom_modules": "Unselected",
+      "custom_modules_recursive": "true",
+      "cvtt_export_templates": "false",
+      "d3d12": "false",
+      "debug_paths_relative": "false",
+      "debug_symbols": "false",
+      "deprecated": "true",
+      "dev_build": "false",
+      "dev_mode": "false",
+      "disable_3d": "false",
+      "disable_advanced_gui": "false",
+      "disable_exceptions": "true",
+      "disable_navigation_2d": "false",
+      "disable_navigation_3d": "false",
+      "disable_overrides": "false",
+      "disable_path_overrides": "true",
+      "disable_physics_2d": "false",
+      "disable_physics_3d": "false",
+      "disable_xr": "false",
+      "engine_update_check": "true",
+      "fast_unsafe": "false",
+      "graphite": "true",
+      "library_type": "executable",
+      "limit_transitive_includes": "true",
+      "lto": "none",
+      "macports_clang": "no",
+      "metal": "true",
+      "minizip": "true",
+      "module_astcenc_enabled": "true",
+      "module_basis_universal_enabled": "true",
+      "module_bcdec_enabled": "true",
+      "module_betsy_enabled": "true",
+      "module_bmp_enabled": "true",
+      "module_camera_enabled": "true",
+      "module_csg_enabled": "true",
+      "module_cvtt_enabled": "true",
+      "module_dds_enabled": "true",
+      "module_enet_enabled": "true",
+      "module_etcpak_enabled": "true",
+      "module_fbx_enabled": "true",
+      "module_freetype_enabled": "true",
+      "module_gdscript_enabled": "true",
+      "module_glslang_enabled": "true",
+      "module_gltf_enabled": "true",
+      "module_godot_physics_2d_enabled": "true",
+      "module_godot_physics_3d_enabled": "true",
+      "module_gridmap_enabled": "true",
+      "module_hdr_enabled": "true",
+      "module_interactive_music_enabled": "true",
+      "module_jolt_physics_enabled": "true",
+      "module_jpg_enabled": "true",
+      "module_jsonrpc_enabled": "true",
+      "module_ktx_enabled": "true",
+      "module_lightmapper_rd_enabled": "true",
+      "module_mbedtls_enabled": "true",
+      "module_meshoptimizer_enabled": "true",
+      "module_mobile_vr_enabled": "true",
+      "module_mono_enabled": "false",
+      "module_mp3_enabled": "true",
+      "module_msdfgen_enabled": "true",
+      "module_multiplayer_enabled": "true",
+      "module_navigation_2d_enabled": "true",
+      "module_navigation_3d_enabled": "true",
+      "module_noise_enabled": "true",
+      "module_objectdb_profiler_enabled": "true",
+      "module_ogg_enabled": "true",
+      "module_openxr_enabled": "true",
+      "module_particles_runtime_tests_enabled": "true",
+      "module_raycast_enabled": "true",
+      "module_regex_enabled": "true",
+      "module_skinned_mesh_capture_tests_enabled": "false",
+      "module_svg_enabled": "true",
+      "module_text_server_adv_enabled": "true",
+      "module_text_server_fb_enabled": "false",
+      "module_tga_enabled": "true",
+      "module_theora_enabled": "true",
+      "module_tinyexr_enabled": "true",
+      "module_upnp_enabled": "true",
+      "module_vhacd_enabled": "true",
+      "module_visual_shader_enabled": "true",
+      "module_vorbis_enabled": "true",
+      "module_webp_enabled": "true",
+      "module_webrtc_enabled": "true",
+      "module_websocket_enabled": "true",
+      "module_webxr_enabled": "true",
+      "module_xatlas_unwrap_enabled": "true",
+      "module_zip_enabled": "true",
+      "modules_enabled_by_default": "true",
+      "mp3_extra_formats": "false",
+      "no_editor_splash": "true",
+      "opengl3": "true",
+      "optimize": "speed_trace",
+      "osxcross_sdk": "darwin16",
+      "platform": "macos",
+      "precision": "single",
+      "production": "false",
+      "profiler": "none",
+      "profiler_path": "Unselected",
+      "profiler_record_on_demand": "true",
+      "profiler_sample_callstack": "false",
+      "profiler_track_memory": "false",
+      "redirect_build_objects": "true",
+      "scu_build": "false",
+      "scu_limit": "0",
+      "sdl": "true",
+      "steamapi": "false",
+      "strict_checks": "false",
+      "system_certs_path": "",
+      "target": "editor",
+      "tests": "true",
+      "threads": "true",
+      "use_asan": "false",
+      "use_coverage": "false",
+      "use_precise_math_checks": "false",
+      "use_tsan": "false",
+      "use_ubsan": "false",
+      "use_volk": "false",
+      "vulkan": "true",
+      "vulkan_sdk_path": "Unselected",
+      "warnings": "all",
+      "werror": "false",
+      "xaudio2": "false"
+    },
+    "tools": [
+      {
+        "role": "c_compiler",
+        "bytes": 200560,
+        "sha256": "34129c71a01a74f7f3b2443521519b2e5447553fa187f5fcafaaf8c42cc192e2"
+      },
+      {
+        "role": "c_compiler.selected",
+        "bytes": 124520368,
+        "sha256": "fc5e3cbba6ad54059295cad716aacb05ace8235f5f7a6031f1d8c15d24bd6d66"
+      },
+      {
+        "role": "cpp_compiler",
+        "bytes": 200560,
+        "sha256": "34129c71a01a74f7f3b2443521519b2e5447553fa187f5fcafaaf8c42cc192e2"
+      },
+      {
+        "role": "cpp_compiler.selected",
+        "bytes": 124520368,
+        "sha256": "fc5e3cbba6ad54059295cad716aacb05ace8235f5f7a6031f1d8c15d24bd6d66"
+      },
+      {
+        "role": "link_driver",
+        "bytes": 200560,
+        "sha256": "34129c71a01a74f7f3b2443521519b2e5447553fa187f5fcafaaf8c42cc192e2"
+      },
+      {
+        "role": "link_driver.selected",
+        "bytes": 124520368,
+        "sha256": "fc5e3cbba6ad54059295cad716aacb05ace8235f5f7a6031f1d8c15d24bd6d66"
+      },
+      {
+        "role": "linker",
+        "bytes": 2749968,
+        "sha256": "7f7041b1bb30e5e6a815a55edf374065d5c82e1ab93f84d5b6ed5656ded24bcf"
+      }
+    ],
+    "configuration": [
+      [
+        "c_compiler.version",
+        "Apple clang version 21.0.0 (clang-2100.4.1.1)\nTarget: arm64-apple-darwin27.0.0\nThread model: posix"
+      ],
+      [
+        "c_compiler.selected.version",
+        "Apple clang version 21.0.0 (clang-2100.4.1.1)\nTarget: arm64-apple-darwin27.0.0\nThread model: posix"
+      ],
+      [
+        "cpp_compiler.version",
+        "Apple clang version 21.0.0 (clang-2100.4.1.1)\nTarget: arm64-apple-darwin27.0.0\nThread model: posix"
+      ],
+      [
+        "cpp_compiler.selected.version",
+        "Apple clang version 21.0.0 (clang-2100.4.1.1)\nTarget: arm64-apple-darwin27.0.0\nThread model: posix"
+      ],
+      [
+        "link_driver.version",
+        "Apple clang version 21.0.0 (clang-2100.4.1.1)\nTarget: arm64-apple-darwin27.0.0\nThread model: posix"
+      ],
+      [
+        "link_driver.selected.version",
+        "Apple clang version 21.0.0 (clang-2100.4.1.1)\nTarget: arm64-apple-darwin27.0.0\nThread model: posix"
+      ],
+      [
+        "linker.version",
+        ""
+      ],
+      [
+        "sdk.settings.sha256",
+        "82165b15ee21419d4cffaba8895797391b908ac9499ba70f561f3e1bd16758d6"
+      ]
+    ],
+    "recipes": [
+      {
+        "role": "core/engine_build_identity.py",
+        "bytes": 30036,
+        "sha256": "4a4da5b4d6abd5076367f84006bbdd000e76de61e7b7bb13b15532aae65f1eb0"
+      },
+      {
+        "role": "core/SCsub",
+        "bytes": 8207,
+        "sha256": "0fb5bd94238e443b71a69150f31561ac3610a188c07ebef43b76471d2bffae42"
+      },
+      {
+        "role": "platform/macos/SCsub",
+        "bytes": 2062,
+        "sha256": "c9684d9ef7af3ae95c215c7f62eb8e8091184c2c504ce38b7a28ce2aa36040e0"
+      },
+      {
+        "role": "platform/macos/detect.py",
+        "bytes": 15044,
+        "sha256": "3415360e36a9182e8526ccb7d28001450f20066ad8e9981fc993ea59fff2be88"
+      },
+      {
+        "role": "SConstruct",
+        "bytes": 53384,
+        "sha256": "c6d32561793fa5987ed8b9e8a7ab3b4beb04ea63bacb912f6fc1b0528b9181a7"
+      },
+      {
+        "role": "methods.py",
+        "bytes": 65515,
+        "sha256": "5d860ccce735661b778edaf37478317c1b8e763af272d5355de1bc43688da154"
+      }
+    ]
+  },
+  "selection": {
+    "schema": 1,
+    "core_stamp": "1f29c29be83354d8882558e6e5cac177b980f32e91ddf43ca249341a95c1d593",
+    "compiler_route": "BuiltinGlslangV1",
+    "compiler_stamp": "78bf2d54ee15b187819e7d00864fa5fa1982d8a86bde410d8d2994072ef909ec",
+    "platform": "macos",
+    "architecture": "arm64",
+    "target_kind": "Executable"
+  },
+  "diagnostic_inputs": [
+    "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/ForceFeedback.framework/Versions/A/ForceFeedback.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Cocoa.framework/Versions/A/Cocoa.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Carbon.framework/Versions/A/Carbon.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/AudioUnit.framework/Versions/A/AudioUnit.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/CoreAudio.framework/Versions/A/CoreAudio.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/CoreMIDI.framework/Versions/A/CoreMIDI.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/GameController.framework/Versions/A/GameController.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/CoreHaptics.framework/Versions/A/CoreHaptics.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/CoreVideo.framework/Versions/A/CoreVideo.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/AVFoundation.framework/Versions/A/AVFoundation.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/CoreMedia.framework/Versions/A/CoreMedia.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Security.framework/Versions/A/Security.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/UniformTypeIdentifiers.framework/Versions/A/UniformTypeIdentifiers.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/IOSurface.framework/Versions/A/IOSurface.tbd",
+    "/opt/homebrew/Cellar/molten-vk/1.4.2/Frameworks/MoltenVK.xcframework/macos-arm64/libMoltenVK.a",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Metal.framework/Versions/A/Metal.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/MetalFX.framework/Versions/A/MetalFX.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/MetalKit.framework/Versions/A/MetalKit.tbd",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/os_macos.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_application.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_application_delegate.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/crash_handler_macos.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/display_server_macos_base.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/display_server_macos.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_button_view.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_content_view.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_core_cursor.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_status_item.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_window_delegate.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_window.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/key_mapping_macos.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_menu_delegate.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_menu_item.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_open_save_delegate.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/native_menu_macos.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/dir_access_macos.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/tts_macos.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/rendering_context_driver_vulkan_macos.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/gl_manager_macos_legacy.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_progress_view.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/display_server_macos_embedded.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/embedded_debugger.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/embedded_gl_manager.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/editor/embedded_game_view_plugin.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/editor/embedded_process_macos.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_main_macos.macos.editor.arm64.o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/main/libmain.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/tests/libtests.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodules.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_text_server_adv.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_fbx.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_gltf.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_ktx.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_svg.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_theora.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_vorbis.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_astcenc.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_basis_universal.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_bcdec.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_betsy.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_bmp.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_camera.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_csg.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_cvtt.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_dds.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_enet.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_etcpak.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_gdscript.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_glslang.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_godot_physics_2d.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_godot_physics_3d.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_gridmap.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_hdr.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_interactive_music.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_jolt_physics.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_jpg.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_jsonrpc.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_lightmapper_rd.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_mbedtls.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_meshoptimizer.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_mobile_vr.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_mp3.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_multiplayer.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_navigation_2d.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_navigation_3d.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_noise.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_objectdb_profiler.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_ogg.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_openxr.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_particles_runtime_tests.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_raycast.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_regex.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_tga.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_tinyexr.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_upnp.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_vhacd.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_visual_shader.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_webp.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_webrtc.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_websocket.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_webxr.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_xatlas_unwrap.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_zip.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/libplatform.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/drivers/libdrivers.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/editor/libeditor.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/scene/libscene.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/servers/libservers.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/core/libcore.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/freetype/libfreetype_builtin.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/msdfgen/libmsdfgen_builtin.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/text_server_adv/libharfbuzz_builtin.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/text_server_adv/libgraphite_builtin.macos.editor.arm64.a",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/text_server_adv/libicu_builtin.macos.editor.arm64.a",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/libSystem.B.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/libz.1.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/libc++.1.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/libSystem.B.tbd",
+    "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/21/lib/darwin/libclang_rt.osx.a"
+  ],
+  "diagnostic_tools": [
+    [
+      "c_compiler",
+      "/usr/bin/clang"
+    ],
+    [
+      "c_compiler.selected",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang"
+    ],
+    [
+      "cpp_compiler",
+      "/usr/bin/clang++"
+    ],
+    [
+      "cpp_compiler.selected",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++"
+    ],
+    [
+      "link_driver",
+      "/usr/bin/clang"
+    ],
+    [
+      "link_driver.selected",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang"
+    ],
+    [
+      "linker",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld"
+    ]
+  ],
+  "diagnostic_recipes": [
+    [
+      "core/engine_build_identity.py",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/engine_build_identity.py"
+    ],
+    [
+      "core/SCsub",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/SCsub"
+    ],
+    [
+      "platform/macos/SCsub",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos/SCsub"
+    ],
+    [
+      "platform/macos/detect.py",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos/detect.py"
+    ],
+    [
+      "SConstruct",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/SConstruct"
+    ],
+    [
+      "methods.py",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/methods.py"
+    ]
+  ],
+  "diagnostic_graph": {
+    "original_sources": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/os_macos.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_application.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_application_delegate.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/crash_handler_macos.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/display_server_macos_base.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/display_server_macos.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_button_view.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_content_view.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_core_cursor.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_status_item.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_window_delegate.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_window.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/key_mapping_macos.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_menu_delegate.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_menu_item.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_open_save_delegate.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/native_menu_macos.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/dir_access_macos.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/tts_macos.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/rendering_context_driver_vulkan_macos.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/gl_manager_macos_legacy.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_progress_view.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/display_server_macos_embedded.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/embedded_debugger.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/embedded_gl_manager.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/editor/embedded_game_view_plugin.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/editor/embedded_process_macos.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_main_macos.macos.editor.arm64.o"
+    ],
+    "stamp_object": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/core/engine_build_identity.gen.macos.editor.arm64.o",
+    "final_target": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "native_link_command_before_stamp": [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld",
+      "-demangle",
+      "-lto_library",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib",
+      "-dynamic",
+      "-arch",
+      "arm64",
+      "-platform_version",
+      "macos",
+      "11.0.0",
+      "27.2",
+      "-syslibroot",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.2.sdk",
+      "-O2",
+      "-mllvm",
+      "-enable-linkonceodr-outlining",
+      "-o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+      "-L/opt/homebrew/Frameworks/MoltenVK.xcframework/macos-arm64",
+      "-stack_size",
+      "0x800000",
+      "-framework",
+      "ForceFeedback",
+      "-framework",
+      "Cocoa",
+      "-framework",
+      "Carbon",
+      "-framework",
+      "AudioUnit",
+      "-framework",
+      "CoreAudio",
+      "-framework",
+      "CoreMIDI",
+      "-framework",
+      "IOKit",
+      "-framework",
+      "GameController",
+      "-framework",
+      "CoreHaptics",
+      "-framework",
+      "CoreVideo",
+      "-framework",
+      "AVFoundation",
+      "-framework",
+      "CoreMedia",
+      "-framework",
+      "QuartzCore",
+      "-framework",
+      "Security",
+      "-framework",
+      "UniformTypeIdentifiers",
+      "-framework",
+      "IOSurface",
+      "-rpath",
+      "@executable_path/../Frameworks",
+      "-rpath",
+      "@executable_path",
+      "-lMoltenVK",
+      "-framework",
+      "Metal",
+      "-framework",
+      "MetalFX",
+      "-framework",
+      "MetalKit",
+      "-S",
+      "-x",
+      "-dead_strip",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/os_macos.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_application.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_application_delegate.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/crash_handler_macos.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/display_server_macos_base.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/display_server_macos.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_button_view.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_content_view.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_core_cursor.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_status_item.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_window_delegate.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_window.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/key_mapping_macos.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_menu_delegate.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_menu_item.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_open_save_delegate.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/native_menu_macos.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/dir_access_macos.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/tts_macos.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/rendering_context_driver_vulkan_macos.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/gl_manager_macos_legacy.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_progress_view.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/display_server_macos_embedded.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/embedded_debugger.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/embedded_gl_manager.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/editor/embedded_game_view_plugin.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/editor/embedded_process_macos.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/macos/godot_main_macos.macos.editor.arm64.o",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/main/libmain.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/tests/libtests.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodules.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_text_server_adv.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_fbx.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_gltf.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_ktx.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_svg.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_theora.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_vorbis.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_astcenc.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_basis_universal.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_bcdec.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_betsy.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_bmp.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_camera.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_csg.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_cvtt.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_dds.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_enet.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_etcpak.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_gdscript.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_glslang.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_godot_physics_2d.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_godot_physics_3d.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_gridmap.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_hdr.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_interactive_music.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_jolt_physics.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_jpg.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_jsonrpc.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_lightmapper_rd.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_mbedtls.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_meshoptimizer.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_mobile_vr.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_mp3.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_multiplayer.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_navigation_2d.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_navigation_3d.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_noise.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_objectdb_profiler.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_ogg.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_openxr.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_particles_runtime_tests.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_raycast.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_regex.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_tga.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_tinyexr.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_upnp.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_vhacd.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_visual_shader.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_webp.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_webrtc.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_websocket.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_webxr.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_xatlas_unwrap.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/libmodule_zip.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/platform/libplatform.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/drivers/libdrivers.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/editor/libeditor.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/scene/libscene.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/servers/libservers.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/core/libcore.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/freetype/libfreetype_builtin.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/msdfgen/libmsdfgen_builtin.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/text_server_adv/libharfbuzz_builtin.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/text_server_adv/libgraphite_builtin.macos.editor.arm64.a",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/obj/modules/text_server_adv/libicu_builtin.macos.editor.arm64.a",
+      "-lpthread",
+      "-lz",
+      "-lc++",
+      "-lSystem",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/21/lib/darwin/libclang_rt.osx.a"
+    ]
+  }
+}

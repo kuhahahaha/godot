@@ -1,0 +1,26 @@
+{
+  "base": "e433d4ef40e1e6e3700412b82d76b10fc6206a91",
+  "files": [
+    {
+      "path": "servers/rendering/rendering_device.cpp",
+      "sha256": "6e5ec272227a6b118cdc6207958b54d34344b7e3365636d40b5650b728060d17"
+    },
+    {
+      "path": "servers/rendering/rendering_device.h",
+      "sha256": "65facb3aa564583514d85749e726076bbe3418907705d1d3f4051d4841f41216"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/shader_rd.cpp",
+      "sha256": "00a5b7ecb9640a520f2a05263a0d2805afa5bd4c0a92267288260c4ea24f5a82"
+    },
+    {
+      "path": "tests/servers/rendering/test_vertex_array_range.cpp",
+      "sha256": "f9c8d02924221bf74832ea12be73cc93b8d295f651e3a7b079b70172f3e4fff1"
+    },
+    {
+      "path": "tests/servers/rendering/test_native_disposal.cpp",
+      "sha256": "e6eb461c4de7049ff1b9ec5562f54ea69e445550cf05169f98c22091c318af4e"
+    }
+  ],
+  "note": "Red includes already-reviewed ShaderRD mutex lifetime correction; vertex range and pipeline tuple production behavior remain original."
+}

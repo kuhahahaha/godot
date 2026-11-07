@@ -4799,30 +4799,28 @@ RID RenderingDevice::vertex_array_create(uint32_t p_vertex_count, VertexFormatID
 
 		Buffer *buffer = vertex_buffer_owner.get_or_null(buf);
 
-		// Validate with buffer.
+		// Validate the complete fetch range, including the binding offset.
 		{
 			uint32_t element_size = get_format_vertex_size(atf.format);
 			ERR_FAIL_COND_V(element_size == 0, RID()); // Should never happen since this was prevalidated.
 
+			const uint64_t binding_offset = vertex_array.offsets[atf.binding];
+			ERR_FAIL_COND_V_MSG(binding_offset > buffer->size || atf.offset > buffer->size - binding_offset, RID(),
+					vformat("Vertex attribute (%d) will read past the end of the buffer.", atf.location));
+			const uint64_t available = buffer->size - binding_offset - atf.offset;
+			ERR_FAIL_COND_V_MSG(element_size > available, RID(),
+					vformat("Vertex attribute (%d) will read past the end of the buffer.", atf.location));
+
 			if (atf.frequency == VERTEX_FREQUENCY_VERTEX) {
-				// Validate size for regular drawing.
-				uint64_t total_size = uint64_t(atf.stride) * (p_vertex_count - 1) + atf.offset + element_size;
-				ERR_FAIL_COND_V_MSG(total_size > buffer->size, RID(),
+				// The uint32 stride/count product fits uint64; subtract the
+				// element first so adding large binding offsets cannot wrap.
+				const uint64_t stride_extent = uint64_t(atf.stride) * (p_vertex_count - 1);
+				ERR_FAIL_COND_V_MSG(stride_extent > available - element_size, RID(),
 						vformat("Vertex attribute (%d) will read past the end of the buffer.", atf.location));
-
 			} else {
-				// Validate size for instances drawing.
-				uint64_t available = buffer->size - atf.offset;
-				ERR_FAIL_COND_V_MSG(available < element_size, RID(),
-						vformat("Vertex attribute (%d) uses instancing, but it's just too small.", atf.location));
-
-				uint32_t instances_allowed = available / atf.stride;
-
-				// The remaining space might be able to fit another instance.
-				if ((available % atf.stride) >= element_size) {
-					++instances_allowed;
-				}
-
+				// Every instance needs one complete element. Zero stride repeats
+				// that element, including all-instance point-size emulation.
+				const uint32_t instances_allowed = atf.stride == 0 ? UINT32_MAX : uint32_t((available - element_size) / atf.stride + 1);
 				vertex_array.max_instances_allowed = MIN(instances_allowed, vertex_array.max_instances_allowed);
 			}
 		}
@@ -6889,6 +6887,9 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_bind_render_pipeli
 	const RenderPipeline *pipeline = render_pipeline_owner.get_or_null(p_render_pipeline);
 	ERR_FAIL_NULL_V(pipeline, result.failure(ERR_INVALID_PARAMETER));
 	ERR_FAIL_COND_V(pipeline->qualification_return && (!qualification_recording || pipeline->qualification_return->use_closed.load()), result.failure(ERR_UNAUTHORIZED));
+	if (p_capture) {
+		ERR_FAIL_COND_V(pipeline->validation.framebuffer_format != draw_list_framebuffer_format || pipeline->validation.render_pass != draw_list_current_subpass, result.failure(ERR_INVALID_PARAMETER));
+	}
 #ifdef DEBUG_ENABLED
 	ERR_FAIL_COND_V(pipeline->validation.framebuffer_format != draw_list_framebuffer_format && pipeline->validation.render_pass != draw_list_current_subpass, result.failure(ERR_INVALID_PARAMETER));
 #endif

@@ -1,0 +1,436 @@
+ShaderRD version_free: raw source evidence, not a runtime receipt
+Base commit: e433d4ef40e1e6e3700412b82d76b10fc6206a91
+Working tree: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104
+
+Finding: version_owner.free(p_version) destroys Version and returns its slot to
+the thread-safe RID allocator. The old code then reads version->mutex twice.
+These reads occur after the original Version lifetime ended; concurrent slot
+reuse can replace the pointer with a newly created version's mutex.
+RID_Owner<Version, true> locks allocation/free; RID_Alloc::free unlocks after
+publishing the freed slot. version_create uses the same owner and allocates a
+fresh Mutex before inserting the new Version. This proves the reuse hazard,
+not that any specific application interleaving has occurred.
+
+Fix: save the original Mutex* before locking/clearing/freeing Version, then use
+only that saved pointer for unlock/delete after RID free. Map removal, embedded
+set removal, _clear_version and RID free ordering remain unchanged. No public
+interface, authority, scheduler, test hook, or new test was added.
+
+No deterministic race reproduction, sanitizer result, GPU run or new test result
+is claimed. Root owns builds and regressions. This file is static source evidence.
+
+servers/rendering/renderer_rd/shader_rd.cpp:225-249 (e433d4ef40e1e6e3700412b82d76b10fc6206a91)
+225: RID ShaderRD::version_create(bool p_embedded) {
+226: 	//initialize() was never called
+227: 	ERR_FAIL_COND_V(group_to_variant_map.is_empty(), RID());
+228: 
+229: 	Version version;
+230: 	version.dirty = true;
+231: 	version.valid = false;
+232: 	version.initialize_needed = true;
+233: 	version.embedded = p_embedded;
+234: 	version.variants.clear();
+235: 	version.variant_data.clear();
+236: 
+237: 	version.mutex = memnew(Mutex);
+238: 	RID rid = version_owner.make_rid(version);
+239: 	{
+240: 		MutexLock lock(versions_mutex);
+241: 		version_mutexes.insert(rid, version.mutex);
+242: 	}
+243: 
+244: 	if (p_embedded) {
+245: 		MutexLock lock(shader_versions_embedded_set_mutex);
+246: 		shader_versions_embedded_set.insert({ this, rid });
+247: 	}
+248: 
+249: 	return rid;
+
+servers/rendering/renderer_rd/shader_rd.h:82-104 (e433d4ef40e1e6e3700412b82d76b10fc6206a91)
+82: 	struct Version {
+83: 		Mutex *mutex = nullptr;
+84: 		CharString uniforms;
+85: 		CharString vertex_globals;
+86: 		CharString compute_globals;
+87: 		CharString fragment_globals;
+88: 		CharString raygen_globals;
+89: 		CharString any_hit_globals;
+90: 		CharString closest_hit_globals;
+91: 		CharString miss_globals;
+92: 		CharString intersection_globals;
+93: 		HashMap<StringName, CharString> code_sections;
+94: 		Vector<CharString> custom_defines;
+95: 		Vector<WorkerThreadPool::GroupID> group_compilation_tasks;
+96: 
+97: 		Vector<Vector<uint8_t>> variant_data;
+98: 		Vector<RID> variants;
+99: 
+100: 		bool valid;
+101: 		bool dirty;
+102: 		bool initialize_needed;
+103: 		bool embedded;
+104: 	};
+
+servers/rendering/renderer_rd/shader_rd.h:120-123 (e433d4ef40e1e6e3700412b82d76b10fc6206a91)
+120: 
+121: 	RID_Owner<Version, true> version_owner;
+122: 	Mutex versions_mutex;
+123: 	HashMap<RID, Mutex *> version_mutexes;
+
+core/templates/rid_owner.h:153-176 (e433d4ef40e1e6e3700412b82d76b10fc6206a91)
+153: 
+154: 		uint32_t free_chunk = free_index / elements_in_chunk;
+155: 		uint32_t free_element = free_index % elements_in_chunk;
+156: 
+157: 		uint32_t validator = 1 + (uint32_t)(_gen_id() % 0x7FFFFFFF);
+158: 		uint64_t id = validator;
+159: 		id <<= 32;
+160: 		id |= free_index;
+161: 
+162: 		chunks[free_chunk][free_element].validator = validator;
+163: 		chunks[free_chunk][free_element].validator |= 0x80000000; //mark uninitialized bit
+164: 
+165: 		alloc_count++;
+166: 
+167: 		if constexpr (THREAD_SAFE) {
+168: 			mutex.unlock();
+169: 		}
+170: 
+171: 		return _make_from_id(id);
+172: 	}
+173: 
+174: public:
+175: 	RID make_rid() {
+176: 		RID rid = _allocate_rid();
+
+core/templates/rid_owner.h:330-370 (e433d4ef40e1e6e3700412b82d76b10fc6206a91)
+330: 	_FORCE_INLINE_ void free(const RID &p_rid) {
+331: 		if constexpr (THREAD_SAFE) {
+332: 			mutex.lock();
+333: 		}
+334: 
+335: 		uint64_t id = p_rid.get_id();
+336: 		uint32_t idx = uint32_t(id & 0xFFFFFFFF);
+337: 		if (unlikely(idx >= max_alloc)) {
+338: 			if constexpr (THREAD_SAFE) {
+339: 				mutex.unlock();
+340: 			}
+341: 			ERR_FAIL();
+342: 		}
+343: 
+344: 		uint32_t idx_chunk = idx / elements_in_chunk;
+345: 		uint32_t idx_element = idx % elements_in_chunk;
+346: 
+347: 		uint32_t validator = uint32_t(id >> 32);
+348: 		if (unlikely(chunks[idx_chunk][idx_element].validator & 0x80000000)) {
+349: 			if constexpr (THREAD_SAFE) {
+350: 				mutex.unlock();
+351: 			}
+352: 			ERR_FAIL_MSG("Attempted to free an uninitialized or invalid RID");
+353: 		} else if (unlikely(chunks[idx_chunk][idx_element].validator != validator)) {
+354: 			if constexpr (THREAD_SAFE) {
+355: 				mutex.unlock();
+356: 			}
+357: 			ERR_FAIL();
+358: 		}
+359: 
+360: 		chunks[idx_chunk][idx_element].data.~T();
+361: 		chunks[idx_chunk][idx_element].validator = 0xFFFFFFFF; // go invalid
+362: 
+363: 		alloc_count--;
+364: 		free_list_chunks[alloc_count / elements_in_chunk][alloc_count % elements_in_chunk] = idx;
+365: 
+366: 		if constexpr (THREAD_SAFE) {
+367: 			mutex.unlock();
+368: 		}
+369: 	}
+370: 
+
+core/templates/rid_owner.h:518-553 (e433d4ef40e1e6e3700412b82d76b10fc6206a91)
+518: 	RID_Alloc<T, THREAD_SAFE> alloc;
+519: 
+520: public:
+521: 	_FORCE_INLINE_ RID make_rid() {
+522: 		return alloc.make_rid();
+523: 	}
+524: 	_FORCE_INLINE_ RID make_rid(const T &p_ptr) {
+525: 		return alloc.make_rid(p_ptr);
+526: 	}
+527: 
+528: 	_FORCE_INLINE_ RID allocate_rid() {
+529: 		return alloc.allocate_rid();
+530: 	}
+531: 
+532: 	_FORCE_INLINE_ void initialize_rid(RID p_rid) {
+533: 		alloc.initialize_rid(p_rid);
+534: 	}
+535: 
+536: 	_FORCE_INLINE_ void initialize_rid(RID p_rid, const T &p_ptr) {
+537: 		alloc.initialize_rid(p_rid, p_ptr);
+538: 	}
+539: 
+540: 	_FORCE_INLINE_ T *get_or_null(const RID &p_rid) {
+541: 		return alloc.get_or_null(p_rid);
+542: 	}
+543: 
+544: 	_FORCE_INLINE_ bool owns(const RID &p_rid) const {
+545: 		return alloc.owns(p_rid);
+546: 	}
+547: 
+548: 	_FORCE_INLINE_ void free(const RID &p_rid) {
+549: 		alloc.free(p_rid);
+550: 	}
+551: 
+552: 	_FORCE_INLINE_ uint32_t get_rid_count() const {
+553: 		return alloc.get_rid_count();
+
+servers/rendering/renderer_rd/shader_rd.cpp:933-958 (e433d4ef40e1e6e3700412b82d76b10fc6206a91)
+933: bool ShaderRD::version_free(RID p_version) {
+934: 	if (version_owner.owns(p_version)) {
+935: 		{
+936: 			MutexLock lock(versions_mutex);
+937: 			version_mutexes.erase(p_version);
+938: 		}
+939: 
+940: 		Version *version = version_owner.get_or_null(p_version);
+941: 		if (version->embedded) {
+942: 			MutexLock lock(shader_versions_embedded_set_mutex);
+943: 			shader_versions_embedded_set.erase({ this, p_version });
+944: 		}
+945: 
+946: 		version->mutex->lock();
+947: 		_clear_version(version);
+948: 		version_owner.free(p_version);
+949: 		version->mutex->unlock();
+950: 		memdelete(version->mutex);
+951: 	} else {
+952: 		return false;
+953: 	}
+954: 
+955: 	return true;
+956: }
+957: 
+958: void ShaderRD::set_variant_enabled(int p_variant, bool p_enabled) {
+
+servers/rendering/renderer_rd/shader_rd.cpp:933-961 (working tree)
+933: bool ShaderRD::version_free(RID p_version) {
+934: 	if (version_owner.owns(p_version)) {
+935: 		{
+936: 			MutexLock lock(versions_mutex);
+937: 			version_mutexes.erase(p_version);
+938: 		}
+939: 
+940: 		Version *version = version_owner.get_or_null(p_version);
+941: 		if (version->embedded) {
+942: 			MutexLock lock(shader_versions_embedded_set_mutex);
+943: 			shader_versions_embedded_set.erase({ this, p_version });
+944: 		}
+945: 
+946: 		// free() destroys Version and makes its slot reusable. Keep the original
+947: 		// mutex independently so cleanup never reads the released slot.
+948: 		Mutex *const version_mutex = version->mutex;
+949: 		version_mutex->lock();
+950: 		_clear_version(version);
+951: 		version_owner.free(p_version);
+952: 		version_mutex->unlock();
+953: 		memdelete(version_mutex);
+954: 	} else {
+955: 		return false;
+956: 	}
+957: 
+958: 	return true;
+959: }
+960: 
+961: void ShaderRD::set_variant_enabled(int p_variant, bool p_enabled) {
+
+Exact old/new diff
+diff --git a/servers/rendering/renderer_rd/shader_rd.cpp b/servers/rendering/renderer_rd/shader_rd.cpp
+index 34647229a8..e6be528e67 100644
+--- a/servers/rendering/renderer_rd/shader_rd.cpp
++++ b/servers/rendering/renderer_rd/shader_rd.cpp
+@@ -943,11 +943,14 @@ bool ShaderRD::version_free(RID p_version) {
+ 			shader_versions_embedded_set.erase({ this, p_version });
+ 		}
+ 
+-		version->mutex->lock();
++		// free() destroys Version and makes its slot reusable. Keep the original
++		// mutex independently so cleanup never reads the released slot.
++		Mutex *const version_mutex = version->mutex;
++		version_mutex->lock();
+ 		_clear_version(version);
+ 		version_owner.free(p_version);
+-		version->mutex->unlock();
+-		memdelete(version->mutex);
++		version_mutex->unlock();
++		memdelete(version_mutex);
+ 	} else {
+ 		return false;
+ 	}
+
+Actual reachable release chains
+1. Native guard fixture constructs Guard on its main render callback and calls
+   prepare -> release -> prepare -> release. release_pipelines invokes
+   _clear_pipeline_prefix, which invokes ShaderRD::version_free. This call path
+   exists separately from the missing production output source/guard join.
+2. MaterialNativeHold's ShaderData destructor invokes the real ShaderRD
+   version_free. The fixture tears down through MaterialStorage::shader_free
+   -> memdelete(shader->data) -> that destructor.
+3. ShaderRD's own destructor calls version_free for any remaining versions.
+These are call-path facts, not claims that a race was observed.
+
+modules/particles_runtime_tests/particles_external_guard_test_fixture.cpp:96-105 (e433d4ef40e1e6e3700412b82d76b10fc6206a91)
+96: 	using Guard = RendererRD::ParticlesExternalGuard;
+97: 	static_assert(Guard::MODE_COUNT == 5);
+98: 	const char *names[Guard::MODE_COUNT] = { "INIT", "VALIDATE", "FINALIZE", "INIT_EMPTY", "FINALIZE_EMPTY" };
+99: 	Error first_error = OK;
+100: 	// All wrapper ownership, including destruction, stays on this callback.
+101: 	// Publish completion only after this scope has released its original owner.
+102: 	{
+103: 		Guard guard;
+104: 		std::array<RID, Guard::MODE_COUNT> shaders;
+105: 		std::array<RID, Guard::MODE_COUNT> pipelines;
+
+modules/particles_runtime_tests/particles_external_guard_test_fixture.cpp:139-174 (e433d4ef40e1e6e3700412b82d76b10fc6206a91)
+139: 		auto release = [&](const String &p_phase) {
+140: 			const Error error = guard.release_pipelines();
+141: 			check(error == OK, p_phase + ".owner_release");
+142: 			if (error != OK && first_error == OK) {
+143: 				first_error = error;
+144: 			}
+145: 			observe_released(p_phase);
+146: 		};
+147: 
+148: 		first_error = guard.prepare_pipelines();
+149: 		check(first_error == OK, "first.prepare");
+150: 		if (first_error == OK) {
+151: 			observe_bundle("first");
+152: 			const auto original_shaders = shaders;
+153: 			const auto original_pipelines = pipelines;
+154: 			const Error repeated = guard.prepare_pipelines();
+155: 			check(repeated == OK, "repeat.prepare");
+156: 			if (repeated != OK) {
+157: 				first_error = repeated;
+158: 			}
+159: 			for (int i = 0; i < Guard::MODE_COUNT; ++i) {
+160: 				check(guard.get_shader(Guard::Mode(i)) == original_shaders[i] && guard.get_pipeline(Guard::Mode(i)) == original_pipelines[i], String("repeat.") + names[i] + ".same_original_rids");
+161: 			}
+162: 		}
+163: 		release("first_release");
+164: 		if (first_error == OK) {
+165: 			first_error = guard.prepare_pipelines();
+166: 			check(first_error == OK, "reprepare.prepare");
+167: 			if (first_error == OK) {
+168: 				observe_bundle("reprepare");
+169: 			}
+170: 		}
+171: 		release("final_release");
+172: 	}
+173: 	return finish(first_error);
+174: }
+
+servers/rendering/renderer_rd/effects/particles_external_guard.cpp:46-64 (e433d4ef40e1e6e3700412b82d76b10fc6206a91)
+46: Error ParticlesExternalGuard::_clear_pipeline_prefix() {
+47: 	ready = false;
+48: 	RD *rd = RD::get_singleton();
+49: 	for (int i = MODE_COUNT - 1; i >= 0; i--) {
+50: 		if (pipelines[i].is_valid()) {
+51: 			if (rd->compute_pipeline_is_valid(pipelines[i])) {
+52: 				rd->free_rid(pipelines[i]);
+53: 			}
+54: 			pipelines[i] = RID();
+55: 		}
+56: 	}
+57: 	if (shader_version.is_valid()) {
+58: 		if (!shader->version_free(shader_version)) {
+59: 			return ERR_BUG;
+60: 		}
+61: 		shader_version = RID();
+62: 	}
+63: 	return OK;
+64: }
+
+servers/rendering/renderer_rd/effects/particles_external_guard.cpp:141-151 (e433d4ef40e1e6e3700412b82d76b10fc6206a91)
+141: Error ParticlesExternalGuard::release_pipelines() {
+142: 	if (_require_main_render_thread() != OK) {
+143: 		return ERR_UNAVAILABLE;
+144: 	}
+145: 	const Error cleanup = _clear_pipeline_prefix();
+146: 	if (cleanup == OK && shader) {
+147: 		memdelete(shader);
+148: 		shader = nullptr;
+149: 		initialized = false;
+150: 	}
+151: 	return cleanup;
+
+tests/servers/rendering/test_material_storage_native_hold.cpp:420-432 (e433d4ef40e1e6e3700412b82d76b10fc6206a91)
+420: 	class ShaderOwner : public ShaderRD {};
+421: 	class ShaderData : public MaterialStorage::ShaderData {
+422: 	public:
+423: 		ShaderRD *owner = nullptr;
+424: 		RID version;
+425: 		uint32_t changes = 0;
+426: 		void set_code(const String &) override { ++changes; }
+427: 		bool is_animated() const override { return false; }
+428: 		bool casts_shadows() const override { return true; }
+429: 		RenderingServerTypes::ShaderNativeSourceCode get_native_source_code() const override { return {}; }
+430: 		Pair<ShaderRD *, RID> get_native_shader_and_version() const override { return { owner, version }; }
+431: 		~ShaderData() { owner->version_free(version); }
+432: 	};
+
+tests/servers/rendering/test_material_storage_native_hold.cpp:1284-1298 (e433d4ef40e1e6e3700412b82d76b10fc6206a91)
+1284: 			if (!storage->owns_material(material)) {
+1285: 				goto finished;
+1286: 			}
+1287: 		}
+1288: 		if (storage->owns_material(material)) {
+1289: 			storage->material_free(material);
+1290: 		}
+1291: 		storage->shader_free(shader);
+1292: 		textures->texture_free(texture);
+1293: 		rd.free_rid(native_parent);
+1294: 		rd.free_rid(sampler);
+1295: 	finished:
+1296: 		TestMaterialStorageNativeHoldDeviceAccess::drain(rd);
+1297: 		CHECK((driver.buffer_frees == 1 && driver.set_frees == 1 && driver.texture_frees == 2 && driver.sampler_frees == 1 && driver.shader_frees == (cross_variants ? 3u : 1u) && driver.pipeline_frees == (cross_variants ? 3u : 1u)));
+1298: 		CHECK(TestMaterialStorageNativeHoldDeviceAccess::empty(rd));
+
+servers/rendering/renderer_rd/storage_rd/material_storage.cpp:2443-2461 (e433d4ef40e1e6e3700412b82d76b10fc6206a91)
+2443: void MaterialStorage::shader_free(RID p_rid) {
+2444: 	Shader *shader = shader_owner.get_or_null(p_rid);
+2445: 	ERR_FAIL_NULL(shader);
+2446: 
+2447: 	{
+2448: 		MutexLock lock(*shader->mutex);
+2449: 
+2450: 		//make material unreference this
+2451: 		while (shader->owners.size()) {
+2452: 			_material_set_shader((*shader->owners.begin())->self, RID(), true);
+2453: 		}
+2454: 
+2455: 		//clear data if exists
+2456: 		if (shader->data) {
+2457: 			memdelete(shader->data);
+2458: 		}
+2459: 	}
+2460: 
+2461: 	if (shader->embedded) {
+
+servers/rendering/renderer_rd/shader_rd.cpp:1283-1292 (e433d4ef40e1e6e3700412b82d76b10fc6206a91)
+1283: 
+1284: ShaderRD::~ShaderRD() {
+1285: 	LocalVector<RID> remaining = version_owner.get_owned_list();
+1286: 	if (remaining.size()) {
+1287: 		ERR_PRINT(itos(remaining.size()) + " shaders of type " + name + " were never freed");
+1288: 		for (const RID &version_rid : remaining) {
+1289: 			version_free(version_rid);
+1290: 		}
+1291: 	}
+1292: }
+
+Proposed existing filters, not executed by this agent:
+ --test-case=*[MaterialNativeHold]*,*[ShaderCompilePolicy]*,*[ExternalOutputGuard]*
+MaterialNativeHold exercises the actual release chain. ShaderCompilePolicy is
+adjacent coverage. ExternalOutputGuard doctests exercise layout planning, not
+five native pipelines or deterministic concurrency. The native guard fixture
+remains under the sole authorized native runner.
+No final receipt or new testing claim is recorded here.
