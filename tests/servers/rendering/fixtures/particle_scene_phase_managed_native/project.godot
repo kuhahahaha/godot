@@ -1,0 +1,5 @@
+config_version=5
+[application]
+config/name="Managed Scene early phase native probe"
+[rendering]
+renderer/rendering_method="mobile"

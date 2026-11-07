@@ -40,6 +40,7 @@
 #include "core/os/thread.h"
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_scene_cull.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
 #include "servers/rendering/rendering_shader_container.h"
@@ -1539,7 +1540,14 @@ struct Access {
 			return request ? OK : ERR_INVALID_DATA;
 		}
 		bool owner_cleaned = false;
-		void cleanup_owner() {
+		void cleanup_owner(bool runtime = false) {
+			const auto check = [runtime](bool passed) {
+				if (runtime) {
+					CRASH_COND_MSG(!passed, "Original runtime enrollment cleanup failed");
+					return passed;
+				}
+				return Access::check_step(passed);
+			};
 			using namespace GDExtensionDeviceExit;
 			// This CPU fixture never initialized native RD state. Suppress native
 			// teardown on every destructor path, including partial setup/refund failure.
@@ -1555,48 +1563,48 @@ struct Access {
 			if (request && request->serial) {
 				const GDExtensionProductionRequestRefV1 ref = { instance, request->serial };
 				if (request->control.state == ProductionControlState::PENDING) {
-					if (!Access::check_step(registry.production_control_schedule(ref, request->control.serial) == OK)) {
+					if (!check(registry.production_control_schedule(ref, request->control.serial) == OK)) {
 						return;
 					}
 					server->sync();
 				}
 				if (request->control.state == ProductionControlState::RETURNED) {
 					ProductionControlOutput output = {};
-					if (!Access::check_step(registry.production_control_consume(ref, request->control.serial, &output) == OK)) {
+					if (!check(registry.production_control_consume(ref, request->control.serial, &output) == OK)) {
 						return;
 					}
 				}
 				if (request->serial) {
-					if (!Access::check_step(registry.production_cancel(ref).native_error == OK)) {
+					if (!check(registry.production_cancel(ref).native_error == OK)) {
 						return;
 					}
-					if (!Access::check_step(registry.production_release(ref).native_error == OK)) {
+					if (!check(registry.production_release(ref).native_error == OK)) {
 						return;
 					}
 				}
 			}
 			if (attachment.handle_serial) {
-				if (!Access::check_step((public_port ? port.close(attachment) : registry.production_close(attachment)).native_error == OK)) {
+				if (!check((public_port ? port.close(attachment) : registry.production_close(attachment)).native_error == OK)) {
 					return;
 				}
 			}
 			if (qualification.handle_serial) {
-				if (!Access::check_step(registry.qualification_close(qualification).native_error == OK)) {
+				if (!check(registry.qualification_close(qualification).native_error == OK)) {
 					return;
 				}
 			}
 			if (producer.handle_serial) {
-				if (!Access::check_step(registry.release_producer_registration_view(producer) == OK)) {
+				if (!check(registry.release_producer_registration_view(producer) == OK)) {
 					return;
 				}
 			}
 			if (context.handle_serial) {
-				if (!Access::check_step(registry.release_device_reference(instance, context.handle_serial, false).native_error == OK)) {
+				if (!check(registry.release_device_reference(instance, context.handle_serial, false).native_error == OK)) {
 					return;
 				}
 			}
 			if (session.handle_serial) {
-				if (!Access::check_step(registry.release_device_reference(instance, session.handle_serial, true).native_error == OK)) {
+				if (!check(registry.release_device_reference(instance, session.handle_serial, true).native_error == OK)) {
 					return;
 				}
 			}
@@ -1604,16 +1612,16 @@ struct Access {
 			if (reference.is_valid()) {
 				MutexLock lock(registry.mutex);
 				auto &record = registry.records[reference.slot];
-				if (!Access::check_step(record.private_refs == 2)) {
+				if (!check(record.private_refs == 2)) {
 					return;
 				}
-				if (!Access::check_step(record.external_refs == 0)) {
+				if (!check(record.external_refs == 0)) {
 					return;
 				}
-				if (!Access::check_step(record.cleanup_reservations == 0)) {
+				if (!check(record.cleanup_reservations == 0)) {
 					return;
 				}
-				if (!Access::check_step(holder.production_children == 0)) {
+				if (!check(holder.production_children == 0)) {
 					return;
 				}
 				record.holders = nullptr;
@@ -12602,6 +12610,395 @@ struct Access {
 		CHECK(registry.production_serials.next == production_serial);
 		CHECK(registry.frame_serials.next == frame_serial);
 	}
+	// Runtime-only test bridge: controls always use the original queued FIFO.
+	struct ManagedSceneHarness {
+		SingletonEnrollment enrollment;
+		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
+		RenderingDevice *device = nullptr;
+		Dictionary checks;
+		GDExtensionProductionRequestRefV1 ref{};
+		uint64_t control = 0;
+		uint32_t stage = 0;
+		Error record_error = ERR_UNAVAILABLE;
+		bool root_returned = false;
+		bool phase_mode = false;
+		bool viewport_mode = false;
+		RID viewport_scenario, viewport_receiver, viewport_source, viewport_collision;
+		RendererSceneCull::SceneSphereSnapshot viewport_snapshot;
+		Callable phase_callable;
+		GDExtensionScenePhaseRegistrationRefV1 phase_registration{};
+		GDExtensionProductionRequestRefV1 waiting_request{};
+		uint64_t waiting_control = 0;
+		bool waiting_close_started = false;
+		GDExtensionSceneOpaque32V1 phase_capability{};
+		GDExtensionProductionPhysicalContextRefV1 phase_context{};
+		uint32_t phase_calls = 0, ordinary_calls = 0, legacy_calls = 0, callable_frees = 0;
+		GDExtensionInterfaceDeviceSessionScenePhaseUnregisterV1 unregister_phase = nullptr;
+		static void ordinary(void *data, const GDExtensionConstVariantPtr *, GDExtensionInt,
+				GDExtensionVariantPtr returned, GDExtensionCallError *error) {
+			++static_cast<ManagedSceneHarness *>(data)->ordinary_calls;
+			*reinterpret_cast<Variant *>(returned) = Variant();
+			*error = { GDEXTENSION_CALL_OK, 0, 0 };
+		}
+		static void free_callable(void *data) { ++static_cast<ManagedSceneHarness *>(data)->callable_frees; }
+		static void typed(void *data, const GDExtensionNativeScenePhaseV1 *phase,
+				GDExtensionProductionRequestRefV1 request, const GDExtensionProductionOperationV1 *operation) {
+			using namespace GDExtensionDeviceExit;
+			auto &self = *static_cast<ManagedSceneHarness *>(data);
+			if (!phase || !operation) {
+				self.check("managed_phase_callback_payload", false);
+				return;
+			}
+			if (self.phase_calls != 0) {
+				self.check("managed_phase_single_delivery", false);
+				return;
+			}
+			++self.phase_calls;
+			self.phase_context = { NativeScenePhaseProbe::word(phase->physical_context, 0), NativeScenePhaseProbe::word(phase->physical_context, 1) };
+			self.check("managed_phase_original_occurrence", phase->occurrence != 0 && phase->expiry_serial == self.phase_context.frame_serial);
+			self.check("managed_phase_original_device", memcmp(&phase->device_capability, &self.phase_capability, sizeof(self.phase_capability)) == 0);
+			{
+				MutexLock lock(self.enrollment.registry.mutex);
+				ProductionRequest *original = nullptr;
+				RenderingDevice *device = nullptr;
+				const Error live = self.enrollment.registry.production_physical_request_locked(self.phase_context, request, original, device, false);
+				self.check("managed_phase_live_original_frame", live == OK && original == self.enrollment.request && device == self.device && original->control.state == ProductionControlState::EXECUTING && operation->owner_request_nonce == original->operation.owner_request_nonce);
+			}
+			self.record_error = self.native->install_generation(self.phase_context, request, self.enrollment.registry);
+			if (self.record_error == OK) {
+				if (self.viewport_mode) {
+					self.exercise_viewport_receiver();
+				} else {
+					self.exercise_scene();
+				}
+			}
+		}
+		Error install_phase() {
+			using namespace GDExtensionDeviceExit;
+			// Same original adopted Callable enrollment as D's native phase fixture.
+			{
+				MutexLock lock(enrollment.registry.mutex);
+				enrollment.registry.records[enrollment.reference.slot].guard.entry_classes |= 1u << 8;
+			}
+			GDExtensionCallableCustomInfo2 info{};
+			info.callable_userdata = this;
+			info.call_func = &ordinary;
+			info.free_func = &free_callable;
+			info.token = enrollment.registry.records[enrollment.reference.slot].original_owner;
+			const auto create = reinterpret_cast<GDExtensionInterfaceCallableCustomCreate2>(GDExtension::get_interface_function("callable_custom_create2"));
+			CRASH_COND(!create);
+			create(reinterpret_cast<GDExtensionUninitializedTypePtr>(&phase_callable), &info);
+			const auto relay = reinterpret_cast<GDExtensionInterfaceDeviceSessionScenePhaseRelayV1>(gdextension_get_guarded_proc_address("device_session_scene_phase_relay_v1"));
+			const auto capability = reinterpret_cast<GDExtensionInterfaceDeviceSessionScenePhaseCapabilityV1>(gdextension_get_guarded_proc_address("device_session_scene_phase_capability_v1"));
+			const auto registration = reinterpret_cast<GDExtensionInterfaceDeviceSessionScenePhaseRegisterV1>(gdextension_get_guarded_proc_address("device_session_scene_phase_register_v1"));
+			unregister_phase = reinterpret_cast<GDExtensionInterfaceDeviceSessionScenePhaseUnregisterV1>(gdextension_get_guarded_proc_address("device_session_scene_phase_unregister_v1"));
+			CRASH_COND(!relay || !capability || !registration || !unregister_phase);
+			GDExtensionNormalRelayRefV1 wire{};
+			Error error = Error(relay(reinterpret_cast<GDExtensionConstTypePtr>(&phase_callable), &typed, &wire).native_error);
+			if (error != OK) {
+				return error;
+			}
+			GDExtensionScenePhaseSinkConfigV1 config{};
+			config.abi = { 1, sizeof(config), 0 };
+			config.phase = config.max_operations = 1;
+			error = Error(capability(enrollment.attachment, &config.device_capability).native_error);
+			if (error != OK) {
+				return error;
+			}
+			phase_capability = config.device_capability;
+			return Error(registration(wire, enrollment.attachment, &config, &phase_registration).native_error);
+		}
+		void close_phase() {
+			using namespace GDExtensionDeviceExit;
+			check("managed_phase_typed_only", phase_calls == 1 && ordinary_calls == 0 && legacy_calls == 0);
+			{
+				MutexLock lock(enrollment.registry.mutex);
+				ProductionRequest *expired = nullptr;
+				RenderingDevice *device = nullptr;
+				check("managed_phase_original_expiry", enrollment.registry.production_physical_request_locked(phase_context, ref, expired, device, false) == ERR_UNAUTHORIZED && !expired);
+			}
+			GDExtensionScenePhaseCloseV1 close{};
+			const Error closing = Error(unregister_phase(phase_registration, &close).native_error);
+			check("managed_phase_close_waits_holder", closing == ERR_BUSY && close.registration_closed == 1 && close.active_deliveries == 0 && close.relay_cell_released == 1 && close.relay_holder_closed == 0);
+			phase_callable = Callable();
+			check("managed_phase_original_free", callable_frees == 1);
+			const Error closed = Error(unregister_phase(phase_registration, &close).native_error);
+			check("managed_phase_original_close", closed == OK && close.registration_closed == 1 && close.active_deliveries == 0 && close.relay_cell_released == 1 && close.relay_holder_closed == 1);
+			CRASH_COND(closed != OK);
+		}
+		static void record(void *data, GDExtensionDeviceExit::ProductionPhysicalContextRef context,
+				GDExtensionProductionRequestRefV1 request, const GDExtensionProductionOperationV1 *) {
+			auto &self = *static_cast<ManagedSceneHarness *>(data);
+			++self.legacy_calls;
+			self.record_error = self.native->install_generation(context, request, self.enrollment.registry);
+		}
+		void check(const char *name, bool passed) { checks[name] = passed; }
+		Dictionary advance_phase_close() {
+			using namespace GDExtensionDeviceExit;
+			if (!waiting_close_started) {
+				// Wait until original FIFO dispatch has really deferred this RECORD.
+				MutexLock lock(enrollment.registry.mutex);
+				ProductionRequest *pending = nullptr;
+				RenderingDevice *device = nullptr;
+				CRASH_COND(enrollment.registry.production_request_locked(waiting_request, false, pending, device) != OK);
+				if (!pending->control.scene_waiting || pending->control.state != ProductionControlState::QUEUED) {
+					return {};
+				}
+				waiting_close_started = true;
+			}
+			GDExtensionScenePhaseCloseV1 close{};
+			const Error closing = Error(unregister_phase(phase_registration, &close).native_error);
+			CRASH_COND(closing != ERR_BUSY);
+			check("managed_phase_no_draw_admission_closed", close.registration_closed == 1 && close.active_deliveries == 0);
+			ProductionControlOutput refused{};
+			const Error returned = enrollment.registry.production_control_consume(waiting_request, waiting_control, &refused);
+			if (returned == ERR_BUSY) {
+				return {};
+			}
+			CRASH_COND(returned != OK);
+			check("managed_phase_waiting_return_without_draw", refused.result.native_error == ERR_UNAVAILABLE && refused.request_serial == waiting_request.handle_serial && refused.control_serial == waiting_control && phase_calls == 1);
+			// This never-delivered, empty request has no pin/native source to retire;
+			// use D's exact original no-draw mailbox cancellation/release path.
+			CRASH_COND(enrollment.registry.production_cancel(waiting_request).native_error != OK);
+			CRASH_COND(enrollment.registry.production_release(waiting_request).native_error != OK);
+			waiting_request = {};
+			close_phase();
+			native->withdraw_generation();
+			stage = 1;
+			CRASH_COND(schedule(ProductionControlKind::OBSERVE) != OK);
+			return {};
+		}
+		Error schedule(GDExtensionDeviceExit::ProductionControlKind kind) {
+			using namespace GDExtensionDeviceExit;
+			if (kind == ProductionControlKind::RECORD) {
+				return enrollment.registry.production_record_schedule(ref, &control);
+			}
+			const GDExtensionProductionServiceBudgetV1 budget = {
+				production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0
+			};
+			Error error = enrollment.registry.production_control_accept(ref, kind, &control,
+					&budget);
+			return error == OK ? enrollment.registry.production_control_schedule(ref, control) : error;
+		}
+		Error begin(bool p_phase_mode) {
+			phase_mode = p_phase_mode;
+			device = RenderingDevice::get_singleton();
+			auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
+			auto *storage = RendererRD::ParticlesStorage::get_singleton();
+			if (!device || !storage || !server || !server->is_on_render_thread()) {
+				return ERR_UNAVAILABLE;
+			}
+			enrollment.server = server;
+			OrdinalPlan plan;
+			plan.capacity = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 0, 1, 0, 0, 0, 0, 0, 0 };
+			plan.action_count = plan.resource_count = plan.use_count = plan.readback_count = 0;
+			plan.attachment_requests = phase_mode ? 2 : 1;
+			const Error error = enrollment.initialize_owner(1, false, false, &record, this, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &plan, device);
+			if (error == OK && phase_mode) {
+				const Error installed = install_phase();
+				CRASH_COND(installed != OK);
+				auto waiting_operation = plan.operation;
+				++waiting_operation.owner_request_nonce;
+				auto waiting_capacity = plan.capacity;
+				waiting_capacity.resource_uses = 0;
+				const auto reserve = reinterpret_cast<GDExtensionInterfaceDeviceSessionProductionReserveV2>(
+						gdextension_get_guarded_proc_address("device_session_production_reserve_v2"));
+				CRASH_COND(!reserve || reserve(enrollment.attachment, &waiting_operation, &waiting_capacity, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, &waiting_request).native_error != OK);
+			}
+			// Never retain a SceneReady TLS frame between runtime callbacks.
+			enrollment.frame.leave();
+			if (error != OK) {
+				return error;
+			}
+			native = memnew(RendererRD::ExternalLinkedOwnerTest(*device, *storage, true));
+			ref = { enrollment.instance, enrollment.request->serial };
+			return schedule(GDExtensionDeviceExit::ProductionControlKind::RECORD);
+		}
+		void exercise_viewport_receiver() {
+			auto *scene = RendererSceneCull::singleton;
+			auto *storage = RendererRD::ParticlesStorage::get_singleton();
+			viewport_collision = storage->particles_collision_allocate();
+			storage->particles_collision_initialize(viewport_collision);
+			storage->particles_collision_set_collision_type(viewport_collision, RSE::PARTICLES_COLLISION_TYPE_SPHERE_COLLIDE);
+			storage->particles_collision_set_sphere_radius(viewport_collision, 0.1f);
+			viewport_receiver = scene->instance_allocate();
+			scene->instance_initialize(viewport_receiver);
+			scene->instance_set_base(viewport_receiver, native->particle_rid());
+			scene->instance_set_scenario(viewport_receiver, viewport_scenario);
+			viewport_source = scene->instance_allocate();
+			scene->instance_initialize(viewport_source);
+			scene->instance_set_base(viewport_source, viewport_collision);
+			scene->instance_set_scenario(viewport_source, viewport_scenario);
+			const AABB query(Vector3(-1, -1, -1), Vector3(2, 2, 2));
+			check("viewport_receiver_query_committed", scene->scene_receiver_commit_query(viewport_receiver, native->generation, device, Transform3D(), query, query, 1) == OK);
+			scene->update_dirty_instances();
+			check("viewport_receiver_snapshot", scene->scene_sphere_snapshot(viewport_receiver, native->generation, device, 4, viewport_snapshot) == OK && viewport_snapshot.sources.size() == 1);
+			check("viewport_original_root_live", !native->generation_pin().is_empty());
+		}
+		void finish_viewport_observation() {
+			CRASH_COND(!viewport_mode || stage != 4);
+			auto *scene = RendererSceneCull::singleton;
+			check("viewport_receiver_retained_until_observation", viewport_receiver.is_valid() && !native->generation_pin().is_empty());
+			RendererSceneCull::SceneSphereSnapshot observed;
+			const bool snapshot_valid = scene->scene_sphere_snapshot(viewport_receiver, native->generation, device, 4, observed) == OK && observed.sources.size() == 1 && viewport_snapshot.sources.size() == 1;
+			check("viewport_post_draw_snapshot", snapshot_valid);
+			check("viewport_post_draw_source_unchanged", snapshot_valid && observed.sources[0].source_key == viewport_snapshot.sources[0].source_key && observed.sources[0].shape_revision == viewport_snapshot.sources[0].shape_revision && observed.sources[0].transform == viewport_snapshot.sources[0].transform && observed.sources[0].radius == viewport_snapshot.sources[0].radius);
+			check("viewport_post_draw_query_unchanged", snapshot_valid && observed.receiver_transform == viewport_snapshot.receiver_transform && observed.query_bounds == viewport_snapshot.query_bounds);
+			check("viewport_post_draw_revisions_unchanged", snapshot_valid && observed.pose_revision == viewport_snapshot.pose_revision && observed.bounds_revision == viewport_snapshot.bounds_revision && observed.pair_revision == viewport_snapshot.pair_revision);
+			scene->free(viewport_source);
+			viewport_source = RID();
+			scene->free(viewport_receiver);
+			viewport_receiver = RID();
+			RendererRD::ParticlesStorage::get_singleton()->particles_collision_free(viewport_collision);
+			viewport_collision = RID();
+			// The script has completed actual viewport readback. Resume the same
+			// original no-future-draw mailbox/holder/owner close sequence.
+			RenderingServer::get_singleton()->set_render_loop_enabled(false);
+			CRASH_COND(enrollment.registry.production_record_schedule(waiting_request, &waiting_control) != OK);
+			stage = 3;
+		}
+		void exercise_scene() {
+			auto *scene = RendererSceneCull::singleton;
+			auto *storage = RendererRD::ParticlesStorage::get_singleton();
+			const AABB envelope(Vector3(-2, -2, -2), Vector3(4, 4, 4));
+			const AABB query_a(Vector3(-1, -1, -1), Vector3(1, 2, 2));
+			const AABB query_b(Vector3(0, -1, -1), Vector3(1, 2, 2));
+			RID scenario = scene->scenario_allocate();
+			scene->scenario_initialize(scenario);
+			RID sphere = storage->particles_collision_allocate();
+			storage->particles_collision_initialize(sphere);
+			storage->particles_collision_set_collision_type(sphere, RSE::PARTICLES_COLLISION_TYPE_SPHERE_COLLIDE);
+			storage->particles_collision_set_sphere_radius(sphere, 0.1f);
+			auto instance = [&](RID base, Vector3 position) {
+				RID id = scene->instance_allocate();
+				scene->instance_initialize(id);
+				scene->instance_set_base(id, base);
+				scene->instance_set_scenario(id, scenario);
+				scene->instance_set_transform(id, Transform3D(Basis(), position));
+				return id;
+			};
+			const RID left = instance(native->particle_rid(), Vector3());
+			const RID right = instance(native->particle_rid(), Vector3());
+			const RID source_a = instance(sphere, Vector3(-0.5f, 0, 0));
+			const RID source_b = instance(sphere, Vector3(0.5f, 0, 0));
+			check("managed_commit_left", scene->scene_receiver_commit_query(left, native->generation, device, Transform3D(), envelope, query_a, 1) == OK);
+			check("managed_commit_right", scene->scene_receiver_commit_query(right, native->generation, device, Transform3D(), envelope, query_b, 1) == OK);
+			RendererSceneCull::SceneSphereSnapshot a, b, rejected;
+			check("managed_dirty_rejected", scene->scene_sphere_snapshot(left, native->generation, device, 4, rejected) == ERR_UNAVAILABLE);
+			scene->update_dirty_instances();
+			check("managed_same_base_left", scene->scene_sphere_snapshot(left, native->generation, device, 4, a) == OK && a.sources.size() == 1 && a.sources[0].transform.origin.x < 0 && a.query_bounds == query_a && a.bounds_revision == 1 && a.pose_revision > 0);
+			check("managed_same_base_right", scene->scene_sphere_snapshot(right, native->generation, device, 4, b) == OK && b.sources.size() == 1 && b.sources[0].transform.origin.x > 0 && b.query_bounds == query_b && b.bounds_revision == 1);
+			check("managed_distinct_source", a.sources.size() == 1 && b.sources.size() == 1 && a.sources[0].source_key != b.sources[0].source_key);
+			check("managed_bad_generation", scene->scene_receiver_commit_query(left, native->generation + 1, device, Transform3D(), envelope, query_a, 2) == ERR_INVALID_DATA);
+			{
+				RenderingDevice foreign;
+				check("managed_foreign_device", scene->scene_receiver_commit_query(left, native->generation, &foreign, Transform3D(), envelope, query_a, 2) == ERR_INVALID_DATA);
+			}
+			check("managed_outside_envelope", scene->scene_receiver_commit_query(left, native->generation, device, Transform3D(), envelope, AABB(Vector3(20, 0, 0), Vector3(1, 1, 1)), 2) == ERR_INVALID_PARAMETER);
+			check("managed_stale_revision", scene->scene_receiver_commit_query(left, native->generation, device, Transform3D(), envelope, query_a, 1) == ERR_INVALID_PARAMETER);
+			rejected = b;
+			check("managed_rejected_snapshot_zero", scene->scene_sphere_snapshot(right, native->generation + 1, device, 4, rejected) == ERR_INVALID_DATA && rejected.sources.is_empty() && rejected.bounds_revision == 0);
+			check("managed_commit_requery", scene->scene_receiver_commit_query(left, native->generation, device, Transform3D(), envelope, query_b, 2) == OK);
+			scene->update_dirty_instances();
+			RendererSceneCull::SceneSphereSnapshot changed, unchanged;
+			check("managed_left_revision", scene->scene_sphere_snapshot(left, native->generation, device, 4, changed) == OK && changed.bounds_revision == 2 && changed.pose_revision > a.pose_revision && changed.sources.size() == 1 && b.sources.size() == 1 && changed.sources[0].source_key == b.sources[0].source_key);
+			check("managed_right_unchanged", scene->scene_sphere_snapshot(right, native->generation, device, 4, unchanged) == OK && unchanged.bounds_revision == b.bounds_revision && unchanged.pose_revision == b.pose_revision && unchanged.pair_revision == b.pair_revision && unchanged.query_bounds == b.query_bounds);
+			// Same broad envelope, different committed queries: source selection
+			// belongs to the scene receiver instance, for height as for sphere.
+			RID height = storage->particles_collision_allocate();
+			storage->particles_collision_initialize(height);
+			storage->particles_collision_set_collision_type(height, RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE);
+			storage->particles_collision_set_box_extents(height, Vector3(0.1f, 0.1f, 0.1f));
+			const RID height_a = instance(height, Vector3(-0.5f, 0, 0));
+			const RID height_b = instance(height, Vector3(0.5f, 0, 0));
+			check("managed_height_restore_left_query", scene->scene_receiver_commit_query(left, native->generation, device, Transform3D(), envelope, query_a, 3) == OK);
+			scene->update_dirty_instances();
+			RendererSceneCull::SceneHeightfieldSource height_left, height_right;
+			bool height_present = false;
+			check("managed_height_query_left", scene->scene_heightfield_snapshot_pair(left, height_left, height_present) && height_present && height_left.transform.origin.x == -0.5f);
+			height_present = false;
+			check("managed_height_query_right", scene->scene_heightfield_snapshot_pair(right, height_right, height_present) && height_present && height_right.transform.origin.x == 0.5f);
+			check("managed_height_distinct_source", height_left.source_key != 0 && height_right.source_key != 0 && height_left.source_key != height_right.source_key);
+			const RID height_extra = instance(height, Vector3(0.75f, 0, 0));
+			scene->update_dirty_instances();
+			height_present = false;
+			check("managed_height_query_ambiguous", !scene->scene_heightfield_snapshot_pair(right, height_right, height_present) && !height_present);
+			height_present = false;
+			check("managed_height_other_query_unaffected", scene->scene_heightfield_snapshot_pair(left, height_left, height_present) && height_present && height_left.transform.origin.x == -0.5f);
+			const AABB empty_query(Vector3(-1, 1, -1), Vector3(2, 0.5f, 2));
+			check("managed_height_commit_empty_query", scene->scene_receiver_commit_query(left, native->generation, device, Transform3D(), envelope, empty_query, 4) == OK);
+			scene->update_dirty_instances();
+			height_present = true;
+			check("managed_height_query_empty", scene->scene_heightfield_snapshot_pair(left, height_left, height_present) && !height_present);
+			scene->free(height_a);
+			scene->free(height_b);
+			scene->free(height_extra);
+			storage->particles_collision_free(height);
+			scene->free(source_a);
+			scene->free(source_b);
+			scene->free(left);
+			scene->free(right);
+			scene->free(scenario);
+			storage->particles_collision_free(sphere);
+		}
+		// Empty dictionary means the original queued control has not returned yet.
+		Dictionary advance() {
+			using namespace GDExtensionDeviceExit;
+			if (stage == 4) {
+				return {}; // Retain the receiver during actual viewport observations.
+			}
+			if (stage == 3) {
+				return advance_phase_close();
+			}
+			ProductionControlOutput output{};
+			const Error consumed = enrollment.registry.production_control_consume(ref, control, &output);
+			if (consumed == ERR_BUSY) {
+				return {};
+			}
+			CRASH_COND(consumed != OK); // Preserve real custody on unexpected issuer failure.
+			if (stage == 0) {
+				check("managed_original_record", output.result.native_error == OK && record_error == OK && !native->generation_pin().is_empty());
+				if (viewport_mode) {
+					stage = 4;
+					return {};
+				}
+				if (phase_mode) {
+					// The one positive delivery came from actual draw. Future waiting
+					// refusal and holder teardown must no longer depend on a draw.
+					RenderingServer::get_singleton()->set_render_loop_enabled(false);
+					CRASH_COND(enrollment.registry.production_record_schedule(waiting_request, &waiting_control) != OK);
+					stage = 3;
+					return {};
+				} else if (record_error == OK) {
+					exercise_scene();
+				}
+				native->withdraw_generation();
+				stage = 1;
+			} else if (stage == 1 && native->released() && enrollment.request->maintenance_serial == 0) {
+				root_returned |= output.output_generation.native_released;
+				check("managed_original_root_return", root_returned);
+				stage = 2;
+			} else if (stage == 2 && output.result.native_error == OK && output.owner_return.native_error == OK) {
+				enrollment.request = nullptr; // RELEASE consume may reclaim its arena.
+				check("managed_original_request_release", output.owner_return.native_error == OK);
+				memdelete(native);
+				native = nullptr;
+				// All queued controls and custody have returned. This closes only
+				// fixture handles; never sync the currently executing RT callback.
+				enrollment.server = nullptr;
+				enrollment.cleanup_owner(true);
+				check("managed_enrollment_cleanup", enrollment.owner_cleaned);
+				return checks;
+			}
+			if (stage == 1) {
+				root_returned |= output.output_generation.native_released;
+			}
+			const Error queued = schedule(stage == 2 ? ProductionControlKind::RELEASE : ProductionControlKind::OBSERVE);
+			CRASH_COND(queued != OK);
+			return {};
+		}
+	};
+
 	static Error quote(const GDExtensionProductionCapacityV1 &capacity, GDExtensionProductionMetadataQuoteV1 &out, uint32_t current_commands = 0, uint32_t workers = 0) {
 		return GDExtensionDeviceExit::Registry::production_layout(capacity, out, current_commands, workers);
 	}
@@ -12623,6 +13020,35 @@ TEST_CASE("[SceneTree][ProductionRequest][ReadbackSource] adjacent writer chunks
 
 TEST_CASE("[SceneTree][ProductionRequest][IncomingReadback] created output prefix rejects before custody and imported schedule retries after RD contention") {
 	Access::incoming_public_admission();
+}
+
+void *managed_scene_begin(bool phase_mode) {
+	auto *harness = memnew(Access::ManagedSceneHarness);
+	const Error error = harness->begin(phase_mode);
+	CRASH_COND_MSG(error != OK, "Managed Scene original test enrollment failed: " + itos(error));
+	return harness;
+}
+void *managed_scene_begin_viewport(RID scenario) {
+	auto *harness = memnew(Access::ManagedSceneHarness);
+	harness->viewport_mode = true;
+	harness->viewport_scenario = scenario; // Borrowed from the live SubViewport world.
+	const Error error = harness->begin(true);
+	CRASH_COND_MSG(error != OK, "Viewport managed Scene enrollment failed: " + itos(error));
+	return harness;
+}
+bool managed_scene_viewport_ready(void *opaque) {
+	return static_cast<Access::ManagedSceneHarness *>(opaque)->stage == 4;
+}
+void managed_scene_finish_viewport(void *opaque) {
+	static_cast<Access::ManagedSceneHarness *>(opaque)->finish_viewport_observation();
+}
+Dictionary managed_scene_advance(void *opaque) {
+	auto *harness = static_cast<Access::ManagedSceneHarness *>(opaque);
+	Dictionary result = harness->advance();
+	if (!result.is_empty()) {
+		memdelete(harness);
+	}
+	return result;
 }
 
 TEST_CASE("[ProductionRequest] quote checks dimensions before reserving real cells") {

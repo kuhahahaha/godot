@@ -33,6 +33,7 @@
 #include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/rendering_server.h"
 #include "tests/servers/rendering/test_external_output_custody_bridge.h"
 #include "tests/test_macros.h"
 
@@ -86,6 +87,17 @@ ExternalLinkedOwnerTest::ExternalLinkedOwnerTest(RenderingDevice &rd, bool p_emp
 	if (empty_storage_mode) {
 		return;
 	}
+	initialize_owner(rd, p_query_enabled);
+}
+ExternalLinkedOwnerTest::ExternalLinkedOwnerTest(RenderingDevice &rd, ParticlesStorage &p_storage, bool p_query_enabled) :
+		expected_device(&rd) {
+	CRASH_COND(ParticlesStorage::get_singleton() != &p_storage || RenderingDevice::get_singleton() != &rd);
+	CRASH_COND(!RenderingServer::get_singleton()->is_on_render_thread());
+	storage = &p_storage;
+	owns_storage = false;
+	initialize_owner(rd, p_query_enabled);
+}
+void ExternalLinkedOwnerTest::initialize_owner(RenderingDevice &rd, bool p_query_enabled) {
 	ExternalOutputConfig config;
 	config.max_views = 1;
 	config.max_inflight = 2;
@@ -108,6 +120,12 @@ ExternalLinkedOwnerTest::~ExternalLinkedOwnerTest() {
 	}
 	// Fail closed on leaked custody; never manufacture RELEASED during cleanup.
 	CRASH_COND(!released());
+	if (!owns_storage) {
+		// Original particles_free performs dependency notification and removes
+		// this released owner. The borrowed storage/device outlive the fixture.
+		storage->particles_free(particles);
+		return;
+	}
 	storage->particles_owner.get_or_null(particles)->external = nullptr;
 	memdelete(owner);
 	storage->particles_owner.free(particles);

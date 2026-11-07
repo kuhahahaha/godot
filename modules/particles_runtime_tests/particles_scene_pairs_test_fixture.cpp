@@ -4,13 +4,38 @@
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/rendering_server.h"
 
+namespace TestProductionRequest {
+void *managed_scene_begin(bool);
+Dictionary managed_scene_advance(void *);
+void *managed_scene_begin_viewport(RID);
+bool managed_scene_viewport_ready(void *);
+void managed_scene_finish_viewport(void *);
+} //namespace TestProductionRequest
 void ParticlesScenePairsTestFixture::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("run_viewport_invariance", "scenario"), &ParticlesScenePairsTestFixture::run_viewport_invariance);
+	ClassDB::bind_method(D_METHOD("finish_viewport_observation"), &ParticlesScenePairsTestFixture::finish_viewport_observation);
 	ClassDB::bind_method(D_METHOD("run"), &ParticlesScenePairsTestFixture::run);
+	ClassDB::bind_method(D_METHOD("run_phase"), &ParticlesScenePairsTestFixture::run_phase);
+	ClassDB::bind_method(D_METHOD("advance"), &ParticlesScenePairsTestFixture::advance);
 	ClassDB::bind_method(D_METHOD("result"), &ParticlesScenePairsTestFixture::result);
 }
 Dictionary ParticlesScenePairsTestFixture::result() const {
 	MutexLock lock(result_mutex);
 	return result_data.duplicate(true);
+}
+void ParticlesScenePairsTestFixture::run_viewport_invariance(RID p_scenario) {
+	viewport_mode = true;
+	managed_scene = TestProductionRequest::managed_scene_begin_viewport(p_scenario);
+	MutexLock lock(result_mutex);
+	result_data["checks"] = Dictionary();
+}
+void ParticlesScenePairsTestFixture::finish_viewport_observation() {
+	CRASH_COND(!viewport_mode || !managed_scene);
+	TestProductionRequest::managed_scene_finish_viewport(managed_scene);
+}
+void ParticlesScenePairsTestFixture::run_phase() {
+	phase_mode = true;
+	run();
 }
 void ParticlesScenePairsTestFixture::run() {
 	auto *scene = RendererSceneCull::singleton;
@@ -146,11 +171,40 @@ void ParticlesScenePairsTestFixture::run() {
 	scene->free(scenario);
 	storage->particles_collision_free(sphere);
 	storage->particles_free(particles);
+	if (phase_mode) {
+		managed_scene = TestProductionRequest::managed_scene_begin(true);
+		MutexLock lock(result_mutex);
+		result_data["checks"] = checks;
+		return;
+	}
 	bool passed = true;
 	for (const Variant &key : checks.keys()) {
 		passed = passed && bool(checks[key]);
 	}
 	MutexLock lock(result_mutex);
+	result_data["checks"] = checks;
+	result_data["pass"] = passed;
+}
+void ParticlesScenePairsTestFixture::advance() {
+	if (!managed_scene) {
+		return;
+	}
+	const Dictionary managed_checks = TestProductionRequest::managed_scene_advance(managed_scene);
+	if (managed_checks.is_empty()) {
+		if (viewport_mode && TestProductionRequest::managed_scene_viewport_ready(managed_scene)) {
+			MutexLock lock(result_mutex);
+			result_data["viewport_ready"] = true;
+		}
+		return;
+	}
+	managed_scene = nullptr;
+	MutexLock lock(result_mutex);
+	Dictionary checks = result_data["checks"];
+	checks.merge(managed_checks);
+	bool passed = true;
+	for (const Variant &key : checks.keys()) {
+		passed = passed && bool(checks[key]);
+	}
 	result_data["checks"] = checks;
 	result_data["pass"] = passed;
 }

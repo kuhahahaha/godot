@@ -296,6 +296,9 @@ bool RendererSceneCull::scene_heightfield_snapshot_pair(RID p_receiver, SceneHei
 		if (source->base_type != RSE::INSTANCE_PARTICLES_COLLISION || !source->visible || source->scenario != receiver->scenario) {
 			continue;
 		}
+		if (receiver->scene_query_committed && !receiver->scene_query_world.intersects_inclusive(source->transformed_aabb)) {
+			continue;
+		}
 		const InstanceParticlesCollisionData *collision = static_cast<const InstanceParticlesCollisionData *>(source->base_data);
 		if (!(collision->cull_mask & receiver->layer_mask)) {
 			continue;
@@ -3072,6 +3075,8 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 		bool mesh_visible = false;
 
 		InstanceData &idata = cull_data.scenario->instance_data[i];
+		const bool scene_only_particles = (idata.flags & InstanceData::FLAG_BASE_TYPE_MASK) == RSE::INSTANCE_PARTICLES &&
+				RSG::particles_storage->particles_is_external_scene_only(idata.base_rid);
 		uint32_t visibility_flags = idata.flags & (InstanceData::FLAG_VISIBILITY_DEPENDENCY_HIDDEN_CLOSE_RANGE | InstanceData::FLAG_VISIBILITY_DEPENDENCY_HIDDEN | InstanceData::FLAG_VISIBILITY_DEPENDENCY_FADE_CHILDREN);
 		int32_t visibility_check = -1;
 
@@ -3149,7 +3154,9 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 						mesh_visible = true;
 					} else if (base_type == RSE::INSTANCE_PARTICLES) {
 						//particles visible? process them
-						if (RSG::particles_storage->particles_is_inactive(idata.base_rid)) {
+						if (scene_only_particles) {
+							keep = false;
+						} else if (RSG::particles_storage->particles_is_inactive(idata.base_rid)) {
 							//but if nothing is going on, don't do it.
 							keep = false;
 						} else {
@@ -3402,7 +3409,7 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 					if (IN_FRUSTUM(cull_data.cull->shadows[j].cascades[k].frustum) && VIS_CHECK) {
 						uint32_t base_type = idata.flags & InstanceData::FLAG_BASE_TYPE_MASK;
 
-						if (((1 << base_type) & RSE::INSTANCE_GEOMETRY_MASK) && idata.flags & InstanceData::FLAG_CAST_SHADOWS && (LAYER_CHECK & cull_data.cull->shadows[j].caster_mask)) {
+						if (!scene_only_particles && ((1 << base_type) & RSE::INSTANCE_GEOMETRY_MASK) && idata.flags & InstanceData::FLAG_CAST_SHADOWS && (LAYER_CHECK & cull_data.cull->shadows[j].caster_mask)) {
 							cull_result.directional_shadows[j].cascade_geometry_instances[k].push_back(idata.instance_geometry);
 							mesh_visible = true;
 						}
@@ -3432,7 +3439,7 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 							cull_result.sdfgi_cascade_lights[sdfgi_last_light_cascade].push_back(instance_light->instance);
 						}
 					}
-				} else if ((1 << base_type) & RSE::INSTANCE_GEOMETRY_MASK) {
+				} else if (!scene_only_particles && ((1 << base_type) & RSE::INSTANCE_GEOMETRY_MASK)) {
 					if ((idata.flags & InstanceData::FLAG_USES_BAKED_LIGHT) && (cull_data.visible_layers & idata.layer_mask)) {
 						cull_result.sdfgi_region_geometry_instances[j].push_back(idata.instance_geometry);
 						mesh_visible = true;
@@ -4268,7 +4275,9 @@ void RendererSceneCull::render_probes() {
 			}
 
 			ERR_FAIL_NULL(geom->geometry_instance);
-			scene_cull_result.geometry_instances.push_back(geom->geometry_instance);
+			if (ins->base_type != RSE::INSTANCE_PARTICLES || !RSG::particles_storage->particles_is_external_scene_only(ins->base)) {
+				scene_cull_result.geometry_instances.push_back(geom->geometry_instance);
+			}
 		}
 
 		scene_render->voxel_gi_update(probe->probe_instance, update_lights, probe->light_instances, scene_cull_result.geometry_instances);
@@ -4364,7 +4373,9 @@ void RendererSceneCull::_update_dirty_instance(Instance *p_instance) const {
 		if ((1 << p_instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) {
 			InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(p_instance->base_data);
 
-			bool can_cast_shadows = true;
+			const bool scene_only_particles = p_instance->base_type == RSE::INSTANCE_PARTICLES &&
+					RSG::particles_storage->particles_is_external_scene_only(p_instance->base);
+			bool can_cast_shadows = !scene_only_particles;
 			bool is_animated = false;
 
 			p_instance->instance_uniforms.materials_start();
@@ -4446,7 +4457,7 @@ void RendererSceneCull::_update_dirty_instance(Instance *p_instance) const {
 				} else if (p_instance->base_type == RSE::INSTANCE_PARTICLES) {
 					bool cast_shadows = false;
 
-					int dp = RSG::particles_storage->particles_get_draw_passes(p_instance->base);
+					int dp = scene_only_particles ? 0 : RSG::particles_storage->particles_get_draw_passes(p_instance->base);
 
 					for (int i = 0; i < dp; i++) {
 						RID mesh = RSG::particles_storage->particles_get_draw_pass_mesh(p_instance->base, i);

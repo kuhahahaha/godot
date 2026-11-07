@@ -44,13 +44,17 @@ class ExternalLinkedOwnerTest {
 	ParticlesStorage *storage = nullptr;
 	ExternalOutputOwner *owner = nullptr;
 	RID particles;
+	bool owns_storage = true;
 	RenderingDevice *expected_device = nullptr;
 	bool empty_storage_mode = false;
+	void initialize_owner(RenderingDevice &, bool);
 
 public:
 	// CPU profile projection only; does not create/admit a render generation.
 	static void scene_only_profile_query();
 	explicit ExternalLinkedOwnerTest(RenderingDevice &, bool p_empty_storage = false, bool p_query_enabled = false);
+	// Borrow the existing RD owner; retain only this fixture particle and root.
+	ExternalLinkedOwnerTest(RenderingDevice &, ParticlesStorage &, bool p_query_enabled);
 	~ExternalLinkedOwnerTest();
 	// This mode only locates a real Create result. It installs no owner/pin and
 	// destroys no placement object itself; free goes through ParticlesStorage.
