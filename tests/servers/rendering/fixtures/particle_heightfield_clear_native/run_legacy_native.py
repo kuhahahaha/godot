@@ -78,6 +78,7 @@ def main():
                 "--script", "res://run.gd",
             ]
             env = os.environ.copy()
+            env.pop("ANGE_HEIGHTFIELD_LEGACY_NEIGHBOR_CASE", None)
             env["ANGE_HEIGHTFIELD_LEGACY_NORMAL"] = "1"
             for name in (
                 "ANGE_HEIGHTFIELD_GEOMETRY",

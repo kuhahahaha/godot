@@ -5,6 +5,7 @@
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_globals.h"
@@ -14,6 +15,7 @@
 
 void ParticlesHeightfieldClearTestFixture::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("run"), &ParticlesHeightfieldClearTestFixture::run);
+	ClassDB::bind_method(D_METHOD("run_legacy_neighbor", "case"), &ParticlesHeightfieldClearTestFixture::run_legacy_neighbor);
 	ClassDB::bind_method(D_METHOD("run_legacy_normal", "transform_case"), &ParticlesHeightfieldClearTestFixture::run_legacy_normal, DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("run_transformed", "scale"), &ParticlesHeightfieldClearTestFixture::run_transformed);
 	ClassDB::bind_method(D_METHOD("run_geometry", "height"), &ParticlesHeightfieldClearTestFixture::run_geometry);
@@ -24,6 +26,17 @@ void ParticlesHeightfieldClearTestFixture::_bind_methods() {
 Dictionary ParticlesHeightfieldClearTestFixture::result() const {
 	MutexLock lock(result_mutex);
 	return result_data.duplicate(true);
+}
+
+Error ParticlesHeightfieldClearTestFixture::run_legacy_neighbor(int p_case) {
+	if (started) {
+		return ERR_ALREADY_IN_USE;
+	}
+	if (p_case < 0 || p_case > 5) {
+		return ERR_INVALID_PARAMETER;
+	}
+	legacy_neighbor_case = p_case;
+	return run();
 }
 
 Error ParticlesHeightfieldClearTestFixture::run_legacy_normal(int p_transform_case) {
@@ -92,6 +105,9 @@ Error ParticlesHeightfieldClearTestFixture::run_capture() {
 	{
 		MutexLock lock(result_mutex);
 		result_data["driver"] = rd->get_device_name();
+	}
+	if (legacy_neighbor_case >= 0) {
+		return run_neighbor_setup();
 	}
 	// One collision base owns two independent instance capture targets.
 	collision = storage->particles_collision_allocate();
@@ -227,6 +243,65 @@ Error ParticlesHeightfieldClearTestFixture::run_capture() {
 	return rd->buffer_get_data_async(buffer, callable_mp(this, &ParticlesHeightfieldClearTestFixture::sample_done), 0, 8);
 }
 
+Error ParticlesHeightfieldClearTestFixture::run_neighbor_setup() {
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	auto *textures = RendererRD::TextureStorage::get_singleton();
+	const RSE::ParticlesCollisionType types[] = {
+		RSE::PARTICLES_COLLISION_TYPE_SPHERE_COLLIDE, RSE::PARTICLES_COLLISION_TYPE_BOX_COLLIDE,
+		RSE::PARTICLES_COLLISION_TYPE_SDF_COLLIDE, RSE::PARTICLES_COLLISION_TYPE_SPHERE_ATTRACT,
+		RSE::PARTICLES_COLLISION_TYPE_BOX_ATTRACT, RSE::PARTICLES_COLLISION_TYPE_VECTOR_FIELD_ATTRACT
+	};
+	collision = storage->particles_collision_allocate();
+	storage->particles_collision_initialize(collision);
+	storage->particles_collision_set_collision_type(collision, types[legacy_neighbor_case]);
+	storage->particles_collision_set_box_extents(collision, Vector3(1, 1, 1));
+	Transform3D source_transform;
+	if (legacy_neighbor_case <= 1) {
+		storage->particles_collision_set_sphere_radius(collision, 1.0);
+
+	} else if (legacy_neighbor_case == 3 || legacy_neighbor_case == 4) {
+		storage->particles_collision_set_sphere_radius(collision, 2.0);
+		storage->particles_collision_set_box_extents(collision, Vector3(2, 2, 2));
+		storage->particles_collision_set_attractor_strength(collision, 2.0);
+		storage->particles_collision_set_attractor_attenuation(collision, 1.0);
+		storage->particles_collision_set_attractor_directionality(collision, 0.0);
+
+	}
+	if (legacy_neighbor_case == 2 || legacy_neighbor_case == 5) {
+		const bool sdf = legacy_neighbor_case == 2;
+		const int size = sdf ? 16 : 2;
+		storage->particles_collision_set_box_extents(collision, Vector3(2, 2, 2));
+		const int channels = sdf ? 1 : 3;
+		Vector<Ref<Image>> slices;
+		for (int z = 0; z < size; ++z) {
+			PackedByteArray bytes;
+			bytes.resize(size * size * channels * sizeof(float));
+			for (int y = 0; y < size; ++y) {
+				for (int x = 0; x < size; ++x) {
+					const float texel[3] = { sdf ? -2.0f + (x + 0.5f) * 4.0f / size : 0.0f, 0.5f, 0.5f };
+					std::memcpy(bytes.ptrw() + (y * size + x) * channels * sizeof(float), texel, channels * sizeof(float));
+				}
+			}
+			slices.push_back(Image::create_from_data(size, size, false, sdf ? Image::FORMAT_RF : Image::FORMAT_RGBF, bytes));
+		}
+		legacy_texture = textures->texture_allocate();
+		textures->texture_3d_initialize(legacy_texture, sdf ? Image::FORMAT_RF : Image::FORMAT_RGBF, size, size, size, false, slices);
+		if (textures->texture_get_type(legacy_texture) != RendererRD::TextureStorage::TYPE_3D ||
+				!rd->texture_is_valid(textures->texture_get_rd_texture(legacy_texture)) ||
+				textures->texture_get_rd_texture(legacy_texture) == textures->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_3D_WHITE)) {
+			return ERR_CANT_CREATE;
+		}
+		storage->particles_collision_set_field_texture(collision, legacy_texture);
+		if (!sdf) {
+			storage->particles_collision_set_attractor_strength(collision, 2.0);
+			storage->particles_collision_set_attractor_attenuation(collision, 1.0);
+			storage->particles_collision_set_attractor_directionality(collision, 0.0);
+		}
+	}
+	second_instance = storage->particles_collision_instance_create(collision);
+	return run_legacy_process(source_transform);
+}
+
 Error ParticlesHeightfieldClearTestFixture::run_legacy_process(const Transform3D &p_field_transform) {
 	using Storage = RendererRD::ParticlesStorage;
 	auto *storage = Storage::get_singleton();
@@ -235,21 +310,24 @@ Error ParticlesHeightfieldClearTestFixture::run_legacy_process(const Transform3D
 	materials->shader_initialize(legacy_shader);
 	// particles.glsl integrates the cleared zero velocity BEFORE start();
 	// start then fixes the point, native collision runs, and process observes it.
+	const bool attractor = legacy_neighbor_case >= 3;
+	const String process_code = attractor ?
+			"void process() { CUSTOM = vec4(ATTRACTOR_FORCE, 1.0); VELOCITY += ATTRACTOR_FORCE * DELTA; }" :
+			"void process() { VELOCITY = COLLISION_NORMAL; CUSTOM = vec4(COLLISION_NORMAL, COLLIDED ? COLLISION_DEPTH : -1.0); TRANSFORM[3].xyz += COLLISION_NORMAL * COLLISION_DEPTH; }";
 	materials->shader_set_code(legacy_shader,
-			"shader_type particles; uniform vec3 start_position; void start() { TRANSFORM = mat4(1.0); TRANSFORM[3].xyz = start_position; VELOCITY = vec3(0.0); } "
-			"void process() { VELOCITY = COLLISION_NORMAL; CUSTOM = vec4(COLLISION_NORMAL, COLLIDED ? COLLISION_DEPTH : -1.0); "
-			"TRANSFORM[3].xyz += COLLISION_NORMAL * COLLISION_DEPTH; }");
+			String("shader_type particles; uniform vec3 start_position; void start() { TRANSFORM = mat4(1.0); TRANSFORM[3].xyz = start_position; VELOCITY = vec3(0.0); } ") + process_code);
 	legacy_material = materials->material_allocate();
 	materials->material_initialize(legacy_material);
 	materials->material_set_shader(legacy_material, legacy_shader);
-	materials->material_set_param(legacy_material, "start_position", p_field_transform.origin);
+	const Vector3 neighbor_positions[] = { Vector3(0, 1, 0), Vector3(1.125f, 0, 0), Vector3(0.125f, 0, 0), Vector3(1, 0, 0), Vector3(1, 0, 0), Vector3() };
+	materials->material_set_param(legacy_material, "start_position", legacy_neighbor_case >= 0 ? neighbor_positions[legacy_neighbor_case] : p_field_transform.origin);
 	materials->_update_queued_materials();
 	legacy_particle = storage->particles_allocate();
 	storage->particles_initialize(legacy_particle);
 	storage->particles_set_amount(legacy_particle, 1);
 	storage->particles_set_lifetime(legacy_particle, 1.0);
 	storage->particles_set_use_local_coordinates(legacy_particle, false);
-	storage->particles_set_collision_base_size(legacy_particle, 0.1f);
+	storage->particles_set_collision_base_size(legacy_particle, legacy_neighbor_case >= 0 ? 0.25f : 0.1f);
 	storage->particles_set_process_material(legacy_particle, legacy_material);
 	storage->particles_set_emitting(legacy_particle, true);
 	storage->particles_collision_instance_set_transform(second_instance, p_field_transform);
@@ -279,9 +357,25 @@ Error ParticlesHeightfieldClearTestFixture::run_legacy_process(const Transform3D
 	if (!storage->_particles_process(particle, 1.0 / 60.0)) {
 		return FAILED;
 	}
+	const bool textured = legacy_neighbor_case == 2 || legacy_neighbor_case == 5;
+	if (textured) {
+		const auto &frame = particle->frame_history[0];
+		const bool frame_matches = attractor ?
+				frame.attractor_count == 1 && frame.attractors[0].type == Storage::ParticlesFrameParams::ATTRACTOR_TYPE_VECTOR_FIELD && frame.attractors[0].texture_index == 0 :
+				frame.collider_count == 1 && frame.colliders[0].type == Storage::ParticlesFrameParams::COLLISION_TYPE_SDF && frame.colliders[0].texture_index == 0;
+		if (!frame_matches || particle->collision_3d_textures_used != 1 || particle->collision_3d_textures[0] != legacy_texture) {
+			return FAILED;
+		}
+	}
 	{
 		MutexLock lock(result_mutex);
 		result_data["legacy_normal"] = true;
+		if (legacy_neighbor_case >= 0) {
+			const char *names[] = { "sphere", "box", "sdf", "sphere_attractor", "box_attractor", "vector_attractor" };
+			result_data["neighbor_case"] = names[legacy_neighbor_case];
+		}
+		result_data["attractor_count"] = particle->frame_history[0].attractor_count;
+		result_data["textures_used"] = particle->collision_3d_textures_used;
 		result_data["frame_counter"] = particle->frame_counter;
 		result_data["collider_count"] = particle->frame_history[0].collider_count;
 	}
@@ -300,10 +394,20 @@ void ParticlesHeightfieldClearTestFixture::legacy_sample_done(const PackedByteAr
 	// Independent world-plane oracle, not a copy of native collision math.
 	// All rotated fields have the separately specified world plane x=10,
 	// outward normal -X and world-space particle radius .1, regardless of scale.
-	const Vector3 expected_normal = transformed_capture ? Vector3(-1, 0, 0) : Vector3(0, 1, 0);
-	const Vector3 expected_position = transformed_capture ? Vector3(9.9f, 20, 30) : Vector3(0, 0.1f, 0);
-	const bool passed = size_ok && (value.active & 1) && normal.distance_to(expected_normal) < 0.001f &&
-			Math::abs(depth - 0.1f) < 0.001f && position.distance_to(expected_position) < 0.001f;
+	const bool neighbor = legacy_neighbor_case >= 0;
+	const bool attractor = legacy_neighbor_case >= 3;
+	const float expected_depth = legacy_neighbor_case == 0 ? 0.25f : legacy_neighbor_case == 1 || legacy_neighbor_case == 2 ? 0.125f : 0.1f;
+	const Vector3 expected_normal = legacy_neighbor_case == 1 || legacy_neighbor_case == 2 ? Vector3(1, 0, 0) : transformed_capture ? Vector3(-1, 0, 0) : Vector3(0, 1, 0);
+	const Vector3 neighbor_expected_positions[] = { Vector3(0, 1.25f, 0), Vector3(1.25f, 0, 0), Vector3(0.25f, 0, 0), Vector3(1, 0, 0), Vector3(1, 0, 0), Vector3() };
+	const Vector3 expected_position = neighbor ? neighbor_expected_positions[legacy_neighbor_case] : transformed_capture ? Vector3(9.9f, 20, 30) : Vector3(0, expected_depth, 0);
+	bool passed = size_ok && (value.active & 1) && normal.distance_to(expected_normal) < (1.0f / 4096.0f) &&
+			Math::abs(depth - expected_depth) < (1.0f / 4096.0f) && position.distance_to(expected_position) < (1.0f / 4096.0f);
+	const Vector3 force(value.custom[0], value.custom[1], value.custom[2]);
+	if (attractor) {
+		const Vector3 expected_force = legacy_neighbor_case == 5 ? Vector3(-2, 0, 0) : Vector3(-1, 0, 0);
+		passed = size_ok && (value.active & 1) && Math::abs(depth - 1.0f) < (1.0f / 4096.0f) &&
+				force.distance_to(expected_force) < (1.0f / 4096.0f) && normal.distance_to(expected_force / 60.0f) < (1.0f / 4096.0f) && position.distance_to(expected_position) < (1.0f / 4096.0f);
+	}
 	cleanup();
 	MutexLock lock(result_mutex);
 	Array normal_values;
@@ -315,8 +419,19 @@ void ParticlesHeightfieldClearTestFixture::legacy_sample_done(const PackedByteAr
 	result_data["normal"] = normal_values;
 	result_data["position"] = position_values;
 	result_data["depth"] = depth;
+	if (neighbor) {
+		result_data["collided"] = !attractor && depth >= 0.0f;
+		Array force_values;
+		for (int axis = 0; axis < 3; ++axis) {
+			force_values.push_back(force[axis]);
+		}
+		result_data["force"] = force_values;
+		result_data["velocity"] = normal_values;
+	}
 	result_data["active"] = bool(value.active & 1);
-	result_data["pass"] = passed && int(result_data["frame_counter"]) == 1 && int(result_data["collider_count"]) == 1;
+	result_data["pass"] = passed && int(result_data["frame_counter"]) == 1 &&
+			int(result_data["collider_count"]) == (attractor ? 0 : 1) && int(result_data["attractor_count"]) == (attractor ? 1 : 0) &&
+			int(result_data["textures_used"]) == (legacy_neighbor_case == 2 || legacy_neighbor_case == 5 ? 1 : 0);
 }
 
 void ParticlesHeightfieldClearTestFixture::sample_done(const PackedByteArray &p_bytes) {
@@ -380,5 +495,9 @@ void ParticlesHeightfieldClearTestFixture::cleanup() {
 			storage->particles_collision_free(collision);
 			collision = RID();
 		}
+	}
+	if (legacy_texture.is_valid()) {
+		RendererRD::TextureStorage::get_singleton()->texture_free(legacy_texture);
+		legacy_texture = RID();
 	}
 }
