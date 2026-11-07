@@ -49,6 +49,30 @@ public:
 
 TEST_FORCE_LINK(test_viewport_camera_source)
 
+TEST_CASE("[B4][CameraCapture] epoch high water survives rollback and withdrawn resize") {
+	const RID viewport = RSG::viewport->viewport_allocate();
+	RSG::viewport->viewport_initialize(viewport);
+	RendererViewport::Viewport::ViewPresentationKey key{ 1003, 2, 1 };
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, key));
+	auto earlier = key;
+	earlier.view_epoch = 1;
+	CHECK_FALSE(RSG::viewport->viewport_register_presentation_key(viewport, earlier));
+	CHECK(RSG::viewport->viewport_get_presentation_key(viewport).view_epoch == 2);
+	RSG::viewport->viewport_set_size(viewport, 64, 48, 1);
+	CHECK_FALSE(RSG::viewport->viewport_register_presentation_key(viewport, key));
+	key.view_epoch = 3;
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, key));
+	CHECK(RSG::viewport->viewport_register_presentation_key(viewport, key)); // Idempotent before revoke.
+	RSG::viewport->viewport_invalidate_presentation_key(viewport);
+	RSG::viewport->viewport_set_size(viewport, 96, 48, 1);
+	CHECK_FALSE(RSG::viewport->viewport_register_presentation_key(viewport, key));
+	key.view_epoch = 4;
+	CHECK(RSG::viewport->viewport_register_presentation_key(viewport, key));
+	RSG::viewport->viewport_invalidate_presentation_key(viewport);
+	CHECK(RSG::viewport->viewport_register_presentation_key(viewport, key)); // Withdrawal alone.
+	RSG::viewport->free(viewport);
+}
+
 TEST_CASE("[B4][CameraCapture] withdrawn viewport cannot replace original view lineage") {
 	const RID viewport = RSG::viewport->viewport_allocate();
 	RSG::viewport->viewport_initialize(viewport);

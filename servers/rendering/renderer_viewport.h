@@ -148,6 +148,7 @@ public:
 		// One original view lineage for this viewport RID lifetime. Withdrawal
 		// cannot substitute another view and overwrite its epoch tombstone.
 		uint64_t presentation_view_id = 0;
+		uint64_t highest_presentation_epoch = 0;
 		CameraSourceToken previous_camera_token;
 		CameraSourceToken current_camera_token;
 		uint64_t camera_capture_ordinal = 0;

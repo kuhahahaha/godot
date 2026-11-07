@@ -15,3 +15,6 @@ Review correction: viewport RID now retains its first presentation view ID acros
 
 
 Runtime fixture correction: the headless Dummy RenderingMethod buffer factory returns null. The new invocation test now uses a finite CPU-only RenderSceneBuffers subclass implementing no-op configuration setters, so owner identity/mismatch and resize revocation do not depend on a GPU factory. Added explicit null-ref cleanup/return after the retain assertion, because this test configuration can continue after REQUIRE. This does not qualify attachments, device lifetime or GPU execution. The test TU syntax check and diff check passed; parent owns the updated runtime run.
+
+
+Second review correction: the single viewport lineage now retains a highest-seen epoch across ordinary withdrawal. Registration rejects lower epochs without mutation. Resource reconfiguration revokes that high water even while unregistered, so neither epoch rollback before resize nor withdraw-before-resize can reopen an old resource generation. Same-epoch registration remains idempotent only before resource revocation (ordinary withdrawal alone preserves its prior semantics). Added the two exact sequence regressions. Syntax checks and diff check pass; no SCons was run by this slice.

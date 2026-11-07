@@ -139,7 +139,7 @@ Vector<RendererViewport::Viewport *> RendererViewport::_sort_active_viewports() 
 void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 	// Reconfiguration revokes future source borrowing, including in-place buffer
 	// attachment replacement. Already retained records remain immutable.
-	if (p_viewport->presentation_registered) {
+	if (p_viewport->presentation_view_id != 0) {
 		viewport_invalidate_presentation_key(p_viewport->self, true);
 	}
 	if (p_viewport->render_buffers.is_valid()) {
@@ -1459,7 +1459,7 @@ RendererViewport::Viewport::ViewPresentationKey RendererViewport::viewport_get_p
 bool RendererViewport::viewport_register_presentation_key(RID p_viewport, const Viewport::ViewPresentationKey &p_key) {
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL_V(viewport, false);
-	if (p_key.view_id == 0 || p_key.view_epoch == 0 ||
+	if (p_key.view_id == 0 || p_key.view_epoch == 0 || p_key.view_epoch < viewport->highest_presentation_epoch ||
 			(p_key.view_id == viewport->revoked_resource_key.view_id && p_key.view_epoch <= viewport->revoked_resource_key.view_epoch)) {
 		return false;
 	}
@@ -1481,6 +1481,7 @@ bool RendererViewport::viewport_register_presentation_key(RID p_viewport, const 
 		viewport->staged_camera_data_valid = false;
 	}
 	viewport->presentation_view_id = p_key.view_id;
+	viewport->highest_presentation_epoch = p_key.view_epoch;
 	viewport->presentation_key = p_key;
 	viewport->presentation_registered = true;
 	return true;
@@ -1489,8 +1490,10 @@ bool RendererViewport::viewport_register_presentation_key(RID p_viewport, const 
 void RendererViewport::viewport_invalidate_presentation_key(RID p_viewport, bool p_resource_change) {
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);
-	if (p_resource_change && viewport->presentation_registered) {
-		viewport->revoked_resource_key = viewport->presentation_key;
+	if (p_resource_change && viewport->presentation_view_id != 0) {
+		viewport->revoked_resource_key.view_id = viewport->presentation_view_id;
+		viewport->revoked_resource_key.view_epoch = viewport->highest_presentation_epoch;
+		viewport->revoked_resource_key.present_seq = 0;
 	}
 	viewport->presentation_registered = false;
 	viewport->presentation_key = Viewport::ViewPresentationKey();
