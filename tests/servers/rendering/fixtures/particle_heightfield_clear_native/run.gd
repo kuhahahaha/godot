@@ -18,12 +18,29 @@ func _start() -> void:
 		method = "run_geometry_params"
 	if transform_case != "":
 		method = "run_transformed"
+	if OS.get_environment("ANGE_HEIGHTFIELD_LEGACY_NORMAL") == "1":
+		method = "run_legacy_normal"
 	if not fixture.has_method(method):
 		print("HEIGHTFIELD_GEOMETRY_MISSING ", method)
 		quit(1)
 		return
 	var callback := Callable(fixture, method)
-	if method == "run_transformed":
+	if method == "run_legacy_normal":
+		var legacy_transform_case := 0
+		match transform_case:
+			"", "identity":
+				legacy_transform_case = 0
+			"rotated":
+				legacy_transform_case = 1
+			"rotated_uniform":
+				legacy_transform_case = 2
+			"rotated_nonuniform":
+				legacy_transform_case = 3
+			_:
+				quit(1)
+				return
+		callback = callback.bind(legacy_transform_case)
+	elif method == "run_transformed":
 		var scale := Vector3.ONE
 		match transform_case:
 			"rotated":

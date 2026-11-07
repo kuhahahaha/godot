@@ -49,3 +49,27 @@ Mobile case must report second_raw = 0.75 and fail the numeric assertion;
 restore the flag before the final build. This mutation is a test command, not
 a production change included with this fixture. No assertion is based solely
 on resource identity or renderer metadata.
+
+
+## Actual legacy height collision control
+
+`run_legacy_native.py` drives the same main-RD D32 capture with a local y=0
+plane, then runs the original `ParticlesStorage::_particles_process` for one
+ordinary legacy particle. Its ordinary particles material starts the particle
+at the field origin, observes the actual `COLLIDED`, `COLLISION_NORMAL` and
+`COLLISION_DEPTH` builtins, writes normal into velocity and depth into custom.w,
+and corrects position by normal times depth. The fixture asynchronously reads
+the actual particle buffer before freeing particle, material, shader and capture
+resources. The initial velocity sentinel is -7, so no simulation cannot pass.
+
+Four scenes run on Mobile and Forward+ (eight cases): identity, plus Z rotation
+90 degrees with translation (10,20,30) and local scales (1,1,1), (2,2,2), or
+(2,3,4). Geometry and the actual collision instance use the same field transform;
+the particle itself has identity scale and world collision radius 0.1.
+Independent world-plane expectations are normal (0,1,0), depth 0.1 and corrected
+position (0,0.1,0) for identity; the other three expect normal (-1,0,0), depth
+0.1 and position (9.9,20,30). They are fixed values, not derived through the
+production capture or collider matrix code. The runner also requires active,
+one actual process frame, one collider, real renderer evidence and no errors or
+warnings. This verifies the transformed planar legacy height branch; H25 sloped
+geometry and sphere/box/SDF/attractor neighbor coverage remain unverified.

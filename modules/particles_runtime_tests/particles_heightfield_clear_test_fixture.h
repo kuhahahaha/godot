@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/math/transform_3d.h"
 #include "core/math/vector3.h"
 #include "core/object/ref_counted.h"
 #include "core/os/mutex.h"
@@ -15,6 +16,10 @@ class ParticlesHeightfieldClearTestFixture : public RefCounted {
 	bool started = false;
 	bool geometry_capture = false;
 	bool transformed_capture = false;
+	bool legacy_normal_capture = false;
+	RID legacy_particle;
+	RID legacy_shader;
+	RID legacy_material;
 	Vector3 capture_scale = Vector3(1, 1, 1);
 	float geometry_height = 0;
 	float capture_extents_y = 1.0f;
@@ -35,12 +40,15 @@ class ParticlesHeightfieldClearTestFixture : public RefCounted {
 	Error run_capture();
 	void cleanup();
 	void sample_done(const PackedByteArray &p_bytes);
+	Error run_legacy_process(const Transform3D &p_field_transform);
+	void legacy_sample_done(const PackedByteArray &p_bytes);
 
 protected:
 	static void _bind_methods();
 
 public:
 	Error run();
+	Error run_legacy_normal(int p_transform_case = 0);
 	Error run_geometry(float p_height);
 	Error run_transformed(const Vector3 &p_scale);
 	Error run_geometry_params(float p_height, float p_extents_y, float p_transform_y);
