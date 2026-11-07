@@ -1,0 +1,5 @@
+config_version=5
+[application]
+config/name="Scene pairs native probe"
+[rendering]
+renderer/rendering_method="mobile"

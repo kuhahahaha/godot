@@ -2,7 +2,7 @@
 """Sample production D32 heightfields on main RD, on Mobile and Forward+.
 
 Requires a tests=yes module_particles_runtime_tests_enabled=yes editor and a
-real display/GPU. This is a legacy numeric regression, not E34 acceptance.
+real display/GPU. This is a native numeric regression, not E34 acceptance.
 """
 
 import argparse
@@ -22,7 +22,8 @@ def main():
     parser.add_argument("--rendering-driver", default="vulkan")
     args = parser.parse_args()
     observed = {}
-    for height in (None, -0.5, 0.0, 0.5):
+    cases = [(height, 1.0, 0.0) for height in (None, -0.5, 0.0, 0.5)] + [(0.25, 2.0, -0.5)]
+    for height, extents_y, transform_y in cases:
         for method, renderer in (("mobile", "Forward Mobile"), ("forward_plus", "Forward+")):
             command = [
                 str(args.binary.resolve()),
@@ -40,7 +41,9 @@ def main():
             env = os.environ.copy()
             env["ANGE_HEIGHTFIELD_GEOMETRY"] = "0" if height is None else "1"
             env["ANGE_HEIGHTFIELD_GEOMETRY_HEIGHT"] = str(height or 0.0)
-            print(f"HEIGHTFIELD_NATIVE_CASE renderer={method} height={height}", flush=True)
+            env["ANGE_HEIGHTFIELD_EXTENTS_Y"] = str(extents_y)
+            env["ANGE_HEIGHTFIELD_TRANSFORM_Y"] = str(transform_y)
+            print(f"HEIGHTFIELD_NATIVE_CASE renderer={method} height={height} extents_y={extents_y} transform_y={transform_y}", flush=True)
             print("COMMAND " + json.dumps(command), flush=True)
             result = subprocess.run(
                 command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=90
@@ -57,7 +60,7 @@ def main():
                 for line in result.stdout.splitlines()
                 if "HEIGHTFIELD_CLEAR_NATIVE_PASS " in line
             ]
-            expected = 0.0 if height is None else (height + 1.0) / 2.0
+            expected = 0.0 if height is None else (height - transform_y + extents_y) / (2.0 * extents_y)
             if (
                 len(samples) != 1
                 or not samples[0].get("pass")
@@ -66,10 +69,10 @@ def main():
                 or not math.isclose(samples[0].get("second_raw", float("nan")), expected, abs_tol=0.001)
             ):
                 raise SystemExit(f"Missing independent D32 samples on {renderer}, height={height}")
-            observed[(height, method)] = samples[0]["second_raw"]
-        if not math.isclose(observed[(height, "mobile")], observed[(height, "forward_plus")], abs_tol=0.001):
+            observed[(height, extents_y, transform_y, method)] = samples[0]["second_raw"]
+        if not math.isclose(observed[(height, extents_y, transform_y, "mobile")], observed[(height, extents_y, transform_y, "forward_plus")], abs_tol=0.001):
             raise SystemExit(f"Mobile/Forward+ depth mismatch at height={height}")
-    print("HEIGHTFIELD_NATIVE_MATRIX_PASS 8 real GPU cases")
+    print("HEIGHTFIELD_NATIVE_MATRIX_PASS 10 real GPU cases")
 
 
 if __name__ == "__main__":

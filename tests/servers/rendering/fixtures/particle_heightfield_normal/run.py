@@ -58,6 +58,9 @@ with tempfile.TemporaryDirectory(prefix="ange-heightfield-normal-") as tmp:
     shader_path.write_text(compute)
     env = os.environ.copy()
     env["ANGE_HEIGHTFIELD_TEST_SHADER"] = str(shader_path)
+    rendering_method = env.get("ANGE_HEIGHTFIELD_RENDERING_METHOD", "mobile")
+    if rendering_method not in ("mobile", "forward_plus"):
+        sys.exit(f"Unsupported rendering method: {rendering_method}")
     command = [
         str(ROOT / "bin/godot.macos.editor.arm64"),
         "--display-driver",
@@ -65,7 +68,7 @@ with tempfile.TemporaryDirectory(prefix="ange-heightfield-normal-") as tmp:
         "--rendering-driver",
         "metal",
         "--rendering-method",
-        "mobile",
+        rendering_method,
         "--path",
         str(HERE),
         "--script",
@@ -73,8 +76,9 @@ with tempfile.TemporaryDirectory(prefix="ange-heightfield-normal-") as tmp:
     ]
     result = subprocess.run(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=90)
     print(result.stdout)
-    if "Metal 4.0 - Forward Mobile" not in result.stdout:
-        sys.exit("Expected local Metal/Mobile GPU evidence")
+    expected_renderer = {"mobile": "Forward Mobile", "forward_plus": "Forward+"}[rendering_method]
+    if f"Metal 4.0 - {expected_renderer}" not in result.stdout:
+        sys.exit(f"Expected local Metal/{expected_renderer} GPU evidence")
     if "HEIGHTFIELD_NORMAL_GPU 3" not in result.stdout:
         sys.exit("Missing slope sample")
     sys.exit(result.returncode)

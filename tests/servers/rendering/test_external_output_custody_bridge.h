@@ -48,7 +48,7 @@ class ExternalLinkedOwnerTest {
 	bool empty_storage_mode = false;
 
 public:
-	explicit ExternalLinkedOwnerTest(RenderingDevice &, bool p_empty_storage = false);
+	explicit ExternalLinkedOwnerTest(RenderingDevice &, bool p_empty_storage = false, bool p_query_enabled = false);
 	~ExternalLinkedOwnerTest();
 	// This mode only locates a real Create result. It installs no owner/pin and
 	// destroys no placement object itself; free goes through ParticlesStorage.
