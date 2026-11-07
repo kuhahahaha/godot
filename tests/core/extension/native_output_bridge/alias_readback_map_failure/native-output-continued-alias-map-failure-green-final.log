@@ -1,0 +1,28 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/core/extension/test_production_request.cpp:11715:
+TEST CASE:  [SceneTree][ProductionRequest][AliasReadbackMapFailure] actual download map failure returns custody and retires original owners
+
+tests/core/extension/test_production_request.cpp:7263: ERROR: CHECK( report.cause.native_error == ERR_CANT_ACQUIRE_RESOURCE ) is NOT correct!
+  values: CHECK( 44 == 28 )
+
+tests/core/extension/test_production_request.cpp:7263: ERROR: CHECK( report.cause.native_error == ERR_CANT_ACQUIRE_RESOURCE ) is NOT correct!
+  values: CHECK( 44 == 28 )
+
+tests/core/extension/test_production_request.cpp:7263: ERROR: CHECK( report.cause.native_error == ERR_CANT_ACQUIRE_RESOURCE ) is NOT correct!
+  values: CHECK( 44 == 28 )
+
+tests/core/extension/test_production_request.cpp:7263: ERROR: CHECK( report.cause.native_error == ERR_CANT_ACQUIRE_RESOURCE ) is NOT correct!
+  values: CHECK( 44 == 28 )
+
+tests/core/extension/test_production_request.cpp:7263: ERROR: CHECK( report.cause.native_error == ERR_CANT_ACQUIRE_RESOURCE ) is NOT correct!
+  values: CHECK( 44 == 28 )
+
+tests/core/extension/test_production_request.cpp:7263: ERROR: CHECK( report.cause.native_error == ERR_CANT_ACQUIRE_RESOURCE ) is NOT correct!
+  values: CHECK( 44 == 28 )
+
+===============================================================================
+[doctest] test cases:    2 |    1 passed | 1 failed | 2212 skipped
+[doctest] assertions: 1625 | 1619 passed | 6 failed |
+[doctest] Status: FAILURE!

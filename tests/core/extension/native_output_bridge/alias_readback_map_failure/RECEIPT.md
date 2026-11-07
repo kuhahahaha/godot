@@ -1,0 +1,17 @@
+# Returned output-alias map failure and original request retirement
+
+The actual original Frame download path calls buffer_map_observed. The bounded test driver refuses only that download map with native code -7001; ordinary initial staging buffer_map still succeeds. A retained payload is uploaded through the original alias factory/source/witness and original READBACK. Actual failure retains issued=returned=4, completed=0, delivered=false and ERR_CANT_ACQUIRE_RESOURCE. Two repeated public copies preserve destination/written sentinels and do not retry the map. Original cancel, slot/generation/source retirement and all eight allocation frees are exercised.
+
+## Original defect and repair
+
+The pre-fix PTY run exits78 with final request serial3 unreleased and GDEXTENSION_CLOSE_FAILED. The exact original maintenance cursor is active with serial3 and same_owner=true; both original native owners are Complete/KnownAccepted/retained, graphs are not pending, capture/effects/device-loss are absent. production_release_v2 refuses scheduling that exact tail because the intentional readback result error remains in report.cause. The baseline is preserved as a failing diagnostic, including failed cleanup assertions; it is not a safe failure-drain success.
+
+The repair only admits the existing original RELEASE continuation for that exact active owner/serial after a returned ERR_CANT_ACQUIRE_RESOURCE readback and strictly positive native completion. Other errors, unknown issue, incomplete/failed native observation, graph pending, outstanding custody or device loss still refuse. It leaves the error/result/facts untouched and keeps production_release_locked as the final physical reclaim authority.
+
+Eight reversible refusal contrasts cover native Pending, Unknown, completion error, incomplete byte return, another readback error, pending graph, foreign tail owner and IssuedUnknown despite Complete. Each checks Busy, original control remains OWNER_CONSUMED and request/cursor survives; owner and aliases are restored before actual release. Live readback state remains failed through cleanup; final successful release returns the retained map-error report.
+
+## Verification and limits
+
+Final r3: 2 cases/1664 assertions and 218 cases/93718 assertions, both exit0. Focused run has no diagnostics. Combined has exactly three intentional pipeline refusals, three foreign-camera refusals and one deliberate invalid UTF-8 diagnostic. Binary157077352 bytes, SHA256 `8f7162b365ce9533e2b30f08f53717b1b6700a3b46990d42f6554a1c43be037e`. Build: `scons -Q platform=macos target=editor tests=yes debug_symbols=no module_particles_runtime_tests_enabled=yes -j2`, exit0; only the existing MoltenVK minimum-version linker warning. Commands and identities are adjacent. Initial r1 passed 2 cases/1606 assertions and 218 cases/93660 assertions. The first added per-turn report assertion was too strong: bounded RELEASE legitimately reports ERR_BUSY while retaining the original readback error. Its six assertion failures are preserved in the interim green-final/combo-final logs; corrected assertions inspect retained readback state while live and the final report at successful release.
+
+CPU/dummy bounded-driver evidence only. This does not certify real GPU mapping, device-loss drain, native unknown recovery, prepared normal engine Create, public Instance192 seal/view/draw or complete Scene K06. The long goal remains active.

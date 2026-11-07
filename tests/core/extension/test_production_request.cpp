@@ -186,6 +186,8 @@ struct Access {
 			return OK;
 		}
 		bool alias_readback_mode = false;
+		bool alias_download_map_failure = false;
+		uint32_t alias_observed_download_maps = 0, alias_failed_download_maps = 0;
 		uint8_t alias_bytes[16][1024] = {}, alias_upload[64] = {}, alias_download[64] = {};
 		uint64_t alias_sizes[16] = {};
 		bool alias_live[16] = {}, alias_upload_live = false, alias_download_live = false;
@@ -221,6 +223,19 @@ struct Access {
 			}
 			CHECK((upload_mode && id == BufferID(2) && staging_live));
 			return upload_mode && id == BufferID(2) && staging_live ? upload_memory[2] : nullptr;
+		}
+		uint8_t *buffer_map_observed(BufferID id, int64_t &native_code) override {
+			if (alias_readback_mode && id == BufferID(501)) {
+				REQUIRE(alias_download_live);
+				++alias_observed_download_maps;
+				if (alias_download_map_failure) {
+					++alias_failed_download_maps;
+					native_code = -7001;
+					return nullptr;
+				}
+			}
+			native_code = 0;
+			return buffer_map(id);
 		}
 		void buffer_unmap(BufferID id) override {
 			if (alias_readback_mode) {
@@ -6856,7 +6871,7 @@ struct Access {
 			CHECK_FALSE(f.request->readbacks[0].source.delivered);
 		}
 	};
-	static void output_alias_readback_complete() {
+	static void output_alias_readback_complete(bool map_failure = false) {
 		using namespace GDExtensionDeviceExit;
 		auto *server = ordinal_server();
 		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
@@ -6968,6 +6983,7 @@ struct Access {
 		fixture.rd.main_queue = RDD::CommandQueueID(1);
 		fixture.rd.frames_drawn = 3;
 		fixture.driver.alias_readback_mode = true;
+		fixture.driver.alias_download_map_failure = map_failure;
 		fixture.rd.upload_staging_buffers.block_size = fixture.rd.upload_staging_buffers.max_size = 64;
 		fixture.rd.upload_staging_buffers.usage_bits = RDD::BUFFER_USAGE_TRANSFER_FROM_BIT;
 		fixture.rd.download_staging_buffers.block_size = fixture.rd.download_staging_buffers.max_size = 64;
@@ -7022,7 +7038,7 @@ struct Access {
 		uint64_t written = 0;
 		CHECK(copy_bytes(ref, request.revision, 0, returned_bytes, 4, &written).native_error == ERR_BUSY);
 		CHECK(written == 0);
-		for (uint32_t turn = 0; turn < 128 && written != 4; ++turn) {
+		for (uint32_t turn = 0; turn < 128 && (map_failure ? request.readbacks[0].source.returned != 4 : written != 4); ++turn) {
 			auto offered = budget;
 			offered.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
 			const Error e = Error(observe(ref, &offered, &report).native_error);
@@ -7033,35 +7049,79 @@ struct Access {
 				CHECK((consumed == OK || consumed == ERR_BUSY));
 			}
 			const Error copied = Error(copy_bytes(ref, request.revision, 0, returned_bytes, 4, &written).native_error);
-			CHECK((copied == OK || copied == ERR_BUSY));
+			if (map_failure) {
+				CHECK((copied == ERR_BUSY || copied == ERR_CANT_ACQUIRE_RESOURCE));
+				CHECK(written == 0);
+			} else {
+				CHECK((copied == OK || copied == ERR_BUSY));
+			}
 		}
-		REQUIRE(request.readbacks[0].source.delivered);
-		CHECK(request.readbacks[0].source.completed == 4);
-		CHECK(request.readbacks[0].source.returned == 4);
-		REQUIRE(copy_bytes(ref, request.revision, 0, returned_bytes, 4, &written).native_error == OK);
-		CHECK(written == 4);
-		CHECK(memcmp(returned_bytes, pattern, 4) == 0);
-		// Public copy failures are pure observations: neither destination nor
-		// written is reset by stale-revision or insufficient-capacity rejection.
-		const auto copy_revision = request.revision;
-		const auto copy_graphs = request.graph_count, copy_natives = request.native_count;
-		const auto copy_issues = fixture.driver.issues, copy_polls = fixture.driver.polls;
-		uint8_t unchanged_bytes[] = { 0xa1, 0xb2, 0xc3, 0xd4 };
-		const uint8_t sentinel_bytes[] = { 0xa1, 0xb2, 0xc3, 0xd4 };
-		uint64_t unchanged_written = 99;
-		REQUIRE(copy_revision > 0);
-		CHECK(copy_bytes(ref, copy_revision - 1, 0, unchanged_bytes, 4, &unchanged_written).native_error == ERR_DOES_NOT_EXIST);
-		CHECK(unchanged_written == 99);
-		CHECK(memcmp(unchanged_bytes, sentinel_bytes, 4) == 0);
-		CHECK(copy_bytes(ref, copy_revision, 0, unchanged_bytes, 3, &unchanged_written).native_error == ERR_PARAMETER_RANGE_ERROR);
-		CHECK(unchanged_written == 99);
-		CHECK(memcmp(unchanged_bytes, sentinel_bytes, 4) == 0);
-		CHECK(request.revision == copy_revision);
-		CHECK(request.graph_count == copy_graphs);
-		CHECK(request.native_count == copy_natives);
-		CHECK(fixture.driver.issues == copy_issues);
-		CHECK(fixture.driver.polls == copy_polls);
-		CHECK(request.capture_inflight == 0);
+		if (map_failure) {
+			// Actual original Frame delivery attempted the driver map. Its
+			// failed return closes capture custody, not CPU byte readiness.
+			REQUIRE(request.readbacks[0].source.returned == 4);
+			CHECK(request.readbacks[0].source.issued == 4);
+			CHECK(request.readbacks[0].source.completed == 0);
+			CHECK_FALSE(request.readbacks[0].source.delivered);
+			CHECK(request.readbacks[0].source.error == ERR_CANT_ACQUIRE_RESOURCE);
+			CHECK(request.readbacks[0].capture.native_code == -7001);
+			CHECK(request.capture_inflight == 0);
+			CHECK_FALSE(request.effects_pending);
+			CHECK_FALSE(request.source_device_lost);
+			CHECK(fixture.rd.frames[0].download_buffer_get_data_requests.is_empty());
+			CHECK(request.control.state == ProductionControlState::OWNER_CONSUMED);
+			CHECK(fixture.driver.alias_observed_download_maps == 1);
+			CHECK(fixture.driver.alias_failed_download_maps == 1);
+			CHECK(report.ready_readbacks == 0);
+			CHECK(report.cause.native_error == ERR_CANT_ACQUIRE_RESOURCE);
+			const auto error_revision = request.revision;
+			const auto graphs = request.graph_count, natives = request.native_count;
+			const auto driver_issues = fixture.driver.issues, driver_polls = fixture.driver.polls;
+			uint8_t untouched[] = { 0xa1, 0xb2, 0xc3, 0xd4 };
+			const uint8_t sentinel[] = { 0xa1, 0xb2, 0xc3, 0xd4 };
+			uint64_t untouched_written = 99;
+			for (uint32_t repeat = 0; repeat < 2; ++repeat) {
+				CHECK(copy_bytes(ref, error_revision, 0, untouched, 4, &untouched_written).native_error == ERR_CANT_ACQUIRE_RESOURCE);
+				CHECK(untouched_written == 99);
+				CHECK(memcmp(untouched, sentinel, 4) == 0);
+			}
+			CHECK(request.revision == error_revision);
+			CHECK(request.graph_count == graphs);
+			CHECK(request.native_count == natives);
+			CHECK(fixture.driver.issues == driver_issues);
+			CHECK(fixture.driver.polls == driver_polls);
+			CHECK(fixture.driver.alias_observed_download_maps == 1);
+		} else {
+			REQUIRE(request.readbacks[0].source.delivered);
+			CHECK(request.readbacks[0].source.completed == 4);
+			CHECK(request.readbacks[0].source.returned == 4);
+			REQUIRE(copy_bytes(ref, request.revision, 0, returned_bytes, 4, &written).native_error == OK);
+			CHECK(written == 4);
+			CHECK(memcmp(returned_bytes, pattern, 4) == 0);
+			// Public copy failures are pure observations: neither destination nor
+			// written is reset by stale-revision or insufficient-capacity rejection.
+			const auto copy_revision = request.revision;
+			const auto copy_graphs = request.graph_count, copy_natives = request.native_count;
+			const auto copy_issues = fixture.driver.issues, copy_polls = fixture.driver.polls;
+			uint8_t unchanged_bytes[] = { 0xa1, 0xb2, 0xc3, 0xd4 };
+			const uint8_t sentinel_bytes[] = { 0xa1, 0xb2, 0xc3, 0xd4 };
+			uint64_t unchanged_written = 99;
+			REQUIRE(copy_revision > 0);
+			CHECK(copy_bytes(ref, copy_revision - 1, 0, unchanged_bytes, 4, &unchanged_written).native_error == ERR_DOES_NOT_EXIST);
+			CHECK(unchanged_written == 99);
+			CHECK(memcmp(unchanged_bytes, sentinel_bytes, 4) == 0);
+			CHECK(copy_bytes(ref, copy_revision, 0, unchanged_bytes, 3, &unchanged_written).native_error == ERR_PARAMETER_RANGE_ERROR);
+			CHECK(unchanged_written == 99);
+			CHECK(memcmp(unchanged_bytes, sentinel_bytes, 4) == 0);
+			CHECK(request.revision == copy_revision);
+			CHECK(request.graph_count == copy_graphs);
+			CHECK(request.native_count == copy_natives);
+			CHECK(fixture.driver.issues == copy_issues);
+			CHECK(fixture.driver.polls == copy_polls);
+			CHECK(request.capture_inflight == 0);
+			CHECK(fixture.driver.alias_observed_download_maps == 1);
+			CHECK(fixture.driver.alias_failed_download_maps == 0);
+		}
 		CHECK(fixture.driver.alias_upload_copies == 1);
 		CHECK(fixture.driver.alias_download_copies == 1);
 		probe.closing = true;
@@ -7102,6 +7162,16 @@ struct Access {
 		}
 		REQUIRE(native.released());
 		native.free_created();
+		if (map_failure) {
+			// Actual cancellation/owner retirement did not rewrite the failed
+			// readback into a completed result or retry its failed map.
+			CHECK(request.readbacks[0].source.error == ERR_CANT_ACQUIRE_RESOURCE);
+			CHECK(request.readbacks[0].source.returned == 4);
+			CHECK(request.readbacks[0].source.completed == 0);
+			CHECK_FALSE(request.readbacks[0].source.delivered);
+			CHECK(fixture.driver.alias_failed_download_maps == 1);
+		}
+
 		for (uint32_t slot = 0; slot < 1; ++slot) {
 			const auto &backing = backings[slot];
 			const GDExtensionStorageRetireRequestV1 retirement = { Enrollment::ABI, backing.backing, backing.rid, backing.backing_serial, 0, 0, 1, 1, 0 };
@@ -7118,6 +7188,70 @@ struct Access {
 			REQUIRE(returned.state == 1);
 			REQUIRE(fixture.port.storage_release(ref, retired).native_error == OK);
 		}
+		if (map_failure) {
+			REQUIRE(fixture.rd.native_disposal_active);
+			REQUIRE(fixture.rd.native_disposal_continuation.production_owner == &request);
+			REQUIRE(fixture.rd.native_disposal_continuation.serial == request.maintenance_serial);
+			REQUIRE(request.natives[0].owner_index == 0);
+			auto &owner = request.natives[0];
+			REQUIRE(owner.observation.state == NativeSourceObservation::State::Complete);
+			// Each reversible contrast must refuse publication of the original
+			// RELEASE cell. A returned map error grants no unknown/native work.
+			for (uint32_t factor = 0; factor < 8; ++factor) {
+				const auto saved_observation = owner.observation;
+				const auto saved_issue = owner.member.source.issue;
+				const auto saved_readback = request.readbacks[0].source;
+				const bool saved_pending = request.graphs[0].pending;
+				auto *saved_owner = fixture.rd.native_disposal_continuation.production_owner;
+				switch (factor) {
+					case 0:
+						owner.observation.state = NativeSourceObservation::State::Pending;
+						break;
+					case 1:
+						owner.observation.state = NativeSourceObservation::State::Unknown;
+						break;
+					case 2:
+						owner.observation.completion_error = ERR_UNAVAILABLE;
+						break;
+					case 3:
+						--request.readbacks[0].source.returned;
+						break;
+					case 4:
+						request.readbacks[0].source.error = ERR_UNAVAILABLE;
+						break;
+					case 5:
+						request.graphs[0].pending = true;
+						break;
+					case 6:
+						fixture.rd.native_disposal_continuation.production_owner = nullptr;
+						break;
+					case 7:
+						for (uint32_t i = 0; i < request.native_count; ++i) {
+							if (request.natives[i].owner_index == 0) {
+								request.natives[i].member.source.issue = RDD::IssueFact::IssuedUnknown;
+							}
+						}
+						break;
+				}
+				auto offered = budget;
+				offered.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
+				GDExtensionProductionServiceBudgetV1 remaining{};
+				CHECK(release(ref, &offered, &remaining, &report).native_error == ERR_BUSY);
+				CHECK(request.control.state == ProductionControlState::OWNER_CONSUMED);
+				CHECK(request.serial == ref.handle_serial);
+				CHECK(fixture.rd.native_disposal_active);
+				CHECK(fixture.rd.native_disposal_continuation.serial == request.maintenance_serial);
+				owner.observation = saved_observation;
+				for (uint32_t i = 0; i < request.native_count; ++i) {
+					if (request.natives[i].owner_index == 0) {
+						request.natives[i].member.source.issue = saved_issue;
+					}
+				}
+				request.readbacks[0].source = saved_readback;
+				request.graphs[0].pending = saved_pending;
+				fixture.rd.native_disposal_continuation.production_owner = saved_owner;
+			}
+		}
 		for (const auto target : { ref, probe.create_ref }) {
 			Request *original = target.handle_serial == ref.handle_serial ? &request : create_request;
 			for (uint32_t turn = 0; turn < 64 && original->serial; ++turn) {
@@ -7125,6 +7259,19 @@ struct Access {
 				offered.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
 				GDExtensionProductionServiceBudgetV1 remaining{};
 				const Error e = Error(release(target, &offered, &remaining, &report).native_error);
+				if (map_failure && target.handle_serial == ref.handle_serial) {
+					// The control report may describe bounded cleanup as Busy;
+					// its retained readback result must remain the map failure.
+					if (original->serial) {
+						CHECK(original->readbacks[0].source.error == ERR_CANT_ACQUIRE_RESOURCE);
+						CHECK(original->readbacks[0].source.returned == 4);
+						CHECK(original->readbacks[0].source.completed == 0);
+						CHECK_FALSE(original->readbacks[0].source.delivered);
+					}
+					if (e == OK) {
+						CHECK(report.cause.native_error == ERR_CANT_ACQUIRE_RESOURCE);
+					}
+				}
 				CHECK((e == OK || e == ERR_BUSY));
 				server->sync();
 			}
@@ -11573,4 +11720,8 @@ TEST_CASE("[SceneTree][ProductionRequest][GenerationGuardRefusal] actual unprepa
 
 TEST_CASE("[SceneTree][ProductionRequest][AliasReadbackIntegration] actual internal acquire upload and single download preserve byte custody") {
 	TestProductionRequest::Access::output_alias_readback_complete();
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][AliasReadbackMapFailure] actual download map failure returns custody and retires original owners") {
+	TestProductionRequest::Access::output_alias_readback_complete(true);
 }

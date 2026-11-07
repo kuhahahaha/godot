@@ -1801,7 +1801,42 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_v2(GDExtensionProd
 					own_tail = request->maintenance_serial && rd->native_disposal_active && request->maintenance_serial == rd->native_disposal_continuation.serial && rd->native_disposal_continuation.production_owner == request;
 					rd->_thread_safe_.unlock();
 				}
-				if (ready.native_error != ERR_BUSY || !own_tail || request->capture_inflight || (request->compute_list_open || request->draw_list_open) || report->cause.native_error != OK || (!request->cancelled && request->next_action != request->action_count)) {
+				// A returned CPU map failure is a result error, not an outstanding
+				// native obligation. Admit only the original maintenance tail after
+				// all issued work is positively complete; preserve the error report.
+				const bool returned_map_failure = [&]() {
+					if (report->cause.native_error != ERR_CANT_ACQUIRE_RESOURCE || request->effects_pending || request->source_device_lost || report->possible_obligations || report->physical_returns_pending || report->known_obligations != report->complete_obligations) {
+						return false;
+					}
+					for (uint32_t i = 0; i < request->graph_count; ++i) {
+						const auto &graph = request->graphs[i];
+						if (graph.request != request || graph.pending || graph.fact.issue_error != OK) {
+							return false;
+						}
+					}
+					for (uint32_t i = 0; i < request->native_count; ++i) {
+						const ProductionNativeCell *owner = nullptr;
+						if (production_native_owner_locked(*request, i, owner) != OK || owner->member.source.issue != RDD::IssueFact::KnownAccepted || owner->member.source.error != OK || owner->observation.state != NativeSourceObservation::State::Complete || owner->observation.error != OK || owner->observation.completion_error != OK || owner->observation.retention_error != OK || owner->member.retention_error != OK || owner->release_error != OK || !owner->member.retained) {
+							return false;
+						}
+					}
+					bool found_map_failure = false;
+					for (uint32_t i = 0; i < request->readback_count; ++i) {
+						const auto &readback = request->readbacks[i];
+						if (readback.request != request || readback.source.returned != readback.source.issued || readback.source.completed > readback.source.issued) {
+							return false;
+						}
+						if (readback.source.error == OK) {
+							continue;
+						}
+						if (readback.source.error != ERR_CANT_ACQUIRE_RESOURCE || !readback.source.issued || readback.source.delivered) {
+							return false;
+						}
+						found_map_failure = true;
+					}
+					return found_map_failure;
+				}();
+				if (ready.native_error != ERR_BUSY || !own_tail || request->capture_inflight || (request->compute_list_open || request->draw_list_open) || (report->cause.native_error != OK && !returned_map_failure) || (!request->cancelled && request->next_action != request->action_count)) {
 					return ready;
 				}
 			}
