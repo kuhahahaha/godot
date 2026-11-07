@@ -35,7 +35,7 @@
 namespace RendererRD {
 
 ParticlesStorage::HeightFrame::HeightFrame(const Snapshot &p_snapshot, const Ref<HeightFrameResources> &p_resources, uint32_t p_native_capacity, uint32_t p_transfer_capacity) :
-		snapshot(p_snapshot), resources(p_resources), prefix(p_resources->device, p_native_capacity, p_transfer_capacity) {
+		snapshot(p_snapshot), resources(p_resources), prefix(p_resources, p_native_capacity, p_transfer_capacity) {
 }
 
 Error ParticlesStorage::HeightFrame::create_candidate(ParticlesStorage &p_storage, RID p_instance, uint64_t p_original_occurrence, const Ref<HeightFrameResources> &p_resources, uint32_t p_native_capacity, uint32_t p_transfer_capacity, Ref<HeightFrame> &r_frame) {
@@ -48,7 +48,7 @@ Error ParticlesStorage::HeightFrame::create_candidate(ParticlesStorage &p_storag
 	if (!base || base->type != RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE) {
 		return ERR_INVALID_PARAMETER;
 	}
-	if (p_resources->state != HeightFrameResources::State::ALLOCATED || p_resources->allocation_error != OK) {
+	if (!p_resources->is_quoted_verified()) {
 		return ERR_INVALID_DATA;
 	}
 	HeightFrameResources::Observation allocation;

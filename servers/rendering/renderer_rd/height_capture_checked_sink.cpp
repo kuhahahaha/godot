@@ -41,6 +41,11 @@ HeightCaptureCheckedSink::HeightCaptureCheckedSink(RenderingDevice &p_rd, uint32
 	cleanup.operation = Operation::End;
 }
 
+HeightCaptureCheckedSink::HeightCaptureCheckedSink(const Ref<ParticlesStorage::HeightFrameResources> &p_resources, uint32_t p_native_capacity, uint32_t p_transfer_capacity) :
+		HeightCaptureCheckedSink(p_resources->device, p_native_capacity, p_transfer_capacity) {
+	quoted_resources = p_resources;
+}
+
 HeightCaptureCheckedSink::~HeightCaptureCheckedSink() = default;
 
 Error HeightCaptureCheckedSink::begin_quoted_target(const Ref<ParticlesStorage::HeightFrameResources> &p_resources, uint32_t p_draw_flags, VectorView<Color> p_clear_colors, float p_clear_depth, uint32_t p_clear_stencil, const Rect2 &p_region, uint32_t p_breadcrumb) {
@@ -112,6 +117,19 @@ Error HeightCaptureCheckedSink::accept(const DrawResult &p_result) {
 }
 
 Error HeightCaptureCheckedSink::begin(RID p_framebuffer, uint32_t p_draw_flags, VectorView<Color> p_clear_colors, float p_clear_depth, uint32_t p_clear_stencil, const Rect2 &p_region, uint32_t p_breadcrumb) {
+	if (quoted_resources.is_valid()) {
+		if (&quoted_resources->device != &rd || !quoted_resources->is_quoted_verified()) {
+			return fail(ERR_UNAUTHORIZED);
+		}
+		ParticlesStorage::HeightFrameResources::Observation observation;
+		const Error observed = quoted_resources->observe(observation);
+		if (observed != OK) {
+			return fail(observed);
+		}
+		if (observation.depth.state != NativeDisposalWitness::State::LIVE || observation.framebuffer.state != NativeDisposalWitness::State::LIVE || p_framebuffer != quoted_resources->get_framebuffer()) {
+			return fail(ERR_INVALID_DATA);
+		}
+	}
 	if (begin_attempted) {
 		return fail(ERR_INVALID_PARAMETER);
 	}

@@ -306,7 +306,7 @@ Error ParticlesHeightfieldClearTestFixture::run_frame_resources() {
 		return ERR_UNAVAILABLE;
 	}
 	using Resources = RendererRD::ParticlesStorage::HeightFrameResources;
-	quoted_resources_capture = OS::get_singleton()->get_environment("ANGE_HEIGHTFIELD_QUOTED_RESOURCES") == "1";
+	quoted_resources_capture = candidate_capture || OS::get_singleton()->get_environment("ANGE_HEIGHTFIELD_QUOTED_RESOURCES") == "1";
 	Error error = OK;
 	if (quoted_resources_capture) {
 		bool verified = true;

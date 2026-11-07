@@ -101,6 +101,7 @@ public:
 	// Capacities are caller-provided finite working storage, not budget grants.
 	// A separate cleanup slot is reserved here even when business storage fills.
 	HeightCaptureCheckedSink(RenderingDevice &p_rd, uint32_t p_native_capacity, uint32_t p_transfer_capacity);
+	HeightCaptureCheckedSink(const Ref<ParticlesStorage::HeightFrameResources> &p_resources, uint32_t p_native_capacity, uint32_t p_transfer_capacity);
 	~HeightCaptureCheckedSink(); // Never secretly end a list or free RIDs.
 	HeightCaptureCheckedSink(const HeightCaptureCheckedSink &) = delete;
 	HeightCaptureCheckedSink &operator=(const HeightCaptureCheckedSink &) = delete;
