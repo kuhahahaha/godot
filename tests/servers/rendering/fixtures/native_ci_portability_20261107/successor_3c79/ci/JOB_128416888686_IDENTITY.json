@@ -1,0 +1,23 @@
+{
+  "id": 128416888686,
+  "bytes": 1655841,
+  "sha256": "42cb1eb4c81f5ea6524816c46ea3693610366bd5eddb7f97637fe1a8670f4f8a",
+  "matches": [
+    {
+      "line": 4095,
+      "text": "2026-11-07T13:31:59.8118210Z scons: done building targets."
+    },
+    {
+      "line": 7492,
+      "text": "2026-11-07T13:34:12.1887360Z scons: done building targets."
+    },
+    {
+      "line": 7943,
+      "text": "2026-11-07T13:35:28.9217840Z [doctest] test cases:   2267 |   2266 passed | 1 failed | 3 skipped"
+    },
+    {
+      "line": 7944,
+      "text": "2026-11-07T13:35:28.9218790Z [doctest] assertions: 585294 | 585291 passed | 3 failed |"
+    }
+  ]
+}

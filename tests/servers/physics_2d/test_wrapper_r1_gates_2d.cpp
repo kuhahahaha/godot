@@ -114,6 +114,7 @@ public:
 	bool stage_end_tail = false;
 	bool finish_cleanup = false;
 	std::atomic<bool> step_returned_before_finish{ false };
+	std::atomic<int> finish_count_before_step_return{ -1 };
 	Semaphore step_returned;
 	Thread::ID init_thread = Thread::UNASSIGNED_ID;
 	Thread::ID finish_thread = Thread::UNASSIGNED_ID;
@@ -128,7 +129,8 @@ public:
 		if (finish_from_step) {
 			wrapper->finish();
 			wrapper->finish();
-			step_returned_before_finish.store(finish_count.load() == 0);
+			finish_count_before_step_return.store(finish_count.load());
+			step_returned_before_finish.store(finish_count_before_step_return.load() == 0);
 			step_returned.post();
 		}
 	}
@@ -188,7 +190,9 @@ TEST_CASE("[PhysicsWrapper2DR1Gates] pump-origin finish returns from step and ea
 	wrapper->step(1.0 / 60.0);
 	wait_gate(backend->step_returned);
 	CHECK(backend->step_returned_before_finish.load());
-	CHECK(backend->finish_count.load() == 0);
+	// The Main step root epilogue may already have serviced and joined the
+	// requested stop. Assert the count captured inside the pump callback.
+	CHECK(backend->finish_count_before_step_return.load() == 0);
 	CHECK(Access::snapshot(wrapper).stopping);
 	switch (boundary) {
 		case 0:

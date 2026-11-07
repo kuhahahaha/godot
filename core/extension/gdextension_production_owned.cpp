@@ -395,10 +395,10 @@ void Registry::production_raster_prepare_report_locked(const ProductionRequest &
 	out.revision = request.revision;
 	out.phase = request.raster_prepare_phase;
 	out.result = result(request.resources[0].creating ? ERR_BUSY : request.resources[0].handoff_error);
-	uint64_t *serials[4] = { &out.framebuffer_serial, &out.depth_serial, &out.shader_serial, &out.pipeline_serial };
+	uint64_t *output_serials[4] = { &out.framebuffer_serial, &out.depth_serial, &out.shader_serial, &out.pipeline_serial };
 	for (uint32_t i = 0; i < 4; ++i) {
 		const auto &slot = request.resources[i];
-		*serials[i] = slot.backing_serial;
+		*output_serials[i] = slot.backing_serial;
 		if (slot.primary.is_valid()) {
 			out.known_mask |= 1u << i;
 		}

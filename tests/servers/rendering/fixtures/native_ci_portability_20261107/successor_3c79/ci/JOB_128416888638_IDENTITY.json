@@ -1,0 +1,11 @@
+{
+  "id": 128416888638,
+  "bytes": 2263451,
+  "sha256": "dae728d78479a7b7472da4eba8d1adcc5468f48dc2ccbec246d24bd89bd64c50",
+  "matches": [
+    {
+      "line": 3448,
+      "text": "2026-11-07T13:58:20.7085702Z core\\extension\\gdextension_production_owned.cpp:398:19: error: declaration of 'serials' shadows a member of 'GDExtensionDeviceExit::Registry' [-Werror=shadow]"
+    }
+  ]
+}

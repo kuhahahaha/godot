@@ -79,9 +79,10 @@ public:
 		const RID framebuffer_rid = device.framebuffer_owner.make_rid(framebuffer);
 		RenderingDevice::RenderPipeline pipeline;
 		pipeline.driver_id = RDD::PipelineID(5);
-#ifdef DEBUG_ENABLED
+		// Checked capture consumes these original creation facts in release too.
 		pipeline.validation.framebuffer_format = 1;
 		pipeline.validation.vertex_format = RenderingDevice::INVALID_ID;
+#ifdef DEBUG_ENABLED
 		pipeline.validation.primitive_minimum = pipeline.validation.primitive_divisor = 3;
 #endif
 		const RID pipeline_rid = device.render_pipeline_owner.make_rid(pipeline);

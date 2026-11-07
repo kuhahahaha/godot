@@ -1,0 +1,21 @@
+# Successor CI monitoring handoff
+
+Parent directed this monitor to stop after the latest snapshot to release its concurrency slot. Last snapshot 2026-11-07T14:06:02Z; exact run42377076633/head3c79c5d8e107da32c07f1ffa017302de50896380 remains in_progress: 18/20 jobs completed, 10 success and8 failure. MSVC Windows Editor128416888607 and GCC doubles sanitizer128416888728 remain in_progress/Compilation. No full CI green is claimed.
+
+HANDOFF_STATUS.json preserves every job/compile/unit state and independently recomputed raw-log byte/SHA identities. LATEST.json and timestamp snapshots preserve original jobs data. All11 relevant completed-lane original ANSI logs were saved by `gh api --allow-escape-sequences repos/kuhahahaha/godot/actions/jobs/<id>/logs`, with per-job IDENTITY.json and exact raw first-failure slices where applicable. Transient API EOF failures were retried, with no log normalization. Initial disk-full failure created nothing; parent cleanup restored space; monitor deleted no files.
+
+## Old causes vs observed successor outcomes
+
+- Windows clang-cl128416888717: complete SUCCESS, including compilation/unit tests. Former getenv/fopen MSVC CRT failure genuinely disappears on this lane. Other MSVC lanes must be considered separately.
+- Windows MSVC Template128416888627: compilation FAILURE due to new production_owned.cpp398 local serials hiding Registry::serials, C4458/C2220. Old CRT C4996 is not the current diagnostic, but full compile success is not established. Editor still running.
+- MinGW Template128416888638, Linux Minimal128416888806, Mono Editor128416888646, Mono release128416888747, Mono debug128416888750: all compilation FAILURE on production_owned.cpp398 serials shadow member (header812), -Werror=shadow. The old interface phase shadow diagnostic did not recur, but these lanes are not full compile greens; do not turn an absent old diagnostic into a complete lane-success claim.
+- TSan128416888641: complete SUCCESS, compilation+unit tests;2177cases/585253assert allpass. Former FrameWait LocalVector fatal absent and suite completes. Original raw log1099396B SHA17d8feb66ecb8e9a0b59be1956b9d2de742462469a0a533fe52bafa017c00edf.
+- ASan/UBSan128416888693: complete SUCCESS, compilation+unit tests;2176cases/585251assert allpass. Former FrameWait LocalVector fatal absent and suite completes. Raw1159577B SHA33d8f4daa34343ecd5c8f8e132a39bf38a86276049d86050826a8dafaf20d1eb. Other pre-existing UBSan runtime diagnostics remain in this original log; success does not mean diagnostic-free.
+- macOS Editor128416888686: both architecture compilations SUCCESS, unit FAILURE2267cases/2266pass/1fail,585294assert/3fail. Only failed case PhysicsWrapper2DR1Gates pump-origin finish, original test_wrapper_r1_gates_2d.cpp191 count0 observed1 for sync/flush_queries/end_sync. Parent authorized narrow fixture diagnosis/change, independently documented under physics2d-fixture/. No build/runtime GREEN was claimed by author.
+- macOS Template128416888636: both architecture compilations SUCCESS, unit FAILURE2237cases/2236pass/1fail,479451assert/10fail. Only failed case D32 Qualification checked RD depth draw prefix (test_qualification_ticket.cpp1692); first helper97 bind.error expected0 actual31, then dependent draw/graph mapping assertions. Root owns diagnosis; monitor changed no RD source.
+
+## Other work delivered during monitoring
+
+The one authorized 2D fixture edit is released to parent; physics2d-fixture/REVIEW.md explains the real Main step-root epilogue race and snapshot fix. Author postimage18176B SHA81bc9e9c80cbf971316a245e80ac9ae1218f90e947c0a6e1e51e61dc04a6bdc7, preimage preserved. Parent may since have changed/reviewed the shared file; this is the author's handoff identity, not an assertion of current worktree state. No production code/build/staging/commit was performed by this monitor.
+
+Independent offline P01 M5 review is separately complete at work/p01-m5-successor-independent-review-20261107/. It accepts only the saved M5 native substrate117/1290+cancel controls, with one exact typed44/reason19 retry at ordinal106 and independently compared frozen readback bytes. No package controller, DSO or GPU was executed. It grants no M3/K06/E09/runtime/wholeP1 authority and notes stale SUCCESSOR_IDENTITY scope prose.
