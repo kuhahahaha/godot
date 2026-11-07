@@ -41,6 +41,14 @@ class TestCheckedBindAccess {
 	using RDG = RenderingDeviceGraph;
 	struct Driver : TransferTestDriverBase {
 		Vector<uint64_t> payload;
+		RenderPassID render_pass_create(VectorView<Attachment> p_attachments, VectorView<Subpass> p_subpasses, VectorView<SubpassDependency> p_dependencies, uint32_t p_view_count, AttachmentReference) override {
+			CHECK(p_attachments.size() == 0);
+			CHECK(p_subpasses.size() == 1);
+			CHECK(p_dependencies.size() == 0);
+			CHECK(p_view_count == 1);
+			return RenderPassID(71);
+		}
+		void render_pass_free(RenderPassID p_render_pass) override { CHECK(p_render_pass == RenderPassID(71)); }
 		uint64_t limit_get(Limit p_limit) override {
 			CHECK(p_limit == LIMIT_MAX_BOUND_UNIFORM_SETS);
 			return 8;
@@ -171,6 +179,69 @@ class TestCheckedBindAccess {
 	}
 
 public:
+	static void checked_list_ids() {
+		Fixture f;
+		f.end();
+		const RID framebuffer = f.rd.framebuffer_create_empty(Size2i(16, 16));
+		REQUIRE(framebuffer.is_valid());
+		// Success uses the public begin result, never a fabricated enum value.
+		const RD::DrawListID list = f.rd.draw_list_begin(framebuffer);
+		REQUIRE(list == Fixture::LIST);
+		REQUIRE(f.rd.draw_list.active);
+		REQUIRE(f.rd.draw_graph.contains_record(f.rd.draw_list.begin_handle));
+		RD::RenderPipeline pipeline;
+		pipeline.driver_id = RDD::PipelineID(81);
+		pipeline.validation.framebuffer_format = f.rd.draw_list_framebuffer_format;
+		const RID pipeline_rid = f.rd.render_pipeline_owner.make_rid(pipeline);
+		RD::Buffer buffer;
+		buffer.driver_id = RDD::BufferID(82);
+		buffer.size = 16;
+		buffer.usage = RDD::BUFFER_USAGE_INDIRECT_BIT;
+		const RID buffer_rid = f.rd.storage_buffer_owner.make_rid(buffer);
+		const Rect2 scissor(1, 1, 8, 8);
+		const RD::DrawListID wrong_lists[] = { RD::ID_TYPE_DRAW_LIST, RD::ID_TYPE_COMPUTE_LIST, int64_t(RD::ID_TYPE_COMPUTE_LIST) << RD::ID_BASE_SHIFT, list + 1 };
+		ERR_PRINT_OFF;
+		for (RD::DrawListID wrong : wrong_lists) {
+			const uint32_t before = f.rd.draw_graph.qualification_command_count();
+			const auto check_rejected = [&](const RD::DrawAppendResult &result) {
+				CHECK(result.error == ERR_INVALID_PARAMETER);
+				CHECK(result.effect == RD::NativeAppendEffect::NoNewEffect);
+				CHECK_FALSE(result.draw_handle.is_valid());
+				CHECK(result.prefix_count == 0);
+				CHECK_FALSE(result.capture_complete);
+				CHECK_FALSE(result.has_transfer);
+				CHECK(f.rd.draw_graph.qualification_command_count() == before);
+				CHECK_FALSE(f.rd.draw_list.state.pipeline.is_valid());
+				CHECK_FALSE(f.rd.draw_list.state.checked_push_constant_supplied);
+				CHECK(f.rd.draw_list.state.draw_count == 0);
+				CHECK(f.rd.draw_list.active);
+			};
+			check_rejected(f.rd._draw_list_bind_render_pipeline_recorded(wrong, pipeline_rid));
+			check_rejected(f.rd._draw_list_enable_scissor_recorded(wrong, scissor));
+			check_rejected(f.rd._draw_list_draw_indirect_recorded(wrong, false, buffer_rid, 0, 1, 0));
+		}
+		ERR_PRINT_ON;
+		for (const auto &result : {
+				 f.rd._draw_list_bind_render_pipeline_recorded(list, pipeline_rid),
+				 f.rd._draw_list_enable_scissor_recorded(list, scissor),
+				 f.rd._draw_list_draw_indirect_recorded(list, false, buffer_rid, 0, 1, 0) }) {
+			CHECK(result.error == OK);
+			CHECK(result.effect == RD::NativeAppendEffect::Recorded);
+			CHECK(result.capture_complete);
+			CHECK(f.rd.draw_graph.contains_record(result.draw_handle));
+		}
+		CHECK(f.rd.draw_list.state.pipeline == pipeline_rid);
+		CHECK(f.rd.draw_list.state.draw_count == 1);
+		f.end();
+		RDG::framebuffer_cache_free(&f.driver, f.rd.framebuffer_owner.get_or_null(framebuffer)->framebuffer_cache);
+		f.rd.framebuffer_owner.free(framebuffer);
+		for (const KeyValue<RD::FramebufferFormatID, RD::FramebufferFormat> &format : f.rd.framebuffer_formats) {
+			f.driver.render_pass_free(format.value.render_pass);
+		}
+		f.rd.framebuffer_formats.clear();
+		f.rd.render_pipeline_owner.free(pipeline_rid);
+		f.rd.storage_buffer_owner.free(buffer_rid);
+	}
 	static void uniform_state() {
 		Fixture f;
 		const RID first = f.uniform(51), next = f.uniform(52);
@@ -352,6 +423,9 @@ public:
 	}
 };
 
+TEST_CASE("[RenderingDevice][CheckedBind] checked draw leaves require the public begin list ID before effects") {
+	TestCheckedBindAccess::checked_list_ids();
+}
 TEST_CASE("[RenderingDevice][CheckedBind] uniform acceptance records CPU state without a native instruction") {
 	TestCheckedBindAccess::uniform_state();
 }

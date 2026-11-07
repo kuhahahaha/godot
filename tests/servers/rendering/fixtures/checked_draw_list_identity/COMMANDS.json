@@ -1,0 +1,57 @@
+{
+  "build": {
+    "command": [
+      "scons",
+      "-Q",
+      "platform=macos",
+      "target=editor",
+      "tests=yes",
+      "debug_symbols=no",
+      "module_particles_runtime_tests_enabled=yes",
+      "-j3"
+    ],
+    "exit_code": 0,
+    "provenance": "Executed by root; command and exit status confirmed in parent message.",
+    "log": "checked-draw-metadata-green-build.log"
+  },
+  "red": {
+    "command": [
+      "bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*checked draw leaves require the public begin list ID before effects*,*original indirect draw retains exact identity native prefix and transfer*"
+    ],
+    "exit_code": 1,
+    "log": "checked-draw-red.log"
+  },
+  "green": {
+    "focused": {
+      "command": [
+        "bin/godot.macos.editor.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[CheckedBind]*,*[RecordSource]*,*[OutputSceneMetadata]*,*[OutputMetadataFactory]*,*[B4]*"
+      ],
+      "exit_code": 0,
+      "binary": {
+        "bytes": 156730024,
+        "sha256": "d75aa4372d76d47aa98640cb39a7f5db55da86b6f9139daf480372ab10e11c79"
+      },
+      "log": "checked-draw-metadata-focused-green.log"
+    },
+    "combined": {
+      "command": [
+        "bin/godot.macos.editor.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[ProductionRequest]*,*[ProductionNativeObserve]*,*[B4]*,*[ViewportHistory]*,*[CheckedBind]*,*[RecordSource]*,*[NativeDisposal]*,*[QualificationTicket]*"
+      ],
+      "exit_code": 0,
+      "binary": {
+        "bytes": 156730024,
+        "sha256": "d75aa4372d76d47aa98640cb39a7f5db55da86b6f9139daf480372ab10e11c79"
+      },
+      "log": "checked-draw-metadata-combined-green.log"
+    }
+  }
+}

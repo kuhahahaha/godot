@@ -1,0 +1,216 @@
+{
+  "schema_version": 1,
+  "scope": "checked draw list identity guards and corresponding controlled fixtures",
+  "base_commit": "9558cdc89578886e081b59b472fc476f3202467d",
+  "source_change_paths": [
+    "servers/rendering/rendering_device.cpp",
+    "tests/servers/rendering/test_checked_draw_bind.cpp",
+    "tests/servers/rendering/test_record_source.cpp",
+    "tests/servers/rendering/test_external_output_contract.cpp"
+  ],
+  "compiled_overlay_paths": [
+    "core/extension/gdextension_production_request.cpp",
+    "core/extension/gdextension_production_request.h",
+    "tests/core/extension/test_production_request.cpp"
+  ],
+  "sources": [
+    {
+      "path": "servers/rendering/rendering_device.cpp",
+      "role": "source_change",
+      "base_bytes": 690190,
+      "base_sha256": "c13577649c2b9594514bd4d99bcd31c399778d47f4c228496d306e24f572d850",
+      "green_bytes": 690626,
+      "green_sha256": "6e5ec272227a6b118cdc6207958b54d34344b7e3365636d40b5650b728060d17"
+    },
+    {
+      "path": "tests/servers/rendering/test_checked_draw_bind.cpp",
+      "role": "source_change",
+      "base_bytes": 17565,
+      "base_sha256": "7de1d0825b5c98c8c04bec74c577a056e546a949b1fbd2aca1ad4c46370d6533",
+      "green_bytes": 21335,
+      "green_sha256": "73ac947f2209b73c7d78be78560e7e3f57a1a60a921ba2fd20ff72d9a8206040"
+    },
+    {
+      "path": "tests/servers/rendering/test_record_source.cpp",
+      "role": "source_change",
+      "base_bytes": 39455,
+      "base_sha256": "77a864a1e6fdbf07187f58962f76ab395384771db9e9c5ab96942266a90501c6",
+      "green_bytes": 41514,
+      "green_sha256": "5a09257a8e96b504cab9d3f71fffae46f408a7ea1bee3f8bf5669cb92ad57a32"
+    },
+    {
+      "path": "tests/servers/rendering/test_external_output_contract.cpp",
+      "role": "source_change",
+      "base_bytes": 39912,
+      "base_sha256": "cf6635d3b767a33045ffea4ca84055f99ef32e57df0dfc70ded90253bb8d6a99",
+      "green_bytes": 39988,
+      "green_sha256": "96ff90c355c0012a087c9e0db7f480932e29220b189946fbb800829eacfe08fb"
+    },
+    {
+      "path": "core/extension/gdextension_production_request.cpp",
+      "role": "compiled_overlay",
+      "base_bytes": 136051,
+      "base_sha256": "7cf9e55f46089501a879cc30369674d29b4f5fdb29e4cbf70895731fa4bff91d",
+      "green_bytes": 137223,
+      "green_sha256": "2faa9a5717c34c7503214b70c87363ccd39cb825a29aaf4ef3bb8215ddda8084"
+    },
+    {
+      "path": "core/extension/gdextension_production_request.h",
+      "role": "compiled_overlay",
+      "base_bytes": 21454,
+      "base_sha256": "dba371ba85a9091721173c585e1276a976907e37d8f54a9f599fe7304b351739",
+      "green_bytes": 21647,
+      "green_sha256": "c20491171145d04a56f16782b72e18843a1ef77d93393e1eae47fe1e860c80c5"
+    },
+    {
+      "path": "tests/core/extension/test_production_request.cpp",
+      "role": "compiled_overlay",
+      "base_bytes": 538480,
+      "base_sha256": "041189aa211b27fbf5676d1cdab6f38e0b70a18368f7ecca32fa8589932c78a2",
+      "green_bytes": 548049,
+      "green_sha256": "06c0d9a3d1513cdb9cbdca985835cf75b5b511b322139f96badc98371b2dd558"
+    }
+  ],
+  "green_binary": {
+    "path": "bin/godot.macos.editor.arm64",
+    "bytes": 156730024,
+    "sha256": "d75aa4372d76d47aa98640cb39a7f5db55da86b6f9139daf480372ab10e11c79",
+    "provenance": "Root execution manifest; green binary jointly includes source_change and compiled_overlay."
+  },
+  "red": {
+    "exit_code": 1,
+    "test_cases": 2,
+    "passed_cases": 0,
+    "failed_cases": 2,
+    "assertions": 243,
+    "passed_assertions": 142,
+    "failed_assertions": 101,
+    "binary_retained": false,
+    "binary_sha256": null,
+    "limits": "Red used the initial draw fixtures against original production guards; green also includes metadata negative test additions and metadata production fix. No red binary/hash or exact complete red-source snapshot was preserved.",
+    "examples": [
+      {
+        "file": "tests/servers/rendering/test_checked_draw_bind.cpp",
+        "line": 207,
+        "assertion": "result.error == ERR_INVALID_PARAMETER",
+        "observed": "0 == 31"
+      },
+      {
+        "file": "tests/servers/rendering/test_record_source.cpp",
+        "line": 615,
+        "assertion": "bare_list.observed.error == ERR_INVALID_PARAMETER",
+        "observed": "0 == 31"
+      },
+      {
+        "file": "tests/servers/rendering/test_record_source.cpp",
+        "line": 655,
+        "assertion": "drawn.observed.error == OK",
+        "observed": "31 == 0"
+      },
+      {
+        "file": "tests/servers/rendering/test_record_source.cpp",
+        "line": 628,
+        "assertion": "device.transfer_worker_operation_used_by_draw[0] == 0",
+        "observed": "9 == 0"
+      }
+    ]
+  },
+  "green_build": {
+    "exit_code": 0
+  },
+  "focused": {
+    "exit_code": 0,
+    "test_cases": 66,
+    "passed_cases": 66,
+    "assertions": 6623,
+    "passed_assertions": 6623,
+    "expected_diagnostics": {
+      "foreign_camera_source_token": 3
+    }
+  },
+  "combined": {
+    "exit_code": 0,
+    "test_cases": 179,
+    "passed_cases": 179,
+    "assertions": 80359,
+    "passed_assertions": 80359,
+    "expected_diagnostics": {
+      "pipeline_creation_failure": 3,
+      "foreign_camera_source_token": 3
+    }
+  },
+  "behavior": {
+    "source_guard": "Reject bare ID_TYPE_DRAW_LIST; accept int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT returned by public begin.",
+    "checked_leaves": [
+      "render pipeline bind",
+      "indirect draw",
+      "enable scissor"
+    ],
+    "checked_leaf_guard_condition": "p_capture only; before list state, graph or transfer effects; thread and recording-error order retained.",
+    "ordinary_public_wrapper_capture": false,
+    "public_begin_success_fixture": true,
+    "invalid_ids": [
+      "bare draw enum",
+      "bare compute enum",
+      "encoded compute list",
+      "encoded draw list plus one"
+    ],
+    "preserved_coverage": [
+      "exact identity",
+      "actual graph handle",
+      "transfer pair",
+      "late descriptor prefix",
+      "indexed draw",
+      "zero draw count"
+    ]
+  },
+  "independent_review": {
+    "agent": "/root/production_raster_frame_impl",
+    "model_designation": "user-designated Astra",
+    "evidence": "review.txt",
+    "provenance": "Original cross-review relayed by root"
+  },
+  "claims_excluded": [
+    "physical GPU qualification",
+    "output issuer or packet authority",
+    "end-to-end particle acceptance"
+  ],
+  "artifact_hashes": {
+    "COMMANDS.json": {
+      "bytes": 1728,
+      "sha256": "ff53a772636e7ae2d73ebfddaa7426c57271c5327ce7906e6b4595adb64f2349"
+    },
+    "SOURCE_CHANGE.patch": {
+      "bytes": 16945,
+      "sha256": "ef180fc02864f48860192b4474b3748b0bc861ea7a11f4b3c58413ecdab0c55d"
+    },
+    "checked-draw-metadata-combined-green.log": {
+      "bytes": 1225,
+      "sha256": "350517a71b91cda669d6d56777481a1f869e85d5d50e1eca330be8b1e78b0611"
+    },
+    "checked-draw-metadata-focused-green.log": {
+      "bytes": 726,
+      "sha256": "3760a5858a7df385213ff467b0d9d67a09b327c6d957753850ddda6152e46c12"
+    },
+    "checked-draw-metadata-green-build.log": {
+      "bytes": 3846,
+      "sha256": "e35d803b3843d6fb1b0848961ab43cd6390fa8256880556e18ded6a8bc430d53"
+    },
+    "checked-draw-metadata-green-runs.json": {
+      "bytes": 944,
+      "sha256": "382d555e054265ca747552afdfc095e9900961daf7a82e9a08d76d5d07d20a86"
+    },
+    "checked-draw-red.log": {
+      "bytes": 16725,
+      "sha256": "f99a022b3106980ae7e8d10f4dbb3e33256058cbdb56be31538c8b0da5ceb053"
+    },
+    "review.txt": {
+      "bytes": 580,
+      "sha256": "d9cba4007529704a7815497a1fdf1daac21a9ed0a2a27d1fff55964df87ffed6"
+    },
+    "RECEIPT.md": {
+      "bytes": 4026,
+      "sha256": "f023015061d759b213f4f734d3db6c74bca2fb721aa5e4ddcd0e571162d5bf31"
+    }
+  }
+}

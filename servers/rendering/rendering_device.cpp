@@ -6880,6 +6880,9 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_bind_render_pipeli
 	DrawAppendResult result;
 	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	if (p_capture) {
+		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
+	}
 
 	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
 
@@ -7724,6 +7727,9 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_indirect_reco
 	DrawAppendResult result;
 	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	if (p_capture) {
+		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
+	}
 
 	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
 
@@ -7924,6 +7930,9 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_enable_scissor_rec
 	DrawAppendResult result;
 	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	if (p_capture) {
+		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
+	}
 
 	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
 
@@ -14904,7 +14913,7 @@ RenderingDevice::SourceDrawAppendResult RenderingDevice::_record_source_draw_ind
 		result.native.error = result.observed.error;
 		return result;
 	}
-	if (list != ID_TYPE_DRAW_LIST) {
+	if (list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT)) {
 		result.observed.error = ERR_INVALID_PARAMETER;
 		result.native.error = result.observed.error;
 		return result;
