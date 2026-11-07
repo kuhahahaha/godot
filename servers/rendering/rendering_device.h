@@ -1758,6 +1758,7 @@ private:
 	static constexpr uint32_t NATIVE_HEIGHT_RANGE_CAPACITY = 64;
 	LocalVector<Ref<NativeHeightRange>> native_height_ranges;
 	uint64_t next_native_height_range_serial = 1;
+	Ref<NativeHeightRange> native_height_active_checked_range;
 	bool native_height_finalization_started = false;
 	bool native_height_finalization_drained = false;
 	Error _native_height_range_validate(const Ref<NativeHeightRange> &p_range) const;
@@ -1773,6 +1774,7 @@ private:
 	void _native_height_seal_frame(uint32_t p_frame);
 	Error _native_height_issue_slot(uint32_t p_frame, uint64_t p_epoch, uint32_t p_slot, RDD::CommandBufferID p_command, Error p_error, const RDD::QueueCallReport &p_report);
 	Error _native_height_retain_frame_sources(uint32_t p_frame);
+	Error _native_height_retain_sources(const Ref<NativeHeightRange> &p_range);
 	Error _native_height_ranges_prepare_finalization();
 	// WORK accounts command recording/CPU phases only. Receipts count actual
 	// native observation, ownership return, issue and physical free calls.
@@ -2369,6 +2371,13 @@ private:
 		// Immutable current batch after a qualification dependency reserves it.
 		// Cleared only after exact source join/retain; not a frame-wide exclusion.
 		bool qualification_batch_sealed = false;
+		struct HeightWatcher {
+			Ref<NativeHeightRange> range;
+			uint32_t dependency = 0;
+		};
+		HeightWatcher height_watchers[NATIVE_HEIGHT_RANGE_CAPACITY];
+		uint32_t height_watcher_count = 0;
+		bool height_observer_pending = false;
 		bool production_observer_pending = false;
 		bool submission_pending = false;
 		bool poisoned = false;
@@ -2393,6 +2402,7 @@ private:
 	BinaryMutex transfer_worker_pool_texture_barriers_mutex;
 	ConditionVariable transfer_worker_pool_condition;
 
+	Error _native_height_join_worker(TransferWorker *p_worker, uint64_t p_first, uint64_t p_last, const RDD::QueueCallReport &p_report);
 	TransferWorker *_acquire_transfer_worker(uint32_t p_transfer_size, uint32_t p_required_align, uint32_t &r_staging_offset);
 	void _release_transfer_worker(TransferWorker *p_transfer_worker);
 	void _end_transfer_worker(TransferWorker *p_transfer_worker);

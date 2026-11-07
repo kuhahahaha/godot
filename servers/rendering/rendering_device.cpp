@@ -9253,7 +9253,7 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 			for (uint32_t worker_index = 0; worker_index < transfer_worker_pool_size; worker_index++) {
 				TransferWorker *worker = transfer_worker_pool[worker_index];
 				MutexLock worker_lock(worker->thread_mutex);
-				if (!worker->poisoned && !worker->qualification_batch_sealed) {
+				if (!worker->poisoned && !worker->qualification_batch_sealed && !worker->height_observer_pending) {
 					all_workers_poisoned = false;
 					break;
 				}
@@ -9274,7 +9274,7 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 			uint32_t alignment_offset = _get_alignment_offset(candidate_worker->staging_buffer_size_in_use, p_required_align);
 			uint32_t required_size = candidate_worker->staging_buffer_size_in_use + p_transfer_size + alignment_offset;
 			bool candidate_worker_busy = candidate_worker->submitted;
-			bool candidate_worker_poisoned = candidate_worker->poisoned || candidate_worker->qualification_batch_sealed;
+			bool candidate_worker_poisoned = candidate_worker->poisoned || candidate_worker->qualification_batch_sealed || candidate_worker->height_observer_pending;
 			bool candidate_worker_full = required_size > candidate_worker->staging_buffer_size_allocated;
 			bool pick_candidate = false;
 			if (!candidate_worker_poisoned && !candidate_worker_busy && !candidate_worker_full) {
@@ -9459,6 +9459,103 @@ void RenderingDevice::_end_transfer_worker(TransferWorker *p_transfer_worker) {
 	p_transfer_worker->submission_pending = true;
 }
 
+Error RenderingDevice::_native_height_join_worker(TransferWorker *worker, uint64_t first, uint64_t last, const RDD::QueueCallReport &report) {
+	if (!worker->height_watcher_count) {
+		return OK;
+	}
+	// Watchers freeze acquisition until original RT has captured and retained
+	// this batch. A background waiter cannot mutate the range or recycle it.
+	if (render_thread_id != Thread::get_caller_id()) {
+		return ERR_BUSY;
+	}
+	Error result = OK;
+	for (uint32_t w = 0; w < worker->height_watcher_count; ++w) {
+		auto &watcher = worker->height_watchers[w];
+		const Ref<NativeHeightRange> &range = watcher.range;
+		auto &dependency = range->workers[watcher.dependency];
+		if (!dependency.attached && !dependency.issue_attempted) {
+			if (dependency.worker != worker->index || dependency.operation < first || dependency.operation > last) {
+				if (result == OK) {
+					result = ERR_BUSY;
+				}
+				continue;
+			}
+			// Zero-prefix retry leaves the exact watcher unresolved, with no
+			// invented source and no sticky failure for a later actual issue.
+			if (report.error == ERR_BUSY && report.calls.is_empty()) {
+				if (result == OK) {
+					result = ERR_BUSY;
+				}
+				continue;
+			}
+			bool valid = report.error == OK && report.issued && report.submission_serial && report.native_issue_count &&
+					report.native_issue_count <= range->limits.worker_sources;
+			uint32_t count = 0;
+			for (const auto &fact : report.calls) {
+				if (fact.presentation_only || fact.issue == RDD::IssueFact::NotIssued) {
+					continue;
+				}
+				++count;
+				if (!fact.serial || !fact.completion_serial || fact.completion == RDD::CompletionCapability::Disabled) {
+					valid = false;
+				}
+			}
+			const bool capacity = count <= range->limits.worker_sources && range->source_count + count <= range->limits.native_sources && range->worker_edge_count + count <= range->worker_edges.size();
+			if (!count || count > range->limits.worker_sources || range->source_count + count > range->limits.native_sources ||
+					range->worker_edge_count + count > range->worker_edges.size()) {
+				valid = false;
+			}
+			// Failed reports can contain a real prefix. Preserve its observable
+			// facts and quarantine the original worker; never call it Complete.
+			if (!valid) {
+				range->issue_error = report.error != OK ? report.error : ERR_INVALID_DATA;
+				range->uncaptured_prefix = true;
+				if (result == OK || result == ERR_BUSY) {
+					result = range->issue_error;
+				}
+			}
+			dependency.issue_attempted = true;
+			dependency.first_operation = first;
+			dependency.last_operation = last;
+			for (const auto &fact : report.calls) {
+				if (!capacity || fact.presentation_only || fact.issue == RDD::IssueFact::NotIssued || !fact.serial || !fact.completion_serial || fact.completion == RDD::CompletionCapability::Disabled) {
+					continue;
+				}
+				if (fact.error != OK) {
+					range->issue_error = fact.error;
+				}
+				uint32_t source = range->source_count;
+				for (uint32_t i = 0; i < range->source_count; ++i) {
+					const auto &old = range->sources[i].original;
+					if (old.serial == fact.serial) {
+						source = i;
+						if (old.completion_serial != fact.completion_serial || old.queue_index != fact.queue_index || old.issue != fact.issue ||
+								old.error != fact.error || old.native_code != fact.native_code || old.completion != fact.completion) {
+							range->issue_error = ERR_INVALID_DATA;
+							range->uncaptured_prefix = true;
+						}
+						break;
+					}
+				}
+				if (source == range->source_count) {
+					range->sources[range->source_count++].original = fact;
+				}
+				range->worker_edges[range->worker_edge_count++] = { watcher.dependency, source };
+			}
+			dependency.attached = valid && range->issue_error == OK && !range->uncaptured_prefix;
+		}
+		const Error retained = _native_height_retain_sources(range);
+		if (range->issue_error != OK && (result == OK || result == ERR_BUSY)) {
+			result = range->issue_error;
+		}
+		if (retained != OK && (result == OK || result == ERR_BUSY)) {
+			result = retained;
+		}
+	}
+	worker->height_observer_pending = result != OK;
+	return result;
+}
+
 void RenderingDevice::_submit_transfer_worker(TransferWorker *p_transfer_worker, VectorView<RDD::SemaphoreID> p_signal_semaphores, bool p_operations_locked) {
 	QualificationSourceAdmissionScope source_admission(*this, p_transfer_worker->index);
 	RenderingDeviceDriver::QueueCallReport report;
@@ -9506,6 +9603,13 @@ void RenderingDevice::_submit_transfer_worker(TransferWorker *p_transfer_worker,
 		// or reported as a successfully completed upload.
 		p_transfer_worker->poisoned = true;
 		p_transfer_worker->completion_error = report.error != OK ? report.error : ERR_CANT_CREATE;
+		if (!p_operations_locked) {
+			p_transfer_worker->operations_mutex.lock();
+		}
+		_native_height_join_worker(p_transfer_worker, p_transfer_worker->operations_processed + 1, p_transfer_worker->operations_counter, report);
+		if (!p_operations_locked) {
+			p_transfer_worker->operations_mutex.unlock();
+		}
 		return;
 	}
 
@@ -9518,6 +9622,7 @@ void RenderingDevice::_submit_transfer_worker(TransferWorker *p_transfer_worker,
 		p_transfer_worker->operations_mutex.lock();
 	}
 	p_transfer_worker->operations_submitted = p_transfer_worker->operations_counter;
+	_native_height_join_worker(p_transfer_worker, p_transfer_worker->operations_processed + 1, p_transfer_worker->operations_submitted, report);
 	if (!p_operations_locked) {
 		p_transfer_worker->operations_mutex.unlock();
 	}
@@ -9570,6 +9675,12 @@ bool RenderingDevice::_wait_for_transfer_worker(TransferWorker *p_transfer_worke
 	if (!p_transfer_worker->submitted) {
 		return true;
 	}
+	if (p_transfer_worker->height_watcher_count) {
+		MutexLock operations_lock(p_transfer_worker->operations_mutex);
+		if (_native_height_join_worker(p_transfer_worker, p_transfer_worker->operations_processed + 1, p_transfer_worker->operations_submitted, p_transfer_worker->last_submission) != OK) {
+			return false;
+		}
+	}
 	const uint64_t serial = p_transfer_worker->submission_serial;
 	RDD::FencePollResult poll = p_transfer_worker->last_completion;
 	if (!poll.matches(serial)) {
@@ -9609,6 +9720,11 @@ bool RenderingDevice::_wait_for_transfer_worker(TransferWorker *p_transfer_worke
 		return false;
 	}
 	p_transfer_worker->staging_buffer_size_in_use = 0;
+	for (uint32_t i = 0; i < p_transfer_worker->height_watcher_count; ++i) {
+		p_transfer_worker->height_watchers[i].range.unref();
+	}
+	p_transfer_worker->height_watcher_count = 0;
+	p_transfer_worker->height_observer_pending = false;
 	p_transfer_worker->submitted = false;
 	p_transfer_worker->submission_serial = 0;
 
@@ -9653,16 +9769,54 @@ Error RenderingDevice::_check_transfer_worker_operation(uint32_t index, uint64_t
 		return ERR_BUSY;
 	}
 	Unlock operations_unlock{ worker->operations_mutex };
-	// An already-processed operation is an original worker-state proof and
-	// contributes no invented native source. This is the only positive worker
-	// path currently supported by the checked height capture. A pending/current
-	// batch still requires the authenticated interval join and remains refused
-	// before any quote or mutation.
-	if (!native_height_ranges.is_empty() && !frames.is_empty() && uint32_t(frame) < frames.size() && worker->operations_processed < operation) {
-		for (const Ref<NativeHeightRange> &range : native_height_ranges) {
-			if (range->capture_sink && !range->recording_closed && range->capture_frame == uint32_t(frame) && range->capture_epoch == frames[frame].qualification_epoch) {
-				return ERR_UNAVAILABLE;
+	// Capacity checks precede qualification quotes and all watcher publication.
+	Ref<NativeHeightRange> height_range;
+	uint32_t height_dependency = UINT32_MAX;
+	if (render_thread_id == Thread::get_caller_id() && native_height_active_checked_range.is_valid() && worker->operations_processed < operation) {
+		if (operation > worker->operations_counter) {
+			return ERR_INVALID_DATA;
+		}
+		height_range = native_height_active_checked_range;
+		if (height_range->recording_closed || height_range->capture_frame != uint32_t(frame) || height_range->capture_epoch != frames[frame].qualification_epoch) {
+			return ERR_INVALID_DATA;
+		}
+		for (uint32_t i = 0; i < worker->height_watcher_count; ++i) {
+			if (worker->height_watchers[i].range == height_range) {
+				height_dependency = worker->height_watchers[i].dependency;
 			}
+		}
+		if (height_dependency == UINT32_MAX && (!height_range->limits.worker_sources || height_range->worker_count == height_range->limits.worker_dependencies || worker->height_watcher_count == NATIVE_HEIGHT_RANGE_CAPACITY)) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+	}
+
+	if (height_range.is_valid() && height_dependency != UINT32_MAX) {
+		const auto &dependency = height_range->workers[height_dependency];
+		if (dependency.issue_attempted && (operation < dependency.first_operation || operation > dependency.last_operation)) {
+			return ERR_INVALID_DATA;
+		}
+		if (height_range->issue_error != OK) {
+			return height_range->issue_error;
+		}
+	}
+	// Quote the current prefix plus future submit under both original locks.
+	// This bounded recipe refuses excess prefix before publishing any watcher.
+	if (height_range.is_valid()) {
+		RDD::QueueCallReport prefix;
+		uint32_t future = 0;
+		if (worker->recording || worker->submission_pending) {
+			const Error quoted = driver->qualification_worker_source_quote(worker->command_buffer, prefix, future);
+			if (quoted != OK) {
+				return quoted;
+			}
+		} else if (worker->submitted && operation <= worker->operations_submitted) {
+			prefix = worker->last_submission;
+		} else {
+			return ERR_UNAVAILABLE;
+		}
+		if (future > height_range->limits.worker_sources || prefix.calls.size() > height_range->limits.worker_sources - future ||
+				prefix.native_issue_count > height_range->limits.worker_sources - future || (!future && prefix.calls.is_empty())) {
+			return ERR_PARAMETER_RANGE_ERROR;
 		}
 	}
 	if (worker->operations_processed < operation) {
@@ -9688,6 +9842,31 @@ Error RenderingDevice::_check_transfer_worker_operation(uint32_t index, uint64_t
 				return admission;
 			}
 			worker->qualification_batch_sealed = true;
+		}
+	}
+	if (height_range.is_valid()) {
+		if (height_dependency == UINT32_MAX) {
+			height_dependency = height_range->worker_count++;
+			height_range->workers[height_dependency] = { index, operation, false, false };
+			worker->height_watchers[worker->height_watcher_count++] = { height_range, height_dependency };
+			worker->height_observer_pending = true;
+		} else {
+			auto &dependency = height_range->workers[height_dependency];
+			if (operation > dependency.operation) {
+				dependency.operation = operation;
+				// A second resource in the same authenticated batch shares the
+				// existing edges and observer; it does not reopen its issue.
+				if (!dependency.issue_attempted) {
+					worker->height_observer_pending = true;
+				}
+			}
+		}
+		// The original worker locks still authenticate this historical batch.
+		if (worker->submitted && operation <= worker->operations_submitted) {
+			const Error joined = _native_height_join_worker(worker, worker->operations_processed + 1, worker->operations_submitted, worker->last_submission);
+			if (joined != OK && joined != ERR_BUSY) {
+				return joined;
+			}
 		}
 	}
 	auto &used = transfer_worker_operation_used_by_draw[index];
@@ -10241,10 +10420,20 @@ Error RenderingDevice::_native_height_range_enter_checked_call(const Ref<NativeH
 	}
 	// An already captured business failure must still permit the original
 	// independent cleanup End. It never makes another business append legal.
-	return r_sink.cleanup_attempted ? OK : p_range->append_error;
+	const Error result = r_sink.cleanup_attempted ? OK : p_range->append_error;
+	if (result == OK) {
+		if (native_height_active_checked_range.is_valid()) {
+			return ERR_BUSY;
+		}
+		native_height_active_checked_range = p_range;
+	}
+	return result;
 }
 
 Error RenderingDevice::_native_height_range_enroll_original_record(const Ref<NativeHeightRange> &p_range, RendererRD::HeightCaptureCheckedSink &p_sink, uint32_t p_business_index, bool p_cleanup) {
+	if (native_height_active_checked_range == p_range) {
+		native_height_active_checked_range.unref();
+	}
 	if (&p_sink.rd != this || p_sink.native_range != p_range) {
 		return ERR_INVALID_PARAMETER;
 	}
@@ -10407,11 +10596,26 @@ Error RenderingDevice::_native_height_range_prepare(Ref<NativeHeightRange> &r_ra
 	if (source_bound > UINT32_MAX / graph_bound || !next_native_height_range_serial) {
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
-	const NativeHeightRange::Limits limits{ graph_bound, source_bound, graph_bound * source_bound };
+	uint32_t worker_bound = 0;
+	// Unsupported transfer observation preserves the standalone clear recipe.
+	if (!driver->native_issue_bound(RDD::NativeIssueKind::TRANSFER_WORKER, 1, worker_bound)) {
+		worker_bound = 0;
+	} else if (worker_bound) {
+		// Finite per-dependency admission allowance, not a claim that the
+		// current-submit bound includes a backend's historical prefix.
+		worker_bound = MAX(worker_bound, 16u);
+	}
+	if (worker_bound > (UINT32_MAX - source_bound) / graph_bound) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	const uint32_t worker_sources = graph_bound * worker_bound;
+	const NativeHeightRange::Limits limits{ graph_bound, source_bound + worker_sources, graph_bound * source_bound, graph_bound, worker_bound };
 	Ref<NativeHeightRange> range = memnew(NativeHeightRange(uint64_t(get_instance_id()), next_native_height_range_serial++, limits));
 	range->graphs.resize(limits.graph_members);
 	range->sources.resize(limits.native_sources);
 	range->edges.resize(limits.source_edges);
+	range->workers.resize(limits.worker_dependencies);
+	range->worker_edges.resize(worker_sources);
 	native_height_ranges.reserve(NATIVE_HEIGHT_RANGE_CAPACITY);
 	native_height_ranges.push_back(range);
 	r_range = range;
@@ -10640,28 +10844,39 @@ Error RenderingDevice::_native_height_issue_slot(uint32_t p_frame, uint64_t p_ep
 	return result != OK ? result : retained;
 }
 
+Error RenderingDevice::_native_height_retain_sources(const Ref<NativeHeightRange> &range) {
+	while (range->retain_cursor < range->source_count) {
+		auto &source = range->sources[range->retain_cursor];
+		if (!source.retained) {
+			if (source.retention_error != OK) {
+				return source.retention_error;
+			}
+			if (!_native_disposal_admit(NativeDisposalWork::RETAIN)) {
+				return ERR_BUSY;
+			}
+			const Error error = driver->native_call_retain(source.original.serial);
+			if (error != OK) {
+				if (error != ERR_BUSY) {
+					source.retention_error = error;
+					range->retention_error = error;
+				}
+				return error;
+			}
+			source.retained = true;
+		}
+		++range->retain_cursor;
+	}
+	if (range->uncaptured_prefix) {
+		return ERR_INVALID_DATA; // The original Frame must not retire a lost prefix.
+	}
+	return OK;
+}
+
 Error RenderingDevice::_native_height_retain_frame_sources(uint32_t p_frame) {
 	for (const Ref<NativeHeightRange> &range : frames[p_frame].native_height_ranges) {
-		while (range->retain_cursor < range->source_count) {
-			auto &source = range->sources[range->retain_cursor];
-			if (!source.retained) {
-				if (!_native_disposal_admit(NativeDisposalWork::RETAIN)) {
-					return ERR_BUSY;
-				}
-				const Error error = driver->native_call_retain(source.original.serial);
-				if (error != OK) {
-					if (error != ERR_BUSY) {
-						source.retention_error = error;
-						range->retention_error = error;
-					}
-					return error;
-				}
-				source.retained = true;
-			}
-			++range->retain_cursor;
-		}
-		if (range->uncaptured_prefix) {
-			return ERR_INVALID_DATA; // The original Frame must not retire a lost prefix.
+		const Error retained = _native_height_retain_sources(range);
+		if (retained != OK) {
+			return retained;
 		}
 	}
 	return OK;
@@ -10719,9 +10934,13 @@ Error RenderingDevice::_native_height_range_observe(const Ref<NativeHeightRange>
 		retained += p_range->sources[i].retained;
 		completed += p_range->sources[i].complete;
 	}
-	const bool clean = p_range->append_error == OK && p_range->mapping_error == OK && p_range->issue_error == OK &&
+	bool workers_attached = true;
+	for (uint32_t i = 0; i < p_range->worker_count; ++i) {
+		workers_attached = workers_attached && p_range->workers[i].attached;
+	}
+	const bool clean = workers_attached && p_range->append_error == OK && p_range->mapping_error == OK && p_range->issue_error == OK &&
 			p_range->retention_error == OK && p_range->completion_error == OK && !p_range->uncaptured_prefix;
-	const bool prefix_clean = p_range->recording_closed && p_range->has_recorded_effect && p_range->graph_count &&
+	const bool prefix_clean = workers_attached && p_range->recording_closed && p_range->has_recorded_effect && p_range->graph_count &&
 			sealed == p_range->graph_count && attempted == p_range->graph_count && p_range->source_count &&
 			retained == p_range->source_count && completed == p_range->source_count &&
 			p_range->mapping_error == OK && p_range->issue_error == OK && p_range->retention_error == OK &&
@@ -10736,7 +10955,7 @@ Error RenderingDevice::_native_height_range_observe(const Ref<NativeHeightRange>
 	r_snapshot.recording_closed = p_range->recording_closed;
 	r_snapshot.has_recorded_effect = p_range->has_recorded_effect;
 	r_snapshot.mapping_closed = sealed == p_range->graph_count;
-	r_snapshot.issue_closed = attempted == p_range->graph_count;
+	r_snapshot.issue_closed = workers_attached && attempted == p_range->graph_count;
 	r_snapshot.native_complete = p_range->native_complete;
 	r_snapshot.prefix_settled = p_range->prefix_settled;
 	r_snapshot.observers_returned = p_range->observers_returned;
@@ -10773,7 +10992,7 @@ Error RenderingDevice::_native_height_range_return(const Ref<NativeHeightRange> 
 	if (p_range->return_error != OK) {
 		return p_range->return_error;
 	}
-	const bool known_no_effect = !p_range->has_recorded_effect && !p_range->uncaptured_prefix && !p_range->graph_count && !p_range->source_count && !p_range->edge_count;
+	const bool known_no_effect = !p_range->has_recorded_effect && !p_range->uncaptured_prefix && !p_range->graph_count && !p_range->source_count && !p_range->edge_count && !p_range->worker_count;
 	if (!p_range->recording_closed || (!p_range->native_complete && !p_range->prefix_settled && !known_no_effect)) {
 		return ERR_BUSY;
 	}
@@ -10826,7 +11045,7 @@ Error RenderingDevice::_native_height_ranges_prepare_finalization() {
 			return ERR_BUSY;
 		}
 		range->recording_closed = true;
-		if (!range->has_recorded_effect && !range->uncaptured_prefix && !range->graph_count && !range->source_count && !range->edge_count) {
+		if (!range->has_recorded_effect && !range->uncaptured_prefix && !range->graph_count && !range->source_count && !range->edge_count && !range->worker_count) {
 			const Error returned = _native_height_range_return(range, budget, usage);
 			if (returned != OK) {
 				return returned;

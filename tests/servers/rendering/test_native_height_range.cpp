@@ -53,17 +53,24 @@ class TestNativeHeightRangeAccess {
 	class Driver : public TransferTestDriverBase {
 	public:
 		uint32_t retains = 0, polls = 0, releases = 0, recycles = 0, issues = 0, command_ends = 0, segment_ends = 0;
-		bool retain_busy = false, release_busy = false, release_fail = false;
+		bool retain_busy = false, quote_fail = false, quote_excess = false, release_busy = false, release_fail = false;
 		bool finalize_sentinel = false;
 		RDD::FencePollResult completion;
 		bool native_call_observation_supported() const override { return true; }
 		bool native_issue_bound(NativeIssueKind kind, uint32_t commands, uint32_t &bound) const override {
-			if (kind != NativeIssueKind::MAIN_SLOT || commands != 1) {
+			if ((kind != NativeIssueKind::MAIN_SLOT && kind != NativeIssueKind::TRANSFER_WORKER) || commands != 1) {
 				return false;
 			}
 			bound = 1;
 			return true;
 		}
+		Error qualification_worker_source_quote(CommandBufferID, QueueCallReport &prefix, uint32_t &future) const override {
+			prefix = {};
+			future = quote_excess ? 17 : 1;
+			return quote_fail ? FAILED : OK;
+		}
+		Error fence_recycle(FenceID, uint64_t) override { ++recycles; return OK; }
+		bool command_pool_reset(CommandPoolID) override { return true; }
 		Error native_call_retain(uint64_t serial) override {
 			if (finalize_sentinel) {
 				child_require(serial == 71);
@@ -168,6 +175,7 @@ class TestNativeHeightRangeAccess {
 		fact.issue = RDD::IssueFact::KnownAccepted;
 		report.calls.push_back(fact);
 		report.native_issue_count = 1;
+		report.submission_serial = 901;
 		report.issued = true;
 		return report;
 	}
@@ -195,7 +203,9 @@ public:
 		CHECK(f.rd.transfer_worker_operation_used_by_draw[0] == 1);
 		worker->operations_processed = 0;
 		f.rd.transfer_worker_operation_used_by_draw[0] = 0;
+		REQUIRE(f.rd._native_height_range_enter_checked_call(range, sink) == OK);
 		CHECK(f.rd._check_transfer_worker_operation(0, 1) == ERR_UNAVAILABLE);
+		f.rd.native_height_active_checked_range.unref();
 		CHECK(worker->thread_mutex.try_lock());
 		worker->thread_mutex.unlock();
 		CHECK(worker->operations_mutex.try_lock());
@@ -226,6 +236,121 @@ public:
 		f.rd.transfer_worker_pool.clear();
 		f.rd.transfer_worker_operation_used_by_draw.clear();
 		f.rd.transfer_worker_pool_size = 0;
+	}
+	static void worker_source_custody() {
+		using Sink = RendererRD::HeightCaptureCheckedSink;
+		Fixture f;
+		f.rd.transfer_worker_pool.resize(1);
+		f.rd.transfer_worker_operation_used_by_draw.resize(1);
+		f.rd.transfer_worker_pool_size = 1;
+		auto *worker = memnew(RenderingDevice::TransferWorker);
+		f.rd.transfer_worker_pool[0] = worker;
+		worker->operations_counter = 4;
+		worker->recording = true;
+		Sink sink(f.rd, 2, 0);
+		Ref<NativeHeightRange> range;
+		REQUIRE(sink.prepare_native_range(range) == OK);
+		// An open range alone must never capture an ordinary worker call.
+		CHECK(f.rd._check_transfer_worker_operation(0, 2) == OK);
+		CHECK(range->worker_count == 0);
+		REQUIRE(f.rd._native_height_range_enter_checked_call(range, sink) == OK);
+		f.driver.quote_fail = true;
+		CHECK(f.rd._check_transfer_worker_operation(0, 2) == FAILED);
+		CHECK(range->worker_count == 0);
+		CHECK(worker->height_watcher_count == 0);
+		f.driver.quote_fail = false;
+		f.driver.quote_excess = true;
+		CHECK(f.rd._check_transfer_worker_operation(0, 2) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(range->worker_count == 0);
+		f.driver.quote_excess = false;
+		CHECK(f.rd._check_transfer_worker_operation(0, 2) == OK);
+		CHECK(range->worker_count == 1);
+		CHECK(worker->height_observer_pending);
+		f.rd.native_height_active_checked_range.unref();
+		// A later reused report cannot satisfy an operation outside its exact interval.
+		CHECK(f.rd._native_height_join_worker(worker, 5, 8, report()) == ERR_BUSY);
+		CHECK(range->source_count == 0);
+		RDD::QueueCallReport retry;
+		retry.error = ERR_BUSY;
+		CHECK(f.rd._native_height_join_worker(worker, 1, 4, retry) == ERR_BUSY);
+		CHECK(range->source_count == 0);
+		f.driver.retain_busy = true;
+		worker->recording = false;
+		worker->submitted = true;
+		worker->submission_serial = 901;
+		worker->operations_submitted = 4;
+		worker->last_submission = report();
+		worker->last_completion.completed = true;
+		worker->last_completion.completed_serial = 901;
+		CHECK(f.rd._native_height_join_worker(worker, 1, 4, worker->last_submission) == ERR_BUSY);
+		CHECK(range->source_count == 1);
+		CHECK(range->worker_edge_count == 1);
+		CHECK(range->workers[0].attached);
+		f.rd.native_height_active_checked_range = range;
+		CHECK(f.rd._check_transfer_worker_operation(0, 4) == OK);
+		CHECK(range->workers[0].attached);
+		CHECK(range->worker_edge_count == 1);
+		f.rd.native_height_active_checked_range.unref();
+		CHECK_FALSE(f.rd._wait_for_transfer_worker(worker));
+		CHECK(f.driver.recycles == 0);
+		CHECK(worker->operations_processed == 0);
+		CHECK(worker->submitted);
+		f.driver.retain_busy = false;
+		CHECK(f.rd._wait_for_transfer_worker(worker));
+		CHECK(f.driver.recycles == 1);
+		CHECK(range->sources[0].retained);
+		CHECK(worker->operations_processed == 4);
+		CHECK(worker->height_watcher_count == 0);
+		// Synthetic graph member isolates reducer behavior; it is not GPU proof.
+		range->graph_count = 1;
+		range->graphs[0].state = NativeHeightRange::MemberState::IssueAttached;
+		range->graphs[0].issue_attempted = true;
+		range->recording_closed = true;
+		range->has_recorded_effect = true;
+		NativeHeightRange::Snapshot snapshot;
+		CHECK(observe(f, range, snapshot) == ERR_BUSY);
+		CHECK_FALSE(snapshot.native_complete);
+		f.driver.completion.completed = true;
+		f.driver.completion.completed_serial = 901;
+		CHECK(observe(f, range, snapshot) == OK);
+		CHECK(snapshot.native_complete);
+		CHECK(give_back(f, range) == OK);
+		CHECK(f.driver.releases == 1);
+		memdelete(worker);
+		f.rd.transfer_worker_pool.clear();
+		f.rd.transfer_worker_pool_size = 0;
+	}
+	static void worker_invalid_reports() {
+		for (uint32_t variant = 0; variant < 3; ++variant) {
+			Fixture f;
+			auto range = sealed(f);
+			RenderingDevice::TransferWorker worker;
+			worker.height_watcher_count = 1;
+			worker.height_observer_pending = true;
+			worker.height_watchers[0] = { range, 0 };
+			range->worker_count = 1;
+			range->workers[0] = { 0, 2, false, false };
+			auto bad = report();
+			if (variant == 0) {
+				bad.calls.clear();
+			} else if (variant == 1) {
+				bad.error = FAILED; // Preserve this genuine issued prefix.
+			} else {
+				bad.calls.write[0].completion_serial = 0;
+			}
+			CHECK(f.rd._native_height_join_worker(&worker, 1, 4, bad) != OK);
+			CHECK(worker.height_observer_pending);
+			CHECK_FALSE(range->workers[0].attached);
+			CHECK(range->source_count == (variant == 1 ? 1 : 0));
+			CHECK(f.driver.retains == (variant == 1 ? 1 : 0));
+			CHECK(f.rd._native_height_join_worker(&worker, 1, 4, bad) != OK);
+			CHECK(range->source_count == (variant == 1 ? 1 : 0));
+			NativeHeightRange::Snapshot snapshot;
+			CHECK(observe(f, range, snapshot) != OK);
+			CHECK_FALSE(snapshot.native_complete);
+			CHECK_FALSE(snapshot.issue_closed);
+			CHECK(give_back(f, range) == ERR_BUSY);
+		}
 	}
 	static Error observe(Fixture &f, const Ref<NativeHeightRange> &range, NativeHeightRange::Snapshot &out) {
 		RenderingDevice::NativeDisposalBudget budget{ 64, 64, UINT64_MAX };
@@ -925,4 +1050,12 @@ TEST_CASE("[RenderingDevice][NativeHeightRange] actual finalize child") {
 	if (mode == "busy" || mode == "last_ref") {
 		TestNativeHeightRangeAccess::actual_finalize_child(mode);
 	}
+}
+
+TEST_CASE("[RenderingDevice][NativeHeightRange] exact worker source retains before recycle and completes through original observer") {
+	TestNativeHeightRangeAccess::worker_source_custody();
+}
+
+TEST_CASE("[RenderingDevice][NativeHeightRange] invalid worker reports retain known prefix without completing or replaying") {
+	TestNativeHeightRangeAccess::worker_invalid_reports();
 }

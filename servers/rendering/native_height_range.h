@@ -76,6 +76,8 @@ private:
 		uint32_t graph_members = 0;
 		uint32_t native_sources = 0;
 		uint32_t source_edges = 0;
+		uint32_t worker_dependencies = 0;
+		uint32_t worker_sources = 0;
 	};
 
 	enum class MemberState : uint8_t {
@@ -106,6 +108,23 @@ private:
 		uint32_t member = 0;
 		uint32_t source = 0;
 	};
+
+	struct WorkerDependency {
+		uint32_t worker = 0;
+		uint64_t operation = 0;
+		bool attached = false;
+		bool issue_attempted = false;
+		uint64_t first_operation = 0;
+		uint64_t last_operation = 0;
+	};
+	struct WorkerSourceEdge {
+		uint32_t dependency = 0;
+		uint32_t source = 0;
+	};
+	LocalVector<WorkerDependency> workers;
+	LocalVector<WorkerSourceEdge> worker_edges;
+	uint32_t worker_count = 0;
+	uint32_t worker_edge_count = 0;
 
 	const uint64_t device;
 	const uint64_t serial; // RD incarnation only; no E09/business identity.
