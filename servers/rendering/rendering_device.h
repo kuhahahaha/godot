@@ -1562,6 +1562,8 @@ public:
 	void shader_destroy_modules(RID p_shader);
 
 	uint64_t shader_get_vertex_input_attribute_mask(RID p_shader);
+	// Read-only original render-thread lookup; refuses placeholders and preserves output on failure.
+	Error shader_get_native_vertex_input_mask_if_ready(RID p_shader, uint64_t &r_input_mask);
 
 	/******************/
 	/**** UNIFORMS ****/

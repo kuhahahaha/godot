@@ -877,6 +877,48 @@ void ShaderRD::version_set_raytracing_code(RID p_version, const HashMap<String, 
 	_version_set(version, p_code, p_custom_defines);
 }
 
+Error ShaderRD::version_get_native_shader_if_ready(RID p_version, int p_variant, RID &r_shader, uint64_t &r_input_mask) {
+	auto *rd = RD::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (p_variant < 0 || p_variant >= variant_defines.size()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (!variants_enabled[p_variant] || !group_enabled[variant_to_group[p_variant]]) {
+		return ERR_UNAVAILABLE;
+	}
+	Version *version = version_owner.get_or_null(p_version);
+	if (!version) {
+		return ERR_INVALID_PARAMETER;
+	}
+	MutexLock lock(*version->mutex);
+	if (version->dirty || !version->valid || version->initialize_needed) {
+		return ERR_BUSY;
+	}
+	for (auto task : version->group_compilation_tasks) {
+		if (task) {
+			return ERR_BUSY;
+		}
+	}
+	if (p_variant >= version->variants.size() || p_variant >= version->variant_data.size()) {
+		return ERR_UNAVAILABLE;
+	}
+	const RID shader = version->variants[p_variant];
+	// Disabled groups own placeholders; failed compilation can leave one behind.
+	if (shader.is_null() || version->variant_data[p_variant].is_empty()) {
+		return ERR_UNAVAILABLE;
+	}
+	uint64_t input_mask = 0;
+	const Error ready = rd->shader_get_native_vertex_input_mask_if_ready(shader, input_mask);
+	if (ready != OK) {
+		return ready;
+	}
+	r_shader = shader;
+	r_input_mask = input_mask;
+	return OK;
+}
+
 bool ShaderRD::version_native_shader_is_ready(RID p_version, RID p_shader) {
 	Version *version = version_owner.get_or_null(p_version);
 	if (!version || p_shader.is_null()) {

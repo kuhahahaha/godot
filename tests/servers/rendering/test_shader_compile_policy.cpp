@@ -70,8 +70,64 @@ public:
 	static RID create_old_ref(RenderingDevice &p_rd, const Ref<RDShaderSPIRV> &p_spirv, const String &p_name) { return p_rd._shader_create_from_spirv(p_spirv, p_name); }
 	static String name(RenderingDevice &p_rd, RID p_rid) { return p_rd.shader_owner.get_or_null(p_rid)->name; }
 	static void set_driver(RenderingDevice &p_rd, RenderingDeviceDriver *p_driver) { p_rd.driver = p_driver; }
+	static void set_render_thread(RenderingDevice &p_rd) { p_rd.render_thread_id = Thread::get_caller_id(); }
 	static void clear_shader(RenderingDevice &p_rd, RID p_rid) { p_rd.shader_owner.free(p_rid); }
 	static void mark_filled(RenderingDevice &p_rd, RID p_rid) { p_rd.shader_owner.get_or_null(p_rid)->driver_id = RenderingDeviceDriver::ShaderID(42); }
+
+	// Unit-state injection into the original Version owner, not a real compilation result.
+	static void check_ready_lookup(RenderingDevice &p_rd, RID p_native, const Vector<uint8_t> &p_bytes) {
+		class Owner : public ShaderRD {};
+		RenderingDevice *previous = RenderingDevice::singleton;
+		RenderingDevice::singleton = &p_rd;
+		{
+			Owner owner;
+			owner.initialize(Vector<String>{ "", "#define SECOND_VARIANT\n" }, "");
+			const RID version_rid = owner.version_create(false);
+			REQUIRE(version_rid.is_valid());
+			auto *version = owner.version_owner.get_or_null(version_rid);
+			RID result = p_native;
+			uint64_t mask = UINT64_MAX;
+			auto refused = [&](RID p_version, int p_variant, Error p_expected) {
+				result = p_native;
+				mask = UINT64_MAX;
+				CHECK(owner.version_get_native_shader_if_ready(p_version, p_variant, result, mask) == p_expected);
+				CHECK(result == p_native);
+				CHECK(mask == UINT64_MAX);
+			};
+			refused(RID(), 0, ERR_INVALID_PARAMETER);
+			refused(version_rid, -1, ERR_INVALID_PARAMETER);
+			refused(version_rid, 0, ERR_BUSY); // Original newly issued dirty version.
+			CHECK(version->dirty);
+			CHECK(version->variants.is_empty());
+			version->dirty = false;
+			version->valid = true;
+			refused(version_rid, 0, ERR_BUSY); // initialize_needed still true.
+			version->initialize_needed = false;
+			version->group_compilation_tasks.push_back(1); // Unjoined-token guard only; never joined.
+			refused(version_rid, 0, ERR_BUSY);
+			CHECK(version->group_compilation_tasks[0] == 1);
+			version->group_compilation_tasks.write[0] = 0;
+			owner.group_enabled.write[0] = false;
+			refused(version_rid, 0, ERR_UNAVAILABLE);
+			CHECK_FALSE(owner.group_enabled[0]);
+			owner.group_enabled.write[0] = true;
+			refused(version_rid, 0, ERR_UNAVAILABLE); // Missing variant storage.
+			const RID placeholder = p_rd.shader_create_placeholder();
+			version->variants = Vector<RID>{ p_native, placeholder };
+			version->variant_data = Vector<Vector<uint8_t>>{ p_bytes, p_bytes };
+			refused(version_rid, 1, ERR_UNAVAILABLE); // Real placeholder with actual nonempty container bytes.
+			CHECK(owner.version_get_native_shader_if_ready(version_rid, 0, result, mask) == OK);
+			CHECK(result == p_native);
+			CHECK(mask == p_rd.shader_get_vertex_input_attribute_mask(p_native));
+			version->valid = false;
+			refused(version_rid, 0, ERR_BUSY);
+			version->variants.clear(); // Native shader belongs to the outer fixture.
+			version->variant_data.clear();
+			p_rd.shader_owner.free(placeholder);
+			CHECK(owner.version_free(version_rid));
+		}
+		RenderingDevice::singleton = previous;
+	}
 
 	static void rollback(Vector<RID> &p_variants, Vector<Vector<uint8_t>> &p_bytes, const LocalVector<int> &p_group, const LocalVector<int> &p_loaded, Vector<RID> &p_freed) {
 		ShaderRD::_rollback_cache_load(p_variants, p_bytes, p_group, p_loaded, [](RID p_rid, void *p_context) { static_cast<Vector<RID> *>(p_context)->push_back(p_rid); }, &p_freed);
@@ -833,6 +889,12 @@ TEST_CASE("policy_flags [ShaderCompilePolicy]") {
 		}
 		CHECK(driver.format.creates == 0);
 		RID placeholder = rd.shader_create_placeholder();
+		TestShaderCompilePolicyAccess::set_render_thread(rd);
+		uint64_t ready_mask = UINT64_MAX;
+		CHECK(rd.shader_get_native_vertex_input_mask_if_ready(RID(), ready_mask) == ERR_INVALID_DATA);
+		CHECK(ready_mask == UINT64_MAX);
+		CHECK(rd.shader_get_native_vertex_input_mask_if_ready(placeholder, ready_mask) == ERR_UNAVAILABLE);
+		CHECK(ready_mask == UINT64_MAX);
 		Ref<CodecContainer> encoder;
 		encoder.instantiate();
 		encoder->initialize_fixture(1);
@@ -864,6 +926,11 @@ TEST_CASE("policy_flags [ShaderCompilePolicy]") {
 		CHECK(driver.native_creates == 1);
 		driver.native_accepts = true;
 		CHECK(rd.shader_create_from_bytecode(encoder->to_bytes(), placeholder) == placeholder);
+		CHECK(rd.shader_get_native_vertex_input_mask_if_ready(placeholder, ready_mask) == OK);
+		CHECK(ready_mask == 0); // A compiled compute shader has a legitimate zero vertex mask.
+		const int lookup_native_creates = driver.native_creates;
+		TestShaderCompilePolicyAccess::check_ready_lookup(rd, placeholder, encoder->to_bytes());
+		CHECK(driver.native_creates == lookup_native_creates);
 		CHECK(static_cast<uint64_t>(rd.shader_get_compile_flags(placeholder)) == 1);
 		CHECK(driver.native_creates == 2);
 		TestShaderCompilePolicyAccess::clear_shader(rd, placeholder);

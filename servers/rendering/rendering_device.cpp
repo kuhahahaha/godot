@@ -5392,6 +5392,23 @@ uint64_t RenderingDevice::shader_get_vertex_input_attribute_mask(RID p_shader) {
 	return shader->vertex_input_mask;
 }
 
+Error RenderingDevice::shader_get_native_vertex_input_mask_if_ready(RID p_shader, uint64_t &r_input_mask) {
+	if (!native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	_THREAD_SAFE_METHOD_
+
+	const Shader *shader = shader_owner.get_or_null(p_shader);
+	if (!shader) {
+		return ERR_INVALID_DATA;
+	}
+	if (!shader->driver_id) {
+		return ERR_UNAVAILABLE;
+	}
+	r_input_mask = shader->vertex_input_mask;
+	return OK;
+}
+
 /******************/
 /**** UNIFORMS ****/
 /******************/
