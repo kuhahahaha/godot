@@ -563,6 +563,9 @@ Error RenderingDevice::_production_output_directory_return(GDExtensionDeviceExit
 		return ERR_UNAUTHORIZED;
 	}
 	auto &request = *pin.request;
+	if (request.continuation_inflight) {
+		return ERR_BUSY;
+	}
 	auto &control = request.control;
 	if (control.state != ProductionControlState::EXECUTING || control.input.kind != ProductionControlKind::OBSERVE || control.input.request_serial != request.serial || &budget != &control.input.budget || &usage != &control.output.service_usage) {
 		return ERR_UNAUTHORIZED;
@@ -644,6 +647,9 @@ Error RenderingDevice::_production_output_directory_mark_root(GDExtensionDeviceE
 		return ERR_UNAUTHORIZED;
 	}
 	auto &request = *pin.request;
+	if (request.continuation_inflight) {
+		return ERR_BUSY;
+	}
 	auto &control = request.control;
 	// A copied budget or a separate usage object cannot authorize another pass.
 	if (control.state != ProductionControlState::EXECUTING || control.input.kind != ProductionControlKind::OBSERVE || control.input.request_serial != request.serial || &budget != &control.input.budget || &usage != &control.output.service_usage) {
@@ -909,6 +915,9 @@ Error RenderingDevice::_production_output_hold_begin_return(GDExtensionDeviceExi
 		return ERR_UNAUTHORIZED;
 	}
 	auto &request = *pin.request;
+	if (request.continuation_inflight) {
+		return ERR_BUSY;
+	}
 	GDExtensionProductionReportV2 source = {};
 	registry.production_report_locked(request, source);
 	if (request.capture_inflight || request.compute_list_open || (!request.cancelled && request.next_action != request.action_count) || source.possible_obligations || source.known_obligations != source.complete_obligations) {
@@ -959,6 +968,9 @@ Error RenderingDevice::_production_output_hold_returned_locked(GDExtensionDevice
 		return ERR_UNAUTHORIZED;
 	}
 	auto &request = *pin.request;
+	if (request.continuation_inflight) {
+		return ERR_BUSY;
+	}
 	bool found = false;
 	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
 		const auto &cell = request.uses[i];
@@ -1003,6 +1015,9 @@ Error RenderingDevice::_production_output_hold_returned_locked(GDExtensionDevice
 
 Error RenderingDevice::_production_output_drop_step(GDExtensionDeviceExit::ProductionRequest &request, const NativeDisposalBudget &budget, NativeDisposalUsage &usage) {
 	using namespace GDExtensionDeviceExit;
+	if (request.continuation_inflight) {
+		return ERR_BUSY;
+	}
 	if (!budget.passes || !budget.receipts || !budget.deadline_usec || OS::get_singleton()->get_ticks_usec() >= budget.deadline_usec) {
 		return ERR_BUSY;
 	}
@@ -1395,6 +1410,9 @@ Error RenderingDevice::_production_output_owned_cancel_unbound(GDExtensionDevice
 	}
 	bool found = false;
 	auto &request = *pin.request;
+	if (request.continuation_inflight) {
+		return ERR_BUSY;
+	}
 	bool owns_group = false;
 	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
 		const auto &g = request.uses[i];
@@ -1764,9 +1782,38 @@ Error RenderingDevice::_production_output_owned_render_pipeline_create(GDExtensi
 	if (ready != OK) {
 		return ready;
 	}
+	return _production_output_owned_render_pipeline_create_locked(registry, *request, group, ordinal, p_shader, p_framebuffer_format, p_vertex_format, p_render_primitive, p_rasterization_state, p_multisample_state, p_depth_stencil_state, p_blend_state, p_dynamic_state_flags, p_for_render_pass, p_specialization_constants, r_pipeline);
+}
+
+Error RenderingDevice::_production_output_owned_pipeline_preflight(GDExtensionDeviceExit::ProductionOutputPreparationScope &scope) {
+	if (!scope.registry) {
+		return ERR_INVALID_PARAMETER;
+	}
+	GDExtensionDeviceExit::Registry::Lock lock(*scope.registry);
+	GDExtensionDeviceExit::ProductionRequest *request = nullptr;
+	const Error ready = scope.registry->production_output_preparation_matches_locked(scope, *this, request);
+	return ready == OK ? _native_disposal_preflight() : ready;
+}
+
+Error RenderingDevice::_production_output_owned_render_pipeline_create(GDExtensionDeviceExit::ProductionOutputPreparationScope &scope, RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, RID &r_pipeline) {
+	if (!scope.registry || &r_pipeline != scope.original_root || r_pipeline.is_valid()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	GDExtensionDeviceExit::Registry &registry = *scope.registry;
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
+	GDExtensionDeviceExit::ProductionRequest *request = nullptr;
+	const Error ready = registry.production_output_preparation_matches_locked(scope, *this, request);
+	if (ready != OK) {
+		return ready;
+	}
+	return _production_output_owned_render_pipeline_create_locked(registry, *request, scope.group, 0, p_shader, p_framebuffer_format, p_vertex_format, p_render_primitive, p_rasterization_state, p_multisample_state, p_depth_stencil_state, p_blend_state, p_dynamic_state_flags, p_for_render_pass, p_specialization_constants, r_pipeline);
+}
+
+Error RenderingDevice::_production_output_owned_render_pipeline_create_locked(GDExtensionDeviceExit::Registry &registry, GDExtensionDeviceExit::ProductionRequest &request, uint64_t group, uint32_t ordinal, RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, RID &r_pipeline) {
+	using namespace GDExtensionDeviceExit;
 	ProductionUseCell *reserved = nullptr;
-	for (uint32_t i = request->use_count + request->binding_used; i < request->capacity.resource_uses; ++i) {
-		auto &cell = request->uses[i];
+	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+		auto &cell = request.uses[i];
 		if (cell.disposal_group_serial == group && cell.disposal_ordinal == ordinal && cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED) {
 			reserved = &cell;
 			break;
@@ -1788,7 +1835,7 @@ Error RenderingDevice::_production_output_owned_render_pipeline_create(GDExtensi
 	}
 	// Factory publishes directly into this original cell; there is no fallible
 	// post-creation capture/bind and no stack-owned created-pipeline prefix.
-	registry.production_native_effect_enter_locked(*request);
+	registry.production_native_effect_enter_locked(request);
 	r_pipeline = _qualification_render_pipeline_create_internal(p_shader, p_framebuffer_format, p_vertex_format, p_render_primitive, p_rasterization_state, p_multisample_state, p_depth_stencil_state, p_blend_state, p_dynamic_state_flags, p_for_render_pass, p_specialization_constants, nullptr, RID(), reserved);
 	return r_pipeline.is_valid() ? OK : ERR_CANT_CREATE;
 }

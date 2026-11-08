@@ -80,6 +80,10 @@ public:
 	bool selection_source_metadata_matches(uint32_t, RSE::PrimitiveType, uint64_t, const AABB &, const Vector4 &) const;
 	bool selection_inline_matches(const ExternalOutputConfig &) const;
 	bool preparation_rows_match_slots(bool p_probe_duplicate = false) const;
+	bool preparation_pipeline_reservations_match(uint32_t p_slot) const;
+	uint64_t preparation_pipeline_group(uint32_t, uint32_t) const;
+	Error return_pipeline_row(uint32_t, uint32_t);
+	Error cancel_pipeline_slot(uint32_t);
 	Error prepare_pipeline_prefix(GDExtensionProductionPhysicalContextRefV1, uint32_t p_slot, uint32_t p_surface, uint32_t p_max_resources);
 	uint64_t selection_material_generation(uint32_t) const;
 	bool selection_faulted() const;

@@ -176,6 +176,33 @@ public:
 	bool is_empty() const { return registry == nullptr; }
 };
 
+// A synchronous native-owner continuation of an originally reserved output
+// action. It is neither an extension physical context nor a new reservation.
+class ProductionOutputPreparationScope final {
+	friend class Registry;
+	friend class ::RenderingDevice;
+	friend class ::RendererRD::ParticlesStorage;
+#ifdef TESTS_ENABLED
+	friend struct ::TestProductionRequest::Access;
+#endif
+	ProductionOutputPreparationScope() = default;
+	Registry *registry = nullptr;
+	ProductionRequest *request = nullptr;
+	ProductionOutputPin *pin = nullptr;
+	RenderingDevice *device = nullptr;
+	ProductionOutputPreparationScope *previous = nullptr;
+	RID *original_root = nullptr;
+	uint64_t request_serial = 0, root_serial = 0, group = 0, thread = 0;
+	uint32_t action_ordinal = UINT32_MAX, surface_ordinal = UINT32_MAX;
+
+public:
+	ProductionOutputPreparationScope(const ProductionOutputPreparationScope &) = delete;
+	ProductionOutputPreparationScope &operator=(const ProductionOutputPreparationScope &) = delete;
+	ProductionOutputPreparationScope(ProductionOutputPreparationScope &&) = delete;
+	ProductionOutputPreparationScope &operator=(ProductionOutputPreparationScope &&) = delete;
+	~ProductionOutputPreparationScope();
+};
+
 // One actual byte-bounded CPU metadata resource in an original accepted row.
 // This lease proves physical allocation/custody only, never logical U08/source
 // admission. Explicit return after all readers and the linked root are gone.
@@ -484,6 +511,7 @@ struct ProductionControlCell {
 };
 class ProductionRequest {
 	friend class Registry;
+	friend class ::RendererRD::ExternalOutputOwner;
 	friend class ::RenderingDevice;
 #ifdef TESTS_ENABLED
 	friend struct ::TestProductionRequest::Access;
@@ -513,6 +541,7 @@ class ProductionRequest {
 	uint32_t observe_cursor = 0, release_cursor = 0;
 	bool source_device_lost = false, release_started = false;
 	uint32_t capture_inflight = 0;
+	uint32_t continuation_inflight = 0;
 	// One fixed mailbox per request, included by sizeof(ProductionRequest) in
 	// the checked arena Quote. Never aliases retained payload or return cells.
 	ProductionControlCell control = {};

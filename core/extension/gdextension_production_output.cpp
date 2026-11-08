@@ -35,6 +35,153 @@
 #include "servers/rendering/rendering_device.h"
 
 namespace GDExtensionDeviceExit {
+thread_local ProductionOutputPreparationScope *Registry::production_output_preparation_scope = nullptr;
+
+ProductionOutputPreparationScope::~ProductionOutputPreparationScope() {
+	if (registry) {
+		registry->production_output_preparation_end(*this);
+	}
+}
+
+Error Registry::production_output_preparation_validate_locked(ProductionOutputPin &pin, RenderingDevice &rd, uint32_t action_ordinal, uint32_t surface_ordinal, uint64_t group, RID *&root) {
+	if (!rd.is_main_instance || RenderingDevice::get_singleton() != &rd || rd.render_thread_id != Thread::get_caller_id() ||
+			!production_output_pin_matches_locked(pin, { instance, pin.request_serial }, rd)) {
+		return ERR_UNAUTHORIZED;
+	}
+	auto &request = *pin.request;
+	auto &attachment = *request.attachment;
+	const auto &record = records[attachment.library];
+	const auto &native = device_records[attachment.device];
+	if (phase != Phase::RUNNING || !request.frozen || request.cancelled || request.release_started || request.source_device_lost || request.effects_pending || request.capture_inflight ||
+			attachment.closing || !attachment.opened || !attachment.holder || attachment.holder->pending ||
+			attachment.holder->generation != attachment.library_generation || attachment.holder->handle_serial != record.producer_code_holder ||
+			!record.occupied || !record.attached || record.quiescing || record.close_started || record.close_error != OK ||
+			record.guard_enrollment != GuardEnrollment::QUALIFIED || record.snapshot.library_generation != attachment.library_generation ||
+			record.producer_registration_serial != attachment.producer_serial || !record.producer_attachment_identity || !native.live || rd.production_finalization_started.load(std::memory_order_acquire) ||
+			request.control.state != ProductionControlState::OWNER_CONSUMED ||
+			request.draw_list_open || request.compute_list_open) {
+		return ERR_BUSY;
+	}
+	// Keep the same retirement/revision margin as original native preparation.
+	if (request.revision > UINT64_MAX - uint64_t(request.capacity.graph_memberships) * 2 - uint64_t(request.capacity.native_memberships) * 2 - request.capacity.readbacks - request.capacity.resources - 8) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	if (action_ordinal >= request.action_count || !group) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const auto &action = request.actions[action_ordinal];
+	const auto &row = request.uses[pin.cell_index];
+	if (action.request != &request || action.declaration.action_ordinal != action_ordinal || action.declaration.action_kind != GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1 ||
+			action.output_state != ProductionActionCell::OutputState::BOUND || action.output_root != pin.serial || !action.output_read_capacity || !action.output_read_graph_capacity ||
+			row.output_owner_kind != ProductionOutputOwnerKind::SLOT || row.output_particles != action.output_particles || row.output_generation != action.output_generation ||
+			row.output_slot != action.output_slot || row.output_lease != action.output_lease) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!rd._thread_safe_.try_lock()) {
+		return ERR_BUSY;
+	}
+	const Error native_ready = rd._native_disposal_preflight();
+	const bool source_matches = native_ready == OK && production_output_source_matches_locked(request, action, rd) && production_output_recorded_ordered_locked(request, rd);
+	rd._thread_safe_.unlock();
+	if (native_ready != OK || !source_matches) {
+		return native_ready != OK ? native_ready : ERR_BUSY;
+	}
+	RID *original_root = nullptr;
+	if (!RendererRD::ParticlesStorage::_production_output_preparation_matches(action.output_particles, action.output_generation, action.output_slot,
+				action.output_lease, surface_ordinal, group, pin, rd, original_root) ||
+			!original_root) {
+		return ERR_UNAUTHORIZED;
+	}
+	uint32_t headers = 0, members = 0;
+	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+		const auto &cell = request.uses[i];
+		if (cell.disposal_group_serial != group) {
+			continue;
+		}
+		if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_pin_serial == pin.serial &&
+				cell.disposal_group_count == 1 && !cell.disposal_group_release && !cell.disposal_group_dropped && !cell.disposal_group_native_hold) {
+			++headers;
+		} else if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED && cell.disposal_ordinal == 0 &&
+				cell.disposal.request == &request && cell.disposal.request_serial == request.serial && cell.disposal.group == group && cell.disposal.owned &&
+				!cell.disposal.rid && !cell.disposal.serial && !cell.disposal.native_driver_id && !cell.disposal.next && cell.disposal.counter_dropped &&
+				cell.disposal.state.load(std::memory_order_acquire) == 0) {
+			++members;
+		} else {
+			return ERR_ALREADY_IN_USE;
+		}
+	}
+	if (headers != 1 || members != 1 || original_root->is_valid()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	root = original_root;
+	return OK;
+}
+
+Error Registry::production_output_preparation_begin(ProductionOutputPin &pin, RenderingDevice &rd, uint32_t action_ordinal, uint32_t surface_ordinal, uint64_t group, ProductionOutputPreparationScope &scope) {
+	Lock lock(*this);
+	if (!rd.native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (scope.registry) {
+		return ERR_ALREADY_IN_USE;
+	}
+	if (production_physical_frame || (pin.request && pin.request->continuation_inflight)) {
+		return ERR_BUSY;
+	}
+	RID *root = nullptr;
+	const Error error = production_output_preparation_validate_locked(pin, rd, action_ordinal, surface_ordinal, group, root);
+	if (error != OK) {
+		return error;
+	}
+	scope.registry = this;
+	scope.request = pin.request;
+	scope.pin = &pin;
+	scope.device = &rd;
+	scope.previous = production_output_preparation_scope;
+	scope.original_root = root;
+	scope.request_serial = pin.request_serial;
+	scope.root_serial = pin.serial;
+	scope.group = group;
+	scope.thread = Thread::get_caller_id();
+	scope.action_ordinal = action_ordinal;
+	scope.surface_ordinal = surface_ordinal;
+	++scope.request->continuation_inflight;
+	production_output_preparation_scope = &scope;
+	return OK;
+}
+
+Error Registry::production_output_preparation_matches_locked(const ProductionOutputPreparationScope &scope, RenderingDevice &rd, ProductionRequest *&request) {
+	if (scope.registry != this || production_output_preparation_scope != &scope || scope.device != &rd || scope.thread != Thread::get_caller_id() ||
+			!scope.pin || scope.pin->request != scope.request || scope.pin->request_serial != scope.request_serial || scope.pin->serial != scope.root_serial ||
+			!scope.request || scope.request->continuation_inflight != 1) {
+		return ERR_UNAUTHORIZED;
+	}
+	RID *root = nullptr;
+	const Error error = production_output_preparation_validate_locked(*scope.pin, rd, scope.action_ordinal, scope.surface_ordinal, scope.group, root);
+	if (error != OK) {
+		return error;
+	}
+	if (root != scope.original_root) {
+		return ERR_UNAUTHORIZED;
+	}
+	request = scope.request;
+	return OK;
+}
+
+void Registry::production_output_preparation_end(ProductionOutputPreparationScope &scope) {
+	Lock lock(*this);
+	CRASH_COND(scope.registry != this || production_output_preparation_scope != &scope || scope.thread != Thread::get_caller_id() ||
+			!scope.request || scope.request->serial != scope.request_serial || !scope.request->continuation_inflight);
+	production_output_preparation_scope = scope.previous;
+	--scope.request->continuation_inflight;
+	scope.registry = nullptr;
+	scope.request = nullptr;
+	scope.pin = nullptr;
+	scope.device = nullptr;
+	scope.previous = nullptr;
+	scope.original_root = nullptr;
+}
+
 namespace {
 template <size_t N>
 GDExtensionOutputStatusV1 output_status(Error error, const char (&detail)[N]) {
@@ -556,13 +703,26 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 			return;
 		}
 	}
+	// This initial continuation slice reserves one original pipeline per actual
+	// surface row. Zero native storage has no SurfaceBindings to prepare.
+	const bool reserve_pipelines = layout.resource_count && action.output_read_capacity;
+	if (reserve_pipelines && (!action.output_read_graph_capacity || action.output_read_capacity < surfaces)) {
+		out->status = output_status(ERR_OUT_OF_MEMORY, "output_preparation_capacity");
+		return;
+	}
 	uint32_t spare = 0;
 	for (uint32_t i = request->use_count + request->binding_used; i < request->capacity.resource_uses; ++i) {
 		const auto &cell = request->uses[i];
 		spare += cell.request == request && cell.output_role == ProductionUseCell::OutputRole::UNUSED && !cell.output_consumer && !cell.dependency.physical && !cell.output_pin_serial && !cell.disposal_group_serial;
 	}
-	if (spare < 1u + (layout.resource_count ? layout.resource_count + 1 : 0) || action.output_read_capacity > owner.read_capacity || uint64_t(action.output_read_capacity) * action.output_read_graph_capacity > request->capacity.graph_memberships - request->graph_count) {
+	const uint64_t required_uses = 1u + (layout.resource_count ? uint64_t(layout.resource_count) + 1 : 0) + (reserve_pipelines ? uint64_t(surfaces) * 2 : 0);
+	if (spare < required_uses || action.output_read_capacity > owner.read_capacity || request->graph_count > request->capacity.graph_memberships || uint64_t(action.output_read_capacity) * action.output_read_graph_capacity > request->capacity.graph_memberships - request->graph_count) {
 		out->status = output_status(ERR_OUT_OF_MEMORY, "output_prequoted_capacity");
+		return;
+	}
+	const uint64_t required_groups = (layout.resource_count ? 1u : 0u) + (reserve_pipelines ? uint64_t(surfaces) : 0u);
+	if (required_groups && (!request->next_disposal_group_serial || required_groups - 1 > UINT64_MAX - request->next_disposal_group_serial)) {
+		out->status = output_status(ERR_PARAMETER_RANGE_ERROR, "output_group_serial_capacity");
 		return;
 	}
 	Owner::MetadataLayout metadata;
@@ -672,8 +832,24 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 			}
 		}
 	}
+	if (error == OK && reserve_pipelines) {
+		for (uint32_t i = 0; i < slot.surface_count; ++i) {
+			// Reserve under this original RESERVING action, before publishing its
+			// writables or advancing next_action. Retain no expiring context.
+			unlock_mutex_for_call();
+			error = storage->_external_pipeline_reserve_owned_prefix(context, RID::from_uint64(input->particles), slot_index, i,
+					*slot.surfaces[i].preparation_row, action.output_read_graph_capacity);
+			relock_mutex_after_call();
+			if (error != OK) {
+				break;
+			}
+		}
+	}
 	if (error != OK) {
 		bool prefix = slot.owned_group != 0;
+		for (uint32_t i = 0; i < slot.surface_count; ++i) {
+			prefix |= slot.surfaces[i].pipeline_owned_group != 0 || slot.surfaces[i].created_pipeline.is_valid();
+		}
 		if (slot.storage) {
 			for (const auto &resource : slot.storage->resources) {
 				prefix |= resource.rid.is_valid();

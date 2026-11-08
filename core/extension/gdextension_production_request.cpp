@@ -480,7 +480,7 @@ Error Registry::production_request_locked(GDExtensionProductionRequestRefV1 ref,
 			if (e != OK) {
 				return e;
 			}
-			if (r.attachment != a || (admit && (r.cancelled || r.release_started || r.control.state != ProductionControlState::OWNER_CONSUMED))) {
+			if (r.attachment != a || (admit && (r.cancelled || r.release_started || r.continuation_inflight || r.control.state != ProductionControlState::OWNER_CONSUMED))) {
 				return ERR_BUSY;
 			}
 			out = &r;
@@ -1421,7 +1421,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_observe_v2(GDExtensionProd
 	return result(service);
 }
 void Registry::production_report_locked(const ProductionRequest &r, GDExtensionProductionReportV2 &report) const {
-	if (r.capture_inflight) {
+	if (r.capture_inflight || r.continuation_inflight) {
 		report = {};
 		report.abi = production_dto_abi<GDExtensionProductionReportV2>();
 		report.operation = r.operation;
@@ -1566,6 +1566,9 @@ Error Registry::production_poll_native_locked(ProductionRequest &r, RDD &driver,
 	if (!service_budget_active(budget) || !r.native_count) {
 		return OK;
 	}
+	if (r.continuation_inflight) {
+		return ERR_BUSY;
+	}
 	if (r.native_count > r.capacity.native_memberships || !r.natives) {
 		return ERR_INVALID_DATA;
 	}
@@ -1704,7 +1707,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_facts(GDExtensionProductio
 	if (error != OK) {
 		return result(error, 16);
 	}
-	if (r->capture_inflight) {
+	if (r->capture_inflight || r->continuation_inflight) {
 		return result(ERR_BUSY, 16);
 	}
 	if (revision != r->revision) {
@@ -1760,7 +1763,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_facts_v2(GDExtensionProduc
 	if (error != OK) {
 		return result(error, 16);
 	}
-	if (r->capture_inflight) {
+	if (r->capture_inflight || r->continuation_inflight) {
 		return result(ERR_BUSY, 16);
 	}
 	if (revision != r->revision) {
@@ -1811,7 +1814,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_copy(GDExtensionProduction
 	if (error != OK) {
 		return result(error, 16);
 	}
-	if (request->capture_inflight) {
+	if (request->capture_inflight || request->continuation_inflight) {
 		return result(ERR_BUSY, 16);
 	}
 	if (revision != request->revision) {
@@ -2004,7 +2007,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_v2(GDExtensionProd
 					}
 					return found_map_failure;
 				}();
-				if (ready.native_error != ERR_BUSY || !own_tail || request->capture_inflight || (request->compute_list_open || request->draw_list_open) || (report->cause.native_error != OK && !returned_map_failure) || (!request->cancelled && request->next_action != request->action_count)) {
+				if (ready.native_error != ERR_BUSY || !own_tail || request->capture_inflight || request->continuation_inflight || (request->compute_list_open || request->draw_list_open) || (report->cause.native_error != OK && !returned_map_failure) || (!request->cancelled && request->next_action != request->action_count)) {
 					return ready;
 				}
 			}
@@ -2272,7 +2275,7 @@ Error Registry::production_output_owners_service_locked(ProductionRequest &reque
 	}
 	const auto &budget = control.input.budget;
 	auto &usage = control.output.service_usage;
-	if (!budget.controls || usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u) || !budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros || request.capture_inflight || request.source_device_lost || request.revision > UINT64_MAX - uint64_t(request.capacity.graph_memberships) * 2 - uint64_t(request.capacity.native_memberships) * 2 - request.capacity.readbacks - request.capacity.resources - 8) {
+	if (!budget.controls || usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u) || !budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros || request.capture_inflight || request.continuation_inflight || request.source_device_lost || request.revision > UINT64_MAX - uint64_t(request.capacity.graph_memberships) * 2 - uint64_t(request.capacity.native_memberships) * 2 - request.capacity.readbacks - request.capacity.resources - 8) {
 		return ERR_BUSY;
 	}
 	const uint32_t index = request.output_owner_cursor;
@@ -2339,7 +2342,7 @@ Error Registry::production_output_generation_return(ProductionOutputPin &pin, Re
 	if (row.output_owner_kind != ProductionOutputOwnerKind::GENERATION || row.output_particles != particles || row.output_generation != generation || row.output_slot != UINT32_MAX || row.output_lease ||
 			!rd._production_output_owner_matches(ProductionOutputOwnerKind::GENERATION, particles, generation, UINT32_MAX, 0, pin, { instance, request.serial }) ||
 			control.state != ProductionControlState::EXECUTING || control.input.kind != ProductionControlKind::OBSERVE || control.input.request_serial != request.serial ||
-			&budget != &control.input.budget || &usage != &control.output.service_usage || request.capture_inflight != 1) {
+			&budget != &control.input.budget || &usage != &control.output.service_usage || request.capture_inflight != 1 || request.continuation_inflight) {
 		return ERR_UNAUTHORIZED;
 	}
 	if (control.output.output_generation.native_released || !budget.controls || usage.passes >= MIN(budget.passes, 64u) ||
@@ -2411,6 +2414,9 @@ Error Registry::production_output_unpin_locked(ProductionOutputPin &pin) {
 		return ERR_INVALID_DATA;
 	}
 	auto &request = *pin.request;
+	if (request.continuation_inflight) {
+		return ERR_BUSY;
+	}
 	auto &attachment = *request.attachment;
 	const auto &native = device_records[attachment.device];
 	if (native.execution_thread != Thread::get_caller_id()) {
@@ -2529,7 +2535,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 		}
 		r->maintenance_serial = 0;
 	}
-	if (r->capture_inflight || r->effects_pending || r->source_device_lost) {
+	if (r->capture_inflight || r->continuation_inflight || r->effects_pending || r->source_device_lost) {
 		return result(ERR_BUSY, 16);
 	}
 	if (r->graph_count > r->capacity.graph_memberships || r->native_count > r->capacity.native_memberships) {
@@ -2861,6 +2867,9 @@ Error Registry::production_control_accept(GDExtensionProductionRequestRefV1 ref,
 	if (error != OK) {
 		return error;
 	}
+	if (r->continuation_inflight) {
+		return ERR_BUSY;
+	}
 	auto &cell = r->control;
 	if (cell.state != ProductionControlState::OWNER_CONSUMED) {
 		// A retry retrieves the same retained operation, never overwrites it.
@@ -2957,7 +2966,7 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 				// The private component fixture has directory/metadata work after
 				// native sources settle. Invoke only its original OBSERVE service;
 				// do not turn its presence into an empty native disposal cursor.
-				if (test_production_before_maintenance && cell.input.budget.controls && cell.output.service_usage.passes < MIN(cell.input.budget.passes, 64u) && cell.output.service_usage.receipts < MIN(cell.input.budget.receipts, 128u) && cell.input.budget.deadline_micros && OS::get_singleton()->get_ticks_usec() < cell.input.budget.deadline_micros && !request.capture_inflight && !request.source_device_lost && request.revision <= UINT64_MAX - uint64_t(request.capacity.graph_memberships) * 2 - uint64_t(request.capacity.native_memberships) * 2 - request.capacity.readbacks - request.capacity.resources - 8) {
+				if (test_production_before_maintenance && cell.input.budget.controls && cell.output.service_usage.passes < MIN(cell.input.budget.passes, 64u) && cell.output.service_usage.receipts < MIN(cell.input.budget.receipts, 128u) && cell.input.budget.deadline_micros && OS::get_singleton()->get_ticks_usec() < cell.input.budget.deadline_micros && !request.capture_inflight && !request.continuation_inflight && !request.source_device_lost && request.revision <= UINT64_MAX - uint64_t(request.capacity.graph_memberships) * 2 - uint64_t(request.capacity.native_memberships) * 2 - request.capacity.readbacks - request.capacity.resources - 8) {
 					const uint64_t request_serial = request.serial, control_serial = request.control.serial;
 					auto *const attachment = request.attachment;
 					const uint64_t epoch = attachment->epoch;

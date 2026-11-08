@@ -8167,8 +8167,133 @@ struct Access {
 		GDExtensionOutputAcquireInputV1 input{};
 		GDExtensionOutputAcquireResultV1 acquired{};
 		GDExtensionDeviceExit::ProductionPhysicalContextRef completed_context{};
-		bool closing = false;
+		bool closing = false, prepare_continuation = false;
 		uint32_t create_calls = 0, acquire_calls = 0;
+		RID continuation_shader;
+		uint32_t continuation_calls = 0, continuation_mode = 0;
+		static void reject_exhausted_group_serials(NativeAliasReadbackProbe &p, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref) {
+			using namespace GDExtensionDeviceExit;
+			auto &f = *p.fixture;
+			auto &request = *f.request;
+			const auto acquire = ordinal_port<GDExtensionInterfaceDeviceSessionOutputAcquireV1>("device_session_output_acquire_v1");
+			const auto original_next = request.next_disposal_group_serial;
+			const auto revision = request.revision, pin_serial = request.next_output_pin_serial;
+			const auto frontier = request.next_action, graphs = request.graph_count, natives = request.native_count;
+			const auto allocations = f.driver.alias_allocations, frees = f.driver.alias_frees;
+			const auto commands = f.rd.draw_graph.qualification_command_count();
+			const auto native_effect = request.native_effect_entered, append_effect = request.append_effect_entered;
+			const auto control_effect = request.control.record_history.control_effect_entered;
+			const auto control_append = request.control.record_history.control_append_entered;
+			// One storage group plus both actual surface groups need three serials.
+			// UINT64_MAX is valid once; zero means the original sequence is exhausted.
+			const uint64_t exhausted[] = { 0, UINT64_MAX, UINT64_MAX - 1 };
+			for (uint64_t next : exhausted) {
+				INFO("next disposal group serial: " << next);
+				request.next_disposal_group_serial = next;
+				GDExtensionOutputAcquireResultV1 refused{};
+				acquire(context, ref, 0, &p.input, &refused);
+				CHECK(refused.status.error == ERR_PARAMETER_RANGE_ERROR);
+				CHECK(refused.writable_count == 0);
+				CHECK(request.next_disposal_group_serial == next);
+				CHECK(request.next_output_pin_serial == pin_serial);
+				CHECK(request.revision == revision);
+				CHECK(request.next_action == frontier);
+				CHECK(request.graph_count == graphs);
+				CHECK(request.native_count == natives);
+				CHECK(request.actions[0].output_state == ProductionActionCell::OutputState::UNBOUND);
+				CHECK(request.actions[0].output_root == 0);
+				CHECK(p.native->pin(0).is_empty());
+				CHECK(p.native->preparation_rows_match_slots());
+				CHECK(f.driver.alias_allocations == allocations);
+				CHECK(f.driver.alias_frees == frees);
+				CHECK(f.rd.draw_graph.qualification_command_count() == commands);
+				CHECK(request.native_effect_entered == native_effect);
+				CHECK(request.append_effect_entered == append_effect);
+				CHECK(request.control.record_history.control_effect_entered == control_effect);
+				CHECK(request.control.record_history.control_append_entered == control_append);
+				request.next_disposal_group_serial = original_next;
+			}
+		}
+		static void continue_pipeline(uint64_t p_probe) {
+			using namespace GDExtensionDeviceExit;
+			auto &p = *reinterpret_cast<NativeAliasReadbackProbe *>(uintptr_t(p_probe));
+			auto &f = *p.fixture;
+			auto &request = *f.request;
+			auto &rd = f.rd;
+			const auto group = p.native->preparation_pipeline_group(0, 0);
+			REQUIRE(group != 0);
+			const auto revision = request.revision;
+			const auto frontier = request.next_action;
+			const auto returned_serial = request.control.serial;
+			const auto returned_effect = request.control.record_history.control_effect_entered;
+			const auto returned_append = request.control.record_history.control_append_entered;
+			const auto attempts = f.driver.raster_attempts;
+			Ref<UnitContainer> container;
+			container.instantiate();
+			container->initialize_raster();
+			p.continuation_shader = rd.shader_create_from_bytecode(container->to_bytes());
+			REQUIRE(p.continuation_shader.is_valid());
+			f.driver.raster_fail = p.continuation_mode == 1;
+			const auto format = rd.framebuffer_format_create(Vector<RD::AttachmentFormat>());
+			{
+				ProductionOutputPreparationScope scope;
+				CHECK(rd._production_output_owned_pipeline_preflight(scope) == ERR_INVALID_PARAMETER);
+				CHECK(f.registry.production_output_preparation_begin(p.native->pin(0), rd, 0, 0, group + 1, scope) == ERR_UNAUTHORIZED);
+				CHECK(request.continuation_inflight == 0);
+#ifdef THREADS_ENABLED
+				Error foreign = OK;
+				std::thread thread([&]() {
+					ProductionOutputPreparationScope refused;
+					foreign = f.registry.production_output_preparation_begin(p.native->pin(0), rd, 0, 0, group, refused);
+				});
+				thread.join();
+				CHECK(foreign == ERR_UNAUTHORIZED);
+#endif
+				REQUIRE(f.registry.production_output_preparation_begin(p.native->pin(0), rd, 0, 0, group, scope) == OK);
+				CHECK(request.continuation_inflight == 1);
+				CHECK(f.registry.production_output_preparation_begin(p.native->pin(0), rd, 0, 0, group, scope) == ERR_ALREADY_IN_USE);
+				REQUIRE(rd._production_output_owned_pipeline_preflight(scope) == OK);
+				CHECK(f.registry.production_output_unpin(p.native->pin(0)) == ERR_BUSY);
+				const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+				uint64_t control = 0;
+				CHECK(f.registry.production_control_accept({ f.instance, request.serial }, ProductionControlKind::OBSERVE, &control, &budget) == ERR_BUSY);
+				CHECK(control == 0);
+				ProductionServiceUsage usage{};
+				ProductionDisposalObservation observation{};
+				CHECK(rd._production_output_retire_service(p.native->pin(0), group, budget, usage, observation) == ERR_BUSY);
+				CHECK(usage.passes == 0);
+				CHECK(p.native->return_pipeline_row(0, 0) == ERR_BUSY);
+				RID stack_output;
+				CHECK(rd._production_output_owned_render_pipeline_create(scope, p.continuation_shader, format, RD::INVALID_ID,
+							  RD::RENDER_PRIMITIVE_TRIANGLES, RD::PipelineRasterizationState(), RD::PipelineMultisampleState(),
+							  RD::PipelineDepthStencilState(), RD::PipelineColorBlendState(), 0, 0, {}, stack_output) == ERR_INVALID_PARAMETER);
+				CHECK(stack_output.is_null());
+				CHECK(f.driver.raster_attempts == attempts);
+				REQUIRE(rd._production_output_owned_render_pipeline_create(scope, p.continuation_shader, format, RD::INVALID_ID,
+								RD::RENDER_PRIMITIVE_TRIANGLES, RD::PipelineRasterizationState(), RD::PipelineMultisampleState(),
+								RD::PipelineDepthStencilState(), RD::PipelineColorBlendState(), 0, 0, {}, p.native->pipeline_root()) == (p.continuation_mode == 1 ? ERR_CANT_CREATE : OK));
+				CHECK(p.native->pipeline_root().is_valid() == (p.continuation_mode != 1));
+				CHECK(f.driver.raster_attempts == attempts + 1);
+				CHECK(rd._production_output_owned_pipeline_preflight(scope) == (p.continuation_mode == 1 ? OK : ERR_ALREADY_IN_USE));
+				if (p.continuation_mode == 2) {
+					CHECK(p.native->cancel_pipeline_slot(0) == OK);
+					CHECK(request.continuation_inflight == 1);
+					CHECK(rd._production_output_owned_pipeline_preflight(scope) == ERR_UNAUTHORIZED);
+					CHECK(p.native->return_pipeline_row(0, 0) == ERR_BUSY);
+				}
+			}
+			CHECK(request.continuation_inflight == 0);
+			ProductionOutputPreparationScope replay;
+			CHECK(f.registry.production_output_preparation_begin(p.native->pin(0), rd, 0, 0, group, replay) == (p.continuation_mode == 2 ? ERR_UNAUTHORIZED : (p.continuation_mode == 1 ? OK : ERR_ALREADY_IN_USE)));
+			CHECK(request.revision == revision);
+			CHECK(request.next_action == frontier);
+			CHECK(request.control.serial == returned_serial);
+			CHECK(request.control.state == ProductionControlState::OWNER_CONSUMED);
+			CHECK(request.control.record_history.control_effect_entered == returned_effect);
+			CHECK(request.control.record_history.control_append_entered == returned_append);
+			CHECK(request.actions[0].output_state == ProductionActionCell::OutputState::BOUND);
+			++p.continuation_calls;
+		}
 		static void receive(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
 			using namespace GDExtensionDeviceExit;
 			auto &p = *static_cast<NativeAliasReadbackProbe *>(opaque);
@@ -8196,9 +8321,16 @@ struct Access {
 			}
 			auto acquire = ordinal_port<GDExtensionInterfaceDeviceSessionOutputAcquireV1>("device_session_output_acquire_v1");
 			auto append = ordinal_port<GDExtensionInterfaceDeviceSessionProductionAppendV2>("device_session_production_append_v2");
+			if (p.prepare_continuation) {
+				reject_exhausted_group_serials(p, context, ref);
+			}
 			acquire(context, ref, 0, &p.input, &p.acquired);
 			REQUIRE(p.acquired.status.error == OK);
-			CHECK(p.native->preparation_rows_match_slots(true));
+			if (p.prepare_continuation) {
+				CHECK(p.native->preparation_pipeline_reservations_match(0));
+			} else {
+				CHECK(p.native->preparation_rows_match_slots(true));
+			}
 			// A genuine acquired BOUND pin is not another preparation window.
 			// Exercise the real prefix entry without mutating its closed row or
 			// synthesizing RESERVING, native pass inputs, or a source grant.
@@ -8222,10 +8354,12 @@ struct Access {
 				CHECK(f.driver.alias_frees == frees);
 				CHECK(f.rd.draw_graph.qualification_command_count() == commands);
 			};
-			reject_pipeline_prefix(context, 0, ERR_INVALID_PARAMETER);
-			reject_pipeline_prefix({}, 1, ERR_UNAUTHORIZED);
-			reject_pipeline_prefix(context, 1, ERR_BUSY);
-			reject_pipeline_prefix(context, 1, ERR_BUSY); // Refusal must leave retry state unchanged.
+			if (!p.prepare_continuation) {
+				reject_pipeline_prefix(context, 0, ERR_INVALID_PARAMETER);
+				reject_pipeline_prefix({}, 1, ERR_UNAUTHORIZED);
+				reject_pipeline_prefix(context, 1, ERR_BUSY);
+				reject_pipeline_prefix(context, 1, ERR_BUSY); // Refusal must leave retry state unchanged.
+			}
 			p.completed_context = context; // Test-only stale-invocation rejection after this callback returns.
 			CHECK(p.acquired.writable_count == 3);
 			++p.acquire_calls;
@@ -8318,7 +8452,7 @@ struct Access {
 			CHECK_FALSE(f.request->readbacks[0].source.delivered);
 		}
 	};
-	static void output_alias_readback_complete(bool map_failure = false, bool cleanup_content = false) {
+	static void output_alias_readback_complete(bool map_failure = false, bool cleanup_content = false, bool prepare_continuation = false, uint32_t continuation_mode = 0) {
 		using namespace GDExtensionDeviceExit;
 		auto *server = ordinal_server();
 		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
@@ -8347,7 +8481,11 @@ struct Access {
 		fixture.public_port = true;
 		NativeAliasReadbackProbe probe;
 		probe.fixture = &fixture;
+		probe.prepare_continuation = prepare_continuation;
+		probe.continuation_mode = continuation_mode;
 		REQUIRE(fixture.prepare_device(server) == OK);
+		fixture.driver.raster_device = &fixture.rd;
+		fixture.driver.raster_quiet = true;
 		using MeshStorage = RendererRD::MeshStorage;
 		auto *previous_meshes = MeshStorage::get_singleton();
 		auto *meshes = memnew(MeshStorage(MeshStorage::NativeHoldTestTag{}));
@@ -8472,6 +8610,10 @@ struct Access {
 		prepared.source_use_count = 1;
 		prepared.source_generation = 1;
 		prepared.input = probe.input;
+		if (prepare_continuation) {
+			prepared.read_capacity = 2;
+			prepared.read_graph_capacity = 4;
+		}
 		prepared.roles[0] = { 1, 1, 1, 0, 3, 192 };
 		prepared.roles[1] = { 2, 2, 2, 0, 3, 192 };
 		prepared.roles[2] = { 7, 3, 3, 0, 3, 32 };
@@ -8482,9 +8624,14 @@ struct Access {
 		CHECK(probe.acquire_calls == 1);
 		CHECK(request.next_action == 3);
 		const auto groups_before_expired_context = request.next_disposal_group_serial;
-		CHECK(native.prepare_pipeline_prefix(probe.completed_context, 0, 0, 1) == ERR_UNAUTHORIZED);
+		CHECK(native.prepare_pipeline_prefix(probe.completed_context, 0, 0, 1) == (prepare_continuation ? ERR_ALREADY_IN_USE : ERR_UNAUTHORIZED));
 		CHECK(request.next_disposal_group_serial == groups_before_expired_context);
-		CHECK(native.preparation_rows_match_slots());
+		CHECK(prepare_continuation ? native.preparation_pipeline_reservations_match(0) : native.preparation_rows_match_slots());
+		if (prepare_continuation) {
+			server->call_on_render_thread(callable_mp_static(&NativeAliasReadbackProbe::continue_pipeline).bind(uint64_t(uintptr_t(&probe))));
+			server->sync();
+			CHECK(probe.continuation_calls == 1);
+		}
 		// Both actual owners retire through original controls, without repairing flags.
 		const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
 		GDExtensionProductionReportV2 report{};
@@ -8584,7 +8731,7 @@ struct Access {
 		server->sync();
 		REQUIRE(consume(ref, control, &recorded).native_error == OK);
 
-		for (uint32_t turn = 0; turn < 64 && request.output_owner_head != UINT32_MAX; ++turn) {
+		for (uint32_t turn = 0; turn < (prepare_continuation ? 256u : 64u) && request.output_owner_head != UINT32_MAX; ++turn) {
 			auto offered = budget;
 			offered.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
 			const Error e = Error(observe(ref, &offered, &report).native_error);
@@ -8602,7 +8749,7 @@ struct Access {
 		REQUIRE(fixture.port.record_schedule(probe.create_ref, &control) == OK);
 		server->sync();
 		REQUIRE(consume(probe.create_ref, control, &recorded).native_error == OK);
-		for (uint32_t turn = 0; turn < 64 && !native.released(); ++turn) {
+		for (uint32_t turn = 0; turn < (prepare_continuation ? 256u : 64u) && !native.released(); ++turn) {
 			auto offered = budget;
 			offered.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
 			// The public report cannot carry native_released; preserve and consume
@@ -8618,6 +8765,11 @@ struct Access {
 		}
 		REQUIRE(native.released());
 		native.free_created();
+		if (prepare_continuation) {
+			CHECK(fixture.driver.raster_frees == (continuation_mode == 1 ? 0 : 1));
+			CHECK(fixture.driver.raster_budgeted_frees == (continuation_mode == 1 ? 0 : 1));
+			CHECK_FALSE(fixture.driver.raster_live);
+		}
 		if (map_failure) {
 			// Actual cancellation/owner retirement did not rewrite the failed
 			// readback into a completed result or retry its failed map.
@@ -8626,6 +8778,23 @@ struct Access {
 			CHECK(request.readbacks[0].source.completed == 0);
 			CHECK_FALSE(request.readbacks[0].source.delivered);
 			CHECK(fixture.driver.alias_failed_download_maps == 1);
+		}
+
+		if (prepare_continuation) {
+			// Returning the last owner can leave an original bounded maintenance
+			// tail. Drain it through OBSERVE before requesting backing retirement.
+			for (uint32_t turn = 0; turn < 256 && fixture.rd.native_disposal_active && fixture.rd.native_disposal_continuation.production_owner == &request; ++turn) {
+				auto offered = budget;
+				offered.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
+				const Error e = Error(observe(ref, &offered, &report).native_error);
+				CHECK((e == OK || e == ERR_BUSY));
+				server->sync();
+				if (request.control.state == ProductionControlState::RETURNED) {
+					const Error consumed = Error(observe(ref, &offered, &report).native_error);
+					CHECK((consumed == OK || consumed == ERR_BUSY));
+				}
+			}
+			CHECK_FALSE((fixture.rd.native_disposal_active && fixture.rd.native_disposal_continuation.production_owner == &request));
 		}
 
 		for (uint32_t slot = 0; slot < 1; ++slot) {
@@ -8641,6 +8810,7 @@ struct Access {
 				CHECK((e == OK || e == ERR_BUSY));
 				server->sync();
 			}
+			INFO("backing retirement state=", returned.state, " reason=", returned.reason, " native_error=", returned.native_error, " maintenance=", request.maintenance_serial);
 			REQUIRE(returned.state == 1);
 			REQUIRE(fixture.port.storage_release(ref, retired).native_error == OK);
 		}
@@ -8804,6 +8974,9 @@ struct Access {
 			CHECK(cleanup_state.unlocked_checks == 3);
 		}
 #endif
+		if (probe.continuation_shader.is_valid()) {
+			fixture.rd.free(probe.continuation_shader);
+		}
 		CHECK(fixture.driver.alias_allocations == 8);
 		CHECK(fixture.driver.alias_frees == 8);
 		for (auto &block : fixture.rd.upload_staging_buffers.blocks) {
@@ -14027,6 +14200,18 @@ TEST_CASE("[SceneTree][ProductionRequest][GenerationGuardRefusal] actual unprepa
 
 TEST_CASE("[SceneTree][ProductionRequest][AliasReadbackIntegration] actual internal acquire upload and single download preserve byte custody") {
 	TestProductionRequest::Access::output_alias_readback_complete();
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][NativePreparationContinuation] original Acquire reserves pipeline custody before its physical context expires") {
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, true);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][NativePreparationContinuation] failed native pipeline factory retires its original reservation without draw") {
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, true, 1);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][NativePreparationContinuation] slot closes inside native scope and retires without draw") {
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, true, 2);
 }
 
 TEST_CASE("[SceneTree][ProductionRequest][AliasReadbackMapFailure] actual download map failure returns custody and retires original owners") {

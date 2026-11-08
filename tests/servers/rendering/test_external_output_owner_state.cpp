@@ -393,6 +393,38 @@ bool ExternalLinkedOwnerTest::preparation_rows_match_slots(bool p_probe_duplicat
 	}
 	return true;
 }
+bool ExternalLinkedOwnerTest::preparation_pipeline_reservations_match(uint32_t p_slot) const {
+	if (!owner || p_slot >= owner->slot_count) {
+		return false;
+	}
+	const auto &slot = owner->slots[p_slot];
+	if (!slot.surfaces || !slot.surface_count) {
+		return false;
+	}
+	for (uint32_t i = 0; i < slot.surface_count; ++i) {
+		const auto &surface = slot.surfaces[i];
+		const auto *row = surface.preparation_row;
+		if (!row || surface.preparation != row || !surface.pipeline_owned_group || surface.created_pipeline.is_valid() ||
+				!row->source_sealed || !row->max_resources || row->pipeline_pin != &slot.original_pin ||
+				row->pipeline_owned_group != surface.pipeline_owned_group || row->pipeline_original_root != &surface.created_pipeline ||
+				row->pipeline_context.registry_instance || row->pipeline_context.frame_serial) {
+			return false;
+		}
+	}
+	return true;
+}
+uint64_t ExternalLinkedOwnerTest::preparation_pipeline_group(uint32_t p_slot, uint32_t p_surface) const {
+	CRASH_COND(!owner || p_slot >= owner->slot_count || !owner->slots[p_slot].surfaces || p_surface >= owner->slots[p_slot].surface_count);
+	return owner->slots[p_slot].surfaces[p_surface].pipeline_owned_group;
+}
+Error ExternalLinkedOwnerTest::cancel_pipeline_slot(uint32_t p_slot) {
+	CRASH_COND(!owner);
+	return owner->cancel_slot(p_slot);
+}
+Error ExternalLinkedOwnerTest::return_pipeline_row(uint32_t p_slot, uint32_t p_surface) {
+	CRASH_COND(!owner);
+	return owner->return_preparation_row(p_slot, p_surface);
+}
 Error ExternalLinkedOwnerTest::prepare_pipeline_prefix(GDExtensionProductionPhysicalContextRefV1 p_context, uint32_t p_slot, uint32_t p_surface, uint32_t p_max_resources) {
 	CRASH_COND(!exists() || p_slot >= owner->slot_count || !owner->slots[p_slot].surfaces || p_surface >= owner->slots[p_slot].surface_count);
 	auto *row = owner->slots[p_slot].surfaces[p_surface].preparation_row;

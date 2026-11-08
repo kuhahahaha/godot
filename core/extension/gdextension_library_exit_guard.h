@@ -115,6 +115,7 @@ enum class ProductionOutputOwnerKind : uint8_t { NONE,
 	GENERATION,
 	SLOT };
 class ProductionOutputPin;
+class ProductionOutputPreparationScope;
 class ProductionOutputMetadataLease;
 class ProductionAttachment;
 class ProductionRequest;
@@ -914,6 +915,7 @@ private:
 	friend class ::RendererRD::ParticlesStorage;
 	friend class ::RendererRD::ExternalOutputOwner;
 	friend class ProductionOutputPin;
+	friend class ProductionOutputPreparationScope;
 	friend class ProductionOutputMetadataLease;
 	struct DeviceRecord {
 		Object *object = nullptr;
@@ -949,6 +951,11 @@ private:
 	Error scene_phase_call_relay(NormalRelayToken, const GDExtensionNativeScenePhaseV1 &, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 &);
 	struct ProductionPhysicalFrame;
 	static thread_local ProductionPhysicalFrame *production_physical_frame;
+	static thread_local ProductionOutputPreparationScope *production_output_preparation_scope;
+	Error production_output_preparation_begin(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint64_t, ProductionOutputPreparationScope &);
+	void production_output_preparation_end(ProductionOutputPreparationScope &);
+	Error production_output_preparation_matches_locked(const ProductionOutputPreparationScope &, RenderingDevice &, ProductionRequest *&);
+	Error production_output_preparation_validate_locked(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint64_t, RID *&);
 	// Core-only ambient bridge. Uses the original executing RECORD frame;
 	// never interprets Dictionary tokens or grants source/Host/mapping admission.
 	Error production_output_pin_current(RenderingDevice &, ProductionOutputPin &);

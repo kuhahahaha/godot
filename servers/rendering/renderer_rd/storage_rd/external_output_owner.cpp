@@ -97,9 +97,22 @@ bool ExternalOutputOwner::generation_root_matches(const GDExtensionDeviceExit::P
 			generation_root_serial && generation_root_serial == pin.serial;
 }
 
+bool ExternalOutputOwner::has_inflight_preparation() const {
+	if (generation_pin.request && generation_pin.request->continuation_inflight) {
+		return true;
+	}
+	for (uint32_t i = 0; i < slot_count; ++i) {
+		const auto *request = slots[i].original_pin.request;
+		if (request && request->continuation_inflight) {
+			return true;
+		}
+	}
+	return false;
+}
+
 Error ExternalOutputOwner::generation_returnable(uint32_t &unused, uint32_t &returned) const {
 	unused = returned = 0;
-	if ((state != GenerationState::WITHDRAWING && state != GenerationState::RETIRING && state != GenerationState::FAULTED_RETIRING) || has_live_slots() || generation_surface_has_custody()) {
+	if (has_inflight_preparation() || (state != GenerationState::WITHDRAWING && state != GenerationState::RETIRING && state != GenerationState::FAULTED_RETIRING) || has_live_slots() || generation_surface_has_custody()) {
 		return ERR_BUSY;
 	}
 	for (uint32_t i = 0; i < slot_count; ++i) {
@@ -386,6 +399,9 @@ Error ExternalOutputOwner::install_metadata_directory(GDExtensionDeviceExit::Pro
 }
 
 Error ExternalOutputOwner::bind_preparation_rows(uint32_t p_slot) {
+	if (has_inflight_preparation()) {
+		return ERR_BUSY;
+	}
 	if (p_slot >= slot_count || !metadata_directories_placement || !preparation_rows) {
 		return ERR_INVALID_PARAMETER;
 	}
@@ -427,6 +443,9 @@ Error ExternalOutputOwner::bind_preparation_rows(uint32_t p_slot) {
 }
 
 Error ExternalOutputOwner::return_preparation_row(uint32_t p_slot, uint32_t p_surface) {
+	if (has_inflight_preparation()) {
+		return ERR_BUSY;
+	}
 	if (p_slot >= slot_count || !slots[p_slot].surfaces || p_surface >= slots[p_slot].surface_count) {
 		return ERR_INVALID_PARAMETER;
 	}
@@ -489,7 +508,7 @@ Error ExternalOutputOwner::install_reserved_surface_cells(uint32_t p_surfaces) {
 }
 
 Error ExternalOutputOwner::return_reserved_cells() {
-	if (has_live_slots() || has_generation_selection_custody()) {
+	if (has_inflight_preparation() || has_live_slots() || has_generation_selection_custody()) {
 		return ERR_BUSY;
 	}
 	for (uint32_t i = 0; i < view_capacity; ++i) {

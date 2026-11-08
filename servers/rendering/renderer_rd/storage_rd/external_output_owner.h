@@ -276,6 +276,7 @@ private:
 	// Component substrate for the original accepted Create receiver. The public
 	// Create leaf remains unavailable until its real admission/source join exists.
 	bool generation_root_matches(const GDExtensionDeviceExit::ProductionOutputPin &) const;
+	bool has_inflight_preparation() const;
 	Error generation_returnable(uint32_t &, uint32_t &) const;
 	Error install_generation_root(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, GDExtensionDeviceExit::Registry &, RenderingDevice &, RID, GDExtensionDeviceExit::ProductionOutputMetadataLease * = nullptr);
 	Error install_reserved_cells(uint32_t p_views, uint32_t p_reads);

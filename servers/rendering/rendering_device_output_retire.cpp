@@ -49,6 +49,9 @@ Error RenderingDevice::_production_output_retire_service(GDExtensionDeviceExit::
 		return ERR_UNAUTHORIZED;
 	}
 	auto &request = *pin.request;
+	if (request.continuation_inflight) {
+		return ERR_BUSY;
+	}
 	auto &control = request.control;
 	if (control.state != ProductionControlState::EXECUTING || control.input.kind != ProductionControlKind::OBSERVE ||
 			control.input.request_serial != request.serial || &budget != &control.input.budget ||
