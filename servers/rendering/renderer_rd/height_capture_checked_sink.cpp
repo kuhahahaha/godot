@@ -221,7 +221,10 @@ Error HeightCaptureCheckedSink::bind_uniform_set(RID p_uniform_set, uint32_t p_i
 		enroll_record(business_count - 1, false);
 		return first_error;
 	}
-	record->bind = rd._draw_list_bind_uniform_set_recorded(list, p_uniform_set, p_index);
+	const uint32_t remaining = transfers.size() - transfer_count;
+	record->bind = rd._draw_list_bind_uniform_set_recorded(list, p_uniform_set, p_index, true, remaining ? transfers.ptr() + transfer_count : nullptr, remaining);
+	record->transfer_count = record->bind.transfer_count;
+	transfer_count += record->bind.transfer_count;
 	enroll_record(business_count - 1, false);
 	return accept(record->bind);
 }

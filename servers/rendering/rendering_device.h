@@ -553,7 +553,7 @@ private:
 			return result;
 		}
 	};
-	BindAppendResult _draw_list_bind_uniform_set_recorded(DrawListID p_list, RID p_uniform_set, uint32_t p_index, bool p_capture = true);
+	BindAppendResult _draw_list_bind_uniform_set_recorded(DrawListID p_list, RID p_uniform_set, uint32_t p_index, bool p_capture = true, NativeTransferDependency *p_transfers = nullptr, uint32_t p_transfer_capacity = 0);
 	BindAppendResult _draw_list_bind_vertex_array_recorded(DrawListID p_list, RID p_vertex_array, NativeTransferDependency *p_transfers, uint32_t p_transfer_capacity, bool p_capture = true);
 	BindAppendResult _draw_list_bind_index_array_recorded(DrawListID p_list, RID p_index_array, NativeTransferDependency *p_transfers, uint32_t p_transfer_capacity, bool p_capture = true);
 	bool _draw_list_usage_conflicts(const RDG::ResourceTracker *p_tracker, RDG::ResourceUsage p_usage) const;

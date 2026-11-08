@@ -7338,7 +7338,7 @@ void RenderingDevice::draw_list_bind_uniform_set(DrawListID p_list, RID p_unifor
 	_draw_list_bind_uniform_set_recorded(p_list, p_uniform_set, p_index, false);
 }
 
-RenderingDevice::BindAppendResult RenderingDevice::_draw_list_bind_uniform_set_recorded(DrawListID p_list, RID p_uniform_set, uint32_t p_index, bool p_capture) {
+RenderingDevice::BindAppendResult RenderingDevice::_draw_list_bind_uniform_set_recorded(DrawListID p_list, RID p_uniform_set, uint32_t p_index, bool p_capture, NativeTransferDependency *p_transfers, uint32_t p_transfer_capacity) {
 	BindAppendResult result;
 	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
@@ -7358,6 +7358,41 @@ RenderingDevice::BindAppendResult RenderingDevice::_draw_list_bind_uniform_set_r
 	ERR_FAIL_NULL_V(uniform_set, result.failure(ERR_INVALID_PARAMETER));
 	ERR_FAIL_COND_V_MSG(_native_immutable_uniform_set_writes(*uniform_set), result.failure(ERR_UNAUTHORIZED), "An immutable native backing cannot be bound for shader writes.");
 	ERR_FAIL_COND_V((!uniform_set->qualification_dependencies.is_empty() || uniform_set->qualification_return) && !qualification_recording, result.failure(ERR_UNAUTHORIZED));
+
+	if (p_capture) {
+		// Retain original immutable sampled-texture upload membership before
+		// accepting deferred descriptor state. Capacity refusal publishes none.
+		uint32_t count = 0;
+		for (const auto &entry : uniform_set->untracked_usage) {
+			if (entry.value != RDG::RESOURCE_USAGE_TEXTURE_SAMPLE) {
+				continue;
+			}
+			Texture *texture = texture_owner.get_or_null(entry.key);
+			ERR_FAIL_COND_V(!texture || !texture->driver_id || texture->qualification_return || native_immutable_resource_is_retiring(entry.key), result.failure(ERR_INVALID_DATA));
+			if (texture->transfer_worker_index < 0) {
+				continue;
+			}
+			const uint32_t index = texture->transfer_worker_index;
+			ERR_FAIL_COND_V(index >= transfer_worker_pool.size() || !transfer_worker_pool[index] || transfer_worker_pool[index]->index != index || index >= transfer_worker_operation_used_by_draw.size(), result.failure(ERR_INVALID_DATA));
+			ERR_FAIL_COND_V(count == p_transfer_capacity || !p_transfers, result.failure(ERR_PARAMETER_RANGE_ERROR));
+			++count;
+		}
+		for (const auto &entry : uniform_set->untracked_usage) {
+			if (entry.value != RDG::RESOURCE_USAGE_TEXTURE_SAMPLE) {
+				continue;
+			}
+			Texture *texture = texture_owner.get_or_null(entry.key);
+			if (texture->transfer_worker_index < 0) {
+				continue;
+			}
+			const NativeTransferDependency transfer = { uint32_t(texture->transfer_worker_index), texture->transfer_worker_operation };
+			const Error error = _check_transfer_worker_texture(texture);
+			if (error != OK) {
+				return result.failure(error);
+			}
+			p_transfers[result.transfer_count++] = transfer;
+		}
+	}
 
 	const auto &previous = draw_list.state.sets[p_index];
 	result.state_changed = p_index > draw_list.state.set_count || previous.uniform_set_driver_id != uniform_set->driver_id || previous.bound || previous.uniform_set_format != uniform_set->format || previous.uniform_set != p_uniform_set;
@@ -7766,8 +7801,9 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_recorded(Draw
 		const RenderPipeline *pipeline = render_pipeline_owner.get_or_null(draw_list.state.pipeline);
 		const Shader *shader = shader_owner.get_or_null(pipeline->shader);
 		ERR_FAIL_COND_V(uint32_t(pipeline->set_formats.size()) != draw_list.state.set_count || shader->set_formats != pipeline->set_formats, result.failure(ERR_INVALID_DATA));
-		// This profile captures read-only sets requiring no hidden copy, clear,
-		// transfer or revision mutation. Original public drawing is unchanged.
+		// This profile captures read-only sets requiring no hidden copy,
+		// clear or revision mutation. Upload dependencies are retained at bind.
+		// Original public drawing is unchanged.
 		HashMap<RDG::ResourceTracker *, RDG::ResourceUsage> pending_usages;
 		uint32_t batch_count = 0;
 		uint32_t last_index = 0;
@@ -7841,7 +7877,26 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_recorded(Draw
 					case RDG::RESOURCE_USAGE_TEXTURE_SAMPLE: {
 						ERR_FAIL_COND_V(!texture_owner.owns(entry.key), result.failure(ERR_INVALID_PARAMETER));
 						const Texture *texture = texture_owner.get_or_null(entry.key);
-						ERR_FAIL_COND_V(!texture || !texture->driver_id || texture->qualification_return || texture->transfer_worker_index >= 0, result.failure(ERR_INVALID_DATA));
+						ERR_FAIL_COND_V(!texture || !texture->driver_id || texture->qualification_return, result.failure(ERR_INVALID_DATA));
+						if (texture->transfer_worker_index >= 0) {
+							// A pending upload is covered only by an earlier original
+							// checked bind whose raw tuple has already been enrolled.
+							const Ref<NativeHeightRange> &range = native_height_active_checked_range;
+							bool covered = false;
+							if (range.is_valid() && !range->recording_closed && range->capture_frame == uint32_t(frame) && range->capture_epoch == frames[frame].qualification_epoch) {
+								for (uint32_t k = 0; k < range->capture_transfers; ++k) {
+									const auto &checked = range->checked_transfers[k];
+									if (checked.worker == uint32_t(texture->transfer_worker_index) && checked.operation == texture->transfer_worker_operation && !checked.processed && checked.dependency < range->worker_count) {
+										const auto &dependency = range->workers[checked.dependency];
+										covered = dependency.worker == checked.worker && dependency.operation >= checked.operation && (!dependency.issue_attempted || (checked.operation >= dependency.first_operation && checked.operation <= dependency.last_operation));
+										if (covered) {
+											break;
+										}
+									}
+								}
+							}
+							ERR_FAIL_COND_V(!covered, result.failure(ERR_INVALID_DATA));
+						}
 					} break;
 					default:
 						return result.failure(ERR_UNAVAILABLE);

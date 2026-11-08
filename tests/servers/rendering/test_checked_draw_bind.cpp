@@ -246,6 +246,65 @@ public:
 		f.rd.render_pipeline_owner.free(pipeline_rid);
 		f.rd.storage_buffer_owner.free(buffer_rid);
 	}
+	static void uniform_texture_transfers() {
+		Fixture f;
+		const RID set_rid = f.uniform(51);
+		auto *set = f.rd.uniform_set_owner.get_or_null(set_rid);
+		Vector<RID> textures;
+		for (uint64_t operation : { uint64_t(77), uint64_t(78) }) {
+			RD::Texture texture;
+			texture.driver_id = RDD::TextureID(operation);
+			texture.transfer_worker_index = 0;
+			texture.transfer_worker_operation = operation;
+			const RID rid = f.rd.texture_owner.make_rid(texture);
+			textures.push_back(rid);
+			set->untracked_usage.insert(rid, RDG::RESOURCE_USAGE_TEXTURE_SAMPLE);
+		}
+		auto *worker = f.rd.transfer_worker_pool[0];
+		worker->operations_processed = 71;
+		worker->operations_submitted = 71;
+		worker->operations_counter = 78;
+		worker->recording = true;
+		RD::NativeTransferDependency transfers[2];
+		ERR_PRINT_OFF;
+		no_effect(f.rd._draw_list_bind_uniform_set_recorded(Fixture::LIST, set_rid, 0, true, transfers, 1), ERR_PARAMETER_RANGE_ERROR);
+		CHECK(f.rd.transfer_worker_operation_used_by_draw[0] == 0);
+		CHECK_FALSE(f.rd.draw_list.state.sets[0].uniform_set.is_valid());
+		worker->thread_mutex.lock();
+		no_effect(f.rd._draw_list_bind_uniform_set_recorded(Fixture::LIST, set_rid, 0, true, transfers, 2), ERR_BUSY);
+		worker->thread_mutex.unlock();
+		CHECK(f.rd.transfer_worker_operation_used_by_draw[0] == 0);
+		ERR_PRINT_ON;
+		const auto result = f.rd._draw_list_bind_uniform_set_recorded(Fixture::LIST, set_rid, 0, true, transfers, 2);
+		CHECK(result.error == OK);
+		CHECK(result.state_accepted);
+		CHECK(result.capture_complete);
+		CHECK(result.transfer_count == 2);
+		CHECK(result.effect == RD::NativeAppendEffect::NoNewEffect);
+		CHECK_FALSE(result.bind_handle.is_valid());
+		CHECK(transfers[0].worker == 0);
+		CHECK(transfers[1].worker == 0);
+		CHECK(((transfers[0].operation == 77 && transfers[1].operation == 78) || (transfers[0].operation == 78 && transfers[1].operation == 77)));
+		CHECK(f.rd.transfer_worker_operation_used_by_draw[0] == 78);
+		CHECK(worker->operations_processed == 71);
+		CHECK(worker->operations_submitted == 71);
+		CHECK(worker->recording);
+		for (RID rid : textures) {
+			CHECK(f.rd.texture_owner.get_or_null(rid)->transfer_worker_index == 0);
+		}
+		// Only the original processed cursor may clear the texture marker.
+		worker->operations_processed = 78;
+		const auto processed = f.rd._draw_list_bind_uniform_set_recorded(Fixture::LIST, set_rid, 0, true, transfers, 2);
+		CHECK(processed.error == OK);
+		CHECK(processed.transfer_count == 2);
+		for (RID rid : textures) {
+			CHECK(f.rd.texture_owner.get_or_null(rid)->transfer_worker_index == -1);
+			f.rd.texture_owner.free(rid);
+		}
+		set->untracked_usage.clear();
+		CHECK(f.rd._draw_list_bind_uniform_set_recorded(Fixture::LIST, set_rid, 0).transfer_count == 0);
+	}
+
 	static void uniform_state() {
 		Fixture f;
 		const RID first = f.uniform(51), next = f.uniform(52);
@@ -443,4 +502,8 @@ TEST_CASE("[RenderingDevice][CheckedBind] geometry binds preserve original paylo
 }
 TEST_CASE("[RenderingDevice][CheckedBind] original usage conflicts and offset overflow refuse before effects") {
 	TestCheckedBindAccess::preflight();
+}
+
+TEST_CASE("[RenderingDevice][CheckedBind] immutable sampled textures retain exact pending upload tuples before state") {
+	TestCheckedBindAccess::uniform_texture_transfers();
 }
