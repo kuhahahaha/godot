@@ -235,6 +235,11 @@ public:
 
 		RID version;
 
+	private:
+		RID native_features_version;
+		bool native_features_need_inverse = false;
+
+	public:
 		static const uint32_t VERTEX_INPUT_MASKS_SIZE = (ShaderVersion::SHADER_VERSION_COLOR_PASS * 2 + SHADER_COLOR_PASS_FLAG_COUNT) * 3;
 		std::atomic<uint64_t> vertex_input_masks[VERTEX_INPUT_MASKS_SIZE] = {};
 
@@ -325,6 +330,7 @@ public:
 		// bounds/source/history proof and backend mirror-cull calibration.
 		bool instance192_shader_supported() const;
 		virtual Pair<ShaderRD *, RID> get_native_shader_and_version() const;
+		Error get_native_instance192_shader_features(NativeInstance192ShaderFeatures &r_features) const override;
 		uint16_t _get_shader_version(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader) const;
 		RID _get_shader_variant(uint16_t p_shader_version, bool p_indexed144 = false, bool p_instance192 = false) const;
 		void _clear_vertex_input_mask_cache();

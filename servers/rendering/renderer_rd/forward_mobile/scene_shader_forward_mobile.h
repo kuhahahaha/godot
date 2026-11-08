@@ -258,6 +258,11 @@ public:
 
 		RID version;
 
+	private:
+		RID native_features_version;
+		bool native_features_need_inverse = false;
+
+	public:
 		static const uint32_t VERTEX_INPUT_MASKS_SIZE = SHADER_VERSION_MAX * 6;
 		std::atomic<uint64_t> vertex_input_masks[VERTEX_INPUT_MASKS_SIZE] = {};
 
@@ -345,6 +350,7 @@ public:
 		// bounds/source/history proof and backend mirror-cull calibration.
 		bool instance192_shader_supported() const;
 		virtual Pair<ShaderRD *, RID> get_native_shader_and_version() const;
+		Error get_native_instance192_shader_features(NativeInstance192ShaderFeatures &r_features) const override;
 		RD::PolygonCullMode get_cull_mode_from_cull_variant(CullVariant p_cull_variant);
 		void _clear_vertex_input_mask_cache();
 		RID get_shader_variant(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144 = false, bool p_instance192 = false) const;

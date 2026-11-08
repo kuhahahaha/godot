@@ -13,7 +13,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 MODES = ("INIT", "VALIDATE", "FINALIZE", "INIT_EMPTY", "FINALIZE_EMPTY")
-PASS = "PARTICLE_EXTERNAL_GUARD_NATIVE_PASS five_modes=1 checks=131 idempotent=1 owner_released=1 reprepare=1 physical_return_claimed=0"
+PASS = "PARTICLE_EXTERNAL_GUARD_NATIVE_PASS five_modes=1 checks=202 idempotent=1 owner_released=1 reprepare=1 physical_return_claimed=0"
 MISSING = "PARTICLE_EXTERNAL_GUARD_NATIVE_MISSING tests-only fixture class not registered"
 
 
@@ -60,6 +60,12 @@ def expected_checks() -> set[str]:
         for mode in MODES
         for suffix in ("actual_pipeline", "original_shader_association", "reflected_compute_layout", "reflected_source_roles", "distinct_engine_variant", "survives_local_release")
     )
+    labels.add("material_features.original_owner")
+    labels.update(
+        f"material_features.{case}.{suffix}"
+        for case in ("plain", "vertex_inverse", "fragment_inverse", "alpha_hash", "alpha_scissor", "normal_only", "both")
+        for suffix in ("unissued_unchanged", "selection", "compiled_fact", "generation", "original_version", "inverse_requirement", "release", "released_refused", "empty_selection", "empty_invalidates")
+    )
     return labels
 
 
@@ -69,6 +75,7 @@ def main() -> int:
     parser.add_argument("--sha256", required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--driver", choices=("metal", "vulkan"), default="metal")
+    parser.add_argument("--method", choices=("mobile", "forward_plus"), default="mobile")
     parser.add_argument(
         "--expect-missing-fixture", action="store_true", help="headless registration RED only; never GPU success"
     )
@@ -83,7 +90,7 @@ def main() -> int:
     command += (
         ["--headless"]
         if args.expect_missing_fixture
-        else ["--rendering-driver", args.driver, "--rendering-method", "mobile"]
+        else ["--rendering-driver", args.driver, "--rendering-method", args.method]
     )
     environment = dict(os.environ, ANGE_MACOS_BACKGROUND_RENDER="1")
     for key in tuple(environment):
@@ -119,7 +126,7 @@ def main() -> int:
                 and native_report.get("error") == 0
                 and native_report.get("mode_count") == 5
                 and native_report.get("failures") == []
-                and len(checks) == len(labels) == 131
+                and len(checks) == len(labels) == 202
                 and set(labels) == expected_checks()
                 and all(row.get("ok") is True for row in checks)
                 and all(
@@ -129,9 +136,9 @@ def main() -> int:
                 and native_report.get("device", {}).get("driver") == args.driver
             )
         backend = "Metal" if args.driver == "metal" else "Vulkan"
-        startup = re.findall(r"^(Metal|Vulkan) [0-9.]+ - Forward Mobile - Using Device #[0-9]+: .+$", text, re.M)
+        startup = re.findall(r"^(Metal|Vulkan) [0-9.]+ - (Forward Mobile|Forward\+) - Using Device #[0-9]+: .+$", text, re.M)
         passed = (
-            returncode == 0 and text.count(PASS) == 1 and valid_report and startup == [backend] and not fatal and stable
+            returncode == 0 and text.count(PASS) == 1 and valid_report and startup == [(backend, "Forward Mobile" if args.method == "mobile" else "Forward+")] and not fatal and stable
         )
     result = {
         "command": command,

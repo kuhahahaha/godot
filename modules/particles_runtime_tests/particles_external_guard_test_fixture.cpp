@@ -33,6 +33,7 @@
 #include "core/object/class_db.h"
 #include "core/os/os.h"
 #include "servers/rendering/renderer_rd/effects/particles_external_guard.h"
+#include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/rendering_device.h"
@@ -91,6 +92,72 @@ Error ParticlesExternalGuardTestFixture::run() {
 		device_info["renderer"] = OS::get_singleton()->get_current_rendering_method();
 		device_info["name"] = rd->get_device_name();
 		device_info["api"] = rd->get_device_api_version();
+	}
+
+	// Observe actual backend compiler facts through the original bounded owner.
+	// No feature observation is material/profile qualification or a draw permit.
+	{
+		auto *materials = RendererRD::MaterialStorage::get_singleton();
+		check(materials != nullptr, "material_features.original_owner");
+		if (!materials) {
+			return finish(ERR_UNAVAILABLE);
+		}
+		struct FeatureCase {
+			const char *name;
+			const char *source;
+			bool inverse;
+		};
+		const FeatureCase cases[] = {
+			{ "plain", "shader_type spatial; void fragment() { ALBEDO = vec3(1.0); }", false },
+			{ "vertex_inverse", "shader_type spatial; void vertex() { VERTEX = (INV_MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }", true },
+			{ "fragment_inverse", "shader_type spatial; void fragment() { ALBEDO = (INV_MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }", true },
+			{ "alpha_hash", "shader_type spatial; void fragment() { ALPHA_HASH_SCALE = 0.5; }", true },
+			{ "alpha_scissor", "shader_type spatial; void fragment() { ALPHA_SCISSOR_THRESHOLD = 0.5; }", false },
+			{ "normal_only", "shader_type spatial; void fragment() { ALBEDO = NORMAL; }", false },
+			{ "both", "shader_type spatial; void fragment() { ALBEDO = (INV_MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; ALPHA_HASH_SCALE = 0.5; }", true },
+		};
+		for (const auto &entry : cases) {
+			const String label = String("material_features.") + entry.name;
+			const RID shader = materials->shader_allocate();
+			materials->shader_initialize(shader, false);
+			materials->shader_set_code(shader, entry.source);
+			const RID material = materials->material_allocate();
+			materials->material_initialize(material);
+			materials->material_set_shader(material, shader);
+			materials->_update_queued_materials();
+			const uint64_t generation = materials->material_get_generation(material);
+			RendererRD::MaterialStorage::NativeSelectionLease selection;
+			RendererRD::MaterialStorage::NativeSelectionShaderFeatures features;
+			features.material = shader;
+			features.material_generation = UINT64_MAX;
+			check(materials->material_selection_get_shader_features(selection, features) == ERR_UNAUTHORIZED && features.material == shader && features.material_generation == UINT64_MAX, label + ".unissued_unchanged");
+			const Error acquired = materials->material_selection_acquire(material, selection, generation);
+			check(acquired == OK, label + ".selection");
+			if (acquired == OK) {
+				const Error observed = materials->material_selection_get_shader_features(selection, features);
+				check(observed == OK, label + ".compiled_fact");
+				if (observed == OK) {
+					check(features.material == material && features.material_generation == generation, label + ".generation");
+					check(features.compiled.shader && features.compiled.version.is_valid(), label + ".original_version");
+					check(features.compiled.needs_inverse == entry.inverse, label + ".inverse_requirement");
+				}
+				check(materials->material_selection_release(selection) == OK, label + ".release");
+				check(materials->material_selection_get_shader_features(selection, features) == ERR_UNAUTHORIZED, label + ".released_refused");
+			}
+			// Empty code invalidates the previous successful compiler observation.
+			materials->shader_set_code(shader, "");
+			materials->_update_queued_materials();
+			RendererRD::MaterialStorage::NativeSelectionLease empty_selection;
+			const Error empty_acquired = materials->material_selection_acquire(material, empty_selection, materials->material_get_generation(material));
+			check(empty_acquired == ERR_INVALID_DATA && !empty_selection.is_active(), label + ".empty_selection");
+			check(materials->material_selection_get_shader_features(empty_selection, features) == ERR_UNAUTHORIZED, label + ".empty_invalidates");
+			// Preserve cleanup even if an incorrect admission is exposed.
+			if (empty_selection.is_active()) {
+				materials->material_selection_release(empty_selection);
+			}
+			materials->material_free(material);
+			materials->shader_free(shader);
+		}
 	}
 
 	using Guard = RendererRD::ParticlesExternalGuard;

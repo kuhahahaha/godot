@@ -68,6 +68,14 @@ public:
 	};
 
 	struct ShaderData {
+		// Compiler observation only: not material/profile qualification or GPU readiness.
+		// Consume under the original material selection lease; do not retain as authority.
+		struct NativeInstance192ShaderFeatures {
+			ShaderRD *shader = nullptr;
+			RID version;
+			bool needs_inverse = false;
+		};
+
 		enum BlendMode {
 			BLEND_MODE_MIX,
 			BLEND_MODE_ADD,
@@ -94,6 +102,7 @@ public:
 		virtual bool casts_shadows() const = 0;
 		virtual RenderingServerTypes::ShaderNativeSourceCode get_native_source_code() const = 0;
 		virtual Pair<ShaderRD *, RID> get_native_shader_and_version() const = 0;
+		virtual Error get_native_instance192_shader_features(NativeInstance192ShaderFeatures &r_features) const { return ERR_UNAVAILABLE; }
 
 		virtual ~ShaderData() {}
 
@@ -127,6 +136,14 @@ public:
 	};
 	Error material_selection_acquire(RID p_rid, NativeSelectionLease &r_lease, uint64_t p_expected_generation);
 	Error material_selection_release(NativeSelectionLease &r_lease);
+	struct NativeSelectionShaderFeatures {
+		RID material;
+		uint64_t material_generation = 0;
+		ShaderData::NativeInstance192ShaderFeatures compiled;
+	};
+	// Current compiler facts under an existing selection; not full qualification.
+	// The returned pointers/version are borrowed only while that selection is held.
+	Error material_selection_get_shader_features(const NativeSelectionLease &p_lease, NativeSelectionShaderFeatures &r_features) const;
 
 	class NativeMaterialHold {
 		bool physical_transferred = false, metadata_returned = false, metadata_return_active = false;

@@ -42,6 +42,9 @@ using namespace RendererSceneRenderImplementation;
 /* ShaderData */
 
 void SceneShaderForwardMobile::ShaderData::set_code(const String &p_code) {
+	// Invalidate before every early exit; an old successful source is not this one.
+	native_features_version = RID();
+	native_features_need_inverse = false;
 	// Accepted original workers read this ShaderData until their task returns.
 	// Join and retire their cache before changing inputs, including early exits.
 	pipeline_hash_map.clear_pipelines();
@@ -58,6 +61,8 @@ void SceneShaderForwardMobile::ShaderData::set_code(const String &p_code) {
 	}
 
 	ShaderCompiler::GeneratedCode gen_code;
+	bool uses_inverse_model_matrix = false;
+	bool uses_alpha_hash = false;
 
 	blend_mode = BLEND_MODE_MIX;
 	depth_test_disabledi = 0;
@@ -133,7 +138,8 @@ void SceneShaderForwardMobile::ShaderData::set_code(const String &p_code) {
 
 	actions.usage_flag_pointers["ALPHA"] = &uses_alpha;
 	actions.usage_flag_pointers["ALPHA_SCISSOR_THRESHOLD"] = &uses_alpha_clip;
-	actions.usage_flag_pointers["ALPHA_HASH_SCALE"] = &uses_alpha_clip;
+	actions.usage_flag_pointers["ALPHA_HASH_SCALE"] = &uses_alpha_hash;
+	actions.usage_flag_pointers["INV_MODEL_MATRIX"] = &uses_inverse_model_matrix;
 	actions.usage_flag_pointers["ALPHA_ANTIALIASING_EDGE"] = &uses_alpha_antialiasing;
 	actions.usage_flag_pointers["ALPHA_TEXTURE_COORDINATE"] = &uses_alpha_antialiasing;
 	actions.render_mode_flags["depth_prepass_alpha"] = &uses_depth_prepass_alpha;
@@ -188,6 +194,9 @@ void SceneShaderForwardMobile::ShaderData::set_code(const String &p_code) {
 		}
 		ERR_FAIL_MSG("Shader compilation failed.");
 	}
+
+	// Preserve the original alpha-clip union while tracking hash exactly.
+	uses_alpha_clip |= uses_alpha_hash;
 
 	if (version.is_null()) {
 		version = SceneShaderForwardMobile::singleton->shader.version_create(false);
@@ -264,6 +273,22 @@ void SceneShaderForwardMobile::ShaderData::set_code(const String &p_code) {
 	}
 
 	uses_blend_alpha = blend_mode_uses_blend_alpha(BlendMode(blend_mode));
+	if (version.is_valid()) {
+		native_features_need_inverse = uses_inverse_model_matrix || uses_alpha_hash;
+		native_features_version = version;
+	}
+}
+
+Error SceneShaderForwardMobile::ShaderData::get_native_instance192_shader_features(NativeInstance192ShaderFeatures &r_features) const {
+	if (native_features_version.is_null() || native_features_version != version) {
+		return ERR_UNAVAILABLE;
+	}
+	NativeInstance192ShaderFeatures features;
+	features.shader = &SceneShaderForwardMobile::singleton->shader;
+	features.version = native_features_version;
+	features.needs_inverse = native_features_need_inverse;
+	r_features = features;
+	return OK;
 }
 
 bool SceneShaderForwardMobile::ShaderData::is_animated() const {
