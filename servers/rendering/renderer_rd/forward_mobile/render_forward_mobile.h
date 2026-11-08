@@ -186,6 +186,30 @@ private:
 		}
 	};
 
+	// Exact ordinary surface selection, shared with future pre-list preparation.
+	// Native backing classification and vertex format are resolved from this
+	// selected source by their original MeshStorage owner.
+	struct NativeSurfacePipelineOverride {
+		SceneShaderForwardMobile::ShaderData *shader = nullptr;
+		RID material_uniform_set;
+	};
+
+	struct NativeSurfacePipelineSelection {
+		SceneShaderForwardMobile::ShaderData *shader = nullptr;
+		SceneShaderForwardMobile::MaterialData *used_material = nullptr;
+		void *mesh_surface = nullptr;
+		RID material_uniform_set;
+		SceneShaderForwardMobile::ShaderData::CullVariant cull_variant = SceneShaderForwardMobile::ShaderData::CULL_VARIANT_MAX;
+		SceneShaderForwardMobile::ShaderData::PipelineKey base_key = {};
+
+		RD::PolygonCullMode get_cull_mode() const {
+			return shader->get_cull_mode_from_cull_variant(cull_variant);
+		}
+	};
+
+	static bool _select_native_surface_pipeline(const RenderListParameters &p_params, uint32_t p_element,
+			const NativeSurfacePipelineOverride &p_override, NativeSurfacePipelineSelection &r_selection);
+
 	/* Render shadows */
 
 	void _render_shadow_pass(RID p_light, RID p_shadow_atlas, int p_pass, const PagedArray<RenderGeometryInstance *> &p_instances, float p_lod_distance_multiplier = 0, float p_screen_mesh_lod_threshold = 0.0, bool p_open_pass = true, bool p_close_pass = true, bool p_clear_region = true, RenderingServerTypes::RenderInfo *p_render_info = nullptr, const Transform3D &p_main_cam_transform = Transform3D());

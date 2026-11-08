@@ -132,6 +132,108 @@ public:
 		CHECK(uv2.subpass == 0);
 	}
 
+	static void native_surface_pipeline() {
+		using Renderer = RenderForwardMobile;
+		using Shader = SceneShaderForwardMobile;
+		// Opaque tokens are only identities for this CPU selection test. No
+		// shader method, native allocation or material use is performed here.
+		uint64_t identities[5] = {};
+		Renderer::GeometryInstanceForwardMobile instance;
+		instance.instance_count = 4;
+		instance.flags_cache = Renderer::INSTANCE_DATA_FLAG_MULTIMESH | Renderer::INSTANCE_DATA_FLAG_MULTIMESH_FORMAT_2D |
+				Renderer::INSTANCE_DATA_FLAG_MULTIMESH_HAS_COLOR | Renderer::INSTANCE_DATA_FLAG_MULTIMESH_HAS_CUSTOM_DATA;
+		instance.use_projector = true;
+		instance.use_soft_shadow = true;
+		instance.omni_light_count = 3;
+		instance.spot_light_count = 1;
+		instance.area_light_count = 0;
+		instance.reflection_probe_count = 2;
+		instance.decals_count = 1;
+		Renderer::GeometryInstanceSurfaceDataCache surface;
+		surface.owner = &instance;
+		surface.primitive = RSE::PRIMITIVE_TRIANGLES;
+		surface.surface = &identities[0];
+		surface.surface_shadow = &identities[1];
+		surface.shader = reinterpret_cast<Shader::ShaderData *>(&identities[2]);
+		surface.shader_shadow = reinterpret_cast<Shader::ShaderData *>(&identities[3]);
+		surface.material = reinterpret_cast<Shader::MaterialData *>(&identities[4]);
+		surface.material_uniform_set = RID::from_uint64(211);
+		surface.material_uniform_set_shadow = RID::from_uint64(223);
+		Renderer::GeometryInstanceSurfaceDataCache *elements[] = { &surface };
+		Renderer::RenderElementInfo info{};
+		Shader::ShaderSpecialization base = {};
+		base.packed_0 = 0x24; // Directional soft shadow and disabled fog survive.
+		base.packed_1 = 0x200011; // Directional light count and sample count survive.
+		base.packed_2 = 2.5f;
+		Renderer::RenderListParameters params(elements, &info, 1, false, Renderer::PASS_MODE_COLOR, RID(), base, true);
+		Renderer::NativeSurfacePipelineOverride override;
+		Renderer::NativeSurfacePipelineSelection selected;
+		for (auto mode : { Renderer::PASS_MODE_COLOR, Renderer::PASS_MODE_COLOR_TRANSPARENT }) {
+			params.pass_mode = mode;
+			REQUIRE(Renderer::_select_native_pass(mode, 1, false, 307, 2, params.native_pass));
+			for (bool lightmap : { false, true }) {
+				info.uses_lightmap = lightmap;
+				REQUIRE(Renderer::_select_native_surface_pipeline(params, 0, override, selected));
+				CHECK(selected.shader == surface.shader);
+				CHECK(selected.mesh_surface == surface.surface);
+				CHECK(selected.used_material == surface.material);
+				CHECK(selected.material_uniform_set == RID::from_uint64(211));
+				CHECK(selected.base_key.version == (lightmap ? Shader::SHADER_VERSION_LIGHTMAP_COLOR_PASS : Shader::SHADER_VERSION_COLOR_PASS));
+				CHECK(selected.base_key.framebuffer_format_id == 307);
+				CHECK(selected.base_key.render_pass == 2);
+				CHECK(selected.base_key.primitive_type == RSE::PRIMITIVE_TRIANGLES);
+				CHECK(selected.base_key.wireframe);
+				CHECK_FALSE(selected.base_key.ubershader);
+				CHECK(selected.base_key.shader_specialization.packed_0 == 0xF027);
+				CHECK(selected.base_key.shader_specialization.packed_1 == 0x686011);
+				CHECK(selected.base_key.shader_specialization.packed_2 == 2.5f);
+			}
+		}
+		for (bool mirror : { false, true }) {
+			instance.mirror = mirror;
+			for (bool reverse : { false, true }) {
+				params.reverse_cull = reverse;
+				REQUIRE(Renderer::_select_native_surface_pipeline(params, 0, override, selected));
+				CHECK(selected.cull_variant == (mirror != reverse ? Shader::ShaderData::CULL_VARIANT_REVERSED : Shader::ShaderData::CULL_VARIANT_NORMAL));
+			}
+		}
+		override.shader = surface.shader; // Explicit debug override is ignored by shadow.
+		override.material_uniform_set = RID::from_uint64(227);
+		for (auto mode : { Renderer::PASS_MODE_SHADOW, Renderer::PASS_MODE_SHADOW_DP }) {
+			params.pass_mode = mode;
+			REQUIRE(Renderer::_select_native_pass(mode, 1, false, 311, 0, params.native_pass));
+			for (bool double_sided : { false, true }) {
+				surface.flags = double_sided ? Renderer::GeometryInstanceSurfaceDataCache::FLAG_USES_DOUBLE_SIDED_SHADOWS : 0;
+				REQUIRE(Renderer::_select_native_surface_pipeline(params, 0, override, selected));
+				CHECK(selected.shader == surface.shader_shadow);
+				CHECK(selected.mesh_surface == surface.surface_shadow);
+				CHECK(selected.used_material == nullptr);
+				CHECK(selected.material_uniform_set == RID::from_uint64(223));
+				CHECK(selected.base_key.version == (mode == Renderer::PASS_MODE_SHADOW ? Shader::SHADER_VERSION_SHADOW_PASS : Shader::SHADER_VERSION_SHADOW_PASS_DP));
+				CHECK(selected.cull_variant == (double_sided ? Shader::ShaderData::CULL_VARIANT_DOUBLE_SIDED : Shader::ShaderData::CULL_VARIANT_NORMAL));
+				CHECK(selected.base_key.shader_specialization.packed_0 == 0xF024);
+				CHECK(selected.base_key.shader_specialization.packed_1 == 0x200011);
+				CHECK(selected.base_key.shader_specialization.packed_2 == 2.5f);
+			}
+		}
+		params.pass_mode = Renderer::PASS_MODE_DEPTH_MATERIAL;
+		REQUIRE(Renderer::_select_native_pass(params.pass_mode, 1, false, 313, 0, params.native_pass));
+		REQUIRE(Renderer::_select_native_surface_pipeline(params, 0, override, selected));
+		CHECK(selected.cull_variant == Shader::ShaderData::CULL_VARIANT_DOUBLE_SIDED);
+		CHECK(selected.used_material == nullptr);
+		CHECK(selected.material_uniform_set == RID::from_uint64(227));
+		CHECK(selected.mesh_surface == surface.surface);
+		override = {};
+		surface.surface = nullptr;
+		REQUIRE(Renderer::_select_native_surface_pipeline(params, 0, override, selected));
+		CHECK(selected.mesh_surface == nullptr);
+		CHECK(selected.used_material == surface.material); // Existing draw still marks it used before skipping.
+		instance.instance_count = 0;
+		CHECK_FALSE(Renderer::_select_native_surface_pipeline(params, 0, override, selected));
+		CHECK(selected.base_key.framebuffer_format_id == 313);
+		CHECK(selected.used_material == surface.material);
+	}
+
 	static void failure_preserves_output() {
 		using Renderer = RenderForwardMobile;
 		Renderer::NativePassSelection selected;
@@ -169,4 +271,8 @@ TEST_CASE("[B4][MobileNativePassSelection] opaque merged alpha separate alpha an
 
 TEST_CASE("[B4][MobileNativePassSelection] unsupported selection preserves the prior output") {
 	RendererSceneRenderImplementation::TestMobileNativePassSelection::failure_preserves_output();
+}
+
+TEST_CASE("[B4][MobileNativePassSelection][MobileNativeSurfacePipeline] actual surface selector preserves material source cull and specialization") {
+	RendererSceneRenderImplementation::TestMobileNativePassSelection::native_surface_pipeline();
 }

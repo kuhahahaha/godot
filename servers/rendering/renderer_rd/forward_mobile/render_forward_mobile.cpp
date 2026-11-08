@@ -2558,6 +2558,54 @@ void RenderForwardMobile::_render_list_with_draw_list(RenderListParameters *p_pa
 	RD::get_singleton()->draw_list_end();
 }
 
+bool RenderForwardMobile::_select_native_surface_pipeline(const RenderListParameters &p_params, uint32_t p_element,
+		const NativeSurfacePipelineOverride &p_override, NativeSurfacePipelineSelection &r_selection) {
+	const GeometryInstanceSurfaceDataCache *surf = p_params.elements[p_element];
+	const GeometryInstanceForwardMobile *inst = surf->owner;
+	if (inst->instance_count == 0) {
+		return false;
+	}
+	const bool shadow_pass = p_params.native_pass.pass_mode == PASS_MODE_SHADOW || p_params.native_pass.pass_mode == PASS_MODE_SHADOW_DP;
+	NativeSurfacePipelineSelection selected;
+	auto &specialization = selected.base_key.shader_specialization;
+	specialization = p_params.base_specialization;
+	specialization.multimesh = bool(inst->flags_cache & INSTANCE_DATA_FLAG_MULTIMESH);
+	specialization.multimesh_format_2d = bool(inst->flags_cache & INSTANCE_DATA_FLAG_MULTIMESH_FORMAT_2D);
+	specialization.multimesh_has_color = bool(inst->flags_cache & INSTANCE_DATA_FLAG_MULTIMESH_HAS_COLOR);
+	specialization.multimesh_has_custom_data = bool(inst->flags_cache & INSTANCE_DATA_FLAG_MULTIMESH_HAS_CUSTOM_DATA);
+	if (shadow_pass) {
+		selected.material_uniform_set = surf->material_uniform_set_shadow;
+		selected.shader = surf->shader_shadow;
+		selected.mesh_surface = surf->surface_shadow;
+	} else {
+		specialization.use_light_projector = inst->use_projector;
+		specialization.use_light_soft_shadows = inst->use_soft_shadow;
+		specialization.omni_lights = SceneShaderForwardMobile::shader_count_for(inst->omni_light_count);
+		specialization.spot_lights = SceneShaderForwardMobile::shader_count_for(inst->spot_light_count);
+		specialization.area_lights = SceneShaderForwardMobile::shader_count_for(inst->area_light_count);
+		specialization.reflection_probes = SceneShaderForwardMobile::shader_count_for(inst->reflection_probe_count);
+		specialization.decals = inst->decals_count > 0;
+		selected.material_uniform_set = p_override.shader ? p_override.material_uniform_set : surf->material_uniform_set;
+		selected.shader = p_override.shader ? p_override.shader : surf->shader;
+		selected.used_material = p_override.shader ? nullptr : surf->material;
+		selected.mesh_surface = surf->surface;
+	}
+	if (p_params.native_pass.pass_mode == PASS_MODE_DEPTH_MATERIAL || (shadow_pass && (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_DOUBLE_SIDED_SHADOWS))) {
+		selected.cull_variant = SceneShaderForwardMobile::ShaderData::CULL_VARIANT_DOUBLE_SIDED;
+	} else {
+		const bool mirror = inst->mirror != p_params.reverse_cull;
+		selected.cull_variant = mirror ? SceneShaderForwardMobile::ShaderData::CULL_VARIANT_REVERSED : SceneShaderForwardMobile::ShaderData::CULL_VARIANT_NORMAL;
+	}
+	selected.base_key.primitive_type = surf->primitive;
+	selected.base_key.version = p_params.native_pass.version_for_surface(p_params.element_info[p_element].uses_lightmap);
+	selected.base_key.framebuffer_format_id = p_params.native_pass.framebuffer_format;
+	selected.base_key.wireframe = p_params.force_wireframe;
+	selected.base_key.render_pass = p_params.native_pass.subpass;
+	selected.base_key.ubershader = false;
+	r_selection = selected;
+	return true;
+}
+
 template <RenderForwardMobile::PassMode p_pass_mode>
 void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_draw_list, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
@@ -2585,22 +2633,28 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 	uint32_t pipeline_hash = 0;
 	uint32_t prev_pipeline_hash = 0;
 
-	bool shadow_pass = (p_pass_mode == PASS_MODE_SHADOW) || (p_pass_mode == PASS_MODE_SHADOW_DP);
+	NativeSurfacePipelineOverride debug_override;
+#ifdef DEBUG_ENABLED
+	if (unlikely(get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_LIGHTING)) {
+		debug_override.material_uniform_set = scene_shader.default_material_uniform_set;
+		debug_override.shader = scene_shader.default_material_shader_ptr;
+	} else if (unlikely(get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_OVERDRAW)) {
+		debug_override.material_uniform_set = scene_shader.overdraw_material_uniform_set;
+		debug_override.shader = scene_shader.overdraw_material_shader_ptr;
+	} else if (unlikely(get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_PSSM_SPLITS)) {
+		debug_override.material_uniform_set = scene_shader.debug_shadow_splits_material_uniform_set;
+		debug_override.shader = scene_shader.debug_shadow_splits_material_shader_ptr;
+	}
+#endif
 
 	for (uint32_t i = p_from_element; i < p_to_element; i++) {
 		const GeometryInstanceSurfaceDataCache *surf = p_params->elements[i];
 		const RenderElementInfo &element_info = p_params->element_info[i];
-		const GeometryInstanceForwardMobile *inst = surf->owner;
-
-		if (inst->instance_count == 0) {
+		NativeSurfacePipelineSelection selected;
+		if (!_select_native_surface_pipeline(*p_params, i, debug_override, selected)) {
 			continue;
 		}
-
-		SceneShaderForwardMobile::ShaderSpecialization pipeline_specialization = p_params->base_specialization;
-		pipeline_specialization.multimesh = bool(inst->flags_cache & INSTANCE_DATA_FLAG_MULTIMESH);
-		pipeline_specialization.multimesh_format_2d = bool(inst->flags_cache & INSTANCE_DATA_FLAG_MULTIMESH_FORMAT_2D);
-		pipeline_specialization.multimesh_has_color = bool(inst->flags_cache & INSTANCE_DATA_FLAG_MULTIMESH_HAS_COLOR);
-		pipeline_specialization.multimesh_has_custom_data = bool(inst->flags_cache & INSTANCE_DATA_FLAG_MULTIMESH_HAS_CUSTOM_DATA);
+		const SceneShaderForwardMobile::ShaderSpecialization pipeline_specialization = selected.base_key.shader_specialization;
 
 		SceneState::PushConstant push_constant;
 		push_constant.base_index = i + p_params->element_offset;
@@ -2612,39 +2666,11 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 			push_constant.uv_offset = 0;
 		}
 
-		if (shadow_pass) {
-			material_uniform_set = surf->material_uniform_set_shadow;
-			shader = surf->shader_shadow;
-			mesh_surface = surf->surface_shadow;
-
-		} else {
-			pipeline_specialization.use_light_projector = inst->use_projector;
-			pipeline_specialization.use_light_soft_shadows = inst->use_soft_shadow;
-			pipeline_specialization.omni_lights = SceneShaderForwardMobile::shader_count_for(inst->omni_light_count);
-			pipeline_specialization.spot_lights = SceneShaderForwardMobile::shader_count_for(inst->spot_light_count);
-			pipeline_specialization.area_lights = SceneShaderForwardMobile::shader_count_for(inst->area_light_count);
-			pipeline_specialization.reflection_probes = SceneShaderForwardMobile::shader_count_for(inst->reflection_probe_count);
-			pipeline_specialization.decals = inst->decals_count > 0;
-
-#ifdef DEBUG_ENABLED
-			if (unlikely(get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_LIGHTING)) {
-				material_uniform_set = scene_shader.default_material_uniform_set;
-				shader = scene_shader.default_material_shader_ptr;
-			} else if (unlikely(get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_OVERDRAW)) {
-				material_uniform_set = scene_shader.overdraw_material_uniform_set;
-				shader = scene_shader.overdraw_material_shader_ptr;
-			} else if (unlikely(get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_PSSM_SPLITS)) {
-				material_uniform_set = scene_shader.debug_shadow_splits_material_uniform_set;
-				shader = scene_shader.debug_shadow_splits_material_shader_ptr;
-			} else {
-#endif
-				material_uniform_set = surf->material_uniform_set;
-				shader = surf->shader;
-				surf->material->set_as_used();
-#ifdef DEBUG_ENABLED
-			}
-#endif
-			mesh_surface = surf->surface;
+		material_uniform_set = selected.material_uniform_set;
+		shader = selected.shader;
+		mesh_surface = selected.mesh_surface;
+		if (selected.used_material) {
+			selected.used_material->set_as_used();
 		}
 
 		if (!mesh_surface) {
@@ -2656,32 +2682,13 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 			should_request_redraw = true;
 		}
 
-		//find cull variant
-		SceneShaderForwardMobile::ShaderData::CullVariant cull_variant;
-
-		if (p_pass_mode == PASS_MODE_DEPTH_MATERIAL || ((p_pass_mode == PASS_MODE_SHADOW || p_pass_mode == PASS_MODE_SHADOW_DP) && surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_DOUBLE_SIDED_SHADOWS)) {
-			cull_variant = SceneShaderForwardMobile::ShaderData::CULL_VARIANT_DOUBLE_SIDED;
-		} else {
-			bool mirror = surf->owner->mirror;
-			if (p_params->reverse_cull) {
-				mirror = !mirror;
-			}
-			cull_variant = mirror ? SceneShaderForwardMobile::ShaderData::CULL_VARIANT_REVERSED : SceneShaderForwardMobile::ShaderData::CULL_VARIANT_NORMAL;
-		}
-
-		pipeline_key.primitive_type = surf->primitive;
+		pipeline_key = selected.base_key;
 		RID xforms_uniform_set = surf->owner->transforms_uniform_set;
-
-		pipeline_key.version = p_params->native_pass.version_for_surface(element_info.uses_lightmap);
-		pipeline_key.framebuffer_format_id = p_params->native_pass.framebuffer_format;
-		pipeline_key.wireframe = p_params->force_wireframe;
-		pipeline_key.render_pass = p_params->native_pass.subpass;
-		pipeline_key.ubershader = 0;
 		pipeline_key.indexed144 = mesh_storage->mesh_surface_is_external(mesh_surface);
 
 		bool emulate_point_size = shader->uses_point_size && scene_shader.emulate_point_size;
 
-		const RD::PolygonCullMode cull_mode = shader->get_cull_mode_from_cull_variant(cull_variant);
+		const RD::PolygonCullMode cull_mode = selected.get_cull_mode();
 		RD::VertexFormatID vertex_format = -1;
 		RID pipeline_rd;
 		RID vertex_array_rd;
