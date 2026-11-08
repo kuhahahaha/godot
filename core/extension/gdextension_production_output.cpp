@@ -726,7 +726,7 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 		return;
 	}
 	Owner::MetadataLayout metadata;
-	error = owner.generation_config_inline ? Owner::plan_metadata_layout(owner.view_capacity, owner.read_capacity, owner.surface_capacity, metadata, owner.generation_mesh_count, owner.generation_material_count, owner.binding_capacity, owner.storage_capacity) : Owner::plan_metadata_layout(owner.view_capacity, owner.read_capacity, owner.surface_capacity, metadata);
+	error = owner.generation_config_inline ? Owner::plan_metadata_layout(owner.view_capacity, owner.read_capacity, owner.surface_capacity, metadata, owner.generation_mesh_count, owner.generation_material_count, owner.binding_capacity, owner.storage_capacity, owner.preparation_capacity) : Owner::plan_metadata_layout(owner.view_capacity, owner.read_capacity, owner.surface_capacity, metadata);
 	if (error != OK || metadata.total_bytes != owner.metadata_lease.get_size()) {
 		out->status = output_status(ERR_INVALID_DATA, "output_metadata_layout");
 		return;

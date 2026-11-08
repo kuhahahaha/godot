@@ -246,7 +246,7 @@ Error ExternalOutputOwner::select_slot(const ExternalOutputRequest &request, uin
 	return OK;
 }
 
-Error ExternalOutputOwner::plan_metadata_layout(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, MetadataLayout &r_layout, uint32_t p_mesh_selections, uint32_t p_material_selections, uint32_t p_bindings, uint32_t p_storage) {
+Error ExternalOutputOwner::plan_metadata_layout(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, MetadataLayout &r_layout, uint32_t p_mesh_selections, uint32_t p_material_selections, uint32_t p_bindings, uint32_t p_storage, uint32_t p_preparations) {
 	MetadataLayout layout;
 	layout.view_count = p_views;
 	layout.read_count = p_reads;
@@ -255,6 +255,9 @@ Error ExternalOutputOwner::plan_metadata_layout(uint32_t p_views, uint32_t p_rea
 	layout.material_selection_count = p_material_selections;
 	layout.binding_count = p_bindings == UINT32_MAX ? p_surfaces : p_bindings;
 	layout.storage_count = p_storage == UINT32_MAX ? (p_surfaces ? MAX_SLOTS : 0) : p_storage;
+	// Legacy component layouts retain one row per binding. Production quotes
+	// the generation-wide finite bank independently from surface bindings.
+	layout.preparation_count = p_preparations == UINT32_MAX ? layout.binding_count : p_preparations;
 	uint64_t cursor = sizeof(ExternalOutputOwner);
 	uint32_t alignment = alignof(ExternalOutputOwner);
 	auto append = [&](uint32_t count, size_t stride, size_t align, uint32_t &offset) {
@@ -276,7 +279,7 @@ Error ExternalOutputOwner::plan_metadata_layout(uint32_t p_views, uint32_t p_rea
 			!append(p_reads, sizeof(ReadCell), alignof(ReadCell), layout.read_offset) ||
 			!append(layout.storage_count, sizeof(ExternalOutputStorage), alignof(ExternalOutputStorage), layout.storage_offset) ||
 			!append(layout.binding_count, sizeof(SurfaceBinding), alignof(SurfaceBinding), layout.surface_binding_offset) ||
-			!append(layout.binding_count, sizeof(ExternalPipelinePreparation), alignof(ExternalPipelinePreparation), layout.preparation_offset) ||
+			!append(layout.preparation_count, sizeof(ExternalPipelinePreparation), alignof(ExternalPipelinePreparation), layout.preparation_offset) ||
 			!append(p_mesh_selections, sizeof(GenerationMeshSelection), alignof(GenerationMeshSelection), layout.mesh_selection_offset) ||
 			!append(p_material_selections, sizeof(GenerationMaterialSelection), alignof(GenerationMaterialSelection), layout.material_selection_offset) ||
 			!append(p_surfaces, sizeof(SurfaceCell), alignof(SurfaceCell), layout.surface_offset) ||
@@ -306,7 +309,7 @@ Error ExternalOutputOwner::plan_generation_selection_layout(const ExternalOutput
 	if (bindings > UINT32_MAX) {
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
-	return plan_metadata_layout(views, reads, surface_consumers, out, config.surfaces.size(), flattened, uint32_t(bindings), uint32_t(slots));
+	return plan_metadata_layout(views, reads, surface_consumers, out, config.surfaces.size(), flattened, uint32_t(bindings), uint32_t(slots), reads);
 }
 
 Error ExternalOutputOwner::install_metadata_directory(GDExtensionDeviceExit::ProductionPhysicalContextRef context,
@@ -361,7 +364,7 @@ Error ExternalOutputOwner::install_metadata_directory(GDExtensionDeviceExit::Pro
 	for (uint32_t i = 0; i < p_surfaces; ++i) {
 		new (base + layout.surface_offset + size_t(i) * sizeof(SurfaceCell)) SurfaceCell;
 	}
-	for (uint32_t i = 0; i < layout.binding_count; ++i) {
+	for (uint32_t i = 0; i < layout.preparation_count; ++i) {
 		new (base + layout.preparation_offset + size_t(i) * sizeof(ExternalPipelinePreparation)) ExternalPipelinePreparation;
 	}
 	for (uint32_t i = 0; i < mesh_selections; ++i) {
@@ -378,8 +381,8 @@ Error ExternalOutputOwner::install_metadata_directory(GDExtensionDeviceExit::Pro
 	generation_mesh_count = mesh_selections;
 	generation_material_count = material_selections;
 	binding_capacity = layout.binding_count;
-	preparation_rows = layout.binding_count ? reinterpret_cast<ExternalPipelinePreparation *>(base + layout.preparation_offset) : nullptr;
-	preparation_capacity = layout.binding_count;
+	preparation_rows = layout.preparation_count ? reinterpret_cast<ExternalPipelinePreparation *>(base + layout.preparation_offset) : nullptr;
+	preparation_capacity = layout.preparation_count;
 	storage_capacity = layout.storage_count;
 	if (p_generation_selection) {
 		// Identity resides in quoted rows; do not retain parser Vector storage.
@@ -962,7 +965,7 @@ Error ExternalOutputOwner::acquire_generation_selection(GDExtensionDeviceExit::P
 		return ERR_INVALID_DATA;
 	}
 	MetadataLayout layout;
-	Error error = plan_metadata_layout(view_capacity, read_capacity, surface_capacity, layout, generation_mesh_count, generation_material_count, binding_capacity, storage_capacity);
+	Error error = plan_metadata_layout(view_capacity, read_capacity, surface_capacity, layout, generation_mesh_count, generation_material_count, binding_capacity, storage_capacity, preparation_capacity);
 	if (error != OK) {
 		return error;
 	}
@@ -1023,7 +1026,7 @@ Error ExternalOutputOwner::acquire_generation_surface_sources(GDExtensionDeviceE
 		return ERR_UNAUTHORIZED;
 	}
 	MetadataLayout layout;
-	Error error = plan_metadata_layout(view_capacity, read_capacity, surface_capacity, layout, generation_mesh_count, generation_material_count, binding_capacity, storage_capacity);
+	Error error = plan_metadata_layout(view_capacity, read_capacity, surface_capacity, layout, generation_mesh_count, generation_material_count, binding_capacity, storage_capacity, preparation_capacity);
 	if (error != OK) {
 		return error;
 	}
