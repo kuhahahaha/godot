@@ -401,6 +401,27 @@ Error ExternalOutputOwner::install_metadata_directory(GDExtensionDeviceExit::Pro
 	return OK;
 }
 
+bool ExternalOutputOwner::preparation_row_matches(uint32_t p_slot, uint32_t p_surface, const ExternalPipelinePreparation &p_row) const {
+	if (p_slot >= slot_count || !slots[p_slot].surfaces || p_surface >= slots[p_slot].surface_count || !preparation_rows) {
+		return false;
+	}
+	const auto &slot = slots[p_slot];
+	const auto &surface = slot.surfaces[p_surface];
+	if (surface.preparation_index >= preparation_capacity || surface.preparation_row != &preparation_rows[surface.preparation_index] ||
+			&p_row != surface.preparation_row || p_row.owner != this || p_row.owner_slot != p_slot || p_row.owner_surface != p_surface ||
+			p_row.generation != generation || !slot.lease_serial || p_row.serial != slot.lease_serial) {
+		return false;
+	}
+	if (generation_surfaces_complete) {
+		if (retained_surface_count != generation_material_count || p_surface >= retained_surface_count) {
+			return false;
+		}
+		const auto &source = generation_materials[p_surface];
+		return p_row.source_geometry == &source.geometry_source && p_row.source_material == source.material && p_row.source_material_generation == source.generation;
+	}
+	return !p_row.source_geometry && p_row.source_material.is_null() && !p_row.source_material_generation;
+}
+
 Error ExternalOutputOwner::bind_preparation_rows(uint32_t p_slot) {
 	if (has_inflight_preparation()) {
 		return ERR_BUSY;
@@ -413,35 +434,54 @@ Error ExternalOutputOwner::bind_preparation_rows(uint32_t p_slot) {
 			!slot.surfaces || !slot.surfaces_placement || !slot.surface_count || slot.publication_closed) {
 		return ERR_UNAUTHORIZED;
 	}
-	const uint64_t first = uint64_t(p_slot) * slot.surface_count;
-	if (first > preparation_capacity || slot.surface_count > preparation_capacity - first) {
-		return ERR_OUT_OF_MEMORY;
-	}
-	// All rows are preflighted before associating any. An old incarnation or
-	// unresolved native prefix must never be overwritten by a new Acquire.
 	for (uint32_t i = 0; i < slot.surface_count; ++i) {
-		const auto &row = preparation_rows[first + i];
-		if (slot.surfaces[i].preparation_row || slot.surfaces[i].preparation || row.owner || row.serial || row.generation || !row.source_sealed ||
-				row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group || row.created_pipeline.is_valid() ||
-				row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
+		const auto &surface = slot.surfaces[i];
+		if (surface.preparation_row || surface.preparation || surface.preparation_index != UINT32_MAX) {
 			return ERR_ALREADY_IN_USE;
 		}
 	}
+	// Count the complete free set first. Fragmentation is legal; insufficient
+	// capacity must leave every surface locator and bank row unchanged.
+	auto free_row = [](const ExternalPipelinePreparation &row) {
+		return !row.owner && row.owner_slot == UINT32_MAX && row.owner_surface == UINT32_MAX && !row.serial && !row.generation && row.source_sealed && !row.max_resources &&
+				!row.source_geometry && row.source_material.is_null() && !row.source_material_generation &&
+				!row.pipeline_pin && !row.pipeline_original_root && !row.pipeline_owned_group && !row.pipeline_scope &&
+				!row.pipeline_context.registry_instance && !row.pipeline_context.frame_serial && !row.native_cache_queried &&
+				row.created_pipeline.is_null() && !row.geometry[0].is_active() && !row.geometry[1].is_active() && !row.material.is_active();
+	};
+	uint32_t available = 0;
+	for (uint32_t i = 0; i < preparation_capacity; ++i) {
+		available += free_row(preparation_rows[i]);
+	}
+	if (available < slot.surface_count) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	if (generation_surfaces_complete && (retained_surface_count != generation_material_count || slot.surface_count > retained_surface_count)) {
+		return ERR_INVALID_DATA;
+	}
+	// No callbacks, native effects or allocation occur between preflight and
+	// association. Existing owner serialization protects this complete claim.
+	uint32_t next = 0;
 	for (uint32_t i = 0; i < slot.surface_count; ++i) {
-		auto &row = preparation_rows[first + i];
+		while (next < preparation_capacity && !free_row(preparation_rows[next])) {
+			++next;
+		}
+		CRASH_COND(next == preparation_capacity);
+		auto &row = preparation_rows[next];
 		row.owner = this;
+		row.owner_slot = p_slot;
+		row.owner_surface = i;
 		row.generation = generation;
 		row.serial = slot.lease_serial;
-		if (generation_surfaces_complete && retained_surface_count == generation_material_count && i < retained_surface_count) {
+		if (generation_surfaces_complete) {
 			const auto &source = generation_materials[i];
 			row.source_geometry = &source.geometry_source;
 			row.source_material = source.material;
 			row.source_material_generation = source.generation;
 		}
+		slot.surfaces[i].preparation_index = next++;
 		slot.surfaces[i].preparation_row = &row;
 	}
-	// No pass is selected or opened: source_sealed stays true and the resource
-	// allowance stays zero until the original renderer preparation opportunity.
 	return OK;
 }
 
@@ -455,23 +495,20 @@ Error ExternalOutputOwner::return_preparation_row(uint32_t p_slot, uint32_t p_su
 	auto &slot = slots[p_slot];
 	auto &surface = slot.surfaces[p_surface];
 	if (!surface.preparation_row) {
-		return surface.preparation ? ERR_INVALID_DATA : OK; // Unbound prefix or legacy component metadata.
-	}
-	const uint64_t index = uint64_t(p_slot) * slot.surface_count + p_surface;
-	if (!preparation_rows || index >= preparation_capacity || surface.preparation_row != &preparation_rows[index]) {
-		return ERR_INVALID_DATA;
+		return surface.preparation || surface.preparation_index != UINT32_MAX ? ERR_INVALID_DATA : OK; // Unbound prefix or legacy component metadata.
 	}
 	auto &row = *surface.preparation_row;
-	if (row.owner != this || row.generation != generation || row.serial != slot.lease_serial) {
+	if (!preparation_row_matches(p_slot, p_surface, row)) {
 		return ERR_INVALID_DATA;
 	}
-	if (surface.preparation || !row.source_sealed || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group ||
+	if (surface.preparation || !row.source_sealed || row.pipeline_scope || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group ||
 			row.created_pipeline.is_valid() || row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
 		return ERR_BUSY;
 	}
 	row.~ExternalPipelinePreparation();
 	new (&row) ExternalPipelinePreparation;
 	surface.preparation_row = nullptr;
+	surface.preparation_index = UINT32_MAX;
 	return OK;
 }
 
@@ -533,7 +570,7 @@ Error ExternalOutputOwner::return_reserved_cells() {
 	}
 	for (uint32_t i = 0; i < preparation_capacity; ++i) {
 		const auto &row = preparation_rows[i];
-		if (row.owner || row.serial || row.generation || !row.source_sealed || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group ||
+		if (row.owner || row.owner_slot != UINT32_MAX || row.owner_surface != UINT32_MAX || row.serial || row.generation || !row.source_sealed || row.pipeline_scope || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group ||
 				row.created_pipeline.is_valid() || row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
 			return ERR_BUSY;
 		}

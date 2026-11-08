@@ -52,6 +52,7 @@ class ExternalLinkedOwnerTest {
 public:
 	// CPU profile projection only; does not create/admit a render generation.
 	static void scene_only_profile_query();
+	static void preparation_bank_fragmentation(GDExtensionDeviceExit::ProductionOutputPin (&)[3]);
 	explicit ExternalLinkedOwnerTest(RenderingDevice &, bool p_empty_storage = false, bool p_query_enabled = false);
 	// Borrow the existing RD owner; retain only this fixture particle and root.
 	ExternalLinkedOwnerTest(RenderingDevice &, ParticlesStorage &, bool p_query_enabled);

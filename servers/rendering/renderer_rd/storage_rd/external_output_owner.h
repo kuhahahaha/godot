@@ -80,6 +80,7 @@ class ExternalOutputOwner {
 		// Reserved metadata is distinct from an opened native pass prefix.
 		// The stable row belongs to this slot incarnation; it grants no pass.
 		ExternalPipelinePreparation *preparation_row = nullptr;
+		uint32_t preparation_index = UINT32_MAX; // Stable owner-bank locator, independent of slot/surface arithmetic.
 		ExternalPipelinePreparation *preparation = nullptr;
 		RID created_pipeline;
 		uint64_t pipeline_owned_group = 0;
@@ -193,6 +194,7 @@ class ExternalOutputOwner {
 	uint32_t binding_capacity = 0, storage_capacity = 0;
 	ExternalPipelinePreparation *preparation_rows = nullptr;
 	uint32_t preparation_capacity = 0;
+	bool preparation_row_matches(uint32_t, uint32_t, const ExternalPipelinePreparation &) const;
 	Error bind_preparation_rows(uint32_t);
 	Error return_preparation_row(uint32_t, uint32_t);
 	bool generation_selection_attempted = false;

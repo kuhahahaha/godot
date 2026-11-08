@@ -1,0 +1,7 @@
+{
+  "file": "servers/rendering/renderer_rd/storage_rd/external_output_owner.cpp",
+  "green_sha256": "176b54a76aa0cfc62f06a157919961b19c50409efdfe23453747eb54877b8e9f",
+  "anchor": "\t// Count the complete free set first. Fragmentation is legal; insufficient",
+  "insertion": "\t// Temporary negative control: original slot-slice capacity limit.\n\tconst uint64_t legacy_first = uint64_t(p_slot) * slot.surface_count;\n\tif (legacy_first > preparation_capacity || slot.surface_count > preparation_capacity - legacy_first) {\n\t\treturn ERR_OUT_OF_MEMORY;\n\t}\n",
+  "scope": "Legacy slot*surface capacity restriction only, before mutation; other new locator authentication preserved"
+}

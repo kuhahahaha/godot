@@ -83,9 +83,7 @@ Error ParticlesStorage::_external_pipeline_prepare_owned_prefix(GDExtensionProdu
 		return ERR_UNAUTHORIZED;
 	}
 	auto &surface = slot.surfaces[surface_index];
-	const uint64_t preparation_index = uint64_t(slot_index) * slot.surface_count + surface_index;
-	if (!owner.preparation_rows || preparation_index >= owner.preparation_capacity ||
-			surface.preparation_row != &owner.preparation_rows[preparation_index] || &preparation != surface.preparation_row || preparation.serial != slot.lease_serial) {
+	if (!owner.preparation_row_matches(slot_index, surface_index, preparation)) {
 		return ERR_UNAUTHORIZED;
 	}
 	if (surface.preparation || surface.pipeline_owned_group || surface.created_pipeline.is_valid() || surface.pipeline_group_returned ||
@@ -136,9 +134,7 @@ Error ParticlesStorage::_external_pipeline_reserve_owned_prefix(GDExtensionProdu
 		return ERR_UNAUTHORIZED;
 	}
 	auto &surface = slot.surfaces[surface_index];
-	const uint64_t preparation_index = uint64_t(slot_index) * slot.surface_count + surface_index;
-	if (!owner.preparation_rows || preparation_index >= owner.preparation_capacity ||
-			surface.preparation_row != &owner.preparation_rows[preparation_index] || &preparation != surface.preparation_row || preparation.serial != slot.lease_serial) {
+	if (!owner.preparation_row_matches(slot_index, surface_index, preparation)) {
 		return ERR_UNAUTHORIZED;
 	}
 	if (surface.preparation || surface.pipeline_owned_group || surface.created_pipeline.is_valid() || surface.pipeline_group_returned ||
@@ -189,8 +185,7 @@ bool ParticlesStorage::_production_output_preparation_matches(RID particle_rid, 
 	}
 	auto &surface = slot.surfaces[surface_index];
 	auto *row = surface.preparation_row;
-	const uint64_t index = uint64_t(slot_index) * slot.surface_count + surface_index;
-	if (!row || !owner.preparation_rows || index >= owner.preparation_capacity || row != &owner.preparation_rows[index] ||
+	if (!row || !owner.preparation_row_matches(slot_index, surface_index, *row) ||
 			surface.preparation != row || !group || surface.pipeline_owned_group != group || surface.pipeline_group_returned ||
 			row->owner != &owner || row->generation != generation || row->serial != lease_serial || row->pipeline_pin != &pin ||
 			row->pipeline_owned_group != group || row->pipeline_original_root != &surface.created_pipeline || !row->max_resources || row->pipeline_scope != scope || (!scope ? !row->source_sealed : (!cleanup && row->source_sealed)) ||

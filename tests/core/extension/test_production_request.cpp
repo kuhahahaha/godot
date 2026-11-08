@@ -1431,7 +1431,8 @@ struct Access {
 				whole.resource_uses += 16 + (mesh_directory ? (directory_external ? 48 : 16) : 0);
 			}
 			if (output_borrow) {
-				whole.resource_uses += 2;
+				// Existing root/borrow plus three independently paid bank-test pins.
+				whole.resource_uses += 5;
 			}
 			if (ordinal_plan) {
 				whole = ordinal_plan->capacity;
@@ -1501,7 +1502,8 @@ struct Access {
 				single.resource_uses += 16 + (mesh_directory ? (directory_external ? 48 : 16) : 0);
 			}
 			if (output_borrow) {
-				single.resource_uses += 2;
+				// Existing root/borrow plus three independently paid bank-test pins.
+				single.resource_uses += 5;
 			}
 			const GDExtensionProductionOperationV1 operation = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionOperationV1>(), 91, 1, 10, 10 + record_actions };
 			const GDExtensionProductionActionV1 action = { 10, uint32_t(receiver && !upload_prefix ? GDEXTENSION_PRODUCTION_DISPATCH_V1 : GDEXTENSION_PRODUCTION_UPLOAD_V1), 0, 0, 1, uint32_t(keep_list ? GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1 : GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1), UINT32_MAX };
@@ -3478,6 +3480,26 @@ struct Access {
 				CHECK(registry.production_output_unpin(custody_pin) == OK);
 			} else {
 				CHECK(custody_pin.is_empty());
+			}
+		}
+		ProductionOutputPin bank_pins[3];
+		bool bank_pins_ready = true;
+		for (auto &pin : bank_pins) {
+			const Error borrowed = registry.production_output_pin_borrow(test.output_pin, device, pin);
+			CHECK(borrowed == OK);
+			if (borrowed != OK) {
+				bank_pins_ready = false;
+				break;
+			}
+		}
+		if (bank_pins_ready) {
+			RendererRD::ExternalLinkedOwnerTest::preparation_bank_fragmentation(bank_pins);
+		}
+		// Explicitly return all successful borrows even when setup or a bank
+		// assertion fails; no-exception doctest REQUIRE cannot own this cleanup.
+		for (auto &pin : bank_pins) {
+			if (!pin.is_empty()) {
+				CHECK(registry.production_output_unpin(pin) == OK);
 			}
 		}
 		serial = request.next_output_pin_serial; // New genuine borrows above advanced the allocator.

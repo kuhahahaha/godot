@@ -369,6 +369,108 @@ bool ExternalLinkedOwnerTest::selection_inline_matches(const ExternalOutputConfi
 	}
 	return true;
 }
+void ExternalLinkedOwnerTest::preparation_bank_fragmentation(GDExtensionDeviceExit::ProductionOutputPin (&issued)[3]) {
+	// CPU owner-bank mechanics against actual independently issued original
+	// pins. No manufactured pin, native group, scope, selection or completion.
+	ExternalOutputConfig config;
+	config.max_views = 1;
+	config.max_inflight = 3;
+	ExternalOutputOwner bank(config, 1);
+	ExternalPipelinePreparation rows[5];
+	ExternalOutputOwner::SurfaceBinding surfaces[3][2];
+	bank.preparation_rows = rows;
+	bank.preparation_capacity = 5;
+	bank.metadata_directories_placement = true;
+	auto expect = [](bool value) { CHECK(value); return value; };
+	// Cleanup is outside the exercise lambda: failed checks return to explicit
+	// cleanup even in Godot's no-exception REQUIRE configuration.
+	auto exercise = [&]() {
+		for (uint32_t i = 0; i < 3; ++i) {
+			auto &slot = bank.slots[i];
+			if (!expect(!issued[i].is_empty())) {
+				return;
+			}
+			slot.original_pin = std::move(issued[i]);
+			slot.state = ExternalOutputOwner::LeaseState::RESERVED;
+			slot.lease_serial = 10 + i;
+			slot.surfaces = surfaces[i];
+			slot.surfaces_placement = true;
+			slot.surface_count = 2;
+		}
+		if (!expect(bank.bind_preparation_rows(0) == OK) || !expect(bank.bind_preparation_rows(1) == OK)) {
+			return;
+		}
+		expect(surfaces[0][0].preparation_index == 0 && surfaces[0][1].preparation_index == 1);
+		expect(surfaces[1][0].preparation_index == 2 && surfaces[1][1].preparation_index == 3);
+		expect(bank.bind_preparation_rows(1) == ERR_ALREADY_IN_USE);
+		// Only row 4 is free. A two-row claim must not consume even that row.
+		expect(bank.bind_preparation_rows(2) == ERR_OUT_OF_MEMORY);
+		for (uint32_t i = 0; i < 2; ++i) {
+			expect(!surfaces[2][i].preparation_row && surfaces[2][i].preparation_index == UINT32_MAX);
+			expect(bank.preparation_row_matches(0, i, rows[i]));
+			expect(bank.preparation_row_matches(1, i, rows[2 + i]));
+		}
+		expect(!rows[4].owner && !rows[4].serial && !rows[4].generation);
+		if (!expect(bank.return_preparation_row(0, 0) == OK) || !expect(bank.bind_preparation_rows(2) == OK)) {
+			return;
+		}
+		// Slot 2 now occupies noncontiguous rows 0 and 4, outside its old
+		// slot*surface slice. The still-live slot 0 row 1 is untouched.
+		expect(surfaces[2][0].preparation_index == 0 && surfaces[2][1].preparation_index == 4);
+		expect(bank.preparation_row_matches(2, 0, rows[0]));
+		expect(bank.preparation_row_matches(2, 1, rows[4]));
+		expect(bank.preparation_row_matches(0, 1, rows[1]));
+		// Swapping both the pointer and its locator still cannot swap surfaces,
+		// including this legacy fixture with no selected source geometry.
+		std::swap(surfaces[2][0].preparation_row, surfaces[2][1].preparation_row);
+		std::swap(surfaces[2][0].preparation_index, surfaces[2][1].preparation_index);
+		expect(!bank.preparation_row_matches(2, 0, rows[4]));
+		expect(bank.return_preparation_row(2, 0) == ERR_INVALID_DATA);
+		std::swap(surfaces[2][0].preparation_row, surfaces[2][1].preparation_row);
+		std::swap(surfaces[2][0].preparation_index, surfaces[2][1].preparation_index);
+		const auto correct_index = surfaces[2][0].preparation_index;
+		surfaces[2][0].preparation_index = 4;
+		expect(!bank.preparation_row_matches(2, 0, rows[0]));
+		expect(bank.return_preparation_row(2, 0) == ERR_INVALID_DATA);
+		surfaces[2][0].preparation_index = correct_index;
+		++bank.slots[2].lease_serial;
+		expect(!bank.preparation_row_matches(2, 0, rows[0]));
+		expect(bank.return_preparation_row(2, 0) == ERR_INVALID_DATA);
+		--bank.slots[2].lease_serial;
+		// Interleave returns from three slots and reuse earlier holes without
+		// disturbing later retained rows or requiring contiguous capacity.
+		if (!expect(bank.return_preparation_row(1, 0) == OK) || !expect(bank.return_preparation_row(0, 1) == OK) ||
+				!expect(bank.bind_preparation_rows(0) == OK)) {
+			return;
+		}
+		expect(surfaces[0][0].preparation_index == 1 && surfaces[0][1].preparation_index == 2);
+		expect(bank.preparation_row_matches(1, 1, rows[3]));
+		expect(bank.preparation_row_matches(2, 0, rows[0]));
+		expect(bank.preparation_row_matches(2, 1, rows[4]));
+	};
+	exercise();
+	for (uint32_t i = 0; i < 3; ++i) {
+		auto &slot = bank.slots[i];
+		for (uint32_t surface = 0; slot.surfaces && surface < slot.surface_count; ++surface) {
+			expect(bank.return_preparation_row(i, surface) == OK);
+		}
+		// Return each original pin to the caller even after an exercise failure.
+		// The original Registry fixture explicitly unpins every surviving pin.
+		if (!slot.original_pin.is_empty()) {
+			issued[i] = std::move(slot.original_pin);
+		}
+		slot.surfaces = nullptr;
+		slot.surface_count = 0;
+	}
+	for (const auto &row : rows) {
+		expect(!row.owner && row.owner_slot == UINT32_MAX && row.owner_surface == UINT32_MAX && !row.serial && !row.generation);
+	}
+	bank.preparation_rows = nullptr;
+	bank.preparation_capacity = 0;
+	bank.metadata_directories_placement = false;
+	bank.state = ExternalOutputOwner::GenerationState::RELEASED;
+}
+
 bool ExternalLinkedOwnerTest::preparation_rows_match_slots(bool p_probe_duplicate) const {
 	if (!exists() || !owner->generation_config_inline || !owner->generation_material_count ||
 			!owner->preparation_rows || owner->preparation_capacity != owner->read_capacity) {
@@ -386,35 +488,39 @@ bool ExternalLinkedOwnerTest::preparation_rows_match_slots(bool p_probe_duplicat
 			}
 		}
 	}
-	// Until the tuple locator migration, every live legacy surface slice must
-	// still fit wholly in the explicitly quoted bank; never skip missing rows.
-	for (uint32_t i = 0; i < owner->slot_count; ++i) {
-		const auto &slot = owner->slots[i];
-		if (slot.surfaces && (uint64_t(i) * slot.surface_count + slot.surface_count > owner->preparation_capacity)) {
-			return false;
-		}
-	}
 	for (uint32_t i = 0; i < owner->preparation_capacity; ++i) {
-		const uint32_t slot_index = i / owner->generation_material_count;
-		const uint32_t surface_index = i % owner->generation_material_count;
-		const auto *slot = slot_index < owner->slot_count ? &owner->slots[slot_index] : nullptr;
 		const auto &row = owner->preparation_rows[i];
-		// This slice creates metadata only. Even a successful real Acquire
-		// must leave every row closed and without a pass/resource allowance.
-		if (!row.source_sealed || row.max_resources || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group ||
+		if (!row.source_sealed || row.max_resources || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group || row.pipeline_scope ||
 				row.pipeline_context.registry_instance || row.pipeline_context.frame_serial || row.native_cache_queried ||
 				row.last_error != ERR_UNCONFIGURED || row.selected_geometry != UINT32_MAX || row.created_pipeline.is_valid() || row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
 			return false;
 		}
-		if (slot && slot->surfaces) {
-			if (slot->surface_count != owner->generation_material_count || !slot->surfaces_placement ||
-					slot->surfaces[surface_index].preparation_row != &row || slot->surfaces[surface_index].preparation ||
-					slot->surfaces[surface_index].pipeline_owned_group || slot->surfaces[surface_index].created_pipeline.is_valid() || slot->surfaces[surface_index].pipeline_group_returned ||
-					row.owner != owner || row.generation != owner->generation || row.serial != slot->lease_serial) {
+		uint32_t references = 0;
+		for (uint32_t slot_index = 0; slot_index < owner->slot_count; ++slot_index) {
+			const auto &slot = owner->slots[slot_index];
+			for (uint32_t surface_index = 0; slot.surfaces && surface_index < slot.surface_count; ++surface_index) {
+				const auto &surface = slot.surfaces[surface_index];
+				if (surface.preparation_index != i) {
+					continue;
+				}
+				++references;
+				if (!owner->preparation_row_matches(slot_index, surface_index, row) || surface.preparation ||
+						surface.pipeline_owned_group || surface.created_pipeline.is_valid() || surface.pipeline_group_returned) {
+					return false;
+				}
+			}
+		}
+		if (row.owner ? references != 1 : (references || row.owner_slot != UINT32_MAX || row.owner_surface != UINT32_MAX || row.generation || row.serial || row.source_geometry || row.source_material.is_valid() || row.source_material_generation)) {
+			return false;
+		}
+	}
+	// Detect out-of-range locators too: the bank-row walk cannot visit them.
+	for (uint32_t slot_index = 0; slot_index < owner->slot_count; ++slot_index) {
+		const auto &slot = owner->slots[slot_index];
+		for (uint32_t surface = 0; slot.surfaces && surface < slot.surface_count; ++surface) {
+			if (!slot.surfaces[surface].preparation_row || !owner->preparation_row_matches(slot_index, surface, *slot.surfaces[surface].preparation_row)) {
 				return false;
 			}
-		} else if (row.owner || row.generation || row.serial || row.source_geometry || row.source_material.is_valid() || row.source_material_generation) {
-			return false; // Every unused bank row remains completely unbound.
 		}
 	}
 	return true;

@@ -174,6 +174,7 @@ class ExternalPipelinePreparation {
 	friend class RendererSceneRenderImplementation::RenderForwardMobile;
 	ExternalOutputOwner *owner = nullptr;
 	uint64_t serial = 0, generation = 0;
+	uint32_t owner_slot = UINT32_MAX, owner_surface = UINT32_MAX;
 	uint32_t max_resources = 0;
 	bool source_sealed = true; // Only the owner opens an admitted pre-seal preparation row.
 	ExternalPacketPipelineRequest selection;

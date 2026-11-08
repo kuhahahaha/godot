@@ -77,3 +77,7 @@ Original kind24 JSON+Core integrated. Clean RED3/29/8fail process1; initial unsa
 Scope cleanup and batch multiplicity candidates integrated, independent Sol merged review clear. Narrow row-preflight negative control RED3/2997/12fail process1 without engine crash; restored GREEN6/3448 pass, neighbors45/8752 pass, both builds0. See SCOPE_BATCH_CONTINUATION_RECEIPT.md. Preserves cancel/withdraw original prefixes and finite pin drops; does not finish Task2 bank/capture production entry/public renderer. Finite bank stable-locator candidate and Count+4gate private guard candidate continue on defaultSol; Astra0.
 
 Ruling: private guard successor must represent Count+four original gate backings independently, preserving original typed role mappings and allowing proven READ/READ sharing. Existing anchor is not a source accessor and Count16 reserved words are not validity. This follows OUTPUT_CONTRACT and actual selected_member_source/projection lineage; private candidate only, no public ABI issued. Cost if wrong: private component/proof layout rework before callable SDK delivery.
+
+## Global bank locator slice
+
+Seven-file global-free-set locator slice integrated; independent Sol clear. Legacy slot-slice negative control RED1case383assert1fail process1; restored GREEN typed-port borrow1/400 pass, builds0. See GLOBAL_BANK_LOCATOR_RECEIPT.md. Complete P rows/3groups/row OBSERVE candidate continues; locator slice is not Task2 completion.
