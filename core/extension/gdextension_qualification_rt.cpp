@@ -33,6 +33,7 @@
 #include "core/extension/gdextension_qualification_rt_depth.h"
 #include "core/os/thread.h"
 #include "servers/rendering/rendering_server_default.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 
 namespace GDExtensionDeviceExit {
 thread_local Registry::QualificationBridge *Registry::active_qualification_bridge = nullptr;
@@ -58,23 +59,34 @@ T pod(const void *bytes) {
 	memcpy(&value, bytes, sizeof(value));
 	return value;
 }
-constexpr uint32_t request_sizes[] = { 0, 8, 56, 80, 104, 48, sizeof(GDExtensionQualificationRecordV1), sizeof(GDExtensionQualificationUploadPrepareV1), sizeof(GDExtensionQualificationUploadRequestV1), sizeof(GDExtensionQualificationRecordV1), sizeof(GDExtensionQualificationRecordV2), sizeof(GDExtensionQualificationUploadPrepareV1), sizeof(GDExtensionQualificationTextureCreateV1), sizeof(GDExtensionQualificationSamplerCreateV1), sizeof(GDExtensionQualificationTextureUploadV1), sizeof(GDExtensionQualificationSetCreateV1), sizeof(GDExtensionQualificationResourceRetireV1), sizeof(GDExtensionQualificationRecordV3), sizeof(GDExtensionQualificationRasterCreateV1), sizeof(GDExtensionQualificationRasterRetireRequestV1), sizeof(GDExtensionQualificationRecordV4), sizeof(GDExtensionStorageSceneDepthQuoteRequestV1), sizeof(GDExtensionStorageSceneDepthCreateRequestV1), sizeof(GDExtensionStorageSceneDepthRetireRequestV1) };
-constexpr uint32_t result_sizes[] = { 0, 48, 72, 136, 96, sizeof(GDExtensionQualificationReportV1), sizeof(GDExtensionQualificationTicketRefV1) + sizeof(GDExtensionQualificationReportV1), sizeof(GDExtensionQualificationTicketRefV1) + sizeof(GDExtensionQualificationReportV1), sizeof(GDExtensionQualificationUploadReportV1), sizeof(GDExtensionQualificationReportV1), sizeof(GDExtensionQualificationReportV2), sizeof(GDExtensionQualificationTicketRefV1) + sizeof(GDExtensionQualificationReportV2), sizeof(GDExtensionQualificationResourceBackingV1), sizeof(GDExtensionQualificationResourceBackingV1), sizeof(GDExtensionQualificationUploadReportV1), sizeof(GDExtensionQualificationResourceBackingV1), sizeof(GDExtensionQualificationResourceRetireReportV1), sizeof(GDExtensionQualificationReportV2), sizeof(GDExtensionQualificationRasterBackingV1), sizeof(GDExtensionQualificationRasterRetireRefV1) + sizeof(GDExtensionQualificationRasterRetireReportV1), sizeof(GDExtensionQualificationReportV3), sizeof(GDExtensionStorageSceneDepthQuoteV1), sizeof(GDExtensionStorageSceneDepthReportV1), sizeof(GDExtensionStorageSceneDepthReportV1) };
-constexpr uint32_t MAX_REQUEST = sizeof(GDExtensionQualificationRecordV4), MAX_RESULT = MAX(sizeof(GDExtensionQualificationTicketRefV1) + sizeof(GDExtensionQualificationReportV2), sizeof(GDExtensionQualificationReportV3)), MAX_SEGMENTS = 4096;
+constexpr uint32_t request_sizes[] = { 0, 8, 56, 80, 104, 48, sizeof(GDExtensionQualificationRecordV1), sizeof(GDExtensionQualificationUploadPrepareV1), sizeof(GDExtensionQualificationUploadRequestV1), sizeof(GDExtensionQualificationRecordV1), sizeof(GDExtensionQualificationRecordV2), sizeof(GDExtensionQualificationUploadPrepareV1), sizeof(GDExtensionQualificationTextureCreateV1), sizeof(GDExtensionQualificationSamplerCreateV1), sizeof(GDExtensionQualificationTextureUploadV1), sizeof(GDExtensionQualificationSetCreateV1), sizeof(GDExtensionQualificationResourceRetireV1), sizeof(GDExtensionQualificationRecordV3), sizeof(GDExtensionQualificationRasterCreateV1), sizeof(GDExtensionQualificationRasterRetireRequestV1), sizeof(GDExtensionQualificationRecordV4), sizeof(GDExtensionStorageSceneDepthQuoteRequestV1), sizeof(GDExtensionStorageSceneDepthCreateRequestV1), sizeof(GDExtensionStorageSceneDepthRetireRequestV1), sizeof(GDExtensionOutputMetadataQueryInputV1) };
+constexpr uint32_t result_sizes[] = { 0, 48, 72, 136, 96, sizeof(GDExtensionQualificationReportV1), sizeof(GDExtensionQualificationTicketRefV1) + sizeof(GDExtensionQualificationReportV1), sizeof(GDExtensionQualificationTicketRefV1) + sizeof(GDExtensionQualificationReportV1), sizeof(GDExtensionQualificationUploadReportV1), sizeof(GDExtensionQualificationReportV1), sizeof(GDExtensionQualificationReportV2), sizeof(GDExtensionQualificationTicketRefV1) + sizeof(GDExtensionQualificationReportV2), sizeof(GDExtensionQualificationResourceBackingV1), sizeof(GDExtensionQualificationResourceBackingV1), sizeof(GDExtensionQualificationUploadReportV1), sizeof(GDExtensionQualificationResourceBackingV1), sizeof(GDExtensionQualificationResourceRetireReportV1), sizeof(GDExtensionQualificationReportV2), sizeof(GDExtensionQualificationRasterBackingV1), sizeof(GDExtensionQualificationRasterRetireRefV1) + sizeof(GDExtensionQualificationRasterRetireReportV1), sizeof(GDExtensionQualificationReportV3), sizeof(GDExtensionStorageSceneDepthQuoteV1), sizeof(GDExtensionStorageSceneDepthReportV1), sizeof(GDExtensionStorageSceneDepthReportV1), sizeof(GDExtensionOutputMetadataQueryRtResultV1) };
+constexpr uint32_t MAX_REQUEST = MAX(sizeof(GDExtensionQualificationRecordV4), sizeof(GDExtensionOutputMetadataQueryInputV1)), MAX_RESULT = MAX(MAX(sizeof(GDExtensionQualificationTicketRefV1) + sizeof(GDExtensionQualificationReportV2), sizeof(GDExtensionQualificationReportV3)), sizeof(GDExtensionOutputMetadataQueryRtResultV1)), MAX_SEGMENTS = 4096;
 constexpr uint64_t MAX_PAYLOAD = 67108864;
 static_assert(sizeof(GDExtensionStorageSceneDepthQuoteRequestV1) <= MAX_REQUEST);
 static_assert(sizeof(GDExtensionStorageSceneDepthCreateRequestV1) <= MAX_REQUEST);
 static_assert(sizeof(GDExtensionStorageSceneDepthRetireRequestV1) <= MAX_REQUEST);
 static_assert(sizeof(GDExtensionStorageSceneDepthQuoteV1) <= MAX_RESULT);
 static_assert(sizeof(GDExtensionStorageSceneDepthReportV1) <= MAX_RESULT);
-static_assert(sizeof(request_sizes) / sizeof(request_sizes[0]) == 24);
-static_assert(sizeof(result_sizes) / sizeof(result_sizes[0]) == 24);
+static_assert(sizeof(request_sizes) / sizeof(request_sizes[0]) == 25);
+static_assert(sizeof(result_sizes) / sizeof(result_sizes[0]) == 25);
 static_assert(sizeof(GDExtensionQualificationRasterCreateV1) <= MAX_REQUEST);
 static_assert(sizeof(GDExtensionQualificationRasterRetireRequestV1) <= MAX_REQUEST);
 static_assert(sizeof(GDExtensionQualificationRasterBackingV1) <= MAX_RESULT);
 static_assert(sizeof(GDExtensionQualificationRasterRetireRefV1) + sizeof(GDExtensionQualificationRasterRetireReportV1) <= MAX_RESULT);
 Error validate_request(const GDExtensionQualificationRtRequestV1 &h, const uint8_t *bytes) {
 	switch (h.kind) {
+		case GDEXTENSION_QUALIFICATION_RT_OUTPUT_METADATA_QUERY_V1: {
+			const auto q = pod<GDExtensionOutputMetadataQueryInputV1>(bytes);
+			const uint64_t rid_count = uint64_t(q.config.surfaces.count) + q.config.surface_materials.count;
+			// Request bytes carry no caller pointers. Both RID arrays are copied
+			// into the existing configured payload before accepting this cell.
+			if (!abi(q.abi, sizeof(q)) || !abi(q.config.abi, sizeof(q.config)) || !abi(q.limits.abi, sizeof(q.limits)) ||
+					q.limits.reserved || q.config.surfaces.reserved || q.config.surface_materials.reserved ||
+					q.config.surfaces.data || q.config.surface_materials.data || h.payload_bytes != rid_count * sizeof(uint64_t)) {
+				return ERR_INVALID_PARAMETER;
+			}
+		} break;
 		case 21: {
 			const auto q = pod<GDExtensionStorageSceneDepthQuoteRequestV1>(bytes);
 			if (!abi(q.abi) || !abi(q.descriptor.abi) || q.descriptor.reserved || !q.descriptor.width || !q.descriptor.height || !q.allocation_generation || q.quote_attempt != 1 || h.payload_bytes) {
@@ -349,7 +361,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_reserve(GDExtensionQ
 	if (!disjoint(request, 1, out, sizeof(*out)) || !disjoint(request, header.request_bytes, out, sizeof(*out)) || (payload && (!disjoint(payload, 1, out, sizeof(*out)) || header.payload_bytes > SIZE_MAX || !disjoint(payload, size_t(header.payload_bytes), out, sizeof(*out))))) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
-	if (!abi(header.abi, sizeof(header)) || header.flags || header.reserved || !header.operation_serial || header.kind < 1 || header.kind > 23 || header.request_bytes != request_sizes[header.kind] || header.result_capacity != result_sizes[header.kind] || header.segment_capacity > MAX_SEGMENTS || ((header.kind == 8 || header.kind == 14) ? !header.segment_capacity : header.segment_capacity != 0) || header.payload_bytes > MAX_PAYLOAD || ((header.payload_bytes != 0) != (payload != nullptr))) {
+	if (!abi(header.abi, sizeof(header)) || header.flags || header.reserved || !header.operation_serial || header.kind < 1 || header.kind > GDEXTENSION_QUALIFICATION_RT_OUTPUT_METADATA_QUERY_V1 || header.request_bytes != request_sizes[header.kind] || header.result_capacity != result_sizes[header.kind] || header.segment_capacity > MAX_SEGMENTS || ((header.kind == 8 || header.kind == 14) ? !header.segment_capacity : header.segment_capacity != 0) || header.payload_bytes > MAX_PAYLOAD || ((header.payload_bytes != 0) != (payload != nullptr))) {
 		*out = {};
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
@@ -991,6 +1003,37 @@ void Registry::qualification_rt_dispatch(uint64_t bridge_serial, uint64_t serial
 		active_qualification_bridge = bridge;
 		active_qualification_serial = serial;
 		switch (cell->header.kind) {
+			case GDEXTENSION_QUALIFICATION_RT_OUTPUT_METADATA_QUERY_V1: {
+				{
+					Lock lock(*this);
+					const Error checked = qualification_bridge_locked(bridge_ref, true, true, bridge, rd, GDEXTENSION_QUALIFICATION_RT_OUTPUT_METADATA_QUERY_V1);
+					if (checked != OK) {
+						called = result(checked, checked == ERR_UNAUTHORIZED ? 15 : 16);
+						break;
+					}
+				}
+				auto q = pod<GDExtensionOutputMetadataQueryInputV1>(cell->request.ptr());
+				const auto *rids = reinterpret_cast<const uint64_t *>(cell->payload.ptr());
+				q.config.surfaces.data = q.config.surfaces.count ? rids : nullptr;
+				q.config.surface_materials.data = q.config.surface_materials.count ? rids + q.config.surfaces.count : nullptr;
+				GDExtensionOutputMetadataQueryResultV1 queried{};
+				auto *particles = RendererRD::ParticlesStorage::get_singleton();
+				if (!particles) {
+					called = result(ERR_UNAVAILABLE, 18);
+					break;
+				}
+				particles->particles_external_metadata_query(q, queried);
+				GDExtensionOutputMetadataQueryRtResultV1 copied{};
+				copied.abi = { 1, sizeof(copied), 0 };
+				copied.error = queried.status.error;
+				copied.requirements = queried.requirements;
+				copied.detail_length = MIN(queried.status.detail_length, uint32_t(sizeof(copied.detail) - 1));
+				if (copied.detail_length && queried.status.detail) {
+					memcpy(copied.detail, queried.status.detail, copied.detail_length);
+				}
+				save(copied); // Never copy borrowed status.detail across the RT return.
+				valid_output = abi(queried.abi, sizeof(queried)) && (!queried.status.detail_length || queried.status.detail) && (!copied.error ? abi(copied.requirements.abi, sizeof(copied.requirements)) : true);
+			} break;
 			case 21: {
 				const auto q = pod<GDExtensionStorageSceneDepthQuoteRequestV1>(cell->request.ptr());
 				GDExtensionStorageSceneDepthQuoteV1 out = {};

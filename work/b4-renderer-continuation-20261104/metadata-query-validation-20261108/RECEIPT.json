@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "scope": "Original bounded QualificationRt kind24 MetadataQuery; CPU/dummy transport only",
+  "build_command": "scons -Q tests=yes platform=macos target=editor debug_symbols=no module_particles_runtime_tests_enabled=yes -j2",
+  "build_exit": 0,
+  "red": {
+    "command": "bin/godot.macos.editor.arm64 --headless --test --test-case='*[MetadataQuery]*'",
+    "exit": 1,
+    "cases": 3,
+    "assertions": 29,
+    "failed_assertions": 8
+  },
+  "initial_red_fixture_crash": {
+    "exit": 134,
+    "excluded_from_acceptance": true,
+    "cause": "REQUIRE continues under DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS; fixed explicit failure exits"
+  },
+  "green": {
+    "exit": 0,
+    "cases": 3,
+    "assertions": 73
+  },
+  "neighbors": {
+    "filter": "*[QualificationRt]*",
+    "exit": 0,
+    "cases": 11,
+    "assertions": 631
+  },
+  "source_and_binary_sha256": {
+    "core/extension/gdextension_interface.json": "a35cd3886527d79c0360f39813b985c01ab7a822d640405820bfef9127d01273",
+    "core/extension/gdextension_interface.gen.h": "02310d7540b9cf25bf561666dfbc04bf9760c32314ca47276b82d25ab3d4d344",
+    "core/extension/gdextension_qualification_rt.cpp": "97bec7d27cb3e0483dbce681c971f6092ac51d1d27d75afe05dec935463c2bee",
+    "tests/servers/rendering/test_qualification_rt.cpp": "f61e08442829b0025a739a8626071cdb96c8fa02f401e4d6b3a468d26bc3db60",
+    "bin/godot.macos.editor.arm64": "832adc0a75ac0265d1075944ee03188c3544d8995aab12d53b4ea1b746ae34f2"
+  },
+  "logs": {
+    "b4-native-prequote-red-build.log": "e3422eecb35b78a74ebf8bb70f9d0efa6afc481da7f570916f8047ebf5256c9d",
+    "b4-native-prequote-red-test.log": "9bba0fa69bb7c748d9a7f449f6ad5c4765ed3a4cb1256401a8da6b419b7dcaa6",
+    "b4-native-prequote-red-capacity.log": "b987382f068e035727398ea8838d5356dfac301d0306d984e2cf7ea71df91f33",
+    "b4-native-prequote-red-safe-build.log": "09357fa69b197f6b903b73f8d6a23e0350acdcb56facf4e32cc0f98b93e409cb",
+    "b4-native-prequote-red-safe-test.log": "8110f2d546e1d834ea99e349883058bc7046449e4c1aa9ce0e02b50cee24975e",
+    "b4-native-prequote-green-build.log": "0c19d7fbf46ccc73af5f167a822cf4223d2eb832f34b5d43ae3c51229def5a3f",
+    "b4-native-prequote-green-test.log": "528134397d6dc95a4dfc9e73586605d74f69f1dfaff8a0ceb65c4779b48618a0",
+    "b4-native-prequote-neighbor-test.log": "62e1d62eab2474b41124f4ac79bf430e2413fb2de70bba68b061e318c0b09479"
+  },
+  "limits": [
+    "Private Fixture manual queue enrollment/direct original dispatch; no real RenderingServer FIFO proof",
+    "Packed request and dual-span payload copy proved; downstream pointer reconstruction offsets not behaviorally observed",
+    "Thread case conditionally registered under THREADS_ENABLED; actual worker/main separation ran in this build",
+    "No public Instance192/Create/Finalize/Seal, GPU or visible Sprite acceptance",
+    "Fixed P1 host/configuration unchanged",
+    "Adapter candidate original Catch target passed 2 cases/91 assertions separately; central A integration pending"
+  ]
+}

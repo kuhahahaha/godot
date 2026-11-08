@@ -39,6 +39,227 @@ class TestQualificationRtAccess {
  static GDExtensionQualificationRtConfigV1 config(){return {{1,40,0},1,312,200,2,256};}
  static GDExtensionQualificationRtRequestV1 query(uint64_t operation){return {{1,56,0},1,0,operation,0,8,48,0,0};}
 public:
+ // Uses this file's existing original Registry/RenderingDevice fixture. The
+ // private fixture manually enrolls its queue pin exactly like carrier(); it
+ // exercises production copy/dispatch/accepted-close logic, not GPU success.
+	static void metadata_query_carrier() {
+		Fixture f;
+		auto c = config();
+		c.max_request_bytes = sizeof(GDExtensionOutputMetadataQueryInputV1);
+		c.max_result_bytes = sizeof(GDExtensionOutputMetadataQueryRtResultV1);
+		auto status = f.registry->qualification_rt_configure(f.ref, &c);
+		CHECK(status.native_error == OK);
+		if (status.native_error != OK) {
+			return;
+		}
+		GDExtensionOutputMetadataQueryInputV1 q{};
+		q.abi = { 1, sizeof(q), 0 };
+		q.config.abi = { 1, sizeof(q.config), 0 };
+		q.limits.abi = { 1, sizeof(q.limits), 0 };
+		q.config.surfaces.count = 2;
+		q.config.surface_materials.count = 1;
+		uint64_t payload[] = { 13, 17, 19 };
+		const auto original = q;
+		GDExtensionQualificationRtRequestV1 h{ { 1, sizeof(h), 0 }, GDEXTENSION_QUALIFICATION_RT_OUTPUT_METADATA_QUERY_V1, 0, 1, sizeof(payload), sizeof(q), sizeof(GDExtensionOutputMetadataQueryRtResultV1), 0, 0 };
+		GDExtensionQualificationRtRefV1 ref{};
+		status = f.registry->qualification_rt_reserve(f.ref, &h, &q, payload, &ref);
+		CHECK(status.native_error == OK);
+		if (status.native_error != OK) {
+			return;
+		}
+		q = {};
+		payload[0] = payload[1] = payload[2] = 999;
+		CHECK(memcmp(f.bridge->rt->request.ptr(), &original, sizeof(original)) == 0);
+		const uint64_t expected[] = { 13, 17, 19 };
+		CHECK(memcmp(f.bridge->rt->payload.ptr(), expected, sizeof(expected)) == 0);
+		f.queue();
+		status = f.registry->qualification_rt_activate(f.ref, ref);
+		CHECK(status.native_error == OK);
+		if (status.native_error != OK) {
+			return;
+		}
+		GDExtensionQualificationRtObservationV1 observation{};
+		GDExtensionOutputMetadataQueryRtResultV1 output{};
+		status = f.registry->qualification_rt_observe(f.ref, ref, &observation, &output, sizeof(output), nullptr, 0);
+		CHECK(status.native_error == OK);
+		if (status.native_error != OK) {
+			return;
+		}
+		CHECK(observation.state == 1);
+		CHECK(observation.result_bytes == 0);
+		CHECK(output.abi.abi_version == 0);
+		if (observation.state != 1) {
+			return;
+		}
+		status = f.registry->qualification_close(f.ref);
+		CHECK(status.native_error == ERR_BUSY);
+		CHECK(f.bridge->closing);
+		if (status.native_error != ERR_BUSY || !f.bridge->closing) {
+			return;
+		}
+		// The accepted original must drain despite refusing a fresh operation.
+		auto fresh = h;
+		++fresh.operation_serial;
+		GDExtensionQualificationRtRefV1 denied{};
+		CHECK(f.registry->qualification_rt_reserve(f.ref, &fresh, &original, expected, &denied).native_error == ERR_BUSY);
+		CHECK(denied.handle_serial == 0);
+		f.dispatch();
+		CHECK(f.bridge->rt->admission_consumed);
+		CHECK(f.bridge->rt->state == 2);
+		CHECK_FALSE(f.bridge->rt->executing);
+		CHECK_FALSE(f.bridge->rt->queued);
+		status = f.registry->qualification_rt_observe(f.ref, ref, &observation, &output, sizeof(output), nullptr, 0);
+		CHECK(status.native_error == OK);
+		if (status.native_error != OK) {
+			return;
+		}
+		CHECK(observation.state == 2);
+		CHECK(observation.kind == GDEXTENSION_QUALIFICATION_RT_OUTPUT_METADATA_QUERY_V1);
+		CHECK(observation.operation_serial == 1);
+		CHECK(observation.result_bytes == sizeof(output));
+		// No live particle bank: checked refusal or absent-storage unavailability.
+		if (observation.call_result.native_error == OK) {
+			CHECK(output.abi.abi_version == 1);
+			CHECK(output.error != OK);
+		} else {
+			CHECK(observation.call_result.native_error == ERR_UNAVAILABLE);
+			CHECK(output.abi.abi_version == 0);
+		}
+		status = f.registry->qualification_rt_release(f.ref, ref);
+		CHECK(status.native_error == OK);
+		if (status.native_error != OK) {
+			return;
+		}
+		CHECK(f.bridge->children == 0);
+		CHECK_FALSE(f.bridge->rt->occupied);
+		denied = {};
+		CHECK(f.registry->qualification_rt_reserve(f.ref, &fresh, &original, expected, &denied).native_error == ERR_BUSY);
+		CHECK(denied.handle_serial == 0);
+		CHECK_FALSE(f.bridge->rt->occupied);
+	}
+ static void metadata_query_capacity() {
+  for(unsigned dimension=0;dimension<3;++dimension) {
+   Fixture f;auto c=config();c.max_request_bytes=sizeof(GDExtensionOutputMetadataQueryInputV1);c.max_result_bytes=sizeof(GDExtensionOutputMetadataQueryRtResultV1);c.max_payload_bytes=24;
+   if(dimension==0)--c.max_request_bytes;else if(dimension==1)--c.max_result_bytes;else --c.max_payload_bytes;
+   REQUIRE(f.registry->qualification_rt_configure(f.ref,&c).native_error==OK);
+   GDExtensionOutputMetadataQueryInputV1 q{};q.abi={1,sizeof(q),0};q.config.abi={1,sizeof(q.config),0};q.limits.abi={1,sizeof(q.limits),0};q.config.surfaces.count=2;q.config.surface_materials.count=1;
+   uint64_t payload[]={13,17,19};GDExtensionQualificationRtRequestV1 h{{1,sizeof(h),0},GDEXTENSION_QUALIFICATION_RT_OUTPUT_METADATA_QUERY_V1,0,1,sizeof(payload),sizeof(q),sizeof(GDExtensionOutputMetadataQueryRtResultV1),0,0};
+   const auto refs=f.registry->records[0].private_refs;const auto serial=f.registry->qualification_serials.next;GDExtensionQualificationRtRefV1 ref{};
+   const auto refused=f.registry->qualification_rt_reserve(f.ref,&h,&q,payload,&ref);
+   CHECK(refused.native_error==ERR_PARAMETER_RANGE_ERROR);CHECK(refused.reason==19);CHECK(ref.handle_serial==0);CHECK_FALSE(f.bridge->rt->occupied);CHECK(f.bridge->children==0);CHECK(f.registry->records[0].private_refs==refs);CHECK(f.registry->qualification_serials.next==serial);
+  }
+ }
+#ifdef THREADS_ENABLED
+	static void metadata_query_cross_thread() {
+		Fixture f;
+		auto c = config();
+		c.max_request_bytes = sizeof(GDExtensionOutputMetadataQueryInputV1);
+		c.max_result_bytes = sizeof(GDExtensionOutputMetadataQueryRtResultV1);
+		const auto configured = f.registry->qualification_rt_configure(f.ref, &c);
+		CHECK(configured.native_error == OK);
+		if (configured.native_error != OK) {
+			return;
+		}
+		GDExtensionOutputMetadataQueryInputV1 q{};
+		q.abi = { 1, sizeof(q), 0 };
+		q.config.abi = { 1, sizeof(q.config), 0 };
+		q.limits.abi = { 1, sizeof(q.limits), 0 };
+		q.config.surfaces.count = 2;
+		q.config.surface_materials.count = 1;
+		const auto original = q;
+		uint64_t payload[] = { 13, 17, 19 };
+		const uint64_t expected[] = { 13, 17, 19 };
+		GDExtensionQualificationRtRequestV1 h{ { 1, sizeof(h), 0 }, GDEXTENSION_QUALIFICATION_RT_OUTPUT_METADATA_QUERY_V1, 0, 1, sizeof(payload), sizeof(q), sizeof(GDExtensionOutputMetadataQueryRtResultV1), 0, 0 };
+		GDExtensionQualificationRtRefV1 ref{};
+		GDExtensionDeviceSessionResultV1 reserve{}, activate{}, pending_status{}, close{}, observe{}, release{}, fresh_status{};
+		GDExtensionQualificationRtObservationV1 pending{}, done{};
+		GDExtensionOutputMetadataQueryRtResultV1 output{};
+		Semaphore accepted, returned;
+		const auto main_thread = Thread::get_caller_id();
+		uint64_t owner_thread = main_thread;
+		bool ready = false;
+		bool dispatched = false;
+		std::thread owner([&] {
+			owner_thread = Thread::get_caller_id();
+			f.registry->records[0].owner_thread = owner_thread;
+			reserve = f.registry->qualification_rt_reserve(f.ref, &h, &q, payload, &ref);
+			if (reserve.native_error == OK) {
+				q = {};
+				payload[0] = payload[1] = payload[2] = 999;
+				// Private fixture enrollment; actual main performs Registry dispatch.
+				f.queue();
+				activate = f.registry->qualification_rt_activate(f.ref, ref);
+				if (activate.native_error == OK) {
+					pending_status = f.registry->qualification_rt_observe(f.ref, ref, &pending, &output, sizeof(output), nullptr, 0);
+					if (pending_status.native_error == OK && pending.state == 1) {
+						close = f.registry->qualification_close(f.ref);
+						ready = close.native_error == ERR_BUSY && f.bridge->closing;
+					}
+				}
+			}
+			accepted.post();
+			returned.wait();
+			if (!dispatched) {
+				return;
+			}
+			observe = f.registry->qualification_rt_observe(f.ref, ref, &done, &output, sizeof(output), nullptr, 0);
+			if (observe.native_error != OK) {
+				return;
+			}
+			release = f.registry->qualification_rt_release(f.ref, ref);
+			if (release.native_error != OK) {
+				return;
+			}
+			auto fresh = h;
+			++fresh.operation_serial;
+			GDExtensionQualificationRtRefV1 denied{};
+			fresh_status = f.registry->qualification_rt_reserve(f.ref, &fresh, &original, expected, &denied);
+		});
+		accepted.wait();
+		CHECK(owner_thread != main_thread);
+		CHECK(reserve.native_error == OK);
+		if (reserve.native_error == OK) {
+			CHECK(activate.native_error == OK);
+			if (activate.native_error == OK) {
+				CHECK(pending_status.native_error == OK);
+				CHECK(pending.state == 1);
+				if (pending_status.native_error == OK && pending.state == 1) {
+					CHECK(close.native_error == ERR_BUSY);
+					CHECK(f.bridge->closing);
+				}
+			}
+		}
+		// Always wake and join the worker before an early return or fixture cleanup.
+		if (!ready) {
+			returned.post();
+			owner.join();
+			f.registry->records[0].owner_thread = main_thread;
+			return;
+		}
+		CHECK(memcmp(f.bridge->rt->request.ptr(), &original, sizeof(original)) == 0);
+		CHECK(memcmp(f.bridge->rt->payload.ptr(), expected, sizeof(expected)) == 0);
+		f.dispatch();
+		CHECK(f.bridge->rt->admission_consumed);
+		CHECK(f.bridge->rt->state == 2);
+		dispatched = true;
+		returned.post();
+		owner.join();
+		f.registry->records[0].owner_thread = main_thread;
+		CHECK(observe.native_error == OK);
+		if (observe.native_error != OK) {
+			return;
+		}
+		CHECK(done.state == 2);
+		CHECK(done.operation_serial == 1);
+		CHECK(release.native_error == OK);
+		if (release.native_error != OK) {
+			return;
+		}
+		CHECK(fresh_status.native_error == ERR_BUSY);
+		CHECK_FALSE(f.bridge->rt->occupied);
+		CHECK(f.bridge->children == 0);
+	}
+#endif
 	static void malformed_header_output_alias() {
 		Fixture f;
 		struct Shared {
@@ -362,3 +583,10 @@ TEST_CASE("[QualificationRt] accepted close scope admits its typed call exactly 
 TEST_CASE("[QualificationRt] V3 admission retains original operation identity and legacy V2 ABI") {
  TestQualificationRtAccess::original_operation_admission();
 }
+
+TEST_CASE("[QualificationRt][MetadataQuery] original copy and accepted close dispatch drain") {TestQualificationRtAccess::metadata_query_carrier();}
+TEST_CASE("[QualificationRt][MetadataQuery] finite request result payload capacities refuse without effects") {TestQualificationRtAccess::metadata_query_capacity();}
+
+#ifdef THREADS_ENABLED
+TEST_CASE("[QualificationRt][MetadataQuery] worker owner copied source survives main RT close drain") {TestQualificationRtAccess::metadata_query_cross_thread();}
+#endif

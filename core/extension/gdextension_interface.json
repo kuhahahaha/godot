@@ -9588,6 +9588,42 @@
             ]
         },
         {
+            "name": "GDExtensionQualificationRtOutputKindV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_RT_OUTPUT_METADATA_QUERY_V1",
+                    "value": 24
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputMetadataQueryRtResultV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "detail_length",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "detail[96]",
+                    "type": "char"
+                },
+                {
+                    "name": "requirements",
+                    "type": "GDExtensionOutputMetadataRequirementsV1"
+                }
+            ]
+        },
+        {
             "name": "GDExtensionOutputCreateInputV3",
             "kind": "struct",
             "members": [

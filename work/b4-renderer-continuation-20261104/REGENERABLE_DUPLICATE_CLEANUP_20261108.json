@@ -1,0 +1,20 @@
+[
+  {
+    "path": "/tmp/b4-sdk-load-repo-fixture-green/host",
+    "bytes": 156035352,
+    "sha256": "dd3f837f678d75e81cfe55de8e4cd8321e9e8c78aee5928c35484fb44726591c",
+    "retained_identical_copy": "/tmp/b4-sdk-load-repo-fixture-final/host"
+  },
+  {
+    "path": "/tmp/b4-sdk-load-repo-fixture-mypy-green/host",
+    "bytes": 156035352,
+    "sha256": "dd3f837f678d75e81cfe55de8e4cd8321e9e8c78aee5928c35484fb44726591c",
+    "retained_identical_copy": "/tmp/b4-sdk-load-repo-fixture-final/host"
+  },
+  {
+    "path": "/tmp/b4-sdk62-load-runtime/host.arm64",
+    "bytes": 156035352,
+    "sha256": "dd3f837f678d75e81cfe55de8e4cd8321e9e8c78aee5928c35484fb44726591c",
+    "retained_identical_copy": "/tmp/b4-sdk-load-repo-fixture-final/host"
+  }
+]
