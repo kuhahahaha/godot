@@ -443,6 +443,25 @@ uint64_t ExternalLinkedOwnerTest::preparation_pipeline_group(uint32_t p_slot, ui
 	CRASH_COND(!owner || p_slot >= owner->slot_count || !owner->slots[p_slot].surfaces || p_surface >= owner->slots[p_slot].surface_count);
 	return owner->slots[p_slot].surfaces[p_surface].pipeline_owned_group;
 }
+bool ExternalLinkedOwnerTest::preparation_scope_link_matches(uint32_t p_slot, uint32_t p_surface, const GDExtensionDeviceExit::ProductionOutputPreparationScope *p_scope, bool p_sealed) const {
+	CRASH_COND(!owner || p_slot >= owner->slot_count || !owner->slots[p_slot].surfaces || p_surface >= owner->slots[p_slot].surface_count);
+	const auto &slot = owner->slots[p_slot];
+	const auto &surface = slot.surfaces[p_surface];
+	const auto *row = surface.preparation_row;
+	return row && row == surface.preparation && row->pipeline_scope == p_scope && row->source_sealed == p_sealed &&
+			row->pipeline_pin == &slot.original_pin && row->pipeline_original_root == &surface.created_pipeline && row->pipeline_owned_group == surface.pipeline_owned_group;
+}
+Error ExternalLinkedOwnerTest::preparation_row_preflight(uint32_t p_slot, uint32_t p_surface) {
+	return owner->slots[p_slot].surfaces[p_surface].preparation_row->_pipeline_preflight();
+}
+Error ExternalLinkedOwnerTest::preparation_row_cleanup(uint32_t p_slot, uint32_t p_surface) {
+	return owner->slots[p_slot].surfaces[p_surface].preparation_row->_cleanup_preflight();
+}
+RID ExternalLinkedOwnerTest::preparation_row_factory(uint32_t p_slot, uint32_t p_surface, RID p_shader, RenderingDevice::FramebufferFormatID p_format) {
+	return owner->slots[p_slot].surfaces[p_surface].preparation_row->_create_pipeline(p_shader, p_format, RenderingDevice::INVALID_ID,
+			RenderingDevice::RENDER_PRIMITIVE_TRIANGLES, RenderingDevice::PipelineRasterizationState(), RenderingDevice::PipelineMultisampleState(),
+			RenderingDevice::PipelineDepthStencilState(), RenderingDevice::PipelineColorBlendState(), 0, 0, {});
+}
 Error ExternalLinkedOwnerTest::cancel_pipeline_slot(uint32_t p_slot) {
 	CRASH_COND(!owner);
 	return owner->cancel_slot(p_slot);

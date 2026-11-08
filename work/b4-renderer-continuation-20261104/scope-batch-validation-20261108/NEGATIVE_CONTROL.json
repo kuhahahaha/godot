@@ -1,0 +1,7 @@
+{
+  "file": "servers/rendering/renderer_rd/storage_rd/external_output_packet.cpp",
+  "green_sha256": "d804e0a163d2b6b8d29531766d8864b1403875683f3303d5f18ae76e9919104c",
+  "mutation": "Restore expired PhysicalContext preflight for real row; actual scope factory and cleanup stay unchanged. Proves row preflight routing regression only.",
+  "from": "const Error error = pipeline_scope ? rd->_production_output_owned_pipeline_preflight(*pipeline_scope) :\n\t\t\trd->_production_output_owned_pipeline_preflight(pipeline_context, *pipeline_pin, pipeline_owned_group);",
+  "to": "const Error error = rd->_production_output_owned_pipeline_preflight(pipeline_context, *pipeline_pin, pipeline_owned_group);"
+}

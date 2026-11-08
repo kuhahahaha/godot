@@ -1733,6 +1733,12 @@ private:
 	Error _production_output_directory_capture(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, const VectorView<RID> &, uint32_t, NativeOutputGroupBinding &);
 	Error _production_output_directory_return(GDExtensionDeviceExit::ProductionOutputPin &, NativeOutputGroupBinding &, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);
 	Error _production_output_directory_mark_root(GDExtensionDeviceExit::ProductionOutputPin &, const NativeOutputGroupBinding &, RID, bool, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);
+	// Shared primitives only. Callers must already retain authenticated original
+	// Registry and RD locks. No scope/window or source permission is issued here.
+	Error _production_output_hold_inventory_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_reserved_group, const VectorView<NativeImmutableHold *> &, uint32_t p_limit, uint32_t &r_count);
+	Error _production_output_hold_stage_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_reserved_group, const VectorView<NativeImmutableHold *> &, uint32_t p_limit, uint32_t &r_count);
+	void _production_output_hold_inventory_clear_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_reserved_group);
+	Error _production_output_hold_adopt_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_pin_serial, uint64_t p_reserved_group, const VectorView<NativeImmutableHold *> &, uint32_t p_limit, uint64_t &r_group);
 	Error _production_output_hold_capture_locked(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, NativeImmutableHold &, uint64_t &);
 	Error _production_output_hold_returned_locked(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, GDExtensionDeviceExit::ProductionDisposalObservation &);
 	Error _production_output_hold_capture(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, NativeImmutableHold &, uint64_t &);

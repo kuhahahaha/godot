@@ -71,3 +71,9 @@ Task2 capture research: current native external_pipeline_prepare only derivesgeo
 ## Prequote MetadataQuery accepted CPU transport slice
 
 Original kind24 JSON+Core integrated. Clean RED3/29/8fail process1; initial unsafe REQUIRE continuation crash excluded and fixture explicit exits fixed. GREEN3/73 and original QualificationRt11/631 pass, buildexit0. See METADATA_QUERY_RT_RECEIPT.md and durable metadata-query-validation-20261108 logs/hashes. Independent Sol source/test review; downstream dual-array reconstruction behavior still unobserved, private fixture not real FIFO/GPU. A adapter2/91 remains candidate integration; fixed P1 unchanged. Long goal active; Astra0 this turn.
+
+## Exact stable row scope + bounded batch capture slice
+
+Scope cleanup and batch multiplicity candidates integrated, independent Sol merged review clear. Narrow row-preflight negative control RED3/2997/12fail process1 without engine crash; restored GREEN6/3448 pass, neighbors45/8752 pass, both builds0. See SCOPE_BATCH_CONTINUATION_RECEIPT.md. Preserves cancel/withdraw original prefixes and finite pin drops; does not finish Task2 bank/capture production entry/public renderer. Finite bank stable-locator candidate and Count+4gate private guard candidate continue on defaultSol; Astra0.
+
+Ruling: private guard successor must represent Count+four original gate backings independently, preserving original typed role mappings and allowing proven READ/READ sharing. Existing anchor is not a source accessor and Count16 reserved words are not validity. This follows OUTPUT_CONTRACT and actual selected_member_source/projection lineage; private candidate only, no public ABI issued. Cost if wrong: private component/proof layout rework before callable SDK delivery.

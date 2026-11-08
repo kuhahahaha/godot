@@ -166,6 +166,7 @@ class ExternalPipelinePreparation {
 	friend class ExternalLinkedOwnerTest;
 #endif
 	friend class ParticlesStorage;
+	friend class ::GDExtensionDeviceExit::Registry;
 	friend class RendererSceneRenderImplementation::SceneShaderForwardClustered;
 	friend class RendererSceneRenderImplementation::SceneShaderForwardMobile;
 	friend class ExternalOutputOwner;
@@ -193,10 +194,13 @@ class ExternalPipelinePreparation {
 	// pipeline root and group, including failed material-hold prefixes.
 	RID created_pipeline;
 	GDExtensionProductionPhysicalContextRefV1 pipeline_context{};
+	GDExtensionDeviceExit::ProductionOutputPreparationScope *pipeline_scope = nullptr;
 	GDExtensionDeviceExit::ProductionOutputPin *pipeline_pin = nullptr;
 	uint64_t pipeline_owned_group = 0;
 	RID *pipeline_original_root = nullptr;
 	Error _pipeline_preflight();
+	// Only mandatory prefix capture/adopt/seal may use this exact cleanup proof.
+	Error _cleanup_preflight();
 	RID _create_pipeline(RID p_shader, RenderingDevice::FramebufferFormatID p_framebuffer_format, RenderingDevice::VertexFormatID p_vertex_format, RenderingDevice::RenderPrimitive p_render_primitive, const RenderingDevice::PipelineRasterizationState &p_rasterization_state, const RenderingDevice::PipelineMultisampleState &p_multisample_state, const RenderingDevice::PipelineDepthStencilState &p_depth_stencil_state, const RenderingDevice::PipelineColorBlendState &p_blend_state, BitField<RenderingDevice::PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<RenderingDevice::PipelineSpecializationConstant> &p_specialization_constants);
 	ExternalPipelinePreparation() = default;
 

@@ -8237,6 +8237,7 @@ struct Access {
 			const auto format = rd.framebuffer_format_create(Vector<RD::AttachmentFormat>());
 			{
 				ProductionOutputPreparationScope scope;
+				CHECK(p.native->preparation_scope_link_matches(0, 0, nullptr, true));
 				CHECK(rd._production_output_owned_pipeline_preflight(scope) == ERR_INVALID_PARAMETER);
 				CHECK(f.registry.production_output_preparation_begin(p.native->pin(0), rd, 0, 0, group + 1, scope) == ERR_UNAUTHORIZED);
 				CHECK(request.continuation_inflight == 0);
@@ -8251,6 +8252,46 @@ struct Access {
 #endif
 				REQUIRE(f.registry.production_output_preparation_begin(p.native->pin(0), rd, 0, 0, group, scope) == OK);
 				CHECK(request.continuation_inflight == 1);
+				CHECK(p.native->preparation_scope_link_matches(0, 0, &scope, false));
+				REQUIRE(p.native->preparation_row_preflight(0, 0) == OK);
+				CHECK(p.native->preparation_row_cleanup(0, 0) == OK);
+				// The old invocation remains expired even inside the new scope.
+				CHECK(rd._production_output_owned_pipeline_preflight(p.completed_context, p.native->pin(0), group) != OK);
+				ProductionRequest *cleanup_request = nullptr;
+				auto cleanup_matches = [&](const ProductionOutputPreparationScope &candidate, ProductionRequest *&out) {
+					Registry::Lock cleanup_lock(f.registry);
+					return f.registry.production_output_preparation_cleanup_matches_locked(candidate, rd, out);
+				};
+				CHECK(cleanup_matches(scope, cleanup_request) == OK);
+				CHECK(cleanup_request == &request);
+#ifdef THREADS_ENABLED
+				Error foreign_cleanup = OK;
+				std::thread cleanup_thread([&]() { ProductionRequest *out = nullptr; foreign_cleanup = cleanup_matches(scope, out); });
+				cleanup_thread.join();
+				CHECK(foreign_cleanup == ERR_UNAUTHORIZED);
+#endif
+				ProductionOutputPreparationScope forged;
+				CHECK(cleanup_matches(forged, cleanup_request) == ERR_UNAUTHORIZED);
+				const auto original_row = scope.row;
+				scope.row = nullptr;
+				CHECK(cleanup_matches(scope, cleanup_request) == ERR_UNAUTHORIZED);
+				scope.row = original_row;
+				const auto original_source_generation = scope.source_generation;
+				++scope.source_generation;
+				CHECK(cleanup_matches(scope, cleanup_request) == ERR_UNAUTHORIZED);
+				scope.source_generation = original_source_generation;
+				// Cancellation/effects stop new factories without withdrawing the
+				// exact retained scope's mandatory prefix cleanup opportunity.
+				request.cancelled = true;
+				CHECK(p.native->preparation_row_preflight(0, 0) == ERR_BUSY);
+				CHECK(p.native->preparation_row_cleanup(0, 0) == OK);
+				CHECK(p.native->preparation_row_factory(0, 0, p.continuation_shader, format).is_null());
+				CHECK(f.driver.raster_attempts == attempts);
+				request.cancelled = false;
+				request.effects_pending = true;
+				CHECK(p.native->preparation_row_preflight(0, 0) == ERR_BUSY);
+				CHECK(p.native->preparation_row_cleanup(0, 0) == OK);
+				request.effects_pending = false;
 				CHECK(f.registry.production_output_preparation_begin(p.native->pin(0), rd, 0, 0, group, scope) == ERR_ALREADY_IN_USE);
 				REQUIRE(rd._production_output_owned_pipeline_preflight(scope) == OK);
 				CHECK(f.registry.production_output_unpin(p.native->pin(0)) == ERR_BUSY);
@@ -8269,20 +8310,27 @@ struct Access {
 							  RD::PipelineDepthStencilState(), RD::PipelineColorBlendState(), 0, 0, {}, stack_output) == ERR_INVALID_PARAMETER);
 				CHECK(stack_output.is_null());
 				CHECK(f.driver.raster_attempts == attempts);
-				REQUIRE(rd._production_output_owned_render_pipeline_create(scope, p.continuation_shader, format, RD::INVALID_ID,
-								RD::RENDER_PRIMITIVE_TRIANGLES, RD::PipelineRasterizationState(), RD::PipelineMultisampleState(),
-								RD::PipelineDepthStencilState(), RD::PipelineColorBlendState(), 0, 0, {}, p.native->pipeline_root()) == (p.continuation_mode == 1 ? ERR_CANT_CREATE : OK));
+				// Exercise the renderer's real row bridge, not just the RD scope overload.
+				const RID created = p.native->preparation_row_factory(0, 0, p.continuation_shader, format);
+				CHECK(created == p.native->pipeline_root());
 				CHECK(p.native->pipeline_root().is_valid() == (p.continuation_mode != 1));
 				CHECK(f.driver.raster_attempts == attempts + 1);
 				CHECK(rd._production_output_owned_pipeline_preflight(scope) == (p.continuation_mode == 1 ? OK : ERR_ALREADY_IN_USE));
+				CHECK(p.native->preparation_row_preflight(0, 0) == (p.continuation_mode == 1 ? OK : ERR_ALREADY_IN_USE));
+				CHECK(p.native->preparation_row_cleanup(0, 0) == OK);
 				if (p.continuation_mode == 2) {
 					CHECK(p.native->cancel_pipeline_slot(0) == OK);
+					p.native->withdraw_generation();
+					CHECK(p.native->preparation_row_cleanup(0, 0) == OK);
+					CHECK(p.native->preparation_scope_link_matches(0, 0, &scope, false));
 					CHECK(request.continuation_inflight == 1);
 					CHECK(rd._production_output_owned_pipeline_preflight(scope) == ERR_UNAUTHORIZED);
 					CHECK(p.native->return_pipeline_row(0, 0) == ERR_BUSY);
 				}
 			}
 			CHECK(request.continuation_inflight == 0);
+			CHECK(p.native->preparation_scope_link_matches(0, 0, nullptr, true));
+			CHECK(p.native->preparation_row_cleanup(0, 0) == ERR_UNAUTHORIZED);
 			ProductionOutputPreparationScope replay;
 			CHECK(f.registry.production_output_preparation_begin(p.native->pin(0), rd, 0, 0, group, replay) == (p.continuation_mode == 2 ? ERR_UNAUTHORIZED : (p.continuation_mode == 1 ? OK : ERR_ALREADY_IN_USE)));
 			CHECK(request.revision == revision);

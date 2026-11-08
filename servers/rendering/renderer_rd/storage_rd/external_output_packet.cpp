@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "external_output_packet.h"
+#include "core/extension/gdextension_production_request.h"
 
 #include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
 
@@ -100,18 +101,34 @@ Error ExternalPacketBinding::record_checked(RenderingDevice::DrawListID) {
 
 namespace RendererRD {
 ExternalPipelinePreparation::~ExternalPipelinePreparation() {
-	CRASH_COND(pipeline_pin || pipeline_original_root || pipeline_owned_group || geometry[0].is_active() || geometry[1].is_active() || material.is_active());
+	CRASH_COND(pipeline_scope || pipeline_pin || pipeline_original_root || pipeline_owned_group || geometry[0].is_active() || geometry[1].is_active() || material.is_active());
 }
 Error ExternalPipelinePreparation::_pipeline_preflight() {
 	auto *rd = RenderingDevice::get_singleton();
 	if (!rd || !pipeline_pin || !pipeline_owned_group || !pipeline_original_root) {
 		return ERR_UNCONFIGURED;
 	}
-	const Error error = rd->_production_output_owned_pipeline_preflight(pipeline_context, *pipeline_pin, pipeline_owned_group);
+	// A row with a scope never falls back to an ambient or expired context.
+	if (pipeline_scope && (pipeline_scope->row != this || source_sealed || pipeline_scope->pin != pipeline_pin ||
+			pipeline_scope->original_root != pipeline_original_root || pipeline_scope->group != pipeline_owned_group)) {
+		return ERR_UNAUTHORIZED;
+	}
+	const Error error = pipeline_scope ? rd->_production_output_owned_pipeline_preflight(*pipeline_scope) :
+			rd->_production_output_owned_pipeline_preflight(pipeline_context, *pipeline_pin, pipeline_owned_group);
 	if (error != OK) {
 		return error;
 	}
 	return pipeline_original_root->is_valid() ? ERR_ALREADY_IN_USE : OK;
+}
+Error ExternalPipelinePreparation::_cleanup_preflight() {
+	auto *rd = RenderingDevice::get_singleton();
+	if (!rd || !pipeline_scope || pipeline_scope->row != this || !pipeline_scope->registry) {
+		return ERR_UNAUTHORIZED;
+	}
+	auto &registry = *pipeline_scope->registry;
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
+	GDExtensionDeviceExit::ProductionRequest *request = nullptr;
+	return registry.production_output_preparation_cleanup_matches_locked(*pipeline_scope, *rd, request);
 }
 RID ExternalPipelinePreparation::_create_pipeline(RID p_shader, RenderingDevice::FramebufferFormatID p_framebuffer_format, RenderingDevice::VertexFormatID p_vertex_format, RenderingDevice::RenderPrimitive p_render_primitive, const RenderingDevice::PipelineRasterizationState &p_rasterization_state, const RenderingDevice::PipelineMultisampleState &p_multisample_state, const RenderingDevice::PipelineDepthStencilState &p_depth_stencil_state, const RenderingDevice::PipelineColorBlendState &p_blend_state, BitField<RenderingDevice::PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<RenderingDevice::PipelineSpecializationConstant> &p_specialization_constants) {
 	if (!pipeline_pin || !pipeline_owned_group || !pipeline_original_root || pipeline_original_root->is_valid()) {
@@ -123,7 +140,13 @@ RID ExternalPipelinePreparation::_create_pipeline(RID p_shader, RenderingDevice:
 		last_error = ERR_UNCONFIGURED;
 		return RID();
 	}
-	last_error = rd->_production_output_owned_render_pipeline_create(pipeline_context, *pipeline_pin, pipeline_owned_group, 0, p_shader, p_framebuffer_format, p_vertex_format, p_render_primitive, p_rasterization_state, p_multisample_state, p_depth_stencil_state, p_blend_state, p_dynamic_state_flags, p_for_render_pass, p_specialization_constants, *pipeline_original_root);
+	if (pipeline_scope && (pipeline_scope->row != this || source_sealed || pipeline_scope->pin != pipeline_pin ||
+			pipeline_scope->original_root != pipeline_original_root || pipeline_scope->group != pipeline_owned_group)) {
+		last_error = ERR_UNAUTHORIZED;
+		return RID();
+	}
+	last_error = pipeline_scope ? rd->_production_output_owned_render_pipeline_create(*pipeline_scope, p_shader, p_framebuffer_format, p_vertex_format, p_render_primitive, p_rasterization_state, p_multisample_state, p_depth_stencil_state, p_blend_state, p_dynamic_state_flags, p_for_render_pass, p_specialization_constants, *pipeline_original_root) :
+			rd->_production_output_owned_render_pipeline_create(pipeline_context, *pipeline_pin, pipeline_owned_group, 0, p_shader, p_framebuffer_format, p_vertex_format, p_render_primitive, p_rasterization_state, p_multisample_state, p_depth_stencil_state, p_blend_state, p_dynamic_state_flags, p_for_render_pass, p_specialization_constants, *pipeline_original_root);
 	created_pipeline = *pipeline_original_root; // Original surface retains it even on a later leaf failure.
 	return created_pipeline;
 }

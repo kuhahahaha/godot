@@ -37,6 +37,7 @@
 #include "servers/rendering/native_disposal_witness.h"
 
 class TestProductionResourceUseAccess;
+class TestNativeDisposalAccess;
 namespace TestProductionNativeObserve {
 struct Access;
 }
@@ -182,6 +183,7 @@ class ProductionOutputPreparationScope final {
 	friend class Registry;
 	friend class ::RenderingDevice;
 	friend class ::RendererRD::ParticlesStorage;
+	friend class ::RendererRD::ExternalPipelinePreparation;
 #ifdef TESTS_ENABLED
 	friend struct ::TestProductionRequest::Access;
 #endif
@@ -192,6 +194,12 @@ class ProductionOutputPreparationScope final {
 	RenderingDevice *device = nullptr;
 	ProductionOutputPreparationScope *previous = nullptr;
 	RID *original_root = nullptr;
+	::RendererRD::ExternalPipelinePreparation *row = nullptr;
+	ProductionResourceSlot *original_source = nullptr;
+	const void *original_geometry = nullptr;
+	RID original_particles, original_material;
+	uint64_t original_generation = 0, original_lease = 0, original_material_generation = 0, source_generation = 0;
+	uint32_t original_slot = UINT32_MAX, source_use = UINT32_MAX, first_source_use = UINT32_MAX, source_use_count = 0;
 	uint64_t request_serial = 0, root_serial = 0, group = 0, thread = 0;
 	uint32_t action_ordinal = UINT32_MAX, surface_ordinal = UINT32_MAX;
 
@@ -337,6 +345,7 @@ class ProductionUseCell {
 	friend class Registry;
 	friend class ::RenderingDevice;
 #ifdef TESTS_ENABLED
+	friend class ::TestNativeDisposalAccess;
 	friend struct ::TestProductionRequest::Access;
 	friend struct ::TestProductionNativeObserve::Access;
 	friend class ::TestProductionResourceUseAccess;
@@ -367,6 +376,7 @@ class ProductionUseCell {
 	ProductionDisposalUse disposal;
 	uint64_t disposal_group_serial = 0, disposal_group_pin_serial = 0;
 	uint32_t disposal_group_count = 0, disposal_ordinal = UINT32_MAX;
+	uint32_t disposal_group_native_hold_count = 0;
 	bool disposal_group_release = false, disposal_group_dropped = false, disposal_group_native_hold = false;
 };
 class ProductionReadbackCell {
@@ -514,6 +524,7 @@ class ProductionRequest {
 	friend class ::RendererRD::ExternalOutputOwner;
 	friend class ::RenderingDevice;
 #ifdef TESTS_ENABLED
+	friend class ::TestNativeDisposalAccess;
 	friend struct ::TestProductionRequest::Access;
 	friend struct ::TestProductionNativeObserve::Access;
 	friend class ::TestProductionResourceUseAccess;

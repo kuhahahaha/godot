@@ -82,6 +82,11 @@ public:
 	bool preparation_rows_match_slots(bool p_probe_duplicate = false) const;
 	bool preparation_pipeline_reservations_match(uint32_t p_slot) const;
 	uint64_t preparation_pipeline_group(uint32_t, uint32_t) const;
+	bool preparation_scope_link_matches(uint32_t, uint32_t, const GDExtensionDeviceExit::ProductionOutputPreparationScope *, bool) const;
+	Error preparation_row_preflight(uint32_t, uint32_t);
+	Error preparation_row_cleanup(uint32_t, uint32_t);
+	RID preparation_row_factory(uint32_t, uint32_t, RID, RenderingDevice::FramebufferFormatID);
+
 	Error return_pipeline_row(uint32_t, uint32_t);
 	Error cancel_pipeline_slot(uint32_t);
 	Error prepare_pipeline_prefix(GDExtensionProductionPhysicalContextRefV1, uint32_t p_slot, uint32_t p_surface, uint32_t p_max_resources);

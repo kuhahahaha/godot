@@ -169,35 +169,36 @@ Error ParticlesStorage::_external_pipeline_reserve_owned_prefix(GDExtensionProdu
 	return OK;
 }
 
-bool ParticlesStorage::_production_output_preparation_matches(RID particle_rid, uint64_t generation, uint32_t slot_index, uint64_t lease_serial, uint32_t surface_index, uint64_t group, const GDExtensionDeviceExit::ProductionOutputPin &pin, RenderingDevice &device, RID *&r_root) {
+bool ParticlesStorage::_production_output_preparation_matches(RID particle_rid, uint64_t generation, uint32_t slot_index, uint64_t lease_serial, uint32_t surface_index, uint64_t group, const GDExtensionDeviceExit::ProductionOutputPin &pin, RenderingDevice &device, RID *&r_root, ExternalPipelinePreparation *&r_row, const GDExtensionDeviceExit::ProductionOutputPreparationScope *scope, bool cleanup) {
 	ParticlesStorage *storage = get_singleton();
 	if (!storage || !device.native_immutable_is_render_thread()) {
 		return false;
 	}
-	const auto *particles = storage->particles_owner.get_or_null(particle_rid);
+	auto *particles = storage->particles_owner.get_or_null(particle_rid);
 	if (!particles || !particles->external) {
 		return false;
 	}
-	const auto &owner = *particles->external;
-	if (!owner.admits_work() || owner.device != &device || owner.generation != generation || slot_index >= owner.slot_count) {
+	auto &owner = *particles->external;
+	if ((!cleanup && !owner.admits_work()) || owner.device != &device || owner.generation != generation || slot_index >= owner.slot_count) {
 		return false;
 	}
-	const auto &slot = owner.slots[slot_index];
+	auto &slot = owner.slots[slot_index];
 	if (slot.lease_serial != lease_serial || &slot.original_pin != &pin || !slot.surfaces || surface_index >= slot.surface_count ||
-			slot.publication_closed || slot.pass_uses_closed || slot.state == ExternalOutputOwner::LeaseState::RETIRING || slot.state == ExternalOutputOwner::LeaseState::RELEASED) {
+			slot.state == ExternalOutputOwner::LeaseState::RELEASED || (!cleanup && (slot.publication_closed || slot.pass_uses_closed || slot.state == ExternalOutputOwner::LeaseState::RETIRING))) {
 		return false;
 	}
-	const auto &surface = slot.surfaces[surface_index];
-	const auto *row = surface.preparation_row;
+	auto &surface = slot.surfaces[surface_index];
+	auto *row = surface.preparation_row;
 	const uint64_t index = uint64_t(slot_index) * slot.surface_count + surface_index;
 	if (!row || !owner.preparation_rows || index >= owner.preparation_capacity || row != &owner.preparation_rows[index] ||
 			surface.preparation != row || !group || surface.pipeline_owned_group != group || surface.pipeline_group_returned ||
 			row->owner != &owner || row->generation != generation || row->serial != lease_serial || row->pipeline_pin != &pin ||
-			row->pipeline_owned_group != group || row->pipeline_original_root != &surface.created_pipeline || !row->source_sealed || !row->max_resources ||
+			row->pipeline_owned_group != group || row->pipeline_original_root != &surface.created_pipeline || !row->max_resources || row->pipeline_scope != scope || (!scope ? !row->source_sealed : (!cleanup && row->source_sealed)) ||
 			row->pipeline_context.registry_instance || row->pipeline_context.frame_serial) {
 		return false;
 	}
 	r_root = row->pipeline_original_root;
+	r_row = row;
 	return true;
 }
 

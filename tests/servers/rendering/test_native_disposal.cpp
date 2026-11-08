@@ -28,6 +28,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
+#include "core/extension/gdextension_production_request.h"
 #include "core/os/os.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_shader_container.h"
@@ -39,6 +40,7 @@ TEST_FORCE_LINK(test_native_disposal)
 class TestNativeDisposalAccess {
 public:
 	static void immutable_inline();
+	static void immutable_batch(uint32_t p_mode);
 	static void sampled_disposal();
 	static void sampled_failure();
 	static void sampled_identity();
@@ -3207,4 +3209,261 @@ void TestNativeDisposalAccess::depth_allocation_quote() {
 }
 TEST_CASE("[RenderingDevice][NativeDisposal][DepthAllocationQuote] original finite quote gates creation and preserves failed actual prefix") {
 	TestNativeDisposalAccess::depth_allocation_quote();
+}
+
+// These tests exercise shared capture/drop primitives against real RD resources.
+// The local metadata fixture issues no Registry, action, physical or scope grant.
+void TestNativeDisposalAccess::immutable_batch(uint32_t p_mode) {
+	using namespace GDExtensionDeviceExit;
+	RenderingDevice rd;
+	TestNativeDisposal::Driver driver;
+	driver.unique_buffers = true;
+	attach(rd, driver);
+	const uint32_t resource_count = p_mode == 1 ? 1 : p_mode == 2 ? 4
+																  : 3;
+	RID roots[4];
+	NativeDisposalWitness witnesses[4];
+	RenderingDevice::NativeImmutableHold first, second;
+	ProductionRequest request;
+	request.serial = 1;
+	ProductionUseCell cells[5];
+	request.uses = cells;
+	request.capacity.resource_uses = resource_count + 1;
+	const uint64_t group_serial = 7, pin_serial = 9;
+	uint64_t adopted = 0;
+	uint32_t created_count = 0;
+	auto cleanup = [&]() {
+		// Use the real original return paths, outside the RD lock. In particular,
+		// a refused adoption still leaves both wrappers responsible for their pins.
+		for (auto *hold : { &first, &second }) {
+			if (hold->is_active()) {
+				CHECK(rd.native_immutable_hold_release(*hold) == OK);
+				CHECK_FALSE(hold->is_active());
+			}
+		}
+		for (uint32_t i = 0; i < created_count; ++i) {
+			const Error status = release(rd, witnesses[i]);
+			CHECK((status == OK || status == ERR_BUSY));
+		}
+		if (adopted) {
+			// Also handle an unexpected successful undersized adoption without
+			// rebuilding cells that may already be linked to physical resources.
+			for (uint32_t i = 0; i < request.capacity.resource_uses; ++i) {
+				if (cells[i].output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cells[i].disposal_group_serial == adopted) {
+					cells[i].disposal_group_release = true;
+				}
+			}
+			const RenderingDevice::NativeDisposalBudget cleanup_budget{ 1024, 1024, OS::get_singleton()->get_ticks_usec() + 10000000 };
+			for (uint32_t turn = 0; turn < 64 && driver.frees != int(created_count); ++turn) {
+				RenderingDevice::NativeDisposalUsage cleanup_usage;
+				const Error status = rd._production_output_drop_step(request, cleanup_budget, cleanup_usage);
+				CHECK((status == OK || status == ERR_BUSY));
+				dispose(rd);
+			}
+		} else {
+			dispose(rd);
+		}
+		CHECK(rd.native_immutable_hold_count == 0);
+		CHECK(driver.frees == int(created_count));
+		for (uint32_t i = 0; i < created_count; ++i) {
+			CHECK(rd._native_immutable_counter(roots[i]) == nullptr);
+		}
+		detach(rd);
+	};
+	for (uint32_t i = 0; i < resource_count; ++i) {
+		const Error status = create(rd, roots[i], witnesses[i]);
+		CHECK(status == OK);
+		if (status != OK) {
+			cleanup();
+			return;
+		}
+		++created_count;
+	}
+	RID first_roots[] = { roots[0], roots[1] };
+	RID second_roots[] = { roots[p_mode == 2 ? 2 : 1], roots[p_mode == 2 ? 3 : 2] };
+	const uint32_t root_count = p_mode == 1 ? 1 : 2;
+	if (p_mode == 1) {
+		second_roots[0] = roots[0];
+	}
+	Error status = rd.native_immutable_hold_acquire(VectorView<RID>(first_roots, root_count), first, 3);
+	CHECK(status == OK);
+	if (status != OK) {
+		cleanup();
+		return;
+	}
+	status = rd.native_immutable_hold_acquire(VectorView<RID>(second_roots, root_count), second, 3);
+	CHECK(status == OK);
+	if (status != OK) {
+		cleanup();
+		return;
+	}
+	CHECK(rd.native_immutable_hold_count == 2);
+	uint32_t expected_pins[4] = {};
+	for (uint32_t i = 0; i < root_count; ++i) {
+		for (uint32_t j = 0; j < resource_count; ++j) {
+			expected_pins[j] += first_roots[i] == roots[j];
+			expected_pins[j] += second_roots[i] == roots[j];
+		}
+	}
+	auto reserve = [&](uint32_t count) {
+		request.capacity.resource_uses = count + 1;
+		for (uint32_t i = 0; i < 5; ++i) {
+			cells[i].~ProductionUseCell();
+			new (&cells[i]) ProductionUseCell;
+		}
+		for (uint32_t i = 0; i < count; ++i) {
+			auto &cell = cells[i];
+			cell.output_role = ProductionUseCell::OutputRole::DISPOSAL_RESERVED;
+			cell.disposal_group_serial = group_serial;
+			cell.disposal_ordinal = i;
+			cell.disposal.request = &request;
+			cell.disposal.request_serial = request.serial;
+			cell.disposal.group = group_serial;
+			cell.disposal.owned = true;
+			cell.disposal.counter_dropped = true;
+		}
+		cells[count].output_role = ProductionUseCell::OutputRole::DISPOSAL_GROUP;
+		cells[count].disposal_group_serial = group_serial;
+		cells[count].disposal_group_pin_serial = pin_serial;
+		cells[count].disposal_group_count = count;
+	};
+	auto untouched = [&](uint32_t count) {
+		CHECK(first.is_valid());
+		CHECK(second.is_valid());
+		CHECK(rd.native_immutable_hold_count == 2);
+		for (uint32_t i = 0; i < resource_count; ++i) {
+			const auto *counter = rd._native_immutable_counter(roots[i]);
+			CHECK(counter != nullptr);
+			if (counter) {
+				CHECK(*counter == expected_pins[i]);
+			}
+		}
+		for (uint32_t i = 0; i < count; ++i) {
+			const auto &cell = cells[i];
+			CHECK(cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED);
+			CHECK(cell.disposal_group_serial == group_serial);
+			CHECK(cell.disposal_ordinal == i);
+			CHECK(cell.disposal.request == &request);
+			CHECK(cell.disposal.request_serial == request.serial);
+			CHECK(cell.disposal.group == group_serial);
+			CHECK(cell.disposal.owned);
+			CHECK(cell.disposal.counter_dropped);
+			CHECK(cell.disposal.counter_pins_remaining == 0);
+			CHECK(cell.disposal.rid == 0);
+			CHECK(cell.disposal.serial == 0);
+			CHECK(cell.disposal.native_driver_id == 0);
+			CHECK(cell.disposal.next == nullptr);
+			CHECK(cell.disposal.state.load() == 0);
+		}
+		CHECK(cells[count].disposal_group_native_hold_count == 0);
+		CHECK_FALSE(cells[count].disposal_group_native_hold);
+		CHECK(request.next_disposal_group_serial == 1);
+		CHECK(driver.frees == 0);
+	};
+	RenderingDevice::NativeImmutableHold *holds[] = { &first, &second };
+	if (resource_count > 1) {
+		reserve(resource_count - 1);
+		{
+			MutexLock lock(rd._thread_safe_);
+			status = rd._production_output_hold_adopt_locked(request, pin_serial, group_serial, VectorView<RenderingDevice::NativeImmutableHold *>(holds, 2), resource_count - 1, adopted);
+		}
+		CHECK(status == ERR_OUT_OF_MEMORY);
+		CHECK(adopted == 0);
+		if (status != ERR_OUT_OF_MEMORY || adopted) {
+			cleanup();
+			return;
+		}
+		untouched(resource_count - 1);
+	}
+	reserve(resource_count);
+	uint32_t inventory = UINT32_MAX;
+	{
+		MutexLock lock(rd._thread_safe_);
+		status = rd._production_output_hold_inventory_locked(request, group_serial, VectorView<RenderingDevice::NativeImmutableHold *>(holds, 2), resource_count, inventory);
+	}
+	CHECK(status == OK);
+	CHECK(inventory == resource_count);
+	if (status != OK) {
+		cleanup();
+		return;
+	}
+	untouched(resource_count);
+	{
+		MutexLock lock(rd._thread_safe_);
+		status = rd._production_output_hold_adopt_locked(request, pin_serial, group_serial, VectorView<RenderingDevice::NativeImmutableHold *>(holds, 2), resource_count, adopted);
+	}
+	CHECK(status == OK);
+	if (status != OK) {
+		cleanup();
+		return;
+	}
+	CHECK(adopted == group_serial);
+	CHECK_FALSE(first.is_active());
+	CHECK_FALSE(second.is_active());
+	CHECK(cells[resource_count].disposal_group_native_hold_count == 2);
+	CHECK(rd.native_immutable_hold_count == 2);
+	for (uint32_t i = 0; i < resource_count; ++i) {
+		uint32_t matching = 0;
+		for (uint32_t j = 0; j < resource_count; ++j) {
+			if (cells[j].disposal.rid == roots[i].get_id()) {
+				++matching;
+				CHECK(cells[j].disposal.counter_pins_remaining == expected_pins[i]);
+				CHECK_FALSE(cells[j].disposal.owned);
+			}
+		}
+		CHECK(matching == 1);
+		CHECK(*rd._native_immutable_counter(roots[i]) == expected_pins[i]);
+		CHECK(release(rd, witnesses[i]) == ERR_BUSY);
+	}
+	cells[resource_count].disposal_group_release = true;
+	const uint64_t deadline = OS::get_singleton()->get_ticks_usec() + 10000000;
+	// Each actual pin consumes a pass. Identical holds force a yield halfway
+	// through one physical node, with exactly one remaining reference.
+	RenderingDevice::NativeDisposalBudget budget{ 64, 1, deadline };
+	RenderingDevice::NativeDisposalUsage usage;
+	CHECK(rd._production_output_drop_step(request, budget, usage) == ERR_BUSY);
+	CHECK(usage.passes == 1);
+	CHECK_FALSE(cells[resource_count].disposal_group_dropped);
+	if (p_mode == 1) {
+		CHECK(cells[0].disposal.counter_pins_remaining == 1);
+		CHECK_FALSE(cells[0].disposal.counter_dropped);
+		CHECK(*rd._native_immutable_counter(roots[0]) == 1);
+	}
+	for (uint32_t turn = 0; turn < 64 && !cells[resource_count].disposal_group_dropped; ++turn) {
+		RenderingDevice::NativeDisposalUsage next;
+		const Error status = rd._production_output_drop_step(request, budget, next);
+		CHECK((status == OK || status == ERR_BUSY));
+		CHECK(next.passes <= 1);
+	}
+	CHECK(cells[resource_count].disposal_group_dropped);
+	CHECK(rd.native_immutable_hold_count == 0);
+	for (uint32_t turn = 0; turn < 64; ++turn) {
+		RenderingDevice::NativeDisposalUsage next;
+		const Error status = rd._production_output_drop_step(request, budget, next);
+		CHECK((status == OK || status == ERR_BUSY));
+		CHECK(next.passes <= 1);
+		dispose(rd);
+		if (driver.frees == int(resource_count)) {
+			break;
+		}
+	}
+	CHECK(driver.frees == int(resource_count));
+	for (uint32_t i = 0; i < resource_count; ++i) {
+		CHECK(cells[i].disposal.counter_pins_remaining == 0);
+		CHECK(cells[i].disposal.counter_dropped);
+		CHECK(cells[i].disposal.state.load() == 3);
+		CHECK(rd._native_immutable_counter(roots[i]) == nullptr);
+	}
+	CHECK(rd.dependency_map.is_empty());
+	CHECK(rd.reverse_dependency_map.is_empty());
+	cleanup();
+}
+TEST_CASE("[RenderingDevice][NativeDisposal][BatchHold] overlapping holds retain exact multiplicities") {
+	TestNativeDisposalAccess::immutable_batch(0);
+}
+TEST_CASE("[RenderingDevice][NativeDisposal][BatchHold] identical holds resume within one physical node") {
+	TestNativeDisposalAccess::immutable_batch(1);
+}
+TEST_CASE("[RenderingDevice][NativeDisposal][BatchHold] disjoint holds consume the union capacity") {
+	TestNativeDisposalAccess::immutable_batch(2);
 }

@@ -39,6 +39,7 @@
 namespace RendererRD {
 class ParticlesStorage;
 class ExternalOutputOwner;
+class ExternalPipelinePreparation;
 } //namespace RendererRD
 template <class T>
 class Ref;
@@ -914,6 +915,7 @@ private:
 	friend class ::RenderingDeviceDriver;
 	friend class ::RendererRD::ParticlesStorage;
 	friend class ::RendererRD::ExternalOutputOwner;
+	friend class ::RendererRD::ExternalPipelinePreparation;
 	friend class ProductionOutputPin;
 	friend class ProductionOutputPreparationScope;
 	friend class ProductionOutputMetadataLease;
@@ -955,7 +957,9 @@ private:
 	Error production_output_preparation_begin(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint64_t, ProductionOutputPreparationScope &);
 	void production_output_preparation_end(ProductionOutputPreparationScope &);
 	Error production_output_preparation_matches_locked(const ProductionOutputPreparationScope &, RenderingDevice &, ProductionRequest *&);
-	Error production_output_preparation_validate_locked(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint64_t, RID *&);
+	Error production_output_preparation_validate_locked(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint64_t, RID *&, ::RendererRD::ExternalPipelinePreparation *&, const ProductionOutputPreparationScope * = nullptr);
+	// CloseOldWork: exact retained scope only; does not authorize a factory.
+	Error production_output_preparation_cleanup_matches_locked(const ProductionOutputPreparationScope &, RenderingDevice &, ProductionRequest *&);
 	// Core-only ambient bridge. Uses the original executing RECORD frame;
 	// never interprets Dictionary tokens or grants source/Host/mapping admission.
 	Error production_output_pin_current(RenderingDevice &, ProductionOutputPin &);
