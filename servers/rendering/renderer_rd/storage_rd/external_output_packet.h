@@ -191,13 +191,16 @@ class ExternalPipelinePreparation {
 	RenderingDevice::PolygonCullMode cull_mode = RenderingDevice::POLYGON_CULL_DISABLED;
 	Error last_error = ERR_UNCONFIGURED;
 	bool native_cache_queried = false;
-	// Selected RID copy only. The original SurfaceBinding owns the actual
-	// pipeline root and group, including failed material-hold prefixes.
+	// Selected RID copy only. Bank reservations own their actual stable root
+	// and all three original groups below, including failed native prefixes.
 	RID created_pipeline;
 	GDExtensionProductionPhysicalContextRefV1 pipeline_context{};
 	GDExtensionDeviceExit::ProductionOutputPreparationScope *pipeline_scope = nullptr;
 	GDExtensionDeviceExit::ProductionOutputPin *pipeline_pin = nullptr;
 	uint64_t pipeline_owned_group = 0;
+	RID owned_pipeline_root;
+	uint64_t geometry_reserved_group = 0, material_reserved_group = 0;
+	bool bank_groups_reserved = false;
 	RID *pipeline_original_root = nullptr;
 	Error _pipeline_preflight();
 	// Only mandatory prefix capture/adopt/seal may use this exact cleanup proof.

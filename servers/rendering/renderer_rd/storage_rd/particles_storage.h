@@ -552,6 +552,7 @@ public:
 	Error _external_storage_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1, RID, uint32_t);
 	// The assigned row stays closed until the original owned reservation succeeds.
 	Error _external_pipeline_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1, RID, uint32_t, uint32_t, ExternalPipelinePreparation &, uint32_t p_max_resources);
+	Error _external_preparation_bank_reserve_owned_prefix(GDExtensionProductionPhysicalContextRefV1, RID, uint32_t, uint32_t p_max_resources);
 	Error _external_pipeline_reserve_owned_prefix(GDExtensionProductionPhysicalContextRefV1, RID, uint32_t, uint32_t, ExternalPipelinePreparation &, uint32_t p_max_resources);
 	static bool _production_output_preparation_matches(RID, uint64_t, uint32_t, uint64_t, uint32_t, uint64_t, const GDExtensionDeviceExit::ProductionOutputPin &, RenderingDevice &, RID *&, ExternalPipelinePreparation *&, const GDExtensionDeviceExit::ProductionOutputPreparationScope * = nullptr, bool p_cleanup = false);
 	void particles_external_create_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCreateInputV1 &, GDExtensionOutputCreateResultV1 &);

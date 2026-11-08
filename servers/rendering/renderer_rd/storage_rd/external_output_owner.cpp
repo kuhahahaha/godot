@@ -117,7 +117,7 @@ Error ExternalOutputOwner::generation_returnable(uint32_t &unused, uint32_t &ret
 	}
 	for (uint32_t i = 0; i < slot_count; ++i) {
 		const auto &slot = slots[i];
-		if (!slot.publication_closed || !slot.pass_uses_closed || slot.storage || slot.surfaces || slot.surface_count || !slot.original_pin.is_empty() || slot.owned_group || slot.output_membership_group || slot_has_custody(i)) {
+		if (!slot.publication_closed || !slot.pass_uses_closed || slot.storage || slot.surfaces || slot.surface_count || slot.preparation_reserved_count || !slot.original_pin.is_empty() || slot.owned_group || slot.output_membership_group || slot_has_custody(i)) {
 			return ERR_BUSY;
 		}
 		unused += slot.state == LeaseState::EMPTY;
@@ -401,6 +401,24 @@ Error ExternalOutputOwner::install_metadata_directory(GDExtensionDeviceExit::Pro
 	return OK;
 }
 
+bool ExternalOutputOwner::preparation_bank_row_matches(uint32_t p_slot, uint32_t p_index, const ExternalPipelinePreparation &p_row) const {
+	return p_slot < slot_count && preparation_rows && p_index < preparation_capacity && &p_row == &preparation_rows[p_index] &&
+			p_row.owner == this && p_row.owner_slot == p_slot && p_row.generation == generation && slots[p_slot].lease_serial && p_row.serial == slots[p_slot].lease_serial;
+}
+
+uint32_t ExternalOutputOwner::free_preparation_rows() const {
+	uint32_t count = 0;
+	for (uint32_t i = 0; preparation_rows && i < preparation_capacity; ++i) {
+		const auto &row = preparation_rows[i];
+		count += !row.owner && row.owner_slot == UINT32_MAX && row.owner_surface == UINT32_MAX && !row.serial && !row.generation && row.source_sealed && !row.max_resources &&
+				!row.source_geometry && row.source_material.is_null() && !row.source_material_generation &&
+				!row.pipeline_pin && !row.pipeline_original_root && !row.pipeline_owned_group && !row.geometry_reserved_group && !row.material_reserved_group && !row.bank_groups_reserved && row.owned_pipeline_root.is_null() && !row.pipeline_scope &&
+				!row.pipeline_context.registry_instance && !row.pipeline_context.frame_serial && !row.native_cache_queried &&
+				row.created_pipeline.is_null() && !row.geometry[0].is_active() && !row.geometry[1].is_active() && !row.material.is_active();
+	}
+	return count;
+}
+
 bool ExternalOutputOwner::preparation_row_matches(uint32_t p_slot, uint32_t p_surface, const ExternalPipelinePreparation &p_row) const {
 	if (p_slot >= slot_count || !slots[p_slot].surfaces || p_surface >= slots[p_slot].surface_count || !preparation_rows) {
 		return false;
@@ -422,7 +440,7 @@ bool ExternalOutputOwner::preparation_row_matches(uint32_t p_slot, uint32_t p_su
 	return !p_row.source_geometry && p_row.source_material.is_null() && !p_row.source_material_generation;
 }
 
-Error ExternalOutputOwner::bind_preparation_rows(uint32_t p_slot) {
+Error ExternalOutputOwner::bind_preparation_rows(uint32_t p_slot, uint32_t p_count) {
 	if (has_inflight_preparation()) {
 		return ERR_BUSY;
 	}
@@ -430,6 +448,13 @@ Error ExternalOutputOwner::bind_preparation_rows(uint32_t p_slot) {
 		return ERR_INVALID_PARAMETER;
 	}
 	auto &slot = slots[p_slot];
+	const uint32_t count = p_count ? p_count : slot.surface_count;
+	if (count < slot.surface_count) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	if (slot.preparation_reserved_count) {
+		return ERR_ALREADY_IN_USE;
+	}
 	if (slot.state != LeaseState::RESERVED || slot.original_pin.is_empty() || !slot.lease_serial ||
 			!slot.surfaces || !slot.surfaces_placement || !slot.surface_count || slot.publication_closed) {
 		return ERR_UNAUTHORIZED;
@@ -445,7 +470,7 @@ Error ExternalOutputOwner::bind_preparation_rows(uint32_t p_slot) {
 	auto free_row = [](const ExternalPipelinePreparation &row) {
 		return !row.owner && row.owner_slot == UINT32_MAX && row.owner_surface == UINT32_MAX && !row.serial && !row.generation && row.source_sealed && !row.max_resources &&
 				!row.source_geometry && row.source_material.is_null() && !row.source_material_generation &&
-				!row.pipeline_pin && !row.pipeline_original_root && !row.pipeline_owned_group && !row.pipeline_scope &&
+				!row.pipeline_pin && !row.pipeline_original_root && !row.pipeline_owned_group && !row.geometry_reserved_group && !row.material_reserved_group && !row.bank_groups_reserved && row.owned_pipeline_root.is_null() && !row.pipeline_scope &&
 				!row.pipeline_context.registry_instance && !row.pipeline_context.frame_serial && !row.native_cache_queried &&
 				row.created_pipeline.is_null() && !row.geometry[0].is_active() && !row.geometry[1].is_active() && !row.material.is_active();
 	};
@@ -453,7 +478,7 @@ Error ExternalOutputOwner::bind_preparation_rows(uint32_t p_slot) {
 	for (uint32_t i = 0; i < preparation_capacity; ++i) {
 		available += free_row(preparation_rows[i]);
 	}
-	if (available < slot.surface_count) {
+	if (available < count) {
 		return ERR_OUT_OF_MEMORY;
 	}
 	if (generation_surfaces_complete && (retained_surface_count != generation_material_count || slot.surface_count > retained_surface_count)) {
@@ -461,8 +486,9 @@ Error ExternalOutputOwner::bind_preparation_rows(uint32_t p_slot) {
 	}
 	// No callbacks, native effects or allocation occur between preflight and
 	// association. Existing owner serialization protects this complete claim.
+	slot.retire_preparation_index = 0;
 	uint32_t next = 0;
-	for (uint32_t i = 0; i < slot.surface_count; ++i) {
+	for (uint32_t i = 0; i < count; ++i) {
 		while (next < preparation_capacity && !free_row(preparation_rows[next])) {
 			++next;
 		}
@@ -470,18 +496,56 @@ Error ExternalOutputOwner::bind_preparation_rows(uint32_t p_slot) {
 		auto &row = preparation_rows[next];
 		row.owner = this;
 		row.owner_slot = p_slot;
-		row.owner_surface = i;
+		row.owner_surface = i < slot.surface_count ? i : UINT32_MAX;
 		row.generation = generation;
 		row.serial = slot.lease_serial;
-		if (generation_surfaces_complete) {
+		if (generation_surfaces_complete && i < slot.surface_count) {
 			const auto &source = generation_materials[i];
 			row.source_geometry = &source.geometry_source;
 			row.source_material = source.material;
 			row.source_material_generation = source.generation;
 		}
-		slot.surfaces[i].preparation_index = next++;
-		slot.surfaces[i].preparation_row = &row;
+		if (i < slot.surface_count) {
+			slot.surfaces[i].preparation_index = next;
+			slot.surfaces[i].preparation_row = &row;
+		}
+		++next;
+		++slot.preparation_reserved_count;
 	}
+	return OK;
+}
+
+Error ExternalOutputOwner::return_preparation_bank_row(uint32_t p_slot, uint32_t p_index) {
+	if (has_inflight_preparation()) {
+		return ERR_BUSY;
+	}
+	if (p_slot >= slot_count || !preparation_rows || p_index >= preparation_capacity) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto &slot = slots[p_slot];
+	auto &row = preparation_rows[p_index];
+	if (!preparation_bank_row_matches(p_slot, p_index, row) || !slot.preparation_reserved_count) {
+		return ERR_INVALID_DATA;
+	}
+	SurfaceBinding *surface = nullptr;
+	if (row.owner_surface != UINT32_MAX) {
+		if (!preparation_row_matches(p_slot, row.owner_surface, row)) {
+			return ERR_INVALID_DATA;
+		}
+		surface = &slot.surfaces[row.owner_surface];
+	}
+	if ((surface && surface->preparation) || !row.source_sealed || row.pipeline_scope || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group ||
+			row.geometry_reserved_group || row.material_reserved_group || row.owned_pipeline_root.is_valid() ||
+			row.created_pipeline.is_valid() || row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
+		return ERR_BUSY;
+	}
+	row.~ExternalPipelinePreparation();
+	new (&row) ExternalPipelinePreparation;
+	if (surface) {
+		surface->preparation_row = nullptr;
+		surface->preparation_index = UINT32_MAX;
+	}
+	--slot.preparation_reserved_count;
 	return OK;
 }
 
@@ -492,24 +556,14 @@ Error ExternalOutputOwner::return_preparation_row(uint32_t p_slot, uint32_t p_su
 	if (p_slot >= slot_count || !slots[p_slot].surfaces || p_surface >= slots[p_slot].surface_count) {
 		return ERR_INVALID_PARAMETER;
 	}
-	auto &slot = slots[p_slot];
-	auto &surface = slot.surfaces[p_surface];
+	auto &surface = slots[p_slot].surfaces[p_surface];
 	if (!surface.preparation_row) {
-		return surface.preparation || surface.preparation_index != UINT32_MAX ? ERR_INVALID_DATA : OK; // Unbound prefix or legacy component metadata.
+		return surface.preparation || surface.preparation_index != UINT32_MAX ? ERR_INVALID_DATA : OK;
 	}
-	auto &row = *surface.preparation_row;
-	if (!preparation_row_matches(p_slot, p_surface, row)) {
+	if (!preparation_row_matches(p_slot, p_surface, *surface.preparation_row)) {
 		return ERR_INVALID_DATA;
 	}
-	if (surface.preparation || !row.source_sealed || row.pipeline_scope || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group ||
-			row.created_pipeline.is_valid() || row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
-		return ERR_BUSY;
-	}
-	row.~ExternalPipelinePreparation();
-	new (&row) ExternalPipelinePreparation;
-	surface.preparation_row = nullptr;
-	surface.preparation_index = UINT32_MAX;
-	return OK;
+	return return_preparation_bank_row(p_slot, surface.preparation_index);
 }
 
 Error ExternalOutputOwner::install_reserved_cells(uint32_t p_views, uint32_t p_reads) {
@@ -570,7 +624,7 @@ Error ExternalOutputOwner::return_reserved_cells() {
 	}
 	for (uint32_t i = 0; i < preparation_capacity; ++i) {
 		const auto &row = preparation_rows[i];
-		if (row.owner || row.owner_slot != UINT32_MAX || row.owner_surface != UINT32_MAX || row.serial || row.generation || !row.source_sealed || row.pipeline_scope || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group ||
+		if (row.owner || row.owner_slot != UINT32_MAX || row.owner_surface != UINT32_MAX || row.serial || row.generation || !row.source_sealed || row.pipeline_scope || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group || row.geometry_reserved_group || row.material_reserved_group || row.owned_pipeline_root.is_valid() ||
 				row.created_pipeline.is_valid() || row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
 			return ERR_BUSY;
 		}
@@ -670,7 +724,7 @@ Error ExternalOutputOwner::return_slot_pin(uint32_t p_slot) {
 	}
 	auto &cell = slots[p_slot];
 	if (cell.state != LeaseState::RETIRING || !cell.publication_closed || !cell.pass_uses_closed ||
-			cell.storage || cell.surfaces || cell.surface_count || cell.owned_group || slot_has_custody(p_slot)) {
+			cell.storage || cell.surfaces || cell.surface_count || cell.preparation_reserved_count || cell.owned_group || slot_has_custody(p_slot)) {
 		return ERR_BUSY;
 	}
 	for (uint32_t i = 0; i < config.max_views; ++i) {

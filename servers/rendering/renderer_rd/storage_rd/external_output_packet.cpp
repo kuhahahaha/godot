@@ -101,7 +101,7 @@ Error ExternalPacketBinding::record_checked(RenderingDevice::DrawListID) {
 
 namespace RendererRD {
 ExternalPipelinePreparation::~ExternalPipelinePreparation() {
-	CRASH_COND(pipeline_scope || pipeline_pin || pipeline_original_root || pipeline_owned_group || geometry[0].is_active() || geometry[1].is_active() || material.is_active());
+	CRASH_COND(pipeline_scope || pipeline_pin || pipeline_original_root || pipeline_owned_group || geometry_reserved_group || material_reserved_group || owned_pipeline_root.is_valid() || geometry[0].is_active() || geometry[1].is_active() || material.is_active());
 }
 Error ExternalPipelinePreparation::_pipeline_preflight() {
 	auto *rd = RenderingDevice::get_singleton();

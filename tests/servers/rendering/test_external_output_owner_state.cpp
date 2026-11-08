@@ -185,11 +185,11 @@ bool ExternalLinkedOwnerTest::metadata_directory_in_slab(uint32_t views, uint32_
 			static_cast<const void *>(owner->read_cells) == (reads ? base + layout.read_offset : nullptr) &&
 			static_cast<const void *>(owner->surface_cells) == (surfaces ? base + layout.surface_offset : nullptr);
 }
-Error ExternalLinkedOwnerTest::selection_metadata_bytes(const ExternalOutputConfig &config, uint64_t &bytes, uint32_t *alignment) {
+Error ExternalLinkedOwnerTest::selection_metadata_bytes(const ExternalOutputConfig &config, uint64_t &bytes, uint32_t *alignment, uint32_t p_reads) {
 	ExternalOutputOwner::MetadataLayout layout;
-	const Error error = ExternalOutputOwner::plan_generation_selection_layout(config, 1, 2, 7, layout);
+	const Error error = ExternalOutputOwner::plan_generation_selection_layout(config, 1, p_reads, 7, layout);
 	if (error == OK) {
-		// The production generation bank is paid by the global read limit (2),
+		// The production generation bank is paid by its explicit global read limit,
 		// independently of the slot/surface binding count. Keep the expected
 		// slices independent of the planner's count and offset fields.
 		uint64_t expected = sizeof(ExternalOutputOwner);
@@ -199,10 +199,10 @@ Error ExternalLinkedOwnerTest::selection_metadata_bytes(const ExternalOutputConf
 			}
 		};
 		append(1, sizeof(ExternalOutputOwner::ViewCell), alignof(ExternalOutputOwner::ViewCell));
-		append(2, sizeof(ExternalOutputOwner::ReadCell), alignof(ExternalOutputOwner::ReadCell));
+		append(p_reads, sizeof(ExternalOutputOwner::ReadCell), alignof(ExternalOutputOwner::ReadCell));
 		append(config.max_views * config.max_inflight, sizeof(ExternalOutputStorage), alignof(ExternalOutputStorage));
 		append(config.max_views * config.max_inflight * config.surface_materials.size(), sizeof(ExternalOutputOwner::SurfaceBinding), alignof(ExternalOutputOwner::SurfaceBinding));
-		append(2, sizeof(ExternalPipelinePreparation), alignof(ExternalPipelinePreparation));
+		append(p_reads, sizeof(ExternalPipelinePreparation), alignof(ExternalPipelinePreparation));
 		append(config.surfaces.size(), sizeof(ExternalOutputOwner::GenerationMeshSelection), alignof(ExternalOutputOwner::GenerationMeshSelection));
 		append(config.surface_materials.size(), sizeof(ExternalOutputOwner::GenerationMaterialSelection), alignof(ExternalOutputOwner::GenerationMaterialSelection));
 		append(7, sizeof(ExternalOutputOwner::SurfaceCell), alignof(ExternalOutputOwner::SurfaceCell));
@@ -215,10 +215,10 @@ Error ExternalLinkedOwnerTest::selection_metadata_bytes(const ExternalOutputConf
 	return error;
 }
 Error ExternalLinkedOwnerTest::create_selection_component(GDExtensionDeviceExit::ProductionPhysicalContextRef context,
-		GDExtensionProductionRequestRefV1 request, const ExternalOutputConfig &config, GDExtensionDeviceExit::ProductionOutputMetadataLease &metadata, int failure) {
+		GDExtensionProductionRequestRefV1 request, const ExternalOutputConfig &config, GDExtensionDeviceExit::ProductionOutputMetadataLease &metadata, int failure, uint32_t p_reads) {
 	CRASH_COND(!empty_storage_mode || owner);
 	ExternalOutputOwner::MetadataLayout layout;
-	Error error = ExternalOutputOwner::plan_generation_selection_layout(config, 1, 2, 7, layout);
+	Error error = ExternalOutputOwner::plan_generation_selection_layout(config, 1, p_reads, 7, layout);
 	if (error != OK) {
 		return error;
 	}
@@ -226,7 +226,7 @@ Error ExternalLinkedOwnerTest::create_selection_component(GDExtensionDeviceExit:
 	CRASH_COND(metadata.is_empty() || metadata.get_size() != layout.total_bytes);
 	owner = new (metadata.get_data()) ExternalOutputOwner(config, generation, true, true);
 	owner->device = expected_device;
-	CRASH_COND(owner->install_metadata_directory(context, request, registry, metadata, 1, 2, 7, true) != OK);
+	CRASH_COND(owner->install_metadata_directory(context, request, registry, metadata, 1, p_reads, 7, true) != OK);
 	particles = storage->particles_owner.allocate_rid();
 	storage->particles_owner.initialize_rid(particles);
 	storage->particles_owner.get_or_null(particles)->external = owner;
@@ -439,11 +439,15 @@ void ExternalLinkedOwnerTest::preparation_bank_fragmentation(GDExtensionDeviceEx
 		--bank.slots[2].lease_serial;
 		// Interleave returns from three slots and reuse earlier holes without
 		// disturbing later retained rows or requiring contiguous capacity.
-		if (!expect(bank.return_preparation_row(1, 0) == OK) || !expect(bank.return_preparation_row(0, 1) == OK) ||
-				!expect(bank.bind_preparation_rows(0) == OK)) {
+		if (!expect(bank.return_preparation_row(1, 0) == OK) || !expect(bank.return_preparation_row(0, 1) == OK)) {
+			return;
+		}
+		bank.slots[0].retire_preparation_index = 4;
+		if (!expect(bank.bind_preparation_rows(0) == OK)) {
 			return;
 		}
 		expect(surfaces[0][0].preparation_index == 1 && surfaces[0][1].preparation_index == 2);
+		expect(bank.slots[0].retire_preparation_index == 0);
 		expect(bank.preparation_row_matches(1, 1, rows[3]));
 		expect(bank.preparation_row_matches(2, 0, rows[0]));
 		expect(bank.preparation_row_matches(2, 1, rows[4]));
@@ -490,7 +494,7 @@ bool ExternalLinkedOwnerTest::preparation_rows_match_slots(bool p_probe_duplicat
 	}
 	for (uint32_t i = 0; i < owner->preparation_capacity; ++i) {
 		const auto &row = owner->preparation_rows[i];
-		if (!row.source_sealed || row.max_resources || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group || row.pipeline_scope ||
+		if (!row.source_sealed || row.max_resources || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group || row.geometry_reserved_group || row.material_reserved_group || row.bank_groups_reserved || row.owned_pipeline_root.is_valid() || row.pipeline_scope ||
 				row.pipeline_context.registry_instance || row.pipeline_context.frame_serial || row.native_cache_queried ||
 				row.last_error != ERR_UNCONFIGURED || row.selected_geometry != UINT32_MAX || row.created_pipeline.is_valid() || row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
 			return false;
@@ -536,18 +540,53 @@ bool ExternalLinkedOwnerTest::preparation_pipeline_reservations_match(uint32_t p
 	for (uint32_t i = 0; i < slot.surface_count; ++i) {
 		const auto &surface = slot.surfaces[i];
 		const auto *row = surface.preparation_row;
-		if (!row || surface.preparation != row || !surface.pipeline_owned_group || surface.created_pipeline.is_valid() ||
+		if (!row || surface.preparation != row || !row->pipeline_owned_group || row->owned_pipeline_root.is_valid() ||
 				!row->source_sealed || !row->max_resources || row->pipeline_pin != &slot.original_pin ||
-				row->pipeline_owned_group != surface.pipeline_owned_group || row->pipeline_original_root != &surface.created_pipeline ||
+				row->pipeline_original_root != &row->owned_pipeline_root ||
 				row->pipeline_context.registry_instance || row->pipeline_context.frame_serial) {
 			return false;
 		}
 	}
 	return true;
 }
+bool ExternalLinkedOwnerTest::preparation_bank_reservations_match(uint32_t p_slot, uint32_t p_count, uint32_t p_graph) const {
+	if (!owner || p_slot >= owner->slot_count || owner->slots[p_slot].preparation_reserved_count != p_count ||
+			owner->preparation_capacity != 4 || owner->read_capacity != 4 || p_count != 3 || owner->free_preparation_rows() != 1) {
+		return false;
+	}
+	const auto &slot = owner->slots[p_slot];
+	uint32_t found = 0;
+	for (uint32_t i = 0; i < owner->preparation_capacity; ++i) {
+		const auto &row = owner->preparation_rows[i];
+		if (row.owner != owner || row.owner_slot != p_slot) {
+			continue;
+		}
+		++found;
+		if (!owner->preparation_bank_row_matches(p_slot, i, row) || !row.source_sealed || row.pipeline_scope || !row.bank_groups_reserved ||
+				row.max_resources != p_graph || row.pipeline_pin != &slot.original_pin || row.pipeline_original_root != &row.owned_pipeline_root ||
+				!row.pipeline_owned_group || !row.geometry_reserved_group || !row.material_reserved_group || row.owned_pipeline_root.is_valid()) {
+			return false;
+		}
+		if (row.owner_surface == UINT32_MAX && (row.source_geometry || row.source_material.is_valid() || row.source_material_generation)) {
+			return false;
+		}
+	}
+	return found == p_count;
+}
+uint64_t ExternalLinkedOwnerTest::preparation_bank_group(uint32_t p_slot, uint32_t p_ordinal, uint32_t p_kind) const {
+	uint32_t ordinal = 0;
+	for (uint32_t i = 0; owner && i < owner->preparation_capacity; ++i) {
+		const auto &row = owner->preparation_rows[i];
+		if (row.owner == owner && row.owner_slot == p_slot && ordinal++ == p_ordinal) {
+			return p_kind == 0 ? row.pipeline_owned_group : (p_kind == 1 ? row.geometry_reserved_group : row.material_reserved_group);
+		}
+	}
+	return 0;
+}
 uint64_t ExternalLinkedOwnerTest::preparation_pipeline_group(uint32_t p_slot, uint32_t p_surface) const {
 	CRASH_COND(!owner || p_slot >= owner->slot_count || !owner->slots[p_slot].surfaces || p_surface >= owner->slots[p_slot].surface_count);
-	return owner->slots[p_slot].surfaces[p_surface].pipeline_owned_group;
+	const auto &surface = owner->slots[p_slot].surfaces[p_surface];
+	return surface.preparation_row ? surface.preparation_row->pipeline_owned_group : surface.pipeline_owned_group;
 }
 bool ExternalLinkedOwnerTest::preparation_scope_link_matches(uint32_t p_slot, uint32_t p_surface, const GDExtensionDeviceExit::ProductionOutputPreparationScope *p_scope, bool p_sealed) const {
 	CRASH_COND(!owner || p_slot >= owner->slot_count || !owner->slots[p_slot].surfaces || p_surface >= owner->slots[p_slot].surface_count);
@@ -555,7 +594,7 @@ bool ExternalLinkedOwnerTest::preparation_scope_link_matches(uint32_t p_slot, ui
 	const auto &surface = slot.surfaces[p_surface];
 	const auto *row = surface.preparation_row;
 	return row && row == surface.preparation && row->pipeline_scope == p_scope && row->source_sealed == p_sealed &&
-			row->pipeline_pin == &slot.original_pin && row->pipeline_original_root == &surface.created_pipeline && row->pipeline_owned_group == surface.pipeline_owned_group;
+			row->pipeline_pin == &slot.original_pin && row->pipeline_original_root == &row->owned_pipeline_root && row->pipeline_owned_group != 0;
 }
 Error ExternalLinkedOwnerTest::preparation_row_preflight(uint32_t p_slot, uint32_t p_surface) {
 	return owner->slots[p_slot].surfaces[p_surface].preparation_row->_pipeline_preflight();
@@ -767,7 +806,8 @@ void ExternalLinkedOwnerTest::install_pipeline(uint64_t group) {
 }
 RID &ExternalLinkedOwnerTest::pipeline_root() {
 	CRASH_COND(!owner->slots[0].surfaces);
-	return owner->slots[0].surfaces[0].created_pipeline;
+	auto &surface = owner->slots[0].surfaces[0];
+	return surface.preparation_row ? surface.preparation_row->owned_pipeline_root : surface.created_pipeline;
 }
 bool ExternalLinkedOwnerTest::pipeline_returned() const {
 	return owner->slots[0].surfaces && owner->slots[0].surfaces[0].pipeline_group_returned;

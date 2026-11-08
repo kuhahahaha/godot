@@ -96,7 +96,7 @@ Error ParticlesStorage::_external_pipeline_prepare_owned_prefix(GDExtensionProdu
 	// owner. Do not re-run the pre-action owner_bind gate. The owned factory
 	// authenticates the current physical invocation and original RESERVING
 	// action; a later BOUND pin is not a new preparation opportunity.
-	const Error error = owner.device->_production_output_owned_reserve(context, slot.original_pin, 1, surface.pipeline_owned_group);
+	const Error error = owner.device->_production_output_owned_reserve(context, slot.original_pin, 1, preparation.pipeline_owned_group);
 	if (error != OK) {
 		// Reserve refuses before assigning any group. The row is still closed,
 		// with no allowance or cached context, and needs no rollback grant.
@@ -109,8 +109,71 @@ Error ParticlesStorage::_external_pipeline_prepare_owned_prefix(GDExtensionProdu
 	preparation.source_sealed = false;
 	preparation.pipeline_context = context;
 	preparation.pipeline_pin = &slot.original_pin;
-	preparation.pipeline_owned_group = surface.pipeline_owned_group;
-	preparation.pipeline_original_root = &surface.created_pipeline;
+	preparation.pipeline_original_root = &preparation.owned_pipeline_root;
+	return OK;
+}
+
+Error ParticlesStorage::_external_preparation_bank_reserve_owned_prefix(GDExtensionProductionPhysicalContextRefV1 context, RID particle_rid, uint32_t slot_index, uint32_t max_resources) {
+	Particles *particles = particles_owner.get_or_null(particle_rid);
+	if (!particles || !particles->external || !max_resources) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto &owner = *particles->external;
+	if (!owner.admits_work() || !owner.device || owner.device != RenderingDevice::get_singleton() || slot_index >= owner.slot_count) {
+		return ERR_UNCONFIGURED;
+	}
+	auto &slot = owner.slots[slot_index];
+	if (slot.state != ExternalOutputOwner::LeaseState::RESERVED || slot.publication_closed || slot.pass_uses_closed || !slot.preparation_reserved_count ||
+			!_production_output_owner_matches(GDExtensionDeviceExit::ProductionOutputOwnerKind::SLOT, particle_rid, owner.generation, slot_index, slot.lease_serial, slot.original_pin, *owner.device, slot.original_request)) {
+		return ERR_UNAUTHORIZED;
+	}
+	uint32_t claimed = 0;
+	for (uint32_t i = 0; i < owner.preparation_capacity; ++i) {
+		const auto &row = owner.preparation_rows[i];
+		if (row.owner != &owner || row.owner_slot != slot_index) {
+			continue;
+		}
+		++claimed;
+		if (!owner.preparation_bank_row_matches(slot_index, i, row) || !row.source_sealed || row.max_resources || row.pipeline_scope ||
+				row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group || row.geometry_reserved_group || row.material_reserved_group || row.bank_groups_reserved ||
+				row.owned_pipeline_root.is_valid() || row.created_pipeline.is_valid() || row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
+			return ERR_ALREADY_IN_USE;
+		}
+		if (row.owner_surface != UINT32_MAX ? !owner.preparation_row_matches(slot_index, row.owner_surface, row) : (row.source_geometry || row.source_material.is_valid() || row.source_material_generation)) {
+			return ERR_UNAUTHORIZED;
+		}
+	}
+	if (claimed != slot.preparation_reserved_count) {
+		return ERR_INVALID_DATA;
+	}
+	for (uint32_t i = 0; i < owner.preparation_capacity; ++i) {
+		auto &row = owner.preparation_rows[i];
+		if (row.owner != &owner || row.owner_slot != slot_index) {
+			continue;
+		}
+		if (!owner.preparation_bank_row_matches(slot_index, i, row) || row.pipeline_pin || row.pipeline_owned_group || row.geometry_reserved_group || row.material_reserved_group || row.bank_groups_reserved) {
+			return ERR_ALREADY_IN_USE;
+		}
+		// Install stable row custody before the first reservation. Any successful
+		// group is an original retained prefix even if a later group refuses.
+		row.pipeline_pin = &slot.original_pin;
+		row.pipeline_original_root = &row.owned_pipeline_root;
+		row.max_resources = max_resources;
+		if (row.owner_surface != UINT32_MAX) {
+			slot.surfaces[row.owner_surface].preparation = &row;
+		}
+		Error error = owner.device->_production_output_owned_reserve(context, slot.original_pin, 1, row.pipeline_owned_group);
+		if (error == OK) {
+			error = owner.device->_production_output_owned_reserve(context, slot.original_pin, max_resources, row.geometry_reserved_group);
+		}
+		if (error == OK) {
+			error = owner.device->_production_output_owned_reserve(context, slot.original_pin, max_resources, row.material_reserved_group);
+		}
+		if (error != OK) {
+			return error;
+		}
+		row.bank_groups_reserved = true;
+	}
 	return OK;
 }
 
@@ -147,7 +210,7 @@ Error ParticlesStorage::_external_pipeline_reserve_owned_prefix(GDExtensionProdu
 	// owner. Do not re-run the pre-action owner_bind gate. The owned factory
 	// authenticates the current physical invocation and original RESERVING
 	// action; a later BOUND pin is not a new preparation opportunity.
-	const Error error = owner.device->_production_output_owned_reserve(context, slot.original_pin, 1, surface.pipeline_owned_group);
+	const Error error = owner.device->_production_output_owned_reserve(context, slot.original_pin, 1, preparation.pipeline_owned_group);
 	if (error != OK) {
 		// Reserve refuses before assigning any group. The row is still closed,
 		// with no allowance or cached context, and needs no rollback grant.
@@ -160,8 +223,7 @@ Error ParticlesStorage::_external_pipeline_reserve_owned_prefix(GDExtensionProdu
 	preparation.source_sealed = true;
 	// The original physical context expires on receiver return; retain no copy.
 	preparation.pipeline_pin = &slot.original_pin;
-	preparation.pipeline_owned_group = surface.pipeline_owned_group;
-	preparation.pipeline_original_root = &surface.created_pipeline;
+	preparation.pipeline_original_root = &preparation.owned_pipeline_root;
 	return OK;
 }
 
@@ -186,9 +248,9 @@ bool ParticlesStorage::_production_output_preparation_matches(RID particle_rid, 
 	auto &surface = slot.surfaces[surface_index];
 	auto *row = surface.preparation_row;
 	if (!row || !owner.preparation_row_matches(slot_index, surface_index, *row) ||
-			surface.preparation != row || !group || surface.pipeline_owned_group != group || surface.pipeline_group_returned ||
+			surface.preparation != row || !group || row->pipeline_owned_group != group ||
 			row->owner != &owner || row->generation != generation || row->serial != lease_serial || row->pipeline_pin != &pin ||
-			row->pipeline_owned_group != group || row->pipeline_original_root != &surface.created_pipeline || !row->max_resources || row->pipeline_scope != scope || (!scope ? !row->source_sealed : (!cleanup && row->source_sealed)) ||
+			row->pipeline_owned_group != group || row->pipeline_original_root != &row->owned_pipeline_root || !row->max_resources || row->pipeline_scope != scope || (!scope ? !row->source_sealed : (!cleanup && row->source_sealed)) ||
 			row->pipeline_context.registry_instance || row->pipeline_context.frame_serial) {
 		return false;
 	}
@@ -380,6 +442,68 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			owner.views[i].history_slot = UINT32_MAX;
 			return OK;
 		}
+	}
+	if (slot.preparation_reserved_count) {
+		while (slot.retire_preparation_index < owner.preparation_capacity) {
+			auto &row = owner.preparation_rows[slot.retire_preparation_index];
+			if (row.owner == &owner && row.owner_slot == p_slot) {
+				break;
+			}
+			++slot.retire_preparation_index;
+		}
+		if (slot.retire_preparation_index >= owner.preparation_capacity) {
+			return ERR_INVALID_DATA;
+		}
+		auto &row = owner.preparation_rows[slot.retire_preparation_index];
+		if (!owner.preparation_bank_row_matches(p_slot, slot.retire_preparation_index, row) || row.pipeline_scope || !row.source_sealed) {
+			return ERR_INVALID_DATA;
+		}
+		if (row.pipeline_owned_group) {
+			const uint32_t before = r_usage.passes;
+			error = owner.device->_production_output_retire_service(p_pin, row.pipeline_owned_group, p_budget, r_usage, observation);
+			if (error == OK) {
+				row.pipeline_owned_group = 0;
+				row.owned_pipeline_root = RID();
+				row.created_pipeline = RID();
+				return OK;
+			}
+			if (error != ERR_BUSY || r_usage.passes != before) {
+				return error;
+			}
+			// A waiting owned pipeline allows its original borrowed groups to
+			// progress below without a second budget or a hidden owner sweep.
+		}
+		// Until exact tuple finalization adopts these holds, retain their real
+		// prefixes. Never clear wrappers or their prepaid groups speculatively.
+		if (row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
+			return ERR_BUSY;
+		}
+		for (uint64_t *group : { &row.geometry_reserved_group, &row.material_reserved_group }) {
+			if (*group) {
+				error = owner.device->_production_output_retire_service(p_pin, *group, p_budget, r_usage, observation);
+				if (error == OK) {
+					*group = 0;
+				}
+				return error;
+			}
+		}
+		if (row.pipeline_owned_group || !spend()) {
+			return ERR_BUSY;
+		}
+		if (row.owned_pipeline_root.is_valid()) {
+			return ERR_INVALID_DATA;
+		}
+		row.pipeline_pin = nullptr;
+		row.pipeline_original_root = nullptr;
+		row.created_pipeline = RID();
+		if (row.owner_surface != UINT32_MAX) {
+			slot.surfaces[row.owner_surface].preparation = nullptr;
+		}
+		error = owner.return_preparation_bank_row(p_slot, slot.retire_preparation_index);
+		if (error == OK) {
+			++slot.retire_preparation_index;
+		}
+		return error;
 	}
 	if (slot.retire_surface < slot.surface_count) {
 		if (!slot.surfaces) {

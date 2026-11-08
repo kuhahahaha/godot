@@ -339,6 +339,7 @@ class ProductionActionCell {
 	uint64_t output_generation = 0, output_lease = 0, output_root = 0;
 	uint32_t output_slot = UINT32_MAX;
 	uint32_t output_read_capacity = 0, output_read_graph_capacity = 0, output_read_cursor = 0;
+	uint64_t output_preparation_borrower_headroom = 0; // Paid simultaneous L, never an issued pin or a read grant.
 	bool output_source_prepared = false;
 };
 class ProductionUseCell {

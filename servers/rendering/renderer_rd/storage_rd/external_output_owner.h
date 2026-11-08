@@ -82,6 +82,8 @@ class ExternalOutputOwner {
 		ExternalPipelinePreparation *preparation_row = nullptr;
 		uint32_t preparation_index = UINT32_MAX; // Stable owner-bank locator, independent of slot/surface arithmetic.
 		ExternalPipelinePreparation *preparation = nullptr;
+		// Legacy component fixture custody only; production bank roots/groups
+		// live in preparation_row and are never mirrored into these fields.
 		RID created_pipeline;
 		uint64_t pipeline_owned_group = 0;
 		bool pipeline_group_returned = false;
@@ -117,6 +119,7 @@ class ExternalOutputOwner {
 		uint64_t lease_serial = 0;
 		uint64_t owned_group = 0, output_membership_group = 0;
 		uint32_t retire_surface = 0, retire_resource = 0;
+		uint32_t preparation_reserved_count = 0, retire_preparation_index = 0;
 		bool output_group_returned = false;
 		bool publication_closed = false;
 		bool pass_uses_closed = false;
@@ -195,7 +198,10 @@ class ExternalOutputOwner {
 	ExternalPipelinePreparation *preparation_rows = nullptr;
 	uint32_t preparation_capacity = 0;
 	bool preparation_row_matches(uint32_t, uint32_t, const ExternalPipelinePreparation &) const;
-	Error bind_preparation_rows(uint32_t);
+	bool preparation_bank_row_matches(uint32_t, uint32_t, const ExternalPipelinePreparation &) const;
+	uint32_t free_preparation_rows() const;
+	Error bind_preparation_rows(uint32_t, uint32_t p_count = 0);
+	Error return_preparation_bank_row(uint32_t, uint32_t);
 	Error return_preparation_row(uint32_t, uint32_t);
 	bool generation_selection_attempted = false;
 	bool generation_selection_complete = false;

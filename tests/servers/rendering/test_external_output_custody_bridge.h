@@ -68,8 +68,8 @@ public:
 			uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, GDExtensionOutputCreateResultV1 &);
 	static Error metadata_directory_bytes(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, uint64_t &r_bytes);
 	bool metadata_directory_in_slab(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces) const;
-	static Error selection_metadata_bytes(const ExternalOutputConfig &, uint64_t &, uint32_t *p_alignment = nullptr);
-	Error create_selection_component(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const ExternalOutputConfig &, GDExtensionDeviceExit::ProductionOutputMetadataLease &, int p_failure);
+	static Error selection_metadata_bytes(const ExternalOutputConfig &, uint64_t &, uint32_t *p_alignment = nullptr, uint32_t p_reads = 2);
+	Error create_selection_component(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const ExternalOutputConfig &, GDExtensionDeviceExit::ProductionOutputMetadataLease &, int p_failure, uint32_t p_reads = 2);
 	void unprepared_guard_refusal(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const ExternalOutputConfig &, GDExtensionDeviceExit::ProductionOutputMetadataLease &);
 	uint32_t selection_meshes() const;
 	uint32_t selection_materials() const;
@@ -82,6 +82,8 @@ public:
 	bool selection_inline_matches(const ExternalOutputConfig &) const;
 	bool preparation_rows_match_slots(bool p_probe_duplicate = false) const;
 	bool preparation_pipeline_reservations_match(uint32_t p_slot) const;
+	bool preparation_bank_reservations_match(uint32_t, uint32_t, uint32_t) const;
+	uint64_t preparation_bank_group(uint32_t, uint32_t, uint32_t) const;
 	uint64_t preparation_pipeline_group(uint32_t, uint32_t) const;
 	bool preparation_scope_link_matches(uint32_t, uint32_t, const GDExtensionDeviceExit::ProductionOutputPreparationScope *, bool) const;
 	Error preparation_row_preflight(uint32_t, uint32_t);

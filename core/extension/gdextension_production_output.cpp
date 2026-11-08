@@ -774,8 +774,8 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 			return;
 		}
 	}
-	// This initial continuation slice reserves one original pipeline per actual
-	// surface row. Zero native storage has no SurfaceBindings to prepare.
+	// Zero native storage has no preparation rows or manufactured buffers.
+	// Nonzero native preparation pays the original action P/G envelope.
 	const bool reserve_pipelines = layout.resource_count && action.output_read_capacity;
 	if (reserve_pipelines && (!action.output_read_graph_capacity || action.output_read_capacity < surfaces)) {
 		out->status = output_status(ERR_OUT_OF_MEMORY, "output_preparation_capacity");
@@ -786,12 +786,23 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 		const auto &cell = request->uses[i];
 		spare += cell.request == request && cell.output_role == ProductionUseCell::OutputRole::UNUSED && !cell.output_consumer && !cell.dependency.physical && !cell.output_pin_serial && !cell.disposal_group_serial;
 	}
-	const uint64_t required_uses = 1u + (layout.resource_count ? uint64_t(layout.resource_count) + 1 : 0) + (reserve_pipelines ? uint64_t(surfaces) * 2 : 0);
+	const uint64_t borrower_headroom = reserve_pipelines ? uint64_t(owner.view_capacity) + owner.surface_capacity + owner.read_capacity : 0;
+	const uint64_t per_row_uses = uint64_t(action.output_read_graph_capacity) * 2 + 4;
+	if (reserve_pipelines && uint64_t(action.output_read_capacity) > (UINT64_MAX - borrower_headroom - 1u - (uint64_t(layout.resource_count) + 1)) / per_row_uses) {
+		out->status = output_status(ERR_PARAMETER_RANGE_ERROR, "output_preparation_quote_overflow");
+		return;
+	}
+	const uint64_t required_uses = 1u + (layout.resource_count ? uint64_t(layout.resource_count) + 1 : 0) + (reserve_pipelines ? uint64_t(action.output_read_capacity) * per_row_uses + borrower_headroom : 0);
+	const uint32_t preparation_count = layout.resource_count ? (reserve_pipelines ? action.output_read_capacity : surfaces) : 0;
+	if (preparation_count > owner.free_preparation_rows()) {
+		out->status = output_status(ERR_OUT_OF_MEMORY, "output_global_preparation_bank");
+		return;
+	}
 	if (spare < required_uses || action.output_read_capacity > owner.read_capacity || request->graph_count > request->capacity.graph_memberships || uint64_t(action.output_read_capacity) * action.output_read_graph_capacity > request->capacity.graph_memberships - request->graph_count) {
 		out->status = output_status(ERR_OUT_OF_MEMORY, "output_prequoted_capacity");
 		return;
 	}
-	const uint64_t required_groups = (layout.resource_count ? 1u : 0u) + (reserve_pipelines ? uint64_t(surfaces) : 0u);
+	const uint64_t required_groups = (layout.resource_count ? 1u : 0u) + (reserve_pipelines ? uint64_t(action.output_read_capacity) * 3 : 0u);
 	if (required_groups && (!request->next_disposal_group_serial || required_groups - 1 > UINT64_MAX - request->next_disposal_group_serial)) {
 		out->status = output_status(ERR_PARAMETER_RANGE_ERROR, "output_group_serial_capacity");
 		return;
@@ -836,6 +847,7 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 		out->status = output_status(error, "output_owner_bind");
 		return;
 	}
+	action.output_preparation_borrower_headroom = borrower_headroom;
 	if (layout.resource_count) {
 		auto *base = static_cast<uint8_t *>(owner.metadata_lease.get_data());
 		slot.storage = new (base + metadata.storage_offset + size_t(slot_index) * sizeof(Storage)) Storage(*rd);
@@ -848,7 +860,13 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 		}
 		// The executing original RECORD and installed independent root retain
 		// the action/slot while each factory reacquires the Registry lock.
-		error = owner.bind_preparation_rows(slot_index);
+		error = owner.bind_preparation_rows(slot_index, preparation_count);
+		if (error == OK && reserve_pipelines) {
+			// Prepay all row groups before the first storage/native factory.
+			unlock_mutex_for_call();
+			error = storage->_external_preparation_bank_reserve_owned_prefix(context, RID::from_uint64(input->particles), slot_index, action.output_read_graph_capacity);
+			relock_mutex_after_call();
+		}
 		if (error == OK) {
 			unlock_mutex_for_call();
 			error = slot.storage->allocate_instance192_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity, surfaces);
@@ -903,23 +921,14 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 			}
 		}
 	}
-	if (error == OK && reserve_pipelines) {
-		for (uint32_t i = 0; i < slot.surface_count; ++i) {
-			// Reserve under this original RESERVING action, before publishing its
-			// writables or advancing next_action. Retain no expiring context.
-			unlock_mutex_for_call();
-			error = storage->_external_pipeline_reserve_owned_prefix(context, RID::from_uint64(input->particles), slot_index, i,
-					*slot.surfaces[i].preparation_row, action.output_read_graph_capacity);
-			relock_mutex_after_call();
-			if (error != OK) {
-				break;
-			}
-		}
-	}
 	if (error != OK) {
 		bool prefix = slot.owned_group != 0;
 		for (uint32_t i = 0; i < slot.surface_count; ++i) {
 			prefix |= slot.surfaces[i].pipeline_owned_group != 0 || slot.surfaces[i].created_pipeline.is_valid();
+		}
+		for (uint32_t i = 0; i < owner.preparation_capacity; ++i) {
+			const auto &row = owner.preparation_rows[i];
+			prefix |= row.owner == &owner && row.owner_slot == slot_index && (row.pipeline_owned_group || row.geometry_reserved_group || row.material_reserved_group || row.owned_pipeline_root.is_valid());
 		}
 		if (slot.storage) {
 			for (const auto &resource : slot.storage->resources) {
@@ -930,6 +939,18 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 			if (slot.storage) {
 				slot.storage->~ExternalOutputStorage();
 				slot.storage = nullptr;
+			}
+			for (uint32_t i = 0; i < owner.preparation_capacity; ++i) {
+				auto &row = owner.preparation_rows[i];
+				if (row.owner != &owner || row.owner_slot != slot_index) {
+					continue;
+				}
+				row.pipeline_pin = nullptr;
+				row.pipeline_original_root = nullptr;
+				if (row.owner_surface != UINT32_MAX) {
+					slot.surfaces[row.owner_surface].preparation = nullptr;
+				}
+				CRASH_COND(owner.return_preparation_bank_row(slot_index, i) != OK);
 			}
 			for (uint32_t i = 0; i < slot.surface_count; ++i) {
 				// Only unopened metadata is rolled back here. Native prefixes
@@ -946,6 +967,7 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 			slot.original_request = {};
 			action.output_state = ProductionActionCell::OutputState::UNBOUND;
 			action.output_root = action.output_lease = action.output_generation = 0;
+			action.output_preparation_borrower_headroom = 0;
 			action.output_slot = UINT32_MAX;
 			action.output_particles = RID();
 		} else {

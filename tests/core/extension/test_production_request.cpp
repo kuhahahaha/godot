@@ -8206,9 +8206,9 @@ struct Access {
 			const auto native_effect = request.native_effect_entered, append_effect = request.append_effect_entered;
 			const auto control_effect = request.control.record_history.control_effect_entered;
 			const auto control_append = request.control.record_history.control_append_entered;
-			// One storage group plus both actual surface groups need three serials.
+			// One storage group plus three groups for each of P=3 rows need ten serials.
 			// UINT64_MAX is valid once; zero means the original sequence is exhausted.
-			const uint64_t exhausted[] = { 0, UINT64_MAX, UINT64_MAX - 1 };
+			const uint64_t exhausted[] = { 0, UINT64_MAX, UINT64_MAX - 1, UINT64_MAX - 8 };
 			for (uint64_t next : exhausted) {
 				INFO("next disposal group serial: " << next);
 				request.next_disposal_group_serial = next;
@@ -8375,10 +8375,10 @@ struct Access {
 				}
 				uint64_t bytes = 0;
 				uint32_t alignment = 0;
-				REQUIRE(RendererRD::ExternalLinkedOwnerTest::selection_metadata_bytes(p.config, bytes, &alignment) == OK);
+				REQUIRE(RendererRD::ExternalLinkedOwnerTest::selection_metadata_bytes(p.config, bytes, &alignment, p.prepare_continuation ? 4 : 2) == OK);
 				ProductionOutputMetadataLease metadata;
 				REQUIRE(f.registry.production_output_metadata_create(context, ref, 0, f.rd, bytes, alignment, metadata, true) == OK);
-				REQUIRE(p.native->create_selection_component(context, ref, p.config, metadata, 0) == OK);
+				REQUIRE(p.native->create_selection_component(context, ref, p.config, metadata, 0, p.prepare_continuation ? 4 : 2) == OK);
 				CHECK(metadata.is_empty());
 				++p.create_calls;
 				return;
@@ -8394,10 +8394,46 @@ struct Access {
 			if (p.prepare_continuation) {
 				reject_exhausted_group_serials(p, context, ref);
 			}
+			if (p.prepare_continuation) {
+				// Exact one-less paid use budget refuses before any native effect.
+				const auto paid = f.request->capacity.resource_uses;
+				const auto root_serial = f.request->next_output_pin_serial;
+				const auto allocations = f.driver.alias_allocations;
+				--f.request->capacity.resource_uses;
+				GDExtensionOutputAcquireResultV1 refused{};
+				acquire(context, ref, 0, &p.input, &refused);
+				CHECK(refused.status.error == ERR_OUT_OF_MEMORY);
+				CHECK(refused.writable_count == 0);
+				CHECK(f.request->next_output_pin_serial == root_serial);
+				CHECK(f.driver.alias_allocations == allocations);
+				CHECK(p.native->preparation_rows_match_slots());
+				f.request->capacity.resource_uses = paid;
+				// The exact last legal ten-group range succeeds without wrapping.
+				f.request->next_disposal_group_serial = UINT64_MAX - 9;
+			}
 			acquire(context, ref, 0, &p.input, &p.acquired);
 			REQUIRE(p.acquired.status.error == OK);
 			if (p.prepare_continuation) {
 				CHECK(p.native->preparation_pipeline_reservations_match(0));
+				CHECK(p.native->preparation_bank_reservations_match(0, 3, 4));
+				CHECK(f.request->actions[0].output_preparation_borrower_headroom == 12);
+				CHECK(f.request->next_disposal_group_serial == 0);
+				for (uint32_t row = 0; row < 3; ++row) {
+					for (uint32_t kind = 0; kind < 3; ++kind) {
+						const uint64_t group = p.native->preparation_bank_group(0, row, kind);
+						uint32_t headers = 0, members = 0;
+						const uint32_t expected = kind ? 4 : 1;
+						for (uint32_t use = f.request->use_count + f.request->binding_used; use < f.request->capacity.resource_uses; ++use) {
+							const auto &cell = f.request->uses[use];
+							if (cell.disposal_group_serial == group) {
+								headers += cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_count == expected && cell.disposal_group_pin_serial == f.request->actions[0].output_root;
+								members += cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED;
+							}
+						}
+						CHECK(headers == 1);
+						CHECK(members == expected);
+					}
+				}
 			} else {
 				CHECK(p.native->preparation_rows_match_slots(true));
 			}
@@ -8582,7 +8618,7 @@ struct Access {
 			tag->fill(0);
 		}
 		uint64_t metadata_bytes = 0;
-		REQUIRE(RendererRD::ExternalLinkedOwnerTest::selection_metadata_bytes(probe.config, metadata_bytes) == OK);
+		REQUIRE(RendererRD::ExternalLinkedOwnerTest::selection_metadata_bytes(probe.config, metadata_bytes, nullptr, prepare_continuation ? 4 : 2) == OK);
 
 		REQUIRE(fixture.initialize_owner(1, false, false, &NativeAliasReadbackProbe::receive, &probe, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &pool, nullptr, true) == OK);
 		RendererRD::ExternalLinkedOwnerTest native(fixture.rd, true);
@@ -8681,7 +8717,7 @@ struct Access {
 		prepared.source_generation = 1;
 		prepared.input = probe.input;
 		if (prepare_continuation) {
-			prepared.read_capacity = 2;
+			prepared.read_capacity = 3;
 			prepared.read_graph_capacity = 4;
 		}
 		prepared.roles[0] = { 1, 1, 1, 0, 3, 192 };
@@ -8815,6 +8851,19 @@ struct Access {
 		CHECK(request.control.state == ProductionControlState::OWNER_CONSUMED);
 		CHECK(request.output_owner_head == UINT32_MAX);
 		CHECK(native.preparation_rows_match_slots());
+		if (prepare_continuation) {
+			uint32_t retired_groups = 0;
+			for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+				const auto &cell = request.uses[i];
+				CHECK(cell.output_role != ProductionUseCell::OutputRole::DISPOSAL_RESERVED);
+				if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP) {
+					CHECK(cell.disposal_group_release);
+					CHECK(cell.disposal_group_dropped);
+					++retired_groups;
+				}
+			}
+			CHECK(retired_groups == 10); // Storage plus all nine groups, including unselected row 2.
+		}
 		probe.closing = true;
 		REQUIRE(fixture.port.record_schedule(probe.create_ref, &control) == OK);
 		server->sync();

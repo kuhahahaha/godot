@@ -1,0 +1,9 @@
+# Finite P reservation and original bounded return
+
+Actual Acquire now atomically claims P global bank rows and prepays three original owned groups per row (pipeline 1, geometry G, material G) before storage factories. Admission checks P*(2G+4)+L, separate root/storage costs, finite graph and exact final serial headroom. Original OBSERVE returns every reserved row including unselected rows before the slot root; active wrappers remain retained for later real transfer.
+
+Independent Sol source review found no blocking issue in the reservation slice. Narrow geometry G-1 negative control built and ran: 3 cases/3980 assertions/18 target failures, normal process1. Restored source: scope/batch 6/4449 and native/prefix/qualification neighbors 46/8977 passed.
+
+Expanded full typed-port fragmentation coverage exposed a real candidate regression: surface return delegated a corrupt index into another valid sibling bank row. Restoring calling-surface identity authentication before delegation fixes the cause. Existing exact mutation produced 401 assertions/2 failures before the fix and 401/401 pass after it. Final combined CPU/dummy regression: 54 cases/14260 assertions, process0. Temporary caller-line diagnostics were removed after diagnosis. Exact commands, source/binary hashes and logs are preserved in p-reservation-validation-20261108/RECEIPT.json. Final exact source was rebuilt and rerun after removing diagnostics and formatting one ternary line; the same 54/14260 pass was confirmed.
+
+Full tuple selection/finish, prospective dependency closure, actual view acquisition, public Finalize/JD02/Seal, GPU dispatch, visible Sprite and full no-follow-up-draw physical retirement are still incomplete. This is a completed bounded reservation/return slice, not completion of Task 2 or the long goal. Fixed P1 is unchanged.

@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "base_commit": "35973a577b",
+  "scope": "P rows and three original owned groups per row reserved before storage factory, bounded original OBSERVE return; CPU/dummy only",
+  "build_command": "scons -Q tests=yes platform=macos target=editor debug_symbols=no module_particles_runtime_tests_enabled=yes -j2",
+  "candidate_patch_sha256": "7fb2ec74ed1cebb75472732cadd1d8857a2fbe6c6f042d69aea194ce2530b8cb",
+  "red": {
+    "build_exit": 0,
+    "filter": "*[NativePreparationContinuation]*",
+    "exit": 1,
+    "cases": 3,
+    "assertions": 3980,
+    "failed_assertions": 18,
+    "mutation": "Only geometry reserve uses G-1 for three G4 cases. Header/member cardinality failures; no crash. Not full old implementation RED."
+  },
+  "initial_green": {
+    "build_exit": 0,
+    "cases": 6,
+    "assertions": 4449,
+    "exit": 0
+  },
+  "initial_neighbors": {
+    "cases": 46,
+    "assertions": 8977,
+    "exit": 0
+  },
+  "integration_regression": {
+    "initial_bank_cases": 5,
+    "initial_bank_assertions": 1285,
+    "failed_assertions": 2,
+    "diagnostic_filter": "*installed typed production port*",
+    "diagnostic_subcase": "Metadata borrow from a true original pin retains the accepted arena after native recording",
+    "diagnostic_assertions": 401,
+    "diagnostic_failed_assertions": 2,
+    "cause": "Surface return delegated a corrupted index to another valid bank row without authenticating the calling surface. It released the sibling row.",
+    "fix": "Restore preparation_row_matches for calling surface before bank delegation.",
+    "targeted_green_assertions": 401,
+    "targeted_green_exit": 0
+  },
+  "final_combined": {
+    "filter": "*[NativePreparationContinuation]*,*[BatchHold]*,*[NativeDisposal]*,*[PipelinePrefix]*,*[ExternalOutputOwner]*,*[QualificationRt]*,*[OutputAliasReadbackFreeze]*,*installed typed production port*,*[ExternalOutput]*,*[PreparationBankLayout]*,*[GenerationMetadataLayout]*",
+    "cases": 54,
+    "assertions": 14260,
+    "exit": 0
+  },
+  "source_sha256": {
+    "core/extension/gdextension_production_output.cpp": "b883bd7447187984eebb3900799ff77ec9e5cc2f9089bd590988d104d7e524c9",
+    "core/extension/gdextension_production_request.h": "37519b1716c518ff114d41baf86aedf96572cbcd996d05742aeacab8ece45230",
+    "servers/rendering/renderer_rd/storage_rd/external_output_owner.cpp": "f454335a8346ac14023e60fff654f5f22878392dede12cff234aa3e1b8e0ff21",
+    "servers/rendering/renderer_rd/storage_rd/external_output_owner.h": "dce3947dcde0fa87f825cf98de60c386a2a3da62704a3f30d35952b287e9cde1",
+    "servers/rendering/renderer_rd/storage_rd/external_output_packet.cpp": "55416ae8302428d0d856d1e49319937610f67e6bcf89c8b2c5bdcde70bed594e",
+    "servers/rendering/renderer_rd/storage_rd/external_output_packet.h": "1312a32a44930de2826c3819790fcdda569b99be0666bcf164fa7c1e981b6522",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.h": "1a116174f479523f2a67c5de9a8dd4ccb1519d6bee2839e98fbbb408bed26bf3",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp": "10cdc3b90b9716bf3a05d20e1513e82ea4255ea370e602f601ccea6122898bc9",
+    "tests/core/extension/test_production_request.cpp": "dc5f668d6e17074c47c33cec0cdf84590ea295b959b58f5295c10eb40f589e82",
+    "tests/servers/rendering/test_external_output_custody_bridge.h": "e806da22168827069c7f3ad79528da7b12ee815751a3fbf6ccf4962c934fc3a8",
+    "tests/servers/rendering/test_external_output_owner_state.cpp": "20b27a6d055e2f67a0a89edb9023827efce033fb2289163b1509dc1b70032064"
+  },
+  "binary_sha256": "ea906754884dfd8fc3facd56692b4c3321260fa9b7974b9e6a39626d8e55a1a0",
+  "logs_sha256": {
+    "b4-p-reservation-green-test.log": "4f419f194b5509e12263564190aeb6d277adb39b26f8f5484912be2c23f76328",
+    "b4-p-reservation-exact-final-build.log": "a8f18c0f8c450f70f28767d99d47d972d9e9cfc96bb02c2b7cb3e155b9a49ec0",
+    "b4-p-reservation-final-build.log": "47d8ad378cfa755fc0583a2139fbac07fb9197e95a0b61488b1672bc0e3e7490",
+    "b4-p-reservation-bank-diagnostic-test.log": "2b2a2ebc29c60111e3c4de2a58f7eaf1ca8a69a8f64e909b3c65ae778928d312",
+    "b4-p-reservation-bank-diagnostic-build.log": "4b622221d5d79077e24e8849853baaf18813c168ad2c71961d336b496b2de032",
+    "b4-p-reservation-final-test.log": "8e290bde4710ce2d55a393de98f131c43765b13e664c9a37671e2c6144d94c06",
+    "b4-p-reservation-combined-test.log": "4accc3ed38aa08fd891586f867c9e9fcfe88a776f7f8a4119adb055621eafc16",
+    "b4-p-reservation-red-build.log": "db86871f389384ac719df71c2fdb2d85bbc042a646479de672d2ec1abddef1bc",
+    "b4-p-reservation-bank-test.log": "f2be6cc6a28f400c84d3132d4000853039f7cb92d4946a214862977fd2ec14a8",
+    "b4-p-reservation-green-build.log": "fec24a7cd9d9302851eb735c95d8ad4b6bb6507cc0739109c04dbce4143533fe",
+    "b4-p-reservation-neighbor-test.log": "c22b4c886946f3685ba21380ffc8d6877034e158868419475679ca626c1c5499",
+    "b4-p-reservation-exact-final-test.log": "4accc3ed38aa08fd891586f867c9e9fcfe88a776f7f8a4119adb055621eafc16",
+    "b4-p-reservation-red-test.log": "2364935c7a101417ec916081d17381a8070696302828ca4d6869ae470060618a"
+  },
+  "post_run_source_change": "None. Exact final source including ternary whitespace and removal of temporary diagnostic builtin was rebuilt and rerun: 54 cases/14260 assertions, process0.",
+  "limits": [
+    "Full exact tuple lookup and backend finish/capture still pending",
+    "Active geometry/material wrappers retained until actual transfer",
+    "Prospective pre-effect full G dependency closure unresolved",
+    "No public Create/Finalize/JD02/Seal or actual view acquire completion",
+    "No dispatch, visible Sprite GPU or full no-follow-up-draw physical retirement acceptance"
+  ],
+  "review": "Original candidate independent Sol source review plus FIX_REVIEW.md for caller-surface identity repair."
+}
