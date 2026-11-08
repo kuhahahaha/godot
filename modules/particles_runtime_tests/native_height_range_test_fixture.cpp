@@ -34,6 +34,7 @@
 #include "core/object/class_db.h"
 #include "core/os/os.h"
 #include "servers/rendering/rendering_device.h"
+#include "servers/rendering/renderer_rd/height_capture_checked_sink.h"
 #include "servers/rendering/rendering_server.h"
 
 namespace {
@@ -135,7 +136,7 @@ Error NativeHeightRangeTestFixture::observe_ranges(RenderingDevice *p_rd, const 
 	for (int i = 0; i < 2; ++i) {
 		const RenderingDevice::NativeDisposalBudget budget{ 64, 8, OS::get_singleton()->get_ticks_usec() + 100000 };
 		RenderingDevice::NativeDisposalUsage usage;
-		const Error error = p_rd->_native_height_range_observe(ranges[i], budget, usage, r_snapshots[i]);
+		const Error error = RendererRD::HeightCaptureCheckedSink::observe_native_range(*p_rd, ranges[i], budget, usage, r_snapshots[i]);
 		observe_polls += usage.polls;
 		Dictionary row = range_data(r_snapshots[i]);
 		row["observe_error"] = int(error);
@@ -383,7 +384,7 @@ void NativeHeightRangeTestFixture::advance_impl() {
 		phase = 3;
 	} else if (phase == 3 || phase == 4) {
 		RenderingDevice::NativeDisposalUsage usage;
-		error = rd->_native_height_range_return(ranges[phase - 3], budget, usage);
+		error = RendererRD::HeightCaptureCheckedSink::return_native_range(*rd, ranges[phase - 3], budget, usage);
 		observer_releases += usage.releases;
 		if (error != OK && error != ERR_BUSY) {
 			finish(error);

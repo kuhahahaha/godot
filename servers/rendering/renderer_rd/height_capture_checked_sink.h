@@ -121,6 +121,11 @@ public:
 
 	Error begin_quoted_target(const Ref<ParticlesStorage::HeightFrameResources> &p_resources, uint32_t p_draw_flags, VectorView<Color> p_clear_colors = {}, float p_clear_depth = 0.0f, uint32_t p_clear_stencil = 0, const Rect2 &p_region = Rect2(), uint32_t p_breadcrumb = 0);
 	Error prepare_native_range(Ref<NativeHeightRange> &r_range);
+	// Mechanical custody of the original RD range only. These calls preserve
+	// the original device/RT checks and charge the caller's existing budget;
+	// they do not submit, publish a HeightFrame, or attest business completion.
+	static Error observe_native_range(RenderingDevice &p_rd, const Ref<NativeHeightRange> &p_range, const RenderingDevice::NativeDisposalBudget &p_budget, RenderingDevice::NativeDisposalUsage &r_usage, NativeHeightRange::Snapshot &r_snapshot);
+	static Error return_native_range(RenderingDevice &p_rd, const Ref<NativeHeightRange> &p_range, const RenderingDevice::NativeDisposalBudget &p_budget, RenderingDevice::NativeDisposalUsage &r_usage);
 	Error begin(RID p_framebuffer, uint32_t p_draw_flags, VectorView<Color> p_clear_colors = {}, float p_clear_depth = 0.0f, uint32_t p_clear_stencil = 0, const Rect2 &p_region = Rect2(), uint32_t p_breadcrumb = 0);
 	Error bind_uniform_set(RID p_uniform_set, uint32_t p_index);
 	Error bind_vertex_array(RID p_vertex_array);

@@ -60,6 +60,14 @@ Error HeightCaptureCheckedSink::prepare_native_range(Ref<NativeHeightRange> &r_r
 	return fail(error);
 }
 
+Error HeightCaptureCheckedSink::observe_native_range(RenderingDevice &p_rd, const Ref<NativeHeightRange> &p_range, const RenderingDevice::NativeDisposalBudget &p_budget, RenderingDevice::NativeDisposalUsage &r_usage, NativeHeightRange::Snapshot &r_snapshot) {
+	return p_rd._native_height_range_observe(p_range, p_budget, r_usage, r_snapshot);
+}
+
+Error HeightCaptureCheckedSink::return_native_range(RenderingDevice &p_rd, const Ref<NativeHeightRange> &p_range, const RenderingDevice::NativeDisposalBudget &p_budget, RenderingDevice::NativeDisposalUsage &r_usage) {
+	return p_rd._native_height_range_return(p_range, p_budget, r_usage);
+}
+
 Error HeightCaptureCheckedSink::enter_checked_call() {
 	if (native_range.is_null()) {
 		return OK;

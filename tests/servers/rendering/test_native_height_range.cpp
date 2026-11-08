@@ -355,12 +355,12 @@ public:
 	static Error observe(Fixture &f, const Ref<NativeHeightRange> &range, NativeHeightRange::Snapshot &out) {
 		RenderingDevice::NativeDisposalBudget budget{ 64, 64, UINT64_MAX };
 		RenderingDevice::NativeDisposalUsage usage;
-		return f.rd._native_height_range_observe(range, budget, usage, out);
+		return RendererRD::HeightCaptureCheckedSink::observe_native_range(f.rd, range, budget, usage, out);
 	}
 	static Error give_back(Fixture &f, const Ref<NativeHeightRange> &range) {
 		RenderingDevice::NativeDisposalBudget budget{ 64, 64, UINT64_MAX };
 		RenderingDevice::NativeDisposalUsage usage;
-		return f.rd._native_height_range_return(range, budget, usage);
+		return RendererRD::HeightCaptureCheckedSink::return_native_range(f.rd, range, budget, usage);
 	}
 
 public:
@@ -746,7 +746,7 @@ public:
 		REQUIRE(foreign_fixture.rd._native_height_range_prepare(foreign) == OK);
 		NativeHeightRange::Snapshot out;
 		RenderingDevice::NativeDisposalUsage foreign_usage;
-		CHECK(f.rd._native_height_range_observe(foreign, RenderingDevice::NativeDisposalBudget{ 64, 64, UINT64_MAX }, foreign_usage, out) == ERR_INVALID_PARAMETER);
+		CHECK(RendererRD::HeightCaptureCheckedSink::observe_native_range(f.rd, foreign, RenderingDevice::NativeDisposalBudget{ 64, 64, UINT64_MAX }, foreign_usage, out) == ERR_INVALID_PARAMETER);
 		CHECK_FALSE(out.native_complete);
 	}
 	static void post_drain_finalization_busy_cursor() {

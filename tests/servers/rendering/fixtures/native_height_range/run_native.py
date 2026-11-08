@@ -56,6 +56,8 @@ SOURCES = (
     "modules/particles_runtime_tests/config.py",
     "modules/particles_runtime_tests/SCsub",
     "servers/rendering/native_height_range.h",
+    "servers/rendering/renderer_rd/height_capture_checked_sink.h",
+    "servers/rendering/renderer_rd/height_capture_checked_sink.cpp",
     "servers/rendering/native_depth_allocation_projection.h",
     "servers/rendering/native_disposal_witness.h",
     "servers/rendering/rendering_device.h",
