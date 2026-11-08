@@ -561,9 +561,29 @@ public:
 		CHECK(selected_mesh->selection_holds == UINT32_MAX);
 		CHECK(original->version_count == versions_before);
 		selected_mesh->selection_holds = 0;
+		const uint64_t initial_revision = selected_mesh->revision;
+		// This formerly changed has_bone_weights before rejecting and leaked
+		// its temporary Surface. The original API must reject before allocation.
+		RenderingServerTypes::SurfaceData failed_bones;
+		failed_bones.format = uint64_t(RSE::ARRAY_FLAG_FORMAT_CURRENT_VERSION) | RSE::ARRAY_FORMAT_BONES;
+		const uint32_t allocations_before_failed_add = driver.allocations;
+		CHECK_FALSE(storage->mesh_needs_instance(selected_rid, true));
+		ERR_PRINT_OFF;
+		storage->mesh_add_surface(selected_rid, failed_bones);
+		ERR_PRINT_ON;
+		CHECK_FALSE(storage->mesh_needs_instance(selected_rid, true));
+		CHECK_FALSE(selected_mesh->has_bone_weights);
+		CHECK(selected_mesh->surface_count == 1);
+		CHECK(selected_mesh->surfaces[0] == original);
+		CHECK(selected_mesh->revision == initial_revision);
+		CHECK(driver.allocations == allocations_before_failed_add);
+		storage->mesh_set_path(selected_rid, "revision-before-selection");
+		CHECK(selected_mesh->revision == initial_revision + 1);
 		CHECK(storage->mesh_selection_acquire(selected_rid, selection) == OK);
+		CHECK(selection.get_revision() == initial_revision + 1);
 		CHECK(storage->mesh_selection_acquire(selected_rid, selection) == ERR_ALREADY_IN_USE);
 		CHECK(storage->mesh_selection_acquire(selected_rid, sibling) == OK);
+		CHECK(sibling.get_revision() == selection.get_revision());
 		CHECK(original->version_count == versions_before);
 		CHECK(original->immutable_holds == 0);
 		const RID material_before = original->material;
@@ -599,17 +619,73 @@ public:
 		storage->mesh_clear(selected_rid);
 		storage->mesh_surface_remove(selected_rid, 0);
 		storage->mesh_surface_set_material(selected_rid, 0, RID::from_uint64(999));
+		storage->mesh_set_path(selected_rid, "must-be-refused");
 		CHECK(storage->mesh_instance_create(selected_rid).is_null());
 		ERR_PRINT_ON;
 		CHECK(storage->mesh_owner.get_or_null(selected_rid) == selected_mesh);
 		CHECK(selected_mesh->surface_count == 1);
 		CHECK(selected_mesh->surfaces[0] == original);
 		CHECK(original->material == material_before);
+		CHECK(selected_mesh->revision == selection.get_revision());
+		CHECK(storage->mesh_get_path(selected_rid) == "revision-before-selection");
 		CHECK(storage->mesh_selection_release(selection) == OK);
 		CHECK(selected_mesh->selection_holds == 1);
 		CHECK(storage->mesh_selection_release(selection) == ERR_UNAUTHORIZED);
 		CHECK(storage->mesh_selection_release(sibling) == OK);
 		CHECK(selected_mesh->selection_holds == 0);
+		CHECK(selection.get_revision() == 0);
+		storage->mesh_surface_set_material(selected_rid, 0, RID::from_uint64(998));
+		CHECK(selected_mesh->revision == initial_revision + 2);
+		CHECK(storage->mesh_selection_acquire(selected_rid, selection) == OK);
+		CHECK(selection.get_revision() == initial_revision + 2);
+		CHECK(storage->mesh_selection_release(selection) == OK);
+		// Exercise the actual original shadow notification path, including a
+		// stale null reverse entry while its target is selected.
+		const RID shadow_rid = storage->mesh_allocate();
+		storage->mesh_initialize(shadow_rid);
+		auto *shadow_mesh = storage->mesh_owner.get_or_null(shadow_rid);
+		uint32_t shadow_notifications = 0;
+		DependencyTracker shadow_tracker;
+		shadow_tracker.userdata = &shadow_notifications;
+		shadow_tracker.changed_callback = [](Dependency::DependencyChangedNotification notification, DependencyTracker *tracker) {
+			if (notification == Dependency::DEPENDENCY_CHANGED_MESH) {
+				++*static_cast<uint32_t *>(tracker->userdata);
+			}
+		};
+		shadow_tracker.update_begin();
+		shadow_tracker.update_dependency(&selected_mesh->dependency);
+		shadow_tracker.update_end();
+		const uint64_t before_shadow = selected_mesh->revision;
+		storage->mesh_set_shadow_mesh(selected_rid, shadow_rid);
+		CHECK(selected_mesh->revision == before_shadow + 1);
+		CHECK(shadow_notifications == 1);
+		storage->mesh_clear(shadow_rid);
+		CHECK(selected_mesh->revision == before_shadow + 2);
+		CHECK(selected_mesh->shadow_mesh.is_null());
+		CHECK(shadow_notifications == 2);
+		CHECK(storage->mesh_selection_acquire(selected_rid, selection) == OK);
+		const uint64_t selected_shadow_revision = selection.get_revision();
+		storage->mesh_clear(shadow_rid);
+		CHECK(shadow_notifications == 3);
+		CHECK(selected_mesh->revision == selected_shadow_revision);
+		CHECK(storage->mesh_selection_release(selection) == OK);
+		// Original reverse entries outlive invalidation. Return the test's
+		// notification and reverse-edge custody explicitly before owner cleanup.
+		shadow_tracker.clear();
+		shadow_mesh->shadow_owners.erase(selected_mesh);
+		storage->mesh_free(shadow_rid);
+		// Saturation is a boundary fixture. A real MAX snapshot must return
+		// before the subsequent owner mutation exhausts the revision.
+		selected_mesh->revision = UINT64_MAX;
+		CHECK(storage->mesh_selection_acquire(selected_rid, selection) == OK);
+		CHECK(selection.get_revision() == UINT64_MAX);
+		CHECK(storage->mesh_selection_release(selection) == OK);
+		storage->mesh_set_path(selected_rid, "exhausted");
+		CHECK(selected_mesh->revision == 0);
+		CHECK(storage->mesh_selection_acquire(selected_rid, selection) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK_FALSE(selection.is_active());
+		storage->mesh_set_path(selected_rid, "still-exhausted");
+		CHECK(selected_mesh->revision == 0);
 		// Restore the existing fixture's local original owner for directory tests.
 		selected_mesh->surfaces = nullptr;
 		selected_mesh->surface_count = 0;

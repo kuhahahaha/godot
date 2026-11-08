@@ -96,6 +96,9 @@ private:
 	struct MultiMesh;
 
 	struct Mesh {
+		// Original mesh owner state revision. Zero is permanently unselectable
+		// after exhaustion; RID remains the allocation/lifetime identity.
+		uint64_t revision = 1;
 		uint32_t selection_holds = 0;
 		struct Surface {
 			RSE::PrimitiveType primitive = RSE::PRIMITIVE_POINTS;
@@ -263,6 +266,8 @@ private:
 	static RD::VertexFormatID _mesh_surface_generate_external_vertex_format(uint64_t p_input_mask, bool p_input_motion_vectors);
 	static void _mesh_surface_generate_external_version(Mesh::Surface::Version &v, Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated);
 	static void _mesh_surface_get_external_arrays(Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, RID &r_vertex_array_rd, RD::VertexFormatID &r_vertex_format);
+	static void _mesh_revision_advance(Mesh *p_mesh);
+	static void _mesh_invalidate_shadow_owners(Mesh *p_mesh);
 	static void _mesh_surface_clear(Mesh *p_mesh, int p_surface);
 	static void _mesh_surface_dispose(Mesh::Surface *p_surface);
 
@@ -481,6 +486,8 @@ public:
 		NativeSelectionLease &operator=(const NativeSelectionLease &) = delete;
 		~NativeSelectionLease() { CRASH_COND(owner); }
 		bool is_active() const { return owner != nullptr; }
+		// A source revision only while this exact original mesh remains selected.
+		uint64_t get_revision() const { return owner ? generation : 0; }
 	};
 	Error mesh_selection_acquire(RID p_rid, NativeSelectionLease &r_lease);
 	Error mesh_selection_release(NativeSelectionLease &r_lease);

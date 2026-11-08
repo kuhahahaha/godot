@@ -237,6 +237,27 @@ bool MeshStorage::free(RID p_rid) {
 
 /* MESH API */
 
+void MeshStorage::_mesh_revision_advance(Mesh *p_mesh) {
+	// Never wrap a new state onto an old revision. Exhausted owners remain
+	// usable by ordinary renderer APIs, but cannot issue new selections.
+	if (p_mesh->revision) {
+		p_mesh->revision = p_mesh->revision == UINT64_MAX ? 0 : p_mesh->revision + 1;
+	}
+}
+
+void MeshStorage::_mesh_invalidate_shadow_owners(Mesh *p_mesh) {
+	for (Mesh *owner : p_mesh->shadow_owners) {
+		// Preserve original notifications for every reverse entry, including
+		// already cleared ones. Only actual source changes advance revision.
+		if (owner->shadow_mesh.is_valid()) {
+			DEV_ASSERT(!owner->selection_holds);
+			owner->shadow_mesh = RID();
+			_mesh_revision_advance(owner);
+		}
+		owner->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
+	}
+}
+
 Error MeshStorage::mesh_selection_acquire(RID p_rid, NativeSelectionLease &r_lease) {
 	auto *rd = RD::get_singleton();
 	if (!rd || !rd->native_immutable_is_render_thread()) {
@@ -249,7 +270,7 @@ Error MeshStorage::mesh_selection_acquire(RID p_rid, NativeSelectionLease &r_lea
 	if (!mesh || !mesh->surface_count) {
 		return ERR_INVALID_PARAMETER;
 	}
-	if (mesh->selection_holds == UINT32_MAX) {
+	if (!mesh->revision || mesh->selection_holds == UINT32_MAX) {
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
 	if (mesh->blend_shape_count || !mesh->instances.is_empty() || mesh->shadow_mesh.is_valid()) {
@@ -265,6 +286,7 @@ Error MeshStorage::mesh_selection_acquire(RID p_rid, NativeSelectionLease &r_lea
 	r_lease.owner = this;
 	r_lease.device = rd;
 	r_lease.rid = p_rid;
+	r_lease.generation = mesh->revision;
 	return OK;
 }
 
@@ -273,13 +295,14 @@ Error MeshStorage::mesh_selection_release(NativeSelectionLease &r_lease) {
 		return ERR_UNAUTHORIZED;
 	}
 	auto *mesh = mesh_owner.get_or_null(r_lease.rid);
-	if (!mesh || !mesh->selection_holds) {
+	if (!mesh || !mesh->selection_holds || !r_lease.generation || mesh->revision != r_lease.generation) {
 		return ERR_INVALID_DATA;
 	}
 	--mesh->selection_holds;
 	r_lease.owner = nullptr;
 	r_lease.device = nullptr;
 	r_lease.rid = RID();
+	r_lease.generation = 0;
 	return OK;
 }
 
@@ -304,13 +327,7 @@ void MeshStorage::mesh_free(RID p_rid) {
 	if (mesh->instances.size()) {
 		ERR_PRINT("deleting mesh with active instances");
 	}
-	if (mesh->shadow_owners.size()) {
-		for (Mesh *E : mesh->shadow_owners) {
-			Mesh *shadow_owner = E;
-			shadow_owner->shadow_mesh = RID();
-			shadow_owner->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
-		}
-	}
+	_mesh_invalidate_shadow_owners(mesh);
 	mesh_owner.free(p_rid);
 }
 
@@ -324,6 +341,7 @@ void MeshStorage::mesh_set_blend_shape_count(RID p_mesh, int p_blend_shape_count
 	ERR_FAIL_COND(mesh->surface_count > 0); //surfaces already exist
 
 	mesh->blend_shape_count = p_blend_shape_count;
+	_mesh_revision_advance(mesh);
 }
 
 /// Returns stride
@@ -437,6 +455,8 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 	}
 #endif
 
+	ERR_FAIL_COND_MSG(!new_surface.index_count && !new_surface.vertex_count, "Meshes must contain a vertex array, an index array, or both");
+
 	Mesh::Surface *s = memnew(Mesh::Surface);
 
 	s->format = new_surface.format;
@@ -490,10 +510,6 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 
 	s->vertex_count = new_surface.vertex_count;
 
-	if (new_surface.format & RSE::ARRAY_FORMAT_BONES) {
-		mesh->has_bone_weights = true;
-	}
-
 	if (new_surface.index_count) {
 		bool is_index_16 = new_surface.vertex_count <= 65536 && new_surface.vertex_count > 0;
 
@@ -515,8 +531,6 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 			}
 		}
 	}
-
-	ERR_FAIL_COND_MSG(!new_surface.index_count && !new_surface.vertex_count, "Meshes must contain a vertex array, an index array, or both");
 
 	s->aabb = new_surface.aabb;
 	s->bone_aabbs = new_surface.bone_aabbs; //only really useful for returning them.
@@ -579,7 +593,11 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 
 	mesh->surfaces = (Mesh::Surface **)memrealloc(mesh->surfaces, sizeof(Mesh::Surface *) * (mesh->surface_count + 1));
 	mesh->surfaces[mesh->surface_count] = s;
+	if (new_surface.format & RSE::ARRAY_FORMAT_BONES) {
+		mesh->has_bone_weights = true;
+	}
 	mesh->surface_count++;
+	_mesh_revision_advance(mesh);
 
 	for (MeshInstance *mi : mesh->instances) {
 		_mesh_instance_add_surface(mi, mesh, mesh->surface_count - 1);
@@ -588,11 +606,7 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 	_multimesh_mesh_changed(mesh);
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
 
-	for (Mesh *E : mesh->shadow_owners) {
-		Mesh *shadow_owner = E;
-		shadow_owner->shadow_mesh = RID();
-		shadow_owner->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
-	}
+	_mesh_invalidate_shadow_owners(mesh);
 
 	mesh->material_cache.clear();
 }
@@ -650,13 +664,11 @@ Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDe
 	mesh->skeleton_aabb_version = 0;
 	mesh->surfaces[mesh->surface_count] = surface;
 	r_surface_index = mesh->surface_count++;
+	_mesh_revision_advance(mesh);
 	r_generation = surface->external_generation;
 	_multimesh_mesh_changed(mesh);
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
-	for (Mesh *shadow_owner : mesh->shadow_owners) {
-		shadow_owner->shadow_mesh = RID();
-		shadow_owner->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
-	}
+	_mesh_invalidate_shadow_owners(mesh);
 	mesh->material_cache.clear();
 	return OK;
 }
@@ -1590,6 +1602,7 @@ void MeshStorage::mesh_set_blend_shape_mode(RID p_mesh, RSE::BlendShapeMode p_mo
 	ERR_FAIL_INDEX((int)p_mode, 2);
 
 	mesh->blend_shape_mode = p_mode;
+	_mesh_revision_advance(mesh);
 }
 
 RSE::BlendShapeMode MeshStorage::mesh_get_blend_shape_mode(RID p_mesh) const {
@@ -1609,6 +1622,7 @@ void MeshStorage::mesh_surface_update_vertex_region(RID p_mesh, int p_surface, i
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->vertex_buffer.is_null());
 	// Until E25 COW source mirroring is installed, a region write invalidates
 	// new static captures rather than exposing stale bytes as current.
+	_mesh_revision_advance(mesh);
 	mesh->surfaces[p_surface]->static_capture_supported = false;
 	mesh->surfaces[p_surface]->static_capture_invalidated = true;
 
@@ -1629,6 +1643,7 @@ void MeshStorage::mesh_surface_update_attribute_region(RID p_mesh, int p_surface
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->attribute_buffer.is_null());
 	// Until E25 COW source mirroring is installed, a region write invalidates
 	// new static captures rather than exposing stale bytes as current.
+	_mesh_revision_advance(mesh);
 	mesh->surfaces[p_surface]->static_capture_supported = false;
 	mesh->surfaces[p_surface]->static_capture_invalidated = true;
 
@@ -1647,8 +1662,9 @@ void MeshStorage::mesh_surface_update_skin_region(RID p_mesh, int p_surface, int
 	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->immutable_holds, "Immutable native surface holds must return before an in-place mutation.");
 	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->external, "Indexed144 external buffers must be updated through their original owner.");
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->skin_buffer.is_null());
-	// Skin writes do not advance a static geometry revision. They revoke new
-	// static captures while preserving existing renderer skin behavior.
+	// Skin writes revoke static capture classification. The mesh owner state
+	// revision advances even if a later RD update reports a partial failure.
+	_mesh_revision_advance(mesh);
 	mesh->surfaces[p_surface]->static_capture_supported = false;
 	mesh->surfaces[p_surface]->static_capture_invalidated = true;
 
@@ -1669,6 +1685,7 @@ void RendererRD::MeshStorage::mesh_surface_update_index_region(RID p_mesh, int p
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->index_buffer.is_null());
 	// Until E25 COW source mirroring is installed, a region write invalidates
 	// new static captures rather than exposing stale bytes as current.
+	_mesh_revision_advance(mesh);
 	mesh->surfaces[p_surface]->static_capture_supported = false;
 	mesh->surfaces[p_surface]->static_capture_invalidated = true;
 
@@ -1685,6 +1702,7 @@ void MeshStorage::mesh_surface_set_material(RID p_mesh, int p_surface, RID p_mat
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
 	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->immutable_holds, "Immutable native surface holds must return before an in-place mutation.");
 	mesh->surfaces[p_surface]->material = p_material;
+	_mesh_revision_advance(mesh);
 
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MATERIAL);
 	mesh->material_cache.clear();
@@ -1757,6 +1775,7 @@ void MeshStorage::mesh_set_custom_aabb(RID p_mesh, const AABB &p_aabb) {
 	ERR_FAIL_NULL(mesh);
 	ERR_FAIL_COND_MSG(mesh->selection_holds, "Mesh selection must return before mutation.");
 	mesh->custom_aabb = p_aabb;
+	_mesh_revision_advance(mesh);
 
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_AABB);
 }
@@ -1881,10 +1900,16 @@ AABB MeshStorage::mesh_get_aabb(RID p_mesh, RID p_skeleton) {
 		}
 	}
 
-	mesh->aabb = aabb;
-
-	mesh->skeleton_aabb_version = skeleton->version;
-	mesh->skeleton_aabb_rid = p_skeleton;
+	// Bounds queries can refresh the skeleton cache, but must not mutate an
+	// original selected mesh. Return the computed value without caching then.
+	if (!mesh->selection_holds) {
+		if (mesh->aabb != aabb) {
+			_mesh_revision_advance(mesh);
+		}
+		mesh->aabb = aabb;
+		mesh->skeleton_aabb_version = skeleton->version;
+		mesh->skeleton_aabb_rid = p_skeleton;
+	}
 	return aabb;
 }
 
@@ -1892,7 +1917,9 @@ void MeshStorage::mesh_set_path(RID p_mesh, const String &p_path) {
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
 
+	ERR_FAIL_COND_MSG(mesh->selection_holds, "Mesh selection must return before mutation.");
 	mesh->path = p_path;
+	_mesh_revision_advance(mesh);
 }
 
 String MeshStorage::mesh_get_path(RID p_mesh) const {
@@ -1913,6 +1940,7 @@ void MeshStorage::mesh_set_shadow_mesh(RID p_mesh, RID p_shadow_mesh) {
 		shadow_mesh->shadow_owners.erase(mesh);
 	}
 	mesh->shadow_mesh = p_shadow_mesh;
+	_mesh_revision_advance(mesh);
 
 	shadow_mesh = mesh_owner.get_or_null(mesh->shadow_mesh);
 
@@ -1942,17 +1970,14 @@ void MeshStorage::mesh_clear(RID p_mesh) {
 
 	mesh->surfaces = nullptr;
 	mesh->surface_count = 0;
+	_mesh_revision_advance(mesh);
 	mesh->material_cache.clear();
 	mesh->has_bone_weights = false;
 	mesh->aabb = AABB();
 	_multimesh_mesh_changed(mesh);
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
 
-	for (Mesh *E : mesh->shadow_owners) {
-		Mesh *shadow_owner = E;
-		shadow_owner->shadow_mesh = RID();
-		shadow_owner->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
-	}
+	_mesh_invalidate_shadow_owners(mesh);
 }
 
 void MeshStorage::mesh_surface_remove(RID p_mesh, int p_surface) {
@@ -1973,6 +1998,7 @@ void MeshStorage::mesh_surface_remove(RID p_mesh, int p_surface) {
 	}
 	mesh->surfaces = (Mesh::Surface **)memrealloc(mesh->surfaces, sizeof(Mesh::Surface *) * (mesh->surface_count - 1));
 	--mesh->surface_count;
+	_mesh_revision_advance(mesh);
 
 	mesh->material_cache.clear();
 
@@ -2000,11 +2026,7 @@ void MeshStorage::mesh_surface_remove(RID p_mesh, int p_surface) {
 	_multimesh_mesh_changed(mesh);
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
 
-	for (Mesh *E : mesh->shadow_owners) {
-		Mesh *shadow_owner = E;
-		shadow_owner->shadow_mesh = RID();
-		shadow_owner->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
-	}
+	_mesh_invalidate_shadow_owners(mesh);
 }
 
 void MeshStorage::mesh_debug_usage(List<RenderingServerTypes::MeshInfo> *r_info) {
@@ -2070,6 +2092,7 @@ RID MeshStorage::mesh_instance_create(RID p_base) {
 	}
 
 	mi->I = mesh->instances.push_back(mi);
+	_mesh_revision_advance(mesh);
 
 	mi->dirty = true;
 
@@ -2080,6 +2103,7 @@ void MeshStorage::mesh_instance_free(RID p_rid) {
 	MeshInstance *mi = mesh_instance_owner.get_or_null(p_rid);
 	_mesh_instance_clear(mi);
 	mi->mesh->instances.erase(mi->I);
+	_mesh_revision_advance(mi->mesh);
 	mi->I = nullptr;
 
 	mesh_instance_owner.free(p_rid);
