@@ -1755,6 +1755,31 @@ private:
 	// Shared primitives only. Callers must already retain authenticated original
 	// Registry and RD locks. No scope/window or source permission is issued here.
 	Error _production_output_hold_inventory_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_reserved_group, const VectorView<NativeImmutableHold *> &, uint32_t p_limit, uint32_t &r_count);
+	template <typename Visitor>
+	Error _native_immutable_visit_related_locked(RID p_rid, bool p_bidirectional, Visitor &&p_visit);
+	struct NativeProspectiveKey {
+		RID actual;
+		uint32_t future = UINT32_MAX;
+		bool operator==(const NativeProspectiveKey &p_other) const { return actual == p_other.actual && future == p_other.future; }
+	};
+	struct NativeProspectiveSymbol {
+		enum Kind { FUTURE_VERTEX_ARRAY, FUTURE_RENDER_PIPELINE } kind = FUTURE_VERTEX_ARRAY;
+		Vector<RID> dependencies; // Exact future VA used VBs or one exact ready shader.
+	};
+	// Keys/counts only: not authority, immutable eligibility, or group admission.
+	// Caller holds RD lock and must retain exact source/material plans.
+	Error _native_prospective_closure_keys_locked(const VectorView<NativeProspectiveKey> &p_roots, const VectorView<NativeProspectiveSymbol> &p_symbols, uint32_t p_limit, bool p_bidirectional, Vector<NativeProspectiveKey> &r_nodes);
+	struct NativeProspectiveMaterialOrigin {
+		RID material;
+		uint64_t generation = 0;
+	};
+	struct NativeProspectiveDisposalMetadata {
+		uint32_t kind = UINT32_MAX;
+		uint64_t serial = 0, native_driver_id = 0;
+		bool qualified_borrow = false;
+	};
+	// Shared original-owner predicate from actual staging. Does not stage a cell.
+	Error _production_output_resource_preflight_locked(GDExtensionDeviceExit::ProductionRequest &p_request, RID p_rid, uint32_t p_pins, const VectorView<NativeProspectiveMaterialOrigin> &p_origins, NativeProspectiveDisposalMetadata &r_metadata);
 	Error _production_output_hold_stage_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_reserved_group, const VectorView<NativeImmutableHold *> &, uint32_t p_limit, uint32_t &r_count);
 	void _production_output_hold_inventory_clear_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_reserved_group);
 	Error _production_output_hold_adopt_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_pin_serial, uint64_t p_reserved_group, const VectorView<NativeImmutableHold *> &, uint32_t p_limit, uint64_t &r_group);

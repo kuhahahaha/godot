@@ -1,0 +1,107 @@
+{
+  "source_base": "74a28657f0956d46056adb34f8b10f17a0716243",
+  "patch_sha256": "cc7120d3b5e97719286860a46cb26b9e72c56ae00c28393cad16f66e2423d708",
+  "scope": "Shared actual acquire/stage related-edge enumeration and original staging-owner predicate; private typed future-key closure prerequisite. No production G orchestration yet.",
+  "build_exit": 0,
+  "target": {
+    "cases": 1,
+    "assertions": 39,
+    "exit": 0
+  },
+  "neighbors": {
+    "cases": 10,
+    "assertions": 3995,
+    "exit": 0
+  },
+  "red": {
+    "cases": 1,
+    "assertions": 39,
+    "failures": 5,
+    "exit": 1,
+    "control": "disable virtual incoming future edges",
+    "cleanup": "normal exit; original cpp restored byte-for-byte and rebuilt"
+  },
+  "restored_union": {
+    "cases": 222,
+    "assertions": 86627,
+    "exit": 0
+  },
+  "limits": [
+    "Typed traversal has no production orchestration caller; shared enumerate/predicate are consumed by actual acquire/stage",
+    "Full G raw-root cap/aggregate counters/reservations/authenticated scope/backend preeffect integration not complete",
+    "Dedicated stage-direction mutant sensitivity not established; malformed future symbols, pipeline and ownership-refusal matrix not run",
+    "Real Runtime99 carrier and final-reader/ordering are separate open native tasks"
+  ],
+  "source_sha256": {
+    "servers/rendering/rendering_device.h": "8f8a56fc76ae2d6eada61ba2984800c4e64364509f61232fb733c5ff6ffc02a4",
+    "servers/rendering/rendering_device_immutable_hold.cpp": "cc35436afa0985707a07e2c0225164bf69a04d78cce1f39b96856a038afea198",
+    "tests/servers/rendering/test_mesh_storage_external.cpp": "3c8e3c9f44e17c3a3a3fdac9143ce60c4b4eb99b7089d2922c1b325dce3e73b5"
+  },
+  "log_sha256": {
+    "live-restored-build.log": "7695951ed40848c25d8f8f1783669f1ea3108ed71c8e8fa16ff4a96878651e45",
+    "live-union.log": "86da3c2635386e9e29d8bd91872dd026f1b4a7c29d12c91fb4f79d4c650d7be1",
+    "live-material-forward_plus-runner.log": "4a4919b85647cb058f7c8d5fcb240df4e05a64e9d8e4aeb092f77deb33d46bf4",
+    "live-red-build.log": "c8989f4f81ba14e8458c32e41139033817b0b60476bc78555dd52b199bbe2d55",
+    "live-red-test.log": "72eeb88a5cf4ad63b5868ed206fcf02ca1b4952d1c374aba2fa2016e3d1e7fd1",
+    "live-restored-test.log": "86da3c2635386e9e29d8bd91872dd026f1b4a7c29d12c91fb4f79d4c650d7be1",
+    "live-material-mobile-runner.log": "ffc12c24752bd45d3bc97d3b68ddf6a212fa01c29dedd6ed3b7e456036af6a3a",
+    "live-native-neighbors.log": "b51bf0eeea3d8db2b949634bc09ccb0efe0782174ac8aca32dd53b727cf12e1a",
+    "live-target.log": "c62ddce6d57a7ab01b1e3779910d54e19b2c2d012a56e36326e3a23f9cda344e",
+    "live-green-build.log": "db16a2b8a7c9c2574d09d3afffb4a483db002d429f4135f4050030e32f3a9904"
+  },
+  "metal_execution": {
+    "host_sha256": "930ab4f241dbe32697f57b05bcd9e134715f826e522aafff70d581c60af89f48",
+    "runs": [
+      {
+        "method": "mobile",
+        "command": [
+          "python3",
+          "tests/servers/rendering/fixtures/particle_external_guard_native/run_native.py",
+          "--godot",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+          "--sha256",
+          "930ab4f241dbe32697f57b05bcd9e134715f826e522aafff70d581c60af89f48",
+          "--out",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-preparation-finite-bank-20261108/candidate-prospective-g-closure/live-material-mobile",
+          "--driver",
+          "metal",
+          "--method",
+          "mobile"
+        ],
+        "exit": 0,
+        "seconds": 13.29429578781128
+      },
+      {
+        "method": "forward_plus",
+        "command": [
+          "python3",
+          "tests/servers/rendering/fixtures/particle_external_guard_native/run_native.py",
+          "--godot",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+          "--sha256",
+          "930ab4f241dbe32697f57b05bcd9e134715f826e522aafff70d581c60af89f48",
+          "--out",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-preparation-finite-bank-20261108/candidate-prospective-g-closure/live-material-forward_plus",
+          "--driver",
+          "metal",
+          "--method",
+          "forward_plus"
+        ],
+        "exit": 0,
+        "seconds": 6.267287015914917
+      }
+    ]
+  },
+  "metal_guard_neighbor": {
+    "mobile": {
+      "runner_exit": 0,
+      "result_file": "live-material-mobile/result.json",
+      "scope": "original guard fixture, no dispatch recorded/full physical return claimed"
+    },
+    "forward_plus": {
+      "runner_exit": 0,
+      "result_file": "live-material-forward_plus/result.json",
+      "scope": "original guard fixture, no dispatch recorded/full physical return claimed"
+    }
+  }
+}

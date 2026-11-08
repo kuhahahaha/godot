@@ -361,6 +361,32 @@ Error RenderingDevice::_native_immutable_resource_eligibility_locked(RID rid) {
 	return OK;
 }
 
+template <typename Visitor>
+Error RenderingDevice::_native_immutable_visit_related_locked(RID rid, bool bidirectional, Visitor &&visit) {
+	for (const auto *edges : { bidirectional ? dependency_map.getptr(rid) : nullptr, reverse_dependency_map.getptr(rid) }) {
+		if (edges) {
+			for (RID related : *edges) {
+				const Error error = visit(related);
+				if (error != OK) {
+					return error;
+				}
+			}
+		}
+	}
+	if (const auto *shader = shader_owner.owns(rid) ? shader_owner.get_or_null(rid) : nullptr) {
+		for (RID sampler : shader->native_immutable_samplers) {
+			const Error error = visit(sampler);
+			if (error != OK) {
+				return error;
+			}
+		}
+	}
+	if (const auto *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr; texture && texture->owner.is_valid()) {
+		return visit(texture->owner);
+	}
+	return OK;
+}
+
 Error RenderingDevice::native_immutable_hold_acquire(const VectorView<RID> &roots, NativeImmutableHold &out, uint32_t limit) {
 	if (render_thread_id != Thread::get_caller_id()) {
 		return ERR_UNAUTHORIZED;
@@ -409,32 +435,9 @@ Error RenderingDevice::native_immutable_hold_acquire(const VectorView<RID> &root
 		}
 	}
 	for (uint32_t i = 0; i < count; ++i) {
-		if (const auto *dependencies = reverse_dependency_map.getptr(resources[i])) {
-			for (RID dependency : *dependencies) {
-				const Error error = append(dependency);
-				if (error != OK) {
-					return error;
-				}
-			}
-		}
-		// Shader factories preserve the actual embedded sampler RIDs. These
-		// physical owners share this hold's bounded atomic closure, without
-		// imposing a new legacy shader/sampler dependency relationship.
-		if (const auto *shader = shader_owner.owns(resources[i]) ? shader_owner.get_or_null(resources[i]) : nullptr) {
-			for (RID sampler : shader->native_immutable_samplers) {
-				const Error error = append(sampler);
-				if (error != OK) {
-					return error;
-				}
-			}
-		}
-		// Native texture views must retain the actual original parent even when
-		// an older owner did not add a graph dependency for the view.
-		if (const auto *texture = texture_owner.owns(resources[i]) ? texture_owner.get_or_null(resources[i]) : nullptr; texture && texture->owner.is_valid()) {
-			const Error error = append(texture->owner);
-			if (error != OK) {
-				return error;
-			}
+		const Error error = _native_immutable_visit_related_locked(resources[i], false, append);
+		if (error != OK) {
+			return error;
 		}
 	}
 	if (!use_inline && dynamic_resources.resize(count) != OK) {
@@ -843,6 +846,81 @@ Error RenderingDevice::_production_output_hold_capture_locked(GDExtensionProduct
 	return _production_output_hold_adopt_locked(request, pin.serial, 0, VectorView<NativeImmutableHold *>(holds, 1), request.capacity.resource_uses, group_serial);
 }
 
+Error RenderingDevice::_native_prospective_closure_keys_locked(const VectorView<NativeProspectiveKey> &roots, const VectorView<NativeProspectiveSymbol> &symbols, uint32_t limit, bool bidirectional, Vector<NativeProspectiveKey> &out) {
+	out.clear();
+	if (!roots.size() || !roots.ptr() || (symbols.size() && !symbols.ptr()) || !limit) {
+		return ERR_INVALID_PARAMETER;
+	}
+	Vector<NativeProspectiveKey> nodes;
+	auto append = [&](const NativeProspectiveKey &key) -> Error {
+		if (key.actual.is_valid() ? key.future != UINT32_MAX : key.future >= symbols.size()) {
+			return ERR_INVALID_PARAMETER;
+		}
+		for (const auto &existing : nodes) {
+			if (existing == key) {
+				return OK;
+			}
+		}
+		if (uint64_t(nodes.size()) >= limit) {
+			return ERR_OUT_OF_MEMORY;
+		}
+		const auto index = nodes.size();
+		if (nodes.resize(index + 1) != OK) {
+			return ERR_OUT_OF_MEMORY;
+		}
+		nodes.write[index] = key;
+		return OK;
+	};
+	for (uint32_t root = 0; root < roots.size(); ++root) {
+		const Error error = append(roots[root]);
+		if (error != OK) {
+			return error;
+		}
+	}
+	for (int64_t i = 0; i < nodes.size(); ++i) {
+		// append may reallocate nodes; never keep a reference to its element.
+		const NativeProspectiveKey key = nodes[i];
+		if (key.actual.is_valid()) {
+			if (!_native_immutable_counter(key.actual)) {
+				return ERR_DOES_NOT_EXIST;
+			}
+			const Error error = _native_immutable_visit_related_locked(key.actual, bidirectional, [&](RID related) { return append({ related, UINT32_MAX }); });
+			if (error != OK) {
+				return error;
+			}
+			if (bidirectional) {
+				for (uint32_t symbol = 0; symbol < symbols.size(); ++symbol) {
+					for (RID dependency : symbols[symbol].dependencies) {
+						if (dependency == key.actual) {
+							const Error virtual_error = append({ RID(), symbol });
+							if (virtual_error != OK) {
+								return virtual_error;
+							}
+						}
+					}
+				}
+			}
+		} else {
+			const auto &symbol = symbols[key.future];
+			if ((symbol.kind != NativeProspectiveSymbol::FUTURE_VERTEX_ARRAY && symbol.kind != NativeProspectiveSymbol::FUTURE_RENDER_PIPELINE) ||
+					(symbol.kind == NativeProspectiveSymbol::FUTURE_RENDER_PIPELINE && symbol.dependencies.size() != 1)) {
+				return ERR_INVALID_PARAMETER;
+			}
+			for (RID dependency : symbol.dependencies) {
+				if (symbol.kind == NativeProspectiveSymbol::FUTURE_VERTEX_ARRAY ? !vertex_buffer_owner.owns(dependency) : !shader_owner.owns(dependency)) {
+					return ERR_DOES_NOT_EXIST;
+				}
+				const Error error = append({ dependency, UINT32_MAX });
+				if (error != OK) {
+					return error;
+				}
+			}
+		}
+	}
+	out = std::move(nodes);
+	return OK;
+}
+
 void RenderingDevice::_production_output_hold_inventory_clear_locked(GDExtensionDeviceExit::ProductionRequest &request, uint64_t reserved_group) {
 	using namespace GDExtensionDeviceExit;
 	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
@@ -874,6 +952,77 @@ Error RenderingDevice::_production_output_hold_inventory_locked(GDExtensionDevic
 	return OK;
 }
 
+Error RenderingDevice::_production_output_resource_preflight_locked(GDExtensionDeviceExit::ProductionRequest &request, RID rid, uint32_t pins, const VectorView<NativeProspectiveMaterialOrigin> &origins, NativeProspectiveDisposalMetadata &metadata) {
+	using namespace GDExtensionDeviceExit;
+	metadata = NativeProspectiveDisposalMetadata();
+	const uint64_t wide_begin = uint64_t(request.use_count) + request.binding_used;
+	if (wide_begin > request.capacity.resource_uses) {
+		return ERR_INVALID_DATA;
+	}
+	const uint32_t begin = uint32_t(wide_begin);
+	uint32_t kind;
+	uint64_t serial, native_driver_id;
+	auto **head = _production_disposal_head(rid, kind, serial, native_driver_id);
+	auto *counter = _native_immutable_counter(rid);
+	if (!head || !serial || (kind < 10 && !native_driver_id) || !counter || *counter < pins) {
+		return ERR_INVALID_DATA;
+	}
+	QualificationPhysicalReturn *qualified = nullptr;
+	if (auto *qualified_buffer = _native_immutable_buffer(rid)) {
+		qualified = qualified_buffer->qualification_return;
+	} else if (auto *qualified_texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr) {
+		qualified = qualified_texture->qualification_return;
+	} else if (auto *qualified_shader = shader_owner.owns(rid) ? shader_owner.get_or_null(rid) : nullptr) {
+		qualified = qualified_shader->qualification_return;
+	} else if (auto *qualified_pipeline = compute_pipeline_owner.owns(rid) ? compute_pipeline_owner.get_or_null(rid) : nullptr) {
+		qualified = qualified_pipeline->qualification_return;
+	} else if (auto *qualified_sampler = sampler_owner.owns(rid) ? sampler_owner.get_or_null(rid) : nullptr) {
+		qualified = qualified_sampler->qualification_return;
+	} else if (auto *qualified_uniform_set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr) {
+		qualified = qualified_uniform_set->qualification_return;
+	}
+	if (qualified) {
+		bool original = false;
+		auto same_use = [&](const ProductionResourceUse &use) { return use.physical == qualified && use.request == &request && use.request_serial == request.serial && use.rid == rid.get_id() && use.same_physical() && use.linked(); };
+		for (uint32_t i = 0; i < request.resource_count; ++i) {
+			const auto &slot = request.resources[i];
+			for (uint32_t u = 0; u < slot.use_count; ++u) {
+				original |= same_use(slot.uses[u]);
+			}
+			original |= slot.imported && &slot.owned_physical == qualified && qualified->rid == rid.get_id() && slot.backing_serial == qualified->serial;
+		}
+		for (uint32_t i = 0; i < begin; ++i) {
+			original |= same_use(request.uses[i].dependency);
+		}
+		if (!original) {
+			return ERR_UNAUTHORIZED;
+		}
+	}
+	if (auto *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr; set && set->invalidated_callback) {
+		bool material_owned = false;
+		for (uint32_t origin_index = 0; origin_index < origins.size(); ++origin_index) {
+			const auto &origin = origins[origin_index];
+			material_owned |= !origin.material.is_null() && origin.material == set->production_material_origin &&
+					origin.generation == set->production_material_origin_generation &&
+					RendererRD::MaterialStorage::_native_hold_callback_is_owned(set->production_material_origin, set->production_material_origin_generation, set->invalidated_callback, set->invalidated_callback_userdata, rid);
+		}
+		if (!material_owned) {
+			return ERR_UNAVAILABLE;
+		}
+	}
+	if (auto *buffer = _native_immutable_buffer(rid); buffer && buffer->transfer_worker_index >= 0) {
+		return ERR_BUSY;
+	}
+	if (auto *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr; texture && (texture->transfer_worker_index >= 0)) {
+		return ERR_UNAVAILABLE;
+	}
+	metadata.kind = kind;
+	metadata.serial = serial;
+	metadata.native_driver_id = native_driver_id;
+	metadata.qualified_borrow = qualified != nullptr;
+	return OK;
+}
+
 Error RenderingDevice::_production_output_hold_stage_locked(GDExtensionDeviceExit::ProductionRequest &request, uint64_t reserved_group, const VectorView<NativeImmutableHold *> &holds, uint32_t limit, uint32_t &out_count) {
 	using namespace GDExtensionDeviceExit;
 	// This bounded scratch belongs to the already admitted request. Every
@@ -890,6 +1039,11 @@ Error RenderingDevice::_production_output_hold_stage_locked(GDExtensionDeviceExi
 				return ERR_INVALID_PARAMETER;
 			}
 		}
+	}
+	NativeProspectiveMaterialOrigin origins[2];
+	for (uint32_t h = 0; h < holds.size(); ++h) {
+		origins[h].material = holds[h]->material_origin;
+		origins[h].generation = holds[h]->material_origin_generation;
 	}
 	const uint32_t begin = request.use_count + request.binding_used;
 	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
@@ -939,61 +1093,10 @@ Error RenderingDevice::_production_output_hold_stage_locked(GDExtensionDeviceExi
 				return OK;
 			}
 		}
-		uint32_t kind;
-		uint64_t serial, native_driver_id;
-		auto **head = _production_disposal_head(rid, kind, serial, native_driver_id);
-		auto *counter = _native_immutable_counter(rid);
-		if (!head || !serial || (kind < 10 && !native_driver_id) || !counter || *counter < pins) {
-			return ERR_INVALID_DATA;
-		}
-		QualificationPhysicalReturn *qualified = nullptr;
-		if (auto *qualified_buffer = _native_immutable_buffer(rid)) {
-			qualified = qualified_buffer->qualification_return;
-		} else if (auto *qualified_texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr) {
-			qualified = qualified_texture->qualification_return;
-		} else if (auto *qualified_shader = shader_owner.owns(rid) ? shader_owner.get_or_null(rid) : nullptr) {
-			qualified = qualified_shader->qualification_return;
-		} else if (auto *qualified_pipeline = compute_pipeline_owner.owns(rid) ? compute_pipeline_owner.get_or_null(rid) : nullptr) {
-			qualified = qualified_pipeline->qualification_return;
-		} else if (auto *qualified_sampler = sampler_owner.owns(rid) ? sampler_owner.get_or_null(rid) : nullptr) {
-			qualified = qualified_sampler->qualification_return;
-		} else if (auto *qualified_uniform_set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr) {
-			qualified = qualified_uniform_set->qualification_return;
-		}
-		if (qualified) {
-			bool original = false;
-			auto same_use = [&](const ProductionResourceUse &use) { return use.physical == qualified && use.request == &request && use.request_serial == request.serial && use.rid == rid.get_id() && use.same_physical() && use.linked(); };
-			for (uint32_t i = 0; i < request.resource_count; ++i) {
-				const auto &slot = request.resources[i];
-				for (uint32_t u = 0; u < slot.use_count; ++u) {
-					original |= same_use(slot.uses[u]);
-				}
-				original |= slot.imported && &slot.owned_physical == qualified && qualified->rid == rid.get_id() && slot.backing_serial == qualified->serial;
-			}
-			for (uint32_t i = 0; i < begin; ++i) {
-				original |= same_use(request.uses[i].dependency);
-			}
-			if (!original) {
-				return ERR_UNAUTHORIZED;
-			}
-		}
-		if (auto *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr; set && set->invalidated_callback) {
-			bool material_owned = false;
-			for (uint32_t h = 0; h < holds.size(); ++h) {
-				NativeImmutableHold *hold = holds[h];
-				material_owned |= !hold->material_origin.is_null() && hold->material_origin == set->production_material_origin &&
-						hold->material_origin_generation == set->production_material_origin_generation &&
-						RendererRD::MaterialStorage::_native_hold_callback_is_owned(set->production_material_origin, set->production_material_origin_generation, set->invalidated_callback, set->invalidated_callback_userdata, rid);
-			}
-			if (!material_owned) {
-				return ERR_UNAVAILABLE;
-			}
-		}
-		if (auto *buffer = _native_immutable_buffer(rid); buffer && buffer->transfer_worker_index >= 0) {
-			return ERR_BUSY;
-		}
-		if (auto *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr; texture && (texture->transfer_worker_index >= 0)) {
-			return ERR_UNAVAILABLE;
+		NativeProspectiveDisposalMetadata metadata;
+		const Error checked = _production_output_resource_preflight_locked(request, rid, pins, VectorView<NativeProspectiveMaterialOrigin>(origins, holds.size()), metadata);
+		if (checked != OK) {
+			return checked;
 		}
 		if (count == limit) {
 			return ERR_OUT_OF_MEMORY;
@@ -1004,12 +1107,12 @@ Error RenderingDevice::_production_output_hold_stage_locked(GDExtensionDeviceExi
 			if (eligible) {
 				c.output_role = ProductionUseCell::OutputRole::DISPOSAL_STAGED;
 				c.disposal.rid = rid.get_id();
-				c.disposal.serial = serial;
-				c.disposal.native_driver_id = native_driver_id;
-				c.disposal.kind = kind;
+				c.disposal.serial = metadata.serial;
+				c.disposal.native_driver_id = metadata.native_driver_id;
+				c.disposal.kind = metadata.kind;
 				c.disposal.counter_pins_remaining = pins;
 				c.disposal.counter_dropped = pins == 0;
-				c.disposal.qualified_borrow = qualified != nullptr;
+				c.disposal.qualified_borrow = metadata.qualified_borrow;
 				++count;
 				return OK;
 			}
@@ -1037,32 +1140,10 @@ Error RenderingDevice::_production_output_hold_stage_locked(GDExtensionDeviceExi
 				continue;
 			}
 			const RID rid = RID::from_uint64(cell.disposal.rid);
-			for (const auto *edges : { dependency_map.getptr(rid), reverse_dependency_map.getptr(rid) }) {
-				if (edges) {
-					for (RID related : *edges) {
-						const Error error = stage(related, 0);
-						if (error != OK) {
-							rollback();
-							return error;
-						}
-					}
-				}
-			}
-			if (const auto *shader = shader_owner.owns(rid) ? shader_owner.get_or_null(rid) : nullptr) {
-				for (RID sampler : shader->native_immutable_samplers) {
-					const Error error = stage(sampler, 0);
-					if (error != OK) {
-						rollback();
-						return error;
-					}
-				}
-			}
-			if (const auto *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr; texture && texture->owner.is_valid()) {
-				const Error error = stage(texture->owner, 0);
-				if (error != OK) {
-					rollback();
-					return error;
-				}
+			const Error error = _native_immutable_visit_related_locked(rid, true, [&](RID related) { return stage(related, 0); });
+			if (error != OK) {
+				rollback();
+				return error;
 			}
 		}
 	}

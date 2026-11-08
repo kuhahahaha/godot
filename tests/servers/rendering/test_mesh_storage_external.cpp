@@ -277,6 +277,72 @@ public:
 		CHECK(driver.frees == driver.allocations);
 		end_native(device);
 	}
+	static void prospective_closure_only() {
+		RenderingDevice device;
+		Indexed144FormatDriver driver;
+		begin_native(device, driver);
+		const RID a = device.vertex_buffer_create(12, {}, RenderingDevice::BUFFER_CREATION_AS_STORAGE_BIT);
+		const RID b = device.vertex_buffer_create(12, {}, RenderingDevice::BUFFER_CREATION_AS_STORAGE_BIT);
+		const RID c = device.vertex_buffer_create(12, {}, RenderingDevice::BUFFER_CREATION_AS_STORAGE_BIT);
+		RenderingDevice::VertexAttribute first;
+		first.location = 0;
+		first.binding = 0;
+		first.stride = 4;
+		first.format = RenderingDevice::DATA_FORMAT_R32_SFLOAT;
+		auto second = first;
+		second.location = 1;
+		second.binding = 1;
+		const auto format = device.vertex_format_create({ first, second });
+		const RID old_array = device.vertex_array_create(3, format, { a, b });
+		CHECK(old_array.is_valid());
+		using Key = RenderingDevice::NativeProspectiveKey;
+		using Symbol = RenderingDevice::NativeProspectiveSymbol;
+		Symbol future;
+		future.kind = Symbol::FUTURE_VERTEX_ARRAY;
+		future.dependencies = { b, c };
+		Symbol symbols[] = { future };
+		Key actual_root{ a, UINT32_MAX }, future_root{ RID(), 0 };
+		Vector<Key> nodes;
+		const uint32_t before_formats = driver.formats, before_arrays = arrays(device);
+		const uint32_t before_forward_edges = device.dependency_map.size(), before_reverse_edges = device.reverse_dependency_map.size();
+		{
+			MutexLock lock(device._thread_safe_);
+			CHECK(device._native_prospective_closure_keys_locked({ &actual_root, 1 }, { symbols, 1 }, 5, false, nodes) == OK);
+			CHECK(nodes.size() == 1); // Reverse-only acquisition does not follow dependents.
+			CHECK(device._native_prospective_closure_keys_locked({ &actual_root, 1 }, { symbols, 1 }, 5, true, nodes) == OK);
+			CHECK(nodes.size() == 5); // a, actual VA, b, future VA, c.
+			bool saw_c = false, saw_future = false;
+			for (const Key &key : nodes) {
+				saw_c |= key.actual == c;
+				saw_future |= key.future == 0 && key.actual.is_null();
+			}
+			CHECK(saw_c);
+			CHECK(saw_future);
+			CHECK(device._native_prospective_closure_keys_locked({ &actual_root, 1 }, { symbols, 1 }, 4, true, nodes) == ERR_OUT_OF_MEMORY);
+			CHECK(nodes.is_empty());
+			CHECK(device._native_prospective_closure_keys_locked({ &future_root, 1 }, { symbols, 1 }, 3, false, nodes) == OK);
+			CHECK(nodes.size() == 3); // future VA, b, c; no incoming edge to old VA.
+		}
+		CHECK(driver.formats == before_formats);
+		CHECK(arrays(device) == before_arrays);
+		CHECK(device.native_immutable_hold_count == 0);
+		CHECK(device.dependency_map.size() == before_forward_edges);
+		CHECK(device.reverse_dependency_map.size() == before_reverse_edges);
+		for (RID buffer : { a, b, c }) {
+			const auto *actual = device.vertex_buffer_owner.get_or_null(buffer);
+			CHECK(actual != nullptr);
+			if (actual) {
+				CHECK(actual->native_immutable_holds == 0);
+			}
+		}
+		device.free_rid(old_array);
+		for (RID buffer : { a, b, c }) {
+			device.free_rid(buffer);
+		}
+		dispose(device);
+		CHECK(driver.frees == driver.allocations);
+		end_native(device);
+	}
 	static void detach(RenderingDevice &p_device) {
 		for (RID rid : p_device.vertex_array_owner.get_owned_list()) {
 			p_device.free_rid(rid);
@@ -1087,4 +1153,8 @@ TEST_CASE("[B4][NativeVertexArrayPlan] retained Indexed144 source plans without 
 
 TEST_CASE("[B4][NativeVertexArrayPreflight] validates exact fetches without factories or holds") {
 	TestIndexed144DeviceAccess::preflight_only();
+}
+
+TEST_CASE("[B4][ProspectiveClosureKeys] follows actual and virtual adoption edges without staging") {
+	TestIndexed144DeviceAccess::prospective_closure_only();
 }

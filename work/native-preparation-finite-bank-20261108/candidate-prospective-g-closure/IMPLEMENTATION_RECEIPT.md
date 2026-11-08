@@ -1,0 +1,7 @@
+# Applied prospective closure prerequisite
+
+Actual immutable acquisition and adoption staging share their original related-edge enumerator, retaining reverse-only acquisition versus bidirectional staging and directed embedded sampler/texture-owner edges. Original staging invokes the extracted owner/qualification/material-callback predicate. Private typed actual/future keys traverse a prospective closure without fake RIDs, holds or staging cells.
+
+Build exit0; focused1/39 and original neighbors10/3995 passed. Disabling virtual incoming future edges failed5 intended assertions, exit1 with normal cleanup. Exact cpp restored and rebuilt; union222/86627 passed. Independent historical and current-HEAD reviews retained; source pins and actual logs are in RUNTIME_RECEIPT.json. Historical isolated-only candidate documents describe their earlier phase; this applied receipt supersedes that implementation status.
+
+This is a prerequisite, not full G admission. Authenticated original scope/row/root builders, exact raw material roots before dedup, aggregate increments, per-group reservations/origins, future factory identity, backend preeffect checks and execution revalidation remain. No Runtime carrier/Full-reader/GPU-order closure is inferred. Real Metal guard fixture results, when listed in RUNTIME_RECEIPT, test their original guard scope only; they do not submit dispatch or claim full physical return.
