@@ -3844,6 +3844,14 @@ Error RenderForwardMobile::external_pipeline_prepare(const RendererRD::ExternalS
 	auto *shader = material->shader_data;
 	const bool instance192 = p_surface.profile == ExternalOutputConfig::INSTANCE_192;
 	const bool indexed144 = p_surface.profile == ExternalOutputConfig::INDEXED_144;
+	// Instance192 derives from its original generation's flattened source.
+	// Indexed144 keeps the original slot-owned source/backing association.
+	if (instance192 && (!r_preparation.source_geometry || p_surface.geometry_source != r_preparation.source_geometry ||
+			p_surface.material_selection != r_preparation.source_material || p_surface.material_generation != r_preparation.source_material_generation ||
+			!r_preparation.source_geometry->metadata_matches(p_surface.primitive, p_surface.surface_format, p_surface.surface_aabb, p_surface.surface_uv_scale))) {
+		return fail(ERR_INVALID_DATA);
+	}
+	const auto *geometry_source = instance192 ? r_preparation.source_geometry : p_surface.geometry_source;
 	if ((!instance192 && !indexed144) || indexed144 != p_surface.geometry_source->is_external() || !shader || !shader->is_valid() ||
 			(instance192 && !shader->instance192_shader_supported()) || shader->uses_point_size || shader->uses_particle_trails) {
 		return fail(ERR_UNAVAILABLE);
@@ -3919,7 +3927,7 @@ Error RenderForwardMobile::external_pipeline_prepare(const RendererRD::ExternalS
 		return fail(ERR_CANT_CREATE);
 	}
 	const uint64_t input_mask = shader->get_vertex_input_mask(key.version, false, indexed144, instance192);
-	Error error = MeshStorage::mesh_surface_hold_derive(*p_surface.geometry_source, input_mask, false, false, 0, r_preparation.geometry[0]);
+	Error error = MeshStorage::mesh_surface_hold_derive(*geometry_source, input_mask, false, false, 0, r_preparation.geometry[0]);
 	if (error != OK) {
 		return fail(error);
 	}

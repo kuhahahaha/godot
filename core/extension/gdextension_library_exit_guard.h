@@ -1108,6 +1108,8 @@ public:
 	GDExtensionDeviceSessionResultV1 production_append_v2(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, uint64_t ordinal, uint64_t revision, GDExtensionProductionAppendV2 *out, uint32_t expected_contract = 2);
 	GDExtensionDeviceSessionResultV1 production_close_segment_v2(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, GDExtensionProductionSegmentV2 *out, uint32_t expected_contract = 2);
 	GDExtensionDeviceSessionResultV1 production_record_consume_v2(GDExtensionProductionRequestRefV1 ref, uint64_t serial, GDExtensionProductionRecordReportV2 *out, uint32_t expected_contract = 2);
+	GDExtensionDeviceSessionResultV1 production_observe_v3(GDExtensionProductionRequestRefV1, const GDExtensionProductionServiceBudgetV1 *, GDExtensionProductionObserveResultV3 *);
+	GDExtensionDeviceSessionResultV1 production_output_return_consume(GDExtensionProductionRequestRefV1, const GDExtensionProductionOutputGenerationRefV1 *, GDExtensionProductionOutputGenerationResultV1 *);
 	GDExtensionDeviceSessionResultV1 production_observe_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionServiceBudgetV1 *budget, GDExtensionProductionReportV2 *out, uint32_t expected_contract = 2);
 	GDExtensionDeviceSessionResultV1 production_facts_v2(GDExtensionProductionRequestRefV1 ref, uint64_t revision, uint32_t first, GDExtensionProductionFactV2 *out, uint32_t capacity, uint32_t *written, uint32_t expected_contract = 2);
 	GDExtensionDeviceSessionResultV1 production_release_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionServiceBudgetV1 *input, GDExtensionProductionServiceBudgetV1 *remaining, GDExtensionProductionReportV2 *report, uint32_t expected_contract = 2);

@@ -189,7 +189,18 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 					r_usage.receipts >= MIN(p_budget.receipts, 128u) || !p_budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= p_budget.deadline_micros) {
 				return ERR_BUSY;
 			}
-			if (owner.retained_material_count) {
+			if (owner.retained_surface_count) {
+				// These source-only holds have never been recorded or transferred.
+				// Per-entry derived holds retain all actual later native uses.
+				auto &row = owner.generation_materials[owner.retained_surface_count - 1];
+				error = MeshStorage::mesh_surface_hold_release(row.geometry_source);
+				if (error != OK) {
+					return error;
+				}
+				row.mesh = RID();
+				row.native_surface = UINT32_MAX;
+				--owner.retained_surface_count;
+			} else if (owner.retained_material_count) {
 				auto *materials = MaterialStorage::get_singleton();
 				if (!materials) {
 					return ERR_UNAVAILABLE;

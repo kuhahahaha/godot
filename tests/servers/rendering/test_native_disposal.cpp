@@ -38,6 +38,7 @@ TEST_FORCE_LINK(test_native_disposal)
 
 class TestNativeDisposalAccess {
 public:
+	static void immutable_inline();
 	static void sampled_disposal();
 	static void sampled_failure();
 	static void sampled_identity();
@@ -1938,6 +1939,94 @@ void TestNativeDisposalAccess::pipeline_rid_capacity() {
 	rd.framebuffer_formats.clear();
 	rd.framebuffer_format_cache.clear();
 	detach(rd);
+}
+
+void TestNativeDisposalAccess::immutable_inline() {
+	using namespace TestNativeDisposal;
+	RenderingDevice rd;
+	Driver driver;
+	driver.unique_buffers = true;
+	attach(rd, driver);
+	RID roots[4];
+	NativeDisposalWitness witnesses[4];
+	for (uint32_t i = 0; i < 4; ++i) {
+		REQUIRE(create(rd, roots[i], witnesses[i]) == OK);
+		if (i) {
+			rd._add_dependency(roots[i - 1], roots[i]);
+		}
+	}
+	// The final three resources form a complete closure within the original row.
+	RenderingDevice::NativeImmutableHold first;
+	REQUIRE(rd.native_immutable_hold_acquire(VectorView<RID>(&roots[1], 1), first, 3) == OK);
+	CHECK(first.inline_count == 3);
+	CHECK(first.resources.is_empty());
+	CHECK(first._resource_span().ptr() == first.inline_resources);
+	CHECK(rd.native_immutable_hold_count == 1);
+	RenderingDevice::NativeImmutableHold moved(static_cast<RenderingDevice::NativeImmutableHold &&>(first));
+	CHECK_FALSE(first.is_active());
+	CHECK(first.inline_count == 0);
+	CHECK(first._resource_span().is_empty());
+	CHECK(moved.inline_count == 3);
+	CHECK(moved._resource_span().ptr() == moved.inline_resources);
+	RenderingDevice::NativeImmutableHold assigned;
+	assigned = static_cast<RenderingDevice::NativeImmutableHold &&>(moved);
+	CHECK_FALSE(moved.is_active());
+	CHECK(moved._resource_span().is_empty());
+	assigned = static_cast<RenderingDevice::NativeImmutableHold &&>(assigned);
+	CHECK(assigned.inline_count == 3);
+	for (uint32_t i = 1; i < 4; ++i) {
+		CHECK(assigned._resource_span()[i - 1] == roots[i]);
+		CHECK(rd.native_immutable_resource_is_held(roots[i]));
+	}
+	CHECK(rd.native_immutable_hold_release(assigned) == OK);
+	CHECK(assigned._resource_span().is_empty());
+	CHECK(rd.native_immutable_hold_count == 0);
+	// A fourth dependency is refused before any counter or output mutation.
+	RenderingDevice::NativeImmutableHold refused;
+	CHECK(rd.native_immutable_hold_acquire(VectorView<RID>(&roots[0], 1), refused, 3) == ERR_OUT_OF_MEMORY);
+	CHECK_FALSE(refused.is_active());
+	CHECK(refused.inline_count == 0);
+	CHECK(refused.resources.is_empty());
+	CHECK(rd.native_immutable_hold_count == 0);
+	for (RID rid : roots) {
+		CHECK_FALSE(rd.native_immutable_resource_is_held(rid));
+		CHECK_FALSE(rd.native_immutable_resource_is_retiring(rid));
+	}
+	// Larger original holds retain their Vector path and original retirement.
+	RenderingDevice::NativeImmutableHold large;
+	REQUIRE(rd.native_immutable_hold_acquire(VectorView<RID>(&roots[0], 1), large, 4) == OK);
+	CHECK(large.inline_count == 0);
+	CHECK(large.resources.size() == 4);
+	RenderingDevice::NativeImmutableHold large_moved(static_cast<RenderingDevice::NativeImmutableHold &&>(large));
+	CHECK_FALSE(large.is_active());
+	CHECK(large._resource_span().is_empty());
+	CHECK(large_moved.resources.size() == 4);
+	CHECK(release(rd, witnesses[0]) == ERR_BUSY);
+	CHECK(rd.native_immutable_hold_release(large_moved) == OK);
+	dispose(rd);
+	CHECK(driver.frees == 1);
+	// Returning a retiring inline hold uses that same original release path.
+	RenderingDevice::NativeImmutableHold retiring;
+	REQUIRE(rd.native_immutable_hold_acquire(VectorView<RID>(&roots[1], 1), retiring, 3) == OK);
+	CHECK(release(rd, witnesses[1]) == ERR_BUSY);
+	CHECK(rd.native_immutable_hold_release(retiring) == OK);
+	CHECK(retiring._resource_span().is_empty());
+	dispose(rd);
+	CHECK(driver.frees == 2);
+	for (uint32_t i = 2; i < 4; ++i) {
+		CHECK(release(rd, witnesses[i]) == OK);
+		dispose(rd);
+	}
+	CHECK(driver.creates == 4);
+	CHECK(driver.frees == 4);
+	CHECK(rd.native_immutable_hold_count == 0);
+	CHECK(rd.dependency_map.is_empty());
+	CHECK(rd.reverse_dependency_map.is_empty());
+	detach(rd);
+}
+
+TEST_CASE("[RenderingDevice][NativeImmutableInline] original fixed closure moves and returns without dynamic RID storage") {
+	TestNativeDisposalAccess::immutable_inline();
 }
 
 void TestNativeDisposalAccess::foreign_pending_owner_lookup() {

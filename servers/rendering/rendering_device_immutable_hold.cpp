@@ -313,10 +313,13 @@ Error RenderingDevice::native_immutable_hold_acquire(const VectorView<RID> &root
 	if (native_immutable_hold_count == UINT32_MAX) {
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
-	Vector<RID> resources;
-	if (resources.resize(limit) != OK) {
+	RID inline_resources[3];
+	Vector<RID> dynamic_resources;
+	const bool use_inline = limit <= 3;
+	if (!use_inline && dynamic_resources.resize(limit) != OK) {
 		return ERR_OUT_OF_MEMORY;
 	}
+	RID *resources = use_inline ? inline_resources : dynamic_resources.ptrw();
 	uint32_t count = 0;
 	auto append = [&](RID rid) {
 		for (uint32_t i = 0; i < count; ++i) {
@@ -388,7 +391,7 @@ Error RenderingDevice::native_immutable_hold_acquire(const VectorView<RID> &root
 				}
 			}
 		}
-		resources.write[count++] = rid;
+		resources[count++] = rid;
 		return OK;
 	};
 	for (uint32_t i = 0; i < roots.size(); ++i) {
@@ -426,13 +429,20 @@ Error RenderingDevice::native_immutable_hold_acquire(const VectorView<RID> &root
 			}
 		}
 	}
-	if (resources.resize(count) != OK) {
+	if (!use_inline && dynamic_resources.resize(count) != OK) {
 		return ERR_OUT_OF_MEMORY;
 	}
-	for (RID rid : resources) {
+	if (use_inline) {
+		for (uint32_t i = 0; i < count; ++i) {
+			out.inline_resources[i] = inline_resources[i];
+		}
+		out.inline_count = count;
+	} else {
+		out.resources = static_cast<Vector<RID> &&>(dynamic_resources);
+	}
+	for (RID rid : out._resource_span()) {
 		++*_native_immutable_counter(rid);
 	}
-	out.resources = static_cast<Vector<RID> &&>(resources);
 	out.device = this;
 	out.pins_returned = false;
 	++native_immutable_hold_count;
@@ -451,7 +461,7 @@ Error RenderingDevice::native_immutable_hold_release(NativeImmutableHold &hold) 
 	}
 	MutexLock lock(_thread_safe_);
 	if (!hold.pins_returned) {
-		for (RID rid : hold.resources) {
+		for (RID rid : hold._resource_span()) {
 			auto *holds = _native_immutable_counter(rid);
 			CRASH_COND(!holds || !*holds);
 			--*holds;
@@ -459,8 +469,9 @@ Error RenderingDevice::native_immutable_hold_release(NativeImmutableHold &hold) 
 		hold.pins_returned = true;
 	}
 	bool pending = false;
-	for (int64_t i = hold.resources.size() - 1; i >= 0; --i) {
-		const RID rid = hold.resources[i];
+	const auto resources = hold._resource_span();
+	for (int64_t i = int64_t(resources.size()) - 1; i >= 0; --i) {
+		const RID rid = resources[i];
 		bool *retiring = nullptr;
 		const auto *holds = _native_immutable_counter(rid, &retiring);
 		if (!holds || *holds || !*retiring) {
@@ -486,7 +497,7 @@ Error RenderingDevice::native_immutable_hold_release(NativeImmutableHold &hold) 
 	}
 	CRASH_COND(!native_immutable_hold_count);
 	--native_immutable_hold_count;
-	hold.resources.clear();
+	hold._clear_resources();
 	hold.material_origin = RID();
 	hold.material_origin_generation = 0;
 	hold.device = nullptr;
@@ -716,7 +727,7 @@ Error RenderingDevice::_production_output_hold_capture(GDExtensionProductionPhys
 
 Error RenderingDevice::_production_output_hold_capture_locked(GDExtensionProductionPhysicalContextRefV1 physical_context, GDExtensionDeviceExit::ProductionOutputPin &pin, NativeImmutableHold &hold, uint64_t &group_serial) {
 	using namespace GDExtensionDeviceExit;
-	if (group_serial || hold.device != this || hold.pins_returned || hold.resources.is_empty() || !pin.registry) {
+	if (group_serial || hold.device != this || hold.pins_returned || hold._resource_span().is_empty() || !pin.registry) {
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
@@ -814,7 +825,7 @@ Error RenderingDevice::_production_output_hold_capture_locked(GDExtensionProduct
 		}
 		return ERR_OUT_OF_MEMORY;
 	};
-	for (RID rid : hold.resources) {
+	for (RID rid : hold._resource_span()) {
 		const Error e = stage(rid, true);
 		if (e != OK) {
 			rollback();
@@ -879,7 +890,7 @@ Error RenderingDevice::_production_output_hold_capture_locked(GDExtensionProduct
 	group->disposal_group_serial = serial;
 	group->disposal_group_count = count;
 	group->output_role = ProductionUseCell::OutputRole::DISPOSAL_GROUP;
-	hold.resources.clear();
+	hold._clear_resources();
 	hold.device = nullptr;
 	hold.pins_returned = false;
 	hold.material_origin = RID();

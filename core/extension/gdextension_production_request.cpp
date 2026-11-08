@@ -1301,6 +1301,106 @@ Error Registry::production_observe_service(GDExtensionProductionRequestRefV1 ref
 	return ERR_BUSY;
 }
 
+namespace {
+template <typename Input, typename Output>
+bool production_observe_disjoint(const Input *p_input, const Output *p_output) {
+	const uintptr_t a = uintptr_t(p_input), b = uintptr_t(p_output);
+	return a <= UINTPTR_MAX - sizeof(Input) && b <= UINTPTR_MAX - sizeof(Output) &&
+			(a + sizeof(Input) <= b || b + sizeof(Output) <= a);
+}
+GDExtensionProductionOutputGenerationResultV1 project_output_generation(const ProductionOutputGenerationResult &p_original) {
+	GDExtensionProductionOutputGenerationResultV1 out{};
+	out.abi = production_dto_abi<GDExtensionProductionOutputGenerationResultV1>();
+	if (!p_original.native_released) {
+		return out;
+	}
+	out.registry_instance = p_original.registry_instance;
+	out.request_serial = p_original.request_serial;
+	out.control_serial = p_original.control_serial;
+	out.root_serial = p_original.root_serial;
+	out.particles = p_original.particles;
+	out.generation = p_original.generation;
+	out.root_source = p_original.root_source;
+	out.unused_slots = p_original.unused_slots;
+	out.returned_slots = p_original.returned_slots;
+	out.terminal_kind = 1; // Original generation Released, never per-slot/E05 ACK.
+	out.native_released = 1;
+	return out;
+}
+} // namespace
+
+GDExtensionDeviceSessionResultV1 Registry::production_observe_v3(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionServiceBudgetV1 *budget, GDExtensionProductionObserveResultV3 *out) {
+	const Error contract = production_contract_check(ref, 2);
+	if (contract != OK) {
+		return result(contract);
+	}
+	if (!aligned(budget) || !production_dto_valid(*budget) || budget->reserved || !aligned(out) || !production_observe_disjoint(budget, out)) {
+		return result(ERR_INVALID_PARAMETER);
+	}
+	// Existing service keeps terminal results RETURNED for this exact consumer.
+	// It continues to consume ordinary nonterminal turns with the old rules.
+	const Error service = production_observe_service(ref, *budget);
+	Lock lock(*this);
+	ProductionRequest *request = nullptr;
+	RenderingDevice *rd = nullptr;
+	const Error resolved = production_request_locked(ref, false, request, rd);
+	if (resolved != OK) {
+		return result(resolved);
+	}
+	GDExtensionProductionObserveResultV3 projected{};
+	projected.abi = production_dto_abi<GDExtensionProductionObserveResultV3>();
+	production_report_locked(*request, projected.report);
+	projected.output_generation.abi = production_dto_abi<GDExtensionProductionOutputGenerationResultV1>();
+	const auto &cell = request->control;
+	if (cell.state == ProductionControlState::RETURNED && cell.input.kind == ProductionControlKind::OBSERVE && cell.output.output_generation.native_released) {
+		projected.output_generation = project_output_generation(cell.output.output_generation);
+		*out = projected;
+		return cell.output.result;
+	}
+	*out = projected;
+	return result(service);
+}
+
+GDExtensionDeviceSessionResultV1 Registry::production_output_return_consume(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOutputGenerationRefV1 *expected, GDExtensionProductionOutputGenerationResultV1 *out) {
+	const Error contract = production_contract_check(ref, 2);
+	if (contract != OK) {
+		return result(contract);
+	}
+	if (!aligned(expected) || !production_dto_valid(*expected) || !aligned(out) || !production_observe_disjoint(expected, out)) {
+		return result(ERR_INVALID_PARAMETER);
+	}
+	Lock lock(*this);
+	ProductionRequest *request = nullptr;
+	RenderingDevice *rd = nullptr;
+	const Error resolved = production_request_locked(ref, false, request, rd);
+	if (resolved != OK) {
+		return result(resolved);
+	}
+	auto &cell = request->control;
+	if (!expected->control_serial || cell.serial != expected->control_serial || cell.state == ProductionControlState::OWNER_CONSUMED) {
+		return result(ERR_DOES_NOT_EXIST);
+	}
+	if (cell.state != ProductionControlState::RETURNED) {
+		return result(ERR_BUSY);
+	}
+	const auto &terminal = cell.output.output_generation;
+	if (cell.input.kind != ProductionControlKind::OBSERVE || cell.input.request_serial != request->serial ||
+			cell.output.request_serial != request->serial || cell.output.control_serial != cell.serial || !terminal.native_released ||
+			terminal.registry_instance != instance || terminal.request_serial != request->serial || terminal.control_serial != cell.serial ||
+			!terminal.root_serial || !terminal.particles || !terminal.generation ||
+			expected->registry_instance != terminal.registry_instance || expected->request_serial != terminal.request_serial ||
+			expected->control_serial != terminal.control_serial || expected->root_serial != terminal.root_serial ||
+			expected->particles != terminal.particles || expected->generation != terminal.generation) {
+		return result(ERR_INVALID_DATA);
+	}
+	const auto projected = project_output_generation(terminal);
+	// Same original RETURNED -> OWNER_CONSUMED transition as internal consume,
+	// under the original lock. No callback, native append or E05 ACK is issued.
+	cell.state = ProductionControlState::OWNER_CONSUMED;
+	*out = projected;
+	return result(OK);
+}
+
 GDExtensionDeviceSessionResultV1 Registry::production_observe_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionServiceBudgetV1 *budget, GDExtensionProductionReportV2 *out, uint32_t expected_contract) {
 	const Error contract = production_contract_check(ref, expected_contract);
 	if (contract != OK) {

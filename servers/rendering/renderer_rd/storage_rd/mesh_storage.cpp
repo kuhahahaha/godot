@@ -751,6 +751,54 @@ void MeshStorage::_mesh_surface_generate_external_version(Mesh::Surface::Version
 	v.previous_allocation_generation = s->previous_allocation_generation;
 }
 
+Error MeshStorage::mesh_surface_source_hold_acquire(RID mesh_rid, uint32_t index, NativeSurfaceHold &out) {
+	auto *device = RD::get_singleton();
+	if (!device || !device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (device->draw_list.active || device->compute_list.active || device->raytracing_list.active || device->draw_graph.has_driver_callbacks() || device->production_finalization_started.load(std::memory_order_acquire)) {
+		return ERR_BUSY;
+	}
+	auto *mesh = mesh_owner.get_or_null(mesh_rid);
+	if (!mesh || index >= mesh->surface_count) {
+		return ERR_DOES_NOT_EXIST;
+	}
+	auto *surface = mesh->surfaces[index];
+	if (out.device || surface->immutable_retired || surface->immutable_holds == UINT32_MAX) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (surface->external || mesh->blend_shape_count || !mesh->instances.is_empty() || surface->skin_buffer.is_valid()) {
+		return ERR_UNAVAILABLE;
+	}
+	if (!surface->vertex_count || surface->vertex_buffer.is_null() || (surface->index_count && surface->index_buffer.is_null())) {
+		return ERR_INVALID_DATA;
+	}
+	// Source retention must not create a shader input-mask Version. Later exact
+	// native preparation derives that Version from this same retained Surface.
+	RID roots[3];
+	uint32_t root_count = 0;
+	for (RID root : { surface->vertex_buffer, surface->attribute_buffer, surface->index_buffer }) {
+		if (root.is_valid()) {
+			roots[root_count++] = root;
+		}
+	}
+	const Error error = device->native_immutable_hold_acquire(VectorView<RID>(roots, root_count), out.physical, root_count);
+	if (error != OK) {
+		return error;
+	}
+	++surface->immutable_holds;
+	out.surface = surface;
+	out.device = device;
+	out.vertex_count = surface->vertex_count;
+	out.index_count = surface->index_count;
+	out.surface_format = surface->format;
+	out.surface_aabb = surface->aabb;
+	out.surface_uv_scale = surface->uv_scale;
+	out.primitive = surface->primitive;
+	out.material = surface->material;
+	return OK;
+}
+
 Error MeshStorage::mesh_surface_hold_acquire(RID mesh_rid, uint32_t index, uint64_t mask, bool motion, bool point_size, uint32_t lod, NativeSurfaceHold &out) {
 	auto *device = RD::get_singleton();
 	if (!device || !device->native_immutable_is_render_thread()) {

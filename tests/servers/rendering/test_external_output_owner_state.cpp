@@ -251,6 +251,30 @@ Error ExternalLinkedOwnerTest::create_selection_component(GDExtensionDeviceExit:
 	}
 	return error;
 }
+Error ExternalLinkedOwnerTest::acquire_selection_sources(GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 request) {
+	return owner ? owner->acquire_generation_surface_sources(context, request) : ERR_DOES_NOT_EXIST;
+}
+uint32_t ExternalLinkedOwnerTest::selection_sources() const {
+	return owner ? owner->retained_surface_count : 0;
+}
+Error ExternalLinkedOwnerTest::derive_selection_source(uint32_t index, uint64_t mask, MeshStorage::NativeSurfaceHold &hold) const {
+	if (!owner || index >= owner->retained_surface_count) {
+		return ERR_DOES_NOT_EXIST;
+	}
+	return MeshStorage::mesh_surface_hold_derive(owner->generation_materials[index].geometry_source, mask, false, false, 0, hold);
+}
+bool ExternalLinkedOwnerTest::selection_source_matches(uint32_t index, RID mesh, uint32_t surface, RID material, uint64_t generation, const AABB &bounds, uint64_t format) const {
+	if (!owner || index >= owner->retained_surface_count) {
+		return false;
+	}
+	const auto &row = owner->generation_materials[index];
+	return row.mesh == mesh && row.native_surface == surface && row.material == material && row.generation == generation && row.geometry_source.is_valid() &&
+			row.geometry_source.get_aabb() == bounds && row.geometry_source.get_format() == format && row.geometry_source.get_primitive() == RSE::PRIMITIVE_TRIANGLES &&
+			row.geometry_source.get_vertex_array().is_null() && row.geometry_source.get_vertex_format() == 0;
+}
+bool ExternalLinkedOwnerTest::selection_source_metadata_matches(uint32_t index, RSE::PrimitiveType primitive, uint64_t format, const AABB &bounds, const Vector4 &uv) const {
+	return owner && index < owner->retained_surface_count && owner->generation_materials[index].geometry_source.metadata_matches(primitive, format, bounds, uv);
+}
 void ExternalLinkedOwnerTest::unprepared_guard_refusal(GDExtensionDeviceExit::ProductionPhysicalContextRef context,
 		GDExtensionProductionRequestRefV1 request, const ExternalOutputConfig &config, GDExtensionDeviceExit::ProductionOutputMetadataLease &metadata) {
 	CRASH_COND(!empty_storage_mode || owner || metadata.is_empty());
@@ -635,6 +659,16 @@ public:
 		Owner::MetadataLayout base, selected;
 		REQUIRE(Owner::plan_metadata_layout(0, 0, 0, base) == OK);
 		CHECK(base.total_bytes == sizeof(Owner));
+		// The holder owns the three RID values; its real row size is quoted,
+		// including those bytes rather than only a dynamic Vector wrapper.
+		CHECK(sizeof(RD::NativeImmutableHold) >= sizeof(Vector<RID>) + 3 * sizeof(RID) + sizeof(uint32_t));
+		Owner::MetadataLayout one_source;
+		REQUIRE(Owner::plan_metadata_layout(0, 0, 0, one_source, 0, 1) == OK);
+		const uint64_t source_begin = (uint64_t(base.total_bytes) + alignof(Owner::GenerationMaterialSelection) - 1) & ~(uint64_t(alignof(Owner::GenerationMaterialSelection)) - 1);
+		CHECK(one_source.material_selection_offset == source_begin);
+		CHECK(one_source.total_bytes == source_begin + sizeof(Owner::GenerationMaterialSelection));
+		CHECK(sizeof(Owner::GenerationMaterialSelection) >= sizeof(MeshStorage::NativeSurfaceHold));
+		CHECK(sizeof(MeshStorage::NativeSurfaceHold) >= sizeof(RD::NativeImmutableHold));
 		REQUIRE(Owner::plan_metadata_layout(1, 2, 7, selected, 2, 3, 12, 4) == OK);
 		CHECK(selected.view_count == 1);
 		CHECK(selected.read_count == 2);

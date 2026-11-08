@@ -12967,7 +12967,11 @@ void RenderingDevice::swap_buffers(bool p_present) {
 	}
 	if (qualification_frame_advance_pending) {
 		const Error error = _begin_frame(true);
-		ERR_FAIL_COND_MSG(error != OK, "Failed to finish qualification frame advance.");
+		if (error == ERR_BUSY && frame_issue_error.load() == OK && frame_wait_error.load() == OK && !frame_wait_native_code_valid.load()) {
+			return; // Early source contention retains this exact pending slot.
+		}
+		ERR_FAIL_COND_MSG(error != OK, vformat("Failed to finish pending rendering frame advance: error=%d issue=%d wait=%d native_code_valid=%d native_code=%d.",
+				int(error), int(frame_issue_error.load()), int(frame_wait_error.load()), int(frame_wait_native_code_valid.load()), frame_wait_native_code.load()));
 		return;
 	}
 	ERR_FAIL_COND_MSG(frame_issue_error != OK, "Cannot advance a frame after a non-replayable rendering issue failure.");
@@ -13002,7 +13006,11 @@ void RenderingDevice::swap_buffers(bool p_present) {
 
 	GodotProfileZoneGrouped(_profile_zone, "_begin_frame");
 	const Error begin_error = _begin_frame(true);
-	ERR_FAIL_COND_MSG(begin_error != OK, "Failed to wait for the next rendering frame.");
+	if (begin_error == ERR_BUSY && frame_issue_error.load() == OK && frame_wait_error.load() == OK && !frame_wait_native_code_valid.load()) {
+		return; // No fence error was observed; recording stays suspended.
+	}
+	ERR_FAIL_COND_MSG(begin_error != OK, vformat("Failed to begin the next rendering frame: error=%d issue=%d wait=%d native_code_valid=%d native_code=%d.",
+			int(begin_error), int(frame_issue_error.load()), int(frame_wait_error.load()), int(frame_wait_native_code_valid.load()), frame_wait_native_code.load()));
 }
 
 void RenderingDevice::submit() {

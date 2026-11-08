@@ -2375,7 +2375,8 @@ struct Access {
 				test.check(__LINE__, rd._production_output_owned_bind(context, test.output_pin, test.owned_group, 1, test.auxiliary_buffer_witness) == ERR_UNAUTHORIZED);
 				const RID root = test.auxiliary_pipeline;
 				RenderingDevice::NativeImmutableHold physical;
-				test.check(__LINE__, rd.native_immutable_hold_acquire(VectorView<RID>(&root, 1), physical, 4) == OK);
+				// Pipeline + shader exercise the original capture from inline storage.
+				test.check(__LINE__, rd.native_immutable_hold_acquire(VectorView<RID>(&root, 1), physical, 3) == OK);
 				test.check(__LINE__, rd._production_output_hold_capture(context, test.output_pin, physical, test.borrowed_group) == OK && !physical.is_active());
 				test.check(__LINE__, rd._production_output_hold_contains(test.output_pin, test.borrowed_group, test.auxiliary_pipeline));
 				const RID qualified_root = request.resources[0].primary;
@@ -5931,10 +5932,16 @@ struct Access {
 			CHECK(probe.native->withdrawing());
 		}
 	};
-	static void output_scene_metadata(bool extra_metadata, bool bound_unlinked = false, bool use_v3 = false, int metadata_delta = 0) {
+	static void output_scene_metadata(bool extra_metadata, bool bound_unlinked = false, bool use_v3 = false, int metadata_delta = 0, bool public_terminal = false) {
 		using namespace GDExtensionDeviceExit;
 		auto *server = ordinal_server();
 		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
+			return;
+		}
+		const auto observe3 = ordinal_port<GDExtensionInterfaceDeviceSessionProductionObserveV3>("device_session_production_observe_v3");
+		const auto consume_return = ordinal_port<GDExtensionInterfaceDeviceSessionProductionOutputReturnConsumeV1>("device_session_production_output_return_consume_v1");
+		if (public_terminal && (!observe3 || !consume_return)) {
+			FAIL_CHECK("Original public generation return consumer must be installed");
 			return;
 		}
 		const auto consume = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
@@ -6037,7 +6044,17 @@ struct Access {
 			REQUIRE(fixture.registry.production_output_metadata_return(probe.unrelated) == OK);
 			CHECK(request.revision == revision + 1);
 		}
-		const uint64_t terminal_control = dispatch();
+		GDExtensionProductionObserveResultV3 public_observation{};
+		uint64_t terminal_control = 0;
+		if (public_terminal) {
+			CHECK(observe3(ref, &budget, &public_observation).native_error == ERR_BUSY);
+			server->sync(); // Original OBSERVE FIFO; no additional RECORD/draw.
+			CHECK(observe3(ref, &budget, &public_observation).native_error == OK);
+			terminal_control = public_observation.output_generation.control_serial;
+		} else {
+			terminal_control = dispatch();
+		}
+
 		REQUIRE(request.control.output.output_generation.native_released);
 		CHECK(request.control.output.result.native_error == OK);
 		CHECK(request.control.output.service_usage.controls == 1);
@@ -6057,8 +6074,121 @@ struct Access {
 		CHECK(terminal.root_source.possible_obligations == 0);
 		CHECK(terminal.root_source.complete_obligations == 0);
 		ProductionControlOutput consumed{};
-		REQUIRE(fixture.registry.production_control_consume(ref, terminal_control, &consumed) == OK);
-		CHECK(std::memcmp(&terminal, &consumed.output_generation, sizeof(terminal)) == 0);
+		if (public_terminal) {
+			CHECK(public_observation.abi.abi_version == 3);
+			CHECK(public_observation.output_generation.native_released == 1);
+			CHECK(public_observation.output_generation.terminal_kind == 1);
+			CHECK(public_observation.output_generation.root_serial == root_serial);
+			CHECK(public_observation.output_generation.root_source.physical_returns_pending == 1);
+			CHECK(public_observation.output_generation.registry_instance == terminal.registry_instance);
+			CHECK(public_observation.output_generation.request_serial == terminal.request_serial);
+			CHECK(public_observation.output_generation.control_serial == terminal.control_serial);
+			CHECK(public_observation.output_generation.particles == terminal.particles);
+			CHECK(public_observation.output_generation.generation == terminal.generation);
+			CHECK(public_observation.output_generation.unused_slots == terminal.unused_slots);
+			CHECK(public_observation.output_generation.returned_slots == terminal.returned_slots);
+			CHECK(std::memcmp(&public_observation.output_generation.root_source, &terminal.root_source, sizeof(terminal.root_source)) == 0);
+			const auto projected_before = public_observation.output_generation;
+			auto zero_budget = budget;
+			zero_budget.controls = zero_budget.receipts = zero_budget.passes = 0;
+			const auto revision_before_peek = request.revision;
+			CHECK(observe3(ref, &zero_budget, &public_observation).native_error == OK);
+			CHECK(request.revision == revision_before_peek);
+			CHECK(request.control.state == ProductionControlState::RETURNED);
+			CHECK(std::memcmp(&public_observation.output_generation, &projected_before, sizeof(projected_before)) == 0);
+
+			GDExtensionProductionReportV2 legacy{};
+			CHECK(fixture.registry.production_observe_v2(ref, &budget, &legacy).native_error == ERR_UNAVAILABLE);
+			GDExtensionProductionOutputGenerationRefV1 expected{ production_dto_abi<GDExtensionProductionOutputGenerationRefV1>(), terminal.registry_instance, terminal.request_serial, terminal.control_serial, terminal.root_serial, terminal.particles, terminal.generation };
+			// ABI rejection runs against the actual original RETURNED control,
+			// so a rejected transport cannot consume or replace that terminal.
+			const auto abi_control_serial = request.control.serial;
+			const auto abi_revision = request.revision;
+			auto control_unchanged = [&]() {
+				CHECK(request.control.state == ProductionControlState::RETURNED);
+				CHECK(request.control.serial == abi_control_serial);
+				CHECK(request.revision == abi_revision);
+				CHECK(std::memcmp(&request.control.output.output_generation, &terminal, sizeof(terminal)) == 0);
+			};
+			for (uint32_t header = 0; header < 3; ++header) {
+				auto bad_budget = budget;
+				auto bad_expected = expected;
+				if (header == 0) {
+					++bad_budget.abi.abi_version;
+					++bad_expected.abi.abi_version;
+				} else if (header == 1) {
+					--bad_budget.abi.struct_size;
+					--bad_expected.abi.struct_size;
+				} else {
+					bad_budget.abi.reserved = bad_expected.abi.reserved = 1;
+				}
+				GDExtensionProductionObserveResultV3 observation_out{};
+				observation_out.output_generation.generation = 12345;
+				const auto observation_before = observation_out;
+				CHECK(observe3(ref, &bad_budget, &observation_out).native_error == ERR_INVALID_PARAMETER);
+				CHECK(std::memcmp(&observation_out, &observation_before, sizeof(observation_out)) == 0);
+				GDExtensionProductionOutputGenerationResultV1 consume_out{};
+				consume_out.generation = 67890;
+				const auto consume_before = consume_out;
+				CHECK(consume_return(ref, &bad_expected, &consume_out).native_error == ERR_INVALID_PARAMETER);
+				CHECK(std::memcmp(&consume_out, &consume_before, sizeof(consume_out)) == 0);
+				control_unchanged();
+			}
+			alignas(GDExtensionProductionServiceBudgetV1) uint8_t budget_bytes[sizeof(budget) + 1]{};
+			alignas(GDExtensionProductionOutputGenerationRefV1) uint8_t expected_bytes[sizeof(expected) + 1]{};
+			std::memcpy(budget_bytes + 1, &budget, sizeof(budget));
+			std::memcpy(expected_bytes + 1, &expected, sizeof(expected));
+			GDExtensionProductionObserveResultV3 aligned_observation{};
+			GDExtensionProductionOutputGenerationResultV1 aligned_return{};
+			const auto aligned_observation_before = aligned_observation;
+			const auto aligned_return_before = aligned_return;
+			CHECK(observe3(ref, reinterpret_cast<const GDExtensionProductionServiceBudgetV1 *>(budget_bytes + 1), &aligned_observation).native_error == ERR_INVALID_PARAMETER);
+			CHECK(consume_return(ref, reinterpret_cast<const GDExtensionProductionOutputGenerationRefV1 *>(expected_bytes + 1), &aligned_return).native_error == ERR_INVALID_PARAMETER);
+			CHECK(std::memcmp(&aligned_observation, &aligned_observation_before, sizeof(aligned_observation)) == 0);
+			CHECK(std::memcmp(&aligned_return, &aligned_return_before, sizeof(aligned_return)) == 0);
+			control_unchanged();
+			alignas(GDExtensionProductionObserveResultV3) uint8_t observation_bytes[sizeof(GDExtensionProductionObserveResultV3) + 1]{};
+			alignas(GDExtensionProductionOutputGenerationResultV1) uint8_t return_bytes[sizeof(GDExtensionProductionOutputGenerationResultV1) + 1]{};
+			uint8_t observation_bytes_before[sizeof(observation_bytes)]{};
+			uint8_t return_bytes_before[sizeof(return_bytes)]{};
+			CHECK(observe3(ref, &budget, reinterpret_cast<GDExtensionProductionObserveResultV3 *>(observation_bytes + 1)).native_error == ERR_INVALID_PARAMETER);
+			CHECK(consume_return(ref, &expected, reinterpret_cast<GDExtensionProductionOutputGenerationResultV1 *>(return_bytes + 1)).native_error == ERR_INVALID_PARAMETER);
+			CHECK(std::memcmp(observation_bytes, observation_bytes_before, sizeof(observation_bytes)) == 0);
+			CHECK(std::memcmp(return_bytes, return_bytes_before, sizeof(return_bytes)) == 0);
+			control_unchanged();
+			// Aligned overlapping complete extents must reject before any write.
+			std::memcpy(observation_bytes, &budget, sizeof(budget));
+			std::memcpy(return_bytes, &expected, sizeof(expected));
+			std::memcpy(observation_bytes_before, observation_bytes, sizeof(observation_bytes));
+			std::memcpy(return_bytes_before, return_bytes, sizeof(return_bytes));
+			CHECK(observe3(ref, reinterpret_cast<const GDExtensionProductionServiceBudgetV1 *>(observation_bytes), reinterpret_cast<GDExtensionProductionObserveResultV3 *>(observation_bytes)).native_error == ERR_INVALID_PARAMETER);
+			CHECK(consume_return(ref, reinterpret_cast<const GDExtensionProductionOutputGenerationRefV1 *>(return_bytes), reinterpret_cast<GDExtensionProductionOutputGenerationResultV1 *>(return_bytes)).native_error == ERR_INVALID_PARAMETER);
+			CHECK(std::memcmp(observation_bytes, observation_bytes_before, sizeof(observation_bytes)) == 0);
+			CHECK(std::memcmp(return_bytes, return_bytes_before, sizeof(return_bytes)) == 0);
+			control_unchanged();
+
+			for (uint32_t field = 0; field < 6; ++field) {
+				auto bad = expected;
+				uint64_t *fields[] = { &bad.registry_instance, &bad.request_serial, &bad.control_serial, &bad.root_serial, &bad.particles, &bad.generation };
+				++*fields[field];
+				GDExtensionProductionOutputGenerationResultV1 untouched{};
+				untouched.generation = 999;
+				CHECK(consume_return(ref, &bad, &untouched).native_error != OK);
+				CHECK(untouched.generation == 999);
+				CHECK(request.control.state == ProductionControlState::RETURNED);
+			}
+			GDExtensionProductionOutputGenerationResultV1 returned{};
+			CHECK(consume_return(ref, &expected, &returned).native_error == OK);
+			CHECK(returned.root_serial == terminal.root_serial);
+			CHECK(returned.generation == terminal.generation);
+			CHECK(returned.root_source.physical_returns_pending == terminal.root_source.physical_returns_pending);
+			CHECK(request.control.state == ProductionControlState::OWNER_CONSUMED);
+			CHECK(consume_return(ref, &expected, &returned).native_error == ERR_DOES_NOT_EXIST);
+		} else {
+			REQUIRE(fixture.registry.production_control_consume(ref, terminal_control, &consumed) == OK);
+			CHECK(std::memcmp(&terminal, &consumed.output_generation, sizeof(terminal)) == 0);
+		}
+
 		CHECK(fixture.registry.production_release(ref).native_error == ERR_BUSY);
 		CHECK(fixture.registry.production_close(fixture.attachment).native_error == ERR_BUSY);
 		GDExtensionProductionReportV2 live{};
@@ -6070,8 +6200,10 @@ struct Access {
 		CHECK(request.revision == before_free + 1);
 		REQUIRE(fixture.registry.production_report_contents_locked(request, live) == OK);
 		CHECK(live.physical_returns_pending == 0);
-		CHECK(std::memcmp(&terminal, &consumed.output_generation, sizeof(terminal)) == 0);
-		CHECK(consumed.output_generation.root_source.physical_returns_pending == 1);
+		if (!public_terminal) {
+			CHECK(std::memcmp(&terminal, &consumed.output_generation, sizeof(terminal)) == 0);
+			CHECK(consumed.output_generation.root_source.physical_returns_pending == 1);
+		}
 		CHECK(fixture.driver.issues == 0);
 		for (uint32_t turn = 0; turn < 8 && request.serial; ++turn) {
 			GDExtensionProductionServiceBudgetV1 remaining{};
@@ -6229,6 +6361,7 @@ struct Access {
 		CHECK(fixture.owner_cleaned);
 	}
 	struct GenerationSelectionProbe {
+		bool native_sources = false, source_failure = false;
 		SingletonEnrollment *fixture = nullptr;
 		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
 		RendererRD::ExternalOutputConfig config, expected_identity;
@@ -6338,12 +6471,74 @@ struct Access {
 				CHECK(materials->owns_material(material));
 				CHECK(materials->material_get_generation(material) == before);
 			}
+			if (p.native_sources) {
+				// Source backing is original MeshStorage-owned storage. Retaining the
+				// generation must not create any shader input-mask VA or native draw.
+				auto *meshes = RendererRD::MeshStorage::get_singleton();
+				p.fixture->driver.mesh_directory_factory = true;
+				uint32_t flattened = 0;
+				for (const RID &rid : p.config.surfaces) {
+					auto *mesh = meshes->mesh_owner.get_or_null(rid);
+					for (uint32_t i = 0; i < mesh->surface_count; ++i) {
+						auto *surface = mesh->surfaces[i];
+						surface->vertex_count = 3;
+						surface->primitive = RSE::PRIMITIVE_TRIANGLES;
+						surface->format = RSE::ARRAY_FORMAT_VERTEX;
+						surface->aabb = AABB(Vector3(flattened + 1, 2, 3), Vector3(4, 5, 6));
+						surface->uv_scale = Vector4(2, 3, 4, flattened + 1);
+						surface->vertex_buffer_size = 36;
+						if (!p.source_failure || flattened != 1) {
+							surface->vertex_buffer = p.fixture->rd.vertex_buffer_create(36);
+							REQUIRE(surface->vertex_buffer.is_valid());
+						}
+						CHECK(surface->version_count == 0);
+						++flattened;
+					}
+				}
+				CHECK(p.native->acquire_selection_sources({}, ref) == ERR_UNAUTHORIZED);
+				CHECK(p.native->selection_sources() == 0);
+				REQUIRE(p.native->acquire_selection_sources(context, ref) == (p.source_failure ? ERR_INVALID_DATA : OK));
+				CHECK(p.native->acquire_selection_sources(context, ref) == ERR_ALREADY_IN_USE);
+				CHECK(p.native->selection_sources() == (p.source_failure ? 1u : flattened));
+				CHECK(p.native->selection_faulted() == p.source_failure);
+				flattened = 0;
+				for (const RID &rid : p.config.surfaces) {
+					auto *mesh = meshes->mesh_owner.get_or_null(rid);
+					for (uint32_t i = 0; i < mesh->surface_count; ++i) {
+						auto *surface = mesh->surfaces[i];
+						const bool retained = !p.source_failure || flattened == 0;
+						CHECK(surface->immutable_holds == (retained ? 1u : 0u));
+						CHECK(surface->version_count == 0);
+						CHECK(p.native->selection_source_matches(flattened, rid, i, p.config.surface_materials[flattened], p.expected_material_generations[flattened], surface->aabb, surface->format) == retained);
+						CHECK_FALSE(p.native->selection_source_matches(flattened, rid, i + 1, p.config.surface_materials[flattened], p.expected_material_generations[flattened], surface->aabb, surface->format));
+						// The same pure predicate is used by both production preparation
+						// consumers. A correct pointer cannot bless rewritten metadata.
+						CHECK(p.native->selection_source_metadata_matches(flattened, surface->primitive, surface->format, surface->aabb, surface->uv_scale) == retained);
+						CHECK_FALSE(p.native->selection_source_metadata_matches(flattened, RSE::PRIMITIVE_LINES, surface->format, surface->aabb, surface->uv_scale));
+						CHECK_FALSE(p.native->selection_source_metadata_matches(flattened, surface->primitive, surface->format ^ RSE::ARRAY_FORMAT_NORMAL, surface->aabb, surface->uv_scale));
+						CHECK_FALSE(p.native->selection_source_metadata_matches(flattened, surface->primitive, surface->format, AABB(surface->aabb.position + Vector3(1, 0, 0), surface->aabb.size), surface->uv_scale));
+						CHECK_FALSE(p.native->selection_source_metadata_matches(flattened, surface->primitive, surface->format, surface->aabb, surface->uv_scale + Vector4(1, 0, 0, 0)));
+						if (retained) {
+							RendererRD::MeshStorage::NativeSurfaceHold derived;
+							REQUIRE(p.native->derive_selection_source(flattened, 1, derived) == OK);
+							CHECK(derived.is_valid());
+							CHECK(derived.get_vertex_array().is_valid());
+							CHECK(derived.get_aabb() == surface->aabb);
+							CHECK(surface->version_count == 1);
+							CHECK(surface->immutable_holds == 2);
+							REQUIRE(RendererRD::MeshStorage::mesh_surface_hold_release(derived) == OK);
+							CHECK(surface->immutable_holds == 1);
+						}
+						++flattened;
+					}
+				}
+			}
 			if (!p.failure) {
 				p.native->withdraw_generation();
 			}
 		}
 	};
-	static void generation_selection_lifecycle(int failure, bool multi_mesh = false) {
+	static void generation_selection_lifecycle(int failure, bool multi_mesh = false, bool native_sources = false, bool source_failure = false) {
 		using namespace GDExtensionDeviceExit;
 		using MeshStorage = RendererRD::MeshStorage;
 		auto *server = ordinal_server();
@@ -6374,6 +6569,8 @@ struct Access {
 		}
 		void *materials = RendererRD::selection_materials_create(material_count);
 		GenerationSelectionProbe probe;
+		probe.native_sources = native_sources;
+		probe.source_failure = source_failure;
 		probe.failure = failure;
 		probe.config.profile = RendererRD::ExternalOutputConfig::INSTANCE_192;
 		probe.config.max_views = probe.config.max_inflight = 1;
@@ -6444,7 +6641,8 @@ struct Access {
 			const uint32_t initial_meshes = failure >= 2 ? 0u : mesh_count;
 			const uint32_t initial_materials = failure == 0 ? material_count : failure == 1 ? 1u
 																							: 0u;
-			const uint32_t initial_leases = initial_meshes + initial_materials;
+			const uint32_t initial_sources = native_sources ? (source_failure ? 1u : material_count) : 0;
+			const uint32_t initial_leases = initial_meshes + initial_materials + initial_sources;
 			for (uint32_t i = 0; i < mesh_count; ++i) {
 				CHECK(mesh_owners[i]->selection_holds == (i < initial_meshes ? 1u : 0u));
 			}
@@ -6487,15 +6685,18 @@ struct Access {
 				if (turn < initial_leases) {
 					CHECK_FALSE(out.output_generation.native_released);
 					REQUIRE(native.exists());
-					CHECK(native.selection_meshes() + native.selection_materials() == initial_leases - turn - 1);
+					CHECK(native.selection_meshes() + native.selection_materials() + native.selection_sources() == initial_leases - turn - 1);
 					CHECK(RendererRD::selection_shader_holds(materials) == native.selection_materials());
 					const uint32_t initially_retained_materials = initial_materials;
-					const uint32_t remaining_materials = turn + 1 < initially_retained_materials ? initially_retained_materials - turn - 1 : 0;
+					const uint32_t source_turns = MIN(turn + 1, initial_sources);
+					const uint32_t selection_turns = turn + 1 - source_turns;
+					const uint32_t remaining_materials = selection_turns < initially_retained_materials ? initially_retained_materials - selection_turns : 0;
+					CHECK(native.selection_sources() == initial_sources - source_turns);
 					// Exact original RID suffix order, followed by mesh1 before mesh0.
 					for (uint32_t i = 0; i < material_count; ++i) {
 						CHECK(RendererRD::selection_material_holds(materials, i) == (i < remaining_materials ? 1u : 0u));
 					}
-					const uint32_t remaining_meshes = initial_leases - turn - 1 - remaining_materials;
+					const uint32_t remaining_meshes = initial_leases - turn - 1 - remaining_materials - native.selection_sources();
 					CHECK(native.selection_meshes() == remaining_meshes);
 					for (uint32_t i = 0; i < mesh_count; ++i) {
 						CHECK(mesh_owners[i]->selection_holds == (i < remaining_meshes ? 1u : 0u));
@@ -6508,7 +6709,7 @@ struct Access {
 				} else {
 					CHECK(out.output_generation.native_released);
 					CHECK(request.output_owner_head == UINT32_MAX);
-					if (failure) {
+					if (failure || source_failure) {
 						CHECK_FALSE(native.exists());
 						CHECK(request.resources[0].metadata_returned);
 						CHECK(request.resources[0].metadata_data == nullptr);
@@ -6540,6 +6741,18 @@ struct Access {
 				}
 			}
 			CHECK(request.serial == 0);
+			if (native_sources) {
+				// Native source leases have returned; ordinary MeshStorage now
+				// owns and disposes its own backing/derived-Version resources.
+				for (const RID &rid : probe.expected_identity.surfaces) {
+					meshes->mesh_clear(rid);
+				}
+				fixture.rd._free_pending_resources(0);
+				CHECK(fixture.driver.mesh_directory_buffer_frees == (source_failure ? material_count - 1 : material_count));
+				CHECK_FALSE(fixture.driver.mesh_directory_buffer_live);
+				fixture.rd.vertex_formats.clear();
+				fixture.rd.vertex_format_cache.clear();
+			}
 			fixture.cleanup_owner();
 			CHECK(fixture.owner_cleaned);
 		}
@@ -13271,6 +13484,9 @@ TEST_CASE("[SceneTree][ProductionRequest][OutputMetadataFactory] protected origi
 TEST_CASE("[SceneTree][ProductionRequest][OutputMetadataFactory] bound live unlinked pin blocks actual metadata return") {
 	Access::output_metadata_bound_pin();
 }
+TEST_CASE("[SceneTree][ProductionRequest][OutputObserveV3] public original generation terminal consumes without next draw and rejects wrong tuple replay") {
+	Access::output_scene_metadata(false, false, false, 0, true);
+}
 TEST_CASE("[SceneTree][ProductionRequest][OutputSceneMetadata] real SceneOnly root terminal retains metadata until actual particles free") {
 	Access::output_scene_metadata(false);
 }
@@ -13685,6 +13901,14 @@ TEST_CASE("[SceneTree][ProductionRequest][MetadataV3] exact accepted row size re
 }
 TEST_CASE("[SceneTree][ProductionRequest][MetadataV3] V2 preserves larger accepted metadata semantics") {
 	TestProductionRequest::Access::output_scene_metadata(false, false, false, 1);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][GenerationSurfaceSource] flattened native sources retain exact bounds without creating versions") {
+	TestProductionRequest::Access::generation_selection_lifecycle(0, true, true);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][GenerationSurfaceSource] invalid later source retains exact prefix for original bounded return") {
+	TestProductionRequest::Access::generation_selection_lifecycle(0, true, true, true);
 }
 
 TEST_CASE("[SceneTree][ProductionRequest][GenerationSelection] original slab and root retain CPU selection through bounded return") {

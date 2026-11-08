@@ -564,6 +564,9 @@ public:
 		uint64_t get_format() const { return is_valid() ? surface_format : 0; }
 		AABB get_aabb() const { return is_valid() ? surface_aabb : AABB(); }
 		Vector4 get_uv_scale() const { return is_valid() ? surface_uv_scale : Vector4(); }
+		bool metadata_matches(RSE::PrimitiveType p_primitive, uint64_t p_format, const AABB &p_aabb, const Vector4 &p_uv_scale) const {
+			return is_valid() && primitive == p_primitive && surface_format == p_format && surface_aabb == p_aabb && surface_uv_scale == p_uv_scale;
+		}
 	};
 
 private:
@@ -586,6 +589,8 @@ private:
 	static Error _native_hold_retirement_root_at(const NativeSurfaceHold &, uint32_t, RID &);
 
 public:
+	// Retain existing source backings only. No VA/version or pipeline factory runs.
+	Error mesh_surface_source_hold_acquire(RID p_mesh, uint32_t p_surface, NativeSurfaceHold &r_hold);
 	Error mesh_surface_hold_acquire(RID p_mesh, uint32_t p_surface, uint64_t p_input_mask, bool p_motion, bool p_point_size_emulated, uint32_t p_lod, NativeSurfaceHold &r_hold);
 	static Error mesh_surface_hold_release(NativeSurfaceHold &r_hold);
 	// Prepare only before transfer/seal, from the exact retained Surface, including

@@ -595,11 +595,27 @@ public:
 		friend class RenderingDevice;
 		friend class GDExtensionDeviceExit::Registry;
 		friend class RendererRD::MaterialStorage;
+#ifdef TESTS_ENABLED
+		friend class TestNativeDisposalAccess;
+#endif
 		RID material_origin;
 		uint64_t material_origin_generation = 0;
 		RenderingDevice *device = nullptr;
 		Vector<RID> resources;
+		// Small original source holds live entirely in their quoted owner row.
+		RID inline_resources[3];
+		uint32_t inline_count = 0;
 		bool pins_returned = false;
+		Span<const RID> _resource_span() const {
+			return inline_count ? Span<const RID>(inline_resources, inline_count) : Span<const RID>(resources.ptr(), resources.size());
+		}
+		void _clear_resources() {
+			for (RID &rid : inline_resources) {
+				rid = RID();
+			}
+			inline_count = 0;
+			resources.clear();
+		}
 
 	public:
 		NativeImmutableHold() = default;
@@ -613,6 +629,12 @@ public:
 			CRASH_COND(device);
 			device = other.device;
 			resources = static_cast<Vector<RID> &&>(other.resources);
+			inline_count = other.inline_count;
+			for (uint32_t i = 0; i < 3; ++i) {
+				inline_resources[i] = other.inline_resources[i];
+				other.inline_resources[i] = RID();
+			}
+			other.inline_count = 0;
 			pins_returned = other.pins_returned;
 			material_origin = other.material_origin;
 			material_origin_generation = other.material_origin_generation;

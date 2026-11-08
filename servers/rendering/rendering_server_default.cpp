@@ -139,6 +139,26 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 			redraw_request();
 			return;
 		}
+		if (device->is_main_instance && device->qualification_frame_advance_pending.load() && !device->native_disposal_active.load(std::memory_order_acquire)) {
+			// Resume this exact recording slot before advancing renderer state.
+			// Existing native failures must not be cleared by a fresh wait attempt.
+			Error resume_error = device->frame_issue_error.load();
+			if (resume_error == OK) {
+				resume_error = device->frame_wait_error.load();
+			}
+			if (resume_error == OK) {
+				resume_error = device->frame_wait_native_code_valid.load() ? FAILED : device->_begin_frame(true);
+			}
+			if (resume_error != OK) {
+				redraw_request();
+				if (resume_error == ERR_BUSY && device->frame_issue_error.load() == OK && device->frame_wait_error.load() == OK && !device->frame_wait_native_code_valid.load()) {
+					return; // Native source contention retains callbacks and redraw demand.
+				}
+				ERR_FAIL_MSG(vformat("Failed to resume pending rendering frame: error=%d issue=%d wait=%d native_code_valid=%d native_code=%d.",
+						int(resume_error), int(device->frame_issue_error.load()), int(device->frame_wait_error.load()),
+						int(device->frame_wait_native_code_valid.load()), device->frame_wait_native_code.load()));
+			}
+		}
 	}
 	GodotProfileZoneGroupedFirst(_profile_zone, "rasterizer->begin_frame");
 	RSG::rasterizer->begin_frame(frame_step);

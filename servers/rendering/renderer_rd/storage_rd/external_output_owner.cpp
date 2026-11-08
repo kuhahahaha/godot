@@ -413,6 +413,12 @@ Error ExternalOutputOwner::bind_preparation_rows(uint32_t p_slot) {
 		row.owner = this;
 		row.generation = generation;
 		row.serial = slot.lease_serial;
+		if (generation_surfaces_complete && retained_surface_count == generation_material_count && i < retained_surface_count) {
+			const auto &source = generation_materials[i];
+			row.source_geometry = &source.geometry_source;
+			row.source_material = source.material;
+			row.source_material_generation = source.generation;
+		}
 		slot.surfaces[i].preparation_row = &row;
 	}
 	// No pass is selected or opened: source_sealed stays true and the resource
@@ -770,8 +776,14 @@ Error ExternalOutputOwner::surface_return(ExternalSurfaceSelection &p_surface) {
 		return ERR_INVALID_DATA;
 	}
 	auto &slot = slots[cell.slot];
-	if (p_surface.generation != generation || !slot.surfaces ||
-			p_surface.geometry_source != &slot.surfaces[cell.surface].geometry ||
+	const MeshStorage::NativeSurfaceHold *source = slot.surfaces ? &slot.surfaces[cell.surface].geometry : nullptr;
+	if (config.profile == ExternalOutputConfig::INSTANCE_192 && generation_surfaces_complete) {
+		if (!generation_materials || cell.surface >= retained_surface_count || retained_surface_count != generation_material_count) {
+			return ERR_INVALID_DATA;
+		}
+		source = &generation_materials[cell.surface].geometry_source;
+	}
+	if (p_surface.generation != generation || !slot.surfaces || p_surface.geometry_source != source ||
 			!slot.original_registry || cell.pin.is_empty()) {
 		return ERR_INVALID_DATA;
 	}
@@ -881,6 +893,59 @@ Error ExternalOutputOwner::acquire_generation_selection(GDExtensionDeviceExit::P
 		++retained_material_count;
 	}
 	generation_selection_complete = true;
+	return OK;
+}
+Error ExternalOutputOwner::acquire_generation_surface_sources(GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 request) {
+	if (generation_surfaces_attempted || state != GenerationState::CONFIGURED || has_live_slots()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	if (!generation_selection_complete || retained_mesh_count != generation_mesh_count || retained_material_count != generation_material_count ||
+			!generation_registry || !device || !generation_root_matches(generation_pin) ||
+			request.registry_instance != generation_request.registry_instance || request.handle_serial != generation_request.handle_serial ||
+			!generation_registry->production_output_pin_matches(generation_pin, request, *device)) {
+		return ERR_UNAUTHORIZED;
+	}
+	MetadataLayout layout;
+	Error error = plan_metadata_layout(view_capacity, read_capacity, surface_capacity, layout, generation_mesh_count, generation_material_count, binding_capacity, storage_capacity);
+	if (error != OK) {
+		return error;
+	}
+	error = generation_registry->production_output_metadata_validate(context, request, metadata_lease, *device, layout.total_bytes, layout.alignment);
+	if (error != OK) {
+		return error;
+	}
+	auto *meshes = MeshStorage::get_singleton();
+	if (!meshes) {
+		return ERR_UNAVAILABLE;
+	}
+	generation_surfaces_attempted = true;
+	auto fail = [&](Error reason) {
+		withdraw();
+		generation_selection_unpublished = true;
+		state = GenerationState::FAULTED_RETIRING;
+		return reason;
+	};
+	for (uint32_t mesh = 0; mesh < generation_mesh_count; ++mesh) {
+		const RID rid = generation_meshes[mesh].mesh;
+		const int count = meshes->mesh_get_surface_count(rid);
+		if (count <= 0 || uint32_t(count) > generation_material_count - retained_surface_count) {
+			return fail(ERR_INVALID_DATA);
+		}
+		for (uint32_t surface = 0; surface < uint32_t(count); ++surface) {
+			auto &row = generation_materials[retained_surface_count];
+			error = meshes->mesh_surface_source_hold_acquire(rid, surface, row.geometry_source);
+			if (error != OK) {
+				return fail(error);
+			}
+			row.mesh = rid;
+			row.native_surface = surface;
+			++retained_surface_count;
+		}
+	}
+	if (retained_surface_count != generation_material_count) {
+		return fail(ERR_INVALID_DATA);
+	}
+	generation_surfaces_complete = true;
 	return OK;
 }
 } // namespace RendererRD

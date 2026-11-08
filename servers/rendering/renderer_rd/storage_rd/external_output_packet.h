@@ -176,6 +176,11 @@ class ExternalPipelinePreparation {
 	uint32_t max_resources = 0;
 	bool source_sealed = true; // Only the owner opens an admitted pre-seal preparation row.
 	ExternalPacketPipelineRequest selection;
+	// Exact generation source selected when this original slot row was bound.
+	// The generation outlives all its slots; this pointer creates no new grant.
+	const MeshStorage::NativeSurfaceHold *source_geometry = nullptr;
+	RID source_material;
+	uint64_t source_material_generation = 0;
 	MeshStorage::NativeSurfaceHold geometry[2];
 	uint32_t selected_geometry = UINT32_MAX;
 	MaterialStorage::NativeMaterialHold material;

@@ -34,7 +34,9 @@ TEST_FORCE_LINK(test_rendering_device_frame_wait)
 
 #include "core/object/callable_mp.h"
 #include "core/os/thread.h"
+#include "servers/rendering/renderer_compositor.h"
 #include "servers/rendering/rendering_device.h"
+#include "servers/rendering/rendering_server_default.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #ifdef MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED
 #include "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_image_collector.h"
@@ -43,17 +45,46 @@ TEST_FORCE_LINK(test_rendering_device_frame_wait)
 
 class TestFrameWaitAccess {
 public:
-	static void busy_ordinary_advance_retries_same_slot() {
+	struct FrameErrors {
+		uint32_t count = 0;
+		static void capture(void *p_data, const char *, const char *, int, const char *, const char *, bool, ErrorHandlerType p_type) {
+			if (p_type == ERR_HANDLER_ERROR) {
+				++static_cast<FrameErrors *>(p_data)->count;
+			}
+		}
+		ErrorHandlerList handler{ &FrameErrors::capture, this };
+		FrameErrors() { add_error_handler(&handler); }
+		~FrameErrors() { remove_error_handler(&handler); }
+	};
+	static inline uint32_t pending_draw_callbacks = 0;
+	static void pending_frame_drawn() { ++pending_draw_callbacks; }
+	static void busy_ordinary_advance_retries_same_slot(bool p_server_draw = false, uint32_t p_failure = 0) {
+		auto *server = p_server_draw ? Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton()) : nullptr;
+		auto *compositor = p_server_draw ? RendererCompositor::get_singleton() : nullptr;
+		if (p_server_draw) {
+			REQUIRE(server != nullptr);
+			REQUIRE(compositor != nullptr);
+			REQUIRE(RenderingDevice::get_singleton() == nullptr);
+			if (!server || !compositor || RenderingDevice::get_singleton()) {
+				return;
+			}
+			server->sync();
+		}
 		// Feed original RD frame paths distinct observations; this fixture does
 		// not certify a native dispatch or replace the separate Metal witness.
 		struct BusyDriver : TransferTestDriverBase {
 			LocalVector<uint64_t> waited, recycled;
-			bool ready = false;
+			bool ready = false, native_failure = false;
 			uint32_t begins = 0, resets = 0, submissions = 0;
 			bool native_call_observation_supported() const override { return true; }
 			FencePollResult native_call_wait(uint64_t serial) override {
 				waited.push_back(serial);
 				FencePollResult result;
+				if (native_failure) {
+					result.native_error = true;
+					result.native_code = 77;
+					return result;
+				}
 				if (ready) {
 					result.completed = true;
 					result.completed_serial = serial;
@@ -84,6 +115,7 @@ public:
 		RenderingDevice device;
 		device.driver = &driver;
 		device.render_thread_id = Thread::get_caller_id();
+		device.is_main_instance = p_server_draw;
 		device.frames.resize(2);
 		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 2, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
 		for (uint32_t i = 0; i < 2; ++i) {
@@ -97,25 +129,84 @@ public:
 			report.calls.push_back(fact);
 			frame.chain_reports.push_back(report);
 		}
+		FrameErrors errors;
 		ERR_PRINT_OFF;
 		device.swap_buffers(false);
 		ERR_PRINT_ON;
+		CHECK(errors.count == 0); // Healthy early Busy is not a rendering error.
 		CHECK(device.frame == 1);
 		CHECK(device.frame_wait_error == OK); // Early native Busy has no fence error.
 		CHECK(device.qualification_frame_advance_pending);
 		CHECK(device.buffer_clear(RID(), 0, 4) == ERR_BUSY);
+		const uint64_t compositor_frame = compositor ? compositor->get_frame_number() : 0;
+		if (p_server_draw) {
+			pending_draw_callbacks = 0;
+			server->request_frame_drawn_callback(callable_mp_static(&TestFrameWaitAccess::pending_frame_drawn));
+			if (p_failure == 1) {
+				device.frame_issue_error = FAILED;
+			} else if (p_failure == 2) {
+				device.frame_wait_error = FAILED;
+			} else if (p_failure == 3) {
+				driver.native_failure = true;
+			}
+		}
+		errors.count = 0;
 		ERR_PRINT_OFF;
-		device.swap_buffers(false);
+		if (p_server_draw) {
+			server->draw(false, 0.01);
+		} else {
+			device.swap_buffers(false);
+		}
 		ERR_PRINT_ON;
+		if (p_failure) {
+			CHECK(errors.count > 0); // A real error remains observable.
+		} else {
+			CHECK(errors.count == 0);
+		}
+		if (p_server_draw) {
+			CHECK(pending_draw_callbacks == 0);
+			CHECK(compositor->get_frame_number() == compositor_frame);
+			CHECK(server->has_changed());
+		}
+		if (p_failure) {
+			CHECK(device.frame == 1);
+			CHECK(device.qualification_frame_advance_pending);
+			CHECK(driver.begins == 0);
+			CHECK(driver.resets == 0);
+			CHECK(driver.submissions == 0);
+			if (p_failure == 1) {
+				CHECK(device.frame_issue_error == FAILED);
+			} else if (p_failure == 2) {
+				CHECK(device.frame_wait_error == FAILED);
+			} else {
+				CHECK(device.frame_wait_native_code_valid);
+				CHECK(device.frame_wait_native_code == 77);
+			}
+			// Restore only the controlled driver failure to drain the registered
+			// callback normally before this fixture's RD singleton is destroyed.
+			device.frame_issue_error = device.frame_wait_error = OK;
+			device.frame_wait_native_code_valid = false;
+			driver.native_failure = false;
+		}
 		CHECK(device.frame == 1);
-		REQUIRE(driver.waited.size() == 2);
-		CHECK(driver.waited[0] == 18);
-		CHECK(driver.waited[1] == 18);
+		if (!p_failure) {
+			CHECK(driver.waited.size() == 2);
+			if (driver.waited.size() == 2) {
+				CHECK(driver.waited[0] == 18);
+				CHECK(driver.waited[1] == 18);
+			}
+		}
 		CHECK_FALSE(device.frames[1].chain_reports[0].calls[0].source_owner_returned);
 		CHECK(device.get_frames_drawn() == 0);
 		CHECK(driver.recycled.is_empty());
 		driver.ready = true;
-		device.swap_buffers(false);
+		if (p_server_draw) {
+			server->draw(false, 0.01);
+			CHECK(pending_draw_callbacks == 1);
+			CHECK(compositor->get_frame_number() == compositor_frame + 1);
+		} else {
+			device.swap_buffers(false);
+		}
 		CHECK(device.frame == 1);
 		CHECK_FALSE(device.qualification_frame_advance_pending);
 		CHECK(device._recording_error() == OK);
@@ -125,7 +216,9 @@ public:
 		CHECK(driver.resets == 1);
 		CHECK(driver.submissions == 0);
 		REQUIRE(driver.recycled.size() == 1);
-		CHECK(driver.recycled[0] == 18);
+		if (driver.recycled.size() == 1) {
+			CHECK(driver.recycled[0] == 18);
+		}
 		device.swap_buffers(false);
 		CHECK(device.frame == 0);
 		CHECK_FALSE(device.qualification_frame_advance_pending);
@@ -134,7 +227,65 @@ public:
 		CHECK(driver.resets == 2);
 		CHECK(driver.submissions == 1);
 		REQUIRE(driver.recycled.size() == 2);
-		CHECK(driver.recycled[1] == 17);
+		if (driver.recycled.size() == 2) {
+			CHECK(driver.recycled[1] == 17);
+		}
+		device.frames.clear();
+		device.driver = nullptr;
+	}
+	static void ordinary_fence_busy_reports_error() {
+		struct Driver : TransferTestDriverBase {
+			Error wait_error = ERR_BUSY;
+			uint32_t waits = 0, resets = 0;
+			Error fence_wait(FenceID) override {
+				++waits;
+				return wait_error;
+			}
+			bool command_pool_reset(CommandPoolID) override {
+				++resets;
+				return true;
+			}
+			bool command_buffer_begin(CommandBufferID) override { return true; }
+			void begin_segment(uint32_t, uint32_t) override {}
+			void command_buffer_end(CommandBufferID) override {}
+			void end_segment() override {}
+		} driver;
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.frames.resize(2);
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 2, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		device.frames[0].command_buffer = RenderingDeviceDriver::CommandBufferID(31);
+		device.frames[1].command_buffer = RenderingDeviceDriver::CommandBufferID(32);
+		device.frames[1].fence = RenderingDeviceDriver::FenceID(41);
+		// Enter the same ordinary retry state produced after a submitted frame
+		// fence reports BUSY.  This keeps the fixture on _stall_for_frame and
+		// avoids issuing a synthetic command queue submission.
+		device.frames[1].fence_signaled = true;
+		device.frame = 1;
+		device.qualification_frame_advance_pending = true;
+		device.frame_wait_error = ERR_BUSY;
+		device.failed_wait_frame = 1;
+		FrameErrors errors;
+		for (uint32_t attempt = 0; attempt < 2; ++attempt) {
+			errors.count = 0;
+			ERR_PRINT_OFF;
+			const Error begin_error = device._begin_frame(true);
+			ERR_PRINT_ON;
+			CHECK(begin_error == ERR_BUSY);
+			CHECK(errors.count == 0);
+			CHECK(device.frame_wait_error == ERR_BUSY);
+			CHECK(device.failed_wait_frame == 1);
+			CHECK(device.frame == 1);
+			CHECK(device.qualification_frame_advance_pending);
+			CHECK(driver.waits == attempt + 1);
+			CHECK(driver.resets == 0);
+		}
+		driver.wait_error = OK;
+		CHECK(device._begin_frame(true) == OK);
+		CHECK(device.frame_wait_error == OK);
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+		CHECK(driver.resets == 1);
 		device.frames.clear();
 		device.driver = nullptr;
 	}
@@ -937,4 +1088,18 @@ TEST_CASE("[R01][FrameWait] native pool reset and primary begin failure close ad
 
 TEST_CASE("[R01][FrameWait] ordinary advance retries an early native wait before rotating again") {
 	TestFrameWaitAccess::busy_ordinary_advance_retries_same_slot();
+}
+
+TEST_CASE("[SceneTree][R01][FrameWait] ordinary draw retries its pending frame before advancing renderer state") {
+	TestFrameWaitAccess::busy_ordinary_advance_retries_same_slot(true);
+}
+
+TEST_CASE("[SceneTree][R01][FrameWait] pending ordinary draw preserves real issue wait and native errors") {
+	SUBCASE("Issue failure") { TestFrameWaitAccess::busy_ordinary_advance_retries_same_slot(true, 1); }
+	SUBCASE("Fence wait failure") { TestFrameWaitAccess::busy_ordinary_advance_retries_same_slot(true, 2); }
+	SUBCASE("Native completion failure") { TestFrameWaitAccess::busy_ordinary_advance_retries_same_slot(true, 3); }
+}
+
+TEST_CASE("[R01][FrameWait] actual fence Busy remains an error during ordinary frame advance") {
+	TestFrameWaitAccess::ordinary_fence_busy_reports_error();
 }

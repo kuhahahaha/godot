@@ -51,6 +51,10 @@ constexpr GDExtensionDeviceExitAbi production_dto_abi() {
 	return { 1, sizeof(T), 0 };
 }
 template <>
+constexpr GDExtensionDeviceExitAbi production_dto_abi<GDExtensionProductionObserveResultV3>() {
+	return { 3, sizeof(GDExtensionProductionObserveResultV3), 0 };
+}
+template <>
 constexpr GDExtensionDeviceExitAbi production_dto_abi<GDExtensionProductionDispatchV2>() {
 	return { 2, sizeof(GDExtensionProductionDispatchV2), 0 };
 }

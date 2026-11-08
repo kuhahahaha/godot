@@ -174,6 +174,11 @@ class ExternalOutputOwner {
 		MeshStorage::NativeSelectionLease lease;
 	};
 	struct GenerationMaterialSelection {
+		// Flattened original source row. CPU selection custody and immutable
+		// native backing custody are independent; native source holds return first.
+		RID mesh;
+		uint32_t native_surface = UINT32_MAX;
+		MeshStorage::NativeSurfaceHold geometry_source;
 		RID material;
 		uint64_t generation = 0;
 		MaterialStorage::NativeSelectionLease lease;
@@ -181,7 +186,8 @@ class ExternalOutputOwner {
 	GenerationMeshSelection *generation_meshes = nullptr;
 	GenerationMaterialSelection *generation_materials = nullptr;
 	uint32_t generation_mesh_count = 0, generation_material_count = 0;
-	uint32_t retained_mesh_count = 0, retained_material_count = 0;
+	uint32_t retained_mesh_count = 0, retained_material_count = 0, retained_surface_count = 0;
+	bool generation_surfaces_attempted = false, generation_surfaces_complete = false;
 	bool generation_selection_unpublished = false;
 	bool generation_config_inline = false;
 	uint32_t binding_capacity = 0, storage_capacity = 0;
@@ -191,8 +197,9 @@ class ExternalOutputOwner {
 	Error return_preparation_row(uint32_t, uint32_t);
 	bool generation_selection_attempted = false;
 	bool generation_selection_complete = false;
-	bool has_generation_selection_custody() const { return retained_mesh_count || retained_material_count; }
+	bool has_generation_selection_custody() const { return retained_mesh_count || retained_material_count || retained_surface_count; }
 	Error acquire_generation_selection(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1);
+	Error acquire_generation_surface_sources(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1);
 	struct MetadataLayout {
 		uint32_t view_count = 0, read_count = 0, surface_count = 0;
 		uint32_t view_offset = 0, read_offset = 0, surface_offset = 0;

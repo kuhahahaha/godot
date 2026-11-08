@@ -509,7 +509,10 @@ void ParticlesStorage::_external_create_received(GDExtensionProductionPhysicalCo
 	}
 	owner->metadata_lease = static_cast<GDExtensionDeviceExit::ProductionOutputMetadataLease &&>(p_metadata);
 	if (instance_selection) {
-		const Error selected = owner->acquire_generation_selection(p_context, p_request);
+		Error selected = owner->acquire_generation_selection(p_context, p_request);
+		if (selected == OK) {
+			selected = owner->acquire_generation_surface_sources(p_context, p_request);
+		}
 		if (selected != OK) {
 			// All post-root refusals, including a pre-lease refusal, retain the
 			// linked owner/metadata and any acquired original selection prefix.

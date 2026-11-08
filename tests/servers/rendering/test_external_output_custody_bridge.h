@@ -72,6 +72,11 @@ public:
 	void unprepared_guard_refusal(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const ExternalOutputConfig &, GDExtensionDeviceExit::ProductionOutputMetadataLease &);
 	uint32_t selection_meshes() const;
 	uint32_t selection_materials() const;
+	Error acquire_selection_sources(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1);
+	uint32_t selection_sources() const;
+	Error derive_selection_source(uint32_t, uint64_t, MeshStorage::NativeSurfaceHold &) const;
+	bool selection_source_matches(uint32_t, RID, uint32_t, RID, uint64_t, const AABB &, uint64_t) const;
+	bool selection_source_metadata_matches(uint32_t, RSE::PrimitiveType, uint64_t, const AABB &, const Vector4 &) const;
 	bool selection_inline_matches(const ExternalOutputConfig &) const;
 	bool preparation_rows_match_slots(bool p_probe_duplicate = false) const;
 	Error prepare_pipeline_prefix(GDExtensionProductionPhysicalContextRefV1, uint32_t p_slot, uint32_t p_surface, uint32_t p_max_resources);
