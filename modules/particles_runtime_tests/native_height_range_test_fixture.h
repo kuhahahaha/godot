@@ -54,6 +54,12 @@ class NativeHeightRangeTestFixture : public RefCounted {
 	NativeDepthAllocationProjection pair;
 	RID depth_rid;
 	RID framebuffer_rid;
+	RID worker_vertex_buffer;
+	RID worker_vertex_array;
+	uint64_t worker_buffer_driver_id = 0;
+	uint64_t worker_buffer_allocation_serial = 0;
+	bool worker_resources_enqueued = false;
+	bool worker_resources_returned = false;
 	uint64_t initial_depth_serial = 0;
 	uint64_t initial_framebuffer_serial = 0;
 	uint64_t start_usec = 0;
@@ -74,6 +80,8 @@ class NativeHeightRangeTestFixture : public RefCounted {
 	void publish();
 	void finish(Error p_error);
 	void advance_impl();
+	Error record_worker_ranges(RenderingDevice *p_rd);
+	bool worker_buffer_pending_disposal(RenderingDevice *p_rd) const;
 	Error observe_ranges(RenderingDevice *p_rd, const String &p_stage, NativeHeightRange::Snapshot (&r_snapshots)[2]);
 	Error observe_pair(RenderingDevice *p_rd, const String &p_stage, NativeDepthAllocationProjection::Report &r_report);
 

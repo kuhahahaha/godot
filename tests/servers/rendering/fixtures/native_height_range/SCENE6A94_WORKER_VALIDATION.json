@@ -1,0 +1,293 @@
+{
+  "status": "candidate-only; original Scene cohort remains red",
+  "base_commit": "44ea079b80ab58c5e41d90fe53cd00dbb7e9a4c6",
+  "worker_source_commit": "6a94a851d38735187002c29b2a7c0fff893b3cd2",
+  "package_sha256": "ec094a6b5cae6399d8228773872d4d0c5eda750829e3d44baaf9e67d63e36fc5",
+  "patch_sha256": "9be8b81504dee2d018984f59f417e9924cb1f0cedd567ba27c81f5d661be5348",
+  "binary_sha256": "7d64f3e3bfd5f803f7b072caf6392c479e7f9e632920f1529c69c6a6255e5447",
+  "binary_bytes": 116445408,
+  "build_argv": [
+    "scons",
+    "-j6",
+    "verbose=yes",
+    "platform=macos",
+    "target=template_debug",
+    "arch=arm64",
+    "tests=yes",
+    "modules_enabled_by_default=no",
+    "module_gdscript_enabled=yes",
+    "module_particles_runtime_tests_enabled=yes",
+    "module_glslang_enabled=yes",
+    "metal=yes",
+    "vulkan=no",
+    "opengl3=no",
+    "dev_build=no",
+    "debug_symbols=no",
+    "optimize=none",
+    "disable_path_overrides=no"
+  ],
+  "original_gpu_cases": {
+    "attempted": 24,
+    "passed": 20,
+    "failed": 4
+  },
+  "cpu": {
+    "height_range_cases": 22,
+    "height_range_assertions": 865,
+    "nativepass_cases": 9,
+    "nativepass_assertions": 691
+  },
+  "additional_gpu": {
+    "worker_cases": 1,
+    "worker_checks": 48,
+    "clear_cases": 2,
+    "clear_checks_each": 34
+  },
+  "source_files": {
+    "modules/particles_runtime_tests/native_height_range_test_fixture.cpp": {
+      "bytes": 29414,
+      "sha256": "f9d7adb2befa2404f4921bb267ccc9137ac3036ad1e76d68c2c6322800aa51a6"
+    },
+    "modules/particles_runtime_tests/native_height_range_test_fixture.h": {
+      "bytes": 4313,
+      "sha256": "d2b4825f0b332bdd7620044df55f8e250a14675573ffca92a4d839cf63df9e51"
+    },
+    "servers/rendering/native_height_range.h": {
+      "bytes": 6813,
+      "sha256": "b855a71b5be314121468636b5e075399a578c08022c40c4e537c0db297653054"
+    },
+    "servers/rendering/rendering_device.cpp": {
+      "bytes": 772224,
+      "sha256": "62d36090d60716db2be26ad3b8c01c04c3e008d519e872aa6c1c92990194a566"
+    },
+    "tests/servers/rendering/fixtures/native_height_range/README_worker.md": {
+      "bytes": 2521,
+      "sha256": "e7d2c650a36c5ebcfe71c37cb34bf8569568efa63ca6a80a09322b63a92dd2cf"
+    },
+    "tests/servers/rendering/fixtures/native_height_range/run.gd": {
+      "bytes": 4301,
+      "sha256": "746a3619eee2dc2c00cff447a8f10b6ffbc06b72ac85bf0df8d927cffbae5bd0"
+    },
+    "tests/servers/rendering/fixtures/native_height_range/run_native.py": {
+      "bytes": 17192,
+      "sha256": "d8f20e2b3aa4361943f37418981ec68b79eea4bfd9173c5b2c4a6930679cc64c"
+    },
+    "tests/servers/rendering/fixtures/native_height_range/run_worker.py": {
+      "bytes": 212,
+      "sha256": "02725824f8c18048daaedeb206a826bcdf6e2eaad96611a610e093c3b04b3926"
+    },
+    "tests/servers/rendering/test_native_height_range.cpp": {
+      "bytes": 50117,
+      "sha256": "d5e9ed1fdd0c15896b1b27a5b3223e3ea720466619401af728e08fd5394901a4"
+    },
+    "servers/rendering/renderer_rd/height_capture_checked_sink.cpp": {
+      "bytes": 15819,
+      "sha256": "ff90fd94de865765af441120b8bbc555bf2314870bcaf190624ffe7293347d28"
+    }
+  },
+  "cohort": [
+    {
+      "label": "height-range-cpu",
+      "argv": [
+        "/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.template_debug.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*NativeHeightRange*"
+      ],
+      "expected_cases": 22,
+      "exit_code": 0,
+      "pass": true,
+      "elapsed_seconds": 1.3160632909857668,
+      "log": "/tmp/scene-worker-join-6a94-20261109/final-height-range-cpu.log",
+      "log_sha256": "2fe804557532adf2fb2f5ab1a62a1c81dce45a0a7789b1f2fd355e8a78391189",
+      "binary_sha256": "7d64f3e3bfd5f803f7b072caf6392c479e7f9e632920f1529c69c6a6255e5447"
+    },
+    {
+      "label": "nativepass-cpu",
+      "argv": [
+        "/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.template_debug.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*MobileNativePassSelection*,*ClusteredNativePassSelection*"
+      ],
+      "expected_cases": 9,
+      "exit_code": 0,
+      "pass": true,
+      "elapsed_seconds": 0.12315512500936165,
+      "log": "/tmp/scene-worker-join-6a94-20261109/final-nativepass-cpu.log",
+      "log_sha256": "c5e2a6b0ef2ba4013e8d709cf6a6094d245adedf80057f195ee7ab1b6e46800c",
+      "binary_sha256": "7d64f3e3bfd5f803f7b072caf6392c479e7f9e632920f1529c69c6a6255e5447"
+    },
+    {
+      "label": "candidate",
+      "argv": [
+        "python3",
+        "/tmp/scene-native-merge-20261109/gpu-template-fixture/run_candidate.py",
+        "--binary",
+        "/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.template_debug.arm64",
+        "--display-driver",
+        "macos",
+        "--rendering-driver",
+        "metal"
+      ],
+      "expected_cases": 2,
+      "exit_code": 1,
+      "pass": false,
+      "elapsed_seconds": 0.8863552080001682,
+      "log": "/tmp/scene-worker-join-6a94-20261109/final-candidate.log",
+      "log_sha256": "a4fc55edcc1cd6ac2f1c539173818e7f704d4c52ecb8821f6aa1e21f839c6fd8",
+      "binary_sha256": "7d64f3e3bfd5f803f7b072caf6392c479e7f9e632920f1529c69c6a6255e5447",
+      "attempted_cases": 1
+    },
+    {
+      "label": "geometry-refusal",
+      "argv": [
+        "python3",
+        "/tmp/scene-native-merge-20261109/gpu-template-fixture/run_candidate.py",
+        "--binary",
+        "/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.template_debug.arm64",
+        "--display-driver",
+        "macos",
+        "--rendering-driver",
+        "metal",
+        "--geometry-refusal"
+      ],
+      "expected_cases": 2,
+      "exit_code": 1,
+      "pass": false,
+      "elapsed_seconds": 0.7256620840053074,
+      "log": "/tmp/scene-worker-join-6a94-20261109/final-geometry-refusal.log",
+      "log_sha256": "20f688cf9c8b206c847cb2e0fcf55928e4b2a40b49319c6691a1bca0dd267b6b",
+      "binary_sha256": "7d64f3e3bfd5f803f7b072caf6392c479e7f9e632920f1529c69c6a6255e5447",
+      "attempted_cases": 1
+    },
+    {
+      "label": "source-selection",
+      "argv": [
+        "python3",
+        "/tmp/scene-native-merge-20261109/gpu-template-fixture/run_source_selection.py",
+        "--binary",
+        "/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.template_debug.arm64",
+        "--display-driver",
+        "macos",
+        "--rendering-driver",
+        "metal"
+      ],
+      "expected_cases": 8,
+      "exit_code": 0,
+      "pass": true,
+      "elapsed_seconds": 6.984120375011116,
+      "log": "/tmp/scene-worker-join-6a94-20261109/final-source-selection.log",
+      "log_sha256": "058b9e649758859dd988509b1c66be8e3c8e96f6a39e2191ecd3007e93019d18",
+      "binary_sha256": "7d64f3e3bfd5f803f7b072caf6392c479e7f9e632920f1529c69c6a6255e5447"
+    },
+    {
+      "label": "legacy-neighbors",
+      "argv": [
+        "python3",
+        "/tmp/scene-native-merge-20261109/gpu-template-fixture/run_legacy_neighbors.py",
+        "--binary",
+        "/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.template_debug.arm64",
+        "--display-driver",
+        "macos"
+      ],
+      "expected_cases": 12,
+      "exit_code": 0,
+      "pass": true,
+      "elapsed_seconds": 7.922076500020921,
+      "log": "/tmp/scene-worker-join-6a94-20261109/final-legacy-neighbors.log",
+      "log_sha256": "25db5666f3403a7a86ffb1cbeb9b01739beb1329a00475d7670977281ddf4e2f",
+      "binary_sha256": "7d64f3e3bfd5f803f7b072caf6392c479e7f9e632920f1529c69c6a6255e5447"
+    },
+    {
+      "label": "native-worker",
+      "argv": [
+        "python3",
+        "/tmp/scene-worker-join-6a94-20261109/template-fixture/tests/servers/rendering/fixtures/native_height_range/run_worker.py",
+        "--godot",
+        "/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.template_debug.arm64",
+        "--sha256",
+        "7d64f3e3bfd5f803f7b072caf6392c479e7f9e632920f1529c69c6a6255e5447",
+        "--out",
+        "/tmp/scene-worker-join-6a94-20261109/final-native-worker-evidence"
+      ],
+      "expected_cases": 1,
+      "exit_code": 0,
+      "pass": true,
+      "elapsed_seconds": 0.8888589999987744,
+      "log": "/tmp/scene-worker-join-6a94-20261109/final-native-worker.log",
+      "log_sha256": "3380d2f07b031cf41242bd27768ba23124dd623e7c98dc9965daa21a55d4f4e6",
+      "binary_sha256": "7d64f3e3bfd5f803f7b072caf6392c479e7f9e632920f1529c69c6a6255e5447"
+    },
+    {
+      "label": "native-clear",
+      "argv": [
+        "python3",
+        "/tmp/scene-worker-join-6a94-20261109/template-fixture/tests/servers/rendering/fixtures/native_height_range/run_native.py",
+        "--godot",
+        "/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.template_debug.arm64",
+        "--sha256",
+        "7d64f3e3bfd5f803f7b072caf6392c479e7f9e632920f1529c69c6a6255e5447",
+        "--out",
+        "/tmp/scene-worker-join-6a94-20261109/final-native-clear-evidence"
+      ],
+      "expected_cases": 2,
+      "exit_code": 0,
+      "pass": true,
+      "elapsed_seconds": 1.4815464590210468,
+      "log": "/tmp/scene-worker-join-6a94-20261109/final-native-clear.log",
+      "log_sha256": "32883d2b267254759274142a7d9a28aba270ae06fdcda91ea864a6c511af97b3",
+      "binary_sha256": "7d64f3e3bfd5f803f7b072caf6392c479e7f9e632920f1529c69c6a6255e5447"
+    },
+    {
+      "label": "candidate-forward-plus",
+      "argv": [
+        "python3",
+        "/tmp/scene-native-merge-20261109/gpu-template-fixture/run_candidate_forward_only.py",
+        "--binary",
+        "/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.template_debug.arm64",
+        "--display-driver",
+        "macos",
+        "--rendering-driver",
+        "metal"
+      ],
+      "expected_cases": 1,
+      "exit_code": 1,
+      "pass": false,
+      "elapsed_seconds": 0.8258883329690434,
+      "log": "/tmp/scene-worker-join-6a94-20261109/final-candidate-forward-plus.log",
+      "log_sha256": "b5ed3ffe14c0139aa191dd2d0bca7bdbb2f93bf43d6285b377bc2bbfd40aae2d",
+      "binary_sha256": "7d64f3e3bfd5f803f7b072caf6392c479e7f9e632920f1529c69c6a6255e5447",
+      "attempted_cases": 1
+    },
+    {
+      "label": "geometry-refusal-forward-plus",
+      "argv": [
+        "python3",
+        "/tmp/scene-native-merge-20261109/gpu-template-fixture/run_candidate_forward_only.py",
+        "--binary",
+        "/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.template_debug.arm64",
+        "--display-driver",
+        "macos",
+        "--rendering-driver",
+        "metal",
+        "--geometry-refusal"
+      ],
+      "expected_cases": 1,
+      "exit_code": 1,
+      "pass": false,
+      "elapsed_seconds": 0.7876327499980107,
+      "log": "/tmp/scene-worker-join-6a94-20261109/final-geometry-refusal-forward-plus.log",
+      "log_sha256": "5541957abaaeee2a1af352e9b2f0fc4538aba75ea77af0809f30a5732ff5ba2c",
+      "binary_sha256": "7d64f3e3bfd5f803f7b072caf6392c479e7f9e632920f1529c69c6a6255e5447",
+      "attempted_cases": 1
+    }
+  ],
+  "independent_review": {
+    "reviewer": "native_renderer_merge_review",
+    "scope": "nine exact package after files and single Scene sink cursor repair",
+    "result": "no source blocker; does not certify full cohort green"
+  },
+  "diagnostics_restored": true,
+  "stable_mainline_ready": false
+}

@@ -49,6 +49,8 @@ CHECKS = {
     "second_range_returned",
     "initial_clear_recorded",
 }
+WORKER_CHECKS = {'worker_sink_recorded_1', 'worker_sink_closed_1', 'worker_sink_recorded_0', 'worker_transfer_pending', 'worker_resources_returned', 'worker_vertex_array_created', 'worker_resources_live_before_retire', 'worker_vertex_buffer_created', 'worker_first_bind_transfer_0', 'worker_resources_live_after_native_complete', 'worker_sink_closed_0', 'worker_no_next_draw', 'worker_first_bind_transfer_1', 'worker_resources_enqueued'}
+
 SOURCES = (
     "modules/particles_runtime_tests/native_height_range_test_fixture.h",
     "modules/particles_runtime_tests/native_height_range_test_fixture.cpp",
@@ -56,6 +58,8 @@ SOURCES = (
     "modules/particles_runtime_tests/config.py",
     "modules/particles_runtime_tests/SCsub",
     "servers/rendering/native_height_range.h",
+    "servers/rendering/render_capture_test_tracking.h",
+    "servers/rendering/render_capture_test_tracking.cpp",
     "servers/rendering/renderer_rd/height_capture_checked_sink.h",
     "servers/rendering/renderer_rd/height_capture_checked_sink.cpp",
     "servers/rendering/native_depth_allocation_projection.h",
@@ -73,6 +77,8 @@ SOURCES = (
     "tests/servers/rendering/fixtures/native_height_range/project.godot",
     "tests/servers/rendering/fixtures/native_height_range/run.gd",
     "tests/servers/rendering/fixtures/native_height_range/run_native.py",
+    "tests/servers/rendering/fixtures/native_height_range/run_worker.py",
+    "tests/servers/rendering/fixtures/native_height_range/README_worker.md",
     "tests/servers/rendering/fixtures/native_height_range/README.md",
 )
 
@@ -147,7 +153,7 @@ def _valid_report(report: object, case_index: int) -> bool:
         and report["error"] == 0
         and report["case_index"] == case_index
         and report["phase"] == 7
-        and report["path"] == ("bounded" if case_index == 0 else "ordinary")
+        and report["path"] == ("ordinary" if case_index == 1 else "bounded")
     ):
         return False
     if (
@@ -173,7 +179,7 @@ def _valid_report(report: object, case_index: int) -> bool:
         return False
     if not (
         report.get("failures") == []
-        and (report["callbacks"] == 1 if case_index == 0 else report["callbacks"] >= 3)
+        and (report["callbacks"] >= 3 if case_index == 1 else report["callbacks"] == 1)
         and report["maintenance_calls"] > 0
         and report["observe_polls"] >= 2
         and report["observer_releases"] >= 2
@@ -186,19 +192,51 @@ def _valid_report(report: object, case_index: int) -> bool:
     before, completed, returned = (
         report[k] for k in ("draws_before_range_issue", "draws_at_native_complete", "draws_at_physical_return")
     )
-    if case_index == 0:
+    if case_index != 1:
         if before != completed or returned != before or report["range_maintenance_calls"] <= 0:
             return False
     elif completed <= before or returned < completed or report["range_maintenance_calls"] != 0:
         return False
+    expected_checks = CHECKS | WORKER_CHECKS if case_index == 2 else CHECKS
+    if case_index == 2:
+        if (
+            report.get("worker_resources_returned") is not True
+            or report.get("worker_tracking_coverage_failed") is not False
+            or type(report.get("draws_at_worker_return")) is not int
+            or report["draws_at_worker_return"] != before
+            or type(report.get("worker_index")) is not int
+            or report["worker_index"] < 0
+            or not positive_int(report.get("worker_operation"))
+            or not positive_int(report.get("worker_buffer_driver_id"))
+            or not positive_int(report.get("worker_allocation_serial"))
+            or report.get("worker_allocation_live_after_observers") is not True
+            or report.get("worker_allocation_live_after_enqueue") is not True
+            or report.get("worker_allocation_disposed") is not True
+        ):
+            return False
+        bindings = report.get("worker_bindings")
+        if not isinstance(bindings, list) or len(bindings) != 2:
+            return False
+        for binding in bindings:
+            if not isinstance(binding, dict) or any(type(binding.get(key)) is not int for key in ("transfer_count", "bind_transfer_count", "bind_error", "worker", "operation")):
+                return False
+            if not (
+                binding["transfer_count"] == binding["bind_transfer_count"] == 1
+                and binding["bind_error"] == 0
+                and binding.get("capture_complete") is True
+                and binding.get("recorded") is True
+                and binding["worker"] == report["worker_index"]
+                and binding["operation"] == report["worker_operation"]
+            ):
+                return False
     checks = report.get("checks")
     if (
         not isinstance(checks, list)
-        or len(checks) != len(CHECKS)
+        or len(checks) != len(expected_checks)
         or any(
             not isinstance(r, dict) or r.get("ok") is not True or not isinstance(r.get("check"), str) for r in checks
         )
-        or {r["check"] for r in checks} != CHECKS
+        or {r["check"] for r in checks} != expected_checks
     ):
         return False
     device = report.get("device")
@@ -307,7 +345,7 @@ def valid_report(report: object, case_index: int) -> bool:
         return False
 
 
-def main() -> int:
+def main(case_indices: tuple[int, ...] = (0, 1)) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--godot", required=True, type=Path)
     parser.add_argument("--sha256", required=True)
@@ -325,7 +363,7 @@ def main() -> int:
         if key.startswith(("GODOT_", "DYLD_")):
             environment.pop(key, None)
     results = []
-    for case_index in (0, 1):
+    for case_index in case_indices:
         directory = args.out / str(case_index)
         directory.mkdir()
         command = [

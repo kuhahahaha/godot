@@ -96,7 +96,7 @@ void NativeHeightRangeTestFixture::publish() {
 	data["complete"] = complete;
 	data["error"] = int(outcome);
 	data["case_index"] = case_index;
-	data["path"] = case_index == 0 ? "bounded" : "ordinary";
+	data["path"] = case_index == 1 ? "ordinary" : "bounded";
 	data["phase"] = phase;
 	data["callbacks"] = callback_count;
 	data["checks"] = checks;
@@ -109,8 +109,8 @@ void NativeHeightRangeTestFixture::publish() {
 	data["observer_releases"] = observer_releases;
 	data["elapsed_usec"] = OS::get_singleton()->get_ticks_usec() - start_usec;
 	data["deadline_usec"] = DEADLINE_USEC;
-	data["physical_prefix_returned"] = physical_returned;
-	data["retained_on_failure"] = prefix_created && !physical_returned;
+	data["physical_prefix_returned"] = physical_returned && (case_index != 2 || worker_resources_returned);
+	data["retained_on_failure"] = (prefix_created && !physical_returned) || (case_index == 2 && worker_vertex_buffer.is_valid() && !worker_resources_returned);
 	data["producer_complete"] = false;
 	data["whole_output_released"] = false;
 	data["reservation_refunded"] = false;
@@ -160,6 +160,110 @@ Error NativeHeightRangeTestFixture::observe_pair(RenderingDevice *p_rd, const St
 	return error;
 }
 
+bool NativeHeightRangeTestFixture::worker_buffer_pending_disposal(RenderingDevice *p_rd) const {
+	for (const auto &frame : p_rd->frames) {
+		for (const auto &buffer : frame.buffers_to_dispose_of) {
+			if (buffer.driver_id.id == worker_buffer_driver_id) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+Error NativeHeightRangeTestFixture::record_worker_ranges(RenderingDevice *p_rd) {
+	using Sink = RendererRD::HeightCaptureCheckedSink;
+	// Initial depth materialization above is complete. This upload is new and
+	// receives its dependency only from the original buffer factory.
+	const float vertices[9] = { -1, -1, 0, 1, -1, 0, 0, 1, 0 };
+	worker_vertex_buffer = p_rd->vertex_buffer_create(sizeof(vertices), Span<uint8_t>(reinterpret_cast<const uint8_t *>(vertices), sizeof(vertices)));
+	if (!check(worker_vertex_buffer.is_valid(), "worker_vertex_buffer_created")) {
+		return ERR_CANT_CREATE;
+	}
+	const auto *buffer = p_rd->vertex_buffer_owner.get_or_null(worker_vertex_buffer);
+	if (!buffer || buffer->transfer_worker_index < 0 || uint32_t(buffer->transfer_worker_index) >= p_rd->transfer_worker_pool.size()) {
+		check(false, "worker_transfer_pending");
+		return ERR_INVALID_DATA;
+	}
+	const uint32_t worker_index = uint32_t(buffer->transfer_worker_index);
+	const uint64_t operation = buffer->transfer_worker_operation;
+	worker_buffer_driver_id = buffer->driver_id.id;
+	worker_buffer_allocation_serial = buffer->capture_test_allocation_serial;
+	auto *worker = p_rd->transfer_worker_pool[worker_index];
+	bool pending = false;
+	if (worker) {
+		MutexLock thread_lock(worker->thread_mutex);
+		MutexLock operations_lock(worker->operations_mutex);
+		pending = worker->index == worker_index && worker->recording && operation > worker->operations_processed && operation <= worker->operations_counter;
+	}
+	if (!check(pending && !p_rd->capture_test_coverage_failed.load() && worker_buffer_allocation_serial && p_rd->capture_test_allocation_registry.physically_live(worker_buffer_driver_id, worker_buffer_allocation_serial), "worker_transfer_pending")) {
+		return ERR_INVALID_DATA; // Never prewarm, forge a dependency, or soft-skip.
+	}
+	data["worker_index"] = worker_index;
+	data["worker_operation"] = operation;
+	data["worker_buffer_driver_id"] = worker_buffer_driver_id;
+	data["worker_allocation_serial"] = worker_buffer_allocation_serial;
+	RenderingDevice::VertexAttribute attribute;
+	attribute.format = RenderingDevice::DATA_FORMAT_R32G32B32_SFLOAT;
+	attribute.stride = 3 * sizeof(float);
+	Vector<RenderingDevice::VertexAttribute> attributes;
+	attributes.push_back(attribute);
+	const auto format = p_rd->vertex_format_create(attributes);
+	Vector<RID> buffers;
+	buffers.push_back(worker_vertex_buffer);
+	worker_vertex_array = p_rd->vertex_array_create(3, format, buffers);
+	if (!check(format != RenderingDevice::INVALID_ID && worker_vertex_array.is_valid(), "worker_vertex_array_created")) {
+		return ERR_CANT_CREATE;
+	}
+	Array bindings;
+	for (int i = 0; i < 2; ++i) {
+		Sink sink(*p_rd, 3, 1);
+		Error error = sink.prepare_native_range(ranges[i]);
+		if (error == OK) {
+			error = sink.begin(framebuffer_rid, RenderingDevice::DRAW_CLEAR_DEPTH, {}, i == 0 ? 0.375f : 0.625f);
+		}
+		if (error == OK) {
+			error = sink.bind_vertex_array(worker_vertex_array);
+		}
+		const bool bound = check(error == OK && sink.get_business_count() == 2, "worker_sink_recorded_" + itos(i));
+		if (!bound) {
+			sink.reject(error != OK ? error : ERR_BUG);
+			sink.unwind(); // Original independent End before local sink destruction.
+			return error != OK ? error : ERR_BUG;
+		}
+		const auto &record = sink.get_business_record(1);
+		const bool exact = sink.get_transfer_count() == 1 && record.operation == Sink::Operation::VertexArray && record.bind.error == OK && record.bind.effect == RenderingDevice::NativeAppendEffect::Recorded && record.bind.capture_complete && record.bind.state_accepted && record.bind.transfer_count == 1 && record.transfer_count == 1 && record.transfer_offset == 0 && p_rd->draw_graph.contains_record(record.bind.bind_handle) && sink.get_transfer(0).worker == worker_index && sink.get_transfer(0).operation == operation;
+		Dictionary row;
+		row["transfer_count"] = sink.get_transfer_count();
+		row["bind_transfer_count"] = record.bind.transfer_count;
+		row["bind_error"] = int(record.bind.error);
+		row["capture_complete"] = record.bind.capture_complete;
+		row["recorded"] = record.bind.effect == RenderingDevice::NativeAppendEffect::Recorded;
+		if (sink.get_transfer_count() == 1) {
+			row["worker"] = sink.get_transfer(0).worker;
+			row["operation"] = sink.get_transfer(0).operation;
+		}
+		bindings.push_back(row);
+		data["worker_bindings"] = bindings;
+		if (!check(exact, "worker_first_bind_transfer_" + itos(i))) {
+			sink.reject(ERR_INVALID_DATA);
+			sink.unwind();
+			return ERR_INVALID_DATA;
+		}
+		error = sink.finish();
+		if (!check(error == OK && sink.is_restored() && !sink.has_open_list() && sink.get_business_count() == 3, "worker_sink_closed_" + itos(i))) {
+			sink.reject(error != OK ? error : ERR_BUG);
+			sink.unwind();
+			return error != OK ? error : ERR_BUG;
+		}
+	}
+	check(ranges[0].is_valid() && ranges[1].is_valid() && ranges[0] != ranges[1], "ranges_prepared");
+	data["independent_ranges"] = ranges[0] != ranges[1];
+	data["recorded_frame"] = p_rd->frame;
+	check(true, "ranges_recorded");
+	return OK;
+}
+
 void NativeHeightRangeTestFixture::begin(int p_case) {
 	if (started) {
 		return;
@@ -174,7 +278,7 @@ void NativeHeightRangeTestFixture::begin(int p_case) {
 		finish(ERR_UNAVAILABLE);
 		return;
 	}
-	if (!check(!rs->is_render_loop_enabled() && !rd->draw_list.active && !rd->compute_list.active && !rd->raytracing_list.active, "loop_disabled_for_setup") || !check(p_case == 0 || p_case == 1, "fixed_case")) {
+	if (!check(!rs->is_render_loop_enabled() && !rd->draw_list.active && !rd->compute_list.active && !rd->raytracing_list.active, "loop_disabled_for_setup") || !check(p_case == 0 || p_case == 1 || p_case == 2, "fixed_case")) {
 		finish(ERR_INVALID_PARAMETER);
 		return;
 	}
@@ -246,32 +350,40 @@ void NativeHeightRangeTestFixture::begin(int p_case) {
 		finish(ERR_UNAVAILABLE);
 		return;
 	}
-	for (int i = 0; i < 2; ++i) {
-		error = rd->_native_height_range_prepare(ranges[i]);
+	if (case_index == 2) {
+		error = record_worker_ranges(rd);
 		if (error != OK) {
-			check(false, "ranges_prepared");
 			finish(error);
 			return;
 		}
-	}
-	check(ranges[0].is_valid() && ranges[1].is_valid() && ranges[0] != ranges[1], "ranges_prepared");
-	data["independent_ranges"] = ranges[0] != ranges[1];
-	data["recorded_frame"] = rd->frame;
-	for (int i = 0; i < 2; ++i) {
-		error = rd->_native_height_range_record_depth_clear(ranges[i], depth, framebuffer, i == 0 ? 0.375f : 0.625f);
-		if (error != OK) {
-			check(false, "ranges_recorded");
-			finish(error);
-			return;
+	} else {
+		for (int i = 0; i < 2; ++i) {
+			error = rd->_native_height_range_prepare(ranges[i]);
+			if (error != OK) {
+				check(false, "ranges_prepared");
+				finish(error);
+				return;
+			}
 		}
-	}
-	check(true, "ranges_recorded");
-	for (int i = 0; i < 2; ++i) {
-		error = rd->_native_height_range_close(ranges[i]);
-		if (error != OK) {
-			check(false, "ranges_closed");
-			finish(error);
-			return;
+		check(ranges[0].is_valid() && ranges[1].is_valid() && ranges[0] != ranges[1], "ranges_prepared");
+		data["independent_ranges"] = ranges[0] != ranges[1];
+		data["recorded_frame"] = rd->frame;
+		for (int i = 0; i < 2; ++i) {
+			error = rd->_native_height_range_record_depth_clear(ranges[i], depth, framebuffer, i == 0 ? 0.375f : 0.625f);
+			if (error != OK) {
+				check(false, "ranges_recorded");
+				finish(error);
+				return;
+			}
+		}
+		check(true, "ranges_recorded");
+		for (int i = 0; i < 2; ++i) {
+			error = rd->_native_height_range_close(ranges[i]);
+			if (error != OK) {
+				check(false, "ranges_closed");
+				finish(error);
+				return;
+			}
 		}
 	}
 	check(true, "ranges_closed");
@@ -293,7 +405,7 @@ void NativeHeightRangeTestFixture::begin(int p_case) {
 	data["draws_before_range_issue"] = recorded_draws;
 	phase = 1;
 	publish();
-	if (case_index == 0) {
+	if (case_index != 1) {
 		// Stay inside this original RT callback. Main::iteration waits for
 		// RenderingServer::sync before its mandatory pending-resource draw and
 		// frames_drawn increment; yielding back to Main between bounded steps
@@ -336,7 +448,7 @@ void NativeHeightRangeTestFixture::advance_impl() {
 	const RenderingDevice::NativeDisposalBudget budget{ 4096, 32, OS::get_singleton()->get_ticks_usec() + 100000 };
 	Error error = OK;
 	if (phase == 1) {
-		if (case_index == 0) {
+		if (case_index != 1) {
 			if (rs->is_render_loop_enabled()) {
 				finish(ERR_BUG);
 				return;
@@ -362,6 +474,10 @@ void NativeHeightRangeTestFixture::advance_impl() {
 				finish(ERR_BUG);
 				return;
 			}
+			if (case_index == 2 && !check(rd->vertex_array_owner.owns(worker_vertex_array) && rd->vertex_buffer_owner.owns(worker_vertex_buffer) && rd->capture_test_allocation_registry.physically_live(worker_buffer_driver_id, worker_buffer_allocation_serial), "worker_resources_live_after_native_complete")) {
+				finish(ERR_BUG);
+				return;
+			}
 			NativeDepthAllocationProjection::Report physical;
 			error = observe_pair(rd, "native_complete", physical);
 			if (!check(error == OK && live_pair(physical), "completion_is_not_physical_return")) {
@@ -370,7 +486,7 @@ void NativeHeightRangeTestFixture::advance_impl() {
 			}
 			const uint64_t draws = Engine::get_singleton()->get_frames_drawn();
 			data["draws_at_native_complete"] = draws;
-			if (!check(case_index == 0 ? draws == recorded_draws && range_maintenance_calls > 0 : draws > recorded_draws && range_maintenance_calls == 0 && rs->is_render_loop_enabled(), "correct_issue_path")) {
+			if (!check(case_index != 1 ? draws == recorded_draws && range_maintenance_calls > 0 : draws > recorded_draws && range_maintenance_calls == 0 && rs->is_render_loop_enabled(), "correct_issue_path")) {
 				finish(ERR_BUG);
 				return;
 			}
@@ -408,6 +524,21 @@ void NativeHeightRangeTestFixture::advance_impl() {
 				if (!check(error == OK && live_pair(physical), "range_return_is_not_physical_return")) {
 					finish(error != OK ? error : ERR_BUG);
 					return;
+				}
+				if (case_index == 2) {
+					data["worker_allocation_live_after_observers"] = rd->capture_test_allocation_registry.physically_live(worker_buffer_driver_id, worker_buffer_allocation_serial);
+					if (!check(rd->vertex_array_owner.owns(worker_vertex_array) && rd->vertex_buffer_owner.owns(worker_vertex_buffer) && rd->capture_test_allocation_registry.physically_live(worker_buffer_driver_id, worker_buffer_allocation_serial), "worker_resources_live_before_retire")) {
+						finish(ERR_BUG);
+						return;
+					}
+					rd->free_rid(worker_vertex_array);
+					rd->free_rid(worker_vertex_buffer);
+					worker_resources_enqueued = !rd->vertex_array_owner.owns(worker_vertex_array) && !rd->vertex_buffer_owner.owns(worker_vertex_buffer) && worker_buffer_pending_disposal(rd) && rd->capture_test_allocation_registry.physically_live(worker_buffer_driver_id, worker_buffer_allocation_serial);
+					data["worker_allocation_live_after_enqueue"] = rd->capture_test_allocation_registry.physically_live(worker_buffer_driver_id, worker_buffer_allocation_serial);
+					if (!check(worker_resources_enqueued, "worker_resources_enqueued")) {
+						finish(ERR_BUG);
+						return;
+					}
 				}
 				error = rd->_native_disposal_free(framebuffer);
 				if (!check(error == OK, "retire_framebuffer")) {
@@ -489,6 +620,17 @@ void NativeHeightRangeTestFixture::advance_impl() {
 		if (!check(!rd->native_disposal_active.load() && rd->_recording_error() == OK, "cleanup_continuation_settled")) {
 			finish(rd->_recording_error() != OK ? rd->_recording_error() : ERR_BUG);
 			return;
+		}
+		if (case_index == 2) {
+			worker_resources_returned = worker_resources_enqueued && !rd->capture_test_coverage_failed.load() && !rd->vertex_array_owner.owns(worker_vertex_array) && !rd->vertex_buffer_owner.owns(worker_vertex_buffer) && !worker_buffer_pending_disposal(rd) && !rd->capture_test_allocation_registry.physically_live(worker_buffer_driver_id, worker_buffer_allocation_serial);
+			data["worker_resources_returned"] = worker_resources_returned;
+			data["worker_tracking_coverage_failed"] = rd->capture_test_coverage_failed.load();
+			data["worker_allocation_disposed"] = !rd->capture_test_allocation_registry.physically_live(worker_buffer_driver_id, worker_buffer_allocation_serial);
+			data["draws_at_worker_return"] = Engine::get_singleton()->get_frames_drawn();
+			if (!check(worker_resources_returned, "worker_resources_returned") || !check(Engine::get_singleton()->get_frames_drawn() == recorded_draws && callback_count == 1, "worker_no_next_draw")) {
+				finish(ERR_BUG);
+				return;
+			}
 		}
 		finish(OK);
 		return;

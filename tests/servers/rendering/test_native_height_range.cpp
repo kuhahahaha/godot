@@ -204,7 +204,10 @@ public:
 		worker->operations_processed = 0;
 		f.rd.transfer_worker_operation_used_by_draw[0] = 0;
 		REQUIRE(f.rd._native_height_range_enter_checked_call(range, sink) == OK);
-		CHECK(f.rd._check_transfer_worker_operation(0, 1) == ERR_UNAVAILABLE);
+		CHECK(f.rd._check_transfer_worker_operation(0, 1) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(range->checked_transfer_count == 0);
+		CHECK(range->worker_count == 0);
+		CHECK(worker->height_watcher_count == 0);
 		f.rd.native_height_active_checked_range.unref();
 		CHECK(worker->thread_mutex.try_lock());
 		worker->thread_mutex.unlock();
@@ -247,7 +250,7 @@ public:
 		f.rd.transfer_worker_pool[0] = worker;
 		worker->operations_counter = 4;
 		worker->recording = true;
-		Sink sink(f.rd, 2, 0);
+		Sink sink(f.rd, 2, 2);
 		Ref<NativeHeightRange> range;
 		REQUIRE(sink.prepare_native_range(range) == OK);
 		// An open range alone must never capture an ordinary worker call.
@@ -319,6 +322,97 @@ public:
 		memdelete(worker);
 		f.rd.transfer_worker_pool.clear();
 		f.rd.transfer_worker_pool_size = 0;
+	}
+	static void checked_transfer_receipt_controls() {
+		using Sink = RendererRD::HeightCaptureCheckedSink;
+		using Effect = RenderingDevice::NativeAppendEffect;
+		// Mechanical tuple authentication only: test-owned worker state and raw
+		// records below are deliberate controls, not a real VA/GPU acceptance.
+		// Every success receipt is issued by the original checker under its locks.
+		for (uint32_t fault = 0; fault < 9; ++fault) {
+			CAPTURE(fault);
+			Fixture f;
+			RenderingDevice::TransferWorker worker;
+			worker.index = 0;
+			worker.operations_counter = 4;
+			worker.operations_processed = fault == 0 ? 4 : 0;
+			worker.recording = true;
+			f.rd.transfer_worker_pool.resize(1);
+			f.rd.transfer_worker_pool[0] = &worker;
+			f.rd.transfer_worker_operation_used_by_draw.resize(1);
+			f.rd.transfer_worker_pool_size = 1;
+			Sink sink(f.rd, 2, 2);
+			Ref<NativeHeightRange> range;
+			REQUIRE(sink.prepare_native_range(range) == OK);
+			REQUIRE(sink.enter_checked_call() == OK);
+			if (fault != 3) {
+				REQUIRE(f.rd._check_transfer_worker_operation(0, 2) == OK);
+				CHECK(range->checked_transfer_count == 1);
+				CHECK(range->checked_transfers[0].worker == 0);
+				CHECK(range->checked_transfers[0].operation == 2);
+				CHECK(range->checked_transfers[0].processed == (fault == 0));
+				CHECK(range->worker_count == (fault == 0 ? 0u : 1u));
+			}
+			if (fault == 4 || fault == 6) {
+				REQUIRE(f.rd._check_transfer_worker_operation(0, 4) == OK);
+				CHECK(range->checked_transfer_count == 2);
+				// The two exact operations share one original pending dependency.
+				CHECK(range->worker_count == 1);
+				CHECK(range->workers[0].operation == 4);
+				CHECK(f.rd._check_transfer_worker_operation(0, 4) == ERR_PARAMETER_RANGE_ERROR);
+				CHECK(range->checked_transfer_count == 2);
+				CHECK(worker.height_watcher_count == 1);
+			}
+			sink.business_count = 1;
+			auto &record = sink.business[0];
+			record.operation = Sink::Operation::VertexArray;
+			record.bind.capture_complete = true;
+			record.bind.state_accepted = true;
+			record.bind.transfer_count = record.transfer_count = sink.transfer_count = 1;
+			sink.transfers[0] = { 0, fault == 2 ? 3u : 2u };
+			if (fault == 5 || fault == 6) {
+				record.bind.transfer_count = record.transfer_count = sink.transfer_count = 2;
+				sink.transfers[1] = { 0, 2 };
+				if (fault == 6) { sink.transfers[0].operation = 4; }
+			}
+			if (fault == 8) { record.bind.effect = Effect::Unknown; }
+			const Error enrolled = f.rd._native_height_range_enroll_original_record(range, sink, 0, false);
+			const bool covered = fault <= 1 || fault == 7;
+			CHECK(enrolled == (covered ? OK : ERR_INVALID_DATA));
+			CHECK(range->uncaptured_prefix == !covered);
+			if (covered) {
+				CHECK(range->capture_transfers == 1);
+			} else {
+				sink.reject(enrolled);
+			}
+			if (fault == 7) {
+				// An actual original join attempt with an unknown report cannot be
+				// repaired by a later known report, even though the tuple matched.
+				auto unknown = report();
+				unknown.calls.clear();
+				CHECK(f.rd._native_height_join_worker(&worker, 1, 4, unknown) == ERR_INVALID_DATA);
+				CHECK(f.rd._native_height_join_worker(&worker, 1, 4, report()) == ERR_INVALID_DATA);
+				CHECK(range->uncaptured_prefix);
+				CHECK(range->source_count == 0);
+				CHECK_FALSE(range->workers[0].attached);
+			}
+			CHECK(sink.unwind() == (covered ? OK : ERR_INVALID_DATA));
+			CHECK(range->recording_closed);
+			CHECK(f.driver.issues == 0); // No subsequent draw or issue repairs a fault.
+			CHECK(f.driver.polls == 0);
+			if (!covered || fault == 7) {
+				CHECK(give_back(f, range) == ERR_BUSY);
+				CHECK_FALSE(range->native_complete);
+				CHECK_FALSE(range->observers_returned);
+			} else if (fault == 0) {
+				CHECK(give_back(f, range) == OK); // Actual processed check, empty prefix.
+				CHECK_FALSE(range->native_complete);
+			}
+			CHECK(f.driver.releases == 0);
+			f.rd.transfer_worker_pool.clear();
+			f.rd.transfer_worker_operation_used_by_draw.clear();
+			f.rd.transfer_worker_pool_size = 0;
+		}
 	}
 	static void worker_invalid_reports() {
 		for (uint32_t variant = 0; variant < 3; ++variant) {
@@ -1059,4 +1153,8 @@ TEST_CASE("[RenderingDevice][NativeHeightRange] exact worker source retains befo
 
 TEST_CASE("[RenderingDevice][NativeHeightRange] invalid worker reports retain known prefix without completing or replaying") {
 	TestNativeHeightRangeAccess::worker_invalid_reports();
+}
+
+TEST_CASE("[RenderingDevice][NativeHeightRange] exact checked transfer receipts reject missing duplicate hidden and unknown membership") {
+	TestNativeHeightRangeAccess::checked_transfer_receipt_controls();
 }

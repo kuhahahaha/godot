@@ -216,6 +216,7 @@ Error HeightCaptureCheckedSink::bind_uniform_set(RID p_uniform_set, uint32_t p_i
 		return first_error;
 	}
 	record->index = p_index;
+	record->transfer_offset = transfer_count;
 	if (enter_checked_call() != OK) {
 		enroll_record(business_count - 1, false);
 		return first_error;

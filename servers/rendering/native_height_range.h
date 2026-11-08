@@ -121,6 +121,16 @@ private:
 		uint32_t dependency = 0;
 		uint32_t source = 0;
 	};
+	// Exact successful dependency checks from the original synchronous checked
+	// call. Raw sink transfers must consume these original worker-lock receipts.
+	struct CheckedTransfer {
+		uint32_t worker = 0;
+		uint64_t operation = 0;
+		uint32_t dependency = UINT32_MAX;
+		bool processed = false;
+	};
+	LocalVector<CheckedTransfer> checked_transfers;
+	uint32_t checked_transfer_count = 0;
 	LocalVector<WorkerDependency> workers;
 	LocalVector<WorkerSourceEdge> worker_edges;
 	uint32_t worker_count = 0;

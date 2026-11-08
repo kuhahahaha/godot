@@ -9854,6 +9854,17 @@ Error RenderingDevice::_check_transfer_worker_operation(uint32_t index, uint64_t
 		return ERR_BUSY;
 	}
 	Unlock operations_unlock{ worker->operations_mutex };
+	Ref<NativeHeightRange> checked_range;
+	if (render_thread_id == Thread::get_caller_id() && native_height_active_checked_range.is_valid()) {
+		checked_range = native_height_active_checked_range;
+		if (!operation || operation > worker->operations_counter || checked_range->recording_closed ||
+				checked_range->capture_frame != uint32_t(frame) || checked_range->capture_epoch != frames[frame].qualification_epoch) {
+			return ERR_INVALID_DATA;
+		}
+		if (checked_range->checked_transfer_count >= checked_range->checked_transfers.size()) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+	}
 	// Capacity checks precede qualification quotes and all watcher publication.
 	Ref<NativeHeightRange> height_range;
 	uint32_t height_dependency = UINT32_MAX;
@@ -9953,6 +9964,11 @@ Error RenderingDevice::_check_transfer_worker_operation(uint32_t index, uint64_t
 				return joined;
 			}
 		}
+	}
+	if (checked_range.is_valid()) {
+		checked_range->checked_transfers[checked_range->checked_transfer_count++] = {
+			index, operation, height_dependency, worker->operations_processed >= operation
+		};
 	}
 	if (r_processed != nullptr) {
 		*r_processed = worker->operations_processed >= operation;
@@ -10491,6 +10507,9 @@ Error RenderingDevice::_native_height_range_prepare_checked_capture(RendererRD::
 	if (error != OK) {
 		return error;
 	}
+	// Same finite transfer capacity as the original sink, allocated before
+	// recording. No watcher/enrollment path grows this receipt directory.
+	r_range->checked_transfers.resize(r_sink.transfers.size());
 	frames[frame].native_height_ranges.push_back(r_range);
 	r_range->recording_started = true;
 	r_range->capture_sink = &r_sink;
@@ -10611,15 +10630,31 @@ Error RenderingDevice::_native_height_range_enroll_original_record(const Ref<Nat
 		case RendererRD::HeightCaptureCheckedSink::Operation::IndexArray:
 			result(record.bind.error, record.bind.effect, record.bind.capture_complete);
 			save(record.bind.bind_handle);
-			if (record.transfer_offset != p_range->capture_transfers || record.transfer_count > p_sink.transfer_count - MIN(p_sink.transfer_count, record.transfer_offset)) {
+			if (record.transfer_offset != p_range->capture_transfers || record.transfer_offset > p_sink.transfer_count ||
+				record.transfer_count > p_sink.transfer_count - record.transfer_offset || record.bind.transfer_count != record.transfer_count ||
+				p_range->checked_transfer_count < p_range->capture_transfers || record.transfer_count != p_range->checked_transfer_count - p_range->capture_transfers) {
 				fail(ERR_INVALID_DATA, true);
 			} else {
+				for (uint32_t i = 0; i < record.transfer_count; ++i) {
+					const auto &raw = p_sink.transfers[record.transfer_offset + i];
+					const auto &checked = p_range->checked_transfers[p_range->capture_transfers + i];
+					if (raw.worker != checked.worker || raw.operation != checked.operation) {
+						fail(ERR_INVALID_DATA, true);
+						continue;
+					}
+					if (!checked.processed) {
+						if (checked.dependency >= p_range->worker_count) {
+							fail(ERR_INVALID_DATA, true);
+							continue;
+						}
+						const auto &dependency = p_range->workers[checked.dependency];
+						if (dependency.worker != raw.worker || dependency.operation < raw.operation ||
+								(dependency.issue_attempted && (raw.operation < dependency.first_operation || raw.operation > dependency.last_operation))) {
+							fail(ERR_INVALID_DATA, true);
+						}
+					}
+				}
 				p_range->capture_transfers += record.transfer_count;
-			}
-			// A raw transfer copy is not an authenticated original worker join.
-			// Until that path is installed, never retire it as an empty prefix.
-			if (record.bind.transfer_count || record.transfer_count) {
-				fail(ERR_UNAVAILABLE, true);
 			}
 			break;
 		default:
@@ -10636,6 +10671,10 @@ Error RenderingDevice::_native_height_range_enroll_original_record(const Ref<Nat
 				fail(ERR_UNAVAILABLE, true);
 			}
 			break;
+	}
+	// Hidden checks without matching raw membership are not a covered prefix.
+	if (p_range->checked_transfer_count != p_range->capture_transfers) {
+		fail(ERR_INVALID_DATA, true);
 	}
 	return p_range->append_error;
 }
@@ -10656,7 +10695,7 @@ Error RenderingDevice::_native_height_range_close_checked_capture(const Ref<Nati
 	}
 	if (p_range->capture_frame != frame || p_range->capture_epoch != frames[frame].qualification_epoch ||
 			r_sink.owns_list || r_sink.restoration_unknown || p_range->capture_records != r_sink.business_count ||
-			p_range->capture_transfers != r_sink.transfer_count || p_range->capture_cleanup != r_sink.cleanup_attempted ||
+			p_range->capture_transfers != r_sink.transfer_count || p_range->checked_transfer_count != p_range->capture_transfers || p_range->capture_cleanup != r_sink.cleanup_attempted ||
 			(p_range->has_recorded_effect && !r_sink.restored)) {
 		p_range->uncaptured_prefix = true;
 		if (p_range->append_error == OK) {

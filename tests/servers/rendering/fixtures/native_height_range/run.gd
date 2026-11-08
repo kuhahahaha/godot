@@ -43,10 +43,29 @@ const CHECKS := [
 	"cleanup_continuation_settled"
 ]
 
+const WORKER_CHECKS := [
+	"worker_vertex_buffer_created",
+	"worker_transfer_pending",
+	"worker_vertex_array_created",
+	"worker_sink_recorded_0",
+	"worker_first_bind_transfer_0",
+	"worker_sink_closed_0",
+	"worker_sink_recorded_1",
+	"worker_first_bind_transfer_1",
+	"worker_sink_closed_1",
+	"worker_resources_live_after_native_complete",
+	"worker_resources_live_before_retire",
+	"worker_resources_enqueued",
+	"worker_resources_returned",
+	"worker_no_next_draw",
+]
+
 func _initialize() -> void:
 	for argument in OS.get_cmdline_user_args():
 		if argument == "--case=1":
 			case_index = 1
+		elif argument == "--case=2":
+			case_index = 2
 	if not ClassDB.class_exists("NativeHeightRangeTestFixture"):
 		printerr("NATIVE_HEIGHT_RANGE_MISSING")
 		quit(77)
@@ -68,13 +87,16 @@ func _process(_delta: float) -> bool:
 		var passed: bool = report.get("started", false) and report.get("error", -1) == OK
 		passed = passed and report.get("failures", ["missing"]).is_empty()
 		passed = passed and report.get("physical_prefix_returned", false) and not report.get("retained_on_failure", true)
+		var expected_checks: Array = CHECKS.duplicate()
+		if case_index == 2:
+			expected_checks.append_array(WORKER_CHECKS)
 		var seen: Dictionary = {}
 		var rows: Array = report.get("checks", [])
 		for row in rows:
 			var label: String = row.get("check", "")
-			passed = passed and CHECKS.has(label) and not seen.has(label) and row.get("ok", false)
+			passed = passed and expected_checks.has(label) and not seen.has(label) and row.get("ok", false)
 			seen[label] = true
-		passed = passed and rows.size() == CHECKS.size() and seen.size() == CHECKS.size()
+		passed = passed and rows.size() == expected_checks.size() and seen.size() == expected_checks.size()
 		print("NATIVE_HEIGHT_RANGE_RESULT=", JSON.stringify(report))
 		if passed:
 			print("NATIVE_HEIGHT_RANGE_PASS case=", case_index)
@@ -87,7 +109,7 @@ func _process(_delta: float) -> bool:
 		return false
 	# Bounded case completes every step inside begin's single RT callback.
 	# Never enqueue another callback while that callback still owns the range.
-	if case_index == 0:
+	if case_index != 1:
 		return false
 	# Only one callback can be in flight. All range state stays on the RT;
 	# result() returns a mutex-protected deep snapshot of the same fixture Ref.
