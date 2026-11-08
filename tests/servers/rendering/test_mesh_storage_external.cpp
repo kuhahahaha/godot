@@ -518,6 +518,118 @@ public:
 		memfree(mesh.surfaces);
 		TestIndexed144DeviceAccess::end_native(device);
 	}
+	static void prospective_plan(bool external) {
+		RenderingDevice device;
+		Indexed144FormatDriver driver;
+		TestIndexed144DeviceAccess::begin_native(device, driver);
+		auto *previous_storage = MeshStorage::get_singleton();
+		auto *storage = memnew(MeshStorage(MeshStorage::NativeHoldTestTag{}));
+		const RID normal = device.vertex_buffer_create(16, {}, RD::BUFFER_CREATION_AS_STORAGE_BIT);
+		storage->mesh_default_rd_buffers[MeshStorage::DEFAULT_RD_BUFFER_NORMAL] = normal;
+		MeshStorage::Mesh mesh;
+		mesh.surfaces = static_cast<MeshStorage::Mesh::Surface **>(memalloc(sizeof(MeshStorage::Mesh::Surface *)));
+		mesh.surface_count = 1;
+		auto *original = surface(device, external);
+		mesh.surfaces[0] = original;
+		const RID current = original->vertex_buffer, previous = original->previous_vertex_buffer, index = original->index_buffer;
+		Hold retained;
+		const Error acquired = MeshStorage::_mesh_surface_hold_acquire(original, 1, false, false, 0, retained);
+		CHECK(acquired == OK);
+		if (acquired == OK) {
+			using Plan = MeshStorage::NativeVertexArrayPlan;
+			Plan plan;
+			const uint32_t formats = driver.formats;
+			const uint32_t arrays = TestIndexed144DeviceAccess::arrays(device);
+			const uint32_t versions = original->version_count;
+			const uint32_t holds = original->immutable_holds;
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, false, false, 0, plan) == OK);
+			CHECK(plan.existing_vertex_array == retained.get_vertex_array());
+			CHECK(plan.existing_vertex_format == retained.get_vertex_format());
+			CHECK(plan.vertex_count == 3);
+			CHECK(plan.buffers.size() == 1);
+			if (!plan.buffers.is_empty()) {
+				CHECK(plan.buffers[0] == original->vertex_buffer);
+			}
+			CHECK(plan.attributes.size() == (external ? 10 : 1));
+			if (!plan.attributes.is_empty()) {
+				CHECK(plan.attributes[0].location == 0);
+				CHECK(plan.attributes[0].stride == (external ? 144 : 12));
+				CHECK(plan.attributes[0].format == (external ? RD::DATA_FORMAT_R32G32B32A32_SFLOAT : RD::DATA_FORMAT_R32G32B32_SFLOAT));
+			}
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 3, false, false, 0, plan) == OK);
+			CHECK(plan.existing_vertex_array.is_null());
+			CHECK(plan.existing_vertex_format == 0);
+			CHECK(plan.attributes.size() == (external ? 10 : 2));
+			CHECK(plan.buffers.size() == (external ? 1 : 2));
+			if (!external) {
+				CHECK(plan.offsets.size() == 2);
+				if (plan.buffers.size() == 2 && plan.offsets.size() == 2) {
+					CHECK(plan.buffers[1] == normal);
+					CHECK(plan.offsets[0] == 0);
+					CHECK(plan.offsets[1] == 0);
+				}
+				storage->mesh_default_rd_buffers[MeshStorage::DEFAULT_RD_BUFFER_NORMAL] = RID();
+				CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 3, false, false, 0, plan) == ERR_INVALID_DATA);
+				storage->mesh_default_rd_buffers[MeshStorage::DEFAULT_RD_BUFFER_NORMAL] = normal;
+			} else {
+				CHECK(plan.offsets.is_empty());
+				CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1ull << 31, false, false, 0, plan) == ERR_UNAVAILABLE);
+			}
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, true, false, 0, plan) == ERR_UNAVAILABLE);
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, false, true, 0, plan) == ERR_UNAVAILABLE);
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, false, false, 1, plan) == ERR_UNAVAILABLE);
+			original->immutable_holds = UINT32_MAX;
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, false, false, 0, plan) == ERR_INVALID_PARAMETER);
+			original->immutable_holds = holds;
+			// A published failed Version must not be reclassified as future work.
+			const RID saved_array = original->versions[0].vertex_array;
+			original->versions[0].vertex_array = RID();
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, false, false, 0, plan) == ERR_CANT_CREATE);
+			CHECK(plan.existing_vertex_array.is_null());
+			CHECK(plan.existing_vertex_format == 0);
+			original->versions[0].vertex_array = saved_array;
+			CHECK(driver.formats == formats);
+			CHECK(TestIndexed144DeviceAccess::arrays(device) == arrays);
+			CHECK(original->version_count == versions);
+			CHECK(original->immutable_holds == holds);
+			// Detached retained source, frozen existing and missing keys.
+			MeshStorage::_mesh_surface_clear(&mesh, 0);
+			mesh.surface_count = 0;
+			CHECK(MeshStorage::_native_hold_freeze_directory(retained) == OK);
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, false, false, 0, plan) == OK);
+			CHECK(!plan.buffers.is_empty());
+			if (!plan.buffers.is_empty()) {
+				CHECK(plan.buffers[0] == original->vertex_buffer);
+			}
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 3, false, false, 0, plan) == ERR_UNAVAILABLE);
+			CHECK(MeshStorage::_native_hold_thaw_directory(retained) == OK);
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 3, false, false, 0, plan) == OK);
+			Hold derived;
+			CHECK(MeshStorage::mesh_surface_hold_derive(retained, 3, false, false, 0, derived) == OK);
+			CHECK(derived.is_valid());
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 3, false, false, 0, plan) == OK);
+			CHECK(plan.existing_vertex_array == derived.get_vertex_array());
+			CHECK(plan.existing_vertex_format == derived.get_vertex_format());
+			CHECK(MeshStorage::mesh_surface_hold_release(derived) == OK);
+			CHECK(MeshStorage::mesh_surface_hold_release(retained) == OK);
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, false, false, 0, plan) == ERR_UNAUTHORIZED);
+		} else {
+			MeshStorage::_mesh_surface_clear(&mesh, 0);
+			mesh.surface_count = 0;
+		}
+		if (external) {
+			device.free_rid(current);
+			device.free_rid(previous);
+			device.free_rid(index);
+		}
+		device.free_rid(normal);
+		memdelete(storage);
+		MeshStorage::singleton = previous_storage;
+		TestIndexed144DeviceAccess::dispose(device);
+		CHECK(driver.frees == driver.allocations);
+		memfree(mesh.surfaces);
+		TestIndexed144DeviceAccess::end_native(device);
+	}
 	static void incremental_surface(bool external) {
 		// Actual local holds exercise metadata steps, not Core pin/packet authority.
 		RenderingDevice device;
@@ -718,4 +830,12 @@ TEST_CASE("[B4][MaterialPreparation] Mobile color preparation preserves transpar
 		CHECK_FALSE(MobileShader::ShaderData::external_color_version_supported(MobileShader::SHADER_VERSION_SHADOW_PASS, false));
 		CHECK_FALSE(MobileShader::ShaderData::external_color_version_supported(MobileShader::SHADER_VERSION_COLOR_PASS_MULTIVIEW, true));
 	}
+}
+
+TEST_CASE("[B4][NativeVertexArrayPlan] retained ordinary source plans without factories") {
+	RendererRD::TestMeshStorageExternalAccess::prospective_plan(false);
+}
+
+TEST_CASE("[B4][NativeVertexArrayPlan] retained Indexed144 source plans without factories") {
+	RendererRD::TestMeshStorageExternalAccess::prospective_plan(true);
 }

@@ -701,10 +701,12 @@ void MeshStorage::_mesh_surface_get_external_arrays(Mesh::Surface *s, uint64_t p
 	s->version_lock.unlock();
 }
 
-RD::VertexFormatID MeshStorage::_mesh_surface_generate_external_vertex_format(uint64_t p_input_mask, bool p_input_motion_vectors) {
+Error MeshStorage::_mesh_surface_external_vertex_attributes(uint64_t p_input_mask, bool p_input_motion_vectors, Vector<RD::VertexAttribute> &attributes) {
 	const uint64_t supported_inputs = ((1ull << 10) - 1) | (p_input_motion_vectors ? (7ull << 12) : 0);
-	ERR_FAIL_COND_V(p_input_mask & ~supported_inputs, 0);
-	Vector<RD::VertexAttribute> attributes;
+	if (p_input_mask & ~supported_inputs) {
+		return ERR_UNAVAILABLE;
+	}
+	attributes.clear();
 	auto add = [&attributes](uint32_t p_location, uint32_t p_binding, uint32_t p_offset, RD::DataFormat p_format) {
 		RD::VertexAttribute a;
 		a.binding = p_binding;
@@ -729,7 +731,21 @@ RD::VertexFormatID MeshStorage::_mesh_surface_generate_external_vertex_format(ui
 		add(13, 1, 16, RD::DATA_FORMAT_R32G32B32A32_SFLOAT);
 		add(14, 1, 32, RD::DATA_FORMAT_R32G32B32A32_SFLOAT);
 	}
+	return OK;
+}
+
+RD::VertexFormatID MeshStorage::_mesh_surface_generate_external_vertex_format(uint64_t p_input_mask, bool p_input_motion_vectors) {
+	Vector<RD::VertexAttribute> attributes;
+	ERR_FAIL_COND_V(_mesh_surface_external_vertex_attributes(p_input_mask, p_input_motion_vectors, attributes) != OK, 0);
 	return RD::get_singleton()->vertex_format_create(attributes);
+}
+
+void MeshStorage::_mesh_surface_external_vertex_bindings(Mesh::Surface *s, bool p_input_motion_vectors, Vector<RID> &r_buffers) {
+	r_buffers.clear();
+	r_buffers.push_back(s->vertex_buffer);
+	if (p_input_motion_vectors) {
+		r_buffers.push_back(s->previous_vertex_buffer);
+	}
 }
 
 void MeshStorage::_mesh_surface_generate_external_version(Mesh::Surface::Version &v, Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated) {
@@ -739,10 +755,7 @@ void MeshStorage::_mesh_surface_generate_external_version(Mesh::Surface::Version
 		return;
 	}
 	Vector<RID> buffers;
-	buffers.push_back(s->vertex_buffer);
-	if (p_input_motion_vectors) {
-		buffers.push_back(s->previous_vertex_buffer);
-	}
+	_mesh_surface_external_vertex_bindings(s, p_input_motion_vectors, buffers);
 	v.vertex_array = RD::get_singleton()->vertex_array_create(s->vertex_count, v.vertex_format, buffers);
 	v.input_mask = p_input_mask;
 	v.input_motion_vectors = p_input_motion_vectors;
@@ -824,6 +837,82 @@ Error MeshStorage::mesh_surface_hold_acquire(RID mesh_rid, uint32_t index, uint6
 		return ERR_CANT_CREATE;
 	}
 	return _mesh_surface_hold_acquire(mesh->surfaces[index], mask, motion, point_size, lod, out);
+}
+
+Error MeshStorage::mesh_surface_hold_plan_vertex_array(const NativeSurfaceHold &source, uint64_t mask, bool motion, bool point_size, uint32_t lod, NativeVertexArrayPlan &out) {
+	out = NativeVertexArrayPlan();
+	RenderingDevice *device = source.device;
+	if (!device || device != RD::get_singleton() || !device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!source.surface || !source.is_valid() || source.physical_transferred || source.metadata_returned || source.metadata_return_active || !source.surface->immutable_holds || source.surface->immutable_holds == UINT32_MAX) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (motion || point_size || lod || source.surface->skin_buffer.is_valid()) {
+		return ERR_UNAVAILABLE;
+	}
+	if (device->draw_list.active || device->compute_list.active || device->raytracing_list.active || device->draw_graph.has_driver_callbacks() || device->production_finalization_started.load(std::memory_order_acquire)) {
+		return ERR_BUSY;
+	}
+	MeshStorage *storage = get_singleton();
+	if (!storage) {
+		return ERR_UNAVAILABLE;
+	}
+	Mesh::Surface *s = source.surface;
+	// Same order as Version factories: Surface first; never acquire it under RD.
+	s->version_lock.lock();
+	struct VersionUnlock {
+		SpinLock &spin;
+		~VersionUnlock() { spin.unlock(); }
+	} unlock{ s->version_lock };
+	NativeVertexArrayPlan plan;
+	bool matched_version = false;
+	for (uint32_t i = 0; i < s->version_count; ++i) {
+		const Mesh::Surface::Version &version = s->versions[i];
+		if (version.input_mask != mask || version.input_motion_vectors || version.point_size_emulated) {
+			continue;
+		}
+		if (s->external && (version.current_allocation_generation != s->current_allocation_generation || version.previous_allocation_generation != s->previous_allocation_generation)) {
+			continue;
+		}
+		matched_version = true;
+		plan.existing_vertex_array = version.vertex_array;
+		plan.existing_vertex_format = version.vertex_format;
+		break;
+	}
+	// A failed published Version is cached by the actual factory lookup; it
+	// cannot be represented as a future VA that derive would create.
+	if (matched_version && (plan.existing_vertex_array.is_null() || !plan.existing_vertex_format)) {
+		return ERR_CANT_CREATE;
+	}
+	if (!matched_version) {
+		if (s->output_directory_holds) {
+			return ERR_UNAVAILABLE;
+		}
+		if (s->version_count == UINT32_MAX || uint64_t(s->version_count + 1) > SIZE_MAX / sizeof(Mesh::Surface::Version)) {
+			return ERR_OUT_OF_MEMORY;
+		}
+	}
+	plan.vertex_count = s->vertex_count;
+	if (s->external) {
+		const Error error = _mesh_surface_external_vertex_attributes(mask, false, plan.attributes);
+		if (error != OK) {
+			return error;
+		}
+		_mesh_surface_external_vertex_bindings(s, false, plan.buffers);
+	} else {
+		uint32_t position_stride = 0;
+		plan.attributes = _mesh_surface_vertex_attributes(s->format, mask, false, false, false, position_stride);
+		storage->_mesh_surface_vertex_bindings(s, mask, false, position_stride, plan.buffers, plan.offsets);
+	}
+	// Minimal native fixtures bypass eager default creation. Never invent roots.
+	for (const RID &buffer : plan.buffers) {
+		if (buffer.is_null()) {
+			return ERR_INVALID_DATA;
+		}
+	}
+	out = std::move(plan);
+	return OK;
 }
 
 Error MeshStorage::mesh_surface_hold_derive(const NativeSurfaceHold &source, uint64_t mask, bool motion, bool point_size, uint32_t lod, NativeSurfaceHold &out) {
@@ -2242,7 +2331,7 @@ void MeshStorage::update_mesh_instances() {
 	RD::get_singleton()->compute_list_end();
 }
 
-RD::VertexFormatID MeshStorage::_mesh_surface_generate_vertex_format(uint64_t p_surface_format, uint64_t p_input_mask, bool p_instanced_surface, bool p_input_motion_vectors, bool p_point_size_emulated, uint32_t &r_position_stride) {
+Vector<RD::VertexAttribute> MeshStorage::_mesh_surface_vertex_attributes(uint64_t p_surface_format, uint64_t p_input_mask, bool p_instanced_surface, bool p_input_motion_vectors, bool p_point_size_emulated, uint32_t &r_position_stride) {
 	Vector<RD::VertexAttribute> attributes;
 	uint32_t normal_tangent_stride = 0;
 	uint32_t attribute_stride = 0;
@@ -2431,15 +2520,16 @@ RD::VertexFormatID MeshStorage::_mesh_surface_generate_vertex_format(uint64_t p_
 		}
 	}
 
-	return RD::get_singleton()->vertex_format_create(attributes);
+	return attributes;
 }
 
-void MeshStorage::_mesh_surface_generate_version_for_input_mask(Mesh::Surface::Version &v, Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, MeshInstance::Surface *mis, uint32_t p_current_buffer, uint32_t p_previous_buffer) {
-	uint32_t position_stride = 0;
-	v.vertex_format = _mesh_surface_generate_vertex_format(s->format, p_input_mask, mis != nullptr, p_input_motion_vectors, p_point_size_emulated, position_stride);
+RD::VertexFormatID MeshStorage::_mesh_surface_generate_vertex_format(uint64_t p_surface_format, uint64_t p_input_mask, bool p_instanced_surface, bool p_input_motion_vectors, bool p_point_size_emulated, uint32_t &r_position_stride) {
+	return RD::get_singleton()->vertex_format_create(_mesh_surface_vertex_attributes(p_surface_format, p_input_mask, p_instanced_surface, p_input_motion_vectors, p_point_size_emulated, r_position_stride));
+}
 
-	Vector<RID> buffers;
-	Vector<uint64_t> offsets;
+void MeshStorage::_mesh_surface_vertex_bindings(Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, uint32_t p_position_stride, Vector<RID> &r_buffers, Vector<uint64_t> &r_offsets, MeshInstance::Surface *mis, uint32_t p_current_buffer, uint32_t p_previous_buffer) {
+	r_buffers.clear();
+	r_offsets.clear();
 	RID buffer;
 	uint64_t offset = 0;
 	for (int i = 0; i < RSE::ARRAY_INDEX; i++) {
@@ -2453,7 +2543,7 @@ void MeshStorage::_mesh_surface_generate_version_for_input_mask(Mesh::Surface::V
 			switch (i) {
 				case RSE::ARRAY_VERTEX:
 				case RSE::ARRAY_NORMAL:
-					offset = i == RSE::ARRAY_NORMAL ? position_stride * s->vertex_count : 0;
+					offset = i == RSE::ARRAY_NORMAL ? p_position_stride * s->vertex_count : 0;
 					buffer = mis != nullptr ? mis->vertex_buffer[p_current_buffer] : s->vertex_buffer;
 					break;
 				case RSE::ARRAY_TANGENT:
@@ -2479,22 +2569,31 @@ void MeshStorage::_mesh_surface_generate_version_for_input_mask(Mesh::Surface::V
 			continue; // Shader does not need this, skip it (but computing stride was important anyway)
 		}
 
-		buffers.push_back(buffer);
-		offsets.push_back(offset);
+		r_buffers.push_back(buffer);
+		r_offsets.push_back(offset);
 
 		if (p_input_motion_vectors) {
 			// Push the buffer for motion vector inputs.
 			if (i == RSE::ARRAY_VERTEX || i == RSE::ARRAY_NORMAL || i == RSE::ARRAY_TANGENT) {
 				if (mis && buffer != mesh_default_rd_buffers[i]) {
-					buffers.push_back(mis->vertex_buffer[p_previous_buffer]);
+					r_buffers.push_back(mis->vertex_buffer[p_previous_buffer]);
 				} else {
-					buffers.push_back(buffer);
+					r_buffers.push_back(buffer);
 				}
 
-				offsets.push_back(offset);
+				r_offsets.push_back(offset);
 			}
 		}
 	}
+}
+
+void MeshStorage::_mesh_surface_generate_version_for_input_mask(Mesh::Surface::Version &v, Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, MeshInstance::Surface *mis, uint32_t p_current_buffer, uint32_t p_previous_buffer) {
+	uint32_t position_stride = 0;
+	v.vertex_format = _mesh_surface_generate_vertex_format(s->format, p_input_mask, mis != nullptr, p_input_motion_vectors, p_point_size_emulated, position_stride);
+
+	Vector<RID> buffers;
+	Vector<uint64_t> offsets;
+	_mesh_surface_vertex_bindings(s, p_input_mask, p_input_motion_vectors, position_stride, buffers, offsets, mis, p_current_buffer, p_previous_buffer);
 
 	v.input_mask = p_input_mask;
 	v.current_buffer = p_current_buffer;

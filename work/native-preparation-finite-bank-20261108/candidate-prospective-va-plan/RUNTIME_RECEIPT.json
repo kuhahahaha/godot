@@ -1,0 +1,67 @@
+{
+  "base": "851b46b8e0",
+  "scope": "MeshStorage scratch VA value plan and shared factory helpers only",
+  "files": [
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/mesh_storage.h",
+      "sha256": "3b03ceaba0ff0d4c6a55089547022b9bbf7fd9038d2ee6b95f89a796855976e3"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp",
+      "sha256": "c965b8a7aaeb3e3767121bdcf9541496b21b2227fd3a1a96477c2efd81d35104"
+    },
+    {
+      "path": "tests/servers/rendering/test_mesh_storage_external.cpp",
+      "sha256": "2131bea005bfdb108c3a99eddc4f443bb649c0dd34e86c60c37f275481d9e697"
+    }
+  ],
+  "binary_sha256": "bc5a9d54fdbe77ff85305c9115ba879b8e7c60087ac3213c21b1328bf6d0cece",
+  "build": {
+    "command": "scons -Q tests=yes platform=macos target=editor debug_symbols=no module_particles_runtime_tests_enabled=yes -j2",
+    "exit": 0,
+    "log": "green-build.log"
+  },
+  "red": {
+    "cases": 2,
+    "assertions": 126,
+    "failed_assertions": 6,
+    "exit": 1,
+    "execution": "red-execution.json"
+  },
+  "green": {
+    "cases": 2,
+    "assertions": 126,
+    "exit": 0
+  },
+  "neighbor": {
+    "cases": 21,
+    "assertions": 16454,
+    "exit": 0
+  },
+  "combined": {
+    "cases": 82,
+    "assertions": 21562,
+    "exit": 0,
+    "execution": "combined-execution.json"
+  },
+  "review": [
+    "INDEPENDENT_REVIEW.md",
+    "TEST_REVIEW.md",
+    "FIX_REVIEW.md"
+  ],
+  "limits": [
+    "CPU test-double semantic coverage; no GPU acceptance for new plan",
+    "version-directory growth overflow source-reviewed, not synthetic runtime model",
+    "RD format/range/immutable preflight still absent",
+    "full prospective bidirectional G/caller integration and execution revalidation still pending",
+    "public Instance192/renderer facts admission remains closed"
+  ],
+  "diagnostics": "Combined regression has existing invalid UTF8 and foreign camera-token refusal diagnostics from negative cases; process0.",
+  "log_sha256": {
+    "red-test.log": "2547977c7c7df8ddd74b0c8cb198fcaaa2cdb9d236f097f9a18830a642fac804",
+    "green-test.log": "1a34f1fab40abc7becd3662e3ec57ba5d045703e4f657f404ce0f8389482c684",
+    "regression-test.log": "f1632107f5be248e846645b108a299e770aea05f125650bf8ce919a8f515160a",
+    "combined-test.log": "92e79c012773c865d599362f8c8788131e527dad1499bb755ff8690da1d9fb5b",
+    "green-build.log": "af92f9d43757fc716fd818e40ea1385feee395b5ce957b8bc2496ab03785618b"
+  }
+}

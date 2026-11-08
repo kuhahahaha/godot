@@ -253,6 +253,11 @@ private:
 				weight_update_list(this), array_update_list(this) {}
 	};
 
+	// Pure value construction shared by ordinary factories and native admission.
+	static Vector<RD::VertexAttribute> _mesh_surface_vertex_attributes(uint64_t p_surface_format, uint64_t p_input_mask, bool p_instanced_surface, bool p_input_motion_vectors, bool p_point_size_emulated, uint32_t &r_position_stride);
+	void _mesh_surface_vertex_bindings(Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, uint32_t p_position_stride, Vector<RID> &r_buffers, Vector<uint64_t> &r_offsets, MeshInstance::Surface *mis = nullptr, uint32_t p_current_buffer = 0, uint32_t p_previous_buffer = 0);
+	static Error _mesh_surface_external_vertex_attributes(uint64_t p_input_mask, bool p_input_motion_vectors, Vector<RD::VertexAttribute> &r_attributes);
+	static void _mesh_surface_external_vertex_bindings(Mesh::Surface *s, bool p_input_motion_vectors, Vector<RID> &r_buffers);
 	RD::VertexFormatID _mesh_surface_generate_vertex_format(uint64_t p_surface_format, uint64_t p_input_mask, bool p_instanced_surface, bool p_input_motion_vectors, bool p_point_size_emulated, uint32_t &r_position_stride);
 	void _mesh_surface_generate_version_for_input_mask(Mesh::Surface::Version &v, Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, MeshInstance::Surface *mis = nullptr, uint32_t p_current_buffer = 0, uint32_t p_previous_buffer = 0);
 	static RD::VertexFormatID _mesh_surface_generate_external_vertex_format(uint64_t p_input_mask, bool p_input_motion_vectors);
@@ -608,6 +613,19 @@ public:
 	static Error mesh_surface_hold_release(NativeSurfaceHold &r_hold);
 	// Prepare only before transfer/seal, from the exact retained Surface, including
 	// one detached by COW. Never resolve the current mesh RID to replace it.
+	// Scratch values only: neither a hold nor authority. Vectors may allocate.
+	// Existing Versions return their exact VA/format; missing Versions leave both null.
+	struct NativeVertexArrayPlan {
+		Vector<RD::VertexAttribute> attributes;
+		Vector<RID> buffers;
+		Vector<uint64_t> offsets;
+		uint32_t vertex_count = 0;
+		RID existing_vertex_array;
+		RD::VertexFormatID existing_vertex_format = 0;
+	};
+	// Call outside Registry/RD locks, before prospective RD validation. Retain
+	// p_source until execution and recompute/revalidate immediately before factories.
+	static Error mesh_surface_hold_plan_vertex_array(const NativeSurfaceHold &p_source, uint64_t p_input_mask, bool p_motion, bool p_point_size_emulated, uint32_t p_lod, NativeVertexArrayPlan &r_plan);
 	static Error mesh_surface_hold_derive(const NativeSurfaceHold &p_source, uint64_t p_input_mask, bool p_motion, bool p_point_size_emulated, uint32_t p_lod, NativeSurfaceHold &r_hold);
 
 private:
