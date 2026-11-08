@@ -29,7 +29,7 @@ func _expected_checks() -> Dictionary:
 		for suffix in ["ready", "five_distinct_shaders", "five_distinct_pipelines"]:
 			expected[phase + "." + suffix] = true
 		for mode in MODES:
-			for suffix in ["actual_shader", "actual_pipeline", "original_shader_association", "reflected_compute_layout"]:
+			for suffix in ["actual_shader", "actual_pipeline", "original_shader_association", "reflected_compute_layout", "reflected_source_roles"]:
 				expected[phase + "." + mode + "." + suffix] = true
 	for mode in MODES:
 		expected["repeat." + mode + ".same_original_rids"] = true
@@ -39,13 +39,17 @@ func _expected_checks() -> Dictionary:
 		for mode in MODES:
 			for suffix in ["getters_empty", "shader_owner_removed", "pipeline_owner_removed"]:
 				expected[phase + "." + mode + "." + suffix] = true
+	expected["engine.actual_prepared_owner"] = true
+	for mode in MODES:
+		for suffix in ["actual_pipeline", "original_shader_association", "reflected_compute_layout", "reflected_source_roles", "distinct_engine_variant", "survives_local_release"]:
+			expected["engine." + mode + "." + suffix] = true
 	return expected
 
 func _checks_complete(checks: Variant) -> bool:
 	if typeof(checks) != TYPE_ARRAY:
 		return false
 	var expected: Dictionary = _expected_checks()
-	if checks.size() != expected.size() or expected.size() != 90:
+	if checks.size() != expected.size() or expected.size() != 131:
 		return false
 	var seen: Dictionary = {}
 	for row in checks:
@@ -67,7 +71,7 @@ func _process(_delta: float) -> bool:
 		passed = passed and report.get("dispatch_recorded", true) == false and report.get("source_authority_supplied", true) == false and report.get("physical_return_claimed", true) == false
 		print("PARTICLE_EXTERNAL_GUARD_NATIVE_RESULT=", JSON.stringify(report))
 		if passed:
-			print("PARTICLE_EXTERNAL_GUARD_NATIVE_PASS five_modes=1 checks=90 idempotent=1 owner_released=1 reprepare=1 physical_return_claimed=0")
+			print("PARTICLE_EXTERNAL_GUARD_NATIVE_PASS five_modes=1 checks=131 idempotent=1 owner_released=1 reprepare=1 physical_return_claimed=0")
 		quit(0 if passed else 1)
 	elif Time.get_ticks_msec() - started_msec > TIMEOUT_MSEC:
 		printerr("PARTICLE_EXTERNAL_GUARD_NATIVE_TIMEOUT: callback completion not observed; no success/physical return inferred")

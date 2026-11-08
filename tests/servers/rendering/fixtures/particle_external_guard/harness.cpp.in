@@ -25,12 +25,22 @@ Bool3 lessThanEqual(vec3 a,vec3 b){return {a.x<=b.x,a.y<=b.y,a.z<=b.z};}
 Bool2 notEqual(uvec2 a,uvec2 b){return {a.x!=b.x,a.y!=b.y};} Bool3 notEqual(uvec3 a,uvec3 b){return {a.x!=b.x,a.y!=b.y,a.z!=b.z};}
 void atomicOr(uint &target,uint value){target|=value;} void atomicMin(uint &target,uint value){target=min(target,value);}
 template<class T>struct Array:std::vector<T>{using std::vector<T>::operator=;int length()const{return int(this->size());}};
-struct Buffer{Array<uint>words;}current_records,previous_records,output_meta,source,scratch,status,commands;
+struct Buffer{Array<uint>words;}current_records,previous_records,output_meta,scratch,status,commands;
+// Distinct descriptors can deliberately refer to one actual source allocation.
+struct SourceWords {
+ Array<uint> owned; Array<uint> *backing=&owned;
+ uint &operator[](uint i){return (*backing)[i];}
+ int length()const{return backing->length();}
+ void reset(uint size,uint fill){backing=&owned;owned.assign(size,fill);}
+ void share(SourceWords &other){backing=other.backing;}
+ void truncate(uint size){backing->resize(size);}
+};
+struct SourceBuffer{SourceWords words;}source_count,source_count_validity,source_attributes_validity,source_dense_ids_validity,source_instance_gate;
 // PRODUCTION_SURFACE
 struct Proof {
  vec4 current_decl_min,current_decl_max,previous_decl_min,previous_decl_max,cull_min,cull_max;
  vec4 current_host_inverse_rows[3],previous_host_inverse_rows[3];
- uvec4 source_accessor,options;Array<SurfaceProof>surfaces;
+ uvec4 source_accessor,source_gate_words,options;Array<SurfaceProof>surfaces;
 }proof;
 struct Params{uint capacity,sequence_low,sequence_high,surface_count,record_base,record_count,reserved0,reserved1;}params;
 struct {uint x;}gl_GlobalInvocationID;
@@ -44,12 +54,16 @@ void healthy(uint actual=1,uint capacity=2){
   w[b+44]=i;w[b+45]=23;w[b+46]=17;
  }
  previous_records.words=current_records.words;
- output_meta.words={actual,0,0,0,capacity,1,55,0};source.words={actual,1};
+ output_meta.words={actual,0,0,0,capacity,1,55,0};
+ source_count.words.reset(8,0xa5a5a5a5);source_count.words[2]=actual;
+ for(uint i=3;i<6;i++)source_count.words[i]=0; // Real Count16 trailing words are never gates.
+ SourceBuffer *gates[]={&source_count_validity,&source_attributes_validity,&source_dense_ids_validity,&source_instance_gate};
+ for(uint i=0;i<4;i++){gates[i]->words.reset(5+i,0xa5a5a5a5);gates[i]->words[i+1]=0;}
  scratch.words.assign(16,0xdeadbeef);status.words.assign(8,0xdeadbeef);commands.words.assign(5,0xdeadbeef);
  proof={};proof.current_decl_min=proof.previous_decl_min=proof.cull_min=vec4(-1,-1,-1,0);
  proof.current_decl_max=proof.previous_decl_max=proof.cull_max=vec4(1,1,1,0);
  for(uint i=0;i<3;i++){proof.current_host_inverse_rows[i]=vec4(i==0,i==1,i==2,0);proof.previous_host_inverse_rows[i]=proof.current_host_inverse_rows[i];}
- proof.source_accessor=uvec4(0,1,1,1);proof.options=uvec4(1,0,0,0);
+ proof.source_accessor=uvec4(2,0,0,1);proof.source_gate_words=uvec4(1,2,3,4);proof.options=uvec4(1,0,0,0);
  SurfaceProof s{};s.current_mesh_min=s.previous_mesh_min=vec4(-.25,-.25,0,0);
  s.current_mesh_max=s.previous_mesh_max=vec4(.25,.25,0,0);s.command=uvec4(1,6,0,0);proof.surfaces={s};
 }
@@ -132,8 +146,8 @@ int main(){
  healthy(0);execute();expect(0,0,"source zero");
  healthy(0,0);execute();expect(0,0,"capacity zero component guard");
  healthy();output_meta.words[0]=3;execute();expect(2,0,"count exceeds envelope and source");
- healthy();source.words[0]=2;execute();expect(2,0,"source count mismatch");
- healthy();source.words[1]=0;execute();expect(1,0,"invalid source");
+ healthy();source_count.words[2]=2;execute();expect(2,0,"source count mismatch");
+ healthy();source_count_validity.words[1]=1;execute();expect(1,0,"invalid source");
  healthy();output_meta.words[3]=1;execute();expect(1,0,"producer fault");
  healthy();output_meta.words[5]=2;execute();expect(4,0,"metadata version");
  healthy();output_meta.words[7]=1;execute();expect(4,0,"metadata sequence");
@@ -173,10 +187,39 @@ int main(){
  healthy(2);current_records.words[0]=0x7fc00000;current_records.words[48+3]=floatBitsToUint(2);
  gl_GlobalInvocationID.x=0;shader_INIT();dispatch_chunk(0,2,true);gl_GlobalInvocationID.x=0;shader_FINALIZE();
  expect(80,0,"same chunk reverse lanes preserve OR and lowest failure");assert(scratch.words[9]==0);
- healthy();proof.source_accessor.z=2;source.words[1]=0;execute();expect(0,1,"rule2 zero source fault");
- healthy();proof.source_accessor.z=2;source.words[1]=1;execute();expect(1,0,"rule2 nonzero source fault");
- healthy();proof.source_accessor.z=2;source.words[1]=0xffffffff;execute();expect(1,0,"rule2 all-bits source fault");
- healthy();source.words[1]=42;execute();expect(0,1,"rule1 noncanonical positive initialized word");
+ // All original gates use fixed zero==healthy; each fault is independent.
+ for(uint gate=0;gate<4;gate++)for(uint value:{1u,42u,0xffffffffu}){
+  healthy();SourceBuffer *gates[]={&source_count_validity,&source_attributes_validity,&source_dense_ids_validity,&source_instance_gate};
+  gates[gate]->words[gate+1]=value;execute();expect(1,0,"each independent source gate");
+ }
+ healthy();source_count.words[2]=2;source_attributes_validity.words[2]=1;execute();expect(3,0,"independent count and attribute gate faults");
+ healthy();proof.source_accessor.y=1;execute();expect(4,0,"reserved source accessor y");
+ healthy();proof.source_accessor.z=2;execute();expect(4,0,"reserved source accessor z no rule selection");
+ for(uint role=0;role<5;role++){
+  healthy();SourceBuffer *sources[]={&source_count,&source_count_validity,&source_attributes_validity,&source_dense_ids_validity,&source_instance_gate};
+  sources[role]->words.truncate(role==0?2:role);execute();expect(1,0,"scalar outside its own source buffer");
+ }
+ for(uint gate=0;gate<4;gate++){
+  healthy(0,0);SourceBuffer *gates[]={&source_count_validity,&source_attributes_validity,&source_dense_ids_validity,&source_instance_gate};
+  gates[gate]->words[gate+1]=1;execute();expect(1,0,"N0 real source gate fault");
+ }
+ healthy(0,0);source_count.words[2]=1;execute();expect(2,0,"N0 real selected count mismatch");
+ // Repeated descriptors retain distinct semantics and nonzero offsets.
+ for(uint capacity:{0u,2u}){
+  uint actual=capacity==0?0u:1u;
+  healthy(actual,capacity);source_count.words.reset(12,0xa5a5a5a5);source_count.words[2]=actual;
+  for(uint i=3;i<6;i++)source_count.words[i]=0;
+  source_count_validity.words.share(source_count.words);source_attributes_validity.words.share(source_count.words);
+  source_dense_ids_validity.words.share(source_count.words);source_instance_gate.words.share(source_count.words);
+  proof.source_gate_words=uvec4(7,8,9,10);
+  for(uint i=7;i<=10;i++)source_count.words[i]=0;
+  execute();expect(0,actual,"shared source backing distinct nonzero offsets");
+  source_dense_ids_validity.words[9]=1;execute();expect(1,0,"shared source backing independent gate fault");
+  // Initial may use one real generation persistent scalar for all gate roles.
+  source_count.words[9]=0;proof.source_gate_words=uvec4(7,7,7,7);
+  execute();expect(0,actual,"Initial shared persistent gate scalar");
+  source_instance_gate.words[7]=0xffffffffu;execute();expect(1,0,"Initial shared persistent gate fault");
+ }
  // The exact production interval routines must include exact-real products.
  bool valid=true;vec2 p=multiply_interval(vec2(.25),vec2(2),valid);assert(valid&&p.x<=.5&&p.y>=.5);checks++;
  valid=true;multiply_interval(vec2(std::numeric_limits<float>::max()),vec2(2),valid);assert(!valid);checks++;

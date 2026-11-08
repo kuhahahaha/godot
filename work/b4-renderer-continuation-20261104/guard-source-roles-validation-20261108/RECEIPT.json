@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "base_commit": "1b51626834",
+  "scope": "Private Count and four source-gate guard component, not production Finalize source authority",
+  "build_command": "scons -Q tests=yes platform=macos target=editor debug_symbols=no module_particles_runtime_tests_enabled=yes -j2",
+  "build_exit": 0,
+  "component": {
+    "command": "python3 tests/servers/rendering/fixtures/particle_external_guard/run.py --shader servers/rendering/renderer_rd/shaders/particles_external_guard.glsl --native-source-root . --mutations",
+    "exit": 0,
+    "shader_variants": 5,
+    "cpu_cases": 87,
+    "targeted_mutation_reds": 11
+  },
+  "doctest": {
+    "exit": 0,
+    "cases": 7,
+    "assertions": 911
+  },
+  "neighbors": {
+    "filter": "*[ExternalOutputGuard]*,*[NativePreparationContinuation]*,*[NativeDisposal]*,*[PipelinePrefix]*,*[QualificationRt]*",
+    "exit": 0,
+    "cases": 55,
+    "assertions": 12660
+  },
+  "native_preparation": {
+    "exit": 0,
+    "passed": true,
+    "driver": "metal",
+    "renderer": "mobile",
+    "unique_checks": 131,
+    "all_true": true,
+    "host_unchanged": true,
+    "dispatch_recorded": false,
+    "physical_return_claimed": false,
+    "device": {
+      "api": "4.0",
+      "driver": "metal",
+      "name": "Apple M3 Pro (Apple9)",
+      "renderer": "mobile"
+    }
+  },
+  "source_sha256": {
+    "modules/particles_runtime_tests/particles_external_guard_test_fixture.cpp": "e669e387a4903e17a35de224d534052c1a7d522cc4d3ae84de7d5b81eff971ca",
+    "servers/rendering/renderer_rd/effects/particles_external_guard.cpp": "36da33d3842c627b6de48dc8f5369f70330bc4f852b23953ff72ff6025c86cbb",
+    "servers/rendering/renderer_rd/effects/particles_external_guard.h": "e7b3dc7cad54036b8de402794059442c5db638605e93b83a1fdc3c8b2a51a802",
+    "servers/rendering/renderer_rd/shaders/particles_external_guard.glsl": "07f8a9db6eb5a71c796315684d351de7b488b8cd2990162abfc2706c6f851442",
+    "tests/servers/rendering/fixtures/particle_external_guard/README.md": "5d7d1a9d3472baf45ebab8634ba93f1d7ed11f4dbda738796bde722070da61d7",
+    "tests/servers/rendering/fixtures/particle_external_guard/harness.cpp.in": "191d70d53cd47ec96a8b44a75bc2b72b259ec676b45af7288fef04926c513fd6",
+    "tests/servers/rendering/fixtures/particle_external_guard/run.py": "50c7fc72569d5372bc39c6270855b3225b9674003eef0c9a9b3682cf5ad23b53",
+    "tests/servers/rendering/fixtures/particle_external_guard_native/README.md": "b8ad8ebbe057930e2b5456eb063575a6e69528fe63e5e18c624ecfcf1a412697",
+    "tests/servers/rendering/fixtures/particle_external_guard_native/run.gd": "c2dd8dcdca24db0585f96adb6bd99635fa3f0dfb6c97127316e5170ff5e37149",
+    "tests/servers/rendering/fixtures/particle_external_guard_native/run_native.py": "32d97e4533b6e94ced0ad8cbe73308a971b49bc16d2b65446f08facc642fef1f",
+    "tests/servers/rendering/test_external_output_guard.cpp": "7a7d81c3d9923dfa1ff833c959c4eba66013c4a1d4d522df22dd845c04f67984"
+  },
+  "binary_sha256": "7587c62cfcdd057e51405f3473bdcc8e71374afd98776387b1bc8bb9b7ac8da9",
+  "limits": [
+    "Native fixture proves actual main-RD five shader/pipeline preparation, reflection, ownership and logical release only; no dispatch or physical return",
+    "Private component cannot authenticate original typed source roles/use ranges/backing generations; receiver integration still pending",
+    "No public Instance192, Finalize/JD02/Seal, visible Sprite or full no-draw retirement acceptance"
+  ]
+}

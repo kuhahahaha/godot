@@ -157,32 +157,38 @@ Error ParticlesExternalGuard::plan_layout(const PushConstant &p_request, const B
 		return ERR_INVALID_PARAMETER;
 	}
 	const uint64_t records_bytes = uint64_t(p_request.capacity) * 192;
-	const uint64_t expected[BINDING_COUNT] = { records_bytes, records_bytes, 32, 0, 64, 32, uint64_t(p_request.surface_count) * 20, 224 + uint64_t(p_request.surface_count) * 144 };
+	const uint64_t expected[BINDING_COUNT] = { records_bytes, records_bytes, 32, 0, 64, 32, uint64_t(p_request.surface_count) * 20, 240 + uint64_t(p_request.surface_count) * 144, 0, 0, 0, 0 };
+	auto is_source = [](uint32_t p_binding) { return p_binding == SOURCE_COUNT || (p_binding >= SOURCE_COUNT_VALIDITY && p_binding <= SOURCE_INSTANCE_GATE); };
 	for (uint32_t i = 0; i < BINDING_COUNT; i++) {
 		const BufferBinding &buffer = p_bindings.buffers[i];
 		if (buffer.byte_length > UINT32_MAX || (buffer.byte_length & 3) != 0 ||
-				(i == SOURCE_BACKING ? buffer.byte_length < 4 : buffer.byte_length != expected[i])) {
+				(is_source(i) ? buffer.byte_length < 4 : buffer.byte_length != expected[i])) {
 			return ERR_INVALID_PARAMETER;
 		}
 		const bool absent_records = p_request.capacity == 0 && (i == CURRENT_RECORDS || i == PREVIOUS_RECORDS);
 		if (absent_records ? buffer.rid.is_valid() : buffer.rid.is_null()) {
 			return ERR_INVALID_PARAMETER;
 		}
-		// All blocks use restrict. Writable status/scratch/commands must never
-		// alias source, metadata, records or proof. Backing aliases across distinct
-		// RIDs still require the original owner's exact allocation proof.
+		// Only the five readonly source blocks may share an original backing.
+		// Every other binding remains exclusive, including records/meta/proof.
+		// Aliases across distinct RIDs still require the owner's allocation proof.
 		for (uint32_t j = 0; j < i; j++) {
-			if (buffer.rid.is_valid() && buffer.rid == p_bindings.buffers[j].rid) {
+			if (buffer.rid.is_valid() && buffer.rid == p_bindings.buffers[j].rid &&
+					(!is_source(i) || !is_source(j) || buffer.byte_length != p_bindings.buffers[j].byte_length)) {
 				return ERR_INVALID_PARAMETER;
 			}
 		}
 	}
-	const uint64_t source_words = p_bindings.buffers[SOURCE_BACKING].byte_length / 4;
-	if (p_proof.source_accessor[0] >= source_words || p_proof.source_accessor[1] >= source_words ||
-			(p_proof.source_accessor[2] != 1 && p_proof.source_accessor[2] != 2) ||
+	if (p_proof.source_accessor[0] >= p_bindings.buffers[SOURCE_COUNT].byte_length / 4 ||
+			p_proof.source_accessor[1] != 0 || p_proof.source_accessor[2] != 0 ||
 			(p_proof.source_accessor[3] != 1 && p_proof.source_accessor[3] != 2) ||
 			p_proof.options[0] > 1 || p_proof.options[1] != 0 || p_proof.options[2] != 0 || p_proof.options[3] != 0) {
 		return ERR_INVALID_PARAMETER;
+	}
+	for (uint32_t gate = 0; gate < 4; gate++) {
+		if (p_proof.source_gate_words[gate] >= p_bindings.buffers[SOURCE_COUNT_VALIDITY + gate].byte_length / 4) {
+			return ERR_INVALID_PARAMETER;
+		}
 	}
 	LayoutPlan plan;
 	if (p_request.capacity == 0) {

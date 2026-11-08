@@ -13,7 +13,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 MODES = ("INIT", "VALIDATE", "FINALIZE", "INIT_EMPTY", "FINALIZE_EMPTY")
-PASS = "PARTICLE_EXTERNAL_GUARD_NATIVE_PASS five_modes=1 checks=90 idempotent=1 owner_released=1 reprepare=1 physical_return_claimed=0"
+PASS = "PARTICLE_EXTERNAL_GUARD_NATIVE_PASS five_modes=1 checks=131 idempotent=1 owner_released=1 reprepare=1 physical_return_claimed=0"
 MISSING = "PARTICLE_EXTERNAL_GUARD_NATIVE_MISSING tests-only fixture class not registered"
 
 
@@ -43,6 +43,7 @@ def expected_checks() -> set[str]:
                 "actual_pipeline",
                 "original_shader_association",
                 "reflected_compute_layout",
+                "reflected_source_roles",
             )
         )
     labels.update(f"repeat.{mode}.same_original_rids" for mode in MODES)
@@ -53,6 +54,12 @@ def expected_checks() -> set[str]:
             for mode in MODES
             for suffix in ("getters_empty", "shader_owner_removed", "pipeline_owner_removed")
         )
+    labels.add("engine.actual_prepared_owner")
+    labels.update(
+        f"engine.{mode}.{suffix}"
+        for mode in MODES
+        for suffix in ("actual_pipeline", "original_shader_association", "reflected_compute_layout", "reflected_source_roles", "distinct_engine_variant", "survives_local_release")
+    )
     return labels
 
 
@@ -112,7 +119,7 @@ def main() -> int:
                 and native_report.get("error") == 0
                 and native_report.get("mode_count") == 5
                 and native_report.get("failures") == []
-                and len(checks) == len(labels) == 90
+                and len(checks) == len(labels) == 131
                 and set(labels) == expected_checks()
                 and all(row.get("ok") is True for row in checks)
                 and all(

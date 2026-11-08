@@ -81,3 +81,7 @@ Ruling: private guard successor must represent Count+four original gate backings
 ## Global bank locator slice
 
 Seven-file global-free-set locator slice integrated; independent Sol clear. Legacy slot-slice negative control RED1case383assert1fail process1; restored GREEN typed-port borrow1/400 pass, builds0. See GLOBAL_BANK_LOCATOR_RECEIPT.md. Complete P rows/3groups/row OBSERVE candidate continues; locator slice is not Task2 completion.
+
+## Count+four gate private guard accepted component
+
+Independent Sol clear. Fresh component5shader/87CPU/11RED passes, engine build0,7doctest/911assert pass, neighbors55/12660pass. Original matched main-RD Metal Mobile preparation131unique truechecks process0 host7587c62... unchanged. See GUARD_SOURCE_ROLES_RECEIPT.md. No dispatch/physical return/source authority/public Instance192/Finalize completion claimed; actual receiver/caller still open. Old c5e4 portable source evidence delivered to main separately with explicit whole-build provenance gaps, never replaced P1.

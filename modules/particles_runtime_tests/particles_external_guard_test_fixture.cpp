@@ -95,6 +95,23 @@ Error ParticlesExternalGuardTestFixture::run() {
 
 	using Guard = RendererRD::ParticlesExternalGuard;
 	static_assert(Guard::MODE_COUNT == 5);
+	static_assert(Guard::BINDING_COUNT == 12);
+	auto source_layout_matches = [](const auto *p_shader, Guard::Mode p_mode) {
+		const bool empty = p_mode == Guard::INIT_EMPTY || p_mode == Guard::FINALIZE_EMPTY;
+		if (!p_shader || p_shader->uniform_sets.size() != 1 || p_shader->uniform_sets[0].size() != (empty ? 10 : 12)) {
+			return false;
+		}
+		uint32_t seen = 0;
+		for (const auto &uniform : p_shader->uniform_sets[0]) {
+			if (uniform.binding >= Guard::BINDING_COUNT || (seen & (1u << uniform.binding)) ||
+					uniform.type != RD::UNIFORM_TYPE_STORAGE_BUFFER ||
+					uniform.writable != (uniform.binding >= Guard::GUARD_SCRATCH && uniform.binding <= Guard::PROTECTED_COMMANDS)) {
+				return false;
+			}
+			seen |= 1u << uniform.binding;
+		}
+		return seen == (empty ? 0xffcu : 0xfffu);
+	};
 	const char *names[Guard::MODE_COUNT] = { "INIT", "VALIDATE", "FINALIZE", "INIT_EMPTY", "FINALIZE_EMPTY" };
 	const auto *storage = RendererRD::ParticlesStorage::get_singleton();
 	const auto *engine_guard = storage ? storage->get_external_guard() : nullptr;
@@ -113,9 +130,12 @@ Error ParticlesExternalGuardTestFixture::run() {
 		check(pipeline && bool(pipeline->driver_id) && rd->compute_pipeline_is_valid(engine_pipelines[i]), label + ".actual_pipeline");
 		check(shader && bool(shader->driver_id) && pipeline && pipeline->shader_driver_id == shader->driver_id, label + ".original_shader_association");
 		check(pipeline && pipeline->push_constant_size == sizeof(Guard::PushConstant) && pipeline->local_group_size[0] == 64 && pipeline->local_group_size[1] == 1 && pipeline->local_group_size[2] == 1, label + ".reflected_compute_layout");
+		check(source_layout_matches(shader, Guard::Mode(i)), label + ".reflected_source_roles");
+		bool distinct = true;
 		for (int j = 0; j < i; ++j) {
-			check(engine_pipelines[i] != engine_pipelines[j] && engine_shaders[i] != engine_shaders[j], label + ".distinct_engine_variant");
+			distinct = distinct && engine_pipelines[i] != engine_pipelines[j] && engine_shaders[i] != engine_shaders[j];
 		}
+		check(distinct, label + ".distinct_engine_variant");
 	}
 	Error first_error = OK;
 	// All wrapper ownership, including destruction, stays on this callback.
@@ -137,6 +157,7 @@ Error ParticlesExternalGuardTestFixture::run() {
 				check(pipelines[i].is_valid() && pipeline && bool(pipeline->driver_id) && rd->compute_pipeline_is_valid(pipelines[i]), label + ".actual_pipeline");
 				check(shader && pipeline && pipeline->shader == shaders[i] && pipeline->shader_driver_id == shader->driver_id, label + ".original_shader_association");
 				check(pipeline && pipeline->push_constant_size == sizeof(Guard::PushConstant) && pipeline->local_group_size[0] == 64 && pipeline->local_group_size[1] == 1 && pipeline->local_group_size[2] == 1, label + ".reflected_compute_layout");
+				check(source_layout_matches(shader, mode), label + ".reflected_source_roles");
 			}
 			bool distinct_shaders = true;
 			bool distinct_pipelines = true;

@@ -43,9 +43,9 @@
 #endif
 
 // Instance192 only. All bindings and proof data are retained by the K owner.
-// Binding 3 is the original readable source backing, never a CPU count upload.
-// The owner resolves the accessor and its validity rule through the real E09
-// bridge before recording; these scalar offsets do not confer source authority.
+// Binding 3 is the original selected Count; 8..11 are its four original gates.
+// Each is resolved independently by the original owner. Readonly source blocks
+// may share proven backing; these scalar offsets do not confer source authority.
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 #ifndef MODE_EMPTY
@@ -62,10 +62,26 @@ layout(set = 0, binding = 2, std430) restrict readonly buffer OutputMetadata {
 	uint words[];
 }
 output_meta;
-layout(set = 0, binding = 3, std430) restrict readonly buffer SourceBacking {
+layout(set = 0, binding = 3, std430) readonly buffer SourceCount {
 	uint words[];
 }
-source;
+source_count;
+layout(set = 0, binding = 8, std430) readonly buffer SourceCountValidity {
+	uint words[];
+}
+source_count_validity;
+layout(set = 0, binding = 9, std430) readonly buffer SourceAttributesValidity {
+	uint words[];
+}
+source_attributes_validity;
+layout(set = 0, binding = 10, std430) readonly buffer SourceDenseIdsValidity {
+	uint words[];
+}
+source_dense_ids_validity;
+layout(set = 0, binding = 11, std430) readonly buffer SourceInstanceGate {
+	uint words[];
+}
+source_instance_gate;
 layout(set = 0, binding = 4, std430) restrict buffer GuardScratch {
 	uint words[];
 }
@@ -100,8 +116,10 @@ layout(set = 0, binding = 7, std430) restrict readonly buffer GeometryProof {
 	vec4 cull_max;
 	vec4 current_host_inverse_rows[3];
 	vec4 previous_host_inverse_rows[3];
-	// count word, validity word, rule (1: initialized!=0, 2: fault==0), space
+	// count word, reserved zero, reserved zero, space
 	uvec4 source_accessor;
+	// CountValidity, AttributesValidity, DenseIdsValidity, InstanceGate; fault==0
+	uvec4 source_gate_words;
 	uvec4 options; // history permitted (0/1), three reserved zero words
 	SurfaceProof surfaces[];
 }
@@ -354,19 +372,35 @@ void initialize_guard() {
 			initial_fault |= META_FAULT;
 		}
 	}
-	if (proof.source_accessor.x >= uint(source.words.length()) || proof.source_accessor.y >= uint(source.words.length())) {
+	if (proof.source_accessor.x >= uint(source_count.words.length())) {
 		initial_fault |= SOURCE_FAULT;
-	} else {
-		uint raw_validity = source.words[proof.source_accessor.y];
-		uint rule = proof.source_accessor.z;
-		if (!((rule == 1u && raw_validity != 0u) || (rule == 2u && raw_validity == 0u))) {
-			initial_fault |= SOURCE_FAULT;
-		}
-		if (source.words[proof.source_accessor.x] != scratch.words[0]) {
-			initial_fault |= COUNT_FAULT;
-		}
+	} else if (source_count.words[proof.source_accessor.x] != scratch.words[0]) {
+		initial_fault |= COUNT_FAULT;
 	}
-	if (proof.source_accessor.w < 1u || proof.source_accessor.w > 2u || proof.options.x > 1u || any(notEqual(proof.options.yzw, uvec3(0u))) ||
+	// Bounds are checked per descriptor before every load, including empty
+	// packets. Count and gate faults accumulate independently. No rule/mask
+	// can omit a selected gate or reinterpret Count16's trailing words.
+	if (proof.source_gate_words.x >= uint(source_count_validity.words.length())) {
+		initial_fault |= SOURCE_FAULT;
+	} else if (source_count_validity.words[proof.source_gate_words.x] != 0u) {
+		initial_fault |= SOURCE_FAULT;
+	}
+	if (proof.source_gate_words.y >= uint(source_attributes_validity.words.length())) {
+		initial_fault |= SOURCE_FAULT;
+	} else if (source_attributes_validity.words[proof.source_gate_words.y] != 0u) {
+		initial_fault |= SOURCE_FAULT;
+	}
+	if (proof.source_gate_words.z >= uint(source_dense_ids_validity.words.length())) {
+		initial_fault |= SOURCE_FAULT;
+	} else if (source_dense_ids_validity.words[proof.source_gate_words.z] != 0u) {
+		initial_fault |= SOURCE_FAULT;
+	}
+	if (proof.source_gate_words.w >= uint(source_instance_gate.words.length())) {
+		initial_fault |= SOURCE_FAULT;
+	} else if (source_instance_gate.words[proof.source_gate_words.w] != 0u) {
+		initial_fault |= SOURCE_FAULT;
+	}
+	if (proof.source_accessor.y != 0u || proof.source_accessor.z != 0u || proof.source_accessor.w < 1u || proof.source_accessor.w > 2u || proof.options.x > 1u || any(notEqual(proof.options.yzw, uvec3(0u))) ||
 			!bounds_shape(proof.current_decl_min, proof.current_decl_max, true) ||
 			!bounds_shape(proof.previous_decl_min, proof.previous_decl_max, true) || !bounds_shape(proof.cull_min, proof.cull_max, true)) {
 		initial_fault |= META_FAULT;

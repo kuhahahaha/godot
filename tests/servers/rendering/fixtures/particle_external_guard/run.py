@@ -29,12 +29,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--shader", type=Path, default=SHADER)
     parser.add_argument("--mutations", action="store_true")
+    parser.add_argument("--shader-only", action="store_true", help="SPIR-V/layout checks only, no CPU executable")
+    parser.add_argument("--syntax-only", action="store_true", help="SPIR-V/layout plus CPU harness syntax, no executable")
     parser.add_argument("--native-source-root", type=Path, default=ROOT)
     args = parser.parse_args()
     source = args.shader.read_text()
     # Derive the same bound as the original Core owner; no mesh-RID limit is
     # substituted for the flattened surface count in either translation.
-    config = (SHADER.parent.parent / "storage_rd/external_output_config.h").read_text()
+    config = (args.native_source_root / "servers/rendering/renderer_rd/storage_rd/external_output_config.h").read_text()
     enums = (args.native_source_root / "servers/rendering/rendering_server_enums.h").read_text()
     mesh_rids = int(re.search(r"MAX_MESH_RIDS = (\d+)", config)[1])
     mesh_surfaces = int(re.search(r"MAX_MESH_SURFACES = (\d+)", enums)[1])
@@ -63,17 +65,21 @@ def main():
             assembly = run([tools["spirv-dis"], str(spv)])
             for member in range(8):
                 assert f"OpMemberDecorate %Params {member} Offset {member * 4}" in assembly
-            for member, offset in enumerate((0, 16, 32, 48, 64, 80, 96, 144, 192, 208, 224)):
-                assert f"OpMemberDecorate %GeometryProof {member} Offset {offset}" in assembly
+            for member, offset in enumerate((0, 16, 32, 48, 64, 80, 96, 144, 192, 208, 224, 240)):
+                assert f"OpMemberDecorate %GeometryProof {member} Offset {offset}" in assembly, (mode, "GeometryProof member", member, "expected offset", offset)
             for index, name in enumerate((
                 "current_records",
                 "previous_records",
                 "output_meta",
-                "source",
+                "source_count",
                 "scratch",
                 "status",
                 "commands",
                 "proof",
+                "source_count_validity",
+                "source_attributes_validity",
+                "source_dense_ids_validity",
+                "source_instance_gate",
             )):
                 if mode.endswith("_EMPTY") and index < 2:
                     assert f"OpDecorate %{name} Binding {index}" not in assembly, (
@@ -82,11 +88,17 @@ def main():
                 else:
                     assert f"OpDecorate %{name} Binding {index}" in assembly
                     assert f"OpDecorate %{name} DescriptorSet 0" in assembly
+            for name in ("SourceCount", "SourceCountValidity", "SourceAttributesValidity", "SourceDenseIdsValidity", "SourceInstanceGate"):
+                assert f"OpMemberDecorate %{name} 0 Restrict" not in assembly, "source READ aliases must remain legal"
+                assert f"OpMemberDecorate %{name} 0 NonWritable" in assembly
             assert "ArrayStride 144" in assembly
             if mode == "VALIDATE":
                 assert assembly.count("NoContraction") >= 8
             assert "OpExecutionMode %main LocalSize 64 1 1" in assembly
             print(mode + ": SPIR-V compile/validate/layout PASS")
+        if args.shader_only:
+            print(json.dumps({"gpu_execution": False, "cpu_execution": False, "shader_layout_only": True}))
+            return
         # Translate the production functions, not a reimplementation of their
         # conditions. Vectors and buffer operations supply CPU scalar semantics.
         body = source[source.index("const uint SOURCE_FAULT") : source.index("\nvoid main()")]
@@ -112,6 +124,10 @@ def main():
         surface = source[source.index("struct SurfaceProof {") : source.index("\nlayout(set = 0, binding = 7")]
         cpp = temp / "guard.cpp"
         cpp.write_text(harness.replace("// PRODUCTION_SURFACE", surface).replace("// PRODUCTION_FUNCTIONS", functions))
+        if args.syntax_only:
+            run([tools["clang++"], "-std=c++17", "-ffp-contract=off", "-fsyntax-only", str(cpp)])
+            print("CPU translated harness syntax PASS (not executed)")
+            return
         binary = temp / "guard"
         run([tools["clang++"], "-std=c++17", "-O0", "-ffp-contract=off", str(cpp), "-o", str(binary)])
         print(run([str(binary)]), end="")
@@ -131,10 +147,16 @@ def main():
             ),
             (
                 "ignore_source_validity",
-                "uint raw_validity = source.words[proof.source_accessor.y];",
-                "uint raw_validity = 1u;",
+                "source_count_validity.words[proof.source_gate_words.x] != 0u",
+                "false",
                 "invalid source expected",
             ),
+            ("ignore_attribute_gate", "source_attributes_validity.words[proof.source_gate_words.y] != 0u", "false", "each independent source gate expected"),
+            ("ignore_identity_gate", "source_dense_ids_validity.words[proof.source_gate_words.z] != 0u", "false", "each independent source gate expected"),
+            ("ignore_instance_gate", "source_instance_gate.words[proof.source_gate_words.w] != 0u", "false", "each independent source gate expected"),
+            ("ignore_selected_count", "source_count.words[proof.source_accessor.x] != scratch.words[0]", "false", "source count mismatch expected"),
+            ("omit_empty_count_gate", "source_count_validity.words[proof.source_gate_words.x] != 0u", "params.capacity != 0u && source_count_validity.words[proof.source_gate_words.x] != 0u", "N0 real source gate fault expected"),
+            ("omit_empty_count", "source_count.words[proof.source_accessor.x] != scratch.words[0]", "params.capacity != 0u && source_count.words[proof.source_accessor.x] != scratch.words[0]", "N0 real selected count mismatch expected"),
             ("ignore_bounds", "record_fault |= BOUNDS_FAULT;", "record_fault |= 0u;", "current bounds escape expected"),
             ("ignore_history", "if ((flags & 2u) != 0u) {", "if (false) {", "valid previous escape expected"),
         )
