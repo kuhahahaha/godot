@@ -1229,6 +1229,21 @@ Error MaterialStorage::material_selection_get_shader_features(const NativeSelect
 	return OK;
 }
 
+Error MaterialStorage::material_selection_get_shader_observation(const NativeSelectionLease &p_lease, NativeSelectionShaderObservation &r_observation) const {
+	NativeSelectionShaderFeatures features;
+	const Error observed = material_selection_get_shader_features(p_lease, features);
+	if (observed != OK) {
+		return observed;
+	}
+	NativeSelectionShaderObservation observation;
+	observation.material = features.material;
+	observation.material_generation = features.material_generation;
+	observation.shader_version = features.compiled.version;
+	observation.needs_inverse = features.compiled.needs_inverse;
+	r_observation = observation;
+	return OK;
+}
+
 bool MaterialStorage::MaterialData::native_immutable_busy() const {
 	auto *rd = RD::get_singleton();
 	if (!rd) {

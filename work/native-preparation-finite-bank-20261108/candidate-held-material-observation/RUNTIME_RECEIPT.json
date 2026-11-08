@@ -1,0 +1,69 @@
+{
+  "base": "b220d7467b",
+  "scope": "Internal pointer-free held material compiler observation; not full qualification or public transport",
+  "source_sha256": {
+    "servers/rendering/renderer_rd/storage_rd/material_storage.h": "d9478cb1b48c1b2c168598446dabfef2ef33d0f55a10e801c7edf6770deba571",
+    "servers/rendering/renderer_rd/storage_rd/material_storage.cpp": "41cc708e468a03d30aa7ede37de31cd4b4f787269529c6ac90883e1efe179b38",
+    "modules/particles_runtime_tests/particles_external_guard_test_fixture.cpp": "f8052a73136af841d846cde945c639c6cdd9f32c7fbdda8fe88e2f9cbeb3706e",
+    "tests/servers/rendering/fixtures/particle_external_guard_native/run.gd": "b68c511d02ae6efd288e822a0f6885000f9ac934a4febf44a291c2e334edec78",
+    "tests/servers/rendering/fixtures/particle_external_guard_native/run_native.py": "17bcef5a567f4b923ae0a19be440f818fa15b148e947a01613d30e8c6f0ee9aa",
+    "tests/servers/rendering/fixtures/particle_external_guard_native/README.md": "1bb137798e5c561b2a1ba664ad6fcc405e1779a085d1c157f3252c2751e70f1e"
+  },
+  "host_sha256": "d9b190436dbf163a9232a21a33f18dcd1c9b1e5f2e7d41f3501f578da3afbf84",
+  "build_exit": 0,
+  "build_log": "restored-build.log",
+  "red": {
+    "mutation": "needs_inverse=false",
+    "backend": "Metal Mobile",
+    "exit": 1,
+    "target_failures": [
+      "material_features.vertex_inverse.observation_inverse",
+      "material_features.fragment_inverse.observation_inverse",
+      "material_features.alpha_hash.observation_inverse",
+      "material_features.both.observation_inverse",
+      "material_observation.replacement_original",
+      "material_observation.mutated_compiler_fact",
+      "material_observation.same_material_sibling_survives_return"
+    ],
+    "eventual_cleanup": "fixturecomplete and process1; no stderr"
+  },
+  "restored_gpu": {
+    "mobile": {
+      "exit": 0,
+      "checks": 270,
+      "device": {
+        "api": "4.0",
+        "driver": "metal",
+        "name": "Apple M3 Pro (Apple9)",
+        "renderer": "mobile"
+      },
+      "result": "restored-native-mobile/result.json"
+    },
+    "forward_plus": {
+      "exit": 0,
+      "checks": 270,
+      "device": {
+        "api": "4.0",
+        "driver": "metal",
+        "name": "Apple M3 Pro (Apple9)",
+        "renderer": "forward_plus"
+      },
+      "result": "restored-native-forward_plus/result.json"
+    }
+  },
+  "cpu": {
+    "cases": 82,
+    "assertions": 21562,
+    "exit": 0,
+    "log": "combined-test.log"
+  },
+  "review": "INDEPENDENT_REVIEW.md",
+  "commands": "restored-execution.json",
+  "limits": [
+    "No public held-facts transport yet",
+    "No full material/profile qualification",
+    "No native meshowner revision yet",
+    "No Host resource COW or Sprite draw/close acceptance",
+    "Fixture dispatch_recorded=false and physical_return_claimed=false"
+  ]
+}

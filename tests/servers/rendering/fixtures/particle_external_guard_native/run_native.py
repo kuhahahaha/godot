@@ -13,7 +13,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 MODES = ("INIT", "VALIDATE", "FINALIZE", "INIT_EMPTY", "FINALIZE_EMPTY")
-PASS = "PARTICLE_EXTERNAL_GUARD_NATIVE_PASS five_modes=1 checks=202 idempotent=1 owner_released=1 reprepare=1 physical_return_claimed=0"
+PASS = "PARTICLE_EXTERNAL_GUARD_NATIVE_PASS five_modes=1 checks=270 idempotent=1 owner_released=1 reprepare=1 physical_return_claimed=0"
 MISSING = "PARTICLE_EXTERNAL_GUARD_NATIVE_MISSING tests-only fixture class not registered"
 
 
@@ -64,7 +64,18 @@ def expected_checks() -> set[str]:
     labels.update(
         f"material_features.{case}.{suffix}"
         for case in ("plain", "vertex_inverse", "fragment_inverse", "alpha_hash", "alpha_scissor", "normal_only", "both")
-        for suffix in ("unissued_unchanged", "selection", "compiled_fact", "generation", "original_version", "inverse_requirement", "release", "released_refused", "empty_selection", "empty_invalidates")
+        for suffix in ("unissued_unchanged", "selection", "compiled_fact", "generation", "original_version", "inverse_requirement", "release", "released_refused", "empty_selection", "empty_invalidates", "observation_unissued_unchanged", "observation", "observation_original_material", "observation_original_version", "observation_inverse", "observation_returned_unchanged", "observation_empty_unchanged")
+    )
+    labels.update(
+        f"material_observation.{suffix}"
+        for suffix in (
+            "retained_selection", "retained_original", "replacement_selection", "replacement_original",
+            "replacement_preserves_retained", "replacement_return", "replacement_returned_unchanged",
+            "sibling_return_preserves_retained", "retained_return", "successful_mutation",
+            "stale_generation_refused", "dirty_refused", "mutated_selection", "mutated_compiler_fact",
+            "old_lease_cannot_observe_new_selection", "same_material_sibling_selection", "mutated_return",
+            "same_material_sibling_survives_return", "same_material_sibling_return",
+        )
     )
     return labels
 
@@ -126,7 +137,7 @@ def main() -> int:
                 and native_report.get("error") == 0
                 and native_report.get("mode_count") == 5
                 and native_report.get("failures") == []
-                and len(checks) == len(labels) == 202
+                and len(checks) == len(labels) == 270
                 and set(labels) == expected_checks()
                 and all(row.get("ok") is True for row in checks)
                 and all(

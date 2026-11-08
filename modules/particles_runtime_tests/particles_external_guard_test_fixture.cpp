@@ -127,6 +127,15 @@ Error ParticlesExternalGuardTestFixture::run() {
 			materials->_update_queued_materials();
 			const uint64_t generation = materials->material_get_generation(material);
 			RendererRD::MaterialStorage::NativeSelectionLease selection;
+			RendererRD::MaterialStorage::NativeSelectionShaderObservation observation;
+			observation.material = shader;
+			observation.material_generation = UINT64_MAX;
+			observation.shader_version = shader;
+			observation.needs_inverse = !entry.inverse;
+			const auto unchanged = [&]() {
+				return observation.material == shader && observation.material_generation == UINT64_MAX && observation.shader_version == shader && observation.needs_inverse == !entry.inverse;
+			};
+			check(materials->material_selection_get_shader_observation(selection, observation) == ERR_UNAUTHORIZED && unchanged(), label + ".observation_unissued_unchanged");
 			RendererRD::MaterialStorage::NativeSelectionShaderFeatures features;
 			features.material = shader;
 			features.material_generation = UINT64_MAX;
@@ -141,7 +150,16 @@ Error ParticlesExternalGuardTestFixture::run() {
 					check(features.compiled.shader && features.compiled.version.is_valid(), label + ".original_version");
 					check(features.compiled.needs_inverse == entry.inverse, label + ".inverse_requirement");
 				}
+				const Error projected = materials->material_selection_get_shader_observation(selection, observation);
+				check(projected == OK, label + ".observation");
+				if (projected == OK) {
+					check(observation.material == material && observation.material_generation == generation, label + ".observation_original_material");
+					check(observation.shader_version.is_valid() && observation.shader_version == features.compiled.version, label + ".observation_original_version");
+					check(observation.needs_inverse == entry.inverse, label + ".observation_inverse");
+				}
 				check(materials->material_selection_release(selection) == OK, label + ".release");
+				const auto returned = observation;
+				check(materials->material_selection_get_shader_observation(selection, observation) == ERR_UNAUTHORIZED && observation.material == returned.material && observation.material_generation == returned.material_generation && observation.shader_version == returned.shader_version && observation.needs_inverse == returned.needs_inverse, label + ".observation_returned_unchanged");
 				check(materials->material_selection_get_shader_features(selection, features) == ERR_UNAUTHORIZED, label + ".released_refused");
 			}
 			// Empty code invalidates the previous successful compiler observation.
@@ -151,6 +169,8 @@ Error ParticlesExternalGuardTestFixture::run() {
 			const Error empty_acquired = materials->material_selection_acquire(material, empty_selection, materials->material_get_generation(material));
 			check(empty_acquired == ERR_INVALID_DATA && !empty_selection.is_active(), label + ".empty_selection");
 			check(materials->material_selection_get_shader_features(empty_selection, features) == ERR_UNAUTHORIZED, label + ".empty_invalidates");
+			const auto invalidated = observation;
+			check(materials->material_selection_get_shader_observation(empty_selection, observation) == ERR_UNAUTHORIZED && observation.material == invalidated.material && observation.material_generation == invalidated.material_generation && observation.shader_version == invalidated.shader_version && observation.needs_inverse == invalidated.needs_inverse, label + ".observation_empty_unchanged");
 			// Preserve cleanup even if an incorrect admission is exposed.
 			if (empty_selection.is_active()) {
 				materials->material_selection_release(empty_selection);
@@ -158,6 +178,91 @@ Error ParticlesExternalGuardTestFixture::run() {
 			materials->material_free(material);
 			materials->shader_free(shader);
 		}
+
+		// Independent replacement keeps the old native source alive. This tests
+		// retained-source isolation, not a Host resource COW implementation.
+		const RID original_shader = materials->shader_allocate();
+		materials->shader_initialize(original_shader, false);
+		materials->shader_set_code(original_shader, "shader_type spatial; uniform float weight; void fragment() { ALBEDO = vec3(weight); }");
+		const RID original_material = materials->material_allocate();
+		materials->material_initialize(original_material);
+		materials->material_set_shader(original_material, original_shader);
+		materials->material_set_param(original_material, "weight", 0.25);
+		materials->_update_queued_materials();
+		const uint64_t original_generation = materials->material_get_generation(original_material);
+		RendererRD::MaterialStorage::NativeSelectionLease retained;
+		const Error retained_acquired = materials->material_selection_acquire(original_material, retained, original_generation);
+		check(retained_acquired == OK, "material_observation.retained_selection");
+		if (retained_acquired == OK) {
+			RendererRD::MaterialStorage::NativeSelectionShaderObservation original;
+			check(materials->material_selection_get_shader_observation(retained, original) == OK && original.material == original_material && original.material_generation == original_generation && original.shader_version.is_valid() && !original.needs_inverse, "material_observation.retained_original");
+			const RID replacement_shader = materials->shader_allocate();
+			materials->shader_initialize(replacement_shader, false);
+			materials->shader_set_code(replacement_shader, "shader_type spatial; uniform float weight; void fragment() { ALBEDO = (INV_MODEL_MATRIX * vec4(vec3(weight), 1.0)).xyz; }");
+			const RID replacement_material = materials->material_allocate();
+			materials->material_initialize(replacement_material);
+			materials->material_set_shader(replacement_material, replacement_shader);
+			materials->material_set_param(replacement_material, "weight", 0.75);
+			materials->_update_queued_materials();
+			const uint64_t replacement_generation = materials->material_get_generation(replacement_material);
+			RendererRD::MaterialStorage::NativeSelectionLease replacement;
+			const Error replacement_acquired = materials->material_selection_acquire(replacement_material, replacement, replacement_generation);
+			check(replacement_acquired == OK, "material_observation.replacement_selection");
+			if (replacement_acquired == OK) {
+				RendererRD::MaterialStorage::NativeSelectionShaderObservation current;
+				check(materials->material_selection_get_shader_observation(replacement, current) == OK && current.material == replacement_material && current.material_generation == replacement_generation && current.shader_version.is_valid() && current.shader_version != original.shader_version && current.needs_inverse, "material_observation.replacement_original");
+				RendererRD::MaterialStorage::NativeSelectionShaderObservation old;
+				check(materials->material_selection_get_shader_observation(retained, old) == OK && old.material == original.material && old.material_generation == original.material_generation && old.shader_version == original.shader_version && !old.needs_inverse && double(materials->material_get_param(original_material, "weight")) == 0.25, "material_observation.replacement_preserves_retained");
+				check(materials->material_selection_release(replacement) == OK, "material_observation.replacement_return");
+				const auto returned = current;
+				check(materials->material_selection_get_shader_observation(replacement, current) == ERR_UNAUTHORIZED && current.material == returned.material && current.material_generation == returned.material_generation && current.shader_version == returned.shader_version && current.needs_inverse == returned.needs_inverse, "material_observation.replacement_returned_unchanged");
+			}
+			materials->material_set_param(replacement_material, "weight", 0.5);
+			materials->_update_queued_materials();
+			RendererRD::MaterialStorage::NativeSelectionShaderObservation surviving;
+			check(materials->material_selection_get_shader_observation(retained, surviving) == OK && surviving.material == original.material && surviving.material_generation == original.material_generation && surviving.shader_version == original.shader_version && !surviving.needs_inverse, "material_observation.sibling_return_preserves_retained");
+			materials->material_free(replacement_material);
+			materials->shader_free(replacement_shader);
+			check(materials->material_selection_release(retained) == OK, "material_observation.retained_return");
+			// A real successful mutation advances the original material generation.
+			materials->material_set_param(original_material, "weight", 1.0);
+			materials->shader_set_code(original_shader, "shader_type spatial; void fragment() { ALPHA_HASH_SCALE = 0.5; }");
+			const uint64_t changed_generation = materials->material_get_generation(original_material);
+			check(changed_generation > original_generation && double(materials->material_get_param(original_material, "weight")) == 1.0, "material_observation.successful_mutation");
+			RendererRD::MaterialStorage::NativeSelectionLease stale;
+			check(materials->material_selection_acquire(original_material, stale, original_generation) == ERR_INVALID_DATA && !stale.is_active(), "material_observation.stale_generation_refused");
+			if (stale.is_active()) {
+				materials->material_selection_release(stale);
+			}
+			// Queued uniform/texture updates must not yield a selection or facts.
+			RendererRD::MaterialStorage::NativeSelectionLease dirty;
+			check(materials->material_selection_acquire(original_material, dirty, changed_generation) == ERR_BUSY && !dirty.is_active(), "material_observation.dirty_refused");
+			if (dirty.is_active()) {
+				materials->material_selection_release(dirty);
+			}
+			materials->_update_queued_materials();
+			RendererRD::MaterialStorage::NativeSelectionLease fresh;
+			const Error fresh_acquired = materials->material_selection_acquire(original_material, fresh, changed_generation);
+			check(fresh_acquired == OK, "material_observation.mutated_selection");
+			if (fresh_acquired == OK) {
+				RendererRD::MaterialStorage::NativeSelectionShaderObservation changed;
+				check(materials->material_selection_get_shader_observation(fresh, changed) == OK && changed.material == original_material && changed.material_generation == changed_generation && changed.shader_version.is_valid() && changed.needs_inverse, "material_observation.mutated_compiler_fact");
+				// The returned old lease cannot observe a newer lease on the same RID.
+				const auto unchanged_original = original;
+				check(materials->material_selection_get_shader_observation(retained, original) == ERR_UNAUTHORIZED && original.material == unchanged_original.material && original.material_generation == unchanged_original.material_generation && original.shader_version == unchanged_original.shader_version && original.needs_inverse == unchanged_original.needs_inverse, "material_observation.old_lease_cannot_observe_new_selection");
+				RendererRD::MaterialStorage::NativeSelectionLease sibling;
+				const Error sibling_acquired = materials->material_selection_acquire(original_material, sibling, changed_generation);
+				check(sibling_acquired == OK, "material_observation.same_material_sibling_selection");
+				check(materials->material_selection_release(fresh) == OK, "material_observation.mutated_return");
+				if (sibling_acquired == OK) {
+					RendererRD::MaterialStorage::NativeSelectionShaderObservation remaining;
+					check(materials->material_selection_get_shader_observation(sibling, remaining) == OK && remaining.material == original_material && remaining.material_generation == changed_generation && remaining.shader_version == changed.shader_version && remaining.needs_inverse, "material_observation.same_material_sibling_survives_return");
+					check(materials->material_selection_release(sibling) == OK, "material_observation.same_material_sibling_return");
+				}
+			}
+		}
+		materials->material_free(original_material);
+		materials->shader_free(original_shader);
 	}
 
 	using Guard = RendererRD::ParticlesExternalGuard;

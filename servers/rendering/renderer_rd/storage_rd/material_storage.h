@@ -144,6 +144,17 @@ public:
 	// Current compiler facts under an existing selection; not full qualification.
 	// The returned pointers/version are borrowed only while that selection is held.
 	Error material_selection_get_shader_features(const NativeSelectionLease &p_lease, NativeSelectionShaderFeatures &r_features) const;
+	struct NativeSelectionShaderObservation {
+		RID material;
+		uint64_t material_generation = 0;
+		RID shader_version;
+		bool needs_inverse = false;
+	};
+	// Pointer-free compiler observation under the same original held selection.
+	// No new custody, profile qualification or GPU readiness is issued. The
+	// version is an equality projection, never a stand-alone shader-use grant.
+	// Every failure leaves r_observation unchanged.
+	Error material_selection_get_shader_observation(const NativeSelectionLease &p_lease, NativeSelectionShaderObservation &r_observation) const;
 
 	class NativeMaterialHold {
 		bool physical_transferred = false, metadata_returned = false, metadata_return_active = false;
