@@ -647,16 +647,27 @@ bool ParticlesStorage::particles_is_external_scene_only(RID p_particles) const {
 	return particles && particles->external && particles->external->config.profile == ExternalOutputConfig::SCENE_ONLY;
 }
 uint32_t ParticlesStorage::particles_external_surface_count(RID p_particles) const {
+	auto *rd = RenderingDevice::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread()) {
+		return 0;
+	}
 	const Particles *particles = particles_owner.get_or_null(p_particles);
 	if (!particles || !particles->external) {
 		return 0;
 	}
-	// config.surfaces counts mesh RIDs, not authenticated flattened surfaces.
-	// No generation-wide retained surface directory is installed yet.
-	return 0;
+	const auto &owner = *particles->external;
+	return owner.admits_work() && owner.config.profile == ExternalOutputConfig::INSTANCE_192 && owner.generation_surfaces_complete &&
+					owner.generation_selection_complete && owner.retained_surface_count == owner.generation_material_count
+			? owner.retained_surface_count
+			: 0;
 }
-Error ParticlesStorage::particles_external_surface_acquire(RID, uint32_t, ExternalSurfaceSelection &) {
-	return ERR_UNAVAILABLE;
+Error ParticlesStorage::particles_external_surface_acquire(RID p_particles, uint32_t p_surface, ExternalSurfaceSelection &r_selection) {
+	auto *rd = RenderingDevice::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	Particles *particles = particles_owner.get_or_null(p_particles);
+	return particles && particles->external ? particles->external->surface_acquire(p_surface, r_selection) : ERR_DOES_NOT_EXIST;
 }
 Error ParticlesStorage::particles_external_surface_release(ExternalSurfaceSelection &p_selection) {
 	return p_selection.owner ? p_selection.owner->surface_return(p_selection) : ERR_DOES_NOT_EXIST;

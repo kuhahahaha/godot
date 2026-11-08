@@ -33,11 +33,13 @@
 #include "core/extension/gdextension_external_output_typed.h"
 #include "core/extension/gdextension_manager.h"
 #include "core/extension/gdextension_production_request.h"
+#include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/object/message_queue.h"
 #include "core/os/os.h"
 #include "core/os/semaphore.h"
 #include "core/os/thread.h"
+#include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_scene_cull.h"
@@ -56,6 +58,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
+#include <thread>
 #endif
 
 extern GDExtensionInterfaceFunctionPtr gdextension_get_proc_address(const char *);
@@ -6362,6 +6365,13 @@ struct Access {
 	}
 	struct GenerationSelectionProbe {
 		bool native_sources = false, source_failure = false;
+		RendererRD::ExternalSurfaceSelection retained_surface;
+		static void return_surface(uint64_t p_probe) {
+			auto &probe = *reinterpret_cast<GenerationSelectionProbe *>(uintptr_t(p_probe));
+			CHECK(RendererRD::ParticlesStorage::get_singleton()->particles_external_surface_release(probe.retained_surface) == OK);
+			CHECK(probe.retained_surface.is_empty());
+			CHECK(probe.native->generation_returnable() == OK);
+		}
 		SingletonEnrollment *fixture = nullptr;
 		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
 		RendererRD::ExternalOutputConfig config, expected_identity;
@@ -6501,6 +6511,63 @@ struct Access {
 				CHECK(p.native->acquire_selection_sources(context, ref) == ERR_ALREADY_IN_USE);
 				CHECK(p.native->selection_sources() == (p.source_failure ? 1u : flattened));
 				CHECK(p.native->selection_faulted() == p.source_failure);
+				if (!p.source_failure) {
+					auto *storage = RendererRD::ParticlesStorage::get_singleton();
+					const RID particles = p.native->particle_rid();
+					RendererRD::ExternalSurfaceSelection borrowed;
+					CHECK(storage->particles_external_surface_count(particles) == flattened);
+					CHECK(storage->particles_external_surface_acquire(particles, flattened, borrowed) == ERR_INVALID_PARAMETER);
+					CHECK(borrowed.is_empty());
+					// Exhaust the original accepted pin quota while every surface cell
+					// is free. Refusal must leave the output and source holds unchanged.
+					GDExtensionDeviceExit::ProductionOutputPin occupied[8];
+					for (auto &pin : occupied) {
+						REQUIRE(p.fixture->registry.production_output_pin_borrow(p.native->generation_pin(), p.fixture->rd, pin) == OK);
+					}
+					CHECK(storage->particles_external_surface_acquire(particles, 0, borrowed) == ERR_OUT_OF_MEMORY);
+					CHECK(borrowed.is_empty());
+					CHECK(p.native->selection_sources() == flattened);
+					for (auto &pin : occupied) {
+						REQUIRE(p.fixture->registry.production_output_unpin(pin) == OK);
+					}
+					// Seven quoted surface cells fill before the nine-row pin quota.
+					RendererRD::ExternalSurfaceSelection pool[7];
+					for (uint32_t i = 0; i < 7; ++i) {
+						REQUIRE(storage->particles_external_surface_acquire(particles, i % flattened, pool[i]) == OK);
+					}
+					CHECK(storage->particles_external_surface_acquire(particles, 0, borrowed) == ERR_OUT_OF_MEMORY);
+					CHECK(borrowed.is_empty());
+					for (auto &selection : pool) {
+						CHECK(storage->particles_external_surface_release(selection) == OK);
+					}
+					REQUIRE(storage->particles_external_surface_acquire(particles, 0, borrowed) == OK);
+					CHECK_FALSE(borrowed.is_empty());
+					CHECK(borrowed.get_generation() == RendererRD::ExternalLinkedOwnerTest::generation);
+					CHECK(borrowed.get_native_surface() == 0);
+					CHECK(borrowed.get_flattened_surface() == 0);
+					CHECK(borrowed.get_material_generation() == p.expected_material_generations[0]);
+					CHECK(borrowed.get_surface_aabb() == AABB(Vector3(1, 2, 3), Vector3(4, 5, 6)));
+					CHECK(storage->particles_external_surface_acquire(particles, 1, borrowed) == ERR_ALREADY_IN_USE);
+					CHECK(borrowed.get_flattened_surface() == 0);
+					p.retained_surface = std::move(borrowed);
+					CHECK(borrowed.is_empty());
+					CHECK_FALSE(p.retained_surface.is_empty());
+#ifdef THREADS_ENABLED
+					uint32_t foreign_count = UINT32_MAX;
+					Error foreign_acquire = OK, foreign_return = OK;
+					std::thread foreign([&]() {
+						RendererRD::ExternalSurfaceSelection refused;
+						foreign_count = storage->particles_external_surface_count(particles);
+						foreign_acquire = storage->particles_external_surface_acquire(particles, 0, refused);
+						foreign_return = storage->particles_external_surface_release(p.retained_surface);
+					});
+					foreign.join();
+					CHECK(foreign_count == 0);
+					CHECK(foreign_acquire == ERR_UNAUTHORIZED);
+					CHECK(foreign_return == ERR_UNAUTHORIZED);
+					CHECK_FALSE(p.retained_surface.is_empty());
+#endif
+				}
 				flattened = 0;
 				for (const RID &rid : p.config.surfaces) {
 					auto *mesh = meshes->mesh_owner.get_or_null(rid);
@@ -6535,6 +6602,14 @@ struct Access {
 			}
 			if (!p.failure) {
 				p.native->withdraw_generation();
+				if (!p.retained_surface.is_empty()) {
+					auto *storage = RendererRD::ParticlesStorage::get_singleton();
+					RendererRD::ExternalSurfaceSelection refused;
+					CHECK(storage->particles_external_surface_count(p.native->particle_rid()) == 0);
+					CHECK(storage->particles_external_surface_acquire(p.native->particle_rid(), 0, refused) == ERR_UNAVAILABLE);
+					CHECK(refused.is_empty());
+					CHECK(p.native->generation_returnable() == ERR_BUSY);
+				}
 			}
 		}
 	};
@@ -6618,6 +6693,9 @@ struct Access {
 		plan.action_count = plan.use_count = plan.readback_count = 0;
 		plan.resource_count = 1;
 		plan.resources[0] = { GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, bytes, 0 };
+		if (native_sources && !source_failure) {
+			plan.capacity.resource_uses = 9; // Original root plus bounded borrow tests.
+		}
 		probe.fixture = &fixture;
 		REQUIRE(fixture.initialize_owner(1, false, false, &GenerationSelectionProbe::receive, &probe, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &plan) == OK);
 		{
@@ -6672,6 +6750,21 @@ struct Access {
 				}
 			}
 			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+			if (!probe.retained_surface.is_empty()) {
+				REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &budget) == OK);
+				REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);
+				server->sync();
+				ProductionControlOutput out{};
+				REQUIRE(fixture.registry.production_control_consume(ref, serial, &out) == OK);
+				CHECK(out.result.native_error == ERR_BUSY);
+				CHECK_FALSE(out.output_generation.native_released);
+				CHECK(native.selection_sources() == initial_sources);
+				CHECK(native.selection_meshes() == initial_meshes);
+				CHECK(native.selection_materials() == initial_materials);
+				server->call_on_render_thread(callable_mp_static(&GenerationSelectionProbe::return_surface).bind(uint64_t(uintptr_t(&probe))));
+				server->sync();
+				CHECK(probe.retained_surface.is_empty());
+			}
 			for (uint32_t turn = 0; turn < (failure == 3 ? 0u : initial_leases + 2); ++turn) {
 				REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &budget) == OK);
 				REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);

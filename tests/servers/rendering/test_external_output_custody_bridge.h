@@ -74,6 +74,7 @@ public:
 	uint32_t selection_materials() const;
 	Error acquire_selection_sources(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1);
 	uint32_t selection_sources() const;
+	Error generation_returnable() const;
 	Error derive_selection_source(uint32_t, uint64_t, MeshStorage::NativeSurfaceHold &) const;
 	bool selection_source_matches(uint32_t, RID, uint32_t, RID, uint64_t, const AABB &, uint64_t) const;
 	bool selection_source_metadata_matches(uint32_t, RSE::PrimitiveType, uint64_t, const AABB &, const Vector4 &) const;

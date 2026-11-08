@@ -280,6 +280,8 @@ private:
 	Error install_generation_root(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, GDExtensionDeviceExit::Registry &, RenderingDevice &, RID, GDExtensionDeviceExit::ProductionOutputMetadataLease * = nullptr);
 	Error install_reserved_cells(uint32_t p_views, uint32_t p_reads);
 	Error install_reserved_surface_cells(uint32_t p_surfaces);
+	Error surface_acquire(uint32_t, ExternalSurfaceSelection &);
+	bool generation_surface_has_custody() const;
 	Error surface_return(ExternalSurfaceSelection &);
 	void surface_move(ExternalSurfaceSelection &, ExternalSurfaceSelection &);
 	Error return_reserved_cells();

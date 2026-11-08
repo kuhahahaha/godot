@@ -99,7 +99,7 @@ bool ExternalOutputOwner::generation_root_matches(const GDExtensionDeviceExit::P
 
 Error ExternalOutputOwner::generation_returnable(uint32_t &unused, uint32_t &returned) const {
 	unused = returned = 0;
-	if ((state != GenerationState::WITHDRAWING && state != GenerationState::RETIRING && state != GenerationState::FAULTED_RETIRING) || has_live_slots()) {
+	if ((state != GenerationState::WITHDRAWING && state != GenerationState::RETIRING && state != GenerationState::FAULTED_RETIRING) || has_live_slots() || generation_surface_has_custody()) {
 		return ERR_BUSY;
 	}
 	for (uint32_t i = 0; i < slot_count; ++i) {
@@ -766,28 +766,126 @@ void ExternalOutputOwner::read_move(ExternalPacketBinding &p_to, ExternalPacketB
 	p_from.retained_host_snapshot = false;
 }
 
+bool ExternalOutputOwner::generation_surface_has_custody() const {
+	for (uint32_t i = 0; i < surface_capacity; ++i) {
+		const auto &cell = surface_cells[i];
+		if (cell.slot == UINT32_MAX && (cell.consumer || !cell.pin.is_empty())) {
+			return true;
+		}
+	}
+	return false;
+}
+
+Error ExternalOutputOwner::surface_acquire(uint32_t p_surface, ExternalSurfaceSelection &r_surface) {
+	auto *rd = RenderingDevice::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!r_surface.is_empty()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	if (!admits_work() || config.profile != ExternalOutputConfig::INSTANCE_192 || !generation_surfaces_complete ||
+			!generation_selection_complete || !generation_materials || retained_surface_count != generation_material_count) {
+		return ERR_UNAVAILABLE;
+	}
+	if (p_surface >= retained_surface_count) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (!generation_registry || !device || !generation_root_matches(generation_pin)) {
+		return ERR_UNAUTHORIZED;
+	}
+	const auto &source = generation_materials[p_surface];
+	if (!source.geometry_source.is_valid() || source.mesh.is_null() || source.native_surface == UINT32_MAX || source.material.is_null() || !source.generation) {
+		return ERR_INVALID_DATA;
+	}
+	if (!next_surface_serial) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	uint32_t selected = UINT32_MAX;
+	for (uint32_t i = 0; i < surface_capacity; ++i) {
+		if (!surface_cells[i].consumer && surface_cells[i].pin.is_empty()) {
+			selected = i;
+			break;
+		}
+	}
+	if (selected == UINT32_MAX) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	auto &cell = surface_cells[selected];
+	const Error error = generation_registry->production_output_pin_borrow(generation_pin, *device, cell.pin);
+	if (error != OK) {
+		return error;
+	}
+	const uint64_t serial = next_surface_serial;
+	next_surface_serial = serial == UINT64_MAX ? 0 : serial + 1;
+	cell.consumer = &r_surface;
+	cell.serial = serial;
+	cell.slot = UINT32_MAX; // Generation-source custody; no slot or pass was selected.
+	cell.surface = p_surface;
+	r_surface.owner = this;
+	r_surface.serial = serial;
+	r_surface.generation = generation;
+	r_surface.mesh = source.mesh;
+	r_surface.material_selection = source.material;
+	r_surface.geometry_source = &source.geometry_source;
+	r_surface.cell = selected;
+	r_surface.native_surface = source.native_surface;
+	r_surface.flattened_surface = p_surface;
+	r_surface.profile = config.profile;
+	r_surface.primitive = source.geometry_source.get_primitive();
+	r_surface.pass_mask = config.pass_mask;
+	r_surface.surface_format = source.geometry_source.get_format();
+	r_surface.surface_aabb = source.geometry_source.get_aabb();
+	r_surface.surface_uv_scale = source.geometry_source.get_uv_scale();
+	r_surface.classification = {};
+	r_surface.material_generation = source.generation;
+	r_surface.priority = 0;
+	return OK;
+}
+
 Error ExternalOutputOwner::surface_return(ExternalSurfaceSelection &p_surface) {
+	if (device && !device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
 	if (p_surface.owner != this || p_surface.cell >= surface_capacity) {
 		return ERR_INVALID_PARAMETER;
 	}
 	auto &cell = surface_cells[p_surface.cell];
-	if (cell.consumer != &p_surface || !p_surface.serial || cell.serial != p_surface.serial ||
-			cell.slot >= slot_count || cell.surface >= slots[cell.slot].surface_count) {
+	if (cell.consumer != &p_surface || !p_surface.serial || cell.serial != p_surface.serial || p_surface.generation != generation || cell.pin.is_empty()) {
 		return ERR_INVALID_DATA;
 	}
-	auto &slot = slots[cell.slot];
-	const MeshStorage::NativeSurfaceHold *source = slot.surfaces ? &slot.surfaces[cell.surface].geometry : nullptr;
-	if (config.profile == ExternalOutputConfig::INSTANCE_192 && generation_surfaces_complete) {
-		if (!generation_materials || cell.surface >= retained_surface_count || retained_surface_count != generation_material_count) {
+	GDExtensionDeviceExit::Registry *registry = nullptr;
+	if (cell.slot == UINT32_MAX) {
+		if (config.profile != ExternalOutputConfig::INSTANCE_192 || !generation_surfaces_complete || !generation_materials ||
+				retained_surface_count != generation_material_count || cell.surface >= retained_surface_count || !generation_registry) {
 			return ERR_INVALID_DATA;
 		}
-		source = &generation_materials[cell.surface].geometry_source;
+		const auto &source = generation_materials[cell.surface];
+		if (p_surface.geometry_source != &source.geometry_source || !source.geometry_source.is_valid() ||
+				p_surface.mesh != source.mesh || p_surface.native_surface != source.native_surface || p_surface.flattened_surface != cell.surface ||
+				p_surface.material_selection != source.material || p_surface.material_generation != source.generation) {
+			return ERR_INVALID_DATA;
+		}
+		registry = generation_registry;
+	} else {
+		if (cell.slot >= slot_count || cell.surface >= slots[cell.slot].surface_count) {
+			return ERR_INVALID_DATA;
+		}
+		auto &slot = slots[cell.slot];
+		const MeshStorage::NativeSurfaceHold *source = slot.surfaces ? &slot.surfaces[cell.surface].geometry : nullptr;
+		if (config.profile == ExternalOutputConfig::INSTANCE_192 && generation_surfaces_complete) {
+			if (!generation_materials || cell.surface >= retained_surface_count || retained_surface_count != generation_material_count) {
+				return ERR_INVALID_DATA;
+			}
+			source = &generation_materials[cell.surface].geometry_source;
+		}
+		if (p_surface.generation != generation || !slot.surfaces || p_surface.geometry_source != source ||
+				!slot.original_registry || cell.pin.is_empty()) {
+			return ERR_INVALID_DATA;
+		}
+		registry = slot.original_registry;
 	}
-	if (p_surface.generation != generation || !slot.surfaces || p_surface.geometry_source != source ||
-			!slot.original_registry || cell.pin.is_empty()) {
-		return ERR_INVALID_DATA;
-	}
-	const Error error = slot.original_registry->production_output_unpin(cell.pin);
+	const Error error = registry->production_output_unpin(cell.pin);
 	if (error != OK) {
 		return error;
 	}

@@ -257,6 +257,10 @@ Error ExternalLinkedOwnerTest::acquire_selection_sources(GDExtensionDeviceExit::
 uint32_t ExternalLinkedOwnerTest::selection_sources() const {
 	return owner ? owner->retained_surface_count : 0;
 }
+Error ExternalLinkedOwnerTest::generation_returnable() const {
+	uint32_t unused = 0, returned = 0;
+	return owner ? owner->generation_returnable(unused, returned) : ERR_DOES_NOT_EXIST;
+}
 Error ExternalLinkedOwnerTest::derive_selection_source(uint32_t index, uint64_t mask, MeshStorage::NativeSurfaceHold &hold) const {
 	if (!owner || index >= owner->retained_surface_count) {
 		return ERR_DOES_NOT_EXIST;
