@@ -1,0 +1,57 @@
+HEIGHTFIELD_SOURCE_SELECTION_CASE renderer=mobile case=cast_shadow_off
+COMMAND ["/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "mobile", "--path", "/Users/macbookair/Documents/Work/godot_scene_native_20261106/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.fdcbb4cbc (2026-11-07 18:45:40 UTC) - https://godotengine.org
+Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M5 (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"driver":"Apple M5 (Apple9)","first_raw":0.5,"pass":true,"second_raw":0.5,"source_selection_case":0,"source_selection_control_rasterized":true,"source_selection_distinct_targets":true,"source_selection_scene_cull":true}
+
+HEIGHTFIELD_SOURCE_SELECTION_CASE renderer=mobile case=alpha_discard
+COMMAND ["/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "mobile", "--path", "/Users/macbookair/Documents/Work/godot_scene_native_20261106/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.fdcbb4cbc (2026-11-07 18:45:40 UTC) - https://godotengine.org
+Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M5 (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"driver":"Apple M5 (Apple9)","first_raw":0.5,"pass":true,"second_raw":0.0,"source_selection_case":1,"source_selection_control_rasterized":true,"source_selection_distinct_targets":true,"source_selection_scene_cull":true}
+
+HEIGHTFIELD_SOURCE_SELECTION_CASE renderer=mobile case=hidden
+COMMAND ["/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "mobile", "--path", "/Users/macbookair/Documents/Work/godot_scene_native_20261106/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.fdcbb4cbc (2026-11-07 18:45:40 UTC) - https://godotengine.org
+Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M5 (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"driver":"Apple M5 (Apple9)","first_raw":0.5,"pass":true,"second_raw":0.0,"source_selection_case":2,"source_selection_control_rasterized":true,"source_selection_distinct_targets":true,"source_selection_scene_cull":true}
+
+HEIGHTFIELD_SOURCE_SELECTION_CASE renderer=mobile case=particles_excluded
+COMMAND ["/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "mobile", "--path", "/Users/macbookair/Documents/Work/godot_scene_native_20261106/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.fdcbb4cbc (2026-11-07 18:45:40 UTC) - https://godotengine.org
+Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M5 (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"driver":"Apple M5 (Apple9)","first_raw":0.5,"pass":true,"second_raw":0.0,"source_selection_case":3,"source_selection_control_rasterized":true,"source_selection_distinct_targets":true,"source_selection_scene_cull":true}
+
+HEIGHTFIELD_SOURCE_SELECTION_CASE renderer=forward_plus case=cast_shadow_off
+COMMAND ["/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "forward_plus", "--path", "/Users/macbookair/Documents/Work/godot_scene_native_20261106/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.fdcbb4cbc (2026-11-07 18:45:40 UTC) - https://godotengine.org
+Metal 4.0 - Forward+ - Using Device #0: Apple - Apple M5 (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"driver":"Apple M5 (Apple9)","first_raw":0.5,"pass":true,"second_raw":0.5,"source_selection_case":0,"source_selection_control_rasterized":true,"source_selection_distinct_targets":true,"source_selection_scene_cull":true}
+
+HEIGHTFIELD_SOURCE_SELECTION_CASE renderer=forward_plus case=alpha_discard
+COMMAND ["/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "forward_plus", "--path", "/Users/macbookair/Documents/Work/godot_scene_native_20261106/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.fdcbb4cbc (2026-11-07 18:45:40 UTC) - https://godotengine.org
+Metal 4.0 - Forward+ - Using Device #0: Apple - Apple M5 (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"driver":"Apple M5 (Apple9)","first_raw":0.5,"pass":true,"second_raw":0.0,"source_selection_case":1,"source_selection_control_rasterized":true,"source_selection_distinct_targets":true,"source_selection_scene_cull":true}
+
+HEIGHTFIELD_SOURCE_SELECTION_CASE renderer=forward_plus case=hidden
+COMMAND ["/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "forward_plus", "--path", "/Users/macbookair/Documents/Work/godot_scene_native_20261106/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.fdcbb4cbc (2026-11-07 18:45:40 UTC) - https://godotengine.org
+Metal 4.0 - Forward+ - Using Device #0: Apple - Apple M5 (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"driver":"Apple M5 (Apple9)","first_raw":0.5,"pass":true,"second_raw":0.0,"source_selection_case":2,"source_selection_control_rasterized":true,"source_selection_distinct_targets":true,"source_selection_scene_cull":true}
+
+HEIGHTFIELD_SOURCE_SELECTION_CASE renderer=forward_plus case=particles_excluded
+COMMAND ["/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "forward_plus", "--path", "/Users/macbookair/Documents/Work/godot_scene_native_20261106/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.fdcbb4cbc (2026-11-07 18:45:40 UTC) - https://godotengine.org
+Metal 4.0 - Forward+ - Using Device #0: Apple - Apple M5 (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"driver":"Apple M5 (Apple9)","first_raw":0.5,"pass":true,"second_raw":0.0,"source_selection_case":3,"source_selection_control_rasterized":true,"source_selection_distinct_targets":true,"source_selection_scene_cull":true}
+
+HEIGHTFIELD_SOURCE_SELECTION_PASS cases=8
