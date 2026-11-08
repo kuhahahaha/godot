@@ -690,6 +690,7 @@ protected:
 public:
 	// Native preparation only; does not qualify source, bounds, history or GPU support.
 	Error external_pipeline_prepare(const RendererRD::ExternalSurfaceSelection &p_surface, RendererRD::ExternalPipelinePreparation &r_preparation);
+	Error external_pipeline_prepare_for_view(const RendererRD::ExternalSurfaceSelection &, const RendererRD::ExternalPacketViewLease &, const RendererRD::ExternalPacketPipelineRequest &, const RendererRD::ExternalPipelinePreparation *&);
 
 	static RenderForwardMobile *get_singleton() { return singleton; }
 

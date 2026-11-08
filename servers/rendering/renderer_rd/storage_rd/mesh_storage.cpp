@@ -1011,6 +1011,128 @@ RD::NativeImmutableHold *MeshStorage::_native_hold_transfer_source(NativeSurface
 	return &hold.physical;
 }
 
+Error MeshStorage::_native_hold_prepare_tuple_directory(NativeSurfaceHold &hold, uint32_t limit) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (hold.physical_transferred || hold.tuple_directory_prepared) {
+		return OK;
+	}
+	if (!hold.surface || hold.metadata_returned || hold.metadata_return_active || !hold.retirement_group.is_empty()) {
+		return ERR_INVALID_DATA;
+	}
+	if (!hold.surface->immutable_retired) {
+		return OK; // MeshStorage still owns the complete live directory.
+	}
+	// VA factories use version_lock -> RD. No Registry or RD lock here.
+	const Error frozen = _native_hold_freeze_directory(hold);
+	if (frozen != OK) {
+		return frozen;
+	}
+	auto rollback = [&](Error error) {
+		hold.tuple_directory_roots.clear();
+		const Error thawed = _native_hold_thaw_directory(hold);
+		return thawed == OK ? error : thawed;
+	};
+	uint32_t count = 0;
+	Error error = _native_hold_retirement_root_count(hold, count);
+	if (error != OK) {
+		return rollback(error);
+	}
+	for (uint32_t i = 0; i < count; ++i) {
+		RID root;
+		error = _native_hold_retirement_root_at(hold, i, root);
+		if (error != OK) {
+			return rollback(error);
+		}
+		if (root.is_valid() && !hold.tuple_directory_roots.has(root)) {
+			if (uint32_t(hold.tuple_directory_roots.size()) == limit) {
+				return rollback(ERR_OUT_OF_MEMORY);
+			}
+			if (hold.tuple_directory_roots.push_back(root)) {
+				return rollback(ERR_OUT_OF_MEMORY);
+			}
+		}
+	}
+	// RD atomically acquires the complete closure, verifies it contains every
+	// original selected physical share, then replaces that hold. On refusal the
+	// original hold is untouched and the temporary hold is fully rolled back.
+	error = hold.device->_native_immutable_hold_expand_directory(hold.tuple_directory_roots, hold.physical, limit);
+	if (error != OK) {
+		return rollback(error);
+	}
+	hold.retirement_root_count = count;
+	hold.retirement_mark_cursor = 0;
+	hold.tuple_directory_prepared = true;
+	return OK;
+}
+
+RD::NativeImmutableHold *MeshStorage::_native_hold_tuple_transfer_source(NativeSurfaceHold &hold) {
+	if (hold.tuple_directory_prepared && hold.directory_frozen && hold.retirement_group.is_empty() &&
+			hold.surface && hold.surface->immutable_retired && !hold.physical_transferred && !hold.metadata_returned && hold.physical.is_valid()) {
+		return &hold.physical;
+	}
+	return _native_hold_transfer_live_source(hold);
+}
+
+Error MeshStorage::_native_hold_capture_tuple_directory(GDExtensionDeviceExit::ProductionOutputPin &pin, uint64_t group, NativeSurfaceHold &hold) {
+	if (!hold.tuple_directory_prepared) {
+		return OK;
+	}
+	if (!hold.device || !hold.directory_frozen || hold.physical.is_active() || hold.metadata_returned || !hold.surface || !hold.surface->immutable_retired) {
+		return ERR_INVALID_DATA;
+	}
+	if (!hold.retirement_group.is_empty()) {
+		return OK;
+	}
+	// Stamp only after the actual whole-directory hold was moved into this
+	// original prepaid group; RD verifies every original directory root.
+	return hold.device->_production_output_directory_bind_adopted_locked(pin, group, hold.tuple_directory_roots, hold.retirement_group);
+}
+
+Error MeshStorage::_native_hold_prepare_tuple_directory_return(GDExtensionDeviceExit::ProductionOutputPin &pin, NativeSurfaceHold &hold, const GDExtensionProductionServiceBudgetV1 &budget, GDExtensionDeviceExit::ProductionServiceUsage &usage) {
+	if (!hold.tuple_directory_prepared || hold.tuple_directory_return_ready) {
+		return OK;
+	}
+	if (!hold.device || !hold.device->native_immutable_is_render_thread() || !hold.physical_transferred || hold.retirement_group.is_empty()) {
+		return ERR_INVALID_DATA;
+	}
+	if (hold.surface && hold.surface->immutable_holds > 1) {
+		// Every wrapper sharing the batch must return its metadata share before
+		// the shared native group starts release. Reuse the original OBSERVE
+		// proof/budget check; the complete directory remains frozen until now.
+		const Error admitted = hold.device->_production_output_directory_mark_root(pin, hold.retirement_group, RID(), false, budget, usage);
+		if (admitted != OK) {
+			return admitted;
+		}
+		auto *surface = hold.surface;
+		surface->version_lock.lock();
+		CRASH_COND(!surface->output_directory_holds || surface->immutable_holds <= 1);
+		--surface->output_directory_holds;
+		--surface->immutable_holds;
+		hold.directory_frozen = false;
+		hold.surface = nullptr;
+		hold.metadata_returned = true;
+		surface->version_lock.unlock();
+	}
+	if (hold.surface) {
+		bool done = false;
+		const Error marked = _native_hold_mark_next_retirement_root(pin, hold, budget, usage, done);
+		if (marked != OK || !done) {
+			return marked == OK ? ERR_BUSY : marked;
+		}
+	}
+	hold.tuple_directory_return_ready = true;
+	return OK;
+}
+
+RD::NativeImmutableHold *MeshStorage::_native_hold_transfer_live_source(NativeSurfaceHold &hold) {
+	if (!hold.surface || hold.surface->immutable_retired || hold.metadata_returned || hold.directory_frozen || !hold.retirement_group.is_empty()) {
+		return nullptr;
+	}
+	return _native_hold_transfer_source(hold);
+}
+
 Error MeshStorage::_native_hold_mark_transferred(NativeSurfaceHold &hold) {
 	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
 		return ERR_UNAUTHORIZED;
@@ -1267,6 +1389,8 @@ Error MeshStorage::_native_hold_finish_return(NativeSurfaceHold &hold) {
 	hold.physical_transferred = hold.metadata_returned = false;
 	hold.retirement_directory_returned = false;
 	hold.live_snapshot_transferred = hold.live_snapshot_external = false;
+	hold.tuple_directory_prepared = hold.tuple_directory_return_ready = false;
+	hold.tuple_directory_roots.clear();
 	return OK;
 }
 

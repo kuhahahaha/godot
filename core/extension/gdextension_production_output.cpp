@@ -43,7 +43,7 @@ ProductionOutputPreparationScope::~ProductionOutputPreparationScope() {
 	}
 }
 
-Error Registry::production_output_preparation_validate_locked(ProductionOutputPin &pin, RenderingDevice &rd, uint32_t action_ordinal, uint32_t surface_ordinal, uint64_t group, RID *&root, RendererRD::ExternalPipelinePreparation *&preparation, const ProductionOutputPreparationScope *scope) {
+Error Registry::production_output_preparation_validate_locked(ProductionOutputPin &pin, RenderingDevice &rd, uint32_t action_ordinal, uint32_t surface_ordinal, uint64_t group, RID *&root, RendererRD::ExternalPipelinePreparation *&preparation, const ProductionOutputPreparationScope *scope, uint32_t preparation_index, const RendererRD::ExternalPacketViewLease *selected_view, bool retained_tuple) {
 	if (!rd.is_main_instance || RenderingDevice::get_singleton() != &rd || rd.render_thread_id != Thread::get_caller_id() ||
 			!production_output_pin_matches_locked(pin, { instance, pin.request_serial }, rd)) {
 		return ERR_UNAUTHORIZED;
@@ -88,9 +88,24 @@ Error Registry::production_output_preparation_validate_locked(ProductionOutputPi
 	}
 	RID *original_root = nullptr;
 	if (!RendererRD::ParticlesStorage::_production_output_preparation_matches(action.output_particles, action.output_generation, action.output_slot,
-				action.output_lease, surface_ordinal, group, pin, rd, original_root, preparation, scope) ||
+				action.output_lease, surface_ordinal, group, pin, rd, original_root, preparation, scope, false, preparation_index) ||
 			!original_root || preparation->owner->slots[action.output_slot].original_registry != this || preparation->owner->slots[action.output_slot].original_action_ordinal != action_ordinal || !RendererRD::ParticlesStorage::_production_output_owner_matches(ProductionOutputOwnerKind::SLOT, action.output_particles, action.output_generation, action.output_slot, action.output_lease, pin, rd, { instance, request.serial })) {
 		return ERR_UNAUTHORIZED;
+	}
+	const auto lease_state = preparation->owner->slots[action.output_slot].state;
+	const bool packet = lease_state == RendererRD::ExternalOutputOwner::LeaseState::SEALED_RECORDED || lease_state == RendererRD::ExternalOutputOwner::LeaseState::ADOPTED;
+	if ((packet && !selected_view) || (selected_view && !preparation->owner->preparation_view_matches(*selected_view, action.output_slot))) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (retained_tuple) {
+		if (!selected_view || scope || preparation->tuple_state == RendererRD::ExternalPipelinePreparation::TupleState::UNSELECTED) {
+			return ERR_UNAUTHORIZED;
+		}
+		root = original_root;
+		return OK; // Reuse authenticates current authority; it grants no factory.
+	}
+	if (preparation->finish_complete) {
+		return ERR_ALREADY_IN_USE;
 	}
 	uint32_t headers = 0, members = 0;
 	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
@@ -118,6 +133,12 @@ Error Registry::production_output_preparation_validate_locked(ProductionOutputPi
 }
 
 Error Registry::production_output_preparation_begin(ProductionOutputPin &pin, RenderingDevice &rd, uint32_t action_ordinal, uint32_t surface_ordinal, uint64_t group, ProductionOutputPreparationScope &scope) {
+	return production_output_preparation_begin_internal(pin, rd, action_ordinal, surface_ordinal, group, scope, UINT32_MAX, nullptr);
+}
+Error Registry::production_output_preparation_begin_row(ProductionOutputPin &pin, RenderingDevice &rd, uint32_t action_ordinal, uint32_t source_surface, uint32_t preparation_index, uint64_t group, ProductionOutputPreparationScope &scope, const RendererRD::ExternalPacketViewLease *view) {
+	return production_output_preparation_begin_internal(pin, rd, action_ordinal, source_surface, group, scope, preparation_index, view);
+}
+Error Registry::production_output_preparation_begin_internal(ProductionOutputPin &pin, RenderingDevice &rd, uint32_t action_ordinal, uint32_t surface_ordinal, uint64_t group, ProductionOutputPreparationScope &scope, uint32_t preparation_index, const RendererRD::ExternalPacketViewLease *selected_view) {
 	Lock lock(*this);
 	if (!rd.native_immutable_is_render_thread()) {
 		return ERR_UNAUTHORIZED;
@@ -130,7 +151,7 @@ Error Registry::production_output_preparation_begin(ProductionOutputPin &pin, Re
 	}
 	RID *root = nullptr;
 	RendererRD::ExternalPipelinePreparation *row = nullptr;
-	const Error error = production_output_preparation_validate_locked(pin, rd, action_ordinal, surface_ordinal, group, root, row);
+	const Error error = production_output_preparation_validate_locked(pin, rd, action_ordinal, surface_ordinal, group, root, row, nullptr, preparation_index, selected_view);
 	if (error != OK) {
 		return error;
 	}
@@ -160,6 +181,8 @@ Error Registry::production_output_preparation_begin(ProductionOutputPin &pin, Re
 	scope.thread = Thread::get_caller_id();
 	scope.action_ordinal = action_ordinal;
 	scope.surface_ordinal = surface_ordinal;
+	scope.preparation_index = uint32_t(row - row->owner->preparation_rows);
+	scope.selected_view = selected_view;
 	// Only the exact authenticated closed original row is opened. Its root,
 	// pin, group and native prefixes remain in their original owner storage.
 	row->pipeline_scope = &scope;
@@ -186,7 +209,7 @@ Error Registry::production_output_preparation_cleanup_matches_locked(const Produ
 	const auto &action = original.actions[scope.action_ordinal];
 	const auto &pin_row = original.uses[scope.pin->cell_index];
 	if (action.request != &original || action.declaration.action_ordinal != scope.action_ordinal ||
-			action.declaration.action_kind != GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1 || action.output_state != ProductionActionCell::OutputState::BOUND ||
+			action.declaration.action_kind != GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1 || (action.output_state != ProductionActionCell::OutputState::BOUND && action.output_state != ProductionActionCell::OutputState::RETIRING && action.output_state != ProductionActionCell::OutputState::UNKNOWN) ||
 			action.output_root != scope.root_serial || action.output_particles != scope.original_particles || action.output_generation != scope.original_generation ||
 			action.output_slot != scope.original_slot || action.output_lease != scope.original_lease ||
 			!action.output_source_prepared || action.output_source != scope.original_source || action.output_source_generation != scope.source_generation ||
@@ -200,11 +223,14 @@ Error Registry::production_output_preparation_cleanup_matches_locked(const Produ
 	RID *root = nullptr;
 	RendererRD::ExternalPipelinePreparation *row = nullptr;
 	if (!RendererRD::ParticlesStorage::_production_output_preparation_matches(scope.original_particles, scope.original_generation, scope.original_slot,
-				scope.original_lease, scope.surface_ordinal, scope.group, *scope.pin, rd, root, row, &scope, true) ||
+				scope.original_lease, scope.surface_ordinal, scope.group, *scope.pin, rd, root, row, &scope, true, scope.preparation_index) ||
 			!RendererRD::ParticlesStorage::_production_output_owner_matches(ProductionOutputOwnerKind::SLOT, scope.original_particles, scope.original_generation, scope.original_slot, scope.original_lease, *scope.pin, rd, { instance, scope.request_serial }) ||
 			root != scope.original_root || row != scope.row || row->owner->slots[scope.original_slot].original_registry != this ||
 			row->owner->slots[scope.original_slot].original_action_ordinal != scope.action_ordinal || row->source_geometry != scope.original_geometry ||
 			row->source_material != scope.original_material || row->source_material_generation != scope.original_material_generation) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (scope.selected_view && !row->owner->preparation_view_matches(*scope.selected_view, scope.original_slot, true)) {
 		return ERR_UNAUTHORIZED;
 	}
 	request = &original;
@@ -221,7 +247,7 @@ Error Registry::production_output_preparation_matches_locked(const ProductionOut
 	// factory. CloseOldWork remains usable after cancellation or withdrawal.
 	RID *root = nullptr;
 	RendererRD::ExternalPipelinePreparation *row = nullptr;
-	const Error error = production_output_preparation_validate_locked(*scope.pin, rd, scope.action_ordinal, scope.surface_ordinal, scope.group, root, row, &scope);
+	const Error error = production_output_preparation_validate_locked(*scope.pin, rd, scope.action_ordinal, scope.surface_ordinal, scope.group, root, row, &scope, scope.preparation_index, scope.selected_view);
 	if (error != OK) {
 		return error;
 	}
@@ -232,13 +258,39 @@ Error Registry::production_output_preparation_matches_locked(const ProductionOut
 	return OK;
 }
 
+Error Registry::production_output_preparation_finish(ProductionOutputPreparationScope &scope) {
+	{
+		Lock lock(*this);
+		ProductionRequest *request = nullptr;
+		if (!scope.device) {
+			return ERR_UNAUTHORIZED;
+		}
+		const Error authenticated = production_output_preparation_cleanup_matches_locked(scope, *scope.device, request);
+		if (authenticated != OK) {
+			return authenticated;
+		}
+	}
+	// The retained scope pins request and row throughout the lock-free directory
+	// handshake. Mesh VA lock ordering forbids freezing under Registry/RD locks.
+	const Error prepared = RendererRD::ParticlesStorage::_production_output_preparation_prepare_finish_row(*scope.row);
+	Lock lock(*this);
+	ProductionRequest *request = nullptr;
+	const Error authenticated = production_output_preparation_cleanup_matches_locked(scope, *scope.device, request);
+	if (authenticated != OK) {
+		return authenticated;
+	}
+	scope.row->finish_error = prepared != OK ? prepared : RendererRD::ParticlesStorage::_production_output_preparation_finish_locked(scope, *scope.device, *request);
+	return scope.row->finish_error;
+}
+
 void Registry::production_output_preparation_end(ProductionOutputPreparationScope &scope) {
+	// Finish authenticates before and after its lock-free Mesh handshake.
+	production_output_preparation_finish(scope);
 	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	CRASH_COND(!scope.device || production_output_preparation_cleanup_matches_locked(scope, *scope.device, request) != OK);
-	// This ends only the synchronous extent. The stable row, original pin,
-	// group, root and failed/successful native prefixes stay in their owner.
-	// Mandatory batch capture/adopt/seal is a separate, still-required step.
+	// CloseOldWork is mandatory even after cancellation, backend failure or a
+	// caller omitting explicit finish. Refusal preserves every stable wrapper.
 	scope.row->source_sealed = true;
 	scope.row->pipeline_scope = nullptr;
 	production_output_preparation_scope = scope.previous;
@@ -251,6 +303,8 @@ void Registry::production_output_preparation_end(ProductionOutputPreparationScop
 	scope.original_root = nullptr;
 	scope.row = nullptr;
 	scope.original_source = nullptr;
+	scope.selected_view = nullptr;
+	scope.preparation_index = UINT32_MAX;
 }
 
 namespace {

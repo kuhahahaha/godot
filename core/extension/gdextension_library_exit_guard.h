@@ -40,6 +40,7 @@ namespace RendererRD {
 class ParticlesStorage;
 class ExternalOutputOwner;
 class ExternalPipelinePreparation;
+class ExternalPacketViewLease;
 } //namespace RendererRD
 template <class T>
 class Ref;
@@ -629,11 +630,15 @@ public:
 	// callbacks may borrow an existing scope without making the mutex recursive.
 	class Lock {
 	public:
-		enum Mode { BLOCK, TRY_OR_BORROW, BLOCK_OR_BORROW };
+		enum Mode { BLOCK,
+			TRY_OR_BORROW,
+			BLOCK_OR_BORROW };
+
 	private:
 		Registry &owner;
 		mutable RegistryMutexOwnership ownership;
 		bool borrowed = false;
+
 	public:
 		explicit Lock(Registry &p_owner, Mode p_mode = BLOCK);
 		~Lock();
@@ -955,9 +960,12 @@ private:
 	static thread_local ProductionPhysicalFrame *production_physical_frame;
 	static thread_local ProductionOutputPreparationScope *production_output_preparation_scope;
 	Error production_output_preparation_begin(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint64_t, ProductionOutputPreparationScope &);
+	Error production_output_preparation_begin_row(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint32_t, uint64_t, ProductionOutputPreparationScope &, const ::RendererRD::ExternalPacketViewLease * = nullptr);
+	Error production_output_preparation_begin_internal(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint64_t, ProductionOutputPreparationScope &, uint32_t, const ::RendererRD::ExternalPacketViewLease *);
+	Error production_output_preparation_finish(ProductionOutputPreparationScope &);
 	void production_output_preparation_end(ProductionOutputPreparationScope &);
 	Error production_output_preparation_matches_locked(const ProductionOutputPreparationScope &, RenderingDevice &, ProductionRequest *&);
-	Error production_output_preparation_validate_locked(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint64_t, RID *&, ::RendererRD::ExternalPipelinePreparation *&, const ProductionOutputPreparationScope * = nullptr);
+	Error production_output_preparation_validate_locked(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint64_t, RID *&, ::RendererRD::ExternalPipelinePreparation *&, const ProductionOutputPreparationScope * = nullptr, uint32_t = UINT32_MAX, const ::RendererRD::ExternalPacketViewLease * = nullptr, bool = false);
 	// CloseOldWork: exact retained scope only; does not authorize a factory.
 	Error production_output_preparation_cleanup_matches_locked(const ProductionOutputPreparationScope &, RenderingDevice &, ProductionRequest *&);
 	// Core-only ambient bridge. Uses the original executing RECORD frame;

@@ -201,7 +201,8 @@ class ProductionOutputPreparationScope final {
 	uint64_t original_generation = 0, original_lease = 0, original_material_generation = 0, source_generation = 0;
 	uint32_t original_slot = UINT32_MAX, source_use = UINT32_MAX, first_source_use = UINT32_MAX, source_use_count = 0;
 	uint64_t request_serial = 0, root_serial = 0, group = 0, thread = 0;
-	uint32_t action_ordinal = UINT32_MAX, surface_ordinal = UINT32_MAX;
+	uint32_t action_ordinal = UINT32_MAX, surface_ordinal = UINT32_MAX, preparation_index = UINT32_MAX;
+	const ::RendererRD::ExternalPacketViewLease *selected_view = nullptr;
 
 public:
 	ProductionOutputPreparationScope(const ProductionOutputPreparationScope &) = delete;

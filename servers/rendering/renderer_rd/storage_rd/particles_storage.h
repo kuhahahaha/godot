@@ -46,6 +46,7 @@
 namespace GDExtensionDeviceExit {
 enum class ProductionOutputOwnerKind : uint8_t;
 class ProductionOutputPin;
+class ProductionRequest;
 } //namespace GDExtensionDeviceExit
 
 class RenderDataRD;
@@ -554,7 +555,12 @@ public:
 	Error _external_pipeline_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1, RID, uint32_t, uint32_t, ExternalPipelinePreparation &, uint32_t p_max_resources);
 	Error _external_preparation_bank_reserve_owned_prefix(GDExtensionProductionPhysicalContextRefV1, RID, uint32_t, uint32_t p_max_resources);
 	Error _external_pipeline_reserve_owned_prefix(GDExtensionProductionPhysicalContextRefV1, RID, uint32_t, uint32_t, ExternalPipelinePreparation &, uint32_t p_max_resources);
-	static bool _production_output_preparation_matches(RID, uint64_t, uint32_t, uint64_t, uint32_t, uint64_t, const GDExtensionDeviceExit::ProductionOutputPin &, RenderingDevice &, RID *&, ExternalPipelinePreparation *&, const GDExtensionDeviceExit::ProductionOutputPreparationScope * = nullptr, bool p_cleanup = false);
+	using ExternalPreparationBody = Error (*)(void *, const ExternalSurfaceSelection &, ExternalPipelinePreparation &);
+	Error particles_external_prepare_pipeline(const ExternalSurfaceSelection &, const ExternalPacketViewLease &, const ExternalPacketPipelineRequest &, ExternalPreparationBody, void *, const ExternalPipelinePreparation *&);
+	static Error _production_output_preparation_prepare_finish_row(ExternalPipelinePreparation &);
+	static Error _production_output_preparation_finish_locked(GDExtensionDeviceExit::ProductionOutputPreparationScope &, RenderingDevice &, GDExtensionDeviceExit::ProductionRequest &);
+	static Error _production_output_preparation_finish_row_locked(ExternalPipelinePreparation &, RenderingDevice &, GDExtensionDeviceExit::ProductionRequest &, uint64_t);
+	static bool _production_output_preparation_matches(RID, uint64_t, uint32_t, uint64_t, uint32_t, uint64_t, const GDExtensionDeviceExit::ProductionOutputPin &, RenderingDevice &, RID *&, ExternalPipelinePreparation *&, const GDExtensionDeviceExit::ProductionOutputPreparationScope * = nullptr, bool p_cleanup = false, uint32_t p_preparation_index = UINT32_MAX);
 	void particles_external_create_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCreateInputV1 &, GDExtensionOutputCreateResultV1 &);
 	void particles_external_metadata_query(const GDExtensionOutputMetadataQueryInputV1 &, GDExtensionOutputMetadataQueryResultV1 &);
 	void particles_external_create_typed_v3(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCreateInputV3 &, GDExtensionOutputCreateResultV1 &);

@@ -36,6 +36,7 @@
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
 
 namespace RendererRD {
+struct ExternalPacketPipelineRequest;
 class ParticlesStorage;
 class ExternalOutputOwner;
 // Explicit private component setup only. Pins are still issued by the original
@@ -84,6 +85,10 @@ public:
 	bool preparation_pipeline_reservations_match(uint32_t p_slot) const;
 	bool preparation_bank_reservations_match(uint32_t, uint32_t, uint32_t) const;
 	uint64_t preparation_bank_group(uint32_t, uint32_t, uint32_t) const;
+	Error preparation_tuple_select(uint32_t, uint32_t, const ExternalPacketPipelineRequest &, uint32_t &, bool &);
+	bool preparation_tuple_matches(uint32_t, const ExternalPacketPipelineRequest &) const;
+	bool preparation_tuple_finished(uint32_t) const;
+	RID preparation_tuple_root(uint32_t) const;
 	uint64_t preparation_pipeline_group(uint32_t, uint32_t) const;
 	bool preparation_scope_link_matches(uint32_t, uint32_t, const GDExtensionDeviceExit::ProductionOutputPreparationScope *, bool) const;
 	Error preparation_row_preflight(uint32_t, uint32_t);

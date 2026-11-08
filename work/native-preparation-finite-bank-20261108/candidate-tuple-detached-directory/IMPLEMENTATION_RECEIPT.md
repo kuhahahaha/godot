@@ -1,0 +1,13 @@
+# Tuple mandatory finish and detached directory integration
+
+Implemented against 86a59ee22e. Exact tuple keys and source identity select prepaid stable P bank rows; synchronous renderer wrappers finish original geometry/material physical batches and owned pipeline seal. Mandatory scope destruction and original OBSERVE recover retained prefixes. Detached retained Surfaces freeze their original complete directory outside Registry/RD locks, expand the actual immutable hold within original G, bind adopted original roots, mark owned retirement roots, return shared/last metadata and settle original group before deleting metadata. No extra group, fake hold, source/view issuer or completion flag is introduced.
+
+Real regression modes retain a native vertex buffer and two genuine VA Versions; one VA is absent from selected closure and must be included in complete directory adoption. Success, in-scope cancellation/withdraw, and actual pipeline-factory refusal all settle original owner/driver obligations. A private fixture only; no GPU/public view admission proof.
+
+Full build exposed missing bridge forward declaration; fixed. Execution exposed incorrect immediate failed-factory expectation and actual one-pass-budget starvation: caller spent before original directory service spent again. Fixed by letting directory service charge its own pass, while begin/finish metadata retain original charges. Temporary diagnostics and an attempted ordering-only change were removed. P2 failed-construction VA cleanup fixed and independently reviewed.
+
+Exact final source rebuilt successfully and combined57 cases/18661 assertions pass, process0. Narrow one-shot detached transfer refusal gives eight target assertion failures, process1, and original OBSERVE still completes cleanup; exact source restored/rebuilt/rerun57/18661 process0. Earlier stuck-cleanup crashes are retained as defect evidence, never counted as valid RED. FINAL_RECEIPT.json records source, binary, command/log hashes.
+
+Independent reviews: frozen tuple INDEPENDENT_REVIEW found retained-source blocker; detached-directory INDEPENDENT_REVIEW, regression review, and FIX_REVIEW cover corrected semantics and exact execution-discovered fixes. Author execution is distinct from reviewer source inspection.
+
+Task2 remains partial: prospective pre-effect fixed-point G closure and ready-only shader integration remain open, including future VA/pipeline dependencies and original default/material/sampler/texture owners. Shared-holder interleavings, external/LOD branches and real GPU visibility/no-follow-up-draw acceptance are not established. Public admission stays closed.

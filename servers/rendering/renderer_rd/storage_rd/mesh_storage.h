@@ -490,6 +490,9 @@ public:
 		RD::NativeOutputGroupBinding retirement_group;
 		uint32_t retirement_root_count = 0, retirement_mark_cursor = 0;
 		bool retirement_directory_returned = false;
+		// Whole detached directory retained in the same prepaid tuple geometry G.
+		bool tuple_directory_prepared = false, tuple_directory_return_ready = false;
+		Vector<RID> tuple_directory_roots;
 		friend class MeshStorage;
 		Mesh::Surface *surface = nullptr;
 		RenderingDevice *device = nullptr;
@@ -540,6 +543,10 @@ public:
 			retirement_root_count = other.retirement_root_count;
 			retirement_mark_cursor = other.retirement_mark_cursor;
 			other.retirement_root_count = other.retirement_mark_cursor = 0;
+			tuple_directory_prepared = other.tuple_directory_prepared;
+			tuple_directory_return_ready = other.tuple_directory_return_ready;
+			tuple_directory_roots = std::move(other.tuple_directory_roots);
+			other.tuple_directory_prepared = other.tuple_directory_return_ready = false;
 			retirement_directory_returned = other.retirement_directory_returned;
 			other.retirement_directory_returned = false;
 			other.physical_transferred = other.metadata_returned = other.metadata_return_active = false;
@@ -573,6 +580,12 @@ private:
 	// Only synchronous original Core group capture may borrow this address.
 	// Core must move the actual hold, never save a wrapper pointer or clone RIDs.
 	static RD::NativeImmutableHold *_native_hold_transfer_source(NativeSurfaceHold &);
+	static RD::NativeImmutableHold *_native_hold_transfer_live_source(NativeSurfaceHold &);
+	// Prepare outside Registry/RD locks; capture only after actual batch adoption.
+	static Error _native_hold_prepare_tuple_directory(NativeSurfaceHold &, uint32_t);
+	static RD::NativeImmutableHold *_native_hold_tuple_transfer_source(NativeSurfaceHold &);
+	static Error _native_hold_capture_tuple_directory(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, NativeSurfaceHold &);
+	static Error _native_hold_prepare_tuple_directory_return(GDExtensionDeviceExit::ProductionOutputPin &, NativeSurfaceHold &, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);
 	static Error _native_hold_mark_transferred(NativeSurfaceHold &);
 	static Error _native_hold_begin_return(NativeSurfaceHold &);
 	// Freeze only a detached old Surface, outside Registry/RD locks. Live

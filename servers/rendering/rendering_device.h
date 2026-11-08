@@ -1724,12 +1724,15 @@ private:
 	Error _production_output_owned_storage_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, uint32_t, BitField<StorageBufferUsage>, RID &, NativeDisposalWitness &);
 	Error _production_output_owned_uniform_set_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, const VectorView<Uniform> &, RID, uint32_t, RID &, NativeDisposalWitness &);
 	Error _production_output_owned_seal(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);
+	Error _production_output_owned_seal_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t, uint64_t);
 	Error _production_output_owned_create_preflight_locked(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, GDExtensionDeviceExit::ProductionRequest *&);
 	Error _production_output_owned_bind_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t, uint64_t, uint32_t, const NativeDisposalWitness &);
 	Error _production_output_owned_bind(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, const NativeDisposalWitness &);
 	Error _production_output_owned_cancel_unbound(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);
 	bool _production_output_callback_supported(RID);
 	void _production_output_set_material_origin(RID, RID, uint64_t);
+	Error _native_immutable_hold_expand_directory(const VectorView<RID> &, NativeImmutableHold &, uint32_t);
+	Error _production_output_directory_bind_adopted_locked(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, const VectorView<RID> &, NativeOutputGroupBinding &);
 	Error _production_output_directory_capture(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, const VectorView<RID> &, uint32_t, NativeOutputGroupBinding &);
 	Error _production_output_directory_return(GDExtensionDeviceExit::ProductionOutputPin &, NativeOutputGroupBinding &, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);
 	Error _production_output_directory_mark_root(GDExtensionDeviceExit::ProductionOutputPin &, const NativeOutputGroupBinding &, RID, bool, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);

@@ -65,6 +65,11 @@ struct ExternalPacketPipelineRequest {
 	uint32_t specialization[3] = {};
 	uint32_t view_count = 1;
 	bool wireframe = false, reverse_cull = false, double_sided_shadow = false;
+	bool operator==(const ExternalPacketPipelineRequest &other) const {
+		return backend == other.backend && pass == other.pass && framebuffer_format == other.framebuffer_format && subpass == other.subpass && version == other.version &&
+				color_flags == other.color_flags && specialization[0] == other.specialization[0] && specialization[1] == other.specialization[1] && specialization[2] == other.specialization[2] &&
+				view_count == other.view_count && wireframe == other.wireframe && reverse_cull == other.reverse_cull && double_sided_shadow == other.double_sided_shadow;
+	}
 };
 
 // Frozen by the original native material classifier while its C++ source is
@@ -164,6 +169,7 @@ public:
 class ExternalPipelinePreparation {
 #ifdef TESTS_ENABLED
 	friend class ExternalLinkedOwnerTest;
+	friend struct ::TestProductionRequest::Access;
 #endif
 	friend class ParticlesStorage;
 	friend class ::GDExtensionDeviceExit::Registry;
@@ -178,6 +184,17 @@ class ExternalPipelinePreparation {
 	uint32_t max_resources = 0;
 	bool source_sealed = true; // Only the owner opens an admitted pre-seal preparation row.
 	ExternalPacketPipelineRequest selection;
+	enum class TupleState : uint8_t { UNSELECTED,
+		SELECTED,
+		READY,
+		FAILED };
+	TupleState tuple_state = TupleState::UNSELECTED;
+	uint32_t tuple_surface = UINT32_MAX, tuple_native_surface = UINT32_MAX;
+	RID tuple_mesh;
+	Error backend_error = ERR_UNCONFIGURED, finish_error = ERR_UNCONFIGURED;
+	bool finish_complete = false, geometry_adopted = false, material_adopted = false, pipeline_sealed = false;
+	bool geometry_transferred[2] = {}, material_transferred = false;
+	bool geometry_metadata_returned[2] = {}, material_metadata_returned = false;
 	// Exact generation source selected when this original slot row was bound.
 	// The generation outlives all its slots; this pointer creates no new grant.
 	const MeshStorage::NativeSurfaceHold *source_geometry = nullptr;

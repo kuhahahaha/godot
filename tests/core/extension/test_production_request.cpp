@@ -8192,6 +8192,9 @@ struct Access {
 		bool closing = false, prepare_continuation = false;
 		uint32_t create_calls = 0, acquire_calls = 0;
 		RID continuation_shader;
+		RID detached_vertex_buffer, detached_vertex_array, detached_other_vertex_array;
+		uint32_t detached_buffer_index = UINT32_MAX;
+		bool detached_geometry_installed = false;
 		uint32_t continuation_calls = 0, continuation_mode = 0;
 		static void reject_exhausted_group_serials(NativeAliasReadbackProbe &p, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref) {
 			using namespace GDExtensionDeviceExit;
@@ -8236,12 +8239,181 @@ struct Access {
 				request.next_disposal_group_serial = original_next;
 			}
 		}
+		static bool install_detached_geometry(NativeAliasReadbackProbe &p, GDExtensionDeviceExit::ProductionOutputPreparationScope &scope) {
+			using MeshStorage = RendererRD::MeshStorage;
+			auto &rd = p.fixture->rd;
+			auto *surface = memnew(MeshStorage::Mesh::Surface);
+			surface->format = RSE::ARRAY_FORMAT_VERTEX;
+			surface->vertex_count = 3;
+			surface->primitive = RSE::PRIMITIVE_TRIANGLES;
+			surface->vertex_buffer_size = 36;
+			p.detached_buffer_index = p.fixture->driver.alias_allocations;
+			p.detached_vertex_buffer = surface->vertex_buffer = rd.vertex_buffer_create(36, {}, RD::BUFFER_CREATION_AS_STORAGE_BIT);
+			if (!check_step(surface->vertex_buffer.is_valid())) {
+				MeshStorage::_mesh_surface_dispose(surface);
+				return false;
+			}
+			RD::VertexAttribute position;
+			position.location = 0;
+			position.format = RD::DATA_FORMAT_R32G32B32_SFLOAT;
+			position.stride = 12;
+			Vector<RD::VertexAttribute> attributes;
+			attributes.push_back(position);
+			const auto format = rd.vertex_format_create(attributes);
+			Vector<RID> buffers;
+			buffers.push_back(surface->vertex_buffer);
+			p.detached_vertex_array = rd.vertex_array_create(3, format, buffers);
+			if (!check_step(format != 0 && p.detached_vertex_array.is_valid())) {
+				if (p.detached_vertex_array.is_valid()) {
+					rd.free(p.detached_vertex_array);
+				}
+				MeshStorage::_mesh_surface_dispose(surface);
+				return false;
+			}
+			// A second genuine existing Version is absent from the selected VA
+			// closure. Tuple finish must adopt this unselected directory root too.
+			p.detached_other_vertex_array = rd.vertex_array_create(3, format, buffers);
+			if (!check_step(p.detached_other_vertex_array.is_valid())) {
+				rd.free(p.detached_vertex_array);
+				MeshStorage::_mesh_surface_dispose(surface);
+				return false;
+			}
+			surface->versions = static_cast<MeshStorage::Mesh::Surface::Version *>(memalloc(2 * sizeof(MeshStorage::Mesh::Surface::Version)));
+			surface->version_count = 2;
+			for (uint32_t i = 0; i < 2; ++i) {
+				new (&surface->versions[i]) MeshStorage::Mesh::Surface::Version;
+				surface->versions[i].input_mask = i + 1;
+				surface->versions[i].vertex_format = format;
+				surface->versions[i].vertex_array = i ? p.detached_other_vertex_array : p.detached_vertex_array;
+			}
+			MeshStorage::NativeSurfaceHold source;
+			if (!check_step(MeshStorage::_mesh_surface_hold_acquire(surface, 1, false, false, 0, source) == OK)) {
+				MeshStorage::_mesh_surface_dispose(surface);
+				return false;
+			}
+			MeshStorage::Mesh detached_mesh;
+			MeshStorage::Mesh::Surface *surfaces[] = { surface };
+			detached_mesh.surfaces = surfaces;
+			detached_mesh.surface_count = 1;
+			MeshStorage::_mesh_surface_clear(&detached_mesh, 0);
+			detached_mesh.surface_count = 0;
+			detached_mesh.surfaces = nullptr;
+			CHECK(surface->immutable_retired);
+			CHECK(surface->immutable_holds == 1);
+			MeshStorage::NativeSurfaceHold derived;
+			if (!check_step(MeshStorage::mesh_surface_hold_derive(source, 1, false, false, 0, derived) == OK)) {
+				CHECK(MeshStorage::mesh_surface_hold_release(source) == OK);
+				return false;
+			}
+			CHECK(surface->immutable_holds == 2);
+			CHECK(derived.get_vertex_array() == p.detached_vertex_array);
+			scope.row->geometry[0] = std::move(derived);
+			CHECK_FALSE(derived.is_active());
+			// Leave the row as the final actual metadata/physical holder before
+			// the original continuation destructor freezes its complete directory.
+			const Error released = MeshStorage::mesh_surface_hold_release(source);
+			if (!check_step(released == OK)) {
+				CHECK(MeshStorage::mesh_surface_hold_release(scope.row->geometry[0]) == OK);
+				if (source.is_active()) {
+					CHECK(MeshStorage::mesh_surface_hold_release(source) == OK);
+				}
+				return false;
+			}
+			CHECK_FALSE(source.is_active());
+			CHECK(surface->immutable_holds == 1);
+			const auto *unselected_shares = rd._native_immutable_counter(p.detached_other_vertex_array);
+			if (check_step(unselected_shares != nullptr)) {
+				CHECK(*unselected_shares == 0);
+			}
+			CHECK(rd.vertex_buffer_owner.owns(p.detached_vertex_buffer));
+			CHECK(rd.vertex_array_owner.owns(p.detached_vertex_array));
+			CHECK(p.fixture->driver.alias_live[p.detached_buffer_index]);
+			p.detached_geometry_installed = true;
+			return true;
+		}
 		static void continue_pipeline(uint64_t p_probe) {
 			using namespace GDExtensionDeviceExit;
 			auto &p = *reinterpret_cast<NativeAliasReadbackProbe *>(uintptr_t(p_probe));
 			auto &f = *p.fixture;
 			auto &request = *f.request;
 			auto &rd = f.rd;
+			const bool failed_pipeline = p.continuation_mode == 1 || p.continuation_mode == 5;
+			const bool closed_inside_scope = p.continuation_mode == 2 || p.continuation_mode == 4;
+			const bool detached_geometry = p.continuation_mode >= 3 && p.continuation_mode <= 5;
+			// Actual Acquire prepaid P=3 rows; this private ledger probe issues no
+			// production ViewCell or surface authority. The real native factory
+			// below still enters through the original Registry continuation scope.
+			RendererRD::ExternalPacketPipelineRequest tuple;
+			uint32_t first_tuple = UINT32_MAX, second_tuple = UINT32_MAX, third_tuple = UINT32_MAX;
+			bool reused = true;
+			CHECK(p.native->preparation_tuple_select(0, 0, tuple, first_tuple, reused) == OK);
+			CHECK_FALSE(reused);
+			uint32_t duplicate = UINT32_MAX;
+			CHECK(p.native->preparation_tuple_select(0, 0, tuple, duplicate, reused) == OK);
+			CHECK(reused);
+			CHECK(duplicate == first_tuple);
+			auto other_tuple = tuple;
+			++other_tuple.subpass;
+			CHECK(p.native->preparation_tuple_select(0, 0, other_tuple, second_tuple, reused) == OK);
+			CHECK_FALSE(reused);
+			other_tuple.backend = RendererRD::ExternalPacketPipelineRequest::Backend::MOBILE;
+			CHECK(p.native->preparation_tuple_select(0, 1, other_tuple, third_tuple, reused) == OK);
+			CHECK_FALSE(reused);
+			CHECK(first_tuple != second_tuple);
+			CHECK(first_tuple != third_tuple);
+			CHECK(second_tuple != third_tuple);
+			// Every native key field must distinguish a fourth tuple. All fail
+			// against the original P bound without changing an occupied row.
+			for (uint32_t field = 0; field < 14; ++field) {
+				auto changed = tuple;
+				switch (field) {
+					case 0:
+						changed.backend = RendererRD::ExternalPacketPipelineRequest::Backend::MOBILE;
+						break;
+					case 1:
+						changed.pass = RendererRD::ExternalPacketPass::SHADOW;
+						break;
+					case 2:
+						++changed.framebuffer_format;
+						break;
+					case 3:
+						changed.subpass += 2;
+						break;
+					case 4:
+						++changed.version;
+						break;
+					case 5:
+						++changed.color_flags;
+						break;
+					case 6:
+						++changed.specialization[0];
+						break;
+					case 7:
+						++changed.specialization[1];
+						break;
+					case 8:
+						++changed.specialization[2];
+						break;
+					case 9:
+						++changed.view_count;
+						break;
+					case 10:
+						changed.wireframe = true;
+						break;
+					case 11:
+						changed.reverse_cull = true;
+						break;
+					case 12:
+						changed.double_sided_shadow = true;
+						break;
+					case 13:
+						break;
+				}
+				uint32_t refused = UINT32_MAX;
+				CHECK(p.native->preparation_tuple_select(0, field == 13 ? 1 : 0, changed, refused, reused) == ERR_OUT_OF_MEMORY);
+				CHECK(refused == UINT32_MAX);
+				CHECK(p.native->preparation_tuple_matches(first_tuple, tuple));
+			}
 			const auto group = p.native->preparation_pipeline_group(0, 0);
 			REQUIRE(group != 0);
 			const auto revision = request.revision;
@@ -8255,8 +8427,9 @@ struct Access {
 			container->initialize_raster();
 			p.continuation_shader = rd.shader_create_from_bytecode(container->to_bytes());
 			REQUIRE(p.continuation_shader.is_valid());
-			f.driver.raster_fail = p.continuation_mode == 1;
+			f.driver.raster_fail = failed_pipeline;
 			const auto format = rd.framebuffer_format_create(Vector<RD::AttachmentFormat>());
+			RendererRD::ExternalPipelinePreparation *detached_row = nullptr;
 			{
 				ProductionOutputPreparationScope scope;
 				CHECK(p.native->preparation_scope_link_matches(0, 0, nullptr, true));
@@ -8332,15 +8505,28 @@ struct Access {
 							  RD::PipelineDepthStencilState(), RD::PipelineColorBlendState(), 0, 0, {}, stack_output) == ERR_INVALID_PARAMETER);
 				CHECK(stack_output.is_null());
 				CHECK(f.driver.raster_attempts == attempts);
+				// The failed-factory case must already own its real geometry prefix.
+				if (detached_geometry && failed_pipeline) {
+					if (!install_detached_geometry(p, scope)) {
+						return;
+					}
+					detached_row = scope.row;
+				}
 				// Exercise the renderer's real row bridge, not just the RD scope overload.
 				const RID created = p.native->preparation_row_factory(0, 0, p.continuation_shader, format);
 				CHECK(created == p.native->pipeline_root());
-				CHECK(p.native->pipeline_root().is_valid() == (p.continuation_mode != 1));
+				CHECK(p.native->pipeline_root().is_valid() == !failed_pipeline);
 				CHECK(f.driver.raster_attempts == attempts + 1);
-				CHECK(rd._production_output_owned_pipeline_preflight(scope) == (p.continuation_mode == 1 ? OK : ERR_ALREADY_IN_USE));
-				CHECK(p.native->preparation_row_preflight(0, 0) == (p.continuation_mode == 1 ? OK : ERR_ALREADY_IN_USE));
+				CHECK(rd._production_output_owned_pipeline_preflight(scope) == (failed_pipeline ? OK : ERR_ALREADY_IN_USE));
+				CHECK(p.native->preparation_row_preflight(0, 0) == (failed_pipeline ? OK : ERR_ALREADY_IN_USE));
 				CHECK(p.native->preparation_row_cleanup(0, 0) == OK);
-				if (p.continuation_mode == 2) {
+				if (detached_geometry && !failed_pipeline) {
+					if (!install_detached_geometry(p, scope)) {
+						return;
+					}
+					detached_row = scope.row;
+				}
+				if (closed_inside_scope) {
 					CHECK(p.native->cancel_pipeline_slot(0) == OK);
 					p.native->withdraw_generation();
 					CHECK(p.native->preparation_row_cleanup(0, 0) == OK);
@@ -8350,11 +8536,33 @@ struct Access {
 					CHECK(p.native->return_pipeline_row(0, 0) == ERR_BUSY);
 				}
 			}
+			if (detached_geometry) {
+				if (!check_step(detached_row != nullptr && p.detached_geometry_installed)) {
+					return;
+				}
+				CHECK(detached_row->finish_complete);
+				CHECK(detached_row->finish_error == OK);
+				CHECK(detached_row->geometry_transferred[0]);
+				CHECK(detached_row->geometry[0].has_retirement_directory());
+				CHECK(rd._production_output_hold_contains(p.native->pin(0), detached_row->geometry_reserved_group, p.detached_other_vertex_array));
+				CHECK(rd._production_output_hold_contains(p.native->pin(0), detached_row->geometry_reserved_group, p.detached_vertex_buffer));
+				CHECK(rd._production_output_hold_contains(p.native->pin(0), detached_row->geometry_reserved_group, p.detached_vertex_array));
+				CHECK(p.fixture->driver.alias_live[p.detached_buffer_index]);
+			}
 			CHECK(request.continuation_inflight == 0);
 			CHECK(p.native->preparation_scope_link_matches(0, 0, nullptr, true));
 			CHECK(p.native->preparation_row_cleanup(0, 0) == ERR_UNAUTHORIZED);
+			CHECK(p.native->preparation_tuple_finished(first_tuple));
+			const auto root_after_finish = p.native->preparation_tuple_root(first_tuple);
+			if (!closed_inside_scope) {
+				CHECK(p.native->preparation_tuple_select(0, 0, tuple, duplicate, reused) == OK);
+				CHECK(reused);
+				CHECK(duplicate == first_tuple);
+				CHECK(p.native->preparation_tuple_root(first_tuple) == root_after_finish);
+			}
+
 			ProductionOutputPreparationScope replay;
-			CHECK(f.registry.production_output_preparation_begin(p.native->pin(0), rd, 0, 0, group, replay) == (p.continuation_mode == 2 ? ERR_UNAUTHORIZED : (p.continuation_mode == 1 ? OK : ERR_ALREADY_IN_USE)));
+			CHECK(f.registry.production_output_preparation_begin(p.native->pin(0), rd, 0, 0, group, replay) == (closed_inside_scope ? ERR_UNAUTHORIZED : ERR_ALREADY_IN_USE));
 			CHECK(request.revision == revision);
 			CHECK(request.next_action == frontier);
 			CHECK(request.control.serial == returned_serial);
@@ -8560,6 +8768,8 @@ struct Access {
 	};
 	static void output_alias_readback_complete(bool map_failure = false, bool cleanup_content = false, bool prepare_continuation = false, uint32_t continuation_mode = 0) {
 		using namespace GDExtensionDeviceExit;
+		const bool failed_pipeline = continuation_mode == 1 || continuation_mode == 5;
+		const bool detached_geometry = continuation_mode >= 3 && continuation_mode <= 5;
 		auto *server = ordinal_server();
 		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
 			return;
@@ -8885,8 +9095,8 @@ struct Access {
 		REQUIRE(native.released());
 		native.free_created();
 		if (prepare_continuation) {
-			CHECK(fixture.driver.raster_frees == (continuation_mode == 1 ? 0 : 1));
-			CHECK(fixture.driver.raster_budgeted_frees == (continuation_mode == 1 ? 0 : 1));
+			CHECK(fixture.driver.raster_frees == (failed_pipeline ? 0 : 1));
+			CHECK(fixture.driver.raster_budgeted_frees == (failed_pipeline ? 0 : 1));
 			CHECK_FALSE(fixture.driver.raster_live);
 		}
 		if (map_failure) {
@@ -9096,8 +9306,18 @@ struct Access {
 		if (probe.continuation_shader.is_valid()) {
 			fixture.rd.free(probe.continuation_shader);
 		}
-		CHECK(fixture.driver.alias_allocations == 8);
-		CHECK(fixture.driver.alias_frees == 8);
+		const uint32_t expected_alias_buffers = detached_geometry ? 9 : 8;
+		CHECK(fixture.driver.alias_allocations == expected_alias_buffers);
+		CHECK(fixture.driver.alias_frees == expected_alias_buffers);
+		if (detached_geometry) {
+			CHECK(probe.detached_geometry_installed);
+			CHECK_FALSE(fixture.rd.vertex_buffer_owner.owns(probe.detached_vertex_buffer));
+			CHECK_FALSE(fixture.rd.vertex_array_owner.owns(probe.detached_vertex_array));
+			CHECK_FALSE(fixture.rd.vertex_array_owner.owns(probe.detached_other_vertex_array));
+			if (check_step(probe.detached_buffer_index < 16)) {
+				CHECK_FALSE(fixture.driver.alias_live[probe.detached_buffer_index]);
+			}
+		}
 		for (auto &block : fixture.rd.upload_staging_buffers.blocks) {
 			fixture.driver.buffer_unmap(block.driver_id);
 			fixture.driver.buffer_free(block.driver_id);
@@ -14327,6 +14547,18 @@ TEST_CASE("[SceneTree][ProductionRequest][NativePreparationContinuation] origina
 
 TEST_CASE("[SceneTree][ProductionRequest][NativePreparationContinuation] failed native pipeline factory retires its original reservation without draw") {
 	TestProductionRequest::Access::output_alias_readback_complete(false, false, true, 1);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][NativePreparationContinuation] last retained detached native Surface directory returns through original tuple cleanup") {
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, true, 3);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][NativePreparationContinuation] detached Surface prefix returns after slot closes inside original scope") {
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, true, 4);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][NativePreparationContinuation] detached Surface prefix returns after original pipeline factory fails") {
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, true, 5);
 }
 
 TEST_CASE("[SceneTree][ProductionRequest][NativePreparationContinuation] slot closes inside native scope and retires without draw") {

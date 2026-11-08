@@ -573,6 +573,22 @@ bool ExternalLinkedOwnerTest::preparation_bank_reservations_match(uint32_t p_slo
 	}
 	return found == p_count;
 }
+Error ExternalLinkedOwnerTest::preparation_tuple_select(uint32_t slot, uint32_t surface, const ExternalPacketPipelineRequest &selection, uint32_t &index, bool &reused) {
+	return owner->select_preparation_tuple(slot, surface, selection, index, reused);
+}
+bool ExternalLinkedOwnerTest::preparation_tuple_matches(uint32_t index, const ExternalPacketPipelineRequest &selection) const {
+	return owner && index < owner->preparation_capacity && owner->preparation_rows[index].selection == selection;
+}
+bool ExternalLinkedOwnerTest::preparation_tuple_finished(uint32_t index) const {
+	if (!owner || index >= owner->preparation_capacity) {
+		return false;
+	}
+	const auto &row = owner->preparation_rows[index];
+	return row.finish_complete && row.geometry_adopted && row.material_adopted && row.pipeline_sealed;
+}
+RID ExternalLinkedOwnerTest::preparation_tuple_root(uint32_t index) const {
+	return owner && index < owner->preparation_capacity ? owner->preparation_rows[index].owned_pipeline_root : RID();
+}
 uint64_t ExternalLinkedOwnerTest::preparation_bank_group(uint32_t p_slot, uint32_t p_ordinal, uint32_t p_kind) const {
 	uint32_t ordinal = 0;
 	for (uint32_t i = 0; owner && i < owner->preparation_capacity; ++i) {

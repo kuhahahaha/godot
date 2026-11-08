@@ -119,7 +119,7 @@ class ExternalOutputOwner {
 		uint64_t lease_serial = 0;
 		uint64_t owned_group = 0, output_membership_group = 0;
 		uint32_t retire_surface = 0, retire_resource = 0;
-		uint32_t preparation_reserved_count = 0, retire_preparation_index = 0;
+		uint32_t preparation_reserved_count = 0, preparation_selected_count = 0, retire_preparation_index = 0;
 		bool output_group_returned = false;
 		bool publication_closed = false;
 		bool pass_uses_closed = false;
@@ -202,6 +202,11 @@ class ExternalOutputOwner {
 	uint32_t free_preparation_rows() const;
 	Error bind_preparation_rows(uint32_t, uint32_t p_count = 0);
 	Error return_preparation_bank_row(uint32_t, uint32_t);
+	bool preparation_source_matches(const ExternalPipelinePreparation &) const;
+	GDExtensionDeviceExit::ProductionRequest *preparation_request(uint32_t p_slot) const { return p_slot < slot_count ? slots[p_slot].original_pin.request : nullptr; }
+	uint64_t preparation_pin_serial(uint32_t p_slot) const { return p_slot < slot_count ? slots[p_slot].original_pin.serial : 0; }
+	Error select_preparation_tuple(uint32_t, uint32_t, const ExternalPacketPipelineRequest &, uint32_t &, bool &);
+	bool preparation_view_matches(const ExternalPacketViewLease &, uint32_t, bool p_cleanup = false) const;
 	Error return_preparation_row(uint32_t, uint32_t);
 	bool generation_selection_attempted = false;
 	bool generation_selection_complete = false;

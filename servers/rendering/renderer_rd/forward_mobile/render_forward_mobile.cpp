@@ -3853,9 +3853,7 @@ Error RenderForwardMobile::external_pipeline_prepare(const RendererRD::ExternalS
 	const bool indexed144 = p_surface.profile == ExternalOutputConfig::INDEXED_144;
 	// Instance192 derives from its original generation's flattened source.
 	// Indexed144 keeps the original slot-owned source/backing association.
-	if (instance192 && (!r_preparation.source_geometry || p_surface.geometry_source != r_preparation.source_geometry ||
-			p_surface.material_selection != r_preparation.source_material || p_surface.material_generation != r_preparation.source_material_generation ||
-			!r_preparation.source_geometry->metadata_matches(p_surface.primitive, p_surface.surface_format, p_surface.surface_aabb, p_surface.surface_uv_scale))) {
+	if (instance192 && (!r_preparation.source_geometry || p_surface.geometry_source != r_preparation.source_geometry || p_surface.material_selection != r_preparation.source_material || p_surface.material_generation != r_preparation.source_material_generation || !r_preparation.source_geometry->metadata_matches(p_surface.primitive, p_surface.surface_format, p_surface.surface_aabb, p_surface.surface_uv_scale))) {
 		return fail(ERR_INVALID_DATA);
 	}
 	const auto *geometry_source = instance192 ? r_preparation.source_geometry : p_surface.geometry_source;
@@ -3956,4 +3954,8 @@ Error RenderForwardMobile::external_pipeline_prepare(const RendererRD::ExternalS
 	r_preparation.ubershader = false;
 	r_preparation.cull_mode = key.cull_mode;
 	return fail(OK);
+}
+
+Error RenderForwardMobile::external_pipeline_prepare_for_view(const RendererRD::ExternalSurfaceSelection &surface, const RendererRD::ExternalPacketViewLease &view, const RendererRD::ExternalPacketPipelineRequest &selection, const RendererRD::ExternalPipelinePreparation *&out) {
+	return RendererRD::ParticlesStorage::get_singleton()->particles_external_prepare_pipeline(surface, view, selection, +[](void *renderer, const RendererRD::ExternalSurfaceSelection &source, RendererRD::ExternalPipelinePreparation &row) { return static_cast<RenderForwardMobile *>(renderer)->external_pipeline_prepare(source, row); }, this, out);
 }

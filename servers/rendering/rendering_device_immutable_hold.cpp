@@ -505,6 +505,80 @@ Error RenderingDevice::native_immutable_hold_release(NativeImmutableHold &hold) 
 	return OK;
 }
 
+Error RenderingDevice::_native_immutable_hold_expand_directory(const VectorView<RID> &roots, NativeImmutableHold &hold, uint32_t limit) {
+	if (!native_immutable_is_render_thread() || hold.device != this || hold.pins_returned || roots.size() == 0) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (!_thread_safe_.try_lock()) {
+		return ERR_BUSY;
+	}
+	struct Unlock {
+		Mutex &mutex;
+		~Unlock() { mutex.unlock(); }
+	} unlock{ _thread_safe_ };
+	NativeImmutableHold complete;
+	const Error acquired = native_immutable_hold_acquire(roots, complete, limit);
+	if (acquired != OK) {
+		return acquired;
+	}
+	for (RID selected : hold._resource_span()) {
+		bool present = false;
+		for (RID retained : complete._resource_span()) {
+			present |= selected == retained;
+		}
+		if (!present) {
+			// Continuous RD lock: acquire rejected retiring roots, so rollback
+			// only removes the new shares and cannot invoke native callbacks.
+			CRASH_COND(native_immutable_hold_release(complete) != OK);
+			return ERR_INVALID_DATA;
+		}
+	}
+	// Every selected share is still retained by complete, so returning the old
+	// hold cannot perform native disposal or leave a partial release prefix.
+	CRASH_COND(native_immutable_hold_release(hold) != OK);
+	hold = std::move(complete);
+	return OK;
+}
+
+Error RenderingDevice::_production_output_directory_bind_adopted_locked(GDExtensionDeviceExit::ProductionOutputPin &pin, uint64_t serial, const VectorView<RID> &roots, NativeOutputGroupBinding &binding) {
+	using namespace GDExtensionDeviceExit;
+	if (!native_immutable_is_render_thread() || !pin.registry || !serial || !binding.is_empty() || roots.size() == 0 ||
+			!pin.registry->production_output_pin_matches_locked(pin, { pin.registry->instance, pin.request_serial }, *this)) {
+		return ERR_UNAUTHORIZED;
+	}
+	const auto &request = *pin.request;
+	const uint32_t begin = request.use_count + request.binding_used;
+	bool captured = false;
+	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+		const auto &cell = request.uses[i];
+		if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_serial == serial && cell.disposal_group_pin_serial == pin.serial &&
+				cell.disposal_group_native_hold && !cell.disposal_group_release && !cell.disposal_group_dropped) {
+			captured = true;
+		}
+	}
+	if (!captured) {
+		return ERR_INVALID_DATA;
+	}
+	for (uint32_t root_index = 0; root_index < roots.size(); ++root_index) {
+		const RID root = roots[root_index];
+		bool found = false;
+		for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+			const auto &cell = request.uses[i];
+			found |= cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && cell.disposal_group_serial == serial &&
+					cell.disposal.request == &request && cell.disposal.request_serial == request.serial && cell.disposal.rid == root.get_id() &&
+					cell.disposal.state.load(std::memory_order_acquire) == 1 && !cell.disposal.counter_dropped;
+		}
+		if (!found) {
+			return ERR_INVALID_DATA;
+		}
+	}
+	binding.registry_instance = pin.registry->instance;
+	binding.request_serial = pin.request_serial;
+	binding.pin_serial = pin.serial;
+	binding.group_serial = serial;
+	return OK;
+}
+
 Error RenderingDevice::_production_output_directory_capture(GDExtensionProductionPhysicalContextRefV1 physical_context, GDExtensionDeviceExit::ProductionOutputPin &pin, const VectorView<RID> &roots, uint32_t limit, NativeOutputGroupBinding &binding) {
 	using namespace GDExtensionDeviceExit;
 	if (!pin.registry || !binding.is_empty()) {
@@ -1884,11 +1958,16 @@ Error RenderingDevice::_production_output_owned_seal(GDExtensionProductionPhysic
 	if (!registry.production_output_recorded_ordered_locked(*request, *this)) {
 		return ERR_INVALID_DATA;
 	}
+	return _production_output_owned_seal_locked(*request, pin.serial, serial);
+}
+
+Error RenderingDevice::_production_output_owned_seal_locked(GDExtensionDeviceExit::ProductionRequest &request, uint64_t pin_serial, uint64_t serial) {
+	using namespace GDExtensionDeviceExit;
 	ProductionUseCell *group = nullptr;
-	const uint32_t begin = request->use_count + request->binding_used;
-	for (uint32_t i = begin; i < request->capacity.resource_uses; ++i) {
-		auto &c = request->uses[i];
-		if (c.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && c.disposal_group_serial == serial && c.disposal_group_pin_serial == pin.serial) {
+	const uint32_t begin = request.use_count + request.binding_used;
+	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+		auto &c = request.uses[i];
+		if (c.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && c.disposal_group_serial == serial && c.disposal_group_pin_serial == pin_serial) {
 			group = &c;
 		}
 	}
@@ -1905,8 +1984,8 @@ Error RenderingDevice::_production_output_owned_seal(GDExtensionProductionPhysic
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
 	uint32_t count = 0;
-	for (uint32_t i = begin; i < request->capacity.resource_uses; ++i) {
-		auto &c = request->uses[i];
+	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+		auto &c = request.uses[i];
 		if (c.disposal_group_serial != serial || &c == group) {
 			continue;
 		}
@@ -1931,8 +2010,8 @@ Error RenderingDevice::_production_output_owned_seal(GDExtensionProductionPhysic
 	if (count != group->disposal_group_count) {
 		return ERR_INVALID_DATA;
 	}
-	for (uint32_t i = begin; i < request->capacity.resource_uses; ++i) {
-		auto &c = request->uses[i];
+	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+		auto &c = request.uses[i];
 		if (c.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && c.disposal_group_serial == serial) {
 			auto *counter = _native_immutable_counter(RID::from_uint64(c.disposal.rid));
 			++*counter;
