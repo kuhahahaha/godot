@@ -4,6 +4,41 @@ This fixture exercises actual per-instance heightfield targets owned by one
 base collider. It does not establish E34 acceptance, retained HeightFrame
 snapshots, COW, or production-use leases.
 
+### SceneCull source selection (H12)
+
+```sh
+python3 tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_source_selection.py --binary /absolute/path/to/godot --display-driver macos --rendering-driver metal
+```
+
+This runs four cases on Mobile and Forward+ (eight processes). Each creates a
+real SceneCull scenario with a field, source and ordinary receiver, obtains the
+original collider-instance identity from its pair snapshot, and invokes
+`SceneCull::render_particle_colliders()` through its actual dirty-list/index path.
+Two independent targets are first seeded to `.125`. A direct native renderer
+control must rasterize a y=0 plane to `.5`; the SceneCull target must yield:
+
+| Source | Expected raw depth |
+| --- | --- |
+| Opaque mesh, node cast-shadow OFF | `.5` |
+| Actual discard-all spatial material | `0` |
+| Hidden mesh | `0` |
+| Particle source with a real mesh draw pass | `0` |
+
+The particle case seeds a fixed identity instance in the original particle render
+buffer. Its positive control renders that same particle draw pass to `.5`, so an
+uninitialized or empty particle cannot satisfy the exclusion test. This is a
+fixed draw input, not a particle simulation claim. All observations use D32
+sampling into a test-owned SSBO and asynchronous readback. The runner requires
+real renderer/driver startup, exact case identity, independent control and source
+values, clean exit and no errors/warnings. Scene instances are freed before their
+bases after readback; the SceneCull-owned collision instance is freed once by its
+original owner.
+
+This covers native source selection only. It does not establish HeightFrame
+Current, COW, managed source membership, producer/reader completion, retirement
+qualification, or E34 acceptance. No source-selection GPU run is claimed merely
+by the presence of this fixture.
+
 Build an editor with `tests=yes module_particles_runtime_tests_enabled=yes`.
 Run with an actual display and main RenderingDevice (never `--test` or dummy):
 

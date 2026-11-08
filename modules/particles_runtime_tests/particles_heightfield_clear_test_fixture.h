@@ -18,6 +18,12 @@ class ParticlesHeightfieldClearTestFixture : public RefCounted {
 	bool frame_resources_capture = false;
 	bool quoted_resources_capture = false;
 	bool candidate_capture = false;
+	int source_selection_case = -1;
+	RID selection_scenario;
+	RID selection_field;
+	RID selection_source;
+	RID selection_receiver;
+	RID selection_receiver_particles;
 	Ref<RendererRD::ParticlesStorage::HeightFrame> candidate_frame;
 	Ref<RendererRD::ParticlesStorage::HeightFrame> rejected_candidate;
 	Ref<RendererRD::ParticlesStorage::HeightFrame> postbind_candidate;
@@ -56,6 +62,7 @@ class ParticlesHeightfieldClearTestFixture : public RefCounted {
 	Error run_capture();
 	Error sample_depth_pair();
 	Error capture_candidate();
+	Error capture_source_selection();
 	void retire_frame_resources();
 	void cleanup();
 	void sample_done(const PackedByteArray &p_bytes);
@@ -70,6 +77,7 @@ public:
 	Error run();
 	Error run_frame_resources();
 	Error run_candidate();
+	Error run_source_selection(int p_case);
 	void poll_frame_resources();
 	Error run_legacy_normal(int p_transform_case = 0);
 	Error run_legacy_neighbor(int p_case);

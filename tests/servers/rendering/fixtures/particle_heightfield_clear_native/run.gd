@@ -27,12 +27,22 @@ func _start() -> void:
 		method = "run_frame_resources"
 	if OS.get_environment("ANGE_HEIGHTFIELD_CANDIDATE") == "1":
 		method = "run_candidate"
+	var selection_case := OS.get_environment("ANGE_HEIGHTFIELD_SOURCE_SELECTION")
+	if selection_case != "":
+		method = "run_source_selection"
 	if not fixture.has_method(method):
 		print("HEIGHTFIELD_GEOMETRY_MISSING ", method)
 		quit(1)
 		return
 	var callback := Callable(fixture, method)
-	if method == "run_legacy_neighbor":
+	if method == "run_source_selection":
+		var selection_names := ["cast_shadow_off", "alpha_discard", "hidden", "particles_excluded"]
+		var selection_index := selection_names.find(selection_case)
+		if selection_index < 0:
+			quit(1)
+			return
+		callback = callback.bind(selection_index)
+	elif method == "run_legacy_neighbor":
 		var neighbor_names := ["sphere", "box", "sdf", "sphere_attractor", "box_attractor", "vector_attractor"]
 		var neighbor_index := neighbor_names.find(neighbor_case)
 		if neighbor_index < 0:
