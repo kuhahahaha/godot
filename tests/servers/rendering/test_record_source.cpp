@@ -624,7 +624,7 @@ public:
 		device.frames[0].qualification_tickets.clear();
 	}
 
-	static void hidden_root_failure_retirement() {
+	static void hidden_root_failure_retirement(bool p_release_busy = false) {
 		using namespace GDExtensionDeviceExit;
 		RenderingDevice device;
 		Driver driver;
@@ -677,9 +677,23 @@ public:
 		CHECK(ticket.report.state != 8);
 		CHECK_FALSE(ticket.physically_retired.load());
 		// The original Frame observer returns through its actual hidden-report path.
+		if (p_release_busy) {
+			driver.release_error = ERR_BUSY;
+			CHECK(device._stall_for_frame(0, true) == ERR_BUSY);
+			CHECK(frame.qualification_hidden_reports.size() == 1);
+			CHECK_FALSE(frame.qualification_hidden_reports[0].calls[0].source_owner_returned);
+			CHECK(driver.releases == 1);
+			CHECK(ticket.frame_refs == 1);
+			CHECK_FALSE(ticket.physically_retired.load());
+			CHECK_FALSE(ticket.resource_pins.is_empty());
+			CHECK(device.uniform_buffer_owner.get_or_null(rid)->qualification_users == 1);
+			driver.release_error = OK;
+		}
 		REQUIRE(device._stall_for_frame(0, true) == OK);
 		CHECK(frame.qualification_hidden_reports.is_empty());
-		CHECK(driver.releases == 1);
+		CHECK(driver.releases == (p_release_busy ? 2 : 1));
+		CHECK(device._stall_for_frame(0, true) == OK);
+		CHECK(driver.releases == (p_release_busy ? 2 : 1));
 		ticket.append_failed = true;
 		ticket.report.native_error = ERR_CANT_CREATE;
 		// Controlled original frame-return callback, with no invented graph/main fact.
@@ -691,7 +705,7 @@ public:
 		CHECK(ticket.resource_pins.is_empty());
 		CHECK(device.uniform_buffer_owner.get_or_null(rid)->qualification_users == 0);
 		REQUIRE(release_native_source(driver, ticket.natives[0]) == OK);
-		CHECK(driver.releases == 2);
+		CHECK(driver.releases == (p_release_busy ? 3 : 2));
 		CHECK(ticket.natives[0].owner_released);
 		device.free_rid(rid);
 		CHECK_FALSE(device.uniform_buffer_owner.owns(rid));
@@ -1516,6 +1530,9 @@ TEST_CASE("[RecordSource] enrollment pool refusal restores the original Registry
 
 TEST_CASE("[RecordSource] hidden native root observes a failed prefix and returns its original resource owner") {
 	TestRecordSourceAccess::hidden_root_failure_retirement();
+}
+TEST_CASE("[RecordSource] hidden native root keeps owner pin across busy physical release") {
+	TestRecordSourceAccess::hidden_root_failure_retirement(true);
 }
 TEST_CASE("[RecordSource] successful hidden root never maps a graph missing its original main source") {
 	TestRecordSourceAccess::hidden_root_never_maps_missing_main();
