@@ -1,0 +1,27 @@
+{
+  "commit": "c6366c051f",
+  "scope": "Internal pure ready lookup; no lease, no public admission, no backend G gate yet",
+  "build_exit": 0,
+  "test_command": "./bin/godot.macos.editor.arm64 --test --test-case='*[ShaderCompilePolicy]*,*[NativePreparationContinuation]*' --no-colors",
+  "test_exit": 0,
+  "cases": 10,
+  "assertions": 14001,
+  "test_scope": "Original RD mock native metadata plus explicitly injected private ShaderRD version states; no GPU readiness proof",
+  "expected_diagnostic": "Existing policy invalid UTF8 leading byte ff case",
+  "source_sha256": {
+    "servers/rendering/renderer_rd/shader_rd.cpp": "9e62bba97ed030ea1b599423ce04cf1c41a88568c4035a5329e053613032d2c0",
+    "servers/rendering/renderer_rd/shader_rd.h": "34f5998378f737b3209830d5e532a96705a8443f0fcb513a5443898e5c793fb7",
+    "servers/rendering/rendering_device.cpp": "2a60cc3b65508b3648bc57bc7a4c0b89ce0895ead459e627534e887b511d2c37",
+    "servers/rendering/rendering_device.h": "02b48c978170400396fbf9151f9d3f50f92d3dd1001a7362620bad04eafae8ef",
+    "tests/servers/rendering/test_shader_compile_policy.cpp": "873b1479f66504be6ed63c73fbc7968a59d21ab83f65973575b61f527d7ae98e"
+  },
+  "logs": {
+    "full-tests-build.log": "41b0c9be91934d82b891cf4eca872f30190c0bf2ff8bdc0e92c855ead4a446b2",
+    "full-tests-confirmed.log": "7508829d697bee66ce5b55bcc863436300f77eb07abeec1676cec77962691112"
+  },
+  "limits": [
+    "No full pre-effect G graph",
+    "No production backend query callsite yet",
+    "No U05 or Sprite GPU completion"
+  ]
+}
