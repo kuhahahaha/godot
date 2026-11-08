@@ -296,7 +296,14 @@ bool RenderingDevice::_native_immutable_uniform_set_writes(const UniformSet &set
 	return false;
 }
 
-Error RenderingDevice::_native_immutable_resource_eligibility_locked(RID rid) {
+Error RenderingDevice::_native_immutable_hold_capacity_locked(uint32_t increments) const {
+	return native_immutable_hold_count > UINT32_MAX - increments ? ERR_PARAMETER_RANGE_ERROR : OK;
+}
+
+Error RenderingDevice::_native_immutable_resource_eligibility_locked(RID rid, uint32_t increments) {
+	if (!increments) {
+		return ERR_INVALID_PARAMETER;
+	}
 	bool *retiring = nullptr, *escaped = nullptr;
 	const auto *holds = _native_immutable_counter(rid, &retiring, &escaped);
 	if (!holds) {
@@ -308,7 +315,7 @@ Error RenderingDevice::_native_immutable_resource_eligibility_locked(RID rid) {
 	if (*retiring || native_immutable_resource_is_retiring(rid)) {
 		return ERR_BUSY;
 	}
-	if (*holds == UINT32_MAX) {
+	if (*holds > UINT32_MAX - increments) {
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
 	if (const auto *resource = _native_immutable_buffer(rid); resource && !resource->driver_id) {
@@ -401,8 +408,9 @@ Error RenderingDevice::native_immutable_hold_acquire(const VectorView<RID> &root
 	if (draw_list.active || compute_list.active || raytracing_list.active || draw_graph.has_driver_callbacks() || production_finalization_started.load(std::memory_order_acquire)) {
 		return ERR_BUSY;
 	}
-	if (native_immutable_hold_count == UINT32_MAX) {
-		return ERR_PARAMETER_RANGE_ERROR;
+	const Error capacity = _native_immutable_hold_capacity_locked(1);
+	if (capacity != OK) {
+		return capacity;
 	}
 	RID inline_resources[3];
 	Vector<RID> dynamic_resources;
@@ -949,6 +957,51 @@ Error RenderingDevice::_production_output_hold_inventory_locked(GDExtensionDevic
 	}
 	_production_output_hold_inventory_clear_locked(request, reserved_group);
 	out_count = count;
+	return OK;
+}
+
+Error RenderingDevice::_native_prospective_hold_increments_locked(const VectorView<NativeProspectiveHoldRoots> &holds, const VectorView<NativeProspectiveSymbol> &symbols) {
+	// The original row owns at most two geometry holds and one material hold.
+	// Scratch roots/counts do not prove that row's identity or root completeness.
+	if (holds.size() > 3 || (holds.size() && !holds.ptr())) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const Error capacity = _native_immutable_hold_capacity_locked(holds.size());
+	if (capacity != OK) {
+		return capacity;
+	}
+	Vector<NativeProspectiveKey> closures[3];
+	for (uint32_t h = 0; h < holds.size(); ++h) {
+		if (!holds[h].limit || holds[h].limit > 1024) {
+			return ERR_INVALID_PARAMETER;
+		}
+		const Error closure = _native_prospective_closure_keys_locked(holds[h].roots, symbols, holds[h].limit, false, closures[h]);
+		if (closure != OK) {
+			return closure;
+		}
+	}
+	for (uint32_t h = 0; h < holds.size(); ++h) {
+		for (const NativeProspectiveKey &key : closures[h]) {
+			if (key.actual.is_null()) {
+				// New symbolic owners have no current counter. At most three new
+				// holds can refer to one correctly coalesced future factory node.
+				continue;
+			}
+			uint32_t increments = 0;
+			for (uint32_t other = 0; other < holds.size(); ++other) {
+				for (const NativeProspectiveKey &related : closures[other]) {
+					if (related == key) {
+						++increments; // One per hold, even with repeated raw roots.
+						break;
+					}
+				}
+			}
+			const Error eligible = _native_immutable_resource_eligibility_locked(key.actual, increments);
+			if (eligible != OK) {
+				return eligible;
+			}
+		}
+	}
 	return OK;
 }
 

@@ -1348,7 +1348,8 @@ private:
 	// Validates only direct used VB eligibility. Full closure/G and existing VA/IA,
 	// external history and detached-directory roots are independent later gates.
 	Error _native_vertex_array_preflight(uint32_t p_vertex_count, const Vector<VertexAttribute> &p_attributes, const Vector<RID> &p_buffers, const Vector<uint64_t> &p_offsets, NativeVertexArrayPreflight &r_result);
-	Error _native_immutable_resource_eligibility_locked(RID p_rid);
+	Error _native_immutable_resource_eligibility_locked(RID p_rid, uint32_t p_increments = 1);
+	Error _native_immutable_hold_capacity_locked(uint32_t p_increments) const;
 
 	struct IndexBuffer : public Buffer {
 		uint32_t max_index = 0; // Used for validation.
@@ -1769,6 +1770,14 @@ private:
 	// Keys/counts only: not authority, immutable eligibility, or group admission.
 	// Caller holds RD lock and must retain exact source/material plans.
 	Error _native_prospective_closure_keys_locked(const VectorView<NativeProspectiveKey> &p_roots, const VectorView<NativeProspectiveSymbol> &p_symbols, uint32_t p_limit, bool p_bidirectional, Vector<NativeProspectiveKey> &r_nodes);
+	struct NativeProspectiveHoldRoots {
+		Vector<NativeProspectiveKey> roots;
+		uint32_t limit = 256; // Actual leaf bound, not adoption group G.
+	};
+	// Private count/eligibility prerequisite only. Caller holds RD lock and supplies
+	// exact retained-owner roots for NEW holds only, with factory symbols coalesced.
+	// No scope, material raw-root admission, reservation or callback authority here.
+	Error _native_prospective_hold_increments_locked(const VectorView<NativeProspectiveHoldRoots> &p_holds, const VectorView<NativeProspectiveSymbol> &p_symbols);
 	struct NativeProspectiveMaterialOrigin {
 		RID material;
 		uint64_t generation = 0;

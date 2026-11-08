@@ -277,6 +277,89 @@ public:
 		CHECK(driver.frees == driver.allocations);
 		end_native(device);
 	}
+	static void prospective_hold_increments() {
+		RenderingDevice device;
+		Indexed144FormatDriver driver;
+		begin_native(device, driver);
+		const RID a = device.vertex_buffer_create(12, {}, RenderingDevice::BUFFER_CREATION_AS_STORAGE_BIT);
+		const RID b = device.vertex_buffer_create(12, {}, RenderingDevice::BUFFER_CREATION_AS_STORAGE_BIT);
+		using Key = RenderingDevice::NativeProspectiveKey;
+		using Plan = RenderingDevice::NativeProspectiveHoldRoots;
+		using Symbol = RenderingDevice::NativeProspectiveSymbol;
+		Plan plans[3];
+		plans[0].roots = { Key{ a, UINT32_MAX }, Key{ a, UINT32_MAX } };
+		plans[1].roots = { Key{ a, UINT32_MAX } };
+		plans[2].roots = { Key{ b, UINT32_MAX } };
+		Symbol future;
+		future.dependencies = { a, b };
+		Symbol symbols[] = { future };
+		const uint32_t formats = driver.formats, before_arrays = arrays(device);
+		const uint32_t allocations = driver.allocations, frees = driver.frees;
+		auto *actual_a = device.vertex_buffer_owner.get_or_null(a);
+		auto *actual_b = device.vertex_buffer_owner.get_or_null(b);
+		CHECK(actual_a != nullptr);
+		CHECK(actual_b != nullptr);
+		if (actual_a && actual_b) {
+			MutexLock lock(device._thread_safe_);
+			auto check_zero = [&]() {
+				CHECK(actual_a->native_immutable_holds == 0);
+				CHECK(actual_b->native_immutable_holds == 0);
+				CHECK(device.native_immutable_hold_count == 0);
+			};
+			CHECK(device._native_prospective_hold_increments_locked({ plans, 3 }, {}) == OK);
+			check_zero(); // Check before injecting metadata, so leaks cannot be erased.
+			actual_a->native_immutable_holds = UINT32_MAX - 1;
+			CHECK(device._native_prospective_hold_increments_locked({ plans, 1 }, {}) == OK); // Duplicate roots: one increment.
+			CHECK(actual_a->native_immutable_holds == UINT32_MAX - 1);
+			CHECK(device._native_prospective_hold_increments_locked({ plans, 2 }, {}) == ERR_PARAMETER_RANGE_ERROR);
+			CHECK(actual_a->native_immutable_holds == UINT32_MAX - 1);
+			CHECK(actual_b->native_immutable_holds == 0);
+			CHECK(device.native_immutable_hold_count == 0);
+			actual_a->native_immutable_holds = UINT32_MAX - 2;
+			CHECK(device._native_prospective_hold_increments_locked({ plans, 2 }, {}) == OK);
+			CHECK(actual_a->native_immutable_holds == UINT32_MAX - 2);
+			plans[2].roots = { Key{ RID(), 0 } }; // Future VA adds a third real a pin through its backing edge.
+			CHECK(device._native_prospective_hold_increments_locked({ plans, 3 }, { symbols, 1 }) == ERR_PARAMETER_RANGE_ERROR);
+			CHECK(actual_a->native_immutable_holds == UINT32_MAX - 2);
+			CHECK(actual_b->native_immutable_holds == 0);
+			CHECK(device.native_immutable_hold_count == 0);
+			actual_a->native_immutable_holds = UINT32_MAX - 3;
+			CHECK(device._native_prospective_hold_increments_locked({ plans, 3 }, { symbols, 1 }) == OK);
+			CHECK(actual_a->native_immutable_holds == UINT32_MAX - 3);
+			CHECK(actual_b->native_immutable_holds == 0);
+			CHECK(device.native_immutable_hold_count == 0);
+			actual_a->native_immutable_holds = 0;
+			check_zero();
+			device.native_immutable_hold_count = UINT32_MAX - 1;
+			CHECK(device._native_prospective_hold_increments_locked({ plans, 1 }, {}) == OK);
+			CHECK(device.native_immutable_hold_count == UINT32_MAX - 1);
+			CHECK(device._native_prospective_hold_increments_locked({ plans, 2 }, {}) == ERR_PARAMETER_RANGE_ERROR);
+			CHECK(device.native_immutable_hold_count == UINT32_MAX - 1);
+			CHECK(actual_a->native_immutable_holds == 0);
+			CHECK(actual_b->native_immutable_holds == 0);
+			device.native_immutable_hold_count = 0;
+			plans[2].limit = 2; // Future VA plus two actual VBs needs three nodes.
+			CHECK(device._native_prospective_hold_increments_locked({ plans, 3 }, { symbols, 1 }) == ERR_OUT_OF_MEMORY);
+			check_zero();
+			plans[2].limit = 3;
+			CHECK(device._native_prospective_hold_increments_locked({ plans, 3 }, { symbols, 1 }) == OK);
+			check_zero();
+			plans[0].limit = 1025;
+			CHECK(device._native_prospective_hold_increments_locked({ plans, 1 }, {}) == ERR_INVALID_PARAMETER);
+			check_zero();
+		}
+		CHECK(driver.formats == formats);
+		CHECK(arrays(device) == before_arrays);
+		CHECK(driver.allocations == allocations);
+		CHECK(driver.frees == frees);
+		CHECK(device.dependency_map.is_empty());
+		CHECK(device.reverse_dependency_map.is_empty());
+		device.free_rid(a);
+		device.free_rid(b);
+		dispose(device);
+		CHECK(driver.frees == driver.allocations);
+		end_native(device);
+	}
 	static void prospective_closure_only() {
 		RenderingDevice device;
 		Indexed144FormatDriver driver;
@@ -1153,6 +1236,10 @@ TEST_CASE("[B4][NativeVertexArrayPlan] retained Indexed144 source plans without 
 
 TEST_CASE("[B4][NativeVertexArrayPreflight] validates exact fetches without factories or holds") {
 	TestIndexed144DeviceAccess::preflight_only();
+}
+
+TEST_CASE("[B4][ProspectiveHoldIncrements] original owner counters reject combined planned pins without effects") {
+	TestIndexed144DeviceAccess::prospective_hold_increments();
 }
 
 TEST_CASE("[B4][ProspectiveClosureKeys] follows actual and virtual adoption edges without staging") {
