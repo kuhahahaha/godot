@@ -747,7 +747,7 @@ Error ParticlesHeightfieldClearTestFixture::capture_candidate() {
 	const Error postbind_error = postbind_candidate->capture(*renderer, instances);
 	const auto &postbind_prefix = postbind_candidate->get_capture_prefix();
 	const auto &postbind_cleanup = postbind_prefix.get_cleanup_record().draw;
-	bool postbind_restored = postbind_error != OK && postbind_candidate->get_state() == Frame::State::FailedRetiring &&
+	bool postbind_restored = postbind_error == ERR_OUT_OF_MEMORY && postbind_candidate->get_state() == Frame::State::FailedRetiring &&
 			postbind_candidate->native_range.is_valid() &&
 			postbind_candidate->get_capture_error() == postbind_error && postbind_prefix.get_error() == postbind_error &&
 			postbind_prefix.get_business_count() == 5 && postbind_prefix.has_cleanup_attempt() && postbind_prefix.is_restored() &&
@@ -876,7 +876,7 @@ Error ParticlesHeightfieldClearTestFixture::capture_candidate() {
 		result_data["candidate_failed_without_business_prefix"] = rejected_ok;
 		result_data["candidate_postbind_restored"] = postbind_restored;
 		result_data["candidate_capture_once"] = once;
-		result_data["candidate_state"] = captured ? "CaptureRecorded" : "FailedRetiring";
+		result_data["candidate_state"] = candidate_frame->get_state() == Frame::State::CaptureRecorded ? "CaptureRecorded" : "FailedRetiring";
 		result_data["candidate_checked_handles"] = handles;
 		result_data["candidate_draws"] = draws;
 		result_data["candidate_index_binds"] = indices;
