@@ -1,0 +1,7 @@
+# Applied original graph selected-buffer observations
+
+The original graph can mechanically check a closed single-dispatch producer against the canonical whole-buffer tracker's latest writer, and after an actual readonly reader closes, require its real tracker read entry and direct stored producer edge. Open lists, overwritten content even with a transitive dependency path, malformed/foreign/stale handles, writable/ambiguous readers, transition backends and opaque callbacks refuse conservatively. Observations allocate nothing and do not mutate graph state.
+
+Combined build with independently reviewed aggregate prerequisite exit0. Graph9/48, combined target10/111, graph neighbors39/899 and restored union232/86738 passed. Removing freshness equality failed3 intended assertions; removing the original actual adjacency insertion failed6. Both normal exit1, followed by exact source restoration/rebuild/green. Final independent test-delta review retained. No GPU execution for this mechanical slice.
+
+These APIs issue no source/read authority. Caller must supply the actual canonical Buffer tracker and retain the original RD writer lock across preflight and real append/postcheck. Native trusted Runtime99 handoff, original consumer binding, producer arena custody and actual final-reader return are still unimplemented. Crossgraph remains required and unsupported. See RUNTIME_RECEIPT.json for exact source/log pins and limitations.

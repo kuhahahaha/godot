@@ -280,6 +280,18 @@ public:
 		}
 	};
 
+	// Mechanical observations only, never a selected-source permit. Caller must
+	// supply the original Buffer's canonical tracker under the RD writer lock,
+	// with no active RD lists, and retain that lock through preflight + append.
+	// Narrow slice: one dispatch per closed compute list, whole buffers, no
+	// buffer usage transitions, callbacks, texture slices, draw or ray usage.
+	// Instruction handles resolve only after their actual list has closed.
+	bool is_latest_buffer_writer(const ResourceTracker *p_tracker, const RecordHandle &p_producer) const;
+	// Call immediately after the real readonly reader list closes. Requires the
+	// source still latest, this tracker's actual reader entry, and a DIRECT edge;
+	// transitive reachability alone cannot establish selected content freshness.
+	bool has_buffer_read_dependency(const ResourceTracker *p_tracker, const RecordHandle &p_producer, const RecordHandle &p_reader) const;
+
 	typedef RDD::RenderPassID (*RenderPassCreationFunction)(RenderingDeviceDriver *p_driver, VectorView<RDD::AttachmentLoadOp> p_load_ops, VectorView<RDD::AttachmentStoreOp> p_store_ops, void *p_user_data);
 
 	struct FramebufferStorage {
@@ -926,6 +938,7 @@ private:
 	int32_t _add_to_write_list(int32_t p_command_index, Rect2i p_subresources, int32_t p_list_index, bool p_partial_coverage);
 	RecordedCommand *_allocate_command(uint32_t p_command_size, int32_t &r_command_index);
 	bool _resolve_record_command_index(const RecordHandle &p_handle, uint32_t &r_index) const;
+	bool _resolve_single_dispatch_command(const RecordHandle &p_handle, uint32_t &r_index) const;
 	DependencyPathResult _query_dependency_path(uint32_t p_source, uint32_t p_destination, const DependencyPathScratch &p_scratch, uint32_t &r_path_length) const;
 	DrawListInstruction *_allocate_draw_list_instruction(uint32_t p_instruction_size);
 	ComputeListInstruction *_allocate_compute_list_instruction(uint32_t p_instruction_size);

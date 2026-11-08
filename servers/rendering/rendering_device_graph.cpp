@@ -162,6 +162,85 @@ bool RenderingDeviceGraph::_resolve_record_command_index(const RecordHandle &p_h
 	return false;
 }
 
+bool RenderingDeviceGraph::_resolve_single_dispatch_command(const RecordHandle &p_handle, uint32_t &r_index) const {
+	if ((p_handle.kind != 2 && p_handle.kind != 4) || !_resolve_record_command_index(p_handle, r_index)) {
+		return false;
+	}
+	const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[r_index]]);
+	if (command->type != RecordedCommand::TYPE_COMPUTE_LIST) {
+		return false;
+	}
+	const auto *list = static_cast<const RecordedComputeListCommand *>(command);
+	uint32_t dispatches = 0;
+	for (uint64_t location : compute_record_offsets) {
+		if (uint32_t(location >> 32) == list->list_index && ++dispatches > 1) {
+			return false;
+		}
+	}
+	return dispatches == 1;
+}
+
+bool RenderingDeviceGraph::is_latest_buffer_writer(const ResourceTracker *p_tracker, const RecordHandle &p_producer) const {
+	if (!driver || graph_end_called || driver_buffers_require_transitions || has_driver_callbacks() || !p_tracker ||
+			!p_tracker->buffer_driver_id.id || p_tracker->texture_driver_id.id || p_tracker->acceleration_structure_driver_id.id ||
+			p_tracker->parent || p_tracker->command_frame != tracking_frame || p_tracker->write_command_list_enabled ||
+			p_tracker->draw_list_index >= 0 || p_tracker->raytracing_list_index >= 0) {
+		return false;
+	}
+	uint32_t producer;
+	if (!_resolve_single_dispatch_command(p_producer, producer) || p_tracker->write_command_or_list_index != int32_t(producer)) {
+		return false;
+	}
+	// add_compute_list_usage changes compute_list_index before list closure;
+	// the old writer field alone must not certify an open later source use.
+	for (uint32_t i = 0; i < command_count; ++i) {
+		const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[i]]);
+		if (command->type == RecordedCommand::TYPE_COMPUTE_LIST &&
+				static_cast<const RecordedComputeListCommand *>(command)->list_index == uint32_t(p_tracker->compute_list_index)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool RenderingDeviceGraph::has_buffer_read_dependency(const ResourceTracker *p_tracker, const RecordHandle &p_producer, const RecordHandle &p_reader) const {
+	if (!is_latest_buffer_writer(p_tracker, p_producer) || p_tracker->usage != RESOURCE_USAGE_STORAGE_BUFFER_READ ||
+			p_tracker->compute_list_usage != RESOURCE_USAGE_STORAGE_BUFFER_READ) {
+		return false;
+	}
+	uint32_t producer, reader;
+	if (!_resolve_single_dispatch_command(p_producer, producer) || !_resolve_single_dispatch_command(p_reader, reader) ||
+			producer >= reader || p_tracker->command_index != int32_t(reader)) {
+		return false;
+	}
+	bool actual_read = false;
+	uint32_t visited = 0;
+	for (int32_t node = p_tracker->read_full_command_list_index; node >= 0;) {
+		if (uint32_t(node) >= command_list_nodes.size() || visited++ >= command_list_nodes.size()) {
+			return false;
+		}
+		const auto &entry = command_list_nodes[node];
+		actual_read |= entry.command_index == int32_t(reader);
+		node = entry.next_list_index;
+	}
+	if (!actual_read) {
+		return false;
+	}
+	const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[producer]]);
+	visited = 0;
+	for (int32_t node = command->adjacent_command_list_index; node >= 0;) {
+		if (uint32_t(node) >= command_list_nodes.size() || visited++ >= command_list_nodes.size()) {
+			return false;
+		}
+		const auto &entry = command_list_nodes[node];
+		if (entry.command_index == int32_t(reader)) {
+			return true;
+		}
+		node = entry.next_list_index;
+	}
+	return false;
+}
+
 bool RenderingDeviceGraph::has_driver_callbacks() const {
 	for (uint32_t i = 0; i < command_count; ++i) {
 		const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[i]]);

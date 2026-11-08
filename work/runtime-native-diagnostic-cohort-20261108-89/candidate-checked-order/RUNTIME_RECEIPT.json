@@ -1,0 +1,93 @@
+{
+  "source_base": "f6ca49271b",
+  "patch_sha256": "913b9476d2fc82620ab807f3824442f0e258526933d14f4903c286a95f88f811",
+  "build_exit": 0,
+  "build_snapshot": "Both independently reviewed graph and aggregate prerequisites were applied during this build; pins below identify this constituent",
+  "target": {
+    "cases": 9,
+    "assertions": 48,
+    "exit": 0
+  },
+  "combined_target": {
+    "cases": 10,
+    "assertions": 111,
+    "exit": 0
+  },
+  "graph_neighbors": {
+    "cases": 39,
+    "assertions": 899,
+    "exit": 0
+  },
+  "restored_union": {
+    "cases": 232,
+    "assertions": 86738,
+    "exit": 0
+  },
+  "mutations": [
+    {
+      "control": "freshness",
+      "command": [
+        "bin/godot.macos.editor.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*SelectedBufferSource*",
+        "--no-colors"
+      ],
+      "exit": 1,
+      "assertions_line": [
+        "[doctest] assertions: 48 | 45 passed | 3 failed |"
+      ],
+      "restore_exit": 0
+    },
+    {
+      "control": "actual-edge",
+      "command": [
+        "bin/godot.macos.editor.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*SelectedBufferSource*",
+        "--no-colors"
+      ],
+      "exit": 1,
+      "assertions_line": [
+        "[doctest] assertions: 48 | 42 passed | 6 failed |"
+      ],
+      "restore_exit": 0
+    }
+  ],
+  "source_sha256": {
+    "servers/rendering/rendering_device_graph.h": "3eea7ca0b5a387bd687a39378a000b4c4666498cb72d9c00f3567e4e7db3adc9",
+    "servers/rendering/rendering_device_graph.cpp": "324e65cb6fabb93b58610a560098c7ff3d8574b1ff0d9618b62935b8d655d0f7",
+    "tests/servers/rendering/test_graph_selected_buffer_source.cpp": "aa9d0ca6e4998a9e807b3c7d64badcab596bae30e751f35f05800f075ce63a72"
+  },
+  "limits": [
+    "Mechanical observations only; actual canonical buffer tracker and original RD writer-lock preconditions remain caller obligations",
+    "No trusted Runtime carrier handoff/native consumer association/producer arena borrow/final-reader return integration",
+    "Whole buffers, closed single-dispatch compute lists, transition-free backend and no opaque callbacks only; crossgraph unsupported contract remains open",
+    "Tests exercise actual graph tracker/adjacency but no native buffer import/shader reflection/GPU execution"
+  ],
+  "gpu_run": false,
+  "logs": {
+    "live-restore-aggregate-resource.log": "e05ec2e50d36d9af64a4327fefc773fbc0e691915f412c8894e24ccd0d4e3592",
+    "live-restore-actual-edge-build.log": "b64945d15512ed0c800712463ee86d6d5db7c5d802cf1d8575623747c2859533",
+    "live-red-aggregate-resource.log": "1335a19840fbda979f7cadbf019ca611d2f9418f14b5c7425ddddbdc33803f4c",
+    "live-union.log": "ba14d5cde761a11d00cb8a40eef2d7196801bb1c88feef356a5b0746f41fe983",
+    "live-red-freshness.log": "e0c3efbd8da52bac45f1c2f1b29a4ad4fb903f4db1f6d11487f69d1e97b9d22a",
+    "live-red-aggregate-resource-build.log": "c61c280ef098960a803fe4515fde569326c62dde31bfbd5c572029b4e160291d",
+    "live-restore-freshness-build.log": "c63811acb26b033a65ab4fd542854d0463d0c8144de83236e973e61ee55af858",
+    "live-red-freshness-build.log": "fb644138259965d6fcb1fbccc02a59ab7d03670cd4dd2619ba07577770c41860",
+    "live-red-aggregate-device.log": "7a35d5b082cd12b2a9206cd050be358af2cb3020e15304003998bb2c9588bac8",
+    "live-restore-aggregate-device-build.log": "b3bf5185eb0fe21795793d64be307f6abdf83c7d8c76178661e970f0e75ca54b",
+    "live-restore-freshness.log": "e05ec2e50d36d9af64a4327fefc773fbc0e691915f412c8894e24ccd0d4e3592",
+    "live-restore-aggregate-resource-build.log": "efb1f4750115024657b19eb5ae7bc319fd2b7ff35616476cb4e44190ddba24ec",
+    "live-red-aggregate-device-build.log": "ff52b67bb5394bf69e4d42db568578b964f80643ac6aa67935a1fad28092b0c5",
+    "live-graph-neighbors.log": "2f6f565f390fb6295507ecdd57f1c6d18cbe0281ac2ad28991c6dd4b051633c0",
+    "live-red-actual-edge-build.log": "c39aef6cc1520dda836cf361ab382cdc1851f2f22378bf6f0369013a0c4b8e47",
+    "live-red-actual-edge.log": "9f949ba8d39f02ef1c6db4aba525f677aba0c790ea7d1752f1c09268a809ab45",
+    "live-restore-aggregate-device.log": "e05ec2e50d36d9af64a4327fefc773fbc0e691915f412c8894e24ccd0d4e3592",
+    "live-target.log": "e05ec2e50d36d9af64a4327fefc773fbc0e691915f412c8894e24ccd0d4e3592",
+    "live-restored-union.log": "ba14d5cde761a11d00cb8a40eef2d7196801bb1c88feef356a5b0746f41fe983",
+    "live-green-build.log": "6efc957de5e8001e98ecd9f4c6737ae81336748c7b13e6d33400c182576ed227",
+    "live-restore-actual-edge.log": "e05ec2e50d36d9af64a4327fefc773fbc0e691915f412c8894e24ccd0d4e3592"
+  }
+}
