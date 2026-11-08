@@ -991,6 +991,193 @@ struct Access {
 		}
 	};
 
+	static void exact_request_requirements() {
+		using namespace GDExtensionDeviceExit;
+		auto ensure = [](bool passed, const char *phase) {
+			CHECK_MESSAGE(passed, "Request requirements fixture: ", phase);
+			return passed;
+		};
+		auto *server = ordinal_server();
+		if (!server) {
+			return;
+		}
+		const auto query = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRequestRequirementsV1>("device_session_production_request_requirements_v1");
+		const auto reserve_upload = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReserveV2>("device_session_production_reserve_v2");
+		const auto reserve_incoming = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReserveReadbackSourcesV1>("device_session_production_reserve_readback_sources_v1");
+		if (!ensure(query != nullptr, "installed query")) {
+			return;
+		}
+		if (!ensure(reserve_upload != nullptr, "installed upload reserve")) {
+			return;
+		}
+		if (!ensure(reserve_incoming != nullptr, "installed incoming reserve")) {
+			return;
+		}
+		OrdinalPlan plan;
+		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 2, 2, 2, 2, 2, 32, 1, 2, 8, 64 };
+		plan.attachment_requests = 2;
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		if (!ensure(fixture.prepare_device(server) == OK, "device preparation")) {
+			return;
+		}
+		if (!ensure(fixture.initialize_owner(1, false, false, +[](void *, ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *) {}, nullptr, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &plan, nullptr, true) == OK, "owner enrollment")) {
+			return;
+		}
+		fixture.rd.upload_staging_buffers.block_size = fixture.rd.download_staging_buffers.block_size = 4096;
+		// Original cleanup operations on both acquired requests on every explicit
+		// early return; SingletonEnrollment then closes the original attachment.
+		struct Requests {
+			Registry &registry;
+			GDExtensionProductionRequestRefV1 refs[2] = {};
+			~Requests() {
+				for (auto ref : refs) {
+					if (ref.handle_serial) {
+						CHECK(registry.production_cancel(ref).native_error == OK);
+						CHECK(registry.production_release(ref).native_error == OK);
+					}
+				}
+			}
+		} acquired{ fixture.registry };
+		GDExtensionProductionActionV2 action{ 0, 11, 7, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
+		GDExtensionProductionResourceV1 resource{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 64, 0 };
+		GDExtensionProductionUseV1 use{ 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 4, 0 };
+		GDExtensionProductionUploadV2 upload{};
+		upload.abi = production_dto_abi<GDExtensionProductionUploadV2>();
+		upload.canonical_suboperation = 11;
+		upload.source_recipe_substep = 7;
+		upload.bytes = 4;
+		GDExtensionProductionReadbackSourceV1 incoming{ 0, GDEXTENSION_PRODUCTION_READBACK_RETAINED_INCOMING_V1, 0, 0, 4, {}, { 1, 123 } };
+		GDExtensionProductionMetadataQuoteV1 quote{};
+		auto upload_query = [&](uint32_t bindings = 0) {
+			return query(fixture.attachment, &action, 1, &resource, 1, &use, 1, &upload, 1, nullptr, 0, bindings, 4, &quote).native_error;
+		};
+		const uint64_t serial_before = fixture.registry.production_serials.next;
+		if (!ensure(upload_query() == OK, "upload query")) {
+			return;
+		}
+		CHECK(fixture.registry.production_serials.next == serial_before);
+		CHECK(quote.capacity.requests == 1);
+		CHECK(quote.capacity.suboperations == 1);
+		CHECK(quote.capacity.resources == 1);
+		CHECK(quote.capacity.resource_uses == 1);
+		CHECK(quote.capacity.graph_memberships == 1);
+		CHECK(quote.capacity.native_memberships == 1); // Original QuoteDriver profile.
+		CHECK(quote.capacity.return_cells == 1); // Retained resource-slot index.
+		CHECK(quote.capacity.retained_payload_bytes == 4);
+		CHECK(quote.capacity.readback_bytes == 0);
+		CHECK(quote.graph_slots == 4);
+		const auto producer_quote = quote;
+		CHECK(upload_query(UINT32_MAX) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(memcmp(&producer_quote, &quote, sizeof(quote)) == 0);
+		action.action_kind = GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1;
+		CHECK(upload_query() == ERR_UNAVAILABLE);
+		action.action_kind = GDEXTENSION_PRODUCTION_UPLOAD_V1;
+		upload.action_ordinal = 1;
+		CHECK(upload_query() == ERR_INVALID_DATA);
+		upload.action_ordinal = 0;
+		fixture.rd.upload_staging_buffers.block_size = 16;
+		CHECK(upload_query() == ERR_UNAVAILABLE);
+		fixture.rd.upload_staging_buffers.block_size = 4096;
+		CHECK(memcmp(&producer_quote, &quote, sizeof(quote)) == 0);
+		// Same graph-capacity branch for source copy: exactly one graph.
+		action.action_kind = GDEXTENSION_PRODUCTION_COPY_V1;
+		if (!ensure(query(fixture.attachment, &action, 1, &resource, 1, &use, 1, nullptr, 0, nullptr, 0, 0, 0, &quote).native_error == OK, "copy query")) {
+			return;
+		}
+		CHECK(quote.capacity.graph_memberships == 1);
+		CHECK(quote.capacity.native_memberships == 1);
+		CHECK(quote.capacity.retained_payload_bytes == 0);
+		// Dispatch uses its actual unit plus a declared storage dependency.
+		GDExtensionProductionResourceV1 dispatch_resources[2] = {
+			{ GDEXTENSION_PRODUCTION_UNIT_V1, 4, 5, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 6, 0, 0 }, resource
+		};
+		action.action_kind = GDEXTENSION_PRODUCTION_DISPATCH_V1;
+		use.resource_slot = 1;
+		if (!ensure(query(fixture.attachment, &action, 1, dispatch_resources, 2, &use, 1, nullptr, 0, nullptr, 0, 1, 0, &quote).native_error == OK, "dispatch query")) {
+			return;
+		}
+		CHECK(quote.capacity.graph_memberships == 1);
+		CHECK(quote.capacity.native_memberships == 1);
+		CHECK(quote.capacity.resource_uses == 2);
+		CHECK(quote.capacity.return_cells == 2);
+		// Typed upload producer reservation uses only the queried request slice.
+		action.action_kind = GDEXTENSION_PRODUCTION_UPLOAD_V1;
+		use.resource_slot = 0;
+		if (!ensure(reserve_upload(fixture.attachment, &plan.operation, &producer_quote.capacity, &action, 1, &resource, 1, &use, 1, nullptr, 0, &acquired.refs[0]).native_error == OK, "producer reserve")) {
+			return;
+		}
+		Request *first = nullptr;
+		RenderingDevice *rd = nullptr;
+		{
+			MutexLock lock(fixture.registry.mutex);
+			if (!ensure(fixture.registry.production_request_locked(acquired.refs[0], false, first, rd) == OK, "producer lookup")) {
+				return;
+			}
+		}
+		if (!ensure(first != nullptr, "producer pointer")) {
+			return;
+		}
+		if (!ensure(first->contract_version == 2, "producer contract")) {
+			return;
+		}
+		// Readback branch accounts exact bytes and ceil(bytes/32) graph bound.
+		action.action_kind = GDEXTENSION_PRODUCTION_READBACK_V1;
+		action.physical_unit = UINT32_MAX;
+		action.readback_slot = 0;
+		use.access = GDEXTENSION_PRODUCTION_READ_V1;
+		use.byte_size = incoming.byte_size = 33;
+		if (!ensure(query(fixture.attachment, &action, 1, &resource, 1, &use, 1, nullptr, 0, &incoming, 1, 0, 0, &quote).native_error == OK, "33-byte readback query")) {
+			return;
+		}
+		CHECK(quote.capacity.graph_memberships == 2);
+		CHECK(quote.capacity.native_memberships == 2);
+		CHECK(quote.capacity.readbacks == 1);
+		CHECK(quote.capacity.readback_bytes == 33);
+		CHECK(first->attachment->children == 1); // Query did not allocate a reader.
+		use.byte_size = incoming.byte_size = 4;
+		if (!ensure(query(fixture.attachment, &action, 1, &resource, 1, &use, 1, nullptr, 0, &incoming, 1, 0, 0, &quote).native_error == OK, "4-byte readback query")) {
+			return;
+		}
+		CHECK(quote.capacity.graph_memberships == 1);
+		CHECK(quote.capacity.native_memberships == 1);
+		CHECK(quote.capacity.readback_bytes == 4);
+		CHECK(quote.capacity.retained_payload_bytes == 0);
+		const auto reader_quote = quote;
+		incoming.copy_action_ordinal = 1;
+		CHECK(query(fixture.attachment, &action, 1, &resource, 1, &use, 1, nullptr, 0, &incoming, 1, 0, 0, &quote).native_error == ERR_INVALID_DATA);
+		CHECK(memcmp(&reader_quote, &quote, sizeof(quote)) == 0);
+		incoming.copy_action_ordinal = 0;
+		auto reader_operation = plan.operation;
+		++reader_operation.owner_request_nonce;
+		if (!ensure(reserve_incoming(fixture.attachment, &reader_operation, &reader_quote.capacity, &action, 1, &resource, 1, &use, 1, &incoming, 1, &acquired.refs[1]).native_error == OK, "reader reserve")) {
+			return;
+		}
+		Request *second = nullptr;
+		{
+			MutexLock lock(fixture.registry.mutex);
+			if (!ensure(fixture.registry.production_request_locked(acquired.refs[1], false, second, rd) == OK, "reader lookup")) {
+				return;
+			}
+		}
+		if (!ensure(second != nullptr, "reader pointer")) {
+			return;
+		}
+		CHECK(second->contract_version == 2);
+		CHECK(second->readbacks[0].declaration.source_kind == GDEXTENSION_PRODUCTION_READBACK_RETAINED_INCOMING_V1);
+		CHECK(second->readbacks[0].declaration.incoming.backing_serial == 123);
+		CHECK(first->serial == acquired.refs[0].handle_serial);
+		CHECK(first->attachment == second->attachment);
+		CHECK(first->attachment->children == 2);
+		CHECK(first->graphs != second->graphs);
+		CHECK(first->natives != second->natives);
+		CHECK(first->returns != second->returns);
+		CHECK((first->commands + first->command_count <= second->commands || second->commands + second->command_count <= first->commands));
+		CHECK(fixture.driver.issues == 0);
+		// Backing serial123 is a typed fixture input, never an authenticated
+		// producer carrier join, imported physical buffer, or GPU order claim.
+	}
+
 #ifdef THREADS_ENABLED
 	static void quote_lock_contention(bool p_accept) {
 		REQUIRE(Thread::is_main_thread()); // Never change the engine's thread identity.
@@ -14596,3 +14783,23 @@ TEST_CASE("[SceneTree][ProductionRequest][NativeSceneReleaseMaintenanceBudget] a
 	TestProductionRequest::Access::output_alias_readback_complete(true, true);
 }
 #endif
+
+TEST_CASE("[SceneTree][ProductionRequest][Requirements] installed typed upload and incoming readback metadata slices coexist") {
+	TestProductionRequest::Access::exact_request_requirements();
+}
+TEST_CASE("[ProductionRequest][Requirements] staging bound rejects overflow and unsupported allocator") {
+	using namespace GDExtensionDeviceExit;
+	uint32_t graphs = 99;
+	CHECK(production_staging_graph_bound(0, 4096, graphs) == ERR_PARAMETER_RANGE_ERROR);
+	CHECK(graphs == 0);
+	CHECK(production_staging_graph_bound(UINT64_MAX, 4096, graphs) == ERR_PARAMETER_RANGE_ERROR);
+	CHECK(production_staging_graph_bound(32, 16, graphs) == ERR_UNAVAILABLE);
+	CHECK(production_staging_graph_bound(1, 4096, graphs) == OK);
+	CHECK(graphs == 1);
+	CHECK(production_staging_graph_bound(32, 4096, graphs) == OK);
+	CHECK(graphs == 1);
+	CHECK(production_staging_graph_bound(33, 4096, graphs) == OK);
+	CHECK(graphs == 2);
+	CHECK(production_staging_graph_bound(UINT32_MAX, 4096, graphs) == OK);
+	CHECK(graphs == 134217728);
+}

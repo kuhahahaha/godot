@@ -1,0 +1,9 @@
+# Installed finite per-request requirements query
+
+Implemented the additive typed `device_session_production_request_requirements_v1` with original staging/native profile/layout algorithms. Original typed V2 upload and incoming-readback reserves use two disjoint request slices in one unchanged accepted pool while the first request remains retained. Reserve now uses the same actual per-action storage worker bound for its second quote check. The query creates no source, operation, ordering or arena-borrow authority.
+
+Actual build exit0. Targeted2/124, neighbors144/73286 and existing combined83/21701 passed. A temporary bound-of-one mutation failed exactly4 intended assertions across2 cases, exit1 with normal cleanup. Source restored byte-for-byte, rebuilt exit0 and union221/86588 passed. See RUNTIME_RECEIPT.json and independent reviews. Existing three deliberate pipeline factory failures reproduce on the fixed baseline142/73162; existing camera-token/UTF8 negative diagnostics match fixed r1. No blanket diagnostic suppression.
+
+The original candidate files/README/SOURCE_PINS preserve isolated authoring history; their statements that no live apply/run occurred describe that earlier phase. This receipt supersedes those statements for the seven tracked files listed in RUNTIME_RECEIPT.json, now applied to HEAD80a. Fixed source/host publication is a later cohort receipt.
+
+Limits: CPU/dummy, fixture source serial only; no genuine Runtime99 carrier→native consumer join, physical import, GPU, actual Full reader or crossgraph claim. Native-output/raster/OUTPUT_ALIAS are explicitly unavailable. Runtime96 actual ownership/binding inputs remain pending. Profile-drift/nonzero-worker and broad hostile-span matrices are not run. This ABI is additive and remains marked DRAFT pending consumer SDK agreement; B OutputMetadataQuery mailbox is a separate original kind24 path.

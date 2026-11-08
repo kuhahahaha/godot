@@ -132,6 +132,19 @@ Error release_native_source(RDD &driver, NativeSourceMember &member) {
 	}
 	return error;
 }
+Error production_staging_graph_bound(uint64_t bytes, uint32_t block_size, uint32_t &graphs) {
+	graphs = 0;
+	if (!bytes || bytes > UINT32_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	if (block_size < 32) {
+		return ERR_UNAVAILABLE;
+	}
+	// Every nonfinal successful chunk is >=32 bytes; each graph captures at
+	// least one such chunk. Avoid bytes+31 so even hostile lengths cannot wrap.
+	graphs = uint32_t(bytes / 32 + (bytes % 32 != 0));
+	return OK;
+}
 Error record_source_slot_bound(uint32_t contexts, uint64_t graphs, uint32_t current, uint32_t workers, uint32_t &slots, uint32_t &frames) {
 	slots = frames = 0;
 	if (!contexts || !graphs) {

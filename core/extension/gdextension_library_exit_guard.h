@@ -1006,7 +1006,7 @@ private:
 	ProductionAttachment *production_attachments[RECORD_CAPACITY] = {};
 	Sequence production_serials;
 	static Error production_layout(const GDExtensionProductionCapacityV1 &, GDExtensionProductionMetadataQuoteV1 &, uint32_t = 0, uint32_t = 0);
-	Error production_device_quote_locked(RenderingDevice &, const GDExtensionProductionCapacityV1 &, GDExtensionProductionMetadataQuoteV1 &);
+	Error production_device_quote_locked(RenderingDevice &, const GDExtensionProductionCapacityV1 &, GDExtensionProductionMetadataQuoteV1 &, uint32_t worker_bound = UINT32_MAX);
 	Error production_installation_locked(GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProducerRegistrationRefV1, GDExtensionDeviceRegistryContextRef, GDExtensionOriginalDeviceSessionRef, uint32_t &, uint32_t &, HolderRetirement *&);
 	Error production_attachment_locked(GDExtensionProductionAttachmentRefV1, bool, ProductionAttachment *&, RenderingDevice *&);
 	Error production_request_locked(GDExtensionProductionRequestRefV1, bool, ProductionRequest *&, RenderingDevice *&);
@@ -1114,6 +1114,7 @@ public:
 	GDExtensionDeviceSessionResultV1 release_device_reference(uint64_t, uint64_t, bool);
 
 	// Production metadata handlers. Public ABI registration is deliberately separate.
+	GDExtensionDeviceSessionResultV1 production_request_requirements(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionActionV2 *actions, uint32_t action_count, const GDExtensionProductionResourceV1 *resources, uint32_t resource_count, const GDExtensionProductionUseV1 *uses, uint32_t use_count, const GDExtensionProductionUploadV2 *uploads, uint32_t upload_count, const GDExtensionProductionReadbackSourceV1 *readbacks, uint32_t readback_count, uint32_t binding_count, uint64_t payload_bytes, GDExtensionProductionMetadataQuoteV1 *out);
 	GDExtensionDeviceSessionResultV1 production_quote(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProducerRegistrationRefV1, GDExtensionDeviceRegistryContextRef, GDExtensionOriginalDeviceSessionRef, const GDExtensionProductionCapacityV1 *, GDExtensionProductionMetadataQuoteV1 *);
 	GDExtensionDeviceSessionResultV1 production_accept(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProducerRegistrationRefV1, GDExtensionDeviceRegistryContextRef, GDExtensionOriginalDeviceSessionRef, GDExtensionDeviceExitLibraryCodeHoldRef, const GDExtensionProductionMetadataQuoteV1 *, GDExtensionProductionAttachmentRefV1 *, GDExtensionProductionInstallationReportV1 *);
 	Error production_install_record_receiver(GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProductionAttachmentRefV1, ProductionRecordReceiver, void *, ProductionMetadataReceiver = nullptr);

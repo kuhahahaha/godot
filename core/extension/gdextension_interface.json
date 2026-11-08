@@ -23147,6 +23147,121 @@
                     "Original checked result; no logical completion or source acknowledgment is manufactured."
                 ]
             }
+        },
+        {
+            "name": "device_session_production_request_requirements_v1",
+            "since": "4.7",
+            "description": [
+                "DRAFT additive ABI: derive finite per-request capacity from synchronous frozen V2 physical rows for dispatch/copy/upload/readback only. Does not reserve arena space or grant logical/source/recording authority.",
+                "Graph count is a conservative staging bound, not an observed count. Native count comes from the original live driver profile. Reserve and append recheck live state and may fail if it changes.",
+                "binding_count is the row total of the original frozen future import-set binding spans, not a native verified descriptor certificate; payload_bytes is the exact retained push plus upload byte total. Only sizing-bearing shape is checked here; ownership/access/list/source tags and inactive payload fields still require original reserve validation. Existing reserve/prepare validates the actual closure. Out quote is unchanged on failure. Native output/raster return ERR_UNAVAILABLE."
+            ],
+            "arguments": [
+                {
+                    "name": "ref",
+                    "type": "GDExtensionProductionAttachmentRefV1",
+                    "description": [
+                        "Synchronous frozen input span or count; out is written only on success."
+                    ]
+                },
+                {
+                    "name": "actions",
+                    "type": "const GDExtensionProductionActionV2*",
+                    "description": [
+                        "Synchronous frozen input span or count; out is written only on success."
+                    ]
+                },
+                {
+                    "name": "action_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous frozen input span or count; out is written only on success."
+                    ]
+                },
+                {
+                    "name": "resources",
+                    "type": "const GDExtensionProductionResourceV1*",
+                    "description": [
+                        "Synchronous frozen input span or count; out is written only on success."
+                    ]
+                },
+                {
+                    "name": "resource_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous frozen input span or count; out is written only on success."
+                    ]
+                },
+                {
+                    "name": "uses",
+                    "type": "const GDExtensionProductionUseV1*",
+                    "description": [
+                        "Synchronous frozen input span or count; out is written only on success."
+                    ]
+                },
+                {
+                    "name": "use_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous frozen input span or count; out is written only on success."
+                    ]
+                },
+                {
+                    "name": "uploads",
+                    "type": "const GDExtensionProductionUploadV2*",
+                    "description": [
+                        "Synchronous frozen input span or count; out is written only on success."
+                    ]
+                },
+                {
+                    "name": "upload_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous frozen input span or count; out is written only on success."
+                    ]
+                },
+                {
+                    "name": "readbacks",
+                    "type": "const GDExtensionProductionReadbackSourceV1*",
+                    "description": [
+                        "Synchronous frozen input span or count; out is written only on success."
+                    ]
+                },
+                {
+                    "name": "readback_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous frozen input span or count; out is written only on success."
+                    ]
+                },
+                {
+                    "name": "binding_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous frozen input span or count; out is written only on success."
+                    ]
+                },
+                {
+                    "name": "payload_bytes",
+                    "type": "uint64_t",
+                    "description": [
+                        "Synchronous frozen input span or count; out is written only on success."
+                    ]
+                },
+                {
+                    "name": "out",
+                    "type": "GDExtensionProductionMetadataQuoteV1*",
+                    "description": [
+                        "Derived per-request quote; unchanged on failure."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original Godot Error from checked sizing; no reservation is created."
+                ]
+            }
         }
     ]
 }

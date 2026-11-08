@@ -166,7 +166,7 @@ Error Registry::production_membership_bound_locked(RenderingDevice &rd, uint32_t
 	out = uint32_t(uint64_t(graphs) * per_edge);
 	return OK;
 }
-Error Registry::production_device_quote_locked(RenderingDevice &rd, const GDExtensionProductionCapacityV1 &capacity, GDExtensionProductionMetadataQuoteV1 &out) {
+Error Registry::production_device_quote_locked(RenderingDevice &rd, const GDExtensionProductionCapacityV1 &capacity, GDExtensionProductionMetadataQuoteV1 &out, uint32_t worker_bound) {
 	if (!rd._thread_safe_.try_lock()) {
 		return ERR_BUSY;
 	}
@@ -181,7 +181,7 @@ Error Registry::production_device_quote_locked(RenderingDevice &rd, const GDExte
 		return e;
 	}
 	uint32_t memberships = 0;
-	e = production_membership_bound_locked(rd, capacity.graph_memberships, MIN(capacity.resources, rd.transfer_worker_pool_max_size), memberships);
+	e = production_membership_bound_locked(rd, capacity.graph_memberships, MIN(worker_bound == UINT32_MAX ? capacity.resources : worker_bound, rd.transfer_worker_pool_max_size), memberships);
 	if (e != OK) {
 		return e;
 	}
@@ -190,6 +190,142 @@ Error Registry::production_device_quote_locked(RenderingDevice &rd, const GDExte
 	}
 	out = quote;
 	return OK;
+}
+// Read-only sizing, never a reservation or source/operation grant. Inputs remain
+// synchronous; actual reserve/prepare/append validate the original frozen closure.
+GDExtensionDeviceSessionResultV1 Registry::production_request_requirements(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionActionV2 *actions, uint32_t action_count, const GDExtensionProductionResourceV1 *resources, uint32_t resource_count, const GDExtensionProductionUseV1 *uses, uint32_t use_count, const GDExtensionProductionUploadV2 *uploads, uint32_t upload_count, const GDExtensionProductionReadbackSourceV1 *readbacks, uint32_t readback_count, uint32_t binding_count, uint64_t payload_bytes, GDExtensionProductionMetadataQuoteV1 *out) {
+	if (!aligned(out)) {
+		return result(ERR_INVALID_PARAMETER);
+	}
+	// Validate every address/extent before reading rows. Zero-length spans do
+	// not dereference their pointer. Output may not overwrite an input span.
+	auto span = [&](auto *p, uint32_t count) {
+		using T = std::remove_cv_t<std::remove_pointer_t<decltype(p)>>;
+		return !count || (aligned(p) && count <= SIZE_MAX / sizeof(T) &&
+				uint64_t(count) * sizeof(T) <= UINTPTR_MAX - uintptr_t(p) &&
+				separate(p, size_t(count) * sizeof(T), out, sizeof(*out)));
+	};
+	if (!span(actions, action_count) || !span(resources, resource_count) || !span(uses, use_count) || !span(uploads, upload_count) || !span(readbacks, readback_count) || sizeof(*out) > UINTPTR_MAX - uintptr_t(out)) {
+		return result(ERR_INVALID_PARAMETER);
+	}
+	Lock lock(*this);
+	ProductionAttachment *attachment = nullptr;
+	RenderingDevice *rd = nullptr;
+	Error error = production_attachment_locked(ref, true, attachment, rd);
+	if (error != OK) {
+		return result(error);
+	}
+	const auto &pool = attachment->quote.capacity;
+	// Bound both scanning and nested closure work by the accepted finite pool.
+	if (action_count > pool.suboperations || resource_count > pool.resources || use_count > pool.resource_uses || readback_count > pool.readbacks || upload_count > action_count || binding_count > pool.resource_uses || payload_bytes > pool.retained_payload_bytes || binding_count > UINT32_MAX - use_count) {
+		return result(ERR_PARAMETER_RANGE_ERROR);
+	}
+	GDExtensionProductionCapacityV1 capacity = {};
+	capacity.abi = production_dto_abi<GDExtensionProductionCapacityV1>();
+	capacity.requests = 1;
+	capacity.suboperations = action_count;
+	capacity.resources = resource_count;
+	capacity.resource_uses = MAX(resource_count, use_count + binding_count);
+	capacity.readbacks = readback_count;
+	// Original returns[] is resource-slot indexed, including retained slots.
+	capacity.return_cells = resource_count;
+	capacity.retained_payload_bytes = payload_bytes;
+	for (uint32_t i = 0; i < resource_count; ++i) {
+		if (resources[i].resource_kind < GDEXTENSION_PRODUCTION_STORAGE_V1 || resources[i].resource_kind > GDEXTENSION_PRODUCTION_SET_V1 || resources[i].ownership == GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1) {
+			return result(ERR_UNAVAILABLE);
+		}
+	}
+	for (uint32_t i = 0; i < use_count; ++i) {
+		if (uses[i].resource_slot >= resource_count || !range(uses[i].byte_offset, uses[i].byte_size, resources[uses[i].resource_slot].physical_bytes)) {
+			return result(ERR_INVALID_DATA);
+		}
+	}
+	uint32_t worker_bound = 0;
+	for (uint32_t i = 0; i < action_count; ++i) {
+		const auto &action = actions[i];
+		if (action.action_ordinal != i || action.source_recipe_reserved || action.first_use > use_count || action.use_count > use_count - action.first_use) {
+			return result(ERR_INVALID_DATA);
+		}
+		if (action.action_kind < GDEXTENSION_PRODUCTION_DISPATCH_V1 || action.action_kind > GDEXTENSION_PRODUCTION_READBACK_V1) {
+			return result(ERR_UNAVAILABLE);
+		}
+		uint32_t storages = 0;
+		for (uint32_t u = 0; u < action.use_count; ++u) {
+			const uint32_t slot = uses[action.first_use + u].resource_slot;
+			bool duplicate = false;
+			for (uint32_t before = 0; before < u; ++before) {
+				duplicate |= uses[action.first_use + before].resource_slot == slot;
+			}
+			storages += resources[slot].resource_kind == GDEXTENSION_PRODUCTION_STORAGE_V1 && !duplicate;
+		}
+		worker_bound = MAX(worker_bound, storages);
+	}
+	if (!rd || !rd->_thread_safe_.try_lock()) {
+		return result(ERR_BUSY);
+	}
+	RdUnlock unlock{ rd->_thread_safe_ };
+	if (!rd->driver || rd->frames.is_empty()) {
+		return result(ERR_UNAVAILABLE);
+	}
+	uint64_t upload_bytes = 0;
+	for (uint32_t i = 0; i < action_count; ++i) {
+		const auto &action = actions[i];
+		uint32_t graphs = 1;
+		if (action.action_kind == GDEXTENSION_PRODUCTION_UPLOAD_V1) {
+			const GDExtensionProductionUploadV2 *upload = nullptr;
+			for (uint32_t j = 0; j < upload_count; ++j) {
+				if (uploads[j].action_ordinal == i) {
+					if (upload) {
+						return result(ERR_INVALID_DATA);
+					}
+					upload = &uploads[j];
+				}
+			}
+			if (!upload || !production_dto_valid(*upload) || upload->reserved || upload->source_recipe_reserved || upload->canonical_suboperation != action.canonical_suboperation || upload->source_recipe_substep != action.source_recipe_substep || upload->destination_slot >= resource_count || resources[upload->destination_slot].resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || !range(upload->destination_offset, upload->bytes, resources[upload->destination_slot].physical_bytes) || upload->bytes > payload_bytes - upload_bytes) {
+				return result(ERR_INVALID_DATA);
+			}
+			upload_bytes += upload->bytes;
+			error = production_staging_graph_bound(upload->bytes, rd->upload_staging_buffers.block_size, graphs);
+		} else if (action.action_kind == GDEXTENSION_PRODUCTION_READBACK_V1) {
+			if (action.readback_slot >= readback_count) {
+				return result(ERR_INVALID_DATA);
+			}
+			const auto &readback = readbacks[action.readback_slot];
+			if (readback.copy_action_ordinal != i || readback.resource_slot >= resource_count || resources[readback.resource_slot].resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || !range(readback.byte_offset, readback.byte_size, resources[readback.resource_slot].physical_bytes) || readback.byte_size > UINT64_MAX - capacity.readback_bytes) {
+				return result(ERR_INVALID_DATA);
+			}
+			capacity.readback_bytes += readback.byte_size;
+			error = production_staging_graph_bound(readback.byte_size, rd->download_staging_buffers.block_size, graphs);
+		}
+		if (error != OK || graphs > UINT32_MAX - capacity.graph_memberships) {
+			return result(error == OK ? ERR_PARAMETER_RANGE_ERROR : error);
+		}
+		capacity.graph_memberships += graphs;
+	}
+	// Reject orphan upload/readback rows, including repeated readback slots.
+	for (uint32_t i = 0; i < upload_count; ++i) {
+		if (uploads[i].action_ordinal >= action_count || actions[uint32_t(uploads[i].action_ordinal)].action_kind != GDEXTENSION_PRODUCTION_UPLOAD_V1) {
+			return result(ERR_INVALID_DATA);
+		}
+	}
+	for (uint32_t i = 0; i < readback_count; ++i) {
+		if (readbacks[i].copy_action_ordinal >= action_count || actions[uint32_t(readbacks[i].copy_action_ordinal)].action_kind != GDEXTENSION_PRODUCTION_READBACK_V1 || actions[uint32_t(readbacks[i].copy_action_ordinal)].readback_slot != i) {
+			return result(ERR_INVALID_DATA);
+		}
+	}
+	worker_bound = MIN(worker_bound, rd->transfer_worker_pool_max_size);
+	error = production_membership_bound_locked(*rd, capacity.graph_memberships, worker_bound, capacity.native_memberships);
+	if (error != OK) {
+		return result(error);
+	}
+	GDExtensionProductionMetadataQuoteV1 quote = {};
+	// Use the existing command arena layout (max workers), matching reserve.
+	error = production_layout(capacity, quote, rd->draw_graph.qualification_command_count(), rd->transfer_worker_pool_max_size);
+	if (error != OK || !capacity_fits(capacity, pool)) {
+		return result(error == OK ? ERR_PARAMETER_RANGE_ERROR : error);
+	}
+	*out = quote;
+	return result(OK);
 }
 Error Registry::production_installation_locked(GDExtensionDeviceExitSceneReadyContextRef frame, GDExtensionProducerRegistrationRefV1 producer, GDExtensionDeviceRegistryContextRef context, GDExtensionOriginalDeviceSessionRef session, uint32_t &library, uint32_t &device, HolderRetirement *&holder) {
 	View *view = nullptr;
@@ -721,7 +857,7 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	auto *nc = free_cells(a.natives, a.quote.capacity.native_memberships, c.native_memberships);
 	auto *tc = free_cells(a.returns, a.quote.capacity.return_cells, c.return_cells);
 	GDExtensionProductionMetadataQuoteV1 request_quote = {};
-	e = production_device_quote_locked(*rd, c, request_quote);
+	e = production_device_quote_locked(*rd, c, request_quote, worker_bound);
 	if (e != OK) {
 		return e;
 	}

@@ -109,6 +109,8 @@ Error retain_native_source(RDD &, NativeSourceMember &);
 NativeSourceObservation poll_native_source(RDD &, NativeSourceMember &, const NativeSourceOrigin &);
 Error release_native_source(RDD &, NativeSourceMember &);
 // Checked admission arithmetic only. Actual driver bound remains independent.
+// A finite bound from the original 32-byte staging allocation contract.
+Error production_staging_graph_bound(uint64_t p_bytes, uint32_t p_block_size, uint32_t &r_graphs);
 Error record_source_slot_bound(uint32_t p_contexts, uint64_t p_graphs, uint32_t p_current_commands, uint32_t p_workers, uint32_t &r_slots, uint32_t &r_frames);
 // The qualification policy retains its historical slot formula/cap. Sharing
 // overflow arithmetic does not make that fixed policy a production profile.

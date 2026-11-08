@@ -277,6 +277,10 @@ GDExtensionDeviceSessionResultV1 device_session_production_installation_observe_
 	return Registry::get_singleton().production_installation_observe(attachment, budget, out_report);
 }
 static_assert(std::is_same_v<decltype(&device_session_production_installation_observe_v1), GDExtensionInterfaceDeviceSessionProductionInstallationObserveV1>);
+GDExtensionDeviceSessionResultV1 device_session_production_request_requirements_v1(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionActionV2 *actions, uint32_t action_count, const GDExtensionProductionResourceV1 *resources, uint32_t resource_count, const GDExtensionProductionUseV1 *uses, uint32_t use_count, const GDExtensionProductionUploadV2 *uploads, uint32_t upload_count, const GDExtensionProductionReadbackSourceV1 *readbacks, uint32_t readback_count, uint32_t binding_count, uint64_t payload_bytes, GDExtensionProductionMetadataQuoteV1 *out) {
+	return Registry::get_singleton().production_request_requirements(ref, actions, action_count, resources, resource_count, uses, use_count, uploads, upload_count, readbacks, readback_count, binding_count, payload_bytes, out);
+}
+static_assert(std::is_same_v<decltype(&device_session_production_request_requirements_v1), GDExtensionInterfaceDeviceSessionProductionRequestRequirementsV1>);
 GDExtensionDeviceSessionResultV1 device_session_production_reserve_v2(GDExtensionProductionAttachmentRefV1 attachment, const GDExtensionProductionOperationV1 *operation, const GDExtensionProductionCapacityV1 *capacity, const GDExtensionProductionActionV2 *actions, uint32_t action_count, const GDExtensionProductionResourceV1 *resources, uint32_t resource_count, const GDExtensionProductionUseV1 *uses, uint32_t use_count, const GDExtensionProductionReadbackV2 *readbacks, uint32_t readback_count, GDExtensionProductionRequestRefV1 *out_request) {
 	return Registry::get_singleton().production_reserve_v2(attachment, operation, capacity, actions, action_count, resources, resource_count, uses, use_count, readbacks, readback_count, out_request);
 }
@@ -368,6 +372,7 @@ void register_production_interfaces() {
 	GDExtension::register_interface_function("device_session_scene_phase_relay_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_scene_phase_relay_v1));
 	GDExtension::register_interface_function("device_session_scene_phase_register_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_scene_phase_register_v1));
 	GDExtension::register_interface_function("device_session_scene_phase_unregister_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_scene_phase_unregister_v1));
+	GDExtension::register_interface_function("device_session_production_request_requirements_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_request_requirements_v1));
 	GDExtension::register_interface_function("device_session_production_reserve_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_reserve_v2));
 	GDExtension::register_interface_function("device_session_production_reserve_readback_sources_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_reserve_readback_sources_v1));
 	GDExtension::register_interface_function("device_session_production_prepare_dispatch_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_prepare_dispatch_v2));

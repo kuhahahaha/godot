@@ -1,0 +1,70 @@
+{
+  "scope": "Installed additive finite per-request requirements query for dispatch/copy/upload/readback; original reserve remains authority",
+  "source_base": "80a75b2815010fa712f0d96ab87a6f9f6c3eab97",
+  "candidate_patch_sha256": "5477b30ec7b6e415009075923eb0229edcf5b72f018c7eb85573ea68b612a73f",
+  "source_sha256": {
+    "core/extension/gdextension_interface.json": "9666aadcf6f347e5adb4039d5bf5adbf53bdc3fc15a6e744b631323938c0efd2",
+    "core/extension/gdextension_library_exit_guard.h": "062f991cd6048e266eac5a6ba692b9cb7394961b52d2d9b47a917831fbeb5a80",
+    "core/extension/gdextension_production_interface.cpp": "ca7d87487e4c21d4e6c41c2369c98c468da24eebef2800da37ac25ebc47b51ec",
+    "core/extension/gdextension_production_request.cpp": "465d343750efa08631379cbedbe69d67505b43c205e89dddf1be1ce696a69d33",
+    "core/extension/gdextension_record_source.cpp": "17839420fca4f0e2e69123392da148b2446a0c2dad82d8330e0837b9deafd4d8",
+    "core/extension/gdextension_record_source.h": "44a15abff6768a372ce747ea8383b52d33e00ae297a71362203b2696e594b096",
+    "tests/core/extension/test_production_request.cpp": "fb388eb54473e22dd6eef5cb728f697ea94f09d1c7e16c721db3cee9648a14d4"
+  },
+  "build_command": "scons -Q tests=yes platform=macos target=editor debug_symbols=no module_particles_runtime_tests_enabled=yes -j2",
+  "build_exit": 0,
+  "red": {
+    "exit": 1,
+    "cases": 2,
+    "assertions": 124,
+    "failed_assertions": 4,
+    "control": "positive transfer graph bound forced1",
+    "cleanup": "normal process exit; source restored byte-for-byte and rebuilt"
+  },
+  "green": {
+    "exit": 0,
+    "cases": 2,
+    "assertions": 124
+  },
+  "neighbors": {
+    "exit": 0,
+    "cases": 144,
+    "assertions": 73286
+  },
+  "combined_prior": {
+    "exit": 0,
+    "cases": 83,
+    "assertions": 21701
+  },
+  "restored_union": {
+    "exit": 0,
+    "cases": 221,
+    "assertions": 86588
+  },
+  "baseline_neighbor": {
+    "source": "fixed80a r1",
+    "exit": 0,
+    "cases": 142,
+    "assertions": 73162,
+    "diagnostic": "same three pipeline.driver_id creation-failure diagnostics as candidate neighbor run; existing negative factory cases"
+  },
+  "limits": [
+    "CPU/dummy fixture: not GPU or Runtime99/96 actual carrier integration",
+    "Literal incoming backing serial123 is fixture input; no physical import/preparation/append or ordering claim",
+    "Finite conservative graph/native bound, not observed count or future reservation promise",
+    "Native-output/raster/OUTPUT_ALIAS unsupported; actual Runtime96 frozen ownership and binding-span facts pending",
+    "Nonzero-worker/pending profile drift and broad span/error matrix not run",
+    "OutputMetadataQuery bounded kind24 is a separate existing interface; B same-owner SDK integration still pending"
+  ],
+  "log_sha256": {
+    "green-build.log": "8fadd6ad19f0b7ca1fccb5dcff2b15e8cfe10ffff7a57ebbe3b5d8324d401688",
+    "red-build.log": "185ae9936a2f1323ae9427e9edb73454b38effed4918841cbdf3e8863317f703",
+    "red-test.log": "bde9606f07f7fad6b0c95923fa1f8b177b252ae83bfd2e240f5c9cb3ca7f2f01",
+    "restored-build.log": "10b2e2e60d79af95514eae83043cdc5bc6d9f197a686690b7394e0e9c450b844",
+    "restored-test.log": "b43dc7f1d8f49d9e9f1ad2ad1b1af52dc6a710d64971f2503230d436799afd36",
+    "green-test.log": "b7b67a1d383bf48cf46687d42805a85c0b73f0eb361c29715aeb4f9804ca5f08",
+    "neighbors-test.log": "7de14159a4384a5b4bbff2c909029274033ec751e1c47cde06c3b5da72b7a0cf",
+    "combined-test.log": "8495ec915e49de6ae13f1e791ab19bd7a57cc7f45456000444afb1b70f2277a3",
+    "baseline-neighbors-test.log": "5f32d1be95ef47418856373fc102706e9c25a7e459b5058c3c2b4e333a5b394f"
+  }
+}
