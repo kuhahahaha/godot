@@ -623,8 +623,9 @@ public:
 		RID existing_vertex_array;
 		RD::VertexFormatID existing_vertex_format = 0;
 	};
-	// Call outside Registry/RD locks, before prospective RD validation. Retain
-	// p_source until execution and recompute/revalidate immediately before factories.
+	// Call outside Registry/RD locks; includes direct-VB RD preflight, not
+	// existing VA/IA or full closure validation. Retain p_source until execution
+	// and recompute/revalidate immediately before factories.
 	static Error mesh_surface_hold_plan_vertex_array(const NativeSurfaceHold &p_source, uint64_t p_input_mask, bool p_motion, bool p_point_size_emulated, uint32_t p_lod, NativeVertexArrayPlan &r_plan);
 	static Error mesh_surface_hold_derive(const NativeSurfaceHold &p_source, uint64_t p_input_mask, bool p_motion, bool p_point_size_emulated, uint32_t p_lod, NativeSurfaceHold &r_hold);
 

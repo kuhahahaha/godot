@@ -1336,6 +1336,20 @@ private:
 
 	RID_Owner<VertexArray, true> vertex_array_owner;
 
+	// Scratch-only preflight; caller must retain sources and revalidate before factories.
+	// No format ID, VA RID, hold, or dependency is published by these helpers.
+	static Error _vertex_format_normalize(const Vector<VertexAttribute> &p_attributes, VertexDescriptionCache &r_description);
+	Error _vertex_array_prepare_locked(uint32_t p_vertex_count, const Vector<VertexAttribute> &p_attributes, const Vector<RID> &p_src_buffers, const Vector<uint64_t> &p_offsets, VertexArray &r_array, HashSet<RID> &r_used_buffers);
+	struct NativeVertexArrayPreflight {
+		Vector<VertexAttribute> attributes;
+		Vector<RID> used_buffers;
+		uint32_t max_instances_allowed = UINT32_MAX;
+	};
+	// Validates only direct used VB eligibility. Full closure/G and existing VA/IA,
+	// external history and detached-directory roots are independent later gates.
+	Error _native_vertex_array_preflight(uint32_t p_vertex_count, const Vector<VertexAttribute> &p_attributes, const Vector<RID> &p_buffers, const Vector<uint64_t> &p_offsets, NativeVertexArrayPreflight &r_result);
+	Error _native_immutable_resource_eligibility_locked(RID p_rid);
+
 	struct IndexBuffer : public Buffer {
 		uint32_t max_index = 0; // Used for validation.
 		uint32_t index_count = 0;

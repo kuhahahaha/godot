@@ -296,6 +296,71 @@ bool RenderingDevice::_native_immutable_uniform_set_writes(const UniformSet &set
 	return false;
 }
 
+Error RenderingDevice::_native_immutable_resource_eligibility_locked(RID rid) {
+	bool *retiring = nullptr, *escaped = nullptr;
+	const auto *holds = _native_immutable_counter(rid, &retiring, &escaped);
+	if (!holds) {
+		return ERR_DOES_NOT_EXIST;
+	}
+	if (*escaped) {
+		return ERR_UNAVAILABLE;
+	}
+	if (*retiring || native_immutable_resource_is_retiring(rid)) {
+		return ERR_BUSY;
+	}
+	if (*holds == UINT32_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	if (const auto *resource = _native_immutable_buffer(rid); resource && !resource->driver_id) {
+		return ERR_UNAVAILABLE;
+	}
+	if (const auto *resource = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
+		return ERR_UNAVAILABLE;
+	}
+	if (const auto *resource = shader_owner.owns(rid) ? shader_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
+		return ERR_UNAVAILABLE;
+	}
+	if (const auto *resource = sampler_owner.owns(rid) ? sampler_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
+		return ERR_UNAVAILABLE;
+	}
+	if (const auto *resource = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
+		return ERR_UNAVAILABLE;
+	}
+	if (const auto *resource = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr; resource && !resource->writable_resources.is_empty()) {
+		return ERR_UNAVAILABLE;
+	}
+	if (const auto *resource = render_pipeline_owner.owns(rid) ? render_pipeline_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
+		return ERR_UNAVAILABLE;
+	}
+	if (const auto *resource = compute_pipeline_owner.owns(rid) ? compute_pipeline_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
+		return ERR_UNAVAILABLE;
+	}
+	if (const auto *resource = index_array_owner.owns(rid) ? index_array_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
+		return ERR_UNAVAILABLE;
+	}
+
+	if (const auto *buffer = _native_immutable_buffer(rid); buffer && buffer->qualification_return && buffer->qualification_return->use_closed.load()) {
+		return ERR_BUSY;
+	}
+	if (const auto *buffer = _native_immutable_buffer(rid); buffer && (buffer->transfer_worker_index >= 0 || buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT) || buffer->usage.has_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT))) {
+		return ERR_UNAVAILABLE;
+	}
+	if (const auto *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr) {
+		// Render-target ownership and dynamic framebuffer writes need their
+		// original snapshot producer; this retention leaf cannot freeze them.
+		if (texture->transfer_worker_index >= 0 || texture->pending_clear || (texture->usage_flags & TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) || (texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) || (texture->usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT)) {
+			return ERR_UNAVAILABLE;
+		}
+		if (texture->shared_fallback && texture->owner.is_valid()) {
+			const auto *owner = texture_owner.get_or_null(texture->owner);
+			if (!owner || !owner->shared_fallback || owner->shared_fallback->revision != texture->shared_fallback->revision) {
+				return ERR_UNAVAILABLE;
+			}
+		}
+	}
+	return OK;
+}
+
 Error RenderingDevice::native_immutable_hold_acquire(const VectorView<RID> &roots, NativeImmutableHold &out, uint32_t limit) {
 	if (render_thread_id != Thread::get_caller_id()) {
 		return ERR_UNAUTHORIZED;
@@ -330,66 +395,9 @@ Error RenderingDevice::native_immutable_hold_acquire(const VectorView<RID> &root
 		if (count == limit) {
 			return ERR_OUT_OF_MEMORY;
 		}
-		bool *retiring = nullptr, *escaped = nullptr;
-		const auto *holds = _native_immutable_counter(rid, &retiring, &escaped);
-		if (!holds) {
-			return ERR_DOES_NOT_EXIST;
-		}
-		if (*escaped) {
-			return ERR_UNAVAILABLE;
-		}
-		if (*retiring || native_immutable_resource_is_retiring(rid)) {
-			return ERR_BUSY;
-		}
-		if (*holds == UINT32_MAX) {
-			return ERR_PARAMETER_RANGE_ERROR;
-		}
-		if (const auto *resource = _native_immutable_buffer(rid); resource && !resource->driver_id) {
-			return ERR_UNAVAILABLE;
-		}
-		if (const auto *resource = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
-			return ERR_UNAVAILABLE;
-		}
-		if (const auto *resource = shader_owner.owns(rid) ? shader_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
-			return ERR_UNAVAILABLE;
-		}
-		if (const auto *resource = sampler_owner.owns(rid) ? sampler_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
-			return ERR_UNAVAILABLE;
-		}
-		if (const auto *resource = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
-			return ERR_UNAVAILABLE;
-		}
-		if (const auto *resource = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr; resource && !resource->writable_resources.is_empty()) {
-			return ERR_UNAVAILABLE;
-		}
-		if (const auto *resource = render_pipeline_owner.owns(rid) ? render_pipeline_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
-			return ERR_UNAVAILABLE;
-		}
-		if (const auto *resource = compute_pipeline_owner.owns(rid) ? compute_pipeline_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
-			return ERR_UNAVAILABLE;
-		}
-		if (const auto *resource = index_array_owner.owns(rid) ? index_array_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
-			return ERR_UNAVAILABLE;
-		}
-
-		if (const auto *buffer = _native_immutable_buffer(rid); buffer && buffer->qualification_return && buffer->qualification_return->use_closed.load()) {
-			return ERR_BUSY;
-		}
-		if (const auto *buffer = _native_immutable_buffer(rid); buffer && (buffer->transfer_worker_index >= 0 || buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT) || buffer->usage.has_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT))) {
-			return ERR_UNAVAILABLE;
-		}
-		if (const auto *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr) {
-			// Render-target ownership and dynamic framebuffer writes need their
-			// original snapshot producer; this retention leaf cannot freeze them.
-			if (texture->transfer_worker_index >= 0 || texture->pending_clear || (texture->usage_flags & TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) || (texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) || (texture->usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT)) {
-				return ERR_UNAVAILABLE;
-			}
-			if (texture->shared_fallback && texture->owner.is_valid()) {
-				const auto *owner = texture_owner.get_or_null(texture->owner);
-				if (!owner || !owner->shared_fallback || owner->shared_fallback->revision != texture->shared_fallback->revision) {
-					return ERR_UNAVAILABLE;
-				}
-			}
+		const Error eligible = _native_immutable_resource_eligibility_locked(rid);
+		if (eligible != OK) {
+			return eligible;
 		}
 		resources[count++] = rid;
 		return OK;

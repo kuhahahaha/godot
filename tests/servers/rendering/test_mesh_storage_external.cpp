@@ -105,6 +105,20 @@ public:
 	}
 	static uint64_t binding(RenderingDevice &p_device, RID p_array, uint32_t p_binding) { return p_device.vertex_array_owner.get_or_null(p_array)->buffers[p_binding].id; }
 	static void size(RenderingDevice &p_device, RID p_buffer, uint32_t p_size) { p_device.vertex_buffer_owner.get_or_null(p_buffer)->size = p_size; }
+	static uint32_t holds(RenderingDevice &p_device, RID p_buffer) {
+		auto *buffer = p_device.vertex_buffer_owner.get_or_null(p_buffer);
+		CHECK(buffer != nullptr);
+		return buffer ? buffer->native_immutable_holds : 0;
+	}
+	static uint32_t device_holds(RenderingDevice &p_device) { return p_device.native_immutable_hold_count; }
+	static void external_access(RenderingDevice &p_device, RID p_buffer, bool p_value) {
+		auto *buffer = p_device.vertex_buffer_owner.get_or_null(p_buffer);
+		CHECK(buffer != nullptr);
+		if (buffer) {
+			buffer->native_external_access = p_value;
+		}
+	}
+
 	static uint32_t arrays(RenderingDevice &p_device) { return p_device.vertex_array_owner.get_owned_list().size(); }
 	static bool owns(RenderingDevice &p_device, RID p_buffer) { return p_device.vertex_buffer_owner.owns(p_buffer); }
 	static void begin_native(RenderingDevice &device, Indexed144FormatDriver &driver) {
@@ -138,6 +152,131 @@ public:
 		return id && id < 32 && driver.live[id] ? driver.memory[id][original->offsets[binding]] : 0;
 	}
 	static void dispose(RenderingDevice &device) { device._free_pending_resources(0); }
+	static void preflight_only() {
+		RenderingDevice device;
+		Indexed144FormatDriver driver;
+		begin_native(device, driver);
+		const RID buffer = device.vertex_buffer_create(40, {}, RenderingDevice::BUFFER_CREATION_AS_STORAGE_BIT);
+		auto *actual = device.vertex_buffer_owner.get_or_null(buffer);
+		CHECK(actual != nullptr);
+		if (!actual) {
+			end_native(device);
+			return;
+		}
+		auto check_no_holds = [&]() {
+			CHECK(actual->native_immutable_holds == 0);
+			CHECK(device.native_immutable_hold_count == 0);
+		};
+		RenderingDevice::VertexAttribute a;
+		a.location = 0;
+		a.format = RenderingDevice::DATA_FORMAT_R32G32B32_SFLOAT;
+		a.stride = 12;
+		RenderingDevice::NativeVertexArrayPreflight result;
+		const uint32_t formats = driver.formats, before_arrays = arrays(device);
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, { 4 }, result) == OK);
+		CHECK(result.used_buffers.size() == 1);
+		CHECK(result.attributes.size() == 1);
+		if (!result.attributes.is_empty()) {
+			CHECK(result.attributes[0].binding == 0);
+		}
+		check_no_holds();
+		ERR_PRINT_OFF;
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, { 5 }, result) == ERR_INVALID_PARAMETER);
+		CHECK(result.used_buffers.is_empty());
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, { UINT64_MAX }, result) == ERR_INVALID_PARAMETER);
+		CHECK(device._native_vertex_array_preflight(3, { a, a }, { buffer, buffer }, {}, result) == ERR_INVALID_DATA);
+		RenderingDevice::VertexAttribute b = a;
+		b.location = 1;
+		b.binding = 0;
+		CHECK(device._native_vertex_array_preflight(3, { a, b }, { buffer }, {}, result) == ERR_INVALID_DATA);
+		a.binding = 0;
+		CHECK(device._native_vertex_array_preflight(3, { a, b }, { buffer, RID() }, {}, result) == OK);
+		CHECK(result.used_buffers.size() == 1); // Unused supplied null is not a graph root.
+		b.stride = 16;
+		CHECK(device._native_vertex_array_preflight(3, { a, b }, { buffer }, {}, result) == ERR_INVALID_DATA);
+		a.frequency = RenderingDevice::VERTEX_FREQUENCY_INSTANCE;
+		a.stride = 0;
+		CHECK(device._native_vertex_array_preflight(0, { a }, { buffer }, {}, result) == ERR_INVALID_PARAMETER);
+		CHECK(device._native_vertex_array_preflight(1, { a }, { buffer }, {}, result) == OK);
+		CHECK(result.max_instances_allowed == UINT32_MAX);
+		// Ordinary point-size preparation retains its effective zero-count support.
+		RenderingDevice::VertexArray zero_count_array;
+		HashSet<RID> zero_count_buffers;
+		CHECK(device._vertex_array_prepare_locked(0, { a }, { buffer }, {}, zero_count_array, zero_count_buffers) == OK);
+		CHECK(zero_count_array.max_instances_allowed == UINT32_MAX);
+		a.stride = 12;
+		CHECK(device._native_vertex_array_preflight(1, { a }, { buffer }, {}, result) == OK);
+		CHECK(result.max_instances_allowed == 3);
+		a.frequency = RenderingDevice::VERTEX_FREQUENCY_VERTEX;
+		CHECK(device._native_vertex_array_preflight(0, { a }, { buffer }, {}, result) == ERR_INVALID_PARAMETER);
+		check_no_holds(); // Assert before fault injection can overwrite a leaked increment.
+		device.draw_list.active = true;
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_BUSY);
+		device.draw_list.active = false;
+		device.compute_list.active = true;
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_BUSY);
+		device.compute_list.active = false;
+		device.raytracing_list.active = true;
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_BUSY);
+		device.raytracing_list.active = false;
+		device.production_finalization_started.store(true, std::memory_order_release);
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_BUSY);
+		device.production_finalization_started.store(false, std::memory_order_release);
+		device.native_immutable_device_escaped = true;
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_UNAVAILABLE);
+		device.native_immutable_device_escaped = false;
+		check_no_holds();
+		const auto usage = actual->usage;
+		actual->usage.set_flag(RenderingDeviceDriver::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT);
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_UNAVAILABLE);
+		actual->usage = usage;
+		check_no_holds();
+		actual->usage.set_flag(RenderingDeviceDriver::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_UNAVAILABLE);
+		actual->usage = usage;
+		check_no_holds();
+		// These direct counters are restored before disposal; no fake RD owner.
+		actual->native_immutable_holds = UINT32_MAX;
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(actual->native_immutable_holds == UINT32_MAX);
+		actual->native_immutable_holds = 0;
+		check_no_holds();
+		actual->native_external_access = true;
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_UNAVAILABLE);
+		actual->native_external_access = false;
+		check_no_holds();
+		actual->native_immutable_retire_requested = true;
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_BUSY);
+		actual->native_immutable_retire_requested = false;
+		check_no_holds();
+		actual->transfer_worker_index = 0;
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_UNAVAILABLE);
+		actual->transfer_worker_index = -1;
+		check_no_holds();
+		const auto driver_id = actual->driver_id;
+		actual->driver_id = {};
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_UNAVAILABLE);
+		actual->driver_id = driver_id;
+		check_no_holds();
+		CHECK(device._native_vertex_array_preflight(3, { a }, { RID() }, {}, result) == ERR_DOES_NOT_EXIST);
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, { 0, 0 }, result) == ERR_INVALID_PARAMETER);
+		a.frequency = static_cast<RenderingDevice::VertexFrequency>(-1);
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_INVALID_DATA);
+		a.frequency = RenderingDevice::VERTEX_FREQUENCY_VERTEX;
+		a.format = static_cast<RenderingDevice::DataFormat>(-1);
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_INVALID_DATA);
+		ERR_PRINT_ON;
+		check_no_holds();
+		CHECK(driver.formats == formats);
+		CHECK(arrays(device) == before_arrays);
+		CHECK(device.native_immutable_hold_count == 0);
+		CHECK(device.dependency_map.is_empty());
+		CHECK(device.reverse_dependency_map.is_empty());
+		device.free_rid(buffer);
+		dispose(device);
+		CHECK(driver.frees == driver.allocations);
+		end_native(device);
+	}
 	static void detach(RenderingDevice &p_device) {
 		for (RID rid : p_device.vertex_array_owner.get_owned_list()) {
 			p_device.free_rid(rid);
@@ -542,6 +681,8 @@ public:
 			const uint32_t arrays = TestIndexed144DeviceAccess::arrays(device);
 			const uint32_t versions = original->version_count;
 			const uint32_t holds = original->immutable_holds;
+			const uint32_t buffer_holds = TestIndexed144DeviceAccess::holds(device, original->vertex_buffer);
+			const uint32_t device_holds = TestIndexed144DeviceAccess::device_holds(device);
 			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, false, false, 0, plan) == OK);
 			CHECK(plan.existing_vertex_array == retained.get_vertex_array());
 			CHECK(plan.existing_vertex_format == retained.get_vertex_format());
@@ -553,6 +694,7 @@ public:
 			CHECK(plan.attributes.size() == (external ? 10 : 1));
 			if (!plan.attributes.is_empty()) {
 				CHECK(plan.attributes[0].location == 0);
+				CHECK(plan.attributes[0].binding == (external ? 0u : UINT32_MAX));
 				CHECK(plan.attributes[0].stride == (external ? 144 : 12));
 				CHECK(plan.attributes[0].format == (external ? RD::DATA_FORMAT_R32G32B32A32_SFLOAT : RD::DATA_FORMAT_R32G32B32_SFLOAT));
 			}
@@ -571,10 +713,37 @@ public:
 				storage->mesh_default_rd_buffers[MeshStorage::DEFAULT_RD_BUFFER_NORMAL] = RID();
 				CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 3, false, false, 0, plan) == ERR_INVALID_DATA);
 				storage->mesh_default_rd_buffers[MeshStorage::DEFAULT_RD_BUFFER_NORMAL] = normal;
+				const RID wrong_default = device.storage_buffer_create(16);
+				CHECK(wrong_default.is_valid());
+				if (wrong_default.is_valid()) {
+					storage->mesh_default_rd_buffers[MeshStorage::DEFAULT_RD_BUFFER_NORMAL] = wrong_default;
+					ERR_PRINT_OFF;
+					CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 3, false, false, 0, plan) == ERR_DOES_NOT_EXIST);
+					ERR_PRINT_ON;
+					CHECK(plan.attributes.is_empty());
+					CHECK(plan.buffers.is_empty());
+					storage->mesh_default_rd_buffers[MeshStorage::DEFAULT_RD_BUFFER_NORMAL] = normal;
+					device.free_rid(wrong_default);
+				}
+				TestIndexed144DeviceAccess::external_access(device, normal, true);
+				CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 3, false, false, 0, plan) == ERR_UNAVAILABLE);
+				CHECK(plan.buffers.is_empty());
+				TestIndexed144DeviceAccess::external_access(device, normal, false);
+				CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 3, false, false, 0, plan) == OK);
+				CHECK(TestIndexed144DeviceAccess::holds(device, normal) == 0);
 			} else {
 				CHECK(plan.offsets.is_empty());
 				CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1ull << 31, false, false, 0, plan) == ERR_UNAVAILABLE);
 			}
+			TestIndexed144DeviceAccess::size(device, original->vertex_buffer, original->vertex_buffer_size - 1);
+			ERR_PRINT_OFF;
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, false, false, 0, plan) == ERR_INVALID_PARAMETER);
+			ERR_PRINT_ON;
+			CHECK(plan.buffers.is_empty());
+			CHECK(plan.existing_vertex_array.is_null());
+			TestIndexed144DeviceAccess::size(device, original->vertex_buffer, original->vertex_buffer_size);
+			CHECK(TestIndexed144DeviceAccess::holds(device, original->vertex_buffer) == buffer_holds);
+			CHECK(TestIndexed144DeviceAccess::device_holds(device) == device_holds);
 			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, true, false, 0, plan) == ERR_UNAVAILABLE);
 			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, false, true, 0, plan) == ERR_UNAVAILABLE);
 			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, false, false, 1, plan) == ERR_UNAVAILABLE);
@@ -838,4 +1007,8 @@ TEST_CASE("[B4][NativeVertexArrayPlan] retained ordinary source plans without fa
 
 TEST_CASE("[B4][NativeVertexArrayPlan] retained Indexed144 source plans without factories") {
 	RendererRD::TestMeshStorageExternalAccess::prospective_plan(true);
+}
+
+TEST_CASE("[B4][NativeVertexArrayPreflight] validates exact fetches without factories or holds") {
+	TestIndexed144DeviceAccess::preflight_only();
 }

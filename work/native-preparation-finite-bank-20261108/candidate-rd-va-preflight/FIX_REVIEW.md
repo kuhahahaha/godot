@@ -1,0 +1,15 @@
+# Independent fix review: RD VA preflight
+
+Default Sol, no Astra, 2026-11-08. Source-only follow-up to `INDEPENDENT_REVIEW.md`. Updated patch SHA-256 `f395fa8ed43e9f1fd0cd7c19071e1f69bba7441796ce18d09f9b25560a8ea839`; test after/live SHA-256 `2aa9cedf4e5a5f2987598ab8ca1929e884cd73c1753f15d7360df0e7502b9adc`.
+
+**The P2 counter-oracle finding is resolved. No remaining source-review blocker in this narrow slice.** This disposition is conditional on root's separate build/test results; this reviewer ran no build or behavioral tests.
+
+The live test now obtains and guards the actual VB owner before dereferencing it. `check_no_holds` asserts both that original VB's `native_immutable_holds == 0` and device hold count zero. It runs after the initial successful preflight, after descriptor/success/failure groups and before fault injection can overwrite a leaked count, after each restored metadata group, and before final cleanup. The saturated-count test additionally checks UINT32_MAX is unchanged before restoration. Therefore the original concrete false-negative—resource-only increments erased by manual counter writes—no longer escapes these checks. Assuming zero as the known clean fixture baseline is justified by explicit assertions before injection; a leaked increment is already recorded as failure before restoration.
+
+Added refusal cases exercise active draw, compute and raytracing lists; production finalization; whole-device escape; persistent and device-address usage. Each mutation is restored before subsequent checks/cleanup, and usage/driver IDs use saved actual values. These cases create no holds or resource authority. Error logging remains restored at the end; CHECKs are nonfatal and the owner-null early exit occurs before logging suppression. Resource free/disposal and allocation/free equality checks remain intact.
+
+Directly compared all four live entry paths with candidate after files. Immutable-hold cpp and test match byte-for-byte. Rendering-device cpp/header differ only by whitespace (root removed extra EOF/header blank lines); their whitespace-token sequences match. No semantic production change since the first review was observed.
+
+Remaining nonblocking gaps are still accurately bounded: qualification `use_closed`, wrong-thread/no-driver/device saturation/callback gates, some descriptor subcases and complete result-reset projections are not directly exercised by the new test. README explicitly retains `use_closed` as a gap because its flag is private and existing test friendship does not grant access; no production friendship was added just for fault injection. The extracted original eligibility branch remains unchanged. Full closure/G, existing VA/IA, detached-directory/history, driver support, material/profile, public transport, Host COW and GPU execution remain outside this source slice.
+
+Only this review file was written. No live edit, compiler invocation, test, runner or build was executed by reviewer. Root owns actual execution and acceptance.

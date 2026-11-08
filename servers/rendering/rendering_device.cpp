@@ -4880,6 +4880,46 @@ RID RenderingDevice::vertex_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p
 	return id;
 }
 
+Error RenderingDevice::_vertex_format_normalize(const Vector<VertexAttribute> &p_attributes, VertexDescriptionCache &r_description) {
+	VertexAttributeBindingsMap bindings;
+	bool has_implicit = false;
+	bool has_explicit = false;
+	Vector<VertexAttribute> vertex_descriptions = p_attributes;
+	HashSet<int> used_locations;
+	for (int i = 0; i < vertex_descriptions.size(); i++) {
+		VertexAttribute &attr = vertex_descriptions.write[i];
+		ERR_CONTINUE(attr.format >= DATA_FORMAT_MAX);
+		ERR_FAIL_COND_V(used_locations.has(attr.location), ERR_INVALID_DATA);
+
+		ERR_FAIL_COND_V_MSG(get_format_vertex_size(attr.format) == 0, ERR_INVALID_DATA,
+				vformat("Data format for attribute (%d), '%s', is not valid for a vertex array.", attr.location, String(FORMAT_NAMES[attr.format])));
+
+		if (attr.binding == UINT32_MAX) {
+			attr.binding = i; // Implicitly assigned binding
+			has_implicit = true;
+		} else {
+			has_explicit = true;
+		}
+		ERR_FAIL_COND_V_MSG(!(has_implicit ^ has_explicit), ERR_INVALID_DATA, "Vertex attributes must use either all explicit or all implicit bindings.");
+
+		const VertexAttributeBinding *existing = bindings.getptr(attr.binding);
+		if (!existing) {
+			bindings.insert(attr.binding, VertexAttributeBinding(attr.stride, attr.frequency));
+		} else {
+			ERR_FAIL_COND_V_MSG(existing->stride != attr.stride, ERR_INVALID_DATA,
+					vformat("Vertex attributes with binding (%d) have an inconsistent stride.", attr.binding));
+			ERR_FAIL_COND_V_MSG(existing->frequency != attr.frequency, ERR_INVALID_DATA,
+					vformat("Vertex attributes with binding (%d) have an inconsistent frequency.", attr.binding));
+		}
+
+		used_locations.insert(attr.location);
+	}
+
+	r_description.vertex_formats = std::move(vertex_descriptions);
+	r_description.bindings = std::move(bindings);
+	return OK;
+}
+
 // Internally reference counted, this ID is warranted to be unique for the same description, but needs to be freed as many times as it was allocated.
 RenderingDevice::VertexFormatID RenderingDevice::vertex_format_create(const Vector<VertexAttribute> &p_vertex_descriptions) {
 	_THREAD_SAFE_METHOD_
@@ -4892,39 +4932,10 @@ RenderingDevice::VertexFormatID RenderingDevice::vertex_format_create(const Vect
 		return *idptr;
 	}
 
-	VertexAttributeBindingsMap bindings;
-	bool has_implicit = false;
-	bool has_explicit = false;
-	Vector<VertexAttribute> vertex_descriptions = p_vertex_descriptions;
-	HashSet<int> used_locations;
-	for (int i = 0; i < vertex_descriptions.size(); i++) {
-		VertexAttribute &attr = vertex_descriptions.write[i];
-		ERR_CONTINUE(attr.format >= DATA_FORMAT_MAX);
-		ERR_FAIL_COND_V(used_locations.has(attr.location), INVALID_ID);
-
-		ERR_FAIL_COND_V_MSG(get_format_vertex_size(attr.format) == 0, INVALID_ID,
-				vformat("Data format for attribute (%d), '%s', is not valid for a vertex array.", attr.location, String(FORMAT_NAMES[attr.format])));
-
-		if (attr.binding == UINT32_MAX) {
-			attr.binding = i; // Implicitly assigned binding
-			has_implicit = true;
-		} else {
-			has_explicit = true;
-		}
-		ERR_FAIL_COND_V_MSG(!(has_implicit ^ has_explicit), INVALID_ID, "Vertex attributes must use either all explicit or all implicit bindings.");
-
-		const VertexAttributeBinding *existing = bindings.getptr(attr.binding);
-		if (!existing) {
-			bindings.insert(attr.binding, VertexAttributeBinding(attr.stride, attr.frequency));
-		} else {
-			ERR_FAIL_COND_V_MSG(existing->stride != attr.stride, INVALID_ID,
-					vformat("Vertex attributes with binding (%d) have an inconsistent stride.", attr.binding));
-			ERR_FAIL_COND_V_MSG(existing->frequency != attr.frequency, INVALID_ID,
-					vformat("Vertex attributes with binding (%d) have an inconsistent frequency.", attr.binding));
-		}
-
-		used_locations.insert(attr.location);
-	}
+	VertexDescriptionCache normalized;
+	ERR_FAIL_COND_V(_vertex_format_normalize(p_vertex_descriptions, normalized) != OK, INVALID_ID);
+	Vector<VertexAttribute> &vertex_descriptions = normalized.vertex_formats;
+	VertexAttributeBindingsMap &bindings = normalized.bindings;
 
 	RDD::VertexFormatID driver_id = driver->vertex_format_create(vertex_descriptions, bindings);
 	ERR_FAIL_COND_V(!driver_id, 0);
@@ -4938,83 +4949,85 @@ RenderingDevice::VertexFormatID RenderingDevice::vertex_format_create(const Vect
 	return id;
 }
 
-RID RenderingDevice::vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const Vector<RID> &p_src_buffers, const Vector<uint64_t> &p_offsets) {
-	_THREAD_SAFE_METHOD_
-
-	ERR_FAIL_COND_V(!vertex_formats.has(p_vertex_format), RID());
-	const VertexDescriptionCache &vd = vertex_formats[p_vertex_format];
-
-	VertexArray vertex_array;
-
+Error RenderingDevice::_vertex_array_prepare_locked(uint32_t p_vertex_count, const Vector<VertexAttribute> &p_attributes, const Vector<RID> &p_src_buffers, const Vector<uint64_t> &p_offsets, VertexArray &r_array, HashSet<RID> &r_used_buffers) {
 	if (p_offsets.is_empty()) {
-		vertex_array.offsets.resize_initialized(p_src_buffers.size());
+		r_array.offsets.resize_initialized(p_src_buffers.size());
 	} else {
-		ERR_FAIL_COND_V(p_offsets.size() != p_src_buffers.size(), RID());
-		vertex_array.offsets = p_offsets;
+		ERR_FAIL_COND_V(p_offsets.size() != p_src_buffers.size(), ERR_INVALID_PARAMETER);
+		r_array.offsets = p_offsets;
 	}
 
-	vertex_array.vertex_count = p_vertex_count;
-	vertex_array.description = p_vertex_format;
-	vertex_array.max_instances_allowed = 0xFFFFFFFF; // By default as many as you want.
-	vertex_array.buffers.resize(p_src_buffers.size());
+	r_array.vertex_count = p_vertex_count;
+	r_array.max_instances_allowed = 0xFFFFFFFF; // By default as many as you want.
+	r_array.buffers.resize(p_src_buffers.size());
 
-	HashSet<RID> unique_buffers;
-	unique_buffers.reserve(p_src_buffers.size());
+	r_used_buffers.reserve(p_src_buffers.size());
 
-	for (const VertexAttribute &atf : vd.vertex_formats) {
-		ERR_FAIL_COND_V_MSG(atf.binding >= p_src_buffers.size(), RID(), vformat("Vertex attribute location (%d) is missing a buffer for binding (%d).", atf.location, atf.binding));
+	for (const VertexAttribute &atf : p_attributes) {
+		ERR_FAIL_COND_V_MSG(atf.binding >= p_src_buffers.size(), ERR_INVALID_PARAMETER, vformat("Vertex attribute location (%d) is missing a buffer for binding (%d).", atf.location, atf.binding));
 		RID buf = p_src_buffers[atf.binding];
-		ERR_FAIL_COND_V(native_immutable_resource_is_retiring(buf), RID());
-		ERR_FAIL_COND_V(!vertex_buffer_owner.owns(buf), RID());
+		ERR_FAIL_COND_V(native_immutable_resource_is_retiring(buf), ERR_BUSY);
+		ERR_FAIL_COND_V(!vertex_buffer_owner.owns(buf), ERR_DOES_NOT_EXIST);
 
 		Buffer *buffer = vertex_buffer_owner.get_or_null(buf);
 
 		// Validate the complete fetch range, including the binding offset.
 		{
 			uint32_t element_size = get_format_vertex_size(atf.format);
-			ERR_FAIL_COND_V(element_size == 0, RID()); // Should never happen since this was prevalidated.
+			ERR_FAIL_COND_V(element_size == 0, ERR_INVALID_PARAMETER); // Should never happen since this was prevalidated.
 
-			const uint64_t binding_offset = vertex_array.offsets[atf.binding];
-			ERR_FAIL_COND_V_MSG(binding_offset > buffer->size || atf.offset > buffer->size - binding_offset, RID(),
+			const uint64_t binding_offset = r_array.offsets[atf.binding];
+			ERR_FAIL_COND_V_MSG(binding_offset > buffer->size || atf.offset > buffer->size - binding_offset, ERR_INVALID_PARAMETER,
 					vformat("Vertex attribute (%d) will read past the end of the buffer.", atf.location));
 			const uint64_t available = buffer->size - binding_offset - atf.offset;
-			ERR_FAIL_COND_V_MSG(element_size > available, RID(),
+			ERR_FAIL_COND_V_MSG(element_size > available, ERR_INVALID_PARAMETER,
 					vformat("Vertex attribute (%d) will read past the end of the buffer.", atf.location));
 
 			if (atf.frequency == VERTEX_FREQUENCY_VERTEX) {
 				// The uint32 stride/count product fits uint64; subtract the
 				// element first so adding large binding offsets cannot wrap.
 				const uint64_t stride_extent = uint64_t(atf.stride) * (p_vertex_count - 1);
-				ERR_FAIL_COND_V_MSG(stride_extent > available - element_size, RID(),
+				ERR_FAIL_COND_V_MSG(stride_extent > available - element_size, ERR_INVALID_PARAMETER,
 						vformat("Vertex attribute (%d) will read past the end of the buffer.", atf.location));
 			} else {
 				// Every instance needs one complete element. Zero stride repeats
 				// that element, including all-instance point-size emulation.
 				const uint32_t instances_allowed = atf.stride == 0 ? UINT32_MAX : uint32_t((available - element_size) / atf.stride + 1);
-				vertex_array.max_instances_allowed = MIN(instances_allowed, vertex_array.max_instances_allowed);
+				r_array.max_instances_allowed = MIN(instances_allowed, r_array.max_instances_allowed);
 			}
 		}
 
-		vertex_array.buffers.write[atf.binding] = buffer->driver_id;
+		r_array.buffers.write[atf.binding] = buffer->driver_id;
 
-		if (unique_buffers.has(buf)) {
+		if (r_used_buffers.has(buf)) {
 			// No need to add dependencies multiple times.
 			continue;
 		}
 
-		unique_buffers.insert(buf);
+		r_used_buffers.insert(buf);
 
 		if (buffer->draw_tracker != nullptr) {
-			vertex_array.draw_trackers.push_back(buffer->draw_tracker);
+			r_array.draw_trackers.push_back(buffer->draw_tracker);
 		} else {
-			vertex_array.untracked_buffers.insert(buf);
+			r_array.untracked_buffers.insert(buf);
 		}
 
 		if (buffer->transfer_worker_index >= 0) {
-			vertex_array.transfer_worker_indices.push_back(buffer->transfer_worker_index);
-			vertex_array.transfer_worker_operations.push_back(buffer->transfer_worker_operation);
+			r_array.transfer_worker_indices.push_back(buffer->transfer_worker_index);
+			r_array.transfer_worker_operations.push_back(buffer->transfer_worker_operation);
 		}
 	}
+
+	return OK;
+}
+
+RID RenderingDevice::vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const Vector<RID> &p_src_buffers, const Vector<uint64_t> &p_offsets) {
+	_THREAD_SAFE_METHOD_
+	ERR_FAIL_COND_V(!vertex_formats.has(p_vertex_format), RID());
+	VertexArray vertex_array;
+	HashSet<RID> unique_buffers;
+	ERR_FAIL_COND_V(_vertex_array_prepare_locked(p_vertex_count, vertex_formats[p_vertex_format].vertex_formats, p_src_buffers, p_offsets, vertex_array, unique_buffers) != OK, RID());
+	vertex_array.description = p_vertex_format;
 
 	RID id = vertex_array_owner.make_rid(vertex_array);
 	for (const RID &buf : unique_buffers) {
@@ -5022,6 +5035,61 @@ RID RenderingDevice::vertex_array_create(uint32_t p_vertex_count, VertexFormatID
 	}
 
 	return id;
+}
+
+// Pure with respect to RD/driver resource and hold state; scratch containers allocate.
+Error RenderingDevice::_native_vertex_array_preflight(uint32_t p_vertex_count, const Vector<VertexAttribute> &p_attributes, const Vector<RID> &p_buffers, const Vector<uint64_t> &p_offsets, NativeVertexArrayPreflight &r_result) {
+	r_result = NativeVertexArrayPreflight();
+	if (render_thread_id != Thread::get_caller_id()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!driver || native_immutable_device_escaped) {
+		return ERR_UNAVAILABLE;
+	}
+	MutexLock lock(_thread_safe_);
+	if (draw_list.active || compute_list.active || raytracing_list.active || draw_graph.has_driver_callbacks() || production_finalization_started.load(std::memory_order_acquire)) {
+		return ERR_BUSY;
+	}
+	if (native_immutable_hold_count == UINT32_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	// Native Surface admission requires real vertices; point-size emulation is excluded.
+	if (!p_vertex_count) {
+		return ERR_INVALID_PARAMETER;
+	}
+	// Ordinary format creation historically ERR_CONTINUEs invalid enum values.
+	// Keep that behavior in its shared normalizer, but never admit such a native plan.
+	for (const VertexAttribute &attribute : p_attributes) {
+		if (uint32_t(attribute.format) >= DATA_FORMAT_MAX) {
+			return ERR_INVALID_DATA;
+		}
+		if (attribute.frequency != VERTEX_FREQUENCY_VERTEX && attribute.frequency != VERTEX_FREQUENCY_INSTANCE) {
+			return ERR_INVALID_DATA;
+		}
+	}
+	VertexDescriptionCache normalized;
+	const Error normalized_error = _vertex_format_normalize(p_attributes, normalized);
+	if (normalized_error != OK) {
+		return normalized_error;
+	}
+	VertexArray scratch;
+	HashSet<RID> used;
+	const Error prepared = _vertex_array_prepare_locked(p_vertex_count, normalized.vertex_formats, p_buffers, p_offsets, scratch, used);
+	if (prepared != OK) {
+		return prepared;
+	}
+	NativeVertexArrayPreflight result;
+	for (RID buffer : used) {
+		const Error eligible = _native_immutable_resource_eligibility_locked(buffer);
+		if (eligible != OK) {
+			return eligible;
+		}
+		result.used_buffers.push_back(buffer);
+	}
+	result.attributes = std::move(normalized.vertex_formats);
+	result.max_instances_allowed = scratch.max_instances_allowed;
+	r_result = std::move(result);
+	return OK;
 }
 
 bool RenderingDevice::validate_external_indexed_surface_buffers(RID p_current_vertex_buffer, RID p_previous_vertex_buffer, RID p_index_buffer, RID p_index_array, uint32_t p_vertex_capacity, uint32_t p_index_capacity) {

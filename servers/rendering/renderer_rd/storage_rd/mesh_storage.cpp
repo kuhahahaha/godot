@@ -911,6 +911,14 @@ Error MeshStorage::mesh_surface_hold_plan_vertex_array(const NativeSurfaceHold &
 			return ERR_INVALID_DATA;
 		}
 	}
+	// Keep raw attribute bindings for the factory's original cache key. Only
+	// direct VB eligibility is checked here; existing VA/IA and full G remain
+	// separate gates. Surface-before-RD matches the actual factory lock order.
+	RD::NativeVertexArrayPreflight scratch;
+	const Error preflight = device->_native_vertex_array_preflight(plan.vertex_count, plan.attributes, plan.buffers, plan.offsets, scratch);
+	if (preflight != OK) {
+		return preflight;
+	}
 	out = std::move(plan);
 	return OK;
 }
