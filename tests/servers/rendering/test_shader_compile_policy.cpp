@@ -83,7 +83,11 @@ public:
 			Owner owner;
 			owner.initialize(Vector<String>{ "", "#define SECOND_VARIANT\n" }, "");
 			const RID version_rid = owner.version_create(false);
-			REQUIRE(version_rid.is_valid());
+			CHECK(version_rid.is_valid());
+			if (!version_rid.is_valid()) {
+				RenderingDevice::singleton = previous;
+				return;
+			}
 			auto *version = owner.version_owner.get_or_null(version_rid);
 			RID result = p_native;
 			uint64_t mask = UINT64_MAX;
