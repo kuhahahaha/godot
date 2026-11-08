@@ -10,10 +10,10 @@ fixture's actual Image data, rather than compressed PNG bytes.
 import argparse
 import json
 import os
-from pathlib import Path
 import re
 import struct
 import subprocess
+from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PREFIX = "SCENE_VIEWPORT_INVARIANCE_NATIVE "
@@ -80,10 +80,14 @@ def valid_report(report, capture_dir):
             return False
         before_hash = view.get("before_sha256")
         if not (
-            type(view.get("before_draw_calls")) is int and view["before_draw_calls"] == 2
-            and type(view.get("after_draw_calls")) is int and view["after_draw_calls"] == 2
-            and type(view.get("width")) is int and view["width"] == 128
-            and type(view.get("height")) is int and view["height"] == 128
+            type(view.get("before_draw_calls")) is int
+            and view["before_draw_calls"] == 2
+            and type(view.get("after_draw_calls")) is int
+            and view["after_draw_calls"] == 2
+            and type(view.get("width")) is int
+            and view["width"] == 128
+            and type(view.get("height")) is int
+            and view["height"] == 128
             and type(view.get("before_nonuniform_pixels")) is int
             and 0 < view["before_nonuniform_pixels"] < 128 * 128
             and type(view.get("after_nonuniform_pixels")) is int
@@ -113,11 +117,16 @@ def main():
         capture_dir.mkdir(parents=True, exist_ok=True)
         command = [
             str(args.binary.resolve()),
-            "--display-driver", args.display_driver,
-            "--rendering-driver", "metal",
-            "--rendering-method", method,
-            "--path", str(HERE),
-            "--script", "res://run.gd",
+            "--display-driver",
+            args.display_driver,
+            "--rendering-driver",
+            "metal",
+            "--rendering-method",
+            method,
+            "--path",
+            str(HERE),
+            "--script",
+            "res://run.gd",
         ]
         env = os.environ.copy()
         env.pop("ANGE_SCENE_VIEWPORT_BASELINE_ONLY", None)
@@ -125,8 +134,12 @@ def main():
         print(f"SCENE_VIEWPORT_INVARIANCE_CASE renderer={method}", flush=True)
         print("COMMAND " + json.dumps(command), flush=True)
         result = subprocess.run(
-            command, env=env, text=True, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, timeout=90,
+            command,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=90,
         )
         print(result.stdout, flush=True)
         failure = None
@@ -136,15 +149,12 @@ def main():
             failure = f"Viewport control emitted an error or warning on {renderer}"
         startup = re.findall(
             rf"^Metal [0-9.]+ - {re.escape(renderer)} - Using Device #[0-9]+: .+$",
-            result.stdout, re.MULTILINE,
+            result.stdout,
+            re.MULTILINE,
         )
         if len(startup) != 1 and failure is None:
             failure = f"Missing real Metal/{renderer} renderer evidence"
-        reports = [
-            json.loads(line[len(PREFIX):])
-            for line in result.stdout.splitlines()
-            if line.startswith(PREFIX)
-        ]
+        reports = [json.loads(line[len(PREFIX) :]) for line in result.stdout.splitlines() if line.startswith(PREFIX)]
         if (len(reports) != 1 or not valid_report(reports[0], capture_dir)) and failure is None:
             failure = f"Receiver lifetime/ordinary viewport control failed on {renderer}"
         if failure is not None:
@@ -152,7 +162,9 @@ def main():
             print("SCENE_VIEWPORT_INVARIANCE_CASE_FAIL " + failure, flush=True)
     if failures:
         raise SystemExit("\n".join(failures))
-    print("SCENE_VIEWPORT_INVARIANCE_MATRIX_PASS 4 real Metal view comparisons; public Scene connection and pair membership unverified")
+    print(
+        "SCENE_VIEWPORT_INVARIANCE_MATRIX_PASS 4 real Metal view comparisons; public Scene connection and pair membership unverified"
+    )
 
 
 if __name__ == "__main__":

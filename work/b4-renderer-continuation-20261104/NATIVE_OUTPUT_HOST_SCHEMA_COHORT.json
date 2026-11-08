@@ -1,0 +1,56 @@
+{
+  "commit": "62e7430f8565faa4963fc0d9626baf01262ade38",
+  "files": {
+    "bin/godot.macos.editor.arm64": {
+      "bytes": 157938824,
+      "sha256": "aa28ed7d5212a42f1218510c10d484f8ccc3548f3f6b2a251e08eaae73df105b"
+    },
+    "bin/godot.macos.editor.arm64.controlled_build.json": {
+      "bytes": 530,
+      "sha256": "6a58bd9c73c8a29fdb82581451fbcbd278d3faf0311c18e46b613698c7953eea"
+    },
+    "core/extension/gdextension_interface.json": {
+      "bytes": 865590,
+      "sha256": "3326f9bcbdb6b4079fc7d2fbe89b85a1020d57dda553c48befbd835d0272f7fd"
+    },
+    "core/extension/gdextension_interface.gen.h": {
+      "bytes": 390355,
+      "sha256": "97038bed638d4e3850c6032aba76c94c07e4e779b96a4d4e0e771abaf75fda89"
+    },
+    "core/extension/gdextension_interface.schema.json": {
+      "bytes": 13033,
+      "sha256": "a04ed37dea573fc6928980239810b77eca34337bc42aef18a572fb3900abde34"
+    }
+  },
+  "interfaces": [
+    "device_session_production_observe_v3",
+    "device_session_production_output_return_consume_v1",
+    "device_session_production_reserve_v2"
+  ],
+  "native_output_action_ordinal": "original V2 action array index; no old SDK action-6 consumer claim",
+  "validation": [
+    {
+      "selector": "*[NativeImmutableInline]*,*[GenerationSelectionLayout]*,*[GenerationSurfaceSource]*,*[NativeSurfaceHold]*",
+      "exit_code": 0,
+      "cases": 6,
+      "assertions": 1320
+    },
+    {
+      "selector": "*[OutputObserveV3]*",
+      "exit_code": 0,
+      "cases": 1,
+      "assertions": 198
+    },
+    {
+      "selector": "*[FrameWait]*,*[OwnedFrameDraw]*",
+      "exit_code": 0,
+      "cases": 23,
+      "assertions": 1989
+    }
+  ],
+  "limits": [
+    "No ANGE E09 issuer implemented here",
+    "No visible Sprite draw or no-next-draw closure",
+    "No full GPU FullBirth acceptance"
+  ]
+}

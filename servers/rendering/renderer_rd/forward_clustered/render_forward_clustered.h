@@ -61,6 +61,7 @@ namespace RendererSceneRenderImplementation {
 
 class RenderForwardClustered : public RendererSceneRenderRD {
 	friend SceneShaderForwardClustered;
+	friend class TestClusteredNativePassSelection;
 
 	enum {
 		SCENE_UNIFORM_SET = 0,
@@ -218,6 +219,22 @@ private:
 		COLOR_PASS_FLAG_MOTION_VECTORS = 1 << 3,
 	};
 
+	// Fixed native pass inputs selected before draw_list_begin. This is source
+	// selection only; it grants no external preparation or accepted draw authority.
+	struct NativePassSelection {
+		PassMode pass_mode = PASS_MODE_MAX;
+		uint32_t color_pass_flags = 0;
+		SceneShaderForwardClustered::PipelineVersion version = SceneShaderForwardClustered::PIPELINE_VERSION_MAX;
+		uint32_t base_color_pass_flags = 0;
+		RD::FramebufferFormatID framebuffer_format = 0;
+
+		bool includes_surface(uint32_t p_color_pass_inclusion_mask) const {
+			return pass_mode != PASS_MODE_COLOR || p_color_pass_inclusion_mask == 0 || (color_pass_flags & p_color_pass_inclusion_mask) != 0;
+		}
+	};
+
+	static bool _select_native_pass(PassMode p_pass_mode, uint32_t p_color_pass_flags, uint32_t p_view_count, RD::FramebufferFormatID p_framebuffer_format, NativePassSelection &r_selection);
+
 	struct GeometryInstanceSurfaceDataCache;
 	struct RenderElementInfo;
 
@@ -235,7 +252,7 @@ private:
 		Vector2 uv_offset;
 		float lod_distance_multiplier = 0.0;
 		float screen_mesh_lod_threshold = 0.0;
-		RD::FramebufferFormatID framebuffer_format = 0;
+		NativePassSelection native_pass;
 		uint32_t element_offset = 0;
 		bool use_directional_soft_shadow = false;
 		SceneShaderForwardClustered::ShaderSpecialization base_specialization = {};
@@ -487,9 +504,9 @@ private:
 	Error _render_height_list_checked(RenderListParameters *p_params, RID p_framebuffer, RendererRD::HeightCaptureCheckedSink &r_sink);
 	Error _render_particle_collider_heightfield_impl(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances, RendererRD::HeightCaptureCheckedSink *p_sink);
 
-	template <PassMode p_pass_mode, uint32_t p_color_pass_flags = 0>
-	_FORCE_INLINE_ void _render_list_template(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element, RendererRD::HeightCaptureCheckedSink *p_height_sink = nullptr, LocalVector<PreparedHeightGeometry> *p_height_geometry = nullptr);
-	void _render_list(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
+	template <PassMode p_pass_mode>
+	_FORCE_INLINE_ void _render_list_template(RenderingDevice::DrawListID p_draw_list, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element, RendererRD::HeightCaptureCheckedSink *p_height_sink = nullptr, LocalVector<PreparedHeightGeometry> *p_height_geometry = nullptr);
+	void _render_list(RenderingDevice::DrawListID p_draw_list, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
 	void _render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags = RD::DRAW_DEFAULT_ALL, const Vector<Color> &p_clear_color_values = Vector<Color>(), float p_clear_depth_value = 0.0, uint32_t p_clear_stencil_value = 0, const Rect2 &p_region = Rect2());
 
 	void _fill_instance_data(RenderListType p_render_list, int *p_render_info = nullptr, uint32_t p_offset = 0, int32_t p_max_elements = -1, bool p_update_buffer = true, Error *p_error = nullptr);
@@ -830,6 +847,7 @@ protected:
 public:
 	// Native preparation only; does not qualify source, bounds, history or GPU support.
 	Error external_pipeline_prepare(const RendererRD::ExternalSurfaceSelection &p_surface, RendererRD::ExternalPipelinePreparation &r_preparation);
+	Error external_pipeline_prepare_for_view(const RendererRD::ExternalSurfaceSelection &, const RendererRD::ExternalPacketViewLease &, const RendererRD::ExternalPacketPipelineRequest &, const RendererRD::ExternalPipelinePreparation *&);
 
 	static RenderForwardClustered *get_singleton() { return singleton; }
 

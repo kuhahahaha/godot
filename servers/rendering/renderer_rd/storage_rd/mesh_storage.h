@@ -96,6 +96,9 @@ private:
 	struct MultiMesh;
 
 	struct Mesh {
+		// Original mesh owner state revision. Zero is permanently unselectable
+		// after exhaustion; RID remains the allocation/lifetime identity.
+		uint64_t revision = 1;
 		uint32_t selection_holds = 0;
 		struct Surface {
 			RSE::PrimitiveType primitive = RSE::PRIMITIVE_POINTS;
@@ -253,11 +256,18 @@ private:
 				weight_update_list(this), array_update_list(this) {}
 	};
 
+	// Pure value construction shared by ordinary factories and native admission.
+	static Vector<RD::VertexAttribute> _mesh_surface_vertex_attributes(uint64_t p_surface_format, uint64_t p_input_mask, bool p_instanced_surface, bool p_input_motion_vectors, bool p_point_size_emulated, uint32_t &r_position_stride);
+	void _mesh_surface_vertex_bindings(Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, uint32_t p_position_stride, Vector<RID> &r_buffers, Vector<uint64_t> &r_offsets, MeshInstance::Surface *mis = nullptr, uint32_t p_current_buffer = 0, uint32_t p_previous_buffer = 0);
+	static Error _mesh_surface_external_vertex_attributes(uint64_t p_input_mask, bool p_input_motion_vectors, Vector<RD::VertexAttribute> &r_attributes);
+	static void _mesh_surface_external_vertex_bindings(Mesh::Surface *s, bool p_input_motion_vectors, Vector<RID> &r_buffers);
 	RD::VertexFormatID _mesh_surface_generate_vertex_format(uint64_t p_surface_format, uint64_t p_input_mask, bool p_instanced_surface, bool p_input_motion_vectors, bool p_point_size_emulated, uint32_t &r_position_stride);
 	void _mesh_surface_generate_version_for_input_mask(Mesh::Surface::Version &v, Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, MeshInstance::Surface *mis = nullptr, uint32_t p_current_buffer = 0, uint32_t p_previous_buffer = 0);
 	static RD::VertexFormatID _mesh_surface_generate_external_vertex_format(uint64_t p_input_mask, bool p_input_motion_vectors);
 	static void _mesh_surface_generate_external_version(Mesh::Surface::Version &v, Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated);
 	static void _mesh_surface_get_external_arrays(Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, RID &r_vertex_array_rd, RD::VertexFormatID &r_vertex_format);
+	static void _mesh_revision_advance(Mesh *p_mesh);
+	static void _mesh_invalidate_shadow_owners(Mesh *p_mesh);
 	static void _mesh_surface_clear(Mesh *p_mesh, int p_surface);
 	static void _mesh_surface_dispose(Mesh::Surface *p_surface);
 
@@ -476,6 +486,8 @@ public:
 		NativeSelectionLease &operator=(const NativeSelectionLease &) = delete;
 		~NativeSelectionLease() { CRASH_COND(owner); }
 		bool is_active() const { return owner != nullptr; }
+		// A source revision only while this exact original mesh remains selected.
+		uint64_t get_revision() const { return owner ? generation : 0; }
 	};
 	Error mesh_selection_acquire(RID p_rid, NativeSelectionLease &r_lease);
 	Error mesh_selection_release(NativeSelectionLease &r_lease);
@@ -490,6 +502,9 @@ public:
 		RD::NativeOutputGroupBinding retirement_group;
 		uint32_t retirement_root_count = 0, retirement_mark_cursor = 0;
 		bool retirement_directory_returned = false;
+		// Whole detached directory retained in the same prepaid tuple geometry G.
+		bool tuple_directory_prepared = false, tuple_directory_return_ready = false;
+		Vector<RID> tuple_directory_roots;
 		friend class MeshStorage;
 		Mesh::Surface *surface = nullptr;
 		RenderingDevice *device = nullptr;
@@ -540,6 +555,10 @@ public:
 			retirement_root_count = other.retirement_root_count;
 			retirement_mark_cursor = other.retirement_mark_cursor;
 			other.retirement_root_count = other.retirement_mark_cursor = 0;
+			tuple_directory_prepared = other.tuple_directory_prepared;
+			tuple_directory_return_ready = other.tuple_directory_return_ready;
+			tuple_directory_roots = std::move(other.tuple_directory_roots);
+			other.tuple_directory_prepared = other.tuple_directory_return_ready = false;
 			retirement_directory_returned = other.retirement_directory_returned;
 			other.retirement_directory_returned = false;
 			other.physical_transferred = other.metadata_returned = other.metadata_return_active = false;
@@ -564,12 +583,21 @@ public:
 		uint64_t get_format() const { return is_valid() ? surface_format : 0; }
 		AABB get_aabb() const { return is_valid() ? surface_aabb : AABB(); }
 		Vector4 get_uv_scale() const { return is_valid() ? surface_uv_scale : Vector4(); }
+		bool metadata_matches(RSE::PrimitiveType p_primitive, uint64_t p_format, const AABB &p_aabb, const Vector4 &p_uv_scale) const {
+			return is_valid() && primitive == p_primitive && surface_format == p_format && surface_aabb == p_aabb && surface_uv_scale == p_uv_scale;
+		}
 	};
 
 private:
 	// Only synchronous original Core group capture may borrow this address.
 	// Core must move the actual hold, never save a wrapper pointer or clone RIDs.
 	static RD::NativeImmutableHold *_native_hold_transfer_source(NativeSurfaceHold &);
+	static RD::NativeImmutableHold *_native_hold_transfer_live_source(NativeSurfaceHold &);
+	// Prepare outside Registry/RD locks; capture only after actual batch adoption.
+	static Error _native_hold_prepare_tuple_directory(NativeSurfaceHold &, uint32_t);
+	static RD::NativeImmutableHold *_native_hold_tuple_transfer_source(NativeSurfaceHold &);
+	static Error _native_hold_capture_tuple_directory(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, NativeSurfaceHold &);
+	static Error _native_hold_prepare_tuple_directory_return(GDExtensionDeviceExit::ProductionOutputPin &, NativeSurfaceHold &, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);
 	static Error _native_hold_mark_transferred(NativeSurfaceHold &);
 	static Error _native_hold_begin_return(NativeSurfaceHold &);
 	// Freeze only a detached old Surface, outside Registry/RD locks. Live
@@ -586,10 +614,26 @@ private:
 	static Error _native_hold_retirement_root_at(const NativeSurfaceHold &, uint32_t, RID &);
 
 public:
+	// Retain existing source backings only. No VA/version or pipeline factory runs.
+	Error mesh_surface_source_hold_acquire(RID p_mesh, uint32_t p_surface, NativeSurfaceHold &r_hold);
 	Error mesh_surface_hold_acquire(RID p_mesh, uint32_t p_surface, uint64_t p_input_mask, bool p_motion, bool p_point_size_emulated, uint32_t p_lod, NativeSurfaceHold &r_hold);
 	static Error mesh_surface_hold_release(NativeSurfaceHold &r_hold);
 	// Prepare only before transfer/seal, from the exact retained Surface, including
 	// one detached by COW. Never resolve the current mesh RID to replace it.
+	// Scratch values only: neither a hold nor authority. Vectors may allocate.
+	// Existing Versions return their exact VA/format; missing Versions leave both null.
+	struct NativeVertexArrayPlan {
+		Vector<RD::VertexAttribute> attributes;
+		Vector<RID> buffers;
+		Vector<uint64_t> offsets;
+		uint32_t vertex_count = 0;
+		RID existing_vertex_array;
+		RD::VertexFormatID existing_vertex_format = 0;
+	};
+	// Call outside Registry/RD locks; includes direct-VB RD preflight, not
+	// existing VA/IA or full closure validation. Retain p_source until execution
+	// and recompute/revalidate immediately before factories.
+	static Error mesh_surface_hold_plan_vertex_array(const NativeSurfaceHold &p_source, uint64_t p_input_mask, bool p_motion, bool p_point_size_emulated, uint32_t p_lod, NativeVertexArrayPlan &r_plan);
 	static Error mesh_surface_hold_derive(const NativeSurfaceHold &p_source, uint64_t p_input_mask, bool p_motion, bool p_point_size_emulated, uint32_t p_lod, NativeSurfaceHold &r_hold);
 
 private:

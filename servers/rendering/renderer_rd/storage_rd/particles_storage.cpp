@@ -790,6 +790,7 @@ void ParticlesStorage::particles_set_subemitter(RID p_particles, RID p_subemitte
 		RD::get_singleton()->free_rid(particles->particles_material_uniform_set);
 		particles->particles_material_uniform_set = RID(); //clear and force to re create sub emitting
 	}
+	particles->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_PARTICLES);
 }
 
 void ParticlesStorage::particles_emit(RID p_particles, const Transform3D &p_transform, const Vector3 &p_velocity, const Color &p_color, const Color &p_custom, uint32_t p_emit_flags) {
@@ -799,17 +800,17 @@ void ParticlesStorage::particles_emit(RID p_particles, const Transform3D &p_tran
 	ERR_FAIL_COND_MSG(!p_transform.is_finite() || !p_velocity.is_finite() || !Math::is_finite(p_color.r) || !Math::is_finite(p_color.g) || !Math::is_finite(p_color.b) || !Math::is_finite(p_color.a) || !Math::is_finite(p_custom.r) || !Math::is_finite(p_custom.g) || !Math::is_finite(p_custom.b) || !Math::is_finite(p_custom.a), "Particle emission inputs must contain only finite values.");
 	ERR_FAIL_COND(particles->amount == 0);
 
-	if (particles->emitting) {
-		particles->clear = true;
-		particles->emitting = false;
-	}
-
 	if (particles->emission_buffer == nullptr) {
 		_particles_allocate_emission_buffer(particles);
 		if (particles->emission_buffer == nullptr || particles->emission_storage_buffer.is_null()) {
 			ERR_PRINT("Failed to allocate particle emission buffer.");
 			return;
 		}
+	}
+
+	if (particles->emitting) {
+		particles->clear = true;
+		particles->emitting = false;
 	}
 
 	particles->inactive = false;
@@ -1135,7 +1136,10 @@ bool ParticlesStorage::_particles_amount_is_valid(int p_amount) {
 }
 
 bool ParticlesStorage::_particles_lifetime_is_valid(double p_lifetime) {
-	return Math::is_finite(p_lifetime) && p_lifetime > 0.0;
+	// The shader push constant stores lifetime as a float. Reject finite doubles
+	// that would become zero or infinity when crossing the CPU/GPU boundary.
+	const float gpu_lifetime = (float)p_lifetime;
+	return Math::is_finite(p_lifetime) && Math::is_finite(gpu_lifetime) && gpu_lifetime > 0.0f;
 }
 
 bool ParticlesStorage::_particles_trail_lifetime_is_valid(double p_lifetime) {
@@ -2365,7 +2369,7 @@ void ParticlesStorage::update_particles() {
 			particles->frame_remainder = todo;
 		} else {
 			const double variable_delta = frame_delta * time_scale_double;
-			if (!Math::is_finite(variable_delta) || !_particles_process(particles, variable_delta)) {
+			if (!Math::is_finite(variable_delta) || !Math::is_finite((float)variable_delta) || !_particles_process(particles, variable_delta)) {
 				queue_retry();
 				continue;
 			}

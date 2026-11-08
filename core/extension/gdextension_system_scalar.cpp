@@ -65,7 +65,7 @@ GDExtensionDeviceSessionResultV1 Registry::system_scalar_record(GDExtensionQuali
 	QualificationTicket *ticket = nullptr;
 	ScalarUnlock unlock;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error error = qualification_bridge_locked(ref, true, true, bridge, rd);
 		if (error != OK) return scalar_result(error, error == ERR_UNAUTHORIZED ? 15 : 16);
 		if (q->library_generation != records[bridge->library].snapshot.library_generation) return scalar_result(ERR_INVALID_DATA, 16);
@@ -179,7 +179,7 @@ GDExtensionDeviceSessionResultV1 Registry::system_scalar_record(GDExtensionQuali
 		rd->compute_list_end();
 	}
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		if (ticket->body.is_valid()) {
 			GDExtensionQualificationFactV1 fact = {};
 			fact.graph_instance = ticket->body.graph_instance; fact.graph_frame = ticket->body.graph_frame; fact.graph_kind = ticket->body.kind; fact.graph_index = ticket->body.index; fact.graph_offset = ticket->body.offset;
@@ -193,7 +193,7 @@ GDExtensionDeviceSessionResultV1 Registry::system_scalar_record(GDExtensionQuali
 	Error append_error = ticket->body.is_valid() ? OK : ticket->body_append.error == OK ? FAILED : ticket->body_append.error;
 	if (ticket->body.is_valid()) {
 		const Error copy_error = rd->_buffer_get_data_async(RID::from_uint64(q->output.rid), Callable(), q->output_offset, bytes, ticket->result);
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		for (; ticket->readback_copies_joined < ticket->result->copies.size(); ++ticket->readback_copies_joined) {
 			const auto &copy = ticket->result->copies[ticket->readback_copies_joined];
 			GDExtensionQualificationFactV1 fact = {};
@@ -207,7 +207,7 @@ GDExtensionDeviceSessionResultV1 Registry::system_scalar_record(GDExtensionQuali
 	}
 	rd->qualification_recording = false;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		ticket->finish_system_append(append_error);
 		qualification_ticket_publish(ticket, rd);
 		*out_ticket = { instance, ticket->serial };
@@ -221,7 +221,7 @@ GDExtensionDeviceSessionResultV1 Registry::system_scalar_observe(GDExtensionQual
 	*out = {};
 	if (!scalar_abi(budget->abi) || budget->reserved || !budget->max_passes || budget->max_passes > 32 || !budget->max_micros || budget->max_micros > 5000) return scalar_result(ERR_INVALID_PARAMETER, 2);
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		QualificationBridge *bridge = nullptr; RenderingDevice *rd = nullptr;
 		Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
 		if (error != OK) return scalar_result(error, 17);
@@ -239,7 +239,7 @@ GDExtensionDeviceSessionResultV1 Registry::system_scalar_observe(GDExtensionQual
 	}
 	Error error = qualification_schedule(ref, ticket_ref.handle_serial, 3, *budget);
 	if (error != OK) return scalar_result(error, 17);
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr; RenderingDevice *rd = nullptr;
 	error = qualification_bridge_locked(ref, false, false, bridge, rd);
 	if (error != OK) return scalar_result(error, 17);
@@ -253,7 +253,7 @@ GDExtensionDeviceSessionResultV1 Registry::system_scalar_observe(GDExtensionQual
 GDExtensionDeviceSessionResultV1 Registry::system_scalar_facts(GDExtensionQualificationBridgeRefV1 ref, GDExtensionSystemScalarTicketRefV1 ticket_ref, uint64_t revision, uint32_t first, uint32_t capacity, GDExtensionQualificationFactV1 *facts, uint32_t *written) {
 	if (!scalar_aligned(written) || !scalar_aligned(facts) || !capacity || capacity > 64 || first > UINT32_MAX - capacity || !scalar_separate(facts, size_t(capacity) * sizeof(*facts), written, sizeof(*written))) return scalar_result(ERR_INVALID_PARAMETER, 2);
 	*written = 0;
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr; RenderingDevice *rd = nullptr;
 	Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
 	if (error != OK) return scalar_result(error, 17);
@@ -271,7 +271,7 @@ GDExtensionDeviceSessionResultV1 Registry::system_scalar_facts(GDExtensionQualif
 GDExtensionDeviceSessionResultV1 Registry::system_scalar_copy(GDExtensionQualificationBridgeRefV1 ref, GDExtensionSystemScalarTicketRefV1 ticket_ref, uint64_t revision, void *bytes, uint32_t capacity, uint32_t *written) {
 	if (!scalar_aligned(written) || !bytes || !capacity || capacity > 16384 || !scalar_separate(bytes, capacity, written, sizeof(*written))) return scalar_result(ERR_INVALID_PARAMETER, 2);
 	*written = 0;
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr; RenderingDevice *rd = nullptr;
 	Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
 	if (error != OK) return scalar_result(error, 17);
@@ -287,7 +287,7 @@ GDExtensionDeviceSessionResultV1 Registry::system_scalar_copy(GDExtensionQualifi
 
 GDExtensionDeviceSessionResultV1 Registry::system_scalar_cancel(GDExtensionQualificationBridgeRefV1 ref, GDExtensionSystemScalarTicketRefV1 ticket_ref) {
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		QualificationBridge *bridge = nullptr; RenderingDevice *rd = nullptr;
 		Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
 		if (error != OK) return scalar_result(error, 17);
@@ -317,7 +317,7 @@ void Registry::system_scalar_set_return_step(QualificationTicket *ticket, Render
 	ScalarUnlock unlock{ &rd->_thread_safe_ };
 	if (rd->_recording_error() != OK || rd->draw_list.active || rd->compute_list.active || rd->raytracing_list.active || !rd->frames[rd->frame].qualification_epoch || !rd->_qualification_free_event_available(ticket->system_set_physical.event_capacity_reserved)) return;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		if (!ticket->system_set.is_valid() || ticket->system_set_return_requested || !ticket->physically_retired.load() || ticket->system_set_return_error != OK) return;
 		auto *set = rd->uniform_set_owner.get_or_null(ticket->system_set);
 		if (!set || set->qualification_return != &ticket->system_set_physical || set->qualification_users || ticket->system_set_physical.dependent_children.load()) { ticket->remember_system_set_return_error(ERR_INVALID_DATA); return; }
@@ -326,7 +326,7 @@ void Registry::system_scalar_set_return_step(QualificationTicket *ticket, Render
 	rd->qualification_retiring = true;
 	rd->free_rid(ticket->system_set);
 	rd->qualification_retiring = false;
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (!rd->uniform_set_owner.owns(ticket->system_set) && ticket->system_set_physical.enqueued) {
 		ticket->system_set_return_requested = true;
 	} else {

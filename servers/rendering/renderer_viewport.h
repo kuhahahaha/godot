@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "core/object/ref_counted.h"
 #include "core/templates/rid_owner.h"
 #include "servers/display/display_server_enums.h"
 #include "servers/rendering/renderer_scene_render.h"
@@ -59,6 +60,40 @@ public:
 				return view_id == p_other.view_id && view_epoch == p_other.view_epoch && capture_ordinal == p_other.capture_ordinal;
 			}
 			bool operator!=(const CameraSourceToken &p_other) const { return !(*this == p_other); }
+		};
+
+		// Original native invocation facts. A buffer Ref keeps the owner object
+		// alive, not its mutable attachments or permission for a later invocation.
+		struct CameraInvocation {
+			RID camera;
+			Ref<RenderSceneBuffers> render_buffers;
+			RID render_target;
+			Size2i target_size;
+			Size2i internal_size;
+			uint32_t view_count = 0;
+			bool use_xr = false;
+		};
+
+		// Retains source data only, not a live viewport or rendering permission.
+		// Lazily copied from the existing completed-camera capture on first borrow.
+		class CameraCapture : public RefCounted {
+			friend class RendererViewport;
+
+			const RID viewport;
+			const ViewPresentationKey presentation_key;
+			const CameraSourceToken token;
+			const CameraInvocation invocation;
+			const RendererSceneRender::CameraData camera_data;
+
+			CameraCapture(RID p_viewport, const ViewPresentationKey &p_key, const CameraSourceToken &p_token, const RendererSceneRender::CameraData &p_camera_data, const CameraInvocation &p_invocation) :
+					viewport(p_viewport), presentation_key(p_key), token(p_token), invocation(p_invocation), camera_data(p_camera_data) {}
+
+		public:
+			RID get_viewport() const { return viewport; }
+			const CameraInvocation &get_invocation() const { return invocation; }
+			const ViewPresentationKey &get_presentation_key() const { return presentation_key; }
+			const CameraSourceToken &get_token() const { return token; }
+			const RendererSceneRender::CameraData &get_camera_data() const { return camera_data; }
 		};
 
 		RID self;
@@ -101,11 +136,19 @@ public:
 		// post-render staging and previous-camera adoption.
 		RendererSceneRender::CameraData captured_camera_data;
 		bool captured_camera_data_valid = false;
+		ViewPresentationKey captured_presentation_key;
+		CameraInvocation captured_invocation;
+		mutable Ref<CameraCapture> captured_camera;
 
 		// E15/E16 identity is owned by the registered viewport. These fields
 		// are updated only at the real camera invocation and color adoption
 		// boundaries; they are never inferred from the global frame counter.
 		ViewPresentationKey presentation_key;
+		ViewPresentationKey revoked_resource_key;
+		// One original view lineage for this viewport RID lifetime. Withdrawal
+		// cannot substitute another view and overwrite its epoch tombstone.
+		uint64_t presentation_view_id = 0;
+		uint64_t highest_presentation_epoch = 0;
 		CameraSourceToken previous_camera_token;
 		CameraSourceToken current_camera_token;
 		uint64_t camera_capture_ordinal = 0;
@@ -293,11 +336,23 @@ public:
 	// Internal registered-viewport association only. Freeze the completed actual
 	// camera before culling; lookup copies it without granting a view/permit.
 	Viewport::CameraSourceToken viewport_begin_camera_capture(RID p_viewport, RendererSceneRender::CameraData &r_camera_data);
+	// Actual renderer entry: validates original camera/buffer owner before issuing
+	// an ordinal. One invocation retains all real eye projections in CameraData;
+	// this does not invent a selected-eye binding for an external mono profile.
+	Viewport::CameraSourceToken viewport_begin_camera_capture(RID p_viewport, RendererSceneRender::CameraData &r_camera_data, RID p_camera, const Ref<RenderSceneBuffers> &p_render_buffers);
+
 	// Only the current invocation is available. Failure leaves the output intact.
 	bool viewport_get_camera_capture(RID p_viewport, const Viewport::CameraSourceToken &p_token, RendererSceneRender::CameraData &r_camera_data) const;
+	// Exact retained source borrow. Later captures, invalidation and viewport free
+	// do not rewrite this immutable payload. Failure leaves the output intact.
+	// Render-thread access only, like the source capture. The viewport caches only
+	// its current borrow; old payloads live only while a caller retains them.
+	// This ordinary source primitive does not settle external-output budgets:
+	// an accepted output arena must account native bytes before retaining it.
+	bool viewport_get_camera_capture_ref(RID p_viewport, const Viewport::CameraSourceToken &p_token, Ref<Viewport::CameraCapture> &r_capture) const;
 	Viewport::ViewPresentationKey viewport_get_presentation_key(RID p_viewport) const;
 	bool viewport_register_presentation_key(RID p_viewport, const Viewport::ViewPresentationKey &p_key);
-	void viewport_invalidate_presentation_key(RID p_viewport);
+	void viewport_invalidate_presentation_key(RID p_viewport, bool p_resource_change = false);
 
 	void viewport_set_disable_2d(RID p_viewport, bool p_disable);
 	void viewport_set_environment_mode(RID p_viewport, RSE::ViewportEnvironmentMode p_mode);

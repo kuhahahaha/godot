@@ -1,0 +1,2021 @@
+{
+  "schema": "scene117-height-local-validation-v1",
+  "date": "2026-11-07",
+  "status": "PASS_WITH_EXPLICIT_SCOPE",
+  "execution_owner": "root serial unified local build/runtime; independent receipt evidence review",
+  "provenance": {
+    "original_neighbors_commit": "4d3efe15980b633f7ea1a21fee486744cac0c1de",
+    "original_height_contract_commit": "1bb6d8d958a8f9e651ad5612466656f9ead0823e",
+    "source_coordinator117_zip_sha256": "1642d11163e44a2aad622d028661bea7be6141bdbb157565429d93eff9c8e072",
+    "source117_execution_is_local": false,
+    "adaptation": "38 original-context hunks across7 fixture/module files, preserving local capture16 env isolation and render-loop behavior; no production/ABI changes in this batch"
+  },
+  "local_host": {
+    "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+    "device": "Apple M3 Pro (Apple9)",
+    "driver": "Metal 4.0",
+    "build_base_head": "828f2f807c83b8674f4ff49edc23e5421d0c83f0",
+    "engine_stamp_is_adoption_commit": false,
+    "binary": {
+      "bytes": 157524424,
+      "sha256": "1ad44f2d6045e4a7e29155a730dbb10a8128d279285bf72a51f952dfb55535f3"
+    },
+    "controlled_build": {
+      "schema": 1,
+      "selection": {
+        "schema": 1,
+        "core_stamp": "5f8994a7744ff8245a48174eebabb1fb4c62957f237d081afdae11dd56023706",
+        "compiler_route": "BuiltinGlslangV1",
+        "compiler_stamp": "5b8b179152a3eac3b7e246257acb4008c26e6c2500e2f6d9b32f261532ad9c71",
+        "platform": "macos",
+        "architecture": "arm64",
+        "target_kind": "Executable"
+      },
+      "status": "available",
+      "reason": null,
+      "artifact": {
+        "bytes": 157524424,
+        "sha256": "1ad44f2d6045e4a7e29155a730dbb10a8128d279285bf72a51f952dfb55535f3"
+      }
+    }
+  },
+  "build": {
+    "exit_code": 0,
+    "exit_evidence": "root actual unified build report",
+    "elapsed_seconds": 10.97,
+    "log": {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_BUILD.log",
+      "bytes": 2266,
+      "sha256": "eca88a0ea239780e95a862c836a571b17e78a2f501a03e10e2849e51231eeb50"
+    },
+    "setup_warning_count": 2,
+    "linker_warning": "MoltenVK macOS12 object linked for macOS11"
+  },
+  "inputs_before": {
+    "bin/godot.macos.editor.arm64": {
+      "bytes": 157524424,
+      "sha256": "1ad44f2d6045e4a7e29155a730dbb10a8128d279285bf72a51f952dfb55535f3"
+    },
+    "modules/particles_runtime_tests/particles_heightfield_clear_test_fixture.cpp": {
+      "bytes": 24417,
+      "sha256": "3485b2f254853f8a20a6e600a9620f69c12a7fe20374f7fee2c7462dc8bc5404"
+    },
+    "modules/particles_runtime_tests/particles_heightfield_clear_test_fixture.h": {
+      "bytes": 1690,
+      "sha256": "f261969655839114174af8f6c65fe7187d1dbb536a761d7c175244397c0e6a20"
+    },
+    "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.cpp": {
+      "bytes": 11416,
+      "sha256": "9a675520a8e9335d489c51bc0fa15a1ddea87b9b2861e7e90a87d492f36b9f77"
+    },
+    "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.h": {
+      "bytes": 581,
+      "sha256": "e3be9c7341d33620b735da2201690d1ca5add362b7d5525b5dc78bba0934a1e0"
+    },
+    "servers/rendering/renderer_scene_cull.cpp": {
+      "bytes": 193278,
+      "sha256": "0ae17a6aaf080d05adda8631be5bb46ce80f328a483cad7f4b2709b654a71ee1"
+    },
+    "tests/core/extension/test_production_request.cpp": {
+      "bytes": 740800,
+      "sha256": "46051275555fe66b4052c88fe5ba6a70c4e9fd8b6277f6278a0178102efcc7a1"
+    },
+    "tests/servers/rendering/fixtures/particle_heightfield_clear_native/README.md": {
+      "bytes": 7113,
+      "sha256": "8dc1c58e1f9fd432b8f02d055c7af64c227b0b101cb5488a4d22e00bfc2c8664"
+    },
+    "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run.gd": {
+      "bytes": 2940,
+      "sha256": "e568e52f9194fcf9d7cc4f34f3d7e7b1fe35816a0d790e9ba9e47415eb981a7c"
+    },
+    "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_legacy_native.py": {
+      "bytes": 5243,
+      "sha256": "5a5e7b4098a07352b2ccc4e66c3e2430f58c8917b451af7bd4be963f5759c1a5"
+    },
+    "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_legacy_neighbors.py": {
+      "bytes": 5973,
+      "sha256": "7c4e381d1cc2e6ec2cb0607d38271f11a51d40d221b5ebd9b96f926db09534b1"
+    },
+    "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_native.py": {
+      "bytes": 4509,
+      "sha256": "21b3f8aef544ee83957308242ae3e27995cbb0129698618cf1e9bf373cdccef9"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_phase_managed_native/README.md": {
+      "bytes": 1686,
+      "sha256": "7ae22fc4f36e2714c99d20cd6fc3fdd8bb243548ff85cc3714c5c2a7d90825ae"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_phase_managed_native/project.godot": {
+      "bytes": 131,
+      "sha256": "015b8dc03a507a5ef0bf50de26d13acd29a3ab828d8453e1c6ef5b61e12f7a7b"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_phase_managed_native/run.gd": {
+      "bytes": 1151,
+      "sha256": "fb9e0c5b2f8ecac60e758497091dd8f2f9d9bca66d1c0cc52d19ce3dabd2fae8"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_viewport_invariance_native/README.md": {
+      "bytes": 4120,
+      "sha256": "1eb32b428947b254c8e8b7e23c445cd9d14551492a3e5a965b6bcceffcee15e4"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_viewport_invariance_native/project.godot": {
+      "bytes": 135,
+      "sha256": "53505e0111d78230c7d71a7090d65695ab5fe8edcaa9f8ae860385fd3a5ba142"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_viewport_invariance_native/run.gd": {
+      "bytes": 6829,
+      "sha256": "4c0f5abb3f695243eeaf4796fdb83d208452f496d41c67d2bed023b31ccef48a"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_viewport_invariance_native/run_native.py": {
+      "bytes": 6492,
+      "sha256": "38e4341422b658521665a2a008db22c4d2db6ddf1263597677485b92966788d2"
+    },
+    "tests/servers/rendering/test_external_output_custody_bridge.h": {
+      "bytes": 9146,
+      "sha256": "3c87c2988d58ea6b8d4f7a8a4c618f84348623f54c3f293dace8ea0ec680ba27"
+    },
+    "tests/servers/rendering/test_external_output_owner_state.cpp": {
+      "bytes": 53391,
+      "sha256": "a2bc1afda2eac3672e05900387b070aeccfdccad265f6e94e9fd416b9cc5b24e"
+    }
+  },
+  "inputs_after": {
+    "bin/godot.macos.editor.arm64": {
+      "bytes": 157524424,
+      "sha256": "1ad44f2d6045e4a7e29155a730dbb10a8128d279285bf72a51f952dfb55535f3"
+    },
+    "modules/particles_runtime_tests/particles_heightfield_clear_test_fixture.cpp": {
+      "bytes": 24417,
+      "sha256": "3485b2f254853f8a20a6e600a9620f69c12a7fe20374f7fee2c7462dc8bc5404"
+    },
+    "modules/particles_runtime_tests/particles_heightfield_clear_test_fixture.h": {
+      "bytes": 1690,
+      "sha256": "f261969655839114174af8f6c65fe7187d1dbb536a761d7c175244397c0e6a20"
+    },
+    "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.cpp": {
+      "bytes": 11416,
+      "sha256": "9a675520a8e9335d489c51bc0fa15a1ddea87b9b2861e7e90a87d492f36b9f77"
+    },
+    "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.h": {
+      "bytes": 581,
+      "sha256": "e3be9c7341d33620b735da2201690d1ca5add362b7d5525b5dc78bba0934a1e0"
+    },
+    "servers/rendering/renderer_scene_cull.cpp": {
+      "bytes": 193278,
+      "sha256": "0ae17a6aaf080d05adda8631be5bb46ce80f328a483cad7f4b2709b654a71ee1"
+    },
+    "tests/core/extension/test_production_request.cpp": {
+      "bytes": 740800,
+      "sha256": "46051275555fe66b4052c88fe5ba6a70c4e9fd8b6277f6278a0178102efcc7a1"
+    },
+    "tests/servers/rendering/fixtures/particle_heightfield_clear_native/README.md": {
+      "bytes": 7113,
+      "sha256": "8dc1c58e1f9fd432b8f02d055c7af64c227b0b101cb5488a4d22e00bfc2c8664"
+    },
+    "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run.gd": {
+      "bytes": 2940,
+      "sha256": "e568e52f9194fcf9d7cc4f34f3d7e7b1fe35816a0d790e9ba9e47415eb981a7c"
+    },
+    "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_legacy_native.py": {
+      "bytes": 5243,
+      "sha256": "5a5e7b4098a07352b2ccc4e66c3e2430f58c8917b451af7bd4be963f5759c1a5"
+    },
+    "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_legacy_neighbors.py": {
+      "bytes": 5973,
+      "sha256": "7c4e381d1cc2e6ec2cb0607d38271f11a51d40d221b5ebd9b96f926db09534b1"
+    },
+    "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_native.py": {
+      "bytes": 4509,
+      "sha256": "21b3f8aef544ee83957308242ae3e27995cbb0129698618cf1e9bf373cdccef9"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_phase_managed_native/README.md": {
+      "bytes": 1686,
+      "sha256": "7ae22fc4f36e2714c99d20cd6fc3fdd8bb243548ff85cc3714c5c2a7d90825ae"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_phase_managed_native/project.godot": {
+      "bytes": 131,
+      "sha256": "015b8dc03a507a5ef0bf50de26d13acd29a3ab828d8453e1c6ef5b61e12f7a7b"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_phase_managed_native/run.gd": {
+      "bytes": 1151,
+      "sha256": "fb9e0c5b2f8ecac60e758497091dd8f2f9d9bca66d1c0cc52d19ce3dabd2fae8"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_viewport_invariance_native/README.md": {
+      "bytes": 4120,
+      "sha256": "1eb32b428947b254c8e8b7e23c445cd9d14551492a3e5a965b6bcceffcee15e4"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_viewport_invariance_native/project.godot": {
+      "bytes": 135,
+      "sha256": "53505e0111d78230c7d71a7090d65695ab5fe8edcaa9f8ae860385fd3a5ba142"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_viewport_invariance_native/run.gd": {
+      "bytes": 6829,
+      "sha256": "4c0f5abb3f695243eeaf4796fdb83d208452f496d41c67d2bed023b31ccef48a"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_viewport_invariance_native/run_native.py": {
+      "bytes": 6492,
+      "sha256": "38e4341422b658521665a2a008db22c4d2db6ddf1263597677485b92966788d2"
+    },
+    "tests/servers/rendering/test_external_output_custody_bridge.h": {
+      "bytes": 9146,
+      "sha256": "3c87c2988d58ea6b8d4f7a8a4c618f84348623f54c3f293dace8ea0ec680ba27"
+    },
+    "tests/servers/rendering/test_external_output_owner_state.cpp": {
+      "bytes": 53391,
+      "sha256": "a2bc1afda2eac3672e05900387b070aeccfdccad265f6e94e9fd416b9cc5b24e"
+    }
+  },
+  "inputs_unchanged_during_runs": true,
+  "current_compiled_source_scripts_host_match_run_pins": true,
+  "document_only_after_run": [
+    {
+      "current": {
+        "path": "tests/servers/rendering/fixtures/particle_heightfield_clear_native/README.md",
+        "bytes": 7158,
+        "sha256": "c1e62a30e86662d1c93108775ff79430d1c5cd61f9dfeb317c4e46124ffa9f47"
+      },
+      "recorded": {
+        "bytes": 7113,
+        "sha256": "8dc1c58e1f9fd432b8f02d055c7af64c227b0b101cb5488a4d22e00bfc2c8664"
+      },
+      "reason": "README clarifies four flat cases plus one tilted plane and fixed per-case start; no compiled/script change"
+    }
+  ],
+  "actual_result": {
+    "head": "828f2f807c83b8674f4ff49edc23e5421d0c83f0",
+    "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+    "results": [
+      {
+        "label": "LEGACY10",
+        "command": [
+          "python3",
+          "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_legacy_native.py",
+          "--binary",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+          "--display-driver",
+          "macos"
+        ],
+        "exit_code": 0,
+        "seconds": 7.96,
+        "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_LEGACY10.log",
+        "sha256": "588693103b7879f5a4ee0f8387a1f66fba24e6b099209fd31ba8527f5884f37c",
+        "diagnostics": {
+          "ERROR:": 0,
+          "WARNING:": 0
+        }
+      },
+      {
+        "label": "NEIGHBORS12",
+        "command": [
+          "python3",
+          "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_legacy_neighbors.py",
+          "--binary",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+          "--display-driver",
+          "macos"
+        ],
+        "exit_code": 0,
+        "seconds": 7.34,
+        "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_NEIGHBORS12.log",
+        "sha256": "b29b67d7e8b797ba8cb141bcc45c40eb97bd088706a518ed9a26eab8f6d5b8cd",
+        "diagnostics": {
+          "ERROR:": 0,
+          "WARNING:": 0
+        }
+      },
+      {
+        "label": "CAPTURE16",
+        "command": [
+          "python3",
+          "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_native.py",
+          "--binary",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+          "--display-driver",
+          "macos",
+          "--rendering-driver",
+          "metal"
+        ],
+        "exit_code": 0,
+        "seconds": 9.91,
+        "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CAPTURE16.log",
+        "sha256": "6548e843075088981b64bbb38c4f3e19bf8d636432c26a02d0aecb3fa976d219",
+        "diagnostics": {
+          "ERROR:": 0,
+          "WARNING:": 0
+        }
+      },
+      {
+        "label": "MANAGED_MOBILE",
+        "command": [
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+          "--display-driver",
+          "macos",
+          "--rendering-driver",
+          "metal",
+          "--rendering-method",
+          "mobile",
+          "--path",
+          "tests/servers/rendering/fixtures/particle_scene_phase_managed_native",
+          "--script",
+          "run.gd"
+        ],
+        "exit_code": 0,
+        "seconds": 0.86,
+        "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_MANAGED_MOBILE.log",
+        "sha256": "9c4cc943a7570a60a4841ff477618021f82aaa96d463ca4fa05cf6d0783ea5b2",
+        "diagnostics": {
+          "ERROR:": 0,
+          "WARNING:": 0
+        }
+      },
+      {
+        "label": "MANAGED_FORWARD_PLUS",
+        "command": [
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+          "--display-driver",
+          "macos",
+          "--rendering-driver",
+          "metal",
+          "--rendering-method",
+          "forward_plus",
+          "--path",
+          "tests/servers/rendering/fixtures/particle_scene_phase_managed_native",
+          "--script",
+          "run.gd"
+        ],
+        "exit_code": 0,
+        "seconds": 0.89,
+        "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_MANAGED_FORWARD_PLUS.log",
+        "sha256": "6e66c41809d3b8babda2b5e9b4ecd053e0d99e7a29ee2f85a466ceab60f12a4f",
+        "diagnostics": {
+          "ERROR:": 0,
+          "WARNING:": 0
+        }
+      },
+      {
+        "label": "ORDINARY_MOBILE",
+        "command": [
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+          "--display-driver",
+          "macos",
+          "--rendering-driver",
+          "metal",
+          "--rendering-method",
+          "mobile",
+          "--path",
+          "tests/servers/rendering/fixtures/particle_scene_pairs_native",
+          "--script",
+          "run.gd"
+        ],
+        "exit_code": 0,
+        "seconds": 0.85,
+        "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_ORDINARY_MOBILE.log",
+        "sha256": "59c7b718b9cf2b5e0718306b9f9ae7723dc36b99a378e2b3703193472a926281",
+        "diagnostics": {
+          "ERROR:": 0,
+          "WARNING:": 0
+        }
+      },
+      {
+        "label": "ORDINARY_FORWARD_PLUS",
+        "command": [
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+          "--display-driver",
+          "macos",
+          "--rendering-driver",
+          "metal",
+          "--rendering-method",
+          "forward_plus",
+          "--path",
+          "tests/servers/rendering/fixtures/particle_scene_pairs_native",
+          "--script",
+          "run.gd"
+        ],
+        "exit_code": 0,
+        "seconds": 0.93,
+        "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_ORDINARY_FORWARD_PLUS.log",
+        "sha256": "b5eeda9233e7338ca5029ccbc354b29bc1f4294b9497f69a19a39fc3aeecb78e",
+        "diagnostics": {
+          "ERROR:": 0,
+          "WARNING:": 0
+        }
+      },
+      {
+        "label": "VIEWPORT",
+        "command": [
+          "python3",
+          "tests/servers/rendering/fixtures/particle_scene_viewport_invariance_native/run_native.py",
+          "--binary",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+          "--capture-dir",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CAPTURES",
+          "--display-driver",
+          "macos"
+        ],
+        "exit_code": 0,
+        "seconds": 2.79,
+        "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_VIEWPORT.log",
+        "sha256": "780c9a7140766cb2c88401124aee1e4d902732fe76be0269a9462fa29da5d2a3",
+        "diagnostics": {
+          "ERROR:": 0,
+          "WARNING:": 0
+        }
+      },
+      {
+        "label": "CPU",
+        "command": [
+          "bin/godot.macos.editor.arm64",
+          "--headless",
+          "--test",
+          "--test-case=*ProductionRequest*,*ProductionNativeObserve*,*RecordSource*,*ExternalOutput*,*[K03][P2]*,*EngineGuardLifecycle*,*GenerationMetadataLayout*,*SceneOnlyRouting*,*ReadbackSource*,*ScenePhase*",
+          "--reporters=xml",
+          "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CPU.xml"
+        ],
+        "exit_code": 0,
+        "seconds": 4.11,
+        "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CPU.log",
+        "sha256": "1fbf3d30a19652bfad6bc356bc349d15201ec079f2ea1a085db33445ab47d7ac",
+        "diagnostics": {
+          "ERROR:": 3,
+          "WARNING:": 0
+        }
+      }
+    ],
+    "inputs_unchanged": true
+  },
+  "logs": {
+    "LEGACY10": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_LEGACY10.log",
+      "bytes": 10188,
+      "sha256": "588693103b7879f5a4ee0f8387a1f66fba24e6b099209fd31ba8527f5884f37c",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 0
+      }
+    },
+    "NEIGHBORS12": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_NEIGHBORS12.log",
+      "bytes": 12633,
+      "sha256": "b29b67d7e8b797ba8cb141bcc45c40eb97bd088706a518ed9a26eab8f6d5b8cd",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 0
+      }
+    },
+    "CAPTURE16": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CAPTURE16.log",
+      "bytes": 13545,
+      "sha256": "6548e843075088981b64bbb38c4f3e19bf8d636432c26a02d0aecb3fa976d219",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 0
+      }
+    },
+    "MANAGED_MOBILE": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_MANAGED_MOBILE.log",
+      "bytes": 2044,
+      "sha256": "9c4cc943a7570a60a4841ff477618021f82aaa96d463ca4fa05cf6d0783ea5b2",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 0
+      }
+    },
+    "MANAGED_FORWARD_PLUS": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_MANAGED_FORWARD_PLUS.log",
+      "bytes": 2038,
+      "sha256": "6e66c41809d3b8babda2b5e9b4ecd053e0d99e7a29ee2f85a466ceab60f12a4f",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 0
+      }
+    },
+    "ORDINARY_MOBILE": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_ORDINARY_MOBILE.log",
+      "bytes": 770,
+      "sha256": "59c7b718b9cf2b5e0718306b9f9ae7723dc36b99a378e2b3703193472a926281",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 0
+      }
+    },
+    "ORDINARY_FORWARD_PLUS": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_ORDINARY_FORWARD_PLUS.log",
+      "bytes": 764,
+      "sha256": "b5eeda9233e7338ca5029ccbc354b29bc1f4294b9497f69a19a39fc3aeecb78e",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 0
+      }
+    },
+    "VIEWPORT": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_VIEWPORT.log",
+      "bytes": 6590,
+      "sha256": "780c9a7140766cb2c88401124aee1e4d902732fe76be0269a9462fa29da5d2a3",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 0
+      }
+    },
+    "CPU": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CPU.log",
+      "bytes": 495,
+      "sha256": "1fbf3d30a19652bfad6bc356bc349d15201ec079f2ea1a085db33445ab47d7ac",
+      "diagnostics": {
+        "ERROR:": 3,
+        "WARNING:": 0
+      }
+    }
+  },
+  "records": {
+    "LEGACY10": [
+      {
+        "case": "HEIGHTFIELD_LEGACY_NATIVE_CASE renderer=mobile transform_case=identity world_radius=0.25",
+        "renderer": "mobile",
+        "sample": {
+          "active": true,
+          "attractor_count": 0,
+          "collided": true,
+          "collider_count": 1,
+          "depth": 0.125,
+          "driver": "Apple M3 Pro (Apple9)",
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            0.0,
+            0.25,
+            0.0
+          ],
+          "textures_used": 0
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NATIVE_CASE renderer=forward_plus transform_case=identity world_radius=0.25",
+        "renderer": "forward_plus",
+        "sample": {
+          "active": true,
+          "attractor_count": 0,
+          "collided": true,
+          "collider_count": 1,
+          "depth": 0.125,
+          "driver": "Apple M3 Pro (Apple9)",
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            0.0,
+            0.25,
+            0.0
+          ],
+          "textures_used": 0
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NATIVE_CASE renderer=mobile transform_case=rotation world_radius=0.25",
+        "renderer": "mobile",
+        "sample": {
+          "active": true,
+          "attractor_count": 0,
+          "collided": true,
+          "collider_count": 1,
+          "depth": 0.125,
+          "driver": "Apple M3 Pro (Apple9)",
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "normal": [
+            -1.0,
+            -4.37113882867379e-08,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            -0.25,
+            -5.46392353584224e-09,
+            0.0
+          ],
+          "textures_used": 0
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NATIVE_CASE renderer=forward_plus transform_case=rotation world_radius=0.25",
+        "renderer": "forward_plus",
+        "sample": {
+          "active": true,
+          "attractor_count": 0,
+          "collided": true,
+          "collider_count": 1,
+          "depth": 0.125,
+          "driver": "Apple M3 Pro (Apple9)",
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "normal": [
+            -1.0,
+            -4.37113882867379e-08,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            -0.25,
+            -5.46392353584224e-09,
+            0.0
+          ],
+          "textures_used": 0
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NATIVE_CASE renderer=mobile transform_case=uniform world_radius=0.25",
+        "renderer": "mobile",
+        "sample": {
+          "active": true,
+          "attractor_count": 0,
+          "collided": true,
+          "collider_count": 1,
+          "depth": 0.125,
+          "driver": "Apple M3 Pro (Apple9)",
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            0.0,
+            0.25,
+            0.0
+          ],
+          "textures_used": 0
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NATIVE_CASE renderer=forward_plus transform_case=uniform world_radius=0.25",
+        "renderer": "forward_plus",
+        "sample": {
+          "active": true,
+          "attractor_count": 0,
+          "collided": true,
+          "collider_count": 1,
+          "depth": 0.125,
+          "driver": "Apple M3 Pro (Apple9)",
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            0.0,
+            0.25,
+            0.0
+          ],
+          "textures_used": 0
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NATIVE_CASE renderer=mobile transform_case=nonuniform world_radius=0.25",
+        "renderer": "mobile",
+        "sample": {
+          "active": true,
+          "attractor_count": 0,
+          "collided": true,
+          "collider_count": 1,
+          "depth": 0.125,
+          "driver": "Apple M3 Pro (Apple9)",
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            0.0,
+            0.25,
+            0.0
+          ],
+          "textures_used": 0
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NATIVE_CASE renderer=forward_plus transform_case=nonuniform world_radius=0.25",
+        "renderer": "forward_plus",
+        "sample": {
+          "active": true,
+          "attractor_count": 0,
+          "collided": true,
+          "collider_count": 1,
+          "depth": 0.125,
+          "driver": "Apple M3 Pro (Apple9)",
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            0.0,
+            0.25,
+            0.0
+          ],
+          "textures_used": 0
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NATIVE_CASE renderer=mobile transform_case=tilt_nonuniform_rotation world_radius=0.25",
+        "renderer": "mobile",
+        "sample": {
+          "active": true,
+          "attractor_count": 0,
+          "collided": true,
+          "collider_count": 1,
+          "depth": 0.12087345123291,
+          "driver": "Apple M3 Pro (Apple9)",
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "normal": [
+            -0.966987550258636,
+            -0.241746932268143,
+            -0.0805822908878326
+          ],
+          "pass": true,
+          "position": [
+            -0.241883128881454,
+            -0.0292207859456539,
+            -0.00974025949835777
+          ],
+          "textures_used": 0
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NATIVE_CASE renderer=forward_plus transform_case=tilt_nonuniform_rotation world_radius=0.25",
+        "renderer": "forward_plus",
+        "sample": {
+          "active": true,
+          "attractor_count": 0,
+          "collided": true,
+          "collider_count": 1,
+          "depth": 0.12087345123291,
+          "driver": "Apple M3 Pro (Apple9)",
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "normal": [
+            -0.966987550258636,
+            -0.241746932268143,
+            -0.0805822908878326
+          ],
+          "pass": true,
+          "position": [
+            -0.241883128881454,
+            -0.0292207859456539,
+            -0.00974025949835777
+          ],
+          "textures_used": 0
+        }
+      }
+    ],
+    "NEIGHBORS12": [
+      {
+        "case": "HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=mobile source=sphere",
+        "renderer": "mobile",
+        "sample": {
+          "active": true,
+          "attractor_count": 0,
+          "collided": true,
+          "collider_count": 1,
+          "depth": 0.25,
+          "driver": "Apple M3 Pro (Apple9)",
+          "force": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "neighbor_case": "sphere",
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            0.0,
+            1.25,
+            0.0
+          ],
+          "textures_used": 0,
+          "velocity": [
+            0.0,
+            1.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=forward_plus source=sphere",
+        "renderer": "forward_plus",
+        "sample": {
+          "active": true,
+          "attractor_count": 0,
+          "collided": true,
+          "collider_count": 1,
+          "depth": 0.25,
+          "driver": "Apple M3 Pro (Apple9)",
+          "force": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "neighbor_case": "sphere",
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            0.0,
+            1.25,
+            0.0
+          ],
+          "textures_used": 0,
+          "velocity": [
+            0.0,
+            1.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=mobile source=box",
+        "renderer": "mobile",
+        "sample": {
+          "active": true,
+          "attractor_count": 0,
+          "collided": true,
+          "collider_count": 1,
+          "depth": 0.125,
+          "driver": "Apple M3 Pro (Apple9)",
+          "force": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "neighbor_case": "box",
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            1.25,
+            0.0,
+            0.0
+          ],
+          "textures_used": 0,
+          "velocity": [
+            1.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=forward_plus source=box",
+        "renderer": "forward_plus",
+        "sample": {
+          "active": true,
+          "attractor_count": 0,
+          "collided": true,
+          "collider_count": 1,
+          "depth": 0.125,
+          "driver": "Apple M3 Pro (Apple9)",
+          "force": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "neighbor_case": "box",
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            1.25,
+            0.0,
+            0.0
+          ],
+          "textures_used": 0,
+          "velocity": [
+            1.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=mobile source=sdf",
+        "renderer": "mobile",
+        "sample": {
+          "active": true,
+          "attractor_count": 0,
+          "collided": true,
+          "collider_count": 1,
+          "depth": 0.125,
+          "driver": "Apple M3 Pro (Apple9)",
+          "force": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "neighbor_case": "sdf",
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            0.25,
+            0.0,
+            0.0
+          ],
+          "textures_used": 1,
+          "velocity": [
+            1.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=forward_plus source=sdf",
+        "renderer": "forward_plus",
+        "sample": {
+          "active": true,
+          "attractor_count": 0,
+          "collided": true,
+          "collider_count": 1,
+          "depth": 0.125,
+          "driver": "Apple M3 Pro (Apple9)",
+          "force": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "neighbor_case": "sdf",
+          "normal": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            0.25,
+            0.0,
+            0.0
+          ],
+          "textures_used": 1,
+          "velocity": [
+            1.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=mobile source=sphere_attractor",
+        "renderer": "mobile",
+        "sample": {
+          "active": true,
+          "attractor_count": 1,
+          "collided": false,
+          "collider_count": 0,
+          "depth": 1.0,
+          "driver": "Apple M3 Pro (Apple9)",
+          "force": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "neighbor_case": "sphere_attractor",
+          "normal": [
+            -0.0166666675359011,
+            0.0,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "textures_used": 0,
+          "velocity": [
+            -0.0166666675359011,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=forward_plus source=sphere_attractor",
+        "renderer": "forward_plus",
+        "sample": {
+          "active": true,
+          "attractor_count": 1,
+          "collided": false,
+          "collider_count": 0,
+          "depth": 1.0,
+          "driver": "Apple M3 Pro (Apple9)",
+          "force": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "neighbor_case": "sphere_attractor",
+          "normal": [
+            -0.0166666675359011,
+            0.0,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "textures_used": 0,
+          "velocity": [
+            -0.0166666675359011,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=mobile source=box_attractor",
+        "renderer": "mobile",
+        "sample": {
+          "active": true,
+          "attractor_count": 1,
+          "collided": false,
+          "collider_count": 0,
+          "depth": 1.0,
+          "driver": "Apple M3 Pro (Apple9)",
+          "force": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "neighbor_case": "box_attractor",
+          "normal": [
+            -0.0166666675359011,
+            0.0,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "textures_used": 0,
+          "velocity": [
+            -0.0166666675359011,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=forward_plus source=box_attractor",
+        "renderer": "forward_plus",
+        "sample": {
+          "active": true,
+          "attractor_count": 1,
+          "collided": false,
+          "collider_count": 0,
+          "depth": 1.0,
+          "driver": "Apple M3 Pro (Apple9)",
+          "force": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "neighbor_case": "box_attractor",
+          "normal": [
+            -0.0166666675359011,
+            0.0,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "textures_used": 0,
+          "velocity": [
+            -0.0166666675359011,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=mobile source=vector_attractor",
+        "renderer": "mobile",
+        "sample": {
+          "active": true,
+          "attractor_count": 1,
+          "collided": false,
+          "collider_count": 0,
+          "depth": 1.0,
+          "driver": "Apple M3 Pro (Apple9)",
+          "force": [
+            -2.0,
+            0.0,
+            0.0
+          ],
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "neighbor_case": "vector_attractor",
+          "normal": [
+            -0.0333333350718021,
+            0.0,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "textures_used": 1,
+          "velocity": [
+            -0.0333333350718021,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=forward_plus source=vector_attractor",
+        "renderer": "forward_plus",
+        "sample": {
+          "active": true,
+          "attractor_count": 1,
+          "collided": false,
+          "collider_count": 0,
+          "depth": 1.0,
+          "driver": "Apple M3 Pro (Apple9)",
+          "force": [
+            -2.0,
+            0.0,
+            0.0
+          ],
+          "frame_counter": 1,
+          "legacy_normal": true,
+          "neighbor_case": "vector_attractor",
+          "normal": [
+            -0.0333333350718021,
+            0.0,
+            0.0
+          ],
+          "pass": true,
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "textures_used": 1,
+          "velocity": [
+            -0.0333333350718021,
+            0.0,
+            0.0
+          ]
+        }
+      }
+    ],
+    "CAPTURE16": [
+      {
+        "case": "HEIGHTFIELD_NATIVE_CASE renderer=mobile height=None extents_y=1.0 transform_y=0.0 transform_case=identity",
+        "renderer": "mobile",
+        "sample": {
+          "driver": "Apple M3 Pro (Apple9)",
+          "first_raw": 0.75,
+          "pass": true,
+          "second_raw": 0.0
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_NATIVE_CASE renderer=forward_plus height=None extents_y=1.0 transform_y=0.0 transform_case=identity",
+        "renderer": "forward_plus",
+        "sample": {
+          "driver": "Apple M3 Pro (Apple9)",
+          "first_raw": 0.75,
+          "pass": true,
+          "second_raw": 0.0
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_NATIVE_CASE renderer=mobile height=-0.5 extents_y=1.0 transform_y=0.0 transform_case=identity",
+        "renderer": "mobile",
+        "sample": {
+          "driver": "Apple M3 Pro (Apple9)",
+          "first_raw": 0.75,
+          "pass": true,
+          "second_raw": 0.25
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_NATIVE_CASE renderer=forward_plus height=-0.5 extents_y=1.0 transform_y=0.0 transform_case=identity",
+        "renderer": "forward_plus",
+        "sample": {
+          "driver": "Apple M3 Pro (Apple9)",
+          "first_raw": 0.75,
+          "pass": true,
+          "second_raw": 0.25
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_NATIVE_CASE renderer=mobile height=0.0 extents_y=1.0 transform_y=0.0 transform_case=identity",
+        "renderer": "mobile",
+        "sample": {
+          "driver": "Apple M3 Pro (Apple9)",
+          "first_raw": 0.75,
+          "pass": true,
+          "second_raw": 0.5
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_NATIVE_CASE renderer=forward_plus height=0.0 extents_y=1.0 transform_y=0.0 transform_case=identity",
+        "renderer": "forward_plus",
+        "sample": {
+          "driver": "Apple M3 Pro (Apple9)",
+          "first_raw": 0.75,
+          "pass": true,
+          "second_raw": 0.5
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_NATIVE_CASE renderer=mobile height=0.5 extents_y=1.0 transform_y=0.0 transform_case=identity",
+        "renderer": "mobile",
+        "sample": {
+          "driver": "Apple M3 Pro (Apple9)",
+          "first_raw": 0.75,
+          "pass": true,
+          "second_raw": 0.75
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_NATIVE_CASE renderer=forward_plus height=0.5 extents_y=1.0 transform_y=0.0 transform_case=identity",
+        "renderer": "forward_plus",
+        "sample": {
+          "driver": "Apple M3 Pro (Apple9)",
+          "first_raw": 0.75,
+          "pass": true,
+          "second_raw": 0.75
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_NATIVE_CASE renderer=mobile height=0.25 extents_y=2.0 transform_y=-0.5 transform_case=identity",
+        "renderer": "mobile",
+        "sample": {
+          "driver": "Apple M3 Pro (Apple9)",
+          "first_raw": 0.75,
+          "pass": true,
+          "second_raw": 0.6875
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_NATIVE_CASE renderer=forward_plus height=0.25 extents_y=2.0 transform_y=-0.5 transform_case=identity",
+        "renderer": "forward_plus",
+        "sample": {
+          "driver": "Apple M3 Pro (Apple9)",
+          "first_raw": 0.75,
+          "pass": true,
+          "second_raw": 0.6875
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_NATIVE_CASE renderer=mobile height=0.5 extents_y=1.0 transform_y=0.0 transform_case=rotated",
+        "renderer": "mobile",
+        "sample": {
+          "driver": "Apple M3 Pro (Apple9)",
+          "first_raw": 0.75,
+          "pass": true,
+          "second_raw": 0.75
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_NATIVE_CASE renderer=forward_plus height=0.5 extents_y=1.0 transform_y=0.0 transform_case=rotated",
+        "renderer": "forward_plus",
+        "sample": {
+          "driver": "Apple M3 Pro (Apple9)",
+          "first_raw": 0.75,
+          "pass": true,
+          "second_raw": 0.75
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_NATIVE_CASE renderer=mobile height=0.5 extents_y=1.0 transform_y=0.0 transform_case=rotated_uniform",
+        "renderer": "mobile",
+        "sample": {
+          "driver": "Apple M3 Pro (Apple9)",
+          "first_raw": 0.75,
+          "pass": true,
+          "second_raw": 0.75
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_NATIVE_CASE renderer=forward_plus height=0.5 extents_y=1.0 transform_y=0.0 transform_case=rotated_uniform",
+        "renderer": "forward_plus",
+        "sample": {
+          "driver": "Apple M3 Pro (Apple9)",
+          "first_raw": 0.75,
+          "pass": true,
+          "second_raw": 0.75
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_NATIVE_CASE renderer=mobile height=0.5 extents_y=1.0 transform_y=0.0 transform_case=rotated_nonuniform",
+        "renderer": "mobile",
+        "sample": {
+          "driver": "Apple M3 Pro (Apple9)",
+          "first_raw": 0.75,
+          "pass": true,
+          "second_raw": 0.75
+        }
+      },
+      {
+        "case": "HEIGHTFIELD_NATIVE_CASE renderer=forward_plus height=0.5 extents_y=1.0 transform_y=0.0 transform_case=rotated_nonuniform",
+        "renderer": "forward_plus",
+        "sample": {
+          "driver": "Apple M3 Pro (Apple9)",
+          "first_raw": 0.75,
+          "pass": true,
+          "second_raw": 0.75
+        }
+      }
+    ],
+    "MANAGED_MOBILE": [
+      {
+        "case": null,
+        "renderer": null,
+        "sample": {
+          "checks": {
+            "cull_mask": true,
+            "height_cull_mask": true,
+            "height_one_source": true,
+            "height_two_sources_ambiguous": true,
+            "height_update": true,
+            "height_visibility": true,
+            "kept_pair_pose_revision": true,
+            "kept_pair_shape_revision": true,
+            "kept_pair_type_restore_revision": true,
+            "kept_pair_type_revision": true,
+            "managed_bad_generation": true,
+            "managed_commit_left": true,
+            "managed_commit_requery": true,
+            "managed_commit_right": true,
+            "managed_dirty_rejected": true,
+            "managed_distinct_source": true,
+            "managed_enrollment_cleanup": true,
+            "managed_foreign_device": true,
+            "managed_height_commit_empty_query": true,
+            "managed_height_distinct_source": true,
+            "managed_height_other_query_unaffected": true,
+            "managed_height_query_ambiguous": true,
+            "managed_height_query_empty": true,
+            "managed_height_query_left": true,
+            "managed_height_query_right": true,
+            "managed_height_restore_left_query": true,
+            "managed_left_revision": true,
+            "managed_original_record": true,
+            "managed_original_request_release": true,
+            "managed_original_root_return": true,
+            "managed_outside_envelope": true,
+            "managed_phase_close_waits_holder": true,
+            "managed_phase_live_original_frame": true,
+            "managed_phase_no_draw_admission_closed": true,
+            "managed_phase_original_close": true,
+            "managed_phase_original_device": true,
+            "managed_phase_original_expiry": true,
+            "managed_phase_original_free": true,
+            "managed_phase_original_occurrence": true,
+            "managed_phase_typed_only": true,
+            "managed_phase_waiting_return_without_draw": true,
+            "managed_rejected_snapshot_zero": true,
+            "managed_right_unchanged": true,
+            "managed_same_base_left": true,
+            "managed_same_base_right": true,
+            "managed_stale_revision": true,
+            "ordinary_receiver_not_promoted": true,
+            "ordinary_snapshot_rejected_and_empty": true,
+            "receiver_visibility": true,
+            "rejected_commit_preserves_pairs": true,
+            "same_base_receivers": true,
+            "source_recreate": true,
+            "source_release": true,
+            "source_update": true,
+            "source_visibility": true
+          },
+          "pass": true
+        }
+      }
+    ],
+    "MANAGED_FORWARD_PLUS": [
+      {
+        "case": null,
+        "renderer": null,
+        "sample": {
+          "checks": {
+            "cull_mask": true,
+            "height_cull_mask": true,
+            "height_one_source": true,
+            "height_two_sources_ambiguous": true,
+            "height_update": true,
+            "height_visibility": true,
+            "kept_pair_pose_revision": true,
+            "kept_pair_shape_revision": true,
+            "kept_pair_type_restore_revision": true,
+            "kept_pair_type_revision": true,
+            "managed_bad_generation": true,
+            "managed_commit_left": true,
+            "managed_commit_requery": true,
+            "managed_commit_right": true,
+            "managed_dirty_rejected": true,
+            "managed_distinct_source": true,
+            "managed_enrollment_cleanup": true,
+            "managed_foreign_device": true,
+            "managed_height_commit_empty_query": true,
+            "managed_height_distinct_source": true,
+            "managed_height_other_query_unaffected": true,
+            "managed_height_query_ambiguous": true,
+            "managed_height_query_empty": true,
+            "managed_height_query_left": true,
+            "managed_height_query_right": true,
+            "managed_height_restore_left_query": true,
+            "managed_left_revision": true,
+            "managed_original_record": true,
+            "managed_original_request_release": true,
+            "managed_original_root_return": true,
+            "managed_outside_envelope": true,
+            "managed_phase_close_waits_holder": true,
+            "managed_phase_live_original_frame": true,
+            "managed_phase_no_draw_admission_closed": true,
+            "managed_phase_original_close": true,
+            "managed_phase_original_device": true,
+            "managed_phase_original_expiry": true,
+            "managed_phase_original_free": true,
+            "managed_phase_original_occurrence": true,
+            "managed_phase_typed_only": true,
+            "managed_phase_waiting_return_without_draw": true,
+            "managed_rejected_snapshot_zero": true,
+            "managed_right_unchanged": true,
+            "managed_same_base_left": true,
+            "managed_same_base_right": true,
+            "managed_stale_revision": true,
+            "ordinary_receiver_not_promoted": true,
+            "ordinary_snapshot_rejected_and_empty": true,
+            "receiver_visibility": true,
+            "rejected_commit_preserves_pairs": true,
+            "same_base_receivers": true,
+            "source_recreate": true,
+            "source_release": true,
+            "source_update": true,
+            "source_visibility": true
+          },
+          "pass": true
+        }
+      }
+    ],
+    "ORDINARY_MOBILE": [
+      {
+        "case": null,
+        "renderer": null,
+        "sample": {
+          "checks": {
+            "cull_mask": true,
+            "height_cull_mask": true,
+            "height_one_source": true,
+            "height_two_sources_ambiguous": true,
+            "height_update": true,
+            "height_visibility": true,
+            "kept_pair_pose_revision": true,
+            "kept_pair_shape_revision": true,
+            "kept_pair_type_restore_revision": true,
+            "kept_pair_type_revision": true,
+            "ordinary_receiver_not_promoted": true,
+            "ordinary_snapshot_rejected_and_empty": true,
+            "receiver_visibility": true,
+            "rejected_commit_preserves_pairs": true,
+            "same_base_receivers": true,
+            "source_recreate": true,
+            "source_release": true,
+            "source_update": true,
+            "source_visibility": true
+          },
+          "pass": true
+        }
+      }
+    ],
+    "ORDINARY_FORWARD_PLUS": [
+      {
+        "case": null,
+        "renderer": null,
+        "sample": {
+          "checks": {
+            "cull_mask": true,
+            "height_cull_mask": true,
+            "height_one_source": true,
+            "height_two_sources_ambiguous": true,
+            "height_update": true,
+            "height_visibility": true,
+            "kept_pair_pose_revision": true,
+            "kept_pair_shape_revision": true,
+            "kept_pair_type_restore_revision": true,
+            "kept_pair_type_revision": true,
+            "ordinary_receiver_not_promoted": true,
+            "ordinary_snapshot_rejected_and_empty": true,
+            "receiver_visibility": true,
+            "rejected_commit_preserves_pairs": true,
+            "same_base_receivers": true,
+            "source_recreate": true,
+            "source_release": true,
+            "source_update": true,
+            "source_visibility": true
+          },
+          "pass": true
+        }
+      }
+    ],
+    "VIEWPORT": [
+      {
+        "case": null,
+        "renderer": null,
+        "sample": {
+          "checks": {
+            "managed_enrollment_cleanup": true,
+            "managed_original_record": true,
+            "managed_original_request_release": true,
+            "managed_original_root_return": true,
+            "managed_phase_close_waits_holder": true,
+            "managed_phase_live_original_frame": true,
+            "managed_phase_no_draw_admission_closed": true,
+            "managed_phase_original_close": true,
+            "managed_phase_original_device": true,
+            "managed_phase_original_expiry": true,
+            "managed_phase_original_free": true,
+            "managed_phase_original_occurrence": true,
+            "managed_phase_typed_only": true,
+            "managed_phase_waiting_return_without_draw": true,
+            "viewport_original_root_live": true,
+            "viewport_post_draw_query_unchanged": true,
+            "viewport_post_draw_revisions_unchanged": true,
+            "viewport_post_draw_snapshot": true,
+            "viewport_post_draw_source_unchanged": true,
+            "viewport_receiver_query_committed": true,
+            "viewport_receiver_retained_until_observation": true,
+            "viewport_receiver_snapshot": true
+          },
+          "external_scene_connection": "not-present",
+          "mode": "managed",
+          "pair_membership": "not-observed",
+          "pass": true,
+          "viewport_ready": true,
+          "views": {
+            "side": {
+              "after_draw_calls": 2,
+              "after_nonuniform_pixels": 1300,
+              "after_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CAPTURES/mobile/side_after.png",
+              "after_sha256": "3235d4d3f8e63c27cd916647c8a0b2cb29eef7ab92813e73daaa068b936b2a21",
+              "before_draw_calls": 2,
+              "before_nonuniform_pixels": 1300,
+              "before_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CAPTURES/mobile/side_before.png",
+              "before_sha256": "3235d4d3f8e63c27cd916647c8a0b2cb29eef7ab92813e73daaa068b936b2a21",
+              "height": 128,
+              "rgba_equal": true,
+              "saved": true,
+              "width": 128
+            },
+            "top": {
+              "after_draw_calls": 2,
+              "after_nonuniform_pixels": 1300,
+              "after_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CAPTURES/mobile/top_after.png",
+              "after_sha256": "3235d4d3f8e63c27cd916647c8a0b2cb29eef7ab92813e73daaa068b936b2a21",
+              "before_draw_calls": 2,
+              "before_nonuniform_pixels": 1300,
+              "before_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CAPTURES/mobile/top_before.png",
+              "before_sha256": "3235d4d3f8e63c27cd916647c8a0b2cb29eef7ab92813e73daaa068b936b2a21",
+              "height": 128,
+              "rgba_equal": true,
+              "saved": true,
+              "width": 128
+            }
+          }
+        }
+      },
+      {
+        "case": null,
+        "renderer": null,
+        "sample": {
+          "checks": {
+            "managed_enrollment_cleanup": true,
+            "managed_original_record": true,
+            "managed_original_request_release": true,
+            "managed_original_root_return": true,
+            "managed_phase_close_waits_holder": true,
+            "managed_phase_live_original_frame": true,
+            "managed_phase_no_draw_admission_closed": true,
+            "managed_phase_original_close": true,
+            "managed_phase_original_device": true,
+            "managed_phase_original_expiry": true,
+            "managed_phase_original_free": true,
+            "managed_phase_original_occurrence": true,
+            "managed_phase_typed_only": true,
+            "managed_phase_waiting_return_without_draw": true,
+            "viewport_original_root_live": true,
+            "viewport_post_draw_query_unchanged": true,
+            "viewport_post_draw_revisions_unchanged": true,
+            "viewport_post_draw_snapshot": true,
+            "viewport_post_draw_source_unchanged": true,
+            "viewport_receiver_query_committed": true,
+            "viewport_receiver_retained_until_observation": true,
+            "viewport_receiver_snapshot": true
+          },
+          "external_scene_connection": "not-present",
+          "mode": "managed",
+          "pair_membership": "not-observed",
+          "pass": true,
+          "viewport_ready": true,
+          "views": {
+            "side": {
+              "after_draw_calls": 2,
+              "after_nonuniform_pixels": 1300,
+              "after_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CAPTURES/forward_plus/side_after.png",
+              "after_sha256": "ff6c135a03a63519d78a8d98187c3c6c91478ba31f8cc3413a6fea642ed734fc",
+              "before_draw_calls": 2,
+              "before_nonuniform_pixels": 1300,
+              "before_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CAPTURES/forward_plus/side_before.png",
+              "before_sha256": "ff6c135a03a63519d78a8d98187c3c6c91478ba31f8cc3413a6fea642ed734fc",
+              "height": 128,
+              "rgba_equal": true,
+              "saved": true,
+              "width": 128
+            },
+            "top": {
+              "after_draw_calls": 2,
+              "after_nonuniform_pixels": 1300,
+              "after_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CAPTURES/forward_plus/top_after.png",
+              "after_sha256": "ff6c135a03a63519d78a8d98187c3c6c91478ba31f8cc3413a6fea642ed734fc",
+              "before_draw_calls": 2,
+              "before_nonuniform_pixels": 1300,
+              "before_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CAPTURES/forward_plus/top_before.png",
+              "before_sha256": "ff6c135a03a63519d78a8d98187c3c6c91478ba31f8cc3413a6fea642ed734fc",
+              "height": 128,
+              "rgba_equal": true,
+              "saved": true,
+              "width": 128
+            }
+          }
+        }
+      }
+    ],
+    "CPU": []
+  },
+  "numeric_oracles": {
+    "tolerance_absolute": 0.000244140625,
+    "relative_tolerance": 0,
+    "height_world_radius": 0.25,
+    "height_cases": {
+      "identity": {
+        "normal": [
+          0,
+          1,
+          0
+        ],
+        "depth": 0.125,
+        "position": [
+          0,
+          0.25,
+          0
+        ]
+      },
+      "rotation": {
+        "normal": [
+          -1,
+          0,
+          0
+        ],
+        "depth": 0.125,
+        "position": [
+          -0.25,
+          0,
+          0
+        ]
+      },
+      "uniform": {
+        "normal": [
+          0,
+          1,
+          0
+        ],
+        "depth": 0.125,
+        "position": [
+          0,
+          0.25,
+          0
+        ]
+      },
+      "nonuniform": {
+        "normal": [
+          0,
+          1,
+          0
+        ],
+        "depth": 0.125,
+        "position": [
+          0,
+          0.25,
+          0
+        ]
+      },
+      "tilt_nonuniform_rotation": {
+        "normal": [
+          -0.9669875568304565,
+          -0.2417468892076141,
+          -0.08058229640253803
+        ],
+        "depth": 0.12087344460380706,
+        "position": [
+          -0.2418831168831169,
+          -0.02922077922077922,
+          -0.00974025974025974
+        ]
+      }
+    },
+    "height_kind": "four flat inputs plus one tilted plane; per-case fixed starts, original transforms",
+    "neighbor_cases": {
+      "sphere": {
+        "normal": [
+          0,
+          1,
+          0
+        ],
+        "depth": 0.25,
+        "position": [
+          0,
+          1.25,
+          0
+        ],
+        "textures_used": 0
+      },
+      "box": {
+        "normal": [
+          1,
+          0,
+          0
+        ],
+        "depth": 0.125,
+        "position": [
+          1.25,
+          0,
+          0
+        ],
+        "textures_used": 0
+      },
+      "sdf": {
+        "normal": [
+          1,
+          0,
+          0
+        ],
+        "depth": 0.125,
+        "position": [
+          0.25,
+          0,
+          0
+        ],
+        "textures_used": 1
+      },
+      "sphere_attractor": {
+        "force": [
+          -1,
+          0,
+          0
+        ],
+        "velocity": [
+          -0.016666666666666666,
+          0,
+          0
+        ],
+        "position": [
+          1,
+          0,
+          0
+        ],
+        "textures_used": 0
+      },
+      "box_attractor": {
+        "force": [
+          -1,
+          0,
+          0
+        ],
+        "velocity": [
+          -0.016666666666666666,
+          0,
+          0
+        ],
+        "position": [
+          1,
+          0,
+          0
+        ],
+        "textures_used": 0
+      },
+      "vector_attractor": {
+        "force": [
+          -2,
+          0,
+          0
+        ],
+        "velocity": [
+          -0.03333333333333333,
+          0,
+          0
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "textures_used": 1
+      }
+    },
+    "neighbor_delta_seconds": 0.016666666666666666,
+    "capture16": {
+      "tolerance_absolute": 0.001,
+      "first_raw": 0.75,
+      "empty_second_raw": 0,
+      "geometry_second_raw": "(height-transform_y+extents_y)/(2*extents_y)",
+      "transformed_second_raw": 0.75,
+      "case_count_per_renderer": 8
+    }
+  },
+  "texture_evidence": {
+    "source": "modules/particles_runtime_tests/particles_heightfield_clear_test_fixture.cpp:run_neighbor_setup/run_legacy_process/cleanup",
+    "sdf": "16^3 RF image, x signed-distance texels across[-2,2], actual TextureStorage3D allocation, RD texture valid and not default3Dwhite",
+    "vector": "2^3 RGBF image constant(0,.5,.5), actual TextureStorage3D allocation, RD texture valid and not default3Dwhite",
+    "association": "Actual collision field texture retained; processed frame SDF/vector type and texture_index0; collision_3d_textures_used1 and exact original textureRID checked",
+    "readback": "Original _particles_process(delta1/60) and async full ParticleData; independent fixed runner numeric oracles",
+    "teardown": "Particle/material/shader/collision resources freed before texture_free"
+  },
+  "cpu": {
+    "cases_passed": 216,
+    "assertions_passed": 90654,
+    "failed_cases": 0,
+    "failed_assertions": 0,
+    "skipped": 2042,
+    "expected_negative_pipeline_diagnostics": 3,
+    "xml": {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CPU.xml",
+      "bytes": 385362,
+      "sha256": "5b762b8a981282ff9fad6eed843f3a7cfec5821f7d42ebd75ea1502150684ec6"
+    }
+  },
+  "historical_legacy8": {
+    "not_relabelled_as10": true,
+    "old_binary": {
+      "bytes": 157524408,
+      "sha256": "17145c0f3a2b86607045572133cb4e8d4918117592c8d3bca79d744439657a2b"
+    },
+    "old_runner_sha256": "e8c91541aa35cb7ba0317f0fc64b47c625fa853fd25b54187618613513f7fe12",
+    "old_module_cpp_sha256": "2588b0f4946f9415bddf4e97c801065ecfbfc8b35e6243c6d53916468ab05500",
+    "log": {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_LEGACY8.log",
+      "bytes": 7829,
+      "sha256": "71d9cb3fb7cf39fd55608c7c2b86c0e2c652e6a92ba7cba7a3f595c79e953fe1"
+    },
+    "scope": "Prior4-case preliminary matrix at radius.1 with its frozen source/host; new5-case matrix uses radius.25, changed starts/names/oracles and tilt. Same filename/CLI does not make it the same8control."
+  },
+  "evidence_metadata": [
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_INPUTS_BEFORE.json",
+      "bytes": 3893,
+      "sha256": "2ecaf7f8e0322224078e428a8e86ba744ef0e3f6426d7c8b8acc91f6ae4e1c80"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_INPUTS_AFTER.json",
+      "bytes": 3893,
+      "sha256": "2ecaf7f8e0322224078e428a8e86ba744ef0e3f6426d7c8b8acc91f6ae4e1c80"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_RESULT.json",
+      "bytes": 8067,
+      "sha256": "f792096d33ddf73aebd8accf24ab79a4cd6a380a8d3e40c0b6ec724d5dc1f040"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_HOST_BUILD.json",
+      "bytes": 530,
+      "sha256": "c31b239bb8e8246c55bbb584314ce6fa1b7e3e43614cb0a53d6808137cb3f6c5"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_ADAPTATION_READY.md",
+      "bytes": 5580,
+      "sha256": "61f06e5f5e7b809f9697d2611137a9c9bd7096dfbff5e612c217fee59f50ae9d"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_ADAPTATION_MAP_READY.md",
+      "bytes": 9265,
+      "sha256": "be8f8ab10f98d1bc7facb28b0774338598dadbd67a7899e223bb20bcf9f4a4f7"
+    }
+  ],
+  "viewport_pngs": [
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CAPTURES/forward_plus/side_after.png",
+      "bytes": 450,
+      "sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CAPTURES/forward_plus/side_before.png",
+      "bytes": 450,
+      "sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CAPTURES/forward_plus/top_after.png",
+      "bytes": 450,
+      "sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CAPTURES/forward_plus/top_before.png",
+      "bytes": 450,
+      "sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CAPTURES/mobile/side_after.png",
+      "bytes": 450,
+      "sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CAPTURES/mobile/side_before.png",
+      "bytes": 450,
+      "sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CAPTURES/mobile/top_after.png",
+      "bytes": 450,
+      "sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_CAPTURES/mobile/top_before.png",
+      "bytes": 450,
+      "sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    }
+  ],
+  "limits": [
+    "Isolated ordinary native height/collision/attractor controls; not connected H25, mixed-source behavior, Full/P01 or public connected Scene/pair acceptance.",
+    "Viewport records external_scene_connection=not-present and pair_membership=not-observed.",
+    "No E09 actual operation/scope, K06 production COW/charge/retirement, INSTANCE192/INDEXED144 or B/R01 initializedness/publication/owner acknowledgment qualification.",
+    "CPU dummy/headless pass is separate from actual Metal runtime; build warnings and3expected CPU negative diagnostics retained.",
+    "Original source117 evidence is not reused as local result; no new adoption-commit/push/clean-tree claim."
+  ]
+}

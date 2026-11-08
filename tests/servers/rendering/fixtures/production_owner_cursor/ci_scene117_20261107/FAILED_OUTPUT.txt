@@ -1,0 +1,444 @@
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	﻿2026-11-07T10:43:22.4481458Z Current runner version: '2.338.2'
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4508739Z ##[group]Runner Image Provisioner
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4509650Z Hosted Compute Agent
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4510395Z Version: 20261028.624
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4511035Z Commit: 54898b74c23fde5556c9b3c3a2290865feef0dfe
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4511829Z Build Date: 2026-10-28T21:51:42Z
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4512570Z Worker ID: {7ceb25d9-e8fc-48ef-8713-7d50e223afeb}
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4513293Z Region: westcentralus
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4514189Z Cloud: Azure
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4514749Z ##[endgroup]
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4516331Z ##[group]Operating System
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4517061Z Ubuntu
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4517594Z 24.04.5
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4518179Z LTS
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4518745Z ##[endgroup]
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4519340Z ##[group]Runner Image
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4520023Z Image: ubuntu-24.04
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4520601Z Version: 20261101.360.1
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4523013Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261101.360/images/ubuntu/Ubuntu2404-Readme.md
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4526253Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261101.360
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4528086Z ##[endgroup]
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4530357Z ##[group]GITHUB_TOKEN Permissions
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4533775Z Contents: read
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4534756Z Metadata: read
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4535828Z Packages: read
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4536558Z ##[endgroup]
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4538764Z Secret source: Actions
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4540328Z Cache mode: write
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4541291Z Prepare workflow directory
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4896601Z Prepare all required actions
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.4946936Z Getting action download info
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.8314560Z Download action repository 'actions/checkout@v7' (SHA:3d3c42e5aac5ba805825da76410c181273ba90b1)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:22.9492281Z Download action repository 'tj-actions/changed-files@v47' (SHA:24d32ffd492484c1d75e0c0b894501ddb9d30d62)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:23.4047581Z Download action repository 'j178/prek-action@v2' (SHA:5337cb91e0fa35a7ff31b9ca345126d8bbbcdf16)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:23.9299282Z Uses: kuhahahaha/godot/.github/workflows/static_checks.yml@refs/heads/codex/b4-renderer-continuation-20261104 (71079130d7fc0fad0d9d6cdc0d32027cf41ebbe2)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:23.9305786Z Complete job name: 📊 Static checks / Code style, file formatting, and docs
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.0247066Z ##[group]Run actions/checkout@v7
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.0248051Z with:
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.0248531Z   fetch-depth: 0
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.0249028Z   filter: tree:0
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.0249536Z   repository: kuhahahaha/godot
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.0254064Z   token: ***
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.0254561Z   ssh-strict: true
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.0255047Z   ssh-user: git
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.0255535Z   persist-credentials: true
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.0256083Z   clean: true
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.0256578Z   sparse-checkout-cone-mode: true
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.0257161Z   fetch-tags: false
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.0257654Z   show-progress: true
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.0258192Z   lfs: false
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.0258656Z   submodules: false
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.0259147Z   set-safe-directory: true
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.0259696Z   allow-unsafe-pr-checkout: false
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.0260596Z ##[endgroup]
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3326588Z Syncing repository: kuhahahaha/godot
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3329299Z ##[group]Getting Git version info
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3330963Z Working directory is '/home/runner/work/godot/godot'
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3333449Z [command]/usr/bin/git version
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3447137Z git version 2.56.0
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3472908Z ##[endgroup]
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3485559Z Temporarily overriding HOME='/home/runner/work/_temp/d1d6d563-6488-4de4-8d4b-b210bed4dd70' before making global git config changes
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3489645Z Adding repository directory to the temporary git global config as a safe directory
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3493299Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/godot/godot
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3563867Z Deleting the contents of '/home/runner/work/godot/godot'
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3575959Z ##[group]Determining repository object format
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3578239Z ##[endgroup]
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3580108Z ##[group]Initializing the repository
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3581694Z [command]/usr/bin/git init /home/runner/work/godot/godot
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3702222Z hint: Using 'master' as the name for the initial branch. This default branch name
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3706086Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3709485Z hint: to use in all of your new repositories, which will suppress this warning,
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3712263Z hint: call:
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3714153Z hint:
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3716056Z hint: 	git config --global init.defaultBranch <name>
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3718330Z hint:
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3720470Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3727524Z hint: 'development'. The just-created branch can be renamed via this command:
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3730632Z hint:
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3732230Z hint: 	git branch -m <name>
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3733881Z hint:
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3736775Z hint: Disable this message with "git config set advice.defaultBranchName false"
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3740674Z Initialized empty Git repository in /home/runner/work/godot/godot/.git/
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3747368Z [command]/usr/bin/git remote add origin https://github.com/kuhahahaha/godot
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3790239Z ##[endgroup]
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3793140Z ##[group]Disabling automatic garbage collection
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3795546Z [command]/usr/bin/git config --local gc.auto 0
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3838127Z ##[endgroup]
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3841079Z ##[group]Setting up auth
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3842969Z Removing SSH command configuration
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3845972Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.3910188Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.4326578Z Removing HTTP extra header
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.4333366Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.4382781Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.4628230Z Removing includeIf entries pointing to credentials config files
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.4633970Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.4681031Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.4948888Z [command]/usr/bin/git config --file /home/runner/work/_temp/git-credentials-950175de-a314-4e5f-be4e-6645efd8a793.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.5011591Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/godot/godot/.git.path /home/runner/work/_temp/git-credentials-950175de-a314-4e5f-be4e-6645efd8a793.config
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.5067087Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/godot/godot/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-950175de-a314-4e5f-be4e-6645efd8a793.config
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.5123955Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-950175de-a314-4e5f-be4e-6645efd8a793.config
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.5178639Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-950175de-a314-4e5f-be4e-6645efd8a793.config
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.5228373Z ##[endgroup]
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.5230155Z ##[group]Fetching the repository
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:24.5239851Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --filter=tree:0 origin +refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/tags/*
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4412581Z From https://github.com/kuhahahaha/godot
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4415161Z  * [new branch]          codex/b4-native-output-20261104 -> origin/codex/b4-native-output-20261104
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4416561Z  * [new branch]          codex/b4-renderer-continuation-20261104 -> origin/codex/b4-renderer-continuation-20261104
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4417642Z  * [new branch]          codex/particle-mainline -> origin/codex/particle-mainline
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4418441Z  * [new branch]          codex/scene-native-d8282-validated-20261106 -> origin/codex/scene-native-d8282-validated-20261106
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4419274Z  * [new branch]          codex/skeleton-scene-godot-20261104 -> origin/codex/skeleton-scene-godot-20261104
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4420101Z  * [new branch]          codex/system-scalar-correctness-20261104 -> origin/codex/system-scalar-correctness-20261104
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4421083Z  * [new branch]          codex/system-scalar-source-integration-20261104 -> origin/codex/system-scalar-source-integration-20261104
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4422371Z  * [new branch]          codex/vulkan-qualification-system-integration-20261104 -> origin/codex/vulkan-qualification-system-integration-20261104
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4423241Z  * [new branch]          master                  -> origin/master
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4424189Z  * [new branch]          team/4.7.2              -> origin/team/4.7.2
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4426233Z [command]/usr/bin/git branch --list --remote origin/codex/b4-renderer-continuation-20261104
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4464846Z   origin/codex/b4-renderer-continuation-20261104
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4474487Z [command]/usr/bin/git rev-parse refs/remotes/origin/codex/b4-renderer-continuation-20261104
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4512147Z 71079130d7fc0fad0d9d6cdc0d32027cf41ebbe2
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4517527Z ##[endgroup]
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4518438Z ##[group]Determining the checkout info
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4519100Z ##[endgroup]
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4525759Z [command]/usr/bin/git sparse-checkout disable
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4594890Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4639913Z ##[group]Checking out the ref
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:27.4646952Z [command]/usr/bin/git checkout --progress --force -B codex/b4-renderer-continuation-20261104 refs/remotes/origin/codex/b4-renderer-continuation-20261104
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.4529873Z Updating files:   0% (1/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.4666358Z Updating files:   1% (150/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.4783933Z Updating files:   2% (299/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.4918397Z Updating files:   3% (449/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.5012141Z Updating files:   4% (598/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.5123770Z Updating files:   5% (748/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.5234597Z Updating files:   6% (897/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.5359121Z Updating files:   7% (1046/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.5458844Z Updating files:   8% (1196/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.8571278Z Updating files:   9% (1345/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.8730711Z Updating files:  10% (1495/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.8904549Z Updating files:  11% (1644/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.8974928Z Updating files:  12% (1794/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.9036513Z Updating files:  13% (1943/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.9095814Z Updating files:  14% (2092/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.9155940Z Updating files:  15% (2242/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.9214782Z Updating files:  16% (2391/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.9271194Z Updating files:  17% (2541/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.9330390Z Updating files:  18% (2690/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.9466442Z Updating files:  19% (2839/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.9570908Z Updating files:  20% (2989/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:40.9726742Z Updating files:  21% (3138/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.0622093Z Updating files:  22% (3288/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.0792604Z Updating files:  23% (3437/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.0803335Z Updating files:  23% (3575/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.0887955Z Updating files:  24% (3587/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.0957970Z Updating files:  25% (3736/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.1079570Z Updating files:  26% (3885/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.1147037Z Updating files:  27% (4035/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.1203869Z Updating files:  28% (4184/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.1258996Z Updating files:  29% (4334/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.1309607Z Updating files:  30% (4483/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.1361330Z Updating files:  31% (4633/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.1410597Z Updating files:  32% (4782/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.1464414Z Updating files:  33% (4931/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.1516210Z Updating files:  34% (5081/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.1574138Z Updating files:  35% (5230/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.1679337Z Updating files:  36% (5380/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.1778982Z Updating files:  37% (5529/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.1864463Z Updating files:  38% (5678/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.1940638Z Updating files:  39% (5828/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.2048052Z Updating files:  40% (5977/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.2140646Z Updating files:  41% (6127/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.2222181Z Updating files:  42% (6276/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.2322794Z Updating files:  43% (6426/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.2424388Z Updating files:  44% (6575/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.2517652Z Updating files:  45% (6724/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.2616415Z Updating files:  46% (6874/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.2741295Z Updating files:  47% (7023/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.2836571Z Updating files:  48% (7173/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.2940537Z Updating files:  49% (7322/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.3075051Z Updating files:  50% (7471/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.3187122Z Updating files:  51% (7621/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.3294926Z Updating files:  52% (7770/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.3403674Z Updating files:  53% (7920/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.3548532Z Updating files:  54% (8069/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.3674248Z Updating files:  55% (8219/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.3792374Z Updating files:  56% (8368/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.3856888Z Updating files:  57% (8517/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.3966206Z Updating files:  58% (8667/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.4092197Z Updating files:  59% (8816/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.4279215Z Updating files:  60% (8966/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.4382857Z Updating files:  61% (9115/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.4480024Z Updating files:  62% (9265/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.4625699Z Updating files:  63% (9414/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.4734036Z Updating files:  64% (9563/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.4818491Z Updating files:  65% (9713/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.4958923Z Updating files:  66% (9862/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.5100354Z Updating files:  67% (10012/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.5376861Z Updating files:  68% (10161/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.5584933Z Updating files:  69% (10310/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.5688695Z Updating files:  70% (10460/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.5786548Z Updating files:  71% (10609/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.5932912Z Updating files:  72% (10759/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.6053017Z Updating files:  73% (10908/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.6170493Z Updating files:  74% (11058/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.6392223Z Updating files:  75% (11207/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.6507273Z Updating files:  76% (11356/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.6622148Z Updating files:  77% (11506/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.6767942Z Updating files:  78% (11655/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.6908389Z Updating files:  79% (11805/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.7084395Z Updating files:  80% (11954/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.7246346Z Updating files:  81% (12104/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.7612882Z Updating files:  82% (12253/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.7710212Z Updating files:  83% (12402/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.7825243Z Updating files:  84% (12552/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.7957126Z Updating files:  85% (12701/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.8130016Z Updating files:  86% (12851/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.8280327Z Updating files:  87% (13000/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.8410471Z Updating files:  88% (13149/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.8541883Z Updating files:  89% (13299/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.8692441Z Updating files:  90% (13448/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.8893374Z Updating files:  91% (13598/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.8988023Z Updating files:  92% (13747/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.9116348Z Updating files:  93% (13897/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.9331094Z Updating files:  94% (14046/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.9461501Z Updating files:  95% (14195/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.9616960Z Updating files:  96% (14345/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:41.9814367Z Updating files:  97% (14494/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.0401704Z Updating files:  98% (14644/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.0586587Z Updating files:  99% (14793/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.0587071Z Updating files: 100% (14942/14942)
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.0587478Z Updating files: 100% (14942/14942), done.
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.0756776Z Switched to a new branch 'codex/b4-renderer-continuation-20261104'
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.0762752Z branch 'codex/b4-renderer-continuation-20261104' set up to track 'origin/codex/b4-renderer-continuation-20261104'.
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.0837192Z ##[endgroup]
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.0899007Z [command]/usr/bin/git log -1 --format=%H
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.0940586Z 71079130d7fc0fad0d9d6cdc0d32027cf41ebbe2
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.1170741Z ##[group]Run bash ./misc/scripts/gitignore_check.sh
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.1171242Z ^[[36;1mbash ./misc/scripts/gitignore_check.sh^[[0m
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.1196343Z shell: /usr/bin/bash -e {0}
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.1196618Z ##[endgroup]
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.1272515Z .gitignore validation...
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3514070Z .gitignore:308:*.log	tests/core/extension/fixtures/native_drain_trace/build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3515185Z .gitignore:308:*.log	tests/core/extension/fixtures/native_drain_trace/controlled.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3516178Z .gitignore:308:*.log	tests/core/extension/fixtures/native_metadata_directory/build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3516955Z .gitignore:308:*.log	tests/core/extension/fixtures/native_metadata_directory/combined.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3517579Z .gitignore:308:*.log	tests/core/extension/fixtures/native_metadata_directory/focused.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3518184Z .gitignore:308:*.log	tests/core/extension/fixtures/output_metadata_generation/build-initial.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3518901Z .gitignore:308:*.log	tests/core/extension/fixtures/output_metadata_generation/build-verified.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3519606Z .gitignore:308:*.log	tests/core/extension/fixtures/output_metadata_generation/focused.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3520663Z .gitignore:308:*.log	tests/core/extension/fixtures/output_metadata_generation/regressions.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3521807Z .gitignore:308:*.log	tests/core/extension/fixtures/production_quote_lock_order/green-build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3522977Z .gitignore:308:*.log	tests/core/extension/fixtures/production_quote_lock_order/green-focused.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3524096Z .gitignore:308:*.log	tests/core/extension/fixtures/production_quote_lock_order/green-observe.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3524787Z .gitignore:308:*.log	tests/core/extension/fixtures/production_quote_lock_order/green-particles.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3525703Z .gitignore:308:*.log	tests/core/extension/fixtures/production_quote_lock_order/green-production.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3526342Z .gitignore:308:*.log	tests/core/extension/fixtures/production_quote_lock_order/red-build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3526938Z .gitignore:308:*.log	tests/core/extension/fixtures/production_quote_lock_order/red-tests.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3527649Z .gitignore:308:*.log	tests/core/extension/fixtures/sibling_metadata_retirement/checked-draw-metadata-combined-green.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3528473Z .gitignore:308:*.log	tests/core/extension/fixtures/sibling_metadata_retirement/checked-draw-metadata-focused-green.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3529270Z .gitignore:308:*.log	tests/core/extension/fixtures/sibling_metadata_retirement/checked-draw-metadata-green-build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3529993Z .gitignore:308:*.log	tests/core/extension/fixtures/sibling_metadata_retirement/checked-draw-red.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3530911Z .gitignore:308:*.log	tests/core/extension/fixtures/sibling_metadata_retirement/checked-metadata-red.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3531841Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_integration/native-output-alias-readback-integration-build-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3532964Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_integration/native-output-alias-readback-integration-build-r2.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3534232Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_integration/native-output-alias-readback-integration-red-build-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3535274Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_integration/native-output-alias-readback-integration-red-build-r2.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3536377Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_integration/native-output-continued-alias-readback-integration-combined-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3537490Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_integration/native-output-continued-alias-readback-integration-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3538753Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_integration/native-output-continued-alias-readback-integration-r2.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3539821Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_integration/native-output-continued-alias-readback-integration-red-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3540861Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-alias-readback-map-failure-cursor-r3.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3541886Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-alias-readback-map-failure-fix-build-r3.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3542921Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-continued-alias-map-failure-combined-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3544185Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-continued-alias-map-failure-combined-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3545211Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-continued-alias-map-failure-combined-r3.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3546231Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-continued-alias-map-failure-green-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3547243Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-continued-alias-map-failure-green-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3548243Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-continued-alias-map-failure-green-r3.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3549251Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-continued-alias-readback-map-failure-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3550271Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_static/native-output-alias-readback-static-green-build-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3551254Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_static/native-output-alias-readback-static-green-build-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3552214Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_static/native-output-alias-readback-static-red-build-r2.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3553147Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_static/native-output-alias-readback-static-red-build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3554463Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_static/native-output-continued-alias-readback-static-combined-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3555510Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_static/native-output-continued-alias-readback-static-combined-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3556724Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_static/native-output-continued-alias-readback-static-focused-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3557750Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_static/native-output-continued-alias-readback-static-green-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3558741Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/alias_readback_static/native-output-continued-alias-readback-static-red-r2.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3559693Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/create_selection_transaction/instance192-create-integration-build-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3560689Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/create_selection_transaction/native-output-continued-create-integration-combined-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3561740Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/create_selection_transaction/native-output-continued-create-integration-focused-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3562630Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/metadata_transport/first-metadata-combined.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3563697Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/metadata_transport/first-metadata-focused.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3564650Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/metadata_transport/instance192-metadata-build-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3565422Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/metadata_transport/instance192-metadata-build-r2.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3566185Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/metadata_transport/instance192-metadata-build-r3.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3567030Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/metadata_transport/native-output-continued-metadata-combined-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3567963Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/metadata_transport/native-output-continued-metadata-focused-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3568840Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/native_issuer/native-output-continued-combined-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3569632Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/native_issuer/native-output-continued-endpoint.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3570408Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/native_issuer/native-output-continued-poll-green.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3571222Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/native_issuer/native-output-continued-poll-red-repeat.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3572041Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/native_issuer/native-output-directed-green-build-r2.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3572826Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/native_issuer/native-output-directed-green-build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3573828Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/native_issuer/native-output-directed-red-build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3574593Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/native_issuer/native-output-final-green-build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3575428Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/native_issuer/native-output-join-endpoint.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3576308Z .gitignore:308:*.log	tests/core/extension/native_output_bridge/native_issuer/native-output-poll-red-repeat-build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3577236Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/maintenance_budget/native-output-continued-scene-maintenance-budget-combined-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3578369Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/maintenance_budget/native-output-continued-scene-maintenance-budget-full-credit-counterfactual.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3579439Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/maintenance_budget/native-output-continued-scene-maintenance-budget-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3580605Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/maintenance_budget/native-output-continued-scene-maintenance-budget-restored-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3581613Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/maintenance_budget/native-scene-maintenance-budget-build-r3.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3582520Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/maintenance_budget/native-scene-maintenance-budget-counterfactual-build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3583645Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/maintenance_budget/native-scene-maintenance-budget-restored-build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3584626Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/native-output-continued-scene-phase-combined-green-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3585491Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/native-output-continued-scene-phase-combined-restored-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3586387Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/native-output-continued-scene-phase-foundation-baseline-r4.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3587419Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/native-output-continued-scene-phase-no-hook-counterfactual-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3588300Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/native-output-continued-scene-phase-public-green-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3589116Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/native-output-continued-scene-phase-public-red-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3589934Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/native-output-continued-scene-phase-public-red-r2.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3590730Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/native-output-continued-scene-phase-restored-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3591495Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/native-scene-phase-foundation-build-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3592193Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/native-scene-phase-foundation-build-r2.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3592886Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/native-scene-phase-foundation-build-r3.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3593783Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/native-scene-phase-foundation-build-r4.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3594506Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/native-scene-phase-hook-restored-build-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3595200Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/native-scene-phase-no-hook-build-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3595900Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/native-scene-phase-public-green-build-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3596784Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/release_budget/native-output-continued-scene-release-budget-combined-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3597773Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/release_budget/native-output-continued-scene-release-budget-green-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3598793Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/release_budget/native-output-continued-scene-release-budget-locked-counterfactual-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3599832Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/release_budget/native-output-continued-scene-release-budget-restored-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3600721Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/release_budget/native-scene-release-budget-build-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3601531Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/release_budget/native-scene-release-budget-locked-build-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3602387Z .gitignore:308:*.log	tests/core/extension/native_scene_phase/release_budget/native-scene-release-budget-restored-build-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3603125Z .gitignore:308:*.log	tests/scene/fixtures/particle_collision_texture_changed/green_build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3604165Z .gitignore:308:*.log	tests/scene/fixtures/particle_collision_texture_changed/green_run.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3604750Z .gitignore:308:*.log	tests/scene/fixtures/particle_collision_texture_changed/red_build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3605327Z .gitignore:308:*.log	tests/scene/fixtures/particle_collision_texture_changed/red_run.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3605897Z .gitignore:308:*.log	tests/scene/fixtures/particle_emission_texture_changed/green_build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3606469Z .gitignore:308:*.log	tests/scene/fixtures/particle_emission_texture_changed/green_run.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3607033Z .gitignore:308:*.log	tests/scene/fixtures/particle_emission_texture_changed/neighbors.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3607590Z .gitignore:308:*.log	tests/scene/fixtures/particle_emission_texture_changed/red_run.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3608205Z .gitignore:308:*.log	tests/servers/rendering/fixtures/camera_stage/b4-camera-focused-green-run.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3608887Z .gitignore:308:*.log	tests/servers/rendering/fixtures/camera_stage/b4-camera-particle-green-build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3609544Z .gitignore:308:*.log	tests/servers/rendering/fixtures/camera_stage/b4-camera-stage-red-build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3610297Z .gitignore:308:*.log	tests/servers/rendering/fixtures/camera_stage/b4-camera-stage-red-run.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3610934Z .gitignore:308:*.log	tests/servers/rendering/fixtures/camera_stage/b4-viewport-green-run.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3611656Z .gitignore:308:*.log	tests/servers/rendering/fixtures/checked_draw_list_identity/checked-draw-metadata-combined-green.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3612478Z .gitignore:308:*.log	tests/servers/rendering/fixtures/checked_draw_list_identity/checked-draw-metadata-focused-green.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3613294Z .gitignore:308:*.log	tests/servers/rendering/fixtures/checked_draw_list_identity/checked-draw-metadata-green-build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3614276Z .gitignore:308:*.log	tests/servers/rendering/fixtures/checked_draw_list_identity/checked-draw-red.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3615001Z .gitignore:308:*.log	tests/servers/rendering/fixtures/engine_external_guard/instance192-engine-guard-build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3615794Z .gitignore:308:*.log	tests/servers/rendering/fixtures/engine_external_guard/native-output-continued-guard-combined.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3616691Z .gitignore:308:*.log	tests/servers/rendering/fixtures/generation_selection/identity_retention/instance192-generation-identity-build-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3617735Z .gitignore:308:*.log	tests/servers/rendering/fixtures/generation_selection/identity_retention/native-output-continued-generation-identity-combined-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3618843Z .gitignore:308:*.log	tests/servers/rendering/fixtures/generation_selection/identity_retention/native-output-continued-generation-identity-focused-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3619871Z .gitignore:308:*.log	tests/servers/rendering/fixtures/generation_selection/instance192-generation-selection-counterfactual-build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3620831Z .gitignore:308:*.log	tests/servers/rendering/fixtures/generation_selection/instance192-generation-selection-lifecycle-build-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3621774Z .gitignore:308:*.log	tests/servers/rendering/fixtures/generation_selection/instance192-generation-selection-lifecycle-build-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3622690Z .gitignore:308:*.log	tests/servers/rendering/fixtures/generation_selection/instance192-generation-selection-lifecycle-build-r2.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3623809Z .gitignore:308:*.log	tests/servers/rendering/fixtures/generation_selection/instance192-generation-selection-lifecycle-build-r3.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3624787Z .gitignore:308:*.log	tests/servers/rendering/fixtures/generation_selection/native-output-continued-generation-lifecycle-combined-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3625807Z .gitignore:308:*.log	tests/servers/rendering/fixtures/generation_selection/native-output-continued-generation-lifecycle-counterfactual.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3626774Z .gitignore:308:*.log	tests/servers/rendering/fixtures/generation_selection/native-output-continued-generation-lifecycle-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3627867Z .gitignore:308:*.log	tests/servers/rendering/fixtures/generation_selection/native-output-continued-generation-lifecycle-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3628790Z .gitignore:308:*.log	tests/servers/rendering/fixtures/generation_selection/native-output-continued-generation-lifecycle-trace-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3629685Z .gitignore:308:*.log	tests/servers/rendering/fixtures/native_preparation_ranges/native-preparation-combined-green.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3630487Z .gitignore:308:*.log	tests/servers/rendering/fixtures/native_preparation_ranges/native-preparation-constant-red.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3631277Z .gitignore:308:*.log	tests/servers/rendering/fixtures/native_preparation_ranges/native-preparation-focused-green.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3632057Z .gitignore:308:*.log	tests/servers/rendering/fixtures/native_preparation_ranges/native-preparation-green-build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3632844Z .gitignore:308:*.log	tests/servers/rendering/fixtures/native_preparation_ranges/native-preparation-pipeline-red.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3633887Z .gitignore:308:*.log	tests/servers/rendering/fixtures/native_preparation_ranges/native-preparation-red-build.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3634810Z .gitignore:308:*.log	tests/servers/rendering/fixtures/native_preparation_ranges/native-preparation-vertex-red.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3635629Z .gitignore:33:*.gen.*	tests/servers/rendering/fixtures/native_preparation_ranges/red/engine_build_identity.gen.json
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3636406Z .gitignore:33:*.gen.*	tests/servers/rendering/fixtures/native_preparation_ranges/red/engine_build_selection.gen.json
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3637169Z .gitignore:308:*.log	tests/servers/rendering/fixtures/native_selection_leases/instance192-selection-build-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3637921Z .gitignore:308:*.log	tests/servers/rendering/fixtures/native_selection_leases/instance192-selection-build-r2.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3638680Z .gitignore:308:*.log	tests/servers/rendering/fixtures/native_selection_leases/instance192-selection-build-r3.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3639436Z .gitignore:308:*.log	tests/servers/rendering/fixtures/native_selection_leases/instance192-selection-focused-r2.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3640289Z .gitignore:308:*.log	tests/servers/rendering/fixtures/native_selection_leases/native-output-continued-selection-combined-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3641122Z .gitignore:308:*.log	tests/servers/rendering/fixtures/same_buffer_copy/native-output-continued-graph-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3641874Z .gitignore:308:*.log	tests/servers/rendering/fixtures/same_buffer_copy/native-output-continued-graph-green.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3642611Z .gitignore:308:*.log	tests/servers/rendering/fixtures/same_buffer_copy/native-output-continued-graph-red.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3643327Z .gitignore:308:*.log	tests/servers/rendering/fixtures/scene45_incremental_admission/hardware-POSITIVE.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3644270Z .gitignore:308:*.log	tests/servers/rendering/fixtures/scene45_incremental_admission/hardware-RUN-trace.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3644958Z .gitignore:308:*.log	tests/servers/rendering/fixtures/scene45_incremental_admission/hardware-RUN.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3645833Z .gitignore:308:*.log	tests/servers/rendering/fixtures/scene45_incremental_admission/native-output-continued-scene45-fixed-successor-combined-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3646910Z .gitignore:308:*.log	tests/servers/rendering/fixtures/scene45_incremental_admission/native-output-continued-scene45-frame-reset-worker-combined-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3647991Z .gitignore:308:*.log	tests/servers/rendering/fixtures/scene45_incremental_admission/native-output-continued-scene45-worker-fallback-combined-final.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3648941Z .gitignore:308:*.log	tests/servers/rendering/fixtures/scene45_incremental_admission/scene45-fixed-successor-build-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3649816Z .gitignore:308:*.log	tests/servers/rendering/fixtures/scene45_incremental_admission/scene45-frame-reset-worker-fact-build-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3650799Z .gitignore:308:*.log	tests/servers/rendering/fixtures/scene45_incremental_admission/scene45-record-source-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3651611Z .gitignore:308:*.log	tests/servers/rendering/fixtures/scene45_incremental_admission/scene45-v1-protected-append-red.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3652401Z .gitignore:308:*.log	tests/servers/rendering/fixtures/scene45_incremental_admission/scene45-v1-worker-green-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3653193Z .gitignore:308:*.log	tests/servers/rendering/fixtures/scene45_incremental_admission/scene45-worker-fallback-build-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3654335Z .gitignore:308:*.log	tests/servers/rendering/fixtures/scene_complete_prerequisite/native-output-continued-scene-complete-foundation-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3655287Z .gitignore:308:*.log	tests/servers/rendering/fixtures/scene_complete_prerequisite/native-scene-complete-prerequisite-build-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3656170Z .gitignore:308:*.log	tests/servers/rendering/fixtures/scene_complete_prerequisite/scene-complete-camera-receiver-r1.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3656955Z .gitignore:308:*.log	work/particle-external-output-native-current-20261107-r1/evidence/stderr.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3657752Z .gitignore:308:*.log	work/particle-external-output-native-current-20261107-r1/evidence/stdout.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3658395Z .gitignore:308:*.log	work/particle-external-output-native-current-20261107-r1/stderr.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3658989Z .gitignore:308:*.log	work/particle-external-output-native-current-20261107-r1/stdout.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3659548Z .gitignore:308:*.log	work/particle-native-current-20261107-r1/evidence/stderr.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3660071Z .gitignore:308:*.log	work/particle-native-current-20261107-r1/evidence/stdout.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3660609Z .gitignore:308:*.log	work/particle-scene-pairs-native-current-20261107-r1/stderr.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3661165Z .gitignore:308:*.log	work/particle-scene-pairs-native-current-20261107-r1/stdout.log
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3675653Z ##[error]Process completed with exit code 1.
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.3856160Z Post job cleanup.
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.4764229Z [command]/usr/bin/git version
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.4813106Z git version 2.56.0
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.4851876Z Temporarily overriding HOME='/home/runner/work/_temp/3d8f0138-163d-4367-8a02-a7ecf214ba96' before making global git config changes
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.4853225Z Adding repository directory to the temporary git global config as a safe directory
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.4859516Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/godot/godot
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.4899682Z Removing SSH command configuration
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.4907541Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.4956501Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.5270971Z Removing HTTP extra header
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.5277768Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.5324177Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.5648880Z Removing includeIf entries pointing to credentials config files
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.5653005Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.5694457Z includeif.gitdir:/home/runner/work/godot/godot/.git.path
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.5695408Z includeif.gitdir:/home/runner/work/godot/godot/.git/worktrees/*.path
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.5696378Z includeif.gitdir:/github/workspace/.git.path
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.5697206Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.5706620Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/godot/godot/.git.path
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.5744220Z /home/runner/work/_temp/git-credentials-950175de-a314-4e5f-be4e-6645efd8a793.config
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.5755097Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/godot/godot/.git.path \/home\/runner\/work\/_temp\/git\-credentials\-950175de\-a314\-4e5f\-be4e\-6645efd8a793\.config
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.5804944Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/godot/godot/.git/worktrees/*.path
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.5843150Z /home/runner/work/_temp/git-credentials-950175de-a314-4e5f-be4e-6645efd8a793.config
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.5854826Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/godot/godot/.git/worktrees/*.path \/home\/runner\/work\/_temp\/git\-credentials\-950175de\-a314\-4e5f\-be4e\-6645efd8a793\.config
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.5904569Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.5941727Z /github/runner_temp/git-credentials-950175de-a314-4e5f-be4e-6645efd8a793.config
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.5951392Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-950175de\-a314\-4e5f\-be4e\-6645efd8a793\.config
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.6048146Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.6085752Z /github/runner_temp/git-credentials-950175de-a314-4e5f-be4e-6645efd8a793.config
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.6094155Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-950175de\-a314\-4e5f\-be4e\-6645efd8a793\.config
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.6144826Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.6435301Z Removing credentials config '/home/runner/work/_temp/git-credentials-950175de-a314-4e5f-be4e-6645efd8a793.config'
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.6590487Z Evaluate and set job outputs
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.6597582Z Set output 'changed-files'
+📊 Static checks / Code style, file formatting, and docs	UNKNOWN STEP	2026-11-07T10:43:42.6599467Z Cleaning up orphan processes

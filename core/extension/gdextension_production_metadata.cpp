@@ -61,7 +61,7 @@ ProductionOutputMetadataLease::~ProductionOutputMetadataLease() {
 }
 
 void Registry::production_output_metadata_move(ProductionOutputMetadataLease &out, ProductionOutputMetadataLease &from) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	CRASH_COND(!out.is_empty() || from.registry != this || !from.request || from.request->serial != from.request_serial || from.resource_slot >= from.request->resource_count);
 	auto &resource = from.request->resources[from.resource_slot];
 	CRASH_COND(resource.metadata_consumer != &from || resource.metadata_data != from.data || !from.data);
@@ -82,7 +82,7 @@ void Registry::production_output_metadata_move(ProductionOutputMetadataLease &ou
 
 Error Registry::production_output_metadata_create(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref,
 		uint32_t slot, RenderingDevice &expected, uint64_t bytes, uint32_t alignment, ProductionOutputMetadataLease &out, bool p_exact_bytes) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (!out.is_empty()) {
 		return ERR_ALREADY_IN_USE;
 	}
@@ -145,7 +145,7 @@ Error Registry::production_output_metadata_create(ProductionPhysicalContextRef c
 
 Error Registry::production_output_metadata_validate(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref,
 		const ProductionOutputMetadataLease &lease, RenderingDevice &expected, uint64_t bytes, uint32_t alignment) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (!metadata_layout(bytes, alignment)) {
 		return ERR_INVALID_PARAMETER;
 	}
@@ -170,7 +170,7 @@ Error Registry::production_output_metadata_validate(ProductionPhysicalContextRef
 }
 
 Error Registry::production_output_metadata_bind(ProductionOutputMetadataLease &lease, const ProductionOutputPin &pin) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (lease.registry != this || !lease.request || lease.request->serial != lease.request_serial || lease.resource_slot >= lease.request->resource_count ||
 			pin.registry != this || pin.request != lease.request || pin.request_serial != lease.request_serial || !pin.serial) {
 		return ERR_INVALID_DATA;
@@ -193,7 +193,7 @@ Error Registry::production_output_metadata_bind(ProductionOutputMetadataLease &l
 }
 
 Error Registry::production_output_metadata_return(ProductionOutputMetadataLease &lease) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (lease.is_empty()) {
 		return ERR_DOES_NOT_EXIST;
 	}

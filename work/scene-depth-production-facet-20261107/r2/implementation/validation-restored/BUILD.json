@@ -1,0 +1,15 @@
+{
+  "command": [
+    "scons",
+    "-Q",
+    "tests=yes",
+    "platform=macos",
+    "target=editor",
+    "debug_symbols=no",
+    "module_particles_runtime_tests_enabled=yes",
+    "-j6"
+  ],
+  "exit": 0,
+  "seconds": 13.44,
+  "host_sha256": "1d8e55cb5df534f8dd17109da55fb37770e9534438b775fb2c47e378c3b6a2e4"
+}

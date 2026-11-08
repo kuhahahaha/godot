@@ -34,6 +34,11 @@
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 
+class NativeHeightRange;
+#ifdef TESTS_ENABLED
+class TestNativeHeightRangeAccess;
+#endif
+
 namespace RendererRD {
 
 // Bounded storage for the original checked RD results. This is not an operation
@@ -42,6 +47,10 @@ namespace RendererRD {
 // The caller must explicitly finish/unwind before releasing this object and must
 // retain resources through the original native owner's retirement/close proof.
 class HeightCaptureCheckedSink {
+friend class ::RenderingDevice;
+#ifdef TESTS_ENABLED
+	friend class ::TestNativeHeightRangeAccess;
+#endif
 public:
 	using BeginResult = RenderingDevice::DrawListBeginResult;
 	using BindResult = RenderingDevice::BindAppendResult;
@@ -87,15 +96,19 @@ private:
 	bool owns_list = false;
 	bool restored = false;
 	bool restoration_unknown = false;
+	bool terminal_requested = false;
 	RenderingDevice::DrawListID list = RenderingDevice::INVALID_ID;
 	RID attachment;
 	Error first_error = OK;
+	Ref<NativeHeightRange> native_range;
 
 	Error fail(Error p_error);
 	NativeRecord *reserve(Operation p_operation, RID p_resource = RID());
 	Error accept(const BindResult &p_result);
 	Error accept(const DrawResult &p_result);
 	bool verify_restoration() const;
+	Error enter_checked_call();
+	void enroll_record(uint32_t p_business_index, bool p_cleanup);
 
 public:
 	// Capacities are caller-provided finite working storage, not budget grants.
@@ -107,6 +120,7 @@ public:
 	HeightCaptureCheckedSink &operator=(const HeightCaptureCheckedSink &) = delete;
 
 	Error begin_quoted_target(const Ref<ParticlesStorage::HeightFrameResources> &p_resources, uint32_t p_draw_flags, VectorView<Color> p_clear_colors = {}, float p_clear_depth = 0.0f, uint32_t p_clear_stencil = 0, const Rect2 &p_region = Rect2(), uint32_t p_breadcrumb = 0);
+	Error prepare_native_range(Ref<NativeHeightRange> &r_range);
 	Error begin(RID p_framebuffer, uint32_t p_draw_flags, VectorView<Color> p_clear_colors = {}, float p_clear_depth = 0.0f, uint32_t p_clear_stencil = 0, const Rect2 &p_region = Rect2(), uint32_t p_breadcrumb = 0);
 	Error bind_uniform_set(RID p_uniform_set, uint32_t p_index);
 	Error bind_vertex_array(RID p_vertex_array);

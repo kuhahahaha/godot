@@ -1,0 +1,21 @@
+{
+  "command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--reporters=xml",
+    "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k01-general-checked-prefix-20261107/validation-final/full.xml"
+  ],
+  "exit": 1,
+  "seconds": 21.55,
+  "host_sha256": "3fa28354f1def1610043c973bad71f8f20cb4c5e475eb013ae9696cc69214806",
+  "assertions": {
+    "successes": "593050",
+    "failures": "1"
+  },
+  "cases": {
+    "successes": "2293",
+    "failures": "1",
+    "skipped": "3"
+  }
+}

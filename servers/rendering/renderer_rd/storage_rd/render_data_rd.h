@@ -32,11 +32,31 @@
 
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_data_rd.h"
+#include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/rendering_server_types.h"
 #include "servers/rendering/storage/render_data.h"
 
 class RenderDataRD : public RenderData {
 	GDCLASS(RenderDataRD, RenderData);
+
+	Ref<RendererViewport::Viewport::CameraCapture> native_camera_source;
+
+	static bool camera_payload_matches(const RendererSceneRender::CameraData &p_a, const RendererSceneRender::CameraData &p_b) {
+		if (p_a.source_viewport != p_b.source_viewport || p_a.source_view_id != p_b.source_view_id ||
+				p_a.source_view_epoch != p_b.source_view_epoch || p_a.source_capture_ordinal != p_b.source_capture_ordinal ||
+				p_a.view_count != p_b.view_count || p_a.view_count == 0 || p_a.view_count > RendererSceneRender::MAX_RENDER_VIEWS ||
+				p_a.main_transform != p_b.main_transform || p_a.main_projection != p_b.main_projection ||
+				p_a.is_orthogonal != p_b.is_orthogonal || p_a.vaspect != p_b.vaspect || p_a.visible_layers != p_b.visible_layers ||
+				p_a.taa_jitter != p_b.taa_jitter || p_a.taa_frame_count != p_b.taa_frame_count) {
+			return false;
+		}
+		for (uint32_t eye = 0; eye < p_a.view_count; eye++) {
+			if (p_a.view_offset[eye] != p_b.view_offset[eye] || p_a.view_projection[eye] != p_b.view_projection[eye]) {
+				return false;
+			}
+		}
+		return true;
+	}
 
 public:
 	enum class PacketAdmissionStatus {
@@ -99,7 +119,7 @@ public:
 		}
 	};
 
-	// Internal retirement acknowledgement for a packet's native references.
+	// Internal retirement acknowledgment for a packet's native references.
 	// This is an identity receipt only; it does not claim GPU completion.
 	struct NativeRetirementReceipt {
 		uint64_t view_id = 0;
@@ -117,6 +137,44 @@ public:
 	mutable NativeRetirementReceipt native_retirement_receipt;
 	mutable bool native_retirement_receipt_issued = false;
 	mutable bool native_retirement_acknowledged_state = false;
+
+	// Called by the actual common RD render_scene receiver before either forward
+	// renderer sees this object. The explicit viewport and complete payload must
+	// match the original native capture. No token lookup selects a viewport.
+	bool retain_native_camera_source(RendererViewport &p_viewports, const RendererSceneRender::CameraData &p_camera, const Ref<RenderSceneBuffers> &p_invocation_buffers = Ref<RenderSceneBuffers>()) {
+		if (packet_identity.retired || native_retirement_receipt_issued || !p_camera.source_viewport.is_valid() ||
+				!packet_identity.camera_source_matches(p_camera.source_view_id, p_camera.source_view_epoch, p_camera.source_capture_ordinal)) {
+			return false;
+		}
+		if (native_camera_source.is_valid()) {
+			return camera_payload_matches(native_camera_source->get_camera_data(), p_camera) &&
+					(p_invocation_buffers.is_null() || native_camera_source->get_invocation().render_buffers == p_invocation_buffers);
+		}
+		const RendererViewport::Viewport::CameraSourceToken token{ p_camera.source_view_id, p_camera.source_view_epoch, p_camera.source_capture_ordinal };
+		RendererSceneRender::CameraData original{};
+		// Validate before allocating the lazy retained source. A rewritten center
+		// or eye matrix cannot be repaired by matching the scalar source token.
+		if (!p_viewports.viewport_get_camera_capture(p_camera.source_viewport, token, original) || !camera_payload_matches(original, p_camera)) {
+			return false;
+		}
+		Ref<RendererViewport::Viewport::CameraCapture> captured;
+		if (!p_viewports.viewport_get_camera_capture_ref(p_camera.source_viewport, token, captured) ||
+				(p_invocation_buffers.is_valid() && (captured->get_invocation().render_buffers != p_invocation_buffers || !captured->get_invocation().camera.is_valid()))) {
+			return false;
+		}
+		native_camera_source = captured;
+		return true;
+	}
+
+	// Passes can borrow this exact retained sample, including both XR eyes. It is
+	// ordinary source custody only, not accepted-output budget or permission.
+	Ref<RendererViewport::Viewport::CameraCapture> get_native_camera_source() const {
+		if (native_camera_source.is_null()) {
+			return {};
+		}
+		const auto &token = native_camera_source->get_token();
+		return packet_identity.camera_source_matches(token.view_id, token.view_epoch, token.capture_ordinal) ? native_camera_source : Ref<RendererViewport::Viewport::CameraCapture>();
+	}
 
 	bool set_camera_source(uint64_t p_view_id, uint64_t p_view_epoch, uint64_t p_capture_ordinal) {
 		if (packet_identity.retired || native_retirement_receipt_issued) {

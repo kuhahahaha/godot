@@ -229,6 +229,30 @@ bool RenderingDeviceDriverMetal::native_issue_bound(NativeIssueKind p_kind, uint
 	return true;
 }
 
+bool RenderingDeviceDriverMetal::qualification_incremental_fact_bound(uint64_t graphs,uint32_t current,uint32_t &main,uint32_t &copy) const {
+ // One original main slot (at most wait+work+signal) and both nonblocking
+ // prepare-segment calls per continuation. The extra frame is the initial
+ // membership/failure frame. Screen split slots are admitted before recording.
+ if(graphs>4096)return false;
+ uint64_t bound=uint64_t(current)*3+3*(graphs+1);
+ const uint64_t copy_bound=2*(graphs+1);
+ for(const auto *command:command_buffers)bound+=command->pending_completion_records.size();
+ if(bound+copy_bound>4096)return false;main=uint32_t(bound);copy=uint32_t(copy_bound);return true;
+}
+Error RenderingDeviceDriverMetal::qualification_worker_source_quote(CommandBufferID command,QueueCallReport &prefix,uint32_t &future) const {
+ prefix={};future=2; // worker has no waits: work and optional signal only.
+ if(!command)return ERR_INVALID_PARAMETER;
+ const auto *wrapper=reinterpret_cast<const MDCommandBuffer *>(command.id);
+ if(wrapper->completion_record_failed)return ERR_UNAVAILABLE;
+ // Original caller holds this worker's thread and operations locks. No
+ // append, end, submit, recycle or wrapper reuse can change this prefix.
+ for(const auto *record:wrapper->pending_completion_records){
+  NativeCallFact fact;fact.queue_index=1;fact.serial=record->serial;
+  fact.completion_serial=record->serial;fact.completion=CompletionCapability::CommandBuffer;
+  fact.issue=IssueFact::IssuedUnknown;prefix.calls.push_back(fact);
+ }
+ return OK;
+}
 uint32_t RenderingDeviceDriverMetal::qualification_native_call_bound(uint32_t slots) const {
 	// Each actual Metal3 queue slot can commit its command plus the barrier-mode
 	// wait and signal commands. Include every already committed wrapper source;
@@ -265,24 +289,22 @@ Error RenderingDeviceDriverMetal::_execute_and_present_common(CommandQueueID que
 		record_queue_call_report(report);
 		return OK;
 	}
-	LocalVector<CompletionRecord *> records;
-	for (uint32_t i = 0; i < commands.size(); ++i) {
-		auto *command = reinterpret_cast<MDCommandBuffer *>(commands[i].id);
-		for (auto *record : command->pending_completion_records) {
-			records.push_back(record);
-		}
-		command->pending_completion_records.clear();
-		if (command->completion_record_failed) {
-			report.error = ERR_UNAVAILABLE;
-		}
-	}
-	// Reserve this finite batch's actual commit identities before its first new
-	// native call. Already committed hidden records remain owned on refusal.
-	const uint64_t count = uint64_t(commands.size()) + (barriers && waits.size() > 0 ? 1 : 0) + (barriers && signals.size() > 0 ? 1 : 0);
-	const uint64_t first = count <= UINT32_MAX ? reserve_native_call_serials(count) : 0;
-	if (!first) {
-		report.error = ERR_UNAVAILABLE;
-	}
+ // Reserve the exact pending prefix and complete finite new serial range
+ // before removing the old wrapper owner or issuing any new native effect.
+ const uint64_t count=uint64_t(commands.size())+(barriers && waits.size()>0?1:0)+(barriers && signals.size()>0?1:0);
+ const uint64_t first=count<=UINT32_MAX?reserve_native_call_serials(uint32_t(count)):0;
+ LocalVector<uint64_t> serials;
+ for(uint32_t i=0;i<commands.size();++i){const auto *command=reinterpret_cast<const MDCommandBuffer *>(commands[i].id);for(const auto *record:command->pending_completion_records)serials.push_back(record->serial);}
+ if(first)for(uint32_t i=0;i<count;++i)serials.push_back(first+i);
+ const Error admission=admit_native_sources(serials.ptr(),serials.size());
+ if(admission!=OK){report.error=admission;record_queue_call_report(report);return admission;}
+ LocalVector<CompletionRecord *> records;
+ for(uint32_t i=0;i<commands.size();++i){
+  auto *command=reinterpret_cast<MDCommandBuffer *>(commands[i].id);
+  for(auto *record:command->pending_completion_records)records.push_back(record);
+  command->pending_completion_records.clear();if(command->completion_record_failed)report.error=ERR_UNAVAILABLE;
+ }
+ if(!first)report.error=ERR_UNAVAILABLE;
 	auto *previous_issue_count = active_native_issue_count;
 	active_native_issue_count = &report.native_issue_count;
 	auto *previous_records = active_completion_records;
@@ -309,7 +331,7 @@ Error RenderingDeviceDriverMetal::_execute_and_present_common(CommandQueueID que
 				++report.native_issue_count;
 				cb->commit();
 			} else {
-				report.error = ERR_UNAVAILABLE;
+				report.error = active_native_source_admission && active_native_source_admission->error!=OK ? active_native_source_admission->error : ERR_UNAVAILABLE;
 			}
 		}
 	}
@@ -335,7 +357,7 @@ Error RenderingDeviceDriverMetal::_execute_and_present_common(CommandQueueID que
 		}
 		command->commit();
 		if (command->completion_record_failed) {
-			report.error = ERR_UNAVAILABLE;
+			report.error = active_native_source_admission && active_native_source_admission->error!=OK ? active_native_source_admission->error : ERR_UNAVAILABLE;
 			break;
 		}
 		if (tail && fence) {
@@ -359,7 +381,7 @@ Error RenderingDeviceDriverMetal::_execute_and_present_common(CommandQueueID que
 				++report.native_issue_count;
 				cb->commit();
 			} else {
-				report.error = ERR_UNAVAILABLE;
+				report.error = active_native_source_admission && active_native_source_admission->error!=OK ? active_native_source_admission->error : ERR_UNAVAILABLE;
 			}
 		}
 	}
@@ -367,6 +389,11 @@ Error RenderingDeviceDriverMetal::_execute_and_present_common(CommandQueueID que
 	active_completion_records = previous_records;
 	active_native_serial = previous_serial;
 	active_native_serial_count = previous_count;
+ if(first){
+  LocalVector<uint64_t> unused;
+  for(uint32_t i=0;i<count;++i){bool registered=false;for(const auto *record:records)registered=registered||record->serial==first+i;if(!registered)unused.push_back(first+i);}
+  cancel_native_sources(unused.ptr(),unused.size());
+ }
 	if (fence && fence->armed) {
 		fence->completion_records = records;
 		for (auto *record : records) {
@@ -399,7 +426,7 @@ Error RenderingDeviceDriverMetal::command_queue_execute_and_present(CommandQueue
 	}
 	if (p_cmd_fence && ((Fence *)p_cmd_fence.id)->value == UINT64_MAX) {
 		QueueCallReport report;
-		report.error = ERR_UNAVAILABLE;
+		report.error = active_native_source_admission && active_native_source_admission->error!=OK ? active_native_source_admission->error : ERR_UNAVAILABLE;
 		record_queue_call_report(report);
 		return ERR_UNAVAILABLE;
 	}

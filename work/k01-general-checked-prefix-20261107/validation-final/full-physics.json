@@ -1,0 +1,24 @@
+{
+  "command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--reporters=xml",
+    "--out=work/k01-general-checked-prefix-20261107/validation-final/full-physics.xml"
+  ],
+  "environment": {
+    "GODOT_TEST_PHYSICS_3D_BACKEND": "GodotPhysics3D",
+    "GODOT_TEST_PHYSICS_3D_THREADED": "0"
+  },
+  "exit": 0,
+  "host_sha256": "3fa28354f1def1610043c973bad71f8f20cb4c5e475eb013ae9696cc69214806",
+  "assertions": {
+    "successes": "593067",
+    "failures": "0"
+  },
+  "cases": {
+    "successes": "2294",
+    "failures": "0",
+    "skipped": "3"
+  }
+}

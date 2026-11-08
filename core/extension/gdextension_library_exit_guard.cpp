@@ -119,7 +119,7 @@ void BindingLifetime::record_core_disposal() {
 		return;
 	}
 	auto *registry = storage->reference.registry;
-	MutexLock lock(registry->mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(*registry);
 	CRASH_COND(storage->pending || !storage->core_object || !storage->terminal_action || storage->generation != registry->records[storage->reference.slot].snapshot.library_generation);
 	if (storage->terminal_action != storage->source_action || storage->core_object != storage->source_object) {
 		stop_lifetime_entry(LifetimeFailure::UNREGISTERED);
@@ -147,7 +147,7 @@ Error BindingLifetime::acquire(const RecordRef &p_reference) {
 		return ERR_INVALID_DATA;
 	}
 	Registry *registry = p_reference.registry;
-	MutexLock lock(registry->mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(*registry);
 	auto &record = registry->records[p_reference.slot];
 	if (!record.attached || record.quiescing || record.close_started || record.close_error != OK) {
 		return ERR_BUSY;
@@ -213,7 +213,7 @@ void Registry::retire_binding_holder(HolderRetirement *p_holder) {
 		}
 	}
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Record &record = records[p_holder->reference.slot];
 		CRASH_COND(p_holder->pending || record.binding_holders == 0 || p_holder->generation != record.snapshot.library_generation);
 		const bool core_disposal = p_holder->core_disposal_returned && p_holder->core_disposal_thread == Thread::get_caller_id();
@@ -264,7 +264,7 @@ void Registry::finish_retiring_holders(const RegistrationContext &p_frame) {
 	while (p_head) {
 		auto *next = p_head->frame_next;
 		{
-			MutexLock lock(mutex);
+			Lock lock(*this);
 			CRASH_COND(!p_head->pending || p_head->retired_thread != Thread::get_caller_id() ||
 					p_head->reference.registry != this || p_head->reference.slot != p_frame.reference->slot ||
 					p_head->return_frame != p_frame.frame_id || p_frame.frame_id == 0 ||
@@ -381,7 +381,7 @@ void NativeCloseScope::observe(const GDExtensionLoader *p_loader, bool p_returne
 	if (!scope || scope->loader != p_loader || !scope->reference.registry) {
 		return;
 	}
-	MutexLock lock(scope->reference.registry->mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(*scope->reference.registry);
 	Registry::Record &record = scope->reference.registry->records[scope->reference.slot];
 	if (!p_returned) {
 		record.os_close_attempted = true;
@@ -405,7 +405,7 @@ void RegistrationContext::leave() {
 			retiring_holders = nullptr;
 		}
 		if (reference->registry && frame_id) {
-			MutexLock lock(reference->registry->mutex);
+			GDExtensionDeviceExit::Registry::Lock lock(*reference->registry);
 			reference->registry->expire_frame_locked(frame_id);
 		}
 		current = previous;
@@ -434,7 +434,7 @@ Error Registry::authenticate_registration(const RecordRef &p_ref) {
 			context->reference->registry != this || context->reference->slot != p_ref.slot) {
 		return ERR_UNAUTHORIZED;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	const Record &record = records[p_ref.slot];
 	return record.attached && !record.quiescing && !record.close_started && record.close_error == OK ? OK : ERR_UNAVAILABLE;
 }
@@ -485,7 +485,7 @@ Error Registry::register_normal_relay_holder(const Callable &p_callback, const R
 	if (p_owner.registry != this || !p_cleanup.storage) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	const auto &record = records[p_owner.slot];
 	auto *holder = p_cleanup.storage;
 	if (record.guard_enrollment != GuardEnrollment::QUALIFIED || !record.attached || record.quiescing || record.close_started || record.close_error != OK) {
@@ -524,7 +524,7 @@ Error Registry::call_normal_relay(NormalRelayToken p_token, const Variant **p_ar
 	r_error.argument = r_error.expected = 0;
 	NormalRelay *relay = nullptr;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		relay = find_normal_relay_locked(p_token);
 		if (!relay) {
 			return ERR_INVALID_DATA;
@@ -546,14 +546,14 @@ Error Registry::call_normal_relay(NormalRelayToken p_token, const Variant **p_ar
 	// CallbackScope at actual DSO entry, atomically against generation close.
 	relay->callback.callp(p_arguments, p_argcount, r_return_value, r_error);
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		relay->active_deliveries--;
 	}
 	return r_error.error == Callable::CallError::CALL_OK ? OK : ERR_UNAVAILABLE;
 }
 
 Error Registry::cancel_normal_relay(NormalRelayToken p_token) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	auto *relay = find_normal_relay_locked(p_token);
 	if (!relay) {
 		return ERR_INVALID_DATA;
@@ -566,7 +566,7 @@ Error Registry::release_normal_relay_holder(NormalRelayToken p_token) {
 	Callable releasing;
 	NormalRelay *relay = nullptr;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		relay = find_normal_relay_locked(p_token);
 		if (!relay) {
 			return ERR_INVALID_DATA;
@@ -589,14 +589,14 @@ Error Registry::release_normal_relay_holder(NormalRelayToken p_token) {
 	// acknowledges the actual free return. No invented cleanup permit is used.
 	releasing = Callable();
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		relay->releasing = false;
 	}
 	return OK;
 }
 
 Error Registry::observe_normal_relay(NormalRelayToken p_token, NormalRelaySnapshot &r_snapshot) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	const auto *relay = find_normal_relay_locked(p_token);
 	if (!relay) {
 		return ERR_INVALID_DATA;
@@ -606,7 +606,7 @@ Error Registry::observe_normal_relay(NormalRelayToken p_token, NormalRelaySnapsh
 }
 
 Error Registry::forget_normal_relay(NormalRelayToken p_token) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	auto *relay = find_normal_relay_locked(p_token);
 	if (!relay) {
 		return ERR_INVALID_DATA;
@@ -623,7 +623,7 @@ void BindingLifetime::bind_core_action(uint64_t p_object) {
 		return;
 	}
 	auto *registry = storage->reference.registry;
-	MutexLock lock(registry->mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(*registry);
 	CRASH_COND(!p_object || storage->pending || storage->source_action || !storage->core_owned);
 	for (auto *holder = registry->records[storage->reference.slot].holders; holder; holder = holder->record_next) {
 		if (!holder->cleanup) {
@@ -643,7 +643,7 @@ void CleanupAction::record_core_disposal() {
 		return;
 	}
 	auto *registry = storage->reference.registry;
-	MutexLock lock(registry->mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(*registry);
 	CRASH_COND(storage->pending || storage->generation != registry->records[storage->reference.slot].snapshot.library_generation);
 	if (storage->terminal_action != storage->action_id || storage->core_object != storage->object_id) {
 		stop_lifetime_entry(LifetimeFailure::UNREGISTERED);
@@ -673,7 +673,7 @@ bool CleanupAction::is_scheduled() const {
 		return false;
 	}
 	Registry *registry = storage->reference.registry;
-	MutexLock lock(registry->mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(*registry);
 	return storage->scheduled_action != 0;
 }
 CleanupScope::CleanupScope(const CleanupAction &p_action, const RecordRef &p_generation, uint64_t p_object_id, uint64_t p_action_id, bool p_comparison_only) : comparison_only(p_comparison_only) {
@@ -685,7 +685,7 @@ CleanupScope::CleanupScope(const CleanupAction &p_action, const RecordRef &p_gen
 		return;
 	}
 	Registry *registry = candidate->reference.registry;
-	MutexLock lock(registry->mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(*registry);
 	auto &record = registry->records[candidate->reference.slot];
 	if (!record.attached || record.close_started || record.close_error != OK) {
 		error = ERR_UNAVAILABLE;
@@ -737,7 +737,7 @@ CleanupScope::~CleanupScope() {
 		return;
 	}
 	{
-		MutexLock lock(storage->reference.registry->mutex);
+		GDExtensionDeviceExit::Registry::Lock lock(*storage->reference.registry);
 		auto &record = storage->reference.registry->records[storage->reference.slot];
 		record.active_callbacks--;
 		record.active_cleanup_by_phase[static_cast<uint8_t>(storage->phase)]--;
@@ -759,7 +759,7 @@ Error Registry::register_cleanup_action(const RecordRef &p_ref, uint64_t p_objec
 	if (static_cast<uint8_t>(p_phase) > static_cast<uint8_t>(CleanupPhase::FUTURE_LEVEL)) {
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	auto &record = records[p_ref.slot];
 	if (p_phase != CleanupPhase::UNSCHEDULED) {
 		return ERR_UNAUTHORIZED; // Typed level actions are issued only at bootstrap.
@@ -790,7 +790,7 @@ Error Registry::mark_core_object_action(const RecordRef &p_ref, uint64_t p_objec
 	if (p_ref.registry != this || !r_action.storage || !p_object_id) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	auto *action = r_action.storage;
 	const auto &record = records[p_ref.slot];
 	if (action->reference.slot != p_ref.slot || action->object_id != p_object_id || action->action_id != p_object_id ||
@@ -816,7 +816,7 @@ Error Registry::prepare_core_evidence(const RecordRef &p_ref, CloseRoute p_route
 	if (p_ref.registry != this || r_admission.reference.is_valid()) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	Record &record = records[p_ref.slot];
 	if (!record.preflight_sealed || record.preflight_route != p_route) {
 		return ERR_INVALID_DATA;
@@ -846,7 +846,7 @@ Error Registry::prepare_core_evidence(const RecordRef &p_ref, CloseRoute p_route
 }
 
 Error Registry::register_core_event_export(const CoreEvidenceAdmission &p_admission, CoreExportGrant &r_export) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (!core_admission_matches_locked(p_admission)) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -907,7 +907,7 @@ Error Registry::commit_core_evidence(const CoreEvidenceAdmission &p_admission, P
 	if (error != OK) {
 		return error;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (!core_admission_matches_locked(p_admission) || !physical_can_close_locked(p_admission.reference.slot)) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -944,7 +944,7 @@ Error Registry::consume_core_ack(const RecordRef &p_ref, const PublicationAck &p
 	if (p_ref.registry != this || p_ack.reference.registry != this || p_ack.reference.slot != p_ref.slot) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	Record &record = records[p_ref.slot];
 	if (!record.evidence_committed || record.evidence_serial != p_ack.publication_serial || record.exit_attempt != p_ack.attempt ||
 			record.evidence_attempt != p_ack.attempt || record.evidence_route != p_ack.route || record.preflight_route != p_ack.route ||
@@ -987,7 +987,7 @@ Error Registry::preflight_exit(const RecordRef &p_ref, CloseRoute p_route) {
 		default:
 			return ERR_INVALID_PARAMETER;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	Record &record = records[p_ref.slot];
 	if (!record.attached || record.close_started || record.close_error != OK) {
 		return ERR_UNAVAILABLE;
@@ -1025,7 +1025,7 @@ Error Registry::begin_quiesce(const RecordRef &p_ref) {
 	if (p_ref.registry != this) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	Record &record = records[p_ref.slot];
 	if (!record.attached || record.close_started || record.close_error != OK) {
 		return ERR_UNAVAILABLE;
@@ -1048,7 +1048,7 @@ Error Registry::begin_close(const RecordRef &p_ref, CloseRoute p_route) {
 	if (p_ref.registry != this) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	Record &record = records[p_ref.slot];
 	// G3 cannot be entered by bypassing the G1 admission seal. A caller that
 	// has not first quiesced the generation must observe Busy without mutating
@@ -1094,7 +1094,7 @@ void Registry::observe_close(const RecordRef &p_ref, Error p_error) {
 	if (p_ref.registry != this) {
 		return;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	Record &record = records[p_ref.slot];
 	record.close_returned = true;
 	record.close_error = p_error;
@@ -1104,7 +1104,7 @@ Error Registry::resolve_core_close_return(const RecordRef &p_ref, CoreCloseRetur
 	if (p_ref.registry != this) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	const Record &record = records[p_ref.slot];
 	// RecordRef pins this slot after the wrapper detaches.
 	if (!record.occupied) {
@@ -1177,6 +1177,94 @@ bool Registry::issue_instance(uint64_t &r_instance) {
 	return issuer->sequence.take(r_instance);
 }
 
+thread_local RegistryMutexOwnership *RegistryMutexOwnership::current = nullptr;
+
+void RegistryMutexOwnership::enter(Registry *p_owner) {
+	owner = p_owner;
+	previous = current;
+	held = true;
+	current = this;
+}
+
+void RegistryMutexOwnership::leave() {
+	CRASH_COND(current != this);
+	current = previous;
+	held = false;
+}
+
+Registry::Lock::Lock(Registry &p_owner, Mode p_mode) : owner(p_owner) {
+	if (p_mode != BLOCK && owns(owner)) {
+		borrowed = true;
+		return;
+	}
+	if (p_mode == TRY_OR_BORROW) {
+		if (!owner.mutex.try_lock()) {
+			return;
+		}
+	} else {
+		owner.mutex.lock();
+	}
+	ownership.enter(&owner);
+}
+
+Registry::Lock::~Lock() {
+	if (borrowed || !ownership.owner) {
+		return;
+	}
+	const bool locked = ownership.held;
+	ownership.leave();
+	if (locked) {
+		owner.mutex.unlock();
+	}
+}
+
+bool Registry::Lock::owns(const Registry &p_owner) {
+	for (const auto *scope = RegistryMutexOwnership::current; scope; scope = scope->previous) {
+		if (scope->owner == &p_owner && scope->held) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void Registry::Lock::temp_unlock() const {
+	CRASH_COND(!ownership.held || borrowed);
+	ownership.held = false;
+	owner.mutex.unlock();
+}
+
+void Registry::Lock::temp_relock() const {
+	CRASH_COND(ownership.held || borrowed);
+	owner.mutex.lock();
+	ownership.held = true;
+}
+
+// Original Registry methods temporarily release this same non-recursive
+// mutex around callbacks. Keep their existing outer ownership marker, but
+// suspend it while unlocked so a synchronous callback can acquire normally.
+void Registry::unlock_mutex_for_call() {
+	for (auto *scope = RegistryMutexOwnership::current; scope; scope = scope->previous) {
+		if (scope->owner == this && scope->held) {
+			scope->held = false;
+			mutex.unlock();
+			return;
+		}
+	}
+	// Privileged CPU fixtures can hold the original mutex directly. Such a
+	// lock has no ownership marker and therefore grants no borrowing shortcut.
+	mutex.unlock();
+}
+
+void Registry::relock_mutex_after_call() {
+	mutex.lock();
+	for (auto *scope = RegistryMutexOwnership::current; scope; scope = scope->previous) {
+		if (scope->owner == this && !scope->held) {
+			scope->held = true;
+			return;
+		}
+	}
+}
+
 Registry &Registry::get_singleton() {
 	// Never destroyed: late metadata releases must not touch torn-down services.
 	alignas(Registry) static unsigned char storage[sizeof(Registry)];
@@ -1207,11 +1295,13 @@ BindingPublicationScope::BindingPublicationScope(const RecordRef &p_reference) :
 		return;
 	}
 	registry->mutex.lock();
+	ownership.enter(registry);
 	const auto &record = registry->records[p_reference.slot];
 	error = record.attached && !record.quiescing && !record.close_started && record.close_error == OK ? OK : ERR_BUSY;
 }
 BindingPublicationScope::~BindingPublicationScope() {
 	if (registry) {
+		ownership.leave();
 		registry->mutex.unlock();
 	}
 }
@@ -1220,7 +1310,7 @@ uint64_t RecordRef::get_generation() const {
 	if (!registry) {
 		return 0;
 	}
-	MutexLock lock(registry->mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(*registry);
 	return registry->records[slot].snapshot.library_generation;
 }
 
@@ -1229,7 +1319,7 @@ CallbackScope::CallbackScope(const RecordRef &p_reference) {
 	if (!registry) {
 		return;
 	}
-	MutexLock lock(registry->mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(*registry);
 	auto &record = registry->records[p_reference.slot];
 	if (record.guard_enrollment == GuardEnrollment::PENDING_BOOTSTRAP || record.guard_enrollment == GuardEnrollment::REVOKED) {
 		error = ERR_UNAVAILABLE;
@@ -1256,7 +1346,7 @@ CallbackScope::~CallbackScope() {
 		return;
 	}
 	{
-		MutexLock lock(reference.registry->mutex);
+		GDExtensionDeviceExit::Registry::Lock lock(*reference.registry);
 		reference.registry->records[reference.slot].active_callbacks--;
 	}
 	// The core-only reference outlives the DSO return acknowledgment.
@@ -1269,7 +1359,7 @@ LevelScope::LevelScope(const RecordRef &p_reference, GDExtension *p_owner, const
 	if (!registry || level < 0 || level >= 4) {
 		return;
 	}
-	MutexLock lock(registry->mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(*registry);
 	auto &record = registry->records[p_reference.slot];
 	const auto &original = record.original_initialization;
 	if (!record.bootstrap_tuple_observed || record.original_owner != p_owner || original.initialize != p_initialization.initialize ||
@@ -1354,7 +1444,7 @@ LevelScope::~LevelScope() {
 	}
 	context.leave(); // Drain exact pending holders only after actual DSO return.
 	{
-		MutexLock lock(registry->mutex);
+		GDExtensionDeviceExit::Registry::Lock lock(*registry);
 		auto &record = registry->records[reference.slot];
 		auto &state = record.levels[level];
 		if (initializing) {
@@ -1387,7 +1477,7 @@ LevelScope::~LevelScope() {
 
 thread_local BootstrapScope *BootstrapScope::current = nullptr;
 BootstrapScope::BootstrapScope(RecordRef &&p_reference, GDExtension *p_expected) : previous(current), reference(std::move(p_reference)), expected(p_expected) {
-	MutexLock lock(reference.registry->mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(*reference.registry);
 	reference.registry->records[reference.slot].scope_live = true;
 	reference.registry->records[reference.slot].active_callbacks++;
 	current = this;
@@ -1395,7 +1485,7 @@ BootstrapScope::BootstrapScope(RecordRef &&p_reference, GDExtension *p_expected)
 	context.frame_id = reference.registry->records[reference.slot].bootstrap_frame;
 }
 Error BootstrapScope::observe_tuple(const GDExtensionInitialization &p_initialization, Error p_error) {
-	MutexLock lock(reference.registry->mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(*reference.registry);
 	auto &record = reference.registry->records[reference.slot];
 	if (current != this || RegistrationContext::current != &context || record.original_owner != expected || record.owner_thread != Thread::get_caller_id()) {
 		return ERR_UNAUTHORIZED;
@@ -1422,7 +1512,7 @@ BootstrapScope::~BootstrapScope() {
 	context.leave();
 	current = previous;
 	{
-		MutexLock lock(reference.registry->mutex);
+		GDExtensionDeviceExit::Registry::Lock lock(*reference.registry);
 		reference.registry->records[reference.slot].scope_live = false;
 		auto &record = reference.registry->records[reference.slot];
 		record.active_callbacks--;
@@ -1442,7 +1532,7 @@ Error Registry::begin_cycle(uint64_t &r_cycle) {
 		return injected;
 	}
 #endif
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (phase != Phase::FINALIZED) {
 		return ERR_BUSY;
 	}
@@ -1468,7 +1558,7 @@ Error Registry::begin_cycle(uint64_t &r_cycle) {
 }
 
 bool Registry::begin_finalizing(uint64_t p_cycle) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (p_cycle == 0 || p_cycle != instance || phase != Phase::RUNNING) {
 		return false;
 	}
@@ -1477,7 +1567,7 @@ bool Registry::begin_finalizing(uint64_t p_cycle) {
 }
 
 void Registry::finish_engine_cycle(uint64_t p_cycle) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (p_cycle == 0 || p_cycle != instance || phase != Phase::FINALIZING) {
 		return;
 	}
@@ -1518,7 +1608,7 @@ void Registry::reclaim(uint32_t p_slot) {
 	}
 }
 void Registry::release_private(uint32_t p_slot) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	records[p_slot].private_refs--;
 	reclaim(p_slot);
 }
@@ -1527,7 +1617,7 @@ Error Registry::reserve_open(uint32_t p_kind, RecordRef &r_wrapper, RecordRef &r
 	if (r_wrapper.is_valid() || r_scope.is_valid()) {
 		return ERR_BUSY;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (phase != Phase::RUNNING) {
 		return ERR_BUSY;
 	}
@@ -1589,7 +1679,7 @@ Error Registry::retain_binding_owner(void *p_token, RecordRef &r_ref) {
 	if (r_ref.is_valid()) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	for (const BindingOwner &owner : binding_owners) {
 		if (!owner.token || owner.token != p_token) {
 			continue;
@@ -1612,7 +1702,7 @@ Error Registry::retain_binding_owner(void *p_token, RecordRef &r_ref) {
 }
 
 void Registry::forget_binding_owner(GDExtension *p_owner) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	for (BindingOwner &owner : binding_owners) {
 		if (owner.token == p_owner) {
 			owner = BindingOwner();
@@ -1622,12 +1712,12 @@ void Registry::forget_binding_owner(GDExtension *p_owner) {
 }
 
 void Registry::attach(const RecordRef &p_ref) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	records[p_ref.slot].attached = true;
 	records[p_ref.slot].snapshot.wrapper_association = 1;
 }
 void Registry::observe_initialize(const RecordRef &p_ref, Error p_error) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	Record &record = records[p_ref.slot];
 	record.snapshot.loader_initialize_returned = 1;
 	record.snapshot.loader_initialize_error = p_error;
@@ -1639,7 +1729,7 @@ void Registry::detach(const RecordRef &p_ref) {
 	if (p_ref.registry != this) {
 		return;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	records[p_ref.slot].attached = false;
 	records[p_ref.slot].snapshot.wrapper_association = 2;
 }
@@ -1647,7 +1737,7 @@ Error Registry::retain_private(const RecordRef &p_ref, RecordRef &r_ref) {
 	if (p_ref.registry != this || r_ref.is_valid()) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	Record &record = records[p_ref.slot];
 	if (record.private_refs == private_limit) {
 		return ERR_PARAMETER_RANGE_ERROR;
@@ -1698,7 +1788,7 @@ int32_t Registry::bootstrap(const GDExtensionDeviceExitAbi *p_request, GDExtensi
 	if (!scope || RegistrationContext::current != &scope->context || scope->reference.registry != this || scope->expected != p_library) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (phase != Phase::RUNNING) {
 		return ERR_BUSY;
 	}
@@ -1717,7 +1807,7 @@ int32_t Registry::retain(const GDExtensionDeviceExitAbi *p_request, GDExtensionD
 	if (!scope || RegistrationContext::current != &scope->context || scope->reference.registry != this) {
 		return ERR_INVALID_DATA;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	const uint32_t slot = scope->reference.slot;
 	if (p_library.registry_instance != instance || p_library.handle_serial != records[slot].authority_serial) {
 		return ERR_INVALID_DATA;
@@ -1731,7 +1821,7 @@ int32_t Registry::copy(GDExtensionDeviceExitLibraryViewRef p_view, GDExtensionDe
 	if (!aligned(r_snapshot) || !valid_abi(&r_snapshot->abi, 48)) {
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	const uint32_t slot = find_view(p_view);
 	if (slot == INVALID_SLOT) {
 		return ERR_INVALID_DATA;
@@ -1743,7 +1833,7 @@ int32_t Registry::release(const GDExtensionDeviceExitAbi *p_request, GDExtension
 	if (!valid_abi(p_request)) {
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	const uint32_t slot = find_view(p_view);
 	if (slot == INVALID_SLOT) {
 		return ERR_INVALID_DATA;
@@ -1762,7 +1852,7 @@ int32_t Registry::clone(const GDExtensionDeviceExitAbi *p_request, GDExtensionDe
 	if (!valid_abi(p_request)) {
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	const uint32_t slot = find_view(p_source);
 	if (slot == INVALID_SLOT) {
 		return ERR_INVALID_DATA;

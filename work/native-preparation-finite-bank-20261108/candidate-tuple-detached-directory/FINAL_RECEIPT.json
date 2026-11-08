@@ -1,0 +1,144 @@
+{
+  "schema": 1,
+  "base": "86a59ee22e",
+  "patch_sha256": "a67f67db0f13421a5b2f633be1df922fe061914d9878fe883b01b46019e76298",
+  "files": [
+    {
+      "path": "core/extension/gdextension_library_exit_guard.h",
+      "before": "3cf818e33852566e8c0320ce36c679d68251f8da88ad088aae51c2fe446e83e8",
+      "after": "a0d7411028627978361099060704c974634663e8731af045e596124c8e78d345"
+    },
+    {
+      "path": "core/extension/gdextension_production_output.cpp",
+      "before": "b883bd7447187984eebb3900799ff77ec9e5cc2f9089bd590988d104d7e524c9",
+      "after": "f82637133ae525179b61bc2033bbff95735dafd4ec638dfeea722fe36acb853c"
+    },
+    {
+      "path": "core/extension/gdextension_production_request.h",
+      "before": "37519b1716c518ff114d41baf86aedf96572cbcd996d05742aeacab8ece45230",
+      "after": "a3626a3befc73c1326060a33e7b164e0dc801e5e198d2a2c5d47bc88df882c24"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp",
+      "before": "14d4a56844a613f80803fde33c812a0e3f81d9f6dc4c017c92a7c0e19e9dbfa5",
+      "after": "126ceff936875625ec7a3cb4a1fa028394f906a5bfe93d85e2f724264177bce4"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h",
+      "before": "00f3c3dd763d6238a482d801c7442f2bf1fe7bed6c2ba43141d018928cd601c9",
+      "after": "1bf2793d65bd575e517373e96aea3fb7cf497c179bdebd5f8963828b892170fd"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp",
+      "before": "5dc9056c0b84250eff167fef9fac43b73a7251237da9ffaf8708cbc685fb44f8",
+      "after": "282e9d07d61bd617eabc1e62b1b83a97d75d037ab1b1012287aa55bc80d3244f"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h",
+      "before": "4237b53a29753796e49171546c1b2d578bc0f813c00aad132d658b927f6d736a",
+      "after": "c3b4b3461dc04b37d2ace0f20b80884a254ab575242cae6112810747b18d9267"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/external_output_owner.cpp",
+      "before": "f454335a8346ac14023e60fff654f5f22878392dede12cff234aa3e1b8e0ff21",
+      "after": "3845933cbe401510d9645cb3b96dacbc9074ebc2aa9023793b773d9eb89d8e57"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/external_output_owner.h",
+      "before": "dce3947dcde0fa87f825cf98de60c386a2a3da62704a3f30d35952b287e9cde1",
+      "after": "33ed426b008914488d0546abfa35daf0114fcf1985130d02a326ca84cae7051a"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/external_output_packet.cpp",
+      "before": "55416ae8302428d0d856d1e49319937610f67e6bcf89c8b2c5bdcde70bed594e",
+      "after": "4510c5729112b4b9f34e6f4f7aa1e2409b25627f24f96466c6df71a7d1466871"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/external_output_packet.h",
+      "before": "1312a32a44930de2826c3819790fcdda569b99be0666bcf164fa7c1e981b6522",
+      "after": "a54b2748037c693bb24b539ef186fc808e9f6ea0fbbe9ea64fe2a607ef71bad6"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp",
+      "before": "308ac21796cf30a036397a614091bb8e85220e450932fb1d141c89fac7b35b71",
+      "after": "5a82bab02e78ba2f4475248bc345215d29611e336867d7cd6c54b1ea3584190b"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/mesh_storage.h",
+      "before": "869cc9a4f03e8d95a06048ff62c364266af50c3c7f7cc657c1accbb9d7ba2d1d",
+      "after": "2eab59a0f1573e018ba8fff81f0e074472a81c0a91eae63cfcc945c9b59d7633"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage.h",
+      "before": "1a116174f479523f2a67c5de9a8dd4ccb1519d6bee2839e98fbbb408bed26bf3",
+      "after": "858f04b1b87adbad99306b6cbcb9995375be28142b8bfc91b569579164af6530"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage_external.cpp",
+      "before": "e2cfa4b02e47d3bc9391bfe1514ceef61fcaa818c7fc9ab69ff3a349aabe1d43",
+      "after": "2e968fe26ebf315028465ad653cd81682be5bf6cfef2d0c9760834c2e4f0262c"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp",
+      "before": "10cdc3b90b9716bf3a05d20e1513e82ea4255ea370e602f601ccea6122898bc9",
+      "after": "508423c681500803ce32816889c570821ffa346d4ba0ee90ff1ede20892eb312"
+    },
+    {
+      "path": "servers/rendering/rendering_device.h",
+      "before": "de3fcebe2d6f9cf35c3f0c537900a9b0ab27357aa7288343e70ee6ab98cbed2b",
+      "after": "9d636f23e3321255853cd136689360c42fefc03e29abec6fd2766449a62854e8"
+    },
+    {
+      "path": "servers/rendering/rendering_device_immutable_hold.cpp",
+      "before": "967b1b1573098c895894494d9ff42df7f8b6c7b362fe4e6852b4c4305fa54e31",
+      "after": "8dfd4f84ae03e0ad3b5c476b7882f960408c63bba6222baf0f0c17d9437a60e1"
+    },
+    {
+      "path": "tests/core/extension/test_production_request.cpp",
+      "before": "dc5f668d6e17074c47c33cec0cdf84590ea295b959b58f5295c10eb40f589e82",
+      "after": "15738f7b8c4e1be4c0705d6888bb8e25d5acc53d2a14f479e9b92fc470062963"
+    },
+    {
+      "path": "tests/servers/rendering/test_external_output_custody_bridge.h",
+      "before": "e806da22168827069c7f3ad79528da7b12ee815751a3fbf6ccf4962c934fc3a8",
+      "after": "1281e3e4430f89520055d99aaa477a9d5113c85576fd17e1fa32a71880d361fc"
+    },
+    {
+      "path": "tests/servers/rendering/test_external_output_owner_state.cpp",
+      "before": "20b27a6d055e2f67a0a89edb9023827efce033fb2289163b1509dc1b70032064",
+      "after": "46909caf3ebd2ed3bbb562bb920ea40fc332716a4dbe208e44cde455262a8d11"
+    }
+  ],
+  "build": {
+    "command": "scons -Q tests=yes platform=macos target=editor debug_symbols=no module_particles_runtime_tests_enabled=yes -j2",
+    "exit": 0,
+    "log": "exact-final-build.log"
+  },
+  "red": {
+    "case": "last retained detached native Surface directory returns through original tuple cleanup",
+    "exit": 1,
+    "failed_assertions": 8,
+    "log": "red-test.log",
+    "mutation": "one-shot refusal before detached transfer; normal OBSERVE cleanup completed"
+  },
+  "green": {
+    "cases": 57,
+    "assertions": 18661,
+    "exit": 0,
+    "log": "exact-final-test.log"
+  },
+  "limits": [
+    "prospective full G fixed-point closure remains unresolved",
+    "shared concurrent detached-holder interleavings not covered",
+    "no public U05 issuer/view/presentation/no-follow-up-draw GPU acceptance"
+  ],
+  "binary_sha256": "5ef6c2391b08bc8ac2c28569e34036175b8092ddecf8804c14a948184b58a38f",
+  "log_sha256": {
+    "exact-final-build.log": "2393d493e2cf150aeaeafa46f2a96095d2f2f8ce698b1d271cbe30e7ee153ba1",
+    "exact-final-test.log": "ac3dcc0423ec4aa0233ee7d56ee123e043386f37c2e22313d3065cf6d2f75899",
+    "red-build.log": "54fdafa9e1d3e74fcaf274109a121b542810c1e1871ba94261a323ddd16422e0",
+    "red-test.log": "28e53b065b637ccc9231f9111c1cad752df734324ff4d782dacb0cab8bdd063d",
+    "native-continuation.log": "1b14281381493146267ea89c1a4c344035a5234076cc4c796c370d32c1bd6647",
+    "diagnostic3-test.log": "b5d519b6308da734136af1a55c665cb96ba8589a17fcfab4c1d526f2230564e3"
+  }
+}

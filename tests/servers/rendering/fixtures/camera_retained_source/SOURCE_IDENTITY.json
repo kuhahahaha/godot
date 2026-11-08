@@ -1,0 +1,25 @@
+{
+  "head": "6a3ee010cafb7bbcbf0ad77755c6870cc3e87c77",
+  "files": [
+    {
+      "path": "servers/rendering/renderer_viewport.h",
+      "bytes": 17663,
+      "sha256": "c35f2fedf7aac9327755ce951c13172e3ef606c6c7a1319f2f17bf265fd279b3"
+    },
+    {
+      "path": "servers/rendering/renderer_viewport.cpp",
+      "bytes": 81142,
+      "sha256": "e86c0c648364340fc9930061a5817b570cb4b7d66601cef1aac4197aa80adca6"
+    },
+    {
+      "path": "tests/servers/rendering/test_viewport_camera_source.cpp",
+      "bytes": 44565,
+      "sha256": "2906681304f962b04bf3643def3aab84fe16506f0c64ae66c562dac10627f0af"
+    }
+  ],
+  "patch": {
+    "bytes": 15320,
+    "sha256": "0d8c420a2f326b1520e2f0f3d8737fd4bc2c7d5ec0e295ef6190ea22bb2b2796"
+  },
+  "scope": "Read-only source review; no build/test/GPU executed"
+}

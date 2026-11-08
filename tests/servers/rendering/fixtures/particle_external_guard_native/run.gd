@@ -23,23 +23,21 @@ func _start() -> void:
 
 func _expected_checks() -> Dictionary:
 	var expected: Dictionary = {}
-	expected["original main RD render-thread owner"] = true
-	expected["outside all active command lists"] = true
-	expected["engine.actual_prepared_owner"] = true
-	for mode_index in MODES.size():
-		var mode: String = MODES[mode_index]
-		expected["engine." + mode + ".actual_pipeline"] = true
-		expected["engine." + mode + ".original_shader_association"] = true
-		expected["engine." + mode + ".reflected_compute_layout"] = true
-		for prior in mode_index:
-			expected["engine." + mode + ".distinct_engine_variant_" + str(prior)] = true
+	expected["material_features.original_owner"] = true
+	for material_case in ["plain", "vertex_inverse", "fragment_inverse", "alpha_hash", "alpha_scissor", "normal_only", "both"]:
+		for suffix in ["unissued_unchanged", "selection", "compiled_fact", "generation", "original_version", "inverse_requirement", "release", "released_refused", "empty_selection", "empty_invalidates", "observation_unissued_unchanged", "observation", "observation_original_material", "observation_original_version", "observation_inverse", "observation_returned_unchanged", "observation_empty_unchanged"]:
+			expected["material_features." + material_case + "." + suffix] = true
+	for suffix in ["retained_selection", "retained_original", "replacement_selection", "replacement_original", "replacement_preserves_retained", "replacement_return", "replacement_returned_unchanged", "sibling_return_preserves_retained", "retained_return", "successful_mutation", "stale_generation_refused", "dirty_refused", "mutated_selection", "mutated_compiler_fact", "old_lease_cannot_observe_new_selection", "same_material_sibling_selection", "mutated_return", "same_material_sibling_survives_return", "same_material_sibling_return"]:
+		expected["material_observation." + suffix] = true
+	for label in ["original main RD render-thread owner", "outside all active command lists", "first.prepare", "repeat.prepare", "reprepare.prepare"]:
+		expected[label] = true
 	for phase in ["first", "reprepare"]:
 		expected[phase + ".prepare"] = true
 		expected[phase + ".ready"] = true
 		expected[phase + ".five_distinct_shaders"] = true
 		expected[phase + ".five_distinct_pipelines"] = true
 		for mode in MODES:
-			for suffix in ["actual_shader", "actual_pipeline", "original_shader_association", "reflected_compute_layout"]:
+			for suffix in ["actual_shader", "actual_pipeline", "original_shader_association", "reflected_compute_layout", "reflected_source_roles"]:
 				expected[phase + "." + mode + "." + suffix] = true
 	expected["repeat.prepare"] = true
 	for mode in MODES:
@@ -50,15 +48,17 @@ func _expected_checks() -> Dictionary:
 		for mode in MODES:
 			for suffix in ["getters_empty", "shader_owner_removed", "pipeline_owner_removed"]:
 				expected[phase + "." + mode + "." + suffix] = true
+	expected["engine.actual_prepared_owner"] = true
 	for mode in MODES:
-		expected["engine." + mode + ".survives_local_release"] = true
+		for suffix in ["actual_pipeline", "original_shader_association", "reflected_compute_layout", "reflected_source_roles", "distinct_engine_variant", "survives_local_release"]:
+			expected["engine." + mode + "." + suffix] = true
 	return expected
 
 func _checks_complete(checks: Variant) -> bool:
 	if typeof(checks) != TYPE_ARRAY:
 		return false
 	var expected: Dictionary = _expected_checks()
-	if checks.size() != expected.size():
+	if checks.size() != expected.size() or expected.size() != 270:
 		return false
 	var seen: Dictionary = {}
 	for row in checks:
@@ -80,7 +80,7 @@ func _process(_delta: float) -> bool:
 		passed = passed and report.get("dispatch_recorded", true) == false and report.get("source_authority_supplied", true) == false and report.get("physical_return_claimed", true) == false
 		print("PARTICLE_EXTERNAL_GUARD_NATIVE_RESULT=", JSON.stringify(report))
 		if passed:
-			print("PARTICLE_EXTERNAL_GUARD_NATIVE_PASS five_modes=1 checks=" + str(report.get("checks", []).size()) + " idempotent=1 owner_released=1 reprepare=1 physical_return_claimed=0")
+			print("PARTICLE_EXTERNAL_GUARD_NATIVE_PASS five_modes=1 checks=270 idempotent=1 owner_released=1 reprepare=1 physical_return_claimed=0")
 		quit(0 if passed else 1)
 	elif Time.get_ticks_msec() - started_msec > TIMEOUT_MSEC:
 		printerr("PARTICLE_EXTERNAL_GUARD_NATIVE_TIMEOUT: callback completion not observed; no success/physical return inferred")

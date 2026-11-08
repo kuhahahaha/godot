@@ -1,3 +1,33 @@
+/**************************************************************************/
+/*  particles_heightfield_clear_test_fixture.cpp                          */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 #include "particles_heightfield_clear_test_fixture.h"
 
 #include "core/object/callable_mp.h"
@@ -633,7 +663,14 @@ Error ParticlesHeightfieldClearTestFixture::capture_candidate() {
 	storage->particles_collision_set_height_field_resolution(collision, RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_256);
 	first_instance = storage->particles_collision_instance_create(collision);
 	storage->particles_collision_instance_set_active(first_instance, true);
-	Error error = Frame::create_candidate(*storage, first_instance, geometry_refusal ? 2 : 1, frame_resources_b, 64, 32, candidate_frame);
+	Ref<Frame> preflight_candidate;
+	storage->particles_collision_set_box_extents(collision, Vector3(1, 0, 1));
+	Error error = Frame::create_candidate(*storage, first_instance, 1, frame_resources_b, 64, 32, preflight_candidate);
+	if (error != OK) {
+		return error;
+	}
+	storage->particles_collision_set_box_extents(collision, Vector3(1, 1, 1));
+	error = Frame::create_candidate(*storage, first_instance, geometry_refusal ? 2 : 1, frame_resources_b, 64, 32, candidate_frame);
 	if (error != OK) {
 		return error;
 	}
@@ -690,11 +727,19 @@ Error ParticlesHeightfieldClearTestFixture::capture_candidate() {
 	PagedArray<RenderGeometryInstance *> instances;
 	instances.set_page_pool(&pool);
 	instances.push_back(geometry);
+	const Error preflight_error = preflight_candidate->capture(*renderer, instances);
+	const auto &preflight_prefix = preflight_candidate->get_capture_prefix();
+	const bool preflight_rejected = preflight_error == ERR_INVALID_PARAMETER &&
+			preflight_candidate->get_state() == Frame::State::FailedRetiring && preflight_candidate->native_range.is_valid() &&
+			preflight_prefix.get_error() == preflight_error && preflight_prefix.get_business_count() == 0 &&
+			!preflight_prefix.has_open_list() && !preflight_prefix.has_cleanup_attempt() &&
+			preflight_candidate->capture(*renderer, instances) == ERR_ALREADY_IN_USE;
 	// A zero business-record capacity refuses begin; resolver preparation is
 	// allowed and is not misreported as budget-before-work evidence.
 	const Error rejected = rejected_candidate->capture(*renderer, instances);
 	const auto &failed_prefix = rejected_candidate->get_capture_prefix();
 	const bool rejected_ok = rejected != OK && rejected_candidate->get_state() == Frame::State::FailedRetiring &&
+			rejected_candidate->native_range.is_valid() &&
 			failed_prefix.get_business_count() == 0 && !failed_prefix.has_open_list() && !failed_prefix.has_cleanup_attempt() &&
 			rejected_candidate->capture(*renderer, instances) == ERR_ALREADY_IN_USE;
 	// Five actual business slots accept begin, the three global sets and VA.
@@ -703,6 +748,7 @@ Error ParticlesHeightfieldClearTestFixture::capture_candidate() {
 	const auto &postbind_prefix = postbind_candidate->get_capture_prefix();
 	const auto &postbind_cleanup = postbind_prefix.get_cleanup_record().draw;
 	bool postbind_restored = postbind_error != OK && postbind_candidate->get_state() == Frame::State::FailedRetiring &&
+			postbind_candidate->native_range.is_valid() &&
 			postbind_candidate->get_capture_error() == postbind_error && postbind_prefix.get_error() == postbind_error &&
 			postbind_prefix.get_business_count() == 5 && postbind_prefix.has_cleanup_attempt() && postbind_prefix.is_restored() &&
 			!postbind_prefix.has_open_list() && !postbind_prefix.is_restoration_unknown() &&
@@ -757,7 +803,7 @@ Error ParticlesHeightfieldClearTestFixture::capture_candidate() {
 				actual_draw_refusal = record.draw.error == ERR_UNAVAILABLE && record.draw.effect == Sink::Effect::NoNewEffect && !record.draw.draw_handle.is_valid() && record.draw.prefix_count == 0;
 			}
 		}
-		instanced_restored = actual_instances == 2 && refused == ERR_UNAVAILABLE &&
+		instanced_restored = actual_instances == 2 && refused == ERR_UNAVAILABLE && instanced_candidate->native_range.is_valid() &&
 				instanced_candidate->get_state() == Frame::State::FailedRetiring && instanced_candidate->get_capture_error() == ERR_UNAVAILABLE &&
 				refused_prefix.get_error() == ERR_UNAVAILABLE && refused_draws == 1 && actual_draw_refusal &&
 				refused_prefix.has_cleanup_attempt() && refused_prefix.is_restored() && !refused_prefix.has_open_list() && !refused_prefix.is_restoration_unknown() &&
@@ -818,12 +864,15 @@ Error ParticlesHeightfieldClearTestFixture::capture_candidate() {
 		}
 	}
 	const bool once = candidate_frame->capture(*renderer, instances) == ERR_ALREADY_IN_USE;
-	const bool captured = error == OK && candidate_frame->get_state() == Frame::State::CaptureRecorded && prefix.is_restored() &&
+	const bool captured = error == OK && candidate_frame->native_range.is_valid() &&
+			candidate_frame->get_state() == Frame::State::CaptureRecorded && prefix.is_restored() &&
 			!prefix.has_open_list() && !prefix.has_cleanup_attempt() && !prefix.is_restoration_unknown() && handles &&
 			uniforms >= 3 && vertices == 1 && indices == 1 && pipelines == 1 && pushes == 1 && draws == 1;
 	{
 		MutexLock lock(result_mutex);
 		result_data["candidate_snapshot_frozen"] = frozen_ok;
+		result_data["candidate_native_range_retained"] = candidate_frame->native_range.is_valid();
+		result_data["candidate_preflight_rejected"] = preflight_rejected;
 		result_data["candidate_failed_without_business_prefix"] = rejected_ok;
 		result_data["candidate_postbind_restored"] = postbind_restored;
 		result_data["candidate_capture_once"] = once;
@@ -832,9 +881,9 @@ Error ParticlesHeightfieldClearTestFixture::capture_candidate() {
 		result_data["candidate_draws"] = draws;
 		result_data["candidate_index_binds"] = indices;
 		result_data["candidate_uniform_binds"] = uniforms;
-		result_data["candidate_pass"] = frozen_ok && rejected_ok && postbind_restored && instanced_restored && once && captured;
+		result_data["candidate_pass"] = frozen_ok && preflight_rejected && rejected_ok && postbind_restored && instanced_restored && once && captured;
 	}
-	return frozen_ok && rejected_ok && postbind_restored && instanced_restored && once && captured ? OK : FAILED;
+	return frozen_ok && preflight_rejected && rejected_ok && postbind_restored && instanced_restored && once && captured ? OK : FAILED;
 }
 
 void ParticlesHeightfieldClearTestFixture::poll_frame_resources() {
@@ -928,7 +977,6 @@ Error ParticlesHeightfieldClearTestFixture::run_neighbor_setup() {
 		storage->particles_collision_set_attractor_strength(collision, 2.0);
 		storage->particles_collision_set_attractor_attenuation(collision, 1.0);
 		storage->particles_collision_set_attractor_directionality(collision, 0.0);
-
 	}
 	if (legacy_neighbor_case == 2 || legacy_neighbor_case == 5) {
 		const bool sdf = legacy_neighbor_case == 2;
@@ -974,9 +1022,7 @@ Error ParticlesHeightfieldClearTestFixture::run_legacy_process(const Transform3D
 	// particles.glsl integrates the cleared zero velocity BEFORE start();
 	// start then fixes the point, native collision runs, and process observes it.
 	const bool attractor = legacy_neighbor_case >= 3;
-	const String process_code = attractor ?
-			"void process() { CUSTOM = vec4(ATTRACTOR_FORCE, 1.0); VELOCITY += ATTRACTOR_FORCE * DELTA; }" :
-			"void process() { VELOCITY = COLLISION_NORMAL; CUSTOM = vec4(COLLISION_NORMAL, COLLIDED ? COLLISION_DEPTH : -1.0); TRANSFORM[3].xyz += COLLISION_NORMAL * COLLISION_DEPTH; }";
+	const String process_code = attractor ? "void process() { CUSTOM = vec4(ATTRACTOR_FORCE, 1.0); VELOCITY += ATTRACTOR_FORCE * DELTA; }" : "void process() { VELOCITY = COLLISION_NORMAL; CUSTOM = vec4(COLLISION_NORMAL, COLLIDED ? COLLISION_DEPTH : -1.0); TRANSFORM[3].xyz += COLLISION_NORMAL * COLLISION_DEPTH; }";
 	materials->shader_set_code(legacy_shader,
 			String("shader_type particles; uniform vec3 start_position; void start() { TRANSFORM = mat4(1.0); TRANSFORM[3].xyz = start_position; VELOCITY = vec3(0.0); } ") + process_code);
 	legacy_material = materials->material_allocate();
@@ -1024,9 +1070,7 @@ Error ParticlesHeightfieldClearTestFixture::run_legacy_process(const Transform3D
 	const bool textured = legacy_neighbor_case == 2 || legacy_neighbor_case == 5;
 	if (textured) {
 		const auto &frame = particle->frame_history[0];
-		const bool frame_matches = attractor ?
-				frame.attractor_count == 1 && frame.attractors[0].type == Storage::ParticlesFrameParams::ATTRACTOR_TYPE_VECTOR_FIELD && frame.attractors[0].texture_index == 0 :
-				frame.collider_count == 1 && frame.colliders[0].type == Storage::ParticlesFrameParams::COLLISION_TYPE_SDF && frame.colliders[0].texture_index == 0;
+		const bool frame_matches = attractor ? frame.attractor_count == 1 && frame.attractors[0].type == Storage::ParticlesFrameParams::ATTRACTOR_TYPE_VECTOR_FIELD && frame.attractors[0].texture_index == 0 : frame.collider_count == 1 && frame.colliders[0].type == Storage::ParticlesFrameParams::COLLISION_TYPE_SDF && frame.colliders[0].texture_index == 0;
 		if (!frame_matches || particle->collision_3d_textures_used != 1 || particle->collision_3d_textures[0] != legacy_texture) {
 			return FAILED;
 		}
@@ -1059,7 +1103,8 @@ void ParticlesHeightfieldClearTestFixture::legacy_sample_done(const PackedByteAr
 	const bool neighbor = legacy_neighbor_case >= 0;
 	const bool attractor = legacy_neighbor_case >= 3;
 	const bool tilt = !neighbor && legacy_transform_case == 4;
-	const float expected_depth = neighbor ? (legacy_neighbor_case == 0 ? 0.25f : 0.125f) : tilt ? 0.12087344460380706f : 0.125f;
+	const float expected_depth = neighbor ? (legacy_neighbor_case == 0 ? 0.25f : 0.125f) : tilt ? 0.12087344460380706f
+																								: 0.125f;
 	const Vector3 height_expected_normals[] = { Vector3(0, 1, 0), Vector3(-1, 0, 0), Vector3(0, 1, 0), Vector3(0, 1, 0), Vector3(-0.9669875568304565f, -0.2417468892076141f, -0.08058229640253803f) };
 	const Vector3 expected_normal = neighbor ? (legacy_neighbor_case == 1 || legacy_neighbor_case == 2 ? Vector3(1, 0, 0) : Vector3(0, 1, 0)) : height_expected_normals[legacy_transform_case];
 	const Vector3 neighbor_expected_positions[] = { Vector3(0, 1.25f, 0), Vector3(1.25f, 0, 0), Vector3(0.25f, 0, 0), Vector3(1, 0, 0), Vector3(1, 0, 0), Vector3() };

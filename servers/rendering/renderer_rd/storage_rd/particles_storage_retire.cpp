@@ -63,42 +63,358 @@ Error ParticlesStorage::_external_storage_prepare_owned_prefix(GDExtensionProduc
 	return error;
 }
 
-Error ParticlesStorage::_external_pipeline_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1 context, RID particle_rid, uint32_t slot_index, uint32_t surface_index, ExternalPipelinePreparation &preparation) {
+Error ParticlesStorage::_external_pipeline_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1 context, RID particle_rid, uint32_t slot_index, uint32_t surface_index, ExternalPipelinePreparation &preparation, uint32_t max_resources) {
 	Particles *particles = particles_owner.get_or_null(particle_rid);
 	if (!particles || !particles->external) {
 		return ERR_INVALID_PARAMETER;
 	}
+	if (!max_resources) {
+		return ERR_INVALID_PARAMETER;
+	}
 	auto &owner = *particles->external;
-	if (preparation.owner != &owner || preparation.generation != owner.generation || !preparation.serial || !preparation.max_resources || preparation.source_sealed ||
-			preparation.pipeline_pin || preparation.created_pipeline.is_valid() || preparation.geometry[0].is_active() || preparation.geometry[1].is_active() || preparation.material.is_active() ||
+	if (preparation.owner != &owner || preparation.generation != owner.generation || !preparation.serial ||
 			!owner.device || owner.device != RenderingDevice::get_singleton() || slot_index >= owner.slot_count) {
 		return ERR_UNCONFIGURED;
 	}
 	auto &slot = owner.slots[slot_index];
-	if (!slot.original_registry || !slot.surfaces || surface_index >= slot.surface_count || slot.publication_closed ||
+	if (!owner.admits_work() || slot.state != ExternalOutputOwner::LeaseState::RESERVED ||
+			!slot.original_registry || !slot.surfaces || surface_index >= slot.surface_count || slot.publication_closed || slot.pass_uses_closed ||
 			!_production_output_owner_matches(GDExtensionDeviceExit::ProductionOutputOwnerKind::SLOT, particle_rid, owner.generation, slot_index, slot.lease_serial, slot.original_pin, *owner.device, slot.original_request)) {
 		return ERR_UNAUTHORIZED;
 	}
 	auto &surface = slot.surfaces[surface_index];
-	if (surface.preparation || surface.pipeline_owned_group || surface.created_pipeline.is_valid() || surface.pipeline_group_returned) {
+	if (!owner.preparation_row_matches(slot_index, surface_index, preparation)) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (surface.preparation || surface.pipeline_owned_group || surface.created_pipeline.is_valid() || surface.pipeline_group_returned ||
+			!preparation.source_sealed || preparation.max_resources || preparation.pipeline_pin || preparation.pipeline_original_root || preparation.pipeline_owned_group ||
+			preparation.pipeline_context.registry_instance || preparation.pipeline_context.frame_serial || preparation.native_cache_queried ||
+			preparation.created_pipeline.is_valid() || preparation.geometry[0].is_active() || preparation.geometry[1].is_active() || preparation.material.is_active()) {
 		return ERR_ALREADY_IN_USE;
 	}
-	// Idempotent original locator bind. This never manufactures source/charge
-	// admission: owner/row/directory must already be installed by that caller.
-	Error error = slot.original_registry->production_output_owner_bind(slot.original_pin, *owner.device, particle_rid, owner.generation, slot_index, slot.lease_serial);
+	// The real Acquire has already linked this exact row's original action
+	// owner. Do not re-run the pre-action owner_bind gate. The owned factory
+	// authenticates the current physical invocation and original RESERVING
+	// action; a later BOUND pin is not a new preparation opportunity.
+	const Error error = owner.device->_production_output_owned_reserve(context, slot.original_pin, 1, preparation.pipeline_owned_group);
 	if (error != OK) {
+		// Reserve refuses before assigning any group. The row is still closed,
+		// with no allowance or cached context, and needs no rollback grant.
 		return error;
 	}
-	error = owner.device->_production_output_owned_reserve(context, slot.original_pin, 1, surface.pipeline_owned_group);
-	if (error != OK) {
-		return error; // No pipeline allocation or geometry derivation occurred.
-	}
+	// Only a successfully retained original group can open the row. There is
+	// no failing operation between that reservation and installing its owner.
 	surface.preparation = &preparation;
+	preparation.max_resources = max_resources;
+	preparation.source_sealed = false;
 	preparation.pipeline_context = context;
 	preparation.pipeline_pin = &slot.original_pin;
-	preparation.pipeline_owned_group = surface.pipeline_owned_group;
-	preparation.pipeline_original_root = &surface.created_pipeline;
+	preparation.pipeline_original_root = &preparation.owned_pipeline_root;
 	return OK;
+}
+
+Error ParticlesStorage::_external_preparation_bank_reserve_owned_prefix(GDExtensionProductionPhysicalContextRefV1 context, RID particle_rid, uint32_t slot_index, uint32_t max_resources) {
+	Particles *particles = particles_owner.get_or_null(particle_rid);
+	if (!particles || !particles->external || !max_resources) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto &owner = *particles->external;
+	if (!owner.admits_work() || !owner.device || owner.device != RenderingDevice::get_singleton() || slot_index >= owner.slot_count) {
+		return ERR_UNCONFIGURED;
+	}
+	auto &slot = owner.slots[slot_index];
+	if (slot.state != ExternalOutputOwner::LeaseState::RESERVED || slot.publication_closed || slot.pass_uses_closed || !slot.preparation_reserved_count ||
+			!_production_output_owner_matches(GDExtensionDeviceExit::ProductionOutputOwnerKind::SLOT, particle_rid, owner.generation, slot_index, slot.lease_serial, slot.original_pin, *owner.device, slot.original_request)) {
+		return ERR_UNAUTHORIZED;
+	}
+	uint32_t claimed = 0;
+	for (uint32_t i = 0; i < owner.preparation_capacity; ++i) {
+		const auto &row = owner.preparation_rows[i];
+		if (row.owner != &owner || row.owner_slot != slot_index) {
+			continue;
+		}
+		++claimed;
+		if (!owner.preparation_bank_row_matches(slot_index, i, row) || !row.source_sealed || row.max_resources || row.pipeline_scope ||
+				row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group || row.geometry_reserved_group || row.material_reserved_group || row.bank_groups_reserved ||
+				row.owned_pipeline_root.is_valid() || row.created_pipeline.is_valid() || row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
+			return ERR_ALREADY_IN_USE;
+		}
+		if (row.owner_surface != UINT32_MAX ? !owner.preparation_row_matches(slot_index, row.owner_surface, row) : (row.source_geometry || row.source_material.is_valid() || row.source_material_generation)) {
+			return ERR_UNAUTHORIZED;
+		}
+	}
+	if (claimed != slot.preparation_reserved_count) {
+		return ERR_INVALID_DATA;
+	}
+	for (uint32_t i = 0; i < owner.preparation_capacity; ++i) {
+		auto &row = owner.preparation_rows[i];
+		if (row.owner != &owner || row.owner_slot != slot_index) {
+			continue;
+		}
+		if (!owner.preparation_bank_row_matches(slot_index, i, row) || row.pipeline_pin || row.pipeline_owned_group || row.geometry_reserved_group || row.material_reserved_group || row.bank_groups_reserved) {
+			return ERR_ALREADY_IN_USE;
+		}
+		// Install stable row custody before the first reservation. Any successful
+		// group is an original retained prefix even if a later group refuses.
+		row.pipeline_pin = &slot.original_pin;
+		row.pipeline_original_root = &row.owned_pipeline_root;
+		row.max_resources = max_resources;
+		if (row.owner_surface != UINT32_MAX) {
+			slot.surfaces[row.owner_surface].preparation = &row;
+		}
+		Error error = owner.device->_production_output_owned_reserve(context, slot.original_pin, 1, row.pipeline_owned_group);
+		if (error == OK) {
+			error = owner.device->_production_output_owned_reserve(context, slot.original_pin, max_resources, row.geometry_reserved_group);
+		}
+		if (error == OK) {
+			error = owner.device->_production_output_owned_reserve(context, slot.original_pin, max_resources, row.material_reserved_group);
+		}
+		if (error != OK) {
+			return error;
+		}
+		row.bank_groups_reserved = true;
+	}
+	return OK;
+}
+
+Error ParticlesStorage::_external_pipeline_reserve_owned_prefix(GDExtensionProductionPhysicalContextRefV1 context, RID particle_rid, uint32_t slot_index, uint32_t surface_index, ExternalPipelinePreparation &preparation, uint32_t max_resources) {
+	Particles *particles = particles_owner.get_or_null(particle_rid);
+	if (!particles || !particles->external) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (!max_resources) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto &owner = *particles->external;
+	if (preparation.owner != &owner || preparation.generation != owner.generation || !preparation.serial ||
+			!owner.device || owner.device != RenderingDevice::get_singleton() || slot_index >= owner.slot_count) {
+		return ERR_UNCONFIGURED;
+	}
+	auto &slot = owner.slots[slot_index];
+	if (!owner.admits_work() || slot.state != ExternalOutputOwner::LeaseState::RESERVED ||
+			!slot.original_registry || !slot.surfaces || surface_index >= slot.surface_count || slot.publication_closed || slot.pass_uses_closed ||
+			!_production_output_owner_matches(GDExtensionDeviceExit::ProductionOutputOwnerKind::SLOT, particle_rid, owner.generation, slot_index, slot.lease_serial, slot.original_pin, *owner.device, slot.original_request)) {
+		return ERR_UNAUTHORIZED;
+	}
+	auto &surface = slot.surfaces[surface_index];
+	if (!owner.preparation_row_matches(slot_index, surface_index, preparation)) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (surface.preparation || surface.pipeline_owned_group || surface.created_pipeline.is_valid() || surface.pipeline_group_returned ||
+			!preparation.source_sealed || preparation.max_resources || preparation.pipeline_pin || preparation.pipeline_original_root || preparation.pipeline_owned_group ||
+			preparation.pipeline_context.registry_instance || preparation.pipeline_context.frame_serial || preparation.native_cache_queried ||
+			preparation.created_pipeline.is_valid() || preparation.geometry[0].is_active() || preparation.geometry[1].is_active() || preparation.material.is_active()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	// The real Acquire has already linked this exact row's original action
+	// owner. Do not re-run the pre-action owner_bind gate. The owned factory
+	// authenticates the current physical invocation and original RESERVING
+	// action; a later BOUND pin is not a new preparation opportunity.
+	const Error error = owner.device->_production_output_owned_reserve(context, slot.original_pin, 1, preparation.pipeline_owned_group);
+	if (error != OK) {
+		// Reserve refuses before assigning any group. The row is still closed,
+		// with no allowance or cached context, and needs no rollback grant.
+		return error;
+	}
+	// Retain custody while the original action is RESERVING. Native preparation
+	// later authenticates this closed row through its private continuation scope.
+	surface.preparation = &preparation;
+	preparation.max_resources = max_resources;
+	preparation.source_sealed = true;
+	// The original physical context expires on receiver return; retain no copy.
+	preparation.pipeline_pin = &slot.original_pin;
+	preparation.pipeline_original_root = &preparation.owned_pipeline_root;
+	return OK;
+}
+
+Error ParticlesStorage::_production_output_preparation_prepare_finish_row(ExternalPipelinePreparation &row) {
+	if (!row.owner || !row.max_resources) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (row.finish_complete || row.geometry_adopted) {
+		return OK;
+	}
+	for (auto &geometry : row.geometry) {
+		if (geometry.is_active()) {
+			const Error prepared = MeshStorage::_native_hold_prepare_tuple_directory(geometry, row.max_resources);
+			if (prepared != OK) {
+				return prepared;
+			}
+		}
+	}
+	return OK;
+}
+
+Error ParticlesStorage::_production_output_preparation_finish_locked(GDExtensionDeviceExit::ProductionOutputPreparationScope &scope, RenderingDevice &device, GDExtensionDeviceExit::ProductionRequest &request) {
+	if (!scope.registry || !scope.row || scope.device != &device) {
+		return ERR_UNAUTHORIZED;
+	}
+	GDExtensionDeviceExit::ProductionRequest *authenticated = nullptr;
+	const Error proof = scope.registry->production_output_preparation_cleanup_matches_locked(scope, device, authenticated);
+	if (proof != OK || authenticated != &request) {
+		return proof != OK ? proof : ERR_UNAUTHORIZED;
+	}
+	return _production_output_preparation_finish_row_locked(*scope.row, device, request, scope.root_serial);
+}
+
+Error ParticlesStorage::_production_output_preparation_finish_row_locked(ExternalPipelinePreparation &row, RenderingDevice &device, GDExtensionDeviceExit::ProductionRequest &request, uint64_t pin_serial) {
+	// Caller owns original Registry lock and either exact retained scope cleanup
+	// proof or the authenticated original OBSERVE owner/budget. No NewWork grant.
+	if (!row.owner || row.owner_slot >= row.owner->slot_count || !pin_serial || row.pipeline_pin != &row.owner->slots[row.owner_slot].original_pin ||
+			row.pipeline_original_root != &row.owned_pipeline_root || !row.pipeline_owned_group || !row.max_resources) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (row.finish_complete) {
+		return OK;
+	}
+	if (!device._thread_safe_.try_lock()) {
+		return ERR_BUSY;
+	}
+	struct Unlock {
+		Mutex &mutex;
+		~Unlock() { mutex.unlock(); }
+	} unlock{ device._thread_safe_ };
+	RD::NativeImmutableHold *geometry[2];
+	uint32_t geometry_count = 0;
+	RD::NativeImmutableHold *material[1];
+	uint32_t material_count = 0;
+	if (!row.geometry_adopted) {
+		for (uint32_t i = 0; i < 2; ++i) {
+			if (row.geometry[i].is_active()) {
+				auto *physical = MeshStorage::_native_hold_tuple_transfer_source(row.geometry[i]);
+				if (!physical) {
+					return ERR_BUSY;
+				}
+				geometry[geometry_count++] = physical;
+			}
+		}
+	}
+	if (!row.material_adopted && row.material.is_active()) {
+		auto *physical = MaterialStorage::_native_hold_transfer_source(row.material);
+		if (!physical) {
+			return ERR_BUSY;
+		}
+		material[material_count++] = physical;
+	}
+	uint32_t count = 0;
+	// Inventory both complete batches before moving even one physical counter.
+	// Each dry inventory restores all its original DISPOSAL_RESERVED cells.
+	if (!row.geometry_adopted) {
+		const Error inventory = device._production_output_hold_inventory_locked(request, row.geometry_reserved_group, VectorView<RD::NativeImmutableHold *>(geometry, geometry_count), row.max_resources, count);
+		if (inventory != OK) {
+			return inventory;
+		}
+	}
+	if (!row.material_adopted) {
+		const Error inventory = device._production_output_hold_inventory_locked(request, row.material_reserved_group, VectorView<RD::NativeImmutableHold *>(material, material_count), row.max_resources, count);
+		if (inventory != OK) {
+			return inventory;
+		}
+	}
+	if (!row.geometry_adopted) {
+		uint64_t adopted = 0;
+		const Error moved = device._production_output_hold_adopt_locked(request, pin_serial, row.geometry_reserved_group, VectorView<RD::NativeImmutableHold *>(geometry, geometry_count), row.max_resources, adopted);
+		if (moved != OK) {
+			return moved;
+		}
+		row.geometry_adopted = true;
+	}
+	if (!row.material_adopted) {
+		uint64_t adopted = 0;
+		const Error moved = device._production_output_hold_adopt_locked(request, pin_serial, row.material_reserved_group, VectorView<RD::NativeImmutableHold *>(material, material_count), row.max_resources, adopted);
+		if (moved != OK) {
+			return moved;
+		}
+		row.material_adopted = true;
+	}
+	for (uint32_t i = 0; i < 2; ++i) {
+		if (row.geometry[i].is_active() && !row.geometry_transferred[i]) {
+			const Error captured = MeshStorage::_native_hold_capture_tuple_directory(*row.pipeline_pin, row.geometry_reserved_group, row.geometry[i]);
+			if (captured != OK) {
+				return captured;
+			}
+			const Error marked = MeshStorage::_native_hold_mark_transferred(row.geometry[i]);
+			if (marked != OK) {
+				return marked;
+			}
+			row.geometry_transferred[i] = true;
+		}
+	}
+	if (row.material.is_active() && !row.material_transferred) {
+		const Error marked = MaterialStorage::_native_hold_mark_transferred(row.material);
+		if (marked != OK) {
+			return marked;
+		}
+		row.material_transferred = true;
+	}
+	if (!row.pipeline_sealed) {
+		if (row.owned_pipeline_root.is_valid()) {
+			const Error sealed = device._production_output_owned_seal_locked(request, pin_serial, row.pipeline_owned_group);
+			if (sealed != OK) {
+				return sealed;
+			}
+		}
+		row.pipeline_sealed = true;
+	}
+	row.finish_complete = true;
+	row.finish_error = OK;
+	if (row.tuple_state != ExternalPipelinePreparation::TupleState::UNSELECTED) {
+		row.tuple_state = row.backend_error == OK && row.owned_pipeline_root.is_valid() ? ExternalPipelinePreparation::TupleState::READY : ExternalPipelinePreparation::TupleState::FAILED;
+	}
+	return OK;
+}
+
+bool ParticlesStorage::_production_output_preparation_matches(RID particle_rid, uint64_t generation, uint32_t slot_index, uint64_t lease_serial, uint32_t surface_index, uint64_t group, const GDExtensionDeviceExit::ProductionOutputPin &pin, RenderingDevice &device, RID *&r_root, ExternalPipelinePreparation *&r_row, const GDExtensionDeviceExit::ProductionOutputPreparationScope *scope, bool cleanup, uint32_t preparation_index) {
+	ParticlesStorage *storage = get_singleton();
+	if (!storage || !device.native_immutable_is_render_thread()) {
+		return false;
+	}
+	auto *particles = storage->particles_owner.get_or_null(particle_rid);
+	if (!particles || !particles->external) {
+		return false;
+	}
+	auto &owner = *particles->external;
+	if ((!cleanup && !owner.admits_work()) || owner.device != &device || owner.generation != generation || slot_index >= owner.slot_count) {
+		return false;
+	}
+	auto &slot = owner.slots[slot_index];
+	if (slot.lease_serial != lease_serial || &slot.original_pin != &pin || !slot.surfaces || surface_index >= slot.surface_count ||
+			slot.state == ExternalOutputOwner::LeaseState::RELEASED || (!cleanup && (slot.pass_uses_closed || slot.state == ExternalOutputOwner::LeaseState::RETIRING))) {
+		return false;
+	}
+	ExternalPipelinePreparation *row = nullptr;
+	if (preparation_index == UINT32_MAX) {
+		auto &surface = slot.surfaces[surface_index];
+		row = surface.preparation_row;
+		if (!row || surface.preparation != row || !owner.preparation_row_matches(slot_index, surface_index, *row) ||
+				(row->tuple_state != ExternalPipelinePreparation::TupleState::UNSELECTED && row->tuple_surface != surface_index)) {
+			return false;
+		}
+	} else {
+		if (!owner.preparation_rows || preparation_index >= owner.preparation_capacity) {
+			return false;
+		}
+		row = &owner.preparation_rows[preparation_index];
+		if (!owner.preparation_bank_row_matches(slot_index, preparation_index, *row) || !owner.preparation_source_matches(*row) ||
+				(row->tuple_state != ExternalPipelinePreparation::TupleState::UNSELECTED ? row->tuple_surface != surface_index : row->owner_surface != surface_index)) {
+			return false;
+		}
+	}
+	if (!group || row->pipeline_owned_group != group || row->pipeline_pin != &pin || row->pipeline_original_root != &row->owned_pipeline_root ||
+			!row->max_resources || row->pipeline_scope != scope || (!scope ? !row->source_sealed : (!cleanup && row->source_sealed)) ||
+			row->pipeline_context.registry_instance || row->pipeline_context.frame_serial) {
+		return false;
+	}
+	if (!cleanup) {
+		const bool packet = slot.state == ExternalOutputOwner::LeaseState::SEALED_RECORDED || slot.state == ExternalOutputOwner::LeaseState::ADOPTED;
+		const bool legacy = (slot.state == ExternalOutputOwner::LeaseState::RESERVED || slot.state == ExternalOutputOwner::LeaseState::WRITING) && !slot.publication_closed;
+		if (!packet && !legacy) {
+			return false;
+		}
+	}
+	r_root = row->pipeline_original_root;
+	r_row = row;
+	return true;
 }
 
 bool ParticlesStorage::_production_output_owner_matches(GDExtensionDeviceExit::ProductionOutputOwnerKind kind, RID particle_rid, uint64_t generation, uint32_t slot, uint64_t lease_serial, const GDExtensionDeviceExit::ProductionOutputPin &pin, RenderingDevice &device, GDExtensionProductionRequestRefV1 request) {
@@ -132,7 +448,7 @@ Error ParticlesStorage::_production_output_generation_ready(RID particles, uint6
 		return ERR_UNAUTHORIZED;
 	}
 	const auto &owner = *get_singleton()->particles_owner.get_or_null(particles)->external;
-	if (owner.surface_cells || owner.view_cells || owner.read_cells || owner.generation_meshes || owner.generation_materials || owner.has_generation_selection_custody() || owner.surface_capacity || owner.view_capacity || owner.read_capacity) {
+	if (owner.surface_cells || owner.view_cells || owner.read_cells || owner.generation_meshes || owner.generation_materials || owner.preparation_rows || owner.preparation_capacity || owner.has_generation_selection_custody() || owner.surface_capacity || owner.view_capacity || owner.read_capacity) {
 		return ERR_BUSY;
 	}
 	return owner.generation_returnable(unused, returned);
@@ -152,6 +468,9 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 	auto &owner = *particles->external;
 	if (owner.generation != p_generation || !owner.device) {
 		return ERR_INVALID_PARAMETER;
+	}
+	if (owner.has_inflight_preparation()) {
+		return ERR_BUSY;
 	}
 	if (p_kind == GDExtensionDeviceExit::ProductionOutputOwnerKind::GENERATION) {
 		if (p_slot != UINT32_MAX || p_lease_serial || !owner.generation_root_matches(p_pin) ||
@@ -174,7 +493,18 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 					r_usage.receipts >= MIN(p_budget.receipts, 128u) || !p_budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= p_budget.deadline_micros) {
 				return ERR_BUSY;
 			}
-			if (owner.retained_material_count) {
+			if (owner.retained_surface_count) {
+				// These source-only holds have never been recorded or transferred.
+				// Per-entry derived holds retain all actual later native uses.
+				auto &row = owner.generation_materials[owner.retained_surface_count - 1];
+				error = MeshStorage::mesh_surface_hold_release(row.geometry_source);
+				if (error != OK) {
+					return error;
+				}
+				row.mesh = RID();
+				row.native_surface = UINT32_MAX;
+				--owner.retained_surface_count;
+			} else if (owner.retained_material_count) {
 				auto *materials = MaterialStorage::get_singleton();
 				if (!materials) {
 					return ERR_UNAVAILABLE;
@@ -199,7 +529,7 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			r_usage.controls = 1;
 			return OK;
 		}
-		if (owner.surface_cells || owner.view_cells || owner.read_cells || owner.generation_meshes || owner.generation_materials) {
+		if (owner.surface_cells || owner.view_cells || owner.read_cells || owner.generation_meshes || owner.generation_materials || owner.preparation_rows) {
 			// Directory destruction is its own charged phase. A one-pass turn
 			// retains the generation root and terminal result until a later turn.
 			if (r_usage.passes >= MIN(p_budget.passes, 64u) || r_usage.receipts >= MIN(p_budget.receipts, 128u) ||
@@ -270,6 +600,123 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			owner.views[i].history_slot = UINT32_MAX;
 			return OK;
 		}
+	}
+	if (slot.preparation_reserved_count) {
+		while (slot.retire_preparation_index < owner.preparation_capacity) {
+			auto &row = owner.preparation_rows[slot.retire_preparation_index];
+			if (row.owner == &owner && row.owner_slot == p_slot) {
+				break;
+			}
+			++slot.retire_preparation_index;
+		}
+		if (slot.retire_preparation_index >= owner.preparation_capacity) {
+			return ERR_INVALID_DATA;
+		}
+		auto &row = owner.preparation_rows[slot.retire_preparation_index];
+		if (!owner.preparation_bank_row_matches(p_slot, slot.retire_preparation_index, row) || row.pipeline_scope || !row.source_sealed) {
+			return ERR_INVALID_DATA;
+		}
+		// Retry retained mandatory capture before groups or wrappers can return.
+		if (!row.finish_complete && (row.tuple_state != ExternalPipelinePreparation::TupleState::UNSELECTED || row.owned_pipeline_root.is_valid() || row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active())) {
+			auto *original = owner.preparation_request(p_slot);
+			if (!original || !spend()) {
+				return ERR_BUSY;
+			}
+			row.finish_error = _production_output_preparation_prepare_finish_row(row);
+			if (row.finish_error != OK) {
+				return row.finish_error;
+			}
+			GDExtensionDeviceExit::Registry::Lock lock(*slot.original_registry);
+			row.finish_error = _production_output_preparation_finish_row_locked(row, *owner.device, *original, owner.preparation_pin_serial(p_slot));
+			return row.finish_error;
+		}
+		if (row.pipeline_owned_group) {
+			const uint32_t before = r_usage.passes;
+			error = owner.device->_production_output_retire_service(p_pin, row.pipeline_owned_group, p_budget, r_usage, observation);
+			if (error == OK) {
+				row.pipeline_owned_group = 0;
+				row.owned_pipeline_root = RID();
+				row.created_pipeline = RID();
+				return OK;
+			}
+			if (error != ERR_BUSY || r_usage.passes != before) {
+				return error;
+			}
+			// A waiting owned pipeline allows its original borrowed groups to
+			// progress below without a second budget or a hidden owner sweep.
+		}
+
+		// Detached directory owners must mark their complete original roots (or
+		// return their shared metadata share) before the common G group releases.
+		for (auto &geometry : row.geometry) {
+			if (geometry.is_active()) {
+				error = MeshStorage::_native_hold_prepare_tuple_directory_return(p_pin, geometry, p_budget, r_usage);
+				if (error != OK) {
+					return error;
+				}
+			}
+		}
+		for (uint64_t *group : { &row.geometry_reserved_group, &row.material_reserved_group }) {
+			if (*group) {
+				error = owner.device->_production_output_retire_service(p_pin, *group, p_budget, r_usage, observation);
+				if (error == OK) {
+					*group = 0;
+				}
+				return error;
+			}
+		}
+		for (uint32_t i = 0; i < 2; ++i) {
+			if (row.geometry[i].is_active()) {
+				if (!row.geometry_adopted || !row.geometry_transferred[i]) {
+					return ERR_BUSY;
+				}
+				if (!row.geometry_metadata_returned[i] && row.geometry[i].has_retirement_directory()) {
+					// The original directory service charges its own bounded pass.
+					return MeshStorage::_native_hold_return_directory(p_pin, row.geometry[i], p_budget, r_usage);
+				}
+				if (!spend()) {
+					return ERR_BUSY;
+				}
+				if (!row.geometry_metadata_returned[i]) {
+					error = MeshStorage::_native_hold_begin_return(row.geometry[i]);
+					if (error == OK) {
+						row.geometry_metadata_returned[i] = true;
+					}
+					return error;
+				}
+				return MeshStorage::_native_hold_finish_return(row.geometry[i]);
+			}
+		}
+		if (row.material.is_active()) {
+			if (!row.material_adopted || !row.material_transferred || !spend()) {
+				return ERR_BUSY;
+			}
+			if (!row.material_metadata_returned) {
+				error = MaterialStorage::_native_hold_begin_return(row.material);
+				if (error == OK) {
+					row.material_metadata_returned = true;
+				}
+				return error;
+			}
+			return MaterialStorage::_native_hold_finish_return(row.material);
+		}
+		if (row.pipeline_owned_group || !spend()) {
+			return ERR_BUSY;
+		}
+		if (row.owned_pipeline_root.is_valid()) {
+			return ERR_INVALID_DATA;
+		}
+		row.pipeline_pin = nullptr;
+		row.pipeline_original_root = nullptr;
+		row.created_pipeline = RID();
+		if (row.owner_surface != UINT32_MAX) {
+			slot.surfaces[row.owner_surface].preparation = nullptr;
+		}
+		error = owner.return_preparation_bank_row(p_slot, slot.retire_preparation_index);
+		if (error == OK) {
+			++slot.retire_preparation_index;
+		}
+		return error;
 	}
 	if (slot.retire_surface < slot.surface_count) {
 		if (!slot.surfaces) {
@@ -410,6 +857,10 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			row.created_pipeline = RID();
 			row.source_sealed = true;
 			surface.preparation = nullptr;
+		}
+		error = owner.return_preparation_row(p_slot, slot.retire_surface);
+		if (error != OK) {
+			return error;
 		}
 		++slot.retire_surface;
 		return OK;

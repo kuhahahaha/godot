@@ -360,7 +360,7 @@ Error Registry::scene_phase_install_relay(const Callable &callable, GDExtensionS
 		return ERR_UNAVAILABLE;
 	}
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		if (!scene_phase_holder_matches_locked(custom->cleanup, custom->owner, {}, true)) {
 			return ERR_UNAUTHORIZED;
 		}
@@ -387,7 +387,7 @@ Error Registry::scene_phase_install_relay(const Callable &callable, GDExtensionS
 	// typed leaf once, under that same original Callable holder, before use.
 	const Error error = register_normal_relay(callable, token);
 	if (error == OK) {
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		custom->scene_phase_receiver = receiver;
 		custom->scene_phase_relay = token;
 	}
@@ -413,11 +413,11 @@ bool scene_phase_callable_metadata(const Callable &callable, NormalRelayToken to
 	return true;
 }
 
-Error Registry::scene_phase_call_relay(NormalRelayToken token, const GDExtensionNativeScenePhaseV1 &phase, GDExtensionProductionRequestRefV1 request, const GDExtensionProductionOperationV1 &operation) {
+Error Registry::scene_phase_call_relay(NormalRelayToken token, const GDExtensionNativeScenePhaseV1 &p_phase, GDExtensionProductionRequestRefV1 request, const GDExtensionProductionOperationV1 &operation) {
 	NormalRelay *relay = nullptr;
 	CallableCustomExtension *custom = nullptr;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		relay = find_normal_relay_locked(token);
 		if (!relay || relay->cancelled || relay->release_requested || relay->releasing || relay->callback.is_null()) {
 			return ERR_UNAVAILABLE;
@@ -432,9 +432,9 @@ Error Registry::scene_phase_call_relay(NormalRelayToken token, const GDExtension
 	}
 	// Original record receiver already owns CallbackScope and physical frame.
 	// Do not enter a nested scope: that would invalidate the borrowed context.
-	custom->scene_phase_receiver(custom->userdata, &phase, request, &operation);
+	custom->scene_phase_receiver(custom->userdata, &p_phase, request, &operation);
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		--relay->active_deliveries;
 	}
 	return OK;

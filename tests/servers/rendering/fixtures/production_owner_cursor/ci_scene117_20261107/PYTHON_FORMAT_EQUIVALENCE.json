@@ -1,0 +1,26 @@
+[
+  {
+    "file": "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_legacy_native.py",
+    "standard_library_imports_and_executable_ast_equal": true,
+    "before_sha256": "5a5e7b4098a07352b2ccc4e66c3e2430f58c8917b451af7bd4be963f5759c1a5",
+    "after_sha256": "f6280b8de039ad826da2e310b784da48decf6d23455dd7708edbba917a18aeb2"
+  },
+  {
+    "file": "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_legacy_neighbors.py",
+    "standard_library_imports_and_executable_ast_equal": true,
+    "before_sha256": "7c4e381d1cc2e6ec2cb0607d38271f11a51d40d221b5ebd9b96f926db09534b1",
+    "after_sha256": "f03b801d07a516352c327dbbfac4bba880bc9549f1cd05c28fc63e34a45368df"
+  },
+  {
+    "file": "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_native.py",
+    "standard_library_imports_and_executable_ast_equal": true,
+    "before_sha256": "21b3f8aef544ee83957308242ae3e27995cbb0129698618cf1e9bf373cdccef9",
+    "after_sha256": "f1cede97e918c7ba7f5d5727be9549c1dfef7aa46dc3a6b113d72711403fc987"
+  },
+  {
+    "file": "tests/servers/rendering/fixtures/particle_scene_viewport_invariance_native/run_native.py",
+    "standard_library_imports_and_executable_ast_equal": true,
+    "before_sha256": "38e4341422b658521665a2a008db22c4d2db6ddf1263597677485b92966788d2",
+    "after_sha256": "13dfd6384007471250dee84bf813a58b85b983f68bb4bc00664fda51794e593d"
+  }
+]

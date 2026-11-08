@@ -1,0 +1,1697 @@
+{
+  "scope": "existing fixed main-Metal native particle retry/readback/physical-return fixture only",
+  "entry_negative_only": false,
+  "gpu_pass": true,
+  "holder_qualified": false,
+  "ange_product_qualified": false,
+  "whole_output_released": false,
+  "command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/particle-native-current-20261107-r1/editor.arm64",
+    "--render-thread",
+    "safe",
+    "--path",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_runtime_native",
+    "--script",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_runtime_native/probe.gd",
+    "--rendering-driver",
+    "metal",
+    "--rendering-method",
+    "mobile",
+    "--resolution",
+    "64x64",
+    "--fixed-fps",
+    "64",
+    "--audio-driver",
+    "Dummy"
+  ],
+  "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+  "returncode": 0,
+  "timeout_seconds": 90,
+  "host": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/particle-native-current-20261107-r1/editor.arm64",
+  "host_sha256": "2268e5108732f5295dc174743a1f5e92177725df652ef3b6279ef645632f9efb",
+  "metadata_sha256": "07a1bb8dc2513b3172ffad9602541e245d481ab04f07f196bfd27e5422239a1d",
+  "source_manifest_is_not_build_provenance": true,
+  "sources": {
+    "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp": {
+      "bytes": 175419,
+      "sha256": "dacff88b1191df52b78bd1b277784df0a64e38601cb44c099e3fc236dc89946e"
+    },
+    "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h": {
+      "bytes": 32341,
+      "sha256": "f3da73b3d265e0a5e9afddc8c7d8b1600e8625ff9e68df2a2f8608204e629db8"
+    },
+    "modules/particles_runtime_tests/particles_runtime_test_fixture.h": {
+      "bytes": 4011,
+      "sha256": "b1b310c26866fc54f1d2ca1bd15ebdf60d17e9812b899aaf363ace36195da288"
+    },
+    "modules/particles_runtime_tests/particles_runtime_test_fixture.cpp": {
+      "bytes": 31878,
+      "sha256": "7d10de49c9dcbcb00ac21255cebcf29b7bdb1171ebd49fadae1e77c74fa41143"
+    },
+    "modules/particles_runtime_tests/config.py": {
+      "bytes": 148,
+      "sha256": "8a6606d2863710e709e0c5d2f22089b9b695df1817c7c6d414832d4c3d80581c"
+    },
+    "modules/particles_runtime_tests/register_types.cpp": {
+      "bytes": 3104,
+      "sha256": "7b0f1acabe6a532934ae28ca995427b0ad34eca1c10107ee280a8340ed104d46"
+    },
+    "servers/rendering/render_capture_test_tracking.h": {
+      "bytes": 4898,
+      "sha256": "817d6fc75974440992b45782e53f8011c061e72ba1fdeeabfc8c0b95bd9d1df9"
+    },
+    "servers/rendering/rendering_device.h": {
+      "bytes": 128152,
+      "sha256": "3d4bbb6fda5ac84098e68b09811b025dbec3b2d84879f31a1a319cc4243d8ddd"
+    },
+    "servers/rendering/rendering_device.cpp": {
+      "bytes": 713460,
+      "sha256": "0ea72823cbc39ffa242d5fc8d5ebb66a1a895811fe9f5623218ffb922031a91a"
+    },
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.h": {
+      "bytes": 32922,
+      "sha256": "d12811f2d6b092479c3cdd0426067e0a33f013a187229c7151edcda5aa9e5b4b"
+    },
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp": {
+      "bytes": 126346,
+      "sha256": "d0bcdbf86b1cf9440a5ad44542fc8257517628786baeff0150b24f94609d7050"
+    },
+    "tests/servers/rendering/fixtures/particle_runtime_native/probe.gd": {
+      "bytes": 2267,
+      "sha256": "b5a4b8117d4031d7f238c980a7a872aaf11e09474383de84ec349a9abeebfc01"
+    },
+    "tests/servers/rendering/fixtures/particle_runtime_native/project.godot": {
+      "bytes": 252,
+      "sha256": "c8166bed1159461cc2fb0bcbe823f579a6b7e738c9ea544f41c6e723b013826e"
+    },
+    "tests/servers/rendering/fixtures/particle_runtime_native/run_native.py": {
+      "bytes": 17937,
+      "sha256": "a0279c20af29828006661bc5ada812889df8429b841b34f0a50f9a2ef4319905"
+    },
+    "tests/servers/rendering/fixtures/particle_runtime_native/README.md": {
+      "bytes": 8368,
+      "sha256": "9e82d5680cc20940c550586d31eb34886bc157f4433d0fb8e2017cc3cce31ed3"
+    }
+  },
+  "engine_diagnostics": {
+    "Failed to reset particle sub-emitter buffer.": 2,
+    "Failed to update particle emission buffer.": 2,
+    "Failed to update particle frame parameters buffer.": 8,
+    "Failed to create particle fallback trail buffer.": 1
+  },
+  "result": {
+    "advance_error": 0,
+    "allocation_count": 31,
+    "checks": [
+      {
+        "check": "shared native observation coverage intact at begin",
+        "ok": true
+      },
+      {
+        "check": "original retry fixture allocation",
+        "ok": true
+      },
+      {
+        "check": "particle GPU witness sentinel upload",
+        "ok": true
+      },
+      {
+        "check": "exact upload boundary rejects simulation",
+        "ok": true
+      },
+      {
+        "check": "exact original buffer_update failure hit",
+        "ok": true
+      },
+      {
+        "check": "failed upload records no simulation dispatch",
+        "ok": true
+      },
+      {
+        "check": "failed upload retains pending particle state",
+        "ok": true
+      },
+      {
+        "check": "failed upload retains original subemitter state",
+        "ok": true
+      },
+      {
+        "check": "exact upload boundary rejects simulation",
+        "ok": true
+      },
+      {
+        "check": "exact original buffer_update failure hit",
+        "ok": true
+      },
+      {
+        "check": "failed upload records no simulation dispatch",
+        "ok": true
+      },
+      {
+        "check": "failed upload retains pending particle state",
+        "ok": true
+      },
+      {
+        "check": "failed upload retains original subemitter state",
+        "ok": true
+      },
+      {
+        "check": "same original request succeeds after fault removal",
+        "ok": true
+      },
+      {
+        "check": "retry records one original particle dispatch",
+        "ok": true
+      },
+      {
+        "check": "retry consumes original pending state once",
+        "ok": true
+      },
+      {
+        "check": "retry commits original subemitter transition",
+        "ok": true
+      },
+      {
+        "check": "exact upload boundary rejects simulation",
+        "ok": true
+      },
+      {
+        "check": "exact original buffer_update failure hit",
+        "ok": true
+      },
+      {
+        "check": "failed upload records no simulation dispatch",
+        "ok": true
+      },
+      {
+        "check": "failed upload retains pending particle state",
+        "ok": true
+      },
+      {
+        "check": "failed upload retains original subemitter state",
+        "ok": true
+      },
+      {
+        "check": "exact upload boundary rejects simulation",
+        "ok": true
+      },
+      {
+        "check": "exact original buffer_update failure hit",
+        "ok": true
+      },
+      {
+        "check": "failed upload records no simulation dispatch",
+        "ok": true
+      },
+      {
+        "check": "failed upload retains pending particle state",
+        "ok": true
+      },
+      {
+        "check": "failed upload retains original subemitter state",
+        "ok": true
+      },
+      {
+        "check": "same original request succeeds after fault removal",
+        "ok": true
+      },
+      {
+        "check": "retry records one original particle dispatch",
+        "ok": true
+      },
+      {
+        "check": "retry consumes original pending state once",
+        "ok": true
+      },
+      {
+        "check": "retry commits original subemitter transition",
+        "ok": true
+      },
+      {
+        "check": "exact upload boundary rejects simulation",
+        "ok": true
+      },
+      {
+        "check": "exact original buffer_update failure hit",
+        "ok": true
+      },
+      {
+        "check": "failed upload records no simulation dispatch",
+        "ok": true
+      },
+      {
+        "check": "failed upload retains pending particle state",
+        "ok": true
+      },
+      {
+        "check": "failed upload retains original subemitter state",
+        "ok": true
+      },
+      {
+        "check": "exact upload boundary rejects simulation",
+        "ok": true
+      },
+      {
+        "check": "exact original buffer_update failure hit",
+        "ok": true
+      },
+      {
+        "check": "failed upload records no simulation dispatch",
+        "ok": true
+      },
+      {
+        "check": "failed upload retains pending particle state",
+        "ok": true
+      },
+      {
+        "check": "failed upload retains original subemitter state",
+        "ok": true
+      },
+      {
+        "check": "same original request succeeds after fault removal",
+        "ok": true
+      },
+      {
+        "check": "retry records one original particle dispatch",
+        "ok": true
+      },
+      {
+        "check": "retry consumes original pending state once",
+        "ok": true
+      },
+      {
+        "check": "retry commits original subemitter transition",
+        "ok": true
+      },
+      {
+        "check": "production particle async readback queued",
+        "ok": true
+      },
+      {
+        "check": "progress fixture original buffers",
+        "ok": true
+      },
+      {
+        "check": "progress failure follows one successful original step",
+        "ok": true
+      },
+      {
+        "check": "failed original work remains queued",
+        "ok": true
+      },
+      {
+        "check": "only successful prefix decrements original retained progress",
+        "ok": true
+      },
+      {
+        "check": "failed progress restores original speed scale",
+        "ok": true
+      },
+      {
+        "check": "preprocess ownership survives partial failure",
+        "ok": true
+      },
+      {
+        "check": "original retry queue drains after recovery",
+        "ok": true
+      },
+      {
+        "check": "retry consumes retained suffix without replay or duplicate frame delta",
+        "ok": true
+      },
+      {
+        "check": "successful progress restores original speed scale",
+        "ok": true
+      },
+      {
+        "check": "manual progress closes only after original success",
+        "ok": true
+      },
+      {
+        "check": "retained progress async readback queued",
+        "ok": true
+      },
+      {
+        "check": "progress fixture original buffers",
+        "ok": true
+      },
+      {
+        "check": "progress failure follows one successful original step",
+        "ok": true
+      },
+      {
+        "check": "failed original work remains queued",
+        "ok": true
+      },
+      {
+        "check": "only successful prefix decrements original retained progress",
+        "ok": true
+      },
+      {
+        "check": "failed progress restores original speed scale",
+        "ok": true
+      },
+      {
+        "check": "original retry queue drains after recovery",
+        "ok": true
+      },
+      {
+        "check": "retry consumes retained suffix without replay or duplicate frame delta",
+        "ok": true
+      },
+      {
+        "check": "successful progress restores original speed scale",
+        "ok": true
+      },
+      {
+        "check": "manual progress closes only after original success",
+        "ok": true
+      },
+      {
+        "check": "retained progress async readback queued",
+        "ok": true
+      },
+      {
+        "check": "progress fixture original buffers",
+        "ok": true
+      },
+      {
+        "check": "progress failure follows one successful original step",
+        "ok": true
+      },
+      {
+        "check": "failed original work remains queued",
+        "ok": true
+      },
+      {
+        "check": "only successful prefix decrements original retained progress",
+        "ok": true
+      },
+      {
+        "check": "failed residual suffix restores original emitting state",
+        "ok": true
+      },
+      {
+        "check": "failed progress restores original speed scale",
+        "ok": true
+      },
+      {
+        "check": "original retry queue drains after recovery",
+        "ok": true
+      },
+      {
+        "check": "retry consumes retained suffix without replay or duplicate frame delta",
+        "ok": true
+      },
+      {
+        "check": "successful residual suffix closes emission",
+        "ok": true
+      },
+      {
+        "check": "successful progress restores original speed scale",
+        "ok": true
+      },
+      {
+        "check": "manual progress closes only after original success",
+        "ok": true
+      },
+      {
+        "check": "retained progress async readback queued",
+        "ok": true
+      },
+      {
+        "check": "progress fixture original buffers",
+        "ok": true
+      },
+      {
+        "check": "fixed-step witness includes a nonzero fractional suffix",
+        "ok": true
+      },
+      {
+        "check": "progress failure follows one successful original step",
+        "ok": true
+      },
+      {
+        "check": "failed original work remains queued",
+        "ok": true
+      },
+      {
+        "check": "only successful prefix decrements original retained progress",
+        "ok": true
+      },
+      {
+        "check": "failed progress restores original speed scale",
+        "ok": true
+      },
+      {
+        "check": "frame delta committed to original frame",
+        "ok": true
+      },
+      {
+        "check": "original retry queue drains after recovery",
+        "ok": true
+      },
+      {
+        "check": "retry consumes retained suffix without replay or duplicate frame delta",
+        "ok": true
+      },
+      {
+        "check": "retry preserves exact nonzero fractional frame remainder",
+        "ok": true
+      },
+      {
+        "check": "successful progress restores original speed scale",
+        "ok": true
+      },
+      {
+        "check": "manual progress closes only after original success",
+        "ok": true
+      },
+      {
+        "check": "retained progress async readback queued",
+        "ok": true
+      },
+      {
+        "check": "trail compute shader compiles on actual main RD",
+        "ok": true
+      },
+      {
+        "check": "trail native shader exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original trail fallback allocation failure",
+        "ok": true
+      },
+      {
+        "check": "trail failure stops before uniform creation",
+        "ok": true
+      },
+      {
+        "check": "original trail retry creates real Metal resources",
+        "ok": true
+      },
+      {
+        "check": "trail subsequent use retains original buffer and uniform",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "trail native compute pipeline exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "trail original compute list opens",
+        "ok": true
+      },
+      {
+        "check": "trail async readback queued",
+        "ok": true
+      },
+      {
+        "check": "all fixed actual Metal workloads accepted",
+        "ok": true
+      },
+      {
+        "check": "SDF extension native buffers and borrowed texture exist",
+        "ok": true
+      },
+      {
+        "check": "SDF extension primes actual native trail producer",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejects exact native frame upload",
+        "ok": true
+      },
+      {
+        "check": "SDF extension exact upload fault observed",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejected frame records no dispatch",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejected frame retains pending state",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejected frame restores original collider history",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejected frame restores original collider history",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejected frame restores original collider history",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejected frame restores original collider history",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejected frame restores original trail samples",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejected frame restores original trail samples",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejected frame restores original trail samples",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejects exact native frame upload",
+        "ok": true
+      },
+      {
+        "check": "SDF extension exact upload fault observed",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejected frame records no dispatch",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejected frame retains pending state",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejected frame restores original collider history",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejected frame restores original collider history",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejected frame restores original collider history",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejected frame restores original collider history",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejected frame restores original trail samples",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejected frame restores original trail samples",
+        "ok": true
+      },
+      {
+        "check": "SDF extension rejected frame restores original trail samples",
+        "ok": true
+      },
+      {
+        "check": "SDF extension recovery GPU sentinel uploaded",
+        "ok": true
+      },
+      {
+        "check": "SDF extension recovers after canvas SDF removal",
+        "ok": true
+      },
+      {
+        "check": "SDF extension recovery records two native trail passes once",
+        "ok": true
+      },
+      {
+        "check": "SDF extension recovered current frame has no SDF collider",
+        "ok": true
+      },
+      {
+        "check": "SDF extension recovery retains unmodified historical collider",
+        "ok": true
+      },
+      {
+        "check": "SDF extension recovery retains unmodified historical collider",
+        "ok": true
+      },
+      {
+        "check": "SDF extension recovery retains unmodified historical collider",
+        "ok": true
+      },
+      {
+        "check": "SDF extension trail parameter async readback queued",
+        "ok": true
+      },
+      {
+        "check": "SDF extension particle async readback queued",
+        "ok": true
+      },
+      {
+        "check": "SDF extension two actual Metal readbacks accepted",
+        "ok": true
+      },
+      {
+        "check": "Mobile recovery actual renderer and processed particle exist",
+        "ok": true
+      },
+      {
+        "check": "Mobile recovery creates actual geometry instance",
+        "ok": true
+      },
+      {
+        "check": "Mobile recovery owns newly queued geometry",
+        "ok": true
+      },
+      {
+        "check": "Mobile recovery initial geometry caches valid transforms",
+        "ok": true
+      },
+      {
+        "check": "Mobile recovery initial descriptor references original instances",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "Mobile recovery retires stale cached transform descriptor",
+        "ok": true
+      },
+      {
+        "check": "Mobile recovery rebuilds original instance resources",
+        "ok": true
+      },
+      {
+        "check": "Mobile recovery retains original simulation buffer",
+        "ok": true
+      },
+      {
+        "check": "Mobile recovery notification queues existing geometry",
+        "ok": true
+      },
+      {
+        "check": "Mobile recovery refreshes cached native descriptor",
+        "ok": true
+      },
+      {
+        "check": "Mobile recovery descriptor references rebuilt instances",
+        "ok": true
+      },
+      {
+        "check": "Mobile recovery ordinary unchanged update sends no repeated invalidation",
+        "ok": true
+      },
+      {
+        "check": "Mobile recovery extension completed actual native path",
+        "ok": true
+      },
+      {
+        "check": "async completion belongs to original main RD",
+        "ok": true
+      },
+      {
+        "check": "production particle readback exact bytes",
+        "ok": true
+      },
+      {
+        "check": "actual production particle shader replaces sentinel on emitted particle",
+        "ok": true
+      },
+      {
+        "check": "async completion belongs to original main RD",
+        "ok": true
+      },
+      {
+        "check": "progress upload readback exact bytes",
+        "ok": true
+      },
+      {
+        "check": "original retained final frame reaches actual device buffer",
+        "ok": true
+      },
+      {
+        "check": "async completion belongs to original main RD",
+        "ok": true
+      },
+      {
+        "check": "progress upload readback exact bytes",
+        "ok": true
+      },
+      {
+        "check": "original retained final frame reaches actual device buffer",
+        "ok": true
+      },
+      {
+        "check": "async completion belongs to original main RD",
+        "ok": true
+      },
+      {
+        "check": "progress upload readback exact bytes",
+        "ok": true
+      },
+      {
+        "check": "original retained final frame reaches actual device buffer",
+        "ok": true
+      },
+      {
+        "check": "async completion belongs to original main RD",
+        "ok": true
+      },
+      {
+        "check": "progress upload readback exact bytes",
+        "ok": true
+      },
+      {
+        "check": "original retained final frame reaches actual device buffer",
+        "ok": true
+      },
+      {
+        "check": "async completion belongs to original main RD",
+        "ok": true
+      },
+      {
+        "check": "trail readback exact bytes",
+        "ok": true
+      },
+      {
+        "check": "actual trail shader consumed original retried fallback",
+        "ok": true
+      },
+      {
+        "check": "SDF extension async completion belongs to original main RD",
+        "ok": true
+      },
+      {
+        "check": "SDF extension trail parameter readback exact bytes",
+        "ok": true
+      },
+      {
+        "check": "SDF extension original trail history reaches actual device buffer",
+        "ok": true
+      },
+      {
+        "check": "SDF extension async completion belongs to original main RD",
+        "ok": true
+      },
+      {
+        "check": "SDF extension particle readback exact bytes",
+        "ok": true
+      },
+      {
+        "check": "SDF extension actual native particle shader produces active output",
+        "ok": true
+      },
+      {
+        "check": "original particle owner exists before close",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original particle owner exists before close",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original particle owner exists before close",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original particle owner exists before close",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original particle owner exists before close",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original particle owner exists before close",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original particle owner exists before close",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original buffer allocation identity",
+        "ok": true
+      },
+      {
+        "check": "original allocation owner authenticated",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "original uniform owner exists",
+        "ok": true
+      },
+      {
+        "check": "bounded native resource observation",
+        "ok": true
+      },
+      {
+        "check": "original native resource identity",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release removes original buffer RID",
+        "ok": true
+      },
+      {
+        "check": "owner release is not physical driver retirement",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "original native physical return acknowledged",
+        "ok": true
+      },
+      {
+        "check": "all six original async readbacks physically completed",
+        "ok": true
+      },
+      {
+        "check": "SDF extension both async readbacks physically completed",
+        "ok": true
+      }
+    ],
+    "device_api": "4.0",
+    "device_identity": 3456106673,
+    "device_name": "Apple M3 Pro (Apple9)",
+    "device_vendor": "Apple",
+    "done": true,
+    "driver": "metal",
+    "failures": [],
+    "frame_delay": 2,
+    "gpu_pass": true,
+    "native_resource_count": 29,
+    "readbacks_completed": 6,
+    "readbacks_queued": 6,
+    "released": true,
+    "rendered_frames": 4,
+    "renderer": "mobile",
+    "sdf_readbacks_completed": 2,
+    "sdf_readbacks_queued": 2
+  },
+  "checks": {
+    "one_result": true,
+    "not_timeout": true,
+    "no_fatal_or_exit_leaks": true,
+    "exact_expected_engine_errors": true,
+    "actual_metal_startup": true,
+    "native_and_outer_success": true,
+    "host_and_metadata_unchanged": true,
+    "source_unchanged": true
+  },
+  "stdout_sha256": "01355a22ab69ab4e0a2fef3f61a5712b4df043bef98ea29b42d4020690bc9dcb",
+  "stderr_sha256": "dfba6c7dba1c745f019394f1f8b19476f43c3c33b9dd64e2ce3d474b6a16735f"
+}

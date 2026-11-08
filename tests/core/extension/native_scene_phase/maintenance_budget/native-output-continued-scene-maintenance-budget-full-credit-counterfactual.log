@@ -1,0 +1,24 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/core/extension/test_production_request.cpp:12305:
+TEST CASE:  [SceneTree][ProductionRequest][NativeSceneReleaseMaintenanceBudget] actual map failure maintenance consumes credit before cleanup content return
+
+tests/core/extension/test_production_request.cpp:7807: ERROR: CHECK( actual.passes <= 1 ) is NOT correct!
+  values: CHECK( 2 <= 1 )
+  logged: own tail=true passes=2 receipts=1 calls before=0 after=1
+
+tests/core/extension/test_production_request.cpp:7820: ERROR: CHECK( actual.passes == 1 ) is NOT correct!
+  values: CHECK( 2 == 1 )
+  logged: own tail=true passes=2 receipts=1 calls before=0 after=1
+
+tests/core/extension/test_production_request.cpp:7793: ERROR: CHECK( (e == OK || e == ERR_BUSY) ) is NOT correct!
+  values: CHECK( false )
+
+tests/core/extension/test_production_request.cpp:7834: ERROR: CHECK( finished_spent_tail_slices > 0 ) is NOT correct!
+  values: CHECK( 0 >  0 )
+
+===============================================================================
+[doctest] test cases:   1 |   0 passed | 1 failed | 2219 skipped
+[doctest] assertions: 942 | 938 passed | 4 failed |
+[doctest] Status: FAILURE!

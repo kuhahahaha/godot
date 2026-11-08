@@ -33,6 +33,7 @@
 #include "core/templates/rid.h"
 #include "core/variant/dictionary.h"
 #include "servers/rendering/render_capture_test_tracking.h"
+#include "servers/rendering/storage/utilities.h"
 
 #include <array>
 
@@ -60,6 +61,8 @@ class ParticlesRuntimeTestFixture : public RefCounted {
 	uint32_t readbacks_queued = 0, readbacks_completed = 0;
 	uint32_t sdf_readbacks_queued = 0, sdf_readbacks_completed = 0;
 	bool started = false, released = false, retired = false;
+	uint32_t dependency_notifications = 0;
+	DependencyTracker dependency_tracker;
 	Array failures, observations;
 	bool check(bool p_ok, const String &p_label);
 	bool on_owner() const;
@@ -68,6 +71,7 @@ class ParticlesRuntimeTestFixture : public RefCounted {
 	bool track_resource(RenderCaptureTestResourceKind p_kind, uint64_t p_driver);
 	void track_particles(RID p_rid);
 	bool run_upload_boundaries();
+	static void dependency_changed(Dependency::DependencyChangedNotification p_notification, DependencyTracker *p_tracker);
 	bool run_sdf_history_retry();
 	bool run_mobile_instance_recovery();
 	bool run_progress(int p_kind);

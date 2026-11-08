@@ -40,6 +40,9 @@
 using namespace RendererSceneRenderImplementation;
 
 void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
+	// Invalidate before every early exit; an old successful source is not this one.
+	native_features_version = RID();
+	native_features_need_inverse = false;
 	// Accepted original workers read this ShaderData until their task returns.
 	// Join and retire their cache before changing inputs, including early exits.
 	pipeline_hash_map.clear_pipelines();
@@ -56,6 +59,8 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	}
 
 	ShaderCompiler::GeneratedCode gen_code;
+	bool uses_inverse_model_matrix = false;
+	bool uses_alpha_hash = false;
 
 	blend_mode = BLEND_MODE_MIX;
 	depth_test_disabledi = 0;
@@ -132,7 +137,8 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 
 	actions.usage_flag_pointers["ALPHA"] = &uses_alpha;
 	actions.usage_flag_pointers["ALPHA_SCISSOR_THRESHOLD"] = &uses_alpha_clip;
-	actions.usage_flag_pointers["ALPHA_HASH_SCALE"] = &uses_alpha_clip;
+	actions.usage_flag_pointers["ALPHA_HASH_SCALE"] = &uses_alpha_hash;
+	actions.usage_flag_pointers["INV_MODEL_MATRIX"] = &uses_inverse_model_matrix;
 	actions.usage_flag_pointers["ALPHA_ANTIALIASING_EDGE"] = &uses_alpha_antialiasing;
 	actions.usage_flag_pointers["ALPHA_TEXTURE_COORDINATE"] = &uses_alpha_antialiasing;
 	actions.render_mode_flags["depth_prepass_alpha"] = &uses_depth_prepass_alpha;
@@ -193,6 +199,9 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 		ERR_FAIL_MSG("Shader compilation failed.");
 	}
 
+	// Preserve the original alpha-clip union while tracking hash exactly.
+	uses_alpha_clip |= uses_alpha_hash;
+
 	if (version.is_null()) {
 		version = SceneShaderForwardClustered::singleton->shader.version_create(false);
 	}
@@ -251,6 +260,22 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	}
 
 	uses_blend_alpha = blend_mode_uses_blend_alpha(BlendMode(blend_mode));
+	if (version.is_valid()) {
+		native_features_need_inverse = uses_inverse_model_matrix || uses_alpha_hash;
+		native_features_version = version;
+	}
+}
+
+Error SceneShaderForwardClustered::ShaderData::get_native_instance192_shader_features(NativeInstance192ShaderFeatures &r_features) const {
+	if (native_features_version.is_null() || native_features_version != version) {
+		return ERR_UNAVAILABLE;
+	}
+	NativeInstance192ShaderFeatures features;
+	features.shader = &SceneShaderForwardClustered::singleton->shader;
+	features.version = native_features_version;
+	features.needs_inverse = native_features_need_inverse;
+	r_features = features;
+	return OK;
 }
 
 bool SceneShaderForwardClustered::ShaderData::is_animated() const {
@@ -526,7 +551,17 @@ RID SceneShaderForwardClustered::ShaderData::create_native_pipeline(PipelineKey 
 		specialization_constants.push_back(sc);
 	}
 
-	RID shader_rid = get_shader_variant(p_pipeline_key.version, p_pipeline_key.color_pass_flags, p_pipeline_key.ubershader, p_pipeline_key.indexed144, p_pipeline_key.instance192);
+	RID shader_rid;
+	if (p_output) {
+		uint64_t input_mask = 0;
+		const Error ready = get_native_shader_if_ready(p_pipeline_key.version, p_pipeline_key.color_pass_flags, p_pipeline_key.ubershader, p_pipeline_key.indexed144, p_pipeline_key.instance192, shader_rid, input_mask);
+		if (ready != OK) {
+			p_output->last_error = ready;
+			return RID();
+		}
+	} else {
+		shader_rid = get_shader_variant(p_pipeline_key.version, p_pipeline_key.color_pass_flags, p_pipeline_key.ubershader, p_pipeline_key.indexed144, p_pipeline_key.instance192);
+	}
 	ERR_FAIL_COND_V(shader_rid.is_null(), RID());
 
 	RID pipeline = p_output ? p_output->_create_pipeline(shader_rid, p_pipeline_key.framebuffer_format_id, p_pipeline_key.vertex_format_id, primitive_rd, raster_state, multisample_state, depth_stencil_state, blend_state, 0, 0, specialization_constants) : RD::get_singleton()->render_pipeline_create(shader_rid, p_pipeline_key.framebuffer_format_id, p_pipeline_key.vertex_format_id, primitive_rd, raster_state, multisample_state, depth_stencil_state, blend_state, 0, 0, specialization_constants);
@@ -579,6 +614,22 @@ void SceneShaderForwardClustered::ShaderData::_clear_vertex_input_mask_cache() {
 	for (uint32_t i = 0; i < VERTEX_INPUT_MASKS_SIZE; i++) {
 		vertex_input_masks[i].store(0);
 	}
+}
+
+Error SceneShaderForwardClustered::ShaderData::get_native_shader_if_ready(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader, bool p_indexed144, bool p_instance192, RID &r_shader, uint64_t &r_input_mask) const {
+	if (p_pipeline_version < 0 || p_pipeline_version >= PIPELINE_VERSION_MAX || p_color_pass_flags >= PIPELINE_COLOR_PASS_FLAG_COMBINATIONS || (p_indexed144 && p_instance192)) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (p_instance192 && !instance192_shader_supported()) {
+		return ERR_UNAVAILABLE;
+	}
+	MutexLock lock(SceneShaderForwardClustered::singleton_mutex);
+	if (!SceneShaderForwardClustered::singleton || version.is_null()) {
+		return ERR_UNAVAILABLE;
+	}
+	uint32_t shader_index = _get_shader_version(p_pipeline_version, p_color_pass_flags, p_ubershader);
+	shader_index += p_instance192 ? INSTANCE192_VARIANT_OFFSET : p_indexed144 ? INDEXED144_VARIANT_OFFSET : 0;
+	return SceneShaderForwardClustered::singleton->shader.version_get_native_shader_if_ready(version, shader_index, r_shader, r_input_mask);
 }
 
 RID SceneShaderForwardClustered::ShaderData::get_shader_variant(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader, bool p_indexed144, bool p_instance192) const {

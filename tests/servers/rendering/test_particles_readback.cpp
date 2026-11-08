@@ -122,7 +122,10 @@ TEST_CASE("[ParticlesReadback] negative particle amounts fail closed") {
 
 TEST_CASE("[ParticlesReadback] particle lifetimes reject non-finite and non-positive values") {
 	CHECK(RendererRD::TestParticlesReadbackAccess::lifetime_is_valid(0.01));
-	CHECK(RendererRD::TestParticlesReadbackAccess::lifetime_is_valid(DBL_MAX));
+	CHECK(RendererRD::TestParticlesReadbackAccess::lifetime_is_valid(FLT_MIN));
+	CHECK(RendererRD::TestParticlesReadbackAccess::lifetime_is_valid(FLT_MAX));
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::lifetime_is_valid(DBL_MIN));
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::lifetime_is_valid(DBL_MAX));
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::lifetime_is_valid(0.0));
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::lifetime_is_valid(-1.0));
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::lifetime_is_valid(NAN));

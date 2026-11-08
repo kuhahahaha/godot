@@ -2,7 +2,7 @@
 """Sample production D32 heightfields on main RD, on Mobile and Forward+.
 
 Requires a tests=yes module_particles_runtime_tests_enabled=yes editor and a
-real display/GPU. This is a legacy numeric regression, not E34 acceptance.
+real display/GPU. This is a native numeric regression, not E34 acceptance.
 """
 
 import argparse

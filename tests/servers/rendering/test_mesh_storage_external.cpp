@@ -105,6 +105,20 @@ public:
 	}
 	static uint64_t binding(RenderingDevice &p_device, RID p_array, uint32_t p_binding) { return p_device.vertex_array_owner.get_or_null(p_array)->buffers[p_binding].id; }
 	static void size(RenderingDevice &p_device, RID p_buffer, uint32_t p_size) { p_device.vertex_buffer_owner.get_or_null(p_buffer)->size = p_size; }
+	static uint32_t holds(RenderingDevice &p_device, RID p_buffer) {
+		auto *buffer = p_device.vertex_buffer_owner.get_or_null(p_buffer);
+		CHECK(buffer != nullptr);
+		return buffer ? buffer->native_immutable_holds : 0;
+	}
+	static uint32_t device_holds(RenderingDevice &p_device) { return p_device.native_immutable_hold_count; }
+	static void external_access(RenderingDevice &p_device, RID p_buffer, bool p_value) {
+		auto *buffer = p_device.vertex_buffer_owner.get_or_null(p_buffer);
+		CHECK(buffer != nullptr);
+		if (buffer) {
+			buffer->native_external_access = p_value;
+		}
+	}
+
 	static uint32_t arrays(RenderingDevice &p_device) { return p_device.vertex_array_owner.get_owned_list().size(); }
 	static bool owns(RenderingDevice &p_device, RID p_buffer) { return p_device.vertex_buffer_owner.owns(p_buffer); }
 	static void begin_native(RenderingDevice &device, Indexed144FormatDriver &driver) {
@@ -138,6 +152,131 @@ public:
 		return id && id < 32 && driver.live[id] ? driver.memory[id][original->offsets[binding]] : 0;
 	}
 	static void dispose(RenderingDevice &device) { device._free_pending_resources(0); }
+	static void preflight_only() {
+		RenderingDevice device;
+		Indexed144FormatDriver driver;
+		begin_native(device, driver);
+		const RID buffer = device.vertex_buffer_create(40, {}, RenderingDevice::BUFFER_CREATION_AS_STORAGE_BIT);
+		auto *actual = device.vertex_buffer_owner.get_or_null(buffer);
+		CHECK(actual != nullptr);
+		if (!actual) {
+			end_native(device);
+			return;
+		}
+		auto check_no_holds = [&]() {
+			CHECK(actual->native_immutable_holds == 0);
+			CHECK(device.native_immutable_hold_count == 0);
+		};
+		RenderingDevice::VertexAttribute a;
+		a.location = 0;
+		a.format = RenderingDevice::DATA_FORMAT_R32G32B32_SFLOAT;
+		a.stride = 12;
+		RenderingDevice::NativeVertexArrayPreflight result;
+		const uint32_t formats = driver.formats, before_arrays = arrays(device);
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, { 4 }, result) == OK);
+		CHECK(result.used_buffers.size() == 1);
+		CHECK(result.attributes.size() == 1);
+		if (!result.attributes.is_empty()) {
+			CHECK(result.attributes[0].binding == 0);
+		}
+		check_no_holds();
+		ERR_PRINT_OFF;
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, { 5 }, result) == ERR_INVALID_PARAMETER);
+		CHECK(result.used_buffers.is_empty());
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, { UINT64_MAX }, result) == ERR_INVALID_PARAMETER);
+		CHECK(device._native_vertex_array_preflight(3, { a, a }, { buffer, buffer }, {}, result) == ERR_INVALID_DATA);
+		RenderingDevice::VertexAttribute b = a;
+		b.location = 1;
+		b.binding = 0;
+		CHECK(device._native_vertex_array_preflight(3, { a, b }, { buffer }, {}, result) == ERR_INVALID_DATA);
+		a.binding = 0;
+		CHECK(device._native_vertex_array_preflight(3, { a, b }, { buffer, RID() }, {}, result) == OK);
+		CHECK(result.used_buffers.size() == 1); // Unused supplied null is not a graph root.
+		b.stride = 16;
+		CHECK(device._native_vertex_array_preflight(3, { a, b }, { buffer }, {}, result) == ERR_INVALID_DATA);
+		a.frequency = RenderingDevice::VERTEX_FREQUENCY_INSTANCE;
+		a.stride = 0;
+		CHECK(device._native_vertex_array_preflight(0, { a }, { buffer }, {}, result) == ERR_INVALID_PARAMETER);
+		CHECK(device._native_vertex_array_preflight(1, { a }, { buffer }, {}, result) == OK);
+		CHECK(result.max_instances_allowed == UINT32_MAX);
+		// Ordinary point-size preparation retains its effective zero-count support.
+		RenderingDevice::VertexArray zero_count_array;
+		HashSet<RID> zero_count_buffers;
+		CHECK(device._vertex_array_prepare_locked(0, { a }, { buffer }, {}, zero_count_array, zero_count_buffers) == OK);
+		CHECK(zero_count_array.max_instances_allowed == UINT32_MAX);
+		a.stride = 12;
+		CHECK(device._native_vertex_array_preflight(1, { a }, { buffer }, {}, result) == OK);
+		CHECK(result.max_instances_allowed == 3);
+		a.frequency = RenderingDevice::VERTEX_FREQUENCY_VERTEX;
+		CHECK(device._native_vertex_array_preflight(0, { a }, { buffer }, {}, result) == ERR_INVALID_PARAMETER);
+		check_no_holds(); // Assert before fault injection can overwrite a leaked increment.
+		device.draw_list.active = true;
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_BUSY);
+		device.draw_list.active = false;
+		device.compute_list.active = true;
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_BUSY);
+		device.compute_list.active = false;
+		device.raytracing_list.active = true;
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_BUSY);
+		device.raytracing_list.active = false;
+		device.production_finalization_started.store(true, std::memory_order_release);
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_BUSY);
+		device.production_finalization_started.store(false, std::memory_order_release);
+		device.native_immutable_device_escaped = true;
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_UNAVAILABLE);
+		device.native_immutable_device_escaped = false;
+		check_no_holds();
+		const auto usage = actual->usage;
+		actual->usage.set_flag(RenderingDeviceDriver::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT);
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_UNAVAILABLE);
+		actual->usage = usage;
+		check_no_holds();
+		actual->usage.set_flag(RenderingDeviceDriver::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_UNAVAILABLE);
+		actual->usage = usage;
+		check_no_holds();
+		// These direct counters are restored before disposal; no fake RD owner.
+		actual->native_immutable_holds = UINT32_MAX;
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(actual->native_immutable_holds == UINT32_MAX);
+		actual->native_immutable_holds = 0;
+		check_no_holds();
+		actual->native_external_access = true;
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_UNAVAILABLE);
+		actual->native_external_access = false;
+		check_no_holds();
+		actual->native_immutable_retire_requested = true;
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_BUSY);
+		actual->native_immutable_retire_requested = false;
+		check_no_holds();
+		actual->transfer_worker_index = 0;
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_UNAVAILABLE);
+		actual->transfer_worker_index = -1;
+		check_no_holds();
+		const auto driver_id = actual->driver_id;
+		actual->driver_id = {};
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_UNAVAILABLE);
+		actual->driver_id = driver_id;
+		check_no_holds();
+		CHECK(device._native_vertex_array_preflight(3, { a }, { RID() }, {}, result) == ERR_DOES_NOT_EXIST);
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, { 0, 0 }, result) == ERR_INVALID_PARAMETER);
+		a.frequency = static_cast<RenderingDevice::VertexFrequency>(-1);
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_INVALID_DATA);
+		a.frequency = RenderingDevice::VERTEX_FREQUENCY_VERTEX;
+		a.format = static_cast<RenderingDevice::DataFormat>(-1);
+		CHECK(device._native_vertex_array_preflight(3, { a }, { buffer }, {}, result) == ERR_INVALID_DATA);
+		ERR_PRINT_ON;
+		check_no_holds();
+		CHECK(driver.formats == formats);
+		CHECK(arrays(device) == before_arrays);
+		CHECK(device.native_immutable_hold_count == 0);
+		CHECK(device.dependency_map.is_empty());
+		CHECK(device.reverse_dependency_map.is_empty());
+		device.free_rid(buffer);
+		dispose(device);
+		CHECK(driver.frees == driver.allocations);
+		end_native(device);
+	}
 	static void detach(RenderingDevice &p_device) {
 		for (RID rid : p_device.vertex_array_owner.get_owned_list()) {
 			p_device.free_rid(rid);
@@ -422,9 +561,29 @@ public:
 		CHECK(selected_mesh->selection_holds == UINT32_MAX);
 		CHECK(original->version_count == versions_before);
 		selected_mesh->selection_holds = 0;
+		const uint64_t initial_revision = selected_mesh->revision;
+		// This formerly changed has_bone_weights before rejecting and leaked
+		// its temporary Surface. The original API must reject before allocation.
+		RenderingServerTypes::SurfaceData failed_bones;
+		failed_bones.format = uint64_t(RSE::ARRAY_FLAG_FORMAT_CURRENT_VERSION) | RSE::ARRAY_FORMAT_BONES;
+		const uint32_t allocations_before_failed_add = driver.allocations;
+		CHECK_FALSE(storage->mesh_needs_instance(selected_rid, true));
+		ERR_PRINT_OFF;
+		storage->mesh_add_surface(selected_rid, failed_bones);
+		ERR_PRINT_ON;
+		CHECK_FALSE(storage->mesh_needs_instance(selected_rid, true));
+		CHECK_FALSE(selected_mesh->has_bone_weights);
+		CHECK(selected_mesh->surface_count == 1);
+		CHECK(selected_mesh->surfaces[0] == original);
+		CHECK(selected_mesh->revision == initial_revision);
+		CHECK(driver.allocations == allocations_before_failed_add);
+		storage->mesh_set_path(selected_rid, "revision-before-selection");
+		CHECK(selected_mesh->revision == initial_revision + 1);
 		CHECK(storage->mesh_selection_acquire(selected_rid, selection) == OK);
+		CHECK(selection.get_revision() == initial_revision + 1);
 		CHECK(storage->mesh_selection_acquire(selected_rid, selection) == ERR_ALREADY_IN_USE);
 		CHECK(storage->mesh_selection_acquire(selected_rid, sibling) == OK);
+		CHECK(sibling.get_revision() == selection.get_revision());
 		CHECK(original->version_count == versions_before);
 		CHECK(original->immutable_holds == 0);
 		const RID material_before = original->material;
@@ -460,17 +619,73 @@ public:
 		storage->mesh_clear(selected_rid);
 		storage->mesh_surface_remove(selected_rid, 0);
 		storage->mesh_surface_set_material(selected_rid, 0, RID::from_uint64(999));
+		storage->mesh_set_path(selected_rid, "must-be-refused");
 		CHECK(storage->mesh_instance_create(selected_rid).is_null());
 		ERR_PRINT_ON;
 		CHECK(storage->mesh_owner.get_or_null(selected_rid) == selected_mesh);
 		CHECK(selected_mesh->surface_count == 1);
 		CHECK(selected_mesh->surfaces[0] == original);
 		CHECK(original->material == material_before);
+		CHECK(selected_mesh->revision == selection.get_revision());
+		CHECK(storage->mesh_get_path(selected_rid) == "revision-before-selection");
 		CHECK(storage->mesh_selection_release(selection) == OK);
 		CHECK(selected_mesh->selection_holds == 1);
 		CHECK(storage->mesh_selection_release(selection) == ERR_UNAUTHORIZED);
 		CHECK(storage->mesh_selection_release(sibling) == OK);
 		CHECK(selected_mesh->selection_holds == 0);
+		CHECK(selection.get_revision() == 0);
+		storage->mesh_surface_set_material(selected_rid, 0, RID::from_uint64(998));
+		CHECK(selected_mesh->revision == initial_revision + 2);
+		CHECK(storage->mesh_selection_acquire(selected_rid, selection) == OK);
+		CHECK(selection.get_revision() == initial_revision + 2);
+		CHECK(storage->mesh_selection_release(selection) == OK);
+		// Exercise the actual original shadow notification path, including a
+		// stale null reverse entry while its target is selected.
+		const RID shadow_rid = storage->mesh_allocate();
+		storage->mesh_initialize(shadow_rid);
+		auto *shadow_mesh = storage->mesh_owner.get_or_null(shadow_rid);
+		uint32_t shadow_notifications = 0;
+		DependencyTracker shadow_tracker;
+		shadow_tracker.userdata = &shadow_notifications;
+		shadow_tracker.changed_callback = [](Dependency::DependencyChangedNotification notification, DependencyTracker *tracker) {
+			if (notification == Dependency::DEPENDENCY_CHANGED_MESH) {
+				++*static_cast<uint32_t *>(tracker->userdata);
+			}
+		};
+		shadow_tracker.update_begin();
+		shadow_tracker.update_dependency(&selected_mesh->dependency);
+		shadow_tracker.update_end();
+		const uint64_t before_shadow = selected_mesh->revision;
+		storage->mesh_set_shadow_mesh(selected_rid, shadow_rid);
+		CHECK(selected_mesh->revision == before_shadow + 1);
+		CHECK(shadow_notifications == 1);
+		storage->mesh_clear(shadow_rid);
+		CHECK(selected_mesh->revision == before_shadow + 2);
+		CHECK(selected_mesh->shadow_mesh.is_null());
+		CHECK(shadow_notifications == 2);
+		CHECK(storage->mesh_selection_acquire(selected_rid, selection) == OK);
+		const uint64_t selected_shadow_revision = selection.get_revision();
+		storage->mesh_clear(shadow_rid);
+		CHECK(shadow_notifications == 3);
+		CHECK(selected_mesh->revision == selected_shadow_revision);
+		CHECK(storage->mesh_selection_release(selection) == OK);
+		// Original reverse entries outlive invalidation. Return the test's
+		// notification and reverse-edge custody explicitly before owner cleanup.
+		shadow_tracker.clear();
+		shadow_mesh->shadow_owners.erase(selected_mesh);
+		storage->mesh_free(shadow_rid);
+		// Saturation is a boundary fixture. A real MAX snapshot must return
+		// before the subsequent owner mutation exhausts the revision.
+		selected_mesh->revision = UINT64_MAX;
+		CHECK(storage->mesh_selection_acquire(selected_rid, selection) == OK);
+		CHECK(selection.get_revision() == UINT64_MAX);
+		CHECK(storage->mesh_selection_release(selection) == OK);
+		storage->mesh_set_path(selected_rid, "exhausted");
+		CHECK(selected_mesh->revision == 0);
+		CHECK(storage->mesh_selection_acquire(selected_rid, selection) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK_FALSE(selection.is_active());
+		storage->mesh_set_path(selected_rid, "still-exhausted");
+		CHECK(selected_mesh->revision == 0);
 		// Restore the existing fixture's local original owner for directory tests.
 		selected_mesh->surfaces = nullptr;
 		selected_mesh->surface_count = 0;
@@ -510,6 +725,148 @@ public:
 		CHECK(MeshStorage::_native_hold_freeze_directory(retained) == OK);
 		CHECK(MeshStorage::mesh_surface_hold_release(derived) == OK);
 		CHECK(MeshStorage::mesh_surface_hold_release(retained) == OK);
+		device.free_rid(normal);
+		memdelete(storage);
+		MeshStorage::singleton = previous_storage;
+		TestIndexed144DeviceAccess::dispose(device);
+		CHECK(driver.frees == driver.allocations);
+		memfree(mesh.surfaces);
+		TestIndexed144DeviceAccess::end_native(device);
+	}
+	static void prospective_plan(bool external) {
+		RenderingDevice device;
+		Indexed144FormatDriver driver;
+		TestIndexed144DeviceAccess::begin_native(device, driver);
+		auto *previous_storage = MeshStorage::get_singleton();
+		auto *storage = memnew(MeshStorage(MeshStorage::NativeHoldTestTag{}));
+		const RID normal = device.vertex_buffer_create(16, {}, RD::BUFFER_CREATION_AS_STORAGE_BIT);
+		storage->mesh_default_rd_buffers[MeshStorage::DEFAULT_RD_BUFFER_NORMAL] = normal;
+		MeshStorage::Mesh mesh;
+		mesh.surfaces = static_cast<MeshStorage::Mesh::Surface **>(memalloc(sizeof(MeshStorage::Mesh::Surface *)));
+		mesh.surface_count = 1;
+		auto *original = surface(device, external);
+		mesh.surfaces[0] = original;
+		const RID current = original->vertex_buffer, previous = original->previous_vertex_buffer, index = original->index_buffer;
+		Hold retained;
+		const Error acquired = MeshStorage::_mesh_surface_hold_acquire(original, 1, false, false, 0, retained);
+		CHECK(acquired == OK);
+		if (acquired == OK) {
+			using Plan = MeshStorage::NativeVertexArrayPlan;
+			Plan plan;
+			const uint32_t formats = driver.formats;
+			const uint32_t arrays = TestIndexed144DeviceAccess::arrays(device);
+			const uint32_t versions = original->version_count;
+			const uint32_t holds = original->immutable_holds;
+			const uint32_t buffer_holds = TestIndexed144DeviceAccess::holds(device, original->vertex_buffer);
+			const uint32_t device_holds = TestIndexed144DeviceAccess::device_holds(device);
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, false, false, 0, plan) == OK);
+			CHECK(plan.existing_vertex_array == retained.get_vertex_array());
+			CHECK(plan.existing_vertex_format == retained.get_vertex_format());
+			CHECK(plan.vertex_count == 3);
+			CHECK(plan.buffers.size() == 1);
+			if (!plan.buffers.is_empty()) {
+				CHECK(plan.buffers[0] == original->vertex_buffer);
+			}
+			CHECK(plan.attributes.size() == (external ? 10 : 1));
+			if (!plan.attributes.is_empty()) {
+				CHECK(plan.attributes[0].location == 0);
+				CHECK(plan.attributes[0].binding == (external ? 0u : UINT32_MAX));
+				CHECK(plan.attributes[0].stride == (external ? 144 : 12));
+				CHECK(plan.attributes[0].format == (external ? RD::DATA_FORMAT_R32G32B32A32_SFLOAT : RD::DATA_FORMAT_R32G32B32_SFLOAT));
+			}
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 3, false, false, 0, plan) == OK);
+			CHECK(plan.existing_vertex_array.is_null());
+			CHECK(plan.existing_vertex_format == 0);
+			CHECK(plan.attributes.size() == (external ? 10 : 2));
+			CHECK(plan.buffers.size() == (external ? 1 : 2));
+			if (!external) {
+				CHECK(plan.offsets.size() == 2);
+				if (plan.buffers.size() == 2 && plan.offsets.size() == 2) {
+					CHECK(plan.buffers[1] == normal);
+					CHECK(plan.offsets[0] == 0);
+					CHECK(plan.offsets[1] == 0);
+				}
+				storage->mesh_default_rd_buffers[MeshStorage::DEFAULT_RD_BUFFER_NORMAL] = RID();
+				CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 3, false, false, 0, plan) == ERR_INVALID_DATA);
+				storage->mesh_default_rd_buffers[MeshStorage::DEFAULT_RD_BUFFER_NORMAL] = normal;
+				const RID wrong_default = device.storage_buffer_create(16);
+				CHECK(wrong_default.is_valid());
+				if (wrong_default.is_valid()) {
+					storage->mesh_default_rd_buffers[MeshStorage::DEFAULT_RD_BUFFER_NORMAL] = wrong_default;
+					ERR_PRINT_OFF;
+					CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 3, false, false, 0, plan) == ERR_DOES_NOT_EXIST);
+					ERR_PRINT_ON;
+					CHECK(plan.attributes.is_empty());
+					CHECK(plan.buffers.is_empty());
+					storage->mesh_default_rd_buffers[MeshStorage::DEFAULT_RD_BUFFER_NORMAL] = normal;
+					device.free_rid(wrong_default);
+				}
+				TestIndexed144DeviceAccess::external_access(device, normal, true);
+				CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 3, false, false, 0, plan) == ERR_UNAVAILABLE);
+				CHECK(plan.buffers.is_empty());
+				TestIndexed144DeviceAccess::external_access(device, normal, false);
+				CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 3, false, false, 0, plan) == OK);
+				CHECK(TestIndexed144DeviceAccess::holds(device, normal) == 0);
+			} else {
+				CHECK(plan.offsets.is_empty());
+				CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1ull << 31, false, false, 0, plan) == ERR_UNAVAILABLE);
+			}
+			TestIndexed144DeviceAccess::size(device, original->vertex_buffer, original->vertex_buffer_size - 1);
+			ERR_PRINT_OFF;
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, false, false, 0, plan) == ERR_INVALID_PARAMETER);
+			ERR_PRINT_ON;
+			CHECK(plan.buffers.is_empty());
+			CHECK(plan.existing_vertex_array.is_null());
+			TestIndexed144DeviceAccess::size(device, original->vertex_buffer, original->vertex_buffer_size);
+			CHECK(TestIndexed144DeviceAccess::holds(device, original->vertex_buffer) == buffer_holds);
+			CHECK(TestIndexed144DeviceAccess::device_holds(device) == device_holds);
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, true, false, 0, plan) == ERR_UNAVAILABLE);
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, false, true, 0, plan) == ERR_UNAVAILABLE);
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, false, false, 1, plan) == ERR_UNAVAILABLE);
+			original->immutable_holds = UINT32_MAX;
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, false, false, 0, plan) == ERR_INVALID_PARAMETER);
+			original->immutable_holds = holds;
+			// A published failed Version must not be reclassified as future work.
+			const RID saved_array = original->versions[0].vertex_array;
+			original->versions[0].vertex_array = RID();
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, false, false, 0, plan) == ERR_CANT_CREATE);
+			CHECK(plan.existing_vertex_array.is_null());
+			CHECK(plan.existing_vertex_format == 0);
+			original->versions[0].vertex_array = saved_array;
+			CHECK(driver.formats == formats);
+			CHECK(TestIndexed144DeviceAccess::arrays(device) == arrays);
+			CHECK(original->version_count == versions);
+			CHECK(original->immutable_holds == holds);
+			// Detached retained source, frozen existing and missing keys.
+			MeshStorage::_mesh_surface_clear(&mesh, 0);
+			mesh.surface_count = 0;
+			CHECK(MeshStorage::_native_hold_freeze_directory(retained) == OK);
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, false, false, 0, plan) == OK);
+			CHECK(!plan.buffers.is_empty());
+			if (!plan.buffers.is_empty()) {
+				CHECK(plan.buffers[0] == original->vertex_buffer);
+			}
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 3, false, false, 0, plan) == ERR_UNAVAILABLE);
+			CHECK(MeshStorage::_native_hold_thaw_directory(retained) == OK);
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 3, false, false, 0, plan) == OK);
+			Hold derived;
+			CHECK(MeshStorage::mesh_surface_hold_derive(retained, 3, false, false, 0, derived) == OK);
+			CHECK(derived.is_valid());
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 3, false, false, 0, plan) == OK);
+			CHECK(plan.existing_vertex_array == derived.get_vertex_array());
+			CHECK(plan.existing_vertex_format == derived.get_vertex_format());
+			CHECK(MeshStorage::mesh_surface_hold_release(derived) == OK);
+			CHECK(MeshStorage::mesh_surface_hold_release(retained) == OK);
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(retained, 1, false, false, 0, plan) == ERR_UNAUTHORIZED);
+		} else {
+			MeshStorage::_mesh_surface_clear(&mesh, 0);
+			mesh.surface_count = 0;
+		}
+		if (external) {
+			device.free_rid(current);
+			device.free_rid(previous);
+			device.free_rid(index);
+		}
 		device.free_rid(normal);
 		memdelete(storage);
 		MeshStorage::singleton = previous_storage;
@@ -718,4 +1075,16 @@ TEST_CASE("[B4][MaterialPreparation] Mobile color preparation preserves transpar
 		CHECK_FALSE(MobileShader::ShaderData::external_color_version_supported(MobileShader::SHADER_VERSION_SHADOW_PASS, false));
 		CHECK_FALSE(MobileShader::ShaderData::external_color_version_supported(MobileShader::SHADER_VERSION_COLOR_PASS_MULTIVIEW, true));
 	}
+}
+
+TEST_CASE("[B4][NativeVertexArrayPlan] retained ordinary source plans without factories") {
+	RendererRD::TestMeshStorageExternalAccess::prospective_plan(false);
+}
+
+TEST_CASE("[B4][NativeVertexArrayPlan] retained Indexed144 source plans without factories") {
+	RendererRD::TestMeshStorageExternalAccess::prospective_plan(true);
+}
+
+TEST_CASE("[B4][NativeVertexArrayPreflight] validates exact fetches without factories or holds") {
+	TestIndexed144DeviceAccess::preflight_only();
 }

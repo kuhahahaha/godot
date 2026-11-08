@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "scope": "Exact original scope/stable-row cleanup and bounded two-hold capture primitives; CPU/dummy only",
+  "base_commit": "3a3d10ac4f",
+  "build_command": "scons -Q tests=yes platform=macos target=editor debug_symbols=no module_particles_runtime_tests_enabled=yes -j2",
+  "red": {
+    "build_exit": 0,
+    "command": "bin/godot.macos.editor.arm64 --headless --test --test-case='*[NativePreparationContinuation]*'",
+    "exit": 1,
+    "cases": 3,
+    "assertions": 2997,
+    "failed_assertions": 12,
+    "scope": "Only row preflight restored to expired PhysicalContext; factory/cleanup retain new scope. Not full old-implementation RED. No engine crash."
+  },
+  "green": {
+    "build_exit": 0,
+    "filter": "*[NativePreparationContinuation]*,*[BatchHold]*",
+    "exit": 0,
+    "cases": 6,
+    "assertions": 3448
+  },
+  "neighbors": {
+    "filter": "*[NativeDisposal]*,*[PipelinePrefix]*,*[ExternalOutputOwner]*,*[QualificationRt]*",
+    "exit": 0,
+    "cases": 45,
+    "assertions": 8752
+  },
+  "source_sha256": {
+    "core/extension/gdextension_library_exit_guard.h": "3cf818e33852566e8c0320ce36c679d68251f8da88ad088aae51c2fe446e83e8",
+    "core/extension/gdextension_production_output.cpp": "e4b81cebbdcdead60e7614779c1d5211afdf8beb678216eef8c26dda41374b2c",
+    "core/extension/gdextension_production_request.h": "4a835efa17e1c65d17d74fa727f437d5df6949dda1de8dfee027631f2c421725",
+    "servers/rendering/native_disposal_witness.h": "0b4f884307390d463a3f57074d81664d273d146bdce975a5b60650b85a06c0e5",
+    "servers/rendering/renderer_rd/storage_rd/external_output_packet.cpp": "d804e0a163d2b6b8d29531766d8864b1403875683f3303d5f18ae76e9919104c",
+    "servers/rendering/renderer_rd/storage_rd/external_output_packet.h": "579bfea8594cbfee1c0cceb0b13a388013f7fee156ebe39ab622f1b6fee30a2d",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.h": "da93d9b11ee10933abbe850eb534d565f7955abcf04f9505fbf8b15c98dd9ec6",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp": "9a1bbbc0ef56d145780454f74a65f744319ddb23c431c324ebd2327d290d39b3",
+    "servers/rendering/rendering_device.h": "de3fcebe2d6f9cf35c3f0c537900a9b0ab27357aa7288343e70ee6ab98cbed2b",
+    "servers/rendering/rendering_device_immutable_hold.cpp": "967b1b1573098c895894494d9ff42df7f8b6c7b362fe4e6852b4c4305fa54e31",
+    "tests/core/extension/test_production_request.cpp": "f82df63a6b2c1ec7341a2e49b35c9697846d8cc7d7061c0a4909e67d947c8014",
+    "tests/servers/rendering/test_external_output_custody_bridge.h": "38cc31de92788a36939346ec978c0348cf6277d8f7b15b53b26344cd222cf399",
+    "tests/servers/rendering/test_external_output_owner_state.cpp": "9690c581da62a4d69bdb67750fd1dc781c9846a810fe5ee3fb0d646f55bdaf16",
+    "tests/servers/rendering/test_native_disposal.cpp": "955cc477a8dc916aae1fcf2881a345b478faa9270e324f4e67355f00c5af5f4c"
+  },
+  "binary_sha256": "30b2b651a7d6c3ef2e6c86aefa658853a024c19e025ba24d85bb9d9fef3a68b8",
+  "logs_sha256": {
+    "b4-scope-batch-red-build.log": "bfe106e5dc66334dd622aba419a8ff660a67c7063325184bf247294027f40dca",
+    "b4-scope-batch-red-test.log": "39a677820e5796680f1c038928747bf44d8af9929441a808f74edea01cf43da1",
+    "b4-scope-batch-green-build.log": "71fbc24de838bbbee338b32a2eda2c8ab01866a04c56ad9faefecef607be1cf1",
+    "b4-scope-batch-green-test.log": "c9766e1df8cc2139ff6c623c6d5e8bbc4c19f90973c16695c5f8fa9c4f8864c4",
+    "b4-scope-batch-neighbor-test.log": "87104f4d4e166f59e310cf833d4d80b59049cfed51e12cad9ea4910c10c69de9"
+  },
+  "review": "Independent Sol scope, batch, test failure cleanup and merged interaction source review; no remaining load-bearing finding in these slices.",
+  "limits": [
+    "Batch private primitive has no scope-authorized production entry yet",
+    "Scope destructor preserves prefixes but does not perform complete capture/finish",
+    "Bank remains fixed one-row-per-surface; global locator and complete P bank pending",
+    "Nontrivial dependency closure and G larger than union not runtime tested",
+    "No real renderer pre-list, public Instance192, full caller/Finalize/Seal, GPU or visible Sprite acceptance",
+    "No later draw in existing CPU scope retirement fixture; not whole GPU no-draw closure"
+  ]
+}

@@ -30,6 +30,7 @@
 
 #include "height_capture_checked_sink.h"
 
+#include "servers/rendering/native_height_range.h"
 #include "servers/rendering/renderer_rd/storage_rd/height_frame_resources.h"
 
 namespace RendererRD {
@@ -47,6 +48,36 @@ HeightCaptureCheckedSink::HeightCaptureCheckedSink(const Ref<ParticlesStorage::H
 }
 
 HeightCaptureCheckedSink::~HeightCaptureCheckedSink() = default;
+
+Error HeightCaptureCheckedSink::prepare_native_range(Ref<NativeHeightRange> &r_range) {
+	if (begin_attempted || native_range.is_valid()) {
+		return fail(ERR_INVALID_PARAMETER);
+	}
+	const Error error = rd._native_height_range_prepare_checked_capture(*this, r_range);
+	if (error == OK) {
+		native_range = r_range;
+	}
+	return fail(error);
+}
+
+Error HeightCaptureCheckedSink::enter_checked_call() {
+	if (native_range.is_null()) {
+		return OK;
+	}
+	const Error error = rd._native_height_range_enter_checked_call(native_range, *this);
+	fail(error);
+	return error; // Sticky business failure must not suppress cleanup End.
+}
+
+void HeightCaptureCheckedSink::enroll_record(uint32_t p_business_index, bool p_cleanup) {
+	if (native_range.is_null()) {
+		return;
+	}
+	const Error error = rd._native_height_range_enroll_original_record(native_range, *this, p_business_index, p_cleanup);
+	if (error != OK) {
+		fail(error);
+	}
+}
 
 Error HeightCaptureCheckedSink::begin_quoted_target(const Ref<ParticlesStorage::HeightFrameResources> &p_resources, uint32_t p_draw_flags, VectorView<Color> p_clear_colors, float p_clear_depth, uint32_t p_clear_stencil, const Rect2 &p_region, uint32_t p_breadcrumb) {
 	if (begin_attempted || quoted_resources.is_valid() || p_resources.is_null()) {
@@ -79,6 +110,10 @@ Error HeightCaptureCheckedSink::fail(Error p_error) {
 
 HeightCaptureCheckedSink::NativeRecord *HeightCaptureCheckedSink::reserve(Operation p_operation, RID p_resource) {
 	if (first_error != OK) {
+		return nullptr;
+	}
+	if (terminal_requested && p_operation != Operation::End) {
+		fail(ERR_INVALID_PARAMETER);
 		return nullptr;
 	}
 	if (business_end_attempted || (p_operation != Operation::Begin && !owns_list)) {
@@ -138,6 +173,10 @@ Error HeightCaptureCheckedSink::begin(RID p_framebuffer, uint32_t p_draw_flags, 
 		return first_error;
 	}
 	begin_attempted = true;
+	if (enter_checked_call() != OK) {
+		enroll_record(business_count - 1, false);
+		return first_error;
+	}
 	const RenderingDevice::Framebuffer *framebuffer = rd.framebuffer_owner.get_or_null(p_framebuffer);
 	if (framebuffer && framebuffer->texture_ids.size() == 1) {
 		attachment = framebuffer->texture_ids[0];
@@ -152,12 +191,15 @@ Error HeightCaptureCheckedSink::begin(RID p_framebuffer, uint32_t p_draw_flags, 
 		restoration_unknown = true;
 	}
 	if (result.error != OK) {
+		enroll_record(business_count - 1, false);
 		return fail(result.error);
 	}
 	if (!owns_list || !result.capture_complete || result.effect != Effect::Recorded) {
+		enroll_record(business_count - 1, false);
 		return fail(ERR_INVALID_DATA);
 	}
-	return OK;
+	enroll_record(business_count - 1, false);
+	return first_error;
 }
 
 Error HeightCaptureCheckedSink::bind_uniform_set(RID p_uniform_set, uint32_t p_index) {
@@ -166,7 +208,12 @@ Error HeightCaptureCheckedSink::bind_uniform_set(RID p_uniform_set, uint32_t p_i
 		return first_error;
 	}
 	record->index = p_index;
+	if (enter_checked_call() != OK) {
+		enroll_record(business_count - 1, false);
+		return first_error;
+	}
 	record->bind = rd._draw_list_bind_uniform_set_recorded(list, p_uniform_set, p_index);
+	enroll_record(business_count - 1, false);
 	return accept(record->bind);
 }
 
@@ -176,10 +223,15 @@ Error HeightCaptureCheckedSink::bind_vertex_array(RID p_vertex_array) {
 		return first_error;
 	}
 	record->transfer_offset = transfer_count;
+	if (enter_checked_call() != OK) {
+		enroll_record(business_count - 1, false);
+		return first_error;
+	}
 	const uint32_t remaining = transfers.size() - transfer_count;
 	record->bind = rd._draw_list_bind_vertex_array_recorded(list, p_vertex_array, remaining ? transfers.ptr() + transfer_count : nullptr, remaining);
 	record->transfer_count = record->bind.transfer_count;
 	transfer_count += record->bind.transfer_count;
+	enroll_record(business_count - 1, false);
 	return accept(record->bind);
 }
 
@@ -189,10 +241,15 @@ Error HeightCaptureCheckedSink::bind_index_array(RID p_index_array) {
 		return first_error;
 	}
 	record->transfer_offset = transfer_count;
+	if (enter_checked_call() != OK) {
+		enroll_record(business_count - 1, false);
+		return first_error;
+	}
 	const uint32_t remaining = transfers.size() - transfer_count;
 	record->bind = rd._draw_list_bind_index_array_recorded(list, p_index_array, remaining ? transfers.ptr() + transfer_count : nullptr, remaining);
 	record->transfer_count = record->bind.transfer_count;
 	transfer_count += record->bind.transfer_count;
+	enroll_record(business_count - 1, false);
 	return accept(record->bind);
 }
 
@@ -201,7 +258,12 @@ Error HeightCaptureCheckedSink::bind_pipeline(RID p_pipeline) {
 	if (!record) {
 		return first_error;
 	}
+	if (enter_checked_call() != OK) {
+		enroll_record(business_count - 1, false);
+		return first_error;
+	}
 	record->draw = rd._draw_list_bind_render_pipeline_recorded(list, p_pipeline);
+	enroll_record(business_count - 1, false);
 	return accept(record->draw);
 }
 
@@ -210,7 +272,12 @@ Error HeightCaptureCheckedSink::set_push_constant(const void *p_data, uint32_t p
 	if (!record) {
 		return first_error;
 	}
+	if (enter_checked_call() != OK) {
+		enroll_record(business_count - 1, false);
+		return first_error;
+	}
 	record->draw = rd._draw_list_set_push_constant_recorded(list, p_data, p_size);
+	enroll_record(business_count - 1, false);
 	return accept(record->draw);
 }
 
@@ -219,7 +286,12 @@ Error HeightCaptureCheckedSink::draw_geometry_prepared(bool p_use_indices, uint3
 	if (!record) {
 		return first_error;
 	}
+	if (enter_checked_call() != OK) {
+		enroll_record(business_count - 1, false);
+		return first_error;
+	}
 	record->draw = rd._draw_list_draw_geometry_prepared_recorded(list, p_use_indices, p_instances);
+	enroll_record(business_count - 1, false);
 	return accept(record->draw);
 }
 
@@ -232,6 +304,7 @@ bool HeightCaptureCheckedSink::verify_restoration() const {
 }
 
 Error HeightCaptureCheckedSink::finish() {
+	terminal_requested = true;
 	if (first_error != OK) {
 		return unwind();
 	}
@@ -243,11 +316,17 @@ Error HeightCaptureCheckedSink::finish() {
 		return unwind();
 	}
 	business_end_attempted = true;
+	if (enter_checked_call() != OK) {
+		enroll_record(business_count - 1, false);
+		return unwind();
+	}
 	record->draw = rd._draw_list_end_recorded();
+	enroll_record(business_count - 1, false);
 	accept(record->draw);
 	if (record->draw.effect == Effect::Unknown || record->draw.effect == Effect::NativePrefixOnly) {
 		restoration_unknown = true;
-		return fail(ERR_INVALID_DATA); // A possibly accepted end is never retried.
+		fail(ERR_INVALID_DATA);
+		return unwind(); // Freeze unknown custody; never retry a possible End.
 	}
 	if (record->draw.effect == Effect::Recorded) {
 		owns_list = false;
@@ -256,6 +335,12 @@ Error HeightCaptureCheckedSink::finish() {
 			restoration_unknown = true;
 			fail(ERR_INVALID_DATA);
 		}
+		if (native_range.is_valid()) {
+			const Error closed = rd._native_height_range_close_checked_capture(native_range, *this);
+			if (closed != OK) {
+				fail(closed);
+			}
+		}
 		return first_error;
 	}
 	fail(ERR_INVALID_DATA);
@@ -263,13 +348,28 @@ Error HeightCaptureCheckedSink::finish() {
 }
 
 Error HeightCaptureCheckedSink::unwind() {
+	terminal_requested = true;
 	if (!owns_list || cleanup_attempted || restoration_unknown) {
+		// A checked begin can fail before opening a list. Freeze the opted-in
+		// native range even in that case so RD custody does not remain recording
+		// forever after a refused/empty prefix.
+		if (native_range.is_valid()) {
+			const Error closed = rd._native_height_range_close_checked_capture(native_range, *this);
+			if (closed != OK) {
+				fail(closed);
+			}
+		}
 		return first_error;
 	}
 	// Explicit unwind without a prior failure is an abandoned business capture.
 	fail(ERR_SKIP);
 	cleanup_attempted = true;
+	if (enter_checked_call() != OK) {
+		enroll_record(0, true);
+		return unwind(); // cleanup_attempted prevents retry, but freezes custody.
+	}
 	cleanup.draw = rd._draw_list_end_recorded();
+	enroll_record(0, true);
 	const DrawResult &result = cleanup.draw;
 	if (result.effect == Effect::Recorded) {
 		owns_list = false;
@@ -277,6 +377,12 @@ Error HeightCaptureCheckedSink::unwind() {
 	restored = result.effect == Effect::Recorded && result.capture_complete && rd.draw_graph.contains_record(result.draw_handle) && verify_restoration();
 	if (!restored) {
 		restoration_unknown = true; // Original owner must quarantine this session.
+	}
+	if (native_range.is_valid()) {
+		const Error closed = rd._native_height_range_close_checked_capture(native_range, *this);
+		if (closed != OK) {
+			fail(closed);
+		}
 	}
 	return first_error;
 }

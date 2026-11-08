@@ -1,0 +1,56 @@
+[
+  {
+    "archive": "CAMERA_GPU.log.gz",
+    "raw_bytes": 6902,
+    "raw_sha256": "fd49412b5e813dabe0fa78b1af68ed9d938d0fb521c90c91a7f7dd7513d0b184",
+    "source": "work/sprite-mobile-native-pass-selection-20261107/CAMERA_GPU.log"
+  },
+  {
+    "archive": "CONFIGURED_FULL_CPU.log.gz",
+    "raw_bytes": 5083,
+    "raw_sha256": "8114014aea3108aea7501012737e3868f14c7bb164f226f10995cbf9044af3cd",
+    "source": "work/sprite-mobile-native-pass-selection-20261107/CONFIGURED_FULL_CPU.log"
+  },
+  {
+    "archive": "CONFIGURED_FULL_CPU.xml.gz",
+    "raw_bytes": 1160664,
+    "raw_sha256": "9aaccdc3d8759faf31268bd7048827b71a95780cb30e10d18660968ced0b5849",
+    "source": "work/sprite-mobile-native-pass-selection-20261107/CONFIGURED_FULL_CPU.xml"
+  },
+  {
+    "archive": "FOCUSED.log.gz",
+    "raw_bytes": 0,
+    "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "source": "work/sprite-mobile-native-pass-selection-20261107/FOCUSED.log"
+  },
+  {
+    "archive": "FOCUSED.xml.gz",
+    "raw_bytes": 366030,
+    "raw_sha256": "6d9e0216edcba3dd32d2a374adc73861fff9ffe18fdd3c89ada32d3462acaafb",
+    "source": "work/sprite-mobile-native-pass-selection-20261107/FOCUSED.xml"
+  },
+  {
+    "archive": "HEIGHT_CONTRACT_GPU.log.gz",
+    "raw_bytes": 10188,
+    "raw_sha256": "8dac83604815414cdebcfa1139641f66e6ef5e9540db5939766606db07bae3f9",
+    "source": "work/sprite-mobile-native-pass-selection-20261107/HEIGHT_CONTRACT_GPU.log"
+  },
+  {
+    "archive": "HEIGHT_GPU.log.gz",
+    "raw_bytes": 13545,
+    "raw_sha256": "0fb0abec1f0c784384f8e6b9d871b5641661354e4b4dd6574373a8d33e996fba",
+    "source": "work/sprite-mobile-native-pass-selection-20261107/HEIGHT_GPU.log"
+  },
+  {
+    "archive": "HEIGHT_NEIGHBORS_GPU.log.gz",
+    "raw_bytes": 12633,
+    "raw_sha256": "2dc32f82e9a8c607adbdd1543042d499c72fad9be163dbacb97c9e662e40ff76",
+    "source": "work/sprite-mobile-native-pass-selection-20261107/HEIGHT_NEIGHBORS_GPU.log"
+  },
+  {
+    "archive": "VIEWPORT_GPU.log.gz",
+    "raw_bytes": 6542,
+    "raw_sha256": "8c0267c69fa1855fd1d19aaefa0cc53771cbe73c986acc7defaa816b49acb11e",
+    "source": "work/sprite-mobile-native-pass-selection-20261107/VIEWPORT_GPU.log"
+  }
+]

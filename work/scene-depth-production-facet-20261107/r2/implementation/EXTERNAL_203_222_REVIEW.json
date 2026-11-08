@@ -1,0 +1,422 @@
+{
+  "scope": "Read-only external source/package review; no production adoption, working index modification, build, GPU, attachment execution, merge or commit. Temporary-index patch reconstruction writes Git blobs/tree only; no checkout.",
+  "source_reported_commit": "2eb58a826d17b021eebc682b41ec55a9eba2153c",
+  "prior_reviewed_commit": "8c6f2fb72af1e9152beeaa3d45dba5afcaa88d1b",
+  "patch_base": "f62766d37c561d59c0b7949cd73fa2003015db77",
+  "independently_reconstructed_tree": "817cf0104cff150e1506b23e69b0d5dd67317458",
+  "exact_commit_object_available": true,
+  "fetch_limitation": "Initial authorized HTTPS exact fetch failed with SSL_ERROR_SYSCALL. Parent later reported successful exact HTTPS fetch. Independently read local commit object and verified its tree equals reconstructed tree; no remaining commit/tree binding limitation.",
+  "patch_sha256": "bcc079bc3aa0f95d6355c33a392c9287b53a2745035fbe56b6ad651dbe668e83",
+  "delta_from_prior_review": " .../particles_heightfield_clear_test_fixture.cpp   | 59 ++++++++++++++++++++--\n .../particles_heightfield_clear_test_fixture.h     |  1 +\n servers/rendering/rendering_device.h               |  1 +\n .../run_resources.py                               | 10 +++-\n 4 files changed, 65 insertions(+), 6 deletions(-)\n",
+  "packets": [
+    {
+      "packet": 203,
+      "id": "runtime-scene-quoted-height-adapter-correction-d-20261107-203",
+      "received": true,
+      "reviewed": true,
+      "adopted": false,
+      "status": "received/reviewed/not adopted",
+      "finding": "Reviewed correction: old build/GPU banner f627; unquoted neighbor only. 8c6f source review remains unadopted.",
+      "files": [
+        {
+          "name": "envelope.json",
+          "bytes": 1199,
+          "sha256": "3a437751e54a49bc9b3ccc875e675a591599f612db7f2d0de593cda81203105f"
+        },
+        {
+          "name": "message.json",
+          "bytes": 1898,
+          "sha256": "578a161130ff43a3246734b022f1e41b70fc2b3cb38bcafd8df9fd3e498d3a9f"
+        },
+        {
+          "name": "validation.json",
+          "bytes": 153,
+          "sha256": "ecd9fdededd33bc6527d0ecbafed4c4a6b9c0c3b321049205d7bcc080524507a"
+        }
+      ]
+    },
+    {
+      "packet": 206,
+      "id": "runtime-scene-quoted-height-adapter-2eb58-d-20261107-206",
+      "received": true,
+      "reviewed": true,
+      "adopted": false,
+      "status": "received/reviewed/not adopted",
+      "finding": "Verified 4094-byte evidence package; fixed-source/binary identities and quoted GPU 2/2 are source-reported, not independently replayed.",
+      "files": [
+        {
+          "name": "envelope.json",
+          "bytes": 1978,
+          "sha256": "777525acb54f9d4167cb7de897e6a839a7718128a14aa4c0475be9e6044a3e0d"
+        },
+        {
+          "name": "message.json",
+          "bytes": 2643,
+          "sha256": "f6ad62e3f4da91b78d0ebde9ad7d9198c65ad747d3cb8355bd50fceb72d92216"
+        },
+        {
+          "name": "scene-quoted-height-adapter-2eb58.zip",
+          "bytes": 4094,
+          "sha256": "3d8cee930bbac155e32f4b753fe84edf347618b1513bd154a782ef9355f6f994"
+        },
+        {
+          "name": "scene-quoted-height-adapter-2eb58.zip.download.json",
+          "bytes": 574,
+          "sha256": "67fc930c1171c08495e17daf01aa51ce89eb608c2e6a1f057c3329cd2891fa33"
+        },
+        {
+          "name": "validation.json",
+          "bytes": 640,
+          "sha256": "90e5db9a761f97ba8af68d6c09cb7f222608c116ab56259e38e6e786e30cc2e2"
+        }
+      ]
+    },
+    {
+      "packet": 209,
+      "id": "runtime-scene-quoted-height-adapter-2eb58-source-native-20261107-209",
+      "received": true,
+      "reviewed": true,
+      "adopted": false,
+      "status": "received/reviewed/not adopted",
+      "finding": "Verified 16603-byte source package and actual 51348-byte patch; inspected reconstructed source, interfaces and fixture caller.",
+      "files": [
+        {
+          "name": "envelope.json",
+          "bytes": 1559,
+          "sha256": "6d820f3c5af797ce2fdbfe24139eff2160d67b98fb0af9ea01c003089dc55fb0"
+        },
+        {
+          "name": "message.json",
+          "bytes": 2223,
+          "sha256": "865b0abd85d07313b4a59ea137669bd2de611d065392d73de39d5f4c4c24e734"
+        },
+        {
+          "name": "scene-quoted-height-adapter-2eb58-source.zip",
+          "bytes": 16603,
+          "sha256": "c262ffae54b4fbe61b6f2687886ce40978c4ef461f1cca6beee93539ca3d5544"
+        },
+        {
+          "name": "scene-quoted-height-adapter-2eb58-source.zip.download.json",
+          "bytes": 594,
+          "sha256": "bc62d1697821e9fd85804f55fb4d8d88889d5baa39032309d345c98991e131c3"
+        },
+        {
+          "name": "validation.json",
+          "bytes": 667,
+          "sha256": "563bdcd5ad0ce75b74404f26f7a29cb0af77ef53948561195752d970fd51e0c7"
+        }
+      ]
+    },
+    {
+      "packet": 212,
+      "id": "runtime-scene-source-review-followup-d-20261107-212",
+      "received": true,
+      "reviewed": true,
+      "adopted": false,
+      "status": "received/reviewed/not adopted",
+      "finding": "Reviewed follow-up; actual source patch reviewed here, no repeat engine matrix and no adoption.",
+      "files": [
+        {
+          "name": "envelope.json",
+          "bytes": 1384,
+          "sha256": "2014b4abc659d46512ba82eed9982def75542eeedf5c31ac15d8acc41f986855"
+        },
+        {
+          "name": "message.json",
+          "bytes": 2047,
+          "sha256": "370b7fa8b8e2dd219db3b5701c900f116bab583814223dd6e5380f86843bd09b"
+        },
+        {
+          "name": "validation.json",
+          "bytes": 153,
+          "sha256": "f833acd93d450218fe21a6ebf77c419206d5a0a26bfae53a091aae236ba1d79a"
+        }
+      ]
+    },
+    {
+      "packet": 214,
+      "id": "runtime-scene-native-range-caller-gap-20261107-214",
+      "received": true,
+      "reviewed": true,
+      "adopted": false,
+      "status": "received/reviewed/not adopted",
+      "finding": "Reviewed request; technical byte-count/ancestry statements superseded by 217.",
+      "files": [
+        {
+          "name": "envelope.json",
+          "bytes": 1825,
+          "sha256": "b2a5f9cc75edbccca58ea29e4f08e7d56ffd29431c3a9fe8ec40ef248fb05621"
+        },
+        {
+          "name": "message.json",
+          "bytes": 2526,
+          "sha256": "c824affed04b3aea5e52e7207dc409ff29b483a96449e10b9d48d48234f5f8de"
+        },
+        {
+          "name": "validation.json",
+          "bytes": 153,
+          "sha256": "e911bfe40e9761b3b60c8addccc6e0a1c2a9bf364bd00c9ce521456447bacf29"
+        }
+      ]
+    },
+    {
+      "packet": 217,
+      "id": "runtime-scene-native-range-technical-correction-20261107-217",
+      "received": true,
+      "reviewed": true,
+      "adopted": false,
+      "status": "received/reviewed/not adopted",
+      "finding": "Reviewed correction; independently checked ea244 has 2249 additions/9 deletions/11 files and depth-clear-only signature.",
+      "files": [
+        {
+          "name": "envelope.json",
+          "bytes": 1352,
+          "sha256": "489dd2307ffd798fc500afb27ef1f08d9ec449de62727ca8662a513850071f44"
+        },
+        {
+          "name": "message.json",
+          "bytes": 2051,
+          "sha256": "7544c64023a2b5c5ebc65a5d9f1955fb85437a15fca95086fdc238f4eb9a8747"
+        },
+        {
+          "name": "validation.json",
+          "bytes": 153,
+          "sha256": "f4de8faa6ed37fec0c74287c6e9b4553182c273d987c3d0dc6769a16005a28ff"
+        }
+      ]
+    },
+    {
+      "packet": 220,
+      "id": "runtime-scene-2eb58-patch-application-review-d-20261107-220",
+      "received": true,
+      "reviewed": true,
+      "adopted": false,
+      "status": "received/reviewed/not adopted",
+      "finding": "Independently applied patch with temporary GIT_INDEX_FILE to f627 and reproduced claimed tree; independently verified fetched local 2eb58 commit tree equals it.",
+      "files": [
+        {
+          "name": "envelope.json",
+          "bytes": 1378,
+          "sha256": "cb0c1a3c5c135d7044447a9540a5029cb7399cb4e70d783399119b3a5e30fff1"
+        },
+        {
+          "name": "message.json",
+          "bytes": 2041,
+          "sha256": "3cb7d63ac68ad28fc0764ced0aa9f292407fe5d5b8319581d14a489f6a7fee03"
+        },
+        {
+          "name": "validation.json",
+          "bytes": 153,
+          "sha256": "7ac6e69a44ad8cc8cfc1742a4688f6223e74242d37772373ecaeb43bad706c07"
+        }
+      ]
+    },
+    {
+      "packet": 222,
+      "id": "runtime-scene-geometry-prefix-owner-request-20261107-222",
+      "received": true,
+      "reviewed": true,
+      "adopted": false,
+      "status": "received/reviewed/not adopted",
+      "finding": "Answered B per original D owner: requested authenticated geometry prefix enrollment and production caller do not exist; D owns future integration; no fixed successor SHA or ETA.",
+      "files": [
+        {
+          "name": "envelope.json",
+          "bytes": 1588,
+          "sha256": "7ce2c9e7eb889077dacc4f1b822cf717ba6db9db52f959d29c97875da71f9b1c"
+        },
+        {
+          "name": "message.json",
+          "bytes": 2290,
+          "sha256": "1f3b9b9764d3f1e8b29881ec9941281772b92e6ee41ab01e3c9fbc9a8d7dd303"
+        },
+        {
+          "name": "validation.json",
+          "bytes": 153,
+          "sha256": "8a1391cd25b3fa491cf854618cf131089ec347ba98bace9dec4ece63eda5583f"
+        }
+      ]
+    }
+  ],
+  "packages": [
+    {
+      "packet": 206,
+      "path": "/Users/macbookair/Documents/Codex/2026-10-15/wo-x/feishu-bridge/inbox/runtime-scene-quoted-height-adapter-2eb58-d-20261107-206/scene-quoted-height-adapter-2eb58.zip",
+      "bytes": 4094,
+      "sha256": "3d8cee930bbac155e32f4b753fe84edf347618b1513bd154a782ef9355f6f994",
+      "members": [
+        {
+          "name": "quoted-fixed-build.log",
+          "bytes": 1997,
+          "sha256": "98c31e023775b59a194db4cbfd7c8f0f9c5d4c61813aa6dd2c97ec0d3435d2e9"
+        },
+        {
+          "name": "quoted-fixed-gpu.log",
+          "bytes": 2652,
+          "sha256": "41522935473ba50729efbd682cac6bda5c782b7deb201c4b51f28113ee1b230b"
+        },
+        {
+          "name": "refusal-after-quote.log",
+          "bytes": 4718,
+          "sha256": "744329e778a80cd2bc463561b5361c746d5dacff41078c83276f8a49a8d04e03"
+        },
+        {
+          "name": "source.diff",
+          "bytes": 600,
+          "sha256": "08dfd84a5b9dea1ed2229446815e1573d08986e80531087401188a63e11c2b10"
+        },
+        {
+          "name": "receipt.json",
+          "bytes": 494,
+          "sha256": "5964bb917eed43beefee02268c5de91a024d5f08eafc7648b5644215201ff119"
+        }
+      ]
+    },
+    {
+      "packet": 209,
+      "path": "/Users/macbookair/Documents/Codex/2026-10-15/wo-x/feishu-bridge/inbox/runtime-scene-quoted-height-adapter-2eb58-source-native-20261107-209/scene-quoted-height-adapter-2eb58-source.zip",
+      "bytes": 16603,
+      "sha256": "c262ffae54b4fbe61b6f2687886ce40978c4ef461f1cca6beee93539ca3d5544",
+      "members": [
+        {
+          "name": "quoted-fixed-build.log",
+          "bytes": 1997,
+          "sha256": "98c31e023775b59a194db4cbfd7c8f0f9c5d4c61813aa6dd2c97ec0d3435d2e9"
+        },
+        {
+          "name": "quoted-fixed-gpu.log",
+          "bytes": 2652,
+          "sha256": "41522935473ba50729efbd682cac6bda5c782b7deb201c4b51f28113ee1b230b"
+        },
+        {
+          "name": "refusal-after-quote.log",
+          "bytes": 4718,
+          "sha256": "744329e778a80cd2bc463561b5361c746d5dacff41078c83276f8a49a8d04e03"
+        },
+        {
+          "name": "source.diff",
+          "bytes": 600,
+          "sha256": "08dfd84a5b9dea1ed2229446815e1573d08986e80531087401188a63e11c2b10"
+        },
+        {
+          "name": "receipt.json",
+          "bytes": 630,
+          "sha256": "edc73db3afc74296436dfb9e42595f821e9c992fbc2333384ca35e779c338330"
+        },
+        {
+          "name": "adapter-and-probe.patch",
+          "bytes": 51348,
+          "sha256": "bcc079bc3aa0f95d6355c33a392c9287b53a2745035fbe56b6ad651dbe668e83"
+        }
+      ]
+    }
+  ],
+  "reconstructed_source_files": [
+    {
+      "path": "drivers/metal/metal_allocator.cpp",
+      "bytes": 15553,
+      "sha256": "a8ac57a2f0eea3c837ef7439de8ba76399074c9848fcf3563c57d25dd135e706",
+      "git_blob": "463f36cd89513de4080ec78773bcb0a1d5acd574"
+    },
+    {
+      "path": "drivers/metal/metal_allocator.h",
+      "bytes": 9765,
+      "sha256": "1440f26c7600ccdb20bfec559d500c71b085a6c89e965c2e49707fa4b109de5f",
+      "git_blob": "29dc1c823db7c58ecaff045eaca55e31ae0c6a46"
+    },
+    {
+      "path": "drivers/metal/rendering_device_driver_metal.cpp",
+      "bytes": 148760,
+      "sha256": "4686bcb00abadbed0ee9a4528bbdc59aa26421afbf4e206e83e1a892a88dd9cb",
+      "git_blob": "4715e6c3c8646505083572b9bbe3eaddb14b07b0"
+    },
+    {
+      "path": "drivers/metal/rendering_device_driver_metal.h",
+      "bytes": 34540,
+      "sha256": "0e65f01b4f98369bd22e2435ce5165791eff746b9364ddcfa897738a650c3c45",
+      "git_blob": "7ff37dbe694552e9b8485d09f79fcd8231f8a34f"
+    },
+    {
+      "path": "modules/particles_runtime_tests/particles_heightfield_clear_test_fixture.cpp",
+      "bytes": 51445,
+      "sha256": "311991ac978f43c55511552268b931f123addd4a34d351439b58810d0b089840",
+      "git_blob": "79bb324e9f43c884e7e95e3055a6210fd711fa1e"
+    },
+    {
+      "path": "modules/particles_runtime_tests/particles_heightfield_clear_test_fixture.h",
+      "bytes": 2597,
+      "sha256": "133c64db31ed44e179b30dac3751f2629bcc5a3d0a992353d0dbee8802f162dc",
+      "git_blob": "28a75b463215c1b532ca68c32fcd9430070eeff7"
+    },
+    {
+      "path": "servers/rendering/native_depth_allocation_projection.h",
+      "bytes": 5285,
+      "sha256": "9c635eb1ccf5aaa93c1c8a3b10a4005f6647c1019d59e048a0ce7982a2b5fdf5",
+      "git_blob": "5d0f5794d3304877592c4c49f308b1e0350b8093"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/height_capture_checked_sink.cpp",
+      "bytes": 10955,
+      "sha256": "2bc115cfbdcaa4b94f5134213ec5d4d8356022de3564cd580ba77621abe5c094",
+      "git_blob": "72f8acb5d82693e74bf6aed45bfb930481a2a607"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/height_capture_checked_sink.h",
+      "bytes": 6727,
+      "sha256": "764f36af9fc5ae0a3b13024fb367ef5789019e0716906e6572e51f8c5424626c",
+      "git_blob": "b38387d607bc0d6a203f65a574de9dd16d06e3f1"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/height_frame_resources.cpp",
+      "bytes": 10371,
+      "sha256": "9140e80099e3e4675910e2ba7f55a6179f154892703dcbd5629588b72065e755",
+      "git_blob": "732ff4f9b34898613fbace735a2c3272c72fc787"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/height_frame_resources.h",
+      "bytes": 5591,
+      "sha256": "1997c5ba9343fe604d902834974823e9256e9c603c68df3a57ab80781c17701d",
+      "git_blob": "d095d158453ac307cec94fad3ac65dff4a7a6d78"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage.h",
+      "bytes": 33170,
+      "sha256": "66a33c6322623cd5a8321ee8377a01a92e058de997868dc1cea45aafcc024c9e",
+      "git_blob": "0d21683bd1ca33d96106dc0a81f602630150123f"
+    },
+    {
+      "path": "servers/rendering/rendering_device.cpp",
+      "bytes": 705661,
+      "sha256": "3d91ca07350322b9a9975d68e2449582ed5466605f3ecd0f9c72bcb0d1f4e696",
+      "git_blob": "596d64e5e0fa8e3cfc7d257e79a6bff1e6196054"
+    },
+    {
+      "path": "servers/rendering/rendering_device.h",
+      "bytes": 126924,
+      "sha256": "5bd7671a88cd02ddcbbbfb06ecd363f0748c6c1d2845af01f4f0fe6ffc32e6c7",
+      "git_blob": "6a828de2d11cf511cf7f7a668cb0305e5e390960"
+    },
+    {
+      "path": "servers/rendering/rendering_device_driver.h",
+      "bytes": 52775,
+      "sha256": "9f605918e4c7581769a1ee25f05c56de8e1c5a88fa67e97ab03e1eac500cf6e1",
+      "git_blob": "cb75cb0606178c14a6ff7d4a76fb492708d0da6b"
+    },
+    {
+      "path": "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_resources.py",
+      "bytes": 4717,
+      "sha256": "c8f638d9a3f7732f2ecdd10049a883451d56ecd59138b8624b4bca48480f48ce",
+      "git_blob": "6712c058467cce2ef86157c2372af4b51b65bd8b"
+    }
+  ],
+  "production_geometry_enrollment": {
+    "exists": false,
+    "answer": "B",
+    "owner": "D / original native owner",
+    "next_fixed_sha": null,
+    "eta": null
+  },
+  "independent_gpu_reproduction": false,
+  "binary_hash_independently_verified": false,
+  "verified_commit_tree": "817cf0104cff150e1506b23e69b0d5dd67317458"
+}

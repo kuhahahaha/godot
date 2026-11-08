@@ -1,0 +1,37 @@
+ERROR: FATAL: Index p_index = 0 is out of bounds (count = 0).
+   at: operator[] (./core/templates/local_vector.h:206)
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_record_source.cpp:1225:
+TEST CASE:  [RecordSource] original worker batches seal reserve settle and count fresh serials
+
+tests/servers/rendering/test_record_source.cpp:319: ERROR: CHECK( device._submit_transfer_workers({},true)==OK ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_record_source.cpp:322: FATAL ERROR: REQUIRE( a.natives.size()==1 ) is NOT correct!
+  values: REQUIRE( 0 == 1 )
+
+
+================================================================
+handle_crash: Program crashed with signal 5
+Engine version: Godot Engine v4.7.2.stable.custom_build (776fd86b5a7397b67b46c217170b8019f9401bd0)
+Dumping the backtrace. Please include this when reporting the bug on: https://github.com/godotengine/godot/issues
+Load address: 102a94000
+
+[1] 193064144 (libsystem_platform.dylib+4144) - _sigtramp + 56
+[2] 107cb3e28 (main+521fe28) - TT_RunIns + 1221908
+[3] 103912d64 (main+e7ed64) - main + 12156004
+[4] 102e6f630 (main+3db630) - main + 1000752
+[5] 102e2cb04 (main+398b04) - main + 727556
+[6] 102d7f498 (main+2eb498) - main + 17304
+[7] 102d7b490 (main+2e7490) - main (in godot.macos.editor.arm64) + 912
+[8] 192c83e80 (dyld+31e80) - start + 6688
+-- END OF C++ BACKTRACE --
+================================================================
+tests/servers/rendering/test_record_source.cpp:1225: FATAL ERROR: test case CRASHED: SIGABRT - Abort (abnormal termination) signal
+
+===============================================================================
+[doctest] test cases:  12 |  11 passed | 1 failed | 2217 skipped
+[doctest] assertions: 509 | 507 passed | 2 failed |
+[doctest] Status: FAILURE!

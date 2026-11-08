@@ -30,6 +30,7 @@
 
 #include "height_frame.h"
 
+#include "servers/rendering/native_height_range.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 
 namespace RendererRD {
@@ -85,7 +86,16 @@ Error ParticlesStorage::HeightFrame::capture(RendererSceneRenderRD &p_renderer, 
 		return ERR_ALREADY_IN_USE;
 	}
 	state = State::Recording;
+	capture_error = prefix.prepare_native_range(native_range);
+	if (capture_error != OK) {
+		state = State::FailedRetiring;
+		return capture_error;
+	}
 	capture_error = p_renderer.render_particle_collider_heightfield_checked(resources->get_framebuffer(), snapshot.transform, snapshot.extents, p_geometry, prefix);
+	if (capture_error != OK) {
+		prefix.reject(capture_error);
+		prefix.unwind();
+	}
 	if (capture_error == OK) {
 		capture_error = prefix.get_error();
 	}
@@ -103,6 +113,8 @@ Error ParticlesStorage::HeightFrame::capture(RendererSceneRenderRD &p_renderer, 
 	if (!recorded) {
 		if (capture_error == OK) {
 			capture_error = ERR_INVALID_DATA;
+			prefix.reject(capture_error);
+			prefix.unwind();
 		}
 		state = State::FailedRetiring;
 		return capture_error;

@@ -1,0 +1,674 @@
+{
+  "tests/core/extension/fixtures/native_drain_trace/build.log": {
+    "bytes": 4286,
+    "sha256": "acc75821b740da7d7ae8d319fd81bc08dac2645fced599405c2c5aa0dd8f6aa8"
+  },
+  "tests/core/extension/fixtures/native_drain_trace/controlled.log": {
+    "bytes": 726523,
+    "sha256": "ddc9412cd93a87d8f4210765ab4beb9e1c99142a7b926cf004bfa5a5c4a3ff27"
+  },
+  "tests/core/extension/fixtures/native_metadata_directory/build.log": {
+    "bytes": 4286,
+    "sha256": "acc75821b740da7d7ae8d319fd81bc08dac2645fced599405c2c5aa0dd8f6aa8"
+  },
+  "tests/core/extension/fixtures/native_metadata_directory/combined.log": {
+    "bytes": 1225,
+    "sha256": "774dd4d32672355f558f423382f263de093d72718407087319b55cd1e928cb9f"
+  },
+  "tests/core/extension/fixtures/native_metadata_directory/focused.log": {
+    "bytes": 306,
+    "sha256": "7030f83ebb7557af21e8dda60585397acc3a0deda6df5c944cf997d7e847f0a4"
+  },
+  "tests/core/extension/fixtures/output_metadata_generation/build-initial.log": {
+    "bytes": 92950,
+    "sha256": "f679f01f38b63dbeae71d31391a8fe05f6685e91b600494f2e277cb73a70092d"
+  },
+  "tests/core/extension/fixtures/output_metadata_generation/build-verified.log": {
+    "bytes": 1908,
+    "sha256": "5ec5cf79dfddf03195105abf8da44dffa3a2984d805a67180c53bd8b7ba7ca1d"
+  },
+  "tests/core/extension/fixtures/output_metadata_generation/focused.log": {
+    "bytes": 306,
+    "sha256": "c7d17341975a2388ead99ecf9677f3d1f622eb4c6e4b4bcc155537063c602d22"
+  },
+  "tests/core/extension/fixtures/output_metadata_generation/regressions.log": {
+    "bytes": 1225,
+    "sha256": "683e9da2ed6e103536c54927e265cbce0b56009e59e7466ba686a94a79cebeff"
+  },
+  "tests/core/extension/fixtures/production_quote_lock_order/green-build.log": {
+    "bytes": 1905,
+    "sha256": "9ca142167989d1001ccaf8343019b4b3fa2020ddb4e4713df82c749c0f231abf"
+  },
+  "tests/core/extension/fixtures/production_quote_lock_order/green-focused.log": {
+    "bytes": 298,
+    "sha256": "322b0dd0cfc782d48e7d7d07e1c40c7857a756c3b6803d31202c6f2449f922ab"
+  },
+  "tests/core/extension/fixtures/production_quote_lock_order/green-observe.log": {
+    "bytes": 310,
+    "sha256": "1be07d730875e0cb2f9d847e7781ebd9bc6424b69d75095c51b41236f0d9ef83"
+  },
+  "tests/core/extension/fixtures/production_quote_lock_order/green-particles.log": {
+    "bytes": 298,
+    "sha256": "644e9589a56cc17f048c9b55a15addcc171e0f1d07b95830e8c081ad0f737cad"
+  },
+  "tests/core/extension/fixtures/production_quote_lock_order/green-production.log": {
+    "bytes": 805,
+    "sha256": "3b71fdb52f45cca7ed6503f837c01e3888f67e30d98bb2cd3ec1e99fdb3f427f"
+  },
+  "tests/core/extension/fixtures/production_quote_lock_order/red-build.log": {
+    "bytes": 1908,
+    "sha256": "759545622d72e20de7e1d66ae13b72326628481151a6ce7199520652ac4eabc0"
+  },
+  "tests/core/extension/fixtures/production_quote_lock_order/red-tests.log": {
+    "bytes": 2462,
+    "sha256": "b83db61e1358aa56edf872ef79700a32c04074f66612e32910e8f9aa99dbb087"
+  },
+  "tests/core/extension/fixtures/sibling_metadata_retirement/checked-draw-metadata-combined-green.log": {
+    "bytes": 1225,
+    "sha256": "350517a71b91cda669d6d56777481a1f869e85d5d50e1eca330be8b1e78b0611"
+  },
+  "tests/core/extension/fixtures/sibling_metadata_retirement/checked-draw-metadata-focused-green.log": {
+    "bytes": 726,
+    "sha256": "3760a5858a7df385213ff467b0d9d67a09b327c6d957753850ddda6152e46c12"
+  },
+  "tests/core/extension/fixtures/sibling_metadata_retirement/checked-draw-metadata-green-build.log": {
+    "bytes": 3846,
+    "sha256": "e35d803b3843d6fb1b0848961ab43cd6390fa8256880556e18ded6a8bc430d53"
+  },
+  "tests/core/extension/fixtures/sibling_metadata_retirement/checked-draw-red.log": {
+    "bytes": 16725,
+    "sha256": "f99a022b3106980ae7e8d10f4dbb3e33256058cbdb56be31538c8b0da5ceb053"
+  },
+  "tests/core/extension/fixtures/sibling_metadata_retirement/checked-metadata-red.log": {
+    "bytes": 6548,
+    "sha256": "88916a16c9c410d8b376ee04ddbe5660c8328daa8c514469b62840dfb3417d18"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_integration/native-output-alias-readback-integration-build-r1.log": {
+    "bytes": 2101,
+    "sha256": "e32fecc1d3b73c93e467afc37d804a019eb8b4c1269771bb7b3ca743dce30e55"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_integration/native-output-alias-readback-integration-build-r2.log": {
+    "bytes": 1908,
+    "sha256": "febd25df8375cb05915c9a70c70b544a4b02654641993d1891063a095959c37d"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_integration/native-output-alias-readback-integration-red-build-r1.log": {
+    "bytes": 10296,
+    "sha256": "7de278f7324fbc93924942ff8a3cbce9b42fe36c73526cc13a435f5c558adfd0"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_integration/native-output-alias-readback-integration-red-build-r2.log": {
+    "bytes": 2078,
+    "sha256": "1ad76fb3f39b003fc9a9d6bbe9c9862a5f24c99795e9ec21c705ae3a52ac4783"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_integration/native-output-continued-alias-readback-integration-combined-final.log": {
+    "bytes": 1329,
+    "sha256": "66870597960fa04b8d06dfb9bd07d8932fea1160c1e28a09cdade0cd012baf78"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_integration/native-output-continued-alias-readback-integration-r1.log": {
+    "bytes": 302,
+    "sha256": "d69474f19436c47bf6128f9e1cb2e26d8756f333022e16547af62bb249391891"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_integration/native-output-continued-alias-readback-integration-r2.log": {
+    "bytes": 302,
+    "sha256": "a3b9e88848d2268b39bd469110b507c8e9879e2a213a01a1f3af283bc7bd1206"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_integration/native-output-continued-alias-readback-integration-red-r1.log": {
+    "bytes": 5430,
+    "sha256": "24d78fe087958ba46a37fe52849d6ffab2f084a9d98e1a86028acdb5c12ffbf3"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-alias-readback-map-failure-cursor-r3.log": {
+    "bytes": 1561,
+    "sha256": "db8ece9b166f83340c8c6d95bd9d4a3d3aa6bd0e62cca420b4126246db520872"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-alias-readback-map-failure-fix-build-r3.log": {
+    "bytes": 1908,
+    "sha256": "afba59b3e9e3e9b6a5f109c6b2d1fd260fa4acfa35a8eaa4731c65946b2feea2"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-continued-alias-map-failure-combined-final.log": {
+    "bytes": 2632,
+    "sha256": "a05ec6dad7949a929c07ebd41677979875b71301b45308798d4bb0fda4397f5f"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-continued-alias-map-failure-combined-r1.log": {
+    "bytes": 1329,
+    "sha256": "42d94507d0018c0c4849dd5a74fb3b89d9071416efc6eaffcbde56757ac3f16c"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-continued-alias-map-failure-combined-r3.log": {
+    "bytes": 1329,
+    "sha256": "f664719a7b279e849d1abbb957907942a527b9b95c9f6a78ca21b2108acaf28d"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-continued-alias-map-failure-green-final.log": {
+    "bytes": 1609,
+    "sha256": "2f023ac5e2c40f3d2c68101bab1463068a31c0c708a19a9c1378ccec99b7f386"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-continued-alias-map-failure-green-r1.log": {
+    "bytes": 306,
+    "sha256": "245d268307b2c6ff4947a0b129fe2df0ed8328eb75b22d96155ef0ddadfacf77"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-continued-alias-map-failure-green-r3.log": {
+    "bytes": 306,
+    "sha256": "b0af2477a552495ece50d591d715c1d1e1af0ce1d6e73cb97e3f0b9705f1b549"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-continued-alias-readback-map-failure-r1.log": {
+    "bytes": 43,
+    "sha256": "3b571093b17551e7f9f189d5fd4ed1e8064a26c1fe863934635f24dcd371d6f6"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_static/native-output-alias-readback-static-green-build-final.log": {
+    "bytes": 1012,
+    "sha256": "982c435d31697d95e6f4f9f6ed5fbbb1e66cd4aeeec8d591a2524e4d30d2a069"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_static/native-output-alias-readback-static-green-build-r1.log": {
+    "bytes": 1968,
+    "sha256": "12d9acfdca7e32e22a8105891dcc7871483ec3d6e73e932b49d7305410cc9cda"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_static/native-output-alias-readback-static-red-build-r2.log": {
+    "bytes": 2078,
+    "sha256": "73e3fca902fef8dbabf33601e9780def07bc4d6a9e612ebc37d8790cdf232643"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_static/native-output-alias-readback-static-red-build.log": {
+    "bytes": 1597,
+    "sha256": "87a324df216e3774ca9b932cda81e1e029a1b66e29a4181b7fa23878145da1e5"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_static/native-output-continued-alias-readback-static-combined-final.log": {
+    "bytes": 1329,
+    "sha256": "75a46d5c14b42d4396fbfe69ce798ac10d7b4212add9a855bf8d56d1ca9f625d"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_static/native-output-continued-alias-readback-static-combined-r1.log": {
+    "bytes": 1329,
+    "sha256": "75a46d5c14b42d4396fbfe69ce798ac10d7b4212add9a855bf8d56d1ca9f625d"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_static/native-output-continued-alias-readback-static-focused-final.log": {
+    "bytes": 302,
+    "sha256": "e63e62d761238a841705eb6e503b3e2e7e24f818bb6ac6f17869a2ef5644f812"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_static/native-output-continued-alias-readback-static-green-r1.log": {
+    "bytes": 302,
+    "sha256": "e63e62d761238a841705eb6e503b3e2e7e24f818bb6ac6f17869a2ef5644f812"
+  },
+  "tests/core/extension/native_output_bridge/alias_readback_static/native-output-continued-alias-readback-static-red-r2.log": {
+    "bytes": 2364,
+    "sha256": "f8e65ea095a3c718450e0ef1cc3731718dd772f5eccdfb4c0550301b315f4efd"
+  },
+  "tests/core/extension/native_output_bridge/create_selection_transaction/instance192-create-integration-build-r1.log": {
+    "bytes": 4488,
+    "sha256": "fcad95ff896b0d4557b4d35fc8222e9446d62194328ce962070b05e19e08e2d8"
+  },
+  "tests/core/extension/native_output_bridge/create_selection_transaction/native-output-continued-create-integration-combined-r1.log": {
+    "bytes": 1329,
+    "sha256": "b6bdbed591a5806a1cb16c770302fec519a13a03230f672b639d0cfd48f1da23"
+  },
+  "tests/core/extension/native_output_bridge/create_selection_transaction/native-output-continued-create-integration-focused-r1.log": {
+    "bytes": 302,
+    "sha256": "5dfc8743768671de11dffdcccb0d4da31df44fd0ce425e874563095b7279c071"
+  },
+  "tests/core/extension/native_output_bridge/metadata_transport/first-metadata-combined.log": {
+    "bytes": 2513,
+    "sha256": "0266b2698cb12d1589a00f367e3674fc865171c6b103922fcc668250377479f4"
+  },
+  "tests/core/extension/native_output_bridge/metadata_transport/first-metadata-focused.log": {
+    "bytes": 1486,
+    "sha256": "3320048080afe7155df50585a2bdc53b41128736eb76ec900038bd5bb0fdf683"
+  },
+  "tests/core/extension/native_output_bridge/metadata_transport/instance192-metadata-build-r1.log": {
+    "bytes": 84581,
+    "sha256": "d2758d7dc3bacdf5dfe4d0e6af07a33afd06394d22243fb6a2659b703584a8ee"
+  },
+  "tests/core/extension/native_output_bridge/metadata_transport/instance192-metadata-build-r2.log": {
+    "bytes": 13729,
+    "sha256": "8f284832a1de081fd52503824afd5b1a1266e25ebc4f8ada08552bd0d0cc5b6d"
+  },
+  "tests/core/extension/native_output_bridge/metadata_transport/instance192-metadata-build-r3.log": {
+    "bytes": 1925,
+    "sha256": "d60e873ad36ff2ee010dc5573fc1f6c711fb9bd3bebfe84671e53dd51de3b474"
+  },
+  "tests/core/extension/native_output_bridge/metadata_transport/native-output-continued-metadata-combined-final.log": {
+    "bytes": 1329,
+    "sha256": "17f4035e9bcfe7fec71b992456453fef7318fcad3ee3806de7dfea3cc2fff7f1"
+  },
+  "tests/core/extension/native_output_bridge/metadata_transport/native-output-continued-metadata-focused-final.log": {
+    "bytes": 302,
+    "sha256": "687aec167565a6327200fe89d6743f506214d32abe5c20107381d94114206b19"
+  },
+  "tests/core/extension/native_output_bridge/native_issuer/native-output-continued-combined-final.log": {
+    "bytes": 1329,
+    "sha256": "91ed991399386aea81f850cd5ce17807602aa5bbfa87ca12e96f0fdd6d62f925"
+  },
+  "tests/core/extension/native_output_bridge/native_issuer/native-output-continued-endpoint.log": {
+    "bytes": 302,
+    "sha256": "a08dc6edef5b79df21023d6c4a248eb10079539dcdcd635af6aa4c2a3723720b"
+  },
+  "tests/core/extension/native_output_bridge/native_issuer/native-output-continued-poll-green.log": {
+    "bytes": 302,
+    "sha256": "4b5ae8025b9ed6f8b734211403b9c5def584fb793860e45b801a25230876a229"
+  },
+  "tests/core/extension/native_output_bridge/native_issuer/native-output-continued-poll-red-repeat.log": {
+    "bytes": 1210,
+    "sha256": "99c2e91ffd3bbb5a99a5e699e9f220c1470d547c4f4cb592fd6d323bd4c63701"
+  },
+  "tests/core/extension/native_output_bridge/native_issuer/native-output-directed-green-build-r2.log": {
+    "bytes": 2042,
+    "sha256": "d93d5e38cc2ad4d34c51f0cf1fd3ce4dd082696d17f0cf7367185b0d874bab60"
+  },
+  "tests/core/extension/native_output_bridge/native_issuer/native-output-directed-green-build.log": {
+    "bytes": 1472,
+    "sha256": "e17ba139da8cd5004e4fe8907736c7e4e9ef8cd19ece97b8ad84c6815fbde742"
+  },
+  "tests/core/extension/native_output_bridge/native_issuer/native-output-directed-red-build.log": {
+    "bytes": 2271,
+    "sha256": "c047ca5f571c13420e7baeb26a149c6dca5091b224ccb468f59a251cc22ed050"
+  },
+  "tests/core/extension/native_output_bridge/native_issuer/native-output-final-green-build.log": {
+    "bytes": 1909,
+    "sha256": "6830133c3e7f65b3465adfd024301232755a81d7ba6df394c1f86fc1561e37eb"
+  },
+  "tests/core/extension/native_output_bridge/native_issuer/native-output-join-endpoint.log": {
+    "bytes": 432,
+    "sha256": "5719986999eb8d28ef487f03b066e93477a4402dfaffdc4f28da5b7377111e1a"
+  },
+  "tests/core/extension/native_output_bridge/native_issuer/native-output-poll-red-repeat-build.log": {
+    "bytes": 1909,
+    "sha256": "e483da29f00fa38d25744a38de956b775b8d7f25e56a067663b4b6231d895a9f"
+  },
+  "tests/core/extension/native_scene_phase/maintenance_budget/native-output-continued-scene-maintenance-budget-combined-final.log": {
+    "bytes": 1329,
+    "sha256": "fea9f805e750b0c7089519df6c269b22c8d0e882d0ee890b3fbca23979a2b369"
+  },
+  "tests/core/extension/native_scene_phase/maintenance_budget/native-output-continued-scene-maintenance-budget-full-credit-counterfactual.log": {
+    "bytes": 1281,
+    "sha256": "16612054545db9475ea22bb110f8a9a4ea55629b4fa19cecf11d21a8dbd9c963"
+  },
+  "tests/core/extension/native_scene_phase/maintenance_budget/native-output-continued-scene-maintenance-budget-r1.log": {
+    "bytes": 302,
+    "sha256": "86bc8de700501af6440b874787984ea47314f98186182ada263f59273558d196"
+  },
+  "tests/core/extension/native_scene_phase/maintenance_budget/native-output-continued-scene-maintenance-budget-restored-final.log": {
+    "bytes": 302,
+    "sha256": "86bc8de700501af6440b874787984ea47314f98186182ada263f59273558d196"
+  },
+  "tests/core/extension/native_scene_phase/maintenance_budget/native-scene-maintenance-budget-build-r3.log": {
+    "bytes": 2038,
+    "sha256": "e95fd51f4f4642506dcb28a68357766c0604baa67074adf9880504d50868ee48"
+  },
+  "tests/core/extension/native_scene_phase/maintenance_budget/native-scene-maintenance-budget-counterfactual-build.log": {
+    "bytes": 1905,
+    "sha256": "d9b6d65f54898047d8fa33863e6f3db3b6d61ce64ef5863a7cafbb82b36fe362"
+  },
+  "tests/core/extension/native_scene_phase/maintenance_budget/native-scene-maintenance-budget-restored-build.log": {
+    "bytes": 1905,
+    "sha256": "9c3dc95b5b8e3ace66ffe7ddd8c7aff794abfbb6fd8ced2653191a8566840465"
+  },
+  "tests/core/extension/native_scene_phase/native-output-continued-scene-phase-combined-green-r1.log": {
+    "bytes": 1329,
+    "sha256": "222948f511cb84369371f3255dabb5dc81006cf4ac2f3a29d54707809e70668e"
+  },
+  "tests/core/extension/native_scene_phase/native-output-continued-scene-phase-combined-restored-final.log": {
+    "bytes": 1329,
+    "sha256": "222948f511cb84369371f3255dabb5dc81006cf4ac2f3a29d54707809e70668e"
+  },
+  "tests/core/extension/native_scene_phase/native-output-continued-scene-phase-foundation-baseline-r4.log": {
+    "bytes": 1643,
+    "sha256": "0e29777009c3bc2eccd1eea0e72bf3ad811213776808608a4a340afd9bb3e456"
+  },
+  "tests/core/extension/native_scene_phase/native-output-continued-scene-phase-no-hook-counterfactual-r1.log": {
+    "bytes": 728,
+    "sha256": "42159973c7c087bbfa33fc086203ea54fd939dcea0cea28545e75eff9d15de97"
+  },
+  "tests/core/extension/native_scene_phase/native-output-continued-scene-phase-public-green-r1.log": {
+    "bytes": 302,
+    "sha256": "405b522c340e42cc36b30296888be6ffcaa86132cc45914819284013bf73c0fa"
+  },
+  "tests/core/extension/native_scene_phase/native-output-continued-scene-phase-public-red-final.log": {
+    "bytes": 3487,
+    "sha256": "5ba6a892de81c4802eaa7a7735068b1268de6bf5450736cc0536efefa5d7d714"
+  },
+  "tests/core/extension/native_scene_phase/native-output-continued-scene-phase-public-red-r2.log": {
+    "bytes": 5773,
+    "sha256": "885825f0a61e64fb039fd23b37c73857d4be6cfac24326b7321df7f355a573b9"
+  },
+  "tests/core/extension/native_scene_phase/native-output-continued-scene-phase-restored-final.log": {
+    "bytes": 302,
+    "sha256": "405b522c340e42cc36b30296888be6ffcaa86132cc45914819284013bf73c0fa"
+  },
+  "tests/core/extension/native_scene_phase/native-scene-phase-foundation-build-r1.log": {
+    "bytes": 2075,
+    "sha256": "d46314ef3a675233026a2ec4116e4025c02fea5709c916cf7e36a058f92d8a93"
+  },
+  "tests/core/extension/native_scene_phase/native-scene-phase-foundation-build-r2.log": {
+    "bytes": 2110,
+    "sha256": "2c27191e1201f2d3b79fe4f0030268dd7761aeb01391da1dd539cda716e17b89"
+  },
+  "tests/core/extension/native_scene_phase/native-scene-phase-foundation-build-r3.log": {
+    "bytes": 13439,
+    "sha256": "e5c942f23a99be641616a7aab12573a212d826ddcd9c4884a9fe3f8b12d7cefe"
+  },
+  "tests/core/extension/native_scene_phase/native-scene-phase-foundation-build-r4.log": {
+    "bytes": 94349,
+    "sha256": "5c11c8af19df93f547aab53d93d37ea7cb43425e4b24f77bd4205ecda83d87c5"
+  },
+  "tests/core/extension/native_scene_phase/native-scene-phase-hook-restored-build-r1.log": {
+    "bytes": 1914,
+    "sha256": "9d3894ddb1e033357fce963ca6b6b0e1cf858e02446dba4839a0aef6371261b7"
+  },
+  "tests/core/extension/native_scene_phase/native-scene-phase-no-hook-build-r1.log": {
+    "bytes": 1914,
+    "sha256": "b9774a437d4b546b5745903a010746a5567053420a670ebb521fc57189f4de15"
+  },
+  "tests/core/extension/native_scene_phase/native-scene-phase-public-green-build-r1.log": {
+    "bytes": 3961,
+    "sha256": "e88182b743f29a0d117490adaafa43f582aaa0193ab042ba37972a513d2c07c5"
+  },
+  "tests/core/extension/native_scene_phase/release_budget/native-output-continued-scene-release-budget-combined-final.log": {
+    "bytes": 1329,
+    "sha256": "2e283081ed9ef9931b9027171d555d03e03c19a453d9ca75c31a020983c61fe6"
+  },
+  "tests/core/extension/native_scene_phase/release_budget/native-output-continued-scene-release-budget-green-r1.log": {
+    "bytes": 302,
+    "sha256": "6b4da68c1cdd9e4de8e736217b641ac1d43d8457f91ed0ca9f7eacf0471da2a7"
+  },
+  "tests/core/extension/native_scene_phase/release_budget/native-output-continued-scene-release-budget-locked-counterfactual-r1.log": {
+    "bytes": 966,
+    "sha256": "5cd15e866de5077564b96823a7b90af4bed0f47260d78d02efecc1793d0521ca"
+  },
+  "tests/core/extension/native_scene_phase/release_budget/native-output-continued-scene-release-budget-restored-final.log": {
+    "bytes": 302,
+    "sha256": "6b4da68c1cdd9e4de8e736217b641ac1d43d8457f91ed0ca9f7eacf0471da2a7"
+  },
+  "tests/core/extension/native_scene_phase/release_budget/native-scene-release-budget-build-r1.log": {
+    "bytes": 2119,
+    "sha256": "7f2aa4c8e4164ad4f66a42163e006e3cd0a62e731c34593d21168469fb9a3997"
+  },
+  "tests/core/extension/native_scene_phase/release_budget/native-scene-release-budget-locked-build-r1.log": {
+    "bytes": 1905,
+    "sha256": "53a98806e98de28775ec01353c93bce846c88b0af817ac72bd4d72b1e815cff4"
+  },
+  "tests/core/extension/native_scene_phase/release_budget/native-scene-release-budget-restored-build-r1.log": {
+    "bytes": 2102,
+    "sha256": "dc781e8ac9e15a2ec1312019ffbb9a58968e39f5c88f1ad44ad1a682b3860c0d"
+  },
+  "tests/scene/fixtures/particle_collision_texture_changed/green_build.log": {
+    "bytes": 2041,
+    "sha256": "17ddb0550bdab206db17a7ff6d3f7508a506c362f0cb81be4765608f7906eaa7"
+  },
+  "tests/scene/fixtures/particle_collision_texture_changed/green_run.log": {
+    "bytes": 4686,
+    "sha256": "765361f33bcf55490d5774c0e21cd2f32e58c00171ecfc6e8ab7540bb028b61e"
+  },
+  "tests/scene/fixtures/particle_collision_texture_changed/red_build.log": {
+    "bytes": 4250,
+    "sha256": "78103fde13f770c3d7d928e734728a6c5185722d31729bbf06ce3ba8d97f93cb"
+  },
+  "tests/scene/fixtures/particle_collision_texture_changed/red_run.log": {
+    "bytes": 5853,
+    "sha256": "bc9082edf4e6d59eefd95f891bb2c6ba62193cfd36b896ef94ba4c825fc7b737"
+  },
+  "tests/scene/fixtures/particle_emission_texture_changed/green_build.log": {
+    "bytes": 2715,
+    "sha256": "2dba6355f7a25ef88f8442d9212f121dcedc0a2d441eaa9979e04dc23ee9cd9e"
+  },
+  "tests/scene/fixtures/particle_emission_texture_changed/green_run.log": {
+    "bytes": 9210,
+    "sha256": "340fe9777d631257fb45a930bf5e39d25f358a8867c0889c6a79ab02b305bc6e"
+  },
+  "tests/scene/fixtures/particle_emission_texture_changed/neighbors.log": {
+    "bytes": 298,
+    "sha256": "a5c906dc38a68f3da4299870dca64f8b85bb2c4bbc00de9a3799d1f0e2985699"
+  },
+  "tests/scene/fixtures/particle_emission_texture_changed/red_run.log": {
+    "bytes": 13431,
+    "sha256": "6a8da77e3d03971e53421f332a7bcfdfd8f2b335a145b0088102792fe74ea5d2"
+  },
+  "tests/servers/rendering/fixtures/camera_stage/b4-camera-focused-green-run.log": {
+    "bytes": 298,
+    "sha256": "b01293edf31aaa3f23fba521db40d258f9f72191b518eed49a3662a95dc9e33e"
+  },
+  "tests/servers/rendering/fixtures/camera_stage/b4-camera-particle-green-build.log": {
+    "bytes": 2041,
+    "sha256": "17ddb0550bdab206db17a7ff6d3f7508a506c362f0cb81be4765608f7906eaa7"
+  },
+  "tests/servers/rendering/fixtures/camera_stage/b4-camera-stage-red-build.log": {
+    "bytes": 1915,
+    "sha256": "158129853562d357b3bed5962f3d6a98fb5eb8e28b6e1940e990a9346116b2c0"
+  },
+  "tests/servers/rendering/fixtures/camera_stage/b4-camera-stage-red-run.log": {
+    "bytes": 1350,
+    "sha256": "96fad73d3f66b3ba96d4a0f4c09c468991a775ee2f9b63bb27ff03ea3ab139f3"
+  },
+  "tests/servers/rendering/fixtures/camera_stage/b4-viewport-green-run.log": {
+    "bytes": 726,
+    "sha256": "e9afc0b235ad7103a9fe0d65f111ce8d0484028b3e27cae31d0255b7aa9fb513"
+  },
+  "tests/servers/rendering/fixtures/checked_draw_list_identity/checked-draw-metadata-combined-green.log": {
+    "bytes": 1225,
+    "sha256": "350517a71b91cda669d6d56777481a1f869e85d5d50e1eca330be8b1e78b0611"
+  },
+  "tests/servers/rendering/fixtures/checked_draw_list_identity/checked-draw-metadata-focused-green.log": {
+    "bytes": 726,
+    "sha256": "3760a5858a7df385213ff467b0d9d67a09b327c6d957753850ddda6152e46c12"
+  },
+  "tests/servers/rendering/fixtures/checked_draw_list_identity/checked-draw-metadata-green-build.log": {
+    "bytes": 3846,
+    "sha256": "e35d803b3843d6fb1b0848961ab43cd6390fa8256880556e18ded6a8bc430d53"
+  },
+  "tests/servers/rendering/fixtures/checked_draw_list_identity/checked-draw-red.log": {
+    "bytes": 16725,
+    "sha256": "f99a022b3106980ae7e8d10f4dbb3e33256058cbdb56be31538c8b0da5ceb053"
+  },
+  "tests/servers/rendering/fixtures/engine_external_guard/instance192-engine-guard-build.log": {
+    "bytes": 4450,
+    "sha256": "16cdc632d8bb53e31cc85f8ecbdc6d6eea6cdf7bd813b847d65ad5059123061a"
+  },
+  "tests/servers/rendering/fixtures/engine_external_guard/native-output-continued-guard-combined.log": {
+    "bytes": 1329,
+    "sha256": "2473d2933ba3b776594e118a2d581ec6f6499ed0662b4a5ff34c3113baae0a3d"
+  },
+  "tests/servers/rendering/fixtures/generation_selection/identity_retention/instance192-generation-identity-build-r1.log": {
+    "bytes": 2420,
+    "sha256": "e70dfa9e57ee525b2b88bd9f049898807e7aa64fabb94b39911a397a41a34310"
+  },
+  "tests/servers/rendering/fixtures/generation_selection/identity_retention/native-output-continued-generation-identity-combined-r1.log": {
+    "bytes": 1329,
+    "sha256": "e8c6d4407d56cd20bb238b41ba1c3922bd4449207783e67c30f243e124546b2a"
+  },
+  "tests/servers/rendering/fixtures/generation_selection/identity_retention/native-output-continued-generation-identity-focused-r1.log": {
+    "bytes": 302,
+    "sha256": "4c008ebff4a4163e8e9bff52360cc9acbd3da486072bcf5c14befd925227ccdc"
+  },
+  "tests/servers/rendering/fixtures/generation_selection/instance192-generation-selection-counterfactual-build.log": {
+    "bytes": 1934,
+    "sha256": "7ac0da22a735948f2da1a659bd6f7434a45f8dfb6b172e00b8d083b420cce199"
+  },
+  "tests/servers/rendering/fixtures/generation_selection/instance192-generation-selection-lifecycle-build-final.log": {
+    "bytes": 1934,
+    "sha256": "b6496af5a4090e108d61a5df5a0f634215268024dfffc59485337395809247d5"
+  },
+  "tests/servers/rendering/fixtures/generation_selection/instance192-generation-selection-lifecycle-build-r1.log": {
+    "bytes": 1988,
+    "sha256": "c6027d6f4f9cfb8d6d9b6f2e806cfebe62f1308da611a853db7af8cf1e0771bd"
+  },
+  "tests/servers/rendering/fixtures/generation_selection/instance192-generation-selection-lifecycle-build-r2.log": {
+    "bytes": 2209,
+    "sha256": "042ba170c3c3db3f8739ae0f6610445e1b37a4ee7abec0aeb2782538469cecd8"
+  },
+  "tests/servers/rendering/fixtures/generation_selection/instance192-generation-selection-lifecycle-build-r3.log": {
+    "bytes": 1908,
+    "sha256": "dfba7018263b4ed9eca05a69b17916b28fc406b02c3e6b2d839c365932c85716"
+  },
+  "tests/servers/rendering/fixtures/generation_selection/native-output-continued-generation-lifecycle-combined-final.log": {
+    "bytes": 1329,
+    "sha256": "2cd2f23f565fd4f9b5c16c44632fdd408b88305a6705f3be9c76146206d409d5"
+  },
+  "tests/servers/rendering/fixtures/generation_selection/native-output-continued-generation-lifecycle-counterfactual.log": {
+    "bytes": 1548,
+    "sha256": "008141fdc9a1ccca3303a708ddb17246cbd4d830d5ce577b239c3ef02957a9fb"
+  },
+  "tests/servers/rendering/fixtures/generation_selection/native-output-continued-generation-lifecycle-final.log": {
+    "bytes": 302,
+    "sha256": "cb8d401f3d8bc78313964e64327b38c3db2e7aba6a1a3934ff2bedad10198b26"
+  },
+  "tests/servers/rendering/fixtures/generation_selection/native-output-continued-generation-lifecycle-r1.log": {
+    "bytes": 1696,
+    "sha256": "d317bc365b1480a0851ce4b999132555941bc228216a875f7536deb220cbb044"
+  },
+  "tests/servers/rendering/fixtures/generation_selection/native-output-continued-generation-lifecycle-trace-r1.log": {
+    "bytes": 1708,
+    "sha256": "b15b217a18039a18e1658ab6835c72655d847fda1441a19bf917fd9576a401a5"
+  },
+  "tests/servers/rendering/fixtures/native_preparation_ranges/native-preparation-combined-green.log": {
+    "bytes": 1329,
+    "sha256": "0b9ee48ffa91de317270e5de85c96e35c45ff9f1d08fec35bd72630226f6825f"
+  },
+  "tests/servers/rendering/fixtures/native_preparation_ranges/native-preparation-constant-red.log": {
+    "bytes": 1760,
+    "sha256": "0a2ca840995e91538c4081aa3315723f995cd8cd9520a87f73380c12a3bbe36a"
+  },
+  "tests/servers/rendering/fixtures/native_preparation_ranges/native-preparation-focused-green.log": {
+    "bytes": 410,
+    "sha256": "f8f6cfc387c845897ca58f8076e90066f6b6bb8134f146dd8e6eea323b72511b"
+  },
+  "tests/servers/rendering/fixtures/native_preparation_ranges/native-preparation-green-build.log": {
+    "bytes": 1906,
+    "sha256": "dbea5735f69dee69a3ce97abbb2c11342b921ee22eb94e05f2c6b66eb9cae979"
+  },
+  "tests/servers/rendering/fixtures/native_preparation_ranges/native-preparation-pipeline-red.log": {
+    "bytes": 2545,
+    "sha256": "1554af9b15c29360a80f1721fa3a28698108275c45fff0938a6d9897e6452757"
+  },
+  "tests/servers/rendering/fixtures/native_preparation_ranges/native-preparation-red-build.log": {
+    "bytes": 2183,
+    "sha256": "d2b5162876f46c2ff02d458bf877ad4adbd2a921c318af41efd0e7f17c8cbb1c"
+  },
+  "tests/servers/rendering/fixtures/native_preparation_ranges/native-preparation-vertex-red.log": {
+    "bytes": 9467,
+    "sha256": "cad002614dda751bb06863ec8488547cd05470752b45c89cb50f030325c7a911"
+  },
+  "tests/servers/rendering/fixtures/native_preparation_ranges/red/engine_build_identity.gen.json": {
+    "bytes": 86572,
+    "sha256": "2c7725ebff496fb94e4d6660edec6c5f9e94ffbab273864cd0bd035d37be2e72"
+  },
+  "tests/servers/rendering/fixtures/native_preparation_ranges/red/engine_build_selection.gen.json": {
+    "bytes": 311,
+    "sha256": "b6461e0a27b8997050e0fa4ed331d5a02e48aacaf938a844c501e63aa7217ba0"
+  },
+  "tests/servers/rendering/fixtures/native_selection_leases/instance192-selection-build-r1.log": {
+    "bytes": 2797,
+    "sha256": "1581e820c36a4e09e11f0fe0438cf3f2a340693591ce3dac417829dd666d2c23"
+  },
+  "tests/servers/rendering/fixtures/native_selection_leases/instance192-selection-build-r2.log": {
+    "bytes": 5785,
+    "sha256": "2c53b74f646631c3de7280dd6ca3ca23c85acd73964fbb0f051715fa0b21c685"
+  },
+  "tests/servers/rendering/fixtures/native_selection_leases/instance192-selection-build-r3.log": {
+    "bytes": 1990,
+    "sha256": "55b5476616efe5ddc17dd421dc5b01e76919588952c418bf5b7226706222ec64"
+  },
+  "tests/servers/rendering/fixtures/native_selection_leases/instance192-selection-focused-r2.log": {
+    "bytes": 306,
+    "sha256": "c92a32955328fc303ad629199217a81082d0476fc21100c5a1f313c15edaa622"
+  },
+  "tests/servers/rendering/fixtures/native_selection_leases/native-output-continued-selection-combined-final.log": {
+    "bytes": 1329,
+    "sha256": "0cc50451735061f6edf1969ef5d0581b2412f18b4f2279f42825e10dbec05a48"
+  },
+  "tests/servers/rendering/fixtures/same_buffer_copy/native-output-continued-graph-final.log": {
+    "bytes": 298,
+    "sha256": "88e48667157632d6e16c4a1820eab6d0446cf4f8eb322f86bf2f118eaab02e42"
+  },
+  "tests/servers/rendering/fixtures/same_buffer_copy/native-output-continued-graph-green.log": {
+    "bytes": 298,
+    "sha256": "88e48667157632d6e16c4a1820eab6d0446cf4f8eb322f86bf2f118eaab02e42"
+  },
+  "tests/servers/rendering/fixtures/same_buffer_copy/native-output-continued-graph-red.log": {
+    "bytes": 4866,
+    "sha256": "2a51afc0fb74415f34123d5d198c76688cc838ebde8bd452c2cf9334ea674dbc"
+  },
+  "tests/servers/rendering/fixtures/scene45_incremental_admission/hardware-POSITIVE.log": {
+    "bytes": 5818,
+    "sha256": "9e5893d5deb4d550a13390ab2522db264298f48a3b784b45e558f6d17fc100ee"
+  },
+  "tests/servers/rendering/fixtures/scene45_incremental_admission/hardware-RUN-trace.log": {
+    "bytes": 457,
+    "sha256": "93a6a55c450686d81ca43439e8abf5b9ff792b074d59a59f5d97910ee2ec368a"
+  },
+  "tests/servers/rendering/fixtures/scene45_incremental_admission/hardware-RUN.log": {
+    "bytes": 457,
+    "sha256": "93a6a55c450686d81ca43439e8abf5b9ff792b074d59a59f5d97910ee2ec368a"
+  },
+  "tests/servers/rendering/fixtures/scene45_incremental_admission/native-output-continued-scene45-fixed-successor-combined-r1.log": {
+    "bytes": 2544,
+    "sha256": "e39ebdf4ed7f1b3b7518c882fd250e522186a5760026d99a40ff8bdd924eeb1a"
+  },
+  "tests/servers/rendering/fixtures/scene45_incremental_admission/native-output-continued-scene45-frame-reset-worker-combined-r1.log": {
+    "bytes": 1329,
+    "sha256": "8f493f309270c28990d7873998030378eb04ec1aadb7ea2913fe3267b471749f"
+  },
+  "tests/servers/rendering/fixtures/scene45_incremental_admission/native-output-continued-scene45-worker-fallback-combined-final.log": {
+    "bytes": 1329,
+    "sha256": "8f493f309270c28990d7873998030378eb04ec1aadb7ea2913fe3267b471749f"
+  },
+  "tests/servers/rendering/fixtures/scene45_incremental_admission/scene45-fixed-successor-build-r1.log": {
+    "bytes": 94596,
+    "sha256": "7358cce9f7986f8145e49ac96b2af35875ade0614f8b6fc1c01bda0c9640b5fb"
+  },
+  "tests/servers/rendering/fixtures/scene45_incremental_admission/scene45-frame-reset-worker-fact-build-r1.log": {
+    "bytes": 2101,
+    "sha256": "9025a832446f860436d6e41439aaa25b21a608b77085e450b2357f01190d63df"
+  },
+  "tests/servers/rendering/fixtures/scene45_incremental_admission/scene45-record-source-r1.log": {
+    "bytes": 1923,
+    "sha256": "a092ebb7f95da22606f526c763d6a48fedfb414668e2f20eaecb0438487868d8"
+  },
+  "tests/servers/rendering/fixtures/scene45_incremental_admission/scene45-v1-protected-append-red.log": {
+    "bytes": 2041,
+    "sha256": "768db941e8676f1c5c2753ecfcbfdab7804a3f0c15dfa3e6a77ef409d862b4db"
+  },
+  "tests/servers/rendering/fixtures/scene45_incremental_admission/scene45-v1-worker-green-r1.log": {
+    "bytes": 302,
+    "sha256": "82aea7fa7f4686b26640ccaa17fd21926b541d2e2d4fe7354becf1cad0e9157c"
+  },
+  "tests/servers/rendering/fixtures/scene45_incremental_admission/scene45-worker-fallback-build-r1.log": {
+    "bytes": 1906,
+    "sha256": "cbdef34b927b1b3b37ea32dbbd2231ec806106a7bcc1627f1736d435ce62c530"
+  },
+  "tests/servers/rendering/fixtures/scene_complete_prerequisite/native-output-continued-scene-complete-foundation-r1.log": {
+    "bytes": 302,
+    "sha256": "0eb9420e42a8b2bba80345fd2ce89441f9bfb9cc65dc495ea1996b512917f90d"
+  },
+  "tests/servers/rendering/fixtures/scene_complete_prerequisite/native-scene-complete-prerequisite-build-r1.log": {
+    "bytes": 8362,
+    "sha256": "4541eb3e3c3ae5042f2cade34fdb8ec6765a5774083ae16a08782d44fbaa9bfc"
+  },
+  "tests/servers/rendering/fixtures/scene_complete_prerequisite/scene-complete-camera-receiver-r1.log": {
+    "bytes": 801,
+    "sha256": "19503ebd6dd48233ca1fa714b3b9294e2ce812162db62f2666acf7390c847e63"
+  },
+  "work/particle-external-output-native-current-20261107-r1/evidence/stderr.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "work/particle-external-output-native-current-20261107-r1/evidence/stdout.log": {
+    "bytes": 1924,
+    "sha256": "8c42ae96620c69e68c92350201acb0400dd79bc684d74b8b83b300c3ba04f451"
+  },
+  "work/particle-external-output-native-current-20261107-r1/stderr.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "work/particle-external-output-native-current-20261107-r1/stdout.log": {
+    "bytes": 6851,
+    "sha256": "fcae77ccc94e30fcb9d2c4a7a7f26942067f813ebdc28738d41a145a712aa953"
+  },
+  "work/particle-native-current-20261107-r1/evidence/stderr.log": {
+    "bytes": 3076,
+    "sha256": "dfba6c7dba1c745f019394f1f8b19476f43c3c33b9dd64e2ce3d474b6a16735f"
+  },
+  "work/particle-native-current-20261107-r1/evidence/stdout.log": {
+    "bytes": 25985,
+    "sha256": "01355a22ab69ab4e0a2fef3f61a5712b4df043bef98ea29b42d4020690bc9dcb"
+  },
+  "work/particle-scene-pairs-native-current-20261107-r1/stderr.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "work/particle-scene-pairs-native-current-20261107-r1/stdout.log": {
+    "bytes": 770,
+    "sha256": "c3e232e15ab51f5da5e22da1e554bed17eca4abaab2ac4552936648c849bcbca"
+  }
+}

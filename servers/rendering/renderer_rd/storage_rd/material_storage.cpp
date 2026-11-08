@@ -1196,6 +1196,54 @@ Error MaterialStorage::material_selection_release(NativeSelectionLease &r_lease)
 	return OK;
 }
 
+Error MaterialStorage::material_selection_get_shader_features(const NativeSelectionLease &p_lease, NativeSelectionShaderFeatures &r_features) const {
+	if (p_lease.owner != this || !p_lease.device || p_lease.device != RD::get_singleton() || !p_lease.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	const Material *material = material_owner.get_or_null(p_lease.rid);
+	if (!material || !p_lease.generation || material->generation != p_lease.generation || material->generation == UINT64_MAX ||
+			!material->selection_holds || material->shader_type != SHADER_TYPE_3D || !material->data ||
+			!material->shader || !material->shader->selection_holds || !material->shader->data) {
+		return ERR_INVALID_DATA;
+	}
+	if (material->uniform_dirty || material->texture_dirty) {
+		return ERR_BUSY;
+	}
+	if (material->next_pass.is_valid()) {
+		return ERR_UNAVAILABLE;
+	}
+	ShaderData::NativeInstance192ShaderFeatures compiled;
+	const Error observed = material->shader->data->get_native_instance192_shader_features(compiled);
+	if (observed != OK) {
+		return observed;
+	}
+	const auto original = material->shader->data->get_native_shader_and_version();
+	if (!compiled.shader || compiled.version.is_null() || compiled.shader != original.first || compiled.version != original.second) {
+		return ERR_INVALID_DATA;
+	}
+	NativeSelectionShaderFeatures result;
+	result.material = p_lease.rid;
+	result.material_generation = p_lease.generation;
+	result.compiled = compiled;
+	r_features = result;
+	return OK;
+}
+
+Error MaterialStorage::material_selection_get_shader_observation(const NativeSelectionLease &p_lease, NativeSelectionShaderObservation &r_observation) const {
+	NativeSelectionShaderFeatures features;
+	const Error observed = material_selection_get_shader_features(p_lease, features);
+	if (observed != OK) {
+		return observed;
+	}
+	NativeSelectionShaderObservation observation;
+	observation.material = features.material;
+	observation.material_generation = features.material_generation;
+	observation.shader_version = features.compiled.version;
+	observation.needs_inverse = features.compiled.needs_inverse;
+	r_observation = observation;
+	return OK;
+}
+
 bool MaterialStorage::MaterialData::native_immutable_busy() const {
 	auto *rd = RD::get_singleton();
 	if (!rd) {

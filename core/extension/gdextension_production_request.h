@@ -37,6 +37,7 @@
 #include "servers/rendering/native_disposal_witness.h"
 
 class TestProductionResourceUseAccess;
+class TestNativeDisposalAccess;
 namespace TestProductionNativeObserve {
 struct Access;
 }
@@ -49,6 +50,10 @@ namespace GDExtensionDeviceExit {
 template <class T>
 constexpr GDExtensionDeviceExitAbi production_dto_abi() {
 	return { 1, sizeof(T), 0 };
+}
+template <>
+constexpr GDExtensionDeviceExitAbi production_dto_abi<GDExtensionProductionObserveResultV3>() {
+	return { 3, sizeof(GDExtensionProductionObserveResultV3), 0 };
 }
 template <>
 constexpr GDExtensionDeviceExitAbi production_dto_abi<GDExtensionProductionDispatchV2>() {
@@ -170,6 +175,41 @@ public:
 	ProductionOutputPin &operator=(ProductionOutputPin &&) noexcept;
 	~ProductionOutputPin();
 	bool is_empty() const { return registry == nullptr; }
+};
+
+// A synchronous native-owner continuation of an originally reserved output
+// action. It is neither an extension physical context nor a new reservation.
+class ProductionOutputPreparationScope final {
+	friend class Registry;
+	friend class ::RenderingDevice;
+	friend class ::RendererRD::ParticlesStorage;
+	friend class ::RendererRD::ExternalPipelinePreparation;
+#ifdef TESTS_ENABLED
+	friend struct ::TestProductionRequest::Access;
+#endif
+	ProductionOutputPreparationScope() = default;
+	Registry *registry = nullptr;
+	ProductionRequest *request = nullptr;
+	ProductionOutputPin *pin = nullptr;
+	RenderingDevice *device = nullptr;
+	ProductionOutputPreparationScope *previous = nullptr;
+	RID *original_root = nullptr;
+	::RendererRD::ExternalPipelinePreparation *row = nullptr;
+	ProductionResourceSlot *original_source = nullptr;
+	const void *original_geometry = nullptr;
+	RID original_particles, original_material;
+	uint64_t original_generation = 0, original_lease = 0, original_material_generation = 0, source_generation = 0;
+	uint32_t original_slot = UINT32_MAX, source_use = UINT32_MAX, first_source_use = UINT32_MAX, source_use_count = 0;
+	uint64_t request_serial = 0, root_serial = 0, group = 0, thread = 0;
+	uint32_t action_ordinal = UINT32_MAX, surface_ordinal = UINT32_MAX, preparation_index = UINT32_MAX;
+	const ::RendererRD::ExternalPacketViewLease *selected_view = nullptr;
+
+public:
+	ProductionOutputPreparationScope(const ProductionOutputPreparationScope &) = delete;
+	ProductionOutputPreparationScope &operator=(const ProductionOutputPreparationScope &) = delete;
+	ProductionOutputPreparationScope(ProductionOutputPreparationScope &&) = delete;
+	ProductionOutputPreparationScope &operator=(ProductionOutputPreparationScope &&) = delete;
+	~ProductionOutputPreparationScope();
 };
 
 // One actual byte-bounded CPU metadata resource in an original accepted row.
@@ -300,12 +340,14 @@ class ProductionActionCell {
 	uint64_t output_generation = 0, output_lease = 0, output_root = 0;
 	uint32_t output_slot = UINT32_MAX;
 	uint32_t output_read_capacity = 0, output_read_graph_capacity = 0, output_read_cursor = 0;
+	uint64_t output_preparation_borrower_headroom = 0; // Paid simultaneous L, never an issued pin or a read grant.
 	bool output_source_prepared = false;
 };
 class ProductionUseCell {
 	friend class Registry;
 	friend class ::RenderingDevice;
 #ifdef TESTS_ENABLED
+	friend class ::TestNativeDisposalAccess;
 	friend struct ::TestProductionRequest::Access;
 	friend struct ::TestProductionNativeObserve::Access;
 	friend class ::TestProductionResourceUseAccess;
@@ -336,6 +378,7 @@ class ProductionUseCell {
 	ProductionDisposalUse disposal;
 	uint64_t disposal_group_serial = 0, disposal_group_pin_serial = 0;
 	uint32_t disposal_group_count = 0, disposal_ordinal = UINT32_MAX;
+	uint32_t disposal_group_native_hold_count = 0;
 	bool disposal_group_release = false, disposal_group_dropped = false, disposal_group_native_hold = false;
 };
 class ProductionReadbackCell {
@@ -480,8 +523,10 @@ struct ProductionControlCell {
 };
 class ProductionRequest {
 	friend class Registry;
+	friend class ::RendererRD::ExternalOutputOwner;
 	friend class ::RenderingDevice;
 #ifdef TESTS_ENABLED
+	friend class ::TestNativeDisposalAccess;
 	friend struct ::TestProductionRequest::Access;
 	friend struct ::TestProductionNativeObserve::Access;
 	friend class ::TestProductionResourceUseAccess;
@@ -509,6 +554,7 @@ class ProductionRequest {
 	uint32_t observe_cursor = 0, release_cursor = 0;
 	bool source_device_lost = false, release_started = false;
 	uint32_t capture_inflight = 0;
+	uint32_t continuation_inflight = 0;
 	// One fixed mailbox per request, included by sizeof(ProductionRequest) in
 	// the checked arena Quote. Never aliases retained payload or return cells.
 	ProductionControlCell control = {};

@@ -1,0 +1,544 @@
+{
+  "entries": [
+    {
+      "path": "parent/GREEN_R2_FINAL_BUILD_RESULT.json",
+      "category": "r2_final",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/GREEN_R2_FINAL_BUILD_RESULT.json",
+      "original_bytes": 335,
+      "original_sha256": "c4eeb92d48c74e9e90c3b4c5a95de3405da97ec97e11d8652af81ba41f565894",
+      "stored_bytes": 335,
+      "stored_sha256": "c4eeb92d48c74e9e90c3b4c5a95de3405da97ec97e11d8652af81ba41f565894"
+    },
+    {
+      "path": "parent/GREEN_R2_FINAL_BUILD.log.txt.gz",
+      "category": "r2_final",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/GREEN_R2_FINAL_BUILD.log.txt",
+      "original_bytes": 11727,
+      "original_sha256": "10eb885dae8f8e2731d9e516503db18d5131859f3af7f8be453d5600d0fd6229",
+      "stored_bytes": 2218,
+      "stored_sha256": "da0792c7a8fd19422675456f4767d08e25976cd2e9f5391707ae56cc2c721d4e"
+    },
+    {
+      "path": "parent/GREEN_R2_FULL_RESULT.json",
+      "category": "r2_final",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/GREEN_R2_FULL_RESULT.json",
+      "original_bytes": 628,
+      "original_sha256": "82f1217925bc13254ac9d3a96c105bcd587fbc190d6b1344129de60c8bc13be7",
+      "stored_bytes": 628,
+      "stored_sha256": "82f1217925bc13254ac9d3a96c105bcd587fbc190d6b1344129de60c8bc13be7"
+    },
+    {
+      "path": "parent/GREEN_R2_FULL.log.txt.gz",
+      "category": "r2_final",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/GREEN_R2_FULL.log.txt",
+      "original_bytes": 5083,
+      "original_sha256": "ffbe7b124c0121c7608af484fac495e51e247e0c0ccb4810853478482c74d54c",
+      "stored_bytes": 1319,
+      "stored_sha256": "febd7f3b24b52946e27bdd09ea716cef86355b65944e94fa4fd5f157983bed90"
+    },
+    {
+      "path": "parent/GREEN_R2_FULL.xml.gz",
+      "category": "r2_final",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/GREEN_R2_FULL.xml",
+      "original_bytes": 1162939,
+      "original_sha256": "35cf2879d9033a2dfd777aab44fb90b202175886ed5f0036ddcd897afb704c4f",
+      "stored_bytes": 82437,
+      "stored_sha256": "3bdffa1e2d4fae0e9a8c5a295d5de7259151d5a5b2daeca372d3b7522d67c4dc"
+    },
+    {
+      "path": "parent/GREEN_R2_GPU_RESULT.json",
+      "category": "r2_final",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/GREEN_R2_GPU_RESULT.json",
+      "original_bytes": 770,
+      "original_sha256": "91f7005c6033be76b00f79a07a416ca8ee0944a19fc1728688963d98a8680bd4",
+      "stored_bytes": 770,
+      "stored_sha256": "91f7005c6033be76b00f79a07a416ca8ee0944a19fc1728688963d98a8680bd4"
+    },
+    {
+      "path": "parent/GREEN_R2_GPU.log.txt.gz",
+      "category": "r2_final",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/GREEN_R2_GPU.log.txt",
+      "original_bytes": 26641,
+      "original_sha256": "9c7a12529e7afd824153f9ed6987d6d0faa82534b5fd22ad5ddcd7ba12577114",
+      "stored_bytes": 3066,
+      "stored_sha256": "a99326cb36dbf5195a68a1e8c8c7498888f35e6d59407be9ad4a89e95e5a3211"
+    },
+    {
+      "path": "parent/FINAL_HOOKS_R3.json",
+      "category": "r2_final",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/FINAL_HOOKS_R3.json",
+      "original_bytes": 1587,
+      "original_sha256": "424d195434038f907ba6f1bab3b820c37da63f97f57ae18ea84ca1b0aa7e473d",
+      "stored_bytes": 1587,
+      "stored_sha256": "424d195434038f907ba6f1bab3b820c37da63f97f57ae18ea84ca1b0aa7e473d"
+    },
+    {
+      "path": "parent/RED_R4_CONTROLLED_MUTATION_RECEIPT.json",
+      "category": "historical_red_receipt",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/RED_R4_CONTROLLED_MUTATION_RECEIPT.json",
+      "original_bytes": 1004,
+      "original_sha256": "cec707d3a4cc8c14307c7f0215e48dc92dee45f75db1818212157a101da6abdc",
+      "stored_bytes": 1004,
+      "stored_sha256": "cec707d3a4cc8c14307c7f0215e48dc92dee45f75db1818212157a101da6abdc"
+    },
+    {
+      "path": "parent/CPU_R2_XML_AUDIT.json",
+      "category": "r2_final",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/CPU_R2_XML_AUDIT.json",
+      "original_bytes": 283,
+      "original_sha256": "9ed9f6490cffadb195e2bd6ab55e8191dd87e6157ca11465fb520c7b8d4503e4",
+      "stored_bytes": 283,
+      "stored_sha256": "9ed9f6490cffadb195e2bd6ab55e8191dd87e6157ca11465fb520c7b8d4503e4"
+    },
+    {
+      "path": "parent/FINAL_R2_DELIVERY_SOURCE_PINS.json",
+      "category": "r2_final",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/FINAL_R2_DELIVERY_SOURCE_PINS.json",
+      "original_bytes": 3154,
+      "original_sha256": "8a5e0a3c6d25e1d841f3db239da77676f78b5df49a49102a80b04848d8de02cd",
+      "stored_bytes": 3154,
+      "stored_sha256": "8a5e0a3c6d25e1d841f3db239da77676f78b5df49a49102a80b04848d8de02cd"
+    },
+    {
+      "path": "parent/green_r2_gpu/0/stderr.log.gz",
+      "category": "r2_gpu",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/green_r2_gpu/0/stderr.log",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "parent/green_r2_gpu/0/stdout.log.gz",
+      "category": "r2_gpu",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/green_r2_gpu/0/stdout.log",
+      "original_bytes": 5824,
+      "original_sha256": "cea524679dd1dc9de4ad29c1521c257bbfb9a3cde2dfff7a2c083a3a463f62a6",
+      "stored_bytes": 1253,
+      "stored_sha256": "3dccd729057ee0f4e6450869b410bdfc2083f9afe7d0b3151bb04a8e5b67e129"
+    },
+    {
+      "path": "parent/green_r2_gpu/1/stderr.log.gz",
+      "category": "r2_gpu",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/green_r2_gpu/1/stderr.log",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "parent/green_r2_gpu/1/stdout.log.gz",
+      "category": "r2_gpu",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/green_r2_gpu/1/stdout.log",
+      "original_bytes": 5858,
+      "original_sha256": "48abd21178dc5d809153315d27c8c266303d798115dc22b74f0327b0b7d562c0",
+      "stored_bytes": 1267,
+      "stored_sha256": "4bab456af7a9b2d9623c556887e82d173954a6276369478afe04027069a11601"
+    },
+    {
+      "path": "parent/green_r2_gpu/result.json",
+      "category": "r2_gpu",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/green_r2_gpu/result.json",
+      "original_bytes": 26641,
+      "original_sha256": "9c7a12529e7afd824153f9ed6987d6d0faa82534b5fd22ad5ddcd7ba12577114",
+      "stored_bytes": 26641,
+      "stored_sha256": "9c7a12529e7afd824153f9ed6987d6d0faa82534b5fd22ad5ddcd7ba12577114"
+    },
+    {
+      "path": "independent_review/REVIEW.md",
+      "category": "prior_revision_independent_review",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-independent-20261107/REVIEW.md",
+      "original_bytes": 5747,
+      "original_sha256": "6e1a09d6e008c63daf6ecc9c1df3e6fd7ae7bc519c7f3b35a971030fc2f50e59",
+      "stored_bytes": 5747,
+      "stored_sha256": "6e1a09d6e008c63daf6ecc9c1df3e6fd7ae7bc519c7f3b35a971030fc2f50e59"
+    },
+    {
+      "path": "independent_review/SOURCE_PINS.json",
+      "category": "prior_revision_independent_review",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-independent-20261107/SOURCE_PINS.json",
+      "original_bytes": 2969,
+      "original_sha256": "297ef9379e23dbb0ef810ce8df8d32aff753bfab1e81952cd491e579d0d43bf1",
+      "stored_bytes": 2969,
+      "stored_sha256": "297ef9379e23dbb0ef810ce8df8d32aff753bfab1e81952cd491e579d0d43bf1"
+    },
+    {
+      "path": "independent_review/QUOTE_TEST_TEARDOWN.diff.gz",
+      "category": "prior_revision_independent_review",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-independent-20261107/QUOTE_TEST_TEARDOWN.diff",
+      "original_bytes": 1772,
+      "original_sha256": "5bfc29e4d21752f9ef93be702376b25d3c4c611d56fc1da0843325ea255b3331",
+      "stored_bytes": 780,
+      "stored_sha256": "b5ec0edbadfe70cfbfe7cb4d21be45909befaa894d7b540ffd679ad4953cd87e"
+    },
+    {
+      "path": "independent_review/QUOTE_TEST_TEARDOWN_IDENTITY.json",
+      "category": "prior_revision_independent_review",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-independent-20261107/QUOTE_TEST_TEARDOWN_IDENTITY.json",
+      "original_bytes": 234,
+      "original_sha256": "9d402adedb3d2574808f87f4a56e59fcd24b810c6a463b1504e69f4a2643337f",
+      "stored_bytes": 234,
+      "stored_sha256": "9d402adedb3d2574808f87f4a56e59fcd24b810c6a463b1504e69f4a2643337f"
+    },
+    {
+      "path": "historical_neighbor/GREEN_FINAL_VIEWPORT_RESULT.json",
+      "category": "r1_neighbor",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/GREEN_FINAL_VIEWPORT_RESULT.json",
+      "original_bytes": 584,
+      "original_sha256": "8e407d79c397bde4f0b18093099c649dfcf2bdc332d36f6a7cda73ecb98d4681",
+      "stored_bytes": 584,
+      "stored_sha256": "8e407d79c397bde4f0b18093099c649dfcf2bdc332d36f6a7cda73ecb98d4681"
+    },
+    {
+      "path": "historical_neighbor/GREEN_FINAL_VIEWPORT.log.txt.gz",
+      "category": "r1_neighbor",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/GREEN_FINAL_VIEWPORT.log.txt",
+      "original_bytes": 6470,
+      "original_sha256": "ef8783b3cc5b42f184e85691f8eb7756ed22c7d55b43d9d740a9ec3490deafb9",
+      "stored_bytes": 1148,
+      "stored_sha256": "516109ffa37f8835a4f14f4a2587dad6df919c93ee07f631fcf8547ca83f2474"
+    },
+    {
+      "path": "historical_neighbor/GREEN_FINAL_LEGACY_RESULT.json",
+      "category": "r1_neighbor",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/GREEN_FINAL_LEGACY_RESULT.json",
+      "original_bytes": 401,
+      "original_sha256": "b9fe773d94f97ece58504c61b0ef600789e7cbd8ad0e0d8bc828721e53065b33",
+      "stored_bytes": 401,
+      "stored_sha256": "b9fe773d94f97ece58504c61b0ef600789e7cbd8ad0e0d8bc828721e53065b33"
+    },
+    {
+      "path": "historical_neighbor/GREEN_FINAL_LEGACY.log.txt.gz",
+      "category": "r1_neighbor",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/GREEN_FINAL_LEGACY.log.txt",
+      "original_bytes": 10188,
+      "original_sha256": "793f1a9331e9ee35a25073a020bb907f9960c3fd683dc126e73b3b3327e73ea5",
+      "stored_bytes": 888,
+      "stored_sha256": "8ba56b990dfeb23f0524f3a0fb4cf5707cd7523bf95fa1dbea4948c1f934c882"
+    },
+    {
+      "path": "historical_neighbor/GREEN_FINAL_NEIGHBORS_RESULT.json",
+      "category": "r1_neighbor",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/GREEN_FINAL_NEIGHBORS_RESULT.json",
+      "original_bytes": 404,
+      "original_sha256": "e920d8520a787c8038d412f1e94dd3cea16f6b437c00b92ecc48ddaad00f16ae",
+      "stored_bytes": 404,
+      "stored_sha256": "e920d8520a787c8038d412f1e94dd3cea16f6b437c00b92ecc48ddaad00f16ae"
+    },
+    {
+      "path": "historical_neighbor/GREEN_FINAL_NEIGHBORS.log.txt.gz",
+      "category": "r1_neighbor",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/GREEN_FINAL_NEIGHBORS.log.txt",
+      "original_bytes": 12633,
+      "original_sha256": "2067446b2acd4fc8088517ad1e643dd12bb0b8aa21aacc9a686c90322468f642",
+      "stored_bytes": 914,
+      "stored_sha256": "d37c6f4f8fe7087a1903f9265a1b952f1bf7e8b84ed8b78d2f0579eafeb5a307"
+    },
+    {
+      "path": "historical_neighbor/viewport/forward_plus/side_after.png",
+      "category": "r1_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/viewport/forward_plus/side_after.png",
+      "original_bytes": 450,
+      "original_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de",
+      "stored_bytes": 450,
+      "stored_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    {
+      "path": "historical_neighbor/viewport/forward_plus/side_before.png",
+      "category": "r1_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/viewport/forward_plus/side_before.png",
+      "original_bytes": 450,
+      "original_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de",
+      "stored_bytes": 450,
+      "stored_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    {
+      "path": "historical_neighbor/viewport/forward_plus/top_after.png",
+      "category": "r1_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/viewport/forward_plus/top_after.png",
+      "original_bytes": 450,
+      "original_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de",
+      "stored_bytes": 450,
+      "stored_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    {
+      "path": "historical_neighbor/viewport/forward_plus/top_before.png",
+      "category": "r1_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/viewport/forward_plus/top_before.png",
+      "original_bytes": 450,
+      "original_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de",
+      "stored_bytes": 450,
+      "stored_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    {
+      "path": "historical_neighbor/viewport/mobile/side_after.png",
+      "category": "r1_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/viewport/mobile/side_after.png",
+      "original_bytes": 450,
+      "original_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9",
+      "stored_bytes": 450,
+      "stored_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    },
+    {
+      "path": "historical_neighbor/viewport/mobile/side_before.png",
+      "category": "r1_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/viewport/mobile/side_before.png",
+      "original_bytes": 450,
+      "original_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9",
+      "stored_bytes": 450,
+      "stored_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    },
+    {
+      "path": "historical_neighbor/viewport/mobile/top_after.png",
+      "category": "r1_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/viewport/mobile/top_after.png",
+      "original_bytes": 450,
+      "original_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9",
+      "stored_bytes": 450,
+      "stored_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    },
+    {
+      "path": "historical_neighbor/viewport/mobile/top_before.png",
+      "category": "r1_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/viewport/mobile/top_before.png",
+      "original_bytes": 450,
+      "original_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9",
+      "stored_bytes": 450,
+      "stored_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    },
+    {
+      "path": "final_source/core/extension/gdextension_production_owned.cpp.gz",
+      "category": "r2_final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/gdextension_production_owned.cpp",
+      "original_bytes": 52829,
+      "original_sha256": "1573a91edf768e4baf97956a09d349916ea86435ca47916f31bda3cfbbde91f3",
+      "stored_bytes": 10990,
+      "stored_sha256": "cc4580731f60fbbae506182434b112878f1d4b46404e3eb4673b111f8e3dfcec"
+    },
+    {
+      "path": "final_source/drivers/metal/metal_allocator.cpp.gz",
+      "category": "r2_final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/drivers/metal/metal_allocator.cpp",
+      "original_bytes": 15553,
+      "original_sha256": "a8ac57a2f0eea3c837ef7439de8ba76399074c9848fcf3563c57d25dd135e706",
+      "stored_bytes": 4201,
+      "stored_sha256": "f3f0f0daf2a7d491c0954c11073276a3a173349baf76416690f851b1b7d02404"
+    },
+    {
+      "path": "final_source/drivers/metal/metal_allocator.h.gz",
+      "category": "r2_final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/drivers/metal/metal_allocator.h",
+      "original_bytes": 9765,
+      "original_sha256": "1440f26c7600ccdb20bfec559d500c71b085a6c89e965c2e49707fa4b109de5f",
+      "stored_bytes": 3298,
+      "stored_sha256": "e074c85cd8240c8be81f26b7e3d6bf4f796fc8fa754129116edf4ebedc25eda3"
+    },
+    {
+      "path": "final_source/drivers/metal/rendering_device_driver_metal.cpp.gz",
+      "category": "r2_final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/drivers/metal/rendering_device_driver_metal.cpp",
+      "original_bytes": 150018,
+      "original_sha256": "fbf9b0a98735bb8efaed901ec7e5e6694576c39fc6f764601e9d5dc780ea3bad",
+      "stored_bytes": 34088,
+      "stored_sha256": "5cb2f5e3d5f907c4722f4a8c6af03ac38ef5c60de098dcfbe07448703e59f6d1"
+    },
+    {
+      "path": "final_source/drivers/metal/rendering_device_driver_metal.h.gz",
+      "category": "r2_final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/drivers/metal/rendering_device_driver_metal.h",
+      "original_bytes": 34682,
+      "original_sha256": "c05d74151123ed2bc8f07e7a600b99c10f1b6b395b6647beba71f1f27071a868",
+      "stored_bytes": 8463,
+      "stored_sha256": "b1e02000376dc84c36aa213efb1c239e12c2d765c441849b4a0f457cafd539e9"
+    },
+    {
+      "path": "final_source/servers/rendering/rendering_device.cpp.gz",
+      "category": "r2_final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/rendering_device.cpp",
+      "original_bytes": 724223,
+      "original_sha256": "57e44dfdaef2bd86a81969f7e86e0e0e9c74bf9b4928c9fe7d25f032c089b514",
+      "stored_bytes": 129902,
+      "stored_sha256": "550ceee62c38065b8e9d5d9269e3be0cc66b17552e2394741943d25548178b75"
+    },
+    {
+      "path": "final_source/servers/rendering/rendering_device.h.gz",
+      "category": "r2_final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/rendering_device.h",
+      "original_bytes": 129497,
+      "original_sha256": "656c0aaffda52743a4fd5fe9b5beaad53e161932a0544c18cc9f98dc3f1ace46",
+      "stored_bytes": 28563,
+      "stored_sha256": "3ee1cf1e04f382e21050c75f9ed25791c1a7c7ed526c060024eb19f3bbb64fbf"
+    },
+    {
+      "path": "final_source/servers/rendering/rendering_device_driver.h.gz",
+      "category": "r2_final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/rendering_device_driver.h",
+      "original_bytes": 55236,
+      "original_sha256": "9446494541b4e828716880bc12ede7d3c1abb09b30fbeec0bce19cf106738025",
+      "stored_bytes": 13994,
+      "stored_sha256": "1cd3fb360ed2c5977de758365a1d911e8b0ba536a6da53888b64f1e8bb0f700d"
+    },
+    {
+      "path": "final_source/tests/servers/physics_2d/test_wrapper_r1_gates_2d.cpp.gz",
+      "category": "r2_final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/physics_2d/test_wrapper_r1_gates_2d.cpp",
+      "original_bytes": 18176,
+      "original_sha256": "81bc9e9c80cbf971316a245e80ac9ae1218f90e947c0a6e1e51e61dc04a6bdc7",
+      "stored_bytes": 4670,
+      "stored_sha256": "bacf4cd5d5945973d780ecd2c29d1e57768ce79d7c7d56f0e3d808e65d7fe3ce"
+    },
+    {
+      "path": "final_source/tests/servers/rendering/test_native_disposal.cpp.gz",
+      "category": "r2_final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/test_native_disposal.cpp",
+      "original_bytes": 144286,
+      "original_sha256": "23ecb1af6c8a66b7caa69bfe47cd2b607f3c7ee0144f4baef550e929cdde647b",
+      "stored_bytes": 25281,
+      "stored_sha256": "e09fc3e0de05fb6a6b085f12b069152909ad8c600050fa5e8958638672d09ae9"
+    },
+    {
+      "path": "final_source/tests/servers/rendering/test_qualification_ticket.cpp.gz",
+      "category": "r2_final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/test_qualification_ticket.cpp",
+      "original_bytes": 73548,
+      "original_sha256": "6adae05908947cebe50b68f93339ca70fa4afae69422284c0c33d210608539b8",
+      "stored_bytes": 14262,
+      "stored_sha256": "7f392150f639f5a4946a59ec03348326a80329e9702adc3ce7059fc97d89a711"
+    },
+    {
+      "path": "final_source/servers/rendering/native_depth_allocation_projection.h.gz",
+      "category": "r2_final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/native_depth_allocation_projection.h",
+      "original_bytes": 5285,
+      "original_sha256": "9c635eb1ccf5aaa93c1c8a3b10a4005f6647c1019d59e048a0ce7982a2b5fdf5",
+      "stored_bytes": 1938,
+      "stored_sha256": "50dca433b1d14fc1c0d1473259adb639c54c177b0db6418bd0d1056aa5c13d2e"
+    },
+    {
+      "path": "final_source/modules/particles_runtime_tests/native_depth_allocation_test_fixture.h.gz",
+      "category": "r2_final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/modules/particles_runtime_tests/native_depth_allocation_test_fixture.h",
+      "original_bytes": 3622,
+      "original_sha256": "f1b52e9eaaa187793e21d86142cc7cb4012adeac4cfd4cc188265caeb9c9927c",
+      "stored_bytes": 1443,
+      "stored_sha256": "5716d34f45e23bf7ac30aa0390a0d64960a9323277b20cfb2f7c25a11c13df55"
+    },
+    {
+      "path": "final_source/modules/particles_runtime_tests/native_depth_allocation_test_fixture.cpp.gz",
+      "category": "r2_final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/modules/particles_runtime_tests/native_depth_allocation_test_fixture.cpp",
+      "original_bytes": 21609,
+      "original_sha256": "615f3d430eafa9c63a5e14c8c449e2a42f955e89512df9e529da4742b9c1cc3a",
+      "stored_bytes": 5246,
+      "stored_sha256": "e40f2a36ccc6f338a2439109cd066b363684082fdcc099c943926faed3a92766"
+    },
+    {
+      "path": "final_source/modules/particles_runtime_tests/register_types.cpp.gz",
+      "category": "r2_final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/modules/particles_runtime_tests/register_types.cpp",
+      "original_bytes": 3208,
+      "original_sha256": "92f17951c89ac18cb57d013639001c556c93dd33f444aa1ef81f168091c84ddb",
+      "stored_bytes": 1105,
+      "stored_sha256": "a451d9942135e405c2e7db026fb48203d6f2ca8750981423b4abe1747048734a"
+    },
+    {
+      "path": "final_source/tests/servers/rendering/fixtures/native_depth_allocation/README.md",
+      "category": "r2_final_source",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/native_depth_allocation/README.md",
+      "original_bytes": 5696,
+      "original_sha256": "14292e593bd6c5e0cd51d4547cc3a0ca3a91b34f3a23305343ce2d1ba2709476",
+      "stored_bytes": 5696,
+      "stored_sha256": "14292e593bd6c5e0cd51d4547cc3a0ca3a91b34f3a23305343ce2d1ba2709476"
+    },
+    {
+      "path": "final_source/tests/servers/rendering/fixtures/native_depth_allocation/run_native.py",
+      "category": "r2_final_source",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/native_depth_allocation/run_native.py",
+      "original_bytes": 13485,
+      "original_sha256": "755e3da7da233a495ebf6485ce1ec97c11a84100c19351f8e6a63b38fd9f5932",
+      "stored_bytes": 13485,
+      "stored_sha256": "755e3da7da233a495ebf6485ce1ec97c11a84100c19351f8e6a63b38fd9f5932"
+    },
+    {
+      "path": "final_source/tests/servers/rendering/fixtures/native_depth_allocation/run.gd",
+      "category": "r2_final_source",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/native_depth_allocation/run.gd",
+      "original_bytes": 2516,
+      "original_sha256": "0814051d3a3d43a7be00f5af54ff9ccd86487f2d81fe70885bc9f33702f62450",
+      "stored_bytes": 2516,
+      "stored_sha256": "0814051d3a3d43a7be00f5af54ff9ccd86487f2d81fe70885bc9f33702f62450"
+    },
+    {
+      "path": "final_source/tests/servers/rendering/fixtures/native_depth_allocation/project.godot",
+      "category": "r2_final_source",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/native_depth_allocation/project.godot",
+      "original_bytes": 137,
+      "original_sha256": "490081240b5283b2de8dc90fd8414707c8f5e228dad89f10daa788009a4c6812",
+      "stored_bytes": 137,
+      "stored_sha256": "490081240b5283b2de8dc90fd8414707c8f5e228dad89f10daa788009a4c6812"
+    },
+    {
+      "path": "parent/FINAL_R2_SOURCE_PINS.json",
+      "category": "r2_final_source_pins",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-parent-20261107/FINAL_R2_SOURCE_PINS.json",
+      "original_bytes": 3154,
+      "original_sha256": "8a5e0a3c6d25e1d841f3db239da77676f78b5df49a49102a80b04848d8de02cd",
+      "stored_bytes": 3154,
+      "stored_sha256": "8a5e0a3c6d25e1d841f3db239da77676f78b5df49a49102a80b04848d8de02cd"
+    }
+  ]
+}

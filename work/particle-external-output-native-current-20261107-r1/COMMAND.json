@@ -1,0 +1,12 @@
+[
+  "python3",
+  "tests/servers/rendering/fixtures/particle_external_output_native/run_native.py",
+  "--godot",
+  "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/particle-external-output-native-current-20261107-r1/editor.arm64",
+  "--sha256",
+  "2268e5108732f5295dc174743a1f5e92177725df652ef3b6279ef645632f9efb",
+  "--out",
+  "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/particle-external-output-native-current-20261107-r1/evidence",
+  "--driver",
+  "metal"
+]

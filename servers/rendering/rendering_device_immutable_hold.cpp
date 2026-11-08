@@ -296,6 +296,71 @@ bool RenderingDevice::_native_immutable_uniform_set_writes(const UniformSet &set
 	return false;
 }
 
+Error RenderingDevice::_native_immutable_resource_eligibility_locked(RID rid) {
+	bool *retiring = nullptr, *escaped = nullptr;
+	const auto *holds = _native_immutable_counter(rid, &retiring, &escaped);
+	if (!holds) {
+		return ERR_DOES_NOT_EXIST;
+	}
+	if (*escaped) {
+		return ERR_UNAVAILABLE;
+	}
+	if (*retiring || native_immutable_resource_is_retiring(rid)) {
+		return ERR_BUSY;
+	}
+	if (*holds == UINT32_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	if (const auto *resource = _native_immutable_buffer(rid); resource && !resource->driver_id) {
+		return ERR_UNAVAILABLE;
+	}
+	if (const auto *resource = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
+		return ERR_UNAVAILABLE;
+	}
+	if (const auto *resource = shader_owner.owns(rid) ? shader_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
+		return ERR_UNAVAILABLE;
+	}
+	if (const auto *resource = sampler_owner.owns(rid) ? sampler_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
+		return ERR_UNAVAILABLE;
+	}
+	if (const auto *resource = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
+		return ERR_UNAVAILABLE;
+	}
+	if (const auto *resource = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr; resource && !resource->writable_resources.is_empty()) {
+		return ERR_UNAVAILABLE;
+	}
+	if (const auto *resource = render_pipeline_owner.owns(rid) ? render_pipeline_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
+		return ERR_UNAVAILABLE;
+	}
+	if (const auto *resource = compute_pipeline_owner.owns(rid) ? compute_pipeline_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
+		return ERR_UNAVAILABLE;
+	}
+	if (const auto *resource = index_array_owner.owns(rid) ? index_array_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
+		return ERR_UNAVAILABLE;
+	}
+
+	if (const auto *buffer = _native_immutable_buffer(rid); buffer && buffer->qualification_return && buffer->qualification_return->use_closed.load()) {
+		return ERR_BUSY;
+	}
+	if (const auto *buffer = _native_immutable_buffer(rid); buffer && (buffer->transfer_worker_index >= 0 || buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT) || buffer->usage.has_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT))) {
+		return ERR_UNAVAILABLE;
+	}
+	if (const auto *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr) {
+		// Render-target ownership and dynamic framebuffer writes need their
+		// original snapshot producer; this retention leaf cannot freeze them.
+		if (texture->transfer_worker_index >= 0 || texture->pending_clear || (texture->usage_flags & TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) || (texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) || (texture->usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT)) {
+			return ERR_UNAVAILABLE;
+		}
+		if (texture->shared_fallback && texture->owner.is_valid()) {
+			const auto *owner = texture_owner.get_or_null(texture->owner);
+			if (!owner || !owner->shared_fallback || owner->shared_fallback->revision != texture->shared_fallback->revision) {
+				return ERR_UNAVAILABLE;
+			}
+		}
+	}
+	return OK;
+}
+
 Error RenderingDevice::native_immutable_hold_acquire(const VectorView<RID> &roots, NativeImmutableHold &out, uint32_t limit) {
 	if (render_thread_id != Thread::get_caller_id()) {
 		return ERR_UNAUTHORIZED;
@@ -313,10 +378,13 @@ Error RenderingDevice::native_immutable_hold_acquire(const VectorView<RID> &root
 	if (native_immutable_hold_count == UINT32_MAX) {
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
-	Vector<RID> resources;
-	if (resources.resize(limit) != OK) {
+	RID inline_resources[3];
+	Vector<RID> dynamic_resources;
+	const bool use_inline = limit <= 3;
+	if (!use_inline && dynamic_resources.resize(limit) != OK) {
 		return ERR_OUT_OF_MEMORY;
 	}
+	RID *resources = use_inline ? inline_resources : dynamic_resources.ptrw();
 	uint32_t count = 0;
 	auto append = [&](RID rid) {
 		for (uint32_t i = 0; i < count; ++i) {
@@ -327,68 +395,11 @@ Error RenderingDevice::native_immutable_hold_acquire(const VectorView<RID> &root
 		if (count == limit) {
 			return ERR_OUT_OF_MEMORY;
 		}
-		bool *retiring = nullptr, *escaped = nullptr;
-		const auto *holds = _native_immutable_counter(rid, &retiring, &escaped);
-		if (!holds) {
-			return ERR_DOES_NOT_EXIST;
+		const Error eligible = _native_immutable_resource_eligibility_locked(rid);
+		if (eligible != OK) {
+			return eligible;
 		}
-		if (*escaped) {
-			return ERR_UNAVAILABLE;
-		}
-		if (*retiring || native_immutable_resource_is_retiring(rid)) {
-			return ERR_BUSY;
-		}
-		if (*holds == UINT32_MAX) {
-			return ERR_PARAMETER_RANGE_ERROR;
-		}
-		if (const auto *resource = _native_immutable_buffer(rid); resource && !resource->driver_id) {
-			return ERR_UNAVAILABLE;
-		}
-		if (const auto *resource = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
-			return ERR_UNAVAILABLE;
-		}
-		if (const auto *resource = shader_owner.owns(rid) ? shader_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
-			return ERR_UNAVAILABLE;
-		}
-		if (const auto *resource = sampler_owner.owns(rid) ? sampler_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
-			return ERR_UNAVAILABLE;
-		}
-		if (const auto *resource = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
-			return ERR_UNAVAILABLE;
-		}
-		if (const auto *resource = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr; resource && !resource->writable_resources.is_empty()) {
-			return ERR_UNAVAILABLE;
-		}
-		if (const auto *resource = render_pipeline_owner.owns(rid) ? render_pipeline_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
-			return ERR_UNAVAILABLE;
-		}
-		if (const auto *resource = compute_pipeline_owner.owns(rid) ? compute_pipeline_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
-			return ERR_UNAVAILABLE;
-		}
-		if (const auto *resource = index_array_owner.owns(rid) ? index_array_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
-			return ERR_UNAVAILABLE;
-		}
-
-		if (const auto *buffer = _native_immutable_buffer(rid); buffer && buffer->qualification_return && buffer->qualification_return->use_closed.load()) {
-			return ERR_BUSY;
-		}
-		if (const auto *buffer = _native_immutable_buffer(rid); buffer && (buffer->transfer_worker_index >= 0 || buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT) || buffer->usage.has_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT))) {
-			return ERR_UNAVAILABLE;
-		}
-		if (const auto *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr) {
-			// Render-target ownership and dynamic framebuffer writes need their
-			// original snapshot producer; this retention leaf cannot freeze them.
-			if (texture->transfer_worker_index >= 0 || texture->pending_clear || (texture->usage_flags & TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) || (texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) || (texture->usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT)) {
-				return ERR_UNAVAILABLE;
-			}
-			if (texture->shared_fallback && texture->owner.is_valid()) {
-				const auto *owner = texture_owner.get_or_null(texture->owner);
-				if (!owner || !owner->shared_fallback || owner->shared_fallback->revision != texture->shared_fallback->revision) {
-					return ERR_UNAVAILABLE;
-				}
-			}
-		}
-		resources.write[count++] = rid;
+		resources[count++] = rid;
 		return OK;
 	};
 	for (uint32_t i = 0; i < roots.size(); ++i) {
@@ -426,13 +437,20 @@ Error RenderingDevice::native_immutable_hold_acquire(const VectorView<RID> &root
 			}
 		}
 	}
-	if (resources.resize(count) != OK) {
+	if (!use_inline && dynamic_resources.resize(count) != OK) {
 		return ERR_OUT_OF_MEMORY;
 	}
-	for (RID rid : resources) {
+	if (use_inline) {
+		for (uint32_t i = 0; i < count; ++i) {
+			out.inline_resources[i] = inline_resources[i];
+		}
+		out.inline_count = count;
+	} else {
+		out.resources = static_cast<Vector<RID> &&>(dynamic_resources);
+	}
+	for (RID rid : out._resource_span()) {
 		++*_native_immutable_counter(rid);
 	}
-	out.resources = static_cast<Vector<RID> &&>(resources);
 	out.device = this;
 	out.pins_returned = false;
 	++native_immutable_hold_count;
@@ -451,7 +469,7 @@ Error RenderingDevice::native_immutable_hold_release(NativeImmutableHold &hold) 
 	}
 	MutexLock lock(_thread_safe_);
 	if (!hold.pins_returned) {
-		for (RID rid : hold.resources) {
+		for (RID rid : hold._resource_span()) {
 			auto *holds = _native_immutable_counter(rid);
 			CRASH_COND(!holds || !*holds);
 			--*holds;
@@ -459,8 +477,9 @@ Error RenderingDevice::native_immutable_hold_release(NativeImmutableHold &hold) 
 		hold.pins_returned = true;
 	}
 	bool pending = false;
-	for (int64_t i = hold.resources.size() - 1; i >= 0; --i) {
-		const RID rid = hold.resources[i];
+	const auto resources = hold._resource_span();
+	for (int64_t i = int64_t(resources.size()) - 1; i >= 0; --i) {
+		const RID rid = resources[i];
 		bool *retiring = nullptr;
 		const auto *holds = _native_immutable_counter(rid, &retiring);
 		if (!holds || *holds || !*retiring) {
@@ -486,11 +505,85 @@ Error RenderingDevice::native_immutable_hold_release(NativeImmutableHold &hold) 
 	}
 	CRASH_COND(!native_immutable_hold_count);
 	--native_immutable_hold_count;
-	hold.resources.clear();
+	hold._clear_resources();
 	hold.material_origin = RID();
 	hold.material_origin_generation = 0;
 	hold.device = nullptr;
 	hold.pins_returned = false;
+	return OK;
+}
+
+Error RenderingDevice::_native_immutable_hold_expand_directory(const VectorView<RID> &roots, NativeImmutableHold &hold, uint32_t limit) {
+	if (!native_immutable_is_render_thread() || hold.device != this || hold.pins_returned || roots.size() == 0) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (!_thread_safe_.try_lock()) {
+		return ERR_BUSY;
+	}
+	struct Unlock {
+		Mutex &mutex;
+		~Unlock() { mutex.unlock(); }
+	} unlock{ _thread_safe_ };
+	NativeImmutableHold complete;
+	const Error acquired = native_immutable_hold_acquire(roots, complete, limit);
+	if (acquired != OK) {
+		return acquired;
+	}
+	for (RID selected : hold._resource_span()) {
+		bool present = false;
+		for (RID retained : complete._resource_span()) {
+			present |= selected == retained;
+		}
+		if (!present) {
+			// Continuous RD lock: acquire rejected retiring roots, so rollback
+			// only removes the new shares and cannot invoke native callbacks.
+			CRASH_COND(native_immutable_hold_release(complete) != OK);
+			return ERR_INVALID_DATA;
+		}
+	}
+	// Every selected share is still retained by complete, so returning the old
+	// hold cannot perform native disposal or leave a partial release prefix.
+	CRASH_COND(native_immutable_hold_release(hold) != OK);
+	hold = std::move(complete);
+	return OK;
+}
+
+Error RenderingDevice::_production_output_directory_bind_adopted_locked(GDExtensionDeviceExit::ProductionOutputPin &pin, uint64_t serial, const VectorView<RID> &roots, NativeOutputGroupBinding &binding) {
+	using namespace GDExtensionDeviceExit;
+	if (!native_immutable_is_render_thread() || !pin.registry || !serial || !binding.is_empty() || roots.size() == 0 ||
+			!pin.registry->production_output_pin_matches_locked(pin, { pin.registry->instance, pin.request_serial }, *this)) {
+		return ERR_UNAUTHORIZED;
+	}
+	const auto &request = *pin.request;
+	const uint32_t begin = request.use_count + request.binding_used;
+	bool captured = false;
+	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+		const auto &cell = request.uses[i];
+		if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_serial == serial && cell.disposal_group_pin_serial == pin.serial &&
+				cell.disposal_group_native_hold && !cell.disposal_group_release && !cell.disposal_group_dropped) {
+			captured = true;
+		}
+	}
+	if (!captured) {
+		return ERR_INVALID_DATA;
+	}
+	for (uint32_t root_index = 0; root_index < roots.size(); ++root_index) {
+		const RID root = roots[root_index];
+		bool found = false;
+		for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+			const auto &cell = request.uses[i];
+			found |= cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && cell.disposal_group_serial == serial &&
+					cell.disposal.request == &request && cell.disposal.request_serial == request.serial && cell.disposal.rid == root.get_id() &&
+					cell.disposal.state.load(std::memory_order_acquire) == 1 && !cell.disposal.counter_dropped;
+		}
+		if (!found) {
+			return ERR_INVALID_DATA;
+		}
+	}
+	binding.registry_instance = pin.registry->instance;
+	binding.request_serial = pin.request_serial;
+	binding.pin_serial = pin.serial;
+	binding.group_serial = serial;
 	return OK;
 }
 
@@ -500,7 +593,7 @@ Error RenderingDevice::_production_output_directory_capture(GDExtensionProductio
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock registry_lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock registry_lock(registry);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -547,11 +640,14 @@ Error RenderingDevice::_production_output_directory_return(GDExtensionDeviceExit
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock registry_lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock registry_lock(registry);
 	if (binding.registry_instance != registry.instance || binding.request_serial != pin.request_serial || binding.pin_serial != pin.serial || !registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
 	auto &request = *pin.request;
+	if (request.continuation_inflight) {
+		return ERR_BUSY;
+	}
 	auto &control = request.control;
 	if (control.state != ProductionControlState::EXECUTING || control.input.kind != ProductionControlKind::OBSERVE || control.input.request_serial != request.serial || &budget != &control.input.budget || &usage != &control.output.service_usage) {
 		return ERR_UNAUTHORIZED;
@@ -628,11 +724,14 @@ Error RenderingDevice::_production_output_directory_mark_root(GDExtensionDeviceE
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock registry_lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock registry_lock(registry);
 	if (binding.registry_instance != registry.instance || binding.request_serial != pin.request_serial || binding.pin_serial != pin.serial || !registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
 	auto &request = *pin.request;
+	if (request.continuation_inflight) {
+		return ERR_BUSY;
+	}
 	auto &control = request.control;
 	// A copied budget or a separate usage object cannot authorize another pass.
 	if (control.state != ProductionControlState::EXECUTING || control.input.kind != ProductionControlKind::OBSERVE || control.input.request_serial != request.serial || &budget != &control.input.budget || &usage != &control.output.service_usage) {
@@ -710,13 +809,13 @@ Error RenderingDevice::_production_output_hold_capture(GDExtensionProductionPhys
 	if (!pin.registry) {
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock registry_lock(pin.registry->mutex);
+	GDExtensionDeviceExit::Registry::Lock registry_lock(*pin.registry);
 	return _production_output_hold_capture_locked(physical_context, pin, hold, group_serial);
 }
 
 Error RenderingDevice::_production_output_hold_capture_locked(GDExtensionProductionPhysicalContextRefV1 physical_context, GDExtensionDeviceExit::ProductionOutputPin &pin, NativeImmutableHold &hold, uint64_t &group_serial) {
 	using namespace GDExtensionDeviceExit;
-	if (group_serial || hold.device != this || hold.pins_returned || hold.resources.is_empty() || !pin.registry) {
+	if (group_serial || hold.device != this || hold.pins_returned || hold._resource_span().is_empty() || !pin.registry) {
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
@@ -740,13 +839,103 @@ Error RenderingDevice::_production_output_hold_capture_locked(GDExtensionProduct
 		Mutex &m;
 		~Unlock() { m.unlock(); }
 	} unlock{ _thread_safe_ };
+	NativeImmutableHold *holds[] = { &hold };
+	return _production_output_hold_adopt_locked(request, pin.serial, 0, VectorView<NativeImmutableHold *>(holds, 1), request.capacity.resource_uses, group_serial);
+}
+
+void RenderingDevice::_production_output_hold_inventory_clear_locked(GDExtensionDeviceExit::ProductionRequest &request, uint64_t reserved_group) {
+	using namespace GDExtensionDeviceExit;
+	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+		auto &cell = request.uses[i];
+		if (cell.output_role != ProductionUseCell::OutputRole::DISPOSAL_STAGED || cell.disposal_group_serial != reserved_group) {
+			continue;
+		}
+		cell.disposal.~ProductionDisposalUse();
+		new (&cell.disposal) ProductionDisposalUse;
+		cell.output_role = reserved_group ? ProductionUseCell::OutputRole::DISPOSAL_RESERVED : ProductionUseCell::OutputRole::UNUSED;
+		if (reserved_group) {
+			cell.disposal.request = &request;
+			cell.disposal.request_serial = request.serial;
+			cell.disposal.group = reserved_group;
+			cell.disposal.owned = true;
+			cell.disposal.counter_dropped = true;
+		}
+	}
+}
+
+Error RenderingDevice::_production_output_hold_inventory_locked(GDExtensionDeviceExit::ProductionRequest &request, uint64_t reserved_group, const VectorView<NativeImmutableHold *> &holds, uint32_t limit, uint32_t &out_count) {
+	uint32_t count = 0;
+	const Error inventoried = _production_output_hold_stage_locked(request, reserved_group, holds, limit, count);
+	if (inventoried != OK) {
+		return inventoried;
+	}
+	_production_output_hold_inventory_clear_locked(request, reserved_group);
+	out_count = count;
+	return OK;
+}
+
+Error RenderingDevice::_production_output_hold_stage_locked(GDExtensionDeviceExit::ProductionRequest &request, uint64_t reserved_group, const VectorView<NativeImmutableHold *> &holds, uint32_t limit, uint32_t &out_count) {
+	using namespace GDExtensionDeviceExit;
+	// This bounded scratch belongs to the already admitted request. Every
+	// public dry inventory return restores it, on success as well as refusal.
+	if (holds.size() > 2 || (!limit && holds.size())) {
+		return ERR_INVALID_PARAMETER;
+	}
+	for (uint32_t h = 0; h < holds.size(); ++h) {
+		if (!holds[h] || holds[h]->device != this || holds[h]->pins_returned || holds[h]->_resource_span().is_empty()) {
+			return ERR_INVALID_PARAMETER;
+		}
+		for (uint32_t other = 0; other < h; ++other) {
+			if (holds[h] == holds[other]) {
+				return ERR_INVALID_PARAMETER;
+			}
+		}
+	}
 	const uint32_t begin = request.use_count + request.binding_used;
-	auto rollback = [&]() {for(uint32_t i=begin;i<request.capacity.resource_uses;++i){auto &c=request.uses[i];if(c.output_role==ProductionUseCell::OutputRole::DISPOSAL_STAGED){c.disposal.~ProductionDisposalUse();new(&c.disposal) ProductionDisposalUse();c.output_role=ProductionUseCell::OutputRole::UNUSED;}} };
-	auto stage = [&](RID rid, bool held) -> Error {
+	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+		const auto &c = request.uses[i];
+		if (c.output_role == ProductionUseCell::OutputRole::DISPOSAL_STAGED) {
+			return ERR_BUSY;
+		}
+	}
+	if (native_immutable_hold_count < holds.size()) {
+		return ERR_INVALID_DATA;
+	}
+	if (reserved_group) {
+		uint32_t headers = 0, cells = 0;
+		for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+			const auto &cell = request.uses[i];
+			if (cell.disposal_group_serial != reserved_group) {
+				continue;
+			}
+			if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_count == limit &&
+					!cell.disposal_group_release && !cell.disposal_group_dropped && !cell.disposal_group_native_hold && !cell.disposal_group_native_hold_count) {
+				++headers;
+			} else if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED && cell.disposal.request == &request &&
+					cell.disposal.request_serial == request.serial && cell.disposal.group == reserved_group && cell.disposal.owned &&
+					cell.disposal.counter_dropped && !cell.disposal.counter_pins_remaining && !cell.disposal.rid && !cell.disposal.serial &&
+					!cell.disposal.native_driver_id && cell.disposal.kind == UINT32_MAX && !cell.disposal.qualified_borrow && !cell.disposal.next && cell.disposal.state.load(std::memory_order_acquire) == 0) {
+				++cells;
+			} else {
+				return ERR_INVALID_DATA;
+			}
+		}
+		if (headers != 1 || cells != limit) {
+			return ERR_INVALID_DATA;
+		}
+	}
+	uint32_t count = 0;
+	auto rollback = [&]() { _production_output_hold_inventory_clear_locked(request, reserved_group); };
+	auto stage = [&](RID rid, uint32_t pins) -> Error {
 		for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
 			auto &c = request.uses[i];
-			if (c.output_role == ProductionUseCell::OutputRole::DISPOSAL_STAGED && c.disposal.rid == rid.get_id()) {
-				c.disposal.counter_dropped &= !held;
+			if (c.output_role == ProductionUseCell::OutputRole::DISPOSAL_STAGED && c.disposal_group_serial == reserved_group && c.disposal.rid == rid.get_id()) {
+				const auto *counter = _native_immutable_counter(rid);
+				if (!counter || pins > UINT32_MAX - c.disposal.counter_pins_remaining || *counter < c.disposal.counter_pins_remaining + pins) {
+					return ERR_INVALID_DATA;
+				}
+				c.disposal.counter_pins_remaining += pins;
+				c.disposal.counter_dropped = c.disposal.counter_pins_remaining == 0;
 				return OK;
 			}
 		}
@@ -754,7 +943,7 @@ Error RenderingDevice::_production_output_hold_capture_locked(GDExtensionProduct
 		uint64_t serial, native_driver_id;
 		auto **head = _production_disposal_head(rid, kind, serial, native_driver_id);
 		auto *counter = _native_immutable_counter(rid);
-		if (!head || !serial || (kind < 10 && !native_driver_id) || !counter || (held && !*counter)) {
+		if (!head || !serial || (kind < 10 && !native_driver_id) || !counter || *counter < pins) {
 			return ERR_INVALID_DATA;
 		}
 		QualificationPhysicalReturn *qualified = nullptr;
@@ -789,7 +978,14 @@ Error RenderingDevice::_production_output_hold_capture_locked(GDExtensionProduct
 			}
 		}
 		if (auto *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr; set && set->invalidated_callback) {
-			if (hold.material_origin.is_null() || !hold.material_origin_generation || !RendererRD::MaterialStorage::_native_hold_callback_is_owned(set->production_material_origin, set->production_material_origin_generation, set->invalidated_callback, set->invalidated_callback_userdata, rid)) {
+			bool material_owned = false;
+			for (uint32_t h = 0; h < holds.size(); ++h) {
+				NativeImmutableHold *hold = holds[h];
+				material_owned |= !hold->material_origin.is_null() && hold->material_origin == set->production_material_origin &&
+						hold->material_origin_generation == set->production_material_origin_generation &&
+						RendererRD::MaterialStorage::_native_hold_callback_is_owned(set->production_material_origin, set->production_material_origin_generation, set->invalidated_callback, set->invalidated_callback_userdata, rid);
+			}
+			if (!material_owned) {
 				return ERR_UNAVAILABLE;
 			}
 		}
@@ -799,92 +995,171 @@ Error RenderingDevice::_production_output_hold_capture_locked(GDExtensionProduct
 		if (auto *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr; texture && (texture->transfer_worker_index >= 0)) {
 			return ERR_UNAVAILABLE;
 		}
+		if (count == limit) {
+			return ERR_OUT_OF_MEMORY;
+		}
 		for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
 			auto &c = request.uses[i];
-			if (c.output_role == ProductionUseCell::OutputRole::UNUSED && !c.disposal_group_serial && !c.output_consumer && !c.dependency.physical) {
+			const bool eligible = reserved_group ? c.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED && c.disposal_group_serial == reserved_group : c.output_role == ProductionUseCell::OutputRole::UNUSED && !c.disposal_group_serial && !c.output_consumer && !c.dependency.physical;
+			if (eligible) {
 				c.output_role = ProductionUseCell::OutputRole::DISPOSAL_STAGED;
 				c.disposal.rid = rid.get_id();
 				c.disposal.serial = serial;
 				c.disposal.native_driver_id = native_driver_id;
 				c.disposal.kind = kind;
-				c.disposal.counter_dropped = !held;
+				c.disposal.counter_pins_remaining = pins;
+				c.disposal.counter_dropped = pins == 0;
 				c.disposal.qualified_borrow = qualified != nullptr;
+				++count;
 				return OK;
 			}
 		}
 		return ERR_OUT_OF_MEMORY;
 	};
-	for (RID rid : hold.resources) {
-		const Error e = stage(rid, true);
-		if (e != OK) {
-			rollback();
-			return e;
+	for (uint32_t h = 0; h < holds.size(); ++h) {
+		NativeImmutableHold *hold = holds[h];
+		for (RID rid : hold->_resource_span()) {
+			const Error error = stage(rid, 1);
+			if (error != OK) {
+				rollback();
+				return error;
+			}
 		}
 	}
-	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
-		auto &c = request.uses[i];
-		if (c.output_role != ProductionUseCell::OutputRole::DISPOSAL_STAGED) {
-			continue;
-		}
-		const RID rid = RID::from_uint64(c.disposal.rid);
-		for (const auto *edges : { dependency_map.getptr(rid), reverse_dependency_map.getptr(rid) }) {
-			if (edges) {
-				for (RID related : *edges) {
-					const Error e = stage(related, false);
-					if (e != OK) {
-						rollback();
-						return e;
+	// Iterate to a fixed point; reserved cells can be interspersed with other
+	// admitted groups, so newly discovered nodes need not have larger indices.
+	uint32_t previous = UINT32_MAX;
+	while (previous != count) {
+		previous = count;
+		for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+			auto &cell = request.uses[i];
+			if (cell.output_role != ProductionUseCell::OutputRole::DISPOSAL_STAGED || cell.disposal_group_serial != reserved_group) {
+				continue;
+			}
+			const RID rid = RID::from_uint64(cell.disposal.rid);
+			for (const auto *edges : { dependency_map.getptr(rid), reverse_dependency_map.getptr(rid) }) {
+				if (edges) {
+					for (RID related : *edges) {
+						const Error error = stage(related, 0);
+						if (error != OK) {
+							rollback();
+							return error;
+						}
 					}
+				}
+			}
+			if (const auto *shader = shader_owner.owns(rid) ? shader_owner.get_or_null(rid) : nullptr) {
+				for (RID sampler : shader->native_immutable_samplers) {
+					const Error error = stage(sampler, 0);
+					if (error != OK) {
+						rollback();
+						return error;
+					}
+				}
+			}
+			if (const auto *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr; texture && texture->owner.is_valid()) {
+				const Error error = stage(texture->owner, 0);
+				if (error != OK) {
+					rollback();
+					return error;
 				}
 			}
 		}
 	}
+	out_count = count;
+	return OK;
+}
+
+Error RenderingDevice::_production_output_hold_adopt_locked(GDExtensionDeviceExit::ProductionRequest &request, uint64_t pin_serial, uint64_t reserved_group, const VectorView<NativeImmutableHold *> &holds, uint32_t limit, uint64_t &out_group) {
+	using namespace GDExtensionDeviceExit;
+	// Caller authentication is deliberately outside this shared primitive.
+	// It neither installs a scope nor tests numeric DTOs as source authority.
+	if (!pin_serial || out_group || !request.serial || (!reserved_group && (!request.next_disposal_group_serial || !holds.size()))) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const uint32_t begin = request.use_count + request.binding_used;
 	ProductionUseCell *group = nullptr;
+	uint32_t reserved_count = 0;
+	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+		auto &c = request.uses[i];
+		if (reserved_group && c.disposal_group_serial == reserved_group) {
+			if (c.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP) {
+				if (group || c.disposal_group_pin_serial != pin_serial || c.disposal_group_release || c.disposal_group_dropped || c.disposal_group_native_hold || c.disposal_group_native_hold_count || c.disposal_group_count != limit) {
+					return ERR_INVALID_DATA;
+				}
+				group = &c;
+			} else if (c.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED && c.disposal.request == &request && c.disposal.request_serial == request.serial && c.disposal.group == reserved_group && c.disposal.owned && c.disposal.counter_dropped && !c.disposal.counter_pins_remaining && !c.disposal.rid && !c.disposal.serial && !c.disposal.native_driver_id && c.disposal.kind == UINT32_MAX && !c.disposal.qualified_borrow && !c.disposal.next && c.disposal.state.load(std::memory_order_acquire) == 0) {
+				++reserved_count;
+			} else {
+				return ERR_ALREADY_IN_USE;
+			}
+		}
+	}
+	if (reserved_group && (!group || reserved_count != limit)) {
+		return ERR_INVALID_DATA;
+	}
 	uint32_t count = 0;
-	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
-		auto &c = request.uses[i];
-		if (c.output_role == ProductionUseCell::OutputRole::DISPOSAL_STAGED) {
-			++count;
-		} else if (!group && c.output_role == ProductionUseCell::OutputRole::UNUSED && !c.disposal_group_serial && !c.output_consumer && !c.dependency.physical) {
-			group = &c;
+	const Error inventoried = _production_output_hold_stage_locked(request, reserved_group, holds, limit, count);
+	if (inventoried != OK) {
+		return inventoried;
+	}
+	if (!reserved_group) {
+		for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+			auto &c = request.uses[i];
+			if (c.output_role == ProductionUseCell::OutputRole::UNUSED && !c.disposal_group_serial && !c.output_consumer && !c.dependency.physical) {
+				group = &c;
+				break;
+			}
+		}
+		if (!group) {
+			_production_output_hold_inventory_clear_locked(request, reserved_group);
+			return ERR_OUT_OF_MEMORY;
 		}
 	}
-	if (!group) {
-		rollback();
-		return ERR_OUT_OF_MEMORY;
+	const uint64_t serial = reserved_group ? reserved_group : request.next_disposal_group_serial;
+	// All refusal paths precede this commit. Existing reservations are changed
+	// from owned-empty cells to exact borrowed incarnations only here.
+	if (!reserved_group) {
+		request.next_disposal_group_serial = serial == UINT64_MAX ? 0 : serial + 1;
 	}
-	const uint64_t serial = request.next_disposal_group_serial;
-	request.next_disposal_group_serial = serial == UINT64_MAX ? 0 : serial + 1;
 	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
 		auto &c = request.uses[i];
-		if (c.output_role != ProductionUseCell::OutputRole::DISPOSAL_STAGED) {
-			continue;
+		if (c.output_role == ProductionUseCell::OutputRole::DISPOSAL_STAGED && c.disposal_group_serial == reserved_group) {
+			auto &n = c.disposal;
+			uint32_t kind;
+			uint64_t incarnation, driver_id;
+			auto **head = _production_disposal_head(RID::from_uint64(n.rid), kind, incarnation, driver_id);
+			CRASH_COND(!head || kind != n.kind || incarnation != n.serial || driver_id != n.native_driver_id);
+			n.request = &request;
+			n.request_serial = request.serial;
+			n.group = serial;
+			n.owned = false;
+			n.next = *head;
+			*head = &n;
+			n.state.store(1, std::memory_order_release);
+			c.disposal_group_serial = serial;
+			c.output_role = ProductionUseCell::OutputRole::DISPOSAL_MEMBER;
+		} else if (reserved_group && c.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED && c.disposal_group_serial == reserved_group) {
+			c.disposal.owned = false;
+			c.disposal.state.store(6, std::memory_order_release); // Prepaid but never occupied.
+			c.output_role = ProductionUseCell::OutputRole::DISPOSAL_MEMBER;
 		}
-		auto &n = c.disposal;
-		uint32_t kind;
-		uint64_t physical_serial, native_driver_id;
-		auto **head = _production_disposal_head(RID::from_uint64(n.rid), kind, physical_serial, native_driver_id);
-		CRASH_COND(!head || kind != n.kind || physical_serial != n.serial || native_driver_id != n.native_driver_id);
-		n.request = &request;
-		n.request_serial = request.serial;
-		n.group = serial;
-		n.next = *head;
-		*head = &n;
-		n.state.store(1, std::memory_order_release);
-		c.disposal_group_serial = serial;
-		c.output_role = ProductionUseCell::OutputRole::DISPOSAL_MEMBER;
 	}
-	group->disposal_group_pin_serial = pin.serial;
-	group->disposal_group_native_hold = true;
+	group->disposal_group_pin_serial = pin_serial;
+	group->disposal_group_native_hold = holds.size() != 0;
+	group->disposal_group_native_hold_count = holds.size();
 	group->disposal_group_serial = serial;
-	group->disposal_group_count = count;
+	group->disposal_group_count = reserved_group ? limit : count;
 	group->output_role = ProductionUseCell::OutputRole::DISPOSAL_GROUP;
-	hold.resources.clear();
-	hold.device = nullptr;
-	hold.pins_returned = false;
-	hold.material_origin = RID();
-	hold.material_origin_generation = 0;
-	group_serial = serial;
+	for (uint32_t h = 0; h < holds.size(); ++h) {
+		NativeImmutableHold *hold = holds[h];
+		hold->_clear_resources();
+		hold->device = nullptr;
+		hold->pins_returned = false;
+		hold->material_origin = RID();
+		hold->material_origin_generation = 0;
+	}
+	out_group = serial;
 	return OK;
 }
 Error RenderingDevice::_production_output_hold_begin_return(GDExtensionDeviceExit::ProductionOutputPin &pin, uint64_t serial) {
@@ -893,11 +1168,14 @@ Error RenderingDevice::_production_output_hold_begin_return(GDExtensionDeviceExi
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
 	auto &request = *pin.request;
+	if (request.continuation_inflight) {
+		return ERR_BUSY;
+	}
 	GDExtensionProductionReportV2 source = {};
 	registry.production_report_locked(request, source);
 	if (request.capture_inflight || request.compute_list_open || (!request.cancelled && request.next_action != request.action_count) || source.possible_obligations || source.known_obligations != source.complete_obligations) {
@@ -933,7 +1211,7 @@ Error RenderingDevice::_production_output_hold_returned(GDExtensionDeviceExit::P
 		observation = {};
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock registry_lock(pin.registry->mutex);
+	GDExtensionDeviceExit::Registry::Lock registry_lock(*pin.registry);
 	return _production_output_hold_returned_locked(pin, serial, observation);
 }
 
@@ -948,6 +1226,9 @@ Error RenderingDevice::_production_output_hold_returned_locked(GDExtensionDevice
 		return ERR_UNAUTHORIZED;
 	}
 	auto &request = *pin.request;
+	if (request.continuation_inflight) {
+		return ERR_BUSY;
+	}
 	bool found = false;
 	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
 		const auto &cell = request.uses[i];
@@ -992,6 +1273,9 @@ Error RenderingDevice::_production_output_hold_returned_locked(GDExtensionDevice
 
 Error RenderingDevice::_production_output_drop_step(GDExtensionDeviceExit::ProductionRequest &request, const NativeDisposalBudget &budget, NativeDisposalUsage &usage) {
 	using namespace GDExtensionDeviceExit;
+	if (request.continuation_inflight) {
+		return ERR_BUSY;
+	}
 	if (!budget.passes || !budget.receipts || !budget.deadline_usec || OS::get_singleton()->get_ticks_usec() >= budget.deadline_usec) {
 		return ERR_BUSY;
 	}
@@ -1047,23 +1331,30 @@ Error RenderingDevice::_production_output_drop_step(GDExtensionDeviceExit::Produ
 			if (cell.output_role != ProductionUseCell::OutputRole::DISPOSAL_MEMBER || node.group != group.disposal_group_serial || node.counter_dropped) {
 				continue;
 			}
-			if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
-				return ERR_BUSY;
+			// Legacy disposal producers without explicit multiplicity own one pin.
+			if (!node.counter_pins_remaining) {
+				node.counter_pins_remaining = 1;
 			}
-			MutexLock lock(_thread_safe_);
-			const RID rid = RID::from_uint64(node.rid);
-			uint32_t kind;
-			uint64_t serial, driver_id;
-			auto **head = _production_disposal_head(rid, kind, serial, driver_id);
-			auto *counter = _native_immutable_counter(rid);
-			if (!head || kind != node.kind || serial != node.serial || driver_id != node.native_driver_id || !counter || !*counter) {
-				node.state.store(5, std::memory_order_release);
-				return ERR_INVALID_DATA;
+			while (node.counter_pins_remaining) {
+				if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+					return ERR_BUSY;
+				}
+				MutexLock lock(_thread_safe_);
+				const RID rid = RID::from_uint64(node.rid);
+				uint32_t kind;
+				uint64_t serial, driver_id;
+				auto **head = _production_disposal_head(rid, kind, serial, driver_id);
+				auto *counter = _native_immutable_counter(rid);
+				if (!head || kind != node.kind || serial != node.serial || driver_id != node.native_driver_id || !counter || !*counter) {
+					node.state.store(5, std::memory_order_release);
+					return ERR_INVALID_DATA;
+				}
+				if (!_production_output_callback_supported(rid)) {
+					return ERR_UNAVAILABLE;
+				}
+				--*counter;
+				--node.counter_pins_remaining;
 			}
-			if (!_production_output_callback_supported(rid)) {
-				return ERR_UNAVAILABLE;
-			}
-			--*counter;
 			node.counter_dropped = true;
 		}
 		for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
@@ -1075,8 +1366,9 @@ Error RenderingDevice::_production_output_drop_step(GDExtensionDeviceExit::Produ
 		if (all_dropped) {
 			MutexLock lock(_thread_safe_);
 			if (group.disposal_group_native_hold) {
-				CRASH_COND(!native_immutable_hold_count);
-				--native_immutable_hold_count;
+				const uint32_t count = group.disposal_group_native_hold_count ? group.disposal_group_native_hold_count : 1;
+				CRASH_COND(native_immutable_hold_count < count);
+				native_immutable_hold_count -= count;
 			}
 			group.disposal_group_dropped = true;
 		}
@@ -1182,7 +1474,7 @@ Error RenderingDevice::_production_output_owned_reserve(GDExtensionProductionPhy
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -1236,7 +1528,7 @@ Error RenderingDevice::_production_output_owned_rollback(GDExtensionProductionPh
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -1302,7 +1594,7 @@ Error RenderingDevice::_production_output_owned_bind(GDExtensionProductionPhysic
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -1378,12 +1670,15 @@ Error RenderingDevice::_production_output_owned_cancel_unbound(GDExtensionDevice
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
 	bool found = false;
 	auto &request = *pin.request;
+	if (request.continuation_inflight) {
+		return ERR_BUSY;
+	}
 	bool owns_group = false;
 	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
 		const auto &g = request.uses[i];
@@ -1437,7 +1732,7 @@ bool RenderingDevice::_production_output_hold_contains(GDExtensionDeviceExit::Pr
 		return false;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return false;
 	}
@@ -1483,7 +1778,7 @@ bool RenderingDevice::_production_output_owned_storage_contains(GDExtensionDevic
 		return false;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return false;
 	}
@@ -1559,7 +1854,7 @@ Error RenderingDevice::_production_output_owned_storage_create(GDExtensionProduc
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	ProductionRequest *request = nullptr;
 	const Error ready = _production_output_owned_create_preflight_locked(physical_context, pin, group, ordinal, request);
 	if (ready != OK) {
@@ -1594,7 +1889,7 @@ Error RenderingDevice::_production_output_owned_uniform_set_create(GDExtensionPr
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	ProductionRequest *request = nullptr;
 	const Error ready = _production_output_owned_create_preflight_locked(physical_context, pin, group, ordinal, request);
 	if (ready != OK) {
@@ -1642,7 +1937,7 @@ Error RenderingDevice::_production_output_owned_seal(GDExtensionProductionPhysic
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -1671,11 +1966,16 @@ Error RenderingDevice::_production_output_owned_seal(GDExtensionProductionPhysic
 	if (!registry.production_output_recorded_ordered_locked(*request, *this)) {
 		return ERR_INVALID_DATA;
 	}
+	return _production_output_owned_seal_locked(*request, pin.serial, serial);
+}
+
+Error RenderingDevice::_production_output_owned_seal_locked(GDExtensionDeviceExit::ProductionRequest &request, uint64_t pin_serial, uint64_t serial) {
+	using namespace GDExtensionDeviceExit;
 	ProductionUseCell *group = nullptr;
-	const uint32_t begin = request->use_count + request->binding_used;
-	for (uint32_t i = begin; i < request->capacity.resource_uses; ++i) {
-		auto &c = request->uses[i];
-		if (c.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && c.disposal_group_serial == serial && c.disposal_group_pin_serial == pin.serial) {
+	const uint32_t begin = request.use_count + request.binding_used;
+	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+		auto &c = request.uses[i];
+		if (c.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && c.disposal_group_serial == serial && c.disposal_group_pin_serial == pin_serial) {
 			group = &c;
 		}
 	}
@@ -1692,8 +1992,8 @@ Error RenderingDevice::_production_output_owned_seal(GDExtensionProductionPhysic
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
 	uint32_t count = 0;
-	for (uint32_t i = begin; i < request->capacity.resource_uses; ++i) {
-		auto &c = request->uses[i];
+	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+		auto &c = request.uses[i];
 		if (c.disposal_group_serial != serial || &c == group) {
 			continue;
 		}
@@ -1718,16 +2018,18 @@ Error RenderingDevice::_production_output_owned_seal(GDExtensionProductionPhysic
 	if (count != group->disposal_group_count) {
 		return ERR_INVALID_DATA;
 	}
-	for (uint32_t i = begin; i < request->capacity.resource_uses; ++i) {
-		auto &c = request->uses[i];
+	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+		auto &c = request.uses[i];
 		if (c.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && c.disposal_group_serial == serial) {
 			auto *counter = _native_immutable_counter(RID::from_uint64(c.disposal.rid));
 			++*counter;
 			c.disposal.counter_dropped = false;
+			c.disposal.counter_pins_remaining = 1;
 		}
 	}
 	++native_immutable_hold_count;
 	group->disposal_group_native_hold = true;
+	group->disposal_group_native_hold_count = 1;
 	return OK;
 }
 
@@ -1735,7 +2037,7 @@ Error RenderingDevice::_production_output_owned_pipeline_preflight(GDExtensionPr
 	if (!pin.registry || !group) {
 		return ERR_INVALID_PARAMETER;
 	}
-	MutexLock lock(pin.registry->mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(*pin.registry);
 	GDExtensionDeviceExit::ProductionRequest *request = nullptr;
 	const Error ready = _production_output_owned_create_preflight_locked(physical_context, pin, group, 0, request);
 	return ready == OK ? _native_disposal_preflight() : ready;
@@ -1747,15 +2049,44 @@ Error RenderingDevice::_production_output_owned_render_pipeline_create(GDExtensi
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	ProductionRequest *request = nullptr;
 	const Error ready = _production_output_owned_create_preflight_locked(physical_context, pin, group, ordinal, request);
 	if (ready != OK) {
 		return ready;
 	}
+	return _production_output_owned_render_pipeline_create_locked(registry, *request, group, ordinal, p_shader, p_framebuffer_format, p_vertex_format, p_render_primitive, p_rasterization_state, p_multisample_state, p_depth_stencil_state, p_blend_state, p_dynamic_state_flags, p_for_render_pass, p_specialization_constants, r_pipeline);
+}
+
+Error RenderingDevice::_production_output_owned_pipeline_preflight(GDExtensionDeviceExit::ProductionOutputPreparationScope &scope) {
+	if (!scope.registry) {
+		return ERR_INVALID_PARAMETER;
+	}
+	GDExtensionDeviceExit::Registry::Lock lock(*scope.registry);
+	GDExtensionDeviceExit::ProductionRequest *request = nullptr;
+	const Error ready = scope.registry->production_output_preparation_matches_locked(scope, *this, request);
+	return ready == OK ? _native_disposal_preflight() : ready;
+}
+
+Error RenderingDevice::_production_output_owned_render_pipeline_create(GDExtensionDeviceExit::ProductionOutputPreparationScope &scope, RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, RID &r_pipeline) {
+	if (!scope.registry || &r_pipeline != scope.original_root || r_pipeline.is_valid()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	GDExtensionDeviceExit::Registry &registry = *scope.registry;
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
+	GDExtensionDeviceExit::ProductionRequest *request = nullptr;
+	const Error ready = registry.production_output_preparation_matches_locked(scope, *this, request);
+	if (ready != OK) {
+		return ready;
+	}
+	return _production_output_owned_render_pipeline_create_locked(registry, *request, scope.group, 0, p_shader, p_framebuffer_format, p_vertex_format, p_render_primitive, p_rasterization_state, p_multisample_state, p_depth_stencil_state, p_blend_state, p_dynamic_state_flags, p_for_render_pass, p_specialization_constants, r_pipeline);
+}
+
+Error RenderingDevice::_production_output_owned_render_pipeline_create_locked(GDExtensionDeviceExit::Registry &registry, GDExtensionDeviceExit::ProductionRequest &request, uint64_t group, uint32_t ordinal, RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, RID &r_pipeline) {
+	using namespace GDExtensionDeviceExit;
 	ProductionUseCell *reserved = nullptr;
-	for (uint32_t i = request->use_count + request->binding_used; i < request->capacity.resource_uses; ++i) {
-		auto &cell = request->uses[i];
+	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+		auto &cell = request.uses[i];
 		if (cell.disposal_group_serial == group && cell.disposal_ordinal == ordinal && cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED) {
 			reserved = &cell;
 			break;
@@ -1777,7 +2108,7 @@ Error RenderingDevice::_production_output_owned_render_pipeline_create(GDExtensi
 	}
 	// Factory publishes directly into this original cell; there is no fallible
 	// post-creation capture/bind and no stack-owned created-pipeline prefix.
-	registry.production_native_effect_enter_locked(*request);
+	registry.production_native_effect_enter_locked(request);
 	r_pipeline = _qualification_render_pipeline_create_internal(p_shader, p_framebuffer_format, p_vertex_format, p_render_primitive, p_rasterization_state, p_multisample_state, p_depth_stencil_state, p_blend_state, p_dynamic_state_flags, p_for_render_pass, p_specialization_constants, nullptr, RID(), reserved);
 	return r_pipeline.is_valid() ? OK : ERR_CANT_CREATE;
 }

@@ -1,0 +1,235 @@
+{
+  "command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/particle-external-output-native-current-20261107-r1/editor.arm64",
+    "--path",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_external_output_native",
+    "--render-thread",
+    "safe",
+    "--script",
+    "run.gd",
+    "--rendering-driver",
+    "metal",
+    "--rendering-method",
+    "mobile"
+  ],
+  "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_external_output_native",
+  "host_sha256": "2268e5108732f5295dc174743a1f5e92177725df652ef3b6279ef645632f9efb",
+  "host_unchanged": true,
+  "sources_before": {
+    "modules/particles_runtime_tests/particles_external_output_test_fixture.h": {
+      "bytes": 3322,
+      "sha256": "ee65811de440885bc8e6f1d1dde654e45e63894dd22574c437539db44f9a8ae7"
+    },
+    "modules/particles_runtime_tests/particles_external_output_test_fixture.cpp": {
+      "bytes": 11571,
+      "sha256": "c532b8777a68882d2d665a0c2b7bfbf3e80716e57109f483572eb73c06a20eee"
+    },
+    "modules/particles_runtime_tests/register_types.cpp": {
+      "bytes": 3104,
+      "sha256": "7b0f1acabe6a532934ae28ca995427b0ad34eca1c10107ee280a8340ed104d46"
+    },
+    "modules/particles_runtime_tests/config.py": {
+      "bytes": 148,
+      "sha256": "8a6606d2863710e709e0c5d2f22089b9b695df1817c7c6d414832d4c3d80581c"
+    },
+    "servers/rendering/renderer_rd/storage_rd/external_output_storage.h": {
+      "bytes": 5890,
+      "sha256": "16bb370d27adb1f930f31f2634f1b6ac2a76618e160a7136da426d4c3526b61c"
+    },
+    "servers/rendering/renderer_rd/storage_rd/external_output_storage.cpp": {
+      "bytes": 9946,
+      "sha256": "5c0f67d5a5f5ce1611ea1094a1e05f19552d2d4560cc8bab2f64187b50c798ce"
+    },
+    "servers/rendering/native_disposal_witness.h": {
+      "bytes": 5240,
+      "sha256": "e98592a01b167d4d1fd16c4dda880a5af8ca16053d50e94c3c99ccd9fc2a77fb"
+    },
+    "servers/rendering/rendering_device.h": {
+      "bytes": 128152,
+      "sha256": "3d4bbb6fda5ac84098e68b09811b025dbec3b2d84879f31a1a319cc4243d8ddd"
+    },
+    "servers/rendering/rendering_device.cpp": {
+      "bytes": 713460,
+      "sha256": "0ea72823cbc39ffa242d5fc8d5ebb66a1a895811fe9f5623218ffb922031a91a"
+    },
+    "drivers/metal/rendering_device_driver_metal.cpp": {
+      "bytes": 147493,
+      "sha256": "ad21cbb73c959c8e7bedcc3c34f50faeca3b1753a19561b504efbc31e8f21e73"
+    },
+    "drivers/metal/rendering_device_driver_metal3.cpp": {
+      "bytes": 22070,
+      "sha256": "3af3215e96799ce51b5fe58eb53ff2223e437ff2aa4d8ef3417e373c7799d74c"
+    },
+    "main/main.cpp": {
+      "bytes": 220359,
+      "sha256": "ee9e9cc51309eaeb36f2a832b1035ed0c390865bedf1b48e34da7aeffcf162e7"
+    },
+    "tests/servers/rendering/fixtures/particle_external_output_native/project.godot": {
+      "bytes": 138,
+      "sha256": "7a8fe44895c14eac38dbe56b6e8fba0e793c2e4a13026a93dcda5434d91b1cf9"
+    },
+    "tests/servers/rendering/fixtures/particle_external_output_native/run.gd": {
+      "bytes": 2831,
+      "sha256": "d3bf8ba25c91f24aba364f91c9520e8e086dfce7f90e9ceb8bb133818edec72e"
+    },
+    "tests/servers/rendering/fixtures/particle_external_output_native/run_native.py": {
+      "bytes": 8830,
+      "sha256": "8016ab39575f762d793f4b3d10de68286a7a53ecb1bbe74218de434f62b5532a"
+    },
+    "tests/servers/rendering/fixtures/particle_external_output_native/README.md": {
+      "bytes": 3400,
+      "sha256": "635384fb9387dcee476f3f20b22413e4698851665688661b0e9e6a6635e85742"
+    }
+  },
+  "sources_unchanged": true,
+  "source_identity_is_not_build_provenance": true,
+  "process_timeout_seconds": 180,
+  "returncode": 0,
+  "passed": true,
+  "registration_red_only": false,
+  "physical_prefix_returned": true,
+  "whole_output_released": false,
+  "device_holder_claimed": false,
+  "report": {
+    "checks": [
+      {
+        "check": "owner",
+        "ok": true
+      },
+      {
+        "check": "render_loop_disabled",
+        "ok": true
+      },
+      {
+        "check": "outside_lists",
+        "ok": true
+      },
+      {
+        "check": "allocate",
+        "ok": true
+      },
+      {
+        "check": "live_counts",
+        "ok": true
+      },
+      {
+        "check": "live_bytes",
+        "ok": true
+      },
+      {
+        "check": "live_original_identities",
+        "ok": true
+      },
+      {
+        "check": "live_distinct_identities",
+        "ok": true
+      },
+      {
+        "check": "live_destroy_busy",
+        "ok": true
+      },
+      {
+        "check": "live_owner_retained",
+        "ok": true
+      },
+      {
+        "check": "retire",
+        "ok": true
+      },
+      {
+        "check": "enqueued_observe",
+        "ok": true
+      },
+      {
+        "check": "enqueued_counts",
+        "ok": true
+      },
+      {
+        "check": "enqueued_original_identities",
+        "ok": true
+      },
+      {
+        "check": "logical_owners_removed",
+        "ok": true
+      },
+      {
+        "check": "enqueued_destroy_busy",
+        "ok": true
+      },
+      {
+        "check": "enqueued_owner_retained",
+        "ok": true
+      },
+      {
+        "check": "repeat_retire",
+        "ok": true
+      },
+      {
+        "check": "repeat_observe",
+        "ok": true
+      },
+      {
+        "check": "repeat_unchanged",
+        "ok": true
+      },
+      {
+        "check": "maintenance_returned",
+        "ok": true
+      },
+      {
+        "check": "returned_observe",
+        "ok": true
+      },
+      {
+        "check": "returned_counts",
+        "ok": true
+      },
+      {
+        "check": "returned_original_identities",
+        "ok": true
+      },
+      {
+        "check": "no_next_draw",
+        "ok": true
+      },
+      {
+        "check": "destroy_returned",
+        "ok": true
+      },
+      {
+        "check": "destroy_pointer_empty",
+        "ok": true
+      }
+    ],
+    "complete": true,
+    "counts": {
+      "bytes": 900,
+      "created": 7,
+      "enqueued": 0,
+      "live": 0,
+      "returned": 7,
+      "unknown": 0
+    },
+    "deadline_usec": 20000000,
+    "device": {
+      "api": "4.0",
+      "driver": "metal",
+      "name": "Apple M3 Pro (Apple9)",
+      "renderer": "mobile"
+    },
+    "device_holder_claimed": false,
+    "dispatch_recorded": false,
+    "elapsed_usec": 1459,
+    "error": 0,
+    "failures": [],
+    "maintenance_calls": 2,
+    "physical_prefix_returned": true,
+    "retained_on_failure": false,
+    "schema": 1,
+    "source_authority_supplied": false,
+    "started": true,
+    "whole_output_released": false
+  },
+  "stdout_sha256": "8c42ae96620c69e68c92350201acb0400dd79bc684d74b8b83b300c3ba04f451",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

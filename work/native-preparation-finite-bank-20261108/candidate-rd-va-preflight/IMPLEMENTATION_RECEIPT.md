@@ -1,0 +1,7 @@
+# Native VA direct preflight integration
+
+RenderingDevice factories now share their original descriptor normalization and VA scratch range checks with private native preflight. Original immutable hold acquisition shares its exact leaf eligibility predicate with that preflight. MeshStorage retained-source plan invokes the check before publishing scratch output under the original Surface-before-RD lock order, retaining raw attributes/cache keys. No format, VA, hold or dependency is created by preflight.
+
+Two behavioral negatives establish coverage: wrong actual count caused2 target failures/process1; the unconnected MeshStorage entry route caused11 target failures/process1 for nonnull wrong-owner default, escaped default and undersized backing. Both runs completed normal fixture cleanup. Exact integrated source rebuilt and passed3cases/232assertions and combined83/21668, process0. Real Metal Mobile and Forward+ camera rendering neighbors passed, including actual draw counts/PNG outputs. Commands/source/host hashes and exact limits are pinned in RUNTIME_RECEIPT.json.
+
+Independent source, counter-oracle fix and plan-route reviews found no remaining blocker in this slice. Full bidirectional G/reservation/aggregate counters, existing VA/IA/history, backend preparation integration and public qualification remain active work. This receipt does not close the full native particle/Sprite goal.

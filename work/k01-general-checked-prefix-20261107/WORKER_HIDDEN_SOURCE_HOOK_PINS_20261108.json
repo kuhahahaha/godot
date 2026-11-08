@@ -1,0 +1,15 @@
+{
+  "scope": "Read-only production-source audit; callback files concurrently edited by original height author; not implementation freeze or build provenance",
+  "head": "c50b05c67e64237eebc2128f3668105b16db9c63",
+  "files": {
+    "servers/rendering/rendering_device.cpp": "7efd7e6d51fecf197896313f13705c19c6c4cfca7671127049308f0a3b3a02a3",
+    "servers/rendering/rendering_device.h": "e4fb02d4c7c7dec678f4a75ee7827e20976b40a5f4bcb6e010c74097f3520730",
+    "servers/rendering/native_height_range.h": "75d259ec8ff6f78ec956c4a67ee2a90d0915f51d61446b16580e70618db7c164",
+    "core/extension/gdextension_qualification_rd.cpp": "536bf13be5fd5ecb76e4a34355332932e29ddc4a4eaa7135a7758a56a954b058",
+    "drivers/metal/rendering_device_driver_metal.cpp": "fbf9b0a98735bb8efaed901ec7e5e6694576c39fc6f764601e9d5dc780ea3bad",
+    "drivers/metal/rendering_device_driver_metal3.cpp": "3af3215e96799ce51b5fe58eb53ff2223e437ff2aa4d8ef3417e373c7799d74c",
+    "drivers/vulkan/rendering_device_driver_vulkan.h": "4bfccf4acab93be8b334767233dbec04ec5a33aa4723b1422cf937ccca14b780",
+    "work/k01-general-checked-prefix-20261107/SOURCE_JOIN_AUDIT.md": "a19cdaea73c092fd35f8c8d7449c87327da1c2a0299f55377d98b0ac954c2abb",
+    "work/k01-general-checked-prefix-20261107/WORKER_HIDDEN_SOURCE_HOOK_MAP_20261108.md": "7c3716e216890d5f0734a1d80aee17f1a7360a8a24284814d96ce7a8f213c553"
+  }
+}

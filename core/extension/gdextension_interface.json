@@ -9588,6 +9588,42 @@
             ]
         },
         {
+            "name": "GDExtensionQualificationRtOutputKindV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_RT_OUTPUT_METADATA_QUERY_V1",
+                    "value": 24
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputMetadataQueryRtResultV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "detail_length",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "detail[96]",
+                    "type": "char"
+                },
+                {
+                    "name": "requirements",
+                    "type": "GDExtensionOutputMetadataRequirementsV1"
+                }
+            ]
+        },
+        {
             "name": "GDExtensionOutputCreateInputV3",
             "kind": "struct",
             "members": [
@@ -10463,6 +10499,477 @@
                 {
                     "name": "record_fact",
                     "type": "GDExtensionSceneOpaque32V1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionStorageSceneDepthRefV1",
+            "kind": "struct",
+            "description": [
+                "Locator to one original Scene-depth child on the retained original DeviceExit bridge; observations never reconstruct this child."
+            ],
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionStorageSceneDepthBytesV1",
+            "kind": "struct",
+            "description": [
+                "knowledge 0 UnknownNotExposed, 1 Known; bytes is zero padding when unknown, never a known-zero cost assertion."
+            ],
+            "members": [
+                {
+                    "name": "bytes",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "knowledge",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionStorageSceneDepthDescriptorV1",
+            "kind": "struct",
+            "description": [
+                "One original standalone D32_SFLOAT 2D texture, depth 1, one layer/mip/sample, sampling plus depth-stencil attachment usage, and its one original framebuffer child."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "width",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "height",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionStorageSceneDepthQuoteRequestV1",
+            "kind": "struct",
+            "description": [
+                "Original allocation origin and finite descriptor. No caller byte quote or native object is accepted."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "descriptor",
+                    "type": "GDExtensionStorageSceneDepthDescriptorV1"
+                },
+                {
+                    "name": "allocation_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "part",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "allocation_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "quote_attempt",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionStorageSceneDepthQuoteV1",
+            "kind": "struct",
+            "description": [
+                "Accepted original quote transaction, including sticky original quote_error and the same retained facet on native quote failure. Only quote_error OK plus a finite original quote authorizes C claim/Create. Framebuffer owner reservation Known zero is admission accounting policy, never a physical framebuffer cost assertion. Public observations do not grant create authority."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "facet",
+                    "type": "GDExtensionStorageSceneDepthRefV1"
+                },
+                {
+                    "name": "descriptor",
+                    "type": "GDExtensionStorageSceneDepthDescriptorV1"
+                },
+                {
+                    "name": "texture_native_requirement",
+                    "type": "GDExtensionStorageSceneDepthBytesV1"
+                },
+                {
+                    "name": "texture_owner_reservation",
+                    "type": "GDExtensionStorageSceneDepthBytesV1"
+                },
+                {
+                    "name": "framebuffer_owner_reservation",
+                    "type": "GDExtensionStorageSceneDepthBytesV1"
+                },
+                {
+                    "name": "framebuffer_driver_backing",
+                    "type": "GDExtensionStorageSceneDepthBytesV1"
+                },
+                {
+                    "name": "opaque_driver_overhead",
+                    "type": "GDExtensionStorageSceneDepthBytesV1"
+                },
+                {
+                    "name": "alignment",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "policy",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "allocations",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "parts",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "shared_attachment_references",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "quote_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionStorageSceneDepthCreateRequestV1",
+            "kind": "struct",
+            "description": [
+                "Original create transaction resolves facet on the same authenticated bridge; never accepts RIDs, raw private pointers or a reconstructed quote report."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "facet",
+                    "type": "GDExtensionStorageSceneDepthRefV1"
+                },
+                {
+                    "name": "allocation_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "part",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "allocation_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "create_attempt",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionStorageSceneDepthRetireRequestV1",
+            "kind": "struct",
+            "description": [
+                "Original retire transaction resolves facet on the same authenticated bridge; never accepts RIDs, raw private pointers or a reconstructed quote report."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "facet",
+                    "type": "GDExtensionStorageSceneDepthRefV1"
+                },
+                {
+                    "name": "allocation_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "part",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "allocation_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "retire_attempt",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionStorageSceneDepthReportV1",
+            "kind": "struct",
+            "description": [
+                "Original retained custody/physical-disposal report. API OK means typed transaction delivery only; creation_error remains original even after real physical return. No producer Complete, refund or OutputReleased claim."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "facet",
+                    "type": "GDExtensionStorageSceneDepthRefV1"
+                },
+                {
+                    "name": "allocation_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "create_attempt",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "retire_attempt",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "depth_rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "depth_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "framebuffer_rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "framebuffer_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "depth_driver_backing",
+                    "type": "GDExtensionStorageSceneDepthBytesV1"
+                },
+                {
+                    "name": "framebuffer_driver_backing",
+                    "type": "GDExtensionStorageSceneDepthBytesV1"
+                },
+                {
+                    "name": "framebuffer_object",
+                    "type": "GDExtensionStorageSceneDepthBytesV1"
+                },
+                {
+                    "name": "attachment_reference",
+                    "type": "GDExtensionStorageSceneDepthBytesV1"
+                },
+                {
+                    "name": "opaque_driver_overhead",
+                    "type": "GDExtensionStorageSceneDepthBytesV1"
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "allocation_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "part",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "custody",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "known_created_mask",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "depth_state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "framebuffer_state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "all_created_children_returned",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "creation_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "maintenance_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "create_outcome",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionOutputGenerationRefV1",
+            "kind": "struct",
+            "description": [
+                "Exact original OBSERVE generation-return tuple. Comparison only; cannot issue a generation or permission."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "request_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "control_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "root_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "particles",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "generation",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionOutputGenerationResultV1",
+            "kind": "struct",
+            "description": [
+                "Original immutable generation return. terminal_kind 0 is None, 1 is GenerationReleased. Native release is not E05 source acknowledgment or U09 code close. Each per-slot native lease remains the original Acquire association; this aggregate creates no new lease."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "request_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "control_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "root_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "particles",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "root_source",
+                    "type": "GDExtensionProductionReportV2"
+                },
+                {
+                    "name": "unused_slots",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "returned_slots",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "terminal_kind",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "native_released",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionObserveResultV3",
+            "kind": "struct",
+            "description": [
+                "Version 3 observation projection for the original V2 request contract. Returned generation terminal is peeked until exact consume; no draw or new physical context is required."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "report",
+                    "type": "GDExtensionProductionReportV2"
+                },
+                {
+                    "name": "output_generation",
+                    "type": "GDExtensionProductionOutputGenerationResultV1"
                 }
             ]
         }
@@ -22386,6 +22893,258 @@
                 "type": "GDExtensionDeviceSessionResultV1",
                 "description": [
                     "Structured native result. Busy preserves original in-flight custody for a later bounded service turn."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_scene_depth_quote_v1",
+            "since": "4.7",
+            "description": [
+                "Original Scene-depth quote transaction on the retained DeviceExit bridge. Pure admission failure has API error and zero output. Accepted transaction has API OK and same-facet output even when original native quote_error is nonzero. Such failure signs no native quote and must close through original Retire/observe/release ACK. No general QRT error/output rule changes."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous copied original transaction bridge. No caller pointer survives."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionStorageSceneDepthQuoteRequestV1*",
+                    "description": [
+                        "Synchronous copied original transaction request. No caller pointer survives."
+                    ]
+                },
+                {
+                    "name": "out_quote",
+                    "type": "GDExtensionStorageSceneDepthQuoteV1*",
+                    "description": [
+                        "Synchronous copied original transaction out_quote. No caller pointer survives."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original admission/delivery Error/reason; inspect typed creation_error and custody for an accepted native creation attempt."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_scene_depth_create_v1",
+            "since": "4.7",
+            "description": [
+                "Typed Scene-depth neighbor on the original DeviceExit bridge, session, CodeHolder and fixed RT request cell. No second registry or K01 authority. API failure has zero output; accepted native failure is delivered in Report.creation_error with original custody."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous copied original transaction bridge. No caller pointer survives."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionStorageSceneDepthCreateRequestV1*",
+                    "description": [
+                        "Synchronous copied original transaction request. No caller pointer survives."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionStorageSceneDepthReportV1*",
+                    "description": [
+                        "Synchronous copied original transaction out_report. No caller pointer survives."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original admission/delivery Error/reason; inspect typed creation_error and custody for an accepted native creation attempt."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_scene_depth_retire_v1",
+            "since": "4.7",
+            "description": [
+                "Typed Scene-depth neighbor on the original DeviceExit bridge, session, CodeHolder and fixed RT request cell. No second registry or K01 authority. API failure has zero output; accepted native failure is delivered in Report.creation_error with original custody."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous copied original transaction bridge. No caller pointer survives."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionStorageSceneDepthRetireRequestV1*",
+                    "description": [
+                        "Synchronous copied original transaction request. No caller pointer survives."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionStorageSceneDepthReportV1*",
+                    "description": [
+                        "Synchronous copied original transaction out_report. No caller pointer survives."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original admission/delivery Error/reason; inspect typed creation_error and custody for an accepted native creation attempt."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_scene_depth_observe_v1",
+            "since": "4.7",
+            "description": [
+                "Typed Scene-depth neighbor on the original DeviceExit bridge, session, CodeHolder and fixed RT request cell. No second registry or K01 authority. API failure has zero output; accepted native failure is delivered in Report.creation_error with original custody."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous copied original transaction bridge. No caller pointer survives."
+                    ]
+                },
+                {
+                    "name": "facet",
+                    "type": "GDExtensionStorageSceneDepthRefV1",
+                    "description": [
+                        "Synchronous copied original transaction facet. No caller pointer survives."
+                    ]
+                },
+                {
+                    "name": "budget",
+                    "type": "const GDExtensionQualificationBudgetV1*",
+                    "description": [
+                        "Synchronous copied original transaction budget. No caller pointer survives."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionStorageSceneDepthReportV1*",
+                    "description": [
+                        "Synchronous copied original transaction out_report. No caller pointer survives."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original admission/delivery Error/reason; inspect typed creation_error and custody for an accepted native creation attempt."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_scene_depth_release_v1",
+            "since": "4.7",
+            "description": [
+                "Typed Scene-depth neighbor on the original DeviceExit bridge, session, CodeHolder and fixed RT request cell. No second registry or K01 authority. API failure has zero output; accepted native failure is delivered in Report.creation_error with original custody."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous copied original transaction bridge. No caller pointer survives."
+                    ]
+                },
+                {
+                    "name": "facet",
+                    "type": "GDExtensionStorageSceneDepthRefV1",
+                    "description": [
+                        "Synchronous copied original transaction facet. No caller pointer survives."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original admission/delivery Error/reason; inspect typed creation_error and custody for an accepted native creation attempt."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_observe_v3",
+            "since": "4.7",
+            "description": [
+                "Services the original OBSERVE with unchanged bounded budget for a V2 request. V3 result ABI is 3; nested terminal ABI is 1. A returned generation terminal is projected without consuming it; legacy observe remains unable to consume it. Zero budget may observe a returned terminal without scheduling."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous aligned nonaliasing POD."
+                    ]
+                },
+                {
+                    "name": "budget",
+                    "type": "const GDExtensionProductionServiceBudgetV1*",
+                    "description": [
+                        "Synchronous aligned nonaliasing POD."
+                    ]
+                },
+                {
+                    "name": "out_result",
+                    "type": "GDExtensionProductionObserveResultV3*",
+                    "description": [
+                        "Synchronous aligned nonaliasing POD."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked result; no logical completion or source acknowledgment is manufactured."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_output_return_consume_v1",
+            "since": "4.7",
+            "description": [
+                "Consumes exactly one original RETURNED OBSERVE generation terminal after comparing registry/request/control/root/particles/generation. Wrong tuples preserve RETURNED; replay rejects. This is native result ownership consumption, not E05/U09 acknowledgment. Output remains untouched on failure."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous aligned nonaliasing POD."
+                    ]
+                },
+                {
+                    "name": "expected",
+                    "type": "const GDExtensionProductionOutputGenerationRefV1*",
+                    "description": [
+                        "Synchronous aligned nonaliasing POD."
+                    ]
+                },
+                {
+                    "name": "out_result",
+                    "type": "GDExtensionProductionOutputGenerationResultV1*",
+                    "description": [
+                        "Synchronous aligned nonaliasing POD."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked result; no logical completion or source acknowledgment is manufactured."
                 ]
             }
         }

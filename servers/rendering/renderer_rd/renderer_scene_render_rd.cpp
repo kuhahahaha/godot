@@ -1474,6 +1474,11 @@ void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render
 		// may use it to match a packet to the viewport epoch; no frame counter or
 		// mutable camera state is substituted here.
 		render_data.set_camera_source(p_camera_data->source_view_id, p_camera_data->source_view_epoch, p_camera_data->source_capture_ordinal);
+		// This RenderDataRD is passed unchanged to Mobile or Clustered and all
+		// its color passes. Ordinary unregistered cameras create no source borrow.
+		if (p_camera_data->has_source_token() && p_camera_data->source_viewport.is_valid() && RSG::viewport) {
+			render_data.retain_native_camera_source(*RSG::viewport, *p_camera_data, p_render_buffers);
+		}
 		render_data.set_previous_camera_source(p_prev_camera_data->source_view_id, p_prev_camera_data->source_view_epoch, p_prev_camera_data->source_capture_ordinal);
 		render_data.render_buffers = rb;
 		render_data.scene_data = &scene_data;

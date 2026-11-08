@@ -1,0 +1,38 @@
+{
+  "source_before": "d1dcc010516b005fdf8e2847855512666032ed8d2060097bca0613d3c9332ea5",
+  "source_red": "4c472db95defd92ab5689cc5bc5e0d11f7a985b347c1989350d810dcd6fc6702",
+  "old": "if (observed != OK && !sticky_business_error) {",
+  "new": "if (observed != OK) {",
+  "build_command": [
+    "scons",
+    "-Q",
+    "tests=yes",
+    "platform=macos",
+    "target=editor",
+    "debug_symbols=no",
+    "module_particles_runtime_tests_enabled=yes",
+    "-j6"
+  ],
+  "build_exit": 0,
+  "seconds": 22.84,
+  "host_sha256": "1d437e21eb1715907d31c487f3fe26ca5a79a9e1def7ef500f2788298553d901",
+  "test_command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--test-case=[RenderingDevice][NativeHeightRange] settled native prefix returns despite sticky business error",
+    "--reporters=xml",
+    "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k01-general-checked-prefix-20261107/controlled-red/business_gate/CPU.xml"
+  ],
+  "test_exit": 1,
+  "assertions": {
+    "successes": "11",
+    "failures": "4"
+  },
+  "cases": {
+    "successes": "0",
+    "failures": "1",
+    "skipped": "2296"
+  },
+  "source_restored": "d1dcc010516b005fdf8e2847855512666032ed8d2060097bca0613d3c9332ea5"
+}

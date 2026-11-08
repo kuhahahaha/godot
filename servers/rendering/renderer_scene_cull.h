@@ -51,6 +51,7 @@
 
 class RenderingLightCuller;
 class ParticlesScenePairsTestFixture;
+class ParticlesHeightfieldClearTestFixture;
 class RenderingDevice;
 
 class RendererSceneCull : public RenderingMethod {
@@ -59,6 +60,7 @@ class RendererSceneCull : public RenderingMethod {
 #endif
 #if defined(TESTS_ENABLED) && defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
 	friend class ParticlesScenePairsTestFixture;
+	friend class ParticlesHeightfieldClearTestFixture;
 #endif
 public:
 	struct SceneSphereSource {
@@ -80,7 +82,6 @@ public:
 			uint32_t p_max_sources, SceneSphereSnapshot &r_snapshot) const;
 	bool scene_sphere_snapshot_pairs(RID p_receiver, uint32_t p_max_sources, Vector<SceneSphereSource> &r_sources) const;
 	struct SceneHeightfieldSource {
-		// Original ParticlesStorage instance identity; no resource/record grant.
 		RID collision_instance;
 		uint64_t source_key = 0;
 		uint64_t shape_revision = 0;

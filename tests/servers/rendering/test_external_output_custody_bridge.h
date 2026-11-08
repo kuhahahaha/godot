@@ -36,6 +36,7 @@
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
 
 namespace RendererRD {
+struct ExternalPacketPipelineRequest;
 class ParticlesStorage;
 class ExternalOutputOwner;
 // Explicit private component setup only. Pins are still issued by the original
@@ -52,6 +53,7 @@ class ExternalLinkedOwnerTest {
 public:
 	// CPU profile projection only; does not create/admit a render generation.
 	static void scene_only_profile_query();
+	static void preparation_bank_fragmentation(GDExtensionDeviceExit::ProductionOutputPin (&)[3]);
 	explicit ExternalLinkedOwnerTest(RenderingDevice &, bool p_empty_storage = false, bool p_query_enabled = false);
 	// Borrow the existing RD owner; retain only this fixture particle and root.
 	ExternalLinkedOwnerTest(RenderingDevice &, ParticlesStorage &, bool p_query_enabled);
@@ -67,12 +69,35 @@ public:
 			uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, GDExtensionOutputCreateResultV1 &);
 	static Error metadata_directory_bytes(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, uint64_t &r_bytes);
 	bool metadata_directory_in_slab(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces) const;
-	static Error selection_metadata_bytes(const ExternalOutputConfig &, uint64_t &, uint32_t *p_alignment = nullptr);
-	Error create_selection_component(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const ExternalOutputConfig &, GDExtensionDeviceExit::ProductionOutputMetadataLease &, int p_failure);
+	static Error selection_metadata_bytes(const ExternalOutputConfig &, uint64_t &, uint32_t *p_alignment = nullptr, uint32_t p_reads = 2);
+	Error create_selection_component(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const ExternalOutputConfig &, GDExtensionDeviceExit::ProductionOutputMetadataLease &, int p_failure, uint32_t p_reads = 2);
 	void unprepared_guard_refusal(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const ExternalOutputConfig &, GDExtensionDeviceExit::ProductionOutputMetadataLease &);
 	uint32_t selection_meshes() const;
 	uint32_t selection_materials() const;
+	Error acquire_selection_sources(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1);
+	uint32_t selection_sources() const;
+	Error generation_returnable() const;
+	Error derive_selection_source(uint32_t, uint64_t, MeshStorage::NativeSurfaceHold &) const;
+	bool selection_source_matches(uint32_t, RID, uint32_t, RID, uint64_t, const AABB &, uint64_t) const;
+	bool selection_source_metadata_matches(uint32_t, RSE::PrimitiveType, uint64_t, const AABB &, const Vector4 &) const;
 	bool selection_inline_matches(const ExternalOutputConfig &) const;
+	bool preparation_rows_match_slots(bool p_probe_duplicate = false) const;
+	bool preparation_pipeline_reservations_match(uint32_t p_slot) const;
+	bool preparation_bank_reservations_match(uint32_t, uint32_t, uint32_t) const;
+	uint64_t preparation_bank_group(uint32_t, uint32_t, uint32_t) const;
+	Error preparation_tuple_select(uint32_t, uint32_t, const ExternalPacketPipelineRequest &, uint32_t &, bool &);
+	bool preparation_tuple_matches(uint32_t, const ExternalPacketPipelineRequest &) const;
+	bool preparation_tuple_finished(uint32_t) const;
+	RID preparation_tuple_root(uint32_t) const;
+	uint64_t preparation_pipeline_group(uint32_t, uint32_t) const;
+	bool preparation_scope_link_matches(uint32_t, uint32_t, const GDExtensionDeviceExit::ProductionOutputPreparationScope *, bool) const;
+	Error preparation_row_preflight(uint32_t, uint32_t);
+	Error preparation_row_cleanup(uint32_t, uint32_t);
+	RID preparation_row_factory(uint32_t, uint32_t, RID, RenderingDevice::FramebufferFormatID);
+
+	Error return_pipeline_row(uint32_t, uint32_t);
+	Error cancel_pipeline_slot(uint32_t);
+	Error prepare_pipeline_prefix(GDExtensionProductionPhysicalContextRefV1, uint32_t p_slot, uint32_t p_surface, uint32_t p_max_resources);
 	uint64_t selection_material_generation(uint32_t) const;
 	bool selection_faulted() const;
 	void forget_auto_returned();
@@ -130,7 +155,7 @@ public:
 Error external_storage_poison_and_free(RenderingDevice &, NativeDisposalWitness &, NativeDisposalWitness::Report &);
 Error external_storage_restore_poison(RenderingDevice &, NativeDisposalWitness &, const NativeDisposalWitness::Report &);
 // Original CPU material/shader owners only; no ShaderRD version/pipeline readiness.
-void *selection_materials_create();
+void *selection_materials_create(uint32_t material_count = 2);
 RID selection_material_rid(void *, uint32_t);
 uint32_t selection_material_holds(void *, uint32_t);
 uint32_t selection_shader_holds(void *);

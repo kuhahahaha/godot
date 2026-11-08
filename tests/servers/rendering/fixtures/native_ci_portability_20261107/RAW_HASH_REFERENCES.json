@@ -1,0 +1,134 @@
+[
+  {
+    "path": "work/sprite-camera-retained-source-20261107/ci/JOB_128400182167.log",
+    "kind": "complete original remote log; referenced, not copied",
+    "bytes": 2792666,
+    "sha256": "deaa1b7afaf17ff75ca93bd048552065b04c4b83af37788a9df47e3bbd985093"
+  },
+  {
+    "path": "work/ci-native-drain-portability-20261107/JOB_128400182150_RAW.log",
+    "kind": "complete original remote log; referenced, not copied",
+    "bytes": 1674118,
+    "sha256": "e4300ae76d72ce648de35770e3cdfa74c166d39f629f30194ec62a677190fcc9"
+  },
+  {
+    "path": "work/ci-native-drain-portability-20261107/JOB_128400182171_RAW.log",
+    "kind": "complete original remote log; referenced, not copied",
+    "bytes": 2243967,
+    "sha256": "459f8b1526f25e1cc6461c5982ffe59f03c93a7923e3d76effe52e090b1c1a53"
+  },
+  {
+    "path": "work/sprite-camera-retained-source-20261107/ci/JOB_128400182344.log",
+    "kind": "complete original remote log; referenced, not copied",
+    "bytes": 1421590,
+    "sha256": "e1c3e06331c51824023973a3a7aefc8056f48bad9dedfc480e68724721e1c340"
+  },
+  {
+    "path": "work/ci-native-drain-portability-20261107/JOB_128400182231_RAW.log",
+    "kind": "complete original remote log; referenced, not copied",
+    "bytes": 2542286,
+    "sha256": "31714e505da01249a8270cf775b1ae4217a2164e6c4ac3643e0d3d9502eb1ea7"
+  },
+  {
+    "path": "work/ci-native-drain-portability-20261107/JOB_128400182310_RAW.log",
+    "kind": "complete original remote log; referenced, not copied",
+    "bytes": 2524636,
+    "sha256": "c001c4edc27d828421a541294f4d95a4e09a4fea21b6a955978aef59c7f9986a"
+  },
+  {
+    "path": "work/ci-native-drain-portability-20261107/JOB_128400182259.log",
+    "kind": "complete original remote log; referenced, not copied",
+    "bytes": 8405630,
+    "sha256": "045e8f0e551aa34e77c3a282ec4fff790d3fd00c614c07936bdf87b1905cc6e4"
+  },
+  {
+    "path": "work/ci-native-drain-portability-20261107/JOB_128400182293.log",
+    "kind": "complete original remote log; referenced, not copied",
+    "bytes": 4402495,
+    "sha256": "fcdab7b1472c68527a00838c7f807a2097b4d5775fc7493971db672d3ea093c1"
+  },
+  {
+    "path": "work/sprite-camera-native-propagation-20261107/FINAL_FULL_CPU.xml",
+    "kind": "complete doctest XML; referenced, not copied",
+    "bytes": 1159727,
+    "sha256": "826aa94cfa23a467a995249acd578f166d6491b8f2693a8a83b65c2172de2620"
+  },
+  {
+    "path": "work/sprite-camera-native-propagation-20261107/FINAL_CONFIGURED_FULL_CPU.xml",
+    "kind": "complete doctest XML; referenced, not copied",
+    "bytes": 1159470,
+    "sha256": "f7d5e6f8cc36f38c8c1e44c106fa8c63fe979c2b9bead17f38be868a59f3ec06"
+  },
+  {
+    "path": "work/sprite-camera-native-propagation-20261107/FINAL_FOCUSED.xml",
+    "kind": "complete doctest XML; referenced, not copied",
+    "bytes": 364835,
+    "sha256": "752a3d53878477e66247f8b72531b582f248274f5c2a077dddc363e1311260c8"
+  },
+  {
+    "path": "work/ci-native-drain-portability-20261107/SOURCE_IDENTITY.json",
+    "kind": "historical evidence/source identity; referenced, not copied",
+    "bytes": 613,
+    "sha256": "df1c4d0b738dfd4f8bbe8f4e3bba5bdbedbd37b965b64ab6315ec82f83499bfa"
+  },
+  {
+    "path": "work/ci-native-drain-portability-20261107/POST_HOOK_SOURCE_IDENTITY.json",
+    "kind": "historical evidence/source identity; referenced, not copied",
+    "bytes": 514,
+    "sha256": "7737b99bbef7a2b17e56255e26c6f3fd42ab68739e9c0454df46365955dc8fde"
+  },
+  {
+    "path": "work/ci-native-drain-portability-20261107/PORTABILITY_FIX.patch",
+    "kind": "historical evidence/source identity; referenced, not copied",
+    "bytes": 3790,
+    "sha256": "0f881f3eb25626a39d76bc9d210ac364f9c9c9723a2c879cc575c4f3f46ce062"
+  },
+  {
+    "path": "work/ci-native-drain-portability-20261107/INTERFACE_PREIMAGE.cpp",
+    "kind": "historical evidence/source identity; referenced, not copied",
+    "bytes": 100017,
+    "sha256": "d00b1a740b5d39a0b04f2c7d1a828bafe9e3d87d2eb8851b2c0a00c25c5cb8c1"
+  },
+  {
+    "path": "work/ci-native-drain-portability-20261107/DIAGNOSTIC_PREIMAGE.h",
+    "kind": "historical evidence/source identity; referenced, not copied",
+    "bytes": 7590,
+    "sha256": "72384847932a44a7fb97d23e22bb79b3384828c0e54a481a26c497056689709a"
+  },
+  {
+    "path": "work/ci-frame-wait-fixture-20261107/SOURCE_IDENTITY.json",
+    "kind": "historical evidence/source identity; referenced, not copied",
+    "bytes": 310,
+    "sha256": "fb9555990769db47efd1f58bd2b5391ecbba2fe18459d22d0f874738ac87baa8"
+  },
+  {
+    "path": "work/ci-frame-wait-fixture-20261107/PREIMAGE.cpp",
+    "kind": "historical evidence/source identity; referenced, not copied",
+    "bytes": 40785,
+    "sha256": "d415df53591fa2377090794c2e0aabde65c860645a7a3df3f40d672fb615c940"
+  },
+  {
+    "path": "work/ci-frame-wait-fixture-20261107/FIX.patch",
+    "kind": "historical evidence/source identity; referenced, not copied",
+    "bytes": 1849,
+    "sha256": "a2c401f25e20f01989341eb803f5debc2d283feff2bdce02ab36d7b0b60758ba"
+  },
+  {
+    "path": "work/sprite-camera-native-propagation-independent-review-20261107/SOURCE_IDENTITY.json",
+    "kind": "historical evidence/source identity; referenced, not copied",
+    "bytes": 1916,
+    "sha256": "78ab778530bd42a3f79fb78dca1b2c31a72566db69df15450313be7c608d3056"
+  },
+  {
+    "path": "work/ci-native-drain-portability-20261107/REMAINING_JOB_FAILURES_RAW.json",
+    "kind": "historical evidence/source identity; referenced, not copied",
+    "bytes": 1623,
+    "sha256": "e12622533ada10a0f1147a36050dd98d3b523ffc8e5729f0fbcce40c546896ca"
+  },
+  {
+    "path": "work/ci-native-drain-portability-20261107/OTHER_FAILURES.json",
+    "kind": "historical evidence/source identity; referenced, not copied",
+    "bytes": 6108,
+    "sha256": "0b7e1d8daf1d49ef24f10f0bf5ab9348ace6aa476f5318157611a443ee7fcae3"
+  }
+]

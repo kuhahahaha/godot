@@ -1,0 +1,19 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/core/extension/test_production_request.cpp:12228:
+TEST CASE:  [SceneTree][ProductionRequest][NativeSceneReleaseBudget] original RT RELEASE returns actual retained content outside Registry mutex
+
+tests/core/extension/test_production_request.cpp:4759: ERROR: CHECK( acquired ) is NOT correct!
+  values: CHECK( false )
+
+tests/core/extension/test_production_request.cpp:4759: ERROR: CHECK( acquired ) is NOT correct!
+  values: CHECK( false )
+
+tests/core/extension/test_production_request.cpp:4828: ERROR: CHECK( state.unlocked_checks == 3 ) is NOT correct!
+  values: CHECK( 1 == 3 )
+
+===============================================================================
+[doctest] test cases:   1 |  0 passed | 1 failed | 2218 skipped
+[doctest] assertions: 102 | 99 passed | 3 failed |
+[doctest] Status: FAILURE!

@@ -1,0 +1,11 @@
+--- r1/runner/probe.cpp
++++ r2/runner/probe.cpp
+@@ -178,7 +178,7 @@
+ 		memset(segments, 0, segment_capacity * sizeof(*segments));
+ 	}
+ 	if (!rt_configured) {
+-		GDExtensionQualificationRtConfigV1 config{ { 1, sizeof(config), 0 }, 1, 312, 200, 128, 65536 };
++		GDExtensionQualificationRtConfigV1 config{ { 1, sizeof(config), 0 }, 1, 312, 200, 131, 65536 };
+ 		require(rt_configure(bridge, &config).native_error, "rt_configure");
+ 		rt_configured = true;
+ 	}

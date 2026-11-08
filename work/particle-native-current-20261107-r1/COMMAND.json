@@ -1,0 +1,14 @@
+[
+  "python3",
+  "tests/servers/rendering/fixtures/particle_runtime_native/run_native.py",
+  "--godot",
+  "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/particle-native-current-20261107-r1/editor.arm64",
+  "--sha256",
+  "2268e5108732f5295dc174743a1f5e92177725df652ef3b6279ef645632f9efb",
+  "--controlled-metadata",
+  "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/particle-native-current-20261107-r1/controlled_build.json",
+  "--metadata-sha256",
+  "07a1bb8dc2513b3172ffad9602541e245d481ab04f07f196bfd27e5422239a1d",
+  "--out",
+  "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/particle-native-current-20261107-r1/evidence"
+]

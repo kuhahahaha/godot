@@ -105,7 +105,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_open(const GDExtensionD
 	if (!valid_abi(abi) || !aligned(out) || !separate(abi, sizeof(*abi), out, sizeof(*out)) || out->registry_instance || out->handle_serial) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	View *view = nullptr;
 	Error error = resolve_borrow_locked(frame.registry_instance, frame.handle_serial, ViewDomain::SCENE_READY, view);
 	if (error != OK) {
@@ -198,7 +198,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_backing(GDExtensionQual
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	*out = {};
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = qualification_bridge_locked(ref, true, true, bridge, rd, 1);
@@ -218,6 +218,11 @@ void Registry::qualification_trim_cleanup_ref_credits_locked(QualificationBridge
 	}
 	for (auto *ticket : bridge->tickets) {
 		if (ticket && !ticket->acknowledged) {
+			return;
+		}
+	}
+	for (auto *child : bridge->scene_depth) {
+		if (child && !child->acknowledged) {
 			return;
 		}
 	}
@@ -253,7 +258,7 @@ void Registry::qualification_trim_cleanup_ref_credits_locked(QualificationBridge
 }
 
 GDExtensionDeviceSessionResultV1 Registry::qualification_close(GDExtensionQualificationBridgeRefV1 ref) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
@@ -282,6 +287,12 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_close(GDExtensionQualif
 		if (entry == bridge) {
 			entry = nullptr;
 			break;
+		}
+	}
+	for (auto *child : bridge->scene_depth) {
+		if (child) {
+			CRASH_COND(!child->acknowledged || child->accepted_rt_refs || child->quoting);
+			memdelete(child);
 		}
 	}
 	for (auto *child : bridge->storage) {
@@ -347,7 +358,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_create(GDExtens
 	QualificationBridge::Storage *child = nullptr;
 	uint32_t slot = 0;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error error = qualification_bridge_locked(ref, true, false, bridge, rd);
 		if (error != OK) {
 			return result(error, error == ERR_UNAUTHORIZED ? 15 : 16);
@@ -423,7 +434,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_create(GDExtens
 	// The Registry child pins the original CodeHolder throughout the driver call;
 	// do not hold Registry::mutex across callbacks into original device-loss code.
 	RID rid = rd->_qualification_storage_create(uint32_t(request->bytes), &child->physical);
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	if (rid.is_null()) {
 		CRASH_COND(!child->cleanup_serial_reserved || !qualification_cleanup_serial_reservations);
 		--qualification_cleanup_serial_reservations;
@@ -453,7 +464,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_create(GDEx
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error error = qualification_bridge_locked(ref, true, false, bridge, rd);
 		if (error != OK) {
 			return result(error, error == ERR_UNAUTHORIZED ? 15 : 16);
@@ -488,7 +499,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_create(GDEx
 	uint32_t slot = 0;
 	RID shader_reservation, pipeline_reservation;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error error = qualification_bridge_locked(ref, true, false, bridge, rd);
 		if (error != OK) {
 			return result(error, 16);
@@ -602,7 +613,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_create(GDEx
 		rd->compute_pipeline_owner.free(pipeline_reservation);
 		rd->_qualification_release_free_event(&child->shader);
 		rd->_qualification_release_free_event(&child->pipeline);
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		CRASH_COND(!child->cleanup_serial_reserved || !qualification_cleanup_serial_reservations);
 		--qualification_cleanup_serial_reservations;
 		bridge->unit_origins.discard(child->history_index, child->serial);
@@ -643,7 +654,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_create(GDEx
 		rd->_qualification_release_free_event(&child->pipeline);
 		child->pipeline.serial = 0;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	child->creating = false;
 	*out = child->backing;
 	return result(OK);
@@ -716,7 +727,7 @@ void Registry::qualification_retire_step(QualificationBridge *bridge, RenderingD
 	if (kind == 4) {
 		QualificationResource *child = nullptr;
 		{
-			MutexLock lock(mutex);
+			Lock lock(*this);
 			if (qualification_resource_locked(bridge, { instance, serial }, 0, child) != OK) {
 				return;
 			}
@@ -737,11 +748,11 @@ void Registry::qualification_retire_step(QualificationBridge *bridge, RenderingD
 		}
 		bool failed = false;
 		{
-			MutexLock lock(mutex);
+			Lock lock(*this);
 			failed = child->maintenance_error != OK;
 		}
 		uint32_t reason = failed ? 0 : enqueue(child->physical, 1);
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		MutexLock physical_lock(child->physical.mutex);
 		auto &report = child->report;
 		const auto &physical = child->physical;
@@ -785,7 +796,7 @@ void Registry::qualification_retire_step(QualificationBridge *bridge, RenderingD
 		}
 		bool failed = false;
 		{
-			MutexLock lock(mutex);
+			Lock lock(*this);
 			if (child->report.report_revision == UINT64_MAX) {
 				return;
 			}
@@ -802,7 +813,7 @@ void Registry::qualification_retire_step(QualificationBridge *bridge, RenderingD
 		if (shader_reason) {
 			reason = shader_reason;
 		}
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		MutexLock shader_lock(child->shader.mutex);
 		MutexLock pipeline_lock(child->pipeline.mutex);
 		auto report = child->report;
@@ -857,7 +868,7 @@ Error Registry::qualification_schedule(GDExtensionQualificationBridgeRefV1 ref, 
 	RenderingDevice *rd = nullptr;
 	bool *queued = nullptr, *queue_credit = nullptr;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
 		if (error != OK) {
 			return error;
@@ -934,7 +945,7 @@ Error Registry::qualification_schedule(GDExtensionQualificationBridgeRefV1 ref, 
 	}
 	// A refused queue did not publish a command. Undo this one retained queue pin,
 	// while preserving all original native child and possible-prefix obligations.
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	CRASH_COND(!*queued);
 	if (queue_credit && *queue_credit) {
 		bridge->release_cleanup_queue(*queued, *queue_credit);
@@ -953,7 +964,7 @@ void Registry::qualification_service(uint64_t bridge_serial, uint64_t serial, ui
 	bool *queued = nullptr, *queue_credit = nullptr;
 	Error admitted = OK;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		for (auto *entry : qualification_bridges) {
 			if (entry && entry->serial == bridge_serial) {
 				bridge = entry;
@@ -1016,7 +1027,7 @@ void Registry::qualification_service(uint64_t bridge_serial, uint64_t serial, ui
 			}
 			bool returned = false;
 			{
-				MutexLock lock(mutex);
+				Lock lock(*this);
 				if (kind == 3) {
 					for (auto *ticket : bridge->tickets) {
 						if (ticket && ticket->serial == serial) {
@@ -1051,7 +1062,7 @@ void Registry::qualification_service(uint64_t bridge_serial, uint64_t serial, ui
 			const Error error = [&]() {
 #ifdef TESTS_ENABLED
 				if (kind == 3 && OS::get_singleton()->get_environment("GODOT_SYSTEM_SCALAR_TEST_SET_RETURN_ERROR") == "1") {
-					MutexLock lock(mutex);
+					Lock lock(*this);
 					for (auto *ticket : bridge->tickets)
 						if (ticket && ticket->serial == serial && ticket->test_inject_system_set_return_error()) {
 							// A controlled failure of this maintenance attempt, never a GPU error
@@ -1064,7 +1075,7 @@ void Registry::qualification_service(uint64_t bridge_serial, uint64_t serial, ui
 				return rd->_qualification_maintenance();
 			}();
 			if (error != OK && error != ERR_BUSY && kind == 3) {
-				MutexLock lock(mutex);
+				Lock lock(*this);
 				for (auto *ticket : bridge->tickets) {
 					if (ticket && ticket->serial == serial) {
 						ticket->remember_system_set_return_error(error);
@@ -1074,7 +1085,7 @@ void Registry::qualification_service(uint64_t bridge_serial, uint64_t serial, ui
 			// Publish a real maintenance failure before any later retirement step can
 			// enqueue another driver free. Keep the first cause and the original child.
 			if (error != OK && error != ERR_BUSY && kind != 3) {
-				MutexLock lock(mutex);
+				Lock lock(*this);
 				if (kind == 1) {
 					for (auto *child : bridge->storage) {
 						if (child && child->serial == serial && child->report.state != 1 && child->maintenance_error == OK) {
@@ -1124,7 +1135,7 @@ void Registry::qualification_service(uint64_t bridge_serial, uint64_t serial, ui
 				qualification_retire_step(bridge, rd, serial, kind);
 			}
 			if (error != OK && error != ERR_BUSY) {
-				MutexLock lock(mutex);
+				Lock lock(*this);
 				if (kind == 3) {
 					for (auto *ticket : bridge->tickets) {
 						if (ticket && ticket->serial == serial && !ticket->physically_retired.load()) {
@@ -1142,7 +1153,7 @@ void Registry::qualification_service(uint64_t bridge_serial, uint64_t serial, ui
 			}
 		}
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	CRASH_COND(!*queued);
 	if (queue_credit && *queue_credit) {
 		bridge->release_cleanup_queue(*queued, *queue_credit);
@@ -1155,6 +1166,24 @@ void Registry::qualification_service(uint64_t bridge_serial, uint64_t serial, ui
 }
 
 Error Registry::qualification_cleanup_retire_matches_original_child_locked(QualificationBridge *bridge, uint32_t kind, const void *bytes) {
+	if (kind == 23) {
+		GDExtensionStorageSceneDepthRetireRequestV1 q;
+		memcpy(&q, bytes, sizeof(q));
+		uint32_t index;
+		const Error error = qualification_scene_depth_locked(bridge, q.facet, index);
+		if (error != OK) {
+			return error;
+		}
+		const auto *child = bridge->scene_depth[index];
+		if (child->quoting) {
+			return ERR_BUSY;
+		}
+		if (q.retire_attempt != 3 || q.allocation_slot != child->origin.allocation_slot || q.part != child->origin.part || q.allocation_generation != child->origin.allocation_generation ||
+				(child->retiring && memcmp(&q, &child->retirement, sizeof(q)))) {
+			return ERR_INVALID_DATA;
+		}
+		return OK;
+	}
 	// Read only under the original Registry lock. This authenticates existing
 	// cleanup ownership; it neither reserves a retirement nor changes a child.
 	if (kind == 16) {
@@ -1245,7 +1274,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_retire(GDExtens
 	RenderingDevice *rd = nullptr;
 	QualificationBridge::Storage *child = nullptr;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error error = qualification_bridge_locked(ref, true, false, bridge, rd);
 		if (error != OK) {
 			return result(error, error == ERR_UNAUTHORIZED ? 15 : 16);
@@ -1283,7 +1312,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_retire(GDExtens
 		r.part = request->part;
 	}
 	qualification_retire_step(bridge, rd, child->serial, 1);
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	*out = { instance, child->retire_serial };
 	*report = child->report;
 	return result(OK);
@@ -1302,7 +1331,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_retire(GDEx
 	RenderingDevice *rd = nullptr;
 	QualificationBridge::NativeUnit *child = nullptr;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		Error error = qualification_bridge_locked(ref, true, false, bridge, rd);
 		if (error != OK) {
 			return result(error, error == ERR_UNAUTHORIZED ? 15 : 16);
@@ -1341,7 +1370,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_retire(GDEx
 		r.retire_operation = request->retire_operation;
 	}
 	qualification_retire_step(bridge, rd, child->serial, 2);
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	*out = { instance, child->retire_serial };
 	*report = child->report;
 	return result(OK);
@@ -1357,7 +1386,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_retire_observe(
 	}
 	uint64_t serial = 0;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		QualificationBridge *bridge = nullptr;
 		RenderingDevice *rd = nullptr;
 		Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
@@ -1380,7 +1409,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_retire_observe(
 	if (error != OK) {
 		return result(error, 17);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	error = qualification_bridge_locked(ref, false, false, bridge, rd);
@@ -1405,7 +1434,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_retire_obse
 	}
 	uint64_t serial = 0;
 	{
-		MutexLock lock(mutex);
+		Lock lock(*this);
 		QualificationBridge *bridge = nullptr;
 		RenderingDevice *rd = nullptr;
 		Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
@@ -1428,7 +1457,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_retire_obse
 	if (error != OK) {
 		return result(error, 17);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	error = qualification_bridge_locked(ref, false, false, bridge, rd);
@@ -1444,7 +1473,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_retire_obse
 	return result(ERR_DOES_NOT_EXIST, 17);
 }
 GDExtensionDeviceSessionResultV1 Registry::qualification_storage_retire_release(GDExtensionQualificationBridgeRefV1 ref, GDExtensionStorageRetireRefV1 retire) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
@@ -1480,7 +1509,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_retire_release(
 	return result(ERR_DOES_NOT_EXIST, 17);
 }
 GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_retire_release(GDExtensionQualificationBridgeRefV1 ref, GDExtensionNativeUnitRetireRefV1 retire) {
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
@@ -1669,8 +1698,10 @@ static GDExtensionDeviceSessionResultV1 rt_observe(GDExtensionQualificationBridg
 static GDExtensionDeviceSessionResultV1 rt_release(GDExtensionQualificationBridgeRefV1 b, GDExtensionQualificationRtRefV1 r) {
 	return Registry::get_singleton().qualification_rt_release(b, r);
 }
+void register_qualification_scene_depth_interfaces();
 void register_qualification_typed_interfaces();
 void register_qualification_interfaces() {
+	register_qualification_scene_depth_interfaces();
 	register_qualification_typed_interfaces();
 	GDExtension::register_interface_function("device_session_system_scalar_record_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&system_scalar_record));
 	GDExtension::register_interface_function("device_session_system_scalar_observe_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&system_scalar_observe));

@@ -46,6 +46,9 @@ struct ProductionDisposalObservation {
 };
 // Membership storage lives only in the already quoted request arena.
 class ProductionDisposalUse {
+#ifdef TESTS_ENABLED
+	friend class ::TestNativeDisposalAccess;
+#endif
 	friend class Registry;
 	friend class ::RenderingDevice;
 	ProductionRequest *request = nullptr;
@@ -53,6 +56,8 @@ class ProductionDisposalUse {
 	uint64_t rid = 0, serial = 0, native_driver_id = 0;
 	uint32_t kind = UINT32_MAX;
 	ProductionDisposalUse *next = nullptr;
+	// Multiplicity belongs to this physical incarnation, not another free node.
+	uint32_t counter_pins_remaining = 0;
 	bool owned = false, counter_dropped = false, qualified_borrow = false;
 	std::atomic<uint8_t> state{ 0 }; // unused,held,queued,physical-return,detached-borrow,unknown
 public:

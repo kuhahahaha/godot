@@ -1,0 +1,93 @@
+{
+  "commit": "8c6f2fb72af1e9152beeaa3d45dba5afcaa88d1b",
+  "read_only_git_object_review": true,
+  "remote_source": {
+    "servers/rendering/renderer_rd/storage_rd/height_frame_resources.h": {
+      "bytes": 5591,
+      "sha256": "1997c5ba9343fe604d902834974823e9256e9c603c68df3a57ab80781c17701d",
+      "git_blob": "d095d158453ac307cec94fad3ac65dff4a7a6d78"
+    },
+    "servers/rendering/renderer_rd/storage_rd/height_frame_resources.cpp": {
+      "bytes": 10371,
+      "sha256": "9140e80099e3e4675910e2ba7f55a6179f154892703dcbd5629588b72065e755",
+      "git_blob": "732ff4f9b34898613fbace735a2c3272c72fc787"
+    },
+    "servers/rendering/renderer_rd/height_capture_checked_sink.h": {
+      "bytes": 6727,
+      "sha256": "764f36af9fc5ae0a3b13024fb367ef5789019e0716906e6572e51f8c5424626c",
+      "git_blob": "b38387d607bc0d6a203f65a574de9dd16d06e3f1"
+    },
+    "servers/rendering/renderer_rd/height_capture_checked_sink.cpp": {
+      "bytes": 10955,
+      "sha256": "2bc115cfbdcaa4b94f5134213ec5d4d8356022de3564cd580ba77621abe5c094",
+      "git_blob": "72f8acb5d82693e74bf6aed45bfb930481a2a607"
+    },
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.h": {
+      "bytes": 33170,
+      "sha256": "66a33c6322623cd5a8321ee8377a01a92e058de997868dc1cea45aafcc024c9e",
+      "git_blob": "0d21683bd1ca33d96106dc0a81f602630150123f"
+    },
+    "servers/rendering/renderer_rd/storage_rd/height_frame.h": {
+      "bytes": 5384,
+      "sha256": "27df0d38da60aef80ad574d9fa9d69a9d30719fdeed1b75e4a79f0d1f0511583",
+      "git_blob": "04757ad407e48e03764bf2bb3af8b75621a1e2c6"
+    },
+    "servers/rendering/renderer_rd/storage_rd/height_frame.cpp": {
+      "bytes": 6628,
+      "sha256": "00c60a3c77339a567862319c0ea37ea4b5c8a78916869904a2efaba75ec26b24",
+      "git_blob": "3ecc7578308a4ca6ed9e0a86b838cdf8d6b73126"
+    },
+    "servers/rendering/rendering_device.h": {
+      "bytes": 126872,
+      "sha256": "be9f4e34acbf11c9940382ceb656b067a35f6ecd7688660655abcb0fb44063cd",
+      "git_blob": "0981781348c5bbd5f5cd8bb0a6e9fe4656d368b1"
+    },
+    "servers/rendering/native_depth_allocation_projection.h": {
+      "bytes": 5285,
+      "sha256": "9c635eb1ccf5aaa93c1c8a3b10a4005f6647c1019d59e048a0ce7982a2b5fdf5",
+      "git_blob": "5d0f5794d3304877592c4c49f308b1e0350b8093"
+    },
+    "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp": {
+      "bytes": 184191,
+      "sha256": "4f7cddb0171d6eead0b2dfe41a8aef34f11049896efdb5b1158066302caa651a",
+      "git_blob": "3579fa6c2f290dbcdf8450f7c9a04fa8d6784697"
+    },
+    "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp": {
+      "bytes": 258606,
+      "sha256": "64674b15456d341d0f3b9567e5f2d342f57dee1060c9b2ea69e7d46282314aec",
+      "git_blob": "b32422f3be0388bb7739f6aadff20736e73bb778"
+    }
+  },
+  "local_comparison_source": {
+    "servers/rendering/rendering_device.h": {
+      "bytes": 131095,
+      "sha256": "0ffcdaed1330294d66fc6552fe11eb967e588ac398d602295e8d1ab223b918e5"
+    },
+    "servers/rendering/rendering_device.cpp": {
+      "bytes": 746353,
+      "sha256": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc"
+    },
+    "servers/rendering/native_depth_allocation_projection.h": {
+      "bytes": 5285,
+      "sha256": "9c635eb1ccf5aaa93c1c8a3b10a4005f6647c1019d59e048a0ce7982a2b5fdf5"
+    },
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.h": {
+      "bytes": 33101,
+      "sha256": "25cde7aa6888e73d482fec101897dbb31a8b902958b0b584953646a786aca6b2"
+    }
+  },
+  "corroborating_main_session_review": {
+    "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/scene-8c6f-fixed-source-review-20261107/SOURCE_MANIFEST.json": {
+      "bytes": 3316,
+      "sha256": "683ccfafe9be4cf6c039e9fe9619f3a43817f53e876f41b76df4e28d4e072e34"
+    },
+    "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/scene-8c6f-fixed-source-review-20261107/REVIEW.md": {
+      "bytes": 8312,
+      "sha256": "b4a5e2c7c975329f2167605fe941c105bb5da3b3d1322250c013e551efa08f2c"
+    },
+    "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/scene-8c6f-fixed-source-review-20261107/REVIEW.json": {
+      "bytes": 2584,
+      "sha256": "135c733246b962b38af7d6ede0719dcc6267cf8425a5a13d8c3fd01b4c87aa1c"
+    }
+  }
+}

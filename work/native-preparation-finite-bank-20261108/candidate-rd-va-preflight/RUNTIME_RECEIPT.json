@@ -1,0 +1,69 @@
+{
+  "base": "87daf8bd5d",
+  "scope": "Shared original RD format/VA scratch validation and direct-VB immutable eligibility consumed by MeshStorage retained source plan",
+  "source_sha256": {
+    "servers/rendering/rendering_device.cpp": "85af989923afc2851990c3c06e8c829b41d3117b94ab4cf2329157a38459a2ca",
+    "servers/rendering/rendering_device.h": "31efa34b295ac21dfcea509b4879fd3a8fa4ac421356552f2110d0fe9f57ec0e",
+    "servers/rendering/rendering_device_immutable_hold.cpp": "19dcec89608d5e85e391d310a764496983ad2a6560043e4015b2aa4e01551489",
+    "servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp": "aa9432b0c60cc7f8dd7191ba689989225db615bd21d5d6ea6979d5a1ce40f30c",
+    "servers/rendering/renderer_rd/storage_rd/mesh_storage.h": "690ded3ab440d0399e3eaa0fe85456437f16cae583e2dcb28493755e48eae863",
+    "tests/servers/rendering/test_mesh_storage_external.cpp": "c72832cb6069fa020a557e8e70bcedb3597a5fc8e034a7ac025fc02c923fd02e"
+  },
+  "host_sha256": "a3b6511f58125c05aca42ae5b95f0111c3421043ab920f8a1c919ddd12a9b8a9",
+  "build": {
+    "exit": 0,
+    "command": "scons -Q tests=yes platform=macos target=editor debug_symbols=no module_particles_runtime_tests_enabled=yes -j2",
+    "log": "final-build.log"
+  },
+  "red": [
+    {
+      "log": "red-test.log",
+      "mutation": "native preflight count1 substitutes actual count3",
+      "cases": 1,
+      "assertions": 76,
+      "target_failures": 2,
+      "exit": 1
+    },
+    {
+      "log": "plan-route-red-test.log",
+      "state": "MeshStorage plan not yet connected to RD validation",
+      "cases": 2,
+      "assertions": 149,
+      "target_failures": 11,
+      "exit": 1
+    }
+  ],
+  "final": {
+    "targeted": {
+      "cases": 3,
+      "assertions": 232,
+      "exit": 0
+    },
+    "combined": {
+      "cases": 83,
+      "assertions": 21668,
+      "exit": 0
+    },
+    "camera_neighbor": {
+      "mobile_exit": 0,
+      "forward_plus_exit": 0,
+      "runner_exit": 0,
+      "real_device": "Apple M3 Pro / Metal4.0",
+      "actual_images_and_draw_calls_checked": true
+    }
+  },
+  "commands": "final-execution.json",
+  "reviews": [
+    "INDEPENDENT_REVIEW.md",
+    "FIX_REVIEW.md",
+    "PLAN_ROUTE_REVIEW.md"
+  ],
+  "limits": [
+    "Direct used VB only; full closure/G and aggregate future hold counters pending",
+    "Existing VA/IA identity/eligibility, external history and detached-directory complete roots pending",
+    "No driver support certificate or no-allocation claim; scratch vectors/sets allocate",
+    "No public Ready/profile/full Sprite/no-draw retirement acceptance",
+    "Ordinary invalid-format ERR_CONTINUE behavior preserved; native input rejects invalid enums/count0",
+    "Qualification use_closed branch not directly fault-injected in this fixture"
+  ]
+}

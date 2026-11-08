@@ -89,6 +89,9 @@ protected:
 
 public:
 	bool native_issue_bound(NativeIssueKind p_kind, uint32_t p_commands, uint32_t &r_bound) const override;
+ bool qualification_incremental_accounting_supported() const override { return true; }
+ bool qualification_incremental_fact_bound(uint64_t p_graphs, uint32_t p_current, uint32_t &r_main, uint32_t &r_copy) const override;
+ Error qualification_worker_source_quote(CommandBufferID p_command, QueueCallReport &r_prefix, uint32_t &r_future) const override;
 	uint32_t qualification_native_call_bound(uint32_t p_slots) const override;
 	uint32_t qualification_native_call_bound_for_profile(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames) const override;
 	Error initialize(uint32_t p_device_index, uint32_t p_frame_count) override;

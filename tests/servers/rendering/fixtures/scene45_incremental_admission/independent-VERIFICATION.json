@@ -1,0 +1,13 @@
+{
+  "patch_bytes": 265480,
+  "patch_sha256": "b1d54d883089236208f231d29e6c2a36ed9b3005e6761df7e6f6bc31e6b754a9",
+  "base_files": 42,
+  "changed_files": 39,
+  "current_touched_equals_fixed_base": true,
+  "private_replay_equals_fixed_candidate": true,
+  "apply_check_active_tree_exit": 0,
+  "apply_check_private_exit": 0,
+  "apply_private_exit": 0,
+  "test_production_request_sha256": "b4b5c0a649748a5eef25aca137727669e8eca18ec8a83d57afdc5e3bbe62eeb7",
+  "head_ref_read_from_file": "776fd86b5a7397b67b46c217170b8019f9401bd0"
+}

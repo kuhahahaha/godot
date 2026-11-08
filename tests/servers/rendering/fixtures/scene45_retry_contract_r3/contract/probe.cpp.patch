@@ -1,0 +1,102 @@
+--- r2/runner/probe.cpp
++++ r3/runner/probe.cpp
+@@ -172,6 +172,13 @@
+ GDExtensionInterfaceDeviceSessionQualificationRtReleaseV1 rt_release;
+ uint64_t rt_operation = 1;
+ bool rt_configured = false, rt_abort_tested = false;
++std::string proof_digest(const void *p, size_t n) {
++ unsigned char digest[CC_SHA256_DIGEST_LENGTH];
++ CC_SHA256(p, n, digest);
++ char hex[CC_SHA256_DIGEST_LENGTH * 2 + 1];
++ for (size_t i = 0; i < sizeof(digest); ++i) { std::snprintf(hex + i * 2, 3, "%02x", digest[i]); }
++ return hex;
++}
+ GDExtensionDeviceSessionResultV1 invoke_rt(GDExtensionQualificationBridgeRefV1 bridge, uint32_t kind, const void *request, uint32_t request_size, const void *payload, uint64_t payload_size, void *out, uint32_t out_size, GDExtensionQualificationUploadSegmentV1 *segments = nullptr, uint32_t segment_capacity = 0) {
+ 	memset(out, 0, out_size);
+ 	if (segment_capacity) {
+@@ -210,6 +217,7 @@
+ 		std::_Exit(176);
+ 	}
+ 	std::fprintf(stderr, "QRT_NATIVE_RETURN kind=%u operation=%llu slot=%llu result=%u segments=%u error=%d reply_ack=1\n", kind, (unsigned long long)header.operation_serial, (unsigned long long)ref.handle_serial, observation.result_bytes, observation.segment_count, observation.call_result.native_error);
++ std::fprintf(stderr, "QRT_CALL_IDENTITY kind=%u operation=%llu slot=%llu bridge=%llu:%llu state=%u error=%d reason=%u request=%s payload=%s\n", kind, (unsigned long long)header.operation_serial, (unsigned long long)ref.handle_serial, (unsigned long long)bridge.registry_instance, (unsigned long long)bridge.handle_serial, observation.state, observation.call_result.native_error, observation.call_result.reason, proof_digest(request, request_size).c_str(), proof_digest(payload, payload_size).c_str());
+ 	return observation.call_result;
+ }
+ GDExtensionDeviceSessionResultV1 wrapped_storage_create(GDExtensionQualificationBridgeRefV1 b, const GDExtensionStorageCreateRequestV1 *q, GDExtensionStorageBackingV1 *o) {
+@@ -279,6 +287,46 @@
+ }
+ GDExtensionDeviceSessionResultV1 wrapped_prepared(GDExtensionQualificationBridgeRefV1 b, GDExtensionQualificationTicketRefV1 t, const GDExtensionQualificationRecordV1 *q, GDExtensionQualificationReportV1 *o) {
+ 	return invoke_rt(b, 9, q, sizeof(*q), &t, sizeof(t), o, sizeof(*o));
++}
++struct RecordSnapshot {
++ GDExtensionQualificationReportV1 report{};
++ uint32_t record_facts = 0;
++ std::vector<GDExtensionQualificationFactV1> facts;
++};
++RecordSnapshot record_snapshot(GDExtensionQualificationBridgeRefV1 bridge, GDExtensionQualificationTicketRefV1 ticket, const GDExtensionQualificationBudgetV1 &budget, const GDExtensionQualificationRecordV1 &request, uint64_t operation, const char *stage, std::chrono::steady_clock::time_point deadline) {
++ for (uint32_t pass = 0; pass < 32; ++pass) {
++  if (std::chrono::steady_clock::now() >= deadline) { std::_Exit(209); }
++  RecordSnapshot snapshot;
++  require(observe_ticket(bridge, ticket, &budget, &snapshot.report).native_error, "record_snapshot_observe");
++  const auto &r = snapshot.report;
++  if (r.record_generation != request.record_generation || r.request_nonce != request.request_nonce || std::memcmp(r.request_digest, request.request_digest, 32) || std::memcmp(r.unit_digest, request.unit_digest, 32) || r.source_backing_serial || r.source_offset || r.source_size || r.readback_request || r.owned_size) { std::_Exit(202); }
++  bool stale = false;
++  uint32_t first = 0;
++  while (first < r.fact_count) {
++   GDExtensionQualificationFactV1 facts[64]{};
++   uint32_t written = 0;
++   auto fetched = facts_ticket(bridge, ticket, r.revision, first, std::min<uint32_t>(64, r.fact_count - first), facts, &written);
++   if (fetched.native_error == ERR_INVALID_DATA && fetched.reason == 17) { stale = true; break; }
++   require(fetched.native_error, "record_snapshot_facts");
++   if (!written || written > r.fact_count - first) { std::_Exit(203); }
++   for (uint32_t i = 0; i < written; ++i) {
++    snapshot.facts.push_back(facts[i]);
++    const uint32_t semantic = facts[i].semantic_kind;
++    if (semantic >= 1 && semantic <= 3) { ++snapshot.record_facts; }
++    else if (semantic != 4 && semantic != 5 && semantic != 6) { std::_Exit(204); }
++   }
++   first += written;
++  }
++  if (stale) { continue; }
++  if (first != r.fact_count || snapshot.record_facts) { std::_Exit(205); }
++  std::fprintf(stderr, "ORIGINAL_RECORD_SNAPSHOT operation=%llu stage=%s revision=%llu facts=%u record=%u source=%llu:%llu:%llu readback=%llu owned=%u generation=%llu nonce=%llu request_digest=%s unit_digest=%s\n", (unsigned long long)operation, stage, (unsigned long long)r.revision, r.fact_count, snapshot.record_facts, (unsigned long long)r.source_backing_serial, (unsigned long long)r.source_offset, (unsigned long long)r.source_size, (unsigned long long)r.readback_request, r.owned_size, (unsigned long long)r.record_generation, (unsigned long long)r.request_nonce, proof_digest(r.request_digest, 32).c_str(), proof_digest(r.unit_digest, 32).c_str());
++  for (size_t i = 0; i < snapshot.facts.size(); ++i) {
++   const auto &f = snapshot.facts[i];
++   std::fprintf(stderr, "ORIGINAL_RECORD_SNAPSHOT_FACT operation=%llu stage=%s revision=%llu index=%zu semantic=%u graph=%llu:%llu:%u:%u:%u native=%llu completion=%u error=%u\n", (unsigned long long)operation, stage, (unsigned long long)r.revision, i, f.semantic_kind, (unsigned long long)f.graph_instance, (unsigned long long)f.graph_frame, f.graph_kind, f.graph_index, f.graph_offset, (unsigned long long)f.native_serial, f.completion, f.error);
++  }
++  return snapshot;
++ }
++ std::_Exit(206);
+ }
+ GDExtensionInterfaceDeviceSessionQualificationCancelV1 cancel_ticket;
+ std::vector<uint8_t> file_bytes(const std::filesystem::path &p, uint64_t limit = 67108864) {
+@@ -586,17 +634,30 @@
+ 			std::_Exit(187);
+ 		}
+ 	} else {
++  const auto original_request = request;
++  const auto original_ticket = ticket;
++  const auto original_bridge = bridge;
++  bool admitted = false;
++  const auto record_deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(5000);
+ 		for (uint32_t pass = 0; pass < 5000; ++pass) {
++   const uint64_t operation = rt_operation;
++   const auto before = record_snapshot(bridge, ticket, budget, request, operation, "before", record_deadline);
++   if (std::memcmp(&request, &original_request, sizeof(request)) || std::memcmp(&ticket, &original_ticket, sizeof(ticket)) || std::memcmp(&bridge, &original_bridge, sizeof(bridge))) { std::_Exit(207); }
+ 			auto result = wrapped_prepared(bridge, ticket, &request, &report);
+ 			if (!result.native_error) {
++    std::fprintf(stderr, "ORIGINAL_RECORD_ACCEPT operation=%llu bridge=%llu:%llu ticket=%llu:%llu request=%s attempts=%u generation=%llu nonce=%llu request_digest=%s unit_digest=%s\n", (unsigned long long)operation, (unsigned long long)bridge.registry_instance, (unsigned long long)bridge.handle_serial, (unsigned long long)ticket.registry_instance, (unsigned long long)ticket.handle_serial, proof_digest(&request, sizeof(request)).c_str(), pass + 1, (unsigned long long)request.record_generation, (unsigned long long)request.request_nonce, proof_digest(request.request_digest, 32).c_str(), proof_digest(request.unit_digest, 32).c_str());
++    admitted = true;
+ 				break;
+ 			}
+ 			if (result.native_error != ERR_BUSY || result.reason != 19) {
+ 				require(result.native_error, "record_original_pair");
+ 			}
++   const auto after = record_snapshot(bridge, ticket, budget, request, operation, "after", record_deadline);
++   std::fprintf(stderr, "ORIGINAL_RECORD_RETRY operation=%llu bridge=%llu:%llu ticket=%llu:%llu request=%s error=%d reason=%u before_revision=%llu after_revision=%llu before_facts=%u after_facts=%u before_record=%u after_record=%u before_source=%llu:%llu:%llu after_source=%llu:%llu:%llu before_readback=%llu after_readback=%llu before_owned=%u after_owned=%u generation=%llu nonce=%llu request_digest=%s unit_digest=%s\n", (unsigned long long)operation, (unsigned long long)bridge.registry_instance, (unsigned long long)bridge.handle_serial, (unsigned long long)ticket.registry_instance, (unsigned long long)ticket.handle_serial, proof_digest(&request, sizeof(request)).c_str(), result.native_error, result.reason, (unsigned long long)before.report.revision, (unsigned long long)after.report.revision, before.report.fact_count, after.report.fact_count, before.record_facts, after.record_facts, (unsigned long long)before.report.source_backing_serial, (unsigned long long)before.report.source_offset, (unsigned long long)before.report.source_size, (unsigned long long)after.report.source_backing_serial, (unsigned long long)after.report.source_offset, (unsigned long long)after.report.source_size, (unsigned long long)before.report.readback_request, (unsigned long long)after.report.readback_request, before.report.owned_size, after.report.owned_size, (unsigned long long)request.record_generation, (unsigned long long)request.request_nonce, proof_digest(request.request_digest, 32).c_str(), proof_digest(request.unit_digest, 32).c_str());
+ 			require(observe_ticket(bridge, ticket, &budget, &report).native_error, "prior_upload_return");
+ 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+ 		}
++  if (!admitted) { std::_Exit(208); }
+ 	}
+ 	for (uint32_t pass = 0; pass < 5000; ++pass) {
+ 		require(observe_ticket(bridge, ticket, &budget, &report).native_error, "same_request_async_observe");

@@ -28,6 +28,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
+#include "core/extension/gdextension_production_request.h"
 #include "core/os/os.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_shader_container.h"
@@ -38,6 +39,8 @@ TEST_FORCE_LINK(test_native_disposal)
 
 class TestNativeDisposalAccess {
 public:
+	static void immutable_inline();
+	static void immutable_batch(uint32_t p_mode);
 	static void sampled_disposal();
 	static void sampled_failure();
 	static void sampled_identity();
@@ -49,6 +52,8 @@ public:
 	static void geometry_prepared();
 	static void geometry_prepared_multiple();
 	static void depth_disposal();
+	static void depth_allocation_projection();
+	static void depth_allocation_quote();
 	static void depth_factory_failures();
 	static void depth_identity();
 	static void pipeline_rid_capacity();
@@ -597,7 +602,6 @@ TEST_CASE("[RenderingDevice][NativeDisposal][PipelineRIDCapacity] ordinary facto
 	ERR_PRINT_ON;
 }
 
-
 TEST_CASE("[RenderingDevice][NativeDisposal] large accepted queue drains with single-call turns") {
 	RenderingDevice rd;
 	Driver driver;
@@ -800,9 +804,6 @@ TEST_CASE("[RenderingDevice][NativeDisposal] failed native creation leaves no wi
 
 void TestNativeDisposalAccess::checked_pipeline_compatibility() {
 	using namespace TestNativeDisposal;
-	using RD = RenderingDevice;
-	using RDD = RenderingDeviceDriver;
-	using RDG = RenderingDeviceGraph;
 	struct TupleDriver : RasterCapacityDriver {
 		uint64_t next_pass = 500;
 		uint32_t created_passes = 0, created_pipelines = 0, freed_pipelines = 0;
@@ -913,7 +914,9 @@ void TestNativeDisposalAccess::checked_pipeline_compatibility() {
 	rejected(wrong_format);
 	rd.draw_list_end();
 	rd.draw_graph.begin();
-	for (RID pipeline : { right, wrong_format, wrong_pass, wrong_both }) { rd.free_rid(pipeline); }
+	for (RID pipeline : { right, wrong_format, wrong_pass, wrong_both }) {
+		rd.free_rid(pipeline);
+	}
 	rd.free_rid(shader);
 	rd.free_rid(framebuffer);
 	rd.free_rid(other_framebuffer);
@@ -923,7 +926,9 @@ void TestNativeDisposalAccess::checked_pipeline_compatibility() {
 	CHECK(driver.shader_frees == 1);
 	CHECK(rd.dependency_map.is_empty());
 	CHECK(rd.reverse_dependency_map.is_empty());
-	for (const auto &entry : rd.framebuffer_formats) { driver.render_pass_free(entry.value.render_pass); }
+	for (const auto &entry : rd.framebuffer_formats) {
+		driver.render_pass_free(entry.value.render_pass);
+	}
 	rd.framebuffer_formats.clear();
 	rd.framebuffer_format_cache.clear();
 	detach(rd);
@@ -1292,7 +1297,9 @@ struct GeometryPreparedDriver : TestNativeDisposal::RasterCapacityDriver {
 	}
 	BufferID buffer_create(uint64_t size, BitField<BufferUsageBits> usage, MemoryAllocationType, uint64_t) override {
 		CHECK(((next_buffer == 10 && size == 128) || (next_buffer == 11 && size == 16)));
-		if (next_buffer == 11) { CHECK(usage.has_flag(BUFFER_USAGE_UNIFORM_BIT)); }
+		if (next_buffer == 11) {
+			CHECK(usage.has_flag(BUFFER_USAGE_UNIFORM_BIT));
+		}
 		return BufferID(next_buffer++);
 	}
 	void buffer_free(BufferID buffer) override {
@@ -1311,12 +1318,20 @@ struct GeometryPreparedDriver : TestNativeDisposal::RasterCapacityDriver {
 		++set_creates;
 		return UniformSetID(multiple_sets ? 60 + set : 61);
 	}
-	void uniform_set_free(UniformSetID set) override { CHECK(((!multiple_sets && set == UniformSetID(61)) || (multiple_sets && set.id >= 60 && set.id <= 64))); ++set_frees; }
+	void uniform_set_free(UniformSetID set) override {
+		CHECK(((!multiple_sets && set == UniformSetID(61)) || (multiple_sets && set.id >= 60 && set.id <= 64)));
+		++set_frees;
+	}
 	uint32_t uniform_sets_get_dynamic_offsets(VectorView<UniformSetID> sets, ShaderID shader, uint32_t first, uint32_t count) const override {
 		CHECK(shader == ShaderID(301));
-		if (!multiple_sets) { CHECK(first == 0); CHECK(count == 1); }
+		if (!multiple_sets) {
+			CHECK(first == 0);
+			CHECK(count == 1);
+		}
 		REQUIRE(sets.size() >= count);
-		for (uint32_t i = 0; i < count; ++i) { CHECK(sets[i] == UniformSetID(multiple_sets ? 60 + first + i : 61)); }
+		for (uint32_t i = 0; i < count; ++i) {
+			CHECK(sets[i] == UniformSetID(multiple_sets ? 60 + first + i : 61));
+		}
 		++dynamic_queries;
 		return 0x55;
 	}
@@ -1324,15 +1339,22 @@ struct GeometryPreparedDriver : TestNativeDisposal::RasterCapacityDriver {
 		CHECK(command_buffer == CommandBufferID(11));
 		CHECK(set == UniformSetID(multiple_sets ? 60 + index : 61));
 		CHECK(shader == ShaderID(301));
-		if (!multiple_sets) { CHECK(index == 0); }
+		if (!multiple_sets) {
+			CHECK(index == 0);
+		}
 		native_calls.push_back(multiple_sets ? 100 + index : 1);
 	}
 	void command_bind_render_uniform_sets(CommandBufferID command_buffer, VectorView<UniformSetID> sets, ShaderID shader, uint32_t first, uint32_t count, uint32_t dynamic_mask) override {
 		CHECK(command_buffer == CommandBufferID(11));
 		CHECK(shader == ShaderID(301));
-		if (!multiple_sets) { CHECK(first == 0); CHECK(count == 1); }
+		if (!multiple_sets) {
+			CHECK(first == 0);
+			CHECK(count == 1);
+		}
 		REQUIRE(sets.size() >= count);
-		for (uint32_t i = 0; i < count; ++i) { CHECK(sets[i] == UniformSetID(multiple_sets ? 60 + first + i : 61)); }
+		for (uint32_t i = 0; i < count; ++i) {
+			CHECK(sets[i] == UniformSetID(multiple_sets ? 60 + first + i : 61));
+		}
 		CHECK(dynamic_mask == 0x55);
 		native_calls.push_back(multiple_sets ? 200 + first * 10 + count : 2);
 	}
@@ -1340,14 +1362,26 @@ struct GeometryPreparedDriver : TestNativeDisposal::RasterCapacityDriver {
 		CHECK(attributes.size() == 1);
 		return VertexFormatID(7);
 	}
-	void vertex_format_free(VertexFormatID format) override { CHECK(format == VertexFormatID(7)); ++vertex_format_frees; }
+	void vertex_format_free(VertexFormatID p_format) override {
+		CHECK(p_format == VertexFormatID(7));
+		++vertex_format_frees;
+	}
 	uint64_t buffer_get_dynamic_offsets(Span<BufferID>) override { return 0; }
 	uint64_t api_trait_get(ApiTrait trait) override { return trait == API_TRAIT_HONORS_PIPELINE_BARRIERS && honors_barriers; }
-	uint64_t limit_get(Limit limit) override { CHECK(limit == LIMIT_MAX_BOUND_UNIFORM_SETS); return 8; }
+	uint64_t limit_get(Limit limit) override {
+		CHECK(limit == LIMIT_MAX_BOUND_UNIFORM_SETS);
+		return 8;
+	}
 	void set_object_name(ObjectType type, ID id, const String &name) override {
 		CHECK(name.begins_with("RID:"));
-		if (type == OBJECT_TYPE_BUFFER) { CHECK((id.id == 10 || id.id == 11)); return; }
-		if (type == OBJECT_TYPE_UNIFORM_SET) { CHECK(((!multiple_sets && id.id == 61) || (multiple_sets && id.id >= 60 && id.id <= 64))); return; }
+		if (type == OBJECT_TYPE_BUFFER) {
+			CHECK((id.id == 10 || id.id == 11));
+			return;
+		}
+		if (type == OBJECT_TYPE_UNIFORM_SET) {
+			CHECK(((!multiple_sets && id.id == 61) || (multiple_sets && id.id >= 60 && id.id <= 64)));
+			return;
+		}
 		RasterCapacityDriver::set_object_name(type, id, name);
 	}
 };
@@ -1374,7 +1408,9 @@ void TestNativeDisposalAccess::geometry_prepared() {
 			const bool compatible_origin = batching && honors_barriers;
 			const RID origin_shader = compatible_origin ? rd.shader_create_from_bytecode(container->to_bytes()) : shader;
 			REQUIRE(origin_shader.is_valid());
-			if (compatible_origin) { CHECK(origin_shader != shader); }
+			if (compatible_origin) {
+				CHECK(origin_shader != shader);
+			}
 			const auto framebuffer_format = rd.framebuffer_format_create(Vector<RenderingDevice::AttachmentFormat>());
 			rd.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
 			rd.draw_graph.begin(true);
@@ -1528,12 +1564,18 @@ void TestNativeDisposalAccess::geometry_prepared() {
 			rd.draw_graph.end(false, false, primary, pool);
 			Vector<uint64_t> expected_calls;
 			for (uint32_t draw = 0; draw < 3; ++draw) {
-				if (!honors_barriers) { expected_calls.push_back(1); }
-				if (draw != 1 || !batching) { expected_calls.push_back(2); }
+				if (!honors_barriers) {
+					expected_calls.push_back(1);
+				}
+				if (draw != 1 || !batching) {
+					expected_calls.push_back(2);
+				}
 				expected_calls.push_back(3);
 			}
 			REQUIRE(driver.native_calls.size() == expected_calls.size());
-			for (int i = 0; i < expected_calls.size(); ++i) { CHECK(driver.native_calls[i] == expected_calls[i]); }
+			for (int i = 0; i < expected_calls.size(); ++i) {
+				CHECK(driver.native_calls[i] == expected_calls[i]);
+			}
 			CHECK(driver.dynamic_queries == (batching ? 2 : 3));
 			for (const auto &record : { first.draw_handle, second.draw_handle, third.draw_handle, end.draw_handle }) {
 				CHECK(rd.draw_graph.record_mapping_state(record) == RDG::RecordMappingState::Recorded);
@@ -1559,7 +1601,9 @@ void TestNativeDisposalAccess::geometry_prepared() {
 			rd.free_rid(set);
 			rd.free_rid(uniform_buffer);
 			rd.free_rid(vertex_buffer);
-			if (compatible_origin) { rd.free_rid(origin_shader); }
+			if (compatible_origin) {
+				rd.free_rid(origin_shader);
+			}
 			rd.free_rid(shader);
 			dispose(rd);
 			CHECK(driver.set_creates == 1);
@@ -1569,10 +1613,14 @@ void TestNativeDisposalAccess::geometry_prepared() {
 			CHECK(driver.shader_frees == (compatible_origin ? 2 : 1));
 			CHECK(rd.dependency_map.is_empty());
 			CHECK(rd.reverse_dependency_map.is_empty());
-			for (auto &entry : rd.framebuffer_formats) { driver.render_pass_free(entry.value.render_pass); }
+			for (auto &entry : rd.framebuffer_formats) {
+				driver.render_pass_free(entry.value.render_pass);
+			}
 			rd.framebuffer_formats.clear();
 			rd.framebuffer_format_cache.clear();
-			for (auto &entry : rd.vertex_formats) { driver.vertex_format_free(entry.value.driver_id); }
+			for (auto &entry : rd.vertex_formats) {
+				driver.vertex_format_free(entry.value.driver_id);
+			}
 			rd.vertex_formats.clear();
 			rd.vertex_format_cache.clear();
 			CHECK(driver.vertex_format_frees == 1);
@@ -1707,7 +1755,9 @@ void TestNativeDisposalAccess::geometry_prepared_multiple() {
 		const uint64_t *expected = sparse ? sparse_calls : contiguous_calls;
 		const uint32_t expected_count = sparse ? 6 : 4;
 		REQUIRE(driver.native_calls.size() == int(expected_count));
-		for (uint32_t i = 0; i < expected_count; ++i) { CHECK(driver.native_calls[i] == expected[i]); }
+		for (uint32_t i = 0; i < expected_count; ++i) {
+			CHECK(driver.native_calls[i] == expected[i]);
+		}
 		CHECK(driver.dynamic_queries == (sparse ? 3 : 1));
 		for (uint32_t i = 0; i < draw.prefix_count; ++i) {
 			const auto &prefix = draw.prefix_handles[i];
@@ -1736,10 +1786,14 @@ void TestNativeDisposalAccess::geometry_prepared_multiple() {
 		CHECK(driver.shader_frees == 1);
 		CHECK(rd.dependency_map.is_empty());
 		CHECK(rd.reverse_dependency_map.is_empty());
-		for (auto &entry : rd.framebuffer_formats) { driver.render_pass_free(entry.value.render_pass); }
+		for (auto &entry : rd.framebuffer_formats) {
+			driver.render_pass_free(entry.value.render_pass);
+		}
 		rd.framebuffer_formats.clear();
 		rd.framebuffer_format_cache.clear();
-		for (auto &entry : rd.vertex_formats) { driver.vertex_format_free(entry.value.driver_id); }
+		for (auto &entry : rd.vertex_formats) {
+			driver.vertex_format_free(entry.value.driver_id);
+		}
 		rd.vertex_formats.clear();
 		rd.vertex_format_cache.clear();
 		CHECK(driver.vertex_format_frees == 1);
@@ -1887,6 +1941,94 @@ void TestNativeDisposalAccess::pipeline_rid_capacity() {
 	rd.framebuffer_formats.clear();
 	rd.framebuffer_format_cache.clear();
 	detach(rd);
+}
+
+void TestNativeDisposalAccess::immutable_inline() {
+	using namespace TestNativeDisposal;
+	RenderingDevice rd;
+	Driver driver;
+	driver.unique_buffers = true;
+	attach(rd, driver);
+	RID roots[4];
+	NativeDisposalWitness witnesses[4];
+	for (uint32_t i = 0; i < 4; ++i) {
+		REQUIRE(create(rd, roots[i], witnesses[i]) == OK);
+		if (i) {
+			rd._add_dependency(roots[i - 1], roots[i]);
+		}
+	}
+	// The final three resources form a complete closure within the original row.
+	RenderingDevice::NativeImmutableHold first;
+	REQUIRE(rd.native_immutable_hold_acquire(VectorView<RID>(&roots[1], 1), first, 3) == OK);
+	CHECK(first.inline_count == 3);
+	CHECK(first.resources.is_empty());
+	CHECK(first._resource_span().ptr() == first.inline_resources);
+	CHECK(rd.native_immutable_hold_count == 1);
+	RenderingDevice::NativeImmutableHold moved(static_cast<RenderingDevice::NativeImmutableHold &&>(first));
+	CHECK_FALSE(first.is_active());
+	CHECK(first.inline_count == 0);
+	CHECK(first._resource_span().is_empty());
+	CHECK(moved.inline_count == 3);
+	CHECK(moved._resource_span().ptr() == moved.inline_resources);
+	RenderingDevice::NativeImmutableHold assigned;
+	assigned = static_cast<RenderingDevice::NativeImmutableHold &&>(moved);
+	CHECK_FALSE(moved.is_active());
+	CHECK(moved._resource_span().is_empty());
+	assigned = static_cast<RenderingDevice::NativeImmutableHold &&>(assigned);
+	CHECK(assigned.inline_count == 3);
+	for (uint32_t i = 1; i < 4; ++i) {
+		CHECK(assigned._resource_span()[i - 1] == roots[i]);
+		CHECK(rd.native_immutable_resource_is_held(roots[i]));
+	}
+	CHECK(rd.native_immutable_hold_release(assigned) == OK);
+	CHECK(assigned._resource_span().is_empty());
+	CHECK(rd.native_immutable_hold_count == 0);
+	// A fourth dependency is refused before any counter or output mutation.
+	RenderingDevice::NativeImmutableHold refused;
+	CHECK(rd.native_immutable_hold_acquire(VectorView<RID>(&roots[0], 1), refused, 3) == ERR_OUT_OF_MEMORY);
+	CHECK_FALSE(refused.is_active());
+	CHECK(refused.inline_count == 0);
+	CHECK(refused.resources.is_empty());
+	CHECK(rd.native_immutable_hold_count == 0);
+	for (RID rid : roots) {
+		CHECK_FALSE(rd.native_immutable_resource_is_held(rid));
+		CHECK_FALSE(rd.native_immutable_resource_is_retiring(rid));
+	}
+	// Larger original holds retain their Vector path and original retirement.
+	RenderingDevice::NativeImmutableHold large;
+	REQUIRE(rd.native_immutable_hold_acquire(VectorView<RID>(&roots[0], 1), large, 4) == OK);
+	CHECK(large.inline_count == 0);
+	CHECK(large.resources.size() == 4);
+	RenderingDevice::NativeImmutableHold large_moved(static_cast<RenderingDevice::NativeImmutableHold &&>(large));
+	CHECK_FALSE(large.is_active());
+	CHECK(large._resource_span().is_empty());
+	CHECK(large_moved.resources.size() == 4);
+	CHECK(release(rd, witnesses[0]) == ERR_BUSY);
+	CHECK(rd.native_immutable_hold_release(large_moved) == OK);
+	dispose(rd);
+	CHECK(driver.frees == 1);
+	// Returning a retiring inline hold uses that same original release path.
+	RenderingDevice::NativeImmutableHold retiring;
+	REQUIRE(rd.native_immutable_hold_acquire(VectorView<RID>(&roots[1], 1), retiring, 3) == OK);
+	CHECK(release(rd, witnesses[1]) == ERR_BUSY);
+	CHECK(rd.native_immutable_hold_release(retiring) == OK);
+	CHECK(retiring._resource_span().is_empty());
+	dispose(rd);
+	CHECK(driver.frees == 2);
+	for (uint32_t i = 2; i < 4; ++i) {
+		CHECK(release(rd, witnesses[i]) == OK);
+		dispose(rd);
+	}
+	CHECK(driver.creates == 4);
+	CHECK(driver.frees == 4);
+	CHECK(rd.native_immutable_hold_count == 0);
+	CHECK(rd.dependency_map.is_empty());
+	CHECK(rd.reverse_dependency_map.is_empty());
+	detach(rd);
+}
+
+TEST_CASE("[RenderingDevice][NativeImmutableInline] original fixed closure moves and returns without dynamic RID storage") {
+	TestNativeDisposalAccess::immutable_inline();
 }
 
 void TestNativeDisposalAccess::foreign_pending_owner_lookup() {
@@ -2829,4 +2971,499 @@ void TestNativeDisposalAccess::sampled_identity() {
 	CHECK(rd.reverse_dependency_map.is_empty());
 	detach(foreign);
 	detach(rd);
+}
+
+// Counterexamples: payload-size arithmetic instead of driver allocation, shared
+// attachment double counting, and a single returned child signing the pair.
+void TestNativeDisposalAccess::depth_allocation_projection() {
+	using namespace TestNativeDisposal;
+	class AllocationDriver : public DepthDisposalDriver {
+	public:
+		uint64_t actual_bytes = 8192;
+		uint64_t texture_get_allocation_size(TextureID) override { return actual_bytes; }
+	} driver;
+	RenderingDevice rd, foreign;
+	attach(rd, driver);
+	attach(foreign, driver);
+	RID depth, framebuffer;
+	NativeDisposalWitness depth_witness, framebuffer_witness;
+	// REQUIRE can unwind this fixture before the normal return checks. Keep
+	// teardown on the original test owner, not RD's uninitialized full finalize.
+	const auto cleanup = [&]() {
+		driver.actual_bytes = 8192; // The original allocation was made before subcases.
+		if (depth_witness.cell.is_valid() && state(depth_witness) == NativeDisposalWitness::State::LIVE) {
+			CHECK(release(rd, depth_witness) == OK);
+		}
+		if (framebuffer_witness.cell.is_valid() && state(framebuffer_witness) == NativeDisposalWitness::State::LIVE) {
+			CHECK(release(rd, framebuffer_witness) == OK);
+		}
+		dispose(rd);
+		// The shared format pass is outside both physical resource witnesses.
+		for (const auto &entry : rd.framebuffer_formats) {
+			driver.render_pass_free(entry.value.render_pass);
+		}
+		rd.framebuffer_formats.clear();
+		rd.framebuffer_format_cache.clear();
+		detach(foreign);
+		detach(rd);
+	};
+	struct Cleanup {
+		const decltype(cleanup) &finish;
+		~Cleanup() { finish(); }
+	} teardown{ cleanup };
+	REQUIRE(rd._native_disposal_depth_texture_create(8, 4, depth, depth_witness) == OK);
+	SUBCASE("partial allocation has only its actual depth child") {
+		driver.fail_pass = true;
+		ERR_PRINT_OFF;
+		CHECK(rd._native_disposal_depth_framebuffer_create(depth_witness, framebuffer, framebuffer_witness) == ERR_CANT_CREATE);
+		ERR_PRINT_ON;
+	}
+	SUBCASE("pair includes an original shared attachment") {
+		REQUIRE(rd._native_disposal_depth_framebuffer_create(depth_witness, framebuffer, framebuffer_witness) == OK);
+		auto *cache = rd.framebuffer_owner.get_or_null(framebuffer)->framebuffer_cache;
+		const auto pass = driver.render_pass_create({}, {}, {}, 1, {});
+		const auto child = driver.framebuffer_create(pass, cache->textures, cache->width, cache->height);
+		cache->storage_map.insert(1, { child, pass });
+	}
+	SUBCASE("unexposed driver allocation stays unknown") {
+		driver.actual_bytes = 0;
+	}
+	// Reject metadata that no longer matches the original incarnation or pair.
+	{
+		NativeDepthAllocationProjection rejected;
+		auto *texture = rd.texture_owner.get_or_null(depth);
+		++texture->native_disposal_serial;
+		CHECK(rd._native_disposal_depth_allocation_capture(depth_witness, framebuffer_witness, rejected) == ERR_INVALID_DATA);
+		--texture->native_disposal_serial;
+		texture->owner = depth;
+		CHECK(rd._native_disposal_depth_allocation_capture(depth_witness, framebuffer_witness, rejected) == ERR_UNAVAILABLE);
+		texture->owner = RID();
+		if (framebuffer.is_valid()) {
+			auto *fb = rd.framebuffer_owner.get_or_null(framebuffer);
+			const RID saved = fb->texture_ids[0];
+			fb->texture_ids.write[0] = RID();
+			CHECK(rd._native_disposal_depth_allocation_capture(depth_witness, framebuffer_witness, rejected) == ERR_INVALID_DATA);
+			fb->texture_ids.write[0] = saved;
+		}
+	}
+	NativeDepthAllocationProjection projection;
+	NativeDepthAllocationProjection::Report report;
+	REQUIRE(rd._native_disposal_depth_allocation_capture(depth_witness, framebuffer_witness, projection) == OK);
+	REQUIRE(rd._native_disposal_depth_allocation_observe(projection, report) == OK);
+	using Knowledge = NativeDepthAllocationProjection::ByteKnowledge;
+	CHECK(report.depth_driver_backing.knowledge == (driver.actual_bytes ? Knowledge::Known : Knowledge::UnknownNotExposed));
+	CHECK(report.depth_driver_backing.bytes == driver.actual_bytes);
+	CHECK(report.framebuffer_driver_backing.knowledge == Knowledge::UnknownNotExposed);
+	CHECK(report.framebuffer_object.knowledge == Knowledge::UnknownNotExposed);
+	CHECK(report.attachment_reference.knowledge == Knowledge::UnknownNotExposed);
+	CHECK(report.opaque_driver_overhead.knowledge == Knowledge::UnknownNotExposed);
+	CHECK(report.framebuffer_created == framebuffer.is_valid());
+	CHECK(report.depth.rid == depth.get_id());
+	CHECK(report.depth.serial == depth_witness.cell->serial);
+	const auto original_bytes = report.depth_driver_backing;
+	depth_witness.cell->state = NativeDisposalWitness::State::UNKNOWN;
+	CHECK(rd._native_disposal_depth_allocation_observe(projection, report) == ERR_INVALID_DATA);
+	CHECK(report.depth.state == NativeDisposalWitness::State::UNKNOWN);
+	CHECK(report.depth_driver_backing.knowledge == original_bytes.knowledge);
+	CHECK(report.depth_driver_backing.bytes == original_bytes.bytes);
+	CHECK_FALSE(report.all_created_children_returned);
+	depth_witness.cell->state = NativeDisposalWitness::State::LIVE;
+	REQUIRE(rd._native_disposal_depth_allocation_observe(projection, report) == OK);
+
+	CHECK(report.shared_attachment_depth.rid == (framebuffer.is_valid() ? depth.get_id() : 0));
+	CHECK_FALSE(report.all_created_children_returned);
+	CHECK(foreign._native_disposal_depth_allocation_observe(projection, report) == ERR_UNAUTHORIZED);
+	CHECK(rd._native_disposal_depth_allocation_capture(depth_witness, framebuffer_witness, projection) == ERR_INVALID_PARAMETER);
+	// Same witnesses remain readable after RID invalidation and driver return;
+	// observing the snapshot never re-reads a later incarnation's allocation.
+	driver.actual_bytes = 8192;
+	REQUIRE(release(rd, depth_witness) == OK);
+	REQUIRE(rd._native_disposal_depth_allocation_observe(projection, report) == OK);
+	CHECK_FALSE(report.all_created_children_returned);
+	if (framebuffer.is_valid()) {
+		uint32_t used = 0;
+		CHECK(step(rd, 1, 1, UINT64_MAX, used) == ERR_BUSY);
+		REQUIRE(rd._native_disposal_depth_allocation_observe(projection, report) == OK);
+		CHECK_FALSE(report.all_created_children_returned);
+	}
+	dispose(rd);
+	REQUIRE(rd._native_disposal_depth_allocation_observe(projection, report) == OK);
+	CHECK(report.all_created_children_returned);
+	CHECK(report.depth.state == NativeDisposalWitness::State::RETURNED);
+	CHECK(report.framebuffer.state == (framebuffer.is_valid() ? NativeDisposalWitness::State::RETURNED : NativeDisposalWitness::State::EMPTY));
+	const uint32_t creates = driver.texture_creates;
+	const uint32_t frees = driver.texture_frees;
+	REQUIRE(rd._native_disposal_depth_allocation_observe(projection, report) == OK);
+	CHECK(driver.texture_creates == creates);
+	CHECK(driver.texture_frees == frees);
+}
+TEST_CASE("[RenderingDevice][NativeDisposal][DepthAllocation] original allocation snapshot and all actual children return") {
+	TestNativeDisposalAccess::depth_allocation_projection();
+}
+
+// Counterexamples: caller byte estimates authorizing allocation, actual overflow
+// publishing success, and failed verification dropping the real cleanup prefix.
+void TestNativeDisposalAccess::depth_allocation_quote() {
+	using namespace TestNativeDisposal;
+	class QuoteDriver : public DepthDisposalDriver {
+	public:
+		uint64_t actual = 8192, reserved = 8192;
+		bool unsupported = false, dedicated = false;
+		Error depth_allocation_quote(uint32_t, uint32_t, DepthAllocationQuote &r_quote) override {
+			r_quote = {};
+			if (unsupported) {
+				return ERR_UNAVAILABLE;
+			}
+			r_quote.policy = dedicated ? DepthAllocationQuote::Policy::MetalHeapDedicated : DepthAllocationQuote::Policy::MetalHeapPool;
+			r_quote.native_requirement = reserved;
+			r_quote.owner_reservation = reserved;
+			r_quote.alignment = 256;
+			return OK;
+		}
+		uint64_t texture_get_allocation_size(TextureID) override { return actual; }
+	} driver;
+	RenderingDevice rd, foreign;
+	attach(rd, driver);
+	attach(foreign, driver);
+	RID texture;
+	NativeDisposalWitness witness;
+	NativeDepthAllocationProjection projection;
+	NativeDepthAllocationQuote::CreateOutcome outcome;
+	// A failed REQUIRE must still retire the original prefix and detach the
+	// partially initialized stub devices before their destructors finalize.
+	const auto cleanup = [&]() {
+		if (witness.cell.is_valid() && state(witness) == NativeDisposalWitness::State::LIVE) {
+			CHECK(release(rd, witness) == OK);
+		}
+		dispose(rd);
+		detach(foreign);
+		detach(rd);
+	};
+	struct Cleanup {
+		const decltype(cleanup) &finish;
+		~Cleanup() { finish(); }
+	} teardown{ cleanup };
+	NativeDepthAllocationQuote quote;
+	NativeDepthAllocationQuote::Report report;
+	REQUIRE(rd._native_disposal_depth_allocation_quote(8, 4, quote) == OK);
+	REQUIRE(rd._native_disposal_depth_allocation_quote_observe(quote, report) == OK);
+	CHECK(report.texture_owner_reservation.bytes == 8192);
+	CHECK(report.framebuffer_owner_reservation.knowledge == NativeDepthAllocationProjection::ByteKnowledge::Known);
+	CHECK(report.framebuffer_owner_reservation.bytes == 0);
+	CHECK(report.allocations == 2);
+	CHECK(report.parts == 1);
+	CHECK(report.shared_attachment_references == 1);
+	CHECK(report.framebuffer_driver_backing.knowledge == NativeDepthAllocationProjection::ByteKnowledge::UnknownNotExposed);
+	CHECK(foreign._native_disposal_depth_allocation_quote_observe(quote, report) == ERR_UNAUTHORIZED);
+	SUBCASE("finite native quote verifies actual owner bytes") {
+		CHECK(rd._native_disposal_depth_texture_create_quoted(quote, texture, witness, projection, outcome) == OK);
+		CHECK(outcome == NativeDepthAllocationQuote::CreateOutcome::CreatedVerified);
+	}
+	SUBCASE("actual over reservation retains an unpublished created prefix") {
+		driver.actual = 12288;
+		CHECK(rd._native_disposal_depth_texture_create_quoted(quote, texture, witness, projection, outcome) == ERR_OUT_OF_MEMORY);
+		CHECK(outcome == NativeDepthAllocationQuote::CreateOutcome::CreatedOverReservation);
+	}
+	SUBCASE("unexposed actual retains an unpublished created prefix") {
+		driver.actual = 0;
+		CHECK(rd._native_disposal_depth_texture_create_quoted(quote, texture, witness, projection, outcome) == ERR_UNAVAILABLE);
+		CHECK(outcome == NativeDepthAllocationQuote::CreateOutcome::CreatedActualUnknown);
+	}
+	SUBCASE("policy change refuses before native allocation") {
+		driver.dedicated = true;
+		CHECK(rd._native_disposal_depth_texture_create_quoted(quote, texture, witness, projection, outcome) == ERR_OUT_OF_MEMORY);
+		CHECK(outcome == NativeDepthAllocationQuote::CreateOutcome::NotCreated);
+		CHECK(driver.texture_creates == 0);
+	}
+	SUBCASE("larger refreshed requirement refuses before native allocation") {
+		driver.reserved = 16384;
+		CHECK(rd._native_disposal_depth_texture_create_quoted(quote, texture, witness, projection, outcome) == ERR_OUT_OF_MEMORY);
+		CHECK(outcome == NativeDepthAllocationQuote::CreateOutcome::NotCreated);
+		CHECK(driver.texture_creates == 0);
+	}
+	SUBCASE("unsupported original backend refuses before native allocation") {
+		driver.unsupported = true;
+		CHECK(rd._native_disposal_depth_texture_create_quoted(quote, texture, witness, projection, outcome) == ERR_UNAVAILABLE);
+		CHECK(outcome == NativeDepthAllocationQuote::CreateOutcome::NotCreated);
+		CHECK(driver.texture_creates == 0);
+	}
+	SUBCASE("a different device cannot consume the original quote") {
+		CHECK(foreign._native_disposal_depth_texture_create_quoted(quote, texture, witness, projection, outcome) == ERR_UNAUTHORIZED);
+		CHECK(outcome == NativeDepthAllocationQuote::CreateOutcome::NotCreated);
+		CHECK(driver.texture_creates == 0);
+	}
+	if (texture.is_valid()) {
+		NativeDepthAllocationProjection::Report actual;
+		REQUIRE(rd._native_disposal_depth_allocation_observe(projection, actual) == OK);
+		CHECK(actual.depth.rid == texture.get_id());
+		CHECK_FALSE(actual.all_created_children_returned);
+		REQUIRE(release(rd, witness) == OK);
+		dispose(rd);
+		REQUIRE(rd._native_disposal_depth_allocation_observe(projection, actual) == OK);
+		CHECK(actual.all_created_children_returned);
+		CHECK(driver.texture_frees == 1);
+	} else {
+		CHECK(witness.cell.is_null());
+		CHECK(driver.texture_frees == 0);
+	}
+}
+TEST_CASE("[RenderingDevice][NativeDisposal][DepthAllocationQuote] original finite quote gates creation and preserves failed actual prefix") {
+	TestNativeDisposalAccess::depth_allocation_quote();
+}
+
+// These tests exercise shared capture/drop primitives against real RD resources.
+// The local metadata fixture issues no Registry, action, physical or scope grant.
+void TestNativeDisposalAccess::immutable_batch(uint32_t p_mode) {
+	using namespace GDExtensionDeviceExit;
+	RenderingDevice rd;
+	TestNativeDisposal::Driver driver;
+	driver.unique_buffers = true;
+	attach(rd, driver);
+	const uint32_t resource_count = p_mode == 1 ? 1 : p_mode == 2 ? 4
+																  : 3;
+	RID roots[4];
+	NativeDisposalWitness witnesses[4];
+	RenderingDevice::NativeImmutableHold first, second;
+	ProductionRequest request;
+	request.serial = 1;
+	ProductionUseCell cells[5];
+	request.uses = cells;
+	request.capacity.resource_uses = resource_count + 1;
+	const uint64_t group_serial = 7, pin_serial = 9;
+	uint64_t adopted = 0;
+	uint32_t created_count = 0;
+	auto cleanup = [&]() {
+		// Use the real original return paths, outside the RD lock. In particular,
+		// a refused adoption still leaves both wrappers responsible for their pins.
+		for (auto *hold : { &first, &second }) {
+			if (hold->is_active()) {
+				CHECK(rd.native_immutable_hold_release(*hold) == OK);
+				CHECK_FALSE(hold->is_active());
+			}
+		}
+		for (uint32_t i = 0; i < created_count; ++i) {
+			const Error status = release(rd, witnesses[i]);
+			CHECK((status == OK || status == ERR_BUSY));
+		}
+		if (adopted) {
+			// Also handle an unexpected successful undersized adoption without
+			// rebuilding cells that may already be linked to physical resources.
+			for (uint32_t i = 0; i < request.capacity.resource_uses; ++i) {
+				if (cells[i].output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cells[i].disposal_group_serial == adopted) {
+					cells[i].disposal_group_release = true;
+				}
+			}
+			const RenderingDevice::NativeDisposalBudget cleanup_budget{ 1024, 1024, OS::get_singleton()->get_ticks_usec() + 10000000 };
+			for (uint32_t turn = 0; turn < 64 && driver.frees != int(created_count); ++turn) {
+				RenderingDevice::NativeDisposalUsage cleanup_usage;
+				const Error status = rd._production_output_drop_step(request, cleanup_budget, cleanup_usage);
+				CHECK((status == OK || status == ERR_BUSY));
+				dispose(rd);
+			}
+		} else {
+			dispose(rd);
+		}
+		CHECK(rd.native_immutable_hold_count == 0);
+		CHECK(driver.frees == int(created_count));
+		for (uint32_t i = 0; i < created_count; ++i) {
+			CHECK(rd._native_immutable_counter(roots[i]) == nullptr);
+		}
+		detach(rd);
+	};
+	for (uint32_t i = 0; i < resource_count; ++i) {
+		const Error status = create(rd, roots[i], witnesses[i]);
+		CHECK(status == OK);
+		if (status != OK) {
+			cleanup();
+			return;
+		}
+		++created_count;
+	}
+	RID first_roots[] = { roots[0], roots[1] };
+	RID second_roots[] = { roots[p_mode == 2 ? 2 : 1], roots[p_mode == 2 ? 3 : 2] };
+	const uint32_t root_count = p_mode == 1 ? 1 : 2;
+	if (p_mode == 1) {
+		second_roots[0] = roots[0];
+	}
+	Error status = rd.native_immutable_hold_acquire(VectorView<RID>(first_roots, root_count), first, 3);
+	CHECK(status == OK);
+	if (status != OK) {
+		cleanup();
+		return;
+	}
+	status = rd.native_immutable_hold_acquire(VectorView<RID>(second_roots, root_count), second, 3);
+	CHECK(status == OK);
+	if (status != OK) {
+		cleanup();
+		return;
+	}
+	CHECK(rd.native_immutable_hold_count == 2);
+	uint32_t expected_pins[4] = {};
+	for (uint32_t i = 0; i < root_count; ++i) {
+		for (uint32_t j = 0; j < resource_count; ++j) {
+			expected_pins[j] += first_roots[i] == roots[j];
+			expected_pins[j] += second_roots[i] == roots[j];
+		}
+	}
+	auto reserve = [&](uint32_t count) {
+		request.capacity.resource_uses = count + 1;
+		for (uint32_t i = 0; i < 5; ++i) {
+			cells[i].~ProductionUseCell();
+			new (&cells[i]) ProductionUseCell;
+		}
+		for (uint32_t i = 0; i < count; ++i) {
+			auto &cell = cells[i];
+			cell.output_role = ProductionUseCell::OutputRole::DISPOSAL_RESERVED;
+			cell.disposal_group_serial = group_serial;
+			cell.disposal_ordinal = i;
+			cell.disposal.request = &request;
+			cell.disposal.request_serial = request.serial;
+			cell.disposal.group = group_serial;
+			cell.disposal.owned = true;
+			cell.disposal.counter_dropped = true;
+		}
+		cells[count].output_role = ProductionUseCell::OutputRole::DISPOSAL_GROUP;
+		cells[count].disposal_group_serial = group_serial;
+		cells[count].disposal_group_pin_serial = pin_serial;
+		cells[count].disposal_group_count = count;
+	};
+	auto untouched = [&](uint32_t count) {
+		CHECK(first.is_valid());
+		CHECK(second.is_valid());
+		CHECK(rd.native_immutable_hold_count == 2);
+		for (uint32_t i = 0; i < resource_count; ++i) {
+			const auto *counter = rd._native_immutable_counter(roots[i]);
+			CHECK(counter != nullptr);
+			if (counter) {
+				CHECK(*counter == expected_pins[i]);
+			}
+		}
+		for (uint32_t i = 0; i < count; ++i) {
+			const auto &cell = cells[i];
+			CHECK(cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED);
+			CHECK(cell.disposal_group_serial == group_serial);
+			CHECK(cell.disposal_ordinal == i);
+			CHECK(cell.disposal.request == &request);
+			CHECK(cell.disposal.request_serial == request.serial);
+			CHECK(cell.disposal.group == group_serial);
+			CHECK(cell.disposal.owned);
+			CHECK(cell.disposal.counter_dropped);
+			CHECK(cell.disposal.counter_pins_remaining == 0);
+			CHECK(cell.disposal.rid == 0);
+			CHECK(cell.disposal.serial == 0);
+			CHECK(cell.disposal.native_driver_id == 0);
+			CHECK(cell.disposal.next == nullptr);
+			CHECK(cell.disposal.state.load() == 0);
+		}
+		CHECK(cells[count].disposal_group_native_hold_count == 0);
+		CHECK_FALSE(cells[count].disposal_group_native_hold);
+		CHECK(request.next_disposal_group_serial == 1);
+		CHECK(driver.frees == 0);
+	};
+	RenderingDevice::NativeImmutableHold *holds[] = { &first, &second };
+	if (resource_count > 1) {
+		reserve(resource_count - 1);
+		{
+			MutexLock lock(rd._thread_safe_);
+			status = rd._production_output_hold_adopt_locked(request, pin_serial, group_serial, VectorView<RenderingDevice::NativeImmutableHold *>(holds, 2), resource_count - 1, adopted);
+		}
+		CHECK(status == ERR_OUT_OF_MEMORY);
+		CHECK(adopted == 0);
+		if (status != ERR_OUT_OF_MEMORY || adopted) {
+			cleanup();
+			return;
+		}
+		untouched(resource_count - 1);
+	}
+	reserve(resource_count);
+	uint32_t inventory = UINT32_MAX;
+	{
+		MutexLock lock(rd._thread_safe_);
+		status = rd._production_output_hold_inventory_locked(request, group_serial, VectorView<RenderingDevice::NativeImmutableHold *>(holds, 2), resource_count, inventory);
+	}
+	CHECK(status == OK);
+	CHECK(inventory == resource_count);
+	if (status != OK) {
+		cleanup();
+		return;
+	}
+	untouched(resource_count);
+	{
+		MutexLock lock(rd._thread_safe_);
+		status = rd._production_output_hold_adopt_locked(request, pin_serial, group_serial, VectorView<RenderingDevice::NativeImmutableHold *>(holds, 2), resource_count, adopted);
+	}
+	CHECK(status == OK);
+	if (status != OK) {
+		cleanup();
+		return;
+	}
+	CHECK(adopted == group_serial);
+	CHECK_FALSE(first.is_active());
+	CHECK_FALSE(second.is_active());
+	CHECK(cells[resource_count].disposal_group_native_hold_count == 2);
+	CHECK(rd.native_immutable_hold_count == 2);
+	for (uint32_t i = 0; i < resource_count; ++i) {
+		uint32_t matching = 0;
+		for (uint32_t j = 0; j < resource_count; ++j) {
+			if (cells[j].disposal.rid == roots[i].get_id()) {
+				++matching;
+				CHECK(cells[j].disposal.counter_pins_remaining == expected_pins[i]);
+				CHECK_FALSE(cells[j].disposal.owned);
+			}
+		}
+		CHECK(matching == 1);
+		CHECK(*rd._native_immutable_counter(roots[i]) == expected_pins[i]);
+		CHECK(release(rd, witnesses[i]) == ERR_BUSY);
+	}
+	cells[resource_count].disposal_group_release = true;
+	const uint64_t deadline = OS::get_singleton()->get_ticks_usec() + 10000000;
+	// Each actual pin consumes a pass. Identical holds force a yield halfway
+	// through one physical node, with exactly one remaining reference.
+	RenderingDevice::NativeDisposalBudget budget{ 64, 1, deadline };
+	RenderingDevice::NativeDisposalUsage usage;
+	CHECK(rd._production_output_drop_step(request, budget, usage) == ERR_BUSY);
+	CHECK(usage.passes == 1);
+	CHECK_FALSE(cells[resource_count].disposal_group_dropped);
+	if (p_mode == 1) {
+		CHECK(cells[0].disposal.counter_pins_remaining == 1);
+		CHECK_FALSE(cells[0].disposal.counter_dropped);
+		CHECK(*rd._native_immutable_counter(roots[0]) == 1);
+	}
+	for (uint32_t turn = 0; turn < 64 && !cells[resource_count].disposal_group_dropped; ++turn) {
+		RenderingDevice::NativeDisposalUsage next;
+		const Error status = rd._production_output_drop_step(request, budget, next);
+		CHECK((status == OK || status == ERR_BUSY));
+		CHECK(next.passes <= 1);
+	}
+	CHECK(cells[resource_count].disposal_group_dropped);
+	CHECK(rd.native_immutable_hold_count == 0);
+	for (uint32_t turn = 0; turn < 64; ++turn) {
+		RenderingDevice::NativeDisposalUsage next;
+		const Error status = rd._production_output_drop_step(request, budget, next);
+		CHECK((status == OK || status == ERR_BUSY));
+		CHECK(next.passes <= 1);
+		dispose(rd);
+		if (driver.frees == int(resource_count)) {
+			break;
+		}
+	}
+	CHECK(driver.frees == int(resource_count));
+	for (uint32_t i = 0; i < resource_count; ++i) {
+		CHECK(cells[i].disposal.counter_pins_remaining == 0);
+		CHECK(cells[i].disposal.counter_dropped);
+		CHECK(cells[i].disposal.state.load() == 3);
+		CHECK(rd._native_immutable_counter(roots[i]) == nullptr);
+	}
+	CHECK(rd.dependency_map.is_empty());
+	CHECK(rd.reverse_dependency_map.is_empty());
+	cleanup();
+}
+TEST_CASE("[RenderingDevice][NativeDisposal][BatchHold] overlapping holds retain exact multiplicities") {
+	TestNativeDisposalAccess::immutable_batch(0);
+}
+TEST_CASE("[RenderingDevice][NativeDisposal][BatchHold] identical holds resume within one physical node") {
+	TestNativeDisposalAccess::immutable_batch(1);
+}
+TEST_CASE("[RenderingDevice][NativeDisposal][BatchHold] disjoint holds consume the union capacity") {
+	TestNativeDisposalAccess::immutable_batch(2);
 }

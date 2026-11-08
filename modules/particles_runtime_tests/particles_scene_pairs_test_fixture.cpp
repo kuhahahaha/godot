@@ -1,8 +1,40 @@
+/**************************************************************************/
+/*  particles_scene_pairs_test_fixture.cpp                                */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 #include "particles_scene_pairs_test_fixture.h"
+
 #include "core/object/class_db.h"
-#include "servers/rendering/renderer_scene_cull.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_scene_cull.h"
 #include "servers/rendering/rendering_server.h"
+#include "servers/rendering/rendering_server_globals.h"
 
 namespace TestProductionRequest {
 void *managed_scene_begin(bool);
@@ -10,8 +42,12 @@ Dictionary managed_scene_advance(void *);
 void *managed_scene_begin_viewport(RID);
 bool managed_scene_viewport_ready(void *);
 void managed_scene_finish_viewport(void *);
-}
+} //namespace TestProductionRequest
 void ParticlesScenePairsTestFixture::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("camera_native_register", "viewport", "present_seq"), &ParticlesScenePairsTestFixture::camera_native_register);
+	ClassDB::bind_method(D_METHOD("camera_native_observe", "viewport", "expected", "stage"), &ParticlesScenePairsTestFixture::camera_native_observe);
+	ClassDB::bind_method(D_METHOD("camera_native_invalidate", "viewport"), &ParticlesScenePairsTestFixture::camera_native_invalidate);
+	ClassDB::bind_method(D_METHOD("camera_native_finish", "viewport"), &ParticlesScenePairsTestFixture::camera_native_finish);
 	ClassDB::bind_method(D_METHOD("run_viewport_invariance", "scenario"), &ParticlesScenePairsTestFixture::run_viewport_invariance);
 	ClassDB::bind_method(D_METHOD("finish_viewport_observation"), &ParticlesScenePairsTestFixture::finish_viewport_observation);
 	ClassDB::bind_method(D_METHOD("run"), &ParticlesScenePairsTestFixture::run);
@@ -33,7 +69,10 @@ void ParticlesScenePairsTestFixture::finish_viewport_observation() {
 	CRASH_COND(!viewport_mode || !managed_scene);
 	TestProductionRequest::managed_scene_finish_viewport(managed_scene);
 }
-void ParticlesScenePairsTestFixture::run_phase() { phase_mode = true;run(); }
+void ParticlesScenePairsTestFixture::run_phase() {
+	phase_mode = true;
+	run();
+}
 void ParticlesScenePairsTestFixture::run() {
 	auto *scene = RendererSceneCull::singleton;
 	auto *storage = RendererRD::ParticlesStorage::get_singleton();
@@ -71,8 +110,8 @@ void ParticlesScenePairsTestFixture::run() {
 	RendererSceneCull::SceneSphereSnapshot rejected_snapshot;
 	rejected_snapshot.pose_revision = 99;
 	checks["ordinary_receiver_not_promoted"] = scene->scene_receiver_commit_query(left, 1, RenderingDevice::get_singleton(),
-			Transform3D(Basis(), Vector3(50, 0, 0)), AABB(Vector3(-1, -1, -1), Vector3(2, 2, 2)),
-			AABB(Vector3(49, -1, -1), Vector3(2, 2, 2)), 1) != OK;
+													   Transform3D(Basis(), Vector3(50, 0, 0)), AABB(Vector3(-1, -1, -1), Vector3(2, 2, 2)),
+													   AABB(Vector3(49, -1, -1), Vector3(2, 2, 2)), 1) != OK;
 	checks["ordinary_snapshot_rejected_and_empty"] = scene->scene_sphere_snapshot(left, 1, RenderingDevice::get_singleton(), 4, rejected_snapshot) != OK &&
 			rejected_snapshot.pose_revision == 0 && rejected_snapshot.sources.is_empty();
 	scene->update_dirty_instances();
@@ -99,7 +138,6 @@ void ParticlesScenePairsTestFixture::run() {
 	scene->update_dirty_instances();
 	checks["kept_pair_shape_revision"] = scene->scene_sphere_snapshot_pairs(left, 4, a) && a.size() == 1 && left_instance->scene_pair_revision > membership_revision;
 	membership_revision = left_instance->scene_pair_revision;
-
 
 	scene->instance_set_visible(source, false);
 	scene->update_dirty_instances();
@@ -168,12 +206,24 @@ void ParticlesScenePairsTestFixture::run() {
 	scene->free(scenario);
 	storage->particles_collision_free(sphere);
 	storage->particles_free(particles);
-	managed_scene = TestProductionRequest::managed_scene_begin(phase_mode);
+	if (phase_mode) {
+		managed_scene = TestProductionRequest::managed_scene_begin(true);
+		MutexLock lock(result_mutex);
+		result_data["checks"] = checks;
+		return;
+	}
+	bool passed = true;
+	for (const Variant &key : checks.keys()) {
+		passed = passed && bool(checks[key]);
+	}
 	MutexLock lock(result_mutex);
 	result_data["checks"] = checks;
+	result_data["pass"] = passed;
 }
 void ParticlesScenePairsTestFixture::advance() {
-	if (!managed_scene) return;
+	if (!managed_scene) {
+		return;
+	}
 	const Dictionary managed_checks = TestProductionRequest::managed_scene_advance(managed_scene);
 	if (managed_checks.is_empty()) {
 		if (viewport_mode && TestProductionRequest::managed_scene_viewport_ready(managed_scene)) {
@@ -192,4 +242,97 @@ void ParticlesScenePairsTestFixture::advance() {
 	}
 	result_data["checks"] = checks;
 	result_data["pass"] = passed;
+}
+
+// This API observes the production cache directly. In particular it must never
+// call viewport_get_camera_capture_ref(), whose lazy allocation would mask a
+// missing retain_native_camera_source() call in the real RD render path.
+void ParticlesScenePairsTestFixture::camera_native_register(RID p_viewport, int64_t p_present_seq) {
+	CRASH_COND(!RenderingServer::get_singleton()->is_on_render_thread() || !RSG::viewport);
+	MutexLock lock(result_mutex);
+	Dictionary checks = result_data.get("checks", Dictionary());
+	RendererViewport::Viewport::ViewPresentationKey key;
+	// Test-only source identity, not an external view/grant/accepted authority.
+	key.view_id = 0x43414d;
+	key.view_epoch = 1;
+	key.present_seq = p_present_seq;
+	checks["registered_" + itos(p_present_seq)] = RSG::viewport->viewport_register_presentation_key(p_viewport, key);
+	camera_native_viewport = p_viewport;
+	result_data["checks"] = checks;
+}
+
+void ParticlesScenePairsTestFixture::camera_native_observe(RID p_viewport, Transform3D p_expected, int64_t p_stage) {
+	CRASH_COND(!RenderingServer::get_singleton()->is_on_render_thread() || !RSG::viewport);
+	MutexLock lock(result_mutex);
+	Dictionary checks = result_data.get("checks", Dictionary());
+	const auto *viewport = RSG::viewport->viewport_owner.get_or_null(p_viewport);
+	const String suffix = "_" + itos(p_stage);
+	checks["real_viewport" + suffix] = viewport != nullptr;
+	if (p_stage == 0) {
+		checks["unregistered_cache_null"] = viewport && !viewport->presentation_registered && viewport->captured_camera.is_null() && !viewport->current_camera_token.is_valid();
+	} else {
+		// Check before copying any Ref: production must already have retained it.
+		checks["production_cache_nonnull" + suffix] = viewport && viewport->captured_camera.is_valid();
+		if (viewport && viewport->captured_camera.is_valid()) {
+			const auto capture = viewport->captured_camera;
+			const auto &data = capture->get_camera_data();
+			const auto &token = capture->get_token();
+			const auto &key = capture->get_presentation_key();
+			Dictionary observation;
+			observation["viewport_rid"] = int64_t(p_viewport.get_id());
+			observation["payload_viewport_rid"] = int64_t(data.source_viewport.get_id());
+			observation["view_id"] = int64_t(token.view_id);
+			observation["view_epoch"] = int64_t(token.view_epoch);
+			observation["capture_ordinal"] = int64_t(token.capture_ordinal);
+			observation["present_seq"] = int64_t(key.present_seq);
+			observation["capture_object_id"] = int64_t(capture->get_instance_id());
+			observation["camera_transform"] = data.main_transform;
+			observation["expected_transform"] = p_expected;
+			result_data["observation" + suffix] = observation;
+			checks["actual_viewport" + suffix] = capture->get_viewport() == p_viewport && data.source_viewport == p_viewport;
+			checks["complete_token" + suffix] = token.is_valid() && token == viewport->current_camera_token && data.source_view_id == token.view_id && data.source_view_epoch == token.view_epoch && data.source_capture_ordinal == token.capture_ordinal && token.view_id == 0x43414d && token.view_epoch == 1;
+			checks["presentation" + suffix] = key.view_id == token.view_id && key.view_epoch == token.view_epoch && key.present_seq == uint64_t(p_stage) && viewport->presentation_key.present_seq == uint64_t(p_stage);
+			checks["camera_payload" + suffix] = data.main_transform.is_equal_approx(p_expected) && data.view_count == 1 && data.is_orthogonal && data.main_projection == viewport->captured_camera_data.main_projection;
+			if (p_stage == 1) {
+				camera_native_old_capture = capture;
+				camera_native_old_transform = data.main_transform;
+				camera_native_old_projection = data.main_projection;
+				checks["old_ref_retained"] = camera_native_old_capture.is_valid() && camera_native_old_capture.ptr() == viewport->captured_camera.ptr();
+			} else {
+				checks["new_ref_and_token"] = camera_native_old_capture.is_valid() && camera_native_old_capture.ptr() != capture.ptr() && token != camera_native_old_capture->get_token() && token.capture_ordinal > camera_native_old_capture->get_token().capture_ordinal;
+				checks["old_payload_immutable"] = camera_native_old_capture.is_valid() && camera_native_old_capture->get_camera_data().main_transform == camera_native_old_transform && camera_native_old_capture->get_camera_data().main_projection == camera_native_old_projection && !data.main_transform.is_equal_approx(camera_native_old_transform) && camera_native_old_capture->get_presentation_key().present_seq == 1;
+			}
+		}
+	}
+	result_data["checks"] = checks;
+	result_data["stage"] = p_stage;
+}
+
+void ParticlesScenePairsTestFixture::camera_native_invalidate(RID p_viewport) {
+	CRASH_COND(!RenderingServer::get_singleton()->is_on_render_thread() || !RSG::viewport);
+	RSG::viewport->viewport_invalidate_presentation_key(p_viewport);
+	MutexLock lock(result_mutex);
+	Dictionary checks = result_data.get("checks", Dictionary());
+	const auto *viewport = RSG::viewport->viewport_owner.get_or_null(p_viewport);
+	checks["invalidated_cache_null"] = viewport && viewport->captured_camera.is_null() && !viewport->presentation_registered;
+	checks["old_ref_survives_invalidate"] = camera_native_old_capture.is_valid() && camera_native_old_capture->get_camera_data().main_transform == camera_native_old_transform;
+	result_data["checks"] = checks;
+	result_data["stage"] = 3;
+}
+
+void ParticlesScenePairsTestFixture::camera_native_finish(RID p_viewport) {
+	CRASH_COND(!RenderingServer::get_singleton()->is_on_render_thread() || !RSG::viewport);
+	MutexLock lock(result_mutex);
+	Dictionary checks = result_data.get("checks", Dictionary());
+	checks["actual_viewport_freed"] = p_viewport == camera_native_viewport && RSG::viewport->viewport_owner.get_or_null(p_viewport) == nullptr;
+	checks["old_ref_survives_free"] = camera_native_old_capture.is_valid() && camera_native_old_capture->get_viewport() == p_viewport && camera_native_old_capture->get_camera_data().source_viewport == p_viewport && camera_native_old_capture->get_camera_data().main_transform == camera_native_old_transform && camera_native_old_capture->get_camera_data().main_projection == camera_native_old_projection && camera_native_old_capture->get_token().is_valid() && camera_native_old_capture->get_presentation_key().present_seq == 1;
+	camera_native_old_capture.unref();
+	checks["old_ref_released"] = camera_native_old_capture.is_null();
+	result_data["checks"] = checks;
+	bool passed = true;
+	for (const Variant &key : checks.keys()) {
+		passed = passed && bool(checks[key]);
+	}
+	result_data["pass"] = passed;
+	result_data["stage"] = 4;
 }

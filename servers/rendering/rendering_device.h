@@ -34,6 +34,7 @@
 #include "core/extension/gdextension_record_source.h"
 #include "servers/rendering/native_depth_allocation_projection.h"
 #include "servers/rendering/native_disposal_witness.h"
+#include "servers/rendering/native_height_range.h"
 
 #ifdef TESTS_ENABLED
 #include "modules/modules_enabled.gen.h" // IWYU pragma: keep. For test module feature macros.
@@ -46,8 +47,8 @@ class ProductionAttachment;
 namespace RendererRD {
 class ExternalOutputStorage;
 class ExternalPipelinePreparation;
-class HeightCaptureCheckedSink;
 class ParticlesStorage;
+class HeightCaptureCheckedSink;
 class MaterialStorage;
 class MeshStorage;
 } //namespace RendererRD
@@ -62,7 +63,7 @@ struct Access;
 namespace RendererRD {
 class TestParticlesProcessRetryAccess;
 class TestMultimeshRebuildAccess;
-}
+} //namespace RendererRD
 #endif
 
 #include <atomic>
@@ -112,6 +113,7 @@ class RDHitGroup;
 namespace GDExtensionDeviceExit {
 enum class ProductionOutputOwnerKind : uint8_t;
 class ProductionOutputPin;
+class ProductionOutputPreparationScope;
 class ProductionUseCell;
 } //namespace GDExtensionDeviceExit
 class RenderingDevice : public RenderingDeviceCommons {
@@ -123,9 +125,12 @@ class RenderingDevice : public RenderingDeviceCommons {
 	friend class ParticlesHeightfieldClearTestFixture;
 	friend class ParticlesExternalGuardTestFixture;
 	friend class ParticlesExternalOutputTestFixture;
+	friend class NativeDepthAllocationTestFixture;
+	friend class NativeHeightRangeTestFixture;
 #endif
 
 	friend class RendererRD::MeshStorage;
+	friend class RendererRD::HeightCaptureCheckedSink;
 	GDCLASS(RenderingDevice, Object)
 
 	_THREAD_SAFE_CLASS_
@@ -147,7 +152,6 @@ private:
 	friend class RenderingServerDefault;
 	friend class RendererRD::ExternalOutputStorage;
 	friend class RendererRD::ExternalPipelinePreparation;
-	friend class RendererRD::HeightCaptureCheckedSink;
 	friend class RendererRD::ParticlesStorage;
 	friend class RendererRD::MaterialStorage;
 #ifdef TESTS_ENABLED
@@ -162,6 +166,8 @@ private:
 	friend class TestQualificationFinalizeAccess;
 	friend class TestQualificationPhysicalAccess;
 	friend class TestNativeDisposalAccess;
+	friend class TestNativeHeightRangeAccess;
+	friend class TestQualificationSceneDepthAccess;
 	friend class TestCheckedBindAccess;
 	friend class TestVertexArrayRangeAccess;
 	friend class TestExternalOutputPrefixAccess;
@@ -346,6 +352,37 @@ private:
 	bool _qualification_resource_busy(RID p_rid);
 	Error _qualification_pin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket, const LocalVector<RID> &p_resources);
 	void _qualification_unpin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket);
+	Error _qualification_admit_frame_ticket(GDExtensionDeviceExit::QualificationTicket *p_ticket);
+	Error _qualification_admit_worker(uint32_t p_worker, uint64_t p_operation, const RDD::QueueCallReport &p_prefix, uint32_t p_future);
+	Error _qualification_admit_extra_main(uint32_t p_slots);
+	Error _qualification_activate_cleanup_credits();
+	Error _qualification_prepare_free(RID p_rid);
+	void _qualification_defer_free(RID p_rid);
+	void _qualification_retry_deferred_frees();
+	LocalVector<RID> qualification_deferred_frees;
+
+	Error _qualification_admit_native_serials(const uint64_t *p_serials, uint32_t p_count, uint32_t p_worker, bool p_copy = false);
+	void _qualification_cancel_native_serials(const uint64_t *p_serials, uint32_t p_count, uint32_t p_worker, bool p_copy = false);
+	bool _qualification_capture_hidden_source(const RDD::QueueCallReport &p_report);
+	struct QualificationSourceAdmissionScope {
+		RenderingDevice &rd;
+		uint32_t worker;
+		RDD::NativeSourceAdmission admission;
+		RDD::NativeSourceAdmissionScope scope;
+		QualificationSourceAdmissionScope(RenderingDevice &p_rd, uint32_t p_worker = UINT32_MAX) : rd(p_rd), worker(p_worker), admission{ this, admit, cancel, OK, capture_hidden, can_block }, scope(admission) {}
+		static Error admit(void *p_owner, const uint64_t *p_serials, uint32_t p_count, bool p_copy) {
+			auto &self = *static_cast<QualificationSourceAdmissionScope *>(p_owner);
+			return self.rd._qualification_admit_native_serials(p_serials, p_count, self.worker, p_copy);
+		}
+		static bool can_block(void *p_owner);
+		static bool capture_hidden(void *p_owner, const RDD::QueueCallReport &p_report) {
+			return static_cast<QualificationSourceAdmissionScope *>(p_owner)->rd._qualification_capture_hidden_source(p_report);
+		}
+		static void cancel(void *p_owner, const uint64_t *p_serials, uint32_t p_count, bool p_copy) {
+			auto &self = *static_cast<QualificationSourceAdmissionScope *>(p_owner);
+			self.rd._qualification_cancel_native_serials(p_serials, p_count, self.worker, p_copy);
+		}
+	};
 	void _qualification_add_frame_ticket(GDExtensionDeviceExit::QualificationTicket *p_ticket);
 	void _qualification_seal_tickets();
 	void _qualification_issue_tickets(uint32_t p_slot, const RDD::QueueCallReport &p_report, Error p_error);
@@ -560,11 +597,27 @@ public:
 		friend class RenderingDevice;
 		friend class GDExtensionDeviceExit::Registry;
 		friend class RendererRD::MaterialStorage;
+#ifdef TESTS_ENABLED
+		friend class TestNativeDisposalAccess;
+#endif
 		RID material_origin;
 		uint64_t material_origin_generation = 0;
 		RenderingDevice *device = nullptr;
 		Vector<RID> resources;
+		// Small original source holds live entirely in their quoted owner row.
+		RID inline_resources[3];
+		uint32_t inline_count = 0;
 		bool pins_returned = false;
+		Span<const RID> _resource_span() const {
+			return inline_count ? Span<const RID>(inline_resources, inline_count) : Span<const RID>(resources.ptr(), resources.size());
+		}
+		void _clear_resources() {
+			for (RID &rid : inline_resources) {
+				rid = RID();
+			}
+			inline_count = 0;
+			resources.clear();
+		}
 
 	public:
 		NativeImmutableHold() = default;
@@ -578,6 +631,12 @@ public:
 			CRASH_COND(device);
 			device = other.device;
 			resources = static_cast<Vector<RID> &&>(other.resources);
+			inline_count = other.inline_count;
+			for (uint32_t i = 0; i < 3; ++i) {
+				inline_resources[i] = other.inline_resources[i];
+				other.inline_resources[i] = RID();
+			}
+			other.inline_count = 0;
 			pins_returned = other.pins_returned;
 			material_origin = other.material_origin;
 			material_origin_generation = other.material_origin_generation;
@@ -833,9 +892,9 @@ public:
 	void _texture_free_shared_fallback(Texture *p_texture);
 	void _texture_copy_shared(RID p_src_texture_rid, Texture *p_src_texture, RID p_dst_texture_rid, Texture *p_dst_texture);
 	bool _texture_create_reinterpret_buffer(Texture *p_texture);
-	void _texture_check_pending_clear(RID p_texture_rid, Texture *p_texture);
-	void _texture_clear_color(RID p_texture_rid, Texture *p_texture, const Color &p_color, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers);
-	void _texture_clear_depth_stencil(RID p_texture_rid, Texture *p_texture, float p_depth, uint8_t p_stencil, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers);
+	Error _texture_check_pending_clear(RID p_texture_rid, Texture *p_texture);
+	Error _texture_clear_color(RID p_texture_rid, Texture *p_texture, const Color &p_color, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers);
+	Error _texture_clear_depth_stencil(RID p_texture_rid, Texture *p_texture, float p_depth, uint8_t p_stencil, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers);
 	uint32_t _texture_vrs_method_to_usage_bits() const;
 	void _texture_ensure_shareable_format(RID p_texture, const DataFormat &p_shareable_format);
 
@@ -1278,6 +1337,20 @@ private:
 
 	RID_Owner<VertexArray, true> vertex_array_owner;
 
+	// Scratch-only preflight; caller must retain sources and revalidate before factories.
+	// No format ID, VA RID, hold, or dependency is published by these helpers.
+	static Error _vertex_format_normalize(const Vector<VertexAttribute> &p_attributes, VertexDescriptionCache &r_description);
+	Error _vertex_array_prepare_locked(uint32_t p_vertex_count, const Vector<VertexAttribute> &p_attributes, const Vector<RID> &p_src_buffers, const Vector<uint64_t> &p_offsets, VertexArray &r_array, HashSet<RID> &r_used_buffers);
+	struct NativeVertexArrayPreflight {
+		Vector<VertexAttribute> attributes;
+		Vector<RID> used_buffers;
+		uint32_t max_instances_allowed = UINT32_MAX;
+	};
+	// Validates only direct used VB eligibility. Full closure/G and existing VA/IA,
+	// external history and detached-directory roots are independent later gates.
+	Error _native_vertex_array_preflight(uint32_t p_vertex_count, const Vector<VertexAttribute> &p_attributes, const Vector<RID> &p_buffers, const Vector<uint64_t> &p_offsets, NativeVertexArrayPreflight &r_result);
+	Error _native_immutable_resource_eligibility_locked(RID p_rid);
+
 	struct IndexBuffer : public Buffer {
 		uint32_t max_index = 0; // Used for validation.
 		uint32_t index_count = 0;
@@ -1504,6 +1577,8 @@ public:
 	void shader_destroy_modules(RID p_shader);
 
 	uint64_t shader_get_vertex_input_attribute_mask(RID p_shader);
+	// Read-only original render-thread lookup; refuses placeholders and preserves output on failure.
+	Error shader_get_native_vertex_input_mask_if_ready(RID p_shader, uint64_t &r_input_mask);
 
 	/******************/
 	/**** UNIFORMS ****/
@@ -1658,20 +1733,32 @@ private:
 	Error _production_output_owner_service(GDExtensionDeviceExit::ProductionOutputOwnerKind, RID, uint64_t, uint32_t, uint64_t, GDExtensionDeviceExit::ProductionOutputPin &, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);
 	Error _production_output_owned_pipeline_preflight(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);
 	Error _production_output_owned_render_pipeline_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, RID &);
+	Error _production_output_owned_pipeline_preflight(GDExtensionDeviceExit::ProductionOutputPreparationScope &);
+	Error _production_output_owned_render_pipeline_create(GDExtensionDeviceExit::ProductionOutputPreparationScope &, RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, RID &);
+	Error _production_output_owned_render_pipeline_create_locked(GDExtensionDeviceExit::Registry &, GDExtensionDeviceExit::ProductionRequest &, uint64_t, uint32_t, RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, RID &);
 	Error _production_output_owned_reserve(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint32_t, uint64_t &);
 	Error _production_output_owned_rollback(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t &);
 	Error _production_output_owned_storage_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, uint32_t, BitField<StorageBufferUsage>, RID &, NativeDisposalWitness &);
 	Error _production_output_owned_uniform_set_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, const VectorView<Uniform> &, RID, uint32_t, RID &, NativeDisposalWitness &);
 	Error _production_output_owned_seal(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);
+	Error _production_output_owned_seal_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t, uint64_t);
 	Error _production_output_owned_create_preflight_locked(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, GDExtensionDeviceExit::ProductionRequest *&);
 	Error _production_output_owned_bind_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t, uint64_t, uint32_t, const NativeDisposalWitness &);
 	Error _production_output_owned_bind(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, const NativeDisposalWitness &);
 	Error _production_output_owned_cancel_unbound(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);
 	bool _production_output_callback_supported(RID);
 	void _production_output_set_material_origin(RID, RID, uint64_t);
+	Error _native_immutable_hold_expand_directory(const VectorView<RID> &, NativeImmutableHold &, uint32_t);
+	Error _production_output_directory_bind_adopted_locked(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, const VectorView<RID> &, NativeOutputGroupBinding &);
 	Error _production_output_directory_capture(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, const VectorView<RID> &, uint32_t, NativeOutputGroupBinding &);
 	Error _production_output_directory_return(GDExtensionDeviceExit::ProductionOutputPin &, NativeOutputGroupBinding &, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);
 	Error _production_output_directory_mark_root(GDExtensionDeviceExit::ProductionOutputPin &, const NativeOutputGroupBinding &, RID, bool, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);
+	// Shared primitives only. Callers must already retain authenticated original
+	// Registry and RD locks. No scope/window or source permission is issued here.
+	Error _production_output_hold_inventory_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_reserved_group, const VectorView<NativeImmutableHold *> &, uint32_t p_limit, uint32_t &r_count);
+	Error _production_output_hold_stage_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_reserved_group, const VectorView<NativeImmutableHold *> &, uint32_t p_limit, uint32_t &r_count);
+	void _production_output_hold_inventory_clear_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_reserved_group);
+	Error _production_output_hold_adopt_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_pin_serial, uint64_t p_reserved_group, const VectorView<NativeImmutableHold *> &, uint32_t p_limit, uint64_t &r_group);
 	Error _production_output_hold_capture_locked(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, NativeImmutableHold &, uint64_t &);
 	Error _production_output_hold_returned_locked(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, GDExtensionDeviceExit::ProductionDisposalObservation &);
 	Error _production_output_hold_capture(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, NativeImmutableHold &, uint64_t &);
@@ -1720,6 +1807,27 @@ private:
 		uint32_t recycles = 0;
 		uint32_t passes = 0;
 	};
+	static constexpr uint32_t NATIVE_HEIGHT_RANGE_CAPACITY = 64;
+	LocalVector<Ref<NativeHeightRange>> native_height_ranges;
+	uint64_t next_native_height_range_serial = 1;
+	Ref<NativeHeightRange> native_height_active_checked_range;
+	bool native_height_finalization_started = false;
+	bool native_height_finalization_drained = false;
+	Error _native_height_range_validate(const Ref<NativeHeightRange> &p_range) const;
+	Error _native_height_range_prepare_checked_capture(RendererRD::HeightCaptureCheckedSink &r_sink, Ref<NativeHeightRange> &r_range);
+	Error _native_height_range_enter_checked_call(const Ref<NativeHeightRange> &p_range, RendererRD::HeightCaptureCheckedSink &r_sink);
+	Error _native_height_range_enroll_original_record(const Ref<NativeHeightRange> &p_range, RendererRD::HeightCaptureCheckedSink &r_sink, uint32_t p_business_index, bool p_cleanup);
+	Error _native_height_range_close_checked_capture(const Ref<NativeHeightRange> &p_range, RendererRD::HeightCaptureCheckedSink &r_sink);
+	Error _native_height_range_prepare(Ref<NativeHeightRange> &r_range);
+	Error _native_height_range_record_depth_clear(const Ref<NativeHeightRange> &p_range, const NativeDisposalWitness &p_depth, const NativeDisposalWitness &p_framebuffer, float p_clear_depth);
+	Error _native_height_range_close(const Ref<NativeHeightRange> &p_range);
+	Error _native_height_range_observe(const Ref<NativeHeightRange> &p_range, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, NativeHeightRange::Snapshot &r_snapshot);
+	Error _native_height_range_return(const Ref<NativeHeightRange> &p_range, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage);
+	void _native_height_seal_frame(uint32_t p_frame);
+	Error _native_height_issue_slot(uint32_t p_frame, uint64_t p_epoch, uint32_t p_slot, RDD::CommandBufferID p_command, Error p_error, const RDD::QueueCallReport &p_report);
+	Error _native_height_retain_frame_sources(uint32_t p_frame);
+	Error _native_height_retain_sources(const Ref<NativeHeightRange> &p_range);
+	Error _native_height_ranges_prepare_finalization();
 	// WORK accounts command recording/CPU phases only. Receipts count actual
 	// native observation, ownership return, issue and physical free calls.
 	enum class NativeDisposalWork : uint8_t { POLL,
@@ -1762,7 +1870,8 @@ private:
 	RID_Owner<UniformSet, true> uniform_set_owner;
 
 	void _uniform_set_update_shared(UniformSet *p_uniform_set);
-	void _uniform_set_update_clears(UniformSet *p_uniform_set);
+	Error _uniform_set_update_clears(UniformSet *p_uniform_set);
+	Error _uniform_set_admit_clear_transfers(UniformSet *p_set);
 
 public:
 	/** Bake a set of uniforms that can be bound at runtime with the given shader.
@@ -2311,6 +2420,16 @@ private:
 		bool recording = false;
 		bool submitted = false;
 		bool qualification_observer_pending = false;
+		// Immutable current batch after a qualification dependency reserves it.
+		// Cleared only after exact source join/retain; not a frame-wide exclusion.
+		bool qualification_batch_sealed = false;
+		struct HeightWatcher {
+			Ref<NativeHeightRange> range;
+			uint32_t dependency = 0;
+		};
+		HeightWatcher height_watchers[NATIVE_HEIGHT_RANGE_CAPACITY];
+		uint32_t height_watcher_count = 0;
+		bool height_observer_pending = false;
 		bool production_observer_pending = false;
 		bool submission_pending = false;
 		bool poisoned = false;
@@ -2335,17 +2454,18 @@ private:
 	BinaryMutex transfer_worker_pool_texture_barriers_mutex;
 	ConditionVariable transfer_worker_pool_condition;
 
+	Error _native_height_join_worker(TransferWorker *p_worker, uint64_t p_first, uint64_t p_last, const RDD::QueueCallReport &p_report);
 	TransferWorker *_acquire_transfer_worker(uint32_t p_transfer_size, uint32_t p_required_align, uint32_t &r_staging_offset);
 	void _release_transfer_worker(TransferWorker *p_transfer_worker);
 	void _end_transfer_worker(TransferWorker *p_transfer_worker);
 	void _submit_transfer_worker(TransferWorker *p_transfer_worker, VectorView<RDD::SemaphoreID> p_signal_semaphores = VectorView<RDD::SemaphoreID>(), bool p_operations_locked = false);
 	bool _wait_for_transfer_worker(TransferWorker *p_transfer_worker, bool p_blocking = false);
 	void _flush_barriers_for_transfer_worker(TransferWorker *p_transfer_worker, bool p_barriers_locked = false);
-	void _check_transfer_worker_operation(uint32_t p_transfer_worker_index, uint64_t p_transfer_worker_operation);
-	void _check_transfer_worker_buffer(Buffer *p_buffer);
-	void _check_transfer_worker_texture(Texture *p_texture);
-	void _check_transfer_worker_vertex_array(VertexArray *p_vertex_array);
-	void _check_transfer_worker_index_array(IndexArray *p_index_array);
+	Error _check_transfer_worker_operation(uint32_t p_transfer_worker_index, uint64_t p_transfer_worker_operation, bool *r_processed = nullptr);
+	Error _check_transfer_worker_buffer(Buffer *p_buffer);
+	Error _check_transfer_worker_texture(Texture *p_texture);
+	Error _check_transfer_worker_vertex_array(VertexArray *p_vertex_array);
+	Error _check_transfer_worker_index_array(IndexArray *p_index_array);
 	Error _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID(), bool p_nonblocking = false);
 	void _submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer);
 	bool _wait_for_transfer_workers();
@@ -2414,6 +2534,7 @@ private:
 
 	struct Frame {
 		uint64_t qualification_epoch = 0;
+		LocalVector<Ref<NativeHeightRange>> native_height_ranges;
 		// Cursor over the original owner queues. Counts seal this drain's cutoff;
 		// callback/reentrant additions remain in the queues for the next safe epoch.
 		struct DisposalCursor {
@@ -2473,6 +2594,8 @@ private:
 		RDD::FenceID fence;
 		bool fence_signaled = false;
 		bool primary_command_buffer_begun = true;
+		bool qualification_graph_closed = false, qualification_segment_closed = false, qualification_issue_busy = false;
+		uint32_t qualification_issue_slot = 0;
 		LocalVector<RenderingDeviceDriver::QueueCallReport> chain_reports;
 		// Owns source observer references transferred by the original hidden queue.
 		LocalVector<RDD::QueueCallReport> qualification_hidden_reports;
@@ -2527,6 +2650,9 @@ private:
 		const Error issue_error = frame_issue_error.load();
 		if (issue_error != OK) {
 			return issue_error;
+		}
+		if (!frames.is_empty() && uint32_t(frame) < frames.size() && frames[frame].qualification_graph_closed) {
+			return ERR_BUSY; // A source retry cannot reopen the already closed graph.
 		}
 		const Error wait_error = frame_wait_error.load();
 		return wait_error != OK ? wait_error : ((frame_wait_draining.load() || qualification_frame_advance_pending.load() || native_disposal_active.load()) ? ERR_BUSY : OK);

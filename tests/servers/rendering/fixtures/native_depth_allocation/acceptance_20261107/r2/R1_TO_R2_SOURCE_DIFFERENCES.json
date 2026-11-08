@@ -1,0 +1,68 @@
+[
+  {
+    "path": "servers/rendering/rendering_device.cpp",
+    "r1": {
+      "bytes": 724115,
+      "sha256": "80a4827f1abc43102d5832e4d74d4477ddeb4f42167eb0c4b1032bf17c118790"
+    },
+    "r2": {
+      "bytes": 724223,
+      "sha256": "57e44dfdaef2bd86a81969f7e86e0e0e9c74bf9b4928c9fe7d25f032c089b514"
+    }
+  },
+  {
+    "path": "tests/servers/rendering/test_native_disposal.cpp",
+    "r1": {
+      "bytes": 144116,
+      "sha256": "67af86cc59065781b2026899c80cb6f4505d4a13e7a609fcee99cbc18dd8ee5d"
+    },
+    "r2": {
+      "bytes": 144286,
+      "sha256": "23ecb1af6c8a66b7caa69bfe47cd2b607f3c7ee0144f4baef550e929cdde647b"
+    }
+  },
+  {
+    "path": "servers/rendering/native_depth_allocation_projection.h",
+    "r1": {
+      "bytes": 4987,
+      "sha256": "1285d134f457fa0b9c06eed9723b795b8250e28ab7ead55df9f6cc19ee17b9fe"
+    },
+    "r2": {
+      "bytes": 5285,
+      "sha256": "9c635eb1ccf5aaa93c1c8a3b10a4005f6647c1019d59e048a0ce7982a2b5fdf5"
+    }
+  },
+  {
+    "path": "modules/particles_runtime_tests/native_depth_allocation_test_fixture.cpp",
+    "r1": {
+      "bytes": 21390,
+      "sha256": "d7783ea55a95cde34169193359bf9181fe00330d452df382f2678cb1a12c9fa4"
+    },
+    "r2": {
+      "bytes": 21609,
+      "sha256": "615f3d430eafa9c63a5e14c8c449e2a42f955e89512df9e529da4742b9c1cc3a"
+    }
+  },
+  {
+    "path": "tests/servers/rendering/fixtures/native_depth_allocation/README.md",
+    "r1": {
+      "bytes": 5028,
+      "sha256": "5b24ced032d818260bb3eef78317a14b605406bb7a4fe0db7bc5e54047bcde17"
+    },
+    "r2": {
+      "bytes": 5696,
+      "sha256": "14292e593bd6c5e0cd51d4547cc3a0ca3a91b34f3a23305343ce2d1ba2709476"
+    }
+  },
+  {
+    "path": "tests/servers/rendering/fixtures/native_depth_allocation/run_native.py",
+    "r1": {
+      "bytes": 13392,
+      "sha256": "8bdcc06173533f4f838fd66426ab639d7d8b0c269d1399060e890ed232155d5a"
+    },
+    "r2": {
+      "bytes": 13485,
+      "sha256": "755e3da7da233a495ebf6485ce1ec97c11a84100c19351f8e6a63b38fd9f5932"
+    }
+  }
+]

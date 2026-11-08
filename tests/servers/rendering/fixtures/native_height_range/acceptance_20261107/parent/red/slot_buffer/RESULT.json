@@ -1,0 +1,20 @@
+{
+  "name": "slot_buffer",
+  "final_sha256": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc",
+  "negative_sha256": "25877c2b3287c94462c24cc8dde441363f68bd2ee3f266b6c38ae6c5aec32f88",
+  "mutation_from": "member.issue_attempted || member.slot != p_slot || member.command_buffer != p_command) {",
+  "mutation_to": "member.issue_attempted) {",
+  "function_position": [],
+  "build_exit": 0,
+  "build_seconds": 19.06,
+  "host_sha256": "1cfd141e9ab82618053852dd19a6623cfa22aa4f49b3dc4b0ff2021dc9b6c6eb",
+  "test_command": [
+    "bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--test-case=*NativeHeightRange*exact slot buffer*",
+    "--reporters=xml",
+    "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/slot_buffer/CPU.xml"
+  ],
+  "test_exit": 1
+}

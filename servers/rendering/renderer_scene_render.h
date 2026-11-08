@@ -330,6 +330,8 @@ public:
 	struct CameraData {
 		// E15/E16 source identity captured at the real camera boundary. Zero
 		// values mean that this render was not admitted to a registered viewport.
+		// Actual native camera invocation selection; never recovered from a token.
+		RID source_viewport;
 		uint64_t source_view_id = 0;
 		uint64_t source_view_epoch = 0;
 		uint64_t source_capture_ordinal = 0;

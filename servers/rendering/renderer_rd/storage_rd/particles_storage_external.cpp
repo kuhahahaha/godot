@@ -38,13 +38,21 @@
 namespace RendererRD {
 Error ParticlesStorage::particles_scene_validate_receiver(RID p_particles, uint64_t p_generation, const RenderingDevice *p_device) const {
 	const Particles *particles = particles_owner.get_or_null(p_particles);
-	if (!particles || !particles->external || !p_generation || !p_device) return ERR_INVALID_PARAMETER;
+	if (!particles || !particles->external || !p_generation || !p_device) {
+		return ERR_INVALID_PARAMETER;
+	}
 	const ExternalOutputOwner &owner = *particles->external;
-	if (owner.generation != p_generation || owner.device != p_device) return ERR_INVALID_DATA;
+	if (owner.generation != p_generation || owner.device != p_device) {
+		return ERR_INVALID_DATA;
+	}
 	if (!owner.admits_work() || !owner.generation_registry || !owner.generation_root_matches(owner.generation_pin) ||
-			!owner.generation_registry->production_output_pin_matches(owner.generation_pin, owner.generation_request, *owner.device)) return ERR_UNAVAILABLE;
+			!owner.generation_registry->production_output_pin_matches(owner.generation_pin, owner.generation_request, *owner.device)) {
+		return ERR_UNAVAILABLE;
+	}
 	if (!owner.config.query_enabled || !owner.config.query_bounds.is_finite() ||
-			!owner.config.query_bounds.get_end().is_finite() || !owner.config.query_bounds.has_volume()) return ERR_INVALID_DATA;
+			!owner.config.query_bounds.get_end().is_finite() || !owner.config.query_bounds.has_volume()) {
+		return ERR_INVALID_DATA;
+	}
 	return OK;
 }
 
@@ -251,7 +259,7 @@ Dictionary ParticlesStorage::particles_external_poll(RID p_particles, const Pack
 }
 Error ParticlesStorage::_external_typed_context(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, bool p_new_work) {
 	auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
-	MutexLock lock(registry.mutex);
+	GDExtensionDeviceExit::Registry::Lock lock(registry);
 	GDExtensionDeviceExit::ProductionRequest *request = nullptr;
 	RenderingDevice *device = nullptr;
 	const Error error = registry.production_physical_request_locked(p_context, p_request, request, device, p_new_work);
@@ -509,7 +517,10 @@ void ParticlesStorage::_external_create_received(GDExtensionProductionPhysicalCo
 	}
 	owner->metadata_lease = static_cast<GDExtensionDeviceExit::ProductionOutputMetadataLease &&>(p_metadata);
 	if (instance_selection) {
-		const Error selected = owner->acquire_generation_selection(p_context, p_request);
+		Error selected = owner->acquire_generation_selection(p_context, p_request);
+		if (selected == OK) {
+			selected = owner->acquire_generation_surface_sources(p_context, p_request);
+		}
 		if (selected != OK) {
 			// All post-root refusals, including a pre-lease refusal, retain the
 			// linked owner/metadata and any acquired original selection prefix.
@@ -644,20 +655,95 @@ bool ParticlesStorage::particles_is_external_scene_only(RID p_particles) const {
 	return particles && particles->external && particles->external->config.profile == ExternalOutputConfig::SCENE_ONLY;
 }
 uint32_t ParticlesStorage::particles_external_surface_count(RID p_particles) const {
+	auto *rd = RenderingDevice::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread()) {
+		return 0;
+	}
 	const Particles *particles = particles_owner.get_or_null(p_particles);
 	if (!particles || !particles->external) {
 		return 0;
 	}
-	// config.surfaces counts mesh RIDs, not authenticated flattened surfaces.
-	// No generation-wide retained surface directory is installed yet.
-	return 0;
+	const auto &owner = *particles->external;
+	return owner.admits_work() && owner.config.profile == ExternalOutputConfig::INSTANCE_192 && owner.generation_surfaces_complete &&
+					owner.generation_selection_complete && owner.retained_surface_count == owner.generation_material_count
+			? owner.retained_surface_count
+			: 0;
 }
-Error ParticlesStorage::particles_external_surface_acquire(RID, uint32_t, ExternalSurfaceSelection &) {
-	return ERR_UNAVAILABLE;
+Error ParticlesStorage::particles_external_surface_acquire(RID p_particles, uint32_t p_surface, ExternalSurfaceSelection &r_selection) {
+	auto *rd = RenderingDevice::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	Particles *particles = particles_owner.get_or_null(p_particles);
+	return particles && particles->external ? particles->external->surface_acquire(p_surface, r_selection) : ERR_DOES_NOT_EXIST;
 }
 Error ParticlesStorage::particles_external_surface_release(ExternalSurfaceSelection &p_selection) {
 	return p_selection.owner ? p_selection.owner->surface_return(p_selection) : ERR_DOES_NOT_EXIST;
 }
+Error ParticlesStorage::particles_external_prepare_pipeline(const ExternalSurfaceSelection &surface, const ExternalPacketViewLease &view, const ExternalPacketPipelineRequest &selection, ExternalPreparationBody body, void *userdata, const ExternalPipelinePreparation *&out) {
+	auto *device = RenderingDevice::get_singleton();
+	if (!device || !device->native_immutable_is_render_thread() || !body || !surface.owner || view.owner != surface.owner) {
+		return ERR_UNAUTHORIZED;
+	}
+	auto &owner = *surface.owner;
+	if (owner.device != device || !owner.preparation_view_matches(view, view.slot) || surface.generation != owner.generation || surface.cell >= owner.surface_capacity ||
+			!owner.generation_registry || !owner.generation_materials || !owner.surface_cells || !owner.generation_surfaces_complete || !surface.geometry_source || !surface.geometry_source->is_valid() || surface.flattened_surface >= owner.retained_surface_count) {
+		return ERR_UNAUTHORIZED;
+	}
+	const auto &cell = owner.surface_cells[surface.cell];
+	const auto &original_source = owner.generation_materials[surface.flattened_surface];
+	if (cell.consumer != &surface || cell.serial != surface.serial || cell.surface != surface.flattened_surface || cell.pin.is_empty() ||
+			surface.geometry_source != &original_source.geometry_source || surface.mesh != original_source.mesh || surface.native_surface != original_source.native_surface ||
+			surface.material_selection != original_source.material || surface.material_generation != original_source.generation ||
+			!owner.generation_registry->production_output_pin_matches(cell.pin, owner.generation_request, *device)) {
+		return ERR_UNAUTHORIZED;
+	}
+	auto &slot = owner.slots[view.slot];
+	uint32_t index = UINT32_MAX;
+	bool reused = false;
+	{
+		GDExtensionDeviceExit::Registry::Lock lock(*slot.original_registry);
+		if (owner.has_inflight_preparation()) {
+			return ERR_BUSY;
+		}
+		const Error selected = owner.select_preparation_tuple(view.slot, surface.flattened_surface, selection, index, reused);
+		if (selected != OK) {
+			return selected;
+		}
+		if (reused) {
+			RID *root = nullptr;
+			ExternalPipelinePreparation *authenticated = nullptr;
+			const Error authority = slot.original_registry->production_output_preparation_validate_locked(slot.original_pin, *device, slot.original_action_ordinal, surface.flattened_surface,
+					owner.preparation_rows[index].pipeline_owned_group, root, authenticated, nullptr, index, &view, true);
+			if (authority != OK) {
+				return authority;
+			}
+		}
+	}
+	auto &row = owner.preparation_rows[index];
+	if (reused) {
+		out = &row;
+		return row.finish_complete ? row.backend_error : (row.finish_error == ERR_UNCONFIGURED ? ERR_BUSY : row.finish_error);
+	}
+	GDExtensionDeviceExit::ProductionOutputPreparationScope scope;
+	Error error = slot.original_registry->production_output_preparation_begin_row(slot.original_pin, *device, slot.original_action_ordinal, surface.flattened_surface, index, row.pipeline_owned_group, scope, &view);
+	if (error != OK) {
+		row.backend_error = error;
+		row.tuple_state = ExternalPipelinePreparation::TupleState::FAILED;
+		out = &row;
+		return error;
+	}
+	// Synchronous real backend body; it cannot retain this stack scope. Every
+	// actual successful/failed hold stays in the original stable row.
+	row.backend_error = body(userdata, surface, row);
+	if (row.backend_error == OK && row.owned_pipeline_root.is_null()) {
+		row.backend_error = ERR_CANT_CREATE;
+	}
+	row.finish_error = slot.original_registry->production_output_preparation_finish(scope);
+	out = &row;
+	return row.finish_error != OK ? row.finish_error : row.backend_error;
+}
+
 Error ParticlesStorage::particles_external_view_acquire(const ExternalSurfaceSelection &, const ::RenderDataRD *, ExternalPacketViewLease &) {
 	return ERR_UNAVAILABLE;
 }

@@ -1,0 +1,106 @@
+[
+  {
+    "name": "slot_buffer",
+    "final_sha256": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc",
+    "negative_sha256": "25877c2b3287c94462c24cc8dde441363f68bd2ee3f266b6c38ae6c5aec32f88",
+    "mutation_from": "member.issue_attempted || member.slot != p_slot || member.command_buffer != p_command) {",
+    "mutation_to": "member.issue_attempted) {",
+    "function_position": [],
+    "build_exit": 0,
+    "build_seconds": 19.06,
+    "host_sha256": "1cfd141e9ab82618053852dd19a6623cfa22aa4f49b3dc4b0ff2021dc9b6c6eb",
+    "test_command": [
+      "bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*NativeHeightRange*exact slot buffer*",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/slot_buffer/CPU.xml"
+    ],
+    "test_exit": 1
+  },
+  {
+    "name": "ordinary_issue",
+    "final_sha256": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc",
+    "negative_sha256": "ead366fd5bc45988fae5c1b729d4b4d9dfd379b81e8d4d7f716bdc6274f3c3d0",
+    "mutation_from": "const Error height_issue = _native_height_issue_slot(frame, frames[frame].qualification_epoch, i, command_buffer, queue_error, report);",
+    "mutation_to": "const Error height_issue = OK; // Controlled negative: omitted ordinary enrollment.",
+    "function_position": [],
+    "build_exit": 0,
+    "build_seconds": 18.56,
+    "host_sha256": "d53d21de1d3d510b9722f465d4cde875f9e9ad9afc1edfdbc04bd42f331c847a",
+    "test_command": [
+      "bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*NativeHeightRange*ordinary and bounded actual issue*",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/ordinary_issue/CPU.xml"
+    ],
+    "test_exit": 1
+  },
+  {
+    "name": "bounded_issue",
+    "final_sha256": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc",
+    "negative_sha256": "e7f69a0888dcfd818b12a4d75528a4b030a54e8471c3a1e4d28979dabe39e509",
+    "mutation_from": "const Error height_issue = _native_height_issue_slot(frame, f.qualification_epoch, slot, command, error, report);",
+    "mutation_to": "const Error height_issue = OK; // Controlled negative: omitted bounded enrollment.",
+    "function_position": [],
+    "build_exit": 0,
+    "build_seconds": 18.09,
+    "host_sha256": "14663966797f16ea185f07680110a65c80653135ed782c06712a332364343643",
+    "test_command": [
+      "bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*NativeHeightRange*ordinary and bounded actual issue*",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/bounded_issue/CPU.xml"
+    ],
+    "test_exit": 1
+  },
+  {
+    "name": "ordinary_retain",
+    "final_sha256": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc",
+    "negative_sha256": "1d38cefe93cec72bf82ef56fa70cbbc4fdea94803ae97f2c09cdbd433a48de3c",
+    "mutation_from": "const Error height_retain = _native_height_retain_frame_sources(p_frame);\n\tif (height_retain != OK) {\n\t\treturn height_retain;\n\t}",
+    "mutation_to": "// Controlled negative: omitted retain-before-recycle barrier.",
+    "function_position": [
+      607598
+    ],
+    "build_exit": 0,
+    "build_seconds": 19.51,
+    "host_sha256": "8a379f8066d19d8b9c8aa004da8634a0cc2602e32a0c2dbb52621b43cefb7812",
+    "test_command": [
+      "bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*NativeHeightRange*ordinary and bounded actual issue*",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/ordinary_retain/CPU.xml"
+    ],
+    "test_exit": 1
+  },
+  {
+    "name": "bounded_retain",
+    "final_sha256": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc",
+    "negative_sha256": "03a8a84082058000df10daa863e55f3946e33e3673fb5fa74ef1493d5d22b71b",
+    "mutation_from": "const Error height_retain = _native_height_retain_frame_sources(p_frame);\n\tif (height_retain != OK) {\n\t\treturn height_retain;\n\t}",
+    "mutation_to": "// Controlled negative: omitted retain-before-recycle barrier.",
+    "function_position": [
+      520736
+    ],
+    "build_exit": 0,
+    "build_seconds": 19.61,
+    "host_sha256": "906b33d545c32ffdbcbdd95b20110c63ccd4e07809098ca12ebb6b09b835211f",
+    "test_command": [
+      "bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*NativeHeightRange*ordinary and bounded actual issue*",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/bounded_retain/CPU.xml"
+    ],
+    "test_exit": 1
+  }
+]

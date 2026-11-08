@@ -1,0 +1,13 @@
+{
+  "command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--test-case=*SceneDepthR2*",
+    "--reporters=xml",
+    "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-depth-production-facet-20261107/r2/implementation/validation-r2-j6/CPU.xml"
+  ],
+  "exit": 0,
+  "seconds": 1.43,
+  "host_sha256": "78f887327f645d2f5354171e00cc1189cea00f23585303cb1f352dcbdcbd8eda"
+}

@@ -1,0 +1,52 @@
+{
+  "base": "75cdc4b796",
+  "scope": "Original Mesh mutation-driven owner-state revision held by actual NativeSelectionLease",
+  "source_sha256": {
+    "servers/rendering/renderer_rd/storage_rd/mesh_storage.h": "53b40f3713176ee23ea04446eedb9b3ba32c6399090d4abf19698c84274d3c59",
+    "servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp": "94f41a260b5e9957e04607d72a54dd4ca45db470bda13d51772b74bb33f2fc7e",
+    "tests/servers/rendering/test_mesh_storage_external.cpp": "ea82ce7870b9451ed86a1b1b88f7dd849593f596b54c9bcbd46959da7d7ab6a8"
+  },
+  "host_sha256": "5a9ad41ae6dd043780bded428507b507e072b9a3e34ef826ad1e83c5635b827e",
+  "build": {
+    "exit": 0,
+    "command": "scons -Q tests=yes platform=macos target=editor debug_symbols=no module_particles_runtime_tests_enabled=yes -j2",
+    "log": "restored-build.log"
+  },
+  "red": {
+    "mutation": "omit initial revision1 mesh_set_path increment",
+    "cases": 2,
+    "assertions": 437,
+    "target_failures": 4,
+    "exit": 1,
+    "normal_cleanup": true
+  },
+  "restored": {
+    "targeted": {
+      "cases": 2,
+      "assertions": 437,
+      "exit": 0
+    },
+    "combined": {
+      "cases": 83,
+      "assertions": 21701,
+      "exit": 0
+    },
+    "real_renderer_camera_neighbor": {
+      "mobile_exit": 0,
+      "forward_plus_exit": 0,
+      "runner_exit": 0
+    }
+  },
+  "commands": "restored-execution.json",
+  "reviews": [
+    "INDEPENDENT_REVIEW.md",
+    "FIX_REVIEW.md"
+  ],
+  "semantics": "Per-original-RID state revision; includes metadata invalidation before potentially partial RD writes. Not GPU-write count/completion. UINT64_MAX remains selectable once; next mutation exhausts permanently to0. No allocation-global uniqueness.",
+  "limits": [
+    "Broad structural/region-failure/derived-bounds/cache/instance/release-mismatch behavioral matrix remains pending",
+    "Public native mesh facts transport/expected-revision receiver not yet wired",
+    "Material contents have separate original owner generation",
+    "No full profile, Host resource COW or Sprite draw/no-follow-up-draw close acceptance"
+  ]
+}

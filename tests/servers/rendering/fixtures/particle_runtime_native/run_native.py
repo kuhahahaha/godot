@@ -67,6 +67,7 @@ EXPECTED_NATIVE_CHECKS = Counter({
     "retry records one original particle dispatch": 3,
     "same original request succeeds after fault removal": 3,
     "shared native observation coverage intact at begin": 1,
+    "subemitter resource replacement notifies particle dependency": 1,
     "successful progress restores original speed scale": 4,
     "successful residual suffix closes emission": 1,
     "trail async readback queued": 1,
@@ -78,7 +79,8 @@ EXPECTED_NATIVE_CHECKS = Counter({
     "trail readback exact bytes": 1,
     "trail subsequent use retains original buffer and uniform": 1,
 })
-# Additive SDF extension; the original 292 checks above remain required.
+# Original 292 checks plus the public subemitter dependency regression.
+# The additive SDF extension remains independently required.
 SDF_EXTENSION_CHECKS = Counter({
     "original allocation owner authenticated": 4,
     "original buffer allocation identity": 4,
@@ -222,7 +224,7 @@ def valid_report(report: object) -> bool:
     if any(type(report.get(key)) is not int or report[key] != value for key, value in integers.items()):
         return False
     checks = report.get("checks")
-    if not isinstance(checks, list) or len(checks) != 292 + sum(SDF_EXTENSION_CHECKS.values()) + sum(
+    if not isinstance(checks, list) or len(checks) != sum(EXPECTED_NATIVE_CHECKS.values()) + sum(SDF_EXTENSION_CHECKS.values()) + sum(
         MOBILE_RECOVERY_CHECKS.values()
     ):
         return False

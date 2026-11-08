@@ -1,0 +1,6 @@
+{
+  "pins": 2952,
+  "all_equal": true,
+  "mismatches": [],
+  "scope": "manual after-check because original wrapper exited on strict qrt oracle before its own after pass"
+}

@@ -1,0 +1,18 @@
+{
+  "servers/rendering/renderer_rd/height_capture_checked_sink.cpp": {
+    "fixed_sha256": "ef7b5aa3b4b7b711ae80cc0ad1cd6145c6ee1600b1a5c253eb6c815e524b71ab",
+    "local_sha256": "1dd785dfbe8df5c3662969c8cff66dc2747086000fae75bf0b1831eccb7481de"
+  },
+  "servers/rendering/renderer_rd/height_capture_checked_sink.h": {
+    "fixed_sha256": "5aec61a1c28adccbafaaa041bd3c91d9f56a39d50c23f1b048f9c14ab6b0f427",
+    "local_sha256": "097fe20f6b425346aae8dba6ee3fd660db653d5915e96d3ad29529dcadce4c02"
+  },
+  "servers/rendering/renderer_rd/storage_rd/height_frame_resources.cpp": {
+    "fixed_sha256": "9140e80099e3e4675910e2ba7f55a6179f154892703dcbd5629588b72065e755",
+    "local_sha256": "a49a1c60bebab85faf4e07a3c004b645f39efb835565c00fc8f3ac785a6e7351"
+  },
+  "servers/rendering/renderer_rd/storage_rd/height_frame_resources.h": {
+    "fixed_sha256": "1997c5ba9343fe604d902834974823e9256e9c603c68df3a57ab80781c17701d",
+    "local_sha256": "c64d2630fba7f75aa1139c0d3984404fee8a07b2d870e4781fa768de00a1bb00"
+  }
+}

@@ -39,6 +39,8 @@
 namespace RendererRD {
 class ParticlesStorage;
 class ExternalOutputOwner;
+class ExternalPipelinePreparation;
+class ExternalPacketViewLease;
 } //namespace RendererRD
 template <class T>
 class Ref;
@@ -50,7 +52,9 @@ class TestProductionResourceUseAccess;
 class TestQualificationPhysicalAccess;
 class TestQualificationAckAccess;
 class TestQualificationTicketAccess;
+class TestRecordSourceAccess;
 class TestQualificationRtAccess;
+class TestQualificationSceneDepthAccess;
 class RenderingDeviceDriver;
 #ifdef TESTS_ENABLED
 class TestVulkanCompletionAccess;
@@ -97,6 +101,9 @@ using ProductionMetadataReceiver = GDExtensionProductionMetadataReceiverV1;
 // entry, adds no work/service permission and survives nested normal callbacks.
 class ProductionCleanupExtent {
 	friend class ::RenderingDevice;
+#ifdef TESTS_ENABLED
+	friend class ::TestQualificationSceneDepthAccess;
+#endif
 	ProductionCleanupExtent *previous = nullptr;
 	static thread_local ProductionCleanupExtent *current;
 	ProductionCleanupExtent();
@@ -110,6 +117,7 @@ enum class ProductionOutputOwnerKind : uint8_t { NONE,
 	GENERATION,
 	SLOT };
 class ProductionOutputPin;
+class ProductionOutputPreparationScope;
 class ProductionOutputMetadataLease;
 class ProductionAttachment;
 class ProductionRequest;
@@ -428,6 +436,9 @@ public:
 // One TLS stack covers bootstrap, normal entry and teardown so a nested foreign
 // generation or cleanup frame cannot borrow an outer registration authority.
 class RegistrationContext {
+#ifdef TESTS_ENABLED
+	friend class ::TestQualificationSceneDepthAccess;
+#endif
 	friend class CleanupAction;
 	friend class BindingLifetime;
 	friend class CallbackIdentityScope;
@@ -541,10 +552,24 @@ public:
 	Error get_error() const { return error; }
 };
 
+// TLS records only successfully held instances of the original Registry mutex.
+// It grants no record/source authority and does not alter mutex recursion.
+class RegistryMutexOwnership {
+	friend class Registry;
+	friend class BindingPublicationScope;
+	Registry *owner = nullptr;
+	RegistryMutexOwnership *previous = nullptr;
+	bool held = false;
+	static thread_local RegistryMutexOwnership *current;
+	void enter(Registry *p_owner);
+	void leave();
+};
+
 // Only core metadata publication may occur under this short gate lock.
 // The caller holds the Object metadata lock first; never call DSO code here.
 class BindingPublicationScope {
 	Registry *registry = nullptr;
+	RegistryMutexOwnership ownership;
 	Error error = ERR_INVALID_DATA;
 
 public:
@@ -601,6 +626,29 @@ class Registry {
 	friend class ::GDExtensionManager;
 
 public:
+	// Tracks ownership of the original BinaryMutex on this thread. Admission
+	// callbacks may borrow an existing scope without making the mutex recursive.
+	class Lock {
+	public:
+		enum Mode { BLOCK,
+			TRY_OR_BORROW,
+			BLOCK_OR_BORROW };
+
+	private:
+		Registry &owner;
+		mutable RegistryMutexOwnership ownership;
+		bool borrowed = false;
+
+	public:
+		explicit Lock(Registry &p_owner, Mode p_mode = BLOCK);
+		~Lock();
+		Lock(const Lock &) = delete;
+		Lock &operator=(const Lock &) = delete;
+		bool is_locked() const { return ownership.held || borrowed; }
+		void temp_unlock() const;
+		void temp_relock() const;
+		static bool owns(const Registry &p_owner);
+	};
 	static constexpr uint32_t MAX_LIVE_GENERATIONS = 1024;
 	static bool is_production_metadata_entry();
 	static bool production_metadata_engine_call_allowed(const StringName &, const StringName &);
@@ -768,6 +816,8 @@ private:
 		uint64_t action = 0;
 	};
 	BinaryMutex mutex;
+	void unlock_mutex_for_call();
+	void relock_mutex_after_call();
 	Phase phase = Phase::FINALIZED;
 	bool engine_cycle_ended = true;
 	uint32_t live_services = 0;
@@ -862,13 +912,17 @@ private:
 	friend class ::TestQualificationPhysicalAccess;
 	friend class ::TestQualificationAckAccess;
 	friend class ::TestQualificationTicketAccess;
+	friend class ::TestRecordSourceAccess;
 	friend class ::TestQualificationRtAccess;
+	friend class ::TestQualificationSceneDepthAccess;
 #endif
 	friend class ::RenderingDevice;
 	friend class ::RenderingDeviceDriver;
 	friend class ::RendererRD::ParticlesStorage;
 	friend class ::RendererRD::ExternalOutputOwner;
+	friend class ::RendererRD::ExternalPipelinePreparation;
 	friend class ProductionOutputPin;
+	friend class ProductionOutputPreparationScope;
 	friend class ProductionOutputMetadataLease;
 	struct DeviceRecord {
 		Object *object = nullptr;
@@ -904,6 +958,16 @@ private:
 	Error scene_phase_call_relay(NormalRelayToken, const GDExtensionNativeScenePhaseV1 &, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 &);
 	struct ProductionPhysicalFrame;
 	static thread_local ProductionPhysicalFrame *production_physical_frame;
+	static thread_local ProductionOutputPreparationScope *production_output_preparation_scope;
+	Error production_output_preparation_begin(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint64_t, ProductionOutputPreparationScope &);
+	Error production_output_preparation_begin_row(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint32_t, uint64_t, ProductionOutputPreparationScope &, const ::RendererRD::ExternalPacketViewLease * = nullptr);
+	Error production_output_preparation_begin_internal(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint64_t, ProductionOutputPreparationScope &, uint32_t, const ::RendererRD::ExternalPacketViewLease *);
+	Error production_output_preparation_finish(ProductionOutputPreparationScope &);
+	void production_output_preparation_end(ProductionOutputPreparationScope &);
+	Error production_output_preparation_matches_locked(const ProductionOutputPreparationScope &, RenderingDevice &, ProductionRequest *&);
+	Error production_output_preparation_validate_locked(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint64_t, RID *&, ::RendererRD::ExternalPipelinePreparation *&, const ProductionOutputPreparationScope * = nullptr, uint32_t = UINT32_MAX, const ::RendererRD::ExternalPacketViewLease * = nullptr, bool = false);
+	// CloseOldWork: exact retained scope only; does not authorize a factory.
+	Error production_output_preparation_cleanup_matches_locked(const ProductionOutputPreparationScope &, RenderingDevice &, ProductionRequest *&);
 	// Core-only ambient bridge. Uses the original executing RECORD frame;
 	// never interprets Dictionary tokens or grants source/Host/mapping admission.
 	Error production_output_pin_current(RenderingDevice &, ProductionOutputPin &);
@@ -1063,6 +1127,8 @@ public:
 	GDExtensionDeviceSessionResultV1 production_append_v2(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, uint64_t ordinal, uint64_t revision, GDExtensionProductionAppendV2 *out, uint32_t expected_contract = 2);
 	GDExtensionDeviceSessionResultV1 production_close_segment_v2(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, GDExtensionProductionSegmentV2 *out, uint32_t expected_contract = 2);
 	GDExtensionDeviceSessionResultV1 production_record_consume_v2(GDExtensionProductionRequestRefV1 ref, uint64_t serial, GDExtensionProductionRecordReportV2 *out, uint32_t expected_contract = 2);
+	GDExtensionDeviceSessionResultV1 production_observe_v3(GDExtensionProductionRequestRefV1, const GDExtensionProductionServiceBudgetV1 *, GDExtensionProductionObserveResultV3 *);
+	GDExtensionDeviceSessionResultV1 production_output_return_consume(GDExtensionProductionRequestRefV1, const GDExtensionProductionOutputGenerationRefV1 *, GDExtensionProductionOutputGenerationResultV1 *);
 	GDExtensionDeviceSessionResultV1 production_observe_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionServiceBudgetV1 *budget, GDExtensionProductionReportV2 *out, uint32_t expected_contract = 2);
 	GDExtensionDeviceSessionResultV1 production_facts_v2(GDExtensionProductionRequestRefV1 ref, uint64_t revision, uint32_t first, GDExtensionProductionFactV2 *out, uint32_t capacity, uint32_t *written, uint32_t expected_contract = 2);
 	GDExtensionDeviceSessionResultV1 production_release_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionServiceBudgetV1 *input, GDExtensionProductionServiceBudgetV1 *remaining, GDExtensionProductionReportV2 *report, uint32_t expected_contract = 2);
@@ -1141,6 +1207,12 @@ public:
 	Error production_control_consume(GDExtensionProductionRequestRefV1, uint64_t, ProductionControlOutput *);
 
 	GDExtensionDeviceSessionResultV1 qualification_close(GDExtensionQualificationBridgeRefV1);
+	GDExtensionDeviceSessionResultV1 qualification_scene_depth_quote(GDExtensionQualificationBridgeRefV1, const GDExtensionStorageSceneDepthQuoteRequestV1 *, GDExtensionStorageSceneDepthQuoteV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_scene_depth_create(GDExtensionQualificationBridgeRefV1, const GDExtensionStorageSceneDepthCreateRequestV1 *, GDExtensionStorageSceneDepthReportV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_scene_depth_retire(GDExtensionQualificationBridgeRefV1, const GDExtensionStorageSceneDepthRetireRequestV1 *, GDExtensionStorageSceneDepthReportV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_scene_depth_observe(GDExtensionQualificationBridgeRefV1, GDExtensionStorageSceneDepthRefV1, const GDExtensionQualificationBudgetV1 *, GDExtensionStorageSceneDepthReportV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_scene_depth_release(GDExtensionQualificationBridgeRefV1, GDExtensionStorageSceneDepthRefV1);
+	Error qualification_scene_depth_locked(QualificationBridge *, GDExtensionStorageSceneDepthRefV1, uint32_t &);
 	GDExtensionDeviceSessionResultV1 qualification_storage_create(GDExtensionQualificationBridgeRefV1, const GDExtensionStorageCreateRequestV1 *, GDExtensionStorageBackingV1 *);
 	GDExtensionDeviceSessionResultV1 qualification_raster_unit_create(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationRasterCreateV1 *, const void *, uint64_t, GDExtensionQualificationRasterBackingV1 *);
 	GDExtensionDeviceSessionResultV1 qualification_raster_unit_retire(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationRasterRetireRequestV1 *, GDExtensionQualificationRasterRetireRefV1 *, GDExtensionQualificationRasterRetireReportV1 *);

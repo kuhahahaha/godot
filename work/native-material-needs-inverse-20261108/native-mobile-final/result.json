@@ -1,0 +1,853 @@
+{
+  "command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--path",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_external_guard_native",
+    "--render-thread",
+    "safe",
+    "--script",
+    "run.gd",
+    "--rendering-driver",
+    "metal",
+    "--rendering-method",
+    "mobile"
+  ],
+  "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_external_guard_native",
+  "host_sha256": "8d2d144881a29b4b9be1d21eaff2d8c4499fe2d31ec3866d6a25a42752c3da0f",
+  "host_unchanged": true,
+  "process_timeout_seconds": 180,
+  "returncode": 0,
+  "passed": true,
+  "registration_red_only": false,
+  "gpu_preparation_pass": true,
+  "physical_return_claimed": false,
+  "report": {
+    "checks": [
+      {
+        "check": "original main RD render-thread owner",
+        "ok": true
+      },
+      {
+        "check": "outside all active command lists",
+        "ok": true
+      },
+      {
+        "check": "material_features.original_owner",
+        "ok": true
+      },
+      {
+        "check": "material_features.plain.unissued_unchanged",
+        "ok": true
+      },
+      {
+        "check": "material_features.plain.selection",
+        "ok": true
+      },
+      {
+        "check": "material_features.plain.compiled_fact",
+        "ok": true
+      },
+      {
+        "check": "material_features.plain.generation",
+        "ok": true
+      },
+      {
+        "check": "material_features.plain.original_version",
+        "ok": true
+      },
+      {
+        "check": "material_features.plain.inverse_requirement",
+        "ok": true
+      },
+      {
+        "check": "material_features.plain.release",
+        "ok": true
+      },
+      {
+        "check": "material_features.plain.released_refused",
+        "ok": true
+      },
+      {
+        "check": "material_features.plain.empty_selection",
+        "ok": true
+      },
+      {
+        "check": "material_features.plain.empty_invalidates",
+        "ok": true
+      },
+      {
+        "check": "material_features.vertex_inverse.unissued_unchanged",
+        "ok": true
+      },
+      {
+        "check": "material_features.vertex_inverse.selection",
+        "ok": true
+      },
+      {
+        "check": "material_features.vertex_inverse.compiled_fact",
+        "ok": true
+      },
+      {
+        "check": "material_features.vertex_inverse.generation",
+        "ok": true
+      },
+      {
+        "check": "material_features.vertex_inverse.original_version",
+        "ok": true
+      },
+      {
+        "check": "material_features.vertex_inverse.inverse_requirement",
+        "ok": true
+      },
+      {
+        "check": "material_features.vertex_inverse.release",
+        "ok": true
+      },
+      {
+        "check": "material_features.vertex_inverse.released_refused",
+        "ok": true
+      },
+      {
+        "check": "material_features.vertex_inverse.empty_selection",
+        "ok": true
+      },
+      {
+        "check": "material_features.vertex_inverse.empty_invalidates",
+        "ok": true
+      },
+      {
+        "check": "material_features.fragment_inverse.unissued_unchanged",
+        "ok": true
+      },
+      {
+        "check": "material_features.fragment_inverse.selection",
+        "ok": true
+      },
+      {
+        "check": "material_features.fragment_inverse.compiled_fact",
+        "ok": true
+      },
+      {
+        "check": "material_features.fragment_inverse.generation",
+        "ok": true
+      },
+      {
+        "check": "material_features.fragment_inverse.original_version",
+        "ok": true
+      },
+      {
+        "check": "material_features.fragment_inverse.inverse_requirement",
+        "ok": true
+      },
+      {
+        "check": "material_features.fragment_inverse.release",
+        "ok": true
+      },
+      {
+        "check": "material_features.fragment_inverse.released_refused",
+        "ok": true
+      },
+      {
+        "check": "material_features.fragment_inverse.empty_selection",
+        "ok": true
+      },
+      {
+        "check": "material_features.fragment_inverse.empty_invalidates",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_hash.unissued_unchanged",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_hash.selection",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_hash.compiled_fact",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_hash.generation",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_hash.original_version",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_hash.inverse_requirement",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_hash.release",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_hash.released_refused",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_hash.empty_selection",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_hash.empty_invalidates",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_scissor.unissued_unchanged",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_scissor.selection",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_scissor.compiled_fact",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_scissor.generation",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_scissor.original_version",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_scissor.inverse_requirement",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_scissor.release",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_scissor.released_refused",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_scissor.empty_selection",
+        "ok": true
+      },
+      {
+        "check": "material_features.alpha_scissor.empty_invalidates",
+        "ok": true
+      },
+      {
+        "check": "material_features.normal_only.unissued_unchanged",
+        "ok": true
+      },
+      {
+        "check": "material_features.normal_only.selection",
+        "ok": true
+      },
+      {
+        "check": "material_features.normal_only.compiled_fact",
+        "ok": true
+      },
+      {
+        "check": "material_features.normal_only.generation",
+        "ok": true
+      },
+      {
+        "check": "material_features.normal_only.original_version",
+        "ok": true
+      },
+      {
+        "check": "material_features.normal_only.inverse_requirement",
+        "ok": true
+      },
+      {
+        "check": "material_features.normal_only.release",
+        "ok": true
+      },
+      {
+        "check": "material_features.normal_only.released_refused",
+        "ok": true
+      },
+      {
+        "check": "material_features.normal_only.empty_selection",
+        "ok": true
+      },
+      {
+        "check": "material_features.normal_only.empty_invalidates",
+        "ok": true
+      },
+      {
+        "check": "material_features.both.unissued_unchanged",
+        "ok": true
+      },
+      {
+        "check": "material_features.both.selection",
+        "ok": true
+      },
+      {
+        "check": "material_features.both.compiled_fact",
+        "ok": true
+      },
+      {
+        "check": "material_features.both.generation",
+        "ok": true
+      },
+      {
+        "check": "material_features.both.original_version",
+        "ok": true
+      },
+      {
+        "check": "material_features.both.inverse_requirement",
+        "ok": true
+      },
+      {
+        "check": "material_features.both.release",
+        "ok": true
+      },
+      {
+        "check": "material_features.both.released_refused",
+        "ok": true
+      },
+      {
+        "check": "material_features.both.empty_selection",
+        "ok": true
+      },
+      {
+        "check": "material_features.both.empty_invalidates",
+        "ok": true
+      },
+      {
+        "check": "engine.actual_prepared_owner",
+        "ok": true
+      },
+      {
+        "check": "engine.INIT.actual_pipeline",
+        "ok": true
+      },
+      {
+        "check": "engine.INIT.original_shader_association",
+        "ok": true
+      },
+      {
+        "check": "engine.INIT.reflected_compute_layout",
+        "ok": true
+      },
+      {
+        "check": "engine.INIT.reflected_source_roles",
+        "ok": true
+      },
+      {
+        "check": "engine.INIT.distinct_engine_variant",
+        "ok": true
+      },
+      {
+        "check": "engine.VALIDATE.actual_pipeline",
+        "ok": true
+      },
+      {
+        "check": "engine.VALIDATE.original_shader_association",
+        "ok": true
+      },
+      {
+        "check": "engine.VALIDATE.reflected_compute_layout",
+        "ok": true
+      },
+      {
+        "check": "engine.VALIDATE.reflected_source_roles",
+        "ok": true
+      },
+      {
+        "check": "engine.VALIDATE.distinct_engine_variant",
+        "ok": true
+      },
+      {
+        "check": "engine.FINALIZE.actual_pipeline",
+        "ok": true
+      },
+      {
+        "check": "engine.FINALIZE.original_shader_association",
+        "ok": true
+      },
+      {
+        "check": "engine.FINALIZE.reflected_compute_layout",
+        "ok": true
+      },
+      {
+        "check": "engine.FINALIZE.reflected_source_roles",
+        "ok": true
+      },
+      {
+        "check": "engine.FINALIZE.distinct_engine_variant",
+        "ok": true
+      },
+      {
+        "check": "engine.INIT_EMPTY.actual_pipeline",
+        "ok": true
+      },
+      {
+        "check": "engine.INIT_EMPTY.original_shader_association",
+        "ok": true
+      },
+      {
+        "check": "engine.INIT_EMPTY.reflected_compute_layout",
+        "ok": true
+      },
+      {
+        "check": "engine.INIT_EMPTY.reflected_source_roles",
+        "ok": true
+      },
+      {
+        "check": "engine.INIT_EMPTY.distinct_engine_variant",
+        "ok": true
+      },
+      {
+        "check": "engine.FINALIZE_EMPTY.actual_pipeline",
+        "ok": true
+      },
+      {
+        "check": "engine.FINALIZE_EMPTY.original_shader_association",
+        "ok": true
+      },
+      {
+        "check": "engine.FINALIZE_EMPTY.reflected_compute_layout",
+        "ok": true
+      },
+      {
+        "check": "engine.FINALIZE_EMPTY.reflected_source_roles",
+        "ok": true
+      },
+      {
+        "check": "engine.FINALIZE_EMPTY.distinct_engine_variant",
+        "ok": true
+      },
+      {
+        "check": "first.prepare",
+        "ok": true
+      },
+      {
+        "check": "first.ready",
+        "ok": true
+      },
+      {
+        "check": "first.INIT.actual_shader",
+        "ok": true
+      },
+      {
+        "check": "first.INIT.actual_pipeline",
+        "ok": true
+      },
+      {
+        "check": "first.INIT.original_shader_association",
+        "ok": true
+      },
+      {
+        "check": "first.INIT.reflected_compute_layout",
+        "ok": true
+      },
+      {
+        "check": "first.INIT.reflected_source_roles",
+        "ok": true
+      },
+      {
+        "check": "first.VALIDATE.actual_shader",
+        "ok": true
+      },
+      {
+        "check": "first.VALIDATE.actual_pipeline",
+        "ok": true
+      },
+      {
+        "check": "first.VALIDATE.original_shader_association",
+        "ok": true
+      },
+      {
+        "check": "first.VALIDATE.reflected_compute_layout",
+        "ok": true
+      },
+      {
+        "check": "first.VALIDATE.reflected_source_roles",
+        "ok": true
+      },
+      {
+        "check": "first.FINALIZE.actual_shader",
+        "ok": true
+      },
+      {
+        "check": "first.FINALIZE.actual_pipeline",
+        "ok": true
+      },
+      {
+        "check": "first.FINALIZE.original_shader_association",
+        "ok": true
+      },
+      {
+        "check": "first.FINALIZE.reflected_compute_layout",
+        "ok": true
+      },
+      {
+        "check": "first.FINALIZE.reflected_source_roles",
+        "ok": true
+      },
+      {
+        "check": "first.INIT_EMPTY.actual_shader",
+        "ok": true
+      },
+      {
+        "check": "first.INIT_EMPTY.actual_pipeline",
+        "ok": true
+      },
+      {
+        "check": "first.INIT_EMPTY.original_shader_association",
+        "ok": true
+      },
+      {
+        "check": "first.INIT_EMPTY.reflected_compute_layout",
+        "ok": true
+      },
+      {
+        "check": "first.INIT_EMPTY.reflected_source_roles",
+        "ok": true
+      },
+      {
+        "check": "first.FINALIZE_EMPTY.actual_shader",
+        "ok": true
+      },
+      {
+        "check": "first.FINALIZE_EMPTY.actual_pipeline",
+        "ok": true
+      },
+      {
+        "check": "first.FINALIZE_EMPTY.original_shader_association",
+        "ok": true
+      },
+      {
+        "check": "first.FINALIZE_EMPTY.reflected_compute_layout",
+        "ok": true
+      },
+      {
+        "check": "first.FINALIZE_EMPTY.reflected_source_roles",
+        "ok": true
+      },
+      {
+        "check": "first.five_distinct_shaders",
+        "ok": true
+      },
+      {
+        "check": "first.five_distinct_pipelines",
+        "ok": true
+      },
+      {
+        "check": "repeat.prepare",
+        "ok": true
+      },
+      {
+        "check": "repeat.INIT.same_original_rids",
+        "ok": true
+      },
+      {
+        "check": "repeat.VALIDATE.same_original_rids",
+        "ok": true
+      },
+      {
+        "check": "repeat.FINALIZE.same_original_rids",
+        "ok": true
+      },
+      {
+        "check": "repeat.INIT_EMPTY.same_original_rids",
+        "ok": true
+      },
+      {
+        "check": "repeat.FINALIZE_EMPTY.same_original_rids",
+        "ok": true
+      },
+      {
+        "check": "first_release.owner_release",
+        "ok": true
+      },
+      {
+        "check": "first_release.not_ready",
+        "ok": true
+      },
+      {
+        "check": "first_release.INIT.getters_empty",
+        "ok": true
+      },
+      {
+        "check": "first_release.INIT.shader_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "first_release.INIT.pipeline_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "first_release.VALIDATE.getters_empty",
+        "ok": true
+      },
+      {
+        "check": "first_release.VALIDATE.shader_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "first_release.VALIDATE.pipeline_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "first_release.FINALIZE.getters_empty",
+        "ok": true
+      },
+      {
+        "check": "first_release.FINALIZE.shader_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "first_release.FINALIZE.pipeline_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "first_release.INIT_EMPTY.getters_empty",
+        "ok": true
+      },
+      {
+        "check": "first_release.INIT_EMPTY.shader_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "first_release.INIT_EMPTY.pipeline_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "first_release.FINALIZE_EMPTY.getters_empty",
+        "ok": true
+      },
+      {
+        "check": "first_release.FINALIZE_EMPTY.shader_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "first_release.FINALIZE_EMPTY.pipeline_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "reprepare.prepare",
+        "ok": true
+      },
+      {
+        "check": "reprepare.ready",
+        "ok": true
+      },
+      {
+        "check": "reprepare.INIT.actual_shader",
+        "ok": true
+      },
+      {
+        "check": "reprepare.INIT.actual_pipeline",
+        "ok": true
+      },
+      {
+        "check": "reprepare.INIT.original_shader_association",
+        "ok": true
+      },
+      {
+        "check": "reprepare.INIT.reflected_compute_layout",
+        "ok": true
+      },
+      {
+        "check": "reprepare.INIT.reflected_source_roles",
+        "ok": true
+      },
+      {
+        "check": "reprepare.VALIDATE.actual_shader",
+        "ok": true
+      },
+      {
+        "check": "reprepare.VALIDATE.actual_pipeline",
+        "ok": true
+      },
+      {
+        "check": "reprepare.VALIDATE.original_shader_association",
+        "ok": true
+      },
+      {
+        "check": "reprepare.VALIDATE.reflected_compute_layout",
+        "ok": true
+      },
+      {
+        "check": "reprepare.VALIDATE.reflected_source_roles",
+        "ok": true
+      },
+      {
+        "check": "reprepare.FINALIZE.actual_shader",
+        "ok": true
+      },
+      {
+        "check": "reprepare.FINALIZE.actual_pipeline",
+        "ok": true
+      },
+      {
+        "check": "reprepare.FINALIZE.original_shader_association",
+        "ok": true
+      },
+      {
+        "check": "reprepare.FINALIZE.reflected_compute_layout",
+        "ok": true
+      },
+      {
+        "check": "reprepare.FINALIZE.reflected_source_roles",
+        "ok": true
+      },
+      {
+        "check": "reprepare.INIT_EMPTY.actual_shader",
+        "ok": true
+      },
+      {
+        "check": "reprepare.INIT_EMPTY.actual_pipeline",
+        "ok": true
+      },
+      {
+        "check": "reprepare.INIT_EMPTY.original_shader_association",
+        "ok": true
+      },
+      {
+        "check": "reprepare.INIT_EMPTY.reflected_compute_layout",
+        "ok": true
+      },
+      {
+        "check": "reprepare.INIT_EMPTY.reflected_source_roles",
+        "ok": true
+      },
+      {
+        "check": "reprepare.FINALIZE_EMPTY.actual_shader",
+        "ok": true
+      },
+      {
+        "check": "reprepare.FINALIZE_EMPTY.actual_pipeline",
+        "ok": true
+      },
+      {
+        "check": "reprepare.FINALIZE_EMPTY.original_shader_association",
+        "ok": true
+      },
+      {
+        "check": "reprepare.FINALIZE_EMPTY.reflected_compute_layout",
+        "ok": true
+      },
+      {
+        "check": "reprepare.FINALIZE_EMPTY.reflected_source_roles",
+        "ok": true
+      },
+      {
+        "check": "reprepare.five_distinct_shaders",
+        "ok": true
+      },
+      {
+        "check": "reprepare.five_distinct_pipelines",
+        "ok": true
+      },
+      {
+        "check": "final_release.owner_release",
+        "ok": true
+      },
+      {
+        "check": "final_release.not_ready",
+        "ok": true
+      },
+      {
+        "check": "final_release.INIT.getters_empty",
+        "ok": true
+      },
+      {
+        "check": "final_release.INIT.shader_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "final_release.INIT.pipeline_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "final_release.VALIDATE.getters_empty",
+        "ok": true
+      },
+      {
+        "check": "final_release.VALIDATE.shader_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "final_release.VALIDATE.pipeline_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "final_release.FINALIZE.getters_empty",
+        "ok": true
+      },
+      {
+        "check": "final_release.FINALIZE.shader_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "final_release.FINALIZE.pipeline_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "final_release.INIT_EMPTY.getters_empty",
+        "ok": true
+      },
+      {
+        "check": "final_release.INIT_EMPTY.shader_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "final_release.INIT_EMPTY.pipeline_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "final_release.FINALIZE_EMPTY.getters_empty",
+        "ok": true
+      },
+      {
+        "check": "final_release.FINALIZE_EMPTY.shader_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "final_release.FINALIZE_EMPTY.pipeline_owner_removed",
+        "ok": true
+      },
+      {
+        "check": "engine.INIT.survives_local_release",
+        "ok": true
+      },
+      {
+        "check": "engine.VALIDATE.survives_local_release",
+        "ok": true
+      },
+      {
+        "check": "engine.FINALIZE.survives_local_release",
+        "ok": true
+      },
+      {
+        "check": "engine.INIT_EMPTY.survives_local_release",
+        "ok": true
+      },
+      {
+        "check": "engine.FINALIZE_EMPTY.survives_local_release",
+        "ok": true
+      }
+    ],
+    "complete": true,
+    "device": {
+      "api": "4.0",
+      "driver": "metal",
+      "name": "Apple M3 Pro (Apple9)",
+      "renderer": "mobile"
+    },
+    "dispatch_recorded": false,
+    "error": 0,
+    "failures": [],
+    "mode_count": 5,
+    "physical_return_claimed": false,
+    "schema": 1,
+    "source_authority_supplied": false,
+    "started": true
+  },
+  "stdout_sha256": "dba4a331f3549fc6d3544988a1b4accf3549754824c2bf9e2bba2af06a81aff5",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

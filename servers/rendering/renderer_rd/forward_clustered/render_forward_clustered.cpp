@@ -304,12 +304,73 @@ void RenderForwardClustered::update() {
 
 /// RENDERING ///
 
-template <RenderForwardClustered::PassMode p_pass_mode, uint32_t p_color_pass_flags>
-void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element, RendererRD::HeightCaptureCheckedSink *p_height_sink, LocalVector<PreparedHeightGeometry> *p_height_geometry) {
+bool RenderForwardClustered::_select_native_pass(PassMode p_pass_mode, uint32_t p_color_pass_flags, uint32_t p_view_count, RD::FramebufferFormatID p_framebuffer_format, NativePassSelection &r_selection) {
+	NativePassSelection selected;
+	selected.pass_mode = p_pass_mode;
+	selected.color_pass_flags = p_color_pass_flags;
+	selected.framebuffer_format = p_framebuffer_format;
+	switch (p_pass_mode) {
+		case PASS_MODE_COLOR: {
+			constexpr uint32_t known_flags = COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS;
+			// The original twelve combinations exclude transparent + separate specular.
+			if ((p_color_pass_flags & ~known_flags) || ((p_color_pass_flags & COLOR_PASS_FLAG_TRANSPARENT) && (p_color_pass_flags & COLOR_PASS_FLAG_SEPARATE_SPECULAR))) {
+				return false;
+			}
+			selected.version = SceneShaderForwardClustered::PIPELINE_VERSION_COLOR_PASS;
+			if (p_color_pass_flags & COLOR_PASS_FLAG_SEPARATE_SPECULAR) {
+				selected.base_color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_SEPARATE_SPECULAR;
+			}
+			if (p_color_pass_flags & COLOR_PASS_FLAG_MOTION_VECTORS) {
+				selected.base_color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_MOTION_VECTORS;
+			}
+			if (p_color_pass_flags & COLOR_PASS_FLAG_TRANSPARENT) {
+				selected.base_color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_TRANSPARENT;
+			}
+			if (p_color_pass_flags & COLOR_PASS_FLAG_MULTIVIEW) {
+				selected.base_color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_MULTIVIEW;
+			}
+		} break;
+		case PASS_MODE_SHADOW:
+		case PASS_MODE_DEPTH: {
+			selected.version = p_view_count > 1 ? SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_MULTIVIEW : SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS;
+		} break;
+		case PASS_MODE_SHADOW_DP: {
+			if (p_view_count > 1) {
+				return false;
+			}
+			selected.version = SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_DP;
+		} break;
+		case PASS_MODE_DEPTH_NORMAL_ROUGHNESS: {
+			selected.version = p_view_count > 1 ? SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS_MULTIVIEW : SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS;
+		} break;
+		case PASS_MODE_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI: {
+			selected.version = p_view_count > 1 ? SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS_AND_VOXEL_GI_MULTIVIEW : SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS_AND_VOXEL_GI;
+		} break;
+		case PASS_MODE_DEPTH_MATERIAL: {
+			if (p_view_count > 1) {
+				return false;
+			}
+			selected.version = SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_MATERIAL;
+		} break;
+		case PASS_MODE_SDF: {
+			// SDF is world space even during stereoscopic rendering.
+			if (p_view_count > 1) {
+				return false;
+			}
+			selected.version = SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_SDF;
+		} break;
+		default:
+			return false;
+	}
+	r_selection = selected;
+	return true;
+}
+
+template <RenderForwardClustered::PassMode p_pass_mode>
+void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p_draw_list, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element, RendererRD::HeightCaptureCheckedSink *p_height_sink, LocalVector<PreparedHeightGeometry> *p_height_geometry) {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	RendererRD::ParticlesStorage *particles_storage = RendererRD::ParticlesStorage::get_singleton();
 	RD::DrawListID draw_list = p_draw_list;
-	RD::FramebufferFormatID framebuffer_format = p_framebuffer_Format;
 
 	if (!p_height_sink) {
 		//global scope bindings
@@ -349,7 +410,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 		const GeometryInstanceSurfaceDataCache *surf = p_params->elements[i];
 		const RenderElementInfo &element_info = p_params->element_info[i];
 
-		if (p_pass_mode == PASS_MODE_COLOR && surf->color_pass_inclusion_mask && (p_color_pass_flags & surf->color_pass_inclusion_mask) == 0) {
+		if (!p_params->native_pass.includes_surface(surf->color_pass_inclusion_mask)) {
 			// Some surfaces can be repeated in multiple render lists. We exclude them from being rendered on the color pass based on the
 			// features supported by the pass compared to the exclusion mask.
 			continue;
@@ -445,60 +506,17 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 			pipeline_specialization.use_directional_soft_shadows = p_params->use_directional_soft_shadow;
 		}
 
-		pipeline_key.color_pass_flags = 0;
-
-		switch (p_pass_mode) {
-			case PASS_MODE_COLOR: {
-				if (element_info.uses_lightmap) {
-					pipeline_key.color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_LIGHTMAP;
-				} else {
-					pipeline_specialization.use_forward_gi = element_info.uses_forward_gi;
-				}
-
-				if constexpr ((p_color_pass_flags & COLOR_PASS_FLAG_SEPARATE_SPECULAR) != 0) {
-					pipeline_key.color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_SEPARATE_SPECULAR;
-				}
-
-				if constexpr ((p_color_pass_flags & COLOR_PASS_FLAG_MOTION_VECTORS) != 0) {
-					pipeline_key.color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_MOTION_VECTORS;
-				}
-
-				if constexpr ((p_color_pass_flags & COLOR_PASS_FLAG_TRANSPARENT) != 0) {
-					pipeline_key.color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_TRANSPARENT;
-				}
-
-				if constexpr ((p_color_pass_flags & COLOR_PASS_FLAG_MULTIVIEW) != 0) {
-					pipeline_key.color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_MULTIVIEW;
-				}
-
-				pipeline_key.version = SceneShaderForwardClustered::PIPELINE_VERSION_COLOR_PASS;
-			} break;
-			case PASS_MODE_SHADOW:
-			case PASS_MODE_DEPTH: {
-				pipeline_key.version = p_params->view_count > 1 ? SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_MULTIVIEW : SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS;
-			} break;
-			case PASS_MODE_SHADOW_DP: {
-				ERR_FAIL_COND_MSG(p_params->view_count > 1, "Multiview not supported for shadow DP pass");
-				pipeline_key.version = SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_DP;
-			} break;
-			case PASS_MODE_DEPTH_NORMAL_ROUGHNESS: {
-				pipeline_key.version = p_params->view_count > 1 ? SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS_MULTIVIEW : SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS;
-			} break;
-			case PASS_MODE_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI: {
-				pipeline_key.version = p_params->view_count > 1 ? SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS_AND_VOXEL_GI_MULTIVIEW : SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS_AND_VOXEL_GI;
-			} break;
-			case PASS_MODE_DEPTH_MATERIAL: {
-				ERR_FAIL_COND_MSG(p_params->view_count > 1, "Multiview not supported for material pass");
-				pipeline_key.version = SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_MATERIAL;
-			} break;
-			case PASS_MODE_SDF: {
-				// Note, SDF is prepared in world space, this shouldn't be a multiview buffer even when stereoscopic rendering is used.
-				ERR_FAIL_COND_MSG(p_params->view_count > 1, "Multiview not supported for SDF pass");
-				pipeline_key.version = SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_SDF;
-			} break;
+		pipeline_key.color_pass_flags = p_params->native_pass.base_color_pass_flags;
+		pipeline_key.version = p_params->native_pass.version;
+		if constexpr (p_pass_mode == PASS_MODE_COLOR) {
+			if (element_info.uses_lightmap) {
+				pipeline_key.color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_LIGHTMAP;
+			} else {
+				pipeline_specialization.use_forward_gi = element_info.uses_forward_gi;
+			}
 		}
 
-		pipeline_key.framebuffer_format_id = framebuffer_format;
+		pipeline_key.framebuffer_format_id = p_params->native_pass.framebuffer_format;
 		pipeline_key.wireframe = p_params->force_wireframe;
 		pipeline_key.ubershader = 0;
 		pipeline_key.indexed144 = mesh_storage->mesh_surface_is_external(mesh_surface);
@@ -711,55 +729,33 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 	}
 }
 
-void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
+void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_list, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
 	//use template for faster performance (pass mode comparisons are inlined)
 
-	switch (p_params->pass_mode) {
-#define VALID_FLAG_COMBINATION(f) \
-	case f: { \
-		_render_list_template<PASS_MODE_COLOR, f>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element); \
-	} break;
-
+	switch (p_params->native_pass.pass_mode) {
 		case PASS_MODE_COLOR: {
-			switch (p_params->color_pass_flags) {
-				VALID_FLAG_COMBINATION(0);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MULTIVIEW);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MOTION_VECTORS);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_SEPARATE_SPECULAR);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MULTIVIEW);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MOTION_VECTORS);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_MULTIVIEW);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_MOTION_VECTORS);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS);
-				default: {
-					ERR_FAIL_MSG("Invalid color pass flag combination " + itos(p_params->color_pass_flags));
-				}
-			}
-
+			_render_list_template<PASS_MODE_COLOR>(p_draw_list, p_params, p_from_element, p_to_element);
 		} break;
 		case PASS_MODE_SHADOW: {
-			_render_list_template<PASS_MODE_SHADOW>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			_render_list_template<PASS_MODE_SHADOW>(p_draw_list, p_params, p_from_element, p_to_element);
 		} break;
 		case PASS_MODE_SHADOW_DP: {
-			_render_list_template<PASS_MODE_SHADOW_DP>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			_render_list_template<PASS_MODE_SHADOW_DP>(p_draw_list, p_params, p_from_element, p_to_element);
 		} break;
 		case PASS_MODE_DEPTH: {
-			_render_list_template<PASS_MODE_DEPTH>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			_render_list_template<PASS_MODE_DEPTH>(p_draw_list, p_params, p_from_element, p_to_element);
 		} break;
 		case PASS_MODE_DEPTH_NORMAL_ROUGHNESS: {
-			_render_list_template<PASS_MODE_DEPTH_NORMAL_ROUGHNESS>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			_render_list_template<PASS_MODE_DEPTH_NORMAL_ROUGHNESS>(p_draw_list, p_params, p_from_element, p_to_element);
 		} break;
 		case PASS_MODE_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI: {
-			_render_list_template<PASS_MODE_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			_render_list_template<PASS_MODE_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI>(p_draw_list, p_params, p_from_element, p_to_element);
 		} break;
 		case PASS_MODE_DEPTH_MATERIAL: {
-			_render_list_template<PASS_MODE_DEPTH_MATERIAL>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			_render_list_template<PASS_MODE_DEPTH_MATERIAL>(p_draw_list, p_params, p_from_element, p_to_element);
 		} break;
 		case PASS_MODE_SDF: {
-			_render_list_template<PASS_MODE_SDF>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			_render_list_template<PASS_MODE_SDF>(p_draw_list, p_params, p_from_element, p_to_element);
 		} break;
 		default: {
 			// Unknown pass mode.
@@ -769,10 +765,10 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
 
 void RenderForwardClustered::_render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags, const Vector<Color> &p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region) {
 	RD::FramebufferFormatID fb_format = RD::get_singleton()->framebuffer_get_format(p_framebuffer);
-	p_params->framebuffer_format = fb_format;
+	ERR_FAIL_COND_MSG(!_select_native_pass(p_params->pass_mode, p_params->color_pass_flags, p_params->view_count, fb_format, p_params->native_pass), "Invalid native pass selection");
 
 	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_framebuffer, p_draw_flags, p_clear_color_values, p_clear_depth_value, p_clear_stencil_value, p_region);
-	_render_list(draw_list, fb_format, p_params, 0, p_params->element_count);
+	_render_list(draw_list, p_params, 0, p_params->element_count);
 	RD::get_singleton()->draw_list_end();
 }
 
@@ -782,12 +778,14 @@ Error RenderForwardClustered::_render_height_list_checked(RenderListParameters *
 		return r_sink.reject(ERR_INVALID_DATA);
 	}
 	const RD::FramebufferFormatID format = rd->framebuffer_get_format(p_framebuffer);
-	p_params->framebuffer_format = format;
+	if (!_select_native_pass(p_params->pass_mode, p_params->color_pass_flags, p_params->view_count, format, p_params->native_pass)) {
+		return r_sink.reject(ERR_INVALID_PARAMETER);
+	}
 	LocalVector<PreparedHeightGeometry> prepared;
 	prepared.reserve(p_params->element_count);
 	// This is the existing resolver template in preparation mode, not a second
 	// resolver or a pipeline cache. No list is open during resource lookup.
-	_render_list_template<PASS_MODE_SHADOW>(RD::INVALID_ID, format, p_params, 0, p_params->element_count, &r_sink, &prepared);
+	_render_list_template<PASS_MODE_SHADOW>(RD::INVALID_ID, p_params, 0, p_params->element_count, &r_sink, &prepared);
 	if (r_sink.get_error() != OK) {
 		return r_sink.get_error();
 	}
@@ -3234,8 +3232,10 @@ void RenderForwardClustered::_render_material(const Transform3D &p_cam_transform
 			Color(0, 0, 0, 0)
 		};
 
+		const RD::FramebufferFormatID fb_format = RD::get_singleton()->framebuffer_get_format(p_framebuffer);
+		ERR_FAIL_COND_MSG(!_select_native_pass(render_list_params.pass_mode, render_list_params.color_pass_flags, render_list_params.view_count, fb_format, render_list_params.native_pass), "Invalid native pass selection");
 		RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_framebuffer, RD::DRAW_CLEAR_ALL, clear, 0.0f, 0, p_region);
-		_render_list(draw_list, RD::get_singleton()->framebuffer_get_format(p_framebuffer), &render_list_params, 0, render_list_params.element_count);
+		_render_list(draw_list, &render_list_params, 0, render_list_params.element_count);
 		RD::get_singleton()->draw_list_end();
 	}
 
@@ -3289,6 +3289,8 @@ void RenderForwardClustered::_render_uv2(const PagedArray<RenderGeometryInstance
 			Color(0, 0, 0, 0),
 			Color(0, 0, 0, 0)
 		};
+		const RD::FramebufferFormatID fb_format = RD::get_singleton()->framebuffer_get_format(p_framebuffer);
+		ERR_FAIL_COND_MSG(!_select_native_pass(render_list_params.pass_mode, render_list_params.color_pass_flags, render_list_params.view_count, fb_format, render_list_params.native_pass), "Invalid native pass selection");
 		RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_framebuffer, RD::DRAW_CLEAR_ALL, clear, 0.0f, 0, p_region);
 
 		const int uv_offset_count = 9;
@@ -3310,11 +3312,11 @@ void RenderForwardClustered::_render_uv2(const PagedArray<RenderGeometryInstance
 			ofs.x /= p_region.size.width;
 			ofs.y /= p_region.size.height;
 			render_list_params.uv_offset = ofs;
-			_render_list(draw_list, RD::get_singleton()->framebuffer_get_format(p_framebuffer), &render_list_params, 0, render_list_params.element_count); //first wireframe, for pseudo conservative
+			_render_list(draw_list, &render_list_params, 0, render_list_params.element_count); //first wireframe, for pseudo conservative
 		}
 		render_list_params.uv_offset = Vector2();
 		render_list_params.force_wireframe = false;
-		_render_list(draw_list, RD::get_singleton()->framebuffer_get_format(p_framebuffer), &render_list_params, 0, render_list_params.element_count); //second regular triangles
+		_render_list(draw_list, &render_list_params, 0, render_list_params.element_count); //second regular triangles
 
 		RD::get_singleton()->draw_list_end();
 	}
@@ -5643,7 +5645,13 @@ Error RenderForwardClustered::external_pipeline_prepare(const RendererRD::Extern
 	auto *shader = material->shader_data;
 	const bool instance192 = p_surface.profile == ExternalOutputConfig::INSTANCE_192;
 	const bool indexed144 = p_surface.profile == ExternalOutputConfig::INDEXED_144;
-	if ((!instance192 && !indexed144) || indexed144 != p_surface.geometry_source->is_external() || !shader || !shader->is_valid() ||
+	// Instance192 derives from its original generation's flattened source.
+	// Indexed144 keeps the original slot-owned source/backing association.
+	if (instance192 && (!r_preparation.source_geometry || p_surface.geometry_source != r_preparation.source_geometry || p_surface.material_selection != r_preparation.source_material || p_surface.material_generation != r_preparation.source_material_generation || !r_preparation.source_geometry->metadata_matches(p_surface.primitive, p_surface.surface_format, p_surface.surface_aabb, p_surface.surface_uv_scale))) {
+		return fail(ERR_INVALID_DATA);
+	}
+	const auto *geometry_source = instance192 ? r_preparation.source_geometry : p_surface.geometry_source;
+	if ((!instance192 && !indexed144) || indexed144 != p_surface.geometry_source->is_external() || !shader ||
 			(instance192 && !shader->instance192_shader_supported()) || shader->uses_point_size || shader->uses_particle_trails) {
 		return fail(ERR_UNAVAILABLE);
 	}
@@ -5691,8 +5699,8 @@ Error RenderForwardClustered::external_pipeline_prepare(const RendererRD::Extern
 	key.wireframe = request.wireframe;
 	key.instance192 = instance192;
 	key.indexed144 = indexed144;
-	// Compile the exact specialized pipeline synchronously. No hash-only cache
-	// hit, no fallback can silently change the frozen variant or vertex layout.
+	// Select the exact specialized pipeline; readiness must be established
+	// before deriving geometry or creating the owned pipeline.
 	key.ubershader = false;
 	key.shader_specialization.packed_0 = request.specialization[0];
 	key.shader_specialization.packed_1 = request.specialization[1];
@@ -5715,12 +5723,13 @@ Error RenderForwardClustered::external_pipeline_prepare(const RendererRD::Extern
 	key.color_pass_flags = request.color_flags;
 	const auto cull = request.pass == ExternalPacketPass::SHADOW && request.double_sided_shadow ? SceneShaderForwardClustered::ShaderData::CULL_VARIANT_DOUBLE_SIDED : (request.reverse_cull ? SceneShaderForwardClustered::ShaderData::CULL_VARIANT_REVERSED : SceneShaderForwardClustered::ShaderData::CULL_VARIANT_NORMAL);
 	key.cull_mode = shader->get_cull_mode_from_cull_variant(cull);
-	RID native_shader = shader->get_shader_variant(key.version, key.color_pass_flags, false, indexed144, instance192);
-	if (native_shader.is_null()) {
-		return fail(ERR_CANT_CREATE);
+	RID native_shader;
+	uint64_t input_mask = 0;
+	Error error = shader->get_native_shader_if_ready(key.version, key.color_pass_flags, false, indexed144, instance192, native_shader, input_mask);
+	if (error != OK) {
+		return fail(error);
 	}
-	const uint64_t input_mask = shader->get_vertex_input_mask(key.version, key.color_pass_flags, false, indexed144, instance192);
-	Error error = MeshStorage::mesh_surface_hold_derive(*p_surface.geometry_source, input_mask, false, false, 0, r_preparation.geometry[0]);
+	error = MeshStorage::mesh_surface_hold_derive(*geometry_source, input_mask, false, false, 0, r_preparation.geometry[0]);
 	if (error != OK) {
 		return fail(error);
 	}
@@ -5742,4 +5751,8 @@ Error RenderForwardClustered::external_pipeline_prepare(const RendererRD::Extern
 	r_preparation.ubershader = false;
 	r_preparation.cull_mode = key.cull_mode;
 	return fail(OK);
+}
+
+Error RenderForwardClustered::external_pipeline_prepare_for_view(const RendererRD::ExternalSurfaceSelection &surface, const RendererRD::ExternalPacketViewLease &view, const RendererRD::ExternalPacketPipelineRequest &selection, const RendererRD::ExternalPipelinePreparation *&out) {
+	return RendererRD::ParticlesStorage::get_singleton()->particles_external_prepare_pipeline(surface, view, selection, +[](void *renderer, const RendererRD::ExternalSurfaceSelection &source, RendererRD::ExternalPipelinePreparation &row) { return static_cast<RenderForwardClustered *>(renderer)->external_pipeline_prepare(source, row); }, this, out);
 }

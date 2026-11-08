@@ -79,6 +79,7 @@ class ParticlesStorage::HeightFrame : public RefCounted {
 	// frame only releases this custody reference; it never requests disposal.
 	Ref<HeightFrameResources> resources;
 	HeightCaptureCheckedSink prefix;
+	Ref<NativeHeightRange> native_range;
 	State state = State::Allocated;
 	Error capture_error = OK;
 

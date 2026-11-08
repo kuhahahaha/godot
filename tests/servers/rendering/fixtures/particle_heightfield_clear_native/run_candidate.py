@@ -77,6 +77,8 @@ def main():
                 or sample.get("checked_clears") != [True, True]
                 or not sample.get("candidate_pass")
                 or not sample.get("candidate_snapshot_frozen")
+                or not sample.get("candidate_native_range_retained")
+                or not sample.get("candidate_preflight_rejected")
                 or not sample.get("candidate_failed_without_business_prefix")
                 or not sample.get("candidate_postbind_restored")
                 or not sample.get("candidate_capture_once")

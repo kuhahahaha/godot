@@ -27,11 +27,15 @@ public:
 		CURRENT_RECORDS,
 		PREVIOUS_RECORDS,
 		OUTPUT_META,
-		SOURCE_BACKING,
+		SOURCE_COUNT,
 		GUARD_SCRATCH,
 		GUARD_STATUS,
 		PROTECTED_COMMANDS,
 		GEOMETRY_PROOF,
+		SOURCE_COUNT_VALIDITY,
+		SOURCE_ATTRIBUTES_VALIDITY,
+		SOURCE_DENSE_IDS_VALIDITY,
+		SOURCE_INSTANCE_GATE,
 		BINDING_COUNT,
 	};
 	struct PushConstant {
@@ -53,7 +57,8 @@ public:
 		float cull_max[4] = {};
 		float current_host_inverse_rows[3][4] = {};
 		float previous_host_inverse_rows[3][4] = {};
-		uint32_t source_accessor[4] = {}; // count word, validity word, rule, space
+		uint32_t source_accessor[4] = {}; // count word, reserved zero, reserved zero, space
+		uint32_t source_gate_words[4] = {}; // CountValidity, AttributesValidity, DenseIdsValidity, InstanceGate; fault==0
 		uint32_t options[4] = {}; // history permitted, reserved zero
 	};
 	struct SurfaceProof {
@@ -116,10 +121,15 @@ public:
 	static Error plan_layout(const PushConstant &p_request, const Bindings &p_bindings, const GeometryProofHeader &p_proof, uint32_t p_max_groups_x, LayoutPlan &r_plan);
 };
 
+static_assert(ParticlesExternalGuard::SOURCE_COUNT == 3);
+static_assert(ParticlesExternalGuard::GUARD_SCRATCH == 4 && ParticlesExternalGuard::GEOMETRY_PROOF == 7);
+static_assert(ParticlesExternalGuard::SOURCE_COUNT_VALIDITY == 8 && ParticlesExternalGuard::SOURCE_INSTANCE_GATE == 11);
+static_assert(ParticlesExternalGuard::BINDING_COUNT == 12);
 static_assert(sizeof(ParticlesExternalGuard::PushConstant) == 32);
-static_assert(sizeof(ParticlesExternalGuard::GeometryProofHeader) == 224);
+static_assert(sizeof(ParticlesExternalGuard::GeometryProofHeader) == 240);
 static_assert(offsetof(ParticlesExternalGuard::GeometryProofHeader, source_accessor) == 192);
-static_assert(offsetof(ParticlesExternalGuard::GeometryProofHeader, options) == 208);
+static_assert(offsetof(ParticlesExternalGuard::GeometryProofHeader, source_gate_words) == 208);
+static_assert(offsetof(ParticlesExternalGuard::GeometryProofHeader, options) == 224);
 static_assert(sizeof(ParticlesExternalGuard::SurfaceProof) == 144);
 static_assert(offsetof(ParticlesExternalGuard::SurfaceProof, command) == 128);
 

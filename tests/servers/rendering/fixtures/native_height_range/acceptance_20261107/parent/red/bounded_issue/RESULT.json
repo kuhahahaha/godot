@@ -1,0 +1,20 @@
+{
+  "name": "bounded_issue",
+  "final_sha256": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc",
+  "negative_sha256": "e7f69a0888dcfd818b12a4d75528a4b030a54e8471c3a1e4d28979dabe39e509",
+  "mutation_from": "const Error height_issue = _native_height_issue_slot(frame, f.qualification_epoch, slot, command, error, report);",
+  "mutation_to": "const Error height_issue = OK; // Controlled negative: omitted bounded enrollment.",
+  "function_position": [],
+  "build_exit": 0,
+  "build_seconds": 18.09,
+  "host_sha256": "14663966797f16ea185f07680110a65c80653135ed782c06712a332364343643",
+  "test_command": [
+    "bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--test-case=*NativeHeightRange*ordinary and bounded actual issue*",
+    "--reporters=xml",
+    "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/bounded_issue/CPU.xml"
+  ],
+  "test_exit": 1
+}

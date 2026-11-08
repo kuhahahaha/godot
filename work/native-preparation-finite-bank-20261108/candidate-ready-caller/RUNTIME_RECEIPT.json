@@ -1,0 +1,47 @@
+{
+  "base": "c6366c051f",
+  "scope": "Backend exact ready lookup before shader is_valid/derive; not full prospective G",
+  "build_command": "scons -Q tests=yes platform=macos target=editor debug_symbols=no module_particles_runtime_tests_enabled=yes -j2",
+  "build_exit": 0,
+  "gpu": {
+    "mobile": {
+      "exit": 0,
+      "checks": 202,
+      "result": "native-mobile-base/result.json"
+    },
+    "forward_plus": {
+      "exit": 0,
+      "checks": 202,
+      "result": "native-forward-base/result.json"
+    }
+  },
+  "host_sha256": "f39da0bf6d8d10035098e8a28ecc2306430413115574c7c95b01c342b5b7b775",
+  "limits": [
+    "create_native_pipeline repeats effectful shader getter",
+    "no prospective VA/material/fixed-point G admission",
+    "no public U05/view/presentation/no-follow-up-draw"
+  ],
+  "candidate_patch_sha256": "3a3d86ebeb96657d8340ce984459af1df98ff102d4de17ab5f4d50f9ec47f826",
+  "factory_requery_fixed": {
+    "files": [
+      "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp",
+      "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp"
+    ],
+    "build_exit": 0,
+    "fixture": {
+      "mobile": {
+        "exit": 0,
+        "checks": 202,
+        "result": "factory-native-mobile/result.json"
+      },
+      "forward_plus": {
+        "exit": 0,
+        "checks": 202,
+        "result": "factory-native-forward_plus/result.json"
+      }
+    },
+    "limits": [
+      "Future VA/material fixed-point G still open"
+    ]
+  }
+}

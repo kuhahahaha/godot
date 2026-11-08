@@ -1,0 +1,6 @@
+{
+  "green_sha256": "609e8efd57199d324eb1def93d7054079c7de5aee8e8a72bf0cbcaeec94146b2",
+  "from": "native_features_need_inverse = uses_inverse_model_matrix || uses_alpha_hash;",
+  "to": "native_features_need_inverse = uses_inverse_model_matrix;",
+  "scope": "Only Mobile excludes alpha hash from actual backend material inverse demand"
+}

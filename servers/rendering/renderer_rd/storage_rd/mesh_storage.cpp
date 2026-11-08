@@ -237,6 +237,27 @@ bool MeshStorage::free(RID p_rid) {
 
 /* MESH API */
 
+void MeshStorage::_mesh_revision_advance(Mesh *p_mesh) {
+	// Never wrap a new state onto an old revision. Exhausted owners remain
+	// usable by ordinary renderer APIs, but cannot issue new selections.
+	if (p_mesh->revision) {
+		p_mesh->revision = p_mesh->revision == UINT64_MAX ? 0 : p_mesh->revision + 1;
+	}
+}
+
+void MeshStorage::_mesh_invalidate_shadow_owners(Mesh *p_mesh) {
+	for (Mesh *owner : p_mesh->shadow_owners) {
+		// Preserve original notifications for every reverse entry, including
+		// already cleared ones. Only actual source changes advance revision.
+		if (owner->shadow_mesh.is_valid()) {
+			DEV_ASSERT(!owner->selection_holds);
+			owner->shadow_mesh = RID();
+			_mesh_revision_advance(owner);
+		}
+		owner->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
+	}
+}
+
 Error MeshStorage::mesh_selection_acquire(RID p_rid, NativeSelectionLease &r_lease) {
 	auto *rd = RD::get_singleton();
 	if (!rd || !rd->native_immutable_is_render_thread()) {
@@ -249,7 +270,7 @@ Error MeshStorage::mesh_selection_acquire(RID p_rid, NativeSelectionLease &r_lea
 	if (!mesh || !mesh->surface_count) {
 		return ERR_INVALID_PARAMETER;
 	}
-	if (mesh->selection_holds == UINT32_MAX) {
+	if (!mesh->revision || mesh->selection_holds == UINT32_MAX) {
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
 	if (mesh->blend_shape_count || !mesh->instances.is_empty() || mesh->shadow_mesh.is_valid()) {
@@ -265,6 +286,7 @@ Error MeshStorage::mesh_selection_acquire(RID p_rid, NativeSelectionLease &r_lea
 	r_lease.owner = this;
 	r_lease.device = rd;
 	r_lease.rid = p_rid;
+	r_lease.generation = mesh->revision;
 	return OK;
 }
 
@@ -273,13 +295,14 @@ Error MeshStorage::mesh_selection_release(NativeSelectionLease &r_lease) {
 		return ERR_UNAUTHORIZED;
 	}
 	auto *mesh = mesh_owner.get_or_null(r_lease.rid);
-	if (!mesh || !mesh->selection_holds) {
+	if (!mesh || !mesh->selection_holds || !r_lease.generation || mesh->revision != r_lease.generation) {
 		return ERR_INVALID_DATA;
 	}
 	--mesh->selection_holds;
 	r_lease.owner = nullptr;
 	r_lease.device = nullptr;
 	r_lease.rid = RID();
+	r_lease.generation = 0;
 	return OK;
 }
 
@@ -304,13 +327,7 @@ void MeshStorage::mesh_free(RID p_rid) {
 	if (mesh->instances.size()) {
 		ERR_PRINT("deleting mesh with active instances");
 	}
-	if (mesh->shadow_owners.size()) {
-		for (Mesh *E : mesh->shadow_owners) {
-			Mesh *shadow_owner = E;
-			shadow_owner->shadow_mesh = RID();
-			shadow_owner->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
-		}
-	}
+	_mesh_invalidate_shadow_owners(mesh);
 	mesh_owner.free(p_rid);
 }
 
@@ -324,6 +341,7 @@ void MeshStorage::mesh_set_blend_shape_count(RID p_mesh, int p_blend_shape_count
 	ERR_FAIL_COND(mesh->surface_count > 0); //surfaces already exist
 
 	mesh->blend_shape_count = p_blend_shape_count;
+	_mesh_revision_advance(mesh);
 }
 
 /// Returns stride
@@ -437,6 +455,8 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 	}
 #endif
 
+	ERR_FAIL_COND_MSG(!new_surface.index_count && !new_surface.vertex_count, "Meshes must contain a vertex array, an index array, or both");
+
 	Mesh::Surface *s = memnew(Mesh::Surface);
 
 	s->format = new_surface.format;
@@ -490,10 +510,6 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 
 	s->vertex_count = new_surface.vertex_count;
 
-	if (new_surface.format & RSE::ARRAY_FORMAT_BONES) {
-		mesh->has_bone_weights = true;
-	}
-
 	if (new_surface.index_count) {
 		bool is_index_16 = new_surface.vertex_count <= 65536 && new_surface.vertex_count > 0;
 
@@ -515,8 +531,6 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 			}
 		}
 	}
-
-	ERR_FAIL_COND_MSG(!new_surface.index_count && !new_surface.vertex_count, "Meshes must contain a vertex array, an index array, or both");
 
 	s->aabb = new_surface.aabb;
 	s->bone_aabbs = new_surface.bone_aabbs; //only really useful for returning them.
@@ -579,7 +593,11 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 
 	mesh->surfaces = (Mesh::Surface **)memrealloc(mesh->surfaces, sizeof(Mesh::Surface *) * (mesh->surface_count + 1));
 	mesh->surfaces[mesh->surface_count] = s;
+	if (new_surface.format & RSE::ARRAY_FORMAT_BONES) {
+		mesh->has_bone_weights = true;
+	}
 	mesh->surface_count++;
+	_mesh_revision_advance(mesh);
 
 	for (MeshInstance *mi : mesh->instances) {
 		_mesh_instance_add_surface(mi, mesh, mesh->surface_count - 1);
@@ -588,11 +606,7 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 	_multimesh_mesh_changed(mesh);
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
 
-	for (Mesh *E : mesh->shadow_owners) {
-		Mesh *shadow_owner = E;
-		shadow_owner->shadow_mesh = RID();
-		shadow_owner->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
-	}
+	_mesh_invalidate_shadow_owners(mesh);
 
 	mesh->material_cache.clear();
 }
@@ -650,13 +664,11 @@ Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDe
 	mesh->skeleton_aabb_version = 0;
 	mesh->surfaces[mesh->surface_count] = surface;
 	r_surface_index = mesh->surface_count++;
+	_mesh_revision_advance(mesh);
 	r_generation = surface->external_generation;
 	_multimesh_mesh_changed(mesh);
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
-	for (Mesh *shadow_owner : mesh->shadow_owners) {
-		shadow_owner->shadow_mesh = RID();
-		shadow_owner->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
-	}
+	_mesh_invalidate_shadow_owners(mesh);
 	mesh->material_cache.clear();
 	return OK;
 }
@@ -701,10 +713,12 @@ void MeshStorage::_mesh_surface_get_external_arrays(Mesh::Surface *s, uint64_t p
 	s->version_lock.unlock();
 }
 
-RD::VertexFormatID MeshStorage::_mesh_surface_generate_external_vertex_format(uint64_t p_input_mask, bool p_input_motion_vectors) {
+Error MeshStorage::_mesh_surface_external_vertex_attributes(uint64_t p_input_mask, bool p_input_motion_vectors, Vector<RD::VertexAttribute> &attributes) {
 	const uint64_t supported_inputs = ((1ull << 10) - 1) | (p_input_motion_vectors ? (7ull << 12) : 0);
-	ERR_FAIL_COND_V(p_input_mask & ~supported_inputs, 0);
-	Vector<RD::VertexAttribute> attributes;
+	if (p_input_mask & ~supported_inputs) {
+		return ERR_UNAVAILABLE;
+	}
+	attributes.clear();
 	auto add = [&attributes](uint32_t p_location, uint32_t p_binding, uint32_t p_offset, RD::DataFormat p_format) {
 		RD::VertexAttribute a;
 		a.binding = p_binding;
@@ -729,7 +743,21 @@ RD::VertexFormatID MeshStorage::_mesh_surface_generate_external_vertex_format(ui
 		add(13, 1, 16, RD::DATA_FORMAT_R32G32B32A32_SFLOAT);
 		add(14, 1, 32, RD::DATA_FORMAT_R32G32B32A32_SFLOAT);
 	}
+	return OK;
+}
+
+RD::VertexFormatID MeshStorage::_mesh_surface_generate_external_vertex_format(uint64_t p_input_mask, bool p_input_motion_vectors) {
+	Vector<RD::VertexAttribute> attributes;
+	ERR_FAIL_COND_V(_mesh_surface_external_vertex_attributes(p_input_mask, p_input_motion_vectors, attributes) != OK, 0);
 	return RD::get_singleton()->vertex_format_create(attributes);
+}
+
+void MeshStorage::_mesh_surface_external_vertex_bindings(Mesh::Surface *s, bool p_input_motion_vectors, Vector<RID> &r_buffers) {
+	r_buffers.clear();
+	r_buffers.push_back(s->vertex_buffer);
+	if (p_input_motion_vectors) {
+		r_buffers.push_back(s->previous_vertex_buffer);
+	}
 }
 
 void MeshStorage::_mesh_surface_generate_external_version(Mesh::Surface::Version &v, Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated) {
@@ -739,16 +767,61 @@ void MeshStorage::_mesh_surface_generate_external_version(Mesh::Surface::Version
 		return;
 	}
 	Vector<RID> buffers;
-	buffers.push_back(s->vertex_buffer);
-	if (p_input_motion_vectors) {
-		buffers.push_back(s->previous_vertex_buffer);
-	}
+	_mesh_surface_external_vertex_bindings(s, p_input_motion_vectors, buffers);
 	v.vertex_array = RD::get_singleton()->vertex_array_create(s->vertex_count, v.vertex_format, buffers);
 	v.input_mask = p_input_mask;
 	v.input_motion_vectors = p_input_motion_vectors;
 	v.point_size_emulated = p_point_size_emulated;
 	v.current_allocation_generation = s->current_allocation_generation;
 	v.previous_allocation_generation = s->previous_allocation_generation;
+}
+
+Error MeshStorage::mesh_surface_source_hold_acquire(RID mesh_rid, uint32_t index, NativeSurfaceHold &out) {
+	auto *device = RD::get_singleton();
+	if (!device || !device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (device->draw_list.active || device->compute_list.active || device->raytracing_list.active || device->draw_graph.has_driver_callbacks() || device->production_finalization_started.load(std::memory_order_acquire)) {
+		return ERR_BUSY;
+	}
+	auto *mesh = mesh_owner.get_or_null(mesh_rid);
+	if (!mesh || index >= mesh->surface_count) {
+		return ERR_DOES_NOT_EXIST;
+	}
+	auto *surface = mesh->surfaces[index];
+	if (out.device || surface->immutable_retired || surface->immutable_holds == UINT32_MAX) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (surface->external || mesh->blend_shape_count || !mesh->instances.is_empty() || surface->skin_buffer.is_valid()) {
+		return ERR_UNAVAILABLE;
+	}
+	if (!surface->vertex_count || surface->vertex_buffer.is_null() || (surface->index_count && surface->index_buffer.is_null())) {
+		return ERR_INVALID_DATA;
+	}
+	// Source retention must not create a shader input-mask Version. Later exact
+	// native preparation derives that Version from this same retained Surface.
+	RID roots[3];
+	uint32_t root_count = 0;
+	for (RID root : { surface->vertex_buffer, surface->attribute_buffer, surface->index_buffer }) {
+		if (root.is_valid()) {
+			roots[root_count++] = root;
+		}
+	}
+	const Error error = device->native_immutable_hold_acquire(VectorView<RID>(roots, root_count), out.physical, root_count);
+	if (error != OK) {
+		return error;
+	}
+	++surface->immutable_holds;
+	out.surface = surface;
+	out.device = device;
+	out.vertex_count = surface->vertex_count;
+	out.index_count = surface->index_count;
+	out.surface_format = surface->format;
+	out.surface_aabb = surface->aabb;
+	out.surface_uv_scale = surface->uv_scale;
+	out.primitive = surface->primitive;
+	out.material = surface->material;
+	return OK;
 }
 
 Error MeshStorage::mesh_surface_hold_acquire(RID mesh_rid, uint32_t index, uint64_t mask, bool motion, bool point_size, uint32_t lod, NativeSurfaceHold &out) {
@@ -776,6 +849,90 @@ Error MeshStorage::mesh_surface_hold_acquire(RID mesh_rid, uint32_t index, uint6
 		return ERR_CANT_CREATE;
 	}
 	return _mesh_surface_hold_acquire(mesh->surfaces[index], mask, motion, point_size, lod, out);
+}
+
+Error MeshStorage::mesh_surface_hold_plan_vertex_array(const NativeSurfaceHold &source, uint64_t mask, bool motion, bool point_size, uint32_t lod, NativeVertexArrayPlan &out) {
+	out = NativeVertexArrayPlan();
+	RenderingDevice *device = source.device;
+	if (!device || device != RD::get_singleton() || !device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!source.surface || !source.is_valid() || source.physical_transferred || source.metadata_returned || source.metadata_return_active || !source.surface->immutable_holds || source.surface->immutable_holds == UINT32_MAX) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (motion || point_size || lod || source.surface->skin_buffer.is_valid()) {
+		return ERR_UNAVAILABLE;
+	}
+	if (device->draw_list.active || device->compute_list.active || device->raytracing_list.active || device->draw_graph.has_driver_callbacks() || device->production_finalization_started.load(std::memory_order_acquire)) {
+		return ERR_BUSY;
+	}
+	MeshStorage *storage = get_singleton();
+	if (!storage) {
+		return ERR_UNAVAILABLE;
+	}
+	Mesh::Surface *s = source.surface;
+	// Same order as Version factories: Surface first; never acquire it under RD.
+	s->version_lock.lock();
+	struct VersionUnlock {
+		SpinLock &spin;
+		~VersionUnlock() { spin.unlock(); }
+	} unlock{ s->version_lock };
+	NativeVertexArrayPlan plan;
+	bool matched_version = false;
+	for (uint32_t i = 0; i < s->version_count; ++i) {
+		const Mesh::Surface::Version &version = s->versions[i];
+		if (version.input_mask != mask || version.input_motion_vectors || version.point_size_emulated) {
+			continue;
+		}
+		if (s->external && (version.current_allocation_generation != s->current_allocation_generation || version.previous_allocation_generation != s->previous_allocation_generation)) {
+			continue;
+		}
+		matched_version = true;
+		plan.existing_vertex_array = version.vertex_array;
+		plan.existing_vertex_format = version.vertex_format;
+		break;
+	}
+	// A failed published Version is cached by the actual factory lookup; it
+	// cannot be represented as a future VA that derive would create.
+	if (matched_version && (plan.existing_vertex_array.is_null() || !plan.existing_vertex_format)) {
+		return ERR_CANT_CREATE;
+	}
+	if (!matched_version) {
+		if (s->output_directory_holds) {
+			return ERR_UNAVAILABLE;
+		}
+		if (s->version_count == UINT32_MAX || uint64_t(s->version_count + 1) > SIZE_MAX / sizeof(Mesh::Surface::Version)) {
+			return ERR_OUT_OF_MEMORY;
+		}
+	}
+	plan.vertex_count = s->vertex_count;
+	if (s->external) {
+		const Error error = _mesh_surface_external_vertex_attributes(mask, false, plan.attributes);
+		if (error != OK) {
+			return error;
+		}
+		_mesh_surface_external_vertex_bindings(s, false, plan.buffers);
+	} else {
+		uint32_t position_stride = 0;
+		plan.attributes = _mesh_surface_vertex_attributes(s->format, mask, false, false, false, position_stride);
+		storage->_mesh_surface_vertex_bindings(s, mask, false, position_stride, plan.buffers, plan.offsets);
+	}
+	// Minimal native fixtures bypass eager default creation. Never invent roots.
+	for (const RID &buffer : plan.buffers) {
+		if (buffer.is_null()) {
+			return ERR_INVALID_DATA;
+		}
+	}
+	// Keep raw attribute bindings for the factory's original cache key. Only
+	// direct VB eligibility is checked here; existing VA/IA and full G remain
+	// separate gates. Surface-before-RD matches the actual factory lock order.
+	RD::NativeVertexArrayPreflight scratch;
+	const Error preflight = device->_native_vertex_array_preflight(plan.vertex_count, plan.attributes, plan.buffers, plan.offsets, scratch);
+	if (preflight != OK) {
+		return preflight;
+	}
+	out = std::move(plan);
+	return OK;
 }
 
 Error MeshStorage::mesh_surface_hold_derive(const NativeSurfaceHold &source, uint64_t mask, bool motion, bool point_size, uint32_t lod, NativeSurfaceHold &out) {
@@ -961,6 +1118,128 @@ RD::NativeImmutableHold *MeshStorage::_native_hold_transfer_source(NativeSurface
 		return nullptr;
 	}
 	return &hold.physical;
+}
+
+Error MeshStorage::_native_hold_prepare_tuple_directory(NativeSurfaceHold &hold, uint32_t limit) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (hold.physical_transferred || hold.tuple_directory_prepared) {
+		return OK;
+	}
+	if (!hold.surface || hold.metadata_returned || hold.metadata_return_active || !hold.retirement_group.is_empty()) {
+		return ERR_INVALID_DATA;
+	}
+	if (!hold.surface->immutable_retired) {
+		return OK; // MeshStorage still owns the complete live directory.
+	}
+	// VA factories use version_lock -> RD. No Registry or RD lock here.
+	const Error frozen = _native_hold_freeze_directory(hold);
+	if (frozen != OK) {
+		return frozen;
+	}
+	auto rollback = [&](Error error) {
+		hold.tuple_directory_roots.clear();
+		const Error thawed = _native_hold_thaw_directory(hold);
+		return thawed == OK ? error : thawed;
+	};
+	uint32_t count = 0;
+	Error error = _native_hold_retirement_root_count(hold, count);
+	if (error != OK) {
+		return rollback(error);
+	}
+	for (uint32_t i = 0; i < count; ++i) {
+		RID root;
+		error = _native_hold_retirement_root_at(hold, i, root);
+		if (error != OK) {
+			return rollback(error);
+		}
+		if (root.is_valid() && !hold.tuple_directory_roots.has(root)) {
+			if (uint32_t(hold.tuple_directory_roots.size()) == limit) {
+				return rollback(ERR_OUT_OF_MEMORY);
+			}
+			if (hold.tuple_directory_roots.push_back(root)) {
+				return rollback(ERR_OUT_OF_MEMORY);
+			}
+		}
+	}
+	// RD atomically acquires the complete closure, verifies it contains every
+	// original selected physical share, then replaces that hold. On refusal the
+	// original hold is untouched and the temporary hold is fully rolled back.
+	error = hold.device->_native_immutable_hold_expand_directory(hold.tuple_directory_roots, hold.physical, limit);
+	if (error != OK) {
+		return rollback(error);
+	}
+	hold.retirement_root_count = count;
+	hold.retirement_mark_cursor = 0;
+	hold.tuple_directory_prepared = true;
+	return OK;
+}
+
+RD::NativeImmutableHold *MeshStorage::_native_hold_tuple_transfer_source(NativeSurfaceHold &hold) {
+	if (hold.tuple_directory_prepared && hold.directory_frozen && hold.retirement_group.is_empty() &&
+			hold.surface && hold.surface->immutable_retired && !hold.physical_transferred && !hold.metadata_returned && hold.physical.is_valid()) {
+		return &hold.physical;
+	}
+	return _native_hold_transfer_live_source(hold);
+}
+
+Error MeshStorage::_native_hold_capture_tuple_directory(GDExtensionDeviceExit::ProductionOutputPin &pin, uint64_t group, NativeSurfaceHold &hold) {
+	if (!hold.tuple_directory_prepared) {
+		return OK;
+	}
+	if (!hold.device || !hold.directory_frozen || hold.physical.is_active() || hold.metadata_returned || !hold.surface || !hold.surface->immutable_retired) {
+		return ERR_INVALID_DATA;
+	}
+	if (!hold.retirement_group.is_empty()) {
+		return OK;
+	}
+	// Stamp only after the actual whole-directory hold was moved into this
+	// original prepaid group; RD verifies every original directory root.
+	return hold.device->_production_output_directory_bind_adopted_locked(pin, group, hold.tuple_directory_roots, hold.retirement_group);
+}
+
+Error MeshStorage::_native_hold_prepare_tuple_directory_return(GDExtensionDeviceExit::ProductionOutputPin &pin, NativeSurfaceHold &hold, const GDExtensionProductionServiceBudgetV1 &budget, GDExtensionDeviceExit::ProductionServiceUsage &usage) {
+	if (!hold.tuple_directory_prepared || hold.tuple_directory_return_ready) {
+		return OK;
+	}
+	if (!hold.device || !hold.device->native_immutable_is_render_thread() || !hold.physical_transferred || hold.retirement_group.is_empty()) {
+		return ERR_INVALID_DATA;
+	}
+	if (hold.surface && hold.surface->immutable_holds > 1) {
+		// Every wrapper sharing the batch must return its metadata share before
+		// the shared native group starts release. Reuse the original OBSERVE
+		// proof/budget check; the complete directory remains frozen until now.
+		const Error admitted = hold.device->_production_output_directory_mark_root(pin, hold.retirement_group, RID(), false, budget, usage);
+		if (admitted != OK) {
+			return admitted;
+		}
+		auto *surface = hold.surface;
+		surface->version_lock.lock();
+		CRASH_COND(!surface->output_directory_holds || surface->immutable_holds <= 1);
+		--surface->output_directory_holds;
+		--surface->immutable_holds;
+		hold.directory_frozen = false;
+		hold.surface = nullptr;
+		hold.metadata_returned = true;
+		surface->version_lock.unlock();
+	}
+	if (hold.surface) {
+		bool done = false;
+		const Error marked = _native_hold_mark_next_retirement_root(pin, hold, budget, usage, done);
+		if (marked != OK || !done) {
+			return marked == OK ? ERR_BUSY : marked;
+		}
+	}
+	hold.tuple_directory_return_ready = true;
+	return OK;
+}
+
+RD::NativeImmutableHold *MeshStorage::_native_hold_transfer_live_source(NativeSurfaceHold &hold) {
+	if (!hold.surface || hold.surface->immutable_retired || hold.metadata_returned || hold.directory_frozen || !hold.retirement_group.is_empty()) {
+		return nullptr;
+	}
+	return _native_hold_transfer_source(hold);
 }
 
 Error MeshStorage::_native_hold_mark_transferred(NativeSurfaceHold &hold) {
@@ -1219,6 +1498,8 @@ Error MeshStorage::_native_hold_finish_return(NativeSurfaceHold &hold) {
 	hold.physical_transferred = hold.metadata_returned = false;
 	hold.retirement_directory_returned = false;
 	hold.live_snapshot_transferred = hold.live_snapshot_external = false;
+	hold.tuple_directory_prepared = hold.tuple_directory_return_ready = false;
+	hold.tuple_directory_roots.clear();
 	return OK;
 }
 
@@ -1321,6 +1602,7 @@ void MeshStorage::mesh_set_blend_shape_mode(RID p_mesh, RSE::BlendShapeMode p_mo
 	ERR_FAIL_INDEX((int)p_mode, 2);
 
 	mesh->blend_shape_mode = p_mode;
+	_mesh_revision_advance(mesh);
 }
 
 RSE::BlendShapeMode MeshStorage::mesh_get_blend_shape_mode(RID p_mesh) const {
@@ -1340,6 +1622,7 @@ void MeshStorage::mesh_surface_update_vertex_region(RID p_mesh, int p_surface, i
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->vertex_buffer.is_null());
 	// Until E25 COW source mirroring is installed, a region write invalidates
 	// new static captures rather than exposing stale bytes as current.
+	_mesh_revision_advance(mesh);
 	mesh->surfaces[p_surface]->static_capture_supported = false;
 	mesh->surfaces[p_surface]->static_capture_invalidated = true;
 
@@ -1360,6 +1643,7 @@ void MeshStorage::mesh_surface_update_attribute_region(RID p_mesh, int p_surface
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->attribute_buffer.is_null());
 	// Until E25 COW source mirroring is installed, a region write invalidates
 	// new static captures rather than exposing stale bytes as current.
+	_mesh_revision_advance(mesh);
 	mesh->surfaces[p_surface]->static_capture_supported = false;
 	mesh->surfaces[p_surface]->static_capture_invalidated = true;
 
@@ -1378,8 +1662,9 @@ void MeshStorage::mesh_surface_update_skin_region(RID p_mesh, int p_surface, int
 	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->immutable_holds, "Immutable native surface holds must return before an in-place mutation.");
 	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->external, "Indexed144 external buffers must be updated through their original owner.");
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->skin_buffer.is_null());
-	// Skin writes do not advance a static geometry revision. They revoke new
-	// static captures while preserving existing renderer skin behavior.
+	// Skin writes revoke static capture classification. The mesh owner state
+	// revision advances even if a later RD update reports a partial failure.
+	_mesh_revision_advance(mesh);
 	mesh->surfaces[p_surface]->static_capture_supported = false;
 	mesh->surfaces[p_surface]->static_capture_invalidated = true;
 
@@ -1400,6 +1685,7 @@ void RendererRD::MeshStorage::mesh_surface_update_index_region(RID p_mesh, int p
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->index_buffer.is_null());
 	// Until E25 COW source mirroring is installed, a region write invalidates
 	// new static captures rather than exposing stale bytes as current.
+	_mesh_revision_advance(mesh);
 	mesh->surfaces[p_surface]->static_capture_supported = false;
 	mesh->surfaces[p_surface]->static_capture_invalidated = true;
 
@@ -1416,6 +1702,7 @@ void MeshStorage::mesh_surface_set_material(RID p_mesh, int p_surface, RID p_mat
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
 	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->immutable_holds, "Immutable native surface holds must return before an in-place mutation.");
 	mesh->surfaces[p_surface]->material = p_material;
+	_mesh_revision_advance(mesh);
 
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MATERIAL);
 	mesh->material_cache.clear();
@@ -1488,6 +1775,7 @@ void MeshStorage::mesh_set_custom_aabb(RID p_mesh, const AABB &p_aabb) {
 	ERR_FAIL_NULL(mesh);
 	ERR_FAIL_COND_MSG(mesh->selection_holds, "Mesh selection must return before mutation.");
 	mesh->custom_aabb = p_aabb;
+	_mesh_revision_advance(mesh);
 
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_AABB);
 }
@@ -1612,10 +1900,16 @@ AABB MeshStorage::mesh_get_aabb(RID p_mesh, RID p_skeleton) {
 		}
 	}
 
-	mesh->aabb = aabb;
-
-	mesh->skeleton_aabb_version = skeleton->version;
-	mesh->skeleton_aabb_rid = p_skeleton;
+	// Bounds queries can refresh the skeleton cache, but must not mutate an
+	// original selected mesh. Return the computed value without caching then.
+	if (!mesh->selection_holds) {
+		if (mesh->aabb != aabb) {
+			_mesh_revision_advance(mesh);
+		}
+		mesh->aabb = aabb;
+		mesh->skeleton_aabb_version = skeleton->version;
+		mesh->skeleton_aabb_rid = p_skeleton;
+	}
 	return aabb;
 }
 
@@ -1623,7 +1917,9 @@ void MeshStorage::mesh_set_path(RID p_mesh, const String &p_path) {
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
 
+	ERR_FAIL_COND_MSG(mesh->selection_holds, "Mesh selection must return before mutation.");
 	mesh->path = p_path;
+	_mesh_revision_advance(mesh);
 }
 
 String MeshStorage::mesh_get_path(RID p_mesh) const {
@@ -1644,6 +1940,7 @@ void MeshStorage::mesh_set_shadow_mesh(RID p_mesh, RID p_shadow_mesh) {
 		shadow_mesh->shadow_owners.erase(mesh);
 	}
 	mesh->shadow_mesh = p_shadow_mesh;
+	_mesh_revision_advance(mesh);
 
 	shadow_mesh = mesh_owner.get_or_null(mesh->shadow_mesh);
 
@@ -1673,17 +1970,14 @@ void MeshStorage::mesh_clear(RID p_mesh) {
 
 	mesh->surfaces = nullptr;
 	mesh->surface_count = 0;
+	_mesh_revision_advance(mesh);
 	mesh->material_cache.clear();
 	mesh->has_bone_weights = false;
 	mesh->aabb = AABB();
 	_multimesh_mesh_changed(mesh);
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
 
-	for (Mesh *E : mesh->shadow_owners) {
-		Mesh *shadow_owner = E;
-		shadow_owner->shadow_mesh = RID();
-		shadow_owner->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
-	}
+	_mesh_invalidate_shadow_owners(mesh);
 }
 
 void MeshStorage::mesh_surface_remove(RID p_mesh, int p_surface) {
@@ -1704,6 +1998,7 @@ void MeshStorage::mesh_surface_remove(RID p_mesh, int p_surface) {
 	}
 	mesh->surfaces = (Mesh::Surface **)memrealloc(mesh->surfaces, sizeof(Mesh::Surface *) * (mesh->surface_count - 1));
 	--mesh->surface_count;
+	_mesh_revision_advance(mesh);
 
 	mesh->material_cache.clear();
 
@@ -1731,11 +2026,7 @@ void MeshStorage::mesh_surface_remove(RID p_mesh, int p_surface) {
 	_multimesh_mesh_changed(mesh);
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
 
-	for (Mesh *E : mesh->shadow_owners) {
-		Mesh *shadow_owner = E;
-		shadow_owner->shadow_mesh = RID();
-		shadow_owner->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
-	}
+	_mesh_invalidate_shadow_owners(mesh);
 }
 
 void MeshStorage::mesh_debug_usage(List<RenderingServerTypes::MeshInfo> *r_info) {
@@ -1801,6 +2092,7 @@ RID MeshStorage::mesh_instance_create(RID p_base) {
 	}
 
 	mi->I = mesh->instances.push_back(mi);
+	_mesh_revision_advance(mesh);
 
 	mi->dirty = true;
 
@@ -1811,6 +2103,7 @@ void MeshStorage::mesh_instance_free(RID p_rid) {
 	MeshInstance *mi = mesh_instance_owner.get_or_null(p_rid);
 	_mesh_instance_clear(mi);
 	mi->mesh->instances.erase(mi->I);
+	_mesh_revision_advance(mi->mesh);
 	mi->I = nullptr;
 
 	mesh_instance_owner.free(p_rid);
@@ -2070,7 +2363,7 @@ void MeshStorage::update_mesh_instances() {
 	RD::get_singleton()->compute_list_end();
 }
 
-RD::VertexFormatID MeshStorage::_mesh_surface_generate_vertex_format(uint64_t p_surface_format, uint64_t p_input_mask, bool p_instanced_surface, bool p_input_motion_vectors, bool p_point_size_emulated, uint32_t &r_position_stride) {
+Vector<RD::VertexAttribute> MeshStorage::_mesh_surface_vertex_attributes(uint64_t p_surface_format, uint64_t p_input_mask, bool p_instanced_surface, bool p_input_motion_vectors, bool p_point_size_emulated, uint32_t &r_position_stride) {
 	Vector<RD::VertexAttribute> attributes;
 	uint32_t normal_tangent_stride = 0;
 	uint32_t attribute_stride = 0;
@@ -2259,15 +2552,16 @@ RD::VertexFormatID MeshStorage::_mesh_surface_generate_vertex_format(uint64_t p_
 		}
 	}
 
-	return RD::get_singleton()->vertex_format_create(attributes);
+	return attributes;
 }
 
-void MeshStorage::_mesh_surface_generate_version_for_input_mask(Mesh::Surface::Version &v, Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, MeshInstance::Surface *mis, uint32_t p_current_buffer, uint32_t p_previous_buffer) {
-	uint32_t position_stride = 0;
-	v.vertex_format = _mesh_surface_generate_vertex_format(s->format, p_input_mask, mis != nullptr, p_input_motion_vectors, p_point_size_emulated, position_stride);
+RD::VertexFormatID MeshStorage::_mesh_surface_generate_vertex_format(uint64_t p_surface_format, uint64_t p_input_mask, bool p_instanced_surface, bool p_input_motion_vectors, bool p_point_size_emulated, uint32_t &r_position_stride) {
+	return RD::get_singleton()->vertex_format_create(_mesh_surface_vertex_attributes(p_surface_format, p_input_mask, p_instanced_surface, p_input_motion_vectors, p_point_size_emulated, r_position_stride));
+}
 
-	Vector<RID> buffers;
-	Vector<uint64_t> offsets;
+void MeshStorage::_mesh_surface_vertex_bindings(Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, uint32_t p_position_stride, Vector<RID> &r_buffers, Vector<uint64_t> &r_offsets, MeshInstance::Surface *mis, uint32_t p_current_buffer, uint32_t p_previous_buffer) {
+	r_buffers.clear();
+	r_offsets.clear();
 	RID buffer;
 	uint64_t offset = 0;
 	for (int i = 0; i < RSE::ARRAY_INDEX; i++) {
@@ -2281,7 +2575,7 @@ void MeshStorage::_mesh_surface_generate_version_for_input_mask(Mesh::Surface::V
 			switch (i) {
 				case RSE::ARRAY_VERTEX:
 				case RSE::ARRAY_NORMAL:
-					offset = i == RSE::ARRAY_NORMAL ? position_stride * s->vertex_count : 0;
+					offset = i == RSE::ARRAY_NORMAL ? p_position_stride * s->vertex_count : 0;
 					buffer = mis != nullptr ? mis->vertex_buffer[p_current_buffer] : s->vertex_buffer;
 					break;
 				case RSE::ARRAY_TANGENT:
@@ -2307,22 +2601,31 @@ void MeshStorage::_mesh_surface_generate_version_for_input_mask(Mesh::Surface::V
 			continue; // Shader does not need this, skip it (but computing stride was important anyway)
 		}
 
-		buffers.push_back(buffer);
-		offsets.push_back(offset);
+		r_buffers.push_back(buffer);
+		r_offsets.push_back(offset);
 
 		if (p_input_motion_vectors) {
 			// Push the buffer for motion vector inputs.
 			if (i == RSE::ARRAY_VERTEX || i == RSE::ARRAY_NORMAL || i == RSE::ARRAY_TANGENT) {
 				if (mis && buffer != mesh_default_rd_buffers[i]) {
-					buffers.push_back(mis->vertex_buffer[p_previous_buffer]);
+					r_buffers.push_back(mis->vertex_buffer[p_previous_buffer]);
 				} else {
-					buffers.push_back(buffer);
+					r_buffers.push_back(buffer);
 				}
 
-				offsets.push_back(offset);
+				r_offsets.push_back(offset);
 			}
 		}
 	}
+}
+
+void MeshStorage::_mesh_surface_generate_version_for_input_mask(Mesh::Surface::Version &v, Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, MeshInstance::Surface *mis, uint32_t p_current_buffer, uint32_t p_previous_buffer) {
+	uint32_t position_stride = 0;
+	v.vertex_format = _mesh_surface_generate_vertex_format(s->format, p_input_mask, mis != nullptr, p_input_motion_vectors, p_point_size_emulated, position_stride);
+
+	Vector<RID> buffers;
+	Vector<uint64_t> offsets;
+	_mesh_surface_vertex_bindings(s, p_input_mask, p_input_motion_vectors, position_stride, buffers, offsets, mis, p_current_buffer, p_previous_buffer);
 
 	v.input_mask = p_input_mask;
 	v.current_buffer = p_current_buffer;

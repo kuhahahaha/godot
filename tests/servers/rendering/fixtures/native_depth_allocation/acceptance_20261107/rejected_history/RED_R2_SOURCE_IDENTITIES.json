@@ -1,0 +1,12 @@
+[
+  {
+    "path": "servers/rendering/rendering_device.cpp",
+    "final_sha256": "80a4827f1abc43102d5832e4d74d4477ddeb4f42167eb0c4b1032bf17c118790",
+    "negative_sha256": "d499eaae17b1d0e0f024d2b6b2bf2dd1176708d8c1efdb8fee7c6681690ac406"
+  },
+  {
+    "path": "tests/servers/rendering/test_qualification_ticket.cpp",
+    "final_sha256": "6adae05908947cebe50b68f93339ca70fa4afae69422284c0c33d210608539b8",
+    "negative_sha256": "3f58706d17a5648c56c72e8be55a7b92c013f748f74ed74985fd6a711f568aaa"
+  }
+]

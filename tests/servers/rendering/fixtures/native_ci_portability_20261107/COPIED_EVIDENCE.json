@@ -1,0 +1,180 @@
+[
+  {
+    "source": "work/ci-native-drain-portability-20261107/INTERFACE_RED_COMMAND.json",
+    "destination": "syntax/INTERFACE_RED_COMMAND.json",
+    "bytes": 1766,
+    "sha256": "9194291fb2fa7f603b49b3f971c7b1ba0bf9479c8737e77264919b86600300e9"
+  },
+  {
+    "source": "work/ci-native-drain-portability-20261107/INTERFACE_RED_OUTPUT.txt",
+    "destination": "syntax/INTERFACE_RED_OUTPUT.log.txt",
+    "bytes": 645,
+    "sha256": "fae92fc0d6ed725a4620f4c0d8e988ea242a2064c119d28d3267d6326993e9d4"
+  },
+  {
+    "source": "work/ci-native-drain-portability-20261107/INTERFACE_GREEN_COMMAND.json",
+    "destination": "syntax/INTERFACE_GREEN_COMMAND.json",
+    "bytes": 1766,
+    "sha256": "c495c95b4830b9761273efef34d02dcb204379c1d1bbe68a06f18e2fbc63dd18"
+  },
+  {
+    "source": "work/ci-native-drain-portability-20261107/INTERFACE_GREEN_OUTPUT.txt",
+    "destination": "syntax/INTERFACE_GREEN_OUTPUT.log.txt",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "source": "work/ci-native-drain-portability-20261107/DIAGNOSTIC_POSIX_GREEN_COMMAND.json",
+    "destination": "syntax/DIAGNOSTIC_POSIX_GREEN_COMMAND.json",
+    "bytes": 1780,
+    "sha256": "5d50ed5e6e01a7250a1852a4d335f69e04e32fd8a197ab4da389606eac566f22"
+  },
+  {
+    "source": "work/ci-native-drain-portability-20261107/DIAGNOSTIC_POSIX_GREEN_OUTPUT.txt",
+    "destination": "syntax/DIAGNOSTIC_POSIX_GREEN_OUTPUT.log.txt",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "source": "work/ci-native-drain-portability-20261107/DIAGNOSTIC_WINDOWS_BRANCH_GREEN_COMMAND.json",
+    "destination": "syntax/DIAGNOSTIC_WINDOWS_BRANCH_GREEN_COMMAND.json",
+    "bytes": 540,
+    "sha256": "8fe79b6c0b219cce914654d6f7a2d1a88af3d6c70f3051eb458908295791ab29"
+  },
+  {
+    "source": "work/ci-native-drain-portability-20261107/DIAGNOSTIC_WINDOWS_BRANCH_GREEN_OUTPUT.txt",
+    "destination": "syntax/DIAGNOSTIC_WINDOWS_BRANCH_GREEN_OUTPUT.log.txt",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "source": "work/ci-frame-wait-fixture-20261107/SYNTAX_COMMAND.json",
+    "destination": "syntax/FRAME_WAIT_GREEN_COMMAND.json.gz",
+    "bytes": 735,
+    "sha256": "9e65bbf61a830e2784e4ecf29a8d7d1854c17ea2b5a102b13d3cf17f2ab1da26",
+    "uncompressed_bytes": 1785,
+    "uncompressed_sha256": "c118f4b7dfe816cb0e44c58601569cf138c63385846bb5777ec5daeeca5d6541",
+    "compression": "gzip; level9; mtime0",
+    "logical_destination": "syntax/FRAME_WAIT_GREEN_COMMAND.json"
+  },
+  {
+    "source": "work/ci-frame-wait-fixture-20261107/SYNTAX_OUTPUT.txt",
+    "destination": "syntax/FRAME_WAIT_GREEN_OUTPUT.log.txt",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "source": "work/ci-native-drain-portability-20261107/WINDOWS_SYNTAX_PREFIX.h",
+    "destination": "syntax/WINDOWS_SYNTAX_PREFIX.h.gz",
+    "bytes": 93,
+    "sha256": "e453f6bb382e86311fc9dd67aa7a116507e5f922f38dd285b929932538edcb44",
+    "logical_destination": "syntax/WINDOWS_SYNTAX_PREFIX.h",
+    "uncompressed_bytes": 131,
+    "uncompressed_sha256": "7585f242d950e20e280482a8dbf47fa946f59db6def60c293be19c8c5b665976",
+    "compression": "gzip; level9; mtime0"
+  },
+  {
+    "source": "work/ci-native-drain-portability-20261107/windows-syntax-stubs/core/os/os.h",
+    "destination": "syntax/windows-syntax-stubs/core/os/os.h.gz",
+    "bytes": 122,
+    "sha256": "7047a1044b12f7b2dd1afb66f572b5ec80b3f45901d7e068f3d6a46fbf3487e3",
+    "logical_destination": "syntax/windows-syntax-stubs/core/os/os.h",
+    "uncompressed_bytes": 115,
+    "uncompressed_sha256": "4703c14294d04c009f95997b32283eeacbf0f3fcae3ccc0d05430dae7093a9ce",
+    "compression": "gzip; level9; mtime0"
+  },
+  {
+    "source": "work/ci-native-drain-portability-20261107/windows-syntax-stubs/core/os/thread.h",
+    "destination": "syntax/windows-syntax-stubs/core/os/thread.h.gz",
+    "bytes": 107,
+    "sha256": "d35afbeb36735d2b43ed3eb3bc682fd2fdeadc234198e20e92750edafbfaf538",
+    "logical_destination": "syntax/windows-syntax-stubs/core/os/thread.h",
+    "uncompressed_bytes": 91,
+    "uncompressed_sha256": "8935b0daa8dba99fd47a10954eff3be10c2d541890705952f55b90a4733972fc",
+    "compression": "gzip; level9; mtime0"
+  },
+  {
+    "source": "work/ci-native-drain-portability-20261107/REVIEW.md",
+    "destination": "reviews/CI_AUTHOR_REVIEW.md",
+    "bytes": 3264,
+    "sha256": "1039abbaf5e6410bf4a71edd478c64752bba57adad6b694df4e0a89d8c51f24d"
+  },
+  {
+    "source": "work/ci-frame-wait-fixture-20261107/REVIEW.md",
+    "destination": "reviews/FRAME_WAIT_AUTHOR_REVIEW.md",
+    "bytes": 2222,
+    "sha256": "bdd7d4fde47f0fc63867efade36801e90395de88ce9a5a51b58d7dda1e631f39"
+  },
+  {
+    "source": "work/sprite-camera-native-propagation-independent-review-20261107/REVIEW.md",
+    "destination": "reviews/CAMERA_AND_FRAME_WAIT_INDEPENDENT_REVIEW.md.gz",
+    "bytes": 1962,
+    "sha256": "1955655ecb08a2ac8c74353379fd9bcb100b3614da5765735f10479767121154",
+    "logical_destination": "reviews/CAMERA_AND_FRAME_WAIT_INDEPENDENT_REVIEW.md",
+    "uncompressed_bytes": 3878,
+    "uncompressed_sha256": "0dee56d2f7d566a920d7436ae52afefa8f184d7a7a326e7d4599079ed9d1ef82",
+    "compression": "gzip; level9; mtime0"
+  },
+  {
+    "source": "work/sprite-camera-native-propagation-20261107/FINAL_FULL_CPU_RESULT.json",
+    "destination": "final/FINAL_FULL_CPU_RESULT.json",
+    "bytes": 646,
+    "sha256": "667e8c684d0d6a12feb45617af24ed471156500b019e488f50c45c693a9500a8"
+  },
+  {
+    "source": "work/sprite-camera-native-propagation-20261107/FINAL_FULL_CPU.log",
+    "destination": "final/FINAL_FULL_CPU.log.txt.gz",
+    "bytes": 1399,
+    "sha256": "26c0c46878711c874b5d8315b831633b01adb55ba76a3960f1c6f106e11ff634",
+    "uncompressed_bytes": 5224,
+    "uncompressed_sha256": "d303d6cc54126e580915dab77ddcb962b3362e0467a4496a72edecfa348bfd3c",
+    "compression": "gzip; level9; mtime0",
+    "logical_destination": "final/FINAL_FULL_CPU.log.txt"
+  },
+  {
+    "source": "work/sprite-camera-native-propagation-20261107/FINAL_CONFIGURED_FULL_CPU_RESULT.json",
+    "destination": "final/FINAL_CONFIGURED_FULL_CPU_RESULT.json",
+    "bytes": 789,
+    "sha256": "658a69a4c0abb23d100f55b53c28feb0646a32a10fc6c731da28f1dd341dfc91"
+  },
+  {
+    "source": "work/sprite-camera-native-propagation-20261107/FINAL_CONFIGURED_FULL_CPU.log",
+    "destination": "final/FINAL_CONFIGURED_FULL_CPU.log.txt.gz",
+    "bytes": 1322,
+    "sha256": "27a1a6cf74d62ad92fb121958947451a92d0f4f45cb85059c035221d88e70c5c",
+    "uncompressed_bytes": 5083,
+    "uncompressed_sha256": "c292dacb88a868a049b7aacfce42b91e7922b3fc359aaec7387ebbe0c2dc9423",
+    "compression": "gzip; level9; mtime0",
+    "logical_destination": "final/FINAL_CONFIGURED_FULL_CPU.log.txt"
+  },
+  {
+    "source": "work/sprite-camera-native-propagation-20261107/FINAL_FOCUSED_RESULT.json",
+    "destination": "final/FINAL_FOCUSED_RESULT.json",
+    "bytes": 767,
+    "sha256": "e3e09daed4cf1e413ccf138897f827b2f5bcb8fd0bc029a430f13250d1e04282"
+  },
+  {
+    "source": "work/sprite-camera-native-propagation-20261107/FINAL_FOCUSED.log",
+    "destination": "final/FINAL_FOCUSED.log.txt",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "source": "work/sprite-camera-native-propagation-20261107/RESTORED_FINAL_BUILD_RESULT.json",
+    "destination": "final/RESTORED_FINAL_BUILD_RESULT.json",
+    "bytes": 228,
+    "sha256": "eb9480bcc200c9525fbfc0d16b1a04d0792c7407b7797f52ef0e189bcf0e1b1e"
+  },
+  {
+    "source": "work/sprite-camera-native-propagation-20261107/RESTORED_FINAL_HOST.json",
+    "destination": "final/RESTORED_FINAL_HOST.json",
+    "bytes": 247,
+    "sha256": "2e07f01efaa544ba3ba781ed808dcfe72ea73b51237e35ff1517405df781ba48"
+  },
+  {
+    "source": "work/sprite-camera-native-propagation-20261107/RESTORED_FINAL_BUILD.log",
+    "destination": "final/RESTORED_FINAL_BUILD.log.txt",
+    "bytes": 1926,
+    "sha256": "b42c67d2e9b74a9f993c1c4a1f70f59045f64571a6d6b88d6b5e289620de064f"
+  }
+]

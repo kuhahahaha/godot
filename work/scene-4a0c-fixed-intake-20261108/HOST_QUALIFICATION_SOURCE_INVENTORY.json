@@ -1,0 +1,816 @@
+{
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/full-system-source-join/ANGE/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "47f80ce99008aa4353630128af101187600f29544e68cd4bb63966c59ef59352",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 39,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 117,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/full-system-program-source/ANGE/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "47f80ce99008aa4353630128af101187600f29544e68cd4bb63966c59ef59352",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 39,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 117,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/full-system-input-binding/ANGE/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "47f80ce99008aa4353630128af101187600f29544e68cd4bb63966c59ef59352",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 39,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 117,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/authored-rate-source/before/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "124f2fb448525da1347345a23903643ef0e7e17254ac85d54a9f950d792932d0",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 207,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 300,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 312,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 324,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/authored-rate-source/candidate/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "124f2fb448525da1347345a23903643ef0e7e17254ac85d54a9f950d792932d0",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 207,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 300,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 312,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 324,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/b-c-full-native-combination/combined/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "b42abf73a5756771e912e9b2f72bd3d2a2319163ecca8a9fd9a6451bca662f07",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 134,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 227,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 239,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/e06-v2-current-source-combination/inputs/original-arm/after/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "139731ca6ade546da47d2be7b63e821e78a93e0ba9ab8e1d3b14257bff2bf406",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 134,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 227,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 239,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 251,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/e06-v2-current-source-combination/inputs/original-arm/before/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "b42abf73a5756771e912e9b2f72bd3d2a2319163ecca8a9fd9a6451bca662f07",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 134,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 227,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 239,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/e06-v2-current-source-combination/e06-after/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "139731ca6ade546da47d2be7b63e821e78a93e0ba9ab8e1d3b14257bff2bf406",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 134,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 227,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 239,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 251,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/e06-v2-current-source-combination/combined/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "139731ca6ade546da47d2be7b63e821e78a93e0ba9ab8e1d3b14257bff2bf406",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 134,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 227,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 239,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 251,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/e06-v2-current-source-combination/after/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "139731ca6ade546da47d2be7b63e821e78a93e0ba9ab8e1d3b14257bff2bf406",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 134,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 227,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 239,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 251,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/e06-v2-current-source-combination/before/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "b42abf73a5756771e912e9b2f72bd3d2a2319163ecca8a9fd9a6451bca662f07",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 134,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 227,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 239,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/e06-v2-current-source-combination/e06-before/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "b42abf73a5756771e912e9b2f72bd3d2a2319163ecca8a9fd9a6451bca662f07",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 134,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 227,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 239,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/authored-birth-source/before/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "b2babc91129ae32cfbff96d8a749521a352ec3fb53c4bfca1e22c89323d0f22b",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 188,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 281,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 293,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 305,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/authored-birth-source/frozen-initial/candidate/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "124f2fb448525da1347345a23903643ef0e7e17254ac85d54a9f950d792932d0",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 207,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 300,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 312,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 324,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/authored-birth-source/candidate/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "124f2fb448525da1347345a23903643ef0e7e17254ac85d54a9f950d792932d0",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 207,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 300,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 312,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 324,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/full-host-foundation-union/after/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "b6e6bb449c8d8538a1bbeb9d2cfa5ecc0f084a81b5fb555ad18943cd5ceed729",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 128,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 221,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/full-host-foundation-union/before/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "47f80ce99008aa4353630128af101187600f29544e68cd4bb63966c59ef59352",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 39,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 117,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/full-system-deferred-source-qualification/candidate/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "139731ca6ade546da47d2be7b63e821e78a93e0ba9ab8e1d3b14257bff2bf406",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 134,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 227,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 239,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 251,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/ANGE/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "b6e6bb449c8d8538a1bbeb9d2cfa5ecc0f084a81b5fb555ad18943cd5ceed729",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 128,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 221,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/full-cpu-gpu-preparation-successor/snapshot/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "b42abf73a5756771e912e9b2f72bd3d2a2319163ecca8a9fd9a6451bca662f07",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 134,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 227,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 239,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/host-module-proof-arm/validation/patch-replay/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "b2babc91129ae32cfbff96d8a749521a352ec3fb53c4bfca1e22c89323d0f22b",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 188,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 281,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 293,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 305,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/host-module-proof-arm/before/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "c97631bcc391ba3be89d1791c2a427b17cdede69eccdd498d7a57f02e34ce7e6",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 185,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 278,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 290,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 302,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/host-module-proof-arm/candidate/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "b2babc91129ae32cfbff96d8a749521a352ec3fb53c4bfca1e22c89323d0f22b",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 188,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 281,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 293,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 305,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/authored-module-state-source/before/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "124f2fb448525da1347345a23903643ef0e7e17254ac85d54a9f950d792932d0",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 207,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 300,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 312,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 324,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/phase2-authored-update-gap/authored-module-state-source/candidate/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "124f2fb448525da1347345a23903643ef0e7e17254ac85d54a9f950d792932d0",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 207,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 300,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 312,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 324,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/structured-spawn-initialization-20261106/fixed-source/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "124f2fb448525da1347345a23903643ef0e7e17254ac85d54a9f950d792932d0",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 207,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 300,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 312,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 324,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/active-gpu-publication/ANGE/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "47f80ce99008aa4353630128af101187600f29544e68cd4bb63966c59ef59352",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 39,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 117,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/review/full-host-lifecycle-topology/snapshot/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "c97631bcc391ba3be89d1791c2a427b17cdede69eccdd498d7a57f02e34ce7e6",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 185,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 278,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 290,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 302,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/review/full-nonzero-topology-source/sources/ANGE/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "c97631bcc391ba3be89d1791c2a427b17cdede69eccdd498d7a57f02e34ce7e6",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 185,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 278,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 290,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 302,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/review/full-nonzero-topology-source/sources/WORKTREE/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "b2babc91129ae32cfbff96d8a749521a352ec3fb53c4bfca1e22c89323d0f22b",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 188,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 281,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 293,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 305,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  },
+  "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/sprite-instance192-shader-consumption-20261107/source/src/godot/particle/host_qualification_service.cpp": {
+    "sha256": "124f2fb448525da1347345a23903643ef0e7e17254ac85d54a9f950d792932d0",
+    "methods": [
+      {
+        "method": "require_request_issuer",
+        "line": 207,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 300,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 312,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      },
+      {
+        "method": "request_qualification",
+        "line": 324,
+        "unavailable_literal": false,
+        "delegates_loader": true
+      }
+    ]
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--test-case=*SceneDepthR2*,*QualificationRt*,*ChildMetadata*,*NativeDisposal*,*NativeHeightRange*,*FrameWait*",
+    "--reporters=xml",
+    "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-depth-production-facet-20261107/r2/implementation/validation-restored/focused.xml"
+  ],
+  "exit": 0,
+  "seconds": 1.38,
+  "host_sha256": "1d8e55cb5df534f8dd17109da55fb37770e9534438b775fb2c47e378c3b6a2e4",
+  "assertions": {
+    "successes": "14485",
+    "failures": "0"
+  },
+  "cases": {
+    "successes": "75",
+    "failures": "0",
+    "skipped": "2219"
+  }
+}

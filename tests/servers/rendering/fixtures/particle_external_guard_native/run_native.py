@@ -13,7 +13,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 MODES = ("INIT", "VALIDATE", "FINALIZE", "INIT_EMPTY", "FINALIZE_EMPTY")
-PASS = "PARTICLE_EXTERNAL_GUARD_NATIVE_PASS"
+PASS = "PARTICLE_EXTERNAL_GUARD_NATIVE_PASS five_modes=1 checks=270 idempotent=1 owner_released=1 reprepare=1 physical_return_claimed=0"
 MISSING = "PARTICLE_EXTERNAL_GUARD_NATIVE_MISSING tests-only fixture class not registered"
 
 
@@ -31,14 +31,49 @@ def expected_checks() -> set[str]:
         labels.update({f"engine.{mode}.{suffix}" for suffix in ("actual_pipeline", "original_shader_association", "reflected_compute_layout")})
         labels.update(f"engine.{mode}.distinct_engine_variant_{prior}" for prior in range(index))
     for phase in ("first", "reprepare"):
-        labels.update(f"{phase}.{suffix}" for suffix in ("prepare", "ready", "five_distinct_shaders", "five_distinct_pipelines"))
-        labels.update(f"{phase}.{mode}.{suffix}" for mode in MODES for suffix in ("actual_shader", "actual_pipeline", "original_shader_association", "reflected_compute_layout"))
-    labels.add("repeat.prepare")
+        labels.update(f"{phase}.{suffix}" for suffix in ("ready", "five_distinct_shaders", "five_distinct_pipelines"))
+        labels.update(
+            f"{phase}.{mode}.{suffix}"
+            for mode in MODES
+            for suffix in (
+                "actual_shader",
+                "actual_pipeline",
+                "original_shader_association",
+                "reflected_compute_layout",
+                "reflected_source_roles",
+            )
+        )
     labels.update(f"repeat.{mode}.same_original_rids" for mode in MODES)
     for phase in ("first_release", "final_release"):
         labels.update(f"{phase}.{suffix}" for suffix in ("owner_release", "not_ready"))
-        labels.update(f"{phase}.{mode}.{suffix}" for mode in MODES for suffix in ("getters_empty", "shader_owner_removed", "pipeline_owner_removed"))
-    labels.update(f"engine.{mode}.survives_local_release" for mode in MODES)
+        labels.update(
+            f"{phase}.{mode}.{suffix}"
+            for mode in MODES
+            for suffix in ("getters_empty", "shader_owner_removed", "pipeline_owner_removed")
+        )
+    labels.add("engine.actual_prepared_owner")
+    labels.update(
+        f"engine.{mode}.{suffix}"
+        for mode in MODES
+        for suffix in ("actual_pipeline", "original_shader_association", "reflected_compute_layout", "reflected_source_roles", "distinct_engine_variant", "survives_local_release")
+    )
+    labels.add("material_features.original_owner")
+    labels.update(
+        f"material_features.{case}.{suffix}"
+        for case in ("plain", "vertex_inverse", "fragment_inverse", "alpha_hash", "alpha_scissor", "normal_only", "both")
+        for suffix in ("unissued_unchanged", "selection", "compiled_fact", "generation", "original_version", "inverse_requirement", "release", "released_refused", "empty_selection", "empty_invalidates", "observation_unissued_unchanged", "observation", "observation_original_material", "observation_original_version", "observation_inverse", "observation_returned_unchanged", "observation_empty_unchanged")
+    )
+    labels.update(
+        f"material_observation.{suffix}"
+        for suffix in (
+            "retained_selection", "retained_original", "replacement_selection", "replacement_original",
+            "replacement_preserves_retained", "replacement_return", "replacement_returned_unchanged",
+            "sibling_return_preserves_retained", "retained_return", "successful_mutation",
+            "stale_generation_refused", "dirty_refused", "mutated_selection", "mutated_compiler_fact",
+            "old_lease_cannot_observe_new_selection", "same_material_sibling_selection", "mutated_return",
+            "same_material_sibling_survives_return", "same_material_sibling_return",
+        )
+    )
     return labels
 
 
@@ -48,6 +83,7 @@ def main() -> int:
     parser.add_argument("--sha256", required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--driver", choices=("metal", "vulkan"), default="metal")
+    parser.add_argument("--method", choices=("mobile", "forward_plus"), default="mobile")
     parser.add_argument(
         "--expect-missing-fixture", action="store_true", help="headless registration RED only; never GPU success"
     )
@@ -62,7 +98,7 @@ def main() -> int:
     command += (
         ["--headless"]
         if args.expect_missing_fixture
-        else ["--rendering-driver", args.driver, "--rendering-method", "mobile"]
+        else ["--rendering-driver", args.driver, "--rendering-method", args.method]
     )
     environment = dict(os.environ, ANGE_MACOS_BACKGROUND_RENDER="1")
     for key in tuple(environment):
@@ -98,7 +134,7 @@ def main() -> int:
                 and native_report.get("error") == 0
                 and native_report.get("mode_count") == 5
                 and native_report.get("failures") == []
-                and len(checks) == len(labels)
+                and len(checks) == len(labels) == 270
                 and set(labels) == expected_checks()
                 and all(row.get("ok") is True for row in checks)
                 and all(
@@ -108,9 +144,9 @@ def main() -> int:
                 and native_report.get("device", {}).get("driver") == args.driver
             )
         backend = "Metal" if args.driver == "metal" else "Vulkan"
-        startup = re.findall(r"^(Metal|Vulkan) [0-9.]+ - Forward Mobile - Using Device #[0-9]+: .+$", text, re.M)
+        startup = re.findall(r"^(Metal|Vulkan) [0-9.]+ - (Forward Mobile|Forward\+) - Using Device #[0-9]+: .+$", text, re.M)
         passed = (
-            returncode == 0 and text.count("PARTICLE_EXTERNAL_GUARD_NATIVE_PASS") == 1 and valid_report and startup == [backend] and not fatal and stable
+            returncode == 0 and text.count(PASS) == 1 and valid_report and startup == [(backend, "Forward Mobile" if args.method == "mobile" else "Forward+")] and not fatal and stable
         )
     result = {
         "command": command,

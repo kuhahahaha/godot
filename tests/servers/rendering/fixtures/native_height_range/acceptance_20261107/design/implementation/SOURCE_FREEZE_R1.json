@@ -1,0 +1,25 @@
+{
+  "status": "source frozen for root first build; not compiled or run by author",
+  "files": [
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/native_height_range.h",
+      "bytes": 5442,
+      "sha256": "8657089d41a8d869959317b3c7644a0edcb5fd20647145f99b2d22abc456780f"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/rendering_device.h",
+      "bytes": 131046,
+      "sha256": "8ebd7390f6bcc63e7f7474dcc749f1fa0cbfcbdcd3f07f14cab7e2b77bbb5b74"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/rendering_device.cpp",
+      "bytes": 746353,
+      "sha256": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/test_native_height_range.cpp",
+      "bytes": 17182,
+      "sha256": "802701f2a5677ec0b5bb2221dc3daabe49487f7acc60b74eb1eb8d69dc1c0ba0"
+    }
+  ]
+}

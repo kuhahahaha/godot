@@ -100,7 +100,7 @@ protected:
 	LocalVector<CompletionRecord *> completion_records;
 	static thread_local LocalVector<CompletionRecord *> *active_completion_records;
 	static thread_local uint32_t *active_native_issue_count;
-	CompletionRecord *register_completion_record(MTL::CommandBuffer *p_command_buffer, uint64_t p_serial, bool p_collection_locked = false);
+	CompletionRecord *register_completion_record(MTL::CommandBuffer *p_command_buffer, uint64_t p_serial, bool p_collection_locked = false, bool p_independent_source = false);
 	bool completion_records_complete(const LocalVector<CompletionRecord *> &p_records) const;
 	bool completion_records_failed(const LocalVector<CompletionRecord *> &p_records, int64_t &r_native_code) const;
 	void retire_completion_records(const LocalVector<CompletionRecord *> &p_records);
@@ -177,8 +177,8 @@ protected:
 		return copy_queue_blit_encoder.get();
 	}
 
-	void _copy_queue_copy_to_buffer(Span<uint8_t> p_src_data, MTL::Buffer *p_dst_buffer, uint64_t p_dst_offset = 0);
-	void _copy_queue_flush();
+	Error _copy_queue_copy_to_buffer(Span<uint8_t> p_src_data, MTL::Buffer *p_dst_buffer, uint64_t p_dst_offset = 0);
+	Error _copy_queue_flush(bool p_nonblocking = false);
 	Error _copy_queue_initialize();
 
 	NS::SharedPtr<MTL::CaptureScope> device_scope;
@@ -585,6 +585,7 @@ public:
 
 	virtual void begin_segment(uint32_t p_frame_index, uint32_t p_frames_drawn) override final;
 	virtual void end_segment() override final;
+	virtual Error end_segment_checked(bool p_nonblocking = false) override final;
 
 #pragma mark - Miscellaneous
 

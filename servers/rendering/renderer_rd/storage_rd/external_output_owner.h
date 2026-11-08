@@ -77,7 +77,13 @@ class ExternalOutputOwner {
 		RELEASED,
 	};
 	struct SurfaceBinding {
+		// Reserved metadata is distinct from an opened native pass prefix.
+		// The stable row belongs to this slot incarnation; it grants no pass.
+		ExternalPipelinePreparation *preparation_row = nullptr;
+		uint32_t preparation_index = UINT32_MAX; // Stable owner-bank locator, independent of slot/surface arithmetic.
 		ExternalPipelinePreparation *preparation = nullptr;
+		// Legacy component fixture custody only; production bank roots/groups
+		// live in preparation_row and are never mirrored into these fields.
 		RID created_pipeline;
 		uint64_t pipeline_owned_group = 0;
 		bool pipeline_group_returned = false;
@@ -113,6 +119,7 @@ class ExternalOutputOwner {
 		uint64_t lease_serial = 0;
 		uint64_t owned_group = 0, output_membership_group = 0;
 		uint32_t retire_surface = 0, retire_resource = 0;
+		uint32_t preparation_reserved_count = 0, preparation_selected_count = 0, retire_preparation_index = 0;
 		bool output_group_returned = false;
 		bool publication_closed = false;
 		bool pass_uses_closed = false;
@@ -171,6 +178,11 @@ class ExternalOutputOwner {
 		MeshStorage::NativeSelectionLease lease;
 	};
 	struct GenerationMaterialSelection {
+		// Flattened original source row. CPU selection custody and immutable
+		// native backing custody are independent; native source holds return first.
+		RID mesh;
+		uint32_t native_surface = UINT32_MAX;
+		MeshStorage::NativeSurfaceHold geometry_source;
 		RID material;
 		uint64_t generation = 0;
 		MaterialStorage::NativeSelectionLease lease;
@@ -178,24 +190,39 @@ class ExternalOutputOwner {
 	GenerationMeshSelection *generation_meshes = nullptr;
 	GenerationMaterialSelection *generation_materials = nullptr;
 	uint32_t generation_mesh_count = 0, generation_material_count = 0;
-	uint32_t retained_mesh_count = 0, retained_material_count = 0;
+	uint32_t retained_mesh_count = 0, retained_material_count = 0, retained_surface_count = 0;
+	bool generation_surfaces_attempted = false, generation_surfaces_complete = false;
 	bool generation_selection_unpublished = false;
 	bool generation_config_inline = false;
 	uint32_t binding_capacity = 0, storage_capacity = 0;
+	ExternalPipelinePreparation *preparation_rows = nullptr;
+	uint32_t preparation_capacity = 0;
+	bool preparation_row_matches(uint32_t, uint32_t, const ExternalPipelinePreparation &) const;
+	bool preparation_bank_row_matches(uint32_t, uint32_t, const ExternalPipelinePreparation &) const;
+	uint32_t free_preparation_rows() const;
+	Error bind_preparation_rows(uint32_t, uint32_t p_count = 0);
+	Error return_preparation_bank_row(uint32_t, uint32_t);
+	bool preparation_source_matches(const ExternalPipelinePreparation &) const;
+	GDExtensionDeviceExit::ProductionRequest *preparation_request(uint32_t p_slot) const { return p_slot < slot_count ? slots[p_slot].original_pin.request : nullptr; }
+	uint64_t preparation_pin_serial(uint32_t p_slot) const { return p_slot < slot_count ? slots[p_slot].original_pin.serial : 0; }
+	Error select_preparation_tuple(uint32_t, uint32_t, const ExternalPacketPipelineRequest &, uint32_t &, bool &);
+	bool preparation_view_matches(const ExternalPacketViewLease &, uint32_t, bool p_cleanup = false) const;
+	Error return_preparation_row(uint32_t, uint32_t);
 	bool generation_selection_attempted = false;
 	bool generation_selection_complete = false;
-	bool has_generation_selection_custody() const { return retained_mesh_count || retained_material_count; }
+	bool has_generation_selection_custody() const { return retained_mesh_count || retained_material_count || retained_surface_count; }
 	Error acquire_generation_selection(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1);
+	Error acquire_generation_surface_sources(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1);
 	struct MetadataLayout {
 		uint32_t view_count = 0, read_count = 0, surface_count = 0;
 		uint32_t view_offset = 0, read_offset = 0, surface_offset = 0;
-		uint32_t storage_offset = 0, surface_binding_offset = 0;
+		uint32_t storage_offset = 0, surface_binding_offset = 0, preparation_offset = 0;
 		uint32_t total_bytes = 0, alignment = 0;
 		uint32_t mesh_selection_count = 0, material_selection_count = 0;
 		uint32_t mesh_selection_offset = 0, material_selection_offset = 0;
-		uint32_t binding_count = 0, storage_count = 0;
+		uint32_t binding_count = 0, storage_count = 0, preparation_count = 0;
 	};
-	static Error plan_metadata_layout(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, MetadataLayout &r_layout, uint32_t p_mesh_selections = 0, uint32_t p_material_selections = 0, uint32_t p_bindings = UINT32_MAX, uint32_t p_storage = UINT32_MAX);
+	static Error plan_metadata_layout(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, MetadataLayout &r_layout, uint32_t p_mesh_selections = 0, uint32_t p_material_selections = 0, uint32_t p_bindings = UINT32_MAX, uint32_t p_storage = UINT32_MAX, uint32_t p_preparations = UINT32_MAX);
 	static Error plan_generation_selection_layout(const ExternalOutputConfig &, uint32_t, uint32_t, uint32_t, MetadataLayout &);
 	Error install_metadata_directory(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1,
 			GDExtensionDeviceExit::Registry &, const GDExtensionDeviceExit::ProductionOutputMetadataLease &,
@@ -244,7 +271,7 @@ class ExternalOutputOwner {
 
 public:
 	~ExternalOutputOwner() {
-		CRASH_COND(surface_cells || view_cells || read_cells || generation_meshes || generation_materials || has_generation_selection_custody() || !generation_pin.is_empty());
+		CRASH_COND(surface_cells || view_cells || read_cells || generation_meshes || generation_materials || preparation_rows || preparation_capacity || has_generation_selection_custody() || !generation_pin.is_empty());
 		// No destructor fabricates native/source return or drops accepted uses.
 		CRASH_COND(state != GenerationState::RELEASED);
 		for (uint32_t i = 0; i < slot_count; ++i) {
@@ -262,10 +289,13 @@ private:
 	// Component substrate for the original accepted Create receiver. The public
 	// Create leaf remains unavailable until its real admission/source join exists.
 	bool generation_root_matches(const GDExtensionDeviceExit::ProductionOutputPin &) const;
+	bool has_inflight_preparation() const;
 	Error generation_returnable(uint32_t &, uint32_t &) const;
 	Error install_generation_root(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, GDExtensionDeviceExit::Registry &, RenderingDevice &, RID, GDExtensionDeviceExit::ProductionOutputMetadataLease * = nullptr);
 	Error install_reserved_cells(uint32_t p_views, uint32_t p_reads);
 	Error install_reserved_surface_cells(uint32_t p_surfaces);
+	Error surface_acquire(uint32_t, ExternalSurfaceSelection &);
+	bool generation_surface_has_custody() const;
 	Error surface_return(ExternalSurfaceSelection &);
 	void surface_move(ExternalSurfaceSelection &, ExternalSurfaceSelection &);
 	Error return_reserved_cells();

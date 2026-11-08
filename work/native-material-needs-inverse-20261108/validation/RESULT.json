@@ -1,0 +1,106 @@
+{
+  "schema": 1,
+  "base_commit": "25754967f1",
+  "scope": "Original material selection-bound compiler inverse-demand fact; not full material qualification or public SDK",
+  "build_exit": 0,
+  "build_command": "scons -Q tests=yes platform=macos target=editor debug_symbols=no module_particles_runtime_tests_enabled=yes -j2",
+  "negative_control": {
+    "exit": 1,
+    "failed_checks": [
+      "material_features.alpha_hash.inverse_requirement"
+    ],
+    "actual_checks": 202,
+    "mutation": "Mobile compiler demand omits ALPHA_HASH_SCALE semantic use; no crash or leak",
+    "host_sha256": "b40459defc4b3e8c7bdf426c12adaa13ff9f4edf3659ff7941c0b666b643b41d"
+  },
+  "native": {
+    "mobile": {
+      "exit": 0,
+      "passed": true,
+      "checks": 202,
+      "device": {
+        "api": "4.0",
+        "driver": "metal",
+        "name": "Apple M3 Pro (Apple9)",
+        "renderer": "mobile"
+      },
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_external_guard_native",
+        "--render-thread",
+        "safe",
+        "--script",
+        "run.gd",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile"
+      ]
+    },
+    "forward_plus": {
+      "exit": 0,
+      "passed": true,
+      "checks": 202,
+      "device": {
+        "api": "4.0",
+        "driver": "metal",
+        "name": "Apple M3 Pro (Apple9)",
+        "renderer": "forward_plus"
+      },
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_external_guard_native",
+        "--render-thread",
+        "safe",
+        "--script",
+        "run.gd",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "forward_plus"
+      ]
+    }
+  },
+  "cpu": {
+    "filter": "*[MaterialNativeHold]*,*spatial inverse model demand*,*[NativePreparationContinuation]*,*[ParticlesExternalGuard]*,*[ShaderCompilePolicy]*",
+    "exit": 0,
+    "cases": 13,
+    "assertions": 11527,
+    "diagnostic": "One Invalid UTF-8 leading byte diagnostic from existing policy-input case appears in retained log; all assertions pass. Not GPU evidence."
+  },
+  "source_sha256": {
+    "modules/particles_runtime_tests/particles_external_guard_test_fixture.cpp": "deeb688708d96ffcc9f9f4c301cff7e7c6ecd934769ec7259080f42a0d729277",
+    "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp": "d24393dbecdd0ed1d5300bc0cd3c2b67bac8edac999ee4d7ed28469ecd618068",
+    "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h": "576bf291e3ae80efac0cb1cb06f71d025b9b9ce3dcf43a9054b9a925ae033644",
+    "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp": "609e8efd57199d324eb1def93d7054079c7de5aee8e8a72bf0cbcaeec94146b2",
+    "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h": "f97aad8bf235342e63b7aefaede2d71e72639afb8294b3cd0eec5dcaec96ff09",
+    "servers/rendering/renderer_rd/storage_rd/material_storage.cpp": "d656c5ec2a6ac7734b49e5848933eb93be14d7f707a149826b64259bf4654b1b",
+    "servers/rendering/renderer_rd/storage_rd/material_storage.h": "94a8104ba7edcc74085bc4a3d1302caf50ee2a1e8886917c145b41c026a899df",
+    "tests/servers/rendering/fixtures/particle_external_guard_native/run.gd": "56b85181a8030a3d867433a11e2d0e3994e01ecd3a977fb49de88d0e7d962615",
+    "tests/servers/rendering/fixtures/particle_external_guard_native/run_native.py": "8413e51b01b924ef21ecde27921bfb0ea939f3845f191d0a271c3b78c870d4c1",
+    "tests/servers/rendering/test_spatial_inverse_requirements.cpp": "6a7a00bcf3ede12ed45a830114404c34ce745cda5e117cfb82b058174d3909f1"
+  },
+  "binary_sha256": "8d2d144881a29b4b9be1d21eaff2d8c4499fe2d31ec3866d6a25a42752c3da0f",
+  "logs_sha256": {
+    "b4-material-features-red-build.log": "b2b76bd8f77af696feaf1fcf5191f2b48e16708c2f34aee1c25cf324707f401e",
+    "b4-material-features-combined-cpu.log": "7d28a272e6ad41230d545d7d1399ecc8d11807037269df654dc2aca8557c3ac5",
+    "b4-material-features-initial-build.log": "9404d5f6a331a915f598bc6313ad62f3a507590ca89dc29865680a730362d8f6",
+    "b4-material-features-native-mobile.log": "206fc4445816dd30e3f7e4f679a5d45b81a2984cb4fd675e623eec4cc986c04d",
+    "b4-material-features-native-red.log": "ac8bc3012399093c64205f6724459caf73bc55f3bfb183fe1cf3cdade2a6963a",
+    "b4-material-features-native-build.log": "e07f9b9f7fad4bd1db3c4e6d25c2ef2cab0a53063693f5e848289931306891eb",
+    "b4-material-features-native-final.log": "6ad2b7d63bcafa3b3fc4a122378794cd20ab77e53003686c7cd4c2aa392bb831",
+    "b4-material-features-final-build.log": "61815986611b83e1d416088c497b7f8dd72564b4ba20af18b95129dde5cf9f68",
+    "b4-material-features-compiler-test.log": "20a3a003bb93b214bc45e1f29a51c64afb37ad0a29cc77eece9f439e4298c52e",
+    "b4-material-features-bounded-build.log": "d62a4bf5737d07696c9dc676893aab7819aa45bc0d0df29c7b929c8bd520c232"
+  },
+  "review": "Subagent source map/compiler candidate plus root source review and bounded owner implementation; fresh independent implementation review pending, not claimed.",
+  "limits": [
+    "No full material/profile qualification",
+    "Borrowed shader/version valid only under existing original material selection lease",
+    "No public ABI getter or B native qualification readiness",
+    "Failed-source compile refusal traced but not exercised in native fixture; empty code invalidation exercised",
+    "Not full Sprite/U05/Finalize/Seal/no-later-draw completion"
+  ]
+}

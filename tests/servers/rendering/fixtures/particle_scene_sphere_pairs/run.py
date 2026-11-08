@@ -30,7 +30,7 @@ def main() -> int:
 #include <vector>
 struct RID { int id=0; };
 struct Transform3D { int origin=0; };
-struct AABB { float min=0,max=1; bool intersects_inclusive(const AABB &other) const { return min<=other.max && max>=other.min; } };
+struct AABB { int start=0,end=1; bool intersects_inclusive(const AABB &other) const { return start<=other.end && end>=other.start; } };
 namespace RSE { enum { INSTANCE_PARTICLES=1, INSTANCE_PARTICLES_COLLISION=2 }; }
 struct SceneSphereSource { uint64_t source_key,shape_revision; Transform3D transform; float radius; };
 template<class T> struct Vector : std::vector<T> {
@@ -43,7 +43,7 @@ struct PairList { SelfList<InstancePair> *head=nullptr; SelfList<InstancePair> *
 struct InstanceParticlesCollisionData { RID instance; uint32_t cull_mask=1; };
 struct Instance {
     int base_type=0; RID base; bool visible=true; void *scenario=nullptr; uint32_t layer_mask=1;
-    bool scene_query_committed=false; AABB scene_query_world; AABB transformed_aabb;
+    AABB scene_query_world, transformed_aabb; bool scene_query_committed=false;
     PairList pairs; InstanceParticlesCollisionData collision_data; void *base_data=&collision_data;
 };
 struct InstancePair { Instance *a=nullptr,*b=nullptr; SelfList<InstancePair> link; InstancePair(Instance *x,Instance *y):a(x),b(y) { link.pair=this; } };
@@ -95,10 +95,12 @@ int main() {
     storage.entries[2]={true,3,10,55,5};
     check(scene.scene_sphere_snapshot_pairs({1},2,out) && out.size()==2 && out[0].source_key==3 && out[0].shape_revision==10 && out[0].transform.origin==55 && out[0].radius==5,"recreated source carries new revision");
     receiver.scene_query_committed=true; receiver.scene_query_world={0,1};
-    left.transformed_aabb={2,3}; right.transformed_aabb={1,2};
-    check(scene.scene_sphere_snapshot_pairs({1},2,out) && out.size()==1 && out[0].source_key==3,"committed query excludes disjoint source but includes touching edge");
-    receiver.scene_query_committed=false;
-    check(scene.scene_sphere_snapshot_pairs({1},2,out) && out.size()==2,"uncommitted query preserves pair membership");
+    right.transformed_aabb={2,3};
+    check(scene.scene_sphere_snapshot_pairs({1},2,out) && out.size()==1 && out[0].source_key==9,"committed receiver query excludes a stale outside pair");
+    right.transformed_aabb={1,2};
+    check(scene.scene_sphere_snapshot_pairs({1},2,out) && out.size()==2,"committed query includes touching source bounds");
+    receiver.scene_query_committed=false; right.transformed_aabb={2,3};
+    check(scene.scene_sphere_snapshot_pairs({1},2,out) && out.size()==2,"uncommitted query preserves ordinary pair selection");
     check(!scene.scene_sphere_snapshot_pairs({7},2,out),"invalid receiver rejects");
     return ok?0:1;
 }

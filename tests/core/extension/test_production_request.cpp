@@ -33,13 +33,16 @@
 #include "core/extension/gdextension_external_output_typed.h"
 #include "core/extension/gdextension_manager.h"
 #include "core/extension/gdextension_production_request.h"
+#include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/object/message_queue.h"
 #include "core/os/os.h"
 #include "core/os/semaphore.h"
 #include "core/os/thread.h"
+#include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_scene_cull.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
 #include "servers/rendering/rendering_shader_container.h"
@@ -56,6 +59,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
+#include <thread>
 #endif
 
 extern GDExtensionInterfaceFunctionPtr gdextension_get_proc_address(const char *);
@@ -1001,8 +1005,8 @@ struct Access {
 		const auto original_private_refs = registry.records[0].private_refs;
 		struct Contention {
 			Enrollment &fixture;
-			std::mutex mutex;
-			std::condition_variable condition;
+			std::mutex mutex{};
+			std::condition_variable condition{};
 			bool held = false, returned = false;
 			bool returned_while_held = false, window_expired = false, registry_acquired = false;
 			static void run(void *p_data) {
@@ -1428,7 +1432,8 @@ struct Access {
 				whole.resource_uses += 16 + (mesh_directory ? (directory_external ? 48 : 16) : 0);
 			}
 			if (output_borrow) {
-				whole.resource_uses += 2;
+				// Existing root/borrow plus three independently paid bank-test pins.
+				whole.resource_uses += 5;
 			}
 			if (ordinal_plan) {
 				whole = ordinal_plan->capacity;
@@ -1498,7 +1503,8 @@ struct Access {
 				single.resource_uses += 16 + (mesh_directory ? (directory_external ? 48 : 16) : 0);
 			}
 			if (output_borrow) {
-				single.resource_uses += 2;
+				// Existing root/borrow plus three independently paid bank-test pins.
+				single.resource_uses += 5;
 			}
 			const GDExtensionProductionOperationV1 operation = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionOperationV1>(), 91, 1, 10, 10 + record_actions };
 			const GDExtensionProductionActionV1 action = { 10, uint32_t(receiver && !upload_prefix ? GDEXTENSION_PRODUCTION_DISPATCH_V1 : GDEXTENSION_PRODUCTION_UPLOAD_V1), 0, 0, 1, uint32_t(keep_list ? GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1 : GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1), UINT32_MAX };
@@ -2375,7 +2381,8 @@ struct Access {
 				test.check(__LINE__, rd._production_output_owned_bind(context, test.output_pin, test.owned_group, 1, test.auxiliary_buffer_witness) == ERR_UNAUTHORIZED);
 				const RID root = test.auxiliary_pipeline;
 				RenderingDevice::NativeImmutableHold physical;
-				test.check(__LINE__, rd.native_immutable_hold_acquire(VectorView<RID>(&root, 1), physical, 4) == OK);
+				// Pipeline + shader exercise the original capture from inline storage.
+				test.check(__LINE__, rd.native_immutable_hold_acquire(VectorView<RID>(&root, 1), physical, 3) == OK);
 				test.check(__LINE__, rd._production_output_hold_capture(context, test.output_pin, physical, test.borrowed_group) == OK && !physical.is_active());
 				test.check(__LINE__, rd._production_output_hold_contains(test.output_pin, test.borrowed_group, test.auxiliary_pipeline));
 				const RID qualified_root = request.resources[0].primary;
@@ -3474,6 +3481,26 @@ struct Access {
 				CHECK(registry.production_output_unpin(custody_pin) == OK);
 			} else {
 				CHECK(custody_pin.is_empty());
+			}
+		}
+		ProductionOutputPin bank_pins[3];
+		bool bank_pins_ready = true;
+		for (auto &pin : bank_pins) {
+			const Error borrowed = registry.production_output_pin_borrow(test.output_pin, device, pin);
+			CHECK(borrowed == OK);
+			if (borrowed != OK) {
+				bank_pins_ready = false;
+				break;
+			}
+		}
+		if (bank_pins_ready) {
+			RendererRD::ExternalLinkedOwnerTest::preparation_bank_fragmentation(bank_pins);
+		}
+		// Explicitly return all successful borrows even when setup or a bank
+		// assertion fails; no-exception doctest REQUIRE cannot own this cleanup.
+		for (auto &pin : bank_pins) {
+			if (!pin.is_empty()) {
+				CHECK(registry.production_output_unpin(pin) == OK);
 			}
 		}
 		serial = request.next_output_pin_serial; // New genuine borrows above advanced the allocator.
@@ -4743,6 +4770,102 @@ struct Access {
 		CHECK_MESSAGE(entry != nullptr, "Missing installed ordinal procedure: ", name);
 		return entry;
 	}
+
+#ifdef THREADS_ENABLED
+	struct SceneReleaseState {
+		GDExtensionDeviceExit::Registry *registry = nullptr;
+		uint32_t calls = 0, destroys = 0, unlocked_checks = 0;
+		bool acquired = false;
+		static void probe_lock(void *p) {
+			auto &s = *static_cast<SceneReleaseState *>(p);
+			s.acquired = s.registry->mutex.try_lock();
+			if (s.acquired) {
+				s.registry->mutex.unlock();
+			}
+		}
+		void check_unlocked() {
+			acquired = false;
+			Thread worker;
+			worker.start(&probe_lock, this);
+			CHECK(worker.is_started());
+			if (worker.is_started()) {
+				worker.wait_to_finish();
+			}
+			CHECK(acquired);
+			unlocked_checks += acquired ? 1 : 0;
+		}
+	};
+	class SceneReleaseContent : public GDExtensionDeviceExit::SceneReadContent {
+		SceneReleaseState *state;
+
+	public:
+		explicit SceneReleaseContent(SceneReleaseState *p) : state(p) {}
+		Error validate(const GDExtensionSceneOpaque32V1 &, const GDExtensionSceneOpaque32V1 &) const override { return ERR_UNAUTHORIZED; }
+		Error return_after_reads() override {
+			state->check_unlocked();
+			return ++state->calls == 1 ? ERR_BUSY : OK;
+		}
+		~SceneReleaseContent() override {
+			state->check_unlocked();
+			++state->destroys;
+		}
+	};
+	static void scene_release_content_budget() {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server) {
+			return;
+		}
+		OrdinalPlan plan;
+		SceneReleaseState state;
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		REQUIRE(ordinal_initialize(fixture, server, plan) == OK);
+		auto &request = *fixture.request;
+		const GDExtensionProductionRequestRefV1 ref{ fixture.instance, request.serial };
+		REQUIRE(fixture.registry.production_cancel(ref).native_error == OK);
+		CHECK(request.native_count == 0);
+		CHECK(request.graph_count == 0);
+		CHECK(request.maintenance_serial == 0);
+		state.registry = &fixture.registry;
+		// Cleanup-only white-box injection: never a Scene key or sample grant.
+		{
+			MutexLock lock(fixture.registry.mutex);
+			CHECK_FALSE(request.actions[0].scene_key_bound);
+			request.actions[0].scene_attempt.content = Ref<SceneReadContent>(memnew(SceneReleaseContent(&state)));
+			CHECK(fixture.registry.production_release_locked(request, &fixture.rd, true).native_error == ERR_BUSY);
+			CHECK(fixture.registry.production_release_locked(request, &fixture.rd, false).native_error == OK);
+		}
+		CHECK(state.calls == 0);
+		for (uint32_t turn = 0; turn < 3; ++turn) {
+			const GDExtensionProductionServiceBudgetV1 budget{ production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+			uint64_t serial = 0;
+			REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::RELEASE, &serial, &budget) == OK);
+			REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);
+			server->sync();
+			REQUIRE(request.control.state == ProductionControlState::RETURNED);
+			const auto usage = request.control.output.service_usage;
+			CHECK(usage.controls == 1);
+			CHECK(usage.passes == (turn < 2 ? 1u : 0u));
+			CHECK(usage.receipts == (turn < 2 ? 1u : 0u));
+			CHECK(request.control.output.result.native_error == (turn < 2 ? ERR_BUSY : OK));
+			CHECK(state.calls == (turn == 0 ? 1u : 2u));
+			CHECK(state.destroys == (turn == 0 ? 0u : 1u));
+			CHECK_FALSE(request.actions[0].scene_key_bound);
+			const auto calls_before_owner = state.calls;
+			ProductionControlOutput output{};
+			REQUIRE(fixture.registry.production_control_consume(ref, serial, &output) == OK);
+			CHECK(state.calls == calls_before_owner);
+			CHECK(output.owner_usage.passes == 0);
+			CHECK(output.owner_usage.receipts == 0);
+		}
+		CHECK(request.serial == 0);
+		CHECK(state.unlocked_checks == 3);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
+#endif
+
 	static RenderingServerDefault *ordinal_server() {
 		auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
 		if (!check_step(server && !server->create_thread && server->server_thread == Thread::get_caller_id() && !RenderingDevice::get_singleton())) {
@@ -4768,6 +4891,7 @@ struct Access {
 		GDExtensionProductionPhysicalContextRefV1 contexts[2]{};
 		GDExtensionNativeScenePhaseV1 phases[2]{};
 		uint32_t typed_calls = 0, ordinary_calls = 0, legacy_calls = 0, frees = 0;
+		Thread::ID free_thread = 0;
 		GDExtensionInterfaceDeviceSessionScenePhaseUnregisterV1 unregister_port = nullptr;
 		bool close_active = false;
 		static uint64_t word(const GDExtensionSceneOpaque32V1 &opaque, uint32_t index) {
@@ -4786,7 +4910,11 @@ struct Access {
 		static void legacy(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *) {
 			++static_cast<NativeScenePhaseProbe *>(opaque)->legacy_calls;
 		}
-		static void free(void *opaque) { ++static_cast<NativeScenePhaseProbe *>(opaque)->frees; }
+		static void free(void *opaque) {
+			auto &p = *static_cast<NativeScenePhaseProbe *>(opaque);
+			p.free_thread = Thread::get_caller_id();
+			++p.frees;
+		}
 		static void typed(void *opaque, const GDExtensionNativeScenePhaseV1 *phase, GDExtensionProductionRequestRefV1 request, const GDExtensionProductionOperationV1 *operation) {
 			using namespace GDExtensionDeviceExit;
 			auto &p = *static_cast<NativeScenePhaseProbe *>(opaque);
@@ -4843,7 +4971,7 @@ struct Access {
 			}
 		}
 	};
-	static void native_scene_phase_infrastructure(bool close_before_draw = false) {
+	static void native_scene_phase_infrastructure(bool close_before_draw = false, bool close_fifo_full = false, bool close_wrong_thread = false) {
 		using namespace GDExtensionDeviceExit;
 		auto *server = ordinal_server();
 		if (!server) {
@@ -4982,6 +5110,118 @@ struct Access {
 		foreign_registration.token.bytes[0] ^= 0x80;
 		CHECK(probe.unregister_port(foreign_registration, &refused_close).native_error == ERR_INVALID_DATA);
 		CHECK(refused_close.registration_closed == 0);
+		if (close_wrong_thread) {
+#ifdef THREADS_ENABLED
+			// No RECORD is queued: Busy must come from the original holder's
+			// destruction-thread gate, not a waiting mailbox or active delivery.
+			const Thread::ID owner_thread = Thread::get_caller_id();
+			const auto registration = probe.registration;
+			NormalRelaySnapshot initial;
+			REQUIRE(fixture.registry.observe_normal_relay(probe.relay, initial) == OK);
+			CHECK(initial.destruction_thread == owner_thread);
+			CHECK(initial.active_deliveries == 0);
+			CHECK_FALSE(initial.cancelled);
+			CHECK_FALSE(initial.release_requested);
+			CHECK_FALSE(initial.cell_released);
+			CHECK_FALSE(initial.holder_closed);
+			CHECK(probe.frees == 0);
+			CHECK(probe.free_thread == 0);
+			struct ForeignUnregister {
+				GDExtensionScenePhaseRegistrationRefV1 registration{};
+				GDExtensionInterfaceDeviceSessionScenePhaseUnregisterV1 port = nullptr;
+				GDExtensionScenePhaseCloseV1 close{};
+				Thread::ID thread = 0;
+				Error error = FAILED;
+				static void run(void *opaque) {
+					auto &test = *static_cast<ForeignUnregister *>(opaque);
+					test.thread = Thread::get_caller_id();
+					test.error = Error(test.port(test.registration, &test.close).native_error);
+				}
+			} foreign;
+			foreign.registration = registration;
+			foreign.port = probe.unregister_port;
+			Thread worker;
+			worker.start(&ForeignUnregister::run, &foreign);
+			const bool started = worker.is_started();
+			CHECK(started);
+			if (started) {
+				worker.wait_to_finish(); // Join before assertions or owner observations.
+			}
+			CHECK(foreign.thread != 0);
+			CHECK(foreign.thread != owner_thread);
+			CHECK(foreign.error == ERR_BUSY);
+			CHECK(foreign.close.abi.abi_version == 1);
+			CHECK(foreign.close.abi.struct_size == sizeof(foreign.close));
+			CHECK(foreign.close.abi.reserved == 0);
+			CHECK(foreign.close.registration_closed == 1);
+			CHECK(foreign.close.active_deliveries == 0);
+			CHECK(foreign.close.relay_cell_released == 0);
+			CHECK(foreign.close.relay_holder_closed == 0);
+			CHECK(memcmp(&foreign.registration, &registration, sizeof(registration)) == 0);
+			CHECK(memcmp(&probe.registration, &registration, sizeof(registration)) == 0);
+			NormalRelaySnapshot observed;
+			REQUIRE(fixture.registry.observe_normal_relay(probe.relay, observed) == OK);
+			CHECK(observed.destruction_thread == initial.destruction_thread);
+			CHECK(observed.active_deliveries == 0);
+			CHECK(observed.cancelled);
+			CHECK_FALSE(observed.release_requested);
+			CHECK_FALSE(observed.cell_released);
+			CHECK_FALSE(observed.holder_closed);
+			CHECK(probe.frees == 0);
+			CHECK(probe.free_thread == 0);
+			CHECK(probe.typed_calls == 0);
+			CHECK(probe.ordinary_calls == 0);
+			CHECK(probe.legacy_calls == 0);
+			GDExtensionScenePhaseCloseV1 close{};
+			CHECK(probe.unregister_port(registration, &close).native_error == ERR_BUSY);
+			CHECK(close.registration_closed == 1);
+			CHECK(close.active_deliveries == 0);
+			CHECK(close.relay_cell_released == 1);
+			CHECK(close.relay_holder_closed == 0);
+			REQUIRE(fixture.registry.observe_normal_relay(probe.relay, observed) == OK);
+			CHECK(observed.destruction_thread == owner_thread);
+			CHECK(observed.active_deliveries == 0);
+			CHECK(observed.cancelled);
+			CHECK(observed.release_requested);
+			CHECK(observed.cell_released);
+			CHECK_FALSE(observed.holder_closed);
+			CHECK(probe.frees == 0);
+			CHECK(probe.free_thread == 0);
+			CHECK(fixture.registry.forget_normal_relay(probe.relay) == ERR_BUSY);
+			probe.callable = Callable(); // Actual last owner-thread alias, never a fabricated ACK.
+			CHECK(probe.frees == 1);
+			CHECK(probe.free_thread == owner_thread);
+			CHECK(probe.free_thread == initial.destruction_thread);
+			REQUIRE(fixture.registry.observe_normal_relay(probe.relay, observed) == OK);
+			CHECK(observed.destruction_thread == owner_thread);
+			CHECK(observed.active_deliveries == 0);
+			CHECK(observed.cancelled);
+			CHECK(observed.release_requested);
+			CHECK(observed.cell_released);
+			CHECK(observed.holder_closed);
+			REQUIRE(probe.unregister_port(registration, &close).native_error == OK);
+			CHECK(close.registration_closed == 1);
+			CHECK(close.active_deliveries == 0);
+			CHECK(close.relay_cell_released == 1);
+			CHECK(close.relay_holder_closed == 1);
+			CHECK(fixture.registry.observe_normal_relay(probe.relay, observed) == ERR_INVALID_DATA);
+			const auto completed_close = close;
+			REQUIRE(probe.unregister_port(registration, &close).native_error == OK);
+			CHECK(memcmp(&close, &completed_close, sizeof(close)) == 0);
+			for (uint32_t i = 0; i < 2; ++i) {
+				REQUIRE(fixture.registry.production_cancel(probe.requests[i]).native_error == OK);
+				REQUIRE(fixture.registry.production_release(probe.requests[i]).native_error == OK);
+			}
+			fixture.cleanup_owner();
+			CHECK(fixture.owner_cleaned);
+			CHECK(probe.frees == 1);
+			CHECK(probe.free_thread == owner_thread);
+			CHECK(probe.typed_calls == 0);
+			CHECK(probe.ordinary_calls == 0);
+			CHECK(probe.legacy_calls == 0);
+			return;
+#endif
+		}
 		uint64_t controls[2]{};
 		for (uint32_t i = 0; i < 2; ++i) {
 			REQUIRE(fixture.port.record_schedule(probe.requests[i], &controls[i]) == OK);
@@ -5002,6 +5242,70 @@ struct Access {
 		if (close_before_draw) {
 			// Close two actual waiting RECORD mailboxes without issuing a phase.
 			GDExtensionScenePhaseCloseV1 close{};
+			if (close_fifo_full) {
+				ProductionRequest *originals[2]{};
+				ProductionControlInput inputs[2]{};
+				for (uint32_t i = 0; i < 2; ++i) {
+					MutexLock lock(fixture.registry.mutex);
+					RenderingDevice *device = nullptr;
+					REQUIRE(fixture.registry.production_request_locked(probe.requests[i], false, originals[i], device) == OK);
+					inputs[i] = originals[i]->control.input;
+				}
+				const auto registration = probe.registration;
+				const auto check_waiting = [&]() {
+					CHECK(memcmp(&probe.registration, &registration, sizeof(registration)) == 0);
+					for (uint32_t i = 0; i < 2; ++i) {
+						MutexLock lock(fixture.registry.mutex);
+						ProductionRequest *original = nullptr;
+						RenderingDevice *device = nullptr;
+						REQUIRE(fixture.registry.production_request_locked(probe.requests[i], false, original, device) == OK);
+						CHECK(original == originals[i]);
+						CHECK(original->serial == probe.requests[i].handle_serial);
+						CHECK(original->control.serial == controls[i]);
+						CHECK(original->control.input.request_serial == inputs[i].request_serial);
+						CHECK(original->control.input.record_generation == inputs[i].record_generation);
+						CHECK(original->control.input.kind == ProductionControlKind::RECORD);
+						CHECK(original->control.state == ProductionControlState::QUEUED);
+						CHECK(original->control.scene_waiting);
+					}
+					NormalRelaySnapshot waiting;
+					REQUIRE(fixture.registry.observe_normal_relay(probe.relay, waiting) == OK);
+					CHECK(waiting.active_deliveries == 0);
+					CHECK_FALSE(waiting.cancelled);
+					CHECK_FALSE(waiting.release_requested);
+					CHECK_FALSE(waiting.cell_released);
+					CHECK_FALSE(waiting.holder_closed);
+					CHECK(probe.typed_calls == 0);
+					CHECK(probe.ordinary_calls == 0);
+					CHECK(probe.legacy_calls == 0);
+					CHECK(probe.frees == 0);
+				};
+				check_waiting();
+				// Fill the real bounded Core FIFO with inert scalar commands. A full
+				// queue must retain both original waiting mailboxes for close retry.
+				uint32_t queued = 0;
+				for (; queued < 65536; ++queued) {
+					if (!server->_try_production_control_dispatch(0, 0, 0, 0)) {
+						break;
+					}
+				}
+				CHECK(queued > 0);
+				CHECK(queued < 65536);
+				CHECK(probe.unregister_port(registration, &close).native_error == ERR_BUSY);
+				CHECK(close.registration_closed == 1);
+				CHECK(close.active_deliveries == 0);
+				CHECK(close.relay_cell_released == 0);
+				CHECK(close.relay_holder_closed == 0);
+				check_waiting();
+				for (uint32_t i = 0; i < 2; ++i) {
+					CHECK(consume(probe.requests[i], controls[i], &recorded).native_error == ERR_BUSY);
+				}
+				server->sync(); // Drain only inert commands; no failed wake was enqueued.
+				check_waiting();
+				for (uint32_t i = 0; i < 2; ++i) {
+					CHECK(consume(probe.requests[i], controls[i], &recorded).native_error == ERR_BUSY);
+				}
+			}
 			bool consumed[2] = {};
 			for (uint32_t i = 0; i < 2; ++i) {
 				CHECK(probe.unregister_port(probe.registration, &close).native_error == ERR_BUSY);
@@ -5654,10 +5958,16 @@ struct Access {
 			CHECK(probe.native->withdrawing());
 		}
 	};
-	static void output_scene_metadata(bool extra_metadata, bool bound_unlinked = false, bool use_v3 = false, int metadata_delta = 0) {
+	static void output_scene_metadata(bool extra_metadata, bool bound_unlinked = false, bool use_v3 = false, int metadata_delta = 0, bool public_terminal = false) {
 		using namespace GDExtensionDeviceExit;
 		auto *server = ordinal_server();
 		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
+			return;
+		}
+		const auto observe3 = ordinal_port<GDExtensionInterfaceDeviceSessionProductionObserveV3>("device_session_production_observe_v3");
+		const auto consume_return = ordinal_port<GDExtensionInterfaceDeviceSessionProductionOutputReturnConsumeV1>("device_session_production_output_return_consume_v1");
+		if (public_terminal && (!observe3 || !consume_return)) {
+			FAIL_CHECK("Original public generation return consumer must be installed");
 			return;
 		}
 		const auto consume = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
@@ -5760,7 +6070,17 @@ struct Access {
 			REQUIRE(fixture.registry.production_output_metadata_return(probe.unrelated) == OK);
 			CHECK(request.revision == revision + 1);
 		}
-		const uint64_t terminal_control = dispatch();
+		GDExtensionProductionObserveResultV3 public_observation{};
+		uint64_t terminal_control = 0;
+		if (public_terminal) {
+			CHECK(observe3(ref, &budget, &public_observation).native_error == ERR_BUSY);
+			server->sync(); // Original OBSERVE FIFO; no additional RECORD/draw.
+			CHECK(observe3(ref, &budget, &public_observation).native_error == OK);
+			terminal_control = public_observation.output_generation.control_serial;
+		} else {
+			terminal_control = dispatch();
+		}
+
 		REQUIRE(request.control.output.output_generation.native_released);
 		CHECK(request.control.output.result.native_error == OK);
 		CHECK(request.control.output.service_usage.controls == 1);
@@ -5780,8 +6100,121 @@ struct Access {
 		CHECK(terminal.root_source.possible_obligations == 0);
 		CHECK(terminal.root_source.complete_obligations == 0);
 		ProductionControlOutput consumed{};
-		REQUIRE(fixture.registry.production_control_consume(ref, terminal_control, &consumed) == OK);
-		CHECK(std::memcmp(&terminal, &consumed.output_generation, sizeof(terminal)) == 0);
+		if (public_terminal) {
+			CHECK(public_observation.abi.abi_version == 3);
+			CHECK(public_observation.output_generation.native_released == 1);
+			CHECK(public_observation.output_generation.terminal_kind == 1);
+			CHECK(public_observation.output_generation.root_serial == root_serial);
+			CHECK(public_observation.output_generation.root_source.physical_returns_pending == 1);
+			CHECK(public_observation.output_generation.registry_instance == terminal.registry_instance);
+			CHECK(public_observation.output_generation.request_serial == terminal.request_serial);
+			CHECK(public_observation.output_generation.control_serial == terminal.control_serial);
+			CHECK(public_observation.output_generation.particles == terminal.particles);
+			CHECK(public_observation.output_generation.generation == terminal.generation);
+			CHECK(public_observation.output_generation.unused_slots == terminal.unused_slots);
+			CHECK(public_observation.output_generation.returned_slots == terminal.returned_slots);
+			CHECK(std::memcmp(&public_observation.output_generation.root_source, &terminal.root_source, sizeof(terminal.root_source)) == 0);
+			const auto projected_before = public_observation.output_generation;
+			auto zero_budget = budget;
+			zero_budget.controls = zero_budget.receipts = zero_budget.passes = 0;
+			const auto revision_before_peek = request.revision;
+			CHECK(observe3(ref, &zero_budget, &public_observation).native_error == OK);
+			CHECK(request.revision == revision_before_peek);
+			CHECK(request.control.state == ProductionControlState::RETURNED);
+			CHECK(std::memcmp(&public_observation.output_generation, &projected_before, sizeof(projected_before)) == 0);
+
+			GDExtensionProductionReportV2 legacy{};
+			CHECK(fixture.registry.production_observe_v2(ref, &budget, &legacy).native_error == ERR_UNAVAILABLE);
+			GDExtensionProductionOutputGenerationRefV1 expected{ production_dto_abi<GDExtensionProductionOutputGenerationRefV1>(), terminal.registry_instance, terminal.request_serial, terminal.control_serial, terminal.root_serial, terminal.particles, terminal.generation };
+			// ABI rejection runs against the actual original RETURNED control,
+			// so a rejected transport cannot consume or replace that terminal.
+			const auto abi_control_serial = request.control.serial;
+			const auto abi_revision = request.revision;
+			auto control_unchanged = [&]() {
+				CHECK(request.control.state == ProductionControlState::RETURNED);
+				CHECK(request.control.serial == abi_control_serial);
+				CHECK(request.revision == abi_revision);
+				CHECK(std::memcmp(&request.control.output.output_generation, &terminal, sizeof(terminal)) == 0);
+			};
+			for (uint32_t header = 0; header < 3; ++header) {
+				auto bad_budget = budget;
+				auto bad_expected = expected;
+				if (header == 0) {
+					++bad_budget.abi.abi_version;
+					++bad_expected.abi.abi_version;
+				} else if (header == 1) {
+					--bad_budget.abi.struct_size;
+					--bad_expected.abi.struct_size;
+				} else {
+					bad_budget.abi.reserved = bad_expected.abi.reserved = 1;
+				}
+				GDExtensionProductionObserveResultV3 observation_out{};
+				observation_out.output_generation.generation = 12345;
+				const auto observation_before = observation_out;
+				CHECK(observe3(ref, &bad_budget, &observation_out).native_error == ERR_INVALID_PARAMETER);
+				CHECK(std::memcmp(&observation_out, &observation_before, sizeof(observation_out)) == 0);
+				GDExtensionProductionOutputGenerationResultV1 consume_out{};
+				consume_out.generation = 67890;
+				const auto consume_before = consume_out;
+				CHECK(consume_return(ref, &bad_expected, &consume_out).native_error == ERR_INVALID_PARAMETER);
+				CHECK(std::memcmp(&consume_out, &consume_before, sizeof(consume_out)) == 0);
+				control_unchanged();
+			}
+			alignas(GDExtensionProductionServiceBudgetV1) uint8_t budget_bytes[sizeof(budget) + 1]{};
+			alignas(GDExtensionProductionOutputGenerationRefV1) uint8_t expected_bytes[sizeof(expected) + 1]{};
+			std::memcpy(budget_bytes + 1, &budget, sizeof(budget));
+			std::memcpy(expected_bytes + 1, &expected, sizeof(expected));
+			GDExtensionProductionObserveResultV3 aligned_observation{};
+			GDExtensionProductionOutputGenerationResultV1 aligned_return{};
+			const auto aligned_observation_before = aligned_observation;
+			const auto aligned_return_before = aligned_return;
+			CHECK(observe3(ref, reinterpret_cast<const GDExtensionProductionServiceBudgetV1 *>(budget_bytes + 1), &aligned_observation).native_error == ERR_INVALID_PARAMETER);
+			CHECK(consume_return(ref, reinterpret_cast<const GDExtensionProductionOutputGenerationRefV1 *>(expected_bytes + 1), &aligned_return).native_error == ERR_INVALID_PARAMETER);
+			CHECK(std::memcmp(&aligned_observation, &aligned_observation_before, sizeof(aligned_observation)) == 0);
+			CHECK(std::memcmp(&aligned_return, &aligned_return_before, sizeof(aligned_return)) == 0);
+			control_unchanged();
+			alignas(GDExtensionProductionObserveResultV3) uint8_t observation_bytes[sizeof(GDExtensionProductionObserveResultV3) + 1]{};
+			alignas(GDExtensionProductionOutputGenerationResultV1) uint8_t return_bytes[sizeof(GDExtensionProductionOutputGenerationResultV1) + 1]{};
+			uint8_t observation_bytes_before[sizeof(observation_bytes)]{};
+			uint8_t return_bytes_before[sizeof(return_bytes)]{};
+			CHECK(observe3(ref, &budget, reinterpret_cast<GDExtensionProductionObserveResultV3 *>(observation_bytes + 1)).native_error == ERR_INVALID_PARAMETER);
+			CHECK(consume_return(ref, &expected, reinterpret_cast<GDExtensionProductionOutputGenerationResultV1 *>(return_bytes + 1)).native_error == ERR_INVALID_PARAMETER);
+			CHECK(std::memcmp(observation_bytes, observation_bytes_before, sizeof(observation_bytes)) == 0);
+			CHECK(std::memcmp(return_bytes, return_bytes_before, sizeof(return_bytes)) == 0);
+			control_unchanged();
+			// Aligned overlapping complete extents must reject before any write.
+			std::memcpy(observation_bytes, &budget, sizeof(budget));
+			std::memcpy(return_bytes, &expected, sizeof(expected));
+			std::memcpy(observation_bytes_before, observation_bytes, sizeof(observation_bytes));
+			std::memcpy(return_bytes_before, return_bytes, sizeof(return_bytes));
+			CHECK(observe3(ref, reinterpret_cast<const GDExtensionProductionServiceBudgetV1 *>(observation_bytes), reinterpret_cast<GDExtensionProductionObserveResultV3 *>(observation_bytes)).native_error == ERR_INVALID_PARAMETER);
+			CHECK(consume_return(ref, reinterpret_cast<const GDExtensionProductionOutputGenerationRefV1 *>(return_bytes), reinterpret_cast<GDExtensionProductionOutputGenerationResultV1 *>(return_bytes)).native_error == ERR_INVALID_PARAMETER);
+			CHECK(std::memcmp(observation_bytes, observation_bytes_before, sizeof(observation_bytes)) == 0);
+			CHECK(std::memcmp(return_bytes, return_bytes_before, sizeof(return_bytes)) == 0);
+			control_unchanged();
+
+			for (uint32_t field = 0; field < 6; ++field) {
+				auto bad = expected;
+				uint64_t *fields[] = { &bad.registry_instance, &bad.request_serial, &bad.control_serial, &bad.root_serial, &bad.particles, &bad.generation };
+				++*fields[field];
+				GDExtensionProductionOutputGenerationResultV1 untouched{};
+				untouched.generation = 999;
+				CHECK(consume_return(ref, &bad, &untouched).native_error != OK);
+				CHECK(untouched.generation == 999);
+				CHECK(request.control.state == ProductionControlState::RETURNED);
+			}
+			GDExtensionProductionOutputGenerationResultV1 returned{};
+			CHECK(consume_return(ref, &expected, &returned).native_error == OK);
+			CHECK(returned.root_serial == terminal.root_serial);
+			CHECK(returned.generation == terminal.generation);
+			CHECK(returned.root_source.physical_returns_pending == terminal.root_source.physical_returns_pending);
+			CHECK(request.control.state == ProductionControlState::OWNER_CONSUMED);
+			CHECK(consume_return(ref, &expected, &returned).native_error == ERR_DOES_NOT_EXIST);
+		} else {
+			REQUIRE(fixture.registry.production_control_consume(ref, terminal_control, &consumed) == OK);
+			CHECK(std::memcmp(&terminal, &consumed.output_generation, sizeof(terminal)) == 0);
+		}
+
 		CHECK(fixture.registry.production_release(ref).native_error == ERR_BUSY);
 		CHECK(fixture.registry.production_close(fixture.attachment).native_error == ERR_BUSY);
 		GDExtensionProductionReportV2 live{};
@@ -5793,8 +6226,10 @@ struct Access {
 		CHECK(request.revision == before_free + 1);
 		REQUIRE(fixture.registry.production_report_contents_locked(request, live) == OK);
 		CHECK(live.physical_returns_pending == 0);
-		CHECK(std::memcmp(&terminal, &consumed.output_generation, sizeof(terminal)) == 0);
-		CHECK(consumed.output_generation.root_source.physical_returns_pending == 1);
+		if (!public_terminal) {
+			CHECK(std::memcmp(&terminal, &consumed.output_generation, sizeof(terminal)) == 0);
+			CHECK(consumed.output_generation.root_source.physical_returns_pending == 1);
+		}
 		CHECK(fixture.driver.issues == 0);
 		for (uint32_t turn = 0; turn < 8 && request.serial; ++turn) {
 			GDExtensionProductionServiceBudgetV1 remaining{};
@@ -5952,10 +6387,18 @@ struct Access {
 		CHECK(fixture.owner_cleaned);
 	}
 	struct GenerationSelectionProbe {
+		bool native_sources = false, source_failure = false;
+		RendererRD::ExternalSurfaceSelection retained_surface;
+		static void return_surface(uint64_t p_probe) {
+			auto &probe = *reinterpret_cast<GenerationSelectionProbe *>(uintptr_t(p_probe));
+			CHECK(RendererRD::ParticlesStorage::get_singleton()->particles_external_surface_release(probe.retained_surface) == OK);
+			CHECK(probe.retained_surface.is_empty());
+			CHECK(probe.native->generation_returnable() == OK);
+		}
 		SingletonEnrollment *fixture = nullptr;
 		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
 		RendererRD::ExternalOutputConfig config, expected_identity;
-		uint64_t expected_material_generations[2] = {};
+		uint64_t expected_material_generations[3] = {};
 		int failure = 0;
 		uint32_t calls = 0;
 		static void receive(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
@@ -6022,7 +6465,7 @@ struct Access {
 																  : ERR_UNAUTHORIZED));
 			REQUIRE(p.native->exists());
 			CHECK(p.native->selection_inline_matches(p.expected_identity));
-			for (uint32_t i = 0; i < 2; ++i) {
+			for (uint32_t i = 0; i < uint32_t(p.expected_identity.surface_materials.size()); ++i) {
 				CHECK(p.native->selection_material_generation(i) == p.expected_material_generations[i]);
 			}
 			// Independent expected bytes have their own allocations. Each changed
@@ -6035,33 +6478,165 @@ struct Access {
 				tag->set(17, original);
 				CHECK(p.native->selection_inline_matches(p.expected_identity));
 			}
-			CHECK(p.native->selection_meshes() == (p.failure == 2 ? 0u : 1u));
-			CHECK(p.native->selection_materials() == (p.failure == 0 ? 2u : p.failure == 1 ? 1u
-																						   : 0u));
+			CHECK(p.native->selection_meshes() == (p.failure == 2 ? 0u : uint32_t(p.expected_identity.surfaces.size())));
+			CHECK(p.native->selection_materials() == (p.failure == 0 ? uint32_t(p.expected_identity.surface_materials.size()) : p.failure == 1 ? 1u
+																																			   : 0u));
 			CHECK(p.native->selection_faulted() == (p.failure != 0));
 			CHECK_FALSE(p.native->generation_pin().is_empty());
 			if (p.failure != 2) {
 				auto *meshes = RendererRD::MeshStorage::get_singleton();
 				auto *materials = RendererRD::MaterialStorage::get_singleton();
-				const RID mesh = p.config.surfaces[0], material = p.config.surface_materials[0];
+				for (const RID &mesh : p.config.surfaces) {
+					const int surfaces = meshes->mesh_get_surface_count(mesh);
+					ERR_PRINT_OFF;
+					meshes->mesh_clear(mesh);
+					meshes->mesh_free(mesh);
+					ERR_PRINT_ON;
+					CHECK(meshes->owns_mesh(mesh));
+					CHECK(meshes->mesh_get_surface_count(mesh) == surfaces);
+				}
+				const RID material = p.config.surface_materials[0];
 				const uint64_t before = materials->material_get_generation(material);
 				ERR_PRINT_OFF;
-				meshes->mesh_clear(mesh);
-				meshes->mesh_free(mesh);
 				materials->material_set_render_priority(material, 7);
 				materials->material_free(material);
 				ERR_PRINT_ON;
-				CHECK(meshes->owns_mesh(mesh));
-				CHECK(meshes->mesh_get_surface_count(mesh) == 2);
 				CHECK(materials->owns_material(material));
 				CHECK(materials->material_get_generation(material) == before);
 			}
+			if (p.native_sources) {
+				// Source backing is original MeshStorage-owned storage. Retaining the
+				// generation must not create any shader input-mask VA or native draw.
+				auto *meshes = RendererRD::MeshStorage::get_singleton();
+				p.fixture->driver.mesh_directory_factory = true;
+				uint32_t flattened = 0;
+				for (const RID &rid : p.config.surfaces) {
+					auto *mesh = meshes->mesh_owner.get_or_null(rid);
+					for (uint32_t i = 0; i < mesh->surface_count; ++i) {
+						auto *surface = mesh->surfaces[i];
+						surface->vertex_count = 3;
+						surface->primitive = RSE::PRIMITIVE_TRIANGLES;
+						surface->format = RSE::ARRAY_FORMAT_VERTEX;
+						surface->aabb = AABB(Vector3(flattened + 1, 2, 3), Vector3(4, 5, 6));
+						surface->uv_scale = Vector4(2, 3, 4, flattened + 1);
+						surface->vertex_buffer_size = 36;
+						if (!p.source_failure || flattened != 1) {
+							surface->vertex_buffer = p.fixture->rd.vertex_buffer_create(36);
+							REQUIRE(surface->vertex_buffer.is_valid());
+						}
+						CHECK(surface->version_count == 0);
+						++flattened;
+					}
+				}
+				CHECK(p.native->acquire_selection_sources({}, ref) == ERR_UNAUTHORIZED);
+				CHECK(p.native->selection_sources() == 0);
+				REQUIRE(p.native->acquire_selection_sources(context, ref) == (p.source_failure ? ERR_INVALID_DATA : OK));
+				CHECK(p.native->acquire_selection_sources(context, ref) == ERR_ALREADY_IN_USE);
+				CHECK(p.native->selection_sources() == (p.source_failure ? 1u : flattened));
+				CHECK(p.native->selection_faulted() == p.source_failure);
+				if (!p.source_failure) {
+					auto *storage = RendererRD::ParticlesStorage::get_singleton();
+					const RID particles = p.native->particle_rid();
+					RendererRD::ExternalSurfaceSelection borrowed;
+					CHECK(storage->particles_external_surface_count(particles) == flattened);
+					CHECK(storage->particles_external_surface_acquire(particles, flattened, borrowed) == ERR_INVALID_PARAMETER);
+					CHECK(borrowed.is_empty());
+					// Exhaust the original accepted pin quota while every surface cell
+					// is free. Refusal must leave the output and source holds unchanged.
+					GDExtensionDeviceExit::ProductionOutputPin occupied[8];
+					for (auto &pin : occupied) {
+						REQUIRE(p.fixture->registry.production_output_pin_borrow(p.native->generation_pin(), p.fixture->rd, pin) == OK);
+					}
+					CHECK(storage->particles_external_surface_acquire(particles, 0, borrowed) == ERR_OUT_OF_MEMORY);
+					CHECK(borrowed.is_empty());
+					CHECK(p.native->selection_sources() == flattened);
+					for (auto &pin : occupied) {
+						REQUIRE(p.fixture->registry.production_output_unpin(pin) == OK);
+					}
+					// Seven quoted surface cells fill before the nine-row pin quota.
+					RendererRD::ExternalSurfaceSelection pool[7];
+					for (uint32_t i = 0; i < 7; ++i) {
+						REQUIRE(storage->particles_external_surface_acquire(particles, i % flattened, pool[i]) == OK);
+					}
+					CHECK(storage->particles_external_surface_acquire(particles, 0, borrowed) == ERR_OUT_OF_MEMORY);
+					CHECK(borrowed.is_empty());
+					for (auto &selection : pool) {
+						CHECK(storage->particles_external_surface_release(selection) == OK);
+					}
+					REQUIRE(storage->particles_external_surface_acquire(particles, 0, borrowed) == OK);
+					CHECK_FALSE(borrowed.is_empty());
+					CHECK(borrowed.get_generation() == RendererRD::ExternalLinkedOwnerTest::generation);
+					CHECK(borrowed.get_native_surface() == 0);
+					CHECK(borrowed.get_flattened_surface() == 0);
+					CHECK(borrowed.get_material_generation() == p.expected_material_generations[0]);
+					CHECK(borrowed.get_surface_aabb() == AABB(Vector3(1, 2, 3), Vector3(4, 5, 6)));
+					CHECK(storage->particles_external_surface_acquire(particles, 1, borrowed) == ERR_ALREADY_IN_USE);
+					CHECK(borrowed.get_flattened_surface() == 0);
+					p.retained_surface = std::move(borrowed);
+					CHECK(borrowed.is_empty());
+					CHECK_FALSE(p.retained_surface.is_empty());
+#ifdef THREADS_ENABLED
+					uint32_t foreign_count = UINT32_MAX;
+					Error foreign_acquire = OK, foreign_return = OK;
+					std::thread foreign([&]() {
+						RendererRD::ExternalSurfaceSelection refused;
+						foreign_count = storage->particles_external_surface_count(particles);
+						foreign_acquire = storage->particles_external_surface_acquire(particles, 0, refused);
+						foreign_return = storage->particles_external_surface_release(p.retained_surface);
+					});
+					foreign.join();
+					CHECK(foreign_count == 0);
+					CHECK(foreign_acquire == ERR_UNAUTHORIZED);
+					CHECK(foreign_return == ERR_UNAUTHORIZED);
+					CHECK_FALSE(p.retained_surface.is_empty());
+#endif
+				}
+				flattened = 0;
+				for (const RID &rid : p.config.surfaces) {
+					auto *mesh = meshes->mesh_owner.get_or_null(rid);
+					for (uint32_t i = 0; i < mesh->surface_count; ++i) {
+						auto *surface = mesh->surfaces[i];
+						const bool retained = !p.source_failure || flattened == 0;
+						CHECK(surface->immutable_holds == (retained ? 1u : 0u));
+						CHECK(surface->version_count == 0);
+						CHECK(p.native->selection_source_matches(flattened, rid, i, p.config.surface_materials[flattened], p.expected_material_generations[flattened], surface->aabb, surface->format) == retained);
+						CHECK_FALSE(p.native->selection_source_matches(flattened, rid, i + 1, p.config.surface_materials[flattened], p.expected_material_generations[flattened], surface->aabb, surface->format));
+						// The same pure predicate is used by both production preparation
+						// consumers. A correct pointer cannot bless rewritten metadata.
+						CHECK(p.native->selection_source_metadata_matches(flattened, surface->primitive, surface->format, surface->aabb, surface->uv_scale) == retained);
+						CHECK_FALSE(p.native->selection_source_metadata_matches(flattened, RSE::PRIMITIVE_LINES, surface->format, surface->aabb, surface->uv_scale));
+						CHECK_FALSE(p.native->selection_source_metadata_matches(flattened, surface->primitive, surface->format ^ RSE::ARRAY_FORMAT_NORMAL, surface->aabb, surface->uv_scale));
+						CHECK_FALSE(p.native->selection_source_metadata_matches(flattened, surface->primitive, surface->format, AABB(surface->aabb.position + Vector3(1, 0, 0), surface->aabb.size), surface->uv_scale));
+						CHECK_FALSE(p.native->selection_source_metadata_matches(flattened, surface->primitive, surface->format, surface->aabb, surface->uv_scale + Vector4(1, 0, 0, 0)));
+						if (retained) {
+							RendererRD::MeshStorage::NativeSurfaceHold derived;
+							REQUIRE(p.native->derive_selection_source(flattened, 1, derived) == OK);
+							CHECK(derived.is_valid());
+							CHECK(derived.get_vertex_array().is_valid());
+							CHECK(derived.get_aabb() == surface->aabb);
+							CHECK(surface->version_count == 1);
+							CHECK(surface->immutable_holds == 2);
+							REQUIRE(RendererRD::MeshStorage::mesh_surface_hold_release(derived) == OK);
+							CHECK(surface->immutable_holds == 1);
+						}
+						++flattened;
+					}
+				}
+			}
 			if (!p.failure) {
 				p.native->withdraw_generation();
+				if (!p.retained_surface.is_empty()) {
+					auto *storage = RendererRD::ParticlesStorage::get_singleton();
+					RendererRD::ExternalSurfaceSelection refused;
+					CHECK(storage->particles_external_surface_count(p.native->particle_rid()) == 0);
+					CHECK(storage->particles_external_surface_acquire(p.native->particle_rid(), 0, refused) == ERR_UNAVAILABLE);
+					CHECK(refused.is_empty());
+					CHECK(p.native->generation_returnable() == ERR_BUSY);
+				}
 			}
 		}
 	};
-	static void generation_selection_lifecycle(int failure) {
+	static void generation_selection_lifecycle(int failure, bool multi_mesh = false, bool native_sources = false, bool source_failure = false) {
 		using namespace GDExtensionDeviceExit;
 		using MeshStorage = RendererRD::MeshStorage;
 		auto *server = ordinal_server();
@@ -6073,22 +6648,34 @@ struct Access {
 		REQUIRE(fixture.prepare_device(server) == OK);
 		auto *previous_meshes = MeshStorage::get_singleton();
 		auto *meshes = memnew(MeshStorage(MeshStorage::NativeHoldTestTag{}));
-		const RID mesh = meshes->mesh_allocate();
-		meshes->mesh_initialize(mesh);
-		auto *mesh_owner = meshes->mesh_owner.get_or_null(mesh);
-		// Original CPU mesh/surface owners, deliberately no VA or physical profile.
-		mesh_owner->surfaces = static_cast<MeshStorage::Mesh::Surface **>(memalloc(2 * sizeof(MeshStorage::Mesh::Surface *)));
-		mesh_owner->surface_count = 2;
-		for (uint32_t i = 0; i < 2; ++i) {
-			mesh_owner->surfaces[i] = memnew(MeshStorage::Mesh::Surface);
+		const uint32_t mesh_count = multi_mesh ? 2u : 1u;
+		const uint32_t material_count = multi_mesh ? 3u : 2u;
+		RID mesh_rids[2];
+		MeshStorage::Mesh *mesh_owners[2] = {};
+		for (uint32_t i = 0; i < mesh_count; ++i) {
+			mesh_rids[i] = meshes->mesh_allocate();
+			meshes->mesh_initialize(mesh_rids[i]);
+			mesh_owners[i] = meshes->mesh_owner.get_or_null(mesh_rids[i]);
+			// Two distinct original CPU owners with unequal 1+2 flattening.
+			// The default fixture keeps its original one-mesh/two-surface shape.
+			const uint32_t surface_count = multi_mesh ? i + 1 : 2u;
+			mesh_owners[i]->surfaces = static_cast<MeshStorage::Mesh::Surface **>(memalloc(surface_count * sizeof(MeshStorage::Mesh::Surface *)));
+			mesh_owners[i]->surface_count = surface_count;
+			for (uint32_t surface = 0; surface < surface_count; ++surface) {
+				mesh_owners[i]->surfaces[surface] = memnew(MeshStorage::Mesh::Surface);
+			}
 		}
-		void *materials = RendererRD::selection_materials_create();
+		void *materials = RendererRD::selection_materials_create(material_count);
 		GenerationSelectionProbe probe;
+		probe.native_sources = native_sources;
+		probe.source_failure = source_failure;
 		probe.failure = failure;
 		probe.config.profile = RendererRD::ExternalOutputConfig::INSTANCE_192;
 		probe.config.max_views = probe.config.max_inflight = 1;
-		probe.config.surfaces.push_back(mesh);
-		for (uint32_t i = 0; i < 2; ++i) {
+		for (uint32_t i = 0; i < mesh_count; ++i) {
+			probe.config.surfaces.push_back(mesh_rids[i]);
+		}
+		for (uint32_t i = 0; i < material_count; ++i) {
 			probe.config.surface_materials.push_back(RendererRD::selection_material_rid(materials, i));
 		}
 		PackedByteArray *tags[] = { &probe.config.producer_tag, &probe.config.device_tag, &probe.config.layout_digest, &probe.config.mapping_digest, &probe.config.numeric_profile_digest };
@@ -6099,16 +6686,24 @@ struct Access {
 		// Give the second original material a distinct genuine generation before
 		// snapshotting; an index swap or constant generation cannot pass.
 		RendererRD::MaterialStorage::get_singleton()->material_set_render_priority(probe.config.surface_materials[1], 4);
+		if (multi_mesh) {
+			RendererRD::MaterialStorage::get_singleton()->material_set_render_priority(probe.config.surface_materials[2], 4);
+			RendererRD::MaterialStorage::get_singleton()->material_set_render_priority(probe.config.surface_materials[2], 8);
+		}
 		for (const RID &rid : probe.config.surfaces) {
 			probe.expected_identity.surfaces.push_back(rid);
 		}
-		for (uint32_t i = 0; i < 2; ++i) {
+		for (uint32_t i = 0; i < material_count; ++i) {
 			const RID rid = probe.config.surface_materials[i];
 			probe.expected_identity.surface_materials.push_back(rid);
 			probe.expected_material_generations[i] = RendererRD::MaterialStorage::get_singleton()->material_get_generation(rid);
 			REQUIRE(probe.expected_material_generations[i] != 0);
 		}
-		REQUIRE(probe.expected_material_generations[0] != probe.expected_material_generations[1]);
+		for (uint32_t i = 0; i < material_count; ++i) {
+			for (uint32_t j = i + 1; j < material_count; ++j) {
+				REQUIRE(probe.expected_material_generations[i] != probe.expected_material_generations[j]);
+			}
+		}
 		PackedByteArray *expected_tags[] = { &probe.expected_identity.producer_tag, &probe.expected_identity.device_tag, &probe.expected_identity.layout_digest, &probe.expected_identity.mapping_digest, &probe.expected_identity.numeric_profile_digest };
 		for (uint32_t i = 0; i < 5; ++i) {
 			expected_tags[i]->resize(32);
@@ -6121,6 +6716,9 @@ struct Access {
 		plan.action_count = plan.use_count = plan.readback_count = 0;
 		plan.resource_count = 1;
 		plan.resources[0] = { GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, bytes, 0 };
+		if (native_sources && !source_failure) {
+			plan.capacity.resource_uses = 9; // Original root plus bounded borrow tests.
+		}
 		probe.fixture = &fixture;
 		REQUIRE(fixture.initialize_owner(1, false, false, &GenerationSelectionProbe::receive, &probe, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &plan) == OK);
 		{
@@ -6141,11 +6739,17 @@ struct Access {
 				CHECK(request.resources[0].metadata_returned);
 				CHECK(request.resources[0].metadata_data == nullptr);
 			}
-			CHECK(mesh_owner->selection_holds == (failure >= 2 ? 0u : 1u));
-			CHECK(RendererRD::selection_material_holds(materials, 0) == (failure >= 2 ? 0u : 1u));
-			CHECK(RendererRD::selection_material_holds(materials, 1) == (failure == 0 ? 1u : 0u));
-			const uint32_t initial_leases = failure == 0 ? 3 : failure == 1 ? 2
-																			: 0;
+			const uint32_t initial_meshes = failure >= 2 ? 0u : mesh_count;
+			const uint32_t initial_materials = failure == 0 ? material_count : failure == 1 ? 1u
+																							: 0u;
+			const uint32_t initial_sources = native_sources ? (source_failure ? 1u : material_count) : 0;
+			const uint32_t initial_leases = initial_meshes + initial_materials + initial_sources;
+			for (uint32_t i = 0; i < mesh_count; ++i) {
+				CHECK(mesh_owners[i]->selection_holds == (i < initial_meshes ? 1u : 0u));
+			}
+			for (uint32_t i = 0; i < material_count; ++i) {
+				CHECK(RendererRD::selection_material_holds(materials, i) == (i < initial_materials ? 1u : 0u));
+			}
 			// Destroy parser bytes before dropping all references. Expected identity
 			// was independently allocated and cannot keep parser storage alive.
 			for (auto *tag : tags) {
@@ -6158,14 +6762,32 @@ struct Access {
 			}
 			if (failure != 3) {
 				CHECK(native.selection_inline_matches(probe.expected_identity));
-				for (uint32_t i = 0; i < 2; ++i) {
+				for (uint32_t i = 0; i < material_count; ++i) {
 					CHECK(native.selection_material_generation(i) == probe.expected_material_generations[i]);
 				}
-				CHECK(mesh_owner->selection_holds == (failure == 2 ? 0u : 1u));
-				CHECK(RendererRD::selection_material_holds(materials, 0) == (failure == 2 ? 0u : 1u));
-				CHECK(RendererRD::selection_material_holds(materials, 1) == (failure == 0 ? 1u : 0u));
+				for (uint32_t i = 0; i < mesh_count; ++i) {
+					CHECK(mesh_owners[i]->selection_holds == (i < initial_meshes ? 1u : 0u));
+				}
+				for (uint32_t i = 0; i < material_count; ++i) {
+					CHECK(RendererRD::selection_material_holds(materials, i) == (i < initial_materials ? 1u : 0u));
+				}
 			}
 			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+			if (!probe.retained_surface.is_empty()) {
+				REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &budget) == OK);
+				REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);
+				server->sync();
+				ProductionControlOutput out{};
+				REQUIRE(fixture.registry.production_control_consume(ref, serial, &out) == OK);
+				CHECK(out.result.native_error == ERR_BUSY);
+				CHECK_FALSE(out.output_generation.native_released);
+				CHECK(native.selection_sources() == initial_sources);
+				CHECK(native.selection_meshes() == initial_meshes);
+				CHECK(native.selection_materials() == initial_materials);
+				server->call_on_render_thread(callable_mp_static(&GenerationSelectionProbe::return_surface).bind(uint64_t(uintptr_t(&probe))));
+				server->sync();
+				CHECK(probe.retained_surface.is_empty());
+			}
 			for (uint32_t turn = 0; turn < (failure == 3 ? 0u : initial_leases + 2); ++turn) {
 				REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &budget) == OK);
 				REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);
@@ -6179,15 +6801,22 @@ struct Access {
 				if (turn < initial_leases) {
 					CHECK_FALSE(out.output_generation.native_released);
 					REQUIRE(native.exists());
-					CHECK(native.selection_meshes() + native.selection_materials() == initial_leases - turn - 1);
+					CHECK(native.selection_meshes() + native.selection_materials() + native.selection_sources() == initial_leases - turn - 1);
 					CHECK(RendererRD::selection_shader_holds(materials) == native.selection_materials());
-					const uint32_t initially_retained_materials = failure == 0 ? 2u : 1u;
-					const uint32_t remaining_materials = turn + 1 < initially_retained_materials ? initially_retained_materials - turn - 1 : 0;
-					// Exact original RID order: material1 returns before material0.
-					for (uint32_t i = 0; i < 2; ++i) {
+					const uint32_t initially_retained_materials = initial_materials;
+					const uint32_t source_turns = MIN(turn + 1, initial_sources);
+					const uint32_t selection_turns = turn + 1 - source_turns;
+					const uint32_t remaining_materials = selection_turns < initially_retained_materials ? initially_retained_materials - selection_turns : 0;
+					CHECK(native.selection_sources() == initial_sources - source_turns);
+					// Exact original RID suffix order, followed by mesh1 before mesh0.
+					for (uint32_t i = 0; i < material_count; ++i) {
 						CHECK(RendererRD::selection_material_holds(materials, i) == (i < remaining_materials ? 1u : 0u));
 					}
-					CHECK(mesh_owner->selection_holds == native.selection_meshes());
+					const uint32_t remaining_meshes = initial_leases - turn - 1 - remaining_materials - native.selection_sources();
+					CHECK(native.selection_meshes() == remaining_meshes);
+					for (uint32_t i = 0; i < mesh_count; ++i) {
+						CHECK(mesh_owners[i]->selection_holds == (i < remaining_meshes ? 1u : 0u));
+					}
 					CHECK_FALSE(request.resources[0].metadata_returned);
 				} else if (turn == initial_leases) {
 					CHECK_FALSE(out.output_generation.native_released);
@@ -6196,7 +6825,7 @@ struct Access {
 				} else {
 					CHECK(out.output_generation.native_released);
 					CHECK(request.output_owner_head == UINT32_MAX);
-					if (failure) {
+					if (failure || source_failure) {
 						CHECK_FALSE(native.exists());
 						CHECK(request.resources[0].metadata_returned);
 						CHECK(request.resources[0].metadata_data == nullptr);
@@ -6210,7 +6839,9 @@ struct Access {
 					}
 				}
 			}
-			CHECK(mesh_owner->selection_holds == 0);
+			for (uint32_t i = 0; i < mesh_count; ++i) {
+				CHECK(mesh_owners[i]->selection_holds == 0);
+			}
 			CHECK(RendererRD::selection_shader_holds(materials) == 0);
 			CHECK(request.graph_count == 0);
 			CHECK(request.native_count == 0);
@@ -6226,11 +6857,25 @@ struct Access {
 				}
 			}
 			CHECK(request.serial == 0);
+			if (native_sources) {
+				// Native source leases have returned; ordinary MeshStorage now
+				// owns and disposes its own backing/derived-Version resources.
+				for (const RID &rid : probe.expected_identity.surfaces) {
+					meshes->mesh_clear(rid);
+				}
+				fixture.rd._free_pending_resources(0);
+				CHECK(fixture.driver.mesh_directory_buffer_frees == (source_failure ? material_count - 1 : material_count));
+				CHECK_FALSE(fixture.driver.mesh_directory_buffer_live);
+				fixture.rd.vertex_formats.clear();
+				fixture.rd.vertex_format_cache.clear();
+			}
 			fixture.cleanup_owner();
 			CHECK(fixture.owner_cleaned);
 		}
 		RendererRD::selection_materials_destroy(materials);
-		meshes->mesh_free(mesh);
+		for (uint32_t i = 0; i < mesh_count; ++i) {
+			meshes->mesh_free(mesh_rids[i]);
+		}
 		memdelete(meshes);
 		MeshStorage::singleton = previous_meshes;
 	}
@@ -6843,7 +7488,7 @@ struct Access {
 	struct NativeSceneAcquireProbe {
 		SingletonEnrollment *fixture = nullptr;
 		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
-		GDExtensionProductionRequestRefV1 create_ref{};
+		GDExtensionProductionRequestRefV1 create_ref{}, admission_ref{};
 		GDExtensionOutputCreateResultV1 created{};
 		GDExtensionOutputAcquireInputV1 input{};
 		GDExtensionInterfaceDeviceSessionOutputCreateV2 create = nullptr;
@@ -6852,7 +7497,7 @@ struct Access {
 		GDExtensionInterfaceDeviceSessionOutputWithdrawV1 withdraw = nullptr;
 		GDExtensionInterfaceDeviceSessionProductionAppendV2 append = nullptr;
 		bool withdrawing = false;
-		uint32_t create_calls = 0, acquire_calls = 0;
+		uint32_t create_calls = 0, acquire_calls = 0, admission_calls = 0;
 		static void receive(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
 			using namespace GDExtensionDeviceExit;
 			auto &probe = *static_cast<NativeSceneAcquireProbe *>(opaque);
@@ -6878,6 +7523,15 @@ struct Access {
 				probe.create(context, ref, &config, &probe.created);
 				REQUIRE(probe.created.status.error == OK);
 				REQUIRE(probe.native->adopt_created(RID::from_uint64(probe.created.particles)));
+				return;
+			}
+			if (ref.handle_serial == probe.admission_ref.handle_serial) {
+				// Admission-only receiver: this original FIFO entry does not append
+				// or manufacture a readback completion.
+				CHECK(context.registry_instance == fixture.instance);
+				CHECK(context.frame_serial != 0);
+				CHECK(fixture.request->frozen);
+				++probe.admission_calls;
 				return;
 			}
 			++probe.acquire_calls;
@@ -7144,6 +7798,390 @@ struct Access {
 		fixture.cleanup_owner();
 		CHECK(fixture.owner_cleaned);
 	}
+	static void incoming_public_admission() {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
+			return;
+		}
+		const auto reserve = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReserveV2>("device_session_production_reserve_v2");
+		const auto prepare = ordinal_port<GDExtensionInterfaceDeviceSessionProductionPrepareOutputV1>("device_session_production_prepare_output_v1");
+		const auto prepare_readback = ordinal_port<GDExtensionInterfaceDeviceSessionProductionPrepareReadbackV2>("device_session_production_prepare_readback_v2");
+		const auto reserve_incoming = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReserveReadbackSourcesV1>("device_session_production_reserve_readback_sources_v1");
+		const auto consume = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
+		const auto release = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReleaseV2>("device_session_production_release_v2");
+		if (!check_step(reserve != nullptr)) {
+			return;
+		}
+		if (!check_step(prepare != nullptr)) {
+			return;
+		}
+		if (!check_step(prepare_readback != nullptr)) {
+			return;
+		}
+		if (!check_step(reserve_incoming != nullptr)) {
+			return;
+		}
+		if (!check_step(consume != nullptr)) {
+			return;
+		}
+		if (!check_step(release != nullptr)) {
+			return;
+		}
+		OrdinalPlan pool;
+		pool.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 2, 2, 3, 4, 2048, 1, 3, 0, 4 };
+		pool.attachment_requests = 2;
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		NativeSceneAcquireProbe probe;
+		probe.fixture = &fixture;
+		probe.create = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputCreateV2>(gdextension_get_guarded_proc_address("device_session_output_create_v2"));
+		probe.acquire = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputAcquireV1>(gdextension_get_guarded_proc_address("device_session_output_acquire_v1"));
+		probe.cancel = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputCancelV1>(gdextension_get_guarded_proc_address("device_session_output_cancel_v1"));
+		probe.withdraw = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputWithdrawV1>(gdextension_get_guarded_proc_address("device_session_output_withdraw_v1"));
+		probe.append = ordinal_port<GDExtensionInterfaceDeviceSessionProductionAppendV2>("device_session_production_append_v2");
+		if (!check_step(probe.create != nullptr)) {
+			return;
+		}
+		if (!check_step(probe.acquire != nullptr)) {
+			return;
+		}
+		if (!check_step(probe.cancel != nullptr)) {
+			return;
+		}
+		if (!check_step(probe.withdraw != nullptr)) {
+			return;
+		}
+		if (!check_step(probe.append != nullptr)) {
+			return;
+		}
+		if (!check_step(fixture.prepare_device(server) == OK)) {
+			return;
+		}
+		if (!check_step(fixture.initialize_owner(1, false, true, &NativeSceneAcquireProbe::receive, &probe, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &pool, nullptr, true) == OK)) {
+			return;
+		}
+		RendererRD::ExternalLinkedOwnerTest native(fixture.rd, true);
+		probe.native = &native;
+		auto operation = pool.operation;
+		const GDExtensionProductionCapacityV1 create_capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 1, 1, 0, 0, 0, 1, 0, 0 };
+		const GDExtensionProductionResourceV1 metadata = { GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, RendererRD::ParticlesStorage::particles_external_scene_metadata_bytes(), 0 };
+		if (!check_step(reserve(fixture.attachment, &operation, &create_capacity, nullptr, 0, &metadata, 1, nullptr, 0, nullptr, 0, &probe.create_ref).native_error == OK)) {
+			return;
+		}
+		Request *create_request = nullptr;
+		{
+			MutexLock lock(fixture.registry.mutex);
+			RenderingDevice *rd = nullptr;
+			if (!check_step(fixture.registry.production_request_locked(probe.create_ref, false, create_request, rd) == OK)) {
+				return;
+			}
+		}
+		fixture.request = create_request;
+		uint64_t control = 0;
+		if (!check_step(fixture.port.record_schedule(probe.create_ref, &control) == OK)) {
+			return;
+		}
+		server->sync();
+		GDExtensionProductionRecordReportV2 recorded{};
+		if (!check_step(consume(probe.create_ref, control, &recorded).native_error == OK)) {
+			return;
+		}
+		if (!check_step(probe.create_calls == 1)) {
+			return;
+		}
+		if (!check_step(native.exists())) {
+			return;
+		}
+		// Actual qualification storage supplies incoming custody; production-owned
+		// storage cannot stand in for a retained incoming source.
+		const auto open_qualification = ordinal_port<GDExtensionInterfaceDeviceSessionQualificationOpenV1>("device_session_qualification_open_v1");
+		const auto create_storage = ordinal_port<GDExtensionInterfaceDeviceSessionQualificationStorageCreateV1>("device_session_qualification_storage_create_v1");
+		const auto retire_storage = ordinal_port<GDExtensionInterfaceDeviceSessionQualificationStorageRetireV1>("device_session_qualification_storage_retire_v1");
+		const auto observe_storage = ordinal_port<GDExtensionInterfaceDeviceSessionQualificationStorageRetireObserveV1>("device_session_qualification_storage_retire_observe_v1");
+		const auto release_storage = ordinal_port<GDExtensionInterfaceDeviceSessionQualificationStorageRetireReleaseV1>("device_session_qualification_storage_retire_release_v1");
+		if (!check_step(open_qualification != nullptr)) {
+			return;
+		}
+		if (!check_step(create_storage != nullptr)) {
+			return;
+		}
+		if (!check_step(retire_storage != nullptr)) {
+			return;
+		}
+		if (!check_step(observe_storage != nullptr)) {
+			return;
+		}
+		if (!check_step(release_storage != nullptr)) {
+			return;
+		}
+		if (!check_step(open_qualification(&Enrollment::ABI, fixture.ready, fixture.context, fixture.session, { fixture.instance, fixture.holder.handle_serial }, &fixture.qualification).native_error == OK)) {
+			return;
+		}
+		fixture.rd.draw_graph.initialize(&fixture.driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+		fixture.rd.draw_graph.begin();
+		fixture.rd.frames[0].qualification_epoch = 1;
+		fixture.rd.frames[0].fence = RDD::FenceID(93);
+		fixture.rd.frames[0].command_buffer = RDD::CommandBufferID(90);
+		fixture.rd.frames[0].command_pool = RDD::CommandPoolID(94);
+		fixture.rd.main_queue = RDD::CommandQueueID(1);
+		fixture.rd.frames_drawn = 3;
+		fixture.driver.output_storage_factory = true;
+		const GDExtensionStorageCreateRequestV1 origin{ Enrollment::ABI, 16, 0, 0, 1, 1, 0 };
+		GDExtensionStorageBackingV1 backing{};
+		if (!check_step(create_storage(fixture.qualification, &origin, &backing).native_error == OK)) {
+			return;
+		}
+		if (!check_step(backing.rid != 0)) {
+			return;
+		}
+		if (!check_step(backing.backing_serial != 0)) {
+			return;
+		}
+		const GDExtensionProductionResourceV1 source{ GDEXTENSION_PRODUCTION_STORAGE_V1, 0, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 16, 0 };
+		const GDExtensionProductionUseV1 uses[] = {
+			{ 0, GDEXTENSION_PRODUCTION_READ_V1, 0, 4, 0 },
+			{ 0, GDEXTENSION_PRODUCTION_READ_V1, 0, 4, 0 }
+		};
+		const GDExtensionProductionCapacityV1 capacity{ production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 2, 1, 2, 4, 2048, 1, 2, 0, 4 };
+		const GDExtensionProductionActionV2 actions[] = {
+			{ 0, 11, 7, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, 1, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX },
+			{ 1, 11, 9, 0, GDEXTENSION_PRODUCTION_READBACK_V1, UINT32_MAX, 1, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, 0 }
+		};
+		GDExtensionProductionReadbackSourceV1 row{ 0, GDEXTENSION_PRODUCTION_READBACK_RETAINED_INCOMING_V1, 1, 0, 4, {}, { 1, backing.backing_serial } };
+		++operation.owner_request_nonce;
+		GDExtensionProductionRequestRefV1 ref{};
+		if (!check_step(reserve_incoming(fixture.attachment, &operation, &capacity, actions, 2, &source, 1, uses, 2, &row, 1, &ref).native_error == OK)) {
+			return;
+		}
+		auto select_request = [&](GDExtensionProductionRequestRefV1 target) -> bool {
+			MutexLock lock(fixture.registry.mutex);
+			RenderingDevice *rd = nullptr;
+			return check_step(fixture.registry.production_request_locked(target, false, fixture.request, rd) == OK && fixture.request != nullptr && rd == &fixture.rd);
+		};
+		if (!select_request(ref)) {
+			return;
+		}
+		if (!check_step(fixture.port.import_storage(ref, 0, &backing).native_error == OK)) {
+			return;
+		}
+		GDExtensionProductionOutputPrepareV1 prepared{};
+		prepared.abi = production_dto_abi<GDExtensionProductionOutputPrepareV1>();
+		prepared.canonical_suboperation = 11;
+		prepared.source_recipe_substep = 7;
+		prepared.source_use_count = prepared.source_generation = 1;
+		prepared.input.abi = production_dto_abi<GDExtensionOutputAcquireInputV1>();
+		prepared.input.particles = probe.created.particles;
+		prepared.input.common.generation = probe.created.generation;
+		prepared.input.common.present_seq = prepared.input.content_version = prepared.input.view_epoch = 1;
+		prepared.input.common.current_camera = { 1, 1, 1 };
+		for (uint32_t axis = 0; axis < 3; ++axis) {
+			prepared.input.common.bounds.size[axis] = 1;
+		}
+		const uint32_t roles[] = { 1, 2, 7 };
+		for (uint32_t i = 0; i < 3; ++i) {
+			prepared.roles[i] = { roles[i], UINT32_MAX, UINT32_MAX, 0, 0, 0 };
+		}
+		if (!check_step(prepare(ref, &prepared).native_error == OK)) {
+			return;
+		}
+		if (!check_step(prepare_readback(ref, 1, 0).native_error == OK)) {
+			return;
+		}
+		auto &rejected = *fixture.request;
+		const auto next_control = rejected.next_control_serial;
+		const auto attempts = fixture.driver.output_storage_attempts, issues = fixture.driver.issues;
+		control = 0;
+		CHECK(fixture.port.record_schedule(ref, &control) == ERR_UNAVAILABLE);
+		server->sync();
+		CHECK(control == 0);
+		CHECK(rejected.next_control_serial == next_control);
+		CHECK(rejected.control.state == ProductionControlState::OWNER_CONSUMED);
+		CHECK_FALSE(rejected.frozen);
+		CHECK_FALSE(rejected.append_effect_entered);
+		CHECK_FALSE(rejected.native_effect_entered);
+		CHECK(rejected.next_action == 0);
+		CHECK(rejected.actions[0].output_state == ProductionActionCell::OutputState::UNBOUND);
+		CHECK(rejected.actions[0].output_root == 0);
+		CHECK(rejected.output_owner_head == UINT32_MAX);
+		CHECK_FALSE(native.slot_reserved(0));
+		CHECK(native.pin(0).is_empty());
+		CHECK(probe.create_calls == 1);
+		CHECK(probe.acquire_calls == 0);
+		CHECK(probe.admission_calls == 0);
+		CHECK(fixture.driver.output_storage_attempts == attempts);
+		CHECK(fixture.driver.issues == issues);
+		CHECK(rejected.graph_count == 0);
+		CHECK(rejected.native_count == 0);
+		CHECK(rejected.readbacks[0].source.issued == 0);
+		// No rejected plan owns an output lease. Release its actual import before
+		// reserving the same real source in the valid admission case.
+		const GDExtensionProductionServiceBudgetV1 budget{ production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+		GDExtensionProductionReportV2 report{};
+		auto cancel_release = [&](GDExtensionProductionRequestRefV1 target, Request *request) -> bool {
+			if (!check_step(request != nullptr && fixture.port.cancel(target).native_error == OK)) {
+				return false;
+			}
+			auto offered = budget;
+			for (uint32_t turn = 0; turn < 64 && request->serial; ++turn) {
+				if (request->control.state == ProductionControlState::OWNER_CONSUMED) {
+					offered.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
+				} else {
+					// A published cell retains its original immutable authorization.
+					offered = request->control.input.budget;
+				}
+				GDExtensionProductionServiceBudgetV1 remaining{};
+				const Error error = Error(release(target, &offered, &remaining, &report).native_error);
+				if (!check_step(error == OK || error == ERR_BUSY)) {
+					return false;
+				}
+				server->sync();
+			}
+			return check_step(request->serial == 0);
+		};
+		if (!cancel_release(ref, &rejected)) {
+			return;
+		}
+		// Reserve output is zero-initialized for each new actual request. Release
+		// takes the old identity by value and cannot clear this caller's DTO.
+		ref = {};
+		++operation.owner_request_nonce;
+		const GDExtensionProductionActionV2 incoming{ 0, 11, 9, 0, GDEXTENSION_PRODUCTION_READBACK_V1, UINT32_MAX, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, 0 };
+		row.copy_action_ordinal = 0;
+		if (!check_step(reserve_incoming(fixture.attachment, &operation, &capacity, &incoming, 1, &source, 1, uses, 1, &row, 1, &ref).native_error == OK)) {
+			return;
+		}
+		if (!select_request(ref)) {
+			return;
+		}
+		probe.admission_ref = ref;
+		if (!check_step(fixture.port.import_storage(ref, 0, &backing).native_error == OK)) {
+			return;
+		}
+		if (!check_step(prepare_readback(ref, 0, 0).native_error == OK)) {
+			return;
+		}
+#ifdef THREADS_ENABLED
+		struct Contention {
+			Mutex *mutex;
+			Semaphore ready{};
+			std::atomic<bool> finished{ false }, holding{ false };
+			bool timeout = false;
+			static void run(void *data) {
+				auto &probe = *static_cast<Contention *>(data);
+				MutexLock lock(*probe.mutex);
+				probe.holding.store(true, std::memory_order_release);
+				probe.ready.post();
+				const uint64_t deadline = OS::get_singleton()->get_ticks_usec() + 5000000;
+				while (!probe.finished.load(std::memory_order_acquire) && OS::get_singleton()->get_ticks_usec() < deadline) {
+					OS::get_singleton()->delay_usec(100);
+				}
+				probe.timeout = !probe.finished.load(std::memory_order_acquire);
+				probe.holding.store(false, std::memory_order_release);
+			}
+		} contention{ &fixture.rd._thread_safe_ };
+		Thread contender;
+		const uint64_t retry_next_control = fixture.request->next_control_serial;
+		contender.start(&Contention::run, &contention);
+		if (!check_step(contender.is_started())) {
+			return;
+		}
+		contention.ready.wait();
+		uint64_t busy_control = 81;
+		const int32_t busy = fixture.port.record_schedule(ref, &busy_control);
+		const bool while_held = contention.holding.load(std::memory_order_acquire);
+		contention.finished.store(true, std::memory_order_release);
+		contender.wait_to_finish();
+		CHECK(busy == ERR_BUSY);
+		CHECK(while_held);
+		CHECK_FALSE(contention.timeout);
+		CHECK(busy_control == 81);
+		CHECK(fixture.request->next_control_serial == retry_next_control);
+		CHECK(fixture.request->control.state == ProductionControlState::OWNER_CONSUMED);
+		CHECK_FALSE(fixture.request->frozen);
+		CHECK_FALSE(fixture.request->append_effect_entered);
+#endif
+
+		control = 0;
+		if (!check_step(fixture.port.record_schedule(ref, &control) == OK)) {
+			return;
+		}
+		CHECK(control != 0);
+		CHECK(fixture.request->frozen);
+		server->sync();
+		if (!check_step(consume(ref, control, &recorded).native_error == OK)) {
+			return;
+		}
+		CHECK(recorded.result.native_error == OK);
+		CHECK(probe.admission_calls == 1);
+		CHECK(probe.acquire_calls == 0);
+		CHECK(fixture.request->control.state == ProductionControlState::OWNER_CONSUMED);
+		CHECK(fixture.request->resources[0].imported);
+		CHECK(fixture.request->resources[0].backing_serial == backing.backing_serial);
+		CHECK(fixture.request->readbacks[0].source.issued == 0);
+		if (!cancel_release(ref, fixture.request)) {
+			return;
+		}
+		fixture.request = create_request;
+		probe.withdrawing = true;
+		if (!check_step(fixture.port.record_schedule(probe.create_ref, &control) == OK)) {
+			return;
+		}
+		server->sync();
+		if (!check_step(consume(probe.create_ref, control, &recorded).native_error == OK)) {
+			return;
+		}
+		for (uint32_t turn = 0; turn < 64 && !native.released(); ++turn) {
+			auto offered = budget;
+			offered.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
+			uint64_t serial = 0;
+			if (!check_step(fixture.registry.production_control_accept(probe.create_ref, ProductionControlKind::OBSERVE, &serial, &offered) == OK)) {
+				return;
+			}
+			if (!check_step(fixture.registry.production_control_schedule(probe.create_ref, serial) == OK)) {
+				return;
+			}
+			server->sync();
+			ProductionControlOutput output{};
+			if (!check_step(fixture.registry.production_control_consume(probe.create_ref, serial, &output) == OK)) {
+				return;
+			}
+			CHECK((output.result.native_error == OK || output.result.native_error == ERR_BUSY));
+		}
+		if (!check_step(native.released())) {
+			return;
+		}
+		native.free_created();
+		if (!cancel_release(probe.create_ref, create_request)) {
+			return;
+		}
+		const GDExtensionStorageRetireRequestV1 retirement{ Enrollment::ABI, backing.backing, backing.rid, backing.backing_serial, 0, 0, 1, 1, 0 };
+		GDExtensionStorageRetireRefV1 retired{};
+		GDExtensionStorageRetireReportV1 returned{};
+		const GDExtensionQualificationBudgetV1 qualification_budget{ Enrollment::ABI, 1, 1000, 0 };
+		{
+			QuoteDriver::QualificationCleanupScope cleanup_scope(fixture.driver);
+			if (!check_step(retire_storage(fixture.qualification, &retirement, &retired, &returned).native_error == OK)) {
+				return;
+			}
+			for (uint32_t turn = 0; turn < 64 && returned.state != 1; ++turn) {
+				const Error error = Error(observe_storage(fixture.qualification, retired, &qualification_budget, &returned).native_error);
+				CHECK((error == OK || error == ERR_BUSY));
+				server->sync();
+			}
+		}
+		if (!check_step(returned.state == 1)) {
+			return;
+		}
+		CHECK(returned.event_seq != 0);
+		if (!check_step(release_storage(fixture.qualification, retired).native_error == OK)) {
+			return;
+		}
+		CHECK(fixture.driver.output_storage_count == 1);
+		CHECK(fixture.driver.output_storage_frees == 1);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
 	struct NativeAliasReadbackProbe {
 		SingletonEnrollment *fixture = nullptr;
 		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
@@ -7151,8 +8189,390 @@ struct Access {
 		GDExtensionProductionRequestRefV1 create_ref{};
 		GDExtensionOutputAcquireInputV1 input{};
 		GDExtensionOutputAcquireResultV1 acquired{};
-		bool closing = false;
+		GDExtensionDeviceExit::ProductionPhysicalContextRef completed_context{};
+		bool closing = false, prepare_continuation = false;
 		uint32_t create_calls = 0, acquire_calls = 0;
+		RID continuation_shader;
+		RID detached_vertex_buffer, detached_vertex_array, detached_other_vertex_array;
+		uint32_t detached_buffer_index = UINT32_MAX;
+		bool detached_geometry_installed = false;
+		uint32_t continuation_calls = 0, continuation_mode = 0;
+		static void reject_exhausted_group_serials(NativeAliasReadbackProbe &p, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref) {
+			using namespace GDExtensionDeviceExit;
+			auto &f = *p.fixture;
+			auto &request = *f.request;
+			const auto acquire = ordinal_port<GDExtensionInterfaceDeviceSessionOutputAcquireV1>("device_session_output_acquire_v1");
+			const auto original_next = request.next_disposal_group_serial;
+			const auto revision = request.revision, pin_serial = request.next_output_pin_serial;
+			const auto frontier = request.next_action, graphs = request.graph_count, natives = request.native_count;
+			const auto allocations = f.driver.alias_allocations, frees = f.driver.alias_frees;
+			const auto commands = f.rd.draw_graph.qualification_command_count();
+			const auto native_effect = request.native_effect_entered, append_effect = request.append_effect_entered;
+			const auto control_effect = request.control.record_history.control_effect_entered;
+			const auto control_append = request.control.record_history.control_append_entered;
+			// One storage group plus three groups for each of P=3 rows need ten serials.
+			// UINT64_MAX is valid once; zero means the original sequence is exhausted.
+			const uint64_t exhausted[] = { 0, UINT64_MAX, UINT64_MAX - 1, UINT64_MAX - 8 };
+			for (uint64_t next : exhausted) {
+				INFO("next disposal group serial: " << next);
+				request.next_disposal_group_serial = next;
+				GDExtensionOutputAcquireResultV1 refused{};
+				acquire(context, ref, 0, &p.input, &refused);
+				CHECK(refused.status.error == ERR_PARAMETER_RANGE_ERROR);
+				CHECK(refused.writable_count == 0);
+				CHECK(request.next_disposal_group_serial == next);
+				CHECK(request.next_output_pin_serial == pin_serial);
+				CHECK(request.revision == revision);
+				CHECK(request.next_action == frontier);
+				CHECK(request.graph_count == graphs);
+				CHECK(request.native_count == natives);
+				CHECK(request.actions[0].output_state == ProductionActionCell::OutputState::UNBOUND);
+				CHECK(request.actions[0].output_root == 0);
+				CHECK(p.native->pin(0).is_empty());
+				CHECK(p.native->preparation_rows_match_slots());
+				CHECK(f.driver.alias_allocations == allocations);
+				CHECK(f.driver.alias_frees == frees);
+				CHECK(f.rd.draw_graph.qualification_command_count() == commands);
+				CHECK(request.native_effect_entered == native_effect);
+				CHECK(request.append_effect_entered == append_effect);
+				CHECK(request.control.record_history.control_effect_entered == control_effect);
+				CHECK(request.control.record_history.control_append_entered == control_append);
+				request.next_disposal_group_serial = original_next;
+			}
+		}
+		static bool install_detached_geometry(NativeAliasReadbackProbe &p, GDExtensionDeviceExit::ProductionOutputPreparationScope &scope) {
+			using MeshStorage = RendererRD::MeshStorage;
+			auto &rd = p.fixture->rd;
+			auto *surface = memnew(MeshStorage::Mesh::Surface);
+			surface->format = RSE::ARRAY_FORMAT_VERTEX;
+			surface->vertex_count = 3;
+			surface->primitive = RSE::PRIMITIVE_TRIANGLES;
+			surface->vertex_buffer_size = 36;
+			p.detached_buffer_index = p.fixture->driver.alias_allocations;
+			p.detached_vertex_buffer = surface->vertex_buffer = rd.vertex_buffer_create(36, {}, RD::BUFFER_CREATION_AS_STORAGE_BIT);
+			if (!check_step(surface->vertex_buffer.is_valid())) {
+				MeshStorage::_mesh_surface_dispose(surface);
+				return false;
+			}
+			RD::VertexAttribute position;
+			position.location = 0;
+			position.format = RD::DATA_FORMAT_R32G32B32_SFLOAT;
+			position.stride = 12;
+			Vector<RD::VertexAttribute> attributes;
+			attributes.push_back(position);
+			const auto format = rd.vertex_format_create(attributes);
+			Vector<RID> buffers;
+			buffers.push_back(surface->vertex_buffer);
+			p.detached_vertex_array = rd.vertex_array_create(3, format, buffers);
+			if (!check_step(format != 0 && p.detached_vertex_array.is_valid())) {
+				if (p.detached_vertex_array.is_valid()) {
+					rd.free(p.detached_vertex_array);
+				}
+				MeshStorage::_mesh_surface_dispose(surface);
+				return false;
+			}
+			// A second genuine existing Version is absent from the selected VA
+			// closure. Tuple finish must adopt this unselected directory root too.
+			p.detached_other_vertex_array = rd.vertex_array_create(3, format, buffers);
+			if (!check_step(p.detached_other_vertex_array.is_valid())) {
+				rd.free(p.detached_vertex_array);
+				MeshStorage::_mesh_surface_dispose(surface);
+				return false;
+			}
+			surface->versions = static_cast<MeshStorage::Mesh::Surface::Version *>(memalloc(2 * sizeof(MeshStorage::Mesh::Surface::Version)));
+			surface->version_count = 2;
+			for (uint32_t i = 0; i < 2; ++i) {
+				new (&surface->versions[i]) MeshStorage::Mesh::Surface::Version;
+				surface->versions[i].input_mask = i + 1;
+				surface->versions[i].vertex_format = format;
+				surface->versions[i].vertex_array = i ? p.detached_other_vertex_array : p.detached_vertex_array;
+			}
+			MeshStorage::NativeSurfaceHold source;
+			if (!check_step(MeshStorage::_mesh_surface_hold_acquire(surface, 1, false, false, 0, source) == OK)) {
+				MeshStorage::_mesh_surface_dispose(surface);
+				return false;
+			}
+			MeshStorage::Mesh detached_mesh;
+			MeshStorage::Mesh::Surface *surfaces[] = { surface };
+			detached_mesh.surfaces = surfaces;
+			detached_mesh.surface_count = 1;
+			MeshStorage::_mesh_surface_clear(&detached_mesh, 0);
+			detached_mesh.surface_count = 0;
+			detached_mesh.surfaces = nullptr;
+			CHECK(surface->immutable_retired);
+			CHECK(surface->immutable_holds == 1);
+			MeshStorage::NativeSurfaceHold derived;
+			if (!check_step(MeshStorage::mesh_surface_hold_derive(source, 1, false, false, 0, derived) == OK)) {
+				CHECK(MeshStorage::mesh_surface_hold_release(source) == OK);
+				return false;
+			}
+			CHECK(surface->immutable_holds == 2);
+			CHECK(derived.get_vertex_array() == p.detached_vertex_array);
+			scope.row->geometry[0] = std::move(derived);
+			CHECK_FALSE(derived.is_active());
+			// Leave the row as the final actual metadata/physical holder before
+			// the original continuation destructor freezes its complete directory.
+			const Error released = MeshStorage::mesh_surface_hold_release(source);
+			if (!check_step(released == OK)) {
+				CHECK(MeshStorage::mesh_surface_hold_release(scope.row->geometry[0]) == OK);
+				if (source.is_active()) {
+					CHECK(MeshStorage::mesh_surface_hold_release(source) == OK);
+				}
+				return false;
+			}
+			CHECK_FALSE(source.is_active());
+			CHECK(surface->immutable_holds == 1);
+			const auto *unselected_shares = rd._native_immutable_counter(p.detached_other_vertex_array);
+			if (check_step(unselected_shares != nullptr)) {
+				CHECK(*unselected_shares == 0);
+			}
+			CHECK(rd.vertex_buffer_owner.owns(p.detached_vertex_buffer));
+			CHECK(rd.vertex_array_owner.owns(p.detached_vertex_array));
+			CHECK(p.fixture->driver.alias_live[p.detached_buffer_index]);
+			p.detached_geometry_installed = true;
+			return true;
+		}
+		static void continue_pipeline(uint64_t p_probe) {
+			using namespace GDExtensionDeviceExit;
+			auto &p = *reinterpret_cast<NativeAliasReadbackProbe *>(uintptr_t(p_probe));
+			auto &f = *p.fixture;
+			auto &request = *f.request;
+			auto &rd = f.rd;
+			const bool failed_pipeline = p.continuation_mode == 1 || p.continuation_mode == 5;
+			const bool closed_inside_scope = p.continuation_mode == 2 || p.continuation_mode == 4;
+			const bool detached_geometry = p.continuation_mode >= 3 && p.continuation_mode <= 5;
+			// Actual Acquire prepaid P=3 rows; this private ledger probe issues no
+			// production ViewCell or surface authority. The real native factory
+			// below still enters through the original Registry continuation scope.
+			RendererRD::ExternalPacketPipelineRequest tuple;
+			uint32_t first_tuple = UINT32_MAX, second_tuple = UINT32_MAX, third_tuple = UINT32_MAX;
+			bool reused = true;
+			CHECK(p.native->preparation_tuple_select(0, 0, tuple, first_tuple, reused) == OK);
+			CHECK_FALSE(reused);
+			uint32_t duplicate = UINT32_MAX;
+			CHECK(p.native->preparation_tuple_select(0, 0, tuple, duplicate, reused) == OK);
+			CHECK(reused);
+			CHECK(duplicate == first_tuple);
+			auto other_tuple = tuple;
+			++other_tuple.subpass;
+			CHECK(p.native->preparation_tuple_select(0, 0, other_tuple, second_tuple, reused) == OK);
+			CHECK_FALSE(reused);
+			other_tuple.backend = RendererRD::ExternalPacketPipelineRequest::Backend::MOBILE;
+			CHECK(p.native->preparation_tuple_select(0, 1, other_tuple, third_tuple, reused) == OK);
+			CHECK_FALSE(reused);
+			CHECK(first_tuple != second_tuple);
+			CHECK(first_tuple != third_tuple);
+			CHECK(second_tuple != third_tuple);
+			// Every native key field must distinguish a fourth tuple. All fail
+			// against the original P bound without changing an occupied row.
+			for (uint32_t field = 0; field < 14; ++field) {
+				auto changed = tuple;
+				switch (field) {
+					case 0:
+						changed.backend = RendererRD::ExternalPacketPipelineRequest::Backend::MOBILE;
+						break;
+					case 1:
+						changed.pass = RendererRD::ExternalPacketPass::SHADOW;
+						break;
+					case 2:
+						++changed.framebuffer_format;
+						break;
+					case 3:
+						changed.subpass += 2;
+						break;
+					case 4:
+						++changed.version;
+						break;
+					case 5:
+						++changed.color_flags;
+						break;
+					case 6:
+						++changed.specialization[0];
+						break;
+					case 7:
+						++changed.specialization[1];
+						break;
+					case 8:
+						++changed.specialization[2];
+						break;
+					case 9:
+						++changed.view_count;
+						break;
+					case 10:
+						changed.wireframe = true;
+						break;
+					case 11:
+						changed.reverse_cull = true;
+						break;
+					case 12:
+						changed.double_sided_shadow = true;
+						break;
+					case 13:
+						break;
+				}
+				uint32_t refused = UINT32_MAX;
+				CHECK(p.native->preparation_tuple_select(0, field == 13 ? 1 : 0, changed, refused, reused) == ERR_OUT_OF_MEMORY);
+				CHECK(refused == UINT32_MAX);
+				CHECK(p.native->preparation_tuple_matches(first_tuple, tuple));
+			}
+			const auto group = p.native->preparation_pipeline_group(0, 0);
+			REQUIRE(group != 0);
+			const auto revision = request.revision;
+			const auto frontier = request.next_action;
+			const auto returned_serial = request.control.serial;
+			const auto returned_effect = request.control.record_history.control_effect_entered;
+			const auto returned_append = request.control.record_history.control_append_entered;
+			const auto attempts = f.driver.raster_attempts;
+			Ref<UnitContainer> container;
+			container.instantiate();
+			container->initialize_raster();
+			p.continuation_shader = rd.shader_create_from_bytecode(container->to_bytes());
+			REQUIRE(p.continuation_shader.is_valid());
+			f.driver.raster_fail = failed_pipeline;
+			const auto format = rd.framebuffer_format_create(Vector<RD::AttachmentFormat>());
+			RendererRD::ExternalPipelinePreparation *detached_row = nullptr;
+			{
+				ProductionOutputPreparationScope scope;
+				CHECK(p.native->preparation_scope_link_matches(0, 0, nullptr, true));
+				CHECK(rd._production_output_owned_pipeline_preflight(scope) == ERR_INVALID_PARAMETER);
+				CHECK(f.registry.production_output_preparation_begin(p.native->pin(0), rd, 0, 0, group + 1, scope) == ERR_UNAUTHORIZED);
+				CHECK(request.continuation_inflight == 0);
+#ifdef THREADS_ENABLED
+				Error foreign = OK;
+				std::thread thread([&]() {
+					ProductionOutputPreparationScope refused;
+					foreign = f.registry.production_output_preparation_begin(p.native->pin(0), rd, 0, 0, group, refused);
+				});
+				thread.join();
+				CHECK(foreign == ERR_UNAUTHORIZED);
+#endif
+				REQUIRE(f.registry.production_output_preparation_begin(p.native->pin(0), rd, 0, 0, group, scope) == OK);
+				CHECK(request.continuation_inflight == 1);
+				CHECK(p.native->preparation_scope_link_matches(0, 0, &scope, false));
+				REQUIRE(p.native->preparation_row_preflight(0, 0) == OK);
+				CHECK(p.native->preparation_row_cleanup(0, 0) == OK);
+				// The old invocation remains expired even inside the new scope.
+				CHECK(rd._production_output_owned_pipeline_preflight(p.completed_context, p.native->pin(0), group) != OK);
+				ProductionRequest *cleanup_request = nullptr;
+				auto cleanup_matches = [&](const ProductionOutputPreparationScope &candidate, ProductionRequest *&out) {
+					Registry::Lock cleanup_lock(f.registry);
+					return f.registry.production_output_preparation_cleanup_matches_locked(candidate, rd, out);
+				};
+				CHECK(cleanup_matches(scope, cleanup_request) == OK);
+				CHECK(cleanup_request == &request);
+#ifdef THREADS_ENABLED
+				Error foreign_cleanup = OK;
+				std::thread cleanup_thread([&]() { ProductionRequest *out = nullptr; foreign_cleanup = cleanup_matches(scope, out); });
+				cleanup_thread.join();
+				CHECK(foreign_cleanup == ERR_UNAUTHORIZED);
+#endif
+				ProductionOutputPreparationScope forged;
+				CHECK(cleanup_matches(forged, cleanup_request) == ERR_UNAUTHORIZED);
+				const auto original_row = scope.row;
+				scope.row = nullptr;
+				CHECK(cleanup_matches(scope, cleanup_request) == ERR_UNAUTHORIZED);
+				scope.row = original_row;
+				const auto original_source_generation = scope.source_generation;
+				++scope.source_generation;
+				CHECK(cleanup_matches(scope, cleanup_request) == ERR_UNAUTHORIZED);
+				scope.source_generation = original_source_generation;
+				// Cancellation/effects stop new factories without withdrawing the
+				// exact retained scope's mandatory prefix cleanup opportunity.
+				request.cancelled = true;
+				CHECK(p.native->preparation_row_preflight(0, 0) == ERR_BUSY);
+				CHECK(p.native->preparation_row_cleanup(0, 0) == OK);
+				CHECK(p.native->preparation_row_factory(0, 0, p.continuation_shader, format).is_null());
+				CHECK(f.driver.raster_attempts == attempts);
+				request.cancelled = false;
+				request.effects_pending = true;
+				CHECK(p.native->preparation_row_preflight(0, 0) == ERR_BUSY);
+				CHECK(p.native->preparation_row_cleanup(0, 0) == OK);
+				request.effects_pending = false;
+				CHECK(f.registry.production_output_preparation_begin(p.native->pin(0), rd, 0, 0, group, scope) == ERR_ALREADY_IN_USE);
+				REQUIRE(rd._production_output_owned_pipeline_preflight(scope) == OK);
+				CHECK(f.registry.production_output_unpin(p.native->pin(0)) == ERR_BUSY);
+				const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+				uint64_t control = 0;
+				CHECK(f.registry.production_control_accept({ f.instance, request.serial }, ProductionControlKind::OBSERVE, &control, &budget) == ERR_BUSY);
+				CHECK(control == 0);
+				ProductionServiceUsage usage{};
+				ProductionDisposalObservation observation{};
+				CHECK(rd._production_output_retire_service(p.native->pin(0), group, budget, usage, observation) == ERR_BUSY);
+				CHECK(usage.passes == 0);
+				CHECK(p.native->return_pipeline_row(0, 0) == ERR_BUSY);
+				RID stack_output;
+				CHECK(rd._production_output_owned_render_pipeline_create(scope, p.continuation_shader, format, RD::INVALID_ID,
+							  RD::RENDER_PRIMITIVE_TRIANGLES, RD::PipelineRasterizationState(), RD::PipelineMultisampleState(),
+							  RD::PipelineDepthStencilState(), RD::PipelineColorBlendState(), 0, 0, {}, stack_output) == ERR_INVALID_PARAMETER);
+				CHECK(stack_output.is_null());
+				CHECK(f.driver.raster_attempts == attempts);
+				// The failed-factory case must already own its real geometry prefix.
+				if (detached_geometry && failed_pipeline) {
+					if (!install_detached_geometry(p, scope)) {
+						return;
+					}
+					detached_row = scope.row;
+				}
+				// Exercise the renderer's real row bridge, not just the RD scope overload.
+				const RID created = p.native->preparation_row_factory(0, 0, p.continuation_shader, format);
+				CHECK(created == p.native->pipeline_root());
+				CHECK(p.native->pipeline_root().is_valid() == !failed_pipeline);
+				CHECK(f.driver.raster_attempts == attempts + 1);
+				CHECK(rd._production_output_owned_pipeline_preflight(scope) == (failed_pipeline ? OK : ERR_ALREADY_IN_USE));
+				CHECK(p.native->preparation_row_preflight(0, 0) == (failed_pipeline ? OK : ERR_ALREADY_IN_USE));
+				CHECK(p.native->preparation_row_cleanup(0, 0) == OK);
+				if (detached_geometry && !failed_pipeline) {
+					if (!install_detached_geometry(p, scope)) {
+						return;
+					}
+					detached_row = scope.row;
+				}
+				if (closed_inside_scope) {
+					CHECK(p.native->cancel_pipeline_slot(0) == OK);
+					p.native->withdraw_generation();
+					CHECK(p.native->preparation_row_cleanup(0, 0) == OK);
+					CHECK(p.native->preparation_scope_link_matches(0, 0, &scope, false));
+					CHECK(request.continuation_inflight == 1);
+					CHECK(rd._production_output_owned_pipeline_preflight(scope) == ERR_UNAUTHORIZED);
+					CHECK(p.native->return_pipeline_row(0, 0) == ERR_BUSY);
+				}
+			}
+			if (detached_geometry) {
+				if (!check_step(detached_row != nullptr && p.detached_geometry_installed)) {
+					return;
+				}
+				CHECK(detached_row->finish_complete);
+				CHECK(detached_row->finish_error == OK);
+				CHECK(detached_row->geometry_transferred[0]);
+				CHECK(detached_row->geometry[0].has_retirement_directory());
+				CHECK(rd._production_output_hold_contains(p.native->pin(0), detached_row->geometry_reserved_group, p.detached_other_vertex_array));
+				CHECK(rd._production_output_hold_contains(p.native->pin(0), detached_row->geometry_reserved_group, p.detached_vertex_buffer));
+				CHECK(rd._production_output_hold_contains(p.native->pin(0), detached_row->geometry_reserved_group, p.detached_vertex_array));
+				CHECK(p.fixture->driver.alias_live[p.detached_buffer_index]);
+			}
+			CHECK(request.continuation_inflight == 0);
+			CHECK(p.native->preparation_scope_link_matches(0, 0, nullptr, true));
+			CHECK(p.native->preparation_row_cleanup(0, 0) == ERR_UNAUTHORIZED);
+			CHECK(p.native->preparation_tuple_finished(first_tuple));
+			const auto root_after_finish = p.native->preparation_tuple_root(first_tuple);
+			if (!closed_inside_scope) {
+				CHECK(p.native->preparation_tuple_select(0, 0, tuple, duplicate, reused) == OK);
+				CHECK(reused);
+				CHECK(duplicate == first_tuple);
+				CHECK(p.native->preparation_tuple_root(first_tuple) == root_after_finish);
+			}
+
+			ProductionOutputPreparationScope replay;
+			CHECK(f.registry.production_output_preparation_begin(p.native->pin(0), rd, 0, 0, group, replay) == (closed_inside_scope ? ERR_UNAUTHORIZED : ERR_ALREADY_IN_USE));
+			CHECK(request.revision == revision);
+			CHECK(request.next_action == frontier);
+			CHECK(request.control.serial == returned_serial);
+			CHECK(request.control.state == ProductionControlState::OWNER_CONSUMED);
+			CHECK(request.control.record_history.control_effect_entered == returned_effect);
+			CHECK(request.control.record_history.control_append_entered == returned_append);
+			CHECK(request.actions[0].output_state == ProductionActionCell::OutputState::BOUND);
+			++p.continuation_calls;
+		}
 		static void receive(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
 			using namespace GDExtensionDeviceExit;
 			auto &p = *static_cast<NativeAliasReadbackProbe *>(opaque);
@@ -7164,10 +8584,10 @@ struct Access {
 				}
 				uint64_t bytes = 0;
 				uint32_t alignment = 0;
-				REQUIRE(RendererRD::ExternalLinkedOwnerTest::selection_metadata_bytes(p.config, bytes, &alignment) == OK);
+				REQUIRE(RendererRD::ExternalLinkedOwnerTest::selection_metadata_bytes(p.config, bytes, &alignment, p.prepare_continuation ? 4 : 2) == OK);
 				ProductionOutputMetadataLease metadata;
 				REQUIRE(f.registry.production_output_metadata_create(context, ref, 0, f.rd, bytes, alignment, metadata, true) == OK);
-				REQUIRE(p.native->create_selection_component(context, ref, p.config, metadata, 0) == OK);
+				REQUIRE(p.native->create_selection_component(context, ref, p.config, metadata, 0, p.prepare_continuation ? 4 : 2) == OK);
 				CHECK(metadata.is_empty());
 				++p.create_calls;
 				return;
@@ -7180,8 +8600,82 @@ struct Access {
 			}
 			auto acquire = ordinal_port<GDExtensionInterfaceDeviceSessionOutputAcquireV1>("device_session_output_acquire_v1");
 			auto append = ordinal_port<GDExtensionInterfaceDeviceSessionProductionAppendV2>("device_session_production_append_v2");
+			if (p.prepare_continuation) {
+				reject_exhausted_group_serials(p, context, ref);
+			}
+			if (p.prepare_continuation) {
+				// Exact one-less paid use budget refuses before any native effect.
+				const auto paid = f.request->capacity.resource_uses;
+				const auto root_serial = f.request->next_output_pin_serial;
+				const auto allocations = f.driver.alias_allocations;
+				--f.request->capacity.resource_uses;
+				GDExtensionOutputAcquireResultV1 refused{};
+				acquire(context, ref, 0, &p.input, &refused);
+				CHECK(refused.status.error == ERR_OUT_OF_MEMORY);
+				CHECK(refused.writable_count == 0);
+				CHECK(f.request->next_output_pin_serial == root_serial);
+				CHECK(f.driver.alias_allocations == allocations);
+				CHECK(p.native->preparation_rows_match_slots());
+				f.request->capacity.resource_uses = paid;
+				// The exact last legal ten-group range succeeds without wrapping.
+				f.request->next_disposal_group_serial = UINT64_MAX - 9;
+			}
 			acquire(context, ref, 0, &p.input, &p.acquired);
 			REQUIRE(p.acquired.status.error == OK);
+			if (p.prepare_continuation) {
+				CHECK(p.native->preparation_pipeline_reservations_match(0));
+				CHECK(p.native->preparation_bank_reservations_match(0, 3, 4));
+				CHECK(f.request->actions[0].output_preparation_borrower_headroom == 12);
+				CHECK(f.request->next_disposal_group_serial == 0);
+				for (uint32_t row = 0; row < 3; ++row) {
+					for (uint32_t kind = 0; kind < 3; ++kind) {
+						const uint64_t group = p.native->preparation_bank_group(0, row, kind);
+						uint32_t headers = 0, members = 0;
+						const uint32_t expected = kind ? 4 : 1;
+						for (uint32_t use = f.request->use_count + f.request->binding_used; use < f.request->capacity.resource_uses; ++use) {
+							const auto &cell = f.request->uses[use];
+							if (cell.disposal_group_serial == group) {
+								headers += cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_count == expected && cell.disposal_group_pin_serial == f.request->actions[0].output_root;
+								members += cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED;
+							}
+						}
+						CHECK(headers == 1);
+						CHECK(members == expected);
+					}
+				}
+			} else {
+				CHECK(p.native->preparation_rows_match_slots(true));
+			}
+			// A genuine acquired BOUND pin is not another preparation window.
+			// Exercise the real prefix entry without mutating its closed row or
+			// synthesizing RESERVING, native pass inputs, or a source grant.
+			auto reject_pipeline_prefix = [&](ProductionPhysicalContextRef attempted_context, uint32_t allowance, Error expected) {
+				const auto revision = f.request->revision;
+				const auto frontier = f.request->next_action, graphs = f.request->graph_count, natives = f.request->native_count;
+				const auto groups = f.request->next_disposal_group_serial;
+				const auto allocations = f.driver.alias_allocations, frees = f.driver.alias_frees;
+				const auto commands = f.rd.draw_graph.qualification_command_count();
+				for (uint32_t surface = 0; surface < 2; ++surface) {
+					CHECK(p.native->prepare_pipeline_prefix(attempted_context, 0, surface, allowance) == expected);
+					CHECK(p.native->preparation_rows_match_slots());
+				}
+				CHECK(f.request->revision == revision);
+				CHECK(f.request->next_action == frontier);
+				CHECK(f.request->graph_count == graphs);
+				CHECK(f.request->native_count == natives);
+				CHECK(f.request->next_disposal_group_serial == groups);
+				CHECK(f.request->actions[0].output_state == ProductionActionCell::OutputState::BOUND);
+				CHECK(f.driver.alias_allocations == allocations);
+				CHECK(f.driver.alias_frees == frees);
+				CHECK(f.rd.draw_graph.qualification_command_count() == commands);
+			};
+			if (!p.prepare_continuation) {
+				reject_pipeline_prefix(context, 0, ERR_INVALID_PARAMETER);
+				reject_pipeline_prefix({}, 1, ERR_UNAUTHORIZED);
+				reject_pipeline_prefix(context, 1, ERR_BUSY);
+				reject_pipeline_prefix(context, 1, ERR_BUSY); // Refusal must leave retry state unchanged.
+			}
+			p.completed_context = context; // Test-only stale-invocation rejection after this callback returns.
 			CHECK(p.acquired.writable_count == 3);
 			++p.acquire_calls;
 			CHECK(f.request->next_action == 1);
@@ -7273,8 +8767,10 @@ struct Access {
 			CHECK_FALSE(f.request->readbacks[0].source.delivered);
 		}
 	};
-	static void output_alias_readback_complete(bool map_failure = false) {
+	static void output_alias_readback_complete(bool map_failure = false, bool cleanup_content = false, bool prepare_continuation = false, uint32_t continuation_mode = 0) {
 		using namespace GDExtensionDeviceExit;
+		const bool failed_pipeline = continuation_mode == 1 || continuation_mode == 5;
+		const bool detached_geometry = continuation_mode >= 3 && continuation_mode <= 5;
 		auto *server = ordinal_server();
 		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
 			return;
@@ -7294,11 +8790,19 @@ struct Access {
 		OrdinalPlan pool;
 		pool.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 3, 5, 64, 16, 4096, 1, 5, 4, 4 };
 		pool.attachment_requests = 2;
+#ifdef THREADS_ENABLED
+		// The fixture may release retained content during fallback cleanup.
+		SceneReleaseState cleanup_state;
+#endif
 		SingletonEnrollment fixture;
 		fixture.public_port = true;
 		NativeAliasReadbackProbe probe;
 		probe.fixture = &fixture;
+		probe.prepare_continuation = prepare_continuation;
+		probe.continuation_mode = continuation_mode;
 		REQUIRE(fixture.prepare_device(server) == OK);
+		fixture.driver.raster_device = &fixture.rd;
+		fixture.driver.raster_quiet = true;
 		using MeshStorage = RendererRD::MeshStorage;
 		auto *previous_meshes = MeshStorage::get_singleton();
 		auto *meshes = memnew(MeshStorage(MeshStorage::NativeHoldTestTag{}));
@@ -7325,7 +8829,7 @@ struct Access {
 			tag->fill(0);
 		}
 		uint64_t metadata_bytes = 0;
-		REQUIRE(RendererRD::ExternalLinkedOwnerTest::selection_metadata_bytes(probe.config, metadata_bytes) == OK);
+		REQUIRE(RendererRD::ExternalLinkedOwnerTest::selection_metadata_bytes(probe.config, metadata_bytes, nullptr, prepare_continuation ? 4 : 2) == OK);
 
 		REQUIRE(fixture.initialize_owner(1, false, false, &NativeAliasReadbackProbe::receive, &probe, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &pool, nullptr, true) == OK);
 		RendererRD::ExternalLinkedOwnerTest native(fixture.rd, true);
@@ -7423,6 +8927,10 @@ struct Access {
 		prepared.source_use_count = 1;
 		prepared.source_generation = 1;
 		prepared.input = probe.input;
+		if (prepare_continuation) {
+			prepared.read_capacity = 3;
+			prepared.read_graph_capacity = 4;
+		}
 		prepared.roles[0] = { 1, 1, 1, 0, 3, 192 };
 		prepared.roles[1] = { 2, 2, 2, 0, 3, 192 };
 		prepared.roles[2] = { 7, 3, 3, 0, 3, 32 };
@@ -7432,6 +8940,15 @@ struct Access {
 		REQUIRE(consume(ref, control, &recorded).native_error == OK);
 		CHECK(probe.acquire_calls == 1);
 		CHECK(request.next_action == 3);
+		const auto groups_before_expired_context = request.next_disposal_group_serial;
+		CHECK(native.prepare_pipeline_prefix(probe.completed_context, 0, 0, 1) == (prepare_continuation ? ERR_ALREADY_IN_USE : ERR_UNAUTHORIZED));
+		CHECK(request.next_disposal_group_serial == groups_before_expired_context);
+		CHECK(prepare_continuation ? native.preparation_pipeline_reservations_match(0) : native.preparation_rows_match_slots());
+		if (prepare_continuation) {
+			server->call_on_render_thread(callable_mp_static(&NativeAliasReadbackProbe::continue_pipeline).bind(uint64_t(uintptr_t(&probe))));
+			server->sync();
+			CHECK(probe.continuation_calls == 1);
+		}
 		// Both actual owners retire through original controls, without repairing flags.
 		const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
 		GDExtensionProductionReportV2 report{};
@@ -7531,7 +9048,7 @@ struct Access {
 		server->sync();
 		REQUIRE(consume(ref, control, &recorded).native_error == OK);
 
-		for (uint32_t turn = 0; turn < 64 && request.output_owner_head != UINT32_MAX; ++turn) {
+		for (uint32_t turn = 0; turn < (prepare_continuation ? 256u : 64u) && request.output_owner_head != UINT32_MAX; ++turn) {
 			auto offered = budget;
 			offered.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
 			const Error e = Error(observe(ref, &offered, &report).native_error);
@@ -7544,11 +9061,25 @@ struct Access {
 		}
 		CHECK(request.control.state == ProductionControlState::OWNER_CONSUMED);
 		CHECK(request.output_owner_head == UINT32_MAX);
+		CHECK(native.preparation_rows_match_slots());
+		if (prepare_continuation) {
+			uint32_t retired_groups = 0;
+			for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+				const auto &cell = request.uses[i];
+				CHECK(cell.output_role != ProductionUseCell::OutputRole::DISPOSAL_RESERVED);
+				if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP) {
+					CHECK(cell.disposal_group_release);
+					CHECK(cell.disposal_group_dropped);
+					++retired_groups;
+				}
+			}
+			CHECK(retired_groups == 10); // Storage plus all nine groups, including unselected row 2.
+		}
 		probe.closing = true;
 		REQUIRE(fixture.port.record_schedule(probe.create_ref, &control) == OK);
 		server->sync();
 		REQUIRE(consume(probe.create_ref, control, &recorded).native_error == OK);
-		for (uint32_t turn = 0; turn < 64 && !native.released(); ++turn) {
+		for (uint32_t turn = 0; turn < (prepare_continuation ? 256u : 64u) && !native.released(); ++turn) {
 			auto offered = budget;
 			offered.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
 			// The public report cannot carry native_released; preserve and consume
@@ -7564,6 +9095,11 @@ struct Access {
 		}
 		REQUIRE(native.released());
 		native.free_created();
+		if (prepare_continuation) {
+			CHECK(fixture.driver.raster_frees == (failed_pipeline ? 0 : 1));
+			CHECK(fixture.driver.raster_budgeted_frees == (failed_pipeline ? 0 : 1));
+			CHECK_FALSE(fixture.driver.raster_live);
+		}
 		if (map_failure) {
 			// Actual cancellation/owner retirement did not rewrite the failed
 			// readback into a completed result or retry its failed map.
@@ -7572,6 +9108,23 @@ struct Access {
 			CHECK(request.readbacks[0].source.completed == 0);
 			CHECK_FALSE(request.readbacks[0].source.delivered);
 			CHECK(fixture.driver.alias_failed_download_maps == 1);
+		}
+
+		if (prepare_continuation) {
+			// Returning the last owner can leave an original bounded maintenance
+			// tail. Drain it through OBSERVE before requesting backing retirement.
+			for (uint32_t turn = 0; turn < 256 && fixture.rd.native_disposal_active && fixture.rd.native_disposal_continuation.production_owner == &request; ++turn) {
+				auto offered = budget;
+				offered.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
+				const Error e = Error(observe(ref, &offered, &report).native_error);
+				CHECK((e == OK || e == ERR_BUSY));
+				server->sync();
+				if (request.control.state == ProductionControlState::RETURNED) {
+					const Error consumed = Error(observe(ref, &offered, &report).native_error);
+					CHECK((consumed == OK || consumed == ERR_BUSY));
+				}
+			}
+			CHECK_FALSE((fixture.rd.native_disposal_active && fixture.rd.native_disposal_continuation.production_owner == &request));
 		}
 
 		for (uint32_t slot = 0; slot < 1; ++slot) {
@@ -7587,10 +9140,11 @@ struct Access {
 				CHECK((e == OK || e == ERR_BUSY));
 				server->sync();
 			}
+			INFO("backing retirement state=", returned.state, " reason=", returned.reason, " native_error=", returned.native_error, " maintenance=", request.maintenance_serial);
 			REQUIRE(returned.state == 1);
 			REQUIRE(fixture.port.storage_release(ref, retired).native_error == OK);
 		}
-		if (map_failure) {
+		if (map_failure && !cleanup_content) {
 			REQUIRE(fixture.rd.native_disposal_active);
 			REQUIRE(fixture.rd.native_disposal_continuation.production_owner == &request);
 			REQUIRE(fixture.rd.native_disposal_continuation.serial == request.maintenance_serial);
@@ -7654,13 +9208,39 @@ struct Access {
 				fixture.rd.native_disposal_continuation.production_owner = saved_owner;
 			}
 		}
+#ifdef THREADS_ENABLED
+		cleanup_state.registry = &fixture.registry;
+		uint32_t spent_tail_slices = 0, finished_spent_tail_slices = 0, content_slices = 0;
+		if (cleanup_content) {
+			REQUIRE(map_failure);
+			REQUIRE(request.maintenance_serial != 0);
+			REQUIRE(fixture.rd.native_disposal_active);
+			REQUIRE(fixture.rd.native_disposal_continuation.serial == request.maintenance_serial);
+			REQUIRE(fixture.rd.native_disposal_continuation.production_owner == &request);
+			MutexLock lock(fixture.registry.mutex);
+			CHECK_FALSE(request.actions[0].scene_key_bound);
+			REQUIRE(request.actions[0].scene_attempt.content.is_null());
+			request.actions[0].scene_attempt.content = Ref<SceneReadContent>(memnew(SceneReleaseContent(&cleanup_state)));
+		}
+#endif
 		for (const auto target : { ref, probe.create_ref }) {
 			Request *original = target.handle_serial == ref.handle_serial ? &request : create_request;
 			for (uint32_t turn = 0; turn < 64 && original->serial; ++turn) {
 				auto offered = budget;
+				if (cleanup_content && target.handle_serial == ref.handle_serial) {
+					offered.passes = offered.receipts = 1;
+				}
 				offered.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
 				GDExtensionProductionServiceBudgetV1 remaining{};
+#ifdef THREADS_ENABLED
+				const uint32_t calls_before_owner = cleanup_state.calls;
+#endif
 				const Error e = Error(release(target, &offered, &remaining, &report).native_error);
+#ifdef THREADS_ENABLED
+				if (cleanup_content) {
+					CHECK(cleanup_state.calls == calls_before_owner);
+				}
+#endif
 				if (map_failure && target.handle_serial == ref.handle_serial) {
 					// The control report may describe bounded cleanup as Busy;
 					// its retained readback result must remain the map failure.
@@ -7675,12 +9255,70 @@ struct Access {
 					}
 				}
 				CHECK((e == OK || e == ERR_BUSY));
+#ifdef THREADS_ENABLED
+				const bool cleanup_target = cleanup_content && target.handle_serial == ref.handle_serial;
+				const bool queued_release = cleanup_target && original->serial && original->control.state == ProductionControlState::QUEUED;
+				const bool own_tail = queued_release && original->maintenance_serial && fixture.rd.native_disposal_active && fixture.rd.native_disposal_continuation.serial == original->maintenance_serial && fixture.rd.native_disposal_continuation.production_owner == original;
+				const uint32_t before_sync = cleanup_state.calls;
+#endif
 				server->sync();
+#ifdef THREADS_ENABLED
+				if (queued_release) {
+					REQUIRE(original->control.state == ProductionControlState::RETURNED);
+					const auto actual = original->control.output.service_usage;
+					INFO("own tail=", own_tail, " passes=", actual.passes, " receipts=", actual.receipts, " calls before=", before_sync, " after=", cleanup_state.calls);
+					CHECK(actual.controls == 1);
+					CHECK(actual.passes <= 1);
+					CHECK(actual.receipts <= 1);
+					CHECK_FALSE(original->actions[0].scene_key_bound);
+					if (own_tail) {
+						// Count only actual exhausted slices with no content callback.
+						// A zero-usage tail does not establish the spent-credit witness.
+						if (cleanup_state.calls == before_sync && (actual.passes == 1 || actual.receipts == 1)) {
+							++spent_tail_slices;
+							if (!fixture.rd.native_disposal_active) {
+								++finished_spent_tail_slices;
+							}
+						}
+					}
+					if (cleanup_state.calls != before_sync) {
+						CHECK(cleanup_state.calls == before_sync + 1);
+						CHECK(actual.passes == 1);
+						CHECK(actual.receipts == 1);
+						CHECK(original->control.output.result.native_error == ERR_BUSY);
+						CHECK(cleanup_state.destroys == (cleanup_state.calls == 2 ? 1u : 0u));
+						++content_slices;
+					}
+				}
+#endif
 			}
 			CHECK(original->serial == 0);
 		}
-		CHECK(fixture.driver.alias_allocations == 8);
-		CHECK(fixture.driver.alias_frees == 8);
+#ifdef THREADS_ENABLED
+		if (cleanup_content) {
+			CHECK(spent_tail_slices > 0);
+			CHECK(finished_spent_tail_slices > 0);
+			CHECK(content_slices == 2);
+			CHECK(cleanup_state.calls == 2);
+			CHECK(cleanup_state.destroys == 1);
+			CHECK(cleanup_state.unlocked_checks == 3);
+		}
+#endif
+		if (probe.continuation_shader.is_valid()) {
+			fixture.rd.free(probe.continuation_shader);
+		}
+		const uint32_t expected_alias_buffers = detached_geometry ? 9 : 8;
+		CHECK(fixture.driver.alias_allocations == expected_alias_buffers);
+		CHECK(fixture.driver.alias_frees == expected_alias_buffers);
+		if (detached_geometry) {
+			CHECK(probe.detached_geometry_installed);
+			CHECK_FALSE(fixture.rd.vertex_buffer_owner.owns(probe.detached_vertex_buffer));
+			CHECK_FALSE(fixture.rd.vertex_array_owner.owns(probe.detached_vertex_array));
+			CHECK_FALSE(fixture.rd.vertex_array_owner.owns(probe.detached_other_vertex_array));
+			if (check_step(probe.detached_buffer_index < 16)) {
+				CHECK_FALSE(fixture.driver.alias_live[probe.detached_buffer_index]);
+			}
+		}
 		for (auto &block : fixture.rd.upload_staging_buffers.blocks) {
 			fixture.driver.buffer_unmap(block.driver_id);
 			fixture.driver.buffer_free(block.driver_id);
@@ -8117,6 +9755,29 @@ struct Access {
 		GDExtensionInterfaceDeviceSessionProductionRasterPrepareReportV1 query = nullptr;
 		bool automatic_end = false;
 		uint32_t calls = 0;
+#ifdef THREADS_ENABLED
+		bool contend_return = false;
+		Thread holder;
+		Semaphore locked, release_lock;
+		Thread::ID holder_id = Thread::UNASSIGNED_ID;
+		static void hold_rd(void *opaque) {
+			auto &probe = *static_cast<RasterJoinProbe *>(opaque);
+			probe.holder_id = Thread::get_caller_id();
+			probe.fixture->rd._thread_safe_.lock();
+			probe.locked.post();
+			probe.release_lock.wait();
+			probe.fixture->rd._thread_safe_.unlock();
+		}
+		void release_holder() {
+			if (holder.is_started()) {
+				release_lock.post();
+				holder.wait_to_finish();
+			}
+		}
+		~RasterJoinProbe() {
+			release_holder(); // Also join before fixture destruction on assertion failure.
+		}
+#endif
 		static void receive(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
 			auto &probe = *static_cast<RasterJoinProbe *>(opaque);
 			++probe.calls;
@@ -8138,6 +9799,17 @@ struct Access {
 				CHECK_FALSE(probe.fixture->rd.draw_list.active);
 				CHECK(request.next_action == 1);
 			}
+#ifdef THREADS_ENABLED
+			if (probe.contend_return) {
+				// Begin has released RD. A different thread must hold its recursive
+				// mutex across the actual protected callback-return close attempt.
+				probe.holder.start(&RasterJoinProbe::hold_rd, &probe);
+				CHECK(probe.holder.is_started());
+				if (probe.holder.is_started()) {
+					probe.locked.wait();
+				}
+			}
+#endif
 		}
 	};
 	static void singleton_raster_prepare(uint32_t fail_stage, uint32_t quiesce_stage = 0, uint32_t record_mode = 0) {
@@ -8172,7 +9844,10 @@ struct Access {
 		probe.begin = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRasterBeginV1>("device_session_production_raster_begin_v1");
 		probe.end = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRasterEndV1>("device_session_production_raster_end_v1");
 		probe.query = query;
-		probe.automatic_end = record_mode == 2;
+		probe.automatic_end = record_mode >= 2;
+#ifdef THREADS_ENABLED
+		probe.contend_return = record_mode == 3;
+#endif
 		REQUIRE(probe.begin != nullptr);
 		REQUIRE(probe.end != nullptr);
 		REQUIRE(fixture.prepare_device(server) == OK);
@@ -8334,10 +10009,81 @@ struct Access {
 			uint64_t control = 0;
 			REQUIRE(fixture.port.record_schedule(ref, &control) == OK);
 			server->sync();
+#ifdef THREADS_ENABLED
+			// Sync must return while the other thread still owns RD. Always
+			// release/join it before any assertion can abort this test body.
+			probe.release_holder();
+			if (probe.contend_return) {
+				CHECK(probe.holder_id != Thread::UNASSIGNED_ID);
+				CHECK(probe.holder_id != server->server_thread);
+				CHECK(request.control.serial == control);
+				CHECK(request.control.state == ProductionControlState::RETURNED);
+			}
+#endif
 			GDExtensionProductionRecordReportV2 recorded{};
 			REQUIRE(consume(ref, control, &recorded).native_error == OK);
 			GDExtensionProductionRecordHistoryV1 history{};
 			REQUIRE(history_query(ref, control, &history).native_error == OK);
+			if (record_mode == 3) {
+				CHECK(recorded.request_serial == ref.handle_serial);
+				CHECK(recorded.control_serial == control);
+				CHECK(recorded.result.native_error == ERR_BUSY);
+				CHECK(recorded.pause == GDEXTENSION_PRODUCTION_RECORD_PAUSE_NONE_V1);
+				CHECK(recorded.segment.segment == 0);
+				CHECK(request.raster_started);
+				CHECK(request.draw_list_open);
+				CHECK(fixture.rd.draw_list.active);
+				CHECK(request.next_action == 0);
+				CHECK_FALSE(request.effects_pending);
+				REQUIRE(request.graph_count == 4);
+				CHECK(request.native_count == 0);
+				RDG::RecordHandle prefix[4];
+				for (uint32_t g = 0; g < 4; ++g) {
+					prefix[g] = request.graphs[g].handle;
+				}
+				// The same accepted request retains its original fixed mailbox.
+				// A new kind gets a new serial only after RECORD is consumed.
+				uint64_t cancel_control = 0;
+				REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::CANCEL, &cancel_control) == OK);
+				CHECK(cancel_control > control);
+				REQUIRE(fixture.registry.production_control_schedule(ref, cancel_control) == OK);
+				server->sync();
+				CHECK(request.control.serial == cancel_control);
+				CHECK(request.control.state == ProductionControlState::RETURNED);
+				ProductionControlOutput cancelled{};
+				REQUIRE(fixture.registry.production_control_consume(ref, cancel_control, &cancelled) == OK);
+				CHECK(cancelled.request_serial == ref.handle_serial);
+				CHECK(cancelled.control_serial == cancel_control);
+				CHECK(cancelled.result.native_error == OK);
+				CHECK(request.serial == ref.handle_serial);
+				CHECK(request.cancelled);
+				CHECK(request.control.state == ProductionControlState::OWNER_CONSUMED);
+				CHECK(request.operation.owner_request_nonce == plan.operation.owner_request_nonce);
+				CHECK(request.operation.record_generation == plan.operation.record_generation);
+				REQUIRE(request.graph_count >= 4);
+				for (uint32_t g = 0; g < 4; ++g) {
+					const auto &handle = request.graphs[g].handle;
+					CHECK(handle.graph_instance == prefix[g].graph_instance);
+					CHECK(handle.graph_frame == prefix[g].graph_frame);
+					CHECK(handle.kind == prefix[g].kind);
+					CHECK(handle.index == prefix[g].index);
+					CHECK(handle.offset == prefix[g].offset);
+				}
+				for (uint32_t i = 0; i < 4; ++i) {
+					const auto &slot = request.resources[i];
+					CHECK(slot.owned_physical.serial == serials[i]);
+					CHECK(slot.use_count == 1);
+					// Observe custody from the original physical owner's reverse
+					// edge; ProductionResourceUse's validation methods are private.
+					CHECK(slot.owned_physical.production_uses == &slot.uses[0]);
+					CHECK(slot.owned_physical.bridge == fixture.attachment.handle_serial);
+					CHECK(slot.owned_physical.child == slot.owned_serial);
+					CHECK(slot.owned_physical.rid == slot.primary.get_id());
+					CHECK_FALSE(slot.owned_physical.use_closed.load());
+					CHECK_FALSE(slot.returned);
+					CHECK(slot.owned_physical.free_event == 0);
+				}
+			}
 			if (record_mode) {
 				CHECK(probe.calls == 1);
 				CHECK(request.next_action == 1);
@@ -8370,8 +10116,8 @@ struct Access {
 				for (uint32_t kind = 0; kind < 8; ++kind) {
 					CHECK(kinds[kind] == expected_kinds[kind]);
 				}
-				REQUIRE(recorded.segment.segment != 0);
-				{
+				if (record_mode != 3) {
+					REQUIRE(recorded.segment.segment != 0);
 					CallbackScope owner_entry(fixture.reference);
 					REQUIRE(owner_entry.get_error() == OK);
 					REQUIRE(fixture.port.ack_segment(ref, recorded.segment.segment, recorded.segment.segment_revision).native_error == OK);
@@ -10490,7 +12236,7 @@ struct Access {
 			}
 			if (probe.scene_query) {
 				CHECK(RendererRD::ParticlesStorage::get_singleton()->particles_scene_validate_receiver(
-						native.particle_rid(), native.generation, &fixture.rd) == ERR_UNAVAILABLE);
+							  native.particle_rid(), native.generation, &fixture.rd) == ERR_UNAVAILABLE);
 			}
 			REQUIRE(native.install_generation(context, ref, fixture.registry) == OK);
 			// Original Registry-issued root, original device and configuration.
@@ -10594,6 +12340,8 @@ struct Access {
 			OutputLeafProbe::status(withdraw(context, ref, &input), OK, "");
 			OutputLeafProbe::status(withdraw(context, ref, &input), OK, "");
 			CHECK(native.withdrawing());
+			CHECK(RendererRD::ParticlesStorage::get_singleton()->particles_scene_validate_receiver(
+						  native.particle_rid(), native.generation, &fixture.rd) == ERR_UNAVAILABLE);
 		}
 	};
 
@@ -11373,6 +13121,193 @@ struct Access {
 		fixture.cleanup_owner();
 		CHECK(fixture.owner_cleaned);
 	}
+	static void incoming_installed_reserve() {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server) {
+			return;
+		}
+		const auto reserve = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReserveReadbackSourcesV1>("device_session_production_reserve_readback_sources_v1");
+		const auto prepare = ordinal_port<GDExtensionInterfaceDeviceSessionProductionPrepareReadbackV2>("device_session_production_prepare_readback_v2");
+		REQUIRE(reserve != nullptr);
+		REQUIRE(prepare != nullptr);
+		OrdinalPlan plan;
+		plan.capacity.retained_payload_bytes = 0;
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		REQUIRE(fixture.prepare_device(server) == OK);
+		REQUIRE(fixture.initialize_owner(1, false, false, +[](void *, ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *) {}, nullptr, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &plan, nullptr, true) == OK);
+		const GDExtensionProductionActionV2 action{ 0, 11, 7, 0, GDEXTENSION_PRODUCTION_READBACK_V1, UINT32_MAX, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, 0 };
+		const GDExtensionProductionResourceV1 resource{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 16, 0 };
+		const GDExtensionProductionUseV1 use{ 0, GDEXTENSION_PRODUCTION_READ_V1, 0, 4, 0 };
+		GDExtensionProductionReadbackSourceV1 row{ 0, GDEXTENSION_PRODUCTION_READBACK_RETAINED_INCOMING_V1, 0, 0, 4, {}, { 1, 123 } };
+		GDExtensionProductionRequestRefV1 ref{};
+		row.source_kind = 0;
+		CHECK(reserve(fixture.attachment, &plan.operation, &plan.capacity, &action, 1, &resource, 1, &use, 1, &row, 1, &ref).native_error == ERR_INVALID_DATA);
+		CHECK(ref.registry_instance == 0);
+		CHECK(ref.handle_serial == 0);
+		row.source_kind = GDEXTENSION_PRODUCTION_READBACK_RETAINED_INCOMING_V1;
+		alignas(GDExtensionProductionReadbackSourceV1) uint8_t misaligned[sizeof(row) + 1] = {};
+		CHECK(reserve(fixture.attachment, &plan.operation, &plan.capacity, &action, 1, &resource, 1, &use, 1, reinterpret_cast<const GDExtensionProductionReadbackSourceV1 *>(misaligned + 1), 1, &ref).native_error == ERR_INVALID_PARAMETER);
+		CHECK(ref.handle_serial == 0);
+		REQUIRE(reserve(fixture.attachment, &plan.operation, &plan.capacity, &action, 1, &resource, 1, &use, 1, &row, 1, &ref).native_error == OK);
+		{
+			MutexLock lock(fixture.registry.mutex);
+			RenderingDevice *rd = nullptr;
+			REQUIRE(fixture.registry.production_request_locked(ref, false, fixture.request, rd) == OK);
+		}
+		CHECK(fixture.request->contract_version == 2);
+		CHECK(fixture.request->readbacks[0].declaration.source_kind == GDEXTENSION_PRODUCTION_READBACK_RETAINED_INCOMING_V1);
+		CHECK(fixture.port.prepare_readback(ref, 11, 0).native_error == ERR_INVALID_DATA);
+		CHECK(prepare(ref, 0, 0).native_error == OK);
+#ifdef THREADS_ENABLED
+		struct Contention {
+			Mutex *mutex;
+			Semaphore ready{};
+			std::atomic<bool> finished{ false }, holding{ false };
+			bool timeout = false;
+			static void run(void *data) {
+				auto &probe = *static_cast<Contention *>(data);
+				MutexLock lock(*probe.mutex);
+				probe.holding.store(true, std::memory_order_release);
+				probe.ready.post();
+				const uint64_t deadline = OS::get_singleton()->get_ticks_usec() + 5000000;
+				while (!probe.finished.load(std::memory_order_acquire) && OS::get_singleton()->get_ticks_usec() < deadline) {
+					OS::get_singleton()->delay_usec(100);
+				}
+				probe.timeout = !probe.finished.load(std::memory_order_acquire);
+				probe.holding.store(false, std::memory_order_release);
+			}
+		} contention{ &fixture.rd._thread_safe_ };
+		Thread contender;
+		const uint64_t next_control = fixture.request->next_control_serial;
+		contender.start(&Contention::run, &contention);
+		REQUIRE(contender.is_started());
+		contention.ready.wait();
+		uint64_t busy_control = 81;
+		const int32_t busy = fixture.port.record_schedule(ref, &busy_control);
+		const bool while_held = contention.holding.load(std::memory_order_acquire);
+		contention.finished.store(true, std::memory_order_release);
+		contender.wait_to_finish();
+		CHECK(busy == ERR_BUSY);
+		CHECK(while_held);
+		CHECK_FALSE(contention.timeout);
+		CHECK(busy_control == 81);
+		CHECK(fixture.request->next_control_serial == next_control);
+		CHECK(fixture.request->control.state == ProductionControlState::OWNER_CONSUMED);
+		CHECK_FALSE(fixture.request->frozen);
+		CHECK_FALSE(fixture.request->append_effect_entered);
+#endif
+		// No imported backing is fabricated by this ABI/mode test. Original
+		// scheduling must refuse it before publishing any RECORD or effect.
+		uint64_t control = 77;
+		CHECK(fixture.port.record_schedule(ref, &control) == ERR_UNCONFIGURED);
+		CHECK(control == 77);
+		CHECK_FALSE(fixture.request->frozen);
+		CHECK(fixture.request->control.state == ProductionControlState::OWNER_CONSUMED);
+		CHECK(fixture.request->graph_count == 0);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
+
+	static void source_writer_chunks() {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server) {
+			return;
+		}
+		const auto reserve = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReserveReadbackSourcesV1>("device_session_production_reserve_readback_sources_v1");
+		const auto upload = ordinal_port<GDExtensionInterfaceDeviceSessionProductionPrepareUploadV2>("device_session_production_prepare_upload_v2");
+		const auto readback = ordinal_port<GDExtensionInterfaceDeviceSessionProductionPrepareReadbackV2>("device_session_production_prepare_readback_v2");
+		if (!check_step(reserve && upload && readback)) {
+			return;
+		}
+		OrdinalPlan pool;
+		pool.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 4, 1, 4, 4, 2048, 2, 1, 8, 8 };
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		if (!check_step(fixture.prepare_device(server) == OK) ||
+				!check_step(fixture.initialize_owner(1, false, false, +[](void *, ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *) {}, nullptr, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &pool, nullptr, true) == OK)) {
+			return;
+		}
+		const GDExtensionProductionResourceV1 resource{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 16, 0 };
+		const GDExtensionProductionActionV2 split_actions[] = {
+			{ 0, 11, 7, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+			{ 1, 11, 8, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 1, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+			{ 2, 11, 9, 0, GDEXTENSION_PRODUCTION_READBACK_V1, UINT32_MAX, 2, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, 0 },
+			{ 3, 11, 10, 0, GDEXTENSION_PRODUCTION_READBACK_V1, UINT32_MAX, 3, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, 1 }
+		};
+		const GDExtensionProductionUseV1 split_uses[] = {
+			{ 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 4, 0 },
+			{ 0, GDEXTENSION_PRODUCTION_WRITE_V1, 4, 4, 0 },
+			{ 0, GDEXTENSION_PRODUCTION_READ_V1, 0, 4, 0 },
+			{ 0, GDEXTENSION_PRODUCTION_READ_V1, 4, 4, 0 }
+		};
+		const GDExtensionProductionReadbackSourceV1 split_rows[] = {
+			{ 0, GDEXTENSION_PRODUCTION_READBACK_REQUEST_WRITER_V1, 2, 0, 4, { 0 }, {} },
+			{ 0, GDEXTENSION_PRODUCTION_READBACK_REQUEST_WRITER_V1, 3, 4, 4, { 1 }, {} }
+		};
+		{
+			// Neither chunk writer covers the whole range; the last writer is
+			// not authority for the union of both physical upload actions.
+			GDExtensionProductionReadbackSourceV1 row = split_rows[0];
+			row.writer.producer_action_ordinal = 1;
+			row.byte_size = 8;
+			GDExtensionProductionUseV1 uses[] = { split_uses[0], split_uses[1], split_uses[2] };
+			uses[2].byte_size = 8;
+			const uint64_t next_serial = fixture.registry.production_serials.next;
+			GDExtensionProductionRequestRefV1 rejected{};
+			CHECK(reserve(fixture.attachment, &pool.operation, &pool.capacity, split_actions, 3, &resource, 1, uses, 3, &row, 1, &rejected).native_error == ERR_INVALID_DATA);
+			CHECK(rejected.registry_instance == 0);
+			CHECK(rejected.handle_serial == 0);
+			CHECK(fixture.registry.production_serials.next == next_serial);
+			CHECK(fixture.request == nullptr);
+			CHECK(fixture.driver.issues == 0);
+		}
+		GDExtensionProductionRequestRefV1 ref{};
+		if (!check_step(reserve(fixture.attachment, &pool.operation, &pool.capacity, split_actions, 4, &resource, 1, split_uses, 4, split_rows, 2, &ref).native_error == OK)) {
+			return;
+		}
+		{
+			MutexLock lock(fixture.registry.mutex);
+			RenderingDevice *rd = nullptr;
+			if (!check_step(fixture.registry.production_request_locked(ref, false, fixture.request, rd) == OK)) {
+				return;
+			}
+		}
+		auto &request = *fixture.request;
+		const uint8_t payloads[2][4] = { { 2, 3, 5, 7 }, { 11, 13, 17, 19 } };
+		for (uint32_t i = 0; i < 2; ++i) {
+			const GDExtensionProductionUploadV2 prepared{ production_dto_abi<GDExtensionProductionUploadV2>(), i, 11, 7 + i, 0, 0, 0, 4 * i, 4 };
+			if (!check_step(upload(ref, &prepared, payloads[i], sizeof(payloads[i])).native_error == OK) ||
+					!check_step(readback(ref, 2 + i, i).native_error == OK)) {
+				return;
+			}
+			CHECK(request.actions[i].prepared);
+			CHECK(request.actions[i].upload.destination_offset == 4 * i);
+			CHECK(request.actions[i].upload.bytes == 4);
+			CHECK(request.actions[i].payload_bytes == sizeof(payloads[i]));
+			CHECK(std::memcmp(request.attachment->payload + request.actions[i].payload_offset, payloads[i], sizeof(payloads[i])) == 0);
+			CHECK(request.actions[2 + i].prepared);
+			CHECK(request.readbacks[i].declaration.source_kind == GDEXTENSION_PRODUCTION_READBACK_REQUEST_WRITER_V1);
+			CHECK(request.readbacks[i].declaration.producer_action_ordinal == i);
+			CHECK(request.readbacks[i].declaration.copy_action_ordinal == 2 + i);
+			CHECK(request.readbacks[i].declaration.byte_offset == 4 * i);
+			CHECK(request.readbacks[i].declaration.byte_size == 4);
+			CHECK(request.actions[i].declaration.canonical_suboperation == 11);
+		}
+		CHECK(request.payload_used == 8);
+		CHECK(request.actions[0].payload_offset != request.actions[1].payload_offset);
+		// This installed reserve/prepare fixture does not import, append or execute
+		// a GPU dispatch. Payload custody proves real chunk preparation, not bytes
+		// downloaded from a native producer or a semantic publication gate.
+		CHECK_FALSE(request.frozen);
+		CHECK(request.graph_count == 0);
+		CHECK(request.native_count == 0);
+		CHECK(fixture.driver.issues == 0);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
 	static void ordinal_readback_producer() {
 		// The valid control and each invalid request go through original accepted
 		// arenas and the installed reserve_v2 entry, before any native effects.
@@ -11676,7 +13611,8 @@ struct Access {
 		static void ordinary(void *data, const GDExtensionConstVariantPtr *, GDExtensionInt,
 				GDExtensionVariantPtr returned, GDExtensionCallError *error) {
 			++static_cast<ManagedSceneHarness *>(data)->ordinary_calls;
-			*reinterpret_cast<Variant *>(returned) = Variant();*error = { GDEXTENSION_CALL_OK, 0, 0 };
+			*reinterpret_cast<Variant *>(returned) = Variant();
+			*error = { GDEXTENSION_CALL_OK, 0, 0 };
 		}
 		static void free_callable(void *data) { ++static_cast<ManagedSceneHarness *>(data)->callable_frees; }
 		static void typed(void *data, const GDExtensionNativeScenePhaseV1 *phase,
@@ -11697,15 +13633,18 @@ struct Access {
 			self.check("managed_phase_original_device", memcmp(&phase->device_capability, &self.phase_capability, sizeof(self.phase_capability)) == 0);
 			{
 				MutexLock lock(self.enrollment.registry.mutex);
-				ProductionRequest *original = nullptr;RenderingDevice *device = nullptr;
+				ProductionRequest *original = nullptr;
+				RenderingDevice *device = nullptr;
 				const Error live = self.enrollment.registry.production_physical_request_locked(self.phase_context, request, original, device, false);
-				self.check("managed_phase_live_original_frame", live == OK && original == self.enrollment.request && device == self.device &&
-						original->control.state == ProductionControlState::EXECUTING && operation->owner_request_nonce == original->operation.owner_request_nonce);
+				self.check("managed_phase_live_original_frame", live == OK && original == self.enrollment.request && device == self.device && original->control.state == ProductionControlState::EXECUTING && operation->owner_request_nonce == original->operation.owner_request_nonce);
 			}
 			self.record_error = self.native->install_generation(self.phase_context, request, self.enrollment.registry);
 			if (self.record_error == OK) {
-				if (self.viewport_mode) self.exercise_viewport_receiver();
-				else self.exercise_scene();
+				if (self.viewport_mode) {
+					self.exercise_viewport_receiver();
+				} else {
+					self.exercise_scene();
+				}
 			}
 		}
 		Error install_phase() {
@@ -11715,8 +13654,10 @@ struct Access {
 				MutexLock lock(enrollment.registry.mutex);
 				enrollment.registry.records[enrollment.reference.slot].guard.entry_classes |= 1u << 8;
 			}
-			GDExtensionCallableCustomInfo2 info{};info.callable_userdata = this;
-			info.call_func = &ordinary;info.free_func = &free_callable;
+			GDExtensionCallableCustomInfo2 info{};
+			info.callable_userdata = this;
+			info.call_func = &ordinary;
+			info.free_func = &free_callable;
 			info.token = enrollment.registry.records[enrollment.reference.slot].original_owner;
 			const auto create = reinterpret_cast<GDExtensionInterfaceCallableCustomCreate2>(GDExtension::get_interface_function("callable_custom_create2"));
 			CRASH_COND(!create);
@@ -11728,11 +13669,16 @@ struct Access {
 			CRASH_COND(!relay || !capability || !registration || !unregister_phase);
 			GDExtensionNormalRelayRefV1 wire{};
 			Error error = Error(relay(reinterpret_cast<GDExtensionConstTypePtr>(&phase_callable), &typed, &wire).native_error);
-			if (error != OK) return error;
-			GDExtensionScenePhaseSinkConfigV1 config{};config.abi = { 1, sizeof(config), 0 };
+			if (error != OK) {
+				return error;
+			}
+			GDExtensionScenePhaseSinkConfigV1 config{};
+			config.abi = { 1, sizeof(config), 0 };
 			config.phase = config.max_operations = 1;
 			error = Error(capability(enrollment.attachment, &config.device_capability).native_error);
-			if (error != OK) return error;
+			if (error != OK) {
+				return error;
+			}
 			phase_capability = config.device_capability;
 			return Error(registration(wire, enrollment.attachment, &config, &phase_registration).native_error);
 		}
@@ -11741,8 +13687,9 @@ struct Access {
 			check("managed_phase_typed_only", phase_calls == 1 && ordinary_calls == 0 && legacy_calls == 0);
 			{
 				MutexLock lock(enrollment.registry.mutex);
-				ProductionRequest *expired = nullptr;RenderingDevice *device = nullptr;
-				check("managed_phase_original_expiry", enrollment.registry.production_physical_request_locked(phase_context, ref, expired, device, false) == ERR_UNAUTHORIZED && !expired);
+				ProductionRequest *expired = nullptr;
+				RenderingDevice *actual_device = nullptr;
+				check("managed_phase_original_expiry", enrollment.registry.production_physical_request_locked(phase_context, ref, expired, actual_device, false) == ERR_UNAUTHORIZED && !expired);
 			}
 			GDExtensionScenePhaseCloseV1 close{};
 			const Error closing = Error(unregister_phase(phase_registration, &close).native_error);
@@ -11765,9 +13712,12 @@ struct Access {
 			if (!waiting_close_started) {
 				// Wait until original FIFO dispatch has really deferred this RECORD.
 				MutexLock lock(enrollment.registry.mutex);
-				ProductionRequest *pending = nullptr;RenderingDevice *device = nullptr;
-				CRASH_COND(enrollment.registry.production_request_locked(waiting_request, false, pending, device) != OK);
-				if (!pending->control.scene_waiting || pending->control.state != ProductionControlState::QUEUED) return {};
+				ProductionRequest *pending = nullptr;
+				RenderingDevice *actual_device = nullptr;
+				CRASH_COND(enrollment.registry.production_request_locked(waiting_request, false, pending, actual_device) != OK);
+				if (!pending->control.scene_waiting || pending->control.state != ProductionControlState::QUEUED) {
+					return {};
+				}
 				waiting_close_started = true;
 			}
 			GDExtensionScenePhaseCloseV1 close{};
@@ -11776,22 +13726,27 @@ struct Access {
 			check("managed_phase_no_draw_admission_closed", close.registration_closed == 1 && close.active_deliveries == 0);
 			ProductionControlOutput refused{};
 			const Error returned = enrollment.registry.production_control_consume(waiting_request, waiting_control, &refused);
-			if (returned == ERR_BUSY) return {};
+			if (returned == ERR_BUSY) {
+				return {};
+			}
 			CRASH_COND(returned != OK);
-			check("managed_phase_waiting_return_without_draw", refused.result.native_error == ERR_UNAVAILABLE &&
-					refused.request_serial == waiting_request.handle_serial && refused.control_serial == waiting_control && phase_calls == 1);
+			check("managed_phase_waiting_return_without_draw", refused.result.native_error == ERR_UNAVAILABLE && refused.request_serial == waiting_request.handle_serial && refused.control_serial == waiting_control && phase_calls == 1);
 			// This never-delivered, empty request has no pin/native source to retire;
 			// use D's exact original no-draw mailbox cancellation/release path.
 			CRASH_COND(enrollment.registry.production_cancel(waiting_request).native_error != OK);
 			CRASH_COND(enrollment.registry.production_release(waiting_request).native_error != OK);
 			waiting_request = {};
-			close_phase();native->withdraw_generation();stage = 1;
+			close_phase();
+			native->withdraw_generation();
+			stage = 1;
 			CRASH_COND(schedule(ProductionControlKind::OBSERVE) != OK);
 			return {};
 		}
 		Error schedule(GDExtensionDeviceExit::ProductionControlKind kind) {
 			using namespace GDExtensionDeviceExit;
-			if (kind == ProductionControlKind::RECORD) return enrollment.registry.production_record_schedule(ref, &control);
+			if (kind == ProductionControlKind::RECORD) {
+				return enrollment.registry.production_record_schedule(ref, &control);
+			}
 			const GDExtensionProductionServiceBudgetV1 budget = {
 				production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0
 			};
@@ -11804,26 +13759,31 @@ struct Access {
 			device = RenderingDevice::get_singleton();
 			auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
 			auto *storage = RendererRD::ParticlesStorage::get_singleton();
-			if (!device || !storage || !server || !server->is_on_render_thread()) return ERR_UNAVAILABLE;
+			if (!device || !storage || !server || !server->is_on_render_thread()) {
+				return ERR_UNAVAILABLE;
+			}
 			enrollment.server = server;
 			OrdinalPlan plan;
 			plan.capacity = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 0, 1, 0, 0, 0, 0, 0, 0 };
 			plan.action_count = plan.resource_count = plan.use_count = plan.readback_count = 0;
 			plan.attachment_requests = phase_mode ? 2 : 1;
-			const Error error = enrollment.initialize_owner(1, false, false, &record, this, false, 1, false,
-					+[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &plan, device);
+			const Error error = enrollment.initialize_owner(1, false, false, &record, this, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &plan, device);
 			if (error == OK && phase_mode) {
-				const Error installed = install_phase();CRASH_COND(installed != OK);
-				auto waiting_operation = plan.operation;++waiting_operation.owner_request_nonce;
-				auto waiting_capacity = plan.capacity;waiting_capacity.resource_uses = 0;
+				const Error installed = install_phase();
+				CRASH_COND(installed != OK);
+				auto waiting_operation = plan.operation;
+				++waiting_operation.owner_request_nonce;
+				auto waiting_capacity = plan.capacity;
+				waiting_capacity.resource_uses = 0;
 				const auto reserve = reinterpret_cast<GDExtensionInterfaceDeviceSessionProductionReserveV2>(
 						gdextension_get_guarded_proc_address("device_session_production_reserve_v2"));
-				CRASH_COND(!reserve || reserve(enrollment.attachment, &waiting_operation, &waiting_capacity,
-						nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, &waiting_request).native_error != OK);
+				CRASH_COND(!reserve || reserve(enrollment.attachment, &waiting_operation, &waiting_capacity, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, &waiting_request).native_error != OK);
 			}
 			// Never retain a SceneReady TLS frame between runtime callbacks.
 			enrollment.frame.leave();
-			if (error != OK) return error;
+			if (error != OK) {
+				return error;
+			}
 			native = memnew(RendererRD::ExternalLinkedOwnerTest(*device, *storage, true));
 			ref = { enrollment.instance, enrollment.request->serial };
 			return schedule(GDExtensionDeviceExit::ProductionControlKind::RECORD);
@@ -11835,10 +13795,12 @@ struct Access {
 			storage->particles_collision_initialize(viewport_collision);
 			storage->particles_collision_set_collision_type(viewport_collision, RSE::PARTICLES_COLLISION_TYPE_SPHERE_COLLIDE);
 			storage->particles_collision_set_sphere_radius(viewport_collision, 0.1f);
-			viewport_receiver = scene->instance_allocate();scene->instance_initialize(viewport_receiver);
+			viewport_receiver = scene->instance_allocate();
+			scene->instance_initialize(viewport_receiver);
 			scene->instance_set_base(viewport_receiver, native->particle_rid());
 			scene->instance_set_scenario(viewport_receiver, viewport_scenario);
-			viewport_source = scene->instance_allocate();scene->instance_initialize(viewport_source);
+			viewport_source = scene->instance_allocate();
+			scene->instance_initialize(viewport_source);
 			scene->instance_set_base(viewport_source, viewport_collision);
 			scene->instance_set_scenario(viewport_source, viewport_scenario);
 			const AABB query(Vector3(-1, -1, -1), Vector3(2, 2, 2));
@@ -11854,21 +13816,15 @@ struct Access {
 			RendererSceneCull::SceneSphereSnapshot observed;
 			const bool snapshot_valid = scene->scene_sphere_snapshot(viewport_receiver, native->generation, device, 4, observed) == OK && observed.sources.size() == 1 && viewport_snapshot.sources.size() == 1;
 			check("viewport_post_draw_snapshot", snapshot_valid);
-			check("viewport_post_draw_source_unchanged", snapshot_valid &&
-					observed.sources[0].source_key == viewport_snapshot.sources[0].source_key &&
-					observed.sources[0].shape_revision == viewport_snapshot.sources[0].shape_revision &&
-					observed.sources[0].transform == viewport_snapshot.sources[0].transform &&
-					observed.sources[0].radius == viewport_snapshot.sources[0].radius);
-			check("viewport_post_draw_query_unchanged", snapshot_valid &&
-					observed.receiver_transform == viewport_snapshot.receiver_transform &&
-					observed.query_bounds == viewport_snapshot.query_bounds);
-			check("viewport_post_draw_revisions_unchanged", snapshot_valid &&
-					observed.pose_revision == viewport_snapshot.pose_revision &&
-					observed.bounds_revision == viewport_snapshot.bounds_revision &&
-					observed.pair_revision == viewport_snapshot.pair_revision);
-			scene->free(viewport_source);viewport_source = RID();
-			scene->free(viewport_receiver);viewport_receiver = RID();
-			RendererRD::ParticlesStorage::get_singleton()->particles_collision_free(viewport_collision);viewport_collision = RID();
+			check("viewport_post_draw_source_unchanged", snapshot_valid && observed.sources[0].source_key == viewport_snapshot.sources[0].source_key && observed.sources[0].shape_revision == viewport_snapshot.sources[0].shape_revision && observed.sources[0].transform == viewport_snapshot.sources[0].transform && observed.sources[0].radius == viewport_snapshot.sources[0].radius);
+			check("viewport_post_draw_query_unchanged", snapshot_valid && observed.receiver_transform == viewport_snapshot.receiver_transform && observed.query_bounds == viewport_snapshot.query_bounds);
+			check("viewport_post_draw_revisions_unchanged", snapshot_valid && observed.pose_revision == viewport_snapshot.pose_revision && observed.bounds_revision == viewport_snapshot.bounds_revision && observed.pair_revision == viewport_snapshot.pair_revision);
+			scene->free(viewport_source);
+			viewport_source = RID();
+			scene->free(viewport_receiver);
+			viewport_receiver = RID();
+			RendererRD::ParticlesStorage::get_singleton()->particles_collision_free(viewport_collision);
+			viewport_collision = RID();
 			// The script has completed actual viewport readback. Resume the same
 			// original no-future-draw mailbox/holder/owner close sequence.
 			RenderingServer::get_singleton()->set_render_loop_enabled(false);
@@ -11881,22 +13837,27 @@ struct Access {
 			const AABB envelope(Vector3(-2, -2, -2), Vector3(4, 4, 4));
 			const AABB query_a(Vector3(-1, -1, -1), Vector3(1, 2, 2));
 			const AABB query_b(Vector3(0, -1, -1), Vector3(1, 2, 2));
-			RID scenario = scene->scenario_allocate();scene->scenario_initialize(scenario);
-			RID sphere = storage->particles_collision_allocate();storage->particles_collision_initialize(sphere);
+			RID scenario = scene->scenario_allocate();
+			scene->scenario_initialize(scenario);
+			RID sphere = storage->particles_collision_allocate();
+			storage->particles_collision_initialize(sphere);
 			storage->particles_collision_set_collision_type(sphere, RSE::PARTICLES_COLLISION_TYPE_SPHERE_COLLIDE);
 			storage->particles_collision_set_sphere_radius(sphere, 0.1f);
 			auto instance = [&](RID base, Vector3 position) {
-				RID id = scene->instance_allocate();scene->instance_initialize(id);
-				scene->instance_set_base(id, base);scene->instance_set_scenario(id, scenario);
-				scene->instance_set_transform(id, Transform3D(Basis(), position));return id;
+				RID id = scene->instance_allocate();
+				scene->instance_initialize(id);
+				scene->instance_set_base(id, base);
+				scene->instance_set_scenario(id, scenario);
+				scene->instance_set_transform(id, Transform3D(Basis(), position));
+				return id;
 			};
 			const RID left = instance(native->particle_rid(), Vector3());
 			const RID right = instance(native->particle_rid(), Vector3());
 			const RID source_a = instance(sphere, Vector3(-0.5f, 0, 0));
-			RID source_b = instance(sphere, Vector3(0.5f, 0, 0));
+			const RID source_b = instance(sphere, Vector3(0.5f, 0, 0));
 			check("managed_commit_left", scene->scene_receiver_commit_query(left, native->generation, device, Transform3D(), envelope, query_a, 1) == OK);
 			check("managed_commit_right", scene->scene_receiver_commit_query(right, native->generation, device, Transform3D(), envelope, query_b, 1) == OK);
-			RendererSceneCull::SceneSphereSnapshot a,b,rejected;
+			RendererSceneCull::SceneSphereSnapshot a, b, rejected;
 			check("managed_dirty_rejected", scene->scene_sphere_snapshot(left, native->generation, device, 4, rejected) == ERR_UNAVAILABLE);
 			scene->update_dirty_instances();
 			check("managed_same_base_left", scene->scene_sphere_snapshot(left, native->generation, device, 4, a) == OK && a.sources.size() == 1 && a.sources[0].transform.origin.x < 0 && a.query_bounds == query_a && a.bounds_revision == 1 && a.pose_revision > 0);
@@ -11913,42 +13874,13 @@ struct Access {
 			check("managed_rejected_snapshot_zero", scene->scene_sphere_snapshot(right, native->generation + 1, device, 4, rejected) == ERR_INVALID_DATA && rejected.sources.is_empty() && rejected.bounds_revision == 0);
 			check("managed_commit_requery", scene->scene_receiver_commit_query(left, native->generation, device, Transform3D(), envelope, query_b, 2) == OK);
 			scene->update_dirty_instances();
-			RendererSceneCull::SceneSphereSnapshot changed,unchanged;
+			RendererSceneCull::SceneSphereSnapshot changed, unchanged;
 			check("managed_left_revision", scene->scene_sphere_snapshot(left, native->generation, device, 4, changed) == OK && changed.bounds_revision == 2 && changed.pose_revision > a.pose_revision && changed.sources.size() == 1 && b.sources.size() == 1 && changed.sources[0].source_key == b.sources[0].source_key);
 			check("managed_right_unchanged", scene->scene_sphere_snapshot(right, native->generation, device, 4, unchanged) == OK && unchanged.bounds_revision == b.bounds_revision && unchanged.pose_revision == b.pose_revision && unchanged.pair_revision == b.pair_revision && unchanged.query_bounds == b.query_bounds);
-			// Retain only the value snapshot. It carries no Scene sample/borrow
-			// authorization and must not follow later source-owner mutations or ABA.
-			const RendererSceneCull::SceneSphereSnapshot retained = b;
-			const RendererSceneCull::SceneSphereSource retained_source = b.sources.size() == 1 ? b.sources[0] : RendererSceneCull::SceneSphereSource();
-			const uint64_t retained_pose = b.pose_revision, retained_bounds = b.bounds_revision, retained_pairs = b.pair_revision;
-			auto retained_unchanged = [&]() {
-				return retained.sources.size() == 1 && retained.sources[0].source_key == retained_source.source_key &&
-						retained.sources[0].shape_revision == retained_source.shape_revision && retained.sources[0].transform == retained_source.transform &&
-						retained.sources[0].radius == retained_source.radius && retained.receiver_transform == Transform3D() && retained.query_bounds == query_b &&
-						retained.pose_revision == retained_pose && retained.bounds_revision == retained_bounds && retained.pair_revision == retained_pairs;
-			};
-			scene->instance_set_transform(source_b, Transform3D(Basis(), Vector3(0.75f, 0, 0)));
-			storage->particles_collision_set_sphere_radius(sphere, 0.125f);
-			scene->update_dirty_instances();
-			RendererSceneCull::SceneSphereSnapshot moved, removed, replacement;
-			check("managed_source_mutation_snapshot", scene->scene_sphere_snapshot(right, native->generation, device, 4, moved) == OK &&
-					moved.sources.size() == 1 && moved.sources[0].source_key == retained_source.source_key && moved.sources[0].shape_revision > retained_source.shape_revision &&
-					moved.sources[0].transform.origin == Vector3(0.75f, 0, 0) && moved.sources[0].radius == 0.125f);
-			check("managed_value_snapshot_frozen_after_source_mutation", retained_unchanged());
-			scene->free(source_b);source_b = RID();
-			scene->update_dirty_instances();
-			check("managed_source_free_snapshot", scene->scene_sphere_snapshot(right, native->generation, device, 4, removed) == OK &&
-					removed.sources.is_empty() && removed.pair_revision > moved.pair_revision);
-			check("managed_value_snapshot_frozen_after_source_free", retained_unchanged());
-			source_b = instance(sphere, Vector3(0.75f, 0, 0));
-			scene->update_dirty_instances();
-			check("managed_recreated_source_distinct_identity", scene->scene_sphere_snapshot(right, native->generation, device, 4, replacement) == OK &&
-					replacement.sources.size() == 1 && replacement.sources[0].source_key != 0 && replacement.sources[0].source_key != retained_source.source_key &&
-					replacement.sources[0].transform.origin == Vector3(0.75f, 0, 0) && replacement.sources[0].radius == 0.125f && replacement.pair_revision > removed.pair_revision);
-			check("managed_value_snapshot_frozen_after_source_recreate", retained_unchanged());
 			// Same broad envelope, different committed queries: source selection
 			// belongs to the scene receiver instance, for height as for sphere.
-			RID height = storage->particles_collision_allocate();storage->particles_collision_initialize(height);
+			RID height = storage->particles_collision_allocate();
+			storage->particles_collision_initialize(height);
 			storage->particles_collision_set_collision_type(height, RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE);
 			storage->particles_collision_set_box_extents(height, Vector3(0.1f, 0.1f, 0.1f));
 			const RID height_a = instance(height, Vector3(-0.5f, 0, 0));
@@ -11984,32 +13916,50 @@ struct Access {
 			scene->update_dirty_instances();
 			height_present = true;
 			check("managed_height_query_empty", scene->scene_heightfield_snapshot_pair(left, height_left, height_present) && !height_present);
-			scene->free(height_a);scene->free(height_b);scene->free(height_extra);
+			scene->free(height_a);
+			scene->free(height_b);
+			scene->free(height_extra);
 			storage->particles_collision_free(height);
-			scene->free(source_a);scene->free(source_b);scene->free(left);scene->free(right);scene->free(scenario);
+			scene->free(source_a);
+			scene->free(source_b);
+			scene->free(left);
+			scene->free(right);
+			scene->free(scenario);
 			storage->particles_collision_free(sphere);
-			check("managed_value_snapshot_readable_after_receiver_free", retained_unchanged());
 		}
 		// Empty dictionary means the original queued control has not returned yet.
 		Dictionary advance() {
 			using namespace GDExtensionDeviceExit;
-			if (stage == 4) return {}; // Retain the receiver during actual viewport observations.
-			if (stage == 3) return advance_phase_close();
+			if (stage == 4) {
+				return {}; // Retain the receiver during actual viewport observations.
+			}
+			if (stage == 3) {
+				return advance_phase_close();
+			}
 			ProductionControlOutput output{};
 			const Error consumed = enrollment.registry.production_control_consume(ref, control, &output);
-			if (consumed == ERR_BUSY) return {};
+			if (consumed == ERR_BUSY) {
+				return {};
+			}
 			CRASH_COND(consumed != OK); // Preserve real custody on unexpected issuer failure.
 			if (stage == 0) {
 				check("managed_original_record", output.result.native_error == OK && record_error == OK && !native->generation_pin().is_empty());
-				if (viewport_mode) { stage = 4;return {}; }
+				if (viewport_mode) {
+					stage = 4;
+					return {};
+				}
 				if (phase_mode) {
 					// The one positive delivery came from actual draw. Future waiting
 					// refusal and holder teardown must no longer depend on a draw.
 					RenderingServer::get_singleton()->set_render_loop_enabled(false);
 					CRASH_COND(enrollment.registry.production_record_schedule(waiting_request, &waiting_control) != OK);
-					stage = 3;return {};
-				} else if (record_error == OK) exercise_scene();
-				native->withdraw_generation();stage = 1;
+					stage = 3;
+					return {};
+				} else if (record_error == OK) {
+					exercise_scene();
+				}
+				native->withdraw_generation();
+				stage = 1;
 			} else if (stage == 1 && native->released() && enrollment.request->maintenance_serial == 0) {
 				root_returned |= output.output_generation.native_released;
 				check("managed_original_root_return", root_returned);
@@ -12017,14 +13967,18 @@ struct Access {
 			} else if (stage == 2 && output.result.native_error == OK && output.owner_return.native_error == OK) {
 				enrollment.request = nullptr; // RELEASE consume may reclaim its arena.
 				check("managed_original_request_release", output.owner_return.native_error == OK);
-				memdelete(native);native = nullptr;
+				memdelete(native);
+				native = nullptr;
 				// All queued controls and custody have returned. This closes only
 				// fixture handles; never sync the currently executing RT callback.
-				enrollment.server = nullptr;enrollment.cleanup_owner(true);
+				enrollment.server = nullptr;
+				enrollment.cleanup_owner(true);
 				check("managed_enrollment_cleanup", enrollment.owner_cleaned);
 				return checks;
 			}
-			if (stage == 1) root_returned |= output.output_generation.native_released;
+			if (stage == 1) {
+				root_returned |= output.output_generation.native_released;
+			}
 			const Error queued = schedule(stage == 2 ? ProductionControlKind::RELEASE : ProductionControlKind::OBSERVE);
 			CRASH_COND(queued != OK);
 			return {};
@@ -12035,6 +13989,25 @@ struct Access {
 		return GDExtensionDeviceExit::Registry::production_layout(capacity, out, current_commands, workers);
 	}
 };
+TEST_CASE("[ProductionRequest][IncomingReadback] typed source reserve entry is installed") {
+	REQUIRE(GDExtension::get_interface_function("device_session_production_reserve_v2") != nullptr);
+	ERR_PRINT_OFF;
+	const GDExtensionInterfaceFunctionPtr entry = GDExtension::get_interface_function("device_session_production_reserve_readback_sources_v1");
+	ERR_PRINT_ON;
+	CHECK_MESSAGE(entry != nullptr, "Missing installed incoming readback source reserve procedure");
+}
+TEST_CASE("[SceneTree][ProductionRequest][IncomingReadback] installed typed reserve selects V2 controls without a fabricated import") {
+	Access::incoming_installed_reserve();
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][ReadbackSource] adjacent writer chunks prepare separate copies and reject a whole range last writer") {
+	Access::source_writer_chunks();
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][IncomingReadback] created output prefix rejects before custody and imported schedule retries after RD contention") {
+	Access::incoming_public_admission();
+}
+
 void *managed_scene_begin(bool phase_mode) {
 	auto *harness = memnew(Access::ManagedSceneHarness);
 	const Error error = harness->begin(phase_mode);
@@ -12058,9 +14031,12 @@ void managed_scene_finish_viewport(void *opaque) {
 Dictionary managed_scene_advance(void *opaque) {
 	auto *harness = static_cast<Access::ManagedSceneHarness *>(opaque);
 	Dictionary result = harness->advance();
-	if (!result.is_empty()) memdelete(harness);
+	if (!result.is_empty()) {
+		memdelete(harness);
+	}
 	return result;
 }
+
 TEST_CASE("[ProductionRequest] quote checks dimensions before reserving real cells") {
 	GDExtensionProductionCapacityV1 capacity = {};
 	capacity.abi = GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionCapacityV1>();
@@ -12128,6 +14104,9 @@ TEST_CASE("[SceneTree][ProductionRequest][OutputMetadataFactory] protected origi
 }
 TEST_CASE("[SceneTree][ProductionRequest][OutputMetadataFactory] bound live unlinked pin blocks actual metadata return") {
 	Access::output_metadata_bound_pin();
+}
+TEST_CASE("[SceneTree][ProductionRequest][OutputObserveV3] public original generation terminal consumes without next draw and rejects wrong tuple replay") {
+	Access::output_scene_metadata(false, false, false, 0, true);
 }
 TEST_CASE("[SceneTree][ProductionRequest][OutputSceneMetadata] real SceneOnly root terminal retains metadata until actual particles free") {
 	Access::output_scene_metadata(false);
@@ -12451,6 +14430,12 @@ TEST_CASE("[SceneTree][ProductionRequest][RasterJoin] original prepared raster b
 	}
 }
 
+#ifdef THREADS_ENABLED
+TEST_CASE("[SceneTree][ProductionRequest][RasterJoin][CloseContention] callback return RD contention closes through original FIFO cancellation and retires") {
+	TestProductionRequest::Access::singleton_raster_prepare(0, 0, 3);
+}
+#endif
+
 TEST_CASE("[SceneTree][ProductionRequest][RecordHistory] exact empty RECORD history survives consume and expires on replacement") {
 	SUBCASE("Original FIFO accepts the exact control") {
 		TestProductionRequest::Access::record_history_empty_lifecycle(false);
@@ -12539,6 +14524,14 @@ TEST_CASE("[SceneTree][ProductionRequest][MetadataV3] V2 preserves larger accept
 	TestProductionRequest::Access::output_scene_metadata(false, false, false, 1);
 }
 
+TEST_CASE("[SceneTree][ProductionRequest][GenerationSurfaceSource] flattened native sources retain exact bounds without creating versions") {
+	TestProductionRequest::Access::generation_selection_lifecycle(0, true, true);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][GenerationSurfaceSource] invalid later source retains exact prefix for original bounded return") {
+	TestProductionRequest::Access::generation_selection_lifecycle(0, true, true, true);
+}
+
 TEST_CASE("[SceneTree][ProductionRequest][GenerationSelection] original slab and root retain CPU selection through bounded return") {
 	TestProductionRequest::Access::generation_selection_lifecycle(0);
 }
@@ -12549,12 +14542,43 @@ TEST_CASE("[SceneTree][ProductionRequest][GenerationSelection] transaction close
 	TestProductionRequest::Access::generation_selection_lifecycle(2);
 }
 
+TEST_CASE("[SceneTree][ProductionRequest][GenerationSelection][GenerationSelectionMultiMesh] unequal original mesh surfaces acquire and return every selection row") {
+	TestProductionRequest::Access::generation_selection_lifecycle(0, true);
+}
+TEST_CASE("[SceneTree][ProductionRequest][GenerationSelection][GenerationSelectionMultiMesh] stale material preserves both unequal mesh prefixes until bounded return") {
+	TestProductionRequest::Access::generation_selection_lifecycle(1, true);
+}
+
 TEST_CASE("[SceneTree][ProductionRequest][GenerationGuardRefusal] actual unprepared engine component refuses private and public Instance192 paths") {
 	TestProductionRequest::Access::generation_selection_lifecycle(3);
 }
 
 TEST_CASE("[SceneTree][ProductionRequest][AliasReadbackIntegration] actual internal acquire upload and single download preserve byte custody") {
 	TestProductionRequest::Access::output_alias_readback_complete();
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][NativePreparationContinuation] original Acquire reserves pipeline custody before its physical context expires") {
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, true);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][NativePreparationContinuation] failed native pipeline factory retires its original reservation without draw") {
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, true, 1);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][NativePreparationContinuation] last retained detached native Surface directory returns through original tuple cleanup") {
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, true, 3);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][NativePreparationContinuation] detached Surface prefix returns after slot closes inside original scope") {
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, true, 4);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][NativePreparationContinuation] detached Surface prefix returns after original pipeline factory fails") {
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, true, 5);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][NativePreparationContinuation] slot closes inside native scope and retires without draw") {
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, true, 2);
 }
 
 TEST_CASE("[SceneTree][ProductionRequest][AliasReadbackMapFailure] actual download map failure returns custody and retires original owners") {
@@ -12568,3 +14592,23 @@ TEST_CASE("[SceneTree][ProductionRequest][NativeScenePhase] actual early hook ow
 TEST_CASE("[SceneTree][ProductionRequest][NativeScenePhaseCloseWaiting] actual unregister returns two original waiting controls without a draw") {
 	TestProductionRequest::Access::native_scene_phase_infrastructure(true);
 }
+
+TEST_CASE("[SceneTree][ProductionRequest][NativeScenePhaseCloseFifoFull] actual full FIFO preserves waiting controls for unregister retry without a draw") {
+	TestProductionRequest::Access::native_scene_phase_infrastructure(true, true);
+}
+
+#ifdef THREADS_ENABLED
+TEST_CASE("[SceneTree][ProductionRequest][NativeScenePhaseCloseWrongThread] original owner retries foreign unregister and frees its typed holder exactly once") {
+	TestProductionRequest::Access::native_scene_phase_infrastructure(false, false, true);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][NativeSceneReleaseBudget] original RT RELEASE returns actual retained content outside Registry mutex") {
+	TestProductionRequest::Access::scene_release_content_budget();
+}
+#endif
+
+#ifdef THREADS_ENABLED
+TEST_CASE("[SceneTree][ProductionRequest][NativeSceneReleaseMaintenanceBudget] actual map failure maintenance consumes credit before cleanup content return") {
+	TestProductionRequest::Access::output_alias_readback_complete(true, true);
+}
+#endif

@@ -1,0 +1,18 @@
+{
+  "original_before": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r3-retry-contract/native-artifacts/RUN_INPUTS_BEFORE.json",
+  "original_after": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r3-retry-contract/native-artifacts/RUN_INPUTS_AFTER.json",
+  "entry_count_before": 2957,
+  "entry_count_after": 2957,
+  "maps_equal": true,
+  "before_manifest": {
+    "bytes": 906463,
+    "sha256": "56956c6077117d61cef17b9dbfcdbee03eb521044bf3c185a85b48c3146ee759"
+  },
+  "after_manifest": {
+    "bytes": 906463,
+    "sha256": "56956c6077117d61cef17b9dbfcdbee03eb521044bf3c185a85b48c3146ee759"
+  },
+  "total_entry_bytes": 243717894,
+  "canonical_map_sha256": "d87c03f509c5bc0f1a3ba8277039122442efa6fb92b40ee8a349f28cecd50b5e",
+  "frozen_inputs_copied": false
+}

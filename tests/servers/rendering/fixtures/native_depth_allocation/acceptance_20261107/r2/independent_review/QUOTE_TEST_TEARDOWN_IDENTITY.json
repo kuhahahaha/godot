@@ -1,0 +1,5 @@
+{
+  "path": "tests/servers/rendering/test_native_disposal.cpp",
+  "sha256": "67af86cc59065781b2026899c80cb6f4505d4a13e7a609fcee99cbc18dd8ee5d",
+  "change": "test-only scope teardown for REQUIRE unwind; original assertions retained"
+}

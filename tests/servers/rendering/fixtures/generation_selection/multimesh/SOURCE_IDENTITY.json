@@ -1,0 +1,8 @@
+{
+  "base": "7d98587dfd07ee76d142cd0a276c8045bb2439be",
+  "files": {
+    "tests/core/extension/test_production_request.cpp": "27ac16f7117129b87a66040cb50758e7dd55a29d884a7869e0d08c22e068b814",
+    "tests/servers/rendering/test_external_output_custody_bridge.h": "a62c73602b551a56ff15d6a351e1351a4988a145699097538fc0c1694bd8522d",
+    "tests/servers/rendering/test_material_storage_native_hold.cpp": "e7a4d5ad06bb62501418c40bf4ee9959e740ccb56349db67e1f3d5bc14472891"
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "purpose": "Encoding-only diff repack: exact original decompressed bytes preserved; prior wrapping records retained as deterministic gzip. Verifiers formatted separately to meet repository Python checks.",
+  "diffs": [
+    {
+      "prior_path": "independent_review/QUOTE_TEST_TEARDOWN.diff",
+      "path": "independent_review/QUOTE_TEST_TEARDOWN.diff.gz",
+      "original_bytes": 1772,
+      "original_sha256": "5bfc29e4d21752f9ef93be702376b25d3c4c611d56fc1da0843325ea255b3331",
+      "stored_bytes": 780,
+      "stored_sha256": "b5ec0edbadfe70cfbfe7cb4d21be45909befaa894d7b540ffd679ad4953cd87e"
+    },
+    {
+      "prior_path": "r1_to_r2_diff/modules/particles_runtime_tests/native_depth_allocation_test_fixture.cpp.diff",
+      "path": "r1_to_r2_diff/modules/particles_runtime_tests/native_depth_allocation_test_fixture.cpp.diff.gz",
+      "original_bytes": 2094,
+      "original_sha256": "65aa50db2479ff55b92c6fc161e9648e469773c9c895509be5e8aee2b6df1a31",
+      "stored_bytes": 593,
+      "stored_sha256": "a9f0c32bc05bbafb626842fb6b8d8b406bd433c455626e90bbb9d7102b858ef8"
+    },
+    {
+      "prior_path": "r1_to_r2_diff/servers/rendering/native_depth_allocation_projection.h.diff",
+      "path": "r1_to_r2_diff/servers/rendering/native_depth_allocation_projection.h.diff.gz",
+      "original_bytes": 814,
+      "original_sha256": "60c81c5a0d86c0b3568075ad1acf4e8016191176a24ca5bd7c1d55eb44dae517",
+      "stored_bytes": 342,
+      "stored_sha256": "922a1749bf940d962c8583adb9312b3a7ad05d98130710df934785a08b7b5369"
+    },
+    {
+      "prior_path": "r1_to_r2_diff/servers/rendering/rendering_device.cpp.diff",
+      "path": "r1_to_r2_diff/servers/rendering/rendering_device.cpp.diff.gz",
+      "original_bytes": 786,
+      "original_sha256": "b4ecb245cb32f1713e6a8f198a937e9ca385b10651b31e6dc9bebe08c0e01f42",
+      "stored_bytes": 292,
+      "stored_sha256": "bd8d896160f3a2ea383afe28a49f51fc126a6283db2c9b0675a09f62b4bbd4d1"
+    },
+    {
+      "prior_path": "r1_to_r2_diff/tests/servers/rendering/fixtures/native_depth_allocation/README.md.diff",
+      "path": "r1_to_r2_diff/tests/servers/rendering/fixtures/native_depth_allocation/README.md.diff.gz",
+      "original_bytes": 1929,
+      "original_sha256": "81714ec95b85b5c853844a8cfb2a2c89052c03c868eefe9d5fa807276ea89625",
+      "stored_bytes": 873,
+      "stored_sha256": "f12377b3bb23ccc9612dae71f0d57db3aca93e6dcdbcb30d898dc227c04092fc"
+    },
+    {
+      "prior_path": "r1_to_r2_diff/tests/servers/rendering/fixtures/native_depth_allocation/run_native.py.diff",
+      "path": "r1_to_r2_diff/tests/servers/rendering/fixtures/native_depth_allocation/run_native.py.diff.gz",
+      "original_bytes": 626,
+      "original_sha256": "39d7c53cf73aa89becfdc37b0f5726feb218c6a3087a2173d8ecded7aacc7ab1",
+      "stored_bytes": 317,
+      "stored_sha256": "9525a633d9bbb6bf5ff6f52c121df4105540c0970d0aaae2603e013845e38af3"
+    },
+    {
+      "prior_path": "r1_to_r2_diff/tests/servers/rendering/test_native_disposal.cpp.diff",
+      "path": "r1_to_r2_diff/tests/servers/rendering/test_native_disposal.cpp.diff.gz",
+      "original_bytes": 634,
+      "original_sha256": "81502b444ce259d623bf87aa7e224530854bd1359763c0ab82e6f88e23aebe75",
+      "stored_bytes": 300,
+      "stored_sha256": "582c287d21f0ec0f242d12eb35b7e09afec6c8e3ed416ea50383425f26acf50a"
+    }
+  ]
+}

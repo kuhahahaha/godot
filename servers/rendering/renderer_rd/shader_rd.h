@@ -239,6 +239,8 @@ public:
 	}
 
 	bool version_is_valid(RID p_version);
+	// Read-only render-thread lookup; outputs are unchanged on refusal.
+	Error version_get_native_shader_if_ready(RID p_version, int p_variant, RID &r_shader, uint64_t &r_input_mask);
 	bool version_native_shader_is_ready(RID p_version, RID p_shader);
 	bool version_native_is_held(RID p_version);
 

@@ -1,0 +1,24 @@
+{
+  "files": [
+    {
+      "path": "AUTHOR_STATIC_CHECKS.json",
+      "bytes": 939,
+      "sha256": "8de6ef724fc5bacde3aacfb76d131c3c25b67e6559836524134dfa2fa3dd3644"
+    },
+    {
+      "path": "INDEPENDENT_REVIEW.json",
+      "bytes": 1646,
+      "sha256": "0cb0482c20089cf4651e0ce1b21b97b9a227fd4002cbeb8be8c022c1ba6e2e59"
+    },
+    {
+      "path": "INDEPENDENT_REVIEW.md",
+      "bytes": 6724,
+      "sha256": "c3d5893bc50f6ec8bbf7a55f31524fdc4439dc355b2e12bd14379493450705c5"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1352,
+      "sha256": "6b24a15d015d305fe831b0b173616cc9b3ce9bee80c651009bb318e64976bfcc"
+    }
+  ]
+}

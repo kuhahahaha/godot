@@ -1,0 +1,19 @@
+{
+  "scope": "CPU source-extracted SceneCull pair harness sync; no production edit/GPU/build claim",
+  "result": "pass",
+  "commands": [
+    "python3 tests/servers/rendering/fixtures/particle_scene_heightfield_pairs/run.py",
+    "python3 tests/servers/rendering/fixtures/particle_scene_sphere_pairs/run.py",
+    "git diff --check"
+  ],
+  "coverage": [
+    "committed receiver query excludes stale outside pair",
+    "inclusive boundary contact remains selected",
+    "uncommitted receiver query preserves ordinary pair selection"
+  ],
+  "files": {
+    "servers/rendering/renderer_scene_cull.cpp": "f00c29e093b4f83727f1156756f32da68b55d26406e4b99739b046f20404f07a",
+    "tests/servers/rendering/fixtures/particle_scene_heightfield_pairs/run.py": "aa9075f8984aea42eeea7cd1deccbc182097c8640b8807aa7e4f793d31826a10",
+    "tests/servers/rendering/fixtures/particle_scene_sphere_pairs/run.py": "6a3ea081cbfa7e417aab6e3acf097d69bc8179064a1f2b4cf37323b7afd04d23"
+  }
+}

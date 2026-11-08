@@ -162,6 +162,46 @@ Error qualification_source_slot_bound(uint64_t graphs, uint32_t current, uint32_
 	slots = uint32_t(base + uint64_t(workers) * frames);
 	return OK;
 }
+uint64_t QualificationFactCredits::occupied() const {
+ return uint64_t(graphs) + main + copy + workers + cleanup + pending + committed;
+}
+Error QualificationFactCredits::initialize(uint32_t p_capacity, uint64_t p_graphs, uint64_t p_main, uint32_t p_cleanup, uint64_t p_copy) {
+ if(!p_capacity || capacity || p_graphs > p_capacity || p_main > p_capacity || p_copy > p_capacity ||
+    p_graphs + p_main + p_copy + uint64_t(p_cleanup) > p_capacity) return ERR_PARAMETER_RANGE_ERROR;
+ capacity=p_capacity;graphs=uint32_t(p_graphs);main=uint32_t(p_main);copy=uint32_t(p_copy);cleanup=p_cleanup;return OK;
+}
+Error QualificationFactCredits::grow_plan(uint64_t p_graphs, uint64_t p_main, uint64_t p_copy) {
+ if(!capacity || p_graphs > capacity || p_main > capacity || p_copy > capacity ||
+    occupied()+p_graphs+p_main+p_copy>capacity) return ERR_PARAMETER_RANGE_ERROR;
+ graphs+=uint32_t(p_graphs);main+=uint32_t(p_main);copy+=uint32_t(p_copy);return OK;
+}
+Error QualificationFactCredits::reserve_workers(uint32_t p_count) {
+ if(!capacity || occupied()>capacity || p_count>capacity-occupied()) return ERR_PARAMETER_RANGE_ERROR;
+ workers+=p_count;return OK;
+}
+Error QualificationFactCredits::admit_native(uint32_t p_count,bool p_worker,bool p_copy) {
+ if(p_worker && p_copy)return ERR_INVALID_PARAMETER;
+ auto &reserved=p_worker?workers:p_copy?copy:main;
+ if(p_count>reserved) return ERR_PARAMETER_RANGE_ERROR;
+ reserved-=p_count;pending+=p_count;return OK;
+}
+Error QualificationFactCredits::cancel_native(uint32_t count,bool worker,bool p_copy) {
+ if(worker && p_copy)return ERR_INVALID_PARAMETER;
+ if(count>pending)return ERR_INVALID_DATA;
+ pending-=count;(worker?workers:p_copy?copy:main)+=count;return OK;
+}
+Error QualificationFactCredits::commit_native(uint32_t p_count) {
+ if(p_count>pending) return ERR_INVALID_DATA;
+ pending-=p_count;committed+=p_count;return OK;
+}
+Error QualificationFactCredits::commit_graph() {
+ if(!graphs) return ERR_PARAMETER_RANGE_ERROR;
+ --graphs;++committed;return OK;
+}
+Error QualificationFactCredits::release_worker_quote(uint32_t p_count) {
+ if(p_count>workers) return ERR_INVALID_DATA;
+ workers-=p_count;return OK;
+}
 bool same_request_readback_complete(const ReadbackSourceState &source, uint64_t request, uint64_t backing, uint64_t offset, uint64_t size) {
 	return request && backing && size && offset <= UINT64_MAX - size && source.request_serial == request && source.backing_serial == backing && source.offset == offset && source.size == size && source.issued == size && source.completed == size && source.owned_bytes == size && source.error == OK && source.delivered;
 }

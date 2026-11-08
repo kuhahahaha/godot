@@ -142,6 +142,29 @@ int main() {
       RendererCompositorRD::get_singleton()->delta = DBL_MAX;
       check(!update(&p, 0) && attempts == 0, "variable delta multiplication overflow fails before dispatch");
       RendererCompositorRD::get_singleton()->delta = 1.0 / 60.0; }
+    for (bool clear : {false, true}) {
+        Particles p; p.clear = clear; p.speed_scale = double(FLT_MAX);
+        p.frame_remainder = 0.001;
+        attempts = 0;
+        RendererCompositorRD::get_singleton()->delta = 2.0;
+        check(!update(&p, 0) && attempts == 0 && p.frames == 0 &&
+              p.clear == clear && p.frame_remainder == 0.001 &&
+              p.retry_pending && p.dirty,
+              "finite variable double overflowing GPU float fails before dispatch");
+        const int frames_before_retry = p.frames;
+        p.speed_scale = 1.0;
+        RendererCompositorRD::get_singleton()->delta = 1.0 / 60.0;
+        attempts = 0;
+        check(update(&p, 0) && attempts == 1 && p.frames == frames_before_retry + 1,
+              "variable delta overflow retry recovers after valid input");
+    }
+    {
+        Particles p; p.speed_scale = double(FLT_MAX); attempts = 0;
+        RendererCompositorRD::get_singleton()->delta = 1.0;
+        check(update(&p, 0) && attempts == 1 && p.frames == 1,
+              "finite GPU float variable delta boundary remains accepted");
+        RendererCompositorRD::get_singleton()->delta = 1.0 / 60.0;
+    }
     { Particles p; attempts = 0;
       check(update(&p) && attempts == 1 && p.frames == 1 && p.frame_remainder == 0, "ordinary frame advances"); }
     { Particles p; p.clear = true; p.speed_scale = 0; attempts = 0;

@@ -1,0 +1,464 @@
+{
+  "entries": [
+    {
+      "path": "evidence/validation/BUILD.json",
+      "category": "historical_r1_not_accepted_pending_p1",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation/BUILD.json",
+      "original_bytes": 335,
+      "original_sha256": "d2ec458a1afd8b127360a15b5eca53af5787d03b3b1bd767b0ce73ba261bba00",
+      "stored_bytes": 335,
+      "stored_sha256": "d2ec458a1afd8b127360a15b5eca53af5787d03b3b1bd767b0ce73ba261bba00"
+    },
+    {
+      "path": "evidence/validation/BUILD.log.gz",
+      "category": "historical_r1_not_accepted_pending_p1",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation/BUILD.log",
+      "original_bytes": 2123,
+      "original_sha256": "8990ffb2eeae18760199d050a0b51d875e6ce4f776fab29ff31d71db48b2068c",
+      "stored_bytes": 930,
+      "stored_sha256": "8aaebbf979f277819138a2b0c4b3714b4172ec43cbd3592e35fb36ec4a4f97a0"
+    },
+    {
+      "path": "evidence/validation/green/busy.log.gz",
+      "category": "historical_r1_not_accepted_pending_p1",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation/green/busy.log",
+      "original_bytes": 403,
+      "original_sha256": "083a4cb0bb4e70a17f734a4332072994292e800a9564685f23ebeecba463aef2",
+      "stored_bytes": 210,
+      "stored_sha256": "bcb3319b335e414d2fb4789ea1b96d6d8bbb8a275355ec3f1b6c8e32a196c6a5"
+    },
+    {
+      "path": "evidence/validation/green/last_ref.log.gz",
+      "category": "historical_r1_not_accepted_pending_p1",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation/green/last_ref.log",
+      "original_bytes": 623,
+      "original_sha256": "073bb4b53c1959536fddf02f4fc1b68786b1c4c48fa75b34d1bfb9973bc34f5a",
+      "stored_bytes": 256,
+      "stored_sha256": "62522332a6766178ba5adee924dd9aca2a5052493c506e3eacc8d7d5c48258ca"
+    },
+    {
+      "path": "evidence/validation/green/results.json",
+      "category": "historical_r1_not_accepted_pending_p1",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation/green/results.json",
+      "original_bytes": 751,
+      "original_sha256": "3de517c3256a02a1e22319aea876469f6613c8ae4b22d79572e0504303e1c3c8",
+      "stored_bytes": 751,
+      "stored_sha256": "3de517c3256a02a1e22319aea876469f6613c8ae4b22d79572e0504303e1c3c8"
+    },
+    {
+      "path": "evidence/validation-r2/BUILD.json",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/BUILD.json",
+      "original_bytes": 335,
+      "original_sha256": "14c5b6b8b8dbb35bee5e8abb8d552301d23276846f63b1e7cddc1fed8138b3b0",
+      "stored_bytes": 335,
+      "stored_sha256": "14c5b6b8b8dbb35bee5e8abb8d552301d23276846f63b1e7cddc1fed8138b3b0"
+    },
+    {
+      "path": "evidence/validation-r2/BUILD.log.gz",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/BUILD.log",
+      "original_bytes": 1912,
+      "original_sha256": "432b5b43fc4455cb200c1a2f39467478b2ae92a25188171dcf3a4e0f1b1339c1",
+      "stored_bytes": 901,
+      "stored_sha256": "a02f8adf1024fb1b83cadab90e15a436af721d3f115fc1418ca7c2bda374eb78"
+    },
+    {
+      "path": "evidence/validation-r2/green/busy.log.gz",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/green/busy.log",
+      "original_bytes": 403,
+      "original_sha256": "083a4cb0bb4e70a17f734a4332072994292e800a9564685f23ebeecba463aef2",
+      "stored_bytes": 210,
+      "stored_sha256": "bcb3319b335e414d2fb4789ea1b96d6d8bbb8a275355ec3f1b6c8e32a196c6a5"
+    },
+    {
+      "path": "evidence/validation-r2/green/last_ref.log.gz",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/green/last_ref.log",
+      "original_bytes": 623,
+      "original_sha256": "073bb4b53c1959536fddf02f4fc1b68786b1c4c48fa75b34d1bfb9973bc34f5a",
+      "stored_bytes": 256,
+      "stored_sha256": "62522332a6766178ba5adee924dd9aca2a5052493c506e3eacc8d7d5c48258ca"
+    },
+    {
+      "path": "evidence/validation-r2/green/results.json",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/green/results.json",
+      "original_bytes": 751,
+      "original_sha256": "3de517c3256a02a1e22319aea876469f6613c8ae4b22d79572e0504303e1c3c8",
+      "stored_bytes": 751,
+      "stored_sha256": "3de517c3256a02a1e22319aea876469f6613c8ae4b22d79572e0504303e1c3c8"
+    },
+    {
+      "path": "evidence/validation-r2/red/BUILD.log.gz",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/red/BUILD.log",
+      "original_bytes": 1906,
+      "original_sha256": "b9142cb815e479e2a8c70c64e7a181c43d3553df992da6ff1b2059fda645f8a9",
+      "stored_bytes": 891,
+      "stored_sha256": "d613e213d800cfbca666decac3efff2da5948292c200e249afe5a5bec007e396"
+    },
+    {
+      "path": "evidence/validation-r2/red/RESULT.json",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/red/RESULT.json",
+      "original_bytes": 594,
+      "original_sha256": "171d5441fe0144b44d5265ff2cbf38a62c0291facc911139c4e61d16d4b23f94",
+      "stored_bytes": 594,
+      "stored_sha256": "171d5441fe0144b44d5265ff2cbf38a62c0291facc911139c4e61d16d4b23f94"
+    },
+    {
+      "path": "evidence/validation-r2/red/RUNNER.log.gz",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/red/RUNNER.log",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "evidence/validation-r2/red/child/busy.log.gz",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/red/child/busy.log",
+      "original_bytes": 39,
+      "original_sha256": "d0129fd55d6539fa609fbf17b0f2406caf649e6bed2d398b4195f2ec20719dad",
+      "stored_bytes": 58,
+      "stored_sha256": "149fc7514f405d8b78611891d1534bef0103d71dcdb5ee84c40baee6a024615d"
+    },
+    {
+      "path": "evidence/validation-r2/red/child/results.json",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/red/child/results.json",
+      "original_bytes": 376,
+      "original_sha256": "8b28ca6809e24a819b5505e264691ffca369f94ed7d095c498c1ec758f87a93f",
+      "stored_bytes": 376,
+      "stored_sha256": "8b28ca6809e24a819b5505e264691ffca369f94ed7d095c498c1ec758f87a93f"
+    },
+    {
+      "path": "evidence/validation-r2/red/positive_rejected/busy.log.gz",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/red/positive_rejected/busy.log",
+      "original_bytes": 39,
+      "original_sha256": "d0129fd55d6539fa609fbf17b0f2406caf649e6bed2d398b4195f2ec20719dad",
+      "stored_bytes": 58,
+      "stored_sha256": "149fc7514f405d8b78611891d1534bef0103d71dcdb5ee84c40baee6a024615d"
+    },
+    {
+      "path": "evidence/validation-r2/red/positive_rejected/last_ref.log.gz",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/red/positive_rejected/last_ref.log",
+      "original_bytes": 39,
+      "original_sha256": "d0129fd55d6539fa609fbf17b0f2406caf649e6bed2d398b4195f2ec20719dad",
+      "stored_bytes": 58,
+      "stored_sha256": "149fc7514f405d8b78611891d1534bef0103d71dcdb5ee84c40baee6a024615d"
+    },
+    {
+      "path": "evidence/validation-r2/red/positive_rejected/results.json",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/red/positive_rejected/results.json",
+      "original_bytes": 754,
+      "original_sha256": "45499c44015a181176e505f3d4f3c672761e6072933d0e50f44402b32dfb78a7",
+      "stored_bytes": 754,
+      "stored_sha256": "45499c44015a181176e505f3d4f3c672761e6072933d0e50f44402b32dfb78a7"
+    },
+    {
+      "path": "evidence/validation-r2/red/source-mutation.diff.gz",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/red/source-mutation.diff",
+      "original_bytes": 186,
+      "original_sha256": "d0a3f5bec9f7b6ee560b9a1dc6ead3838cbd7d8cc781758f95a07ccaa9399644",
+      "stored_bytes": 164,
+      "stored_sha256": "c56e3ffbba1fd59dedff049aa53ac69bdf50233f4481791d0fafb1c7db2920ac"
+    },
+    {
+      "path": "evidence/validation-r2/restored/BUILD.json",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/restored/BUILD.json",
+      "original_bytes": 308,
+      "original_sha256": "63ff7dd702f0c9d7a1f5094ddc33fe7b416cc9458e5ca52bdb81ce2e20fb365e",
+      "stored_bytes": 308,
+      "stored_sha256": "63ff7dd702f0c9d7a1f5094ddc33fe7b416cc9458e5ca52bdb81ce2e20fb365e"
+    },
+    {
+      "path": "evidence/validation-r2/restored/BUILD.log.gz",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/restored/BUILD.log",
+      "original_bytes": 1906,
+      "original_sha256": "d3402a8ace84e23036ea718d9e0c9814c041cb3c7b91a374847d236cb3d55a75",
+      "stored_bytes": 891,
+      "stored_sha256": "e72c64a0ab29933813cc56b18cb0b820724bac78f7ff54675121ba9d0774332e"
+    },
+    {
+      "path": "evidence/validation-r2/restored/XML_AUDIT.json",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/restored/XML_AUDIT.json",
+      "original_bytes": 533,
+      "original_sha256": "42f593ae836c8654b787849be440b31a5d721d2d1ebc3c002d2dc7da23a758c5",
+      "stored_bytes": 533,
+      "stored_sha256": "42f593ae836c8654b787849be440b31a5d721d2d1ebc3c002d2dc7da23a758c5"
+    },
+    {
+      "path": "evidence/validation-r2/restored/children/busy.log.gz",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/restored/children/busy.log",
+      "original_bytes": 403,
+      "original_sha256": "083a4cb0bb4e70a17f734a4332072994292e800a9564685f23ebeecba463aef2",
+      "stored_bytes": 210,
+      "stored_sha256": "bcb3319b335e414d2fb4789ea1b96d6d8bbb8a275355ec3f1b6c8e32a196c6a5"
+    },
+    {
+      "path": "evidence/validation-r2/restored/children/last_ref.log.gz",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/restored/children/last_ref.log",
+      "original_bytes": 623,
+      "original_sha256": "073bb4b53c1959536fddf02f4fc1b68786b1c4c48fa75b34d1bfb9973bc34f5a",
+      "stored_bytes": 256,
+      "stored_sha256": "62522332a6766178ba5adee924dd9aca2a5052493c506e3eacc8d7d5c48258ca"
+    },
+    {
+      "path": "evidence/validation-r2/restored/children/results.json",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/restored/children/results.json",
+      "original_bytes": 751,
+      "original_sha256": "3de517c3256a02a1e22319aea876469f6613c8ae4b22d79572e0504303e1c3c8",
+      "stored_bytes": 751,
+      "stored_sha256": "3de517c3256a02a1e22319aea876469f6613c8ae4b22d79572e0504303e1c3c8"
+    },
+    {
+      "path": "evidence/validation-r2/restored/focused.json",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/restored/focused.json",
+      "original_bytes": 637,
+      "original_sha256": "668893d912a79861000b622c2c46629ba448f16a8a18773693d8faaa3c25b267",
+      "stored_bytes": 637,
+      "stored_sha256": "668893d912a79861000b622c2c46629ba448f16a8a18773693d8faaa3c25b267"
+    },
+    {
+      "path": "evidence/validation-r2/restored/focused.log.gz",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/restored/focused.log",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "evidence/validation-r2/restored/focused.xml.gz",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/restored/focused.xml",
+      "original_bytes": 375819,
+      "original_sha256": "1ec1b791bd2a3ae7df9f70d03ea1303bfbf8c0fcd0ea670bcd721c9f0f8ad3b1",
+      "stored_bytes": 47969,
+      "stored_sha256": "b0b66a8267f2ac19dab3feaad8471dd9caa06a56662d5839fa6ff4e17d41526b"
+    },
+    {
+      "path": "evidence/validation-r2/restored/formatted-runner/busy.log.gz",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/restored/formatted-runner/busy.log",
+      "original_bytes": 403,
+      "original_sha256": "083a4cb0bb4e70a17f734a4332072994292e800a9564685f23ebeecba463aef2",
+      "stored_bytes": 210,
+      "stored_sha256": "bcb3319b335e414d2fb4789ea1b96d6d8bbb8a275355ec3f1b6c8e32a196c6a5"
+    },
+    {
+      "path": "evidence/validation-r2/restored/formatted-runner/last_ref.log.gz",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/restored/formatted-runner/last_ref.log",
+      "original_bytes": 623,
+      "original_sha256": "073bb4b53c1959536fddf02f4fc1b68786b1c4c48fa75b34d1bfb9973bc34f5a",
+      "stored_bytes": 256,
+      "stored_sha256": "62522332a6766178ba5adee924dd9aca2a5052493c506e3eacc8d7d5c48258ca"
+    },
+    {
+      "path": "evidence/validation-r2/restored/formatted-runner/results.json",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/restored/formatted-runner/results.json",
+      "original_bytes": 751,
+      "original_sha256": "3de517c3256a02a1e22319aea876469f6613c8ae4b22d79572e0504303e1c3c8",
+      "stored_bytes": 751,
+      "stored_sha256": "3de517c3256a02a1e22319aea876469f6613c8ae4b22d79572e0504303e1c3c8"
+    },
+    {
+      "path": "evidence/validation-r2/restored/full.json",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/restored/full.json",
+      "original_bytes": 541,
+      "original_sha256": "4e25656f02f503c01ba58de997f8bd529c30821aa34c2bc936e3556709c67fcb",
+      "stored_bytes": 541,
+      "stored_sha256": "4e25656f02f503c01ba58de997f8bd529c30821aa34c2bc936e3556709c67fcb"
+    },
+    {
+      "path": "evidence/validation-r2/restored/full.log.gz",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/restored/full.log",
+      "original_bytes": 5083,
+      "original_sha256": "022eec018683af4942ebc796904613a151d83a275ea3d36cc10c55f51381e87a",
+      "stored_bytes": 1320,
+      "stored_sha256": "0d3fb4a549233a76aa7c14d3ccb0928074210a23bf43b3248fd3bda0163cf9a9"
+    },
+    {
+      "path": "evidence/validation-r2/restored/full.xml.gz",
+      "category": "r2_actual_entry_acceptance",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/validation-r2/restored/full.xml",
+      "original_bytes": 1166296,
+      "original_sha256": "778831924527fe0d858883248e9d81b354ebcafc0c163da72ddd7e7c00e30c8b",
+      "stored_bytes": 82767,
+      "stored_sha256": "1bc9d4e4999a4cf27b44a770adedfb141eeedcb105459c810769a85f8effa0ef"
+    },
+    {
+      "path": "evidence/review/FINAL_PINS_R2.json",
+      "category": "p1_review_and_fix",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/review/FINAL_PINS_R2.json",
+      "original_bytes": 872,
+      "original_sha256": "256bd137027e0ab09c885e053188ede7a27ace609c2abac55cd312173426d60f",
+      "stored_bytes": 872,
+      "stored_sha256": "256bd137027e0ab09c885e053188ede7a27ace609c2abac55cd312173426d60f"
+    },
+    {
+      "path": "evidence/review/MANIFEST.json",
+      "category": "p1_review_and_fix",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/review/MANIFEST.json",
+      "original_bytes": 475,
+      "original_sha256": "1a62bc8836b8aa4b2304340784e9556c727d605d7f88ce796e7b81fa71d08947",
+      "stored_bytes": 475,
+      "stored_sha256": "1a62bc8836b8aa4b2304340784e9556c727d605d7f88ce796e7b81fa71d08947"
+    },
+    {
+      "path": "evidence/review/PREDICATE_CHECK_R2.json",
+      "category": "p1_review_and_fix",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/review/PREDICATE_CHECK_R2.json",
+      "original_bytes": 711,
+      "original_sha256": "a61951b9116fbfa5481447c3d80cca2e01760b76860f23a3c37be8c0c93a8bbe",
+      "stored_bytes": 711,
+      "stored_sha256": "a61951b9116fbfa5481447c3d80cca2e01760b76860f23a3c37be8c0c93a8bbe"
+    },
+    {
+      "path": "evidence/review/REVIEW.md",
+      "category": "p1_review_and_fix",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/review/REVIEW.md",
+      "original_bytes": 3831,
+      "original_sha256": "2e599702b108d5bad9a95a637c1d0fe3f79940fe3ffaed9f85ac4e504178b5cf",
+      "stored_bytes": 3831,
+      "stored_sha256": "2e599702b108d5bad9a95a637c1d0fe3f79940fe3ffaed9f85ac4e504178b5cf"
+    },
+    {
+      "path": "design/IMPLEMENTED_FREEZE.json",
+      "category": "historical_design_identity",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/IMPLEMENTED_FREEZE.json",
+      "original_bytes": 1005,
+      "original_sha256": "55d1afa42add71e360f9cc9bd9cb4232253d6285b136ac402c0ebcf86788e97f",
+      "stored_bytes": 1005,
+      "stored_sha256": "55d1afa42add71e360f9cc9bd9cb4232253d6285b136ac402c0ebcf86788e97f"
+    },
+    {
+      "path": "design/IMPLEMENTED_FREEZE_R2.json",
+      "category": "historical_design_identity",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/IMPLEMENTED_FREEZE_R2.json",
+      "original_bytes": 1020,
+      "original_sha256": "ae15c90184f98b13eec215f18136e13ea47dbc6e10518301457c13015f3bd73b",
+      "stored_bytes": 1020,
+      "stored_sha256": "ae15c90184f98b13eec215f18136e13ea47dbc6e10518301457c13015f3bd73b"
+    },
+    {
+      "path": "design/ACTUAL_FINALIZE_CHILD.cpp.fragment.gz",
+      "category": "historical_design_identity",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/ACTUAL_FINALIZE_CHILD.cpp.fragment",
+      "original_bytes": 4486,
+      "original_sha256": "e5ac94f69fa5ddd367d959d139b9bb72b1b6ac93187d5b39f3f2fbf35343aa8e",
+      "stored_bytes": 1814,
+      "stored_sha256": "68d95eee3a2be9f0889f7b6648153d05c7601b0e40926aa468a788766e9efd68"
+    },
+    {
+      "path": "design/run_finalize_entry.py.candidate.gz",
+      "category": "historical_design_identity",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/finalize-entry-design/run_finalize_entry.py.candidate",
+      "original_bytes": 1481,
+      "original_sha256": "b3a1bf20e485d451ed8c2aa9faacfdb8b0e532bcf603d89644c2323e4d836854",
+      "stored_bytes": 784,
+      "stored_sha256": "389dd460b08f2df675ec2fe745fb163c8aa54b06d679a4c80f093077f1c7d16e"
+    },
+    {
+      "path": "final_source/tests/servers/rendering/test_native_height_range.cpp.gz",
+      "category": "final_source",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/test_native_height_range.cpp",
+      "original_bytes": 25423,
+      "original_sha256": "5f69c203a88f8b5ca3ae66e117b79ed98044480c6017b07275a95edb1d581b3b",
+      "stored_bytes": 6047,
+      "stored_sha256": "2b1d3ac2be577a5725620bf6708c4670a2706c8999ea35c5783a9a2314f8a7b5"
+    },
+    {
+      "path": "final_source/tests/servers/rendering/fixtures/native_height_range_finalize/run_finalize_entry.py",
+      "category": "final_source",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/native_height_range_finalize/run_finalize_entry.py",
+      "original_bytes": 2623,
+      "original_sha256": "1d6b71d80f2abf774dfc021e38ce17391347fa63077c6829a4bafdb4835bff6b",
+      "stored_bytes": 2623,
+      "stored_sha256": "1d6b71d80f2abf774dfc021e38ce17391347fa63077c6829a4bafdb4835bff6b"
+    },
+    {
+      "path": "final_source/tests/servers/rendering/fixtures/native_height_range_finalize/README.md",
+      "category": "final_source",
+      "encoding": "identity",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/native_height_range_finalize/README.md",
+      "original_bytes": 3274,
+      "original_sha256": "80bac6fc01b2f66b45e89e816bec0f4ad6c243f094b518b7957da48e05ae7759",
+      "stored_bytes": 3274,
+      "stored_sha256": "80bac6fc01b2f66b45e89e816bec0f4ad6c243f094b518b7957da48e05ae7759"
+    },
+    {
+      "path": "final_source/servers/rendering/rendering_device.cpp.gz",
+      "category": "final_source",
+      "encoding": "gzip",
+      "original_absolute_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/rendering_device.cpp",
+      "original_bytes": 746353,
+      "original_sha256": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc",
+      "stored_bytes": 134174,
+      "stored_sha256": "7b040d710f2a294364b3cd675ff623a2483f5b3e7e2f4a9d15498dc19333dacd"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "base_commit": "0889c54c94",
+  "scope": "Global free-row stable locator compatibility slice, not complete P tuple bank",
+  "build_command": "scons -Q tests=yes platform=macos target=editor debug_symbols=no module_particles_runtime_tests_enabled=yes -j2",
+  "red": {
+    "build_exit": 0,
+    "filter": "*installed typed production port*",
+    "subcase": "Metadata borrow from a true original pin retains the accepted arena after native recording",
+    "exit": 1,
+    "cases": 1,
+    "assertions": 383,
+    "failed_assertions": 1,
+    "mutation": "Reinstate original slot*surface capacity restriction before any publication; other new locator checks remain"
+  },
+  "green": {
+    "build_exit": 0,
+    "exit": 0,
+    "cases": 1,
+    "assertions": 400
+  },
+  "source_sha256": {
+    "servers/rendering/renderer_rd/storage_rd/external_output_owner.cpp": "176b54a76aa0cfc62f06a157919961b19c50409efdfe23453747eb54877b8e9f",
+    "servers/rendering/renderer_rd/storage_rd/external_output_owner.h": "fcf99037486e31064d52455dbf8879c97249ad6f21d516d8d53e9bd690bef521",
+    "servers/rendering/renderer_rd/storage_rd/external_output_packet.h": "a1a8ada3ee70d729d0460590d6ce4152c861a9a7d23bc6a484a8ddab51621cfc",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp": "fcac7a66a8f393e0ff10c0c3ebffc5190a7d0edaa58b1cc9b791116f1e4a3dce",
+    "tests/core/extension/test_production_request.cpp": "4f1357e2dbdcb329c936ca3a1389caa3917df6c78c508b1c5e6e187e34bce0a2",
+    "tests/servers/rendering/test_external_output_custody_bridge.h": "131e474b4027fd8e1361dd52370110aa8cdcf2fc083d2397984d78b2a1da9eac",
+    "tests/servers/rendering/test_external_output_owner_state.cpp": "67a8f2c5bef53cba4f8d8ba52d084c661987795d57a692e012b7c57f46796b27"
+  },
+  "binary_sha256": "7d3907774d3bd04bf5e9b38bc1d17232d504e74140c82eeec19d2fa876d7187b",
+  "logs_sha256": {
+    "b4-bank-locator-red-build.log": "3dc4870310d77bef11131bbe5ad61428c0cf97e98321c5ea737f13c80c687ef8",
+    "b4-bank-locator-red-test.log": "d6967744520320b37c4bd68ca71685c25646070ad1e73a770bb2193776419032",
+    "b4-bank-locator-green-build.log": "b5e9aa85f62c7e1cd8d9ff46a449e67efaa91e198c5b364e4ed01559123d7620",
+    "b4-bank-locator-green-test.log": "c37c21ebc0aacd9a07eecafaf593a56fb06dadd41f565ed76a83a107cb44a568",
+    "b4-bank-locator-neighbor-test.log": "b077822d084aec9c8b4ed5868911bdf4da99a3d042f55417a4eae49b61911590"
+  },
+  "limits": [
+    "CPU metadata bank exercise uses three real Registry-issued borrowed pins; not three real Acquire/native tuple transactions",
+    "Complete atomic P rows, P*(2G+4)+L, independent row root/groups and per-row physical retirement are still candidate implementation",
+    "No GPU or public Instance192 qualification"
+  ],
+  "neighbors_log": "work/b4-renderer-continuation-20261104/bank-locator-validation-20261108/b4-bank-locator-neighbor-test.log",
+  "neighbors": {
+    "exit": 0,
+    "cases": 38,
+    "assertions": 12114,
+    "filter": "*[NativePreparationContinuation]*,*[OutputAliasReadback]*,*[ExternalOutputOwner]*,*[NativeDisposal]*,*[PipelinePrefix]*,*installed typed production port*"
+  }
+}

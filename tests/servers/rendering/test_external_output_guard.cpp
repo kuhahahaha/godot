@@ -41,7 +41,7 @@ using Guard = RendererRD::ParticlesExternalGuard;
 // Test-local RIDs exercise pure layout rejection, never real native backing.
 static Guard::Bindings bindings_for(uint32_t p_capacity, uint32_t p_surfaces) {
 	Guard::Bindings bindings;
-	const uint64_t bytes[Guard::BINDING_COUNT] = { uint64_t(p_capacity) * 192, uint64_t(p_capacity) * 192, 32, 16, 64, 32, uint64_t(p_surfaces) * 20, 224 + uint64_t(p_surfaces) * 144 };
+	const uint64_t bytes[Guard::BINDING_COUNT] = { uint64_t(p_capacity) * 192, uint64_t(p_capacity) * 192, 32, 16, 64, 32, uint64_t(p_surfaces) * 20, 240 + uint64_t(p_surfaces) * 144, 16, 20, 24, 28 };
 	for (uint32_t i = 0; i < Guard::BINDING_COUNT; i++) {
 		bindings.buffers[i].byte_length = bytes[i];
 		if (bytes[i] != 0) {
@@ -54,8 +54,10 @@ static Guard::Bindings bindings_for(uint32_t p_capacity, uint32_t p_surfaces) {
 static Guard::GeometryProofHeader source_header() {
 	Guard::GeometryProofHeader proof;
 	proof.source_accessor[0] = 1;
-	proof.source_accessor[1] = 3;
-	proof.source_accessor[2] = 1;
+	proof.source_gate_words[0] = 2;
+	proof.source_gate_words[1] = 3;
+	proof.source_gate_words[2] = 4;
+	proof.source_gate_words[3] = 5;
 	proof.source_accessor[3] = 1;
 	return proof;
 }
@@ -100,7 +102,7 @@ TEST_CASE("[ExternalOutputGuard] bounded chunks cover every capacity lane once b
 	CHECK(plan.finalize.record_count == 0);
 	CHECK(plan.finalize.sequence_low == 0x12345678);
 	CHECK(plan.finalize.sequence_high == 0xabcdef01);
-	CHECK(plan.uniforms.size() == 8);
+	CHECK(plan.uniforms.size() == 12);
 	CHECK(plan.initialize_mode == Guard::INIT);
 	CHECK(plan.finalize_mode == Guard::FINALIZE);
 	// A caller cannot silently validate a suffix/subset and then finalize.
@@ -118,14 +120,14 @@ TEST_CASE("[ExternalOutputGuard] zero capacity retains actual source validation 
 	Guard::LayoutPlan plan;
 	REQUIRE(Guard::plan_layout(request, bindings, source_header(), 1, plan) == OK);
 	CHECK(plan.validation_chunks.is_empty());
-	CHECK(plan.uniforms.size() == 6);
+	CHECK(plan.uniforms.size() == 10);
 	CHECK(plan.initialize_mode == Guard::INIT_EMPTY);
 	CHECK(plan.finalize_mode == Guard::FINALIZE_EMPTY);
 	for (const auto &uniform : plan.uniforms) {
 		CHECK(uniform.binding >= Guard::OUTPUT_META);
 	}
 	auto missing_source = bindings;
-	missing_source.buffers[Guard::SOURCE_BACKING] = Guard::BufferBinding();
+	missing_source.buffers[Guard::SOURCE_COUNT] = Guard::BufferBinding();
 	rejects_unchanged(request, missing_source, source_header());
 	auto dummy_record = bindings;
 	dummy_record.buffers[Guard::CURRENT_RECORDS].rid = RID::from_uint64(500);
@@ -133,7 +135,7 @@ TEST_CASE("[ExternalOutputGuard] zero capacity retains actual source validation 
 	rejects_unchanged(request, dummy_record, source_header());
 }
 
-TEST_CASE("[ExternalOutputGuard] every binding has exact protected extent and separate retained RID") {
+TEST_CASE("[ExternalOutputGuard] protected bindings remain exclusive while source READ bindings may share") {
 	const auto request = request_for(4, 2);
 	const auto bindings = bindings_for(4, 2);
 	for (uint32_t i = 0; i < Guard::BINDING_COUNT; i++) {
@@ -146,7 +148,7 @@ TEST_CASE("[ExternalOutputGuard] every binding has exact protected extent and se
 		malformed = bindings;
 		malformed.buffers[i].byte_length--;
 		rejects_unchanged(request, malformed, source_header());
-		if (i != Guard::SOURCE_BACKING) {
+		if (i != Guard::SOURCE_COUNT && i < Guard::SOURCE_COUNT_VALIDITY) {
 			malformed = bindings;
 			malformed.buffers[i].byte_length += 4;
 			rejects_unchanged(request, malformed, source_header());
@@ -154,7 +156,18 @@ TEST_CASE("[ExternalOutputGuard] every binding has exact protected extent and se
 		for (uint32_t j = 0; j < i; j++) {
 			malformed = bindings;
 			malformed.buffers[i].rid = malformed.buffers[j].rid;
-			rejects_unchanged(request, malformed, source_header());
+			const bool source_i = i == Guard::SOURCE_COUNT || i >= Guard::SOURCE_COUNT_VALIDITY;
+			const bool source_j = j == Guard::SOURCE_COUNT || j >= Guard::SOURCE_COUNT_VALIDITY;
+			if (source_i && source_j) {
+				// A shared backing has one physical byte length even for different scalar offsets.
+				malformed.buffers[i].byte_length = malformed.buffers[j].byte_length = 32;
+				Guard::LayoutPlan plan;
+				CHECK(Guard::plan_layout(request, malformed, source_header(), 8, plan) == OK);
+				malformed.buffers[i].byte_length += 4;
+				rejects_unchanged(request, malformed, source_header()); // Same RID cannot have conflicting allocation extents.
+			} else {
+				rejects_unchanged(request, malformed, source_header());
+			}
 		}
 	}
 }
@@ -163,31 +176,75 @@ TEST_CASE("[ExternalOutputGuard] source accessor and reserved header fields reje
 	const auto request = request_for(1);
 	const auto bindings = bindings_for(1, 1);
 	const auto proof = source_header();
-	for (int index : { 0, 1 }) {
-		auto malformed = proof;
-		malformed.source_accessor[index] = 4; // First word beyond the 16-byte source.
+	auto malformed = proof;
+	malformed.source_accessor[0] = 4; // First word outside Count's own 16-byte buffer.
+	rejects_unchanged(request, bindings, malformed);
+	for (int index = 0; index < 4; index++) {
+		malformed = proof;
+		malformed.source_gate_words[index] = uint32_t(bindings.buffers[Guard::SOURCE_COUNT_VALIDITY + index].byte_length / 4);
+		rejects_unchanged(request, bindings, malformed);
+		malformed.source_gate_words[index] = UINT32_MAX;
 		rejects_unchanged(request, bindings, malformed);
 	}
-	for (int index : { 2, 3 }) {
-		for (uint32_t invalid : { 0u, 3u, UINT32_MAX }) {
-			auto malformed = proof;
-			malformed.source_accessor[index] = invalid;
+	for (int index : { 1, 2 }) {
+		for (uint32_t invalid : { 1u, 2u, UINT32_MAX }) {
+			malformed = proof;
+			malformed.source_accessor[index] = invalid; // No selectable validity rule/mask.
 			rejects_unchanged(request, bindings, malformed);
 		}
 	}
+	for (uint32_t invalid : { 0u, 3u, UINT32_MAX }) {
+		malformed = proof;
+		malformed.source_accessor[3] = invalid;
+		rejects_unchanged(request, bindings, malformed);
+	}
 	for (int index = 0; index < 4; index++) {
-		auto malformed = proof;
+		malformed = proof;
 		malformed.options[index] = index == 0 ? 2 : 1;
 		rejects_unchanged(request, bindings, malformed);
 	}
-	for (uint32_t rule : { 1u, 2u }) {
-		for (uint32_t space : { 1u, 2u }) {
-			auto supported = proof;
-			supported.source_accessor[2] = rule;
-			supported.source_accessor[3] = space;
-			supported.options[0] = 1;
-			Guard::LayoutPlan plan;
-			CHECK(Guard::plan_layout(request, bindings, supported, UINT32_MAX, plan) == OK);
+	for (uint32_t space : { 1u, 2u }) {
+		auto supported = proof;
+		supported.source_accessor[3] = space;
+		supported.options[0] = 1;
+		Guard::LayoutPlan plan;
+		CHECK(Guard::plan_layout(request, bindings, supported, UINT32_MAX, plan) == OK);
+	}
+}
+
+TEST_CASE("[ExternalOutputGuard] five source roles retain nonzero offsets and shared backing even at N0") {
+	for (uint32_t capacity : { 0u, 3u }) {
+		auto bindings = bindings_for(capacity, 1);
+		auto proof = source_header();
+		const RID shared = RID::from_uint64(900);
+		for (uint32_t role : { uint32_t(Guard::SOURCE_COUNT), uint32_t(Guard::SOURCE_COUNT_VALIDITY), uint32_t(Guard::SOURCE_ATTRIBUTES_VALIDITY), uint32_t(Guard::SOURCE_DENSE_IDS_VALIDITY), uint32_t(Guard::SOURCE_INSTANCE_GATE) }) {
+			bindings.buffers[role].rid = shared;
+			bindings.buffers[role].byte_length = 32;
+		}
+		Guard::LayoutPlan plan;
+		REQUIRE(Guard::plan_layout(request_for(capacity), bindings, proof, 8, plan) == OK);
+		CHECK(plan.uniforms.size() == (capacity == 0 ? 10 : 12));
+		auto last_word = proof;
+		last_word.source_accessor[0] = 7;
+		for (uint32_t &word : last_word.source_gate_words) {
+			word = 7;
+		}
+		CHECK(Guard::plan_layout(request_for(capacity), bindings, last_word, 8, plan) == OK);
+		last_word.source_accessor[0] = 8;
+		rejects_unchanged(request_for(capacity), bindings, last_word);
+		// All four semantic gates may resolve to the same actual persistent scalar.
+		for (uint32_t &word : proof.source_gate_words) {
+			word = 6;
+		}
+		CHECK(Guard::plan_layout(request_for(capacity), bindings, proof, 8, plan) == OK);
+		// One member's larger allocation cannot authorize another member's out-of-range scalar.
+		bindings.buffers[Guard::SOURCE_ATTRIBUTES_VALIDITY].rid = RID::from_uint64(901);
+		bindings.buffers[Guard::SOURCE_ATTRIBUTES_VALIDITY].byte_length = 24;
+		rejects_unchanged(request_for(capacity), bindings, proof);
+		for (uint32_t role : { uint32_t(Guard::SOURCE_COUNT), uint32_t(Guard::SOURCE_COUNT_VALIDITY), uint32_t(Guard::SOURCE_ATTRIBUTES_VALIDITY), uint32_t(Guard::SOURCE_DENSE_IDS_VALIDITY), uint32_t(Guard::SOURCE_INSTANCE_GATE) }) {
+			auto missing = bindings_for(capacity, 1);
+			missing.buffers[role] = Guard::BufferBinding();
+			rejects_unchanged(request_for(capacity), missing, source_header());
 		}
 	}
 }

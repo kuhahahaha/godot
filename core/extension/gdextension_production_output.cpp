@@ -35,6 +35,278 @@
 #include "servers/rendering/rendering_device.h"
 
 namespace GDExtensionDeviceExit {
+thread_local ProductionOutputPreparationScope *Registry::production_output_preparation_scope = nullptr;
+
+ProductionOutputPreparationScope::~ProductionOutputPreparationScope() {
+	if (registry) {
+		registry->production_output_preparation_end(*this);
+	}
+}
+
+Error Registry::production_output_preparation_validate_locked(ProductionOutputPin &pin, RenderingDevice &rd, uint32_t action_ordinal, uint32_t surface_ordinal, uint64_t group, RID *&root, RendererRD::ExternalPipelinePreparation *&preparation, const ProductionOutputPreparationScope *scope, uint32_t preparation_index, const RendererRD::ExternalPacketViewLease *selected_view, bool retained_tuple) {
+	if (!rd.is_main_instance || RenderingDevice::get_singleton() != &rd || rd.render_thread_id != Thread::get_caller_id() ||
+			!production_output_pin_matches_locked(pin, { instance, pin.request_serial }, rd)) {
+		return ERR_UNAUTHORIZED;
+	}
+	auto &request = *pin.request;
+	auto &attachment = *request.attachment;
+	const auto &record = records[attachment.library];
+	const auto &native = device_records[attachment.device];
+	if (phase != Phase::RUNNING || !request.frozen || request.cancelled || request.release_started || request.source_device_lost || request.effects_pending || request.capture_inflight ||
+			attachment.closing || !attachment.opened || !attachment.holder || attachment.holder->pending ||
+			attachment.holder->generation != attachment.library_generation || attachment.holder->handle_serial != record.producer_code_holder ||
+			!record.occupied || !record.attached || record.quiescing || record.close_started || record.close_error != OK ||
+			record.guard_enrollment != GuardEnrollment::QUALIFIED || record.snapshot.library_generation != attachment.library_generation ||
+			record.producer_registration_serial != attachment.producer_serial || !record.producer_attachment_identity || !native.live || rd.production_finalization_started.load(std::memory_order_acquire) ||
+			request.control.state != ProductionControlState::OWNER_CONSUMED ||
+			request.draw_list_open || request.compute_list_open) {
+		return ERR_BUSY;
+	}
+	// Keep the same retirement/revision margin as original native preparation.
+	if (request.revision > UINT64_MAX - uint64_t(request.capacity.graph_memberships) * 2 - uint64_t(request.capacity.native_memberships) * 2 - request.capacity.readbacks - request.capacity.resources - 8) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	if (action_ordinal >= request.action_count || !group) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const auto &action = request.actions[action_ordinal];
+	const auto &row = request.uses[pin.cell_index];
+	if (action.request != &request || action.declaration.action_ordinal != action_ordinal || action.declaration.action_kind != GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1 ||
+			action.output_state != ProductionActionCell::OutputState::BOUND || action.output_root != pin.serial || !action.output_read_capacity || !action.output_read_graph_capacity ||
+			row.output_owner_kind != ProductionOutputOwnerKind::SLOT || row.output_particles != action.output_particles || row.output_generation != action.output_generation ||
+			row.output_slot != action.output_slot || row.output_lease != action.output_lease) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!rd._thread_safe_.try_lock()) {
+		return ERR_BUSY;
+	}
+	const Error native_ready = rd._native_disposal_preflight();
+	const bool source_matches = native_ready == OK && production_output_source_matches_locked(request, action, rd) && production_output_recorded_ordered_locked(request, rd);
+	rd._thread_safe_.unlock();
+	if (native_ready != OK || !source_matches) {
+		return native_ready != OK ? native_ready : ERR_BUSY;
+	}
+	RID *original_root = nullptr;
+	if (!RendererRD::ParticlesStorage::_production_output_preparation_matches(action.output_particles, action.output_generation, action.output_slot,
+				action.output_lease, surface_ordinal, group, pin, rd, original_root, preparation, scope, false, preparation_index) ||
+			!original_root || preparation->owner->slots[action.output_slot].original_registry != this || preparation->owner->slots[action.output_slot].original_action_ordinal != action_ordinal || !RendererRD::ParticlesStorage::_production_output_owner_matches(ProductionOutputOwnerKind::SLOT, action.output_particles, action.output_generation, action.output_slot, action.output_lease, pin, rd, { instance, request.serial })) {
+		return ERR_UNAUTHORIZED;
+	}
+	const auto lease_state = preparation->owner->slots[action.output_slot].state;
+	const bool packet = lease_state == RendererRD::ExternalOutputOwner::LeaseState::SEALED_RECORDED || lease_state == RendererRD::ExternalOutputOwner::LeaseState::ADOPTED;
+	if ((packet && !selected_view) || (selected_view && !preparation->owner->preparation_view_matches(*selected_view, action.output_slot))) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (retained_tuple) {
+		if (!selected_view || scope || preparation->tuple_state == RendererRD::ExternalPipelinePreparation::TupleState::UNSELECTED) {
+			return ERR_UNAUTHORIZED;
+		}
+		root = original_root;
+		return OK; // Reuse authenticates current authority; it grants no factory.
+	}
+	if (preparation->finish_complete) {
+		return ERR_ALREADY_IN_USE;
+	}
+	uint32_t headers = 0, members = 0;
+	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+		const auto &cell = request.uses[i];
+		if (cell.disposal_group_serial != group) {
+			continue;
+		}
+		if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_pin_serial == pin.serial &&
+				cell.disposal_group_count == 1 && !cell.disposal_group_release && !cell.disposal_group_dropped && !cell.disposal_group_native_hold) {
+			++headers;
+		} else if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED && cell.disposal_ordinal == 0 &&
+				cell.disposal.request == &request && cell.disposal.request_serial == request.serial && cell.disposal.group == group && cell.disposal.owned &&
+				!cell.disposal.rid && !cell.disposal.serial && !cell.disposal.native_driver_id && !cell.disposal.next && cell.disposal.counter_dropped &&
+				cell.disposal.state.load(std::memory_order_acquire) == 0) {
+			++members;
+		} else {
+			return ERR_ALREADY_IN_USE;
+		}
+	}
+	if (headers != 1 || members != 1 || original_root->is_valid()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	root = original_root;
+	return OK;
+}
+
+Error Registry::production_output_preparation_begin(ProductionOutputPin &pin, RenderingDevice &rd, uint32_t action_ordinal, uint32_t surface_ordinal, uint64_t group, ProductionOutputPreparationScope &scope) {
+	return production_output_preparation_begin_internal(pin, rd, action_ordinal, surface_ordinal, group, scope, UINT32_MAX, nullptr);
+}
+Error Registry::production_output_preparation_begin_row(ProductionOutputPin &pin, RenderingDevice &rd, uint32_t action_ordinal, uint32_t source_surface, uint32_t preparation_index, uint64_t group, ProductionOutputPreparationScope &scope, const RendererRD::ExternalPacketViewLease *view) {
+	return production_output_preparation_begin_internal(pin, rd, action_ordinal, source_surface, group, scope, preparation_index, view);
+}
+Error Registry::production_output_preparation_begin_internal(ProductionOutputPin &pin, RenderingDevice &rd, uint32_t action_ordinal, uint32_t surface_ordinal, uint64_t group, ProductionOutputPreparationScope &scope, uint32_t preparation_index, const RendererRD::ExternalPacketViewLease *selected_view) {
+	Lock lock(*this);
+	if (!rd.native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (scope.registry) {
+		return ERR_ALREADY_IN_USE;
+	}
+	if (production_physical_frame || (pin.request && pin.request->continuation_inflight)) {
+		return ERR_BUSY;
+	}
+	RID *root = nullptr;
+	RendererRD::ExternalPipelinePreparation *row = nullptr;
+	const Error error = production_output_preparation_validate_locked(pin, rd, action_ordinal, surface_ordinal, group, root, row, nullptr, preparation_index, selected_view);
+	if (error != OK) {
+		return error;
+	}
+	scope.registry = this;
+	scope.request = pin.request;
+	scope.pin = &pin;
+	scope.device = &rd;
+	scope.previous = production_output_preparation_scope;
+	scope.original_root = root;
+	scope.row = row;
+	const auto &action = pin.request->actions[action_ordinal];
+	scope.original_source = action.output_source;
+	scope.source_generation = action.output_source_generation;
+	scope.source_use = action.output_source_use;
+	scope.first_source_use = action.output_first_source_use;
+	scope.source_use_count = action.output_source_use_count;
+	scope.original_particles = action.output_particles;
+	scope.original_generation = action.output_generation;
+	scope.original_slot = action.output_slot;
+	scope.original_lease = action.output_lease;
+	scope.original_geometry = row->source_geometry;
+	scope.original_material = row->source_material;
+	scope.original_material_generation = row->source_material_generation;
+	scope.request_serial = pin.request_serial;
+	scope.root_serial = pin.serial;
+	scope.group = group;
+	scope.thread = Thread::get_caller_id();
+	scope.action_ordinal = action_ordinal;
+	scope.surface_ordinal = surface_ordinal;
+	scope.preparation_index = uint32_t(row - row->owner->preparation_rows);
+	scope.selected_view = selected_view;
+	// Only the exact authenticated closed original row is opened. Its root,
+	// pin, group and native prefixes remain in their original owner storage.
+	row->pipeline_scope = &scope;
+	row->source_sealed = false;
+	++scope.request->continuation_inflight;
+	production_output_preparation_scope = &scope;
+	return OK;
+}
+
+Error Registry::production_output_preparation_cleanup_matches_locked(const ProductionOutputPreparationScope &scope, RenderingDevice &rd, ProductionRequest *&request) {
+	// CloseOldWork authenticates only custody already retained by this exact
+	// synchronous scope. No native factory or admission may use this proof.
+	if (scope.registry != this || production_output_preparation_scope != &scope || scope.device != &rd || scope.thread != Thread::get_caller_id() ||
+			!rd.is_main_instance || RenderingDevice::get_singleton() != &rd || rd.render_thread_id != Thread::get_caller_id() ||
+			!scope.pin || scope.pin->request != scope.request || scope.pin->request_serial != scope.request_serial || scope.pin->serial != scope.root_serial ||
+			!scope.request || scope.request->serial != scope.request_serial || scope.request->continuation_inflight != 1 ||
+			!scope.row || !scope.original_root || !scope.group || !production_output_pin_matches_locked(*scope.pin, { instance, scope.request_serial }, rd)) {
+		return ERR_UNAUTHORIZED;
+	}
+	auto &original = *scope.request;
+	if (scope.action_ordinal >= original.action_count || !scope.original_source) {
+		return ERR_UNAUTHORIZED;
+	}
+	const auto &action = original.actions[scope.action_ordinal];
+	const auto &pin_row = original.uses[scope.pin->cell_index];
+	if (action.request != &original || action.declaration.action_ordinal != scope.action_ordinal ||
+			action.declaration.action_kind != GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1 || (action.output_state != ProductionActionCell::OutputState::BOUND && action.output_state != ProductionActionCell::OutputState::RETIRING && action.output_state != ProductionActionCell::OutputState::UNKNOWN) ||
+			action.output_root != scope.root_serial || action.output_particles != scope.original_particles || action.output_generation != scope.original_generation ||
+			action.output_slot != scope.original_slot || action.output_lease != scope.original_lease ||
+			!action.output_source_prepared || action.output_source != scope.original_source || action.output_source_generation != scope.source_generation ||
+			action.output_source_use != scope.source_use || action.output_first_source_use != scope.first_source_use || action.output_source_use_count != scope.source_use_count ||
+			scope.original_source->request != &original || scope.original_source->request_serial != scope.request_serial ||
+			scope.original_source->declaration.original_generation != scope.source_generation ||
+			pin_row.output_owner_kind != ProductionOutputOwnerKind::SLOT || pin_row.output_particles != scope.original_particles ||
+			pin_row.output_generation != scope.original_generation || pin_row.output_slot != scope.original_slot || pin_row.output_lease != scope.original_lease) {
+		return ERR_UNAUTHORIZED;
+	}
+	RID *root = nullptr;
+	RendererRD::ExternalPipelinePreparation *row = nullptr;
+	if (!RendererRD::ParticlesStorage::_production_output_preparation_matches(scope.original_particles, scope.original_generation, scope.original_slot,
+				scope.original_lease, scope.surface_ordinal, scope.group, *scope.pin, rd, root, row, &scope, true, scope.preparation_index) ||
+			!RendererRD::ParticlesStorage::_production_output_owner_matches(ProductionOutputOwnerKind::SLOT, scope.original_particles, scope.original_generation, scope.original_slot, scope.original_lease, *scope.pin, rd, { instance, scope.request_serial }) ||
+			root != scope.original_root || row != scope.row || row->owner->slots[scope.original_slot].original_registry != this ||
+			row->owner->slots[scope.original_slot].original_action_ordinal != scope.action_ordinal || row->source_geometry != scope.original_geometry ||
+			row->source_material != scope.original_material || row->source_material_generation != scope.original_material_generation) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (scope.selected_view && !row->owner->preparation_view_matches(*scope.selected_view, scope.original_slot, true)) {
+		return ERR_UNAUTHORIZED;
+	}
+	request = &original;
+	return OK;
+}
+
+Error Registry::production_output_preparation_matches_locked(const ProductionOutputPreparationScope &scope, RenderingDevice &rd, ProductionRequest *&request) {
+	ProductionRequest *retained = nullptr;
+	const Error cleanup = production_output_preparation_cleanup_matches_locked(scope, rd, retained);
+	if (cleanup != OK) {
+		return cleanup;
+	}
+	// Re-run all NewWork/source/order/effect gates immediately before each
+	// factory. CloseOldWork remains usable after cancellation or withdrawal.
+	RID *root = nullptr;
+	RendererRD::ExternalPipelinePreparation *row = nullptr;
+	const Error error = production_output_preparation_validate_locked(*scope.pin, rd, scope.action_ordinal, scope.surface_ordinal, scope.group, root, row, &scope, scope.preparation_index, scope.selected_view);
+	if (error != OK) {
+		return error;
+	}
+	if (root != scope.original_root || row != scope.row) {
+		return ERR_UNAUTHORIZED;
+	}
+	request = retained;
+	return OK;
+}
+
+Error Registry::production_output_preparation_finish(ProductionOutputPreparationScope &scope) {
+	{
+		Lock lock(*this);
+		ProductionRequest *request = nullptr;
+		if (!scope.device) {
+			return ERR_UNAUTHORIZED;
+		}
+		const Error authenticated = production_output_preparation_cleanup_matches_locked(scope, *scope.device, request);
+		if (authenticated != OK) {
+			return authenticated;
+		}
+	}
+	// The retained scope pins request and row throughout the lock-free directory
+	// handshake. Mesh VA lock ordering forbids freezing under Registry/RD locks.
+	const Error prepared = RendererRD::ParticlesStorage::_production_output_preparation_prepare_finish_row(*scope.row);
+	Lock lock(*this);
+	ProductionRequest *request = nullptr;
+	const Error authenticated = production_output_preparation_cleanup_matches_locked(scope, *scope.device, request);
+	if (authenticated != OK) {
+		return authenticated;
+	}
+	scope.row->finish_error = prepared != OK ? prepared : RendererRD::ParticlesStorage::_production_output_preparation_finish_locked(scope, *scope.device, *request);
+	return scope.row->finish_error;
+}
+
+void Registry::production_output_preparation_end(ProductionOutputPreparationScope &scope) {
+	// Finish authenticates before and after its lock-free Mesh handshake.
+	production_output_preparation_finish(scope);
+	Lock lock(*this);
+	ProductionRequest *request = nullptr;
+	CRASH_COND(!scope.device || production_output_preparation_cleanup_matches_locked(scope, *scope.device, request) != OK);
+	// CloseOldWork is mandatory even after cancellation, backend failure or a
+	// caller omitting explicit finish. Refusal preserves every stable wrapper.
+	scope.row->source_sealed = true;
+	scope.row->pipeline_scope = nullptr;
+	production_output_preparation_scope = scope.previous;
+	--request->continuation_inflight;
+	scope.registry = nullptr;
+	scope.request = nullptr;
+	scope.pin = nullptr;
+	scope.device = nullptr;
+	scope.previous = nullptr;
+	scope.original_root = nullptr;
+	scope.row = nullptr;
+	scope.original_source = nullptr;
+	scope.selected_view = nullptr;
+	scope.preparation_index = UINT32_MAX;
+}
+
 namespace {
 template <size_t N>
 GDExtensionOutputStatusV1 output_status(Error error, const char (&detail)[N]) {
@@ -303,7 +575,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_output(GDExtension
 	if (output_decode(input->input, decoded) != OK) {
 		return result(ERR_INVALID_PARAMETER);
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = production_request_locked(ref, true, request, rd);
@@ -428,7 +700,7 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 	if (output_decode(*input, parsed) != OK) {
 		return;
 	}
-	MutexLock lock(mutex);
+	Lock lock(*this);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = production_physical_request_locked(context, ref, request, rd, true);
@@ -556,17 +828,41 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 			return;
 		}
 	}
+	// Zero native storage has no preparation rows or manufactured buffers.
+	// Nonzero native preparation pays the original action P/G envelope.
+	const bool reserve_pipelines = layout.resource_count && action.output_read_capacity;
+	if (reserve_pipelines && (!action.output_read_graph_capacity || action.output_read_capacity < surfaces)) {
+		out->status = output_status(ERR_OUT_OF_MEMORY, "output_preparation_capacity");
+		return;
+	}
 	uint32_t spare = 0;
 	for (uint32_t i = request->use_count + request->binding_used; i < request->capacity.resource_uses; ++i) {
 		const auto &cell = request->uses[i];
 		spare += cell.request == request && cell.output_role == ProductionUseCell::OutputRole::UNUSED && !cell.output_consumer && !cell.dependency.physical && !cell.output_pin_serial && !cell.disposal_group_serial;
 	}
-	if (spare < 1u + (layout.resource_count ? layout.resource_count + 1 : 0) || action.output_read_capacity > owner.read_capacity || uint64_t(action.output_read_capacity) * action.output_read_graph_capacity > request->capacity.graph_memberships - request->graph_count) {
+	const uint64_t borrower_headroom = reserve_pipelines ? uint64_t(owner.view_capacity) + owner.surface_capacity + owner.read_capacity : 0;
+	const uint64_t per_row_uses = uint64_t(action.output_read_graph_capacity) * 2 + 4;
+	if (reserve_pipelines && uint64_t(action.output_read_capacity) > (UINT64_MAX - borrower_headroom - 1u - (uint64_t(layout.resource_count) + 1)) / per_row_uses) {
+		out->status = output_status(ERR_PARAMETER_RANGE_ERROR, "output_preparation_quote_overflow");
+		return;
+	}
+	const uint64_t required_uses = 1u + (layout.resource_count ? uint64_t(layout.resource_count) + 1 : 0) + (reserve_pipelines ? uint64_t(action.output_read_capacity) * per_row_uses + borrower_headroom : 0);
+	const uint32_t preparation_count = layout.resource_count ? (reserve_pipelines ? action.output_read_capacity : surfaces) : 0;
+	if (preparation_count > owner.free_preparation_rows()) {
+		out->status = output_status(ERR_OUT_OF_MEMORY, "output_global_preparation_bank");
+		return;
+	}
+	if (spare < required_uses || action.output_read_capacity > owner.read_capacity || request->graph_count > request->capacity.graph_memberships || uint64_t(action.output_read_capacity) * action.output_read_graph_capacity > request->capacity.graph_memberships - request->graph_count) {
 		out->status = output_status(ERR_OUT_OF_MEMORY, "output_prequoted_capacity");
 		return;
 	}
+	const uint64_t required_groups = (layout.resource_count ? 1u : 0u) + (reserve_pipelines ? uint64_t(action.output_read_capacity) * 3 : 0u);
+	if (required_groups && (!request->next_disposal_group_serial || required_groups - 1 > UINT64_MAX - request->next_disposal_group_serial)) {
+		out->status = output_status(ERR_PARAMETER_RANGE_ERROR, "output_group_serial_capacity");
+		return;
+	}
 	Owner::MetadataLayout metadata;
-	error = owner.generation_config_inline ? Owner::plan_metadata_layout(owner.view_capacity, owner.read_capacity, owner.surface_capacity, metadata, owner.generation_mesh_count, owner.generation_material_count, owner.binding_capacity, owner.storage_capacity) : Owner::plan_metadata_layout(owner.view_capacity, owner.read_capacity, owner.surface_capacity, metadata);
+	error = owner.generation_config_inline ? Owner::plan_metadata_layout(owner.view_capacity, owner.read_capacity, owner.surface_capacity, metadata, owner.generation_mesh_count, owner.generation_material_count, owner.binding_capacity, owner.storage_capacity, owner.preparation_capacity) : Owner::plan_metadata_layout(owner.view_capacity, owner.read_capacity, owner.surface_capacity, metadata);
 	if (error != OK || metadata.total_bytes != owner.metadata_lease.get_size()) {
 		out->status = output_status(ERR_INVALID_DATA, "output_metadata_layout");
 		return;
@@ -605,6 +901,7 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 		out->status = output_status(error, "output_owner_bind");
 		return;
 	}
+	action.output_preparation_borrower_headroom = borrower_headroom;
 	if (layout.resource_count) {
 		auto *base = static_cast<uint8_t *>(owner.metadata_lease.get_data());
 		slot.storage = new (base + metadata.storage_offset + size_t(slot_index) * sizeof(Storage)) Storage(*rd);
@@ -617,9 +914,18 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 		}
 		// The executing original RECORD and installed independent root retain
 		// the action/slot while each factory reacquires the Registry lock.
-		mutex.unlock();
-		error = slot.storage->allocate_instance192_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity, surfaces);
-		mutex.lock();
+		error = owner.bind_preparation_rows(slot_index, preparation_count);
+		if (error == OK && reserve_pipelines) {
+			// Prepay all row groups before the first storage/native factory.
+			unlock_mutex_for_call();
+			error = storage->_external_preparation_bank_reserve_owned_prefix(context, RID::from_uint64(input->particles), slot_index, action.output_read_graph_capacity);
+			relock_mutex_after_call();
+		}
+		if (error == OK) {
+			unlock_mutex_for_call();
+			error = slot.storage->allocate_instance192_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity, surfaces);
+			relock_mutex_after_call();
+		}
 		if (error == OK) {
 			uint32_t member = 0;
 			for (uint32_t i = 0; i < Storage::RESOURCE_COUNT; ++i) {
@@ -671,6 +977,13 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 	}
 	if (error != OK) {
 		bool prefix = slot.owned_group != 0;
+		for (uint32_t i = 0; i < slot.surface_count; ++i) {
+			prefix |= slot.surfaces[i].pipeline_owned_group != 0 || slot.surfaces[i].created_pipeline.is_valid();
+		}
+		for (uint32_t i = 0; i < owner.preparation_capacity; ++i) {
+			const auto &row = owner.preparation_rows[i];
+			prefix |= row.owner == &owner && row.owner_slot == slot_index && (row.pipeline_owned_group || row.geometry_reserved_group || row.material_reserved_group || row.owned_pipeline_root.is_valid());
+		}
 		if (slot.storage) {
 			for (const auto &resource : slot.storage->resources) {
 				prefix |= resource.rid.is_valid();
@@ -681,7 +994,22 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 				slot.storage->~ExternalOutputStorage();
 				slot.storage = nullptr;
 			}
+			for (uint32_t i = 0; i < owner.preparation_capacity; ++i) {
+				auto &row = owner.preparation_rows[i];
+				if (row.owner != &owner || row.owner_slot != slot_index) {
+					continue;
+				}
+				row.pipeline_pin = nullptr;
+				row.pipeline_original_root = nullptr;
+				if (row.owner_surface != UINT32_MAX) {
+					slot.surfaces[row.owner_surface].preparation = nullptr;
+				}
+				CRASH_COND(owner.return_preparation_bank_row(slot_index, i) != OK);
+			}
 			for (uint32_t i = 0; i < slot.surface_count; ++i) {
+				// Only unopened metadata is rolled back here. Native prefixes
+				// keep the slot and its stable preparation row in retirement.
+				CRASH_COND(owner.return_preparation_row(slot_index, i) != OK);
 				slot.surfaces[i].~SurfaceBinding();
 			}
 			slot.surfaces = nullptr;
@@ -693,6 +1021,7 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 			slot.original_request = {};
 			action.output_state = ProductionActionCell::OutputState::UNBOUND;
 			action.output_root = action.output_lease = action.output_generation = 0;
+			action.output_preparation_borrower_headroom = 0;
 			action.output_slot = UINT32_MAX;
 			action.output_particles = RID();
 		} else {

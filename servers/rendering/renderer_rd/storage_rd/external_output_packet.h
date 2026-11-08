@@ -65,6 +65,11 @@ struct ExternalPacketPipelineRequest {
 	uint32_t specialization[3] = {};
 	uint32_t view_count = 1;
 	bool wireframe = false, reverse_cull = false, double_sided_shadow = false;
+	bool operator==(const ExternalPacketPipelineRequest &other) const {
+		return backend == other.backend && pass == other.pass && framebuffer_format == other.framebuffer_format && subpass == other.subpass && version == other.version &&
+				color_flags == other.color_flags && specialization[0] == other.specialization[0] && specialization[1] == other.specialization[1] && specialization[2] == other.specialization[2] &&
+				view_count == other.view_count && wireframe == other.wireframe && reverse_cull == other.reverse_cull && double_sided_shadow == other.double_sided_shadow;
+	}
 };
 
 // Frozen by the original native material classifier while its C++ source is
@@ -162,7 +167,12 @@ public:
 // This is not a source grant: the caller has validated its original selection,
 // preparation opportunity and metadata/backing reservations before native work.
 class ExternalPipelinePreparation {
+#ifdef TESTS_ENABLED
+	friend class ExternalLinkedOwnerTest;
+	friend struct ::TestProductionRequest::Access;
+#endif
 	friend class ParticlesStorage;
+	friend class ::GDExtensionDeviceExit::Registry;
 	friend class RendererSceneRenderImplementation::SceneShaderForwardClustered;
 	friend class RendererSceneRenderImplementation::SceneShaderForwardMobile;
 	friend class ExternalOutputOwner;
@@ -170,9 +180,26 @@ class ExternalPipelinePreparation {
 	friend class RendererSceneRenderImplementation::RenderForwardMobile;
 	ExternalOutputOwner *owner = nullptr;
 	uint64_t serial = 0, generation = 0;
+	uint32_t owner_slot = UINT32_MAX, owner_surface = UINT32_MAX;
 	uint32_t max_resources = 0;
 	bool source_sealed = true; // Only the owner opens an admitted pre-seal preparation row.
 	ExternalPacketPipelineRequest selection;
+	enum class TupleState : uint8_t { UNSELECTED,
+		SELECTED,
+		READY,
+		FAILED };
+	TupleState tuple_state = TupleState::UNSELECTED;
+	uint32_t tuple_surface = UINT32_MAX, tuple_native_surface = UINT32_MAX;
+	RID tuple_mesh;
+	Error backend_error = ERR_UNCONFIGURED, finish_error = ERR_UNCONFIGURED;
+	bool finish_complete = false, geometry_adopted = false, material_adopted = false, pipeline_sealed = false;
+	bool geometry_transferred[2] = {}, material_transferred = false;
+	bool geometry_metadata_returned[2] = {}, material_metadata_returned = false;
+	// Exact generation source selected when this original slot row was bound.
+	// The generation outlives all its slots; this pointer creates no new grant.
+	const MeshStorage::NativeSurfaceHold *source_geometry = nullptr;
+	RID source_material;
+	uint64_t source_material_generation = 0;
 	MeshStorage::NativeSurfaceHold geometry[2];
 	uint32_t selected_geometry = UINT32_MAX;
 	MaterialStorage::NativeMaterialHold material;
@@ -181,14 +208,20 @@ class ExternalPipelinePreparation {
 	RenderingDevice::PolygonCullMode cull_mode = RenderingDevice::POLYGON_CULL_DISABLED;
 	Error last_error = ERR_UNCONFIGURED;
 	bool native_cache_queried = false;
-	// Selected RID copy only. The original SurfaceBinding owns the actual
-	// pipeline root and group, including failed material-hold prefixes.
+	// Selected RID copy only. Bank reservations own their actual stable root
+	// and all three original groups below, including failed native prefixes.
 	RID created_pipeline;
 	GDExtensionProductionPhysicalContextRefV1 pipeline_context{};
+	GDExtensionDeviceExit::ProductionOutputPreparationScope *pipeline_scope = nullptr;
 	GDExtensionDeviceExit::ProductionOutputPin *pipeline_pin = nullptr;
 	uint64_t pipeline_owned_group = 0;
+	RID owned_pipeline_root;
+	uint64_t geometry_reserved_group = 0, material_reserved_group = 0;
+	bool bank_groups_reserved = false;
 	RID *pipeline_original_root = nullptr;
 	Error _pipeline_preflight();
+	// Only mandatory prefix capture/adopt/seal may use this exact cleanup proof.
+	Error _cleanup_preflight();
 	RID _create_pipeline(RID p_shader, RenderingDevice::FramebufferFormatID p_framebuffer_format, RenderingDevice::VertexFormatID p_vertex_format, RenderingDevice::RenderPrimitive p_render_primitive, const RenderingDevice::PipelineRasterizationState &p_rasterization_state, const RenderingDevice::PipelineMultisampleState &p_multisample_state, const RenderingDevice::PipelineDepthStencilState &p_depth_stencil_state, const RenderingDevice::PipelineColorBlendState &p_blend_state, BitField<RenderingDevice::PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<RenderingDevice::PipelineSpecializationConstant> &p_specialization_constants);
 	ExternalPipelinePreparation() = default;
 

@@ -1,0 +1,7 @@
+core/extension/gdextension_interface.cpp:416:101: error: declaration shadows a field of 'GDExtensionDeviceExit::Registry' [-Werror,-Wshadow]
+  416 | Error Registry::scene_phase_call_relay(NormalRelayToken token, const GDExtensionNativeScenePhaseV1 &phase, GDExtensionProductionRequestRefV1 request, const GDExtensionProductionOperationV1 &operation) {
+      |                                                                                                     ^
+./core/extension/gdextension_library_exit_guard.h:807:8: note: previous declaration is here
+  807 |         Phase phase = Phase::FINALIZED;
+      |               ^
+1 error generated.

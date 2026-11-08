@@ -1,0 +1,9 @@
+{
+  "scope": "Read-only fixed-commit header retrieval; no source adoption or build",
+  "commit": "4a0c26723fccee9f90bc75930b27635e006f48c7",
+  "url": "https://raw.githubusercontent.com/kuhahahaha/godot/4a0c26723fccee9f90bc75930b27635e006f48c7/servers/rendering/renderer_rd/storage_rd/height_frame.h",
+  "bytes": 5384,
+  "sha256": "27df0d38da60aef80ad574d9fa9d69a9d30719fdeed1b75e4a79f0d1f0511583",
+  "packet_manifest_included": false,
+  "local_git_commit_available": false
+}

@@ -1,0 +1,17 @@
+{
+  "scope": "P1 closure source review only",
+  "files": {
+    "FINAL_PINS_R2.json": {
+      "bytes": 872,
+      "sha256": "256bd137027e0ab09c885e053188ede7a27ace609c2abac55cd312173426d60f"
+    },
+    "PREDICATE_CHECK_R2.json": {
+      "bytes": 711,
+      "sha256": "a61951b9116fbfa5481447c3d80cca2e01760b76860f23a3c37be8c0c93a8bbe"
+    },
+    "REVIEW.md": {
+      "bytes": 3831,
+      "sha256": "2e599702b108d5bad9a95a637c1d0fe3f79940fe3ffaed9f85ac4e504178b5cf"
+    }
+  }
+}

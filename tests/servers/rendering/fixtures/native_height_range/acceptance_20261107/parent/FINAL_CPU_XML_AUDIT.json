@@ -1,0 +1,28 @@
+[
+  {
+    "name": "FINAL_FOCUSED",
+    "raw_sha256": "574e018bc680b88e5969a3aa7bd0446651ad9b50ba00792a38d0a3040a56755f",
+    "asserts": {
+      "successes": "6902",
+      "failures": "0"
+    },
+    "cases": {
+      "successes": "60",
+      "failures": "0",
+      "skipped": "2223"
+    }
+  },
+  {
+    "name": "FINAL_FULL_CPU",
+    "raw_sha256": "3fa742c8c66aada27870a9a63bb1a89cf4483514f41cba965ae02072a27cc0cf",
+    "asserts": {
+      "successes": "585821",
+      "failures": "0"
+    },
+    "cases": {
+      "successes": "2280",
+      "failures": "0",
+      "skipped": "3"
+    }
+  }
+]
