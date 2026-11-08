@@ -1,0 +1,25 @@
+{
+  "base": "c6366c051f",
+  "scope": "Backend exact ready lookup before shader is_valid/derive; not full prospective G",
+  "build_command": "scons -Q tests=yes platform=macos target=editor debug_symbols=no module_particles_runtime_tests_enabled=yes -j2",
+  "build_exit": 0,
+  "gpu": {
+    "mobile": {
+      "exit": 0,
+      "checks": 202,
+      "result": "native-mobile-base/result.json"
+    },
+    "forward_plus": {
+      "exit": 0,
+      "checks": 202,
+      "result": "native-forward-base/result.json"
+    }
+  },
+  "host_sha256": "23d3df40194ea3d032f77dc53a8352a031bc2c0b5d2bf094b8aa330790e19e6d",
+  "limits": [
+    "create_native_pipeline repeats effectful shader getter",
+    "no prospective VA/material/fixed-point G admission",
+    "no public U05/view/presentation/no-follow-up-draw"
+  ],
+  "candidate_patch_sha256": "3a3d86ebeb96657d8340ce984459af1df98ff102d4de17ab5f4d50f9ec47f826"
+}

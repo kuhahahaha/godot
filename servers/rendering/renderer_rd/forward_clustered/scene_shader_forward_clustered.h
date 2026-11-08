@@ -334,6 +334,8 @@ public:
 		uint16_t _get_shader_version(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader) const;
 		RID _get_shader_variant(uint16_t p_shader_version, bool p_indexed144 = false, bool p_instance192 = false) const;
 		void _clear_vertex_input_mask_cache();
+		// Read-only exact variant lookup; outputs are unchanged on refusal.
+		Error get_native_shader_if_ready(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader, bool p_indexed144, bool p_instance192, RID &r_shader, uint64_t &r_input_mask) const;
 		RID get_shader_variant(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader, bool p_indexed144 = false, bool p_instance192 = false) const;
 		uint64_t get_vertex_input_mask(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader, bool p_indexed144 = false, bool p_instance192 = false);
 		RD::PolygonCullMode get_cull_mode_from_cull_variant(CullVariant p_cull_variant);

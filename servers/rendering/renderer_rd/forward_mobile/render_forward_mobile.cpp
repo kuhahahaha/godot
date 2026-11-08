@@ -3857,7 +3857,7 @@ Error RenderForwardMobile::external_pipeline_prepare(const RendererRD::ExternalS
 		return fail(ERR_INVALID_DATA);
 	}
 	const auto *geometry_source = instance192 ? r_preparation.source_geometry : p_surface.geometry_source;
-	if ((!instance192 && !indexed144) || indexed144 != p_surface.geometry_source->is_external() || !shader || !shader->is_valid() ||
+	if ((!instance192 && !indexed144) || indexed144 != p_surface.geometry_source->is_external() || !shader ||
 			(instance192 && !shader->instance192_shader_supported()) || shader->uses_point_size || shader->uses_particle_trails) {
 		return fail(ERR_UNAVAILABLE);
 	}
@@ -3905,8 +3905,8 @@ Error RenderForwardMobile::external_pipeline_prepare(const RendererRD::ExternalS
 	key.wireframe = request.wireframe;
 	key.instance192 = instance192;
 	key.indexed144 = indexed144;
-	// Compile the exact specialized pipeline synchronously. No hash-only cache
-	// hit, no fallback can silently change the frozen variant or vertex layout.
+	// Select the exact specialized pipeline; readiness must be established
+	// before deriving geometry or creating the owned pipeline.
 	key.ubershader = false;
 	key.shader_specialization.packed_0 = request.specialization[0];
 	key.shader_specialization.packed_1 = request.specialization[1];
@@ -3927,12 +3927,13 @@ Error RenderForwardMobile::external_pipeline_prepare(const RendererRD::ExternalS
 	key.render_pass = request.subpass;
 	const auto cull = request.pass == ExternalPacketPass::SHADOW && request.double_sided_shadow ? SceneShaderForwardMobile::ShaderData::CULL_VARIANT_DOUBLE_SIDED : (request.reverse_cull ? SceneShaderForwardMobile::ShaderData::CULL_VARIANT_REVERSED : SceneShaderForwardMobile::ShaderData::CULL_VARIANT_NORMAL);
 	key.cull_mode = shader->get_cull_mode_from_cull_variant(cull);
-	RID native_shader = shader->get_shader_variant(key.version, false, indexed144, instance192);
-	if (native_shader.is_null()) {
-		return fail(ERR_CANT_CREATE);
+	RID native_shader;
+	uint64_t input_mask = 0;
+	Error error = shader->get_native_shader_if_ready(key.version, false, indexed144, instance192, native_shader, input_mask);
+	if (error != OK) {
+		return fail(error);
 	}
-	const uint64_t input_mask = shader->get_vertex_input_mask(key.version, false, indexed144, instance192);
-	Error error = MeshStorage::mesh_surface_hold_derive(*geometry_source, input_mask, false, false, 0, r_preparation.geometry[0]);
+	error = MeshStorage::mesh_surface_hold_derive(*geometry_source, input_mask, false, false, 0, r_preparation.geometry[0]);
 	if (error != OK) {
 		return fail(error);
 	}

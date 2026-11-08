@@ -552,6 +552,22 @@ void SceneShaderForwardMobile::ShaderData::_clear_vertex_input_mask_cache() {
 	}
 }
 
+Error SceneShaderForwardMobile::ShaderData::get_native_shader_if_ready(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144, bool p_instance192, RID &r_shader, uint64_t &r_input_mask) const {
+	if (p_shader_version < 0 || p_shader_version >= SHADER_VERSION_MAX || (p_indexed144 && p_instance192)) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (p_instance192 && !instance192_shader_supported()) {
+		return ERR_UNAVAILABLE;
+	}
+	MutexLock lock(SceneShaderForwardMobile::singleton_mutex);
+	if (!SceneShaderForwardMobile::singleton || version.is_null()) {
+		return ERR_UNAVAILABLE;
+	}
+	uint32_t shader_index = p_shader_version + (SceneShaderForwardMobile::singleton->use_fp16 ? SHADER_VERSION_MAX * 2 : 0) + (p_ubershader ? SHADER_VERSION_MAX : 0);
+	shader_index += p_instance192 ? INSTANCE192_VARIANT_OFFSET : p_indexed144 ? INDEXED144_VARIANT_OFFSET : 0;
+	return SceneShaderForwardMobile::singleton->shader.version_get_native_shader_if_ready(version, shader_index, r_shader, r_input_mask);
+}
+
 RID SceneShaderForwardMobile::ShaderData::get_shader_variant(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144, bool p_instance192) const {
 	ERR_FAIL_COND_V(p_indexed144 && p_instance192, RID());
 	ERR_FAIL_COND_V(p_instance192 && !instance192_shader_supported(), RID());

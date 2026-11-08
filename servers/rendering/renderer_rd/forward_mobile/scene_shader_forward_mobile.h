@@ -353,6 +353,8 @@ public:
 		Error get_native_instance192_shader_features(NativeInstance192ShaderFeatures &r_features) const override;
 		RD::PolygonCullMode get_cull_mode_from_cull_variant(CullVariant p_cull_variant);
 		void _clear_vertex_input_mask_cache();
+		// Read-only exact variant lookup; outputs are unchanged on refusal.
+		Error get_native_shader_if_ready(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144, bool p_instance192, RID &r_shader, uint64_t &r_input_mask) const;
 		RID get_shader_variant(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144 = false, bool p_instance192 = false) const;
 		uint64_t get_vertex_input_mask(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144 = false, bool p_instance192 = false);
 		bool is_valid() const;

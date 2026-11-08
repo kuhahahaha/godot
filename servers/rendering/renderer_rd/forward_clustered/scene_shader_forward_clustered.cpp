@@ -606,6 +606,22 @@ void SceneShaderForwardClustered::ShaderData::_clear_vertex_input_mask_cache() {
 	}
 }
 
+Error SceneShaderForwardClustered::ShaderData::get_native_shader_if_ready(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader, bool p_indexed144, bool p_instance192, RID &r_shader, uint64_t &r_input_mask) const {
+	if (p_pipeline_version < 0 || p_pipeline_version >= PIPELINE_VERSION_MAX || p_color_pass_flags >= PIPELINE_COLOR_PASS_FLAG_COMBINATIONS || (p_indexed144 && p_instance192)) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (p_instance192 && !instance192_shader_supported()) {
+		return ERR_UNAVAILABLE;
+	}
+	MutexLock lock(SceneShaderForwardClustered::singleton_mutex);
+	if (!SceneShaderForwardClustered::singleton || version.is_null()) {
+		return ERR_UNAVAILABLE;
+	}
+	uint32_t shader_index = _get_shader_version(p_pipeline_version, p_color_pass_flags, p_ubershader);
+	shader_index += p_instance192 ? INSTANCE192_VARIANT_OFFSET : p_indexed144 ? INDEXED144_VARIANT_OFFSET : 0;
+	return SceneShaderForwardClustered::singleton->shader.version_get_native_shader_if_ready(version, shader_index, r_shader, r_input_mask);
+}
+
 RID SceneShaderForwardClustered::ShaderData::get_shader_variant(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader, bool p_indexed144, bool p_instance192) const {
 	return _get_shader_variant(_get_shader_version(p_pipeline_version, p_color_pass_flags, p_ubershader), p_indexed144, p_instance192);
 }
