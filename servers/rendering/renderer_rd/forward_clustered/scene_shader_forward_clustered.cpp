@@ -551,7 +551,17 @@ RID SceneShaderForwardClustered::ShaderData::create_native_pipeline(PipelineKey 
 		specialization_constants.push_back(sc);
 	}
 
-	RID shader_rid = get_shader_variant(p_pipeline_key.version, p_pipeline_key.color_pass_flags, p_pipeline_key.ubershader, p_pipeline_key.indexed144, p_pipeline_key.instance192);
+	RID shader_rid;
+	if (p_output) {
+		uint64_t input_mask = 0;
+		const Error ready = get_native_shader_if_ready(p_pipeline_key.version, p_pipeline_key.color_pass_flags, p_pipeline_key.ubershader, p_pipeline_key.indexed144, p_pipeline_key.instance192, shader_rid, input_mask);
+		if (ready != OK) {
+			p_output->last_error = ready;
+			return RID();
+		}
+	} else {
+		shader_rid = get_shader_variant(p_pipeline_key.version, p_pipeline_key.color_pass_flags, p_pipeline_key.ubershader, p_pipeline_key.indexed144, p_pipeline_key.instance192);
+	}
 	ERR_FAIL_COND_V(shader_rid.is_null(), RID());
 
 	RID pipeline = p_output ? p_output->_create_pipeline(shader_rid, p_pipeline_key.framebuffer_format_id, p_pipeline_key.vertex_format_id, primitive_rd, raster_state, multisample_state, depth_stencil_state, blend_state, 0, 0, specialization_constants) : RD::get_singleton()->render_pipeline_create(shader_rid, p_pipeline_key.framebuffer_format_id, p_pipeline_key.vertex_format_id, primitive_rd, raster_state, multisample_state, depth_stencil_state, blend_state, 0, 0, specialization_constants);
