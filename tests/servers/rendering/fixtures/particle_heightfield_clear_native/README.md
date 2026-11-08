@@ -114,3 +114,42 @@ freed before their associated material, collider and texture. These are
 connection, original record dependency and owner-use join remain absent. Numeric
 agreement cannot certify complete H25 acceptance, multi-source interaction order
 or the remaining sloped-height coverage.
+
+
+### SceneCull source selection (H12)
+
+```sh
+python3 tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_source_selection.py --binary /absolute/path/to/godot --display-driver macos --rendering-driver metal
+```
+
+This runs four cases on Mobile and Forward+ (eight processes). Each creates a
+real SceneCull scenario with a field, source and ordinary receiver, obtains the
+original collider-instance identity from its pair snapshot, and invokes
+`SceneCull::render_particle_colliders()` through its actual dirty-list/index path.
+Two independent targets are first seeded to `.125`. A direct native renderer
+control must rasterize a y=0 plane to `.5`; the SceneCull target must yield:
+
+| Source | Expected raw depth |
+| --- | --- |
+| Opaque mesh, node cast-shadow OFF | `.5` |
+| Actual discard-all spatial material | `0` |
+| Hidden mesh | `0` |
+| Particle source with a real mesh draw pass | `0` |
+
+The particle case seeds a fixed identity instance in the original particle render
+buffer. Its positive control renders that same particle draw pass to `.5`, so an
+uninitialized or empty particle cannot satisfy the exclusion test. This is a
+fixed draw input, not a particle simulation claim. All observations use D32
+sampling into a test-owned SSBO and asynchronous readback. The runner requires
+real renderer/driver startup, exact case identity, independent control and source
+values, clean exit and no errors/warnings. Scene instances are freed before their
+bases after readback; the SceneCull-owned collision instance is freed once by its
+original owner.
+
+This covers native source selection only. It does not establish HeightFrame
+Current, COW, managed source membership, producer/reader completion, retirement
+qualification, or E34 acceptance. No source-selection GPU run is claimed merely
+by the presence of this fixture.
+
+
+Local narrow adaptation: only `ANGE_HEIGHTFIELD_SOURCE_SELECTION` cases enable the normal render loop, matching the original H12 host. All pre-existing modes retain the local disabled-loop policy. Main's draw decision uses render-loop presentation or RD pending-resource work; asynchronous readback does not itself guarantee a persistent resource-disposal counter. H12 therefore keeps real frame progress rather than relying on incidental disposal work. The source-selection runner is the exact original f9ab5fcec21883f1d25b4899abc3e8031754bc1f file. No HeightFrame/candidate/frame-resource branches from that source base are imported. The current candidate has not been built or run on a GPU; the received Metal/M5 evidence is mapped separately in `work/scene-h12-native-intake-20261108/RECEIPT.md`.

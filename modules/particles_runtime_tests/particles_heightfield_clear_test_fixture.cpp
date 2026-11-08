@@ -36,6 +36,7 @@
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
+#include "servers/rendering/renderer_scene_cull.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_globals.h"
@@ -44,6 +45,7 @@
 #include <cstring>
 
 void ParticlesHeightfieldClearTestFixture::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("run_source_selection", "case"), &ParticlesHeightfieldClearTestFixture::run_source_selection);
 	ClassDB::bind_method(D_METHOD("run"), &ParticlesHeightfieldClearTestFixture::run);
 	ClassDB::bind_method(D_METHOD("run_legacy_neighbor", "case"), &ParticlesHeightfieldClearTestFixture::run_legacy_neighbor);
 	ClassDB::bind_method(D_METHOD("run_legacy_normal", "transform_case"), &ParticlesHeightfieldClearTestFixture::run_legacy_normal, DEFVAL(0));
@@ -136,6 +138,9 @@ Error ParticlesHeightfieldClearTestFixture::run_capture() {
 		MutexLock lock(result_mutex);
 		result_data["driver"] = rd->get_device_name();
 	}
+	if (source_selection_case >= 0) {
+		return capture_source_selection();
+	}
 	if (legacy_neighbor_case >= 0) {
 		return run_neighbor_setup();
 	}
@@ -227,6 +232,179 @@ Error ParticlesHeightfieldClearTestFixture::run_capture() {
 	if (legacy_normal_capture) {
 		return run_legacy_process(capture_transform);
 	}
+	return sample_depth_pair();
+}
+
+Error ParticlesHeightfieldClearTestFixture::run_source_selection(int p_case) {
+	if (started) {
+		return ERR_ALREADY_IN_USE;
+	}
+	if (p_case < 0 || p_case > 3) {
+		return ERR_INVALID_PARAMETER;
+	}
+	source_selection_case = p_case;
+	return run();
+}
+
+Error ParticlesHeightfieldClearTestFixture::capture_source_selection() {
+	auto *scene = RendererSceneCull::singleton;
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	auto *renderer = RendererSceneRenderRD::get_singleton();
+	if (!scene) {
+		return ERR_UNAVAILABLE;
+	}
+	// One real mesh supplies both the positive raster control and the SceneCull
+	// source. Removing a source filter must change the measured second depth.
+	Array arrays;
+	arrays.resize(RSE::ARRAY_MAX);
+	arrays[RSE::ARRAY_VERTEX] = PackedVector3Array{
+		Vector3(-0.9f, 0, -0.9f), Vector3(0.9f, 0, -0.9f), Vector3(0.9f, 0, 0.9f),
+		Vector3(-0.9f, 0, -0.9f), Vector3(0.9f, 0, 0.9f), Vector3(-0.9f, 0, 0.9f)
+	};
+	RenderingServerTypes::SurfaceData surface;
+	Error error = RenderingServer::get_singleton()->mesh_create_surface_data_from_arrays(&surface, RSE::PRIMITIVE_TRIANGLES, arrays);
+	if (error != OK) {
+		return error;
+	}
+	mesh = RSG::mesh_storage->mesh_allocate();
+	RSG::mesh_storage->mesh_initialize(mesh);
+	RSG::mesh_storage->mesh_add_surface(mesh, surface);
+	RID source_base = mesh;
+	if (source_selection_case == 3) {
+		legacy_particle = storage->particles_allocate();
+		storage->particles_initialize(legacy_particle);
+		storage->particles_set_amount(legacy_particle, 1);
+		storage->particles_set_custom_aabb(legacy_particle, AABB(Vector3(-1, -1, -1), Vector3(2, 2, 2)));
+		storage->particles_set_draw_passes(legacy_particle, 1);
+		storage->particles_set_draw_pass_mesh(legacy_particle, 0, mesh);
+		auto *particle = storage->particles_owner.get_or_null(legacy_particle);
+		storage->_particles_update_buffers(particle);
+		if (particle->particle_instance_buffer.is_null()) {
+			return ERR_CANT_CREATE;
+		}
+		// Fixed test input in the original particle render buffer: three affine
+		// rows, color and custom, as emitted by particles_copy.glsl. The direct
+		// GPU control below proves this particle geometry actually rasterizes.
+		const float instance_data[20] = {
+			1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0,
+			1, 1, 1, 1, 0, 0, 0, 0
+		};
+		error = rd->buffer_update(particle->particle_instance_buffer, 0, sizeof(instance_data), instance_data);
+		if (error != OK) {
+			return error;
+		}
+		particle->frame_counter = 1;
+		source_base = legacy_particle;
+	}
+	geometry = renderer->geometry_instance_create(source_base);
+	if (!geometry) {
+		return ERR_CANT_CREATE;
+	}
+	geometry->set_transform(Transform3D(), surface.aabb, surface.aabb);
+
+	collision = storage->particles_collision_allocate();
+	storage->particles_collision_initialize(collision);
+	storage->particles_collision_set_collision_type(collision, RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE);
+	storage->particles_collision_set_box_extents(collision, Vector3(1, 1, 1));
+	storage->particles_collision_set_height_field_resolution(collision, RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_256);
+	first_instance = storage->particles_collision_instance_create(collision);
+	selection_scenario = scene->scenario_allocate();
+	scene->scenario_initialize(selection_scenario);
+	auto instance = [&](RID p_base) {
+		RID rid = scene->instance_allocate();
+		scene->instance_initialize(rid);
+		scene->instance_set_base(rid, p_base);
+		scene->instance_set_scenario(rid, selection_scenario);
+		return rid;
+	};
+	selection_field = instance(collision);
+	selection_source = instance(source_base);
+	// An ordinary receiver obtains only the original collider instance identity;
+	// it has no draw passes and contributes no geometry or managed authority.
+	selection_receiver_particles = storage->particles_allocate();
+	storage->particles_initialize(selection_receiver_particles);
+	// Ordinary particle geometry resolves its transforms set even without a
+	// mesh draw pass. A positive amount is required for that original buffer.
+	storage->particles_set_amount(selection_receiver_particles, 1);
+	storage->particles_set_custom_aabb(selection_receiver_particles, AABB(Vector3(-1, -1, -1), Vector3(2, 2, 2)));
+	auto *receiver_particle = storage->particles_owner.get_or_null(selection_receiver_particles);
+	storage->_particles_update_buffers(receiver_particle);
+	if (receiver_particle->particle_instance_buffer.is_null()) {
+		return ERR_CANT_CREATE;
+	}
+	selection_receiver = instance(selection_receiver_particles);
+	if (source_selection_case == 0) {
+		scene->instance_geometry_set_cast_shadows_setting(selection_source, RSE::SHADOW_CASTING_SETTING_OFF);
+	} else if (source_selection_case == 1) {
+		auto *materials = RendererRD::MaterialStorage::get_singleton();
+		legacy_shader = materials->shader_allocate();
+		materials->shader_initialize(legacy_shader);
+		materials->shader_set_code(legacy_shader, "shader_type spatial; render_mode cull_disabled; void fragment() { discard; }");
+		legacy_material = materials->material_allocate();
+		materials->material_initialize(legacy_material);
+		materials->material_set_shader(legacy_material, legacy_shader);
+		materials->_update_queued_materials();
+		scene->instance_geometry_set_material_override(selection_source, legacy_material);
+	} else if (source_selection_case == 2) {
+		scene->instance_set_visible(selection_source, false);
+	}
+	scene->update_dirty_instances();
+	RendererSceneCull::SceneHeightfieldSource source;
+	bool present = false;
+	if (!scene->scene_heightfield_snapshot_pair(selection_receiver, source, present) || !present) {
+		return ERR_INVALID_DATA;
+	}
+	// This local snapshot intentionally exports no native RID. Resolve only
+	// this fixture's actual field through its original SceneCull owner, then
+	// cross-check the exact paired snapshot. Never reinterpret source_key as RID.
+	const auto *field = scene->instance_owner.get_or_null(selection_field);
+	if (!field || field->base_type != RSE::INSTANCE_PARTICLES_COLLISION || field->base != collision || !field->base_data) {
+		return ERR_INVALID_DATA;
+	}
+	const auto *field_data = static_cast<const RendererSceneCull::InstanceParticlesCollisionData *>(field->base_data);
+	RendererSceneCull::SceneHeightfieldSource native_source;
+	if (!storage->particles_collision_instance_get_scene_heightfield(field_data->instance, native_source.source_key, native_source.shape_revision, native_source.transform, native_source.extents, native_source.resolution) ||
+			native_source.source_key != source.source_key || native_source.shape_revision != source.shape_revision ||
+			native_source.transform != source.transform || native_source.extents != source.extents || native_source.resolution != source.resolution) {
+		return ERR_INVALID_DATA;
+	}
+	second_instance = field_data->instance;
+	const RID first_framebuffer = storage->particles_collision_get_heightfield_framebuffer(first_instance);
+	const RID second_framebuffer = storage->particles_collision_get_heightfield_framebuffer(second_instance);
+	if (first_framebuffer.is_null() || second_framebuffer.is_null() || first_framebuffer == second_framebuffer) {
+		return ERR_CANT_CREATE;
+	}
+	for (RID framebuffer : { first_framebuffer, second_framebuffer }) {
+		const auto list = rd->draw_list_begin(framebuffer, RD::DRAW_CLEAR_DEPTH, {}, 0.125f);
+		if (list == RD::INVALID_ID) {
+			return ERR_CANT_CREATE;
+		}
+		rd->draw_list_end();
+	}
+	PagedArrayPool<RenderGeometryInstance *> pool;
+	PagedArray<RenderGeometryInstance *> control;
+	control.set_page_pool(&pool);
+	control.push_back(geometry);
+	renderer->render_particle_collider_heightfield(first_instance, Transform3D(), control);
+	// Exercise the real dirty-list, scenario index and source-kind filter.
+	scene->render_particle_colliders();
+	const auto *first_data = storage->particles_collision_instance_owner.get_or_null(first_instance);
+	const auto *second_data = storage->particles_collision_instance_owner.get_or_null(second_instance);
+	first_texture = first_data ? first_data->heightfield_texture : RID();
+	second_texture = second_data ? second_data->heightfield_texture : RID();
+	if (first_texture.is_null() || second_texture.is_null() || first_texture == second_texture) {
+		return ERR_INVALID_DATA;
+	}
+	{
+		MutexLock lock(result_mutex);
+		result_data["source_selection_case"] = source_selection_case;
+		result_data["source_selection_scene_cull"] = true;
+		result_data["source_selection_distinct_targets"] = true;
+	}
+	return sample_depth_pair();
+}
+
+Error ParticlesHeightfieldClearTestFixture::sample_depth_pair() {
 	const String code = "#version 450\nlayout(local_size_x=1) in; layout(set=0,binding=0) uniform sampler s; layout(set=0,binding=1) uniform texture2D first_depth; layout(set=0,binding=2) uniform texture2D second_depth; layout(set=0,binding=3,std430) buffer Out { float values[2]; } out_data; void main() { out_data.values[0]=texture(sampler2D(first_depth,s),vec2(0.5)).r; out_data.values[1]=texture(sampler2D(second_depth,s),vec2(0.5)).r; }";
 	RenderingDevice::ShaderStageSPIRVData stage;
 	stage.shader_stage = RenderingDevice::SHADER_STAGE_COMPUTE;
@@ -480,6 +658,19 @@ void ParticlesHeightfieldClearTestFixture::sample_done(const PackedByteArray &p_
 		std::memcpy(raw, p_bytes.ptr(), 8);
 	}
 
+	if (source_selection_case >= 0) {
+		cleanup();
+		MutexLock lock(result_mutex);
+		result_data["first_raw"] = raw[0];
+		result_data["second_raw"] = raw[1];
+		// Plane y=0 with field half-height1 gives .5. Excluded/discarded
+		// sources leave clear0; both independent targets were seeded to .125.
+		const float expected = source_selection_case == 0 ? 0.5f : 0.0f;
+		result_data["source_selection_control_rasterized"] = p_bytes.size() == 8 && Math::abs(raw[0] - 0.5f) <= 0.001f;
+		result_data["pass"] = bool(result_data["source_selection_control_rasterized"]) && Math::abs(raw[1] - expected) <= 0.001f;
+		return;
+	}
+
 	cleanup();
 	{
 		MutexLock lock(result_mutex);
@@ -494,6 +685,37 @@ void ParticlesHeightfieldClearTestFixture::sample_done(const PackedByteArray &p_
 }
 
 void ParticlesHeightfieldClearTestFixture::cleanup() {
+	if (source_selection_case >= 0) {
+		if (rd) {
+			for (RID *resource : { &uniform_set, &sampler, &buffer, &pipeline, &shader }) {
+				if (resource->is_valid()) {
+					rd->free_rid(*resource);
+					*resource = RID();
+				}
+			}
+		}
+		if (selection_scenario.is_valid()) {
+			auto *scene = RendererSceneCull::singleton;
+			for (RID *instance : { &selection_source, &selection_receiver, &selection_field }) {
+				if (instance->is_valid()) {
+					scene->free(*instance);
+					*instance = RID();
+				}
+			}
+			// The field's SceneCull owner freed this collision instance once.
+			second_instance = RID();
+			scene->free(selection_scenario);
+			selection_scenario = RID();
+		}
+		if (geometry) {
+			RendererSceneRenderRD::get_singleton()->geometry_instance_free(geometry);
+			geometry = nullptr;
+		}
+		if (selection_receiver_particles.is_valid()) {
+			RendererRD::ParticlesStorage::get_singleton()->particles_free(selection_receiver_particles);
+			selection_receiver_particles = RID();
+		}
+	}
 	auto *particle_storage = RendererRD::ParticlesStorage::get_singleton();
 	if (legacy_particle.is_valid()) {
 		particle_storage->particles_free(legacy_particle);

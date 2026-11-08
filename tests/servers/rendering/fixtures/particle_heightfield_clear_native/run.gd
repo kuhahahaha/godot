@@ -12,7 +12,10 @@ func _initialize() -> void:
 	call_deferred("_start")
 
 func _start() -> void:
-	RenderingServer.set_render_loop_enabled(false)
+	var selection_case := OS.get_environment("ANGE_HEIGHTFIELD_SOURCE_SELECTION")
+	# H12 needs normal main-RD frame progress for its real SceneCull/readback.
+	# Keep the established disabled-loop behavior for every existing case.
+	RenderingServer.set_render_loop_enabled(selection_case != "")
 	var transform_case := OS.get_environment("ANGE_HEIGHTFIELD_TRANSFORM_CASE")
 	var method := "run_geometry" if OS.get_environment("ANGE_HEIGHTFIELD_GEOMETRY") == "1" else "run"
 	if method == "run_geometry" and OS.get_environment("ANGE_HEIGHTFIELD_EXTENTS_Y") != "":
@@ -24,12 +27,21 @@ func _start() -> void:
 	var neighbor_case := OS.get_environment("ANGE_HEIGHTFIELD_LEGACY_NEIGHBOR_CASE")
 	if neighbor_case != "":
 		method = "run_legacy_neighbor"
+	if selection_case != "":
+		method = "run_source_selection"
 	if not fixture.has_method(method):
 		print("HEIGHTFIELD_GEOMETRY_MISSING ", method)
 		quit(1)
 		return
 	var callback := Callable(fixture, method)
-	if method == "run_legacy_neighbor":
+	if method == "run_source_selection":
+		var selection_names := ["cast_shadow_off", "alpha_discard", "hidden", "particles_excluded"]
+		var selection_index := selection_names.find(selection_case)
+		if selection_index < 0:
+			quit(1)
+			return
+		callback = callback.bind(selection_index)
+	elif method == "run_legacy_neighbor":
 		var neighbor_names := ["sphere", "box", "sdf", "sphere_attractor", "box_attractor", "vector_attractor"]
 		var neighbor_index := neighbor_names.find(neighbor_case)
 		if neighbor_index < 0:

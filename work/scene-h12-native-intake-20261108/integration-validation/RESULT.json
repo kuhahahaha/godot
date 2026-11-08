@@ -1,0 +1,131 @@
+{
+  "schema": 1,
+  "base_commit": "c6e76fcac7",
+  "patch_sha256": "d2158a436fe1ae982e13d265a1056b8f59013882f4d25b7d255b8915dbf7ea48",
+  "build": {
+    "exit": 0,
+    "command": "scons -Q tests=yes platform=macos target=editor debug_symbols=no module_particles_runtime_tests_enabled=yes -j2"
+  },
+  "h12": {
+    "command": "python3 tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_source_selection.py --binary bin/godot.macos.editor.arm64 --display-driver macos --rendering-driver metal",
+    "exit": 0,
+    "cases": 8,
+    "device": "Apple M3 Pro (Apple9)",
+    "driver": "Metal 4.0",
+    "renderers": [
+      "Forward Mobile",
+      "Forward+"
+    ],
+    "samples": [
+      {
+        "driver": "Apple M3 Pro (Apple9)",
+        "first_raw": 0.5,
+        "pass": true,
+        "second_raw": 0.5,
+        "source_selection_case": 0,
+        "source_selection_control_rasterized": true,
+        "source_selection_distinct_targets": true,
+        "source_selection_scene_cull": true
+      },
+      {
+        "driver": "Apple M3 Pro (Apple9)",
+        "first_raw": 0.5,
+        "pass": true,
+        "second_raw": 0.0,
+        "source_selection_case": 1,
+        "source_selection_control_rasterized": true,
+        "source_selection_distinct_targets": true,
+        "source_selection_scene_cull": true
+      },
+      {
+        "driver": "Apple M3 Pro (Apple9)",
+        "first_raw": 0.5,
+        "pass": true,
+        "second_raw": 0.0,
+        "source_selection_case": 2,
+        "source_selection_control_rasterized": true,
+        "source_selection_distinct_targets": true,
+        "source_selection_scene_cull": true
+      },
+      {
+        "driver": "Apple M3 Pro (Apple9)",
+        "first_raw": 0.5,
+        "pass": true,
+        "second_raw": 0.0,
+        "source_selection_case": 3,
+        "source_selection_control_rasterized": true,
+        "source_selection_distinct_targets": true,
+        "source_selection_scene_cull": true
+      },
+      {
+        "driver": "Apple M3 Pro (Apple9)",
+        "first_raw": 0.5,
+        "pass": true,
+        "second_raw": 0.5,
+        "source_selection_case": 0,
+        "source_selection_control_rasterized": true,
+        "source_selection_distinct_targets": true,
+        "source_selection_scene_cull": true
+      },
+      {
+        "driver": "Apple M3 Pro (Apple9)",
+        "first_raw": 0.5,
+        "pass": true,
+        "second_raw": 0.0,
+        "source_selection_case": 1,
+        "source_selection_control_rasterized": true,
+        "source_selection_distinct_targets": true,
+        "source_selection_scene_cull": true
+      },
+      {
+        "driver": "Apple M3 Pro (Apple9)",
+        "first_raw": 0.5,
+        "pass": true,
+        "second_raw": 0.0,
+        "source_selection_case": 2,
+        "source_selection_control_rasterized": true,
+        "source_selection_distinct_targets": true,
+        "source_selection_scene_cull": true
+      },
+      {
+        "driver": "Apple M3 Pro (Apple9)",
+        "first_raw": 0.5,
+        "pass": true,
+        "second_raw": 0.0,
+        "source_selection_case": 3,
+        "source_selection_control_rasterized": true,
+        "source_selection_distinct_targets": true,
+        "source_selection_scene_cull": true
+      }
+    ]
+  },
+  "existing_readback_controls": {
+    "exit": 0,
+    "cases": 2,
+    "first_raw": 0.75,
+    "second_raw": 0,
+    "scope": "original run() entry on Mobile and Forward+, no H12 environment, disabled render loop unchanged"
+  },
+  "source_sha256": {
+    "modules/particles_runtime_tests/particles_heightfield_clear_test_fixture.cpp": "bcfe4d3f23a055f4e5092892b50c982d1103f3f524093ba1f333e8ba376c00f9",
+    "modules/particles_runtime_tests/particles_heightfield_clear_test_fixture.h": "1f884589c4c821c7d12fc97e0f86693bd409b17b87e94628c0ae0f5057578a26",
+    "servers/rendering/renderer_scene_cull.h": "51e732b61459e7b59f67c95b189041456f6723f1299508bfb64969806cb0b79d",
+    "tests/servers/rendering/fixtures/particle_heightfield_clear_native/README.md": "ffd33ec400d222fcdfacf87f79e4938847b81a9c5d1b951db28ca8b38f76d582",
+    "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run.gd": "805e28b3861e7c5f279f8f19f2c3ff61a40dd36aab9538e883c570d29a46ca2a",
+    "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_source_selection.py": "70e85a95353752229c98e4ac07c22f2190407d7ab5140da9534cc84fdfc9b2b8"
+  },
+  "binary_sha256": "62690d1c807563043d628114b067c22789d6135a5ab9d24d56ec44b489406d12",
+  "logs_sha256": {
+    "b4-h12-existing-readback-controls.log": "d326e4896d606ca55262bf0987f2c2a32f7dfa2b3cf40680347b7b80d9825f9a",
+    "b4-h12-source-selection-runtime.log": "d52e3336c9c8b65df7bc9ffaebcd7107ec82105dc5c8d5f8a699bd3e7a3bd2c0",
+    "b4-h12-integration-build.log": "a8b2cfc21c0bafb83b9303cdd61746c90a8d00e972ac7829a216ce740d192153"
+  },
+  "review": "candidate/INDEPENDENT_REVIEW.md",
+  "limits": [
+    "H12 source-selection only",
+    "No Current/COW/managed source publication or D geometry custody",
+    "No U05/K01/full native output or no-follow-up-draw closure",
+    "No full GPU matrices rerun",
+    "Fixed P1 host unchanged"
+  ]
+}

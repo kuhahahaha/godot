@@ -51,6 +51,7 @@
 
 class RenderingLightCuller;
 class ParticlesScenePairsTestFixture;
+class ParticlesHeightfieldClearTestFixture;
 class RenderingDevice;
 
 class RendererSceneCull : public RenderingMethod {
@@ -59,6 +60,7 @@ class RendererSceneCull : public RenderingMethod {
 #endif
 #if defined(TESTS_ENABLED) && defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
 	friend class ParticlesScenePairsTestFixture;
+	friend class ParticlesHeightfieldClearTestFixture;
 #endif
 public:
 	struct SceneSphereSource {
