@@ -47,7 +47,6 @@ void initialize_particles_runtime_tests_module(ModuleInitializationLevel p_level
 		GDREGISTER_CLASS(ParticlesHeightfieldClearTestFixture);
 		GDREGISTER_CLASS(ParticlesExternalGuardTestFixture);
 		GDREGISTER_CLASS(ParticlesExternalOutputTestFixture);
-		GDREGISTER_CLASS(ParticlesHeightfieldClearTestFixture);
 		GDREGISTER_CLASS(ParticlesScenePairsTestFixture);
 	}
 }
