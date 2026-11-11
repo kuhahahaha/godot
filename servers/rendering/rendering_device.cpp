@@ -51,6 +51,8 @@
 #include "servers/rendering/rendering_shader_container.h"
 #include "servers/rendering/shader_include_db.h"
 
+#include <iterator>
+
 #include "modules/modules_enabled.gen.h"
 
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)

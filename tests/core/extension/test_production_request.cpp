@@ -6575,6 +6575,16 @@ struct Access {
 					p.retained_surface = std::move(borrowed);
 					CHECK(borrowed.is_empty());
 					CHECK_FALSE(p.retained_surface.is_empty());
+					{
+						GDExtensionDeviceExit::ProductionOutputPin slot_pins[2];
+						for (auto &pin : slot_pins) {
+							REQUIRE(p.fixture->registry.production_output_pin_borrow(p.native->generation_pin(), p.fixture->rd, pin) == OK);
+						}
+						p.native->exercise_camera_view_acquire(p.fixture->registry, ref, p.retained_surface, slot_pins);
+						for (auto &pin : slot_pins) {
+							REQUIRE(p.fixture->registry.production_output_unpin(pin) == OK);
+						}
+					}
 #ifdef THREADS_ENABLED
 					uint32_t foreign_count = UINT32_MAX;
 					Error foreign_acquire = OK, foreign_return = OK;

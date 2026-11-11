@@ -33,6 +33,7 @@
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/render_data_rd.h"
 
 #include <cstddef>
 
@@ -852,9 +853,125 @@ Error ExternalOutputOwner::return_slot_pin(uint32_t p_slot) {
 }
 
 Error ExternalOutputOwner::view_acquire(uint32_t, ExternalPacketViewLease &) {
-	// Actual camera -> sealed slot/consumed tuple issuer join is still absent.
-	// Never select a packet from a slot number or its copied tokens alone.
+	// Never select a packet from a bare slot number or its copied tokens alone.
 	return ERR_UNAVAILABLE;
+}
+
+Error ExternalOutputOwner::acquire_camera_view(const ExternalSurfaceSelection &p_surface, const ::RenderDataRD &p_render_data, ExternalPacketViewLease &r_view) {
+	auto *rd = RenderingDevice::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!r_view.is_empty()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	if (p_surface.owner != this || device != rd || config.profile != ExternalOutputConfig::INSTANCE_192 ||
+			p_surface.generation != generation || p_surface.cell >= surface_capacity ||
+			!generation_registry || !generation_materials || !surface_cells || !generation_surfaces_complete ||
+			!generation_selection_complete || retained_surface_count != generation_material_count ||
+			!p_surface.geometry_source || !p_surface.geometry_source->is_valid() || p_surface.flattened_surface >= retained_surface_count) {
+		return ERR_UNAUTHORIZED;
+	}
+	const auto &surface_cell = surface_cells[p_surface.cell];
+	const auto &original_source = generation_materials[p_surface.flattened_surface];
+	if (surface_cell.consumer != &p_surface || !p_surface.serial || surface_cell.serial != p_surface.serial ||
+			surface_cell.surface != p_surface.flattened_surface || surface_cell.pin.is_empty() ||
+			p_surface.geometry_source != &original_source.geometry_source || p_surface.mesh != original_source.mesh ||
+			p_surface.native_surface != original_source.native_surface || p_surface.material_selection != original_source.material ||
+			p_surface.material_generation != original_source.generation ||
+			!generation_registry->production_output_pin_matches(surface_cell.pin, generation_request, *rd)) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (! ::RenderDataRD::admission_succeeded(p_render_data.admit_camera_status()) ||
+			! ::RenderDataRD::admission_succeeded(p_render_data.admit_surface_status(p_surface.material_generation))) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (p_render_data.packet_identity.external && !p_render_data.previous_camera_source_admitted()) {
+		p_render_data.retire_packet();
+		return ERR_UNAUTHORIZED;
+	}
+	if (!admits_work() || !view_cells || !view_capacity) {
+		return ERR_UNAVAILABLE;
+	}
+	const auto camera_source = p_render_data.get_native_camera_source();
+	if (camera_source.is_null()) {
+		return ERR_UNAVAILABLE;
+	}
+	const auto &camera_token = camera_source->get_token();
+	if (!camera_token.is_valid()) {
+		return ERR_UNAVAILABLE;
+	}
+	uint32_t matched_slot = UINT32_MAX;
+	for (uint32_t s = 0; s < slot_count; ++s) {
+		const auto &slot = slots[s];
+		if ((slot.state != LeaseState::SEALED_RECORDED && slot.state != LeaseState::ADOPTED) || slot.pass_uses_closed) {
+			continue;
+		}
+		const uint32_t view_idx = s / config.max_inflight;
+		if (view_idx >= config.max_views || !views[view_idx].occupied || views[view_idx].closed) {
+			continue;
+		}
+		if (slot.request.common.generation != generation || views[view_idx].epoch != slot.request.view_epoch ||
+				slot.request.view_epoch != camera_token.view_epoch ||
+				slot.request.common.current_camera_token != camera_token) {
+			continue;
+		}
+		if (slot.request.common.has_actual_previous_camera && p_render_data.packet_identity.has_previous_camera_source() &&
+				!p_render_data.previous_camera_source_matches(
+						slot.request.common.actual_previous_camera_token.view_id,
+						slot.request.common.actual_previous_camera_token.view_epoch,
+						slot.request.common.actual_previous_camera_token.capture_ordinal)) {
+			continue;
+		}
+		if (!slot.original_registry || slot.original_pin.is_empty() ||
+				!slot.original_registry->production_output_pin_matches(slot.original_pin, slot.original_request, *rd)) {
+			continue;
+		}
+		if (matched_slot != UINT32_MAX) {
+			return ERR_INVALID_DATA;
+		}
+		matched_slot = s;
+	}
+	if (matched_slot == UINT32_MAX) {
+		return ERR_UNAVAILABLE;
+	}
+	if (!next_view_serial) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	uint32_t selected_cell = UINT32_MAX;
+	for (uint32_t i = 0; i < view_capacity; ++i) {
+		if (!view_cells[i].consumer && view_cells[i].pin.is_empty()) {
+			selected_cell = i;
+			break;
+		}
+	}
+	if (selected_cell == UINT32_MAX) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	auto &slot = slots[matched_slot];
+	auto &cell = view_cells[selected_cell];
+	const Error error = slot.original_registry->production_output_pin_borrow(slot.original_pin, *rd, cell.pin);
+	if (error != OK) {
+		return error;
+	}
+	const uint64_t serial = next_view_serial;
+	next_view_serial = serial == UINT64_MAX ? 0 : serial + 1;
+	if (slot.state == LeaseState::SEALED_RECORDED) {
+		slot.state = LeaseState::ADOPTED;
+	}
+	cell.consumer = &r_view;
+	cell.serial = serial;
+	cell.slot = matched_slot;
+	r_view.owner = this;
+	r_view.serial = serial;
+	r_view.slot = matched_slot;
+	r_view.view_cell = selected_cell;
+	r_view.profile = config.profile;
+	r_view.space = config.space;
+	r_view.current_host = slot.current_host;
+	r_view.previous_host = slot.previous_host;
+	r_view.retained_host_snapshot = slot.retained_host_snapshot;
+	return OK;
 }
 
 Error ExternalOutputOwner::view_return(ExternalPacketViewLease &p_view) {

@@ -33,7 +33,9 @@
 #include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/render_data_rd.h"
 #include "servers/rendering/rendering_server.h"
+#include "servers/rendering/rendering_server_globals.h"
 #include "tests/servers/rendering/test_external_output_custody_bridge.h"
 #include "tests/test_macros.h"
 #include "servers/rendering/rendering_server.h"
@@ -639,6 +641,125 @@ Error ExternalLinkedOwnerTest::prepare_pipeline_prefix(GDExtensionProductionPhys
 	// Locate only the row installed by the actual Acquire. Do not open it,
 	// manufacture a pass, or change the original action's factory authority.
 	return storage->_external_pipeline_prepare_owned_prefix(p_context, particles, p_slot, p_surface, *row, p_max_resources);
+}
+void ExternalLinkedOwnerTest::exercise_camera_view_acquire(GDExtensionDeviceExit::Registry &registry, GDExtensionProductionRequestRefV1 request, const ExternalSurfaceSelection &selection, GDExtensionDeviceExit::ProductionOutputPin (&slot_pins)[2]) {
+	REQUIRE(exists());
+	REQUIRE(RSG::viewport != nullptr);
+	REQUIRE_FALSE(slot_pins[0].is_empty());
+	ExternalPacketViewLease view;
+	ExternalSurfaceSelection empty_selection;
+	CHECK(owner->view_acquire(0, view) == ERR_UNAVAILABLE);
+	CHECK(storage->particles_external_view_acquire(selection, nullptr, view) == ERR_INVALID_PARAMETER);
+
+	const RID viewport = RSG::viewport->viewport_allocate();
+	RSG::viewport->viewport_initialize(viewport);
+	RendererViewport::Viewport::ViewPresentationKey key{ 9101, 7, 12 };
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, key));
+	RendererSceneRender::CameraData camera{};
+	Projection projection;
+	projection.set_perspective(65.0f, 1.5f, 0.1f, 500.0f);
+	camera.set_camera(Transform3D(Basis(), Vector3(0, 1, 2)), projection, false, true);
+	camera.source_viewport = viewport;
+	const auto token = RSG::viewport->viewport_begin_camera_capture(viewport, camera);
+	REQUIRE(token.is_valid());
+
+	::RenderDataRD render_data;
+	REQUIRE(render_data.set_camera_source(token.view_id, token.view_epoch, token.capture_ordinal));
+	CHECK(storage->particles_external_view_acquire(selection, &render_data, view) == ERR_UNAVAILABLE);
+	REQUIRE(render_data.retain_native_camera_source(*RSG::viewport, camera));
+	CHECK(storage->particles_external_view_acquire(empty_selection, &render_data, view) == ERR_UNAUTHORIZED);
+	CHECK(storage->particles_external_view_acquire(selection, &render_data, view) == ERR_UNAVAILABLE);
+
+	auto &slot0 = owner->slots[0];
+	const auto saved_view0 = owner->views[0];
+	slot0.original_pin = std::move(slot_pins[0]);
+	slot0.original_registry = &registry;
+	slot0.original_request = request;
+	slot0.state = ExternalOutputOwner::LeaseState::SEALED_RECORDED;
+	slot0.request.common.generation = owner->generation;
+	slot0.request.view_epoch = token.view_epoch;
+	slot0.request.common.current_camera_token = token;
+	slot0.current_host = Transform3D(Basis(), Vector3(3, 5, 7));
+	slot0.previous_host = Transform3D(Basis(), Vector3(1, 2, 4));
+	slot0.retained_host_snapshot = true;
+	owner->views[0].occupied = true;
+	owner->views[0].closed = false;
+	owner->views[0].epoch = token.view_epoch;
+
+	// Epoch mismatch refuses view lease without consuming a cell.
+	owner->views[0].epoch = token.view_epoch + 1;
+	CHECK(storage->particles_external_view_acquire(selection, &render_data, view) == ERR_UNAVAILABLE);
+	CHECK(view.is_empty());
+	owner->views[0].epoch = token.view_epoch;
+
+	// External packet material generation mismatch retires packet and refuses lease.
+	{
+		::RenderDataRD bad_packet;
+		REQUIRE(bad_packet.set_camera_source(token.view_id, token.view_epoch, token.capture_ordinal));
+		REQUIRE(bad_packet.set_previous_camera_source(token.view_id, token.view_epoch, token.capture_ordinal));
+		REQUIRE(bad_packet.retain_native_camera_source(*RSG::viewport, camera));
+		bad_packet.packet_identity.external = true;
+		bad_packet.packet_identity.material_generation = selection.get_material_generation() + 99;
+		CHECK(storage->particles_external_view_acquire(selection, &bad_packet, view) == ERR_UNAUTHORIZED);
+		CHECK(bad_packet.packet_identity.retired);
+		CHECK(view.is_empty());
+	}
+
+	// Authenticated acquire borrows pin into ViewCell, adopts slot, and satisfies preparation_view_matches.
+	REQUIRE(storage->particles_external_view_acquire(selection, &render_data, view) == OK);
+	CHECK_FALSE(view.is_empty());
+	CHECK(slot0.state == ExternalOutputOwner::LeaseState::ADOPTED);
+	CHECK(owner->preparation_view_matches(view, 0));
+	CHECK(owner->slot_has_custody(0));
+	CHECK(view.get_current_host() == slot0.current_host);
+	CHECK(view.get_previous_host() == slot0.previous_host);
+	CHECK(view.has_retained_host_snapshot());
+	CHECK(storage->particles_external_view_acquire(selection, &render_data, view) == ERR_ALREADY_IN_USE);
+
+	// Exhausting finite view_capacity (1) fails cleanly with ERR_OUT_OF_MEMORY.
+	ExternalPacketViewLease extra_view;
+	CHECK(storage->particles_external_view_acquire(selection, &render_data, extra_view) == ERR_OUT_OF_MEMORY);
+	CHECK(extra_view.is_empty());
+
+	// Release unpins ViewCell cleanly; duplicate release fails with ERR_DOES_NOT_EXIST.
+	CHECK(view.release_checked() == OK);
+	CHECK(view.is_empty());
+	CHECK_FALSE(owner->slot_has_custody(0));
+	CHECK(view.release_checked() == ERR_DOES_NOT_EXIST);
+
+	// Duplicate eligible sealed slots with identical camera token fail closed with ERR_INVALID_DATA.
+	if (owner->slot_count >= 2 && !slot_pins[1].is_empty()) {
+		auto &slot1 = owner->slots[1];
+		slot1.original_pin = std::move(slot_pins[1]);
+		slot1.original_registry = &registry;
+		slot1.original_request = request;
+		slot1.state = ExternalOutputOwner::LeaseState::SEALED_RECORDED;
+		slot1.request = slot0.request;
+		const uint32_t view1_idx = 1 / owner->config.max_inflight;
+		const auto saved_view1 = owner->views[view1_idx];
+		owner->views[view1_idx].occupied = true;
+		owner->views[view1_idx].closed = false;
+		owner->views[view1_idx].epoch = token.view_epoch;
+		CHECK(storage->particles_external_view_acquire(selection, &render_data, view) == ERR_INVALID_DATA);
+		CHECK(view.is_empty());
+		slot_pins[1] = std::move(slot1.original_pin);
+		slot1.original_registry = nullptr;
+		slot1.original_request = {};
+		slot1.request = {};
+		slot1.state = ExternalOutputOwner::LeaseState::EMPTY;
+		owner->views[view1_idx] = saved_view1;
+	}
+
+	slot_pins[0] = std::move(slot0.original_pin);
+	slot0.original_registry = nullptr;
+	slot0.original_request = {};
+	slot0.request = {};
+	slot0.current_host = Transform3D();
+	slot0.previous_host = Transform3D();
+	slot0.retained_host_snapshot = false;
+	slot0.state = ExternalOutputOwner::LeaseState::EMPTY;
+	owner->views[0] = saved_view0;
+	RSG::viewport->free(viewport);
 }
 uint64_t ExternalLinkedOwnerTest::selection_material_generation(uint32_t index) const {
 	CRASH_COND(!exists() || index >= owner->generation_material_count);

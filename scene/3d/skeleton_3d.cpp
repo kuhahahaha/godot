@@ -33,8 +33,11 @@
 
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
+#include "core/os/thread.h"
 #include "scene/3d/skeleton_modifier_3d.h"
 #include "servers/rendering/render_capture_test_hooks.h"
+
+#include <climits>
 
 #include "modules/modules_enabled.gen.h"
 #if !defined(DISABLE_DEPRECATED) && !defined(PHYSICS_3D_DISABLED)
@@ -42,7 +45,20 @@
 #endif // _DISABLE_DEPRECATED && PHYSICS_3D_DISABLED
 #include "servers/rendering/rendering_server.h"
 
+namespace {
+void _advance_sampling_counter(int64_t &r_counter, bool &r_exhausted) {
+	if (r_exhausted || r_counter >= INT64_MAX - 1) {
+		r_counter = INT64_MAX;
+		r_exhausted = true;
+		return;
+	}
+	++r_counter;
+}
+} // namespace
+
 void SkinReference::_skin_changed() {
+	skin_dirty = true;
+	_advance_sampling_counter(live_binding_revision, version_exhausted);
 	if (skeleton_node) {
 		skeleton_node->_make_dirty();
 	}
@@ -52,6 +68,7 @@ void SkinReference::_skin_changed() {
 void SkinReference::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_skeleton"), &SkinReference::get_skeleton);
 	ClassDB::bind_method(D_METHOD("get_skin"), &SkinReference::get_skin);
+	ClassDB::bind_method(D_METHOD("get_palette_commit_state"), &SkinReference::get_palette_commit_state);
 }
 
 RID SkinReference::get_skeleton() const {
@@ -60,6 +77,65 @@ RID SkinReference::get_skeleton() const {
 
 Ref<Skin> SkinReference::get_skin() const {
 	return skin;
+}
+
+Dictionary SkinReference::get_palette_commit_state() const {
+	Dictionary out;
+	out["schema"] = int64_t(1);
+	if (!Thread::is_main_thread()) {
+		out["status"] = int64_t(PALETTE_COMMIT_WRONG_THREAD);
+		out["reference_instance_id"] = int64_t(0);
+		out["skeleton_instance_id"] = int64_t(0);
+		out["live_binding_revision"] = int64_t(0);
+		out["committed_binding_revision"] = int64_t(0);
+		out["live_mapping_revision"] = int64_t(0);
+		out["committed_mapping_revision"] = int64_t(0);
+		out["commit_serial"] = int64_t(0);
+		out["source_update_serial"] = int64_t(0);
+		out["bind_count"] = int64_t(0);
+		out["mapping_valid"] = false;
+		return out;
+	}
+
+	const int64_t ref_id = int64_t(uint64_t(get_instance_id()));
+	const bool is_detached = detached || skeleton_node == nullptr || skin.is_null();
+	int64_t status = int64_t(PALETTE_COMMIT_READY);
+	int64_t skel_id = 0;
+	int64_t live_map_rev = 0;
+
+	if (is_detached) {
+		status = int64_t(PALETTE_COMMIT_DETACHED);
+	} else {
+		skel_id = int64_t(uint64_t(skeleton_node->get_instance_id()));
+		live_map_rev = skeleton_node->sampling_mapping_revision;
+		if (version_exhausted || skeleton_node->sampling_version_exhausted) {
+			status = int64_t(PALETTE_COMMIT_VERSION_EXHAUSTED);
+		} else if (commit_serial == 0) {
+			status = int64_t(PALETTE_COMMIT_NOT_INITIALIZED);
+		} else if (skin_dirty || skeleton_node->dirty ||
+				committed_binding_revision != live_binding_revision ||
+				committed_mapping_revision != skeleton_node->sampling_mapping_revision ||
+				committed_bind_count != int64_t(skin->get_bind_count())) {
+			status = int64_t(PALETTE_COMMIT_SOURCE_CHANGED);
+		} else if (!committed_mapping_valid) {
+			status = int64_t(PALETTE_COMMIT_INVALID_MAPPING);
+		} else {
+			status = int64_t(PALETTE_COMMIT_READY);
+		}
+	}
+
+	out["status"] = status;
+	out["reference_instance_id"] = ref_id;
+	out["skeleton_instance_id"] = skel_id;
+	out["live_binding_revision"] = live_binding_revision;
+	out["committed_binding_revision"] = committed_binding_revision;
+	out["live_mapping_revision"] = live_map_rev;
+	out["committed_mapping_revision"] = committed_mapping_revision;
+	out["commit_serial"] = commit_serial;
+	out["source_update_serial"] = committed_source_update_serial;
+	out["bind_count"] = committed_bind_count;
+	out["mapping_valid"] = committed_mapping_valid;
+	return out;
 }
 
 SkinReference::~SkinReference() {
@@ -357,10 +433,19 @@ void Skeleton3D::_notification(int p_what) {
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 			RenderCaptureTestHooks::observe_skeleton_signal(uint64_t(get_instance_id()), true);
 #endif
+			if (dirty) {
+				force_update_all_dirty_bones();
+			}
+			bonesptr = bones.ptr();
+			len = bones.size();
+
+			_advance_sampling_counter(source_update_serial, sampling_version_exhausted);
+			const int64_t round_source_serial = source_update_serial;
 
 			// Update skins.
 			RenderingServer *rs = RenderingServer::get_singleton();
 			for (SkinReference *E : skin_bindings) {
+				Ref<SkinReference> keep_alive(E);
 				const Skin *skin = E->skin.operator->();
 				RID skeleton = E->skeleton;
 				uint32_t bind_count = skin->get_bind_count();
@@ -372,7 +457,8 @@ void Skeleton3D::_notification(int p_what) {
 					E->skin_bone_indices_ptrs = E->skin_bone_indices.ptrw();
 				}
 
-				if (E->skeleton_version != version) {
+				if (E->skeleton_version != version || E->skin_dirty || !E->mapping_resolved_once) {
+					bool resolved_valid = (bind_count == 0) || (len > 0);
 					for (uint32_t i = 0; i < bind_count; i++) {
 						StringName bind_name = skin->get_bind_name(i);
 
@@ -390,21 +476,26 @@ void Skeleton3D::_notification(int p_what) {
 							if (!found) {
 								ERR_PRINT("Skin bind #" + itos(i) + " contains named bind '" + String(bind_name) + "' but Skeleton3D has no bone by that name.");
 								E->skin_bone_indices_ptrs[i] = 0;
+								resolved_valid = false;
 							}
 						} else if (skin->get_bind_bone(i) >= 0) {
 							int bind_index = skin->get_bind_bone(i);
 							if (bind_index >= len) {
 								ERR_PRINT("Skin bind #" + itos(i) + " contains bone index bind: " + itos(bind_index) + " , which is greater than the skeleton bone count: " + itos(len) + ".");
 								E->skin_bone_indices_ptrs[i] = 0;
+								resolved_valid = false;
 							} else {
 								E->skin_bone_indices_ptrs[i] = bind_index;
 							}
 						} else {
 							ERR_PRINT("Skin bind #" + itos(i) + " does not contain a name nor a bone index.");
 							E->skin_bone_indices_ptrs[i] = 0;
+							resolved_valid = false;
 						}
 					}
 
+					E->cached_mapping_valid = resolved_valid;
+					E->mapping_resolved_once = true;
 					E->skeleton_version = version;
 				}
 
@@ -415,6 +506,17 @@ void Skeleton3D::_notification(int p_what) {
 					RenderCaptureTestHooks::observe_skeleton_palette_request(uint64_t(get_instance_id()), skeleton.get_id(), i);
 #endif
 					rs->skeleton_bone_set_transform(skeleton, i, bonesptr[bone_index].global_pose * skin->get_bind_pose(i));
+				}
+
+				_advance_sampling_counter(E->commit_serial, E->version_exhausted);
+				E->skin_dirty = false;
+				E->committed_binding_revision = E->live_binding_revision;
+				E->committed_mapping_revision = sampling_mapping_revision;
+				E->committed_source_update_serial = round_source_serial;
+				E->committed_bind_count = int64_t(bind_count);
+				E->committed_mapping_valid = E->cached_mapping_valid;
+				if (sampling_version_exhausted) {
+					E->version_exhausted = true;
 				}
 			}
 
@@ -429,6 +531,15 @@ void Skeleton3D::_notification(int p_what) {
 
 			updating = false;
 			update_flags = UPDATE_FLAG_NONE;
+
+			if (!emitting_palette_commit_notification) {
+				emitting_palette_commit_notification = true;
+				const ObjectID self_id = get_instance_id();
+				emit_signal(SNAME("skin_palettes_committed"), round_source_serial);
+				if (Skeleton3D *live_self = Object::cast_to<Skeleton3D>(ObjectDB::get_instance(self_id))) {
+					live_self->emitting_palette_commit_notification = false;
+				}
+			}
 		} break;
 		case NOTIFICATION_INTERNAL_PROCESS: {
 			advance(get_process_delta_time());
@@ -627,6 +738,7 @@ int Skeleton3D::add_bone(const String &p_name) {
 	name_to_bone_index.insert(p_name, new_idx);
 	process_order_dirty = true;
 	version++;
+	_advance_sampling_counter(sampling_mapping_revision, sampling_version_exhausted);
 	rest_dirty = true;
 	_make_dirty();
 	update_gizmos();
@@ -659,6 +771,8 @@ void Skeleton3D::set_bone_name(int p_bone, const String &p_name) {
 	name_to_bone_index.insert(p_name, p_bone);
 
 	version++;
+	_advance_sampling_counter(sampling_mapping_revision, sampling_version_exhausted);
+	_make_dirty();
 }
 
 Variant Skeleton3D::get_bone_meta(int p_bone, const StringName &p_key) const {
@@ -838,17 +952,23 @@ bool Skeleton3D::is_show_rest_only() const {
 }
 
 void Skeleton3D::clear_bones() {
+	for (SkinReference *E : skin_bindings) {
+		E->detached = true;
+		E->skeleton_node = nullptr;
+	}
+	skin_bindings.clear();
+
 	bones.clear();
 	name_to_bone_index.clear();
 
 	// All these structures contain references to now invalid bone indices.
-	skin_bindings.clear();
 	bone_global_pose_dirty.clear();
 	parentless_bones.clear();
 	nested_set_offset_to_bone_index.clear();
 
 	process_order_dirty = true;
 	version++;
+	_advance_sampling_counter(sampling_mapping_revision, sampling_version_exhausted);
 	_make_dirty();
 }
 
@@ -1040,7 +1160,7 @@ Ref<SkinReference> Skeleton3D::register_skin(const Ref<Skin> &p_skin) {
 	ERR_FAIL_COND_V(p_skin.is_null(), Ref<SkinReference>());
 
 	for (const SkinReference *E : skin_bindings) {
-		if (E->skin == p_skin) {
+		if (!E->detached && E->skeleton_node == this && E->skin == p_skin) {
 			return Ref<SkinReference>(E);
 		}
 	}
@@ -1322,6 +1442,7 @@ void Skeleton3D::_bind_methods() {
 	ADD_SIGNAL(MethodInfo("rest_updated"));
 	ADD_SIGNAL(MethodInfo("pose_updated"));
 	ADD_SIGNAL(MethodInfo("skeleton_updated"));
+	ADD_SIGNAL(MethodInfo("skin_palettes_committed", PropertyInfo(Variant::INT, "source_update_serial")));
 	ADD_SIGNAL(MethodInfo("bone_enabled_changed", PropertyInfo(Variant::INT, "bone_idx")));
 	ADD_SIGNAL(MethodInfo("bone_list_changed"));
 	ADD_SIGNAL(MethodInfo("show_rest_only_changed"));
@@ -1444,6 +1565,7 @@ Skeleton3D::Skeleton3D() {
 Skeleton3D::~Skeleton3D() {
 	// Some skins may remain bound.
 	for (SkinReference *E : skin_bindings) {
+		E->detached = true;
 		E->skeleton_node = nullptr;
 	}
 }

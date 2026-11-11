@@ -305,6 +305,7 @@ private:
 	bool slot_has_custody(uint32_t) const;
 	Error return_slot_pin(uint32_t);
 	Error view_acquire(uint32_t, ExternalPacketViewLease &);
+	Error acquire_camera_view(const ExternalSurfaceSelection &, const ::RenderDataRD &, ExternalPacketViewLease &);
 	Error view_return(ExternalPacketViewLease &);
 	void view_move(ExternalPacketViewLease &, ExternalPacketViewLease &);
 	Error read_return(ExternalPacketBinding &, bool);

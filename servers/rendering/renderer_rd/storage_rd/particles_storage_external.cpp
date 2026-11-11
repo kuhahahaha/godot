@@ -744,8 +744,21 @@ Error ParticlesStorage::particles_external_prepare_pipeline(const ExternalSurfac
 	return row.finish_error != OK ? row.finish_error : row.backend_error;
 }
 
-Error ParticlesStorage::particles_external_view_acquire(const ExternalSurfaceSelection &, const ::RenderDataRD *, ExternalPacketViewLease &) {
-	return ERR_UNAVAILABLE;
+Error ParticlesStorage::particles_external_view_acquire(const ExternalSurfaceSelection &p_selection, const ::RenderDataRD *p_render_data, ExternalPacketViewLease &r_view) {
+	auto *device = RenderingDevice::get_singleton();
+	if (!device || !device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!r_view.is_empty()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	if (!p_selection.owner) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!p_render_data) {
+		return ERR_INVALID_PARAMETER;
+	}
+	return p_selection.owner->acquire_camera_view(p_selection, *p_render_data, r_view);
 }
 Error ParticlesStorage::particles_external_resolve(const ExternalPacketViewLease &, const ExternalPacketPipelineRequest &, RD::DrawListID, ExternalPacketBinding &) {
 	return ERR_UNAVAILABLE;

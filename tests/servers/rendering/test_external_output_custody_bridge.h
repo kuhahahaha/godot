@@ -37,6 +37,7 @@
 
 namespace RendererRD {
 struct ExternalPacketPipelineRequest;
+class ExternalSurfaceSelection;
 class ParticlesStorage;
 class ExternalOutputOwner;
 // Explicit private component setup only. Pins are still issued by the original
@@ -98,6 +99,7 @@ public:
 	Error return_pipeline_row(uint32_t, uint32_t);
 	Error cancel_pipeline_slot(uint32_t);
 	Error prepare_pipeline_prefix(GDExtensionProductionPhysicalContextRefV1, uint32_t p_slot, uint32_t p_surface, uint32_t p_max_resources);
+	void exercise_camera_view_acquire(GDExtensionDeviceExit::Registry &, GDExtensionProductionRequestRefV1, const ExternalSurfaceSelection &, GDExtensionDeviceExit::ProductionOutputPin (&)[2]);
 	uint64_t selection_material_generation(uint32_t) const;
 	bool selection_faulted() const;
 	void forget_auto_returned();
