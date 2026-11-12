@@ -3,6 +3,7 @@
 /**************************************************************************/
 
 #include "core/extension/gdextension_production_request.h"
+#include "servers/rendering/native_output_cull.h"
 #include "tests/test_macros.h"
 
 #include <cmath>
@@ -126,4 +127,33 @@ TEST_CASE("[ProductionRequest][HostTransform] inverse translation retains exact 
 	for (uint32_t i = 0; i < 12; ++i) {
 		CHECK(output.inverse[i] == expected[i]);
 	}
+}
+
+TEST_CASE("[ProductionRequest][HostTransform][NativeOutputCull] exact cancellation qualified Host keeps a finite conservative cull") {
+	using namespace GDExtensionDeviceExit;
+	GDExtensionProductionHostTransformInputV1 input{};
+	input.abi = production_dto_abi<GDExtensionProductionHostTransformInputV1>();
+	// det = 1 + 2^60 - 2^60 = 1 exactly. An interval containing zero is
+	// inconclusive; it must not override the original exact qualification.
+	const float affine[12] = { 1, 0x1p20f, 0, 0, 0, 1, 0x1p20f, 0, 0x1p20f, 0x1p40f, 1, 0 };
+	const float inverse[12] = { -0x1p60f, -0x1p20f, 0x1p40f, 0, 0x1p40f, 1, -0x1p20f, 0, -0x1p20f, 0, 1, 0 };
+	memcpy(input.affine, affine, sizeof(affine));
+	GDExtensionProductionHostTransformV1 qualified{};
+	REQUIRE(production_host_transform(input, qualified) == OK);
+	for (uint32_t i = 0; i < 12; ++i) {
+		CHECK(qualified.inverse[i] == inverse[i]);
+	}
+	const AABB world(Vector3(-1, -1, -1), Vector3(2, 2, 2));
+	NativeOutputCull::Envelope result;
+	REQUIRE(NativeOutputCull::compose(world, nullptr, nullptr, qualified.affine, qualified.inverse, result) == OK);
+	Transform3D host;
+	for (uint32_t row = 0; row < 3; ++row) {
+		for (uint32_t column = 0; column < 3; ++column) {
+			host.basis[row][column] = qualified.affine[row * 4 + column];
+		}
+		host.origin[row] = qualified.affine[row * 4 + 3];
+	}
+	CHECK(result.local.is_finite());
+	CHECK(result.world.encloses(world));
+	CHECK(host.xform(result.local).encloses(result.world));
 }

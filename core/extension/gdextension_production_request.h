@@ -481,6 +481,13 @@ class ProductionActionCell {
 	// Original E09 retains the actual scene instance through native release.
 	GDExtensionProductionOutputSceneInputV1 output_scene = {};
 	bool output_scene_prepared = false;
+	// Original selected-view pre-cull observation, paid by the ActionCell quote.
+	// SceneCull owns the synchronous window. This Ref retains only its capture.
+	Ref<RendererViewport::Viewport::CameraCapture> scene_cull_capture;
+	uint64_t scene_cull_version = 0;
+	AABB scene_cull_local, scene_cull_world, scene_cull_required_world;
+	Error scene_cull_error = ERR_UNCONFIGURED;
+	bool scene_cull_prepared = false;
 	GDExtensionProductionOutputPlanV1 output_plan = {};
 	bool output_plan_prepared = false;
 	uint64_t output_acquire_action_ordinal = UINT64_MAX;

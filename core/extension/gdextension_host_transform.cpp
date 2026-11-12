@@ -3,63 +3,12 @@
 /**************************************************************************/
 
 #include "core/extension/gdextension_production_request.h"
+#include "core/math/affine_f32.h"
 
 #include <cmath>
 #include <limits>
 
 namespace GDExtensionDeviceExit {
-// Six signed triple products of F32 inputs. A product of two F32 values
-// is exact in double; FMA retains the rounding residual of the third factor.
-// F32 triple exponents fit the normal double range, including subnormals.
-static double exact_host_determinant(const float (&affine)[12]) {
-	double expansion[12]{};
-	uint32_t count = 0;
-	auto grow = [&](double value) {
-		double next[12]{};
-		uint32_t next_count = 0;
-		for (uint32_t i = 0; i < count; ++i) {
-			const double sum = value + expansion[i];
-			const double b_virtual = sum - value;
-			const double a_virtual = sum - b_virtual;
-			const double residual = (value - a_virtual) + (expansion[i] - b_virtual);
-			if (residual != 0) {
-				next[next_count++] = residual;
-			}
-			value = sum;
-		}
-		if (value != 0 || !next_count) {
-			next[next_count++] = value;
-		}
-		count = next_count;
-		for (uint32_t i = 0; i < count; ++i) {
-			expansion[i] = next[i];
-		}
-	};
-	auto triple = [&](uint32_t a, uint32_t b, uint32_t c, double sign) {
-		const double pair = double(affine[a]) * double(affine[b]);
-		const double product = pair * double(affine[c]);
-		const double residual = std::fma(pair, double(affine[c]), -product);
-		grow(sign * residual);
-		grow(sign * product);
-	};
-	triple(0, 5, 10, 1);
-	triple(1, 6, 8, 1);
-	triple(2, 4, 9, 1);
-	triple(2, 5, 8, -1);
-	triple(1, 4, 10, -1);
-	triple(0, 6, 9, -1);
-	// A zero-eliminating expansion is exactly zero iff its highest component
-	// is zero. Sum from small to large only after that exact classification.
-	if (expansion[count - 1] == 0) {
-		return 0;
-	}
-	double determinant = 0;
-	for (uint32_t i = 0; i < count; ++i) {
-		determinant += expansion[i];
-	}
-	return determinant;
-}
-
 Error production_host_transform(const GDExtensionProductionHostTransformInputV1 &input, GDExtensionProductionHostTransformV1 &out) {
 	if (!production_dto_valid(input)) {
 		return ERR_INVALID_PARAMETER;
@@ -85,7 +34,7 @@ Error production_host_transform(const GDExtensionProductionHostTransformInputV1 
 			inverse[column][row] = basis[(row + 1) % 3][(column + 1) % 3] * basis[(row + 2) % 3][(column + 2) % 3] - basis[(row + 1) % 3][(column + 2) % 3] * basis[(row + 2) % 3][(column + 1) % 3];
 		}
 	}
-	const double determinant = exact_host_determinant(input.affine);
+	const double determinant = AffineF32::exact_basis_determinant(input.affine);
 	if (!Math::is_finite(determinant) || determinant == 0) {
 		return ERR_INVALID_DATA;
 	}
@@ -102,7 +51,7 @@ Error production_host_transform(const GDExtensionProductionHostTransformInputV1 
 		for (uint32_t column = 0; column < 3; ++column) {
 			numerator_affine[column * 4 + row] = input.affine[column * 4 + 3];
 		}
-		inverse[row][3] = -exact_host_determinant(numerator_affine) / determinant;
+		inverse[row][3] = -AffineF32::exact_basis_determinant(numerator_affine) / determinant;
 	}
 	GDExtensionProductionHostTransformV1 sample{};
 	sample.abi = production_dto_abi<GDExtensionProductionHostTransformV1>();

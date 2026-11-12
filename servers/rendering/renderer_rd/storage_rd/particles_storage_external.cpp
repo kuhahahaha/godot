@@ -88,13 +88,13 @@ Error ParticlesStorage::_external_guard_copy_history_locked(const GDExtensionDev
 	const auto &view = *borrow.previous_view;
 	if (view.owner != &owner || view.slot >= owner.slot_count || view.slot == p_slot ||
 			!view.has_retained_host_snapshot() || view.get_profile() != ExternalOutputConfig::INSTANCE_192 ||
-			view.get_space() != ExternalOutputConfig::WORLD) {
+			(view.get_space() != ExternalOutputConfig::WORLD && view.get_space() != ExternalOutputConfig::LOCAL)) {
 		return ERR_INVALID_DATA;
 	}
 	const auto &previous = owner.slots[view.slot];
 	const uint64_t proof_bytes = sizeof(ParticlesExternalGuard::GeometryProofHeader) +
 			uint64_t(slot.surface_count) * sizeof(ParticlesExternalGuard::SurfaceProof);
-	if (!previous.storage || !previous.guard_resources_ready || !previous.guard_proof_payload ||
+	if (!previous.scene_cull_bound || !previous.storage || !previous.guard_resources_ready || !previous.guard_proof_payload ||
 			previous.guard_proof_bytes != proof_bytes || previous.surface_count != slot.surface_count ||
 			!slot.surface_count || slot.surface_count > ExternalOutputConfig::MAX_FLATTENED_SURFACES ||
 			previous.request.common.current_host_token.size() != 32 ||
@@ -192,7 +192,8 @@ Error ParticlesStorage::_external_guard_prepare_owned_prefix(GDExtensionProducti
 		return ERR_INVALID_DATA;
 	}
 	if ((owner.config.motion == ExternalOutputConfig::REQUIRED && !slot.request.common.history_reset && !history) ||
-			owner.config.space != ExternalOutputConfig::WORLD || !slot.retained_host_snapshot || !slot.current_host.is_finite() ||
+			(owner.config.space != ExternalOutputConfig::WORLD && owner.config.space != ExternalOutputConfig::LOCAL) ||
+			!slot.scene_cull_bound || !slot.retained_host_snapshot || !slot.current_host.is_finite() ||
 			p_source_space != uint32_t(owner.config.space) || !slot.surface_count || !slot.surfaces ||
 			!owner.generation_surfaces_complete || owner.generation_material_count != slot.surface_count) {
 		return ERR_UNAVAILABLE;
@@ -227,10 +228,13 @@ Error ParticlesStorage::_external_guard_prepare_owned_prefix(GDExtensionProducti
 		}
 		return true;
 	};
-	// The native particles AABB is the configured envelope, never an enlarged
-	// declaration made up at Finalize. Local space requires a retained native
-	// scene-commit envelope and remains unavailable until that source is bound.
-	const AABB cull = owner.config.bounds;
+	// Geometry declarations retain their original spaces. The cull proof is
+	// the actual pre-cull world commit, never the immutable config fallback.
+	const Error scene_commit = owner.validate_scene_cull(p_slot);
+	if (scene_commit != OK) {
+		return scene_commit;
+	}
+	const AABB cull = slot.scene_cull_world;
 	if (!bounds(slot.request.common.bounds, proof.current_decl_min, proof.current_decl_max, true) ||
 			!bounds(cull, proof.cull_min, proof.cull_max, true)) {
 		return ERR_INVALID_DATA;
@@ -350,7 +354,7 @@ Error ParticlesStorage::_external_guard_prepare_owned_prefix(GDExtensionProducti
 	return OK;
 }
 
-Error ParticlesStorage::particles_scene_validate_receiver(RID p_particles, uint64_t p_generation, const RenderingDevice *p_device) const {
+Error ParticlesStorage::particles_external_validate_scene_generation(RID p_particles, uint64_t p_generation, const RenderingDevice *p_device) const {
 	const Particles *particles = particles_owner.get_or_null(p_particles);
 	if (!particles || !particles->external || !p_generation || !p_device) {
 		return ERR_INVALID_PARAMETER;
@@ -363,6 +367,15 @@ Error ParticlesStorage::particles_scene_validate_receiver(RID p_particles, uint6
 			!owner.generation_registry->production_output_pin_matches(owner.generation_pin, owner.generation_request, *owner.device)) {
 		return ERR_UNAVAILABLE;
 	}
+	return OK;
+}
+
+Error ParticlesStorage::particles_scene_validate_receiver(RID p_particles, uint64_t p_generation, const RenderingDevice *p_device) const {
+	const Error validated = particles_external_validate_scene_generation(p_particles, p_generation, p_device);
+	if (validated != OK) {
+		return validated;
+	}
+	const ExternalOutputOwner &owner = *particles_owner.get_or_null(p_particles)->external;
 	if (!owner.config.query_enabled || !owner.config.query_bounds.is_finite() ||
 			!owner.config.query_bounds.get_end().is_finite() || !owner.config.query_bounds.has_volume()) {
 		return ERR_INVALID_DATA;

@@ -1080,6 +1080,7 @@ private:
 	void camera_ready_source_closed(ProductionCameraReadySubscriber &);
 	bool production_native_record_reject_wait_locked(ProductionRequest &);
 	Error camera_ready_native_invocation(ProductionCameraReadySubscriber &, const ProductionCameraInvocationBorrow &);
+	Error camera_ready_native_pre_cull(ProductionCameraReadySubscriber &, const ProductionCameraInvocationBorrow &);
 	Error production_record_receive_locked(ProductionRequest &, RenderingDevice &, const ProductionCameraInvocationBorrow *p_native_invocation = nullptr);
 	Error production_prepared_record_body(ProductionRequest &, RenderingDevice &, ProductionPhysicalContextRef, const ProductionCameraInvocationBorrow &);
 
@@ -1101,6 +1102,8 @@ private:
 	Error production_schedule_locked(ProductionRequest &, RenderingDevice &, bool);
 	Error production_freeze_rd_locked(ProductionRequest &, RenderingDevice *, bool p_stage_only = false);
 	Error production_output_scene_validate_locked(const ProductionActionCell &, const GDExtensionOutputAcquireInputV1 &) const;
+	Error production_output_cull_required_locked(const ProductionActionCell &, const GDExtensionOutputAcquireInputV1 &, bool, AABB &, AABB * = nullptr) const;
+	Error production_prepare_staged_cull_locked(ProductionRequest &, ProductionActionCell &, RenderingDevice &, const ProductionCameraInvocationBorrow &);
 	Error production_output_history_validate_locked(ProductionRequest &, ProductionActionCell &, RenderingDevice &, const GDExtensionOutputAcquireInputV1 &);
 	Error production_output_history_borrow_locked(ProductionPhysicalContextRef, ProductionRequest &, uint64_t, RenderingDevice &, ProductionOutputHistoryBorrow &);
 

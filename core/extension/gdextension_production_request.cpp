@@ -3287,7 +3287,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 			--r->capture_inflight;
 			return result(ERR_BUSY, 16); // One original charged owner return.
 		}
-		if (action.preinput_camera_source.is_null()) {
+		if (action.preinput_camera_source.is_null() && action.scene_cull_capture.is_null()) {
 			continue;
 		}
 		if (reclaim) {
@@ -3303,10 +3303,13 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 		++usage->passes;
 		++usage->receipts;
 		Ref<RendererViewport::Viewport::CameraCapture> returning = action.preinput_camera_source;
+		Ref<RendererViewport::Viewport::CameraCapture> returning_cull = action.scene_cull_capture;
 		action.preinput_camera_source.unref(); // returning pins final destruction.
+		action.scene_cull_capture.unref();
 		action.preinput_camera_returned = true;
 		unlock_mutex_for_call();
 		returning.unref();
+		returning_cull.unref();
 		relock_mutex_after_call();
 		--r->capture_inflight;
 		return result(ERR_BUSY, 16); // Exactly one charged original source return.

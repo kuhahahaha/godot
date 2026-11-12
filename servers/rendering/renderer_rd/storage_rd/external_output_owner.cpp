@@ -34,10 +34,37 @@
 #include "servers/rendering/renderer_rd/effects/particles_external_guard.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
+#include "servers/rendering/renderer_scene_cull.h"
 
 #include <cstddef>
 
 namespace RendererRD {
+Error ExternalOutputOwner::validate_scene_cull(uint32_t p_slot) const {
+	if (p_slot >= slot_count) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const auto &slot = slots[p_slot];
+	if (!slot.scene_cull_bound || !slot.scene_cull_version || slot.scene_cull_instance.is_null() || slot.scene_cull_viewport.is_null() || !slot.retained_host_snapshot) {
+		return ERR_UNCONFIGURED;
+	}
+	auto *scene = static_cast<RendererSceneCull *>(RSG::scene);
+	if (!scene) {
+		return ERR_UNAVAILABLE;
+	}
+	RendererSceneCull::NativeParticleSceneFacts actual;
+	const Error observed = scene->instance_get_committed_particle_scene_facts(slot.scene_cull_instance, slot.scene_cull_particles, actual);
+	if (observed != OK) {
+		return observed;
+	}
+	if (actual.scenario != slot.scene_cull_scenario || actual.version != slot.scene_cull_version ||
+			actual.transform != slot.current_host || actual.local_aabb != slot.scene_cull_local || actual.world_aabb != slot.scene_cull_world) {
+		return ERR_INVALID_DATA;
+	}
+	const auto &camera = slot.request.common.current_camera_token;
+	return scene->instance_particle_output_cull_window_matches(slot.scene_cull_instance, slot.scene_cull_viewport,
+			camera.view_id, camera.view_epoch, camera.capture_ordinal) ? OK : ERR_BUSY;
+}
+
 Error ExternalOutputOwner::validate_native_selection(const ExternalOutputConfig &config, uint32_t &surface_count) {
 	if (config.profile == ExternalOutputConfig::SCENE_ONLY) {
 		if (!config.surfaces.is_empty() || !config.surface_materials.is_empty()) {
@@ -1036,6 +1063,10 @@ Error ExternalOutputOwner::return_slot_pin(uint32_t p_slot) {
 	cell.output_membership_group = 0;
 	cell.retire_surface = cell.retire_resource = 0;
 	cell.retained_host_snapshot = false;
+	cell.scene_cull_bound = false;
+	cell.scene_cull_instance = cell.scene_cull_particles = cell.scene_cull_scenario = cell.scene_cull_viewport = RID();
+	cell.scene_cull_version = 0;
+	cell.scene_cull_local = cell.scene_cull_world = AABB();
 	cell.consumed_proof_requested = false;
 	cell.consumed_borrow_serial = 0;
 	cell.native_camera_source.unref();

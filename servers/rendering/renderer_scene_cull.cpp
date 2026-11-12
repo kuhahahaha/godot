@@ -51,6 +51,33 @@
 #include "core/os/os.h"
 #endif
 
+// A lexical owner of the actual selected-view call, not a source/RECORD grant.
+// Instance membership is intrusive and disappears if the instance is freed.
+RendererSceneCull::NativeOutputCullScope::NativeOutputCullScope(RendererSceneCull &p_scene, const Ref<RendererViewport::Viewport::CameraCapture> &p_capture) : scene(p_scene), capture(p_capture) {
+	if (capture.is_null() || !RSG::viewport) {
+		return;
+	}
+	previous = scene.native_output_cull_scope;
+	scene.native_output_cull_scope = this;
+	active = preparing = true;
+	RSG::viewport->viewport_prepare_native_output_cull(capture);
+	preparing = false;
+}
+
+RendererSceneCull::NativeOutputCullScope::~NativeOutputCullScope() {
+	if (!active) {
+		return;
+	}
+	while (instances.first()) {
+		Instance *instance = instances.first()->self();
+		instances.remove(&instance->native_output_cull_item);
+		instance->native_output_cull_window = nullptr;
+		instance->native_output_cull_generation = instance->native_output_cull_version = 0;
+	}
+	CRASH_COND(scene.native_output_cull_scope != this);
+	scene.native_output_cull_scope = previous;
+}
+
 /* HALTON SEQUENCE */
 
 #ifndef _3D_DISABLED
@@ -219,6 +246,152 @@ Error RendererSceneCull::instance_get_committed_particle_scene_facts(RID p_insta
 	r_facts.transform = instance->transform;
 	r_facts.local_aabb = instance->aabb;
 	r_facts.world_aabb = instance->transformed_aabb;
+	if (instance->scene_query_base == instance->base && instance->scene_query_generation) {
+		r_facts.query_committed = instance->scene_query_committed;
+		r_facts.query_generation = instance->scene_query_generation;
+		r_facts.query_world = instance->scene_query_world;
+	}
+	return OK;
+}
+
+bool RendererSceneCull::instance_particle_output_cull_window_matches(RID p_instance, RID p_viewport, uint64_t p_view_id,
+		uint64_t p_view_epoch, uint64_t p_capture_ordinal) const {
+	const Instance *instance = instance_owner.get_or_null(p_instance);
+	const auto *scope = native_output_cull_scope;
+	if (!instance || !scope || !scope->active || scope->capture.is_null() || !instance->native_output_cull_window ||
+			!instance->native_scene_committed || instance->update_item.in_list() || instance->update_aabb || instance->update_dependencies ||
+			instance->version != instance->native_output_cull_version || !RSG::viewport) {
+		return false;
+	}
+	const auto &capture = scope->capture;
+	const auto &token = capture->get_token();
+	if (capture->get_viewport() != p_viewport || token.view_id != p_view_id || token.view_epoch != p_view_epoch || token.capture_ordinal != p_capture_ordinal) {
+		return false;
+	}
+	Ref<RendererViewport::Viewport::CameraCapture> current;
+	if (!RSG::viewport->viewport_get_camera_capture_ref(p_viewport, token, current) || current != capture) {
+		return false;
+	}
+	for (; scope; scope = scope->previous) {
+		if (scope == instance->native_output_cull_window) {
+			return true;
+		}
+	}
+	return false;
+}
+
+Error RendererSceneCull::instance_commit_particle_output_cull(RID p_instance, RID p_particles, RID p_scenario, uint64_t p_generation,
+		const Transform3D &p_host, const AABB &p_native_local, const AABB &p_required_world, NativeParticleSceneFacts &r_facts) {
+	r_facts = NativeParticleSceneFacts();
+	auto *scope = native_output_cull_scope;
+	if (!scope || !scope->active || !scope->preparing || scope->capture.is_null() ||
+			!RenderingServer::get_singleton() || !RenderingServer::get_singleton()->is_on_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	auto finite_volume = [](const AABB &box) {
+		const Vector3 end = box.get_end();
+		return box.is_finite() && end.is_finite() && box.has_volume() &&
+				end.x > box.position.x && end.y > box.position.y && end.z > box.position.z;
+	};
+	if (!p_generation || !p_scenario.is_valid() || !p_host.is_finite() || !finite_volume(p_native_local) || !finite_volume(p_required_world)) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		return ERR_UNAVAILABLE;
+	}
+	const Error generation = storage->particles_external_validate_scene_generation(p_particles, p_generation, RenderingDevice::get_singleton());
+	if (generation != OK) {
+		return generation;
+	}
+	NativeParticleSceneFacts before;
+	const Error observed = instance_get_committed_particle_scene_facts(p_instance, p_particles, before);
+	if (observed != OK) {
+		return observed;
+	}
+	if (before.scenario != p_scenario) {
+		return ERR_INVALID_DATA;
+	}
+	Instance *instance = instance_owner.get_or_null(p_instance);
+	if (instance->native_output_cull_window) {
+		bool live_ancestor = false;
+		for (auto *ancestor = scope; ancestor; ancestor = ancestor->previous) {
+			live_ancestor |= ancestor == instance->native_output_cull_window;
+		}
+		// Reuse only the unchanged actual commit. The caller independently
+		// authenticates its own source, history, query, mesh and material.
+		if (!live_ancestor || instance->native_output_cull_generation != p_generation ||
+				instance->native_output_cull_version != before.version || before.transform != p_host || !before.world_aabb.encloses(p_required_world)) {
+			return ERR_BUSY;
+		}
+		r_facts = before;
+		return OK;
+	}
+	// A genuine already committed covering envelope is legal. Adopting it
+	// avoids needless version/query invalidation when the original owner has
+	// already committed this Host and a conservative superset before cull.
+	if (before.transform == p_host && before.world_aabb.encloses(p_required_world)) {
+		if (!before.version) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+		instance->native_output_cull_window = scope;
+		instance->native_output_cull_generation = p_generation;
+		instance->native_output_cull_version = before.version;
+		scope->instances.add(&instance->native_output_cull_item);
+		r_facts = before;
+		return OK;
+	}
+	if (instance->version == UINT64_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	AABB effective_local = p_native_local;
+	if (instance->extra_margin != 0) {
+		effective_local.grow_by(instance->extra_margin);
+	}
+	const AABB effective_world = p_host.xform(effective_local);
+	if (!finite_volume(effective_local) || !finite_volume(effective_world) || !effective_world.encloses(p_required_world)) {
+		return ERR_INVALID_DATA;
+	}
+	AABB *custom = instance->custom_aabb;
+	if (!custom) {
+		custom = memnew(AABB);
+		if (!custom) {
+			return ERR_OUT_OF_MEMORY;
+		}
+	}
+	// All input/math/allocation preflight precedes the original instance's
+	// single transform/custom-AABB mutation. Never flush another scene owner.
+	// A cull-only envelope change preserves the original World query domain
+	// and pose only when their actual association is unchanged and covered.
+	// The ordinary dirty update below still updates genuine pair revisions.
+	// A changed Host never inherits an old query pose revision.
+	const bool preserve_query = instance->scene_query_committed && instance->scene_query_base == p_particles &&
+			instance->scene_query_generation == p_generation && instance->transform == p_host &&
+			finite_volume(instance->scene_query_world) && effective_world.encloses(instance->scene_query_world) &&
+			storage->particles_scene_validate_receiver(p_particles, p_generation, RenderingDevice::get_singleton()) == OK;
+	if (!preserve_query && (instance->transform != p_host || !instance->custom_aabb || *instance->custom_aabb != p_native_local)) {
+		instance->scene_query_committed = false;
+	}
+	*custom = p_native_local;
+	instance->custom_aabb = custom;
+	instance->transform = p_host;
+	_instance_queue_update(instance, true, false);
+	_update_dirty_instance(instance);
+	NativeParticleSceneFacts committed;
+	const Error actual = instance_get_committed_particle_scene_facts(p_instance, p_particles, committed);
+	if (actual != OK) {
+		return actual;
+	}
+	if (committed.scenario != p_scenario || committed.transform != p_host ||
+			committed.local_aabb != effective_local || committed.world_aabb != effective_world) {
+		return ERR_INVALID_DATA;
+	}
+	instance = instance_owner.get_or_null(p_instance);
+	instance->native_output_cull_window = scope;
+	instance->native_output_cull_generation = p_generation;
+	instance->native_output_cull_version = committed.version;
+	scope->instances.add(&instance->native_output_cull_item);
+	r_facts = committed;
 	return OK;
 }
 
@@ -3052,14 +3225,20 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 		}
 #endif // XR_DISABLED
 	}
+	Ref<RendererViewport::Viewport::CameraCapture> native_cull_capture;
 	// Freeze the token only after CameraData is fully constructed. This keeps
 	// failed/unsupported camera setup from consuming a source ordinal.
 	if (p_viewport.is_valid() && RSG::viewport) {
 		camera_data.source_viewport = p_viewport;
-		if (!RSG::viewport->viewport_begin_camera_capture(p_viewport, camera_data, p_camera, p_render_buffers).is_valid()) {
+		const auto token = RSG::viewport->viewport_begin_camera_capture(p_viewport, camera_data, p_camera, p_render_buffers);
+		if (!token.is_valid()) {
 			camera_data.source_viewport = RID();
+		} else {
+			RSG::viewport->viewport_get_camera_capture_ref(p_viewport, token, native_cull_capture);
 		}
 	}
+
+	NativeOutputCullScope native_cull_window(*this, native_cull_capture);
 
 	RID environment = _render_get_environment(p_camera, p_scenario);
 	RID compositor = _render_get_compositor(p_camera, p_scenario);

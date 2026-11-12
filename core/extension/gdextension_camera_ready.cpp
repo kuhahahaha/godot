@@ -48,6 +48,75 @@ void ProductionCameraReadySubscriber::camera_source_native_invocation(const Rend
 	last_error = registry->camera_ready_native_invocation(*this, borrow);
 }
 
+void ProductionCameraReadySubscriber::camera_source_native_pre_cull(const RendererViewport::CameraInvocationScope &invocation) {
+	if (!registry || closed || released || !subscribed) {
+		return;
+	}
+	ProductionCameraInvocationBorrow borrow(invocation);
+	last_error = registry->camera_ready_native_pre_cull(*this, borrow);
+}
+
+Error Registry::camera_ready_native_pre_cull(ProductionCameraReadySubscriber &observer, const ProductionCameraInvocationBorrow &borrow) {
+	const auto &invocation = borrow.get_scope();
+	const auto &capture = invocation.get_capture();
+	RenderingDevice *device = invocation.get_device();
+	if (!device || device != RenderingDevice::get_singleton() || !device->native_immutable_is_render_thread() ||
+			!invocation.is_pre_cull() || !invocation.is_current(&observer, capture) || invocation.is_recordable(&observer, capture)) {
+		return ERR_UNAUTHORIZED;
+	}
+	// Keep an older cull-only capture alive until both original locks return.
+	Ref<RendererViewport::Viewport::CameraCapture> returning;
+	MutexLock device_lock(device->_thread_safe_);
+	Lock lock(*this);
+	if (observer.registry != this || observer.closed || observer.released || !observer.subscribed ||
+			observer.request.registry_instance != instance || observer.attachment.registry_instance != instance ||
+			!invocation.is_current(&observer, capture)) {
+		return ERR_UNAUTHORIZED;
+	}
+	ProductionAttachment *attachment = nullptr;
+	for (auto *candidate : production_attachments) {
+		if (candidate && candidate->serial == observer.attachment.handle_serial) {
+			attachment = candidate;
+			break;
+		}
+	}
+	if (!attachment || attachment->held_device != device || attachment->camera_ready_closed || attachment->camera_ready_close_active) {
+		return ERR_UNAVAILABLE;
+	}
+	ProductionRequest *request = nullptr;
+	for (uint32_t i = 0; i < attachment->quote.capacity.requests; ++i) {
+		if (attachment->requests[i].serial == observer.request.handle_serial) {
+			request = &attachment->requests[i];
+			break;
+		}
+	}
+	if (!request || request->attachment != attachment || observer.action_ordinal >= request->action_count) {
+		return ERR_INVALID_DATA;
+	}
+	// Other subscribers and already recorded prefixes do not mutate this cull.
+	if (!request->native_prepared_executor || !request->native_static_sealed || request->frozen) {
+		return OK;
+	}
+	auto &action = request->actions[observer.action_ordinal];
+	if (action.request != request || action.declaration.action_ordinal != observer.action_ordinal ||
+			action.declaration.action_kind != GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1 || &action.camera_ready_subscriber != &observer ||
+			request->native_staged_anchor != observer.action_ordinal || !action.output_camera_pending) {
+		return ERR_INVALID_DATA;
+	}
+	returning = action.scene_cull_capture;
+	action.scene_cull_prepared = false;
+	if (request->cancelled || request->release_started || request->effects_pending || request->source_device_lost ||
+			request->capture_inflight || request->continuation_inflight || request->native_prepared_unread ||
+			request->control.state != ProductionControlState::QUEUED || request->control.input.kind != ProductionControlKind::RECORD ||
+			request->control.input.output_cancel ||
+			request->control.input.request_serial != request->serial || request->control.input.record_generation != request->operation.record_generation) {
+		action.scene_cull_error = ERR_BUSY;
+		return ERR_BUSY;
+	}
+	action.scene_cull_error = production_prepare_staged_cull_locked(*request, action, *device, borrow);
+	return action.scene_cull_error;
+}
+
 Error Registry::camera_ready_native_invocation(ProductionCameraReadySubscriber &observer, const ProductionCameraInvocationBorrow &borrow) {
 	const auto &invocation = borrow.get_scope();
 	const auto &capture = invocation.get_capture();
@@ -149,6 +218,11 @@ Error Registry::production_complete_staged_camera_locked(ProductionRequest &requ
 			!invocation.is_recordable(&action.camera_ready_subscriber, capture) || capture->get_viewport() != action.camera_ready_viewport ||
 			!action.host_view_received || capture->get_invocation().camera != action.host_view_camera ||
 			capture->get_presentation_key().view_id != action.host_view_key.view_id || capture->get_presentation_key().view_epoch != action.host_view_key.view_epoch) { return ERR_UNAUTHORIZED; }
+	if (!action.scene_cull_prepared || action.scene_cull_capture != capture) {
+		return action.scene_cull_error == OK ? ERR_UNAVAILABLE : action.scene_cull_error;
+	}
+	const Error scene = production_output_scene_validate_locked(action, action.output_input);
+	if (scene != OK) { return scene; }
 	GDExtensionProductionCameraSampleV1 sample{};
 	const Error sampled = production_camera_sample(*capture.ptr(), sample);
 	if (sampled != OK) { return sampled; }

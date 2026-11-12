@@ -137,6 +137,10 @@ Error RenderingDevice::_production_output_read_record(RendererRD::ExternalPacket
 	if (!slot.original_registry || !slot.storage || row.selected_geometry >= 2) {
 		return ERR_UNAUTHORIZED;
 	}
+	const Error scene_commit = owner.validate_scene_cull(read.slot);
+	if (scene_commit != OK) {
+		return scene_commit;
+	}
 	const auto &geometry = row.geometry[row.selected_geometry];
 	const auto &material = row.material.get_snapshot();
 	const auto *pipeline = render_pipeline_owner.get_or_null(binding.pipeline);
@@ -469,6 +473,10 @@ Error RenderingDevice::_production_output_empty_read_record(RendererRD::External
 			binding.index_array.is_valid() || binding.transforms_uniform_set.is_valid() || binding.material || binding.commands.is_valid() ||
 			binding.command_bytes || binding.command_offset || read.raster_bound || read.draw_accepted || read.transfer_count) {
 		return ERR_UNAUTHORIZED;
+	}
+	const Error scene_commit = owner.validate_scene_cull(read.slot);
+	if (scene_commit != OK) {
+		return scene_commit;
 	}
 	const auto *framebuffer = framebuffer_formats.getptr(draw_list_framebuffer_format);
 	if (!framebuffer || !framebuffer->E || framebuffer->view_count != binding.selection.view_count || binding.selection.view_count != 1 ||

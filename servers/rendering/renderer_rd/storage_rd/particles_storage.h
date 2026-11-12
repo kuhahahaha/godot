@@ -623,6 +623,7 @@ public:
 	bool particles_is_external(RID p_particles) const override;
 	bool particles_is_external_scene_only(RID p_particles) const override;
 	// Validates the original immutable output owner; no tag grants custody.
+	Error particles_external_validate_scene_generation(RID p_particles, uint64_t p_generation, const RenderingDevice *p_device) const;
 	Error particles_scene_validate_receiver(RID p_particles, uint64_t p_generation, const RenderingDevice *p_device) const;
 	// Core-only native cache/read providers. No ClassDB method or record grant.
 	struct ExternalSceneMaterialFacts {

@@ -150,7 +150,16 @@ class ExternalOutputOwner {
 		bool pass_uses_closed = false;
 		Transform3D current_host, previous_host;
 		bool retained_host_snapshot = false;
+		// Immutable facts copied from the original selected-view pre-cull commit.
+		// They survive the synchronous window for already accepted GPU prefixes.
+		RID scene_cull_instance, scene_cull_particles, scene_cull_scenario, scene_cull_viewport;
+		uint64_t scene_cull_version = 0;
+		AABB scene_cull_local, scene_cull_world;
+		bool scene_cull_bound = false;
+
 	};
+	Error validate_scene_cull(uint32_t p_slot) const;
+
 	struct View {
 		// CPU records for the original at-most-four in-flight slots, priced
 		// inline by sizeof(owner). A record grants no source/GPU custody.

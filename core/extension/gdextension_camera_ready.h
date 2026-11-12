@@ -59,6 +59,7 @@ class ProductionCameraReadySubscriber final : public RendererViewport::Viewport:
 public:
 	ProductionCameraReadySubscriber() = default;
 	bool camera_source_has_native_executor() const override { return true; }
+	void camera_source_native_pre_cull(const RendererViewport::CameraInvocationScope &) override;
 	void camera_source_native_invocation(const RendererViewport::CameraInvocationScope &) override;
 	void camera_source_retained(const Ref<RendererViewport::Viewport::CameraCapture> &p_capture) override;
 	void camera_source_closed() override;

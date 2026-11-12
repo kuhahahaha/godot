@@ -42,6 +42,7 @@
 #include "servers/rendering/instance_uniforms.h"
 #include "servers/rendering/renderer_scene_occlusion_cull.h"
 #include "servers/rendering/renderer_scene_render.h"
+#include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/rendering_method.h"
 #include "servers/rendering/rendering_server_globals.h"
 #include "servers/rendering/rendering_server_types.h"
@@ -55,9 +56,17 @@ class ParticlesHeightfieldClearTestFixture;
 class RenderingDevice;
 
 namespace GDExtensionDeviceExit { class Registry; }
+#ifdef TESTS_ENABLED
+namespace TestProductionRequest { struct Access; }
+#endif
 
 class RendererSceneCull : public RenderingMethod {
+	class NativeOutputCullScope;
+	NativeOutputCullScope *native_output_cull_scope = nullptr;
 	friend class GDExtensionDeviceExit::Registry;
+#ifdef TESTS_ENABLED
+	friend struct TestProductionRequest::Access;
+#endif
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 	friend class RenderCaptureTestAccess;
 #endif
@@ -76,9 +85,20 @@ public:
 		Transform3D transform;
 		AABB local_aabb;
 		AABB world_aabb;
+		// Actual instance-owned query association, never a query/RECORD grant.
+		bool query_committed = false;
+		uint64_t query_generation = 0;
+		AABB query_world;
 	};
 	// RT-only, no dirty flush or mutation. Original source binding is a separate owner duty.
 	Error instance_get_committed_particle_scene_facts(RID p_instance, RID p_expected_particles, NativeParticleSceneFacts &r_facts) const;
+	// Core-only original selected-view transaction. The live pre-cull scope,
+	// retained source owners and original RECORD context remain separate gates.
+	Error instance_commit_particle_output_cull(RID p_instance, RID p_particles, RID p_scenario, uint64_t p_generation,
+			const Transform3D &p_host, const AABB &p_native_local, const AABB &p_required_world, NativeParticleSceneFacts &r_facts);
+	bool instance_particle_output_cull_window_matches(RID p_instance, RID p_viewport, uint64_t p_view_id,
+			uint64_t p_view_epoch, uint64_t p_capture_ordinal) const;
+
 
 	struct SceneSphereSource {
 		uint64_t source_key = 0;
@@ -535,6 +555,12 @@ public:
 		bool update_aabb;
 		bool update_dependencies;
 		bool native_scene_committed = false; // Set only after the original dirty update completes.
+		// Intrusive membership in the actual synchronous render_camera call.
+		// No candidate cache, new queue or GPU-completion ownership is created.
+		NativeOutputCullScope *native_output_cull_window = nullptr;
+		uint64_t native_output_cull_generation = 0, native_output_cull_version = 0;
+		SelfList<Instance> native_output_cull_item;
+
 
 		SelfList<Instance> update_item;
 
@@ -646,6 +672,7 @@ public:
 
 		Instance() :
 				scenario_item(this),
+				native_output_cull_item(this),
 				update_item(this) {
 			base_type = RSE::INSTANCE_NONE;
 			cast_shadows = RSE::SHADOW_CASTING_SETTING_ON;
@@ -701,6 +728,24 @@ public:
 		}
 	};
 
+private:
+	class NativeOutputCullScope {
+		friend class RendererSceneCull;
+#ifdef TESTS_ENABLED
+		friend struct TestProductionRequest::Access;
+#endif
+		RendererSceneCull &scene;
+		NativeOutputCullScope *previous = nullptr;
+		Ref<RendererViewport::Viewport::CameraCapture> capture;
+		SelfList<Instance>::List instances;
+		bool active = false, preparing = false;
+		NativeOutputCullScope(RendererSceneCull &, const Ref<RendererViewport::Viewport::CameraCapture> &);
+		~NativeOutputCullScope();
+		NativeOutputCullScope(const NativeOutputCullScope &) = delete;
+		NativeOutputCullScope &operator=(const NativeOutputCullScope &) = delete;
+	};
+
+public:
 	mutable SelfList<Instance>::List _instance_update_list;
 	void _instance_queue_update(Instance *p_instance, bool p_update_aabb, bool p_update_dependencies = false) const;
 

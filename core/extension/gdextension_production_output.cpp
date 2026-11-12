@@ -32,6 +32,7 @@
 #include "core/extension/gdextension_output_history_guard_uses.h"
 #include "core/extension/gdextension_output_history_fallback.h"
 #include "core/os/os.h"
+#include "servers/rendering/native_output_cull.h"
 #include "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h"
 #include "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h"
 #include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
@@ -2581,12 +2582,6 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 			out->use_indices[index] = role.use_index;
 		}
 	};
-	error = production_output_scene_validate_locked(action, *input);
-	if (error != OK) {
-		project(false); // Retain any already accepted Acquire custody on refusal.
-		out->status = output_status(error, "output_original_committed_scene");
-		return;
-	}
 	if (action.output_state != ProductionActionCell::OutputState::UNBOUND) {
 		if (action.output_particles.get_id() != input->particles || action.output_generation != owner.generation || action.output_slot >= owner.slot_count || owner.slots[action.output_slot].original_action_ordinal != ordinal || owner.slots[action.output_slot].original_request.handle_serial != request->serial || owner.slots[action.output_slot].lease_serial != action.output_lease) {
 			out->status = output_status(ERR_INVALID_DATA, "output_duplicate_mismatch");
@@ -2618,6 +2613,11 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 		}
 		project();
 		out->status = output_status(action.output_state == ProductionActionCell::OutputState::BOUND ? OK : ERR_BUSY, "output_existing_custody");
+		return;
+	}
+	error = production_output_scene_validate_locked(action, *input);
+	if (error != OK) {
+		out->status = output_status(error, "output_original_committed_scene");
 		return;
 	}
 	if (request->next_action != ordinal || owner.generation_pin.is_empty() || owner.generation_pin.request->attachment != request->attachment || !owner.metadata_directory_installed || owner.metadata_lease.is_empty() || owner.config.profile == RendererRD::ExternalOutputConfig::INDEXED_144) {
@@ -2729,6 +2729,21 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 	slot.original_revision = request->revision;
 	slot.original_action_ordinal = ordinal;
 	slot.request = parsed;
+	// Preserve the real pre-cull proof with the accepted slot. Later versions
+	// cannot revoke this original prefix or its physical retirement.
+	slot.scene_cull_bound = action.scene_cull_prepared;
+	slot.scene_cull_instance = slot.scene_cull_particles = slot.scene_cull_scenario = slot.scene_cull_viewport = RID();
+	slot.scene_cull_version = 0;
+	slot.scene_cull_local = slot.scene_cull_world = AABB();
+	if (action.scene_cull_prepared) {
+		slot.scene_cull_instance = RID::from_uint64(action.output_scene.instance);
+		slot.scene_cull_particles = RID::from_uint64(input->particles);
+		slot.scene_cull_scenario = RID::from_uint64(action.output_scene.scenario);
+		slot.scene_cull_viewport = action.scene_cull_capture->get_viewport();
+		slot.scene_cull_version = action.scene_cull_version;
+		slot.scene_cull_local = action.scene_cull_local;
+		slot.scene_cull_world = action.scene_cull_world;
+	}
 	slot.lease_serial = owner.next_lease_serial;
 	owner.next_lease_serial = owner.next_lease_serial == UINT64_MAX ? 0 : owner.next_lease_serial + 1;
 	slot.consumed_proof_requested = action.consumed_proof_requested;
@@ -2917,8 +2932,200 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 	out->status = output_status(OK, "");
 }
 
-// This checks facts only. The protected physical RECORD entry supplies the
-// existing phase/append authority; SceneCull never creates such authority.
+static Error output_scene_query_world(const RendererSceneCull::NativeParticleSceneFacts &facts,
+		uint64_t generation, const AABB &initial_default, AABB &out) {
+	if (!facts.query_generation) {
+		out = initial_default;
+		return OK;
+	}
+	// A default is only an initial domain. It cannot renew an invalidated
+	// instance projection or replace a different generation's query source.
+	if (facts.query_generation != generation) { return ERR_INVALID_DATA; }
+	if (!facts.query_committed) { return ERR_UNCONFIGURED; }
+	const Vector3 end = facts.query_world.get_end();
+	if (!facts.query_world.is_finite() || !end.is_finite() || !facts.query_world.has_volume() ||
+			end.x <= facts.query_world.position.x || end.y <= facts.query_world.position.y || end.z <= facts.query_world.position.z) {
+		return ERR_INVALID_DATA;
+	}
+	out = facts.query_world;
+	return OK;
+}
+
+Error Registry::production_output_cull_required_locked(const ProductionActionCell &action,
+		const GDExtensionOutputAcquireInputV1 &input, bool include_candidate, AABB &out, AABB *out_local) const {
+	if (!action.preinput_host_prepared || action.preinput_host_returned || !action.request || !action.request->attachment) {
+		return ERR_UNCONFIGURED;
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	const auto *particles = storage ? storage->particles_owner.get_or_null(RID::from_uint64(input.particles)) : nullptr;
+	const auto *owner = particles ? particles->external : nullptr;
+	if (!owner || owner->generation_registry != this || owner->generation != input.common.generation ||
+			owner->device != action.request->attachment->held_device || owner->config.profile != RendererRD::ExternalOutputConfig::INSTANCE_192 ||
+			(owner->config.space != RendererRD::ExternalOutputConfig::WORLD && owner->config.space != RendererRD::ExternalOutputConfig::LOCAL)) {
+		return ERR_UNAUTHORIZED;
+	}
+	AABB declared;
+	for (uint32_t axis = 0; axis < 3; ++axis) {
+		const double position = input.common.bounds.position[axis];
+		const double size = input.common.bounds.size[axis];
+		declared.position[axis] = real_t(position);
+		declared.size[axis] = real_t(size);
+		if (!Math::is_finite(position) || !Math::is_finite(size) || size <= 0 ||
+				double(declared.position[axis]) != position || double(declared.size[axis]) != size) {
+			return ERR_INVALID_PARAMETER;
+		}
+	}
+	AABB current_world = declared;
+	if (owner->config.space == RendererRD::ExternalOutputConfig::LOCAL) {
+		const Error transformed = NativeOutputCull::transform_bounds(declared, action.preinput_host_transform.affine, current_world);
+		if (transformed != OK) { return transformed; }
+	}
+	AABB previous_world;
+	bool has_previous = false;
+	if (include_candidate && !input.common.history_reset && input.common.has_previous_consumed_tuple) {
+		if (!action.staged_predecessor_intent) { return ERR_UNAUTHORIZED; }
+		const auto &request = *action.request;
+		for (uint32_t index = 0; index < request.resource_count; ++index) {
+			const auto &resource = request.resources[index];
+			const auto &view = resource.output_predecessor_view;
+			if (view.is_empty() || resource.output_predecessor_action != action.declaration.action_ordinal) { continue; }
+			if (!production_output_predecessor_matches_locked(request, resource, *owner->device) ||
+					!output_input_equal(resource.output_predecessor_input, action.output_input) || view.owner != owner ||
+					view.get_space() != owner->config.space || !production_dto_valid(resource.output_predecessor_host)) {
+				return ERR_UNAUTHORIZED;
+			}
+			RendererRD::ExternalConsumedColorProofSnapshot proof;
+			const Error copied = view.copy_native_color_consumption(proof);
+			if (copied != OK) { return copied; }
+			const auto &common = proof.get_common();
+			if (proof.get_particles().get_id() != input.particles || proof.get_generation() != input.common.generation ||
+					common.output_tag.size() != 32 || common.view_tag.size() != 32 || common.current_host_token.size() != 32 ||
+					memcmp(common.output_tag.ptr(), input.common.output_tag.bytes, 32) ||
+					memcmp(common.view_tag.ptr(), input.common.view_tag.bytes, 32) ||
+					memcmp(proof.get_token().bytes, input.common.previous_consumed_tuple_token.bytes, 32) ||
+					memcmp(common.current_host_token.ptr(), resource.output_predecessor_host.host_token.bytes, 32)) {
+				return ERR_INVALID_DATA;
+			}
+			const auto &previous_host = proof.get_current_host();
+			for (uint32_t row = 0; row < 3; ++row) {
+				for (uint32_t column = 0; column < 3; ++column) {
+					if (previous_host.basis[row][column] != real_t(resource.output_predecessor_host.affine[row * 4 + column])) { return ERR_INVALID_DATA; }
+				}
+				if (previous_host.origin[row] != real_t(resource.output_predecessor_host.affine[row * 4 + 3])) { return ERR_INVALID_DATA; }
+			}
+			AABB candidate = common.bounds;
+			if (view.get_space() == RendererRD::ExternalOutputConfig::LOCAL) {
+				const Error transformed = NativeOutputCull::transform_bounds(common.bounds, resource.output_predecessor_host.affine, candidate);
+				if (transformed != OK) { return transformed; }
+			}
+			if (has_previous && candidate != previous_world) { return ERR_INVALID_DATA; }
+			previous_world = candidate;
+			has_previous = true;
+		}
+		if (!has_previous) { return ERR_UNCONFIGURED; }
+	}
+	AABB query_world;
+	if (owner->config.query_enabled) {
+		auto *scene = static_cast<RendererSceneCull *>(RSG::scene);
+		if (!scene) { return ERR_UNAVAILABLE; }
+		RendererSceneCull::NativeParticleSceneFacts facts;
+		const Error observed = scene->instance_get_committed_particle_scene_facts(RID::from_uint64(action.output_scene.instance),
+				RID::from_uint64(input.particles), facts);
+		if (observed != OK) { return observed; }
+		const Error queried = output_scene_query_world(facts, input.common.generation, owner->config.query_bounds, query_world);
+		if (queried != OK) { return queried; }
+		// A real query owner must commit a changed pose before this selected
+		// view. Cull preparation has no authority to issue a query revision.
+		if (facts.query_committed) {
+			for (uint32_t row = 0; row < 3; ++row) {
+				for (uint32_t column = 0; column < 3; ++column) {
+					if (facts.transform.basis[row][column] != real_t(action.preinput_host_transform.affine[row * 4 + column])) { return ERR_UNCONFIGURED; }
+				}
+				if (facts.transform.origin[row] != real_t(action.preinput_host_transform.affine[row * 4 + 3])) { return ERR_UNCONFIGURED; }
+			}
+		}
+	}
+	NativeOutputCull::Envelope envelope;
+	const Error composed = NativeOutputCull::compose(current_world, has_previous ? &previous_world : nullptr,
+			owner->config.query_enabled ? &query_world : nullptr,
+			action.preinput_host_transform.affine, action.preinput_host_transform.inverse, envelope);
+	if (composed == OK) {
+		out = envelope.world;
+		if (out_local) { *out_local = envelope.local; }
+	}
+	return composed;
+}
+
+Error Registry::production_prepare_staged_cull_locked(ProductionRequest &request, ProductionActionCell &action,
+		RenderingDevice &rd, const ProductionCameraInvocationBorrow &borrow) {
+	const auto &invocation = borrow.get_scope();
+	const auto &capture = invocation.get_capture();
+	const auto &budget = request.native_stage_budget;
+	if (!Lock::owns(*this) || !invocation.is_pre_cull() || !invocation.is_current(&action.camera_ready_subscriber, capture) ||
+			request.attachment->held_device != &rd || !action.output_source_prepared || !action.output_plan_prepared ||
+			!action.output_scene_prepared || !action.preinput_host_prepared || action.preinput_host_returned ||
+			action.preinput_camera_returned || action.preinput_camera_source.is_valid() ||
+			request.next_action > action.declaration.action_ordinal || !action.host_view_prepared || !action.host_view_received ||
+			capture->get_viewport() != action.camera_ready_viewport || capture->get_invocation().camera != action.host_view_camera ||
+			capture->get_presentation_key().view_id != action.host_view_key.view_id ||
+			capture->get_presentation_key().view_epoch != action.host_view_key.view_epoch) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros ||
+			request.native_stage_controls_used >= budget.controls || request.native_stage_passes_used >= budget.passes ||
+			request.native_stage_receipts_used >= budget.receipts) {
+		return ERR_BUSY;
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	auto *particles = storage ? storage->particles_owner.get_or_null(RID::from_uint64(action.output_input.particles)) : nullptr;
+	auto *owner = particles ? particles->external : nullptr;
+	if (!owner || owner->device != &rd || owner->generation_registry != this || owner->generation != action.output_input.common.generation ||
+			!owner->admits_work() || !owner->generation_root_matches(owner->generation_pin) ||
+			owner->generation_pin.is_empty() || owner->generation_pin.request->attachment != request.attachment ||
+			action.output_plan.source_space != uint32_t(owner->config.space) ||
+			action.output_scene.particles != action.output_input.particles || action.output_scene.generation != owner->generation ||
+			memcmp(action.output_scene.host.affine, action.preinput_host_transform.affine, sizeof(action.output_scene.host.affine)) ||
+			memcmp(action.output_scene.host.host_token.bytes, action.preinput_host_transform.host_token.bytes, 32) ||
+			memcmp(action.output_input.common.current_host_token.bytes, action.preinput_host_transform.host_token.bytes, 32)) {
+		return ERR_UNAUTHORIZED;
+	}
+	const Error admission = production_output_pin_new_work_matches_locked(owner->generation_pin, rd);
+	if (admission != OK) { return admission; }
+	if (!production_output_source_matches_locked(request, action, rd)) { return ERR_UNAUTHORIZED; }
+	AABB required, native_local;
+	const bool candidate = !request.native_history_static_prepared || request.native_history_static.kind != 1;
+	const Error gathered = production_output_cull_required_locked(action, action.output_input, candidate, required, &native_local);
+	if (gathered != OK) { return gathered; }
+	const auto &host = action.preinput_host_transform;
+	Transform3D transform;
+	for (uint32_t row = 0; row < 3; ++row) {
+		for (uint32_t column = 0; column < 3; ++column) { transform.basis[row][column] = host.affine[row * 4 + column]; }
+		transform.origin[row] = host.affine[row * 4 + 3];
+	}
+	auto *scene = static_cast<RendererSceneCull *>(RSG::scene);
+	if (!scene) { return ERR_UNAVAILABLE; }
+	if (OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) { return ERR_BUSY; }
+	RendererSceneCull::NativeParticleSceneFacts facts;
+	const Error committed = scene->instance_commit_particle_output_cull(RID::from_uint64(action.output_scene.instance),
+			RID::from_uint64(action.output_scene.particles), RID::from_uint64(action.output_scene.scenario), owner->generation,
+			transform, native_local, required, facts);
+	if (committed != OK) { return committed; }
+	if (facts.instance.get_id() != action.output_scene.instance || facts.particles.get_id() != action.output_scene.particles ||
+			facts.scenario.get_id() != action.output_scene.scenario || facts.transform != transform ||
+			!facts.version || !facts.world_aabb.encloses(required)) {
+		return ERR_INVALID_DATA;
+	}
+	action.scene_cull_capture = capture;
+	action.scene_cull_version = facts.version;
+	action.scene_cull_local = facts.local_aabb;
+	action.scene_cull_world = facts.world_aabb;
+	action.scene_cull_required_world = required;
+	action.scene_cull_prepared = true;
+	return OK;
+}
+
+// The physical RECORD supplies append authority. This observation binds its
+// original source to the actual committed scene envelope and selected window.
 Error Registry::production_output_scene_validate_locked(const ProductionActionCell &action, const GDExtensionOutputAcquireInputV1 &input) const {
 	if (!action.output_scene_prepared || !action.preinput_host_prepared || action.preinput_host_returned) { return ERR_UNCONFIGURED; }
 	const auto &source = action.output_scene;
@@ -2939,6 +3146,35 @@ Error Registry::production_output_scene_validate_locked(const ProductionActionCe
 			if (facts.transform.basis[row][column] != real_t(host.affine[row * 4 + column])) { return ERR_INVALID_DATA; }
 		}
 		if (facts.transform.origin[row] != real_t(host.affine[row * 4 + 3])) { return ERR_INVALID_DATA; }
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	const auto *particles = storage ? storage->particles_owner.get_or_null(RID::from_uint64(input.particles)) : nullptr;
+	const auto *owner = particles ? particles->external : nullptr;
+	if (!owner || !action.request || !action.request->attachment || owner->generation_registry != this ||
+			owner->generation != input.common.generation || owner->device != action.request->attachment->held_device) { return ERR_UNAUTHORIZED; }
+	// SceneOnly has no authored geometry declaration or native geometry guard.
+	// Keep its original query-only world envelope and ordinary Host association.
+	if (owner->config.profile == RendererRD::ExternalOutputConfig::SCENE_ONLY) {
+		if (action.scene_cull_prepared) { return ERR_UNAUTHORIZED; }
+		if (!owner->config.query_enabled) { return OK; }
+		AABB query_world;
+		const Error queried = output_scene_query_world(facts, input.common.generation, owner->config.query_bounds, query_world);
+		if (queried != OK) { return queried; }
+		return facts.world_aabb.encloses(query_world) ? OK : ERR_INVALID_DATA;
+	}
+	AABB required;
+	const Error gathered = production_output_cull_required_locked(action, input, false, required);
+	if (gathered != OK) { return gathered; }
+	if (!facts.world_aabb.encloses(required)) { return ERR_INVALID_DATA; }
+	if (action.scene_cull_prepared) {
+		if (action.scene_cull_error != OK || action.scene_cull_capture.is_null() || facts.version != action.scene_cull_version ||
+				(action.preinput_camera_source.is_valid() && action.preinput_camera_source != action.scene_cull_capture) ||
+				facts.local_aabb != action.scene_cull_local || facts.world_aabb != action.scene_cull_world ||
+				!facts.world_aabb.encloses(action.scene_cull_required_world)) { return ERR_INVALID_DATA; }
+		const auto &capture = action.scene_cull_capture;
+		const auto &token = capture->get_token();
+		if (!scene->instance_particle_output_cull_window_matches(facts.instance, capture->get_viewport(),
+				token.view_id, token.view_epoch, token.capture_ordinal)) { return ERR_UNAUTHORIZED; }
 	}
 	return OK;
 }
@@ -2971,7 +3207,7 @@ void Registry::production_finalize_output(ProductionPhysicalContextRef context, 
 		out->status = output_status(ERR_INVALID_DATA, "original_finalize_row");
 		return;
 	}
-	if (!acquire.output_guard_complete) {
+	if (!acquire.output_guard_entered && !acquire.output_guard_complete) {
 		error = production_output_scene_validate_locked(acquire, acquire.output_input);
 		if (error != OK) {
 			out->custody = GDEXTENSION_OUTPUT_CUSTODY_RETAINED_PREFIX_V1;
@@ -3378,6 +3614,11 @@ void Registry::production_output_seal(ProductionPhysicalContextRef context, GDEx
 		out->state = uint32_t(slot.state) + 1;
 		out->packet_token = action.output_packet_token;
 		out->status = output_status(OK, "");
+		return;
+	}
+	error = production_output_scene_validate_locked(action, action.output_input);
+	if (error != OK) {
+		out->status = output_status(error, "output_seal_committed_scene");
 		return;
 	}
 	if (!owner.admits_work() || slot.publication_closed || slot.pass_uses_closed || (slot.state != Owner::LeaseState::RESERVED && slot.state != Owner::LeaseState::WRITING)) {

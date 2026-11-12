@@ -33,6 +33,7 @@
 #include "core/extension/gdextension_production_request.h"
 #include "servers/rendering/renderer_rd/effects/particles_external_guard.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_config.h"
+#include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
 
@@ -52,6 +53,27 @@ class ExternalLinkedOwnerTest {
 	void initialize_owner(RenderingDevice &, bool);
 
 public:
+	// Value observation through this already-friended original owner fixture.
+	// It creates no cull snapshot, lease, consumed tuple, or view authority.
+	struct SceneCullObservation {
+		uint32_t profile = 0;
+		bool query_enabled = false;
+		AABB query_bounds;
+		bool slot_empty = false;
+		uint64_t native_color_consumption_serial = 0;
+	};
+	bool read_scene_cull_observation(uint32_t p_slot, SceneCullObservation &r_observation) const {
+		r_observation = SceneCullObservation();
+		if (!owner || !exists() || p_slot >= ExternalOutputOwner::MAX_SLOTS) {
+			return false;
+		}
+		r_observation.profile = owner->config.profile;
+		r_observation.query_enabled = owner->config.query_enabled;
+		r_observation.query_bounds = owner->config.query_bounds;
+		r_observation.slot_empty = owner->slots[p_slot].state == ExternalOutputOwner::LeaseState::EMPTY;
+		r_observation.native_color_consumption_serial = owner->slots[p_slot].native_color_consumption_serial;
+		return true;
+	}
 	// CPU profile projection only; does not create/admit a render generation.
 	static void scene_only_profile_query();
 	// Read only the actual original color/close state before its request retires.

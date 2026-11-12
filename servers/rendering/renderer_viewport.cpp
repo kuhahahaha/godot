@@ -2372,7 +2372,7 @@ RendererViewport::RendererViewport() {
 	occlusion_rays_per_thread = GLOBAL_GET("rendering/occlusion_culling/occlusion_rays_per_thread");
 }
 
-RendererViewport::CameraInvocationScope::CameraInvocationScope(RendererViewport &p_owner, const Ref<Viewport::CameraCapture> &p_capture) : owner(p_owner), capture(p_capture), device(RenderingDevice::get_singleton()) {
+RendererViewport::CameraInvocationScope::CameraInvocationScope(RendererViewport &p_owner, const Ref<Viewport::CameraCapture> &p_capture, bool p_pre_cull) : owner(p_owner), capture(p_capture), device(RenderingDevice::get_singleton()), pre_cull(p_pre_cull) {
 	if (capture.is_null() || owner.camera_invocation_stack_depth == UINT32_MAX) {
 		return;
 	}
@@ -2430,7 +2430,7 @@ bool RendererViewport::CameraInvocationScope::is_current(const Viewport::CameraS
 }
 
 bool RendererViewport::CameraInvocationScope::is_recordable(const Viewport::CameraSourceSubscriber *p_selected, const Ref<Viewport::CameraCapture> &p_capture) const {
-	if (!is_current(p_selected, p_capture) || !device || device != RenderingDevice::get_singleton() ||
+	if (pre_cull || !is_current(p_selected, p_capture) || !device || device != RenderingDevice::get_singleton() ||
 			!device->native_renderer_recording_window_available()) {
 		return false;
 	}
@@ -2438,4 +2438,28 @@ bool RendererViewport::CameraInvocationScope::is_recordable(const Viewport::Came
 	// notifications and DSO receivers keep the closed default. The native facet
 	// revalidates its exact frozen request/action/control and retained capture.
 	return p_selected->camera_source_has_native_executor();
+}
+
+void RendererViewport::viewport_prepare_native_output_cull(const Ref<Viewport::CameraCapture> &p_capture) {
+	if (p_capture.is_null()) {
+		return;
+	}
+	// Preserve the original safe-drain lifetime across the complete walk.
+	CameraInvocationScope delivery_lifetime(*this, p_capture, true);
+	auto *viewport = viewport_owner.get_or_null(p_capture->get_viewport());
+	if (!viewport) {
+		return;
+	}
+	auto deliver = [&](Viewport::CameraSourceSubscriber *subscriber) {
+		CameraInvocationScope invocation(*this, p_capture, true);
+		if (subscriber && subscriber->camera_source_has_native_executor() && invocation.select(subscriber) && invocation.is_current(subscriber, p_capture)) {
+			subscriber->camera_source_native_pre_cull(invocation);
+		}
+	};
+	deliver(viewport->camera_source_observer);
+	for (auto *subscriber = viewport->camera_source_subscribers; subscriber;) {
+		auto *next = subscriber->next_subscriber;
+		deliver(subscriber);
+		subscriber = next;
+	}
 }

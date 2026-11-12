@@ -49,6 +49,7 @@
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_data_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/utilities.h"
+#include "servers/rendering/native_output_cull.h"
 #include "servers/rendering/renderer_scene_cull.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
@@ -10317,6 +10318,7 @@ struct Access {
 		REQUIRE(fixture.prepare_device(server) == OK);
 		REQUIRE(fixture.initialize_owner(1, false, false, &NativeSceneAcquireProbe::receive, &probe, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &pool, nullptr, true) == OK);
 		RendererRD::ExternalLinkedOwnerTest native(fixture.rd, true);
+		ContinuationOutputScene output_scene;
 		probe.native = &native;
 		auto operation = pool.operation;
 		const GDExtensionProductionCapacityV1 create_capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 1, 1, 0, 0, 0, 1, 0, 0 };
@@ -10400,6 +10402,9 @@ struct Access {
 		for (uint32_t axis = 0; axis < 3; ++axis) {
 			probe.input.common.bounds.size[axis] = 1;
 		}
+		// Keep the real SCENE_ONLY/query owner; bind its original Scene/Host
+		// to Acquire ordinal1 without changing producer0 or paid COPY inputs.
+		REQUIRE(output_scene.prepare(ref, probe.input, nullptr, false, 1) == OK);
 		GDExtensionProductionOutputPrepareV1 prepared{};
 		prepared.abi = production_dto_abi<GDExtensionProductionOutputPrepareV1>();
 		prepared.action_ordinal = 1;
@@ -10445,6 +10450,7 @@ struct Access {
 		}
 		CHECK(request.control.state == ProductionControlState::OWNER_CONSUMED);
 		CHECK(request.output_owner_head == UINT32_MAX);
+		output_scene.close();
 		probe.withdrawing = true;
 		REQUIRE(fixture.port.record_schedule(probe.create_ref, &control) == OK);
 		server->sync();
@@ -13092,7 +13098,7 @@ struct Access {
 		RID instance, scenario;
 
 		Error prepare(GDExtensionProductionRequestRefV1 p_request, GDExtensionOutputAcquireInputV1 &r_acquire,
-				const GDExtensionProductionHostTransformInputV1 *p_host = nullptr, bool p_check_missing_host = false) {
+				const GDExtensionProductionHostTransformInputV1 *p_host = nullptr, bool p_check_missing_host = false, uint32_t p_ordinal = 0) {
 			using namespace GDExtensionDeviceExit;
 			const auto prepare_host = ordinal_port<GDExtensionInterfaceDeviceSessionProductionPrepareHostTransformV1>("device_session_production_prepare_host_transform_v1");
 			const auto prepare_scene = ordinal_port<GDExtensionInterfaceDeviceSessionProductionPrepareOutputSceneV1>("device_session_production_prepare_output_scene_v1");
@@ -13145,16 +13151,16 @@ struct Access {
 			};
 			if (p_check_missing_host) {
 				// Withhold Host at Scene preparation. Acquire and Finalize require it.
-				const Error missing_host = Error(prepare_scene(p_request, 0, &binding).native_error);
+				const Error missing_host = Error(prepare_scene(p_request, p_ordinal, &binding).native_error);
 				if (!check_step(missing_host == ERR_UNCONFIGURED)) {
 					return missing_host == OK ? ERR_INVALID_DATA : missing_host;
 				}
 			}
-			const Error host_error = Error(prepare_host(p_request, 0, &host).native_error);
+			const Error host_error = Error(prepare_host(p_request, p_ordinal, &host).native_error);
 			if (host_error != OK) {
 				return host_error;
 			}
-			const Error scene_error = Error(prepare_scene(p_request, 0, &binding).native_error);
+			const Error scene_error = Error(prepare_scene(p_request, p_ordinal, &binding).native_error);
 			if (scene_error == OK) {
 				r_acquire.common.current_host_token = host.host_token;
 			}
@@ -13177,9 +13183,538 @@ struct Access {
 		~ContinuationOutputScene() { close(); }
 	};
 
-	static void output_alias_readback_complete(bool map_failure = false, bool cleanup_content = false, bool prepare_continuation = false, uint32_t continuation_mode = 0, bool typed_plan_quota = false, uint32_t late_plan_write = 0, uint32_t host_consumer_case = 0, bool imported_read_reflection = false, bool records_writer_scope = false, bool records_native_sources = false, bool guard_underquota = false) {
+	// Scene transaction component only. The original Registry fixture owns the
+	// particles/generation; these callbacks create no RECORD or History proof.
+	struct OutputSceneCullSubscriber : RendererViewport::Viewport::CameraSourceSubscriber {
+		RendererSceneCull *scene = nullptr;
+		RID instance, particles, scenario;
+		uint64_t generation = 0;
+		Transform3D host;
+		AABB local, required_world;
+		RendererSceneCull::NativeParticleSceneFacts facts;
+		Ref<RendererViewport::Viewport::CameraCapture> observed_capture;
+		Error result = ERR_UNCONFIGURED;
+		uint32_t pre_cull_calls = 0, record_calls = 0, retained_calls = 0, close_calls = 0;
+		bool camera_source_has_native_executor() const override { return true; }
+		void camera_source_native_pre_cull(const RendererViewport::CameraInvocationScope &scope) override {
+			++pre_cull_calls;
+			CHECK(scope.is_pre_cull());
+			CHECK(scope.is_current(this, scope.get_capture()));
+			CHECK_FALSE(scope.is_recordable(this, scope.get_capture()));
+			observed_capture = scope.get_capture();
+			result = scene->instance_commit_particle_output_cull(instance, particles, scenario, generation,
+					host, local, required_world, facts);
+		}
+		void camera_source_native_invocation(const RendererViewport::CameraInvocationScope &) override { ++record_calls; }
+		void camera_source_retained(const Ref<RendererViewport::Viewport::CameraCapture> &) override { ++retained_calls; }
+		void camera_source_closed() override { ++close_calls; }
+	};
+	struct OutputSceneCullViewport {
+		CameraReadySourceProbe buffer_receipt;
+		OutputSceneCullSubscriber subscriber;
+		RID viewport, camera;
+		Ref<RenderSceneBuffers> buffers;
+		Ref<RendererViewport::Viewport::CameraCapture> capture;
+		bool subscribed = false;
+
+		void refresh() {
+			RendererSceneRender::CameraData data;
+			data.set_camera(Transform3D(), Projection(), false, false, Vector2(), 0, 1);
+			data.source_viewport = viewport;
+			const auto old = capture.is_valid() ? capture->get_token().capture_ordinal : 0;
+			const auto token = RSG::viewport->viewport_begin_camera_capture(viewport, data, camera, buffers);
+			REQUIRE(token.is_valid());
+			CHECK(token.capture_ordinal > old);
+			REQUIRE(RSG::viewport->viewport_get_camera_capture_ref(viewport, token, capture));
+		}
+		void initialize(ContinuationOutputScene &owner, RID particles, uint64_t generation, uint64_t view_id) {
+			subscriber.scene = owner.scene;
+			subscriber.instance = owner.instance;
+			subscriber.scenario = owner.scenario;
+			subscriber.particles = particles;
+			subscriber.generation = generation;
+			viewport = RSG::viewport->viewport_allocate();
+			RSG::viewport->viewport_initialize(viewport);
+			camera = RSG::scene->camera_allocate();
+			RSG::scene->camera_initialize(camera);
+			RSG::viewport->viewport_set_size(viewport, 64, 48, 1);
+			RSG::viewport->viewport_attach_camera(viewport, camera);
+			buffers = Ref<RenderSceneBuffers>(memnew(CameraReadySourceProbe::Buffers(buffer_receipt)));
+			RSG::viewport->viewport_owner.get_or_null(viewport)->render_buffers = buffers;
+			REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, { view_id, 1, 1 }));
+			subscribed = RSG::viewport->viewport_subscribe_camera_source(viewport, &subscriber);
+			REQUIRE(subscribed);
+			refresh();
+		}
+		bool window_matches() const {
+			const auto &token = capture->get_token();
+			return subscriber.scene->instance_particle_output_cull_window_matches(subscriber.instance, viewport,
+					token.view_id, token.view_epoch, token.capture_ordinal);
+		}
+		~OutputSceneCullViewport() {
+			if (subscribed) {
+				CHECK(RSG::viewport->viewport_unsubscribe_camera_source(viewport, &subscriber));
+				CHECK(subscriber.close_calls == 1);
+			}
+			subscriber.observed_capture.unref();
+			capture.unref();
+			if (viewport.is_valid()) { CHECK(RSG::viewport->free(viewport)); }
+			if (camera.is_valid()) { CHECK(RSG::scene->free(camera)); }
+			buffers.unref();
+			CHECK(subscriber.record_calls == 0);
+			CHECK(subscriber.retained_calls == 0);
+			if (viewport.is_valid()) { CHECK(buffer_receipt.buffer_returns == 1); }
+		}
+	};
+	static bool output_scene_cull_same_facts(const RendererSceneCull::NativeParticleSceneFacts &a,
+			const RendererSceneCull::NativeParticleSceneFacts &b) {
+		return a.instance == b.instance && a.particles == b.particles && a.scenario == b.scenario && a.version == b.version &&
+				a.transform == b.transform && a.local_aabb == b.local_aabb && a.world_aabb == b.world_aabb;
+	}
+	static void output_scene_cull_component(SingletonEnrollment &fixture, RendererRD::ExternalLinkedOwnerTest &native, ContinuationOutputScene &owner,
+			const GDExtensionOutputAcquireInputV1 &input, uint32_t mode) {
+		using namespace GDExtensionDeviceExit;
+		using Facts = RendererSceneCull::NativeParticleSceneFacts;
+		REQUIRE((mode >= 1 && mode <= 7));
+		REQUIRE(RSG::viewport != nullptr);
+		const RID particles = RID::from_uint64(input.particles);
+		auto *scene = owner.scene;
+		auto &request = *fixture.request;
+		const auto request_serial = request.serial, revision = request.revision;
+		const auto graphs = request.graph_count, natives = request.native_count;
+		const auto driver_issues = fixture.driver.issues;
+		const auto commands = fixture.rd.draw_graph.qualification_command_count();
+		Facts baseline;
+		REQUIRE(scene->instance_get_committed_particle_scene_facts(owner.instance, particles, baseline) == OK);
+		OutputSceneCullViewport a, b;
+		a.initialize(owner, particles, input.common.generation, 1871);
+		b.initialize(owner, particles, input.common.generation, 1872);
+		const AABB current(Vector3(), Vector3(1, 1, 1));
+		const AABB large(Vector3(-2, -2, -2), Vector3(4, 4, 4));
+		a.subscriber.local = a.subscriber.required_world = large;
+		b.subscriber.local = b.subscriber.required_world = current;
+		auto facts = [&]() {
+			Facts value;
+			REQUIRE(scene->instance_get_committed_particle_scene_facts(owner.instance, particles, value) == OK);
+			return value;
+		};
+		auto restored = [&]() {
+			scene->instance_set_transform(owner.instance, baseline.transform);
+			scene->instance_set_custom_aabb(owner.instance, AABB());
+			scene->update_dirty_instances();
+			const auto value = facts();
+			CHECK(value.transform == baseline.transform);
+			CHECK(value.local_aabb == baseline.local_aabb);
+			CHECK(value.world_aabb == baseline.world_aabb);
+		};
+		if (mode == 1) {
+			// Original numerical Host qualification only. This is not a source,
+			// retained-history or Registry prepared-action assertion.
+			GDExtensionProductionHostTransformInputV1 host{};
+			host.abi = production_dto_abi<GDExtensionProductionHostTransformInputV1>();
+			const float affine[12] = { 1, .5f, 0, 3, 0, 1, 0, -4, 0, 0, 1, 2 };
+			memcpy(host.affine, affine, sizeof(affine));
+			GDExtensionProductionHostTransformV1 qualified{};
+			REQUIRE(production_host_transform(host, qualified) == OK);
+			NativeOutputCull::Envelope envelope;
+			const AABB declaration = current;
+			REQUIRE(NativeOutputCull::compose(declaration, nullptr, nullptr, qualified.affine, qualified.inverse, envelope) == OK);
+			for (uint32_t row = 0; row < 3; ++row) {
+				for (uint32_t column = 0; column < 3; ++column) { a.subscriber.host.basis[row][column] = qualified.affine[row * 4 + column]; }
+				a.subscriber.host.origin[row] = qualified.affine[row * 4 + 3];
+			}
+			a.subscriber.local = envelope.local;
+			a.subscriber.required_world = envelope.world;
+			{
+				RendererSceneCull::NativeOutputCullScope scope(*scene, a.capture);
+				CHECK(a.subscriber.pre_cull_calls == 1);
+				REQUIRE(a.subscriber.result == OK);
+				CHECK(a.window_matches());
+				CHECK(a.subscriber.facts.transform == a.subscriber.host);
+				CHECK(a.subscriber.facts.local_aabb == envelope.local);
+				CHECK(a.subscriber.facts.world_aabb.encloses(declaration));
+				CHECK_FALSE(a.subscriber.host.xform(declaration).encloses(declaration));
+				CHECK(current == declaration);
+			}
+			CHECK_FALSE(a.window_matches());
+		} else if (mode == 2) {
+			Facts refused = baseline;
+			CHECK(scene->instance_commit_particle_output_cull(owner.instance, particles, owner.scenario, input.common.generation,
+					Transform3D(), current, current, refused) == ERR_UNAUTHORIZED);
+			CHECK(refused.instance.is_null());
+			CHECK(output_scene_cull_same_facts(facts(), baseline));
+			const RID other_scenario = scene->scenario_allocate();
+			scene->scenario_initialize(other_scenario);
+			const Error expected[] = { ERR_INVALID_PARAMETER, ERR_INVALID_PARAMETER, ERR_INVALID_DATA,
+				ERR_INVALID_DATA, ERR_INVALID_DATA, ERR_INVALID_PARAMETER };
+			for (uint32_t fault = 0; fault < 6; ++fault) {
+				INFO("actual Scene pre-cull preflight fault: ", fault);
+				a.subscriber.local = a.subscriber.required_world = current;
+				a.subscriber.generation = input.common.generation;
+				a.subscriber.scenario = owner.scenario;
+				a.subscriber.host = Transform3D();
+				if (fault == 0) { a.subscriber.local.size.x = 0; }
+				if (fault == 1) { a.subscriber.required_world.size.y = -1; }
+				if (fault == 2) { a.subscriber.required_world.position.x = 20; }
+				if (fault == 3) { ++a.subscriber.generation; }
+				if (fault == 4) { a.subscriber.scenario = other_scenario; }
+				if (fault == 5) { a.subscriber.host.origin.x = std::numeric_limits<real_t>::infinity(); }
+				a.refresh();
+				const auto calls = a.subscriber.pre_cull_calls;
+				{
+					RendererSceneCull::NativeOutputCullScope scope(*scene, a.capture);
+					CHECK(a.subscriber.pre_cull_calls == calls + 1);
+					CHECK(a.subscriber.result == expected[fault]);
+					CHECK(a.subscriber.facts.instance.is_null());
+					CHECK_FALSE(a.window_matches());
+					CHECK(output_scene_cull_same_facts(facts(), baseline));
+				}
+			}
+			CHECK(scene->free(other_scenario));
+			GDExtensionProductionHostTransformInputV1 singular{};
+			singular.abi = production_dto_abi<GDExtensionProductionHostTransformInputV1>();
+			GDExtensionProductionHostTransformV1 unqualified{};
+			CHECK(production_host_transform(singular, unqualified) == ERR_INVALID_DATA);
+			CHECK(output_scene_cull_same_facts(facts(), baseline));
+		} else if (mode == 3 || mode == 4) {
+			if (mode == 4) {
+				b.subscriber.local = b.subscriber.required_world = AABB(Vector3(20, 0, 0), Vector3(2, 2, 2));
+			}
+			Facts committed;
+			{
+				RendererSceneCull::NativeOutputCullScope outer(*scene, a.capture);
+				CHECK(a.subscriber.pre_cull_calls == 1);
+				REQUIRE(a.subscriber.result == OK);
+				committed = facts();
+				CHECK(a.window_matches());
+				const auto &token = a.capture->get_token();
+				CHECK_FALSE(scene->instance_particle_output_cull_window_matches(owner.instance, b.viewport,
+						token.view_id, token.view_epoch, token.capture_ordinal));
+				Facts after_cull;
+				CHECK(scene->instance_commit_particle_output_cull(owner.instance, particles, owner.scenario, input.common.generation,
+						Transform3D(), current, current, after_cull) == ERR_UNAUTHORIZED);
+				CHECK(after_cull.instance.is_null());
+				{
+					RendererSceneCull::NativeOutputCullScope inner(*scene, b.capture);
+					CHECK(b.subscriber.pre_cull_calls == 1);
+					CHECK(b.subscriber.result == (mode == 3 ? OK : ERR_BUSY));
+					if (mode == 3) {
+						CHECK(b.window_matches());
+						CHECK(output_scene_cull_same_facts(b.subscriber.facts, committed));
+					} else {
+						CHECK(b.subscriber.facts.instance.is_null());
+					}
+					CHECK(output_scene_cull_same_facts(facts(), committed));
+				}
+				CHECK(a.window_matches()); // Inner destruction did not release outer.
+				CHECK_FALSE(b.window_matches());
+				CHECK(output_scene_cull_same_facts(facts(), committed));
+			}
+			CHECK_FALSE(a.window_matches());
+			CHECK_FALSE(b.window_matches());
+			// Same original instance/requirement, next independently captured view.
+			b.refresh();
+			{
+				RendererSceneCull::NativeOutputCullScope next(*scene, b.capture);
+				CHECK(b.subscriber.pre_cull_calls == 2);
+				CHECK(b.subscriber.result == OK);
+				CHECK(b.window_matches());
+				if (mode == 3) {
+					CHECK(output_scene_cull_same_facts(b.subscriber.facts, committed));
+				} else {
+					CHECK(b.subscriber.facts.version > committed.version);
+				}
+				CHECK(b.subscriber.facts.world_aabb.encloses(b.subscriber.required_world));
+			}
+			CHECK_FALSE(b.window_matches());
+		} else if (mode == 5) {
+			{
+				RendererSceneCull::NativeOutputCullScope outer(*scene, a.capture);
+				CHECK(a.subscriber.pre_cull_calls == 1);
+				REQUIRE(a.subscriber.result == OK);
+				for (real_t scale : { real_t(.25), real_t(4) }) {
+					AABB changed = large;
+					changed.size *= scale;
+					scene->instance_set_custom_aabb(owner.instance, changed);
+					CHECK_FALSE(a.window_matches());
+					Facts dirty = a.subscriber.facts;
+					CHECK(scene->instance_get_committed_particle_scene_facts(owner.instance, particles, dirty) == ERR_BUSY);
+					CHECK(dirty.instance.is_null());
+					scene->update_dirty_instances();
+					CHECK(facts().local_aabb == changed);
+					CHECK_FALSE(a.window_matches()); // A larger box is not the old version.
+					const auto changed_facts = facts();
+					const auto calls = b.subscriber.pre_cull_calls;
+					{
+						RendererSceneCull::NativeOutputCullScope nested(*scene, b.capture);
+						CHECK(b.subscriber.pre_cull_calls == calls + 1);
+						CHECK(b.subscriber.result == ERR_BUSY);
+						CHECK(output_scene_cull_same_facts(facts(), changed_facts));
+					}
+				}
+			}
+			a.refresh();
+			auto no_draw_return = [&]() {
+				RendererSceneCull::NativeOutputCullScope no_draw(*scene, a.capture);
+				CHECK(a.subscriber.pre_cull_calls == 2);
+				CHECK(a.subscriber.result == OK);
+				CHECK(a.window_matches());
+				return a.subscriber.facts;
+			};
+			const auto no_draw_facts = no_draw_return();
+			CHECK_FALSE(a.window_matches());
+			b.refresh();
+			{
+				RendererSceneCull::NativeOutputCullScope next(*scene, b.capture);
+				CHECK(b.subscriber.pre_cull_calls == 3);
+				CHECK(b.subscriber.result == OK);
+				CHECK(b.window_matches());
+				CHECK(output_scene_cull_same_facts(b.subscriber.facts, no_draw_facts));
+			}
+			CHECK_FALSE(b.window_matches());
+		} else if (mode == 6) {
+			RendererRD::ExternalLinkedOwnerTest::SceneCullObservation observed;
+			REQUIRE(native.particle_rid() == particles);
+			REQUIRE(native.read_scene_cull_observation(0, observed));
+			REQUIRE(observed.query_enabled);
+			CHECK(request.next_action == 0);
+			CHECK(request.actions[0].output_state == ProductionActionCell::OutputState::UNBOUND);
+			CHECK(observed.slot_empty);
+			CHECK(observed.native_color_consumption_serial == 0);
+			GDExtensionProductionHostTransformV1 qualified{};
+			REQUIRE(fixture.registry.production_read_host_transform({ fixture.instance, request.serial }, 0, &qualified).native_error == OK);
+			NativeOutputCull::Envelope envelope;
+			REQUIRE(NativeOutputCull::compose(current, nullptr, &observed.query_bounds, qualified.affine, qualified.inverse, envelope) == OK);
+			a.subscriber.local = envelope.local;
+			a.subscriber.required_world = envelope.world;
+			{
+				RendererSceneCull::NativeOutputCullScope scope(*scene, a.capture);
+				CHECK(a.subscriber.pre_cull_calls == 1);
+				CHECK(a.subscriber.result == OK);
+				CHECK(a.subscriber.facts.world_aabb.encloses(observed.query_bounds));
+				CHECK(a.subscriber.facts.world_aabb.encloses(current));
+			}
+			// Actual immutable query-enabled owner before any alive/output work.
+			// This does not assert GPU Count=0 or synthesize a consumed empty tuple.
+			CHECK_FALSE(a.window_matches());
+		} else {
+			// Original query commit occurs before selected-view pre-cull. Its
+			// per-instance World query is intentionally outside the base default.
+			const AABB far_query(Vector3(20, 8, -1), Vector3(4, 2, 2));
+			const AABB initial_local(Vector3(-2, -2, -2), Vector3(28, 14, 4));
+			const AABB authored_current(Vector3(input.common.bounds.position[0], input.common.bounds.position[1], input.common.bounds.position[2]),
+					Vector3(input.common.bounds.size[0], input.common.bounds.size[1], input.common.bounds.size[2]));
+			CHECK(authored_current == AABB(Vector3(40, 0, 0), Vector3(1, 1, 1)));
+			CHECK(initial_local.encloses(far_query));
+			CHECK_FALSE(initial_local.encloses(authored_current));
+			REQUIRE(scene->scene_receiver_commit_query(owner.instance, input.common.generation, &fixture.rd,
+					Transform3D(), initial_local, far_query, 41) == OK);
+			scene->update_dirty_instances();
+			RendererSceneCull::SceneSphereSnapshot before_query;
+			REQUIRE(scene->scene_sphere_snapshot(owner.instance, input.common.generation, &fixture.rd, 4, before_query) == OK);
+			CHECK(before_query.query_bounds == far_query);
+			CHECK(before_query.receiver_transform == Transform3D());
+			CHECK(before_query.bounds_revision == 41);
+			REQUIRE(before_query.pose_revision > 0);
+			RendererSceneCull::SceneHeightfieldSnapshot before_height;
+			REQUIRE(scene->scene_heightfield_snapshot(owner.instance, input.common.generation, &fixture.rd, before_height) == OK);
+			CHECK_FALSE(before_height.present); // Real empty query, not a depth producer.
+			CHECK(before_height.query_bounds == far_query);
+			CHECK(before_height.pose_revision == before_query.pose_revision);
+			CHECK(before_height.bounds_revision == before_query.bounds_revision);
+			AABB required_world, native_local;
+			{
+				Registry::Lock lock(fixture.registry);
+				REQUIRE(fixture.registry.production_output_cull_required_locked(request.actions[0], input, false,
+						required_world, &native_local) == OK);
+			}
+			// This must gather the real receiver projection, not config.query_bounds.
+			CHECK(required_world.encloses(far_query));
+			CHECK(required_world.encloses(authored_current));
+			CHECK_FALSE(initial_local.encloses(required_world)); // Force the real changed-cull branch.
+			CHECK(native_local != initial_local);
+			a.subscriber.local = native_local;
+			a.subscriber.required_world = required_world;
+			auto check_query = [&]() {
+				RendererSceneCull::SceneSphereSnapshot after_query;
+				const Error sampled = scene->scene_sphere_snapshot(owner.instance, input.common.generation, &fixture.rd, 4, after_query);
+				CHECK(sampled == OK);
+				if (sampled == OK) {
+					CHECK(after_query.query_bounds == far_query);
+					CHECK(after_query.receiver_transform == before_query.receiver_transform);
+					CHECK(after_query.bounds_revision == before_query.bounds_revision);
+					CHECK(after_query.pose_revision == before_query.pose_revision);
+					CHECK(after_query.pair_revision >= before_query.pair_revision);
+				}
+				RendererSceneCull::SceneHeightfieldSnapshot after_height;
+				const Error height_sampled = scene->scene_heightfield_snapshot(owner.instance, input.common.generation, &fixture.rd, after_height);
+				CHECK(height_sampled == OK);
+				if (height_sampled == OK) {
+					CHECK_FALSE(after_height.present);
+					CHECK(after_height.query_bounds == before_height.query_bounds);
+					CHECK(after_height.receiver_transform == before_height.receiver_transform);
+					CHECK(after_height.bounds_revision == before_height.bounds_revision);
+					CHECK(after_height.pose_revision == before_height.pose_revision);
+				}
+			};
+			{
+				RendererSceneCull::NativeOutputCullScope scope(*scene, a.capture);
+				CHECK(a.subscriber.pre_cull_calls == 1);
+				CHECK(a.subscriber.result == OK);
+				CHECK(a.subscriber.facts.transform == Transform3D());
+				CHECK(a.subscriber.facts.world_aabb.encloses(far_query));
+				CHECK(a.subscriber.facts.world_aabb.encloses(authored_current));
+				CHECK(a.subscriber.facts.local_aabb != initial_local);
+				CHECK(a.window_matches());
+				check_query(); // Commit performs the ordinary actual dirty update.
+			}
+			CHECK_FALSE(a.window_matches());
+			scene->update_dirty_instances();
+			check_query();
+			b.subscriber.local = native_local;
+			b.subscriber.required_world = required_world;
+			b.refresh();
+			{
+				RendererSceneCull::NativeOutputCullScope next(*scene, b.capture);
+				CHECK(b.subscriber.pre_cull_calls == 1);
+				CHECK(b.subscriber.result == OK);
+				CHECK(b.window_matches());
+				CHECK(b.subscriber.facts.world_aabb.encloses(far_query));
+				check_query(); // No query re-commit or fabricated revision between views.
+			}
+			CHECK_FALSE(b.window_matches());
+			// A real query commit with a different pose cannot satisfy this
+			// request's immutable prepared Host, even when both are invertible.
+			Transform3D other_host;
+			other_host.origin.x = 1;
+			REQUIRE(scene->scene_receiver_commit_query(owner.instance, input.common.generation, &fixture.rd,
+					other_host, initial_local, far_query, 42) == OK);
+			scene->update_dirty_instances();
+			const auto other_pose_facts = facts();
+			AABB refused_world = current, refused_local = large;
+			{
+				Registry::Lock lock(fixture.registry);
+				CHECK(fixture.registry.production_output_cull_required_locked(request.actions[0], input, false,
+						refused_world, &refused_local) == ERR_UNCONFIGURED);
+			}
+			CHECK(refused_world == current);
+			CHECK(refused_local == large);
+			CHECK(output_scene_cull_same_facts(facts(), other_pose_facts));
+			RendererSceneCull::SceneSphereSnapshot other_pose_query;
+			REQUIRE(scene->scene_sphere_snapshot(owner.instance, input.common.generation, &fixture.rd, 4, other_pose_query) == OK);
+			CHECK(other_pose_query.receiver_transform == other_host);
+			CHECK(other_pose_query.pose_revision > before_query.pose_revision);
+			CHECK(other_pose_query.bounds_revision == 42);
+			// Original query owner, not cull preparation, renews the original pose.
+			REQUIRE(scene->scene_receiver_commit_query(owner.instance, input.common.generation, &fixture.rd,
+					Transform3D(), native_local, far_query, 43) == OK);
+			scene->update_dirty_instances();
+			RendererSceneCull::SceneSphereSnapshot renewed;
+			REQUIRE(scene->scene_sphere_snapshot(owner.instance, input.common.generation, &fixture.rd, 4, renewed) == OK);
+			CHECK(renewed.pose_revision > other_pose_query.pose_revision);
+			CHECK(renewed.bounds_revision == 43);
+			// The ordinary setter invalidates the same-generation association.
+			// Equal Host numbers cannot make the original fallback renew it.
+			scene->instance_set_custom_aabb(owner.instance, initial_local);
+			scene->update_dirty_instances();
+			const auto invalidated = facts();
+			CHECK(invalidated.query_generation == input.common.generation);
+			CHECK_FALSE(invalidated.query_committed);
+			CHECK(invalidated.query_world == far_query);
+			refused_world = current;
+			refused_local = large;
+			{
+				Registry::Lock lock(fixture.registry);
+				CHECK(fixture.registry.production_output_cull_required_locked(request.actions[0], input, false,
+						refused_world, &refused_local) == ERR_UNCONFIGURED);
+			}
+			CHECK(refused_world == current);
+			CHECK(refused_local == large);
+			CHECK(output_scene_cull_same_facts(facts(), invalidated));
+			RendererSceneCull::SceneSphereSnapshot stale_sphere;
+			RendererSceneCull::SceneHeightfieldSnapshot stale_height;
+			CHECK(scene->scene_sphere_snapshot(owner.instance, input.common.generation, &fixture.rd, 4, stale_sphere) == ERR_UNAVAILABLE);
+			CHECK(scene->scene_heightfield_snapshot(owner.instance, input.common.generation, &fixture.rd, stale_height) == ERR_UNAVAILABLE);
+			REQUIRE(scene->scene_receiver_commit_query(owner.instance, input.common.generation, &fixture.rd,
+					Transform3D(), native_local, far_query, 44) == OK);
+			scene->update_dirty_instances();
+			RendererSceneCull::SceneSphereSnapshot recovered;
+			RendererSceneCull::SceneHeightfieldSnapshot recovered_height;
+			REQUIRE(scene->scene_sphere_snapshot(owner.instance, input.common.generation, &fixture.rd, 4, recovered) == OK);
+			REQUIRE(scene->scene_heightfield_snapshot(owner.instance, input.common.generation, &fixture.rd, recovered_height) == OK);
+			CHECK(recovered.query_bounds == far_query);
+			CHECK(recovered.bounds_revision == 44);
+			CHECK(recovered.pose_revision > renewed.pose_revision);
+			CHECK(recovered_height.query_bounds == recovered.query_bounds);
+			CHECK(recovered_height.bounds_revision == recovered.bounds_revision);
+			CHECK(recovered_height.pose_revision == recovered.pose_revision);
+			CHECK_FALSE(recovered_height.present);
+			AABB recovered_world, recovered_local;
+			{
+				Registry::Lock lock(fixture.registry);
+				CHECK(fixture.registry.production_output_cull_required_locked(request.actions[0], input, false,
+						recovered_world, &recovered_local) == OK);
+			}
+			CHECK(recovered_world.encloses(far_query));
+			CHECK(recovered_world.encloses(authored_current));
+		}
+		if (mode == 7) {
+			// Generic setters correctly invalidate query. This component must
+			// renew the original default projection before its fixture continues
+			// the later ordinary Acquire/Finalize/retirement sequence.
+			RendererRD::ExternalLinkedOwnerTest::SceneCullObservation initial;
+			REQUIRE(native.read_scene_cull_observation(0, initial));
+			REQUIRE(initial.query_enabled);
+			RendererSceneCull::SceneSphereSnapshot last_query;
+			REQUIRE(scene->scene_sphere_snapshot(owner.instance, input.common.generation, &fixture.rd, 4, last_query) == OK);
+			REQUIRE(last_query.bounds_revision < UINT64_MAX);
+			AABB restore_local = baseline.local_aabb;
+			AABB restore_world = baseline.world_aabb;
+			if (!restore_world.encloses(initial.query_bounds)) {
+				GDExtensionProductionHostTransformV1 qualified{};
+				REQUIRE(fixture.registry.production_read_host_transform({ fixture.instance, request.serial }, 0, &qualified).native_error == OK);
+				for (uint32_t row = 0; row < 3; ++row) {
+					for (uint32_t column = 0; column < 3; ++column) {
+						REQUIRE(real_t(qualified.affine[row * 4 + column]) == baseline.transform.basis[row][column]);
+					}
+					REQUIRE(real_t(qualified.affine[row * 4 + 3]) == baseline.transform.origin[row]);
+				}
+				NativeOutputCull::Envelope covering;
+				REQUIRE(NativeOutputCull::compose(baseline.world_aabb, nullptr, &initial.query_bounds,
+						qualified.affine, qualified.inverse, covering) == OK);
+				restore_local = covering.local;
+				restore_world = baseline.transform.xform(restore_local);
+			}
+			REQUIRE(restore_world.encloses(initial.query_bounds));
+			REQUIRE(scene->scene_receiver_commit_query(owner.instance, input.common.generation, &fixture.rd,
+					baseline.transform, restore_local, initial.query_bounds, last_query.bounds_revision + 1) == OK);
+			scene->update_dirty_instances();
+			const auto value = facts();
+			CHECK(value.transform == baseline.transform);
+			CHECK(value.local_aabb == restore_local);
+			CHECK(value.world_aabb == restore_world);
+			CHECK(value.world_aabb.encloses(initial.query_bounds));
+			RendererSceneCull::SceneSphereSnapshot restored_query;
+			REQUIRE(scene->scene_sphere_snapshot(owner.instance, input.common.generation, &fixture.rd, 4, restored_query) == OK);
+			CHECK(restored_query.query_bounds == initial.query_bounds);
+			CHECK(restored_query.bounds_revision == last_query.bounds_revision + 1);
+			CHECK(restored_query.pose_revision > last_query.pose_revision);
+		} else {
+			restored();
+		}
+		CHECK(request.serial == request_serial);
+		CHECK(request.revision == revision);
+		CHECK(request.graph_count == graphs);
+		CHECK(request.native_count == natives);
+		CHECK(fixture.driver.issues == driver_issues);
+		CHECK(fixture.rd.draw_graph.qualification_command_count() == commands);
+	}
+
+	static void output_alias_readback_complete(bool map_failure = false, bool cleanup_content = false, bool prepare_continuation = false, uint32_t continuation_mode = 0, bool typed_plan_quota = false, uint32_t late_plan_write = 0, uint32_t host_consumer_case = 0, bool imported_read_reflection = false, bool records_writer_scope = false, bool records_native_sources = false, bool guard_underquota = false, bool committed_cull_probe = false, uint32_t scene_cull_case = 0) {
 		using namespace GDExtensionDeviceExit;
 		REQUIRE((!records_native_sources || records_writer_scope));
+		REQUIRE((!committed_cull_probe || records_native_sources));
+		REQUIRE((!scene_cull_case || records_native_sources));
 		const bool failed_pipeline = continuation_mode == 1 || continuation_mode == 5;
 		const bool detached_geometry = continuation_mode >= 3 && continuation_mode <= 5;
 		const bool planned_generation = typed_plan_quota || late_plan_write || records_writer_scope;
@@ -13260,6 +13795,14 @@ struct Access {
 		probe.config.capacity = 1;
 		probe.config.max_views = probe.config.max_inflight = 1;
 		probe.config.bounds = AABB(Vector3(), Vector3(1, 1, 1));
+		if (scene_cull_case == 7) {
+			// Authored current geometry is outside the prior query-only cull.
+			probe.config.bounds.position.x = 40;
+		}
+		if (scene_cull_case == 6 || scene_cull_case == 7) {
+			probe.config.query_enabled = true;
+			probe.config.query_bounds = AABB(Vector3(-2, -1, -1), Vector3(4, 2, 2));
+		}
 		probe.config.surfaces.push_back(mesh);
 		for (uint32_t i = 0; i < 2; ++i) {
 			probe.config.surface_materials.push_back(RendererRD::selection_material_rid(materials, i));
@@ -13549,6 +14092,9 @@ struct Access {
 		}
 		for (uint32_t axis = 0; axis < 3; ++axis) {
 			probe.input.common.bounds.size[axis] = 1;
+			if (scene_cull_case == 7) {
+				probe.input.common.bounds.position[axis] = probe.config.bounds.position[axis];
+			}
 		}
 		GDExtensionProductionHostTransformInputV1 records_host{};
 		if (records_native_sources) {
@@ -13561,6 +14107,65 @@ struct Access {
 			continuation_setup = continuation_scene.prepare(ref, probe.input, records_native_sources ? &records_host : nullptr,
 					records_writer_scope && !records_native_sources);
 			CHECK(continuation_setup == OK);
+		}
+		if (committed_cull_probe && continuation_setup == OK) {
+			// Original scene cull must cover the pinned declaration. No History
+			// proof or Camera authority is manufactured by this regression.
+			auto *scene = continuation_scene.scene;
+			const RID instance = continuation_scene.instance;
+			const RID particles = RID::from_uint64(probe.input.particles);
+			RendererSceneCull::NativeParticleSceneFacts baseline;
+			const Error observed = scene->instance_get_committed_particle_scene_facts(instance, particles, baseline);
+			CHECK(observed == OK);
+			if (observed == OK) {
+				auto validate = [&]() {
+					Registry::Lock lock(fixture.registry);
+					return fixture.registry.production_output_scene_validate_locked(request.actions[0], probe.input);
+				};
+				CHECK(validate() == OK);
+				CHECK(probe.camera_calls == 0);
+				const auto revision = request.revision;
+				const auto graphs = request.graph_count;
+				const auto natives = request.native_count;
+				AABB smaller = baseline.local_aabb;
+				smaller.size *= real_t(0.25);
+				CHECK_FALSE(smaller.encloses(baseline.local_aabb));
+				scene->instance_set_custom_aabb(instance, smaller);
+				RendererSceneCull::NativeParticleSceneFacts dirty = baseline;
+				CHECK(scene->instance_get_committed_particle_scene_facts(instance, particles, dirty) == ERR_BUSY);
+				CHECK(dirty.instance.is_null());
+				CHECK(dirty.local_aabb == AABB());
+				CHECK(dirty.world_aabb == AABB());
+				CHECK(validate() == ERR_BUSY);
+				// Original scene-owner commit, not a fabricated committed snapshot.
+				scene->update_dirty_instances();
+				RendererSceneCull::NativeParticleSceneFacts changed;
+				CHECK(scene->instance_get_committed_particle_scene_facts(instance, particles, changed) == OK);
+				CHECK(changed.instance == baseline.instance);
+				CHECK(changed.particles == baseline.particles);
+				CHECK(changed.scenario == baseline.scenario);
+				CHECK(changed.transform == baseline.transform);
+				CHECK(changed.local_aabb == smaller);
+				CHECK(changed.world_aabb == baseline.transform.xform(smaller));
+				CHECK_FALSE(changed.world_aabb.encloses(baseline.world_aabb));
+				// The old validator ignores both actual committed AABBs.
+				CHECK(validate() == ERR_INVALID_DATA);
+				CHECK(request.revision == revision);
+				CHECK(request.graph_count == graphs);
+				CHECK(request.native_count == natives);
+				// Restore using the public original setter, retaining all old writer,
+				// actual-camera, original Guard refusal and physical cleanup controls.
+				scene->instance_set_custom_aabb(instance, AABB());
+				scene->update_dirty_instances();
+				RendererSceneCull::NativeParticleSceneFacts restored;
+				CHECK(scene->instance_get_committed_particle_scene_facts(instance, particles, restored) == OK);
+				CHECK(restored.local_aabb == baseline.local_aabb);
+				CHECK(restored.world_aabb == baseline.world_aabb);
+				CHECK(validate() == OK);
+			}
+		}
+		if (scene_cull_case && continuation_setup == OK) {
+			output_scene_cull_component(fixture, native, continuation_scene, probe.input, scene_cull_case);
 		}
 		if (records_native_sources && continuation_setup == OK) {
 			REQUIRE(RSG::viewport != nullptr);
@@ -19225,8 +19830,9 @@ struct Access {
 			if (!scene || RSG::particles_storage != RendererRD::ParticlesStorage::get_singleton()) { return ERR_UNAVAILABLE; }
 			const auto reserve = reinterpret_cast<GDExtensionInterfaceDeviceSessionProductionReserveV2>(GDExtension::get_interface_function("device_session_production_reserve_v2"));
 			const auto host = reinterpret_cast<GDExtensionInterfaceDeviceSessionProductionPrepareHostTransformV1>(GDExtension::get_interface_function("device_session_production_prepare_host_transform_v1"));
+			const auto read_host = reinterpret_cast<GDExtensionInterfaceDeviceSessionProductionReadHostTransformV1>(GDExtension::get_interface_function("device_session_production_read_host_transform_v1"));
 			const auto bind = reinterpret_cast<GDExtensionInterfaceDeviceSessionProductionPrepareOutputSceneV1>(GDExtension::get_interface_function("device_session_production_prepare_output_scene_v1"));
-			if (!reserve || !host || !bind) { return ERR_UNAVAILABLE; }
+			if (!reserve || !host || !read_host || !bind) { return ERR_UNAVAILABLE; }
 			auto operation = plan.operation;
 			operation.owner_request_nonce += 2; // Distinct from the existing main/waiting requests.
 			auto capacity = plan.capacity;
@@ -19271,6 +19877,19 @@ struct Access {
 			error = Error(bind(output_scene_ref, 0, &output_scene_input).native_error);
 			if (error != OK) { return error; }
 			check("output_scene_public_exact_reentry", bind(output_scene_ref, 0, &output_scene_input).native_error == OK);
+			// This original SCENE_ONLY owner has a World query, not a geometry
+			// declaration. Project that same query through the accepted Host once;
+			// leaving the base query as native-local would transform it twice.
+			RendererRD::ExternalLinkedOwnerTest::SceneCullObservation observed;
+			if (!native->read_scene_cull_observation(0, observed) || observed.profile != RendererRD::ExternalOutputConfig::SCENE_ONLY || !observed.query_enabled) { return ERR_INVALID_DATA; }
+			const AABB query_world = observed.query_bounds;
+			GDExtensionProductionHostTransformV1 qualified_host{};
+			error = Error(read_host(output_scene_ref, 0, &qualified_host).native_error);
+			if (error != OK) { return error; }
+			NativeOutputCull::Envelope query_envelope;
+			error = NativeOutputCull::compose(query_world, nullptr, nullptr, qualified_host.affine, qualified_host.inverse, query_envelope);
+			if (error != OK) { return error; }
+			scene->instance_set_custom_aabb(output_scene_instance, query_envelope.local);
 			output_scene_acquire.abi = production_dto_abi<GDExtensionOutputAcquireInputV1>();
 			output_scene_acquire.particles = output_scene_input.particles;
 			output_scene_acquire.common.generation = output_scene_input.generation;
@@ -19282,6 +19901,7 @@ struct Access {
 			RendererSceneCull::NativeParticleSceneFacts facts;
 			check("output_scene_original_committed_facts", scene->instance_get_committed_particle_scene_facts(output_scene_instance, native->particle_rid(), facts) == OK &&
 					facts.instance == output_scene_instance && facts.particles == native->particle_rid() && facts.scenario == output_scene_scenario && facts.transform == transform && facts.local_aabb.has_volume() && facts.world_aabb == transform.xform(facts.local_aabb));
+			check("output_scene_actual_world_query_enclosed", facts.world_aabb.encloses(query_world));
 			check("output_scene_committed_host_matches", output_scene_validate() == OK);
 			auto changed = transform;
 			changed.origin.x += 1;
@@ -20557,6 +21177,39 @@ TEST_CASE("[SceneTree][ProductionRequest][AliasReadbackIntegration][PhysicalRevi
 
 TEST_CASE("[SceneTree][ProductionRequest][OriginalFinalizeSourceEntry] original complete writers and same paid Host Camera reach actual Guard factory boundary") {
 	TestProductionRequest::Access::output_alias_readback_complete(false, false, false, 0, false, 0, 0, false, true, true);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][CommittedSceneCullBounds] same original Host cannot authenticate a committed undersized cull") {
+	// Reuse the original actual-source fixture and all its physical cleanup.
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, false, 0, false, 0, 0, false, true, true, false, true);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][OutputSceneCullCommit] qualified World declaration commits translated sheared native instance once") {
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, false, 0, false, 0, 0, false, true, true, false, false, 1);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][OutputSceneCullCommit] original pre-cull numerical and identity refusal preserves scene atomically") {
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, false, 0, false, 0, 0, false, true, true, false, false, 2);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][OutputSceneCullCommit] compatible nested real view reuses covering outer commit without version bump") {
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, false, 0, false, 0, 0, false, true, true, false, false, 3);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][OutputSceneCullCommit] incompatible nested real view is Busy until next original independent capture") {
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, false, 0, false, 0, 0, false, true, true, false, false, 4);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][OutputSceneCullCommit] dirty shrink expand and no-draw return release only lexical view window") {
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, false, 0, false, 0, 0, false, true, true, false, false, 5);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][OutputSceneCullCommit] actual query-enabled owner retains query union before any output count exists") {
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, false, 0, false, 0, 0, false, true, true, false, false, 6);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][OutputSceneCullCommit][QueryCoupling] selected pre-cull retains actual far World query under unchanged Host") {
+	TestProductionRequest::Access::output_alias_readback_complete(false, false, false, 0, false, 0, 0, false, true, true, false, false, 7);
 }
 
 TEST_CASE("[SceneTree][ProductionRequest][OriginalRecordsWriterEntry] complete original writer receipts still require original Camera before Finalize") {

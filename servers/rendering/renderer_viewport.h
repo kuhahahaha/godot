@@ -141,6 +141,7 @@ public:
 			// relay and DSO ProductionRecordReceiver are never called here.
 			virtual bool camera_source_has_native_executor() const { return false; }
 			virtual void camera_source_native_invocation(const CameraInvocationScope &) {}
+			virtual void camera_source_native_pre_cull(const CameraInvocationScope &) {}
 			virtual void camera_source_retained(const Ref<CameraCapture> &p_capture) = 0;
 			virtual void camera_source_closed() = 0;
 		};
@@ -337,14 +338,15 @@ public:
 	// subscriber. Retaining the capture outside this stack grants no permission.
 	class CameraInvocationScope {
 		friend class RendererSceneRenderRD;
+		friend class RendererViewport;
 		friend class TestRendererInvocationAccess;
 		RendererViewport &owner;
 		Ref<Viewport::CameraCapture> capture;
 		Viewport::CameraSourceSubscriber *selected = nullptr;
 		Ref<RefCounted> registration_keepalive;
 		RenderingDevice *device = nullptr;
-		bool active = false;
-		CameraInvocationScope(RendererViewport &, const Ref<Viewport::CameraCapture> &);
+		bool active = false, pre_cull = false;
+		CameraInvocationScope(RendererViewport &, const Ref<Viewport::CameraCapture> &, bool p_pre_cull = false);
 		bool select(Viewport::CameraSourceSubscriber *);
 
 	public:
@@ -353,6 +355,7 @@ public:
 		~CameraInvocationScope();
 		bool is_current(const Viewport::CameraSourceSubscriber *, const Ref<Viewport::CameraCapture> &) const;
 		bool is_recordable(const Viewport::CameraSourceSubscriber *, const Ref<Viewport::CameraCapture> &) const;
+		bool is_pre_cull() const { return active && pre_cull; }
 		const Ref<Viewport::CameraCapture> &get_capture() const { return capture; }
 		RenderingDevice *get_device() const { return device; }
 	};
@@ -533,6 +536,8 @@ public:
 	void viewport_set_vrs_texture(RID p_viewport, RID p_texture);
 
 	void handle_timestamp(String p_timestamp, uint64_t p_cpu_time, uint64_t p_gpu_time);
+
+	void viewport_prepare_native_output_cull(const Ref<Viewport::CameraCapture> &p_capture);
 
 	void draw_viewports(bool p_swap_buffers);
 
