@@ -2,9 +2,11 @@
 // Physical Host/scene preparation, stopping before output plan or Acquire.
 bool host_scene_enabled = false, host_scene_prepared = false, host_scene_closed = false, host_scene_advancing = false;
 bool host_request_reclaimed = false, host_instance_freed = false, host_normal_released = false;
+bool host_scene_validation_performed = false, host_scene_cull_validation_deferred = false;
 uint32_t host_scene_step = 0, host_normal_calls = 0, host_normal_frees = 0;
 uint64_t host_scene_deadline = 0, host_node_object_id = 0;
 Error host_scene_error = OK;
+Error host_scene_fact_error = ERR_UNCONFIGURED;
 String host_scene_detail;
 RID host_viewport, host_camera, host_scenario, host_instance;
 Transform3D host_global_transform;
@@ -210,12 +212,21 @@ void advance_host_scene(bool close_requested) {
 		scene->update_dirty_instances(); // Explicit ordinary owner commit; getter never manufactures it.
 		RendererSceneCull::NativeParticleSceneFacts facts;
 		const Error observed = scene->instance_get_committed_particle_scene_facts(host_instance, RID::from_uint64(created.particles), facts);
+		host_scene_fact_error = observed;
 		if (!host_result(observed, "host_original_scene_commit")) { return; }
-		GDExtensionOutputAcquireInputV1 witness{}; // Fact validation only: never passed to Acquire.
-		witness.abi = production_dto_abi<GDExtensionOutputAcquireInputV1>();
-		witness.particles = created.particles; witness.common.generation = created.generation; witness.common.current_host_token = host_input.host_token;
-		{ Registry::Lock lock(enrollment.registry); host_scene_validate_error = enrollment.registry.production_output_scene_validate_locked(host_original_request->actions[staged_enabled ? 1 : 0], witness); }
-		if (!host_result(host_scene_validate_error, "host_original_committed_validation")) { return; }
+		if (staged_enabled) {
+			// This is original Scene/Host preparation, before stage and camera.
+			// The selected pre-cull transaction must establish cull coverage;
+			// original Acquire/Finalize/Seal validate it inside that real window.
+			host_scene_cull_validation_deferred = true;
+		} else {
+			GDExtensionOutputAcquireInputV1 witness{}; // Original nonstaged fact-validation path.
+			witness.abi = production_dto_abi<GDExtensionOutputAcquireInputV1>();
+			witness.particles = created.particles; witness.common.generation = created.generation; witness.common.current_host_token = host_input.host_token;
+			host_scene_validation_performed = true;
+			{ Registry::Lock lock(enrollment.registry); host_scene_validate_error = enrollment.registry.production_output_scene_validate_locked(host_original_request->actions[0], witness); }
+			if (!host_result(host_scene_validate_error, "host_original_committed_validation")) { return; }
+		}
 		if (facts.instance != host_instance || facts.particles.get_id() != created.particles || facts.scenario != host_scenario || facts.transform != host_global_transform || !facts.local_aabb.has_volume() || !facts.world_aabb.has_volume()) { host_fail(ERR_INVALID_DATA, "host_committed_tuple"); return; }
 		host_committed_snapshot["instance"] = int64_t(facts.instance.get_id()); host_committed_snapshot["particles"] = int64_t(facts.particles.get_id());
 		host_committed_snapshot["scenario"] = int64_t(facts.scenario.get_id()); host_committed_snapshot["version"] = int64_t(facts.version);
@@ -287,6 +298,9 @@ void report_host_scene(Dictionary &result) const {
 	result["host_prepare_result"] = dto(host_prepare_result); result["host_scene_result"] = dto(host_scene_result);
 	result["host_view_result"] = dto(host_view_result); result["host_read_result"] = dto(host_read_result);
 	result["host_scene_validate_error"] = host_scene_validate_error;
+	result["host_scene_fact_error"] = host_scene_fact_error;
+	result["host_scene_validation_performed"] = host_scene_validation_performed;
+	result["host_scene_cull_validation_deferred"] = host_scene_cull_validation_deferred;
 	PackedFloat32Array read_affine; for (float value : host_read.affine) { read_affine.push_back(value); } result["host_read_affine"] = read_affine;
 	result["output_acquired"] = false; result["records_written"] = false; result["finalized"] = false; result["renderer_drawn"] = false;
 	result["host_camera_capture_verified"] = false; result["host_view_association_received"] = false;
