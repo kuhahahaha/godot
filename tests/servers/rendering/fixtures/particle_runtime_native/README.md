@@ -1,0 +1,85 @@
+# Existing native particle runtime fixture
+
+This checkout entry maintains the existing `ParticlesRuntimeTestFixture.begin/advance/result` interface in the default-off `particles_runtime_tests` module. It does not introduce another C++ fixture or modify production/module registration. A native build must explicitly enable that module with `tests=yes` and 3D. Host execution requires scheduling authorization from the current coordinator; preparing or importing this runner does not launch it.
+
+```sh
+python3 tests/servers/rendering/fixtures/particle_runtime_native/run_native.py \
+  --godot /absolute/immutable/editor.arm64 --sha256 <actual-host-sha256> \
+  --controlled-metadata /absolute/controlled_build.json \
+  --metadata-sha256 <actual-metadata-sha256> \
+  --out /absolute/new/evidence-directory
+```
+
+There is no default host. The host and metadata paths must be absolute; both hashes are required. Controlled metadata schema1 must be available and match actual host size/hash and the macOS arm64 executable selection. Metadata selection and source snapshots are recorded observations; neither the checkout's source hashes nor this runner invent build provenance. The build owner supplies the immutable host and accepted controlled metadata. Missing/mismatched files fail before host launch. The project and script resolve relative to this tracked entry, with no runtime dependency on SharedWork or historical work directories.
+
+The positive entry always uses `--render-thread safe`, Metal and mobile, a64x64 window, fixed64fps and dummy audio. Three ordinary startup frames are warmup only. The180-frame polling budget can only fail; it never proves callback completion or retirement. The outer90-second process timeout also only fails. The script retains the original fixture through all six asynchronous readbacks, original-owner release and physical native-resource acknowledgments. Native failure/error, missing module/device, timeout, leaks or any false check cannot pass. No RD sync, fabricated completion, new authority, holder or native handle interface is added.
+
+Success requires the six queued and six completed readbacks, all292 native checks true with the exact label/multiplicity Counter, failures empty,26 original allocation identities and22 native resource observations. The original native checks distinguish logical RID removal from physical return and require each original native resource acknowledgment. Metal/mobile startup and actual device metadata must agree. The exact292 Counter was verified against two historical raw Metal runs (`20261101-122958` and `20261102-193655`) and the current C++ fixture's tokens match the reviewed historical implementation, preserving strings. The initial historical candidate differed; it was not used as the oracle. A future intentional fixture change must review these expectations explicitly.
+
+Exactly eleven deliberately injected `ERROR:` messages are permitted: reset sub-emitter buffer2, update emission buffer2, update frame parameters buffer6 and create fallback trail buffer1. Both message text and multiplicity must match; an additional or missing diagnostic fails. Script/crash/leak diagnostics always fail. These expected negatives are retained in full raw stdout/stderr, not discarded or globally ignored.
+
+`--entry-negative` instead uses headless mode and requires exit41 with the exact missing-module result and no engine errors. It never reports GPU success. Use only an independently pinned module-off/older host for this control. The negative mode is not a way to accept an unavailable native device.
+
+Each output directory must be new. The runner preserves controlled metadata, commands, actual return code, separate raw logs, expected/observed diagnostics, native result, source hashes and a file manifest. The runner itself performs no build. Passing evidence is limited to this fixed native retry/trail/readback/physical-return experiment; it does not qualify an ANGE producer/product, K03 holder, external output release, P3/P4 or an arbitrary renderer workload. No native execution is implied by static/parser controls alone.
+
+## Additive SDF history rollback extension
+
+The native module now also runs `run_sdf_history_retry()` on the same actual
+main Metal RD. The original six readbacks and exact 292-check Counter remain
+required. `SDF_EXTENSION_CHECKS` explicitly adds 70 observations, including the
+additional allocation/resource identity and physical-return checks, for 362 total.
+The extension separately queues and completes two SDF readbacks. `probe.gd` and
+`run_native.py` both require those two completions; the runner additionally checks
+the exact combined label/multiplicity Counter. These are intentional source-based
+expectations awaiting the new native RED/GREEN experiment, not historical GPU
+results or a change inferred from whatever output happens to appear.
+
+A separate native particle owns four additional allocations: simulation, instance,
+frame parameters, and fallback emission buffers. It adds four tracked uniform-set
+observations: copy, material, the primed SDF collision set, and the final SDF-off
+collision set. The primed collision set is explicitly tracked before replacement;
+all final particle resources enter `track_particles()` and the existing release
+and physical-return acknowledgment loops. Totals become 30 allocations and 26
+native resources. The default white SDF texture is borrowed from TextureStorage,
+so this fixture neither owns nor retires it.
+
+The extension primes the production particle shader, rejects two exact frame
+parameter uploads with zero simulation dispatches, and requires all historical
+colliders and trail samples to remain original. It then removes the canvas SDF,
+uploads a particle sentinel, and requires one successful two-pass native trail
+process. Separate async readbacks require the retained collider samples to reach
+the actual device buffer and the actual native particle shader to replace the
+sentinel with active white output. Completion and physical retirement retain the
+original owner and delayed acknowledgment rules. The two added expected upload
+errors explicitly extend the original eleven diagnostics to thirteen; all other
+errors still fail. Apply the regression alone first for RED, then the production
+fix for GREEN, using independently pinned hosts and controlled metadata for each.
+
+## Additive Mobile instance-resource recovery extension
+
+The fixed native Metal entry additionally executes `run_mobile_instance_recovery()`
+on the existing processed SDF particle. It creates a real Forward Mobile geometry
+instance, initializes its dependencies through the culler's public material setter,
+caches its actual native transforms descriptor, and invalidates the
+copy descriptor to enter `_particles_update_buffers()`' existing missing-instance
+resource recovery branch. It observes the actual dependency notification via the
+geometry dirty-list gate, then requires a replacement cached descriptor whose RD
+reverse-dependency graph references the rebuilt instance buffer. The simulation
+buffer must remain unchanged; another ordinary update must not queue geometry or
+replace the recovered descriptor. No synthetic notification or unconditional
+geometry refresh can hide the missing callback. Geometry is freed explicitly
+before particle close, so its dependency tracker cannot outlive the fixture.
+
+`MOBILE_RECOVERY_CHECKS` explicitly adds 28 checks to the previous 362, for 390.
+The old instance allocation and both old copy/transforms sets are observed before
+rebuild. Final sets enter the existing `track_particles()` path. Together the
+replacement adds one allocation observation and three native set observations,
+for 31 allocations and 29 native resources. Existing asynchronous readbacks stay
+six original plus two SDF; expected diagnostics stay thirteen. The shared native
+registry must physically acknowledge all old and final resources. Counts are
+source-based expectations for the pending RED/GREEN experiment, not claimed GPU
+results. The source manifest now includes the Mobile renderer implementation and
+header. Use the same pinned-host `run_native.py` entry documented above: regression
+only for RED; add the one-case Mobile callback fix and rebuild a separately pinned
+host for GREEN. This verifies native descriptor recovery, not a rendered pixel or
+motion-vector result.

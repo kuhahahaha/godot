@@ -66,6 +66,14 @@
 				Returns the [AudioEffectInstance] assigned to the given bus and effect indices (and optionally channel).
 			</description>
 		</method>
+		<method name="get_bus_effect_instance_id">
+			<return type="int" />
+			<param index="0" name="bus_idx" type="int" />
+			<param index="1" name="effect_idx" type="int" />
+			<description>
+				Returns the instance ID of the [AudioEffect] resource at the given bus and effect indices without retaining that resource. Returns [code]0[/code] for invalid indices or an empty slot. This identifies the effect resource, rather than its per-channel [AudioEffectInstance], and does not extend its lifetime.
+			</description>
+		</method>
 		<method name="get_bus_index" qualifiers="const">
 			<return type="int" />
 			<param index="0" name="bus_name" type="StringName" />

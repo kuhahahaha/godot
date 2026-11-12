@@ -33,6 +33,7 @@
 TEST_FORCE_LINK(test_image_texture)
 
 #include "core/io/image.h"
+#include "core/object/callable_mp.h"
 #include "scene/resources/image_texture.h"
 #include "tests/test_utils.h"
 
@@ -70,6 +71,21 @@ TEST_CASE("[SceneTree][ImageTexture] set_image") {
 	CHECK(image_texture->get_width() == image_texture->get_image()->get_width());
 	CHECK(image_texture->get_height() == image_texture->get_image()->get_height());
 	CHECK(image_texture->get_format() == image_texture->get_image()->get_format());
+}
+
+TEST_CASE("[SceneTree][ImageTexture] size override emits changed") {
+	Ref<Image> image = memnew(Image(16, 8, false, Image::FORMAT_RGB8));
+	Ref<ImageTexture> texture = ImageTexture::create_from_image(image);
+	class ChangeObserver : public RefCounted {
+	public:
+		int count = 0;
+		void on_changed() { count++; }
+	};
+	Ref<ChangeObserver> observer;
+	observer.instantiate();
+	texture->connect_changed(callable_mp(observer.ptr(), &ChangeObserver::on_changed));
+	texture->set_size_override(Size2i(32, 16));
+	CHECK(observer->count == 1);
 }
 
 TEST_CASE("[SceneTree][ImageTexture] set_size_override") {

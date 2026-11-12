@@ -1,0 +1,6 @@
+ERROR: Condition "!pipeline.driver_id" is true. Returning: RID()
+   at: _qualification_render_pipeline_create_internal (servers/rendering/rendering_device.cpp:6093)
+ERROR: Condition "!pipeline.driver_id" is true. Returning: RID()
+   at: _qualification_render_pipeline_create_internal (servers/rendering/rendering_device.cpp:6093)
+ERROR: Condition "!pipeline.driver_id" is true. Returning: RID()
+   at: _qualification_render_pipeline_create_internal (servers/rendering/rendering_device.cpp:6093)

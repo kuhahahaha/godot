@@ -31,6 +31,7 @@
 #include "particle_process_material.h"
 
 #include "core/config/engine.h"
+#include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/version.h"
 #include "servers/rendering/rendering_server.h"
@@ -301,6 +302,7 @@ void ParticleProcessMaterial::_update_shader() {
 		}
 		case EMISSION_SHAPE_POINTS: {
 			code += "uniform sampler2D emission_texture_points : hint_default_black;\n";
+			code += "uniform bool emission_texture_points_valid = false;\n";
 			code += "uniform int emission_texture_point_count;\n";
 			if (emission_color_texture.is_valid()) {
 				code += "uniform sampler2D emission_texture_color : hint_default_white;\n";
@@ -730,7 +732,7 @@ void ParticleProcessMaterial::_update_shader() {
 		code += "		float skew = max(min(radius_clamped, top_radius) / max(radius_clamped, top_radius), 0.5);\n";
 		code += "		y_pos = radius_clamped < top_radius ? pow(y_pos, skew) : 1.0 - pow(y_pos, skew);\n";
 		code += "		float ring_spawn_angle = rand_from_seed(alt_seed) * 2.0 * pi;\n";
-		code += "		float ring_random_radius = sqrt(rand_from_seed(alt_seed) * (radius_clamped * radius_clamped - emission_ring_inner_radius * emission_ring_inner_radius) + emission_ring_inner_radius * emission_ring_inner_radius);\n";
+		code += "		float ring_random_radius = sqrt(rand_from_seed(alt_seed) * (emission_ring_radius * emission_ring_radius - emission_ring_inner_radius * emission_ring_inner_radius) + emission_ring_inner_radius * emission_ring_inner_radius);\n";
 		code += "		ring_random_radius = mix(ring_random_radius, ring_random_radius * (top_radius / radius_clamped), y_pos);\n";
 		code += "		vec3 axis = emission_ring_axis == vec3(0.0) ? vec3(0.0, 0.0, 1.0) : normalize(emission_ring_axis);\n";
 		code += "		vec3 ortho_axis = vec3(0.0);\n";
@@ -921,9 +923,14 @@ void ParticleProcessMaterial::_update_shader() {
 	code += "	PhysicalParameters physics_params;\n";
 	code += "	calculate_initial_physical_params(physics_params, alt_seed);\n";
 	code += "	process_display_param(params, 0.0);\n";
-	code += "	if (rand_from_seed(alt_seed) > AMOUNT_RATIO) {\n";
+	code += "	if (AMOUNT_RATIO <= 0.0 || rand_from_seed(alt_seed) > AMOUNT_RATIO) {\n";
 	code += "		ACTIVE = false;\n";
 	code += "	}\n\n";
+	if (emission_shape == EMISSION_SHAPE_POINTS || emission_shape == EMISSION_SHAPE_DIRECTED_POINTS) {
+		code += "	if (!emission_texture_points_valid) {\n";
+		code += "		ACTIVE = false;\n";
+		code += "	}\n\n";
+	}
 
 	code += "	if (RESTART_CUSTOM) {\n";
 	code += "		CUSTOM = vec4(0.0);\n";
@@ -1437,6 +1444,7 @@ Vector3 ParticleProcessMaterial::get_velocity_pivot() {
 }
 
 void ParticleProcessMaterial::set_param(Parameter p_param, const Vector2 &p_value) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_value.x) || !Math::is_finite(p_value.y), "Particle material parameter bounds must be finite.");
 	set_param_min(p_param, p_value.x);
 	set_param_max(p_param, p_value.y);
 }
@@ -1606,63 +1614,167 @@ static void _adjust_curve_range(const Ref<Texture2D> &p_texture, float p_min, fl
 	}
 }
 
-void ParticleProcessMaterial::set_param_texture(Parameter p_param, const Ref<Texture2D> &p_texture) {
+Callable ParticleProcessMaterial::_get_param_texture_changed(Parameter p_param) {
+	// Signal connections compare the base callable, ignoring bound arguments.
+	// Give each slot a distinct method so shared textures retain every callback.
+	switch (p_param) {
+		case PARAM_ANGULAR_VELOCITY:
+			return callable_mp(this, &ParticleProcessMaterial::_param_texture_changed_slot<PARAM_ANGULAR_VELOCITY>);
+		case PARAM_ORBIT_VELOCITY:
+			return callable_mp(this, &ParticleProcessMaterial::_param_texture_changed_slot<PARAM_ORBIT_VELOCITY>);
+		case PARAM_LINEAR_ACCEL:
+			return callable_mp(this, &ParticleProcessMaterial::_param_texture_changed_slot<PARAM_LINEAR_ACCEL>);
+		case PARAM_RADIAL_ACCEL:
+			return callable_mp(this, &ParticleProcessMaterial::_param_texture_changed_slot<PARAM_RADIAL_ACCEL>);
+		case PARAM_TANGENTIAL_ACCEL:
+			return callable_mp(this, &ParticleProcessMaterial::_param_texture_changed_slot<PARAM_TANGENTIAL_ACCEL>);
+		case PARAM_DAMPING:
+			return callable_mp(this, &ParticleProcessMaterial::_param_texture_changed_slot<PARAM_DAMPING>);
+		case PARAM_ANGLE:
+			return callable_mp(this, &ParticleProcessMaterial::_param_texture_changed_slot<PARAM_ANGLE>);
+		case PARAM_SCALE:
+			return callable_mp(this, &ParticleProcessMaterial::_param_texture_changed_slot<PARAM_SCALE>);
+		case PARAM_HUE_VARIATION:
+			return callable_mp(this, &ParticleProcessMaterial::_param_texture_changed_slot<PARAM_HUE_VARIATION>);
+		case PARAM_ANIM_SPEED:
+			return callable_mp(this, &ParticleProcessMaterial::_param_texture_changed_slot<PARAM_ANIM_SPEED>);
+		case PARAM_ANIM_OFFSET:
+			return callable_mp(this, &ParticleProcessMaterial::_param_texture_changed_slot<PARAM_ANIM_OFFSET>);
+		case PARAM_TURB_INFLUENCE_OVER_LIFE:
+			return callable_mp(this, &ParticleProcessMaterial::_param_texture_changed_slot<PARAM_TURB_INFLUENCE_OVER_LIFE>);
+		case PARAM_RADIAL_VELOCITY:
+			return callable_mp(this, &ParticleProcessMaterial::_param_texture_changed_slot<PARAM_RADIAL_VELOCITY>);
+		case PARAM_SCALE_OVER_VELOCITY:
+			return callable_mp(this, &ParticleProcessMaterial::_param_texture_changed_slot<PARAM_SCALE_OVER_VELOCITY>);
+		case PARAM_DIRECTIONAL_VELOCITY:
+			return callable_mp(this, &ParticleProcessMaterial::_param_texture_changed_slot<PARAM_DIRECTIONAL_VELOCITY>);
+		default:
+			return Callable();
+	}
+}
+
+void ParticleProcessMaterial::_param_texture_changed(Parameter p_param) {
 	ERR_FAIL_INDEX(p_param, PARAM_MAX);
 
-	tex_parameters[p_param] = p_texture;
-
-	Variant tex_rid = p_texture.is_valid() ? Variant(p_texture->get_rid()) : Variant();
+	const Ref<Texture2D> &texture = tex_parameters[p_param];
+	const Variant tex_rid = texture.is_valid() ? Variant(texture->get_rid()) : Variant();
 
 	switch (p_param) {
-		case PARAM_INITIAL_LINEAR_VELOCITY: {
-			//do none for this one
-		} break;
 		case PARAM_ANGULAR_VELOCITY: {
 			RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->angular_velocity_texture, tex_rid);
-			_adjust_curve_range(p_texture, -360, 360);
 		} break;
 		case PARAM_ORBIT_VELOCITY: {
 			RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->orbit_velocity_texture, tex_rid);
-			_adjust_curve_range(p_texture, -2, 2);
-			notify_property_list_changed();
 		} break;
 		case PARAM_LINEAR_ACCEL: {
 			RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->linear_accel_texture, tex_rid);
-			_adjust_curve_range(p_texture, -200, 200);
 		} break;
 		case PARAM_RADIAL_ACCEL: {
 			RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->radial_accel_texture, tex_rid);
-			_adjust_curve_range(p_texture, -200, 200);
 		} break;
 		case PARAM_TANGENTIAL_ACCEL: {
 			RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->tangent_accel_texture, tex_rid);
-			_adjust_curve_range(p_texture, -200, 200);
 		} break;
 		case PARAM_DAMPING: {
 			RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->damping_texture, tex_rid);
-			_adjust_curve_range(p_texture, 0, 100);
 		} break;
 		case PARAM_ANGLE: {
 			RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->angle_texture, tex_rid);
-			_adjust_curve_range(p_texture, -360, 360);
 		} break;
 		case PARAM_SCALE: {
 			RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->scale_texture, tex_rid);
-			_adjust_curve_range(p_texture, 0, 1);
 		} break;
 		case PARAM_HUE_VARIATION: {
 			RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->hue_variation_texture, tex_rid);
-			_adjust_curve_range(p_texture, -1, 1);
 		} break;
 		case PARAM_ANIM_SPEED: {
 			RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->anim_speed_texture, tex_rid);
-			_adjust_curve_range(p_texture, 0, 200);
 		} break;
 		case PARAM_ANIM_OFFSET: {
 			RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->anim_offset_texture, tex_rid);
 		} break;
 		case PARAM_TURB_INFLUENCE_OVER_LIFE: {
 			RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->turbulence_influence_over_life, tex_rid);
+		} break;
+		case PARAM_RADIAL_VELOCITY: {
+			RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->radial_velocity_texture, tex_rid);
+		} break;
+		case PARAM_SCALE_OVER_VELOCITY: {
+			RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->scale_over_velocity_texture, tex_rid);
+		} break;
+		case PARAM_DIRECTIONAL_VELOCITY: {
+			RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->directional_velocity_texture, tex_rid);
+		} break;
+		default: {
+			// These parameter slots have no sampler uniform.
+		} break;
+	}
+}
+
+void ParticleProcessMaterial::set_param_texture(Parameter p_param, const Ref<Texture2D> &p_texture) {
+	ERR_FAIL_INDEX(p_param, PARAM_MAX);
+
+	const Callable changed = _get_param_texture_changed(p_param);
+	const bool has_sampler = !changed.is_null();
+	if (has_sampler && tex_parameters[p_param].is_valid()) {
+		tex_parameters[p_param]->disconnect_changed(changed);
+	}
+	tex_parameters[p_param] = p_texture;
+	if (has_sampler && tex_parameters[p_param].is_valid()) {
+		// TextureRD resources can emit changed from the render thread.
+		tex_parameters[p_param]->connect_changed(changed, CONNECT_DEFERRED);
+	}
+
+	switch (p_param) {
+		case PARAM_INITIAL_LINEAR_VELOCITY: {
+			//do none for this one
+		} break;
+		case PARAM_ANGULAR_VELOCITY: {
+			_param_texture_changed(p_param);
+			_adjust_curve_range(p_texture, -360, 360);
+		} break;
+		case PARAM_ORBIT_VELOCITY: {
+			_param_texture_changed(p_param);
+			_adjust_curve_range(p_texture, -2, 2);
+			notify_property_list_changed();
+		} break;
+		case PARAM_LINEAR_ACCEL: {
+			_param_texture_changed(p_param);
+			_adjust_curve_range(p_texture, -200, 200);
+		} break;
+		case PARAM_RADIAL_ACCEL: {
+			_param_texture_changed(p_param);
+			_adjust_curve_range(p_texture, -200, 200);
+		} break;
+		case PARAM_TANGENTIAL_ACCEL: {
+			_param_texture_changed(p_param);
+			_adjust_curve_range(p_texture, -200, 200);
+		} break;
+		case PARAM_DAMPING: {
+			_param_texture_changed(p_param);
+			_adjust_curve_range(p_texture, 0, 100);
+		} break;
+		case PARAM_ANGLE: {
+			_param_texture_changed(p_param);
+			_adjust_curve_range(p_texture, -360, 360);
+		} break;
+		case PARAM_SCALE: {
+			_param_texture_changed(p_param);
+			_adjust_curve_range(p_texture, 0, 1);
+		} break;
+		case PARAM_HUE_VARIATION: {
+			_param_texture_changed(p_param);
+			_adjust_curve_range(p_texture, -1, 1);
+		} break;
+		case PARAM_ANIM_SPEED: {
+			_param_texture_changed(p_param);
+			_adjust_curve_range(p_texture, 0, 200);
+		} break;
+		case PARAM_ANIM_OFFSET: {
+			_param_texture_changed(p_param);
+		} break;
+		case PARAM_TURB_INFLUENCE_OVER_LIFE: {
+			_param_texture_changed(p_param);
 			_adjust_curve_range(p_texture, 0, 1);
 		} break;
 		case PARAM_TURB_VEL_INFLUENCE: {
@@ -1672,15 +1784,15 @@ void ParticleProcessMaterial::set_param_texture(Parameter p_param, const Ref<Tex
 			// Can't happen, but silences warning
 		} break;
 		case PARAM_RADIAL_VELOCITY: {
-			RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->radial_velocity_texture, tex_rid);
+			_param_texture_changed(p_param);
 		} break;
 		case PARAM_SCALE_OVER_VELOCITY: {
-			RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->scale_over_velocity_texture, tex_rid);
+			_param_texture_changed(p_param);
 			_adjust_curve_range(p_texture, 0, 3);
 			notify_property_list_changed();
 		} break;
 		case PARAM_DIRECTIONAL_VELOCITY: {
-			RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->directional_velocity_texture, tex_rid);
+			_param_texture_changed(p_param);
 			notify_property_list_changed();
 		} break;
 		case PARAM_MAX:
@@ -1705,10 +1817,22 @@ Color ParticleProcessMaterial::get_color() const {
 	return color;
 }
 
-void ParticleProcessMaterial::set_color_ramp(const Ref<Texture2D> &p_texture) {
-	color_ramp = p_texture;
-	Variant tex_rid = p_texture.is_valid() ? Variant(p_texture->get_rid()) : Variant();
+void ParticleProcessMaterial::_color_ramp_changed() {
+	const Variant tex_rid = color_ramp.is_valid() ? Variant(color_ramp->get_rid()) : Variant();
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->color_ramp, tex_rid);
+}
+
+void ParticleProcessMaterial::set_color_ramp(const Ref<Texture2D> &p_texture) {
+	if (color_ramp != p_texture) {
+		if (color_ramp.is_valid()) {
+			color_ramp->disconnect_changed(callable_mp(this, &ParticleProcessMaterial::_color_ramp_changed));
+		}
+		color_ramp = p_texture;
+		if (color_ramp.is_valid()) {
+			color_ramp->connect_changed(callable_mp(this, &ParticleProcessMaterial::_color_ramp_changed), CONNECT_DEFERRED);
+		}
+	}
+	_color_ramp_changed();
 	_queue_shader_change();
 	notify_property_list_changed();
 }
@@ -1717,10 +1841,22 @@ Ref<Texture2D> ParticleProcessMaterial::get_color_ramp() const {
 	return color_ramp;
 }
 
-void ParticleProcessMaterial::set_color_initial_ramp(const Ref<Texture2D> &p_texture) {
-	color_initial_ramp = p_texture;
-	Variant tex_rid = p_texture.is_valid() ? Variant(p_texture->get_rid()) : Variant();
+void ParticleProcessMaterial::_color_initial_ramp_changed() {
+	const Variant tex_rid = color_initial_ramp.is_valid() ? Variant(color_initial_ramp->get_rid()) : Variant();
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->color_initial_ramp, tex_rid);
+}
+
+void ParticleProcessMaterial::set_color_initial_ramp(const Ref<Texture2D> &p_texture) {
+	if (color_initial_ramp != p_texture) {
+		if (color_initial_ramp.is_valid()) {
+			color_initial_ramp->disconnect_changed(callable_mp(this, &ParticleProcessMaterial::_color_initial_ramp_changed));
+		}
+		color_initial_ramp = p_texture;
+		if (color_initial_ramp.is_valid()) {
+			color_initial_ramp->connect_changed(callable_mp(this, &ParticleProcessMaterial::_color_initial_ramp_changed), CONNECT_DEFERRED);
+		}
+	}
+	_color_initial_ramp_changed();
 	_queue_shader_change();
 	notify_property_list_changed();
 }
@@ -1738,10 +1874,22 @@ void ParticleProcessMaterial::set_particle_flag(ParticleFlags p_particle_flag, b
 	}
 }
 
-void ParticleProcessMaterial::set_alpha_curve(const Ref<Texture2D> &p_texture) {
-	alpha_curve = p_texture;
-	Variant tex_rid = p_texture.is_valid() ? Variant(p_texture->get_rid()) : Variant();
+void ParticleProcessMaterial::_alpha_curve_changed() {
+	const Variant tex_rid = alpha_curve.is_valid() ? Variant(alpha_curve->get_rid()) : Variant();
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->alpha_ramp, tex_rid);
+}
+
+void ParticleProcessMaterial::set_alpha_curve(const Ref<Texture2D> &p_texture) {
+	if (alpha_curve != p_texture) {
+		if (alpha_curve.is_valid()) {
+			alpha_curve->disconnect_changed(callable_mp(this, &ParticleProcessMaterial::_alpha_curve_changed));
+		}
+		alpha_curve = p_texture;
+		if (alpha_curve.is_valid()) {
+			alpha_curve->connect_changed(callable_mp(this, &ParticleProcessMaterial::_alpha_curve_changed), CONNECT_DEFERRED);
+		}
+	}
+	_alpha_curve_changed();
 	_queue_shader_change();
 	notify_property_list_changed();
 }
@@ -1750,10 +1898,22 @@ Ref<Texture2D> ParticleProcessMaterial::get_alpha_curve() const {
 	return alpha_curve;
 }
 
-void ParticleProcessMaterial::set_emission_curve(const Ref<Texture2D> &p_texture) {
-	emission_curve = p_texture;
-	Variant tex_rid = p_texture.is_valid() ? Variant(p_texture->get_rid()) : Variant();
+void ParticleProcessMaterial::_emission_curve_changed() {
+	const Variant tex_rid = emission_curve.is_valid() ? Variant(emission_curve->get_rid()) : Variant();
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->emission_ramp, tex_rid);
+}
+
+void ParticleProcessMaterial::set_emission_curve(const Ref<Texture2D> &p_texture) {
+	if (emission_curve != p_texture) {
+		if (emission_curve.is_valid()) {
+			emission_curve->disconnect_changed(callable_mp(this, &ParticleProcessMaterial::_emission_curve_changed));
+		}
+		emission_curve = p_texture;
+		if (emission_curve.is_valid()) {
+			emission_curve->connect_changed(callable_mp(this, &ParticleProcessMaterial::_emission_curve_changed), CONNECT_DEFERRED);
+		}
+	}
+	_emission_curve_changed();
 	_queue_shader_change();
 	notify_property_list_changed();
 }
@@ -1762,10 +1922,22 @@ Ref<Texture2D> ParticleProcessMaterial::get_emission_curve() const {
 	return emission_curve;
 }
 
-void ParticleProcessMaterial::set_velocity_limit_curve(const Ref<Texture2D> &p_texture) {
-	velocity_limit_curve = p_texture;
-	Variant tex_rid = p_texture.is_valid() ? Variant(p_texture->get_rid()) : Variant();
+void ParticleProcessMaterial::_velocity_limit_curve_changed() {
+	const Variant tex_rid = velocity_limit_curve.is_valid() ? Variant(velocity_limit_curve->get_rid()) : Variant();
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->velocity_limit_curve, tex_rid);
+}
+
+void ParticleProcessMaterial::set_velocity_limit_curve(const Ref<Texture2D> &p_texture) {
+	if (velocity_limit_curve != p_texture) {
+		if (velocity_limit_curve.is_valid()) {
+			velocity_limit_curve->disconnect_changed(callable_mp(this, &ParticleProcessMaterial::_velocity_limit_curve_changed));
+		}
+		velocity_limit_curve = p_texture;
+		if (velocity_limit_curve.is_valid()) {
+			velocity_limit_curve->connect_changed(callable_mp(this, &ParticleProcessMaterial::_velocity_limit_curve_changed), CONNECT_DEFERRED);
+		}
+	}
+	_velocity_limit_curve_changed();
 	_queue_shader_change();
 	notify_property_list_changed();
 }
@@ -1805,26 +1977,67 @@ void ParticleProcessMaterial::set_emission_box_extents(Vector3 p_extents) {
 #endif
 }
 
-void ParticleProcessMaterial::set_emission_point_texture(const Ref<Texture2D> &p_points) {
-	emission_point_texture = p_points;
-	Variant tex_rid = p_points.is_valid() ? Variant(p_points->get_rid()) : Variant();
+void ParticleProcessMaterial::_emission_point_texture_changed() {
+	const Variant tex_rid = emission_point_texture.is_valid() ? Variant(emission_point_texture->get_rid()) : Variant();
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->emission_texture_points, tex_rid);
+	RenderingServer::get_singleton()->material_set_param(_get_material(), "emission_texture_points_valid", emission_point_texture.is_valid());
 }
 
-void ParticleProcessMaterial::set_emission_normal_texture(const Ref<Texture2D> &p_normals) {
-	emission_normal_texture = p_normals;
-	Variant tex_rid = p_normals.is_valid() ? Variant(p_normals->get_rid()) : Variant();
+void ParticleProcessMaterial::set_emission_point_texture(const Ref<Texture2D> &p_points) {
+	if (emission_point_texture != p_points) {
+		if (emission_point_texture.is_valid()) {
+			emission_point_texture->disconnect_changed(callable_mp(this, &ParticleProcessMaterial::_emission_point_texture_changed));
+		}
+		emission_point_texture = p_points;
+		if (emission_point_texture.is_valid()) {
+			// TextureRD resources can emit changed from the render thread.
+			emission_point_texture->connect_changed(callable_mp(this, &ParticleProcessMaterial::_emission_point_texture_changed), CONNECT_DEFERRED);
+		}
+	}
+	_emission_point_texture_changed();
+}
+
+void ParticleProcessMaterial::_emission_normal_texture_changed() {
+	const Variant tex_rid = emission_normal_texture.is_valid() ? Variant(emission_normal_texture->get_rid()) : Variant();
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->emission_texture_normal, tex_rid);
 }
 
-void ParticleProcessMaterial::set_emission_color_texture(const Ref<Texture2D> &p_colors) {
-	emission_color_texture = p_colors;
-	Variant tex_rid = p_colors.is_valid() ? Variant(p_colors->get_rid()) : Variant();
+void ParticleProcessMaterial::set_emission_normal_texture(const Ref<Texture2D> &p_normals) {
+	if (emission_normal_texture != p_normals) {
+		if (emission_normal_texture.is_valid()) {
+			emission_normal_texture->disconnect_changed(callable_mp(this, &ParticleProcessMaterial::_emission_normal_texture_changed));
+		}
+		emission_normal_texture = p_normals;
+		if (emission_normal_texture.is_valid()) {
+			// TextureRD resources can emit changed from the render thread.
+			emission_normal_texture->connect_changed(callable_mp(this, &ParticleProcessMaterial::_emission_normal_texture_changed), CONNECT_DEFERRED);
+		}
+	}
+	_emission_normal_texture_changed();
+}
+
+void ParticleProcessMaterial::_emission_color_texture_changed() {
+	const Variant tex_rid = emission_color_texture.is_valid() ? Variant(emission_color_texture->get_rid()) : Variant();
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->emission_texture_color, tex_rid);
+}
+
+void ParticleProcessMaterial::set_emission_color_texture(const Ref<Texture2D> &p_colors) {
+	if (emission_color_texture != p_colors) {
+		if (emission_color_texture.is_valid()) {
+			emission_color_texture->disconnect_changed(callable_mp(this, &ParticleProcessMaterial::_emission_color_texture_changed));
+		}
+		emission_color_texture = p_colors;
+		if (emission_color_texture.is_valid()) {
+			// TextureRD resources can emit changed from the render thread.
+			emission_color_texture->connect_changed(callable_mp(this, &ParticleProcessMaterial::_emission_color_texture_changed), CONNECT_DEFERRED);
+		}
+	}
+	_emission_color_texture_changed();
 	_queue_shader_change();
 }
 
 void ParticleProcessMaterial::set_emission_point_count(int p_count) {
+	ERR_FAIL_COND_MSG(p_count < 1 || p_count > 1000000, "Particle emission point count must be between one and 1000000.");
 	emission_point_count = p_count;
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->emission_texture_point_count, p_count);
 }
@@ -1846,7 +2059,12 @@ void ParticleProcessMaterial::set_emission_ring_height(real_t p_height) {
 }
 
 void ParticleProcessMaterial::set_emission_ring_radius(real_t p_radius) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || !Math::is_finite(float(p_radius) * float(p_radius)) || p_radius < 0.0, "Particle emission ring radius and its shader square must be finite and non-negative.");
 	emission_ring_radius = p_radius;
+	if (emission_ring_inner_radius > p_radius) {
+		emission_ring_inner_radius = p_radius;
+		RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->emission_ring_inner_radius, p_radius);
+	}
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->emission_ring_radius, p_radius);
 #ifdef TOOLS_ENABLED
 	emit_signal("emission_shape_changed");
@@ -1854,7 +2072,12 @@ void ParticleProcessMaterial::set_emission_ring_radius(real_t p_radius) {
 }
 
 void ParticleProcessMaterial::set_emission_ring_inner_radius(real_t p_radius) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || !Math::is_finite(float(p_radius) * float(p_radius)) || p_radius < 0.0, "Particle emission inner ring radius and its shader square must be finite and non-negative.");
 	emission_ring_inner_radius = p_radius;
+	if (emission_ring_radius < p_radius) {
+		emission_ring_radius = p_radius;
+		RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->emission_ring_radius, p_radius);
+	}
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->emission_ring_inner_radius, p_radius);
 #ifdef TOOLS_ENABLED
 	emit_signal("emission_shape_changed");
@@ -2050,11 +2273,23 @@ Vector3 ParticleProcessMaterial::get_rotation_velocity_3d_max() const {
 }
 
 void ParticleProcessMaterial::set_rotation_velocity_3d_curve(const Ref<Texture2D> &p_texture) {
-	rotation_velocity_3d_curve = p_texture;
-	Variant tex_rid = p_texture.is_valid() ? Variant(p_texture->get_rid()) : Variant();
-	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->rotation_velocity_3d_curve, tex_rid);
+	if (rotation_velocity_3d_curve != p_texture) {
+		if (rotation_velocity_3d_curve.is_valid()) {
+			rotation_velocity_3d_curve->disconnect_changed(callable_mp(this, &ParticleProcessMaterial::_rotation_velocity_3d_curve_changed));
+		}
+		rotation_velocity_3d_curve = p_texture;
+		if (rotation_velocity_3d_curve.is_valid()) {
+			rotation_velocity_3d_curve->connect_changed(callable_mp(this, &ParticleProcessMaterial::_rotation_velocity_3d_curve_changed), CONNECT_DEFERRED);
+		}
+	}
+	_rotation_velocity_3d_curve_changed();
 	_queue_shader_change();
 	notify_property_list_changed();
+}
+
+void ParticleProcessMaterial::_rotation_velocity_3d_curve_changed() {
+	const Variant tex_rid = rotation_velocity_3d_curve.is_valid() ? Variant(rotation_velocity_3d_curve->get_rid()) : Variant();
+	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->rotation_velocity_3d_curve, tex_rid);
 }
 
 Ref<Texture2D> ParticleProcessMaterial::get_rotation_velocity_3d_curve() const {
@@ -2073,6 +2308,7 @@ bool ParticleProcessMaterial::get_turbulence_enabled() const {
 }
 
 void ParticleProcessMaterial::set_turbulence_noise_strength(float p_turbulence_noise_strength) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_turbulence_noise_strength) || p_turbulence_noise_strength < 0.0 || p_turbulence_noise_strength > 20.0, "Particle turbulence noise strength must be finite and between zero and 20.");
 	turbulence_noise_strength = p_turbulence_noise_strength;
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->turbulence_noise_strength, p_turbulence_noise_strength);
 }
@@ -2096,6 +2332,7 @@ float ParticleProcessMaterial::get_turbulence_noise_scale() const {
 }
 
 void ParticleProcessMaterial::set_turbulence_noise_speed_random(float p_turbulence_noise_speed_random) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_turbulence_noise_speed_random) || p_turbulence_noise_speed_random < 0.0 || p_turbulence_noise_speed_random > 4.0, "Particle turbulence noise speed randomness must be finite and between zero and four.");
 	turbulence_noise_speed_random = p_turbulence_noise_speed_random;
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->turbulence_noise_speed_random, p_turbulence_noise_speed_random);
 }
@@ -2294,6 +2531,7 @@ ParticleProcessMaterial::SubEmitterMode ParticleProcessMaterial::get_sub_emitter
 }
 
 void ParticleProcessMaterial::set_sub_emitter_frequency(double p_frequency) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_frequency) || p_frequency < 0.01 || p_frequency > 100.0, "Particle sub-emitter frequency must be finite and between 0.01 and 100 Hz.");
 	sub_emitter_frequency = p_frequency;
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->sub_emitter_frequency, 1.0 / p_frequency); //pass delta instead of frequency, since its easier to compute
 }
@@ -2303,6 +2541,7 @@ double ParticleProcessMaterial::get_sub_emitter_frequency() const {
 }
 
 void ParticleProcessMaterial::set_sub_emitter_amount_at_end(int p_amount) {
+	ERR_FAIL_COND_MSG(p_amount < 1 || p_amount > 32, "Particle sub-emitter amount at end must be between 1 and 32.");
 	sub_emitter_amount_at_end = p_amount;
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->sub_emitter_amount_at_end, p_amount);
 }
@@ -2312,6 +2551,7 @@ int ParticleProcessMaterial::get_sub_emitter_amount_at_end() const {
 }
 
 void ParticleProcessMaterial::set_sub_emitter_amount_at_collision(int p_amount) {
+	ERR_FAIL_COND_MSG(p_amount < 1 || p_amount > 32, "Particle sub-emitter amount at collision must be between 1 and 32.");
 	sub_emitter_amount_at_collision = p_amount;
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->sub_emitter_amount_at_collision, p_amount);
 }
@@ -2321,6 +2561,7 @@ int ParticleProcessMaterial::get_sub_emitter_amount_at_collision() const {
 }
 
 void ParticleProcessMaterial::set_sub_emitter_amount_at_start(int p_amount) {
+	ERR_FAIL_COND_MSG(p_amount < 1 || p_amount > 32, "Particle sub-emitter amount at start must be between 1 and 32.");
 	sub_emitter_amount_at_start = p_amount;
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->sub_emitter_amount_at_start, p_amount);
 }
@@ -2581,7 +2822,7 @@ void ParticleProcessMaterial::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "emission_point_texture", PROPERTY_HINT_RESOURCE_TYPE, Texture2D::get_class_static()), "set_emission_point_texture", "get_emission_point_texture");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "emission_normal_texture", PROPERTY_HINT_RESOURCE_TYPE, Texture2D::get_class_static()), "set_emission_normal_texture", "get_emission_normal_texture");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "emission_color_texture", PROPERTY_HINT_RESOURCE_TYPE, Texture2D::get_class_static()), "set_emission_color_texture", "get_emission_color_texture");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "emission_point_count", PROPERTY_HINT_RANGE, "0,1000000,1"), "set_emission_point_count", "get_emission_point_count");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "emission_point_count", PROPERTY_HINT_RANGE, "1,1000000,1"), "set_emission_point_count", "get_emission_point_count");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "emission_ring_axis"), "set_emission_ring_axis", "get_emission_ring_axis");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "emission_ring_height", PROPERTY_HINT_RANGE, "0,1000,0.01,or_greater"), "set_emission_ring_height", "get_emission_ring_height");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "emission_ring_radius", PROPERTY_HINT_RANGE, "0,1000,0.01,or_greater"), "set_emission_ring_radius", "get_emission_ring_radius");

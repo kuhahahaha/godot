@@ -32,6 +32,9 @@
 
 #include "core/config/engine.h"
 #include "core/extension/gdextension.h"
+#include "core/extension/gdextension_camera_ready.h"
+#include "servers/rendering/rendering_server_globals.h"
+#include "core/extension/gdextension_production_request.h"
 #include "core/extension/gdextension_special_compat_hashes.h"
 #include "core/io/file_access.h"
 #include "core/io/image.h"
@@ -42,13 +45,54 @@
 #include "core/os/memory.h"
 #include "core/variant/variant.h"
 #include "core/version.h"
+#include "servers/rendering/rendering_device.h"
+
+#include <optional>
+
+namespace GDExtensionDeviceExit {
+bool scene_phase_callable_metadata(const Callable &, NormalRelayToken, const CleanupAction *&, const RecordRef *&);
+}
 
 class CallableCustomExtension : public CallableCustom {
+	friend class GDExtensionDeviceExit::Registry;
+	friend bool GDExtensionDeviceExit::scene_phase_callable_metadata(const Callable &, GDExtensionDeviceExit::NormalRelayToken, const GDExtensionDeviceExit::CleanupAction *&, const GDExtensionDeviceExit::RecordRef *&);
+	GDExtensionDeviceExit::RecordRef owner;
+	GDExtensionDeviceExit::CleanupAction cleanup;
+	uint64_t cleanup_serial = 0;
+	Error enrollment_error = OK;
+	bool adopted = false;
+
+	bool enter(std::optional<GDExtensionDeviceExit::CallbackScope> &frame) const {
+		if (!owner.is_valid()) {
+			return true;
+		}
+		frame.emplace(owner);
+		return frame->get_error() == OK;
+	}
+	void enter_comparison(std::optional<GDExtensionDeviceExit::CleanupScope> &frame) const {
+		if (!owner.is_valid()) {
+			return;
+		}
+		frame.emplace(cleanup, owner, reinterpret_cast<uintptr_t>(this), cleanup_serial, true);
+		GDExtensionDeviceExit::require_close_success(frame->get_error(), GDExtensionDeviceExit::CloseRoute::LAST_REF);
+	}
+	bool enroll() {
+		if (!owner.is_valid()) {
+			return true;
+		}
+		enrollment_error = GDExtensionDeviceExit::Registry::get_singleton().register_callable_cleanup(owner, reinterpret_cast<uintptr_t>(this), cleanup, cleanup_serial);
+		return enrollment_error == OK;
+	}
+
 	void *userdata;
 	void *token;
 
 	ObjectID object;
 
+	GDExtensionScenePhaseReceiverV1 scene_phase_receiver = nullptr;
+	GDExtensionDeviceExit::NormalRelayToken scene_phase_relay;
+	GDExtensionDeviceExit::ProductionCameraReadyReceiver camera_ready_receiver = nullptr;
+	GDExtensionDeviceExit::NormalRelayToken camera_ready_relay;
 	GDExtensionCallableCustomCall call_func;
 	GDExtensionCallableCustomIsValid is_valid_func;
 	GDExtensionCallableCustomFree free_func;
@@ -89,6 +133,11 @@ class CallableCustomExtension : public CallableCustom {
 		if (a->equal_func != b->equal_func) {
 			return false;
 		}
+		std::optional<GDExtensionDeviceExit::CleanupScope> first, second;
+		a->enter_comparison(first);
+		if (a != b) {
+			b->enter_comparison(second);
+		}
 		return a->equal_func(a->userdata, b->userdata);
 	}
 
@@ -99,6 +148,11 @@ class CallableCustomExtension : public CallableCustom {
 		if (a->less_than_func != b->less_than_func) {
 			return default_compare_less(p_a, p_b);
 		}
+		std::optional<GDExtensionDeviceExit::CleanupScope> first, second;
+		a->enter_comparison(first);
+		if (a != b) {
+			b->enter_comparison(second);
+		}
 		return a->less_than_func(a->userdata, b->userdata);
 	}
 
@@ -108,6 +162,11 @@ public:
 	}
 
 	String get_as_text() const override {
+		std::optional<GDExtensionDeviceExit::CallbackScope> frame;
+		if (!enter(frame)) {
+			return "<CallableCustom>";
+		}
+
 		if (to_string_func != nullptr) {
 			String out;
 			GDExtensionBool is_valid = false;
@@ -130,6 +189,11 @@ public:
 	}
 
 	bool is_valid() const override {
+		std::optional<GDExtensionDeviceExit::CallbackScope> frame;
+		if (!enter(frame)) {
+			return false;
+		}
+
 		if (is_valid_func != nullptr && !is_valid_func(userdata)) {
 			return false;
 		}
@@ -145,6 +209,12 @@ public:
 	}
 
 	int get_argument_count(bool &r_is_valid) const override {
+		std::optional<GDExtensionDeviceExit::CallbackScope> frame;
+		r_is_valid = false;
+		if (!enter(frame)) {
+			return 0;
+		}
+
 		if (get_argument_count_func != nullptr) {
 			GDExtensionBool is_valid = false;
 
@@ -164,6 +234,14 @@ public:
 	}
 
 	void call(const Variant **p_arguments, int p_argcount, Variant &r_return_value, Callable::CallError &r_call_error) const override {
+		std::optional<GDExtensionDeviceExit::CallbackScope> frame;
+		if (!enter(frame)) {
+			r_return_value = Variant();
+			r_call_error.error = Callable::CallError::CALL_ERROR_INVALID_METHOD;
+			r_call_error.argument = r_call_error.expected = 0;
+			return;
+		}
+
 		GDExtensionCallError error;
 
 		call_func(userdata, (GDExtensionConstVariantPtr *)p_arguments, p_argcount, (GDExtensionVariantPtr)&r_return_value, &error);
@@ -174,7 +252,16 @@ public:
 	}
 
 #ifndef DISABLE_DEPRECATED
-	CallableCustomExtension(GDExtensionCallableCustomInfo *p_info) {
+	CallableCustomExtension(GDExtensionCallableCustomInfo *p_info, GDExtensionDeviceExit::RecordRef &&p_owner) : owner(std::move(p_owner)) {
+		if (!enroll()) {
+			return;
+		}
+		std::optional<GDExtensionDeviceExit::CallbackScope> frame;
+		if (!enter(frame)) {
+			enrollment_error = ERR_UNAVAILABLE;
+			return;
+		}
+		adopted = true;
 		userdata = p_info->callable_userdata;
 		token = p_info->token;
 
@@ -201,7 +288,16 @@ public:
 	}
 #endif
 
-	CallableCustomExtension(GDExtensionCallableCustomInfo2 *p_info) {
+	CallableCustomExtension(GDExtensionCallableCustomInfo2 *p_info, GDExtensionDeviceExit::RecordRef &&p_owner) : owner(std::move(p_owner)) {
+		if (!enroll()) {
+			return;
+		}
+		std::optional<GDExtensionDeviceExit::CallbackScope> frame;
+		if (!enter(frame)) {
+			enrollment_error = ERR_UNAVAILABLE;
+			return;
+		}
+		adopted = true;
 		userdata = p_info->callable_userdata;
 		token = p_info->token;
 
@@ -227,15 +323,446 @@ public:
 		}
 	}
 
+	Error get_enrollment_error() const { return enrollment_error; }
 	~CallableCustomExtension() {
+		if (!adopted) {
+			return;
+		}
+		std::optional<GDExtensionDeviceExit::CleanupScope> frame;
+		if (owner.is_valid()) {
+			frame.emplace(cleanup, owner, reinterpret_cast<uintptr_t>(this), cleanup_serial);
+			GDExtensionDeviceExit::require_close_success(frame->get_error(), GDExtensionDeviceExit::CloseRoute::LAST_REF);
+		}
 		if (free_func != nullptr) {
 			free_func(userdata);
 		}
+		// CleanupScope records the actual free return before the action member retires.
 	}
 };
 
+namespace GDExtensionDeviceExit {
+Error Registry::camera_ready_install_relay(const Callable &callable, ProductionCameraReadyReceiver receiver, NormalRelayToken &token) {
+	if (!receiver || !callable.is_custom() || token.registry_instance || token.serial) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto *custom = dynamic_cast<CallableCustomExtension *>(callable.get_custom());
+	if (!custom || !custom->adopted || !custom->owner.is_valid()) {
+		return ERR_UNAVAILABLE;
+	}
+	{
+		Lock lock(*this);
+		const auto *entry = RegistrationContext::current;
+		if (!scene_phase_holder_matches_locked(custom->cleanup, custom->owner, {}, true) || !entry || !entry->admitted || !entry->reference || entry->reference->registry != this || entry->reference->slot != custom->owner.slot) {
+			return ERR_UNAUTHORIZED;
+		}
+		if (custom->camera_ready_receiver) {
+			if (custom->camera_ready_receiver != receiver) {
+				return ERR_ALREADY_IN_USE;
+			}
+			const auto *existing = find_normal_relay_locked(custom->camera_ready_relay);
+			if (!existing || existing->cancelled || existing->release_requested || existing->releasing) {
+				return ERR_UNAVAILABLE;
+			}
+			token = custom->camera_ready_relay;
+			return OK;
+		}
+		if (custom->scene_phase_receiver) {
+			const auto shared = custom->scene_phase_relay;
+			const auto *existing = find_normal_relay_locked(shared);
+			if (!existing || existing->cancelled || existing->release_requested || existing->releasing ||
+					!existing->callback.is_custom() || existing->callback.get_custom() != custom ||
+					!scene_phase_holder_matches_locked(custom->cleanup, custom->owner, shared, false)) {
+				return ERR_UNAVAILABLE;
+			}
+			// Both typed leaves share this exact original Callable/holder cell.
+			// Cancel/release therefore closes both entries through its active count.
+			custom->camera_ready_receiver = receiver;
+			custom->camera_ready_relay = shared;
+			token = shared;
+			return OK;
+		}
+	}
+	const Error error = register_normal_relay(callable, token);
+	if (error == OK) {
+		Lock lock(*this);
+		custom->camera_ready_receiver = receiver;
+		custom->camera_ready_relay = token;
+	}
+	return error;
+}
+
+Error Registry::camera_ready_encode_relay(NormalRelayToken token, GDExtensionNormalRelayRefV1 &out) {
+	Lock lock(*this);
+	const auto *relay = find_normal_relay_locked(token);
+	if (!relay || relay->cancelled || relay->releasing || relay->release_requested || relay->callback.is_null()) {
+		return ERR_UNAVAILABLE;
+	}
+	const auto *custom = dynamic_cast<const CallableCustomExtension *>(relay->callback.get_custom());
+	if (!custom || !custom->camera_ready_receiver || custom->camera_ready_relay.registry_instance != token.registry_instance || custom->camera_ready_relay.serial != token.serial || !scene_phase_holder_matches_locked(custom->cleanup, custom->owner, token, false)) {
+		return ERR_UNAUTHORIZED;
+	}
+	// It remains the same original NormalRelay cell; typed leaves authenticate
+	// independently, so this transport is not a phase1 registration or U05 grant.
+	out.token = scene_phase_opaque(instance, relay->serial, SCENE_RELAY_KIND, relay->generation);
+	return OK;
+}
+
+Error Registry::camera_ready_bind_relay(GDExtensionProductionAttachmentRefV1 ref, NormalRelayToken token) {
+	Lock lock(*this);
+	ProductionAttachment *attachment = nullptr;
+	RenderingDevice *device = nullptr;
+	Error error = production_attachment_locked(ref, true, attachment, device);
+	if (error != OK) {
+		return error;
+	}
+	if (attachment->camera_ready_closed || attachment->camera_ready_close_active) { return ERR_BUSY; }
+	// One original attachment owns this camera token and its close/retry state.
+	for (const auto *other : production_attachments) {
+		if (other && other != attachment && other->camera_ready_relay.registry_instance == token.registry_instance && other->camera_ready_relay.serial == token.serial) {
+			return ERR_ALREADY_IN_USE;
+		}
+	}
+	const auto *relay = find_normal_relay_locked(token);
+	if (!relay || relay->cancelled || relay->release_requested || relay->releasing || relay->callback.is_null() || relay->record != attachment->library || relay->generation != attachment->library_generation) {
+		return ERR_UNAUTHORIZED;
+	}
+	const auto *custom = dynamic_cast<const CallableCustomExtension *>(relay->callback.get_custom());
+	const auto *entry = RegistrationContext::current;
+	if (!custom || !custom->camera_ready_receiver || custom->camera_ready_relay.registry_instance != token.registry_instance || custom->camera_ready_relay.serial != token.serial || !scene_phase_holder_matches_locked(custom->cleanup, custom->owner, token, false) || !entry || !entry->admitted || !entry->reference || entry->reference->registry != this || entry->reference->slot != attachment->library) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (attachment->camera_ready_relay.serial) {
+		return attachment->camera_ready_relay.registry_instance == token.registry_instance && attachment->camera_ready_relay.serial == token.serial ? OK : ERR_ALREADY_IN_USE;
+	}
+	// This binds only an original code holder, never U05 membership or a view.
+	attachment->camera_ready_relay = token;
+	return OK;
+}
+
+Error Registry::camera_ready_bind_viewport(GDExtensionProductionAttachmentRefV1 ref, NormalRelayToken token, RID p_viewport) {
+	if (!p_viewport.is_valid() || !RSG::viewport) {
+		return ERR_INVALID_PARAMETER;
+	}
+	Ref<ProductionCameraReadyObserver> observer;
+	{
+		Lock lock(*this);
+		ProductionAttachment *attachment = nullptr;
+		RenderingDevice *device = nullptr;
+		const Error error = production_attachment_locked(ref, true, attachment, device);
+		if (error != OK) {
+			return error;
+		}
+		if (attachment->camera_ready_closed || attachment->camera_ready_close_active || !attachment->camera_ready_relay.serial) {
+			return ERR_UNAVAILABLE;
+		}
+		const auto bound = attachment->camera_ready_relay;
+		if (bound.registry_instance != token.registry_instance || bound.serial != token.serial) {
+			return ERR_INVALID_DATA;
+		}
+		const auto *relay = find_normal_relay_locked(token);
+		const auto *custom = relay && relay->callback.is_custom() ? dynamic_cast<const CallableCustomExtension *>(relay->callback.get_custom()) : nullptr;
+		const auto *entry = RegistrationContext::current;
+		if (!relay || relay->cancelled || relay->release_requested || relay->releasing || !custom || !custom->camera_ready_receiver ||
+				!entry || !entry->admitted || !entry->reference || entry->reference->registry != this || entry->reference->slot != attachment->library ||
+				!scene_phase_holder_matches_locked(custom->cleanup, custom->owner, token, false)) {
+			return ERR_UNAUTHORIZED;
+		}
+		if (attachment->camera_ready_observer.is_valid()) {
+			return attachment->camera_ready_viewport == p_viewport ? OK : ERR_ALREADY_IN_USE;
+		}
+		observer = Ref<ProductionCameraReadyObserver>(memnew(ProductionCameraReadyObserver(*this, ref)));
+		attachment->camera_ready_observer = observer;
+		attachment->camera_ready_viewport = p_viewport;
+	}
+	if (!RSG::viewport->viewport_subscribe_camera_source(p_viewport, observer)) {
+		Lock lock(*this);
+		ProductionAttachment *attachment = nullptr;
+		RenderingDevice *device = nullptr;
+		if (production_attachment_locked(ref, false, attachment, device) == OK && attachment->camera_ready_observer == observer) {
+			attachment->camera_ready_observer.unref();
+			attachment->camera_ready_viewport = RID();
+		}
+		return ERR_UNAVAILABLE;
+	}
+	return OK;
+}
+
+Error Registry::camera_ready_close(GDExtensionProductionAttachmentRefV1 ref, GDExtensionNormalRelayRefV1 wire, GDExtensionCameraReadyCloseV1 &out) {
+	out = {};
+	out.abi = { 1, sizeof(out), 0 };
+	NormalRelayToken token;
+	ProductionAttachment *attachment = nullptr;
+	Ref<RendererViewport::Viewport::CameraSourceObserver> observer_to_unbind;
+	RID viewport_to_unbind;
+	{
+		Lock lock(*this);
+		RenderingDevice *device = nullptr;
+		const Error error = production_attachment_locked(ref, false, attachment, device);
+		if (error != OK) { return error; }
+		if (attachment->scene_registration != 0) { return ERR_ALREADY_IN_USE; }
+		token = { scene_phase_word(wire.token, 0), scene_phase_word(wire.token, 1) };
+		const auto expected_wire = scene_phase_opaque(token.registry_instance, token.serial, SCENE_RELAY_KIND, attachment->library_generation);
+		if (token.registry_instance != instance || !token.serial || memcmp(&wire.token, &expected_wire, sizeof(wire.token)) != 0) { return ERR_INVALID_DATA; }
+		const auto bound = attachment->camera_ready_relay;
+		if (bound.serial && (bound.registry_instance != token.registry_instance || bound.serial != token.serial)) { return ERR_ALREADY_IN_USE; }
+		if (attachment->camera_ready_relay_closed) {
+			out.entry_closed = out.relay_cell_released = out.relay_holder_closed = 1;
+			return OK;
+		}
+		if (attachment->camera_ready_close_active) {
+			out.entry_closed = attachment->camera_ready_closed;
+			out.active_deliveries = attachment->camera_ready_active;
+			return ERR_BUSY;
+		}
+		for (const auto *other : production_attachments) {
+			if (other && other != attachment && other->camera_ready_relay.registry_instance == token.registry_instance && other->camera_ready_relay.serial == token.serial) { return ERR_ALREADY_IN_USE; }
+		}
+		const auto *relay = find_normal_relay_locked(token);
+		if (!relay) {
+			if (!bound.serial) { return ERR_DOES_NOT_EXIST; }
+			attachment->camera_ready_closed = attachment->camera_ready_relay_closed = true;
+			out.entry_closed = out.relay_cell_released = out.relay_holder_closed = 1;
+			return OK;
+		}
+		if (relay->destruction_thread != Thread::get_caller_id()) { return ERR_UNAUTHORIZED; }
+		if (relay->record != attachment->library || relay->generation != attachment->library_generation) { return ERR_INVALID_DATA; }
+		if (!attachment->camera_ready_closed) {
+			const auto *first_custom = relay->callback.is_custom() ? dynamic_cast<const CallableCustomExtension *>(relay->callback.get_custom()) : nullptr;
+			if (!first_custom || first_custom->scene_phase_receiver) { return ERR_ALREADY_IN_USE; }
+		}
+		if (!bound.serial) {
+			// Only a still-retained original Callable proves an unbound typed leaf.
+			if (!relay->callback.is_custom() || relay->releasing || relay->release_requested || relay->cancelled) { return ERR_UNAVAILABLE; }
+			const auto *custom = dynamic_cast<const CallableCustomExtension *>(relay->callback.get_custom());
+			if (!custom || !custom->camera_ready_receiver || custom->camera_ready_relay.registry_instance != token.registry_instance ||
+					custom->camera_ready_relay.serial != token.serial || custom->scene_phase_receiver ||
+					!scene_phase_holder_matches_locked(custom->cleanup, custom->owner, token, false)) { return ERR_UNAUTHORIZED; }
+			attachment->camera_ready_relay = token; // Original close custody only, never opens delivery.
+		}
+		attachment->camera_ready_closed = true;
+		observer_to_unbind = attachment->camera_ready_observer;
+		viewport_to_unbind = attachment->camera_ready_viewport;
+		attachment->camera_ready_observer.unref();
+		attachment->camera_ready_viewport = RID();
+		// Pins this exact attachment across original Callable free/reentrant code.
+		attachment->camera_ready_close_active = true;
+		out.entry_closed = 1;
+	}
+	if (observer_to_unbind.is_valid() && viewport_to_unbind.is_valid() && RSG::viewport) {
+		RSG::viewport->viewport_unsubscribe_camera_source(viewport_to_unbind, observer_to_unbind);
+	}
+	const Error outcome = [&]() -> Error {
+		const Error cancelled = cancel_normal_relay(token);
+		if (cancelled != OK) { return cancelled; }
+		const Error released = release_normal_relay_holder(token);
+		NormalRelaySnapshot snapshot;
+		const Error observed = observe_normal_relay(token, snapshot);
+		if (observed != OK) { return observed; }
+		out.active_deliveries = snapshot.active_deliveries;
+		out.relay_cell_released = snapshot.cell_released;
+		out.relay_holder_closed = snapshot.holder_closed;
+		if (released != OK && released != ERR_BUSY) { return released; }
+		if (released == ERR_BUSY || snapshot.active_deliveries || !snapshot.cell_released || !snapshot.holder_closed) { return ERR_BUSY; }
+		return forget_normal_relay(token);
+	}();
+	Lock lock(*this);
+	attachment->camera_ready_close_active = false;
+	if (outcome == OK) { attachment->camera_ready_relay_closed = true; }
+	return outcome;
+}
+
+Error Registry::camera_ready_call_relay(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionCameraSampleV1 &sample, GDExtensionProductionRequestRefV1 request_ref, uint64_t action_ordinal) {
+	NormalRelay *relay = nullptr;
+	ProductionAttachment *attachment = nullptr;
+	CallableCustomExtension *custom = nullptr;
+	{
+		Lock lock(*this);
+		if (ref.registry_instance != instance || !ref.handle_serial) {
+			return ERR_INVALID_DATA;
+		}
+		for (auto *candidate : production_attachments) {
+			if (candidate && candidate->serial == ref.handle_serial) {
+				attachment = candidate;
+				break;
+			}
+		}
+		if (!attachment || attachment->camera_ready_closed || attachment->closing || !attachment->opened || !attachment->held_device || !attachment->held_device->native_immutable_is_render_thread() || attachment->held_device != RenderingDevice::get_singleton()) {
+			return ERR_UNAVAILABLE;
+		}
+		if (is_production_metadata_entry() || production_physical_frame || attachment->held_device->draw_list.active || attachment->held_device->compute_list.active || attachment->held_device->raytracing_list.active || attachment->held_device->_recording_error() != OK) {
+			return ERR_BUSY;
+		}
+		const auto &native = device_records[attachment->device];
+		const auto &record = records[attachment->library];
+		relay = find_normal_relay_locked(attachment->camera_ready_relay);
+		if (!native.live || native.epoch != attachment->epoch || !record.attached || record.quiescing || record.close_started || record.close_error != OK || record.snapshot.library_generation != attachment->library_generation || !attachment->holder || attachment->holder->pending || !relay || relay->cancelled || relay->release_requested || relay->releasing || relay->callback.is_null() || relay->record != attachment->library || relay->generation != attachment->library_generation) {
+			return ERR_UNAVAILABLE;
+		}
+		custom = dynamic_cast<CallableCustomExtension *>(relay->callback.get_custom());
+		if (!custom || !custom->camera_ready_receiver || custom->camera_ready_relay.registry_instance != instance || custom->camera_ready_relay.serial != relay->serial || !scene_phase_holder_matches_locked(custom->cleanup, custom->owner, attachment->camera_ready_relay, false)) {
+			return ERR_UNAUTHORIZED;
+		}
+		if (attachment->camera_ready_active || relay->active_deliveries == UINT32_MAX) {
+			return ERR_BUSY;
+		}
+		++relay->active_deliveries;
+		++attachment->camera_ready_active;
+	}
+	Error error;
+	{
+		// The original active reservation pins Callable/CodeHold and attachment.
+		// Unlike phase1, this native entry has no accepted RECORD physical frame.
+		CallbackScope protected_entry(custom->owner);
+		error = protected_entry.get_error();
+		if (error == OK && request_ref.handle_serial && action_ordinal != UINT64_MAX) {
+			error = Error(production_retain_camera_ready(request_ref, action_ordinal).native_error);
+		}
+		if (error == OK) {
+			custom->camera_ready_receiver(custom->userdata, ref, &sample);
+		}
+	}
+	{
+		Lock lock(*this);
+		--attachment->camera_ready_active;
+		--relay->active_deliveries;
+	}
+	return error;
+}
+
+Error Registry::register_normal_relay(const Callable &p_callback, NormalRelayToken &r_token) {
+	if (is_production_metadata_entry()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (r_token.registry_instance || r_token.serial || !p_callback.is_custom()) {
+		return ERR_INVALID_DATA;
+	}
+	// Inspect only original core metadata. No is_valid/hash/other DSO callback
+	// participates in admission, including on a closed generation.
+	const auto *custom = dynamic_cast<const CallableCustomExtension *>(p_callback.get_custom());
+	if (!custom || !custom->adopted || !custom->owner.is_valid() || !custom->call_func) {
+		return ERR_UNAVAILABLE;
+	}
+	return register_normal_relay_holder(p_callback, custom->owner, custom->cleanup, r_token);
+}
+
+Error Registry::scene_phase_install_relay(const Callable &callable, GDExtensionScenePhaseReceiverV1 receiver, NormalRelayToken &token) {
+	if (!receiver || !callable.is_custom()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto *custom = dynamic_cast<CallableCustomExtension *>(callable.get_custom());
+	if (!custom || !custom->adopted || !custom->owner.is_valid()) {
+		return ERR_UNAVAILABLE;
+	}
+	{
+		Lock lock(*this);
+		if (!scene_phase_holder_matches_locked(custom->cleanup, custom->owner, {}, true)) {
+			return ERR_UNAUTHORIZED;
+		}
+	}
+	// This immutable original destruction-thread check precedes every access
+	// to the once-written typed leaf; no second thread may install it.
+	if (custom->scene_phase_receiver && custom->scene_phase_receiver != receiver) {
+		return ERR_ALREADY_IN_USE;
+	}
+	const auto *entry = RegistrationContext::current;
+	if (!entry || !entry->admitted || !entry->reference || entry->reference->registry != this || entry->reference->slot != custom->owner.slot) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (custom->scene_phase_receiver == receiver && custom->scene_phase_relay.serial) {
+		NormalRelaySnapshot snapshot;
+		const Error observed = observe_normal_relay(custom->scene_phase_relay, snapshot);
+		if (observed != OK || snapshot.cancelled || snapshot.release_requested) {
+			return ERR_UNAVAILABLE;
+		}
+		token = custom->scene_phase_relay;
+		return OK;
+	}
+	{
+		Lock lock(*this);
+		if (custom->camera_ready_receiver) {
+			const auto shared = custom->camera_ready_relay;
+			const auto *existing = find_normal_relay_locked(shared);
+			if (!existing || existing->cancelled || existing->release_requested || existing->releasing ||
+					!existing->callback.is_custom() || existing->callback.get_custom() != custom ||
+					!scene_phase_holder_matches_locked(custom->cleanup, custom->owner, shared, false)) {
+				return ERR_UNAVAILABLE;
+			}
+			custom->scene_phase_receiver = receiver;
+			custom->scene_phase_relay = shared;
+			token = shared;
+			return OK;
+		}
+	}
+	// register_normal_relay checks original owner/cleanup enrollment. Publish the
+	// typed leaf once, under that same original Callable holder, before use.
+	const Error error = register_normal_relay(callable, token);
+	if (error == OK) {
+		Lock lock(*this);
+		custom->scene_phase_receiver = receiver;
+		custom->scene_phase_relay = token;
+	}
+	return error;
+}
+
+// Caller retains the original relay under Registry mutex. This inspects only
+// core Callable metadata and borrows its same original owner/cleanup holder.
+// The Registry caller must authenticate those holders before using the result.
+bool scene_phase_callable_metadata(const Callable &callable, NormalRelayToken token, const CleanupAction *&cleanup, const RecordRef *&owner) {
+	cleanup = nullptr;
+	owner = nullptr;
+	if (!callable.is_custom()) {
+		return false;
+	}
+	const auto *custom = dynamic_cast<const CallableCustomExtension *>(callable.get_custom());
+	if (!custom || !custom->adopted || !custom->scene_phase_receiver ||
+			custom->scene_phase_relay.registry_instance != token.registry_instance || custom->scene_phase_relay.serial != token.serial) {
+		return false;
+	}
+	cleanup = &custom->cleanup;
+	owner = &custom->owner;
+	return true;
+}
+
+Error Registry::scene_phase_call_relay(NormalRelayToken token, const GDExtensionNativeScenePhaseV1 &p_phase, GDExtensionProductionRequestRefV1 request, const GDExtensionProductionOperationV1 &operation) {
+	NormalRelay *relay = nullptr;
+	CallableCustomExtension *custom = nullptr;
+	{
+		Lock lock(*this);
+		relay = find_normal_relay_locked(token);
+		if (!relay || relay->cancelled || relay->release_requested || relay->releasing || relay->callback.is_null()) {
+			return ERR_UNAVAILABLE;
+		}
+		custom = dynamic_cast<CallableCustomExtension *>(relay->callback.get_custom());
+		const auto *entry = RegistrationContext::current;
+		const auto &owner = records[relay->record];
+		if (!custom || !custom->scene_phase_receiver || custom->scene_phase_relay.registry_instance != token.registry_instance || custom->scene_phase_relay.serial != token.serial || !scene_phase_holder_matches_locked(custom->cleanup, custom->owner, token, false) || !entry || !entry->admitted || !entry->reference || entry->reference->registry != this || entry->reference->slot != relay->record || !owner.attached || owner.quiescing || owner.close_started || owner.guard_enrollment != GuardEnrollment::QUALIFIED || owner.snapshot.library_generation != relay->generation || relay->active_deliveries == UINT32_MAX) {
+			return ERR_UNAUTHORIZED;
+		}
+		++relay->active_deliveries;
+	}
+	// Original record receiver already owns CallbackScope and physical frame.
+	// Do not enter a nested scope: that would invalidate the borrowed context.
+	custom->scene_phase_receiver(custom->userdata, &p_phase, request, &operation);
+	{
+		Lock lock(*this);
+		--relay->active_deliveries;
+	}
+	return OK;
+}
+
+bool is_typed_lifecycle_interface(const char *name);
+} //namespace GDExtensionDeviceExit
+
 // Core interface functions.
 GDExtensionInterfaceFunctionPtr gdextension_get_proc_address(const char *p_name) {
+	// Legacy lookup never selects guarded enrollment merely by symbol presence.
+	if ((p_name && strncmp(p_name, "device_session_", 15) == 0) || GDExtensionDeviceExit::is_typed_lifecycle_interface(p_name)) {
+		return nullptr;
+	}
+	return GDExtension::get_interface_function(p_name);
+}
+
+GDExtensionInterfaceFunctionPtr gdextension_get_guarded_proc_address(const char *p_name) {
 	return GDExtension::get_interface_function(p_name);
 }
 
@@ -1334,6 +1861,14 @@ void gdextension_dictionary_set_typed(GDExtensionTypePtr p_self, GDExtensionVari
 
 static void gdextension_object_method_bind_call(GDExtensionMethodBindPtr p_method_bind, GDExtensionObjectPtr p_instance, const GDExtensionConstVariantPtr *p_args, GDExtensionInt p_arg_count, GDExtensionUninitializedVariantPtr r_return, GDExtensionCallError *r_error) {
 	const MethodBind *mb = reinterpret_cast<const MethodBind *>(p_method_bind);
+	if (!GDExtensionDeviceExit::Registry::production_metadata_engine_call_allowed(mb->get_instance_class(), mb->get_name())) {
+		memnew_placement(r_return, Variant);
+		if (r_error) {
+			*r_error = { GDEXTENSION_CALL_ERROR_INVALID_METHOD, 0, 0 };
+		}
+		GDExtensionDeviceExit::record_binding_entry_result(ERR_UNAUTHORIZED);
+		return;
+	}
 	Object *o = (Object *)p_instance;
 	const Variant **args = (const Variant **)p_args;
 	Callable::CallError error;
@@ -1349,6 +1884,28 @@ static void gdextension_object_method_bind_call(GDExtensionMethodBindPtr p_metho
 
 static void gdextension_object_method_bind_ptrcall(GDExtensionMethodBindPtr p_method_bind, GDExtensionObjectPtr p_instance, const GDExtensionConstTypePtr *p_args, GDExtensionTypePtr p_ret) {
 	const MethodBind *mb = reinterpret_cast<const MethodBind *>(p_method_bind);
+	if (!GDExtensionDeviceExit::Registry::production_metadata_engine_call_allowed(mb->get_instance_class(), mb->get_name())) {
+		// ptrcall has no Error channel. Return a valid empty native value and
+		// the original Core binding diagnostic, without entering the method.
+		if (mb->has_return() && p_ret) {
+			const auto type = mb->get_argument_type(-1);
+			if (type == Variant::NIL) {
+				memnew_placement(p_ret, Variant);
+			} else if (type == Variant::INT) {
+				const String method = mb->get_name();
+				const bool list = method.begins_with("compute_list_begin") || method.begins_with("draw_list_begin");
+				const bool error = method.ends_with("_update") || method.ends_with("_copy") || method.ends_with("_clear") || method.ends_with("_async") || method == "driver_callback_add" || method == "blas_build" || method == "tlas_build";
+				*reinterpret_cast<int64_t *>(p_ret) = list ? int64_t(-1) : error ? int64_t(ERR_UNAUTHORIZED)
+																				 : 0;
+			} else {
+				const auto constructor = Variant::get_ptr_constructor(type, 0);
+				CRASH_COND(!constructor);
+				constructor(p_ret, nullptr);
+			}
+		}
+		GDExtensionDeviceExit::record_binding_entry_result(ERR_UNAUTHORIZED);
+		return;
+	}
 	Object *o = (Object *)p_instance;
 	mb->ptrcall(o, (const void **)p_args, p_ret);
 }
@@ -1610,12 +2167,38 @@ static void gdextension_object_set_script_instance(GDExtensionObjectPtr p_object
 
 #ifndef DISABLE_DEPRECATED
 static void gdextension_callable_custom_create(GDExtensionUninitializedTypePtr r_callable, GDExtensionCallableCustomInfo *p_custom_callable_info) {
-	memnew_placement(r_callable, Callable(memnew(CallableCustomExtension(p_custom_callable_info))));
+	GDExtensionDeviceExit::RecordRef owner;
+	const Error enrolled = GDExtensionDeviceExit::Registry::get_singleton().retain_callable_owner(p_custom_callable_info->token, owner);
+	if ((enrolled != OK && enrolled != ERR_DOES_NOT_EXIST) || GDExtensionDeviceExit::Registry::get_singleton().check_entry_classes(owner, 1u << 8) != OK) {
+		memnew_placement(r_callable, Callable());
+		ERR_FAIL_MSG("UNSUPPORTED_ENTRY_CLASS");
+	}
+
+	auto *custom = memnew(CallableCustomExtension(p_custom_callable_info, std::move(owner)));
+	if (custom->get_enrollment_error() != OK) {
+		memdelete(custom);
+		memnew_placement(r_callable, Callable());
+		ERR_FAIL_MSG("CALLABLE_ENROLLMENT_FAILED");
+	}
+	memnew_placement(r_callable, Callable(custom));
 }
 #endif
 
 static void gdextension_callable_custom_create2(GDExtensionUninitializedTypePtr r_callable, GDExtensionCallableCustomInfo2 *p_custom_callable_info) {
-	memnew_placement(r_callable, Callable(memnew(CallableCustomExtension(p_custom_callable_info))));
+	GDExtensionDeviceExit::RecordRef owner;
+	const Error enrolled = GDExtensionDeviceExit::Registry::get_singleton().retain_callable_owner(p_custom_callable_info->token, owner);
+	if ((enrolled != OK && enrolled != ERR_DOES_NOT_EXIST) || GDExtensionDeviceExit::Registry::get_singleton().check_entry_classes(owner, 1u << 8) != OK) {
+		memnew_placement(r_callable, Callable());
+		ERR_FAIL_MSG("UNSUPPORTED_ENTRY_CLASS");
+	}
+
+	auto *custom = memnew(CallableCustomExtension(p_custom_callable_info, std::move(owner)));
+	if (custom->get_enrollment_error() != OK) {
+		memdelete(custom);
+		memnew_placement(r_callable, Callable());
+		ERR_FAIL_MSG("CALLABLE_ENROLLMENT_FAILED");
+	}
+	memnew_placement(r_callable, Callable(custom));
 }
 
 static void *gdextension_callable_custom_get_userdata(GDExtensionTypePtr p_callable, void *p_token) {
@@ -1680,6 +2263,7 @@ static void *gdextension_classdb_get_class_tag(GDExtensionConstStringNamePtr p_c
 #endif
 
 static void gdextension_editor_add_plugin(GDExtensionConstStringNamePtr p_classname) {
+	ERR_FAIL_COND_MSG(GDExtensionDeviceExit::Registry::get_singleton().check_current_entry_classes(1u << 10) != OK, "UNSUPPORTED_ENTRY_CLASS");
 #ifdef TOOLS_ENABLED
 	const StringName classname = *reinterpret_cast<const StringName *>(p_classname);
 	GDExtensionEditorPlugins::add_extension_class(classname);

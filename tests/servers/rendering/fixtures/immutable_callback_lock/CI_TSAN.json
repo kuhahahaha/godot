@@ -1,0 +1,31 @@
+{
+  "run": 41973622411,
+  "job": 127067525286,
+  "head": "8dbf961e9ba899affb988d972bc5636f2a3447e3",
+  "job_status": "success",
+  "unit_tests": 1972,
+  "assertions": 501915,
+  "failures": 0,
+  "tsan_warnings": 0,
+  "log_sha256": "c58533ff39795a6b6764ae4a196f62e803bbbcbe313e1cb42b22f7085d025fe1",
+  "url": "https://github.com/kuhahahaha/godot/actions/runs/41973622411/job/127067525286",
+  "whole_matrix": "not green: Mono editor log guard exit56 under owner triage; remaining jobs pending at observation",
+  "scope": "the pushed callback lock and pipeline delivery; not the later private Core metadata/cursor commit",
+  "current_core_followup": {
+    "run": 41988992429,
+    "job": 127117217701,
+    "head": "a638a36536d6713753d0713b22bec82a6aea87d1",
+    "job_status": "success",
+    "unit_tests": 1980,
+    "assertions": 516718,
+    "skipped_cases": 3,
+    "failures": 0,
+    "tsan_warnings": 0,
+    "existing_suppression_matches": 3331,
+    "log_sha256": "4fc759c04be782f4df653f0d9d55967deb5e980f9d3c294da6a58efab6303ea8",
+    "log_bytes": 957896,
+    "url": "https://github.com/kuhahahaha/godot/actions/runs/41988992429/job/127117217701",
+    "whole_matrix": "still running at observation; five jobs success and fifteen pending, no full matrix acceptance",
+    "scope": "actual current private Core cursor/metadata, installed physical port and mutex tests at a638; not P2 candidate, managed Mono or live GPU qualification"
+  }
+}

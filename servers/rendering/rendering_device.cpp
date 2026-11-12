@@ -31,19 +31,38 @@
 #include "rendering_device.h"
 #include "rendering_device.compat.inc"
 
+#ifdef TESTS_ENABLED
+#include <cstdio>
+#endif
+#include <iterator>
+#include <mutex>
+
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
+#include "core/extension/gdextension_external_output_interface.h"
+#include "core/extension/gdextension_library_exit_guard.h"
+#include "core/extension/gdextension_production_request.h"
+#include "core/extension/gdextension_qualification_internal.h"
+#include "core/extension/gdextension_record_source.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
+#include "core/io/native_drain_diagnostic.h"
 #include "core/object/class_db.h"
 #include "core/os/os.h"
 #include "core/profiling/profiling.h"
 #include "core/templates/fixed_vector.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_rd/height_capture_checked_sink.h"
+#include "servers/rendering/renderer_rd/storage_rd/height_frame_resources.h"
 #include "servers/rendering/rendering_device_binds.h"
 #include "servers/rendering/rendering_shader_container.h"
 #include "servers/rendering/shader_include_db.h"
 
 #include "modules/modules_enabled.gen.h"
+
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+#include "servers/rendering/render_capture_test_hooks.h"
+#endif
 
 #ifdef MODULE_GLSLANG_ENABLED
 #include "modules/glslang/shader_compile.h"
@@ -193,21 +212,51 @@ void RenderingDevice::_remove_dependency(RID p_id, RID p_depends_on) {
 	}
 }
 
-void RenderingDevice::_free_dependencies(RID p_id) {
-	_THREAD_SAFE_METHOD_
+bool RenderingDevice::_free_dependencies(RID p_id, const MutexLock<Mutex> &p_outer_lock) {
+	MutexLock lock(_thread_safe_);
 
 	// Direct dependencies must be freed.
-
-	HashMap<RID, HashSet<RID>>::Iterator E = dependency_map.find(p_id);
-	if (E) {
-		while (E->value.size()) {
-			free_rid(*E->value.begin());
+	while (true) {
+		HashMap<RID, HashSet<RID>>::Iterator E = dependency_map.find(p_id);
+		if (!E) {
+			break;
 		}
-		dependency_map.remove(E);
+		if (E->value.is_empty()) {
+			dependency_map.remove(E);
+			break;
+		}
+		if (native_disposal_budget && !_native_disposal_admit(NativeDisposalWork::WORK)) {
+			return false;
+		}
+		const RID dependent = *E->value.begin();
+		if (production_disposal_drop_owner && !_production_disposal_belongs(dependent, production_disposal_drop_owner)) {
+			return false;
+		}
+		if (resource_frees_in_progress.has(dependent)) {
+			return false; // The enclosing original free owns this edge until its callback returns.
+		}
+		// Each child owns its own lock. Its synchronous callback must not inherit
+		// this dependency traversal's recursive RD lock. Re-find the map afterward.
+		lock.temp_unlock();
+		p_outer_lock.temp_unlock();
+		free_rid(dependent);
+		p_outer_lock.temp_relock();
+		lock.temp_relock();
+		// A synchronous invalidation callback can mutate the dependency map.
+		E = dependency_map.find(p_id);
+		if (E && E->value.has(dependent) && native_disposal_budget) {
+			return false;
+		}
+		ERR_FAIL_COND_V_MSG(E && E->value.has(dependent), false, "A dependent resource could not be freed.");
 	}
 
+	// A dependent's synchronous invalidation callback can acquire this resource
+	// after the initial busy check. Preserve its parent edges if that happened.
+	ERR_FAIL_COND_V_MSG(_qualification_resource_busy(p_id), false, "The resource became busy during dependent cleanup.");
+	ERR_FAIL_COND_V(native_immutable_resource_is_held(p_id), false);
+
 	// Reverse dependencies must be unreferenced.
-	E = reverse_dependency_map.find(p_id);
+	HashMap<RID, HashSet<RID>>::Iterator E = reverse_dependency_map.find(p_id);
 
 	if (E) {
 		for (const RID &F : E->value) {
@@ -219,6 +268,7 @@ void RenderingDevice::_free_dependencies(RID p_id) {
 
 		reverse_dependency_map.remove(E);
 	}
+	return true;
 }
 
 /*******************************/
@@ -240,7 +290,11 @@ Vector<uint8_t> RenderingDevice::shader_compile_spirv_from_source(ShaderStage p_
 }
 
 RID RenderingDevice::shader_create_from_spirv(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name) {
-	Vector<uint8_t> bytecode = shader_compile_binary_from_spirv(p_spirv, p_shader_name);
+	return shader_create_from_spirv_with_options(p_spirv, p_shader_name, {});
+}
+
+RID RenderingDevice::shader_create_from_spirv_with_options(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags) {
+	Vector<uint8_t> bytecode = shader_compile_binary_from_spirv_with_options(p_spirv, p_shader_name, p_flags);
 	ERR_FAIL_COND_V(bytecode.is_empty(), RID());
 	return shader_create_from_bytecode(bytecode);
 }
@@ -340,7 +394,12 @@ RID RenderingDevice::blas_create(Span<AccelerationStructureGeometry> p_geometrie
 			untracked_buffers.insert(rd_geometry.vertex_buffer);
 		}
 
-		_check_transfer_worker_buffer(vertex_buffer);
+		{
+			const Error dependency_error = _check_transfer_worker_buffer(vertex_buffer);
+			if (dependency_error != OK) {
+				return RID();
+			}
+		}
 
 		if (rd_geometry.index_buffer.is_valid()) {
 			IndexBuffer *index_buffer = index_buffer_owner.get_or_null(rd_geometry.index_buffer);
@@ -361,7 +420,12 @@ RID RenderingDevice::blas_create(Span<AccelerationStructureGeometry> p_geometrie
 				untracked_buffers.insert(rd_geometry.index_buffer);
 			}
 
-			_check_transfer_worker_buffer(index_buffer);
+			{
+				const Error dependency_error = _check_transfer_worker_buffer(index_buffer);
+				if (dependency_error != OK) {
+					return RID();
+				}
+			}
 		}
 	}
 
@@ -445,6 +509,9 @@ RID RenderingDevice::tlas_create(uint32_t p_max_instance_count, BitField<Acceler
 
 Error RenderingDevice::blas_build(RID p_blas) {
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
+	if (_recording_error() != OK) {
+		return _recording_error();
+	}
 
 	ERR_FAIL_COND_V_MSG(draw_list.active, ERR_INVALID_PARAMETER, "Building BLAS is forbidden during creation of a draw list.");
 	ERR_FAIL_COND_V_MSG(compute_list.active, ERR_INVALID_PARAMETER, "Building BLAS is forbidden during creation of a compute list.");
@@ -466,6 +533,9 @@ Error RenderingDevice::blas_build(RID p_blas) {
 
 Error RenderingDevice::tlas_build(RID p_tlas, Span<AccelerationStructureInstance> p_instances) {
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
+	if (_recording_error() != OK) {
+		return _recording_error();
+	}
 
 	ERR_FAIL_COND_V_MSG(draw_list.active, ERR_INVALID_PARAMETER, "Building TLAS is forbidden during creation of a draw list.");
 	ERR_FAIL_COND_V_MSG(compute_list.active, ERR_INVALID_PARAMETER, "Building TLAS is forbidden during creation of a compute list.");
@@ -598,6 +668,7 @@ Error RenderingDevice::_hit_sbt_buffer_update(HitShaderBindingTable *p_hit_sbt, 
 		ERR_FAIL_COND_V(!buffer, ERR_CANT_CREATE);
 
 		RDG::resource_tracker_free(p_hit_sbt->draw_tracker);
+		_production_disposal_enqueued(p_hit_sbt->production_disposal_uses);
 		frames[frame].buffers_to_dispose_of.push_back(*p_hit_sbt);
 
 		p_hit_sbt->driver_id = buffer;
@@ -645,6 +716,7 @@ void RenderingDevice::_hit_sbt_add_dirty_range(HitShaderBindingTable *p_hit_sbt,
 }
 
 RID RenderingDevice::hit_sbt_create(RID p_raytracing_pipeline, uint32_t p_initial_hit_group_capacity) {
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V_MSG(!has_feature(SUPPORTS_RAYTRACING_PIPELINE) && !has_feature(SUPPORTS_RAY_QUERY), RID(), "The current rendering device has neither raytracing pipeline nor ray query support.");
 
 	RaytracingPipeline *raytracing_pipeline = raytracing_pipeline_owner.get_or_null(p_raytracing_pipeline);
@@ -859,6 +931,7 @@ RenderingDevice::Buffer *RenderingDevice::_get_buffer_from_owner(RID p_buffer) {
 Error RenderingDevice::_buffer_initialize(Buffer *p_buffer, Span<uint8_t> p_data, uint32_t p_required_align) {
 	uint32_t transfer_worker_offset;
 	TransferWorker *transfer_worker = _acquire_transfer_worker(p_data.size(), p_required_align, transfer_worker_offset);
+	ERR_FAIL_NULL_V(transfer_worker, ERR_BUSY);
 	p_buffer->transfer_worker_index = transfer_worker->index;
 
 	{
@@ -868,6 +941,12 @@ Error RenderingDevice::_buffer_initialize(Buffer *p_buffer, Span<uint8_t> p_data
 
 	// Copy to the worker's staging buffer.
 	uint8_t *data_ptr = driver->buffer_map(transfer_worker->staging_buffer);
+	if (data_ptr == nullptr) {
+		p_buffer->transfer_worker_index = -1;
+		p_buffer->transfer_worker_operation = 0;
+		_release_transfer_worker(transfer_worker);
+		return ERR_CANT_CREATE;
+	}
 	ERR_FAIL_NULL_V(data_ptr, ERR_CANT_CREATE);
 
 	memcpy(data_ptr + transfer_worker_offset, p_data.ptr(), p_data.size());
@@ -905,6 +984,15 @@ Error RenderingDevice::_insert_staging_block(StagingBuffers &p_staging_buffers) 
 }
 
 Error RenderingDevice::_staging_buffer_allocate(StagingBuffers &p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, uint32_t &r_alloc_offset, uint32_t &r_alloc_size, StagingRequiredAction &r_required_action, bool p_can_segment) {
+	if (_recording_error() != OK) {
+		return _recording_error();
+	}
+	// A single staging allocation request must fit in one staging block. Reject it
+	// before selecting or marking a block so callers cannot write past the
+	// backing allocation when a configured region is larger than the block.
+	if (p_amount > p_staging_buffers.block_size) {
+		return ERR_INVALID_PARAMETER;
+	}
 	// Determine a block to use.
 
 	r_alloc_size = p_amount;
@@ -1001,13 +1089,16 @@ Error RenderingDevice::_staging_buffer_allocate(StagingBuffers &p_staging_buffer
 	return OK;
 }
 
-void RenderingDevice::_staging_buffer_execute_required_action(StagingBuffers &p_staging_buffers, StagingRequiredAction p_required_action) {
+Error RenderingDevice::_staging_buffer_execute_required_action(StagingBuffers &p_staging_buffers, StagingRequiredAction p_required_action) {
 	switch (p_required_action) {
 		case STAGING_REQUIRED_ACTION_NONE: {
 			// Do nothing.
 		} break;
 		case STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL: {
-			_flush_and_stall_for_all_frames();
+			const Error wait_error = _flush_and_stall_for_all_frames();
+			if (wait_error != OK) {
+				return wait_error;
+			}
 
 			// Clear the whole staging buffer.
 			for (int i = 0; i < p_staging_buffers.blocks.size(); i++) {
@@ -1019,7 +1110,10 @@ void RenderingDevice::_staging_buffer_execute_required_action(StagingBuffers &p_
 			p_staging_buffers.blocks.write[p_staging_buffers.current].frame_used = frames_drawn;
 		} break;
 		case STAGING_REQUIRED_ACTION_STALL_PREVIOUS: {
-			_stall_for_previous_frames();
+			const Error wait_error = _stall_for_previous_frames();
+			if (wait_error != OK) {
+				return wait_error;
+			}
 
 			for (int i = 0; i < p_staging_buffers.blocks.size(); i++) {
 				// Clear all blocks but the ones from this frame.
@@ -1039,10 +1133,18 @@ void RenderingDevice::_staging_buffer_execute_required_action(StagingBuffers &p_
 			DEV_ASSERT(false && "Unknown required action.");
 		} break;
 	}
+	return OK;
 }
 
 Error RenderingDevice::buffer_copy(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size) {
+	return _buffer_copy_recorded(p_src_buffer, p_dst_buffer, p_src_offset, p_dst_offset, p_size).error;
+}
+
+RenderingDevice::CopyAppendResult RenderingDevice::_buffer_copy_recorded(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size) {
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
+	if (_recording_error() != OK) {
+		return _recording_error();
+	}
 
 	ERR_FAIL_COND_V_MSG(draw_list.active, ERR_INVALID_PARAMETER,
 			"Copying buffers is forbidden during creation of a draw list.");
@@ -1056,17 +1158,37 @@ Error RenderingDevice::buffer_copy(RID p_src_buffer, RID p_dst_buffer, uint32_t 
 		ERR_FAIL_V_MSG(ERR_INVALID_PARAMETER, "Source buffer argument is not a valid buffer of any type.");
 	}
 
+	if (native_immutable_resource_is_held(p_dst_buffer) || native_immutable_resource_is_retiring(p_dst_buffer)) {
+		return ERR_BUSY;
+	}
 	Buffer *dst_buffer = _get_buffer_from_owner(p_dst_buffer);
 	if (!dst_buffer) {
 		ERR_FAIL_V_MSG(ERR_INVALID_PARAMETER, "Destination buffer argument is not a valid buffer of any type.");
 	}
 
+	ERR_FAIL_COND_V(((src_buffer->qualification_return || (src_buffer->native_disposal.cell.is_valid() && src_buffer->native_disposal.cell->production_request)) && !_production_resource_permitted(p_src_buffer)) || ((dst_buffer->qualification_return || (dst_buffer->native_disposal.cell.is_valid() && dst_buffer->native_disposal.cell->production_request)) && !_production_resource_permitted(p_dst_buffer)), ERR_UNAUTHORIZED);
 	// Validate the copy's dimensions for both buffers.
-	ERR_FAIL_COND_V_MSG((p_size + p_src_offset) > src_buffer->size, ERR_INVALID_PARAMETER, "Size is larger than the source buffer.");
-	ERR_FAIL_COND_V_MSG((p_size + p_dst_offset) > dst_buffer->size, ERR_INVALID_PARAMETER, "Size is larger than the destination buffer.");
+	ERR_FAIL_COND_V_MSG(uint64_t(p_src_offset) + uint64_t(p_size) > src_buffer->size, ERR_INVALID_PARAMETER, "Size is larger than the source buffer.");
+	ERR_FAIL_COND_V_MSG(uint64_t(p_dst_offset) + uint64_t(p_size) > dst_buffer->size, ERR_INVALID_PARAMETER, "Size is larger than the destination buffer.");
 
-	_check_transfer_worker_buffer(src_buffer);
-	_check_transfer_worker_buffer(dst_buffer);
+	CopyAppendResult result;
+	for (const Buffer *buffer : { src_buffer, dst_buffer }) {
+		if (buffer->transfer_worker_index >= 0) {
+			result.transfers[result.transfer_count++] = { uint32_t(buffer->transfer_worker_index), buffer->transfer_worker_operation };
+		}
+	}
+	{
+		const Error dependency_error = _check_transfer_worker_buffer(src_buffer);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
+	{
+		const Error dependency_error = _check_transfer_worker_buffer(dst_buffer);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
 
 	// Perform the copy.
 	RDD::BufferCopyRegion region;
@@ -1076,15 +1198,48 @@ Error RenderingDevice::buffer_copy(RID p_src_buffer, RID p_dst_buffer, uint32_t 
 
 	if (_buffer_make_mutable(dst_buffer, p_dst_buffer)) {
 		// The destination buffer must be mutable to be used as a copy destination.
+		result.destination_became_mutable = true;
 		draw_graph.add_synchronization();
 	}
 
-	draw_graph.add_buffer_copy(src_buffer->driver_id, src_buffer->draw_tracker, dst_buffer->driver_id, dst_buffer->draw_tracker, region);
+	result.copy_handle = draw_graph.add_buffer_copy(src_buffer->driver_id, src_buffer->draw_tracker, dst_buffer->driver_id, dst_buffer->draw_tracker, region);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	RenderCaptureTestHooks::observe_buffer_copy(p_src_buffer.get_id(), p_dst_buffer.get_id(), p_src_offset, p_dst_offset, p_size, uint64_t(get_instance_id()), src_buffer->capture_test_allocation_serial, dst_buffer->capture_test_allocation_serial);
+#endif
 
-	return OK;
+	result.effect = NativeAppendEffect::Recorded;
+	return result;
 }
 
-Error RenderingDevice::_buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_t p_offset, uint32_t p_size, const void *p_data) {
+Error RenderingDevice::_buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_t p_offset, uint32_t p_size, const void *p_data, QualificationUploadProgress *p_progress, GDExtensionDeviceExit::BufferUploadSourceCapture *p_source) {
+	if (native_immutable_resource_is_held(p_buffer_id) || native_immutable_resource_is_retiring(p_buffer_id)) {
+		return ERR_BUSY;
+	}
+	if (_recording_error() != OK) {
+		return _recording_error();
+	}
+	if (p_source) {
+		if (p_progress || !p_source->segments || p_source->segment_stride < sizeof(GDExtensionDeviceExit::BufferUploadSourceSegment) || p_source->segment_stride % alignof(GDExtensionDeviceExit::BufferUploadSourceSegment) || !p_source->capacity || p_source->count >= p_source->capacity || p_source->consumed > p_size || p_buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT)) {
+			return ERR_INVALID_PARAMETER;
+		}
+		if (p_source->consumed == p_size) {
+			return OK;
+		}
+	}
+	if (p_progress) {
+		if (!qualification_recording || p_progress->consumed > p_size || !p_progress->max_segments || p_progress->max_segments > 4096) {
+			return ERR_INVALID_PARAMETER;
+		}
+		if (p_buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT)) {
+			return ERR_UNAVAILABLE;
+		}
+		if (p_buffer->transfer_worker_index >= 0) {
+			return ERR_BUSY;
+		}
+		if (p_progress->consumed == p_size) {
+			return OK;
+		}
+	}
 	copy_bytes_count += p_size;
 
 	if (p_buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT)) {
@@ -1092,18 +1247,63 @@ Error RenderingDevice::_buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_
 
 		memcpy(dst_data + p_offset, p_data, p_size);
 		direct_copy_count++;
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+		RenderCaptureTestHooks::observe_buffer_write(p_buffer_id.get_id(), p_offset, p_size, true, uint64_t(get_instance_id()), p_buffer->driver_id.id, p_buffer->capture_test_allocation_serial);
+#endif
 		buffer_flush(p_buffer_id);
 		return OK;
 	}
 
-	_check_transfer_worker_buffer(p_buffer);
+	if (p_source && p_buffer->transfer_worker_index >= 0) {
+		p_source->transfer_worker = uint32_t(p_buffer->transfer_worker_index);
+		p_source->transfer_operation = p_buffer->transfer_worker_operation;
+		p_source->prefix_possible = true;
+	}
+	{
+		const Error dependency_error = _check_transfer_worker_buffer(p_buffer);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
 
 	// Submitting may get chunked for various reasons, so convert this to a task.
-	size_t to_submit = p_size;
-	size_t submit_from = 0;
+	size_t submit_from = p_progress ? p_progress->consumed : p_source ? p_source->consumed
+																	  : 0;
+	size_t to_submit = p_size - submit_from;
 
 	thread_local LocalVector<RDG::RecordedBufferCopy> command_buffer_copies_vector;
 	command_buffer_copies_vector.clear();
+	auto publish = [&]() -> Error {
+		if (command_buffer_copies_vector.is_empty()) {
+			return OK;
+		}
+		if ((p_progress && p_progress->segments.size() >= p_progress->max_segments) || (p_source && p_source->count >= p_source->capacity)) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+		if (_buffer_make_mutable(p_buffer, p_buffer_id)) {
+			if (p_source) {
+				p_source->became_mutable = true;
+				p_source->prefix_possible = true;
+			}
+			draw_graph.add_synchronization();
+		}
+		const auto handle = draw_graph.add_buffer_update(p_buffer->driver_id, p_buffer->draw_tracker, command_buffer_copies_vector);
+		if (p_source) {
+			const auto &first = command_buffer_copies_vector[0].region;
+			const auto &last = command_buffer_copies_vector[command_buffer_copies_vector.size() - 1].region;
+			p_source->segment(p_source->count++) = { handle, uint32_t(first.dst_offset - p_offset), uint32_t(last.dst_offset + last.size - p_offset) };
+			p_source->consumed = last.dst_offset + last.size - p_offset;
+			p_source->prefix_possible = true;
+		}
+		if (p_progress) {
+			const auto &first = command_buffer_copies_vector[0].region;
+			const auto &last = command_buffer_copies_vector[command_buffer_copies_vector.size() - 1].region;
+			p_progress->segments.push_back({ handle, uint32_t(first.dst_offset - p_offset), uint32_t(last.dst_offset + last.size - p_offset) });
+			p_progress->consumed = last.dst_offset + last.size - p_offset;
+		}
+		command_buffer_copies_vector.clear();
+		return OK;
+	};
 
 	const uint8_t *src_data = reinterpret_cast<const uint8_t *>(p_data);
 	const uint32_t required_align = 32;
@@ -1114,20 +1314,33 @@ Error RenderingDevice::_buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_
 
 		Error err = _staging_buffer_allocate(upload_staging_buffers, MIN(to_submit, upload_staging_buffers.block_size), required_align, block_write_offset, block_write_amount, required_action);
 		if (err) {
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+			RenderCaptureTestHooks::observe_buffer_write(p_buffer_id.get_id(), p_offset + submit_from, to_submit, false, uint64_t(get_instance_id()), p_buffer->driver_id.id, p_buffer->capture_test_allocation_serial, submit_from > 0);
+#endif
+			if (p_progress || p_source) {
+				const Error publication = publish();
+				if (publication != OK) {
+					return publication;
+				}
+			}
 			return err;
+		}
+		if ((p_progress || p_source) && required_action != STAGING_REQUIRED_ACTION_NONE) {
+			const Error publication = publish();
+			return publication != OK ? publication : ERR_BUSY;
 		}
 
 		if (!command_buffer_copies_vector.is_empty() && required_action == STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL) {
-			if (_buffer_make_mutable(p_buffer, p_buffer_id)) {
-				// The buffer must be mutable to be used as a copy destination.
-				draw_graph.add_synchronization();
+			const Error publication = publish();
+			if (publication != OK) {
+				return publication;
 			}
-
-			draw_graph.add_buffer_update(p_buffer->driver_id, p_buffer->draw_tracker, command_buffer_copies_vector);
-			command_buffer_copies_vector.clear();
 		}
 
-		_staging_buffer_execute_required_action(upload_staging_buffers, required_action);
+		const Error staging_error = _staging_buffer_execute_required_action(upload_staging_buffers, required_action);
+		if (staging_error != OK) {
+			return staging_error;
+		}
 
 		// Copy to staging buffer.
 		memcpy(upload_staging_buffers.blocks[upload_staging_buffers.current].data_ptr + block_write_offset, src_data + submit_from, block_write_amount);
@@ -1142,6 +1355,9 @@ Error RenderingDevice::_buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_
 		buffer_copy.source = upload_staging_buffers.blocks[upload_staging_buffers.current].driver_id;
 		buffer_copy.region = region;
 		command_buffer_copies_vector.push_back(buffer_copy);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+		RenderCaptureTestHooks::observe_buffer_write(p_buffer_id.get_id(), submit_from + p_offset, block_write_amount, true, uint64_t(get_instance_id()), p_buffer->driver_id.id, p_buffer->capture_test_allocation_serial);
+#endif
 
 		upload_staging_buffers.blocks.write[upload_staging_buffers.current].fill_amount = block_write_offset + block_write_amount;
 
@@ -1149,13 +1365,9 @@ Error RenderingDevice::_buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_
 		submit_from += block_write_amount;
 	}
 
-	if (!command_buffer_copies_vector.is_empty()) {
-		if (_buffer_make_mutable(p_buffer, p_buffer_id)) {
-			// The buffer must be mutable to be used as a copy destination.
-			draw_graph.add_synchronization();
-		}
-
-		draw_graph.add_buffer_update(p_buffer->driver_id, p_buffer->draw_tracker, command_buffer_copies_vector);
+	const Error publication = publish();
+	if (publication != OK) {
+		return publication;
 	}
 
 	gpu_copy_count++;
@@ -1164,6 +1376,9 @@ Error RenderingDevice::_buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_
 }
 
 Error RenderingDevice::buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p_size, const void *p_data, bool p_skip_check) {
+	if (native_immutable_resource_is_held(p_buffer) || native_immutable_resource_is_retiring(p_buffer)) {
+		return ERR_BUSY;
+	}
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
 
 	ERR_FAIL_COND_V_MSG(draw_list.active && !p_skip_check, ERR_INVALID_PARAMETER,
@@ -1175,13 +1390,31 @@ Error RenderingDevice::buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p
 
 	Buffer *buffer = _get_buffer_from_owner(p_buffer);
 	ERR_FAIL_NULL_V_MSG(buffer, ERR_INVALID_PARAMETER, "Buffer argument is not a valid buffer of any type.");
-	ERR_FAIL_COND_V_MSG(p_offset + p_size > buffer->size, ERR_INVALID_PARAMETER, "Attempted to write buffer (" + itos((p_offset + p_size) - buffer->size) + " bytes) past the end.");
+	ERR_FAIL_COND_V_MSG(uint64_t(p_offset) + p_size > buffer->size, ERR_INVALID_PARAMETER, "Attempted to write buffer (" + itos((uint64_t(p_offset) + p_size) - buffer->size) + " bytes) past the end.");
 
+	ERR_FAIL_COND_V(buffer->qualification_return, ERR_UNAUTHORIZED);
+#ifdef TESTS_ENABLED
+	if (test_buffer_update_fault_count > 0 && test_buffer_update_fault_buffer == p_buffer) {
+#if defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+		if (test_buffer_update_fault_skip > 0) {
+			test_buffer_update_fault_skip--;
+		} else
+#endif
+		{
+			test_buffer_update_fault_count--;
+			test_buffer_update_fault_hits++;
+			return ERR_CANT_CREATE;
+		}
+	}
+#endif
 	return _buffer_update(buffer, p_buffer, p_offset, p_size, p_data);
 }
 
 Error RenderingDevice::driver_callback_add(RDD::DriverCallback p_callback, void *p_userdata, VectorView<CallbackResource> p_resources) {
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
+	if (_recording_error() != OK) {
+		return _recording_error();
+	}
 
 	ERR_FAIL_COND_V_MSG(draw_list.active, ERR_INVALID_PARAMETER,
 			"Driver callback is forbidden during creation of a draw list.");
@@ -1189,6 +1422,20 @@ Error RenderingDevice::driver_callback_add(RDD::DriverCallback p_callback, void 
 			"Driver callback is forbidden during creation of a compute list.");
 	ERR_FAIL_COND_V_MSG(raytracing_list.active, ERR_INVALID_PARAMETER,
 			"Driver callback is forbidden during creation of a raytracing list.");
+
+	for (uint32_t i = 0; i < p_resources.size(); ++i) {
+		const auto usage = p_resources[i].usage;
+		const bool read_only = usage == CALLBACK_RESOURCE_USAGE_COPY_FROM || usage == CALLBACK_RESOURCE_USAGE_RESOLVE_FROM || usage == CALLBACK_RESOURCE_USAGE_UNIFORM_BUFFER_READ || usage == CALLBACK_RESOURCE_USAGE_INDIRECT_BUFFER_READ || usage == CALLBACK_RESOURCE_USAGE_TEXTURE_BUFFER_READ || usage == CALLBACK_RESOURCE_USAGE_STORAGE_BUFFER_READ || usage == CALLBACK_RESOURCE_USAGE_VERTEX_BUFFER_READ || usage == CALLBACK_RESOURCE_USAGE_INDEX_BUFFER_READ || usage == CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE || usage == CALLBACK_RESOURCE_USAGE_STORAGE_IMAGE_READ || usage == CALLBACK_RESOURCE_USAGE_ACCELERATION_STRUCTURE_READ;
+		ERR_FAIL_COND_V(!read_only && (native_immutable_resource_is_held(p_resources[i].rid) || native_immutable_resource_is_retiring(p_resources[i].rid)), ERR_BUSY);
+
+		if (p_resources[i].type == CALLBACK_RESOURCE_TYPE_BUFFER) {
+			auto *buffer = storage_buffer_owner.owns(p_resources[i].rid) ? storage_buffer_owner.get_or_null(p_resources[i].rid) : nullptr;
+			ERR_FAIL_COND_V(buffer && buffer->qualification_return, ERR_UNAUTHORIZED);
+		} else if (p_resources[i].type == CALLBACK_RESOURCE_TYPE_TEXTURE) {
+			auto *texture = texture_owner.get_or_null(p_resources[i].rid);
+			ERR_FAIL_COND_V(texture && texture->qualification_return, ERR_UNAUTHORIZED);
+		}
+	}
 
 	thread_local LocalVector<RDG::ResourceTracker *> trackers;
 	thread_local LocalVector<RDG::ResourceUsage> usages;
@@ -1231,6 +1478,23 @@ Error RenderingDevice::driver_callback_add(RDD::DriverCallback p_callback, void 
 	}
 
 	draw_graph.add_driver_callback(p_callback, p_userdata, trackers, usages);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	if (RenderCaptureTestHooks::write_census_active()) {
+		for (uint32_t i = 0; i < p_resources.size(); i++) {
+			const auto &resource = p_resources[i];
+			const auto usage = usages[i];
+			if (resource.type != CALLBACK_RESOURCE_TYPE_BUFFER) {
+				continue;
+			}
+			const Buffer *buffer = _get_buffer_from_owner(resource.rid);
+			if (!buffer) {
+				RenderCaptureTestHooks::write_census_poison();
+				continue;
+			}
+			_capture_test_record_buffer_usage(buffer->driver_id.id, usage, RenderCaptureTestHooks::CALLBACK);
+		}
+	}
+#endif
 
 	return OK;
 }
@@ -1254,8 +1518,16 @@ void RenderingDevice::update_perf_report() {
 }
 
 Error RenderingDevice::buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_size) {
+	if (native_immutable_resource_is_held(p_buffer) || native_immutable_resource_is_retiring(p_buffer)) {
+		return ERR_BUSY;
+	}
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
+	if (_recording_error() != OK) {
+		return _recording_error();
+	}
 
+	ERR_FAIL_COND_V_MSG((p_offset % 4) != 0, ERR_INVALID_PARAMETER,
+			"Offset must be a multiple of four.");
 	ERR_FAIL_COND_V_MSG((p_size % 4) != 0, ERR_INVALID_PARAMETER,
 			"Size must be a multiple of four.");
 	ERR_FAIL_COND_V_MSG(draw_list.active, ERR_INVALID_PARAMETER,
@@ -1270,10 +1542,20 @@ Error RenderingDevice::buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_
 		ERR_FAIL_V_MSG(ERR_INVALID_PARAMETER, "Buffer argument is not a valid buffer of any type.");
 	}
 
-	ERR_FAIL_COND_V_MSG(p_offset + p_size > buffer->size, ERR_INVALID_PARAMETER,
-			"Attempted to write buffer (" + itos((p_offset + p_size) - buffer->size) + " bytes) past the end.");
+	ERR_FAIL_COND_V_MSG(uint64_t(p_offset) + p_size > buffer->size, ERR_INVALID_PARAMETER,
+			"Attempted to write buffer (" + itos((uint64_t(p_offset) + p_size) - buffer->size) + " bytes) past the end.");
 
-	_check_transfer_worker_buffer(buffer);
+	ERR_FAIL_COND_V(buffer->qualification_return, ERR_UNAUTHORIZED);
+	if (p_size == 0) {
+		return OK;
+	}
+
+	{
+		const Error dependency_error = _check_transfer_worker_buffer(buffer);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
 
 	if (_buffer_make_mutable(buffer, p_buffer)) {
 		// The destination buffer must be mutable to be used as a clear destination.
@@ -1281,11 +1563,15 @@ Error RenderingDevice::buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_
 	}
 
 	draw_graph.add_buffer_clear(buffer->driver_id, buffer->draw_tracker, p_offset, p_size);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	RenderCaptureTestHooks::observe_buffer_clear(p_buffer.get_id(), p_offset, p_size, uint64_t(get_instance_id()), buffer->driver_id.id, buffer->capture_test_allocation_serial);
+#endif
 
 	return OK;
 }
 
 Vector<uint8_t> RenderingDevice::buffer_get_data(RID p_buffer, uint32_t p_offset, uint32_t p_size) {
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, Vector<uint8_t>(), "A frame fence wait failed; readback recording is suspended.");
 	ERR_RENDER_THREAD_GUARD_V(Vector<uint8_t>());
 
 	Buffer *buffer = _get_buffer_from_owner(p_buffer);
@@ -1293,15 +1579,20 @@ Vector<uint8_t> RenderingDevice::buffer_get_data(RID p_buffer, uint32_t p_offset
 		ERR_FAIL_V_MSG(Vector<uint8_t>(), "Buffer is either invalid or this type of buffer can't be retrieved.");
 	}
 
+	ERR_FAIL_COND_V(buffer->qualification_return, Vector<uint8_t>());
 	// Size of buffer to retrieve.
 	if (!p_size) {
 		p_size = buffer->size;
-	} else {
-		ERR_FAIL_COND_V_MSG(p_size + p_offset > buffer->size, Vector<uint8_t>(),
-				"Size is larger than the buffer.");
 	}
+	ERR_FAIL_COND_V_MSG(uint64_t(p_offset) + p_size > buffer->size, Vector<uint8_t>(),
+			"Size is larger than the buffer.");
 
-	_check_transfer_worker_buffer(buffer);
+	{
+		const Error dependency_error = _check_transfer_worker_buffer(buffer);
+		if (dependency_error != OK) {
+			return Vector<uint8_t>();
+		}
+	}
 
 	RDD::BufferID tmp_buffer = driver->buffer_create(buffer->size, RDD::BUFFER_USAGE_TRANSFER_TO_BIT, RDD::MEMORY_ALLOCATION_TYPE_CPU, frames_drawn);
 	ERR_FAIL_COND_V(!tmp_buffer, Vector<uint8_t>());
@@ -1311,12 +1602,27 @@ Vector<uint8_t> RenderingDevice::buffer_get_data(RID p_buffer, uint32_t p_offset
 	region.size = p_size;
 
 	draw_graph.add_buffer_get_data(buffer->driver_id, buffer->draw_tracker, tmp_buffer, region);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	RenderCaptureTestHooks::observe_readback_queued(p_buffer.get_id(), p_size);
+#endif
 
 	// Flush everything so memory can be safely mapped.
-	_flush_and_stall_for_all_frames();
+	const Error wait_error = _flush_and_stall_for_all_frames();
+	if (wait_error != OK) {
+		Buffer retained_buffer;
+		retained_buffer.driver_id = tmp_buffer;
+		frames[frame].buffers_to_dispose_of.push_back(retained_buffer);
+		ERR_FAIL_V_MSG(Vector<uint8_t>(), "Buffer readback fence wait failed.");
+	}
 
 	uint8_t *buffer_mem = driver->buffer_map(tmp_buffer);
-	ERR_FAIL_NULL_V(buffer_mem, Vector<uint8_t>());
+	if (buffer_mem == nullptr) {
+		// Mapping can fail after the temporary transfer buffer has been issued
+		// and waited. Do not strand that allocation when the caller receives the
+		// fail-closed empty result.
+		driver->buffer_free(tmp_buffer);
+		ERR_FAIL_V(Vector<uint8_t>());
+	}
 
 	Vector<uint8_t> buffer_data;
 	{
@@ -1327,114 +1633,227 @@ Vector<uint8_t> RenderingDevice::buffer_get_data(RID p_buffer, uint32_t p_offset
 
 	driver->buffer_unmap(tmp_buffer);
 
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	RenderCaptureTestHooks::observe_readback_completed(p_buffer.get_id(), p_size);
+#endif
+
 	driver->buffer_free(tmp_buffer);
 
 	return buffer_data;
 }
 
-Error RenderingDevice::buffer_get_data_async(RID p_buffer, const Callable &p_callback, uint32_t p_offset, uint32_t p_size) {
+Error RenderingDevice::buffer_get_data_async(RID buffer, const Callable &callback, uint32_t offset, uint32_t size) {
+	return _buffer_get_data_async(buffer, callback, offset, size);
+}
+
+Error RenderingDevice::_buffer_get_data_async(RID p_buffer, const Callable &p_callback, uint32_t p_offset, uint32_t p_size, const Ref<BufferGetDataResult> &p_owned, GDExtensionDeviceExit::BufferReadbackSourceCapture *p_capture) {
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
-
-	Buffer *buffer = _get_buffer_from_owner(p_buffer);
-	if (buffer == nullptr) {
-		ERR_FAIL_V_MSG(ERR_INVALID_PARAMETER, "Buffer is either invalid or this type of buffer can't be retrieved.");
+	if (_recording_error() != OK) {
+		return _recording_error();
 	}
-
-	if (p_size == 0) {
+	Buffer *buffer = _get_buffer_from_owner(p_buffer);
+	ERR_FAIL_NULL_V(buffer, ERR_INVALID_PARAMETER);
+	const bool core = p_owned.is_valid() || p_capture;
+	ERR_FAIL_COND_V((buffer->qualification_return || (buffer->native_disposal.cell.is_valid() && buffer->native_disposal.cell->production_request)) && !qualification_recording && !_production_resource_permitted(p_buffer), ERR_UNAUTHORIZED);
+	if (!p_size) {
 		p_size = buffer->size;
 	}
-
-	ERR_FAIL_COND_V_MSG(p_size + p_offset > buffer->size, ERR_INVALID_PARAMETER, "Size is larger than the buffer.");
-	ERR_FAIL_COND_V_MSG(!p_callback.is_valid(), ERR_INVALID_PARAMETER, "Callback must be valid.");
-
-	_check_transfer_worker_buffer(buffer);
-
-	BufferGetDataRequest get_data_request;
-	get_data_request.callback = p_callback;
-	get_data_request.frame_local_index = frames[frame].download_buffer_copy_regions.size();
-	get_data_request.size = p_size;
-
-	const uint32_t required_align = 32;
-	uint32_t block_write_offset;
-	uint32_t block_write_amount;
-	StagingRequiredAction required_action;
-	uint32_t to_submit = p_size;
-	uint32_t submit_from = 0;
-	while (to_submit > 0) {
-		Error err = _staging_buffer_allocate(download_staging_buffers, MIN(to_submit, download_staging_buffers.block_size), required_align, block_write_offset, block_write_amount, required_action);
-		if (err) {
-			return err;
+	ERR_FAIL_COND_V(p_offset > buffer->size || p_size > buffer->size - p_offset, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(p_capture ? (p_owned.is_valid() || p_callback.is_valid() || !p_capture->state || !p_capture->state->request_serial || !p_capture->bytes || p_capture->byte_capacity != p_size || !p_capture->segments || p_capture->segment_stride < sizeof(GDExtensionDeviceExit::BufferUploadSourceSegment) || p_capture->segment_stride % alignof(GDExtensionDeviceExit::BufferUploadSourceSegment) || p_capture->count >= p_capture->capacity || p_capture->state->issued > p_size || p_capture->state->delivered || p_capture->state->error != OK) : core ? (!p_owned->qualification_owned || !qualification_recording || p_callback.is_valid() || p_owned->bytes.size() != p_size || p_owned->issued_size > p_size || p_owned->delivered || p_owned->error != OK)
+																																																																																																																																								   : !p_callback.is_valid(),
+			ERR_INVALID_PARAMETER);
+	if (p_capture) {
+		auto &state = *p_capture->state;
+		if (!buffer->backing_serial || (state.backing_serial && (state.backing_serial != buffer->backing_serial || state.offset != p_offset || state.size != p_size))) {
+			return ERR_INVALID_DATA;
 		}
-
-		const bool flush_frames = (get_data_request.frame_local_count > 0) && required_action == STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL;
-		if (flush_frames) {
-			if (_buffer_make_mutable(buffer, p_buffer)) {
-				// The buffer must be mutable to be used as a copy source.
-				draw_graph.add_synchronization();
+		state.backing_serial = buffer->backing_serial;
+		state.offset = p_offset;
+		state.size = p_size;
+		state.owned_bytes = p_capture->byte_capacity;
+	} else if (core) {
+		if (!p_owned->request_serial || !buffer->backing_serial) {
+			return ERR_INVALID_DATA;
+		}
+		if (!p_owned->source_backing_serial) {
+			if (p_owned->issued_size || !p_owned->copies.is_empty()) {
+				return ERR_INVALID_DATA;
 			}
-
-			for (uint32_t i = 0; i < get_data_request.frame_local_count; i++) {
-				uint32_t local_index = get_data_request.frame_local_index + i;
-				draw_graph.add_buffer_get_data(buffer->driver_id, buffer->draw_tracker, frames[frame].download_buffer_staging_buffers[local_index], frames[frame].download_buffer_copy_regions[local_index]);
-			}
+			p_owned->source_backing_serial = buffer->backing_serial;
+			p_owned->source_offset = p_offset;
+			p_owned->source_size = p_size;
+		} else if (p_owned->source_backing_serial != buffer->backing_serial || p_owned->source_offset != p_offset || p_owned->source_size != p_size) {
+			return ERR_INVALID_DATA;
 		}
-
-		_staging_buffer_execute_required_action(download_staging_buffers, required_action);
-
-		if (flush_frames) {
-			get_data_request.frame_local_count = 0;
-			get_data_request.frame_local_index = frames[frame].download_buffer_copy_regions.size();
-		}
-
-		RDD::BufferCopyRegion region;
-		region.src_offset = submit_from + p_offset;
-		region.dst_offset = block_write_offset;
-		region.size = block_write_amount;
-
-		frames[frame].download_buffer_staging_buffers.push_back(download_staging_buffers.blocks[download_staging_buffers.current].driver_id);
-		frames[frame].download_buffer_copy_regions.push_back(region);
-		get_data_request.frame_local_count++;
-
-		download_staging_buffers.blocks.write[download_staging_buffers.current].fill_amount = block_write_offset + block_write_amount;
-
-		to_submit -= block_write_amount;
-		submit_from += block_write_amount;
 	}
-
-	if (get_data_request.frame_local_count > 0) {
+	// The public legacy route retains its worker submission behavior. Core ticket
+	// admission must join a real worker before using it; never silently wait here.
+	if (core && !p_capture && buffer->transfer_worker_index >= 0) {
+		return ERR_BUSY;
+	}
+	if (!core || p_capture) {
+		if (p_capture && buffer->transfer_worker_index >= 0) {
+			p_capture->transfer_worker = uint32_t(buffer->transfer_worker_index);
+			p_capture->transfer_operation = buffer->transfer_worker_operation;
+		}
+		{
+			const Error dependency_error = _check_transfer_worker_buffer(buffer);
+			if (dependency_error != OK) {
+				return dependency_error;
+			}
+		}
+	}
+	BufferGetDataRequest request;
+	request.buffer = p_buffer;
+	request.callback = p_callback;
+	request.frame_local_index = frames[frame].download_buffer_copy_regions.size();
+	request.capture = p_capture;
+	if (core) {
+		request.result = p_owned;
+	} else {
+		request.result.instantiate();
+		const Error error = request.result->bytes.resize(p_size);
+		if (error != OK) {
+			return error;
+		}
+	}
+	auto issued_size = [&]() -> uint32_t { return p_capture ? uint32_t(p_capture->state->issued) : request.result->issued_size; };
+	auto error_cell = [&]() -> Error & { return p_capture ? p_capture->state->error : request.result->error; };
+	request.result_offset = issued_size();
+	uint32_t submit_from = issued_size(), to_submit = p_size - submit_from;
+	auto publish = [&](bool final) {
+		if (!request.frame_local_count) {
+			return;
+		}
 		if (_buffer_make_mutable(buffer, p_buffer)) {
-			// The buffer must be mutable to be used as a copy source.
+			if (p_capture) {
+				p_capture->became_mutable = true;
+			}
 			draw_graph.add_synchronization();
 		}
-
-		for (uint32_t i = 0; i < get_data_request.frame_local_count; i++) {
-			uint32_t local_index = get_data_request.frame_local_index + i;
-			draw_graph.add_buffer_get_data(buffer->driver_id, buffer->draw_tracker, frames[frame].download_buffer_staging_buffers[local_index], frames[frame].download_buffer_copy_regions[local_index]);
+		for (uint32_t i = 0; i < request.frame_local_count; ++i) {
+			const uint32_t index = request.frame_local_index + i;
+			const auto destination = frames[frame].download_buffer_staging_buffers[index];
+			const auto region = frames[frame].download_buffer_copy_regions[index];
+			const auto handle = draw_graph.add_buffer_get_data(buffer->driver_id, buffer->draw_tracker, destination, region);
+			if (p_capture) {
+				p_capture->segment(p_capture->count++) = { handle, uint32_t(region.src_offset - p_offset), uint32_t(region.src_offset + region.size - p_offset) };
+			} else {
+				request.result->copies.push_back({ handle, buffer->driver_id, destination, region, false, RDG::RecordMappingState::Pending, UINT32_MAX, RDD::CommandBufferID(), false, OK, {} });
+			}
 		}
-
-		frames[frame].download_buffer_get_data_requests.push_back(get_data_request);
+		request.final_segment = final;
+		frames[frame].download_buffer_get_data_requests.push_back(request);
+		if (p_capture) {
+			p_capture->state->issued += request.size;
+		} else {
+			request.result->issued_size += request.size;
+		}
+	};
+	while (to_submit) {
+		// Every staged region will produce one actual graph-copy handle. Reserve
+		// its arena slot before staging consumes bytes or mutability changes.
+		if (p_capture && request.frame_local_count >= p_capture->capacity - p_capture->count) {
+			publish(false);
+			return ERR_BUSY;
+		}
+		uint32_t offset = 0, amount = 0;
+		StagingRequiredAction action;
+		Error error = _staging_buffer_allocate(download_staging_buffers, MIN(to_submit, download_staging_buffers.block_size), 32, offset, amount, action);
+		if (error != OK) {
+			if (core) {
+				publish(false);
+			}
+			error_cell() = error;
+			return error;
+		}
+		if (core && action != STAGING_REQUIRED_ACTION_NONE) {
+			// Both exhausted-staging cases preserve this same result/copy set and return
+			// before the legacy blocking action. The next call resumes only its suffix.
+			publish(false);
+			return ERR_BUSY;
+		}
+		const bool flush = request.frame_local_count > 0 && action == STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL;
+		if (flush) {
+			publish(false);
+		}
+		error = _staging_buffer_execute_required_action(download_staging_buffers, action);
+		if (error != OK) {
+			error_cell() = error;
+			return error;
+		}
+		if (error_cell() != OK) {
+			return error_cell();
+		}
+		buffer = _get_buffer_from_owner(p_buffer);
+		if (!buffer) {
+			error_cell() = ERR_DOES_NOT_EXIST;
+			return ERR_DOES_NOT_EXIST;
+		}
+		if (flush) {
+			request.result_offset = issued_size();
+			request.size = 0;
+			request.frame_local_count = 0;
+			request.frame_local_index = frames[frame].download_buffer_copy_regions.size();
+		}
+		const RDD::BufferCopyRegion region{ submit_from + p_offset, offset, amount };
+		frames[frame].download_buffer_staging_buffers.push_back(download_staging_buffers.blocks[download_staging_buffers.current].driver_id);
+		frames[frame].download_buffer_copy_regions.push_back(region);
+		++request.frame_local_count;
+		request.size += amount;
+		download_staging_buffers.blocks.write[download_staging_buffers.current].fill_amount = offset + amount;
+		submit_from += amount;
+		to_submit -= amount;
 	}
-
+	publish(true);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	if (request.frame_local_count) {
+		RenderCaptureTestHooks::observe_readback_queued(p_buffer.get_id(), p_size);
+	}
+#endif
 	return OK;
 }
 
 uint64_t RenderingDevice::buffer_get_device_address(RID p_buffer) {
 	ERR_RENDER_THREAD_GUARD_V(0);
 
+	MutexLock immutable_lock(_thread_safe_);
+	ERR_FAIL_COND_V(native_immutable_resource_is_held(p_buffer) || native_immutable_resource_is_retiring(p_buffer), 0);
 	Buffer *buffer = _get_buffer_from_owner(p_buffer);
 	ERR_FAIL_NULL_V_MSG(buffer, 0, "Buffer argument is not a valid buffer of any type.");
+	ERR_FAIL_COND_V(buffer->qualification_return, 0);
 	ERR_FAIL_COND_V_MSG(!buffer->usage.has_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT), 0, "Buffer was not created with device address flag.");
 
-	return driver->buffer_get_device_address(buffer->driver_id);
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+	if (buffer->capture_test_allocation_serial && !capture_test_allocation_registry.mark_access_escaped(buffer->driver_id.id, buffer->capture_test_allocation_serial)) {
+		capture_test_coverage_failed.store(true);
+	}
+#endif
+	const uint64_t address = driver->buffer_get_device_address(buffer->driver_id);
+	if (address) {
+		buffer->native_external_access = true;
+	}
+	return address;
 }
 
 uint8_t *RenderingDevice::buffer_persistent_map_advance(RID p_buffer) {
+	ERR_FAIL_COND_V(native_immutable_resource_is_held(p_buffer) || native_immutable_resource_is_retiring(p_buffer), nullptr);
 	ERR_RENDER_THREAD_GUARD_V(0);
 
 	Buffer *buffer = _get_buffer_from_owner(p_buffer);
 	ERR_FAIL_NULL_V_MSG(buffer, nullptr, "Buffer argument is not a valid buffer of any type.");
+	ERR_FAIL_COND_V(buffer->qualification_return, nullptr);
 	direct_copy_count++;
-	return driver->buffer_persistent_map_advance(buffer->driver_id, frames_drawn);
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+	if (buffer->capture_test_allocation_serial && !capture_test_allocation_registry.mark_access_escaped(buffer->driver_id.id, buffer->capture_test_allocation_serial)) {
+		capture_test_coverage_failed.store(true);
+	}
+#endif
+	uint8_t *mapping = driver->buffer_persistent_map_advance(buffer->driver_id, frames_drawn);
+	if (mapping) {
+		buffer->native_external_access = true;
+	}
+	return mapping;
 }
 
 void RenderingDevice::buffer_flush(RID p_buffer) {
@@ -1442,13 +1861,33 @@ void RenderingDevice::buffer_flush(RID p_buffer) {
 
 	Buffer *buffer = _get_buffer_from_owner(p_buffer);
 	ERR_FAIL_NULL_MSG(buffer, "Buffer argument is not a valid buffer of any type.");
+	ERR_FAIL_COND(buffer->qualification_return);
 	driver->buffer_flush(buffer->driver_id);
 }
 
+uint64_t RenderingDevice::_reserve_backing_serial() {
+	uint64_t serial = next_backing_serial.load(std::memory_order_relaxed);
+	while (serial) {
+		const uint64_t next = serial == UINT64_MAX ? 0 : serial + 1;
+		if (next_backing_serial.compare_exchange_weak(serial, next, std::memory_order_relaxed)) {
+			return serial;
+		}
+	}
+	return 0;
+}
+
 RID RenderingDevice::storage_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p_data, BitField<StorageBufferUsage> p_usage, BitField<BufferCreationBits> p_creation_bits) {
+	return _storage_buffer_create_internal(p_size_bytes, p_data, p_usage, p_creation_bits, nullptr);
+}
+
+RID RenderingDevice::_storage_buffer_create_internal(uint32_t p_size_bytes, Span<uint8_t> p_data, BitField<StorageBufferUsage> p_usage, BitField<BufferCreationBits> p_creation_bits, const NativeDisposalWitness *p_native_disposal) {
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V(p_data.size() && (uint32_t)p_data.size() != p_size_bytes, RID());
 
+	const uint64_t backing_serial = _reserve_backing_serial();
+	ERR_FAIL_COND_V_MSG(backing_serial == 0, RID(), "Storage backing serial space exhausted.");
 	Buffer buffer;
+	buffer.backing_serial = backing_serial;
 	buffer.size = p_size_bytes;
 	buffer.usage = (RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT | RDD::BUFFER_USAGE_STORAGE_BIT);
 	if (p_creation_bits.has_flag(BUFFER_CREATION_DYNAMIC_PERSISTENT_BIT)) {
@@ -1479,22 +1918,70 @@ RID RenderingDevice::storage_buffer_create(uint32_t p_size_bytes, Span<uint8_t> 
 		buffer.usage.set_flag(RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
 	}
 
+	RID reserved_storage;
+	if (p_native_disposal) {
+		// The Core factory has no upload prefix. Reserve the actual RID, tracker
+		// and observation cell before the first native allocation.
+		ERR_FAIL_COND_V(!p_data.is_empty(), RID());
+		reserved_storage = storage_buffer_owner.allocate_rid();
+		ERR_FAIL_COND_V(reserved_storage.is_null(), RID());
+		buffer.draw_tracker = RDG::resource_tracker_create();
+		buffer.native_disposal = *p_native_disposal;
+		buffer.native_disposal_rid = reserved_storage.get_id();
+		p_native_disposal->cell->rid = reserved_storage.get_id();
+		p_native_disposal->cell->serial = backing_serial;
+	}
 	buffer.driver_id = driver->buffer_create(buffer.size, buffer.usage, RDD::MEMORY_ALLOCATION_TYPE_GPU, frames_drawn);
-	ERR_FAIL_COND_V(!buffer.driver_id, RID());
+	if (!buffer.driver_id) {
+		if (reserved_storage.is_valid()) {
+			RDG::resource_tracker_free(buffer.draw_tracker);
+			storage_buffer_owner.initialize_rid(reserved_storage, Buffer());
+			storage_buffer_owner.free(reserved_storage);
+		}
+		ERR_FAIL_V(RID());
+	}
 
 	// Storage buffers are assumed to be mutable.
-	buffer.draw_tracker = RDG::resource_tracker_create();
+	if (!buffer.draw_tracker) {
+		buffer.draw_tracker = RDG::resource_tracker_create();
+	}
 	buffer.draw_tracker->buffer_driver_id = buffer.driver_id;
+	if (p_native_disposal) {
+		p_native_disposal->cell->backing = buffer.driver_id.id;
+	}
 
 	if (p_data.size()) {
-		_buffer_initialize(&buffer, p_data);
+		Error initialize_error = _buffer_initialize(&buffer, p_data);
+		if (initialize_error != OK) {
+			RDG::resource_tracker_free(buffer.draw_tracker);
+			driver->buffer_free(buffer.driver_id);
+			_production_disposal_returned(buffer.production_disposal_uses);
+			return RID();
+		}
 	}
 
 	_THREAD_SAFE_LOCK_
 	buffer_memory += buffer.size;
 	_THREAD_SAFE_UNLOCK_
 
-	RID id = storage_buffer_owner.make_rid(buffer);
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+	RID id = reserved_storage.is_valid() ? reserved_storage : storage_buffer_owner.allocate_rid();
+	buffer.capture_test_allocation_serial = capture_test_allocation_registry.allocate(buffer.driver_id.id, id.get_id());
+	if (buffer.capture_test_allocation_serial == 0) {
+		capture_test_coverage_failed.store(true);
+	}
+	storage_buffer_owner.initialize_rid(id, buffer);
+#else
+	RID id = reserved_storage;
+	if (id.is_valid()) {
+		storage_buffer_owner.initialize_rid(id, buffer);
+	} else {
+		id = storage_buffer_owner.make_rid(buffer);
+	}
+#endif
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	RenderCaptureTestHooks::observe_buffer_allocation(id.get_id(), uint64_t(get_instance_id()), buffer.driver_id.id, buffer.capture_test_allocation_serial);
+#endif
 #ifdef DEV_ENABLED
 	set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
@@ -1502,6 +1989,7 @@ RID RenderingDevice::storage_buffer_create(uint32_t p_size_bytes, Span<uint8_t> 
 }
 
 RID RenderingDevice::texture_buffer_create(uint32_t p_size_elements, DataFormat p_format, Span<uint8_t> p_data) {
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	uint32_t element_size = get_format_vertex_size(p_format);
 	ERR_FAIL_COND_V_MSG(element_size == 0, RID(), "Format requested is not supported for texture buffers");
 	uint64_t size_bytes = uint64_t(element_size) * p_size_elements;
@@ -1522,12 +2010,18 @@ RID RenderingDevice::texture_buffer_create(uint32_t p_size_elements, DataFormat 
 
 	bool ok = driver->buffer_set_texel_format(texture_buffer.driver_id, p_format);
 	if (!ok) {
+		RDG::resource_tracker_free(texture_buffer.draw_tracker);
 		driver->buffer_free(texture_buffer.driver_id);
 		ERR_FAIL_V(RID());
 	}
 
 	if (p_data.size()) {
-		_buffer_initialize(&texture_buffer, p_data);
+		Error initialize_error = _buffer_initialize(&texture_buffer, p_data);
+		if (initialize_error != OK) {
+			RDG::resource_tracker_free(texture_buffer.draw_tracker);
+			driver->buffer_free(texture_buffer.driver_id);
+			return RID();
+		}
 	}
 
 	_THREAD_SAFE_LOCK_
@@ -1546,6 +2040,39 @@ RID RenderingDevice::texture_buffer_create(uint32_t p_size_elements, DataFormat 
 /*****************/
 
 RID RenderingDevice::texture_create(const TextureFormat &p_format, const TextureView &p_view, const Vector<Vector<uint8_t>> &p_data) {
+	return _texture_create_internal(p_format, p_view, p_data, nullptr, RID());
+}
+
+RID RenderingDevice::_qualification_texture_create(const TextureFormat &p_format, const TextureView &p_view, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell) {
+	ERR_FAIL_COND_V(!p_cell || !p_cell->bridge || !p_cell->child || !p_cell->serial || p_cell->rid || p_cell->use_closed || p_cell->enqueued || p_cell->free_event, RID());
+	// VRS can implicitly initialize image data. This entry reserves an empty
+	// texture only; checked upload is a separate original ticket operation.
+	ERR_FAIL_COND_V(p_format.usage_bits & TEXTURE_USAGE_VRS_ATTACHMENT_BIT, RID());
+	ERR_FAIL_COND_V(!_qualification_reserve_free_event(p_cell), RID());
+	RID reserved = texture_owner.allocate_rid();
+	if (reserved.is_null()) {
+		_qualification_release_free_event(p_cell);
+		return RID();
+	}
+	RID created = _texture_create_internal(p_format, p_view, {}, p_cell, reserved);
+	if (created.is_null()) {
+		if (texture_owner.owns(reserved)) {
+			texture_owner.initialize_rid(reserved, Texture());
+			texture_owner.free(reserved);
+		}
+		_qualification_release_free_event(p_cell);
+	}
+	return created;
+}
+
+RID RenderingDevice::_texture_create_internal(const TextureFormat &p_format, const TextureView &p_view, const Vector<Vector<uint8_t>> &p_data, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved, const NativeDisposalWitness *p_native_disposal) {
+	ERR_FAIL_COND_V(p_native_disposal && (p_cell || p_reserved.is_null() || !p_data.is_empty()), RID());
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	// Check the stored enum representation before copying or reading it.
+	static_assert(sizeof(p_format.format) == sizeof(uint32_t));
+	uint32_t format_value = 0;
+	memcpy(&format_value, &p_format.format, sizeof(format_value));
+	ERR_FAIL_UNSIGNED_INDEX_V(format_value, DATA_FORMAT_MAX, RID());
 	// Some adjustments will happen.
 	TextureFormat format = p_format;
 
@@ -1745,7 +2272,23 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 
 	texture_memory += driver->texture_get_allocation_size(texture.driver_id);
 
-	RID id = texture_owner.make_rid(texture);
+	RID id = p_reserved;
+	if (id.is_valid()) {
+		texture.qualification_return = p_cell;
+		if (p_cell) {
+			p_cell->rid = id.get_id();
+		}
+		if (p_native_disposal) {
+			texture.native_disposal = *p_native_disposal;
+			texture.native_disposal_rid = id.get_id();
+			texture.native_disposal_serial = p_native_disposal->cell->serial;
+			p_native_disposal->cell->rid = id.get_id();
+			p_native_disposal->cell->backing = texture.driver_id.id;
+		}
+		texture_owner.initialize_rid(id, texture);
+	} else {
+		id = texture_owner.make_rid(texture);
+	}
 #ifdef DEV_ENABLED
 	set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
@@ -1753,8 +2296,45 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 	if (data.size()) {
 		const bool use_general_in_copy_queues = driver->api_trait_get(RDD::API_TRAIT_USE_GENERAL_IN_COPY_QUEUES);
 		const RDD::TextureLayout dst_layout = use_general_in_copy_queues ? RDD::TEXTURE_LAYOUT_GENERAL : RDD::TEXTURE_LAYOUT_COPY_DST_OPTIMAL;
+		auto dispose_failed_texture = [&]() {
+			Texture *failed_texture = texture_owner.get_or_null(id);
+			if (!failed_texture) {
+				return;
+			}
+			// An earlier layer may have issued a transfer. Keep the driver object
+			// alive until the normal frame retirement path has drained that worker.
+			{
+				const Error dependency_error = _check_transfer_worker_texture(failed_texture);
+				if (dependency_error != OK) {
+					if (p_cell) {
+						failed_texture->qualification_return = nullptr;
+						p_cell->rid = 0;
+					}
+					_qualification_defer_free(id);
+					return;
+				}
+			}
+			if (p_cell) {
+				// Creation never returned this qualification cell to its caller. Do
+				// not publish a physical return for a failed create.
+				failed_texture->qualification_return = nullptr;
+				p_cell->rid = 0;
+			}
+			_production_disposal_enqueued(failed_texture->production_disposal_uses);
+			frames[frame].textures_to_dispose_of.push_back(*failed_texture);
+			texture_owner.free(id);
+		};
 		for (uint32_t i = 0; i < format.array_layers; i++) {
-			_texture_initialize(id, i, data[i], dst_layout, immediate_flush);
+			const Error initialize_error = _texture_initialize(id, i, data[i], dst_layout, immediate_flush);
+			if (initialize_error != OK) {
+				// ERR_BUSY can mean an issued transfer is still unresolved. Keep
+				// that owner for the existing shutdown/fence recovery path; freeing
+				// it here would race the unresolved worker.
+				if (initialize_error != ERR_BUSY) {
+					dispose_failed_texture();
+				}
+				return RID();
+			}
 		}
 
 		if (texture.draw_tracker != nullptr) {
@@ -1766,18 +2346,28 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 }
 
 RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with_texture) {
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_with_texture), RID());
 	Texture *src_texture = texture_owner.get_or_null(p_with_texture);
 	ERR_FAIL_NULL_V(src_texture, RID());
+	ERR_FAIL_COND_V(src_texture->qualification_return, RID());
 
 	if (src_texture->owner.is_valid()) { // Ahh this is a share. The RenderingDeviceDriver needs the actual owner.
 		p_with_texture = src_texture->owner;
 		src_texture = texture_owner.get_or_null(src_texture->owner);
 		ERR_FAIL_NULL_V(src_texture, RID()); // This is a bug.
+		ERR_FAIL_COND_V(src_texture->qualification_return, RID());
 	}
 
 	// Create view.
 
 	Texture texture = *src_texture;
+	// A view is another native object; it cannot copy its parent's free receipt.
+	texture.native_disposal = NativeDisposalWitness();
+	texture.native_disposal_rid = texture.native_disposal_serial = 0;
+	texture.production_disposal_uses = nullptr;
+	texture.native_immutable_holds = 0;
+	texture.native_immutable_retire_requested = false;
 	texture.slice_trackers = nullptr;
 	texture.shared_fallback = nullptr;
 
@@ -1806,16 +2396,22 @@ RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with
 		RDD::TextureView regular_view = tv;
 		regular_view.format = src_texture->format;
 		texture.driver_id = driver->texture_create_shared(texture.driver_id, regular_view);
+		ERR_FAIL_COND_V(!texture.driver_id, RID());
 
 		// Create the independent texture for the alias.
 		RDD::TextureFormat alias_format = texture.texture_format();
 		alias_format.format = tv.format;
 		alias_format.usage_bits = TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_CAN_COPY_TO_BIT;
 
+		const RDD::TextureID fallback_texture = driver->texture_create(alias_format, tv);
+		if (!fallback_texture) {
+			driver->texture_free(texture.driver_id);
+			return RID();
+		}
+		const bool source_fallback_was_missing = src_texture->shared_fallback == nullptr;
 		_texture_check_shared_fallback(src_texture);
 		_texture_check_shared_fallback(&texture);
-
-		texture.shared_fallback->texture = driver->texture_create(alias_format, tv);
+		texture.shared_fallback->texture = fallback_texture;
 		texture.shared_fallback->raw_reinterpretation = raw_reintepretation;
 		texture_memory += driver->texture_get_allocation_size(texture.shared_fallback->texture);
 
@@ -1831,7 +2427,14 @@ RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with
 
 		if (raw_reintepretation && src_texture->shared_fallback->buffer.id == 0) {
 			// For shared textures of the same size, we create the buffer on the main texture if it doesn't have it already.
-			_texture_create_reinterpret_buffer(src_texture);
+			if (!_texture_create_reinterpret_buffer(src_texture)) {
+				_texture_free_shared_fallback(&texture);
+				driver->texture_free(texture.driver_id);
+				if (source_fallback_was_missing) {
+					_texture_free_shared_fallback(src_texture);
+				}
+				return RID();
+			}
 		}
 	}
 
@@ -1852,9 +2455,11 @@ RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with
 }
 
 RID RenderingDevice::texture_create_from_extension(TextureType p_type, DataFormat p_format, TextureSamples p_samples, BitField<RenderingDevice::TextureUsageBits> p_usage, uint64_t p_image, uint64_t p_width, uint64_t p_height, uint64_t p_depth, uint64_t p_layers, uint64_t p_mipmaps) {
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	// This method creates a texture object using a VkImage created by an extension, module or other external source (OpenXR uses this).
 
 	Texture texture;
+	texture.native_external_access = true;
 	texture.type = p_type;
 	texture.format = p_format;
 	texture.samples = p_samples;
@@ -1894,13 +2499,17 @@ RID RenderingDevice::texture_create_from_extension(TextureType p_type, DataForma
 }
 
 RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view, RID p_with_texture, uint32_t p_layer, uint32_t p_mipmap, uint32_t p_mipmaps, TextureSliceType p_slice_type, uint32_t p_layers) {
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_with_texture), RID());
 	Texture *src_texture = texture_owner.get_or_null(p_with_texture);
 	ERR_FAIL_NULL_V(src_texture, RID());
+	ERR_FAIL_COND_V(src_texture->qualification_return, RID());
 
 	if (src_texture->owner.is_valid()) { // // Ahh this is a share. The RenderingDeviceDriver needs the actual owner.
 		p_with_texture = src_texture->owner;
 		src_texture = texture_owner.get_or_null(src_texture->owner);
 		ERR_FAIL_NULL_V(src_texture, RID()); // This is a bug.
+		ERR_FAIL_COND_V(src_texture->qualification_return, RID());
 	}
 
 	ERR_FAIL_COND_V_MSG(p_slice_type == TEXTURE_SLICE_CUBEMAP && (src_texture->type != TEXTURE_TYPE_CUBE && src_texture->type != TEXTURE_TYPE_CUBE_ARRAY), RID(),
@@ -1931,6 +2540,12 @@ RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view,
 	}
 
 	Texture texture = *src_texture;
+	// A view is another native object; it cannot copy its parent's free receipt.
+	texture.native_disposal = NativeDisposalWitness();
+	texture.native_disposal_rid = texture.native_disposal_serial = 0;
+	texture.production_disposal_uses = nullptr;
+	texture.native_immutable_holds = 0;
+	texture.native_immutable_retire_requested = false;
 	texture.slice_trackers = nullptr;
 	texture.shared_fallback = nullptr;
 
@@ -1979,6 +2594,7 @@ RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view,
 		RDD::TextureView regular_view = tv;
 		regular_view.format = src_texture->format;
 		texture.driver_id = driver->texture_create_shared_from_slice(src_texture->driver_id, regular_view, p_slice_type, p_layer, slice_layers, p_mipmap, p_mipmaps);
+		ERR_FAIL_COND_V(!texture.driver_id, RID());
 
 		// Create the independent texture for the slice.
 		RDD::TextureSubresourceRange slice_range = texture.barrier_range();
@@ -1992,10 +2608,14 @@ RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view,
 		slice_format.format = tv.format;
 		slice_format.usage_bits = TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_CAN_COPY_TO_BIT;
 
+		const RDD::TextureID fallback_texture = driver->texture_create(slice_format, tv);
+		if (!fallback_texture) {
+			driver->texture_free(texture.driver_id);
+			return RID();
+		}
 		_texture_check_shared_fallback(src_texture);
 		_texture_check_shared_fallback(&texture);
-
-		texture.shared_fallback->texture = driver->texture_create(slice_format, tv);
+		texture.shared_fallback->texture = fallback_texture;
 		texture.shared_fallback->raw_reinterpretation = raw_reintepretation;
 		texture_memory += driver->texture_get_allocation_size(texture.shared_fallback->texture);
 
@@ -2011,7 +2631,11 @@ RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view,
 
 		if (raw_reintepretation && src_texture->shared_fallback->buffer.id == 0) {
 			// For shared texture slices, we create the buffer on the slice if the source texture has no reinterpretation buffer.
-			_texture_create_reinterpret_buffer(&texture);
+			if (!_texture_create_reinterpret_buffer(&texture)) {
+				_texture_free_shared_fallback(&texture);
+				driver->texture_free(texture.driver_id);
+				return RID();
+			}
 		}
 	}
 
@@ -2107,7 +2731,18 @@ uint32_t RenderingDevice::_texture_alignment(Texture *p_texture) const {
 	return least_common_multiple(alignment, driver->api_trait_get(RDD::API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT));
 }
 
+uint32_t RenderingDevice::_normalize_staging_region_size(int64_t p_size) {
+	if (p_size <= 0 || uint64_t(p_size) > UINT32_MAX) {
+		return 1;
+	}
+	const uint32_t normalized = Math::nearest_power_of_2_templated(uint32_t(p_size));
+	return normalized == 0 ? 1 : normalized;
+}
+
 Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, const Vector<uint8_t> &p_data, RDD::TextureLayout p_dst_layout, bool p_immediate_flush) {
+	if (native_immutable_resource_is_held(p_texture) || native_immutable_resource_is_retiring(p_texture)) {
+		return ERR_BUSY;
+	}
 	Texture *texture = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL_V(texture, ERR_INVALID_PARAMETER);
 
@@ -2145,6 +2780,7 @@ Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, cons
 		const bool copy_pass = (pass == 1);
 		if (copy_pass) {
 			transfer_worker = _acquire_transfer_worker(staging_local_offset, required_align, staging_worker_offset);
+			ERR_FAIL_NULL_V(transfer_worker, ERR_BUSY);
 			texture->transfer_worker_index = transfer_worker->index;
 
 			{
@@ -2155,9 +2791,15 @@ Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, cons
 			staging_local_offset = 0;
 
 			write_ptr = driver->buffer_map(transfer_worker->staging_buffer);
+			if (write_ptr == nullptr) {
+				texture->transfer_worker_index = -1;
+				texture->transfer_worker_operation = 0;
+				_release_transfer_worker(transfer_worker);
+				return ERR_CANT_CREATE;
+			}
 			ERR_FAIL_NULL_V(write_ptr, ERR_CANT_CREATE);
 
-			if (driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS)) {
+			if (driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS) && driver->api_trait_get(RDD::API_TRAIT_TEXTURES_REQUIRE_LAYOUT_TRANSITIONS)) {
 				// Transition the texture to the optimal layout.
 				RDD::TextureBarrier tb;
 				tb.texture = texture->driver_id;
@@ -2225,7 +2867,7 @@ Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, cons
 			driver->buffer_unmap(transfer_worker->staging_buffer);
 
 			// If the texture does not have a tracker, it means it must be transitioned to the sampling state.
-			if (texture->draw_tracker == nullptr && driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS)) {
+			if (texture->draw_tracker == nullptr && driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS) && driver->api_trait_get(RDD::API_TRAIT_TEXTURES_REQUIRE_LAYOUT_TRANSITIONS)) {
 				RDD::TextureBarrier tb;
 				tb.texture = texture->driver_id;
 				tb.src_access = RDD::BARRIER_ACCESS_COPY_WRITE_BIT;
@@ -2241,7 +2883,10 @@ Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, cons
 			if (p_immediate_flush) {
 				_end_transfer_worker(transfer_worker);
 				_submit_transfer_worker(transfer_worker);
-				_wait_for_transfer_worker(transfer_worker);
+				if (!_wait_for_transfer_worker(transfer_worker, true)) {
+					_release_transfer_worker(transfer_worker);
+					return ERR_BUSY;
+				}
 			}
 
 			_release_transfer_worker(transfer_worker);
@@ -2252,7 +2897,13 @@ Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, cons
 }
 
 Error RenderingDevice::texture_update(RID p_texture, uint32_t p_layer, const Vector<uint8_t> &p_data) {
+	if (native_immutable_resource_is_held(p_texture) || native_immutable_resource_is_retiring(p_texture)) {
+		return ERR_BUSY;
+	}
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
+	if (_recording_error() != OK) {
+		return _recording_error();
+	}
 
 	ERR_FAIL_COND_V_MSG(draw_list.active, ERR_INVALID_PARAMETER, "Updating textures is forbidden during creation of a draw list.");
 	ERR_FAIL_COND_V_MSG(compute_list.active, ERR_INVALID_PARAMETER, "Updating textures is forbidden during creation of a compute list.");
@@ -2260,11 +2911,13 @@ Error RenderingDevice::texture_update(RID p_texture, uint32_t p_layer, const Vec
 
 	Texture *texture = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL_V(texture, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(texture->qualification_return, ERR_UNAUTHORIZED);
 
 	if (texture->owner != RID()) {
 		p_texture = texture->owner;
 		texture = texture_owner.get_or_null(texture->owner);
 		ERR_FAIL_NULL_V(texture, ERR_BUG); // This is a bug.
+		ERR_FAIL_COND_V(texture->qualification_return, ERR_UNAUTHORIZED);
 	}
 
 	ERR_FAIL_COND_V_MSG(texture->bound, ERR_CANT_ACQUIRE_RESOURCE,
@@ -2284,9 +2937,19 @@ Error RenderingDevice::texture_update(RID p_texture, uint32_t p_layer, const Vec
 			"Required size for texture update (" + itos(required_size) + ") does not match data supplied size (" + itos(p_data.size()) + ").");
 
 	// Clear the texture if the driver requires it during its first use.
-	_texture_check_pending_clear(p_texture, texture);
+	{
+		const Error dependency_error = _texture_check_pending_clear(p_texture, texture);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
 
-	_check_transfer_worker_texture(texture);
+	{
+		const Error dependency_error = _check_transfer_worker_texture(texture);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
 
 	uint32_t block_w, block_h;
 	get_compressed_image_format_block_dimensions(texture->format, block_w, block_h);
@@ -2347,7 +3010,10 @@ Error RenderingDevice::texture_update(RID p_texture, uint32_t p_layer, const Vec
 						command_buffer_to_texture_copies_vector.clear();
 					}
 
-					_staging_buffer_execute_required_action(upload_staging_buffers, required_action);
+					err = _staging_buffer_execute_required_action(upload_staging_buffers, required_action);
+					if (err != OK) {
+						return err;
+					}
 
 					uint8_t *write_ptr = upload_staging_buffers.blocks[upload_staging_buffers.current].data_ptr + alloc_offset;
 
@@ -2387,6 +3053,70 @@ Error RenderingDevice::texture_update(RID p_texture, uint32_t p_layer, const Vec
 
 	draw_graph.add_texture_update(texture->driver_id, texture->draw_tracker, command_buffer_to_texture_copies_vector);
 
+	return OK;
+}
+
+// Original checked image upload: each accepted row is a real graph command.
+// The full immutable tight image is supplied on each retry; only its suffix is staged.
+Error RenderingDevice::_qualification_texture_upload(RID rid, const uint8_t *bytes, uint32_t size, QualificationUploadProgress &progress) {
+	if (!qualification_recording || !bytes || _recording_error() != OK) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto *texture = texture_owner.get_or_null(rid);
+	if (!texture || !texture->qualification_return || !texture->driver_id || texture->owner.is_valid() || texture->shared_fallback || texture->transfer_worker_index >= 0 || texture->mipmaps != 1 || texture->layers != 1 || texture->bound) {
+		return ERR_UNAVAILABLE;
+	}
+	const uint32_t pixel = texture->format == DATA_FORMAT_R32G32B32A32_SFLOAT ? 16 : texture->format == DATA_FORMAT_R8G8B8A8_UNORM ? 4
+																																   : 0;
+	const uint64_t row64 = uint64_t(texture->width) * pixel, rows = uint64_t(texture->height) * texture->depth;
+	if (!pixel || !row64 || !rows || rows > 4096 || row64 * rows != size || progress.consumed > size || progress.consumed % row64 || progress.max_segments != rows) {
+		return ERR_INVALID_DATA;
+	}
+	const uint32_t row_bytes = uint32_t(row64);
+	const uint32_t pitch_step = MAX(1U, uint32_t(driver->api_trait_get(RDD::API_TRAIT_TEXTURE_DATA_ROW_PITCH_STEP)));
+	const uint64_t pitch64 = ((row64 + pitch_step - 1) / pitch_step) * pitch_step;
+	if (pitch64 > UINT32_MAX || pitch64 > upload_staging_buffers.block_size || pitch64 > upload_staging_buffers.max_size) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	while (progress.consumed < size) {
+		uint32_t offset = 0, amount = 0;
+		StagingRequiredAction action;
+		const Error error = _staging_buffer_allocate(upload_staging_buffers, uint32_t(pitch64), _texture_alignment(texture), offset, amount, action, true);
+		if (error != OK) {
+			return error;
+		}
+		if (action != STAGING_REQUIRED_ACTION_NONE || amount < pitch64) {
+			return ERR_BUSY;
+		}
+		if (progress.segments.size() >= progress.max_segments) {
+			return ERR_INVALID_DATA;
+		}
+		uint8_t *destination = upload_staging_buffers.blocks[upload_staging_buffers.current].data_ptr + offset;
+		memcpy(destination, bytes + progress.consumed, row_bytes);
+		if (pitch64 > row_bytes) {
+			memset(destination + row_bytes, 0, pitch64 - row_bytes);
+		}
+		const uint32_t row = progress.consumed / row_bytes;
+		RDG::RecordedBufferToTextureCopy copy;
+		copy.from_buffer = upload_staging_buffers.blocks[upload_staging_buffers.current].driver_id;
+		copy.region.buffer_offset = offset;
+		copy.region.row_pitch = uint32_t(pitch64);
+		copy.region.texture_subresource.aspect = RDD::TEXTURE_ASPECT_COLOR;
+		copy.region.texture_subresource.mipmap = 0;
+		copy.region.texture_subresource.layer = 0;
+		copy.region.texture_offset = Vector3i(0, row % texture->height, row / texture->height);
+		copy.region.texture_region_size = Vector3i(texture->width, 1, 1);
+		if (_texture_make_mutable(texture, rid)) {
+			draw_graph.add_synchronization();
+		}
+		const auto handle = draw_graph.add_texture_update(texture->driver_id, texture->draw_tracker, VectorView(&copy, 1));
+		upload_staging_buffers.blocks.write[upload_staging_buffers.current].fill_amount = offset + amount;
+		progress.segments.push_back({ handle, progress.consumed, progress.consumed + row_bytes });
+		progress.consumed += row_bytes;
+	}
+	// Every pixel now has an original upload command; no implicit clear is needed.
+	texture->pending_clear = false;
+	texture->has_initial_data = true;
 	return OK;
 }
 
@@ -2445,6 +3175,7 @@ void RenderingDevice::_texture_free_shared_fallback(Texture *p_texture) {
 }
 
 void RenderingDevice::_texture_copy_shared(RID p_src_texture_rid, Texture *p_src_texture, RID p_dst_texture_rid, Texture *p_dst_texture) {
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
 	// The only type of copying allowed is from the main texture to the slice texture, as slice textures are not allowed to be used for writing when using this fallback.
 	DEV_ASSERT(p_src_texture != nullptr);
 	DEV_ASSERT(p_dst_texture != nullptr);
@@ -2563,18 +3294,27 @@ void RenderingDevice::_texture_copy_shared(RID p_src_texture_rid, Texture *p_src
 	}
 }
 
-void RenderingDevice::_texture_create_reinterpret_buffer(Texture *p_texture) {
+bool RenderingDevice::_texture_create_reinterpret_buffer(Texture *p_texture) {
+	ERR_FAIL_COND_V(!p_texture || !p_texture->shared_fallback, false);
+	if (p_texture->shared_fallback->buffer) {
+		return true;
+	}
 	uint64_t row_pitch_step = driver->api_trait_get(RDD::API_TRAIT_TEXTURE_DATA_ROW_PITCH_STEP);
 	uint64_t transfer_alignment = driver->api_trait_get(RDD::API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT);
 	uint32_t pixel_bytes = get_image_format_pixel_size(p_texture->format);
 	uint32_t row_pitch = STEPIFY(p_texture->width * pixel_bytes, row_pitch_step);
 	uint64_t buffer_size = STEPIFY(pixel_bytes * row_pitch * p_texture->height * p_texture->depth, transfer_alignment);
-	p_texture->shared_fallback->buffer = driver->buffer_create(buffer_size, RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT, RDD::MEMORY_ALLOCATION_TYPE_GPU, frames_drawn);
-	buffer_memory += driver->buffer_get_allocation_size(p_texture->shared_fallback->buffer);
+	const RDD::BufferID buffer = driver->buffer_create(buffer_size, RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT, RDD::MEMORY_ALLOCATION_TYPE_GPU, frames_drawn);
+	if (!buffer) {
+		return false;
+	}
+	p_texture->shared_fallback->buffer = buffer;
+	buffer_memory += driver->buffer_get_allocation_size(buffer);
 
 	RDG::ResourceTracker *tracker = RDG::resource_tracker_create();
-	tracker->buffer_driver_id = p_texture->shared_fallback->buffer;
+	tracker->buffer_driver_id = buffer;
 	p_texture->shared_fallback->buffer_tracker = tracker;
+	return true;
 }
 
 uint32_t RenderingDevice::_texture_vrs_method_to_usage_bits() const {
@@ -2596,35 +3336,58 @@ void RenderingDevice::_texture_ensure_shareable_format(RID p_texture, const Data
 	}
 }
 
-void RenderingDevice::_texture_check_pending_clear(RID p_texture_rid, Texture *p_texture) {
+Error RenderingDevice::_texture_check_pending_clear(RID p_texture_rid, Texture *p_texture) {
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, _recording_error(), "Texture clear recording is suspended during frame fence recovery or readback callbacks.");
 	DEV_ASSERT(p_texture != nullptr);
 
 	if (!p_texture->pending_clear) {
-		return;
+		return OK;
 	}
 
 	bool clear = true;
-	p_texture->pending_clear = false;
+	Texture *requested_texture = p_texture;
 
 	if (p_texture->owner.is_valid()) {
 		// Check the owner texture instead if it exists.
 		p_texture_rid = p_texture->owner;
 		p_texture = texture_owner.get_or_null(p_texture_rid);
+		ERR_FAIL_NULL_V(p_texture, ERR_INVALID_DATA);
 		clear = p_texture->pending_clear;
 	}
 
 	if (p_texture != nullptr && clear) {
-		if (p_texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-			_texture_clear_depth_stencil(p_texture_rid, p_texture, 0.0f, 0, 0, p_texture->mipmaps, 0, p_texture->layers);
-		} else {
-			_texture_clear_color(p_texture_rid, p_texture, Color(), 0, p_texture->mipmaps, 0, p_texture->layers);
+		const Error admission = _check_transfer_worker_texture(p_texture);
+		if (admission != OK) {
+			return admission;
 		}
-		p_texture->pending_clear = false;
+		if (p_texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+			{
+				const Error dependency_error = _texture_clear_depth_stencil(p_texture_rid, p_texture, 0.0f, 0, 0, p_texture->mipmaps, 0, p_texture->layers);
+				if (dependency_error != OK) {
+					return dependency_error;
+				}
+			}
+		} else {
+			{
+				const Error dependency_error = _texture_clear_color(p_texture_rid, p_texture, Color(), 0, p_texture->mipmaps, 0, p_texture->layers);
+				if (dependency_error != OK) {
+					return dependency_error;
+				}
+			}
+		}
 	}
+	requested_texture->pending_clear = false;
+	return OK;
 }
 
-void RenderingDevice::_texture_clear_color(RID p_texture_rid, Texture *p_texture, const Color &p_color, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers) {
-	_check_transfer_worker_texture(p_texture);
+Error RenderingDevice::_texture_clear_color(RID p_texture_rid, Texture *p_texture, const Color &p_color, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers) {
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, _recording_error(), "Recording is suspended after a frame fence wait failure.");
+	{
+		const Error dependency_error = _check_transfer_worker_texture(p_texture);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
 
 	RDD::TextureSubresourceRange range;
 	range.aspect = RDD::TEXTURE_ASPECT_COLOR_BIT;
@@ -2642,10 +3405,17 @@ void RenderingDevice::_texture_clear_color(RID p_texture_rid, Texture *p_texture
 	}
 
 	draw_graph.add_texture_clear_color(p_texture->driver_id, p_texture->draw_tracker, p_color, range);
+	return OK;
 }
 
-void RenderingDevice::_texture_clear_depth_stencil(RID p_texture_rid, Texture *p_texture, float p_depth, uint8_t p_stencil, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers) {
-	_check_transfer_worker_texture(p_texture);
+Error RenderingDevice::_texture_clear_depth_stencil(RID p_texture_rid, Texture *p_texture, float p_depth, uint8_t p_stencil, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers) {
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, _recording_error(), "Recording is suspended after a frame fence wait failure.");
+	{
+		const Error dependency_error = _check_transfer_worker_texture(p_texture);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
 
 	RDD::TextureSubresourceRange range;
 	if (format_has_depth(p_texture->format)) {
@@ -2668,13 +3438,16 @@ void RenderingDevice::_texture_clear_depth_stencil(RID p_texture_rid, Texture *p
 	}
 
 	draw_graph.add_texture_clear_depth_stencil(p_texture->driver_id, p_texture->draw_tracker, p_depth, p_stencil, range);
+	return OK;
 }
 
 Vector<uint8_t> RenderingDevice::texture_get_data(RID p_texture, uint32_t p_layer) {
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, Vector<uint8_t>(), "A frame fence wait failed; readback recording is suspended.");
 	ERR_RENDER_THREAD_GUARD_V(Vector<uint8_t>());
 
 	Texture *tex = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL_V(tex, Vector<uint8_t>());
+	ERR_FAIL_COND_V(tex->qualification_return, Vector<uint8_t>());
 
 	ERR_FAIL_COND_V_MSG(tex->bound, Vector<uint8_t>(),
 			"Texture can't be retrieved while a draw list that uses it as part of a framebuffer is being created. Ensure the draw list is finalized (and that the color/depth texture using it is not set to `RenderingDevice.FINAL_ACTION_CONTINUE`) to retrieve this texture.");
@@ -2684,9 +3457,19 @@ Vector<uint8_t> RenderingDevice::texture_get_data(RID p_texture, uint32_t p_laye
 	ERR_FAIL_COND_V(p_layer >= tex->layers, Vector<uint8_t>());
 
 	// Clear the texture if the driver requires it during its first use.
-	_texture_check_pending_clear(p_texture, tex);
+	{
+		const Error dependency_error = _texture_check_pending_clear(p_texture, tex);
+		if (dependency_error != OK) {
+			return Vector<uint8_t>();
+		}
+	}
 
-	_check_transfer_worker_texture(tex);
+	{
+		const Error dependency_error = _check_transfer_worker_texture(tex);
+		if (dependency_error != OK) {
+			return Vector<uint8_t>();
+		}
+	}
 
 	if (tex->usage_flags & TEXTURE_USAGE_CPU_READ_BIT) {
 		return driver->texture_get_data(tex->driver_id, p_layer);
@@ -2734,10 +3517,21 @@ Vector<uint8_t> RenderingDevice::texture_get_data(RID p_texture, uint32_t p_laye
 		draw_graph.add_texture_get_data(tex->driver_id, tex->draw_tracker, tmp_buffer, copy_regions);
 
 		// Flush everything so memory can be safely mapped.
-		_flush_and_stall_for_all_frames();
+		const Error wait_error = _flush_and_stall_for_all_frames();
+		if (wait_error != OK) {
+			Buffer retained_buffer;
+			retained_buffer.driver_id = tmp_buffer;
+			frames[frame].buffers_to_dispose_of.push_back(retained_buffer);
+			ERR_FAIL_V_MSG(Vector<uint8_t>(), "Texture readback fence wait failed.");
+		}
 
 		const uint8_t *read_ptr = driver->buffer_map(tmp_buffer);
-		ERR_FAIL_NULL_V(read_ptr, Vector<uint8_t>());
+		if (read_ptr == nullptr) {
+			// The temporary readback buffer is no longer referenced by the draw
+			// graph after the blocking stall, so release it on map failure too.
+			driver->buffer_free(tmp_buffer);
+			ERR_FAIL_V(Vector<uint8_t>());
+		}
 
 		uint32_t block_w = 0;
 		uint32_t block_h = 0;
@@ -2791,18 +3585,32 @@ Vector<uint8_t> RenderingDevice::texture_get_data(RID p_texture, uint32_t p_laye
 
 Error RenderingDevice::texture_get_data_async(RID p_texture, uint32_t p_layer, const Callable &p_callback) {
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
+	if (_recording_error() != OK) {
+		return _recording_error();
+	}
 
 	Texture *tex = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL_V(tex, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(tex->qualification_return, ERR_UNAUTHORIZED);
 
 	ERR_FAIL_COND_V_MSG(tex->bound, ERR_INVALID_PARAMETER, "Texture can't be retrieved while a draw list that uses it as part of a framebuffer is being created. Ensure the draw list is finalized (and that the color/depth texture using it is not set to `RenderingDevice.FINAL_ACTION_CONTINUE`) to retrieve this texture.");
 	ERR_FAIL_COND_V_MSG(!(tex->usage_flags & TEXTURE_USAGE_CAN_COPY_FROM_BIT), ERR_INVALID_PARAMETER, "Texture requires the `RenderingDevice.TEXTURE_USAGE_CAN_COPY_FROM_BIT` to be set to be retrieved.");
 	ERR_FAIL_COND_V(p_layer >= tex->layers, ERR_INVALID_PARAMETER);
 
 	// Clear the texture if the driver requires it during its first use.
-	_texture_check_pending_clear(p_texture, tex);
+	{
+		const Error dependency_error = _texture_check_pending_clear(p_texture, tex);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
 
-	_check_transfer_worker_texture(tex);
+	{
+		const Error dependency_error = _check_transfer_worker_texture(tex);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
 
 	if (_texture_make_mutable(tex, p_texture)) {
 		// The texture must be mutable to be used as a copy source due to layout transitions.
@@ -2817,6 +3625,68 @@ Error RenderingDevice::texture_get_data_async(RID p_texture, uint32_t p_layer, c
 	get_data_request.depth = tex->depth;
 	get_data_request.format = tex->format;
 	get_data_request.mipmaps = tex->mipmaps;
+	get_data_request.result.instantiate();
+	const Error result_error = get_data_request.result->bytes.resize(get_image_format_required_size(tex->format, tex->width, tex->height, tex->depth, tex->mipmaps));
+	if (result_error != OK) {
+		return result_error;
+	}
+
+	// A staging action can drain another request's Callable, which may free this
+	// RID (or its shared owner). Never carry the Texture pointer across it.
+	const RDD::TextureID source_driver_id = tex->driver_id;
+	const RDG::ResourceTracker *source_tracker = tex->draw_tracker;
+	const RID source_owner = tex->owner;
+	const uint64_t source_disposal_serial = tex->native_disposal_serial;
+	const uint32_t source_layers = tex->layers;
+	const uint32_t source_base_mipmap = tex->base_mipmap;
+	const uint32_t source_base_layer = tex->base_layer;
+	const auto source_read_aspects = tex->read_aspect_flags;
+	const Texture *owner = source_owner.is_valid() ? texture_owner.get_or_null(source_owner) : nullptr;
+	if (source_owner.is_valid() && !owner) {
+		return ERR_DOES_NOT_EXIST;
+	}
+	const RDD::TextureID owner_driver_id = owner ? owner->driver_id : RDD::TextureID();
+	const uint64_t owner_disposal_serial = owner ? owner->native_disposal_serial : 0;
+	// An allocation/setup failure may leave staged rows without graph copies or
+	// a published request. Only that current segment's unrecorded tail belongs
+	// to this scope; published prefixes remain owned by their original Frame.
+	struct TextureSegmentTailRollback {
+		RenderingDevice &device;
+		TextureGetDataRequest &request;
+		uint32_t frame_index;
+		bool published = false;
+		TextureSegmentTailRollback(RenderingDevice &p_device, TextureGetDataRequest &p_request) : device(p_device), request(p_request), frame_index(p_device.frame) {}
+		void reset() {
+			frame_index = device.frame;
+			published = false;
+		}
+		~TextureSegmentTailRollback() {
+			if (published || !request.frame_local_count) {
+				return;
+			}
+			auto &target = device.frames[frame_index];
+			const uint64_t tail = uint64_t(request.frame_local_index) + request.frame_local_count;
+			// Callback recording is denied, so no foreign request can append inside
+			// this unpublished span. Never truncate another span on a broken invariant.
+			ERR_FAIL_COND(target.download_texture_staging_buffers.size() != tail || target.download_buffer_texture_copy_regions.size() != tail || target.download_texture_mipmap_offsets.size() != tail);
+			target.download_texture_staging_buffers.resize(request.frame_local_index);
+			target.download_buffer_texture_copy_regions.resize(request.frame_local_index);
+			target.download_texture_mipmap_offsets.resize(request.frame_local_index);
+		}
+	} segment_tail(*this, get_data_request);
+	auto publish = [&](bool p_final) {
+		if (!get_data_request.frame_local_count) {
+			return;
+		}
+		for (uint32_t i = 0; i < get_data_request.frame_local_count; i++) {
+			const uint32_t local_index = get_data_request.frame_local_index + i;
+			draw_graph.add_texture_get_data(tex->driver_id, tex->draw_tracker, frames[frame].download_texture_staging_buffers[local_index], frames[frame].download_buffer_texture_copy_regions[local_index]);
+		}
+		get_data_request.final_segment = p_final;
+		get_data_request.result->issued_regions += get_data_request.frame_local_count;
+		frames[frame].download_texture_get_data_requests.push_back(get_data_request);
+		segment_tail.published = true; // Commit before any callback-capable staging action.
+	};
 
 	uint32_t block_w, block_h;
 	get_compressed_image_format_block_dimensions(tex->format, block_w, block_h);
@@ -2842,8 +3712,10 @@ Error RenderingDevice::texture_get_data_async(RID p_texture, uint32_t p_layer, c
 				for (uint32_t x = 0; x < w; x += region_size) {
 					uint32_t region_w = MIN(region_size, w - x);
 					uint32_t region_h = MIN(region_size, h - y);
-					ERR_FAIL_COND_V(region_w % block_w, ERR_BUG);
-					ERR_FAIL_COND_V(region_h % block_h, ERR_BUG);
+					if (region_w % block_w || region_h % block_h) {
+						get_data_request.result->error = ERR_BUG;
+						return ERR_BUG;
+					}
 
 					uint32_t region_logic_w = MIN(region_size, logic_w - x);
 					uint32_t region_logic_h = MIN(region_size, logic_h - y);
@@ -2852,21 +3724,45 @@ Error RenderingDevice::texture_get_data_async(RID p_texture, uint32_t p_layer, c
 
 					uint32_t to_allocate = region_pitch * region_h;
 					Error err = _staging_buffer_allocate(download_staging_buffers, to_allocate, required_align, block_write_offset, block_write_amount, required_action, false);
-					ERR_FAIL_COND_V(err, ERR_CANT_CREATE);
+					if (err != OK) {
+						get_data_request.result->error = ERR_CANT_CREATE;
+						return ERR_CANT_CREATE;
+					}
 
 					const bool flush_frames = (get_data_request.frame_local_count > 0) && required_action == STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL;
 					if (flush_frames) {
-						for (uint32_t j = 0; j < get_data_request.frame_local_count; j++) {
-							uint32_t local_index = get_data_request.frame_local_index + j;
-							draw_graph.add_texture_get_data(tex->driver_id, tex->draw_tracker, frames[frame].download_texture_staging_buffers[local_index], frames[frame].download_buffer_texture_copy_regions[local_index]);
-						}
+						publish(false);
 					}
 
-					_staging_buffer_execute_required_action(download_staging_buffers, required_action);
+					err = _staging_buffer_execute_required_action(download_staging_buffers, required_action);
+					if (err != OK) {
+						get_data_request.result->error = err;
+						return err;
+					}
+					if (get_data_request.result->error != OK) {
+						return get_data_request.result->error;
+					}
+					tex = texture_owner.get_or_null(p_texture);
+					owner = source_owner.is_valid() ? texture_owner.get_or_null(source_owner) : nullptr;
+					if (!tex || (source_owner.is_valid() && !owner)) {
+						get_data_request.result->error = ERR_DOES_NOT_EXIST;
+						return ERR_DOES_NOT_EXIST;
+					}
+					if (tex->driver_id != source_driver_id || tex->draw_tracker != source_tracker || tex->owner != source_owner ||
+							tex->native_disposal_serial != source_disposal_serial || tex->width != get_data_request.width || tex->height != get_data_request.height ||
+							tex->depth != get_data_request.depth || tex->format != get_data_request.format || tex->mipmaps != get_data_request.mipmaps ||
+							tex->layers != source_layers || tex->base_mipmap != source_base_mipmap || tex->base_layer != source_base_layer || tex->read_aspect_flags != source_read_aspects ||
+							(owner && (owner->driver_id != owner_driver_id || owner->native_disposal_serial != owner_disposal_serial))) {
+						get_data_request.result->error = ERR_INVALID_DATA;
+						return ERR_INVALID_DATA;
+					}
 
-					if (flush_frames) {
+					// A foreign request can force a flush before this request staged its
+					// first tile. Its original frame-local index must be rebased too.
+					if (required_action == STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL) {
 						get_data_request.frame_local_count = 0;
 						get_data_request.frame_local_index = frames[frame].download_buffer_texture_copy_regions.size();
+						segment_tail.reset();
 					}
 
 					RDD::BufferTextureCopyRegion copy_region;
@@ -2892,14 +3788,7 @@ Error RenderingDevice::texture_get_data_async(RID p_texture, uint32_t p_layer, c
 		logic_h = MAX(1u, logic_h >> 1);
 	}
 
-	if (get_data_request.frame_local_count > 0) {
-		for (uint32_t i = 0; i < get_data_request.frame_local_count; i++) {
-			uint32_t local_index = get_data_request.frame_local_index + i;
-			draw_graph.add_texture_get_data(tex->driver_id, tex->draw_tracker, frames[frame].download_texture_staging_buffers[local_index], frames[frame].download_buffer_texture_copy_regions[local_index]);
-		}
-
-		frames[frame].download_texture_get_data_requests.push_back(get_data_request);
-	}
+	publish(true);
 
 	return OK;
 }
@@ -2957,10 +3846,17 @@ uint64_t RenderingDevice::texture_get_native_handle(RID p_texture) {
 #endif
 
 Error RenderingDevice::texture_copy(RID p_from_texture, RID p_to_texture, const Vector3 &p_from, const Vector3 &p_to, const Vector3 &p_size, uint32_t p_src_mipmap, uint32_t p_dst_mipmap, uint32_t p_src_layer, uint32_t p_dst_layer) {
+	if (native_immutable_resource_is_held(p_to_texture) || native_immutable_resource_is_retiring(p_to_texture)) {
+		return ERR_BUSY;
+	}
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
+	if (_recording_error() != OK) {
+		return _recording_error();
+	}
 
 	Texture *src_tex = texture_owner.get_or_null(p_from_texture);
 	ERR_FAIL_NULL_V(src_tex, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(src_tex->qualification_return, ERR_UNAUTHORIZED);
 
 	ERR_FAIL_COND_V_MSG(src_tex->bound, ERR_INVALID_PARAMETER,
 			"Source texture can't be copied while a draw list that uses it as part of a framebuffer is being created. Ensure the draw list is finalized (and that the color/depth texture using it is not set to `RenderingDevice.FINAL_ACTION_CONTINUE`) to copy this texture.");
@@ -2982,6 +3878,7 @@ Error RenderingDevice::texture_copy(RID p_from_texture, RID p_to_texture, const 
 
 	Texture *dst_tex = texture_owner.get_or_null(p_to_texture);
 	ERR_FAIL_NULL_V(dst_tex, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(dst_tex->qualification_return, ERR_UNAUTHORIZED);
 
 	ERR_FAIL_COND_V_MSG(dst_tex->bound, ERR_INVALID_PARAMETER,
 			"Destination texture can't be copied while a draw list that uses it as part of a framebuffer is being created. Ensure the draw list is finalized (and that the color/depth texture using it is not set to `RenderingDevice.FINAL_ACTION_CONTINUE`) to copy this texture.");
@@ -3001,11 +3898,31 @@ Error RenderingDevice::texture_copy(RID p_from_texture, RID p_to_texture, const 
 			"Source and destination texture must be of the same type (color or depth).");
 
 	// Clear the textures if the driver requires it during its first use.
-	_texture_check_pending_clear(p_from_texture, src_tex);
-	_texture_check_pending_clear(p_to_texture, dst_tex);
+	{
+		const Error dependency_error = _texture_check_pending_clear(p_from_texture, src_tex);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
+	{
+		const Error dependency_error = _texture_check_pending_clear(p_to_texture, dst_tex);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
 
-	_check_transfer_worker_texture(src_tex);
-	_check_transfer_worker_texture(dst_tex);
+	{
+		const Error dependency_error = _check_transfer_worker_texture(src_tex);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
+	{
+		const Error dependency_error = _check_transfer_worker_texture(dst_tex);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
 
 	RDD::TextureCopyRegion copy_region;
 	copy_region.src_subresources.aspect = src_tex->read_aspect_flags;
@@ -3038,10 +3955,17 @@ Error RenderingDevice::texture_copy(RID p_from_texture, RID p_to_texture, const 
 }
 
 Error RenderingDevice::texture_resolve_multisample(RID p_from_texture, RID p_to_texture) {
+	if (native_immutable_resource_is_held(p_to_texture) || native_immutable_resource_is_retiring(p_to_texture)) {
+		return ERR_BUSY;
+	}
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
+	if (_recording_error() != OK) {
+		return _recording_error();
+	}
 
 	Texture *src_tex = texture_owner.get_or_null(p_from_texture);
 	ERR_FAIL_NULL_V(src_tex, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(src_tex->qualification_return, ERR_UNAUTHORIZED);
 
 	ERR_FAIL_COND_V_MSG(src_tex->bound, ERR_INVALID_PARAMETER,
 			"Source texture can't be copied while a draw list that uses it as part of a framebuffer is being created. Ensure the draw list is finalized (and that the color/depth texture using it is not set to `RenderingDevice.FINAL_ACTION_CONTINUE`) to copy this texture.");
@@ -3053,6 +3977,7 @@ Error RenderingDevice::texture_resolve_multisample(RID p_from_texture, RID p_to_
 
 	Texture *dst_tex = texture_owner.get_or_null(p_to_texture);
 	ERR_FAIL_NULL_V(dst_tex, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(dst_tex->qualification_return, ERR_UNAUTHORIZED);
 
 	ERR_FAIL_COND_V_MSG(dst_tex->bound, ERR_INVALID_PARAMETER,
 			"Destination texture can't be copied while a draw list that uses it as part of a framebuffer is being created. Ensure the draw list is finalized (and that the color/depth texture using it is not set to `RenderingDevice.FINAL_ACTION_CONTINUE`) to copy this texture.");
@@ -3072,11 +3997,31 @@ Error RenderingDevice::texture_resolve_multisample(RID p_from_texture, RID p_to_
 	_texture_update_shared_fallback(p_to_texture, dst_tex, true);
 
 	// Clear the textures if the driver requires it during its first use.
-	_texture_check_pending_clear(p_from_texture, src_tex);
-	_texture_check_pending_clear(p_to_texture, dst_tex);
+	{
+		const Error dependency_error = _texture_check_pending_clear(p_from_texture, src_tex);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
+	{
+		const Error dependency_error = _texture_check_pending_clear(p_to_texture, dst_tex);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
 
-	_check_transfer_worker_texture(src_tex);
-	_check_transfer_worker_texture(dst_tex);
+	{
+		const Error dependency_error = _check_transfer_worker_texture(src_tex);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
+	{
+		const Error dependency_error = _check_transfer_worker_texture(dst_tex);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
 
 	// The textures must be mutable to be used in the resolve operation.
 	bool src_made_mutable = _texture_make_mutable(src_tex, p_from_texture);
@@ -3095,6 +4040,7 @@ void RenderingDevice::texture_set_discardable(RID p_texture, bool p_discardable)
 
 	Texture *texture = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL(texture);
+	ERR_FAIL_COND(texture->qualification_return);
 
 	texture->is_discardable = p_discardable;
 
@@ -3117,10 +4063,17 @@ bool RenderingDevice::texture_is_discardable(RID p_texture) {
 }
 
 Error RenderingDevice::texture_clear(RID p_texture, const Color &p_color, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers) {
+	if (native_immutable_resource_is_held(p_texture) || native_immutable_resource_is_retiring(p_texture)) {
+		return ERR_BUSY;
+	}
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
+	if (_recording_error() != OK) {
+		return _recording_error();
+	}
 
 	Texture *src_tex = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL_V(src_tex, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(src_tex->qualification_return, ERR_UNAUTHORIZED);
 
 	ERR_FAIL_COND_V_MSG(src_tex->bound, ERR_INVALID_PARAMETER,
 			"Source texture can't be cleared while a draw list that uses it as part of a framebuffer is being created. Ensure the draw list is finalized (and that the color/depth texture using it is not set to `RenderingDevice.FINAL_ACTION_CONTINUE`) to clear this texture.");
@@ -3135,9 +4088,19 @@ Error RenderingDevice::texture_clear(RID p_texture, const Color &p_color, uint32
 	ERR_FAIL_COND_V(p_base_layer + p_layers > src_tex->layers, ERR_INVALID_PARAMETER);
 
 	// Clear the texture if the driver requires it during its first use.
-	_texture_check_pending_clear(p_texture, src_tex);
+	{
+		const Error dependency_error = _texture_check_pending_clear(p_texture, src_tex);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
 
-	_texture_clear_color(p_texture, src_tex, p_color, p_base_mipmap, p_mipmaps, p_base_layer, p_layers);
+	{
+		const Error dependency_error = _texture_clear_color(p_texture, src_tex, p_color, p_base_mipmap, p_mipmaps, p_base_layer, p_layers);
+		if (dependency_error != OK) {
+			return dependency_error;
+		}
+	}
 
 	return OK;
 }
@@ -3630,6 +4593,12 @@ RID RenderingDevice::framebuffer_create_empty(const Size2i &p_size, TextureSampl
 RID RenderingDevice::framebuffer_create(const Vector<RID> &p_texture_attachments, FramebufferFormatID p_format_check, uint32_t p_view_count) {
 	_THREAD_SAFE_METHOD_
 
+	// Preflight the entire attachment list before touching any prior worker.
+	for (RID attachment : p_texture_attachments) {
+		const Texture *texture = texture_owner.get_or_null(attachment);
+		ERR_FAIL_COND_V(texture && texture->qualification_return, RID());
+	}
+
 	FramebufferPass pass;
 
 	for (int i = 0; i < p_texture_attachments.size(); i++) {
@@ -3638,7 +4607,12 @@ RID RenderingDevice::framebuffer_create(const Vector<RID> &p_texture_attachments
 		ERR_FAIL_COND_V_MSG(texture && texture->layers != p_view_count, RID(), "Layers of our texture doesn't match view count for this framebuffer");
 
 		if (texture != nullptr) {
-			_check_transfer_worker_texture(texture);
+			{
+				const Error dependency_error = _check_transfer_worker_texture(texture);
+				if (dependency_error != OK) {
+					return RID();
+				}
+			}
 		}
 
 		if (texture && texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
@@ -3663,7 +4637,37 @@ RID RenderingDevice::framebuffer_create(const Vector<RID> &p_texture_attachments
 }
 
 RID RenderingDevice::framebuffer_create_multipass(const Vector<RID> &p_texture_attachments, const Vector<FramebufferPass> &p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count) {
+	return _qualification_framebuffer_create_multipass(p_texture_attachments, p_passes, p_format_check, p_view_count, nullptr, nullptr, RID());
+}
+
+RID RenderingDevice::_qualification_framebuffer_create(RID p_target, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, GDExtensionDeviceExit::QualificationPhysicalReturn *p_target_cell, RID p_reserved) {
+	ERR_FAIL_NULL_V(p_cell, RID());
+	ERR_FAIL_NULL_V(p_target_cell, RID());
+	Vector<RID> attachments;
+	attachments.push_back(p_target);
+	FramebufferPass pass;
+	pass.depth_attachment = 0;
+	Vector<FramebufferPass> passes;
+	passes.push_back(pass);
+	return _qualification_framebuffer_create_multipass(attachments, passes, INVALID_ID, 1, p_cell, p_target_cell, p_reserved);
+}
+
+RID RenderingDevice::_qualification_framebuffer_create_multipass(const Vector<RID> &p_texture_attachments, const Vector<FramebufferPass> &p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, GDExtensionDeviceExit::QualificationPhysicalReturn *p_target_cell, RID p_reserved, const NativeDisposalWitness *p_native_disposal) {
 	_THREAD_SAFE_METHOD_
+	ERR_FAIL_COND_V(p_native_disposal && (p_cell || p_target_cell || p_reserved.is_null()), RID());
+
+	// Authenticate the original target before worker waits or texture mutation.
+	if (p_cell) {
+		ERR_FAIL_COND_V(!p_reserved.is_valid() || !p_target_cell || p_texture_attachments.size() != 1 || p_passes.size() != 1 || p_view_count != 1, RID());
+		const Texture *target = texture_owner.get_or_null(p_texture_attachments[0]);
+		ERR_FAIL_COND_V(!target || target->qualification_return != p_target_cell || p_target_cell->bridge != p_cell->bridge || p_target_cell->rid != p_texture_attachments[0].get_id() || p_target_cell->use_closed.load() || p_target_cell->dependent_children.load() == UINT32_MAX, RID());
+		ERR_FAIL_COND_V(target->format != DATA_FORMAT_D32_SFLOAT || target->samples != TEXTURE_SAMPLES_1 || target->usage_flags != (TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT), RID());
+	}
+	// Preflight the entire attachment list before touching any prior worker.
+	for (RID attachment : p_texture_attachments) {
+		const Texture *texture = texture_owner.get_or_null(attachment);
+		ERR_FAIL_COND_V(texture && texture->qualification_return && !p_cell, RID());
+	}
 
 	Vector<AttachmentFormat> attachments;
 	LocalVector<RDD::TextureID> textures;
@@ -3681,7 +4685,12 @@ RID RenderingDevice::framebuffer_create_multipass(const Vector<RID> &p_texture_a
 		} else {
 			ERR_FAIL_COND_V_MSG(texture->layers != p_view_count, RID(), "Layers of our texture doesn't match view count for this framebuffer");
 
-			_check_transfer_worker_texture(texture);
+			{
+				const Error dependency_error = _check_transfer_worker_texture(texture);
+				if (dependency_error != OK) {
+					return RID();
+				}
+			}
 
 			if (i != 0 && texture->usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT) {
 				// Detect if the texture is the fragment density map and it's not the first attachment.
@@ -3724,6 +4733,8 @@ RID RenderingDevice::framebuffer_create_multipass(const Vector<RID> &p_texture_a
 			"The format used to check this framebuffer differs from the intended framebuffer format.");
 
 	Framebuffer framebuffer;
+	framebuffer.qualification_return = p_cell;
+	framebuffer.qualification_dependency = p_target_cell;
 	framebuffer.format_id = format_id;
 	framebuffer.texture_ids = p_texture_attachments;
 	framebuffer.size = size;
@@ -3736,7 +4747,24 @@ RID RenderingDevice::framebuffer_create_multipass(const Vector<RID> &p_texture_a
 	framebuffer_cache->trackers = trackers;
 	framebuffer.framebuffer_cache = framebuffer_cache;
 
-	RID id = framebuffer_owner.make_rid(framebuffer);
+	RID id;
+	if (p_cell || p_native_disposal) {
+		id = p_reserved;
+		if (p_native_disposal) {
+			framebuffer.native_disposal = *p_native_disposal;
+			framebuffer.native_disposal_rid = id.get_id();
+			framebuffer.native_disposal_serial = p_native_disposal->cell->serial;
+			framebuffer.native_disposal_backing = uint64_t(uintptr_t(framebuffer_cache));
+			p_native_disposal->cell->rid = id.get_id();
+			p_native_disposal->cell->backing = framebuffer.native_disposal_backing;
+		}
+		framebuffer_owner.initialize_rid(id, framebuffer);
+		if (p_target_cell) {
+			p_target_cell->dependent_children.fetch_add(1);
+		}
+	} else {
+		id = framebuffer_owner.make_rid(framebuffer);
+	}
 #ifdef DEV_ENABLED
 	set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
@@ -3782,6 +4810,7 @@ void RenderingDevice::framebuffer_set_invalidation_callback(RID p_framebuffer, I
 
 	Framebuffer *framebuffer = framebuffer_owner.get_or_null(p_framebuffer);
 	ERR_FAIL_NULL(framebuffer);
+	ERR_FAIL_COND(framebuffer->qualification_return);
 
 	framebuffer->invalidated_callback = p_callback;
 	framebuffer->invalidated_callback_userdata = p_userdata;
@@ -3792,7 +4821,18 @@ void RenderingDevice::framebuffer_set_invalidation_callback(RID p_framebuffer, I
 /*****************/
 
 RID RenderingDevice::sampler_create(const SamplerState &p_state) {
+	return _sampler_create_internal(p_state, nullptr);
+}
+
+RID RenderingDevice::_qualification_sampler_create(const SamplerState &p_state, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell) {
+	ERR_FAIL_COND_V(!p_cell || !p_cell->bridge || !p_cell->child || !p_cell->serial || p_cell->rid || p_cell->use_closed || p_cell->enqueued || p_cell->free_event, RID());
+	return _sampler_create_internal(p_state, p_cell);
+}
+
+RID RenderingDevice::_sampler_create_internal(const SamplerState &p_state, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, const NativeDisposalWitness *p_native_disposal) {
 	_THREAD_SAFE_METHOD_
+	ERR_FAIL_COND_V(p_cell && p_native_disposal, RID());
+	ERR_FAIL_COND_V((p_cell || p_native_disposal) && _recording_error() != OK, RID());
 
 	ERR_FAIL_INDEX_V(p_state.repeat_u, SAMPLER_REPEAT_MODE_MAX, RID());
 	ERR_FAIL_INDEX_V(p_state.repeat_v, SAMPLER_REPEAT_MODE_MAX, RID());
@@ -3800,10 +4840,49 @@ RID RenderingDevice::sampler_create(const SamplerState &p_state) {
 	ERR_FAIL_INDEX_V(p_state.compare_op, COMPARE_OP_MAX, RID());
 	ERR_FAIL_INDEX_V(p_state.border_color, SAMPLER_BORDER_COLOR_MAX, RID());
 
-	RDD::SamplerID sampler = driver->sampler_create(p_state);
-	ERR_FAIL_COND_V(!sampler, RID());
+	// Validation above cannot leak a pending RID: this shared body owns the
+	// reservation and rollback for both retained creation paths.
+	RID reserved;
+	if (p_cell || p_native_disposal) {
+		ERR_FAIL_COND_V(p_cell && !_qualification_reserve_free_event(p_cell), RID());
+		reserved = sampler_owner.allocate_rid();
+		if (reserved.is_null()) {
+			if (p_cell) {
+				_qualification_release_free_event(p_cell);
+			}
+			return RID();
+		}
+	}
+	Sampler sampler;
+	sampler.driver_id = driver->sampler_create(p_state);
+	if (!sampler.driver_id) {
+		if (reserved.is_valid()) {
+			sampler_owner.initialize_rid(reserved, Sampler());
+			sampler_owner.free(reserved);
+			if (p_cell) {
+				_qualification_release_free_event(p_cell);
+			}
+		}
+		return RID();
+	}
 
-	RID id = sampler_owner.make_rid(sampler);
+	RID id = reserved;
+	if (p_cell) {
+		sampler.qualification_return = p_cell;
+		p_cell->rid = id.get_id();
+	}
+	if (p_native_disposal) {
+		sampler.native_disposal = *p_native_disposal;
+		sampler.native_disposal_rid = id.get_id();
+		sampler.native_disposal_serial = p_native_disposal->cell->serial;
+		p_native_disposal->cell->rid = id.get_id();
+		p_native_disposal->cell->backing = sampler.driver_id.id;
+	}
+	if (id.is_valid()) {
+		sampler_owner.initialize_rid(id, sampler);
+	} else {
+		id = sampler_owner.make_rid(sampler);
+	}
 #ifdef DEV_ENABLED
 	set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
@@ -3823,6 +4902,7 @@ bool RenderingDevice::sampler_is_format_supported_for_filter(DataFormat p_format
 /***********************/
 
 RID RenderingDevice::vertex_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p_data, BitField<BufferCreationBits> p_creation_bits) {
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V(p_data.size() && (uint32_t)p_data.size() != p_size_bytes, RID());
 
 	Buffer buffer;
@@ -3853,18 +4933,76 @@ RID RenderingDevice::vertex_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p
 	}
 
 	if (p_data.size()) {
-		_buffer_initialize(&buffer, p_data);
+		Error initialize_error = _buffer_initialize(&buffer, p_data);
+		if (initialize_error != OK) {
+			RDG::resource_tracker_free(buffer.draw_tracker);
+			driver->buffer_free(buffer.driver_id);
+			_production_disposal_returned(buffer.production_disposal_uses);
+			return RID();
+		}
 	}
 
 	_THREAD_SAFE_LOCK_
 	buffer_memory += buffer.size;
 	_THREAD_SAFE_UNLOCK_
 
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+	RID id = vertex_buffer_owner.allocate_rid();
+	buffer.capture_test_allocation_serial = capture_test_allocation_registry.allocate(buffer.driver_id.id, id.get_id());
+	if (buffer.capture_test_allocation_serial == 0) {
+		capture_test_coverage_failed.store(true);
+	}
+	vertex_buffer_owner.initialize_rid(id, buffer);
+#else
 	RID id = vertex_buffer_owner.make_rid(buffer);
+#endif
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	RenderCaptureTestHooks::observe_buffer_allocation(id.get_id(), uint64_t(get_instance_id()), buffer.driver_id.id, buffer.capture_test_allocation_serial);
+#endif
 #ifdef DEV_ENABLED
 	set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
 	return id;
+}
+
+Error RenderingDevice::_vertex_format_normalize(const Vector<VertexAttribute> &p_attributes, VertexDescriptionCache &r_description) {
+	VertexAttributeBindingsMap bindings;
+	bool has_implicit = false;
+	bool has_explicit = false;
+	Vector<VertexAttribute> vertex_descriptions = p_attributes;
+	HashSet<int> used_locations;
+	for (int i = 0; i < vertex_descriptions.size(); i++) {
+		VertexAttribute &attr = vertex_descriptions.write[i];
+		ERR_CONTINUE(attr.format >= DATA_FORMAT_MAX);
+		ERR_FAIL_COND_V(used_locations.has(attr.location), ERR_INVALID_DATA);
+
+		ERR_FAIL_COND_V_MSG(get_format_vertex_size(attr.format) == 0, ERR_INVALID_DATA,
+				vformat("Data format for attribute (%d), '%s', is not valid for a vertex array.", attr.location, String(FORMAT_NAMES[attr.format])));
+
+		if (attr.binding == UINT32_MAX) {
+			attr.binding = i; // Implicitly assigned binding
+			has_implicit = true;
+		} else {
+			has_explicit = true;
+		}
+		ERR_FAIL_COND_V_MSG(!(has_implicit ^ has_explicit), ERR_INVALID_DATA, "Vertex attributes must use either all explicit or all implicit bindings.");
+
+		const VertexAttributeBinding *existing = bindings.getptr(attr.binding);
+		if (!existing) {
+			bindings.insert(attr.binding, VertexAttributeBinding(attr.stride, attr.frequency));
+		} else {
+			ERR_FAIL_COND_V_MSG(existing->stride != attr.stride, ERR_INVALID_DATA,
+					vformat("Vertex attributes with binding (%d) have an inconsistent stride.", attr.binding));
+			ERR_FAIL_COND_V_MSG(existing->frequency != attr.frequency, ERR_INVALID_DATA,
+					vformat("Vertex attributes with binding (%d) have an inconsistent frequency.", attr.binding));
+		}
+
+		used_locations.insert(attr.location);
+	}
+
+	r_description.vertex_formats = std::move(vertex_descriptions);
+	r_description.bindings = std::move(bindings);
+	return OK;
 }
 
 // Internally reference counted, this ID is warranted to be unique for the same description, but needs to be freed as many times as it was allocated.
@@ -3879,39 +5017,10 @@ RenderingDevice::VertexFormatID RenderingDevice::vertex_format_create(const Vect
 		return *idptr;
 	}
 
-	VertexAttributeBindingsMap bindings;
-	bool has_implicit = false;
-	bool has_explicit = false;
-	Vector<VertexAttribute> vertex_descriptions = p_vertex_descriptions;
-	HashSet<int> used_locations;
-	for (int i = 0; i < vertex_descriptions.size(); i++) {
-		VertexAttribute &attr = vertex_descriptions.write[i];
-		ERR_CONTINUE(attr.format >= DATA_FORMAT_MAX);
-		ERR_FAIL_COND_V(used_locations.has(attr.location), INVALID_ID);
-
-		ERR_FAIL_COND_V_MSG(get_format_vertex_size(attr.format) == 0, INVALID_ID,
-				vformat("Data format for attribute (%d), '%s', is not valid for a vertex array.", attr.location, String(FORMAT_NAMES[attr.format])));
-
-		if (attr.binding == UINT32_MAX) {
-			attr.binding = i; // Implicitly assigned binding
-			has_implicit = true;
-		} else {
-			has_explicit = true;
-		}
-		ERR_FAIL_COND_V_MSG(!(has_implicit ^ has_explicit), INVALID_ID, "Vertex attributes must use either all explicit or all implicit bindings.");
-
-		const VertexAttributeBinding *existing = bindings.getptr(attr.binding);
-		if (!existing) {
-			bindings.insert(attr.binding, VertexAttributeBinding(attr.stride, attr.frequency));
-		} else {
-			ERR_FAIL_COND_V_MSG(existing->stride != attr.stride, INVALID_ID,
-					vformat("Vertex attributes with binding (%d) have an inconsistent stride.", attr.binding));
-			ERR_FAIL_COND_V_MSG(existing->frequency != attr.frequency, INVALID_ID,
-					vformat("Vertex attributes with binding (%d) have an inconsistent frequency.", attr.binding));
-		}
-
-		used_locations.insert(attr.location);
-	}
+	VertexDescriptionCache normalized;
+	ERR_FAIL_COND_V(_vertex_format_normalize(p_vertex_descriptions, normalized) != OK, INVALID_ID);
+	Vector<VertexAttribute> &vertex_descriptions = normalized.vertex_formats;
+	VertexAttributeBindingsMap &bindings = normalized.bindings;
 
 	RDD::VertexFormatID driver_id = driver->vertex_format_create(vertex_descriptions, bindings);
 	ERR_FAIL_COND_V(!driver_id, 0);
@@ -3925,84 +5034,85 @@ RenderingDevice::VertexFormatID RenderingDevice::vertex_format_create(const Vect
 	return id;
 }
 
-RID RenderingDevice::vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const Vector<RID> &p_src_buffers, const Vector<uint64_t> &p_offsets) {
-	_THREAD_SAFE_METHOD_
-
-	ERR_FAIL_COND_V(!vertex_formats.has(p_vertex_format), RID());
-	const VertexDescriptionCache &vd = vertex_formats[p_vertex_format];
-
-	VertexArray vertex_array;
-
+Error RenderingDevice::_vertex_array_prepare_locked(uint32_t p_vertex_count, const Vector<VertexAttribute> &p_attributes, const Vector<RID> &p_src_buffers, const Vector<uint64_t> &p_offsets, VertexArray &r_array, HashSet<RID> &r_used_buffers) {
 	if (p_offsets.is_empty()) {
-		vertex_array.offsets.resize_initialized(p_src_buffers.size());
+		r_array.offsets.resize_initialized(p_src_buffers.size());
 	} else {
-		ERR_FAIL_COND_V(p_offsets.size() != p_src_buffers.size(), RID());
-		vertex_array.offsets = p_offsets;
+		ERR_FAIL_COND_V(p_offsets.size() != p_src_buffers.size(), ERR_INVALID_PARAMETER);
+		r_array.offsets = p_offsets;
 	}
 
-	vertex_array.vertex_count = p_vertex_count;
-	vertex_array.description = p_vertex_format;
-	vertex_array.max_instances_allowed = 0xFFFFFFFF; // By default as many as you want.
-	vertex_array.buffers.resize(p_src_buffers.size());
+	r_array.vertex_count = p_vertex_count;
+	r_array.max_instances_allowed = 0xFFFFFFFF; // By default as many as you want.
+	r_array.buffers.resize(p_src_buffers.size());
 
-	HashSet<RID> unique_buffers;
-	unique_buffers.reserve(p_src_buffers.size());
+	r_used_buffers.reserve(p_src_buffers.size());
 
-	for (const VertexAttribute &atf : vd.vertex_formats) {
-		ERR_FAIL_COND_V_MSG(atf.binding >= p_src_buffers.size(), RID(), vformat("Vertex attribute location (%d) is missing a buffer for binding (%d).", atf.location, atf.binding));
+	for (const VertexAttribute &atf : p_attributes) {
+		ERR_FAIL_COND_V_MSG(atf.binding >= p_src_buffers.size(), ERR_INVALID_PARAMETER, vformat("Vertex attribute location (%d) is missing a buffer for binding (%d).", atf.location, atf.binding));
 		RID buf = p_src_buffers[atf.binding];
-		ERR_FAIL_COND_V(!vertex_buffer_owner.owns(buf), RID());
+		ERR_FAIL_COND_V(native_immutable_resource_is_retiring(buf), ERR_BUSY);
+		ERR_FAIL_COND_V(!vertex_buffer_owner.owns(buf), ERR_DOES_NOT_EXIST);
 
 		Buffer *buffer = vertex_buffer_owner.get_or_null(buf);
 
-		// Validate with buffer.
+		// Validate the complete fetch range, including the binding offset.
 		{
 			uint32_t element_size = get_format_vertex_size(atf.format);
-			ERR_FAIL_COND_V(element_size == 0, RID()); // Should never happen since this was prevalidated.
+			ERR_FAIL_COND_V(element_size == 0, ERR_INVALID_PARAMETER); // Should never happen since this was prevalidated.
+
+			const uint64_t binding_offset = r_array.offsets[atf.binding];
+			ERR_FAIL_COND_V_MSG(binding_offset > buffer->size || atf.offset > buffer->size - binding_offset, ERR_INVALID_PARAMETER,
+					vformat("Vertex attribute (%d) will read past the end of the buffer.", atf.location));
+			const uint64_t available = buffer->size - binding_offset - atf.offset;
+			ERR_FAIL_COND_V_MSG(element_size > available, ERR_INVALID_PARAMETER,
+					vformat("Vertex attribute (%d) will read past the end of the buffer.", atf.location));
 
 			if (atf.frequency == VERTEX_FREQUENCY_VERTEX) {
-				// Validate size for regular drawing.
-				uint64_t total_size = uint64_t(atf.stride) * (p_vertex_count - 1) + atf.offset + element_size;
-				ERR_FAIL_COND_V_MSG(total_size > buffer->size, RID(),
+				// The uint32 stride/count product fits uint64; subtract the
+				// element first so adding large binding offsets cannot wrap.
+				const uint64_t stride_extent = uint64_t(atf.stride) * (p_vertex_count - 1);
+				ERR_FAIL_COND_V_MSG(stride_extent > available - element_size, ERR_INVALID_PARAMETER,
 						vformat("Vertex attribute (%d) will read past the end of the buffer.", atf.location));
-
 			} else {
-				// Validate size for instances drawing.
-				uint64_t available = buffer->size - atf.offset;
-				ERR_FAIL_COND_V_MSG(available < element_size, RID(),
-						vformat("Vertex attribute (%d) uses instancing, but it's just too small.", atf.location));
-
-				uint32_t instances_allowed = available / atf.stride;
-
-				// The remaining space might be able to fit another instance.
-				if ((available % atf.stride) >= element_size) {
-					++instances_allowed;
-				}
-
-				vertex_array.max_instances_allowed = MIN(instances_allowed, vertex_array.max_instances_allowed);
+				// Every instance needs one complete element. Zero stride repeats
+				// that element, including all-instance point-size emulation.
+				const uint32_t instances_allowed = atf.stride == 0 ? UINT32_MAX : uint32_t((available - element_size) / atf.stride + 1);
+				r_array.max_instances_allowed = MIN(instances_allowed, r_array.max_instances_allowed);
 			}
 		}
 
-		vertex_array.buffers.write[atf.binding] = buffer->driver_id;
+		r_array.buffers.write[atf.binding] = buffer->driver_id;
 
-		if (unique_buffers.has(buf)) {
+		if (r_used_buffers.has(buf)) {
 			// No need to add dependencies multiple times.
 			continue;
 		}
 
-		unique_buffers.insert(buf);
+		r_used_buffers.insert(buf);
 
 		if (buffer->draw_tracker != nullptr) {
-			vertex_array.draw_trackers.push_back(buffer->draw_tracker);
+			r_array.draw_trackers.push_back(buffer->draw_tracker);
 		} else {
-			vertex_array.untracked_buffers.insert(buf);
+			r_array.untracked_buffers.insert(buf);
 		}
 
 		if (buffer->transfer_worker_index >= 0) {
-			vertex_array.transfer_worker_indices.push_back(buffer->transfer_worker_index);
-			vertex_array.transfer_worker_operations.push_back(buffer->transfer_worker_operation);
+			r_array.transfer_worker_indices.push_back(buffer->transfer_worker_index);
+			r_array.transfer_worker_operations.push_back(buffer->transfer_worker_operation);
 		}
 	}
+
+	return OK;
+}
+
+RID RenderingDevice::vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const Vector<RID> &p_src_buffers, const Vector<uint64_t> &p_offsets) {
+	_THREAD_SAFE_METHOD_
+	ERR_FAIL_COND_V(!vertex_formats.has(p_vertex_format), RID());
+	VertexArray vertex_array;
+	HashSet<RID> unique_buffers;
+	ERR_FAIL_COND_V(_vertex_array_prepare_locked(p_vertex_count, vertex_formats[p_vertex_format].vertex_formats, p_src_buffers, p_offsets, vertex_array, unique_buffers) != OK, RID());
+	vertex_array.description = p_vertex_format;
 
 	RID id = vertex_array_owner.make_rid(vertex_array);
 	for (const RID &buf : unique_buffers) {
@@ -4012,7 +5122,157 @@ RID RenderingDevice::vertex_array_create(uint32_t p_vertex_count, VertexFormatID
 	return id;
 }
 
+// Pure with respect to RD/driver resource and hold state; scratch containers allocate.
+Error RenderingDevice::_native_vertex_array_preflight(uint32_t p_vertex_count, const Vector<VertexAttribute> &p_attributes, const Vector<RID> &p_buffers, const Vector<uint64_t> &p_offsets, NativeVertexArrayPreflight &r_result) {
+	r_result = NativeVertexArrayPreflight();
+	if (render_thread_id != Thread::get_caller_id()) {
+		return ERR_UNAUTHORIZED;
+	}
+#ifdef TESTS_ENABLED
+	const OS *os = OS::get_singleton();
+	const bool trace_enabled = os && os->get_environment("ANGE_TEST_STAGED_MOBILE_PIPELINE_PHASE") == "1";
+#endif
+	if (!driver || native_immutable_device_escaped) {
+#ifdef TESTS_ENABLED
+		if (trace_enabled) {
+			std::fprintf(stdout, "STAGED_MOBILE_VERTEX_PREFLIGHT stage=device_state error=%d driver_live=%d device_escaped=%d\n",
+					int(ERR_UNAVAILABLE), int(bool(driver)), int(native_immutable_device_escaped));
+			std::fflush(stdout);
+		}
+#endif
+		return ERR_UNAVAILABLE;
+	}
+	MutexLock lock(_thread_safe_);
+	if (draw_list.active || compute_list.active || raytracing_list.active || draw_graph.has_driver_callbacks() || production_finalization_started.load(std::memory_order_acquire)) {
+		return ERR_BUSY;
+	}
+	if (native_immutable_hold_count == UINT32_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	// Native Surface admission requires real vertices; point-size emulation is excluded.
+	if (!p_vertex_count) {
+		return ERR_INVALID_PARAMETER;
+	}
+	// Ordinary format creation historically ERR_CONTINUEs invalid enum values.
+	// Keep that behavior in its shared normalizer, but never admit such a native plan.
+	for (const VertexAttribute &attribute : p_attributes) {
+		if (uint32_t(attribute.format) >= DATA_FORMAT_MAX) {
+			return ERR_INVALID_DATA;
+		}
+		if (attribute.frequency != VERTEX_FREQUENCY_VERTEX && attribute.frequency != VERTEX_FREQUENCY_INSTANCE) {
+			return ERR_INVALID_DATA;
+		}
+	}
+	VertexDescriptionCache normalized;
+	const Error normalized_error = _vertex_format_normalize(p_attributes, normalized);
+	if (normalized_error != OK) {
+		return normalized_error;
+	}
+	// Actual format creation first resolves the ORIGINAL raw cache key.
+	// Its comparator intentionally omits binding; a cache hit's stored binding
+	// is therefore the one the actual VA factory will use, not raw re-normalization.
+	VertexDescriptionKey raw_key{ p_attributes };
+	if (const auto *existing = vertex_format_cache.getptr(raw_key)) {
+		const auto *description = vertex_formats.getptr(*existing);
+		if (!description || !description->driver_id) {
+			return ERR_INVALID_DATA;
+		}
+		normalized.vertex_formats = description->vertex_formats;
+		normalized.bindings = description->bindings;
+	}
+	VertexArray scratch;
+	HashSet<RID> used;
+	const Error prepared = _vertex_array_prepare_locked(p_vertex_count, normalized.vertex_formats, p_buffers, p_offsets, scratch, used);
+	if (prepared != OK) {
+		return prepared;
+	}
+	NativeVertexArrayPreflight result;
+	for (RID buffer : used) {
+		const Error eligible = _native_immutable_resource_eligibility_locked(buffer);
+		if (eligible != OK) {
+#ifdef TESTS_ENABLED
+			if (trace_enabled && eligible == ERR_UNAVAILABLE) {
+				uint64_t location_mask = 0;
+				for (const VertexAttribute &attribute : normalized.vertex_formats) {
+					if (attribute.location < 64 && p_buffers[attribute.binding] == buffer) {
+						location_mask |= uint64_t(1) << attribute.location;
+					}
+				}
+				const Buffer *vertex = vertex_buffer_owner.get_or_null(buffer);
+				const bool associated = vertex && vertex->transfer_worker_index >= 0;
+				bool observed = false;
+				bool processed = false;
+				bool submitted = false;
+				if (associated) {
+					// Read the original operation under the normal worker lock order.
+					// Contention leaves readiness unobserved and performs no worker service.
+					const uint32_t index = uint32_t(vertex->transfer_worker_index);
+					std::unique_lock<BinaryMutex> pool_lock(transfer_worker_pool_mutex, std::try_to_lock);
+					if (pool_lock.owns_lock() && index < transfer_worker_pool_size) {
+						auto *worker = transfer_worker_pool[index];
+						std::unique_lock<BinaryMutex> thread_lock(worker->thread_mutex, std::try_to_lock);
+						std::unique_lock<BinaryMutex> operation_lock(worker->operations_mutex, std::defer_lock);
+						if (thread_lock.owns_lock() && operation_lock.try_lock()) {
+							const uint64_t operation = vertex->transfer_worker_operation;
+							observed = worker->index == index && operation && operation <= worker->operations_counter;
+							processed = observed && operation <= worker->operations_processed;
+							submitted = observed && !worker->submission_pending && worker->submitted && operation <= worker->operations_submitted;
+						}
+					}
+				}
+				std::fprintf(stdout, "STAGED_MOBILE_VERTEX_PREFLIGHT stage=buffer_eligibility error=%d location_mask=%llu driver_live=%d escaped=%d persistent=%d address_usage=%d worker_associated=%d worker_observed=%d worker_processed=%d worker_submitted=%d\n",
+						int(eligible), (unsigned long long)location_mask, int(vertex && vertex->driver_id), int(vertex && vertex->native_external_access),
+						int(vertex && vertex->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT)), int(vertex && vertex->usage.has_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT)),
+						int(associated), int(observed), int(processed), int(submitted));
+				std::fflush(stdout);
+			}
+#endif
+			return eligible;
+		}
+		result.used_buffers.push_back(buffer);
+	}
+	result.attributes = std::move(normalized.vertex_formats);
+	result.max_instances_allowed = scratch.max_instances_allowed;
+	r_result = std::move(result);
+	return OK;
+}
+
+bool RenderingDevice::validate_external_indexed_surface_buffers(RID p_current_vertex_buffer, RID p_previous_vertex_buffer, RID p_index_buffer, RID p_index_array, uint32_t p_vertex_capacity, uint32_t p_index_capacity) {
+	// Indexed144 uses one tightly packed Float144 record (9 vec4 values) per vertex
+	// and a separate tightly packed UINT32 index allocation. Keep this check CPU-only;
+	// it is an admission guard for MeshStorage and does not authorize public RID use.
+	if (p_vertex_capacity == 0 || p_index_capacity == 0) {
+		return false;
+	}
+	const uint64_t vertex_bytes = uint64_t(p_vertex_capacity) * 144u;
+	const uint64_t index_bytes = uint64_t(p_index_capacity) * sizeof(uint32_t);
+	if (vertex_bytes > UINT32_MAX || index_bytes > UINT32_MAX) {
+		return false;
+	}
+
+	const Buffer *current = vertex_buffer_owner.get_or_null(p_current_vertex_buffer);
+	const Buffer *previous = vertex_buffer_owner.get_or_null(p_previous_vertex_buffer);
+	const IndexBuffer *index = index_buffer_owner.get_or_null(p_index_buffer);
+	const IndexArray *array = index_array_owner.get_or_null(p_index_array);
+	if (current == nullptr || previous == nullptr || index == nullptr || array == nullptr) {
+		return false;
+	}
+	if (p_current_vertex_buffer == p_previous_vertex_buffer || current->size != vertex_bytes || previous->size != vertex_bytes) {
+		return false;
+	}
+	if (!current->usage.has_flag(RDD::BUFFER_USAGE_VERTEX_BIT) || !previous->usage.has_flag(RDD::BUFFER_USAGE_VERTEX_BIT) ||
+			!current->usage.has_flag(RDD::BUFFER_USAGE_STORAGE_BIT) || !previous->usage.has_flag(RDD::BUFFER_USAGE_STORAGE_BIT)) {
+		return false;
+	}
+	if (index->format != INDEX_BUFFER_FORMAT_UINT32 || index->index_count != p_index_capacity || index->size != index_bytes ||
+			array->format != INDEX_BUFFER_FORMAT_UINT32 || array->offset != 0 || array->indices != p_index_capacity || array->driver_id != index->driver_id) {
+		return false;
+	}
+	return true;
+}
+
 RID RenderingDevice::index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, Span<uint8_t> p_data, bool p_use_restart_indices, BitField<BufferCreationBits> p_creation_bits) {
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V(p_index_count == 0, RID());
 
 	IndexBuffer index_buffer;
@@ -4070,14 +5330,28 @@ RID RenderingDevice::index_buffer_create(uint32_t p_index_count, IndexBufferForm
 	}
 
 	if (p_data.size()) {
-		_buffer_initialize(&index_buffer, p_data);
+		Error initialize_error = _buffer_initialize(&index_buffer, p_data);
+		if (initialize_error != OK) {
+			RDG::resource_tracker_free(index_buffer.draw_tracker);
+			driver->buffer_free(index_buffer.driver_id);
+			return RID();
+		}
 	}
 
 	_THREAD_SAFE_LOCK_
 	buffer_memory += index_buffer.size;
 	_THREAD_SAFE_UNLOCK_
 
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+	RID id = index_buffer_owner.allocate_rid();
+	index_buffer.capture_test_allocation_serial = capture_test_allocation_registry.allocate(index_buffer.driver_id.id, id.get_id());
+	if (index_buffer.capture_test_allocation_serial == 0) {
+		capture_test_coverage_failed.store(true);
+	}
+	index_buffer_owner.initialize_rid(id, index_buffer);
+#else
 	RID id = index_buffer_owner.make_rid(index_buffer);
+#endif
 #ifdef DEV_ENABLED
 	set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
@@ -4086,6 +5360,7 @@ RID RenderingDevice::index_buffer_create(uint32_t p_index_count, IndexBufferForm
 
 RID RenderingDevice::index_array_create(RID p_index_buffer, uint32_t p_index_offset, uint32_t p_index_count) {
 	_THREAD_SAFE_METHOD_
+	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_index_buffer), RID());
 
 	ERR_FAIL_COND_V(!index_buffer_owner.owns(p_index_buffer), RID());
 
@@ -4150,12 +5425,19 @@ String RenderingDevice::_shader_uniform_debug(RID p_shader, int p_set) {
 }
 
 Vector<uint8_t> RenderingDevice::shader_compile_binary_from_spirv(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name) {
+	return shader_compile_binary_from_spirv_with_options(p_spirv, p_shader_name, {});
+}
+
+Vector<uint8_t> RenderingDevice::shader_compile_binary_from_spirv_with_options(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags) {
+	ERR_FAIL_COND_V(p_spirv.is_empty(), Vector<uint8_t>());
+	ERR_FAIL_COND_V(!ShaderCompilePolicy::flags_valid(p_flags, SHADER_COMPILE_FLAG_DISABLE_FAST_MATH), Vector<uint8_t>());
 	const RenderingShaderContainerFormat &container_format = driver->get_shader_container_format();
+	ERR_FAIL_COND_V(!ShaderCompilePolicy::flags_valid(p_flags, container_format.supported_compile_flags()), Vector<uint8_t>());
 	Ref<RenderingShaderContainer> shader_container = container_format.create_container();
 	ERR_FAIL_COND_V(shader_container.is_null(), Vector<uint8_t>());
 
 	// Compile shader binary from SPIR-V.
-	bool code_compiled = shader_container->set_code_from_spirv(p_shader_name, p_spirv);
+	bool code_compiled = shader_container->set_code_from_spirv(p_shader_name, p_spirv, p_flags);
 	ERR_FAIL_COND_V_MSG(!code_compiled, Vector<uint8_t>(), vformat("Failed to compile code to native for SPIR-V."));
 
 	return shader_container->to_bytes();
@@ -4170,6 +5452,9 @@ RID RenderingDevice::shader_create_from_bytecode(const Vector<uint8_t> &p_shader
 }
 
 RID RenderingDevice::shader_create_from_bytecode_with_samplers(const Vector<uint8_t> &p_shader_binary, RID p_placeholder, const Vector<PipelineImmutableSampler> &p_immutable_samplers) {
+	return _qualification_shader_create(p_shader_binary, p_placeholder, p_immutable_samplers, nullptr, RID());
+}
+RID RenderingDevice::_qualification_shader_create(const Vector<uint8_t> &p_shader_binary, RID p_placeholder, const Vector<PipelineImmutableSampler> &p_immutable_samplers, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved) {
 	_THREAD_SAFE_METHOD_
 
 	Ref<RenderingShaderContainer> shader_container = driver->get_shader_container_format().create_container();
@@ -4178,6 +5463,23 @@ RID RenderingDevice::shader_create_from_bytecode_with_samplers(const Vector<uint
 	bool parsed_container = shader_container->from_bytes(p_shader_binary);
 	ERR_FAIL_COND_V_MSG(!parsed_container, RID(), "Failed to parse shader container from binary.");
 
+	ERR_FAIL_COND_V(!ShaderCompilePolicy::flags_valid(shader_container->get_compile_flags(), driver->get_shader_container_format().supported_compile_flags()), RID());
+	if (p_placeholder.is_valid()) {
+		const Shader *placeholder = shader_owner.get_or_null(p_placeholder);
+		ERR_FAIL_NULL_V(placeholder, RID());
+		ERR_FAIL_COND_V(placeholder->driver_id, RID());
+	}
+
+	// Freeze actual sampler owner identities before the first native effect.
+	// They join native holds without changing legacy dependency/free behavior.
+	uint64_t immutable_sampler_count = 0;
+	for (const PipelineImmutableSampler &source_sampler : p_immutable_samplers) {
+		immutable_sampler_count += source_sampler.get_id_count();
+		ERR_FAIL_COND_V(immutable_sampler_count > INT32_MAX, RID());
+	}
+	Vector<RID> immutable_sampler_owners;
+	ERR_FAIL_COND_V(immutable_sampler_owners.resize(immutable_sampler_count) != OK, RID());
+	uint32_t immutable_sampler_index = 0;
 	Vector<RDD::ImmutableSampler> driver_immutable_samplers;
 	for (const PipelineImmutableSampler &source_sampler : p_immutable_samplers) {
 		RDD::ImmutableSampler driver_sampler;
@@ -4185,8 +5487,12 @@ RID RenderingDevice::shader_create_from_bytecode_with_samplers(const Vector<uint
 		driver_sampler.binding = source_sampler.binding;
 
 		for (uint32_t j = 0; j < source_sampler.get_id_count(); j++) {
-			RDD::SamplerID *sampler_driver_id = sampler_owner.get_or_null(source_sampler.get_id(j));
-			driver_sampler.ids.push_back(*sampler_driver_id);
+			Sampler *sampler = sampler_owner.get_or_null(source_sampler.get_id(j));
+			ERR_FAIL_NULL_V(sampler, RID());
+			ERR_FAIL_COND_V(sampler->qualification_return, RID());
+			ERR_FAIL_COND_V(native_immutable_resource_is_retiring(source_sampler.get_id(j)), RID());
+			immutable_sampler_owners.write[immutable_sampler_index++] = source_sampler.get_id(j);
+			driver_sampler.ids.push_back(sampler->driver_id);
 		}
 
 		driver_immutable_samplers.append(driver_sampler);
@@ -4198,7 +5504,11 @@ RID RenderingDevice::shader_create_from_bytecode_with_samplers(const Vector<uint
 	// All good, let's create modules.
 
 	RID id;
-	if (p_placeholder.is_null()) {
+	if (p_cell) {
+		CRASH_COND(!p_reserved.is_valid() || p_placeholder.is_valid() || !p_immutable_samplers.is_empty());
+		id = p_reserved;
+		shader_owner.initialize_rid(id, Shader());
+	} else if (p_placeholder.is_null()) {
 		id = shader_owner.make_rid();
 	} else {
 		id = p_placeholder;
@@ -4206,11 +5516,14 @@ RID RenderingDevice::shader_create_from_bytecode_with_samplers(const Vector<uint
 
 	Shader *shader = shader_owner.get_or_null(id);
 	ERR_FAIL_NULL_V(shader, RID());
+	shader->qualification_return = p_cell;
+	shader->native_immutable_samplers = static_cast<Vector<RID> &&>(immutable_sampler_owners);
 
 	*((ShaderReflection *)shader) = shader_container->get_shader_reflection();
 	shader->name.clear();
 	shader->name.append_utf8(shader_container->shader_name);
 	shader->driver_id = shader_id;
+	shader->compile_flags = shader_container->get_compile_flags();
 	shader->layout_hash = driver->shader_get_layout_hash(shader_id);
 
 	for (int i = 0; i < shader->uniform_sets.size(); i++) {
@@ -4271,9 +5584,18 @@ RID RenderingDevice::shader_create_from_bytecode_with_samplers(const Vector<uint
 	return id;
 }
 
+BitField<RenderingDevice::ShaderCompileFlags> RenderingDevice::shader_get_compile_flags(RID p_shader) const {
+	_THREAD_SAFE_METHOD_
+	const Shader *shader = const_cast<RenderingDevice *>(this)->shader_owner.get_or_null(p_shader);
+	ERR_FAIL_NULL_V(shader, {});
+	ERR_FAIL_COND_V(!shader->driver_id, {});
+	return shader->compile_flags;
+}
+
 void RenderingDevice::shader_destroy_modules(RID p_shader) {
 	Shader *shader = shader_owner.get_or_null(p_shader);
 	ERR_FAIL_NULL(shader);
+	ERR_FAIL_COND(shader->qualification_return);
 	driver->shader_destroy_modules(shader->driver_id);
 }
 
@@ -4292,11 +5614,29 @@ uint64_t RenderingDevice::shader_get_vertex_input_attribute_mask(RID p_shader) {
 	return shader->vertex_input_mask;
 }
 
+Error RenderingDevice::shader_get_native_vertex_input_mask_if_ready(RID p_shader, uint64_t &r_input_mask) {
+	if (!native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	_THREAD_SAFE_METHOD_
+
+	const Shader *shader = shader_owner.get_or_null(p_shader);
+	if (!shader) {
+		return ERR_INVALID_DATA;
+	}
+	if (!shader->driver_id) {
+		return ERR_UNAVAILABLE;
+	}
+	r_input_mask = shader->vertex_input_mask;
+	return OK;
+}
+
 /******************/
 /**** UNIFORMS ****/
 /******************/
 
 RID RenderingDevice::uniform_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p_data, BitField<BufferCreationBits> p_creation_bits) {
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V(p_data.size() && (uint32_t)p_data.size() != p_size_bytes, RID());
 
 	Buffer buffer;
@@ -4324,7 +5664,13 @@ RID RenderingDevice::uniform_buffer_create(uint32_t p_size_bytes, Span<uint8_t> 
 	}
 
 	if (p_data.size()) {
-		_buffer_initialize(&buffer, p_data);
+		Error initialize_error = _buffer_initialize(&buffer, p_data);
+		if (initialize_error != OK) {
+			RDG::resource_tracker_free(buffer.draw_tracker);
+			driver->buffer_free(buffer.driver_id);
+			_production_disposal_returned(buffer.production_disposal_uses);
+			return RID();
+		}
 	}
 
 	_THREAD_SAFE_LOCK_
@@ -4346,28 +5692,151 @@ void RenderingDevice::_uniform_set_update_shared(UniformSet *p_uniform_set) {
 	}
 }
 
-void RenderingDevice::_uniform_set_update_clears(UniformSet *p_uniform_set) {
+Error RenderingDevice::_uniform_set_admit_clear_transfers(UniformSet *p_set) {
+	for (RID rid : p_set->pending_clear_textures) {
+		Texture *texture = texture_owner.get_or_null(rid);
+		if (!texture || !texture->pending_clear) {
+			continue;
+		}
+		if (texture->owner.is_valid()) {
+			texture = texture_owner.get_or_null(texture->owner);
+			ERR_FAIL_NULL_V(texture, ERR_INVALID_DATA);
+		}
+		const Error error = _check_transfer_worker_texture(texture);
+		if (error != OK) {
+			return error;
+		}
+	}
+	return OK;
+}
+
+Error RenderingDevice::_uniform_set_update_clears(UniformSet *p_uniform_set) {
 	if (p_uniform_set->pending_clear_textures.is_empty()) {
-		return;
+		return OK;
 	}
 
 	for (RID texture_id : p_uniform_set->pending_clear_textures) {
 		Texture *texture = texture_owner.get_or_null(texture_id);
 		if (texture != nullptr) {
-			_texture_check_pending_clear(texture_id, texture);
+			{
+				const Error dependency_error = _texture_check_pending_clear(texture_id, texture);
+				if (dependency_error != OK) {
+					return dependency_error;
+				}
+			}
 		}
 	}
 
 	p_uniform_set->pending_clear_textures.clear();
+	return OK;
 }
 
 RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniforms, RID p_shader, uint32_t p_shader_set, bool p_linear_pool) {
+	return _uniform_set_create_qualification(p_uniforms, p_shader, p_shader_set, p_linear_pool, nullptr, nullptr);
+}
+RID RenderingDevice::_qualification_uniform_set_create(const VectorView<Uniform> &uniforms, RID shader, uint32_t index, GDExtensionDeviceExit::QualificationPhysicalReturn *cell, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> &children) {
+	if (!cell || !cell->bridge || !cell->child || !cell->serial || cell->rid || cell->use_closed || !_qualification_reserve_free_event(cell)) {
+		return RID();
+	}
+	RID result = _uniform_set_create_qualification(uniforms, shader, index, false, cell, &children);
+	if (result.is_null()) {
+		_qualification_release_free_event(cell);
+	}
+	return result;
+}
+RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Uniform> &p_uniforms, RID p_shader, uint32_t p_shader_set, bool p_linear_pool, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> *p_children, const NativeDisposalWitness *p_native_disposal, const GDExtensionDeviceExit::ProductionRequest *p_production, const VectorView<ProductionOutputUniformSource> *p_sources) {
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Recording is suspended after a frame fence wait failure.");
 	_THREAD_SAFE_METHOD_
+	QualificationSourceAdmissionScope source_admission(*this);
+	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_shader), RID());
 
 	ERR_FAIL_COND_V(p_uniforms.size() == 0, RID());
 
 	Shader *shader = shader_owner.get_or_null(p_shader);
 	ERR_FAIL_NULL_V(shader, RID());
+
+	LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> qualification_dependencies;
+	LocalVector<NativeDisposalWitness> output_dependencies;
+	if (shader->qualification_return) {
+		qualification_dependencies.push_back(shader->qualification_return);
+	}
+	for (uint32_t u = 0; u < p_uniforms.size(); ++u) {
+		for (uint32_t i = 0; i < p_uniforms[u].get_id_count(); ++i) {
+			ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_uniforms[u].get_id(i)), RID());
+			const auto &uniform = p_uniforms[u];
+			auto *texture = texture_owner.owns(uniform.get_id(i)) ? texture_owner.get_or_null(uniform.get_id(i)) : nullptr;
+			ERR_FAIL_COND_V(texture && texture->qualification_return && (!p_children || !p_children->has(texture->qualification_return)), RID());
+			if (texture && texture->qualification_return && !qualification_dependencies.has(texture->qualification_return)) {
+				qualification_dependencies.push_back(texture->qualification_return);
+			}
+			auto *sampler = sampler_owner.owns(uniform.get_id(i)) ? sampler_owner.get_or_null(uniform.get_id(i)) : nullptr;
+			ERR_FAIL_COND_V(sampler && sampler->qualification_return && (!p_children || !p_children->has(sampler->qualification_return)), RID());
+			if (sampler && sampler->qualification_return && !qualification_dependencies.has(sampler->qualification_return)) {
+				qualification_dependencies.push_back(sampler->qualification_return);
+			}
+			auto *buffer = storage_buffer_owner.owns(uniform.get_id(i)) ? storage_buffer_owner.get_or_null(uniform.get_id(i)) : nullptr;
+			if (buffer && buffer->qualification_return && !qualification_dependencies.has(buffer->qualification_return)) {
+				qualification_dependencies.push_back(buffer->qualification_return);
+			}
+			if (buffer && buffer->native_disposal.cell.is_valid() && buffer->native_disposal.cell->production_request) {
+				const auto &physical = **buffer->native_disposal.cell;
+				bool predecessor = false;
+				if (p_production && p_shader_set < uint32_t(shader->uniform_sets.size())) {
+					for (uint32_t r = 0; r < p_production->resource_count; ++r) {
+						const auto &resource = p_production->resources[r];
+						const bool history_guard = resource.output_guard_history && resource.output_witness.cell == buffer->native_disposal.cell &&
+								GDExtensionDeviceExit::Registry::get_singleton().production_output_guard_matches_locked(*p_production, resource, *this);
+						if (resource.primary == uniform.get_id(i) && (history_guard || (resource.output_predecessor_witness.cell == buffer->native_disposal.cell &&
+								GDExtensionDeviceExit::Registry::get_singleton().production_output_predecessor_matches_locked(*p_production, resource, *this)))) {
+							for (const auto &reflected : shader->uniform_sets[p_shader_set]) {
+								predecessor |= reflected.binding == uniform.binding && reflected.type == UNIFORM_TYPE_STORAGE_BUFFER && !reflected.writable;
+							}
+						}
+					}
+				}
+				ERR_FAIL_COND_V(!p_production || (!predecessor && (physical.production_request != p_production || physical.production_request_serial != p_production->serial)) || physical.state != NativeDisposalWitness::State::LIVE || physical.production_dependent_sets == UINT32_MAX, RID());
+				// The original owned-set factory carries its actual predeclared
+				// group/root witness; nonowning E09 sets require exact aliases.
+				bool declared = predecessor || (p_native_disposal && p_native_disposal->cell.is_valid() && p_native_disposal->cell->production_request == p_production && p_native_disposal->cell->production_request_serial == p_production->serial && p_native_disposal->cell->production_group_serial == physical.production_group_serial && p_native_disposal->cell->production_pin_serial == physical.production_pin_serial);
+				if (p_sources && u < p_sources->size()) {
+					const auto &source = (*p_sources)[u];
+					declared |= source.buffer == uniform.get_id(i) && source.owned_group == physical.production_group_serial &&
+							source.owned_ordinal == physical.production_ordinal && p_native_disposal && p_native_disposal->cell.is_valid() &&
+							p_native_disposal->cell->production_pin_serial == physical.production_pin_serial;
+				}
+				bool duplicate = false;
+				for (uint32_t r = 0; r < p_production->resource_count; ++r) {
+					const auto &resource = p_production->resources[r];
+					declared |= resource.output_alias_prepared && resource.imported && !resource.retiring && resource.output_witness.cell == buffer->native_disposal.cell && resource.primary == uniform.get_id(i) && resource.output_root_serial == physical.production_pin_serial && resource.output_group_serial == physical.production_group_serial;
+				}
+				ERR_FAIL_COND_V(!declared, RID());
+				for (const auto &dependency : output_dependencies) {
+					duplicate |= dependency.cell == buffer->native_disposal.cell;
+				}
+				if (!duplicate) {
+					output_dependencies.push_back(buffer->native_disposal);
+				}
+			}
+		}
+	}
+	if (!qualification_dependencies.is_empty()) {
+		ERR_FAIL_COND_V(render_thread_id != Thread::get_caller_id() || p_linear_pool, RID());
+		ERR_FAIL_COND_V(!p_production && qualification_dependencies.size() > 128, RID());
+		const auto bridge = qualification_dependencies[0]->bridge;
+		for (auto *cell : qualification_dependencies) {
+			bool owned = !p_production && cell->bridge == bridge;
+			if (p_production && (p_production->capture_inflight || p_sources) && p_production->serial) {
+				for (uint32_t r = 0; r < p_production->resource_count && !owned; ++r) {
+					const auto &resource = p_production->resources[r];
+					for (uint32_t u = 0; u < resource.use_count; ++u) {
+						const auto &use = resource.uses[u];
+						owned |= use.physical == cell && use.request == p_production && use.request_serial == p_production->serial && use.same_physical() && use.linked();
+					}
+				}
+			}
+			ERR_FAIL_COND_V(!owned || cell->use_closed.load() || cell->dependent_children.load() == UINT32_MAX, RID());
+		}
+	}
 
 	ERR_FAIL_COND_V_MSG(p_shader_set >= (uint32_t)shader->uniform_sets.size() || shader->uniform_sets[p_shader_set].is_empty(), RID(),
 			"Desired set (" + itos(p_shader_set) + ") not used by shader.");
@@ -4428,10 +5897,10 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 				}
 
 				for (uint32_t j = 0; j < uniform.get_id_count(); j++) {
-					RDD::SamplerID *sampler_driver_id = sampler_owner.get_or_null(uniform.get_id(j));
-					ERR_FAIL_NULL_V_MSG(sampler_driver_id, RID(), "Sampler (binding: " + itos(uniform.binding) + ", index " + itos(j) + ") is not a valid sampler.");
+					Sampler *sampler = sampler_owner.get_or_null(uniform.get_id(j));
+					ERR_FAIL_NULL_V_MSG(sampler, RID(), "Sampler (binding: " + itos(uniform.binding) + ", index " + itos(j) + ") is not a valid sampler.");
 
-					driver_uniform.ids.push_back(*sampler_driver_id);
+					driver_uniform.ids.push_back(sampler->driver_id);
 				}
 			} break;
 			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: {
@@ -4444,8 +5913,8 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 				}
 
 				for (uint32_t j = 0; j < uniform.get_id_count(); j += 2) {
-					RDD::SamplerID *sampler_driver_id = sampler_owner.get_or_null(uniform.get_id(j + 0));
-					ERR_FAIL_NULL_V_MSG(sampler_driver_id, RID(), "SamplerBuffer (binding: " + itos(uniform.binding) + ", index " + itos(j + 1) + ") is not a valid sampler.");
+					Sampler *sampler = sampler_owner.get_or_null(uniform.get_id(j + 0));
+					ERR_FAIL_NULL_V_MSG(sampler, RID(), "SamplerBuffer (binding: " + itos(uniform.binding) + ", index " + itos(j + 1) + ") is not a valid sampler.");
 
 					RID texture_id = uniform.get_id(j + 1);
 					Texture *texture = texture_owner.get_or_null(texture_id);
@@ -4482,9 +5951,14 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 
 					DEV_ASSERT(!texture->owner.is_valid() || texture_owner.get_or_null(texture->owner));
 
-					driver_uniform.ids.push_back(*sampler_driver_id);
+					driver_uniform.ids.push_back(sampler->driver_id);
 					driver_uniform.ids.push_back(driver_id);
-					_check_transfer_worker_texture(texture);
+					{
+						const Error dependency_error = _check_transfer_worker_texture(texture);
+						if (dependency_error != OK) {
+							return RID();
+						}
+					}
 				}
 			} break;
 			case UNIFORM_TYPE_TEXTURE: {
@@ -4533,7 +6007,12 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 					DEV_ASSERT(!texture->owner.is_valid() || texture_owner.get_or_null(texture->owner));
 
 					driver_uniform.ids.push_back(driver_id);
-					_check_transfer_worker_texture(texture);
+					{
+						const Error dependency_error = _check_transfer_worker_texture(texture);
+						if (dependency_error != OK) {
+							return RID();
+						}
+					}
 				}
 			} break;
 			case UNIFORM_TYPE_IMAGE: {
@@ -4581,7 +6060,12 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 					DEV_ASSERT(!texture->owner.is_valid() || texture_owner.get_or_null(texture->owner));
 
 					driver_uniform.ids.push_back(texture->driver_id);
-					_check_transfer_worker_texture(texture);
+					{
+						const Error dependency_error = _check_transfer_worker_texture(texture);
+						if (dependency_error != OK) {
+							return RID();
+						}
+					}
 				}
 			} break;
 			case UNIFORM_TYPE_TEXTURE_BUFFER: {
@@ -4616,7 +6100,12 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 					}
 
 					driver_uniform.ids.push_back(buffer->driver_id);
-					_check_transfer_worker_buffer(buffer);
+					{
+						const Error dependency_error = _check_transfer_worker_buffer(buffer);
+						if (dependency_error != OK) {
+							return RID();
+						}
+					}
 				}
 			} break;
 			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE_BUFFER: {
@@ -4629,8 +6118,8 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 				}
 
 				for (uint32_t j = 0; j < uniform.get_id_count(); j += 2) {
-					RDD::SamplerID *sampler_driver_id = sampler_owner.get_or_null(uniform.get_id(j + 0));
-					ERR_FAIL_NULL_V_MSG(sampler_driver_id, RID(), "SamplerBuffer (binding: " + itos(uniform.binding) + ", index " + itos(j + 1) + ") is not a valid sampler.");
+					Sampler *sampler = sampler_owner.get_or_null(uniform.get_id(j + 0));
+					ERR_FAIL_NULL_V_MSG(sampler, RID(), "SamplerBuffer (binding: " + itos(uniform.binding) + ", index " + itos(j + 1) + ") is not a valid sampler.");
 
 					RID buffer_id = uniform.get_id(j + 1);
 					Buffer *buffer = texture_buffer_owner.get_or_null(buffer_id);
@@ -4643,9 +6132,14 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 						untracked_usage[buffer_id] = RDG::RESOURCE_USAGE_TEXTURE_BUFFER_READ;
 					}
 
-					driver_uniform.ids.push_back(*sampler_driver_id);
+					driver_uniform.ids.push_back(sampler->driver_id);
 					driver_uniform.ids.push_back(buffer->driver_id);
-					_check_transfer_worker_buffer(buffer);
+					{
+						const Error dependency_error = _check_transfer_worker_buffer(buffer);
+						if (dependency_error != OK) {
+							return RID();
+						}
+					}
 				}
 			} break;
 			case UNIFORM_TYPE_IMAGE_BUFFER: {
@@ -4671,7 +6165,12 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 				}
 
 				driver_uniform.ids.push_back(buffer->driver_id);
-				_check_transfer_worker_buffer(buffer);
+				{
+					const Error dependency_error = _check_transfer_worker_buffer(buffer);
+					if (dependency_error != OK) {
+						return RID();
+					}
+				}
 			} break;
 			case UNIFORM_TYPE_STORAGE_BUFFER:
 			case UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC: {
@@ -4712,7 +6211,12 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 				}
 
 				driver_uniform.ids.push_back(buffer->driver_id);
-				_check_transfer_worker_buffer(buffer);
+				{
+					const Error dependency_error = _check_transfer_worker_buffer(buffer);
+					if (dependency_error != OK) {
+						return RID();
+					}
+				}
 			} break;
 			case UNIFORM_TYPE_INPUT_ATTACHMENT: {
 				ERR_FAIL_COND_V_MSG(shader->pipeline_type != PIPELINE_TYPE_RASTERIZATION, RID(), "InputAttachment (binding: " + itos(uniform.binding) + ") supplied for non-render shader (this is not allowed).");
@@ -4738,7 +6242,12 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 					DEV_ASSERT(!texture->owner.is_valid() || texture_owner.get_or_null(texture->owner));
 
 					driver_uniform.ids.push_back(texture->driver_id);
-					_check_transfer_worker_texture(texture);
+					{
+						const Error dependency_error = _check_transfer_worker_texture(texture);
+						if (dependency_error != OK) {
+							return RID();
+						}
+					}
 				}
 			} break;
 			case UNIFORM_TYPE_ACCELERATION_STRUCTURE: {
@@ -4763,11 +6272,51 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 		}
 	}
 
+	RID reserved_set;
+	if (p_native_disposal || !qualification_dependencies.is_empty()) {
+		reserved_set = uniform_set_owner.allocate_rid();
+		ERR_FAIL_COND_V(reserved_set.is_null(), RID());
+	}
 	RDD::UniformSetID driver_uniform_set = driver->uniform_set_create(driver_uniforms, shader->driver_id, p_shader_set, p_linear_pool ? frame : -1);
-	ERR_FAIL_COND_V(!driver_uniform_set, RID());
+	if (!driver_uniform_set) {
+		if (reserved_set.is_valid()) {
+			uniform_set_owner.initialize_rid(reserved_set, UniformSet());
+			uniform_set_owner.free(reserved_set);
+		}
+		ERR_FAIL_V(RID());
+	}
 
 	UniformSet uniform_set;
+	for (uint32_t uniform_index = 0; uniform_index < uniform_count; ++uniform_index) {
+		const Uniform &uniform = uniforms[uniform_index];
+		for (const ShaderUniform &reflected : shader->uniform_sets[p_shader_set]) {
+			if (reflected.binding == uniform.binding && reflected.writable) {
+				for (uint32_t i = 0; i < uniform.get_id_count(); ++i) {
+					const RID rid = uniform.get_id(i);
+					if (!uniform_set.writable_resources.has(rid)) {
+						uniform_set.writable_resources.push_back(rid);
+					}
+				}
+			}
+		}
+	}
+	uniform_set.production_output_dependencies = output_dependencies;
+	for (auto &dependency : uniform_set.production_output_dependencies) {
+		++dependency.cell->production_dependent_sets;
+	}
+	uniform_set.qualification_dependencies = qualification_dependencies;
+	uniform_set.qualification_return = p_cell;
+	for (auto *cell : qualification_dependencies) {
+		cell->dependent_children.fetch_add(1);
+	}
 	uniform_set.driver_id = driver_uniform_set;
+	if (p_native_disposal) {
+		uniform_set.native_disposal = *p_native_disposal;
+		uniform_set.native_disposal_rid = reserved_set.get_id();
+		uniform_set.native_disposal_serial = p_native_disposal->cell->serial;
+		p_native_disposal->cell->rid = reserved_set.get_id();
+		p_native_disposal->cell->backing = driver_uniform_set.id;
+	}
 	uniform_set.format = shader->set_formats[p_shader_set];
 	uniform_set.attachable_textures = attachable_textures;
 	uniform_set.draw_trackers = draw_trackers;
@@ -4779,7 +6328,15 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 	uniform_set.shader_set = p_shader_set;
 	uniform_set.shader_id = p_shader;
 
-	RID id = uniform_set_owner.make_rid(uniform_set);
+	RID id = reserved_set;
+	if (id.is_valid()) {
+		uniform_set_owner.initialize_rid(id, uniform_set);
+	} else {
+		id = uniform_set_owner.make_rid(uniform_set);
+	}
+	if (p_cell) {
+		p_cell->rid = id.get_id();
+	}
 #ifdef DEV_ENABLED
 	set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
@@ -4807,6 +6364,10 @@ void RenderingDevice::uniform_set_set_invalidation_callback(RID p_uniform_set, I
 
 	UniformSet *us = uniform_set_owner.get_or_null(p_uniform_set);
 	ERR_FAIL_NULL(us);
+	ERR_FAIL_COND(us->qualification_return);
+	ERR_FAIL_COND(p_callback && native_immutable_resource_is_retiring(p_uniform_set));
+	us->production_material_origin = RID();
+	us->production_material_origin_generation = 0;
 	us->invalidated_callback = p_callback;
 	us->invalidated_callback_userdata = p_userdata;
 }
@@ -4820,30 +6381,54 @@ bool RenderingDevice::uniform_sets_have_linear_pools() const {
 /*******************/
 
 RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants) {
+	return _qualification_render_pipeline_create_internal(p_shader, p_framebuffer_format, p_vertex_format, p_render_primitive, p_rasterization_state, p_multisample_state, p_depth_stencil_state, p_blend_state, p_dynamic_state_flags, p_for_render_pass, p_specialization_constants, nullptr, RID());
+}
+
+RID RenderingDevice::_qualification_render_pipeline_create(RID p_shader, FramebufferFormatID p_format, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved) {
+	ERR_FAIL_NULL_V(p_cell, RID());
+	PipelineDepthStencilState depth;
+	depth.enable_depth_test = true;
+	depth.enable_depth_write = true;
+	depth.depth_compare_operator = COMPARE_OP_ALWAYS;
+	return _qualification_render_pipeline_create_internal(p_shader, p_format, INVALID_ID, RENDER_PRIMITIVE_TRIANGLES, PipelineRasterizationState(), PipelineMultisampleState(), depth, PipelineColorBlendState(), 0, 0, Vector<PipelineSpecializationConstant>(), p_cell, p_reserved);
+}
+
+// Shared factory predicates. Prospective callers hold Registry then RD and
+// pass allow_default_framebuffer=false: no native/cache factory is permitted.
+// Future attributes carry the actual raw VF cache key; no VF ID is invented.
+Error RenderingDevice::_native_render_pipeline_validate_values(RID p_shader, FramebufferFormatID &p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved, GDExtensionDeviceExit::ProductionUseCell *p_output_cell, bool allow_default_framebuffer, const Vector<VertexAttribute> *future_attributes, Shader *&shader, FramebufferFormat &fb_format, RDD::VertexFormatID &driver_vertex_format) {
+	ERR_FAIL_COND_V(p_cell && p_output_cell, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_shader), ERR_INVALID_PARAMETER);
 	// Needs a shader.
-	Shader *shader = shader_owner.get_or_null(p_shader);
-	ERR_FAIL_NULL_V(shader, RID());
-	ERR_FAIL_COND_V_MSG(shader->pipeline_type != PIPELINE_TYPE_RASTERIZATION, RID(),
+	shader = shader_owner.get_or_null(p_shader);
+	ERR_FAIL_NULL_V(shader, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(shader->qualification_return && !p_cell, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(p_cell && (!p_reserved.is_valid() || !shader->qualification_return || shader->qualification_return->bridge != p_cell->bridge || shader->qualification_return->child != p_cell->child || shader->qualification_return->use_closed.load() || shader->qualification_return->dependent_children.load() == UINT32_MAX), ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(p_cell && (!shader->set_formats.is_empty() || !shader->stage_bits.has_flag(RDD::PIPELINE_STAGE_FRAGMENT_SHADER_BIT)), ERR_INVALID_PARAMETER);
+	const NativeRenderPipelineShaderShape shape = _native_render_pipeline_shader_shape(*shader);
+	ERR_FAIL_COND_V_MSG(shape == NativeRenderPipelineShaderShape::NOT_RASTERIZATION, ERR_INVALID_PARAMETER,
 			"Only render shaders can be used in render pipelines");
 
 	// Validate pre-raster shader. One of stages must be vertex shader or mesh shader (not implemented yet).
-	ERR_FAIL_COND_V_MSG(!shader->stage_bits.has_flag(RDD::PIPELINE_STAGE_VERTEX_SHADER_BIT), RID(), "Pre-raster shader (vertex shader) is not provided for pipeline creation.");
+	ERR_FAIL_COND_V_MSG(shape == NativeRenderPipelineShaderShape::MISSING_VERTEX, ERR_INVALID_PARAMETER, "Pre-raster shader (vertex shader) is not provided for pipeline creation.");
 
-	FramebufferFormat fb_format;
 	{
 		_THREAD_SAFE_METHOD_
 
 		if (p_framebuffer_format == INVALID_ID) {
+			if (!allow_default_framebuffer) {
+				return ERR_UNAVAILABLE;
+			}
 			// If nothing provided, use an empty one (no attachments).
 			p_framebuffer_format = framebuffer_format_create(Vector<AttachmentFormat>());
 		}
-		ERR_FAIL_COND_V(!framebuffer_formats.has(p_framebuffer_format), RID());
+		ERR_FAIL_COND_V(!framebuffer_formats.has(p_framebuffer_format), ERR_INVALID_PARAMETER);
 		fb_format = framebuffer_formats[p_framebuffer_format];
 	}
 
 	// Validate shader vs. framebuffer.
 	{
-		ERR_FAIL_COND_V_MSG(p_for_render_pass >= uint32_t(fb_format.E->key().passes.size()), RID(), "Render pass requested for pipeline creation (" + itos(p_for_render_pass) + ") is out of bounds");
+		ERR_FAIL_COND_V_MSG(p_for_render_pass >= uint32_t(fb_format.E->key().passes.size()), ERR_INVALID_PARAMETER, "Render pass requested for pipeline creation (" + itos(p_for_render_pass) + ") is out of bounds");
 		const FramebufferPass &pass = fb_format.E->key().passes[p_for_render_pass];
 		uint32_t output_mask = 0;
 		for (int i = 0; i < pass.color_attachments.size(); i++) {
@@ -4851,19 +6436,30 @@ RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_
 				output_mask |= 1 << i;
 			}
 		}
-		ERR_FAIL_COND_V_MSG(shader->fragment_output_mask != output_mask, RID(),
+		ERR_FAIL_COND_V_MSG(shader->fragment_output_mask != output_mask, ERR_INVALID_PARAMETER,
 				"Mismatch fragment shader output mask (" + itos(shader->fragment_output_mask) + ") and framebuffer color output mask (" + itos(output_mask) + ") when binding both in render pipeline.");
 	}
 
-	RDD::VertexFormatID driver_vertex_format;
-	if (p_vertex_format != INVALID_ID) {
+	VertexDescriptionCache future_description;
+	if (p_vertex_format != INVALID_ID || future_attributes) {
 		// Uses vertices, else it does not.
 		const VertexDescriptionCache *vd;
-		{
+		if (future_attributes) {
+			ERR_FAIL_COND_V(p_vertex_format != INVALID_ID, ERR_INVALID_PARAMETER);
+			const Error normalized = _vertex_format_normalize(*future_attributes, future_description);
+			if (normalized != OK) {
+				return normalized;
+			}
+			vd = &future_description;
+			VertexDescriptionKey raw_key{ *future_attributes };
+			if (const auto *existing = vertex_format_cache.getptr(raw_key)) {
+				vd = vertex_formats.getptr(*existing);
+			}
+		} else {
 			_THREAD_SAFE_METHOD_
 			vd = vertex_formats.getptr(p_vertex_format);
 		}
-		ERR_FAIL_NULL_V(vd, RID());
+		ERR_FAIL_NULL_V(vd, ERR_INVALID_PARAMETER);
 
 		driver_vertex_format = vd->driver_id;
 
@@ -4880,49 +6476,49 @@ RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_
 				}
 			}
 
-			ERR_FAIL_COND_V_MSG(!found, RID(),
+			ERR_FAIL_COND_V_MSG(!found, ERR_INVALID_PARAMETER,
 					"Shader vertex input location (" + itos(i) + ") not provided in vertex input description for pipeline creation.");
 		}
 
 	} else {
-		ERR_FAIL_COND_V_MSG(shader->vertex_input_mask != 0, RID(),
+		ERR_FAIL_COND_V_MSG(shader->vertex_input_mask != 0, ERR_INVALID_PARAMETER,
 				"Shader contains vertex inputs, but no vertex input description was provided for pipeline creation.");
 	}
 
-	ERR_FAIL_INDEX_V(p_render_primitive, RENDER_PRIMITIVE_MAX, RID());
+	ERR_FAIL_INDEX_V(p_render_primitive, RENDER_PRIMITIVE_MAX, ERR_INVALID_PARAMETER);
 
-	ERR_FAIL_INDEX_V(p_rasterization_state.cull_mode, 3, RID());
+	ERR_FAIL_INDEX_V(p_rasterization_state.cull_mode, 3, ERR_INVALID_PARAMETER);
 
 	if (p_multisample_state.sample_mask.size()) {
 		// Use sample mask.
-		ERR_FAIL_COND_V((int)TEXTURE_SAMPLES_COUNT[p_multisample_state.sample_count] != p_multisample_state.sample_mask.size(), RID());
+		ERR_FAIL_COND_V((int)TEXTURE_SAMPLES_COUNT[p_multisample_state.sample_count] != p_multisample_state.sample_mask.size(), ERR_INVALID_PARAMETER);
 	}
 
-	ERR_FAIL_INDEX_V(p_depth_stencil_state.depth_compare_operator, COMPARE_OP_MAX, RID());
+	ERR_FAIL_INDEX_V(p_depth_stencil_state.depth_compare_operator, COMPARE_OP_MAX, ERR_INVALID_PARAMETER);
 
-	ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.fail, STENCIL_OP_MAX, RID());
-	ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.pass, STENCIL_OP_MAX, RID());
-	ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.depth_fail, STENCIL_OP_MAX, RID());
-	ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.compare, COMPARE_OP_MAX, RID());
+	ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.fail, STENCIL_OP_MAX, ERR_INVALID_PARAMETER);
+	ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.pass, STENCIL_OP_MAX, ERR_INVALID_PARAMETER);
+	ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.depth_fail, STENCIL_OP_MAX, ERR_INVALID_PARAMETER);
+	ERR_FAIL_INDEX_V(p_depth_stencil_state.front_op.compare, COMPARE_OP_MAX, ERR_INVALID_PARAMETER);
 
-	ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.fail, STENCIL_OP_MAX, RID());
-	ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.pass, STENCIL_OP_MAX, RID());
-	ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.depth_fail, STENCIL_OP_MAX, RID());
-	ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.compare, COMPARE_OP_MAX, RID());
+	ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.fail, STENCIL_OP_MAX, ERR_INVALID_PARAMETER);
+	ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.pass, STENCIL_OP_MAX, ERR_INVALID_PARAMETER);
+	ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.depth_fail, STENCIL_OP_MAX, ERR_INVALID_PARAMETER);
+	ERR_FAIL_INDEX_V(p_depth_stencil_state.back_op.compare, COMPARE_OP_MAX, ERR_INVALID_PARAMETER);
 
-	ERR_FAIL_INDEX_V(p_blend_state.logic_op, LOGIC_OP_MAX, RID());
+	ERR_FAIL_INDEX_V(p_blend_state.logic_op, LOGIC_OP_MAX, ERR_INVALID_PARAMETER);
 
 	const FramebufferPass &pass = fb_format.E->key().passes[p_for_render_pass];
-	ERR_FAIL_COND_V(p_blend_state.attachments.size() < pass.color_attachments.size(), RID());
+	ERR_FAIL_COND_V(p_blend_state.attachments.size() < pass.color_attachments.size(), ERR_INVALID_PARAMETER);
 	for (int i = 0; i < pass.color_attachments.size(); i++) {
 		if (pass.color_attachments[i] != ATTACHMENT_UNUSED) {
-			ERR_FAIL_INDEX_V(p_blend_state.attachments[i].src_color_blend_factor, BLEND_FACTOR_MAX, RID());
-			ERR_FAIL_INDEX_V(p_blend_state.attachments[i].dst_color_blend_factor, BLEND_FACTOR_MAX, RID());
-			ERR_FAIL_INDEX_V(p_blend_state.attachments[i].color_blend_op, BLEND_OP_MAX, RID());
+			ERR_FAIL_INDEX_V(p_blend_state.attachments[i].src_color_blend_factor, BLEND_FACTOR_MAX, ERR_INVALID_PARAMETER);
+			ERR_FAIL_INDEX_V(p_blend_state.attachments[i].dst_color_blend_factor, BLEND_FACTOR_MAX, ERR_INVALID_PARAMETER);
+			ERR_FAIL_INDEX_V(p_blend_state.attachments[i].color_blend_op, BLEND_OP_MAX, ERR_INVALID_PARAMETER);
 
-			ERR_FAIL_INDEX_V(p_blend_state.attachments[i].src_alpha_blend_factor, BLEND_FACTOR_MAX, RID());
-			ERR_FAIL_INDEX_V(p_blend_state.attachments[i].dst_alpha_blend_factor, BLEND_FACTOR_MAX, RID());
-			ERR_FAIL_INDEX_V(p_blend_state.attachments[i].alpha_blend_op, BLEND_OP_MAX, RID());
+			ERR_FAIL_INDEX_V(p_blend_state.attachments[i].src_alpha_blend_factor, BLEND_FACTOR_MAX, ERR_INVALID_PARAMETER);
+			ERR_FAIL_INDEX_V(p_blend_state.attachments[i].dst_alpha_blend_factor, BLEND_FACTOR_MAX, ERR_INVALID_PARAMETER);
+			ERR_FAIL_INDEX_V(p_blend_state.attachments[i].alpha_blend_op, BLEND_OP_MAX, ERR_INVALID_PARAMETER);
 		}
 	}
 
@@ -4931,13 +6527,48 @@ RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_
 		for (int j = 0; j < p_specialization_constants.size(); j++) {
 			const PipelineSpecializationConstant &psc = p_specialization_constants[j];
 			if (psc.constant_id == sc.constant_id) {
-				ERR_FAIL_COND_V_MSG(psc.type != sc.type, RID(), "Specialization constant provided for id (" + itos(sc.constant_id) + ") is of the wrong type.");
+				ERR_FAIL_COND_V_MSG(psc.type != sc.type, ERR_INVALID_PARAMETER, "Specialization constant provided for id (" + itos(sc.constant_id) + ") is of the wrong type.");
 				break;
 			}
 		}
 	}
 
+	return OK;
+}
+
+RID RenderingDevice::_qualification_render_pipeline_create_internal(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved, GDExtensionDeviceExit::ProductionUseCell *p_output_cell) {
+	return _native_render_pipeline_create_internal(p_shader, p_framebuffer_format, p_vertex_format, p_render_primitive, p_rasterization_state, p_multisample_state, p_depth_stencil_state, p_blend_state, p_dynamic_state_flags, p_for_render_pass, p_specialization_constants, p_cell, p_reserved, p_output_cell, nullptr);
+}
+
+RID RenderingDevice::_native_render_pipeline_create_internal(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved, GDExtensionDeviceExit::ProductionUseCell *p_output_cell, NativeImmutableHold *p_material_hold) {
+	Shader *shader = nullptr;
+	FramebufferFormat fb_format;
+	RDD::VertexFormatID driver_vertex_format;
+	const Error values = _native_render_pipeline_validate_values(p_shader, p_framebuffer_format, p_vertex_format, p_render_primitive,
+			p_rasterization_state, p_multisample_state, p_depth_stencil_state, p_blend_state, p_dynamic_state_flags,
+			p_for_render_pass, p_specialization_constants, p_material_hold ? nullptr : p_cell, p_reserved, p_output_cell, !p_material_hold, nullptr,
+			shader, fb_format, driver_vertex_format);
+	if (values != OK) {
+		return RID();
+	}
+	const FramebufferPass &pass = fb_format.E->key().passes[p_for_render_pass];
+
+	// Ordinary creation must own its RID before the driver can create a native
+	// pipeline. A thread-safe RID owner can refuse when its finite arena is full.
+	RID ordinary_reserved;
+	if (!p_cell) {
+		ordinary_reserved = render_pipeline_owner.allocate_rid();
+		ERR_FAIL_COND_V(ordinary_reserved.is_null(), RID());
+	}
+
 	RenderPipeline pipeline;
+	pipeline.production_disposal_uses = p_output_cell ? &p_output_cell->disposal : nullptr;
+	pipeline.qualification_return = p_cell;
+	pipeline.qualification_dependency = p_cell && !p_material_hold ? shader->qualification_return : nullptr;
+	pipeline.material_shader_hold = p_material_hold;
+	if (p_material_hold) {
+		++p_material_hold->pipeline_borrowers; // Also retain across the synchronous native factory.
+	}
 	pipeline.driver_id = driver->render_pipeline_create(
 			shader->driver_id,
 			driver_vertex_format,
@@ -4951,6 +6582,18 @@ RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_
 			fb_format.render_pass,
 			p_for_render_pass,
 			p_specialization_constants);
+
+	if (!pipeline.driver_id && p_material_hold) {
+		CRASH_COND(!p_material_hold->pipeline_borrowers);
+		--p_material_hold->pipeline_borrowers;
+	}
+
+	if (!pipeline.driver_id && ordinary_reserved.is_valid()) {
+		// RID_Owner::free requires an initialized slot, even when no driver
+		// object was created. Return this ordinary reservation on both exits.
+		render_pipeline_owner.initialize_rid(ordinary_reserved, RenderPipeline());
+		render_pipeline_owner.free(ordinary_reserved);
+	}
 
 	// Don't print error when it's expected.
 	if (unlikely(!pipeline.driver_id && driver->get_driver_workarounds().dont_print_on_render_pipeline_creation_failure)) {
@@ -4970,11 +6613,12 @@ RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_
 	pipeline.push_constant_size = shader->push_constant_size;
 	pipeline.stage_bits = shader->stage_bits;
 
-#ifdef DEBUG_ENABLED
-	pipeline.validation.dynamic_state = p_dynamic_state_flags;
 	pipeline.validation.framebuffer_format = p_framebuffer_format;
 	pipeline.validation.render_pass = p_for_render_pass;
 	pipeline.validation.vertex_format = p_vertex_format;
+	pipeline.validation.primitive = p_render_primitive;
+#ifdef DEBUG_ENABLED
+	pipeline.validation.dynamic_state = p_dynamic_state_flags;
 	pipeline.validation.uses_restart_indices = p_render_primitive == RENDER_PRIMITIVE_TRIANGLE_STRIPS_WITH_RESTART_INDEX;
 
 	static const uint32_t primitive_divisor[RENDER_PRIMITIVE_MAX] = {
@@ -4998,7 +6642,29 @@ RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_
 #endif
 
 	// Create ID to associate with this pipeline.
-	RID id = render_pipeline_owner.make_rid(pipeline);
+	RID id;
+	if (p_cell) {
+		id = p_reserved;
+		render_pipeline_owner.initialize_rid(id, pipeline);
+		if (pipeline.qualification_dependency) {
+			pipeline.qualification_dependency->dependent_children.fetch_add(1);
+		}
+	} else {
+		id = ordinary_reserved;
+		render_pipeline_owner.initialize_rid(id, pipeline);
+	}
+	if (p_output_cell) {
+		// The exact original reserved cell exists before the driver allocation.
+		// Publish its identity in the factory before any created RID escapes.
+		auto &node = p_output_cell->disposal;
+		node.rid = id.get_id();
+		node.serial = id.get_id();
+		node.native_driver_id = pipeline.driver_id.id;
+		node.kind = 0;
+		node.next = nullptr;
+		node.state.store(1, std::memory_order_release);
+		p_output_cell->output_role = GDExtensionDeviceExit::ProductionUseCell::OutputRole::DISPOSAL_MEMBER;
+	}
 	{
 		_THREAD_SAFE_METHOD_
 
@@ -5019,6 +6685,11 @@ bool RenderingDevice::render_pipeline_is_valid(RID p_pipeline) {
 }
 
 RID RenderingDevice::compute_pipeline_create(RID p_shader, const Vector<PipelineSpecializationConstant> &p_specialization_constants) {
+	return _qualification_pipeline_create(p_shader, p_specialization_constants, nullptr, RID());
+}
+RID RenderingDevice::_qualification_pipeline_create(RID p_shader, const Vector<PipelineSpecializationConstant> &p_specialization_constants, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved, GDExtensionDeviceExit::ProductionUseCell *p_output_cell) {
+	ERR_FAIL_COND_V(p_cell && p_output_cell, RID());
+	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_shader), RID());
 	Shader *shader;
 
 	{
@@ -5027,6 +6698,8 @@ RID RenderingDevice::compute_pipeline_create(RID p_shader, const Vector<Pipeline
 		// Needs a shader.
 		shader = shader_owner.get_or_null(p_shader);
 		ERR_FAIL_NULL_V(shader, RID());
+		ERR_FAIL_COND_V(shader->qualification_return && !p_cell, RID());
+		ERR_FAIL_COND_V(p_cell && (!shader->qualification_return || shader->qualification_return->bridge != p_cell->bridge || shader->qualification_return->child != p_cell->child), RID());
 
 		ERR_FAIL_COND_V_MSG(shader->pipeline_type != PIPELINE_TYPE_COMPUTE, RID(),
 				"Non-compute shaders can't be used in compute pipelines");
@@ -5044,6 +6717,7 @@ RID RenderingDevice::compute_pipeline_create(RID p_shader, const Vector<Pipeline
 	}
 
 	ComputePipeline pipeline;
+	pipeline.qualification_return = p_cell;
 	pipeline.driver_id = driver->compute_pipeline_create(shader->driver_id, p_specialization_constants);
 	ERR_FAIL_COND_V(!pipeline.driver_id, RID());
 
@@ -5061,7 +6735,14 @@ RID RenderingDevice::compute_pipeline_create(RID p_shader, const Vector<Pipeline
 	pipeline.local_group_size[2] = shader->compute_local_size[2];
 
 	// Create ID to associate with this pipeline.
-	RID id = compute_pipeline_owner.make_rid(pipeline);
+	RID id;
+	if (p_cell) {
+		CRASH_COND(!p_reserved.is_valid());
+		id = p_reserved;
+		compute_pipeline_owner.initialize_rid(id, pipeline);
+	} else {
+		id = compute_pipeline_owner.make_rid(pipeline);
+	}
 	{
 		_THREAD_SAFE_METHOD_
 
@@ -5376,6 +7057,10 @@ Error RenderingDevice::screen_create(DisplayServerEnums::WindowID p_screen) {
 
 Error RenderingDevice::screen_prepare_for_drawing(DisplayServerEnums::WindowID p_screen) {
 	_THREAD_SAFE_METHOD_
+	const Error recording_error = _recording_error();
+	if (recording_error != OK) {
+		return recording_error; // Preserve the suspended frame before acquire or presentation.
+	}
 
 	// After submitting work, acquire the swapchain image(s).
 	HashMap<DisplayServerEnums::WindowID, RDD::SwapChainID>::ConstIterator it = screen_swap_chains.find(p_screen);
@@ -5388,7 +7073,16 @@ Error RenderingDevice::screen_prepare_for_drawing(DisplayServerEnums::WindowID p
 	uint32_t to_present_index = 0;
 	while (to_present_index < frames[frame].swap_chains_to_present.size()) {
 		if (frames[frame].swap_chains_to_present[to_present_index] == it->value) {
-			driver->command_queue_execute_and_present(present_queue, {}, {}, {}, {}, it->value);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+			const Error skinned_mesh_capture_test_driver_result =
+#endif
+					driver->command_queue_execute_and_present(present_queue, {}, {}, {}, {}, it->value);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+			RenderCaptureTestHooks::observe_driver_result(uint64_t(get_instance_id()), 1, 0, skinned_mesh_capture_test_driver_result);
+			if (skinned_mesh_capture_test_driver_result != OK) {
+				capture_test_coverage_failed.store(true);
+			}
+#endif
 			frames[frame].swap_chains_to_present.remove_at(to_present_index);
 		} else {
 			to_present_index++;
@@ -5399,7 +7093,10 @@ Error RenderingDevice::screen_prepare_for_drawing(DisplayServerEnums::WindowID p
 	RDD::FramebufferID framebuffer = driver->swap_chain_acquire_framebuffer(main_queue, it->value, resize_required);
 	if (resize_required) {
 		// Flush everything so nothing can be using the swap chain before resizing it.
-		_flush_and_stall_for_all_frames();
+		const Error wait_error = _flush_and_stall_for_all_frames();
+		if (wait_error != OK) {
+			return wait_error;
+		}
 
 		Error err = driver->swap_chain_resize(main_queue, it->value, _get_swap_chain_desired_count());
 		if (err != OK) {
@@ -5492,9 +7189,20 @@ Error RenderingDevice::screen_free(DisplayServerEnums::WindowID p_screen) {
 
 	HashMap<DisplayServerEnums::WindowID, RDD::SwapChainID>::ConstIterator it = screen_swap_chains.find(p_screen);
 	ERR_FAIL_COND_V_MSG(it == screen_swap_chains.end(), FAILED, "Screen was never created.");
+	if (native_finalization_returned) {
+		// The actual RT finalizer already returned from this exact swapchain's
+		// driver free. Consume the retained original screen owner acknowledgment.
+		ERR_FAIL_COND_V_MSG(it->value, ERR_INVALID_DATA, "Finalized screen still has an unresolved native swapchain.");
+		screen_framebuffers.erase(p_screen);
+		screen_swap_chains.erase(p_screen);
+		return OK;
+	}
 
 	// Flush everything so nothing can be using the swap chain before erasing it.
-	_flush_and_stall_for_all_frames();
+	const Error wait_error = _flush_and_stall_for_all_frames();
+	if (wait_error != OK) {
+		return wait_error;
+	}
 
 	const DisplayServerEnums::WindowID screen = it->key;
 	const RDD::SwapChainID swap_chain = it->value;
@@ -5511,31 +7219,49 @@ Error RenderingDevice::screen_free(DisplayServerEnums::WindowID p_screen) {
 
 RenderingDevice::DrawListID RenderingDevice::draw_list_begin_for_screen(DisplayServerEnums::WindowID p_screen, const Color &p_clear_color) {
 	ERR_RENDER_THREAD_GUARD_V(INVALID_ID);
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, INVALID_ID, "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND_V_MSG(draw_list.active, INVALID_ID, "Only one draw list can be active at the same time.");
 	ERR_FAIL_COND_V_MSG(compute_list.active, INVALID_ID, "Only one draw/compute list can be active at the same time.");
 	ERR_FAIL_COND_V_MSG(raytracing_list.active, INVALID_ID, "Only one draw/raytracing list can be active at the same time.");
 
+	if (split_swapchain_into_its_own_cmd_buffer) {
+		const Error admission = _qualification_admit_extra_main(1);
+		if (admission != OK) {
+			return INVALID_ID;
+		}
+	}
 	RenderingContextDriver::SurfaceID surface = context->surface_get_from_window(p_screen);
 	HashMap<DisplayServerEnums::WindowID, RDD::SwapChainID>::ConstIterator sc_it = screen_swap_chains.find(p_screen);
 	HashMap<DisplayServerEnums::WindowID, RDD::FramebufferID>::ConstIterator fb_it = screen_framebuffers.find(p_screen);
 	ERR_FAIL_COND_V_MSG(surface == 0, 0, "A surface was not created for the screen.");
 	ERR_FAIL_COND_V_MSG(sc_it == screen_swap_chains.end(), INVALID_ID, "Screen was never prepared.");
 	ERR_FAIL_COND_V_MSG(fb_it == screen_framebuffers.end(), INVALID_ID, "Framebuffer was never prepared.");
+#ifdef TESTS_ENABLED
+	if (test_main_screen_prepared && test_main_screen_epoch && p_screen == DisplayServerEnums::MAIN_WINDOW_ID) {
+		bool pending_original_swapchain = false;
+		for (auto pending : frames[frame].swap_chains_to_present) {
+			pending_original_swapchain = pending_original_swapchain || pending == sc_it->value;
+		}
+		ERR_FAIL_COND_V_MSG(!pending_original_swapchain || frames[frame].qualification_epoch != test_main_screen_epoch, INVALID_ID, "TESTS-only acquired screen ownership changed before fixture draw.");
+		print_line(vformat("K03_TEST_MAIN_SCREEN_OWNERSHIP_VALIDATED frame_epoch=%d pending_original_swapchain=1", test_main_screen_epoch));
+		// This assertion belongs to the first fixture draw only. Subsequent
+		// ordinary renderer frames retain their own original acquire path.
+		test_main_screen_epoch = 0;
+	}
+#endif
 
 	Rect2i viewport = Rect2i(0, 0, context->surface_get_width(surface), context->surface_get_height(surface));
 
 	_draw_list_start(viewport);
-#ifdef DEBUG_ENABLED
 	draw_list_framebuffer_format = screen_get_framebuffer_format(p_screen);
-#endif
 	draw_list_subpass_count = 1;
 
 	RDD::RenderPassClearValue clear_value;
 	clear_value.color = p_clear_color;
 
 	RDD::RenderPassID render_pass = driver->swap_chain_get_render_pass(sc_it->value);
-	draw_graph.add_draw_list_begin(render_pass, fb_it->value, viewport, RDG::ATTACHMENT_OPERATION_CLEAR, clear_value, RDD::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, RDD::BreadcrumbMarker::BLIT_PASS, split_swapchain_into_its_own_cmd_buffer);
+	draw_list.begin_handle = draw_graph.add_draw_list_begin(render_pass, fb_it->value, viewport, RDG::ATTACHMENT_OPERATION_CLEAR, clear_value, RDD::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, RDD::BreadcrumbMarker::BLIT_PASS, split_swapchain_into_its_own_cmd_buffer);
 
 	draw_graph.add_draw_list_set_viewport(viewport);
 	draw_graph.add_draw_list_set_scissor(viewport);
@@ -5548,12 +7274,28 @@ RenderingDevice::DrawListID RenderingDevice::_draw_list_begin_bind(RID p_framebu
 }
 
 RenderingDevice::DrawListID RenderingDevice::draw_list_begin(RID p_framebuffer, BitField<DrawFlags> p_draw_flags, VectorView<Color> p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region, uint32_t p_breadcrumb) {
-	ERR_RENDER_THREAD_GUARD_V(INVALID_ID);
+	return _draw_list_begin_recorded(p_framebuffer, p_draw_flags, p_clear_color_values, p_clear_depth_value, p_clear_stencil_value, p_region, p_breadcrumb, false).list;
+}
 
-	ERR_FAIL_COND_V_MSG(draw_list.active, INVALID_ID, "Only one draw list can be active at the same time.");
+RenderingDevice::DrawListBeginResult RenderingDevice::_draw_list_begin_recorded(RID p_framebuffer, uint32_t p_draw_flags_bits, VectorView<Color> p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region, uint32_t p_breadcrumb, bool p_capture) {
+	DrawListBeginResult result;
+	const BitField<DrawFlags> p_draw_flags = p_draw_flags_bits;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+
+	ERR_FAIL_COND_V_MSG(draw_list.active, result.failure(ERR_INVALID_PARAMETER), "Only one draw list can be active at the same time.");
 
 	Framebuffer *framebuffer = framebuffer_owner.get_or_null(p_framebuffer);
-	ERR_FAIL_NULL_V(framebuffer, INVALID_ID);
+	ERR_FAIL_NULL_V(framebuffer, result.failure(ERR_INVALID_PARAMETER));
+	ERR_FAIL_COND_V(framebuffer->qualification_return && ((!qualification_recording && !_production_resource_permitted(p_framebuffer)) || framebuffer->qualification_return->use_closed.load()), result.failure(ERR_UNAUTHORIZED));
+
+	if (p_capture) {
+		ERR_FAIL_COND_V(framebuffer->texture_ids.size() != 1 || !p_draw_flags.has_flag(DRAW_CLEAR_DEPTH), result.failure(ERR_UNAVAILABLE));
+		const Texture *target = texture_owner.get_or_null(framebuffer->texture_ids[0]);
+		ERR_FAIL_NULL_V(target, result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(target->format != DATA_FORMAT_D32_SFLOAT || target->owner.is_valid() || target->shared_fallback || target->transfer_worker_index >= 0, result.failure(ERR_UNAVAILABLE));
+	}
+	const uint32_t preparation_begin = draw_graph.qualification_command_count();
 
 	const FramebufferFormatKey *framebuffer_key;
 	{
@@ -5570,7 +7312,7 @@ RenderingDevice::DrawListID RenderingDevice::draw_list_begin(RID p_framebuffer, 
 		if (!((regioni.position.x >= viewport.position.x) && (regioni.position.y >= viewport.position.y) &&
 					((regioni.position.x + regioni.size.x) <= (viewport.position.x + viewport.size.x)) &&
 					((regioni.position.y + regioni.size.y) <= (viewport.position.y + viewport.size.y)))) {
-			ERR_FAIL_V_MSG(INVALID_ID, "When supplying a custom region, it must be contained within the framebuffer rectangle");
+			ERR_FAIL_V_MSG(result.failure(ERR_INVALID_PARAMETER), "When supplying a custom region, it must be contained within the framebuffer rectangle");
 		}
 
 		viewport_offset = regioni.position;
@@ -5599,7 +7341,12 @@ RenderingDevice::DrawListID RenderingDevice::draw_list_begin(RID p_framebuffer, 
 		}
 
 		// Clear the texture if the driver requires it during its first use.
-		_texture_check_pending_clear(texture_rid, texture);
+		{
+			const Error dependency_error = _texture_check_pending_clear(texture_rid, texture);
+			if (dependency_error != OK) {
+				return result.failure(dependency_error);
+			}
+		}
 
 		// Indicate the texture will get modified for the shared texture fallback.
 		_texture_update_shared_fallback(texture_rid, texture, true);
@@ -5612,7 +7359,7 @@ RenderingDevice::DrawListID RenderingDevice::draw_list_begin(RID p_framebuffer, 
 			stages.set_flag(_vrs_stages_from_method(framebuffer_key->vrs_method));
 		} else if (texture->usage_flags & TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) {
 			if (p_draw_flags.has_flag(DrawFlags(DRAW_CLEAR_COLOR_0 << color_index))) {
-				ERR_FAIL_COND_V_MSG(color_index >= p_clear_color_values.size(), INVALID_ID, vformat("Color texture (%d) was specified to be cleared but no color value was provided.", color_index));
+				ERR_FAIL_COND_V_MSG(color_index >= p_clear_color_values.size(), result.failure(ERR_INVALID_PARAMETER), vformat("Color texture (%d) was specified to be cleared but no color value was provided.", color_index));
 				operation = RDG::ATTACHMENT_OPERATION_CLEAR;
 				clear_value.color = p_clear_color_values[color_index];
 			} else if (p_draw_flags.has_flag(DrawFlags(DRAW_IGNORE_COLOR_0 << color_index))) {
@@ -5642,7 +7389,19 @@ RenderingDevice::DrawListID RenderingDevice::draw_list_begin(RID p_framebuffer, 
 		clear_values[i] = clear_value;
 	}
 
-	draw_graph.add_draw_list_begin(framebuffer->framebuffer_cache, Rect2i(viewport_offset, viewport_size), operations, clear_values, stages, p_breadcrumb);
+	result.begin_handle = draw_graph.add_draw_list_begin(framebuffer->framebuffer_cache, Rect2i(viewport_offset, viewport_size), operations, clear_values, stages, p_breadcrumb);
+	result.effect = NativeAppendEffect::NativePrefixOnly;
+	if (p_capture) {
+		const uint32_t preparation_end = draw_graph.qualification_command_count();
+		for (uint32_t i = preparation_begin; i < preparation_end; ++i) {
+			const auto handle = draw_graph.capture_command_record(i);
+			if (result.preparation_count == 1 || !handle.is_valid()) {
+				return result.failure(ERR_INVALID_DATA);
+			}
+			result.preparation_handles[result.preparation_count++] = handle;
+		}
+		result.clear_handle = draw_graph.capture_draw_list_clear(0);
+	}
 	draw_graph.add_draw_list_usages(resource_trackers, resource_usages);
 
 	// Mark textures as bound.
@@ -5659,27 +7418,33 @@ RenderingDevice::DrawListID RenderingDevice::draw_list_begin(RID p_framebuffer, 
 	}
 
 	_draw_list_start(Rect2i(viewport_offset, viewport_size));
-#ifdef DEBUG_ENABLED
+	draw_list.begin_handle = result.begin_handle;
 	draw_list_framebuffer_format = framebuffer->format_id;
-#endif
 	draw_list_current_subpass = 0;
 	draw_list_subpass_count = framebuffer_key->passes.size();
 
 	Rect2i viewport_rect(viewport_offset, viewport_size);
-	draw_graph.add_draw_list_set_viewport(viewport_rect);
-	draw_graph.add_draw_list_set_scissor(viewport_rect);
+	result.prefix_handles[result.prefix_count++] = draw_graph.add_draw_list_set_viewport(viewport_rect);
+	result.prefix_handles[result.prefix_count++] = draw_graph.add_draw_list_set_scissor(viewport_rect);
 
-	return int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT;
+	result.list = int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT;
+	result.effect = NativeAppendEffect::Recorded;
+	result.capture_complete = p_capture;
+	return result;
 }
 
 #ifndef DISABLE_DEPRECATED
 Error RenderingDevice::draw_list_begin_split(RID p_framebuffer, uint32_t p_splits, DrawListID *r_split_ids, InitialAction p_initial_color_action, FinalAction p_final_color_action, InitialAction p_initial_depth_action, FinalAction p_final_depth_action, const Vector<Color> &p_clear_color_values, float p_clear_depth, uint32_t p_clear_stencil, const Rect2 &p_region, const Vector<RID> &p_storage_textures) {
+	if (_recording_error() != OK) {
+		return _recording_error();
+	}
 	ERR_FAIL_V_MSG(ERR_UNAVAILABLE, "Deprecated. Split draw lists are used automatically by RenderingDevice.");
 }
 #endif
 
 void RenderingDevice::draw_list_set_blend_constants(DrawListID p_list, const Color &p_color) {
 	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND(!draw_list.active);
 
@@ -5687,23 +7452,37 @@ void RenderingDevice::draw_list_set_blend_constants(DrawListID p_list, const Col
 }
 
 void RenderingDevice::draw_list_bind_render_pipeline(DrawListID p_list, RID p_render_pipeline) {
-	ERR_RENDER_THREAD_GUARD();
+	_draw_list_bind_render_pipeline_recorded(p_list, p_render_pipeline, false);
+}
 
-	ERR_FAIL_COND(!draw_list.active);
+RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_bind_render_pipeline_recorded(DrawListID p_list, RID p_render_pipeline, bool p_capture) {
+	DrawAppendResult result;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	if (p_capture) {
+		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
+	}
+
+	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
 
 	const RenderPipeline *pipeline = render_pipeline_owner.get_or_null(p_render_pipeline);
-	ERR_FAIL_NULL(pipeline);
+	ERR_FAIL_NULL_V(pipeline, result.failure(ERR_INVALID_PARAMETER));
+	ERR_FAIL_COND_V(pipeline->qualification_return && ((!qualification_recording && !_production_output_raster_permitted(p_render_pipeline)) || pipeline->qualification_return->use_closed.load()), result.failure(ERR_UNAUTHORIZED));
+	if (p_capture) {
+		ERR_FAIL_COND_V(pipeline->validation.framebuffer_format != draw_list_framebuffer_format || pipeline->validation.render_pass != draw_list_current_subpass, result.failure(ERR_INVALID_PARAMETER));
+	}
 #ifdef DEBUG_ENABLED
-	ERR_FAIL_COND(pipeline->validation.framebuffer_format != draw_list_framebuffer_format && pipeline->validation.render_pass != draw_list_current_subpass);
+	ERR_FAIL_COND_V(pipeline->validation.framebuffer_format != draw_list_framebuffer_format && pipeline->validation.render_pass != draw_list_current_subpass, result.failure(ERR_INVALID_PARAMETER));
 #endif
 
 	if (p_render_pipeline == draw_list.state.pipeline) {
-		return; // Redundant state, return.
+		return result; // Redundant state, return.
 	}
 
 	draw_list.state.pipeline = p_render_pipeline;
+	draw_list.state.checked_push_constant_supplied = false;
 
-	draw_graph.add_draw_list_bind_pipeline(pipeline->driver_id, pipeline->stage_bits);
+	result.draw_handle = draw_graph.add_draw_list_bind_pipeline(pipeline->driver_id, pipeline->stage_bits);
 
 	if (draw_list.state.pipeline_shader != pipeline->shader) {
 		// Shader changed, so descriptor sets may become incompatible.
@@ -5771,21 +7550,74 @@ void RenderingDevice::draw_list_bind_render_pipeline(DrawListID p_list, RID p_re
 	draw_list.validation.pipeline_primitive_minimum = pipeline->validation.primitive_minimum;
 	draw_list.validation.pipeline_push_constant_size = pipeline->push_constant_size;
 #endif
+
+	result.effect = NativeAppendEffect::Recorded;
+	result.capture_complete = p_capture;
+	return result;
 }
 
 void RenderingDevice::draw_list_bind_uniform_set(DrawListID p_list, RID p_uniform_set, uint32_t p_index) {
-	ERR_RENDER_THREAD_GUARD();
+	_draw_list_bind_uniform_set_recorded(p_list, p_uniform_set, p_index, false);
+}
+
+RenderingDevice::BindAppendResult RenderingDevice::_draw_list_bind_uniform_set_recorded(DrawListID p_list, RID p_uniform_set, uint32_t p_index, bool p_capture, NativeTransferDependency *p_transfers, uint32_t p_transfer_capacity) {
+	BindAppendResult result;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	if (p_capture) {
+		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(p_index >= MAX_UNIFORM_SETS || p_index >= driver->limit_get(LIMIT_MAX_BOUND_UNIFORM_SETS), result.failure(ERR_INVALID_PARAMETER));
+	}
 
 #ifdef DEBUG_ENABLED
-	ERR_FAIL_COND_MSG(p_index >= driver->limit_get(LIMIT_MAX_BOUND_UNIFORM_SETS) || p_index >= MAX_UNIFORM_SETS,
+	ERR_FAIL_COND_V_MSG(p_index >= driver->limit_get(LIMIT_MAX_BOUND_UNIFORM_SETS) || p_index >= MAX_UNIFORM_SETS, result.failure(ERR_INVALID_PARAMETER),
 			"Attempting to bind a descriptor set (" + itos(p_index) + ") greater than what the hardware supports (" + itos(driver->limit_get(LIMIT_MAX_BOUND_UNIFORM_SETS)) + ").");
 #endif
 
-	ERR_FAIL_COND(!draw_list.active);
+	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
 
 	const UniformSet *uniform_set = uniform_set_owner.get_or_null(p_uniform_set);
-	ERR_FAIL_NULL(uniform_set);
+	ERR_FAIL_NULL_V(uniform_set, result.failure(ERR_INVALID_PARAMETER));
+	ERR_FAIL_COND_V_MSG(_native_immutable_uniform_set_writes(*uniform_set), result.failure(ERR_UNAUTHORIZED), "An immutable native backing cannot be bound for shader writes.");
+	ERR_FAIL_COND_V((!uniform_set->qualification_dependencies.is_empty() || uniform_set->qualification_return) && !qualification_recording && !_production_output_raster_permitted(p_uniform_set), result.failure(ERR_UNAUTHORIZED));
 
+	if (p_capture) {
+		// Retain original immutable sampled-texture upload membership before
+		// accepting deferred descriptor state. Capacity refusal publishes none.
+		uint32_t count = 0;
+		for (const auto &entry : uniform_set->untracked_usage) {
+			if (entry.value != RDG::RESOURCE_USAGE_TEXTURE_SAMPLE) {
+				continue;
+			}
+			Texture *texture = texture_owner.get_or_null(entry.key);
+			ERR_FAIL_COND_V(!texture || !texture->driver_id || texture->qualification_return || native_immutable_resource_is_retiring(entry.key), result.failure(ERR_INVALID_DATA));
+			if (texture->transfer_worker_index < 0) {
+				continue;
+			}
+			const uint32_t index = texture->transfer_worker_index;
+			ERR_FAIL_COND_V(index >= transfer_worker_pool.size() || !transfer_worker_pool[index] || transfer_worker_pool[index]->index != index || index >= transfer_worker_operation_used_by_draw.size(), result.failure(ERR_INVALID_DATA));
+			ERR_FAIL_COND_V(count == p_transfer_capacity || !p_transfers, result.failure(ERR_PARAMETER_RANGE_ERROR));
+			++count;
+		}
+		for (const auto &entry : uniform_set->untracked_usage) {
+			if (entry.value != RDG::RESOURCE_USAGE_TEXTURE_SAMPLE) {
+				continue;
+			}
+			Texture *texture = texture_owner.get_or_null(entry.key);
+			if (texture->transfer_worker_index < 0) {
+				continue;
+			}
+			const NativeTransferDependency transfer = { uint32_t(texture->transfer_worker_index), texture->transfer_worker_operation };
+			const Error error = _check_transfer_worker_texture(texture);
+			if (error != OK) {
+				return result.failure(error);
+			}
+			p_transfers[result.transfer_count++] = transfer;
+		}
+	}
+
+	const auto &previous = draw_list.state.sets[p_index];
+	result.state_changed = p_index > draw_list.state.set_count || previous.uniform_set_driver_id != uniform_set->driver_id || previous.bound || previous.uniform_set_format != uniform_set->format || previous.uniform_set != p_uniform_set;
 	if (p_index > draw_list.state.set_count) {
 		draw_list.state.set_count = p_index;
 	}
@@ -5795,35 +7627,83 @@ void RenderingDevice::draw_list_bind_uniform_set(DrawListID p_list, RID p_unifor
 	draw_list.state.sets[p_index].uniform_set_format = uniform_set->format;
 	draw_list.state.sets[p_index].uniform_set = p_uniform_set;
 
+	bool validate_attachments = p_capture;
 #ifdef DEBUG_ENABLED
-	{ // Validate that textures bound are not attached as framebuffer bindings.
+	validate_attachments = true;
+#endif
+	if (validate_attachments) { // Preserve the original post-state-mutation validation.
 		uint32_t attachable_count = uniform_set->attachable_textures.size();
 		const UniformSet::AttachableTexture *attachable_ptr = uniform_set->attachable_textures.ptr();
 		uint32_t bound_count = draw_list_bound_textures.size();
 		const RID *bound_ptr = draw_list_bound_textures.ptr();
 		for (uint32_t i = 0; i < attachable_count; i++) {
 			for (uint32_t j = 0; j < bound_count; j++) {
-				ERR_FAIL_COND_MSG(attachable_ptr[i].texture == bound_ptr[j],
+				ERR_FAIL_COND_V_MSG(attachable_ptr[i].texture == bound_ptr[j], result.failure(ERR_INVALID_PARAMETER),
 						"Attempted to use the same texture in framebuffer attachment and a uniform (set: " + itos(p_index) + ", binding: " + itos(attachable_ptr[i].bind) + "), this is not allowed.");
 			}
 		}
 	}
-#endif
+	result.state_accepted = true;
+	result.capture_complete = p_capture;
+	return result;
 }
 
 void RenderingDevice::draw_list_bind_vertex_array(DrawListID p_list, RID p_vertex_array) {
-	ERR_RENDER_THREAD_GUARD();
+	_draw_list_bind_vertex_array_recorded(p_list, p_vertex_array, nullptr, 0, false);
+}
 
-	ERR_FAIL_COND(!draw_list.active);
+bool RenderingDevice::_draw_list_usage_conflicts(const RDG::ResourceTracker *p_tracker, RDG::ResourceUsage p_usage) const {
+	// Match add_draw_list_usage's reset-if-outdated and same-list usage rule.
+	// The retained original begin identifies this active graph list only.
+	return p_tracker->command_frame == int64_t(draw_list.begin_handle.graph_frame) && p_tracker->draw_list_index == int32_t(draw_list.begin_handle.index) && p_tracker->draw_list_usage != p_usage;
+}
 
-	VertexArray *vertex_array = vertex_array_owner.get_or_null(p_vertex_array);
-	ERR_FAIL_NULL(vertex_array);
-
-	if (draw_list.state.vertex_array == p_vertex_array) {
-		return; // Already set.
+RenderingDevice::BindAppendResult RenderingDevice::_draw_list_bind_vertex_array_recorded(DrawListID p_list, RID p_vertex_array, NativeTransferDependency *p_transfers, uint32_t p_transfer_capacity, bool p_capture) {
+	BindAppendResult result;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	if (p_capture) {
+		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
 	}
 
-	_check_transfer_worker_vertex_array(vertex_array);
+	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
+	if (p_capture) {
+		ERR_FAIL_COND_V(!draw_graph.contains_record(draw_list.begin_handle), result.failure(ERR_INVALID_DATA));
+	}
+
+	VertexArray *vertex_array = vertex_array_owner.get_or_null(p_vertex_array);
+	ERR_FAIL_NULL_V(vertex_array, result.failure(ERR_INVALID_PARAMETER));
+
+	if (draw_list.state.vertex_array == p_vertex_array) {
+		result.state_accepted = true;
+		result.capture_complete = p_capture;
+		return result; // Already set; no new transfer or instruction.
+	}
+
+	if (p_capture) {
+		const uint32_t count = vertex_array->transfer_worker_indices.size();
+		ERR_FAIL_COND_V(count != uint32_t(vertex_array->transfer_worker_operations.size()) || vertex_array->buffers.size() != vertex_array->offsets.size(), result.failure(ERR_INVALID_DATA));
+		ERR_FAIL_COND_V(count > p_transfer_capacity || (count && !p_transfers), result.failure(ERR_PARAMETER_RANGE_ERROR));
+		for (uint32_t i = 0; i < count; ++i) {
+			const int32_t index = vertex_array->transfer_worker_indices[i];
+			ERR_FAIL_COND_V(index < 0 || uint32_t(index) >= transfer_worker_pool.size() || !transfer_worker_pool[index] || transfer_worker_pool[index]->index != uint32_t(index) || transfer_worker_pool[index]->index >= transfer_worker_operation_used_by_draw.size(), result.failure(ERR_INVALID_DATA));
+		}
+		for (RDG::ResourceTracker *tracker : vertex_array->draw_trackers) {
+			ERR_FAIL_NULL_V(tracker, result.failure(ERR_INVALID_DATA));
+			ERR_FAIL_COND_V(_draw_list_usage_conflicts(tracker, RDG::RESOURCE_USAGE_VERTEX_BUFFER_READ), result.failure(ERR_INVALID_PARAMETER));
+		}
+		for (uint32_t i = 0; i < count; ++i) {
+			p_transfers[i] = { uint32_t(vertex_array->transfer_worker_indices[i]), vertex_array->transfer_worker_operations[i] };
+		}
+		result.transfer_count = count;
+	}
+	{
+		const Error dependency_error = _check_transfer_worker_vertex_array(vertex_array);
+		if (dependency_error != OK) {
+			return result.failure(dependency_error);
+		}
+	}
+	result.state_changed = true;
 
 	draw_list.state.vertex_array = p_vertex_array;
 
@@ -5832,16 +7712,25 @@ void RenderingDevice::draw_list_bind_vertex_array(DrawListID p_list, RID p_verte
 	draw_list.validation.vertex_max_instances_allowed = vertex_array->max_instances_allowed;
 #endif
 	draw_list.validation.vertex_array_size = vertex_array->vertex_count;
+	result.state_accepted = true;
 
-	draw_graph.add_draw_list_bind_vertex_buffers(vertex_array->buffers, vertex_array->offsets);
+	result.bind_handle = draw_graph.add_draw_list_bind_vertex_buffers(vertex_array->buffers, vertex_array->offsets);
+	result.effect = NativeAppendEffect::Recorded;
 
 	for (int i = 0; i < vertex_array->draw_trackers.size(); i++) {
 		draw_graph.add_draw_list_usage(vertex_array->draw_trackers[i], RDG::RESOURCE_USAGE_VERTEX_BUFFER_READ);
 	}
+	if (p_capture) {
+		ERR_FAIL_COND_V(!draw_graph.contains_record(result.bind_handle), result.failure(ERR_INVALID_DATA));
+	}
+	result.state_accepted = true;
+	result.capture_complete = p_capture;
+	return result;
 }
 
 void RenderingDevice::draw_list_bind_vertex_buffers_format(DrawListID p_list, VertexFormatID p_vertex_format, uint32_t p_vertex_count, const Span<RID> &p_vertex_buffers, const Span<uint64_t> &p_offsets) {
 	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND(!draw_list.active);
 
@@ -5882,7 +7771,12 @@ void RenderingDevice::draw_list_bind_vertex_buffers_format(DrawListID p_list, Ve
 		Buffer *buffer = vertex_buffer_owner.get_or_null(buffer_rid);
 		ERR_FAIL_NULL(buffer);
 
-		_check_transfer_worker_buffer(buffer);
+		{
+			const Error dependency_error = _check_transfer_worker_buffer(buffer);
+			if (dependency_error != OK) {
+				return;
+			}
+		}
 
 #if DEBUG_ENABLED
 		uint64_t binding_offset = offsets_span[i];
@@ -5941,35 +7835,76 @@ void RenderingDevice::draw_list_bind_vertex_buffers_format(DrawListID p_list, Ve
 }
 
 void RenderingDevice::draw_list_bind_index_array(DrawListID p_list, RID p_index_array) {
-	ERR_RENDER_THREAD_GUARD();
+	_draw_list_bind_index_array_recorded(p_list, p_index_array, nullptr, 0, false);
+}
 
-	ERR_FAIL_COND(!draw_list.active);
-
-	IndexArray *index_array = index_array_owner.get_or_null(p_index_array);
-	ERR_FAIL_NULL(index_array);
-
-	if (draw_list.state.index_array == p_index_array) {
-		return; // Already set.
+RenderingDevice::BindAppendResult RenderingDevice::_draw_list_bind_index_array_recorded(DrawListID p_list, RID p_index_array, NativeTransferDependency *p_transfers, uint32_t p_transfer_capacity, bool p_capture) {
+	BindAppendResult result;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	if (p_capture) {
+		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
 	}
 
-	_check_transfer_worker_index_array(index_array);
+	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
+	if (p_capture) {
+		ERR_FAIL_COND_V(!draw_graph.contains_record(draw_list.begin_handle), result.failure(ERR_INVALID_DATA));
+	}
+
+	IndexArray *index_array = index_array_owner.get_or_null(p_index_array);
+	ERR_FAIL_NULL_V(index_array, result.failure(ERR_INVALID_PARAMETER));
+
+	if (draw_list.state.index_array == p_index_array) {
+		result.state_accepted = true;
+		result.capture_complete = p_capture;
+		return result; // Already set; no new transfer or instruction.
+	}
+
+	if (p_capture) {
+		const uint64_t checked_offset = uint64_t(index_array->offset) * (index_array->format == INDEX_BUFFER_FORMAT_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t));
+		ERR_FAIL_COND_V(checked_offset > UINT32_MAX, result.failure(ERR_PARAMETER_RANGE_ERROR));
+		ERR_FAIL_COND_V(index_array->draw_tracker && _draw_list_usage_conflicts(index_array->draw_tracker, RDG::RESOURCE_USAGE_INDEX_BUFFER_READ), result.failure(ERR_INVALID_PARAMETER));
+		if (index_array->transfer_worker_index >= 0) {
+			const uint32_t index = index_array->transfer_worker_index;
+			ERR_FAIL_COND_V(!p_transfer_capacity || !p_transfers, result.failure(ERR_PARAMETER_RANGE_ERROR));
+			ERR_FAIL_COND_V(index >= transfer_worker_pool.size() || !transfer_worker_pool[index] || transfer_worker_pool[index]->index != uint32_t(index) || transfer_worker_pool[index]->index >= transfer_worker_operation_used_by_draw.size(), result.failure(ERR_INVALID_DATA));
+			p_transfers[0] = { index, index_array->transfer_worker_operation };
+			result.transfer_count = 1;
+		}
+	}
+	{
+		const Error dependency_error = _check_transfer_worker_index_array(index_array);
+		if (dependency_error != OK) {
+			return result.failure(dependency_error);
+		}
+	}
+	result.state_changed = true;
 
 	draw_list.state.index_array = p_index_array;
 #ifdef DEBUG_ENABLED
 	draw_list.validation.index_array_max_index = index_array->max_index;
 #endif
 	draw_list.validation.index_array_count = index_array->indices;
+	result.state_accepted = true;
 
 	const uint64_t offset_bytes = index_array->offset * (index_array->format == INDEX_BUFFER_FORMAT_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t));
-	draw_graph.add_draw_list_bind_index_buffer(index_array->driver_id, index_array->format, offset_bytes);
+	result.bind_handle = draw_graph.add_draw_list_bind_index_buffer(index_array->driver_id, index_array->format, offset_bytes);
+	result.effect = NativeAppendEffect::Recorded;
 
 	if (index_array->draw_tracker != nullptr) {
 		draw_graph.add_draw_list_usage(index_array->draw_tracker, RDG::RESOURCE_USAGE_INDEX_BUFFER_READ);
 	}
+	if (p_capture) {
+		ERR_FAIL_COND_V(!draw_graph.contains_record(result.bind_handle), result.failure(ERR_INVALID_DATA));
+	}
+	result.state_accepted = true;
+	result.capture_complete = p_capture;
+	return result;
 }
 
 void RenderingDevice::draw_list_set_line_width(DrawListID p_list, float p_width) {
 	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND(!draw_list.active);
 
@@ -5977,45 +7912,258 @@ void RenderingDevice::draw_list_set_line_width(DrawListID p_list, float p_width)
 }
 
 void RenderingDevice::draw_list_set_push_constant(DrawListID p_list, const void *p_data, uint32_t p_data_size) {
-	ERR_RENDER_THREAD_GUARD();
+	_draw_list_set_push_constant_recorded(p_list, p_data, p_data_size, false);
+}
 
-	ERR_FAIL_COND(!draw_list.active);
+RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_set_push_constant_recorded(DrawListID p_list, const void *p_data, uint32_t p_data_size, bool p_capture) {
+	DrawAppendResult result;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
 
+	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
+
+	if (p_capture) {
+		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(!draw_list.state.pipeline.is_valid() || p_data_size != draw_list.state.pipeline_push_constant_size || (p_data_size && !p_data), result.failure(ERR_INVALID_PARAMETER));
+	}
 #ifdef DEBUG_ENABLED
-	ERR_FAIL_COND_MSG(p_data_size != draw_list.validation.pipeline_push_constant_size,
+	ERR_FAIL_COND_V_MSG(p_data_size != draw_list.validation.pipeline_push_constant_size, result.failure(ERR_INVALID_PARAMETER),
 			"This render pipeline requires (" + itos(draw_list.validation.pipeline_push_constant_size) + ") bytes of push constant data, supplied: (" + itos(p_data_size) + ")");
 #endif
 
-	draw_graph.add_draw_list_set_push_constant(draw_list.state.pipeline_shader_driver_id, p_data, p_data_size);
+	result.draw_handle = draw_graph.add_draw_list_set_push_constant(draw_list.state.pipeline_shader_driver_id, p_data, p_data_size);
 
 #ifdef DEBUG_ENABLED
 	draw_list.validation.pipeline_push_constant_supplied = true;
 #endif
+
+	draw_list.state.checked_push_constant_supplied = true;
+
+	result.effect = NativeAppendEffect::Recorded;
+	result.capture_complete = p_capture;
+	return result;
+}
+
+RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_geometry_direct_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances) {
+	return _draw_list_draw_recorded(p_list, p_use_indices, p_instances, 0, true, DrawCaptureProfile::GeometryDirect);
+}
+
+RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_geometry_prepared_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances) {
+	return _draw_list_draw_recorded(p_list, p_use_indices, p_instances, 0, true, DrawCaptureProfile::GeometryPrepared);
 }
 
 void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint32_t p_instances, uint32_t p_procedural_vertices) {
-	ERR_RENDER_THREAD_GUARD();
+	_draw_list_draw_recorded(p_list, p_use_indices, p_instances, p_procedural_vertices, false);
+}
 
-	ERR_FAIL_COND(!draw_list.active);
+RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances, uint32_t p_procedural_vertices, bool p_capture, DrawCaptureProfile p_profile) {
+	DrawAppendResult result;
+	const bool geometry_capture = p_capture && (p_profile == DrawCaptureProfile::GeometryDirect || p_profile == DrawCaptureProfile::GeometryPrepared);
+	const bool prepared_capture = p_capture && p_profile == DrawCaptureProfile::GeometryPrepared;
+	uint32_t expected_prefix_count = 0;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+
+	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
+
+	if (p_capture && p_profile == DrawCaptureProfile::ProceduralTriangle) {
+		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(!draw_list.state.pipeline.is_valid() || p_use_indices || p_instances != 1 || p_procedural_vertices != 3 || draw_list.state.vertex_array.is_valid() || draw_list.state.index_array.is_valid() || draw_list.state.set_count || (draw_list.state.pipeline_push_constant_size && !draw_list.state.checked_push_constant_supplied), result.failure(ERR_UNAVAILABLE));
+	}
+
+	if (geometry_capture) {
+		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(!draw_graph.contains_record(draw_list.begin_handle), result.failure(ERR_INVALID_DATA));
+		ERR_FAIL_COND_V(!draw_list.state.pipeline.is_valid() || p_instances != 1 || p_procedural_vertices != 0, result.failure(ERR_UNAVAILABLE));
+		if (!prepared_capture) {
+			ERR_FAIL_COND_V(draw_list.state.set_count != 0, result.failure(ERR_UNAVAILABLE));
+			for (const DrawList::SetState &set : draw_list.state.sets) {
+				ERR_FAIL_COND_V(set.uniform_set.is_valid(), result.failure(ERR_UNAVAILABLE));
+			}
+		}
+		ERR_FAIL_COND_V(draw_list.state.pipeline_push_constant_size && !draw_list.state.checked_push_constant_supplied, result.failure(ERR_UNAVAILABLE));
+		ERR_FAIL_COND_V(!render_pipeline_owner.owns(draw_list.state.pipeline) || native_immutable_resource_is_retiring(draw_list.state.pipeline), result.failure(ERR_INVALID_PARAMETER));
+		const RenderPipeline *pipeline = render_pipeline_owner.get_or_null(draw_list.state.pipeline);
+		ERR_FAIL_NULL_V(pipeline, result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(!pipeline->driver_id || pipeline->qualification_return, result.failure(ERR_UNAUTHORIZED));
+		ERR_FAIL_COND_V(pipeline->validation.framebuffer_format != draw_list_framebuffer_format || pipeline->validation.render_pass != draw_list_current_subpass, result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(!shader_owner.owns(pipeline->shader) || native_immutable_resource_is_retiring(pipeline->shader), result.failure(ERR_INVALID_PARAMETER));
+		const Shader *shader = shader_owner.get_or_null(pipeline->shader);
+		ERR_FAIL_NULL_V(shader, result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(shader->qualification_return, result.failure(ERR_UNAUTHORIZED));
+		ERR_FAIL_COND_V(!shader->driver_id || shader->driver_id != pipeline->shader_driver_id || draw_list.state.pipeline_shader != pipeline->shader || draw_list.state.pipeline_shader_driver_id != pipeline->shader_driver_id || draw_list.state.pipeline_shader_layout_hash != pipeline->shader_layout_hash || draw_list.state.pipeline_push_constant_size != pipeline->push_constant_size, result.failure(ERR_INVALID_DATA));
+		ERR_FAIL_COND_V(pipeline->validation.primitive != RENDER_PRIMITIVE_TRIANGLES || pipeline->validation.vertex_format == INVALID_ID, result.failure(ERR_UNAVAILABLE));
+		if (!prepared_capture) {
+			for (uint32_t i = 0; i < pipeline->set_formats.size(); ++i) {
+				ERR_FAIL_COND_V(pipeline->set_formats[i] != 0, result.failure(ERR_UNAVAILABLE));
+			}
+		}
+		ERR_FAIL_COND_V(!draw_list.state.vertex_array.is_valid() || !vertex_array_owner.owns(draw_list.state.vertex_array), result.failure(ERR_INVALID_PARAMETER));
+		const VertexArray *vertex_array = vertex_array_owner.get_or_null(draw_list.state.vertex_array);
+		ERR_FAIL_NULL_V(vertex_array, result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(native_immutable_resource_is_retiring(draw_list.state.vertex_array) || vertex_array->description != pipeline->validation.vertex_format || vertex_array->vertex_count <= 0 || vertex_array->max_instances_allowed < 1, result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(uint32_t(vertex_array->vertex_count) != draw_list.validation.vertex_array_size, result.failure(ERR_INVALID_DATA));
+		if (p_use_indices) {
+			ERR_FAIL_COND_V(!draw_list.state.index_array.is_valid() || !index_array_owner.owns(draw_list.state.index_array), result.failure(ERR_INVALID_PARAMETER));
+			const IndexArray *index_array = index_array_owner.get_or_null(draw_list.state.index_array);
+			ERR_FAIL_NULL_V(index_array, result.failure(ERR_INVALID_PARAMETER));
+			ERR_FAIL_COND_V(native_immutable_resource_is_retiring(draw_list.state.index_array) || index_array->indices < 3 || index_array->indices % 3 != 0 || index_array->supports_restart_indices || (index_array->format != INDEX_BUFFER_FORMAT_UINT16 && index_array->format != INDEX_BUFFER_FORMAT_UINT32), result.failure(ERR_INVALID_PARAMETER));
+			ERR_FAIL_COND_V(index_array->indices != draw_list.validation.index_array_count, result.failure(ERR_INVALID_DATA));
+			const uint64_t index_width = index_array->format == INDEX_BUFFER_FORMAT_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t);
+			ERR_FAIL_COND_V(uint64_t(index_array->offset) * index_width > UINT32_MAX, result.failure(ERR_PARAMETER_RANGE_ERROR));
+		} else {
+			ERR_FAIL_COND_V(draw_list.state.index_array.is_valid(), result.failure(ERR_UNAVAILABLE));
+			ERR_FAIL_COND_V(vertex_array->vertex_count < 3 || vertex_array->vertex_count % 3 != 0, result.failure(ERR_INVALID_PARAMETER));
+		}
+	}
+
+	if (prepared_capture) {
+		static_assert(MAX_UNIFORM_SETS * 2 <= DrawAppendResult::PREFIX_CAPACITY);
+		ERR_FAIL_COND_V(draw_list.state.set_count > MAX_UNIFORM_SETS || draw_list.state.set_count > driver->limit_get(LIMIT_MAX_BOUND_UNIFORM_SETS), result.failure(ERR_INVALID_PARAMETER));
+		const RenderPipeline *pipeline = render_pipeline_owner.get_or_null(draw_list.state.pipeline);
+		const Shader *shader = shader_owner.get_or_null(pipeline->shader);
+		ERR_FAIL_COND_V(uint32_t(pipeline->set_formats.size()) != draw_list.state.set_count || shader->set_formats != pipeline->set_formats, result.failure(ERR_INVALID_DATA));
+		// This profile captures read-only sets requiring no hidden copy,
+		// clear or revision mutation. Upload dependencies are retained at bind.
+		// Original public drawing is unchanged.
+		HashMap<RDG::ResourceTracker *, RDG::ResourceUsage> pending_usages;
+		uint32_t batch_count = 0;
+		uint32_t last_index = 0;
+		for (uint32_t i = 0; i < draw_list.state.set_count; ++i) {
+			const DrawList::SetState &binding = draw_list.state.sets[i];
+			ERR_FAIL_COND_V(binding.pipeline_expected_format != pipeline->set_formats[i], result.failure(ERR_INVALID_DATA));
+			if (!binding.pipeline_expected_format) {
+				continue;
+			}
+			ERR_FAIL_COND_V(!uniform_set_owner.owns(binding.uniform_set) || native_immutable_resource_is_retiring(binding.uniform_set), result.failure(ERR_INVALID_PARAMETER));
+			const UniformSet *set = uniform_set_owner.get_or_null(binding.uniform_set);
+			ERR_FAIL_NULL_V(set, result.failure(ERR_INVALID_PARAMETER));
+			ERR_FAIL_COND_V(!set->driver_id || set->driver_id != binding.uniform_set_driver_id || set->format != binding.uniform_set_format || set->format != binding.pipeline_expected_format, result.failure(ERR_INVALID_DATA));
+			ERR_FAIL_COND_V(set->qualification_return || !set->qualification_dependencies.is_empty() || _native_immutable_uniform_set_writes(*set), result.failure(ERR_UNAUTHORIZED));
+			ERR_FAIL_COND_V(!set->writable_resources.is_empty() || !set->pending_clear_textures.is_empty(), result.failure(ERR_UNAVAILABLE));
+			ERR_FAIL_COND_V(!shader_owner.owns(set->shader_id) || native_immutable_resource_is_retiring(set->shader_id), result.failure(ERR_INVALID_PARAMETER));
+			const Shader *origin = shader_owner.get_or_null(set->shader_id);
+			ERR_FAIL_COND_V(!origin || !origin->driver_id || origin->qualification_return || set->shader_set >= uint32_t(origin->set_formats.size()) || origin->set_formats[set->shader_set] != set->format, result.failure(ERR_INVALID_DATA));
+			for (const UniformSet::AttachableTexture &attachment : set->attachable_textures) {
+				ERR_FAIL_COND_V(draw_list_bound_textures.has(attachment.texture), result.failure(ERR_INVALID_PARAMETER));
+			}
+			for (const UniformSet::SharedTexture &shared : set->shared_textures_to_update) {
+				ERR_FAIL_COND_V(!texture_owner.owns(shared.texture) || native_immutable_resource_is_retiring(shared.texture), result.failure(ERR_INVALID_PARAMETER));
+				const Texture *texture = texture_owner.get_or_null(shared.texture);
+				ERR_FAIL_NULL_V(texture, result.failure(ERR_INVALID_PARAMETER));
+				if (!texture->shared_fallback) {
+					continue;
+				}
+				ERR_FAIL_COND_V(shared.writing, result.failure(ERR_UNAVAILABLE));
+				if (texture->owner.is_valid()) {
+					ERR_FAIL_COND_V(!texture_owner.owns(texture->owner) || native_immutable_resource_is_retiring(texture->owner), result.failure(ERR_INVALID_PARAMETER));
+					const Texture *owner = texture_owner.get_or_null(texture->owner);
+					ERR_FAIL_COND_V(!owner || !owner->shared_fallback, result.failure(ERR_INVALID_PARAMETER));
+					ERR_FAIL_COND_V(texture->shared_fallback->revision != owner->shared_fallback->revision, result.failure(ERR_UNAVAILABLE));
+				}
+			}
+			ERR_FAIL_COND_V(set->draw_trackers.size() != set->draw_trackers_usage.size(), result.failure(ERR_INVALID_DATA));
+			for (int j = 0; j < set->draw_trackers.size(); ++j) {
+				RDG::ResourceTracker *tracker = set->draw_trackers[j];
+				const RDG::ResourceUsage usage = set->draw_trackers_usage[j];
+				ERR_FAIL_COND_V(!tracker || usage <= RDG::RESOURCE_USAGE_NONE || usage >= RDG::RESOURCE_USAGE_MAX, result.failure(ERR_INVALID_DATA));
+				if (descriptor_set_batching && !binding.bound) {
+					ERR_FAIL_COND_V(_draw_list_usage_conflicts(tracker, usage), result.failure(ERR_INVALID_PARAMETER));
+					const RDG::ResourceUsage *previous = pending_usages.getptr(tracker);
+					ERR_FAIL_COND_V(previous && *previous != usage, result.failure(ERR_INVALID_PARAMETER));
+					pending_usages.insert(tracker, usage);
+				}
+			}
+			// Immutable resources legitimately have no tracker. Check the
+			// original owner and transfer premise without creating one here.
+			for (const auto &entry : set->untracked_usage) {
+				ERR_FAIL_COND_V(native_immutable_resource_is_retiring(entry.key), result.failure(ERR_INVALID_PARAMETER));
+				const Buffer *buffer = nullptr;
+				switch (entry.value) {
+					case RDG::RESOURCE_USAGE_UNIFORM_BUFFER_READ:
+						ERR_FAIL_COND_V(!uniform_buffer_owner.owns(entry.key), result.failure(ERR_INVALID_PARAMETER));
+						buffer = uniform_buffer_owner.get_or_null(entry.key);
+						break;
+					case RDG::RESOURCE_USAGE_TEXTURE_BUFFER_READ:
+						ERR_FAIL_COND_V(!texture_buffer_owner.owns(entry.key), result.failure(ERR_INVALID_PARAMETER));
+						buffer = texture_buffer_owner.get_or_null(entry.key);
+						break;
+					case RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ:
+						if (storage_buffer_owner.owns(entry.key)) {
+							buffer = storage_buffer_owner.get_or_null(entry.key);
+						} else if (vertex_buffer_owner.owns(entry.key)) {
+							buffer = vertex_buffer_owner.get_or_null(entry.key);
+						}
+						ERR_FAIL_NULL_V(buffer, result.failure(ERR_INVALID_PARAMETER));
+						break;
+					case RDG::RESOURCE_USAGE_TEXTURE_SAMPLE: {
+						ERR_FAIL_COND_V(!texture_owner.owns(entry.key), result.failure(ERR_INVALID_PARAMETER));
+						const Texture *texture = texture_owner.get_or_null(entry.key);
+						ERR_FAIL_COND_V(!texture || !texture->driver_id || texture->qualification_return, result.failure(ERR_INVALID_DATA));
+						if (texture->transfer_worker_index >= 0) {
+							// A pending upload is covered only by an earlier original
+							// checked bind whose raw tuple has already been enrolled.
+							const Ref<NativeHeightRange> &range = native_height_active_checked_range;
+							bool covered = false;
+							if (range.is_valid() && !range->recording_closed && range->capture_frame == uint32_t(frame) && range->capture_epoch == frames[frame].qualification_epoch) {
+								for (uint32_t k = 0; k < range->capture_transfers; ++k) {
+									const auto &checked = range->checked_transfers[k];
+									if (checked.worker == uint32_t(texture->transfer_worker_index) && checked.operation == texture->transfer_worker_operation && !checked.processed && checked.dependency < range->worker_count) {
+										const auto &dependency = range->workers[checked.dependency];
+										covered = dependency.worker == checked.worker && dependency.operation >= checked.operation && (!dependency.issue_attempted || (checked.operation >= dependency.first_operation && checked.operation <= dependency.last_operation));
+										if (covered) {
+											break;
+										}
+									}
+								}
+							}
+							ERR_FAIL_COND_V(!covered, result.failure(ERR_INVALID_DATA));
+						}
+					} break;
+					default:
+						return result.failure(ERR_UNAVAILABLE);
+				}
+				ERR_FAIL_COND_V(buffer && (!buffer->driver_id || buffer->qualification_return || buffer->transfer_worker_index >= 0), result.failure(ERR_UNAVAILABLE));
+			}
+			expected_prefix_count += !driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS);
+			if (!binding.bound) {
+				if (descriptor_set_batching) {
+					// Mirror the original loop, including its empty first batch
+					// when the first expected set has index greater than one.
+					if (i - last_index > 1) {
+						++expected_prefix_count;
+						batch_count = 1;
+					} else {
+						++batch_count;
+					}
+					last_index = i;
+				} else {
+					++expected_prefix_count;
+				}
+			}
+		}
+		expected_prefix_count += descriptor_set_batching && batch_count != 0;
+		ERR_FAIL_COND_V(expected_prefix_count > DrawAppendResult::PREFIX_CAPACITY, result.failure(ERR_PARAMETER_RANGE_ERROR));
+	}
 
 #ifdef DEBUG_ENABLED
-	ERR_FAIL_COND_MSG(!draw_list.validation.pipeline_active,
+	ERR_FAIL_COND_V_MSG(!draw_list.validation.pipeline_active, result.failure(ERR_INVALID_PARAMETER),
 			"No render pipeline was set before attempting to draw.");
 	if (draw_list.validation.pipeline_vertex_format != INVALID_ID) {
 		// Pipeline uses vertices, validate format.
-		ERR_FAIL_COND_MSG(draw_list.validation.vertex_format == INVALID_ID,
+		ERR_FAIL_COND_V_MSG(draw_list.validation.vertex_format == INVALID_ID, result.failure(ERR_INVALID_PARAMETER),
 				"No vertex array was bound, and render pipeline expects vertices.");
 		// Make sure format is right.
-		ERR_FAIL_COND_MSG(draw_list.validation.pipeline_vertex_format != draw_list.validation.vertex_format,
+		ERR_FAIL_COND_V_MSG(draw_list.validation.pipeline_vertex_format != draw_list.validation.vertex_format, result.failure(ERR_INVALID_PARAMETER),
 				"The vertex format used to create the pipeline does not match the vertex format bound.");
 		// Make sure number of instances is valid.
-		ERR_FAIL_COND_MSG(p_instances > draw_list.validation.vertex_max_instances_allowed,
+		ERR_FAIL_COND_V_MSG(p_instances > draw_list.validation.vertex_max_instances_allowed, result.failure(ERR_INVALID_PARAMETER),
 				"Number of instances requested (" + itos(p_instances) + " is larger than the maximum number supported by the bound vertex array (" + itos(draw_list.validation.vertex_max_instances_allowed) + ").");
 	}
 
 	if (draw_list.validation.pipeline_push_constant_size > 0) {
 		// Using push constants, check that they were supplied.
-		ERR_FAIL_COND_MSG(!draw_list.validation.pipeline_push_constant_supplied,
+		ERR_FAIL_COND_V_MSG(!draw_list.validation.pipeline_push_constant_supplied, result.failure(ERR_INVALID_PARAMETER),
 				"The shader in this pipeline requires a push constant to be set before drawing, but it's not present.");
 	}
 
@@ -6030,17 +8178,30 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 
 		if (draw_list.state.sets[i].pipeline_expected_format != draw_list.state.sets[i].uniform_set_format) {
 			if (draw_list.state.sets[i].uniform_set_format == 0) {
-				ERR_FAIL_MSG(vformat("Uniforms were never supplied for set (%d) at the time of drawing, which are required by the pipeline.", i));
+				ERR_FAIL_V_MSG(result.failure(ERR_INVALID_PARAMETER), vformat("Uniforms were never supplied for set (%d) at the time of drawing, which are required by the pipeline.", i));
 			} else if (uniform_set_owner.owns(draw_list.state.sets[i].uniform_set)) {
 				UniformSet *us = uniform_set_owner.get_or_null(draw_list.state.sets[i].uniform_set);
 				const String us_info = us ? vformat("(%d):\n%s\n", i, _shader_uniform_debug(us->shader_id, us->shader_set)) : vformat("(%d, which was just freed) ", i);
-				ERR_FAIL_MSG(vformat("Uniforms supplied for set %sare not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", us_info, _shader_uniform_debug(draw_list.state.pipeline_shader)));
+				ERR_FAIL_V_MSG(result.failure(ERR_INVALID_PARAMETER), vformat("Uniforms supplied for set %sare not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", us_info, _shader_uniform_debug(draw_list.state.pipeline_shader)));
 			} else {
-				ERR_FAIL_MSG(vformat("Uniforms supplied for set (%d, which was just freed) are not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", i, _shader_uniform_debug(draw_list.state.pipeline_shader)));
+				ERR_FAIL_V_MSG(result.failure(ERR_INVALID_PARAMETER), vformat("Uniforms supplied for set (%d, which was just freed) are not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", i, _shader_uniform_debug(draw_list.state.pipeline_shader)));
 			}
 		}
 	}
 #endif
+	// Reserve pending-clear worker dependencies before descriptor graph prefixes.
+	for (uint32_t i = 0; i < draw_list.state.set_count; ++i) {
+		if (!draw_list.state.sets[i].pipeline_expected_format || draw_list.state.sets[i].bound) {
+			continue;
+		}
+		UniformSet *set = uniform_set_owner.get_or_null(draw_list.state.sets[i].uniform_set);
+		if (set) {
+			const Error error = _uniform_set_admit_clear_transfers(set);
+			if (error != OK) {
+				return result.failure(error);
+			}
+		}
+	}
 	thread_local LocalVector<RDD::UniformSetID> valid_descriptor_ids;
 	valid_descriptor_ids.clear();
 	valid_descriptor_ids.resize(draw_list.state.set_count);
@@ -6060,7 +8221,14 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 		}
 		// Prepare descriptor sets if the API doesn't use pipeline barriers.
 		if (!driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS)) {
-			draw_graph.add_draw_list_uniform_set_prepare_for_use(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+			{
+				result.effect = NativeAppendEffect::NativePrefixOnly;
+				ERR_FAIL_COND_V(p_capture && result.prefix_count >= DrawAppendResult::PREFIX_CAPACITY, result.failure(ERR_PARAMETER_RANGE_ERROR));
+				const auto prefix = draw_graph.add_draw_list_uniform_set_prepare_for_use(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+				if (p_capture) {
+					result.prefix_handles[result.prefix_count++] = prefix;
+				}
+			}
 		}
 	}
 
@@ -6076,7 +8244,14 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 				// All good, see if this requires re-binding.
 				if (i - last_set_index > 1) {
 					// If the descriptor sets are not contiguous, bind the previous ones and start a new batch.
-					draw_graph.add_draw_list_bind_uniform_sets(draw_list.state.pipeline_shader_driver_id, valid_descriptor_ids, first_set_index, valid_set_count);
+					{
+						result.effect = NativeAppendEffect::NativePrefixOnly;
+						ERR_FAIL_COND_V(p_capture && result.prefix_count >= DrawAppendResult::PREFIX_CAPACITY, result.failure(ERR_PARAMETER_RANGE_ERROR));
+						const auto prefix = draw_graph.add_draw_list_bind_uniform_sets(draw_list.state.pipeline_shader_driver_id, valid_descriptor_ids, first_set_index, valid_set_count);
+						if (p_capture) {
+							result.prefix_handles[result.prefix_count++] = prefix;
+						}
+					}
 
 					first_set_index = i;
 					valid_set_count = 1;
@@ -6088,47 +8263,66 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 				}
 
 				UniformSet *uniform_set = uniform_set_owner.get_or_null(draw_list.state.sets[i].uniform_set);
-				ERR_FAIL_NULL(uniform_set);
+				ERR_FAIL_NULL_V(uniform_set, result.failure(ERR_INVALID_PARAMETER));
 				_uniform_set_update_shared(uniform_set);
-				_uniform_set_update_clears(uniform_set);
+				{
+					const Error dependency_error = _uniform_set_update_clears(uniform_set);
+					if (dependency_error != OK) {
+						return result.failure(dependency_error);
+					}
+				}
 
 				draw_graph.add_draw_list_usages(uniform_set->draw_trackers, uniform_set->draw_trackers_usage);
 				draw_list.state.sets[i].bound = true;
 
 				last_set_index = i;
 			} else {
-				draw_graph.add_draw_list_bind_uniform_set(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+				{
+					result.effect = NativeAppendEffect::NativePrefixOnly;
+					ERR_FAIL_COND_V(p_capture && result.prefix_count >= DrawAppendResult::PREFIX_CAPACITY, result.failure(ERR_PARAMETER_RANGE_ERROR));
+					const auto prefix = draw_graph.add_draw_list_bind_uniform_set(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+					if (p_capture) {
+						result.prefix_handles[result.prefix_count++] = prefix;
+					}
+				}
 			}
 		}
 	}
 
 	// Bind the remaining batch.
 	if (descriptor_set_batching && valid_set_count > 0) {
-		draw_graph.add_draw_list_bind_uniform_sets(draw_list.state.pipeline_shader_driver_id, valid_descriptor_ids, first_set_index, valid_set_count);
+		{
+			result.effect = NativeAppendEffect::NativePrefixOnly;
+			ERR_FAIL_COND_V(p_capture && result.prefix_count >= DrawAppendResult::PREFIX_CAPACITY, result.failure(ERR_PARAMETER_RANGE_ERROR));
+			const auto prefix = draw_graph.add_draw_list_bind_uniform_sets(draw_list.state.pipeline_shader_driver_id, valid_descriptor_ids, first_set_index, valid_set_count);
+			if (p_capture) {
+				result.prefix_handles[result.prefix_count++] = prefix;
+			}
+		}
 	}
 
 	if (p_use_indices) {
 #ifdef DEBUG_ENABLED
-		ERR_FAIL_COND_MSG(p_procedural_vertices > 0,
+		ERR_FAIL_COND_V_MSG(p_procedural_vertices > 0, result.failure(ERR_INVALID_PARAMETER),
 				"Procedural vertices can't be used together with indices.");
 
-		ERR_FAIL_COND_MSG(!draw_list.validation.index_array_count,
+		ERR_FAIL_COND_V_MSG(!draw_list.validation.index_array_count, result.failure(ERR_INVALID_PARAMETER),
 				"Draw command requested indices, but no index buffer was set.");
 
-		ERR_FAIL_COND_MSG(draw_list.validation.pipeline_uses_restart_indices != draw_list.validation.index_buffer_uses_restart_indices,
+		ERR_FAIL_COND_V_MSG(draw_list.validation.pipeline_uses_restart_indices != draw_list.validation.index_buffer_uses_restart_indices, result.failure(ERR_INVALID_PARAMETER),
 				"The usage of restart indices in index buffer does not match the render primitive in the pipeline.");
 #endif
 		uint32_t to_draw = draw_list.validation.index_array_count;
 
 #ifdef DEBUG_ENABLED
-		ERR_FAIL_COND_MSG(to_draw < draw_list.validation.pipeline_primitive_minimum,
+		ERR_FAIL_COND_V_MSG(to_draw < draw_list.validation.pipeline_primitive_minimum, result.failure(ERR_INVALID_PARAMETER),
 				"Too few indices (" + itos(to_draw) + ") for the render primitive set in the render pipeline (" + itos(draw_list.validation.pipeline_primitive_minimum) + ").");
 
-		ERR_FAIL_COND_MSG((to_draw % draw_list.validation.pipeline_primitive_divisor) != 0,
+		ERR_FAIL_COND_V_MSG((to_draw % draw_list.validation.pipeline_primitive_divisor) != 0, result.failure(ERR_INVALID_PARAMETER),
 				"Index amount (" + itos(to_draw) + ") must be a multiple of the amount of indices required by the render primitive (" + itos(draw_list.validation.pipeline_primitive_divisor) + ").");
 #endif
 
-		draw_graph.add_draw_list_draw_indexed(to_draw, p_instances, 0);
+		result.draw_handle = draw_graph.add_draw_list_draw_indexed(to_draw, p_instances, 0);
 	} else {
 		uint32_t to_draw;
 
@@ -6136,51 +8330,118 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 			to_draw = p_procedural_vertices;
 		} else {
 #ifdef DEBUG_ENABLED
-			ERR_FAIL_COND_MSG(draw_list.validation.pipeline_vertex_format == INVALID_ID,
+			ERR_FAIL_COND_V_MSG(draw_list.validation.pipeline_vertex_format == INVALID_ID, result.failure(ERR_INVALID_PARAMETER),
 					"Draw command lacks indices, but pipeline format does not use vertices.");
 #endif
 			to_draw = draw_list.validation.vertex_array_size;
 		}
 
 #ifdef DEBUG_ENABLED
-		ERR_FAIL_COND_MSG(to_draw < draw_list.validation.pipeline_primitive_minimum,
+		ERR_FAIL_COND_V_MSG(to_draw < draw_list.validation.pipeline_primitive_minimum, result.failure(ERR_INVALID_PARAMETER),
 				"Too few vertices (" + itos(to_draw) + ") for the render primitive set in the render pipeline (" + itos(draw_list.validation.pipeline_primitive_minimum) + ").");
 
-		ERR_FAIL_COND_MSG((to_draw % draw_list.validation.pipeline_primitive_divisor) != 0,
+		ERR_FAIL_COND_V_MSG((to_draw % draw_list.validation.pipeline_primitive_divisor) != 0, result.failure(ERR_INVALID_PARAMETER),
 				"Vertex amount (" + itos(to_draw) + ") must be a multiple of the amount of vertices required by the render primitive (" + itos(draw_list.validation.pipeline_primitive_divisor) + ").");
 #endif
 
-		draw_graph.add_draw_list_draw(to_draw, p_instances);
+		result.draw_handle = draw_graph.add_draw_list_draw(to_draw, p_instances);
 	}
 
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	if (RenderCaptureTestHooks::write_census_active()) {
+		for (uint32_t i = 0; i < draw_list.state.set_count; i++) {
+			if (draw_list.state.sets[i].pipeline_expected_format != 0) {
+				_capture_test_record_writable_set(draw_list.state.sets[i].uniform_set, RenderCaptureTestHooks::DRAW);
+			}
+		}
+	}
+#endif
 	draw_list.state.draw_count++;
+
+	result.effect = NativeAppendEffect::Recorded;
+	result.capture_complete = p_capture;
+	if (geometry_capture && !draw_graph.contains_record(result.draw_handle)) {
+		// The native draw was already appended. Preserve that fact while
+		// reporting that its capture handle could not be retained.
+		result.error = ERR_INVALID_DATA;
+		result.capture_complete = false;
+	}
+	if (prepared_capture) {
+		const auto &begin = draw_list.begin_handle;
+		uint32_t previous_offset = 0;
+		bool have_previous = false;
+		auto exact_instruction = [&](const RDG::RecordHandle &handle) {
+			return handle.kind == 3 && handle.graph_instance == begin.graph_instance && handle.graph_frame == begin.graph_frame && handle.index == begin.index && draw_graph.contains_record(handle);
+		};
+		bool complete = result.prefix_count == expected_prefix_count;
+		for (uint32_t i = 0; i < result.prefix_count; ++i) {
+			const auto &handle = result.prefix_handles[i];
+			complete = complete && exact_instruction(handle) && (!have_previous || handle.offset > previous_offset);
+			previous_offset = handle.offset;
+			have_previous = true;
+		}
+		complete = complete && exact_instruction(result.draw_handle) && (!have_previous || result.draw_handle.offset > previous_offset);
+		result.capture_complete = complete;
+		if (!complete) {
+			result.error = ERR_INVALID_DATA; // Preserve the already recorded draw.
+		}
+	}
+	return result;
 }
 
 void RenderingDevice::draw_list_draw_indirect(DrawListID p_list, bool p_use_indices, RID p_buffer, uint32_t p_offset, uint32_t p_draw_count, uint32_t p_stride) {
-	ERR_RENDER_THREAD_GUARD();
+	_draw_list_draw_indirect_recorded(p_list, p_use_indices, p_buffer, p_offset, p_draw_count, p_stride, false);
+}
 
-	ERR_FAIL_COND(!draw_list.active);
+RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_indirect_recorded(DrawListID p_list, bool p_use_indices, RID p_buffer, uint32_t p_offset, uint32_t p_draw_count, uint32_t p_stride, bool p_capture) {
+	DrawAppendResult result;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	if (p_capture) {
+		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
+	}
+
+	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
 
 	Buffer *buffer = storage_buffer_owner.get_or_null(p_buffer);
-	ERR_FAIL_NULL(buffer);
+	ERR_FAIL_NULL_V(buffer, result.failure(ERR_INVALID_PARAMETER));
+	ERR_FAIL_COND_V((buffer->qualification_return || (buffer->native_disposal.cell.is_valid() && buffer->native_disposal.cell->production_request)) && !_production_output_raster_permitted(p_buffer), result.failure(ERR_UNAUTHORIZED));
 
-	ERR_FAIL_COND_MSG(!buffer->usage.has_flag(RDD::BUFFER_USAGE_INDIRECT_BIT), "Buffer provided was not created to do indirect dispatch.");
+	ERR_FAIL_COND_V_MSG(!buffer->usage.has_flag(RDD::BUFFER_USAGE_INDIRECT_BIT), result.failure(ERR_INVALID_PARAMETER), "Buffer provided was not created to do indirect dispatch.");
+
+	// Validate the complete indirect command span before touching descriptor
+	// state or recording graph instructions. A zero stride retains the existing
+	// tightly packed single-command meaning; multiple commands must provide an
+	// explicit stride at least as large as the command itself.
+	const uint64_t command_size = p_use_indices ? 20u : 16u;
+	ERR_FAIL_COND_V_MSG((p_offset & 3u) != 0, result.failure(ERR_INVALID_PARAMETER), "Indirect command offset must be 4-byte aligned.");
+	ERR_FAIL_COND_V_MSG((p_stride & 3u) != 0, result.failure(ERR_INVALID_PARAMETER), "Indirect command stride must be 4-byte aligned.");
+	if (p_draw_count > 1) {
+		ERR_FAIL_COND_V_MSG(p_stride == 0 || uint64_t(p_stride) < command_size, result.failure(ERR_INVALID_PARAMETER), "Indirect command stride is too small for multiple draws.");
+	} else if (p_draw_count == 1 && p_stride != 0) {
+		ERR_FAIL_COND_V_MSG(uint64_t(p_stride) < command_size, result.failure(ERR_INVALID_PARAMETER), "Indirect command stride is too small for one draw.");
+	}
+	if (p_draw_count != 0) {
+		const uint64_t effective_stride = p_stride == 0 ? command_size : p_stride;
+		const uint64_t command_end = uint64_t(p_offset) + effective_stride * uint64_t(p_draw_count - 1) + command_size;
+		ERR_FAIL_COND_V_MSG(command_end < uint64_t(p_offset) || command_end > buffer->size, result.failure(ERR_INVALID_PARAMETER), "Indirect command span is past the end of the buffer.");
+	}
 
 #ifdef DEBUG_ENABLED
-	ERR_FAIL_COND_MSG(!draw_list.validation.pipeline_active,
+	ERR_FAIL_COND_V_MSG(!draw_list.validation.pipeline_active, result.failure(ERR_INVALID_PARAMETER),
 			"No render pipeline was set before attempting to draw.");
 	if (draw_list.validation.pipeline_vertex_format != INVALID_ID) {
 		// Pipeline uses vertices, validate format.
-		ERR_FAIL_COND_MSG(draw_list.validation.vertex_format == INVALID_ID,
+		ERR_FAIL_COND_V_MSG(draw_list.validation.vertex_format == INVALID_ID, result.failure(ERR_INVALID_PARAMETER),
 				"No vertex array was bound, and render pipeline expects vertices.");
 		// Make sure format is right.
-		ERR_FAIL_COND_MSG(draw_list.validation.pipeline_vertex_format != draw_list.validation.vertex_format,
+		ERR_FAIL_COND_V_MSG(draw_list.validation.pipeline_vertex_format != draw_list.validation.vertex_format, result.failure(ERR_INVALID_PARAMETER),
 				"The vertex format used to create the pipeline does not match the vertex format bound.");
 	}
 
 	if (draw_list.validation.pipeline_push_constant_size > 0) {
 		// Using push constants, check that they were supplied.
-		ERR_FAIL_COND_MSG(!draw_list.validation.pipeline_push_constant_supplied,
+		ERR_FAIL_COND_V_MSG(!draw_list.validation.pipeline_push_constant_supplied, result.failure(ERR_INVALID_PARAMETER),
 				"The shader in this pipeline requires a push constant to be set before drawing, but it's not present.");
 	}
 #endif
@@ -6194,17 +8455,75 @@ void RenderingDevice::draw_list_draw_indirect(DrawListID p_list, bool p_use_indi
 
 		if (draw_list.state.sets[i].pipeline_expected_format != draw_list.state.sets[i].uniform_set_format) {
 			if (draw_list.state.sets[i].uniform_set_format == 0) {
-				ERR_FAIL_MSG(vformat("Uniforms were never supplied for set (%d) at the time of drawing, which are required by the pipeline.", i));
+				ERR_FAIL_V_MSG(result.failure(ERR_INVALID_PARAMETER), vformat("Uniforms were never supplied for set (%d) at the time of drawing, which are required by the pipeline.", i));
 			} else if (uniform_set_owner.owns(draw_list.state.sets[i].uniform_set)) {
 				UniformSet *us = uniform_set_owner.get_or_null(draw_list.state.sets[i].uniform_set);
 				const String us_info = us ? vformat("(%d):\n%s\n", i, _shader_uniform_debug(us->shader_id, us->shader_set)) : vformat("(%d, which was just freed) ", i);
-				ERR_FAIL_MSG(vformat("Uniforms supplied for set %sare not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", us_info, _shader_uniform_debug(draw_list.state.pipeline_shader)));
+				ERR_FAIL_V_MSG(result.failure(ERR_INVALID_PARAMETER), vformat("Uniforms supplied for set %sare not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", us_info, _shader_uniform_debug(draw_list.state.pipeline_shader)));
 			} else {
-				ERR_FAIL_MSG(vformat("Uniforms supplied for set (%d, which was just freed) are not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", i, _shader_uniform_debug(draw_list.state.pipeline_shader)));
+				ERR_FAIL_V_MSG(result.failure(ERR_INVALID_PARAMETER), vformat("Uniforms supplied for set (%d, which was just freed) are not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", i, _shader_uniform_debug(draw_list.state.pipeline_shader)));
 			}
 		}
 	}
 #endif
+
+	if (p_capture) {
+		static_assert(MAX_UNIFORM_SETS * 2 == 32);
+		ERR_FAIL_COND_V(draw_list.state.set_count > MAX_UNIFORM_SETS, result.failure(ERR_INVALID_PARAMETER));
+		// Capture permits only already-prepared immutable bindings. Ordinary
+		// public RD drawing keeps its original shared-copy/clear behavior below.
+		// Those original preparation operations need their own native capture
+		// before an output packet may borrow the resulting material generation.
+		for (uint32_t i = 0; i < draw_list.state.set_count; i++) {
+			if (draw_list.state.sets[i].pipeline_expected_format == 0) {
+				continue;
+			}
+			UniformSet *set = uniform_set_owner.get_or_null(draw_list.state.sets[i].uniform_set);
+			ERR_FAIL_NULL_V(set, result.failure(ERR_INVALID_PARAMETER));
+			for (const UniformSet::SharedTexture &shared : set->shared_textures_to_update) {
+				Texture *texture = texture_owner.get_or_null(shared.texture);
+				ERR_FAIL_NULL_V(texture, result.failure(ERR_INVALID_PARAMETER));
+				if (texture->shared_fallback == nullptr) {
+					continue;
+				}
+				ERR_FAIL_COND_V(shared.writing, result.failure(ERR_UNAVAILABLE));
+				if (texture->owner.is_valid()) {
+					Texture *owner = texture_owner.get_or_null(texture->owner);
+					ERR_FAIL_COND_V(!owner || !owner->shared_fallback, result.failure(ERR_INVALID_PARAMETER));
+					ERR_FAIL_COND_V(texture->shared_fallback->revision != owner->shared_fallback->revision, result.failure(ERR_UNAVAILABLE));
+				}
+			}
+			for (RID rid : set->pending_clear_textures) {
+				Texture *texture = texture_owner.get_or_null(rid);
+				ERR_FAIL_NULL_V(texture, result.failure(ERR_INVALID_PARAMETER));
+				ERR_FAIL_COND_V(texture->pending_clear, result.failure(ERR_UNAVAILABLE));
+			}
+		}
+		result.capture_complete = true;
+	}
+
+	if (buffer->transfer_worker_index >= 0) {
+		result.has_transfer = true;
+		result.transfer = { uint32_t(buffer->transfer_worker_index), buffer->transfer_worker_operation };
+	}
+	{
+		const Error dependency_error = _check_transfer_worker_buffer(buffer);
+		if (dependency_error != OK) {
+			return result.failure(dependency_error);
+		}
+	}
+	for (uint32_t i = 0; i < draw_list.state.set_count; ++i) {
+		if (!draw_list.state.sets[i].pipeline_expected_format || draw_list.state.sets[i].bound) {
+			continue;
+		}
+		UniformSet *set = uniform_set_owner.get_or_null(draw_list.state.sets[i].uniform_set);
+		if (set) {
+			const Error error = _uniform_set_admit_clear_transfers(set);
+			if (error != OK) {
+				return result.failure(error);
+			}
+		}
+	}
 
 	// Prepare descriptor sets if the API doesn't use pipeline barriers.
 	if (!driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS)) {
@@ -6214,7 +8533,11 @@ void RenderingDevice::draw_list_draw_indirect(DrawListID p_list, bool p_use_indi
 				continue;
 			}
 
-			draw_graph.add_draw_list_uniform_set_prepare_for_use(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+			result.effect = NativeAppendEffect::NativePrefixOnly;
+			const auto prepare = draw_graph.add_draw_list_uniform_set_prepare_for_use(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+			if (p_capture) {
+				result.prefix_handles[result.prefix_count++] = prepare;
+			}
 		}
 	}
 
@@ -6225,12 +8548,21 @@ void RenderingDevice::draw_list_draw_indirect(DrawListID p_list, bool p_use_indi
 		}
 		if (!draw_list.state.sets[i].bound) {
 			// All good, see if this requires re-binding.
-			draw_graph.add_draw_list_bind_uniform_set(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+			result.effect = NativeAppendEffect::NativePrefixOnly;
+			const auto bind = draw_graph.add_draw_list_bind_uniform_set(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+			if (p_capture) {
+				result.prefix_handles[result.prefix_count++] = bind;
+			}
 
 			UniformSet *uniform_set = uniform_set_owner.get_or_null(draw_list.state.sets[i].uniform_set);
-			ERR_FAIL_NULL(uniform_set);
+			ERR_FAIL_NULL_V(uniform_set, result.failure(ERR_INVALID_PARAMETER));
 			_uniform_set_update_shared(uniform_set);
-			_uniform_set_update_clears(uniform_set);
+			{
+				const Error dependency_error = _uniform_set_update_clears(uniform_set);
+				if (dependency_error != OK) {
+					return result.failure(dependency_error);
+				}
+			}
 
 			draw_graph.add_draw_list_usages(uniform_set->draw_trackers, uniform_set->draw_trackers_usage);
 
@@ -6239,33 +8571,40 @@ void RenderingDevice::draw_list_draw_indirect(DrawListID p_list, bool p_use_indi
 	}
 
 	if (p_use_indices) {
-#ifdef DEBUG_ENABLED
-		ERR_FAIL_COND_MSG(!draw_list.validation.index_array_count,
+		ERR_FAIL_COND_V_MSG(!draw_list.validation.index_array_count, result.failure(ERR_INVALID_PARAMETER),
 				"Draw command requested indices, but no index buffer was set.");
 
-		ERR_FAIL_COND_MSG(draw_list.validation.pipeline_uses_restart_indices != draw_list.validation.index_buffer_uses_restart_indices,
+#ifdef DEBUG_ENABLED
+		ERR_FAIL_COND_V_MSG(draw_list.validation.pipeline_uses_restart_indices != draw_list.validation.index_buffer_uses_restart_indices, result.failure(ERR_INVALID_PARAMETER),
 				"The usage of restart indices in index buffer does not match the render primitive in the pipeline.");
 #endif
 
-		ERR_FAIL_COND_MSG(p_offset + 20 > buffer->size, "Offset provided (+20) is past the end of buffer.");
-
-		draw_graph.add_draw_list_draw_indexed_indirect(buffer->driver_id, p_offset, p_draw_count, p_stride);
+		result.draw_handle = draw_graph.add_draw_list_draw_indexed_indirect(buffer->driver_id, p_offset, p_draw_count, p_stride);
 	} else {
-		ERR_FAIL_COND_MSG(p_offset + 16 > buffer->size, "Offset provided (+16) is past the end of buffer.");
-
-		draw_graph.add_draw_list_draw_indirect(buffer->driver_id, p_offset, p_draw_count, p_stride);
+		result.draw_handle = draw_graph.add_draw_list_draw_indirect(buffer->driver_id, p_offset, p_draw_count, p_stride);
 	}
 
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	if (RenderCaptureTestHooks::write_census_active()) {
+		for (uint32_t i = 0; i < draw_list.state.set_count; i++) {
+			if (draw_list.state.sets[i].pipeline_expected_format != 0) {
+				_capture_test_record_writable_set(draw_list.state.sets[i].uniform_set, RenderCaptureTestHooks::DRAW_INDIRECT);
+			}
+		}
+	}
+#endif
 	draw_list.state.draw_count++;
 
 	if (buffer->draw_tracker != nullptr) {
 		draw_graph.add_draw_list_usage(buffer->draw_tracker, RDG::RESOURCE_USAGE_INDIRECT_BUFFER_READ);
 	}
 
-	_check_transfer_worker_buffer(buffer);
+	result.effect = NativeAppendEffect::Recorded;
+	return result;
 }
 
 void RenderingDevice::draw_list_set_viewport(DrawListID p_list, const Rect2 &p_rect) {
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
 	ERR_FAIL_COND(!draw_list.active);
 
 	if (p_rect.get_area() == 0) {
@@ -6277,9 +8616,18 @@ void RenderingDevice::draw_list_set_viewport(DrawListID p_list, const Rect2 &p_r
 }
 
 void RenderingDevice::draw_list_enable_scissor(DrawListID p_list, const Rect2 &p_rect) {
-	ERR_RENDER_THREAD_GUARD();
+	_draw_list_enable_scissor_recorded(p_list, p_rect, false);
+}
 
-	ERR_FAIL_COND(!draw_list.active);
+RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_enable_scissor_recorded(DrawListID p_list, const Rect2 &p_rect, bool p_capture) {
+	DrawAppendResult result;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	if (p_capture) {
+		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
+	}
+
+	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
 
 	Rect2i rect = p_rect;
 	rect.position += draw_list.viewport.position;
@@ -6287,14 +8635,19 @@ void RenderingDevice::draw_list_enable_scissor(DrawListID p_list, const Rect2 &p
 	rect = draw_list.viewport.intersection(rect);
 
 	if (rect.get_area() == 0) {
-		return;
+		return result;
 	}
 
-	draw_graph.add_draw_list_set_scissor(rect);
+	result.draw_handle = draw_graph.add_draw_list_set_scissor(rect);
+
+	result.effect = NativeAppendEffect::Recorded;
+	result.capture_complete = p_capture;
+	return result;
 }
 
 void RenderingDevice::draw_list_disable_scissor(DrawListID p_list) {
 	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND(!draw_list.active);
 
@@ -6309,24 +8662,31 @@ uint32_t RenderingDevice::draw_list_get_current_pass() {
 
 RenderingDevice::DrawListID RenderingDevice::draw_list_switch_to_next_pass() {
 	ERR_RENDER_THREAD_GUARD_V(INVALID_ID);
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, INVALID_ID, "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND_V(!draw_list.active, INVALID_FORMAT_ID);
 	ERR_FAIL_COND_V(draw_list_current_subpass >= draw_list_subpass_count - 1, INVALID_FORMAT_ID);
 
 	draw_list_current_subpass++;
 
+	// The graph continues the same list while its subpass bindings reset.
+	const RDG::RecordHandle begin_handle = draw_list.begin_handle;
 	Rect2i viewport;
 	_draw_list_end(&viewport);
 
 	draw_graph.add_draw_list_next_subpass(RDD::COMMAND_BUFFER_TYPE_PRIMARY);
 
 	_draw_list_start(viewport);
+	draw_list.begin_handle = begin_handle;
 
 	return int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT;
 }
 
 #ifndef DISABLE_DEPRECATED
 Error RenderingDevice::draw_list_switch_to_next_pass_split(uint32_t p_splits, DrawListID *r_split_ids) {
+	if (_recording_error() != OK) {
+		return _recording_error();
+	}
 	ERR_FAIL_V_MSG(ERR_UNAVAILABLE, "Deprecated. Split draw lists are used automatically by RenderingDevice.");
 }
 #endif
@@ -6345,11 +8705,21 @@ void RenderingDevice::_draw_list_end(Rect2i *r_last_viewport) {
 }
 
 void RenderingDevice::draw_list_end() {
-	ERR_RENDER_THREAD_GUARD();
+	if (production_output_list_head_owner) {
+		_production_output_reads_close();
+		return;
+	}
+	_draw_list_end_recorded(false);
+}
 
-	ERR_FAIL_COND_MSG(!draw_list.active, "Immediate draw list is already inactive.");
+RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_end_recorded(bool p_capture) {
+	DrawAppendResult result;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
 
-	draw_graph.add_draw_list_end();
+	ERR_FAIL_COND_V_MSG(!draw_list.active, result.failure(ERR_INVALID_PARAMETER), "Immediate draw list is already inactive.");
+
+	result.draw_handle = draw_graph.add_draw_list_end();
 
 	_draw_list_end();
 
@@ -6368,6 +8738,10 @@ void RenderingDevice::draw_list_end() {
 	}
 
 	draw_list_bound_textures.clear();
+
+	result.effect = NativeAppendEffect::Recorded;
+	result.capture_complete = p_capture;
+	return result;
 }
 
 /***************************/
@@ -6376,6 +8750,7 @@ void RenderingDevice::draw_list_end() {
 
 RenderingDevice::RaytracingListID RenderingDevice::raytracing_list_begin() {
 	ERR_RENDER_THREAD_GUARD_V(INVALID_ID);
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, INVALID_ID, "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND_V_MSG(!has_feature(SUPPORTS_RAYTRACING_PIPELINE), INVALID_ID, "The current rendering device has no raytracing pipeline support.");
 
@@ -6392,6 +8767,7 @@ RenderingDevice::RaytracingListID RenderingDevice::raytracing_list_begin() {
 
 void RenderingDevice::raytracing_list_bind_raytracing_pipeline(RaytracingListID p_list, RID p_raytracing_pipeline) {
 	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND(p_list != ID_TYPE_RAYTRACING_LIST);
 	ERR_FAIL_COND(!raytracing_list.active);
@@ -6403,7 +8779,12 @@ void RenderingDevice::raytracing_list_bind_raytracing_pipeline(RaytracingListID 
 		return; // Redundant state, return.
 	}
 
-	_check_transfer_worker_buffer(&pipeline->sbt_buffer);
+	{
+		const Error dependency_error = _check_transfer_worker_buffer(&pipeline->sbt_buffer);
+		if (dependency_error != OK) {
+			return;
+		}
+	}
 
 	raytracing_list.state.pipeline = p_raytracing_pipeline;
 	raytracing_list.state.pipeline_driver_id = pipeline->driver_id;
@@ -6472,6 +8853,7 @@ void RenderingDevice::raytracing_list_bind_raytracing_pipeline(RaytracingListID 
 
 void RenderingDevice::raytracing_list_bind_uniform_set(RaytracingListID p_list, RID p_uniform_set, uint32_t p_index) {
 	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND(p_list != ID_TYPE_RAYTRACING_LIST);
 	ERR_FAIL_COND(!raytracing_list.active);
@@ -6483,6 +8865,8 @@ void RenderingDevice::raytracing_list_bind_uniform_set(RaytracingListID p_list, 
 
 	UniformSet *uniform_set = uniform_set_owner.get_or_null(p_uniform_set);
 	ERR_FAIL_NULL(uniform_set);
+	ERR_FAIL_COND_MSG(_native_immutable_uniform_set_writes(*uniform_set), "An immutable native backing cannot be bound for shader writes.");
+	ERR_FAIL_COND((!uniform_set->qualification_dependencies.is_empty() || uniform_set->qualification_return) && !qualification_recording);
 
 #ifdef DEBUG_ENABLED
 	// Validate the acceleration structures.
@@ -6505,6 +8889,7 @@ void RenderingDevice::raytracing_list_bind_uniform_set(RaytracingListID p_list, 
 
 void RenderingDevice::raytracing_list_set_push_constant(RaytracingListID p_list, const void *p_data, uint32_t p_data_size) {
 	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND(p_list != ID_TYPE_RAYTRACING_LIST);
 	ERR_FAIL_COND(!raytracing_list.active);
@@ -6529,6 +8914,7 @@ void RenderingDevice::raytracing_list_set_push_constant(RaytracingListID p_list,
 
 void RenderingDevice::raytracing_list_trace_rays(RaytracingListID p_list, uint32_t p_raygen_shader_index, RID p_hit_sbt, uint32_t p_width, uint32_t p_height, uint32_t p_depth) {
 	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND(p_list != ID_TYPE_RAYTRACING_LIST);
 	ERR_FAIL_COND(!raytracing_list.active);
@@ -6634,11 +9020,21 @@ void RenderingDevice::raytracing_list_trace_rays(RaytracingListID p_list, uint32
 	}
 
 	draw_graph.add_raytracing_list_trace_rays(raygen_sbt, miss_sbt, rdd_hit_sbt, p_width, p_height, p_depth);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	if (RenderCaptureTestHooks::write_census_active()) {
+		for (uint32_t i = 0; i < raytracing_list.state.set_count; i++) {
+			if (raytracing_list.state.sets[i].pipeline_expected_format != 0) {
+				_capture_test_record_writable_set(raytracing_list.state.sets[i].uniform_set, RenderCaptureTestHooks::RAYTRACE);
+			}
+		}
+	}
+#endif
 	raytracing_list.state.trace_count++;
 }
 
 void RenderingDevice::raytracing_list_end() {
 	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND(!raytracing_list.active);
 
@@ -6653,6 +9049,7 @@ void RenderingDevice::raytracing_list_end() {
 
 RenderingDevice::ComputeListID RenderingDevice::compute_list_begin() {
 	ERR_RENDER_THREAD_GUARD_V(INVALID_ID);
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, INVALID_ID, "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND_V_MSG(compute_list.active, INVALID_ID, "Only one compute list can be active at the same time.");
 	ERR_FAIL_COND_V_MSG(raytracing_list.active, INVALID_ID, "Only one raytracing list can be active at the same time.");
@@ -6666,12 +9063,14 @@ RenderingDevice::ComputeListID RenderingDevice::compute_list_begin() {
 
 void RenderingDevice::compute_list_bind_compute_pipeline(ComputeListID p_list, RID p_compute_pipeline) {
 	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND(p_list != ID_TYPE_COMPUTE_LIST);
 	ERR_FAIL_COND(!compute_list.active);
 
 	const ComputePipeline *pipeline = compute_pipeline_owner.get_or_null(p_compute_pipeline);
 	ERR_FAIL_NULL(pipeline);
+	ERR_FAIL_COND(pipeline->qualification_return && ((!qualification_recording && !_production_resource_permitted(p_compute_pipeline)) || pipeline->qualification_return->use_closed.load()));
 
 	if (p_compute_pipeline == compute_list.state.pipeline) {
 		return; // Redundant state, return.
@@ -6743,6 +9142,7 @@ void RenderingDevice::compute_list_bind_compute_pipeline(ComputeListID p_list, R
 
 void RenderingDevice::compute_list_bind_uniform_set(ComputeListID p_list, RID p_uniform_set, uint32_t p_index) {
 	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND(p_list != ID_TYPE_COMPUTE_LIST);
 	ERR_FAIL_COND(!compute_list.active);
@@ -6754,6 +9154,8 @@ void RenderingDevice::compute_list_bind_uniform_set(ComputeListID p_list, RID p_
 
 	UniformSet *uniform_set = uniform_set_owner.get_or_null(p_uniform_set);
 	ERR_FAIL_NULL(uniform_set);
+	ERR_FAIL_COND_MSG(_native_immutable_uniform_set_writes(*uniform_set), "An immutable native backing cannot be bound for shader writes.");
+	ERR_FAIL_COND((!uniform_set->qualification_dependencies.is_empty() || uniform_set->qualification_return) && !qualification_recording && !_production_resource_permitted(p_uniform_set));
 
 	if (p_index > compute_list.state.set_count) {
 		compute_list.state.set_count = p_index;
@@ -6782,6 +9184,7 @@ void RenderingDevice::compute_list_bind_uniform_set(ComputeListID p_list, RID p_
 
 void RenderingDevice::compute_list_set_push_constant(ComputeListID p_list, const void *p_data, uint32_t p_data_size) {
 	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND(p_list != ID_TYPE_COMPUTE_LIST);
 	ERR_FAIL_COND(!compute_list.active);
@@ -6803,31 +9206,67 @@ void RenderingDevice::compute_list_set_push_constant(ComputeListID p_list, const
 #endif
 }
 
-void RenderingDevice::compute_list_dispatch(ComputeListID p_list, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups) {
-	ERR_RENDER_THREAD_GUARD();
+void RenderingDevice::compute_list_dispatch(ComputeListID list, uint32_t x, uint32_t y, uint32_t z) {
+	_compute_list_dispatch_recorded(list, x, y, z);
+}
 
-	ERR_FAIL_COND(p_list != ID_TYPE_COMPUTE_LIST);
-	ERR_FAIL_COND(!compute_list.active);
+RDG::RecordHandle RenderingDevice::_compute_list_dispatch_recorded(ComputeListID p_list, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups) {
+	ERR_RENDER_THREAD_GUARD_V(RDG::RecordHandle());
+	const Ref<NativeHeightRange> reader = native_height_active_checked_range.is_valid() && native_height_active_checked_range->reader_scope ? native_height_active_checked_range : Ref<NativeHeightRange>();
+	bool reader_accepted = false;
+	struct ReaderAttempt {
+		const Ref<NativeHeightRange> &range;
+		bool &accepted;
+		~ReaderAttempt() {
+			if (range.is_valid() && !accepted && range->append_error == OK) {
+				range->append_error = ERR_INVALID_DATA;
+			}
+		}
+	} reader_attempt{ reader, reader_accepted };
+	if (reader.is_valid()) {
+		if (!reader->reader_owns_list || reader->recording_closed || reader->capture_frame != uint32_t(frame) ||
+				reader->capture_epoch != frames[frame].qualification_epoch || reader->append_error != OK ||
+				reader->graph_count + 2 > reader->limits.graph_members) {
+			return RDG::RecordHandle();
+		}
+		const Error sampled = _native_height_reader_validate_sample(reader);
+		if (sampled != OK || reader->reader_set_index >= compute_list.state.set_count ||
+				!compute_list.state.sets[reader->reader_set_index].pipeline_expected_format ||
+				compute_list.state.sets[reader->reader_set_index].uniform_set != reader->reader_uniform_set) {
+			reader->append_error = sampled != OK ? sampled : ERR_INVALID_DATA;
+			return RDG::RecordHandle();
+		}
+		Texture *depth = texture_owner.get_or_null(RID::from_uint64(reader->producer->producer_depth.cell->rid));
+		const Error dependency = _check_transfer_worker_texture(depth);
+		if (dependency != OK) {
+			reader->append_error = dependency;
+			return RDG::RecordHandle();
+		}
+	}
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RDG::RecordHandle(), "Recording is suspended after a frame fence wait failure.");
+
+	ERR_FAIL_COND_V(p_list != ID_TYPE_COMPUTE_LIST, RDG::RecordHandle());
+	ERR_FAIL_COND_V(!compute_list.active, RDG::RecordHandle());
 
 #ifdef DEBUG_ENABLED
-	ERR_FAIL_COND_MSG(p_x_groups == 0, "Dispatch amount of X compute groups (" + itos(p_x_groups) + ") is zero.");
-	ERR_FAIL_COND_MSG(p_z_groups == 0, "Dispatch amount of Z compute groups (" + itos(p_z_groups) + ") is zero.");
-	ERR_FAIL_COND_MSG(p_y_groups == 0, "Dispatch amount of Y compute groups (" + itos(p_y_groups) + ") is zero.");
-	ERR_FAIL_COND_MSG(p_x_groups > driver->limit_get(LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_X),
+	ERR_FAIL_COND_V_MSG(p_x_groups == 0, RDG::RecordHandle(), "Dispatch amount of X compute groups (" + itos(p_x_groups) + ") is zero.");
+	ERR_FAIL_COND_V_MSG(p_z_groups == 0, RDG::RecordHandle(), "Dispatch amount of Z compute groups (" + itos(p_z_groups) + ") is zero.");
+	ERR_FAIL_COND_V_MSG(p_y_groups == 0, RDG::RecordHandle(), "Dispatch amount of Y compute groups (" + itos(p_y_groups) + ") is zero.");
+	ERR_FAIL_COND_V_MSG(p_x_groups > driver->limit_get(LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_X), RDG::RecordHandle(),
 			"Dispatch amount of X compute groups (" + itos(p_x_groups) + ") is larger than device limit (" + itos(driver->limit_get(LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_X)) + ")");
-	ERR_FAIL_COND_MSG(p_y_groups > driver->limit_get(LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_Y),
+	ERR_FAIL_COND_V_MSG(p_y_groups > driver->limit_get(LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_Y), RDG::RecordHandle(),
 			"Dispatch amount of Y compute groups (" + itos(p_y_groups) + ") is larger than device limit (" + itos(driver->limit_get(LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_Y)) + ")");
-	ERR_FAIL_COND_MSG(p_z_groups > driver->limit_get(LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_Z),
+	ERR_FAIL_COND_V_MSG(p_z_groups > driver->limit_get(LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_Z), RDG::RecordHandle(),
 			"Dispatch amount of Z compute groups (" + itos(p_z_groups) + ") is larger than device limit (" + itos(driver->limit_get(LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_Z)) + ")");
 #endif
 
 #ifdef DEBUG_ENABLED
 
-	ERR_FAIL_COND_MSG(!compute_list.validation.pipeline_active, "No compute pipeline was set before attempting to draw.");
+	ERR_FAIL_COND_V_MSG(!compute_list.validation.pipeline_active, RDG::RecordHandle(), "No compute pipeline was set before attempting to draw.");
 
 	if (compute_list.validation.pipeline_push_constant_size > 0) {
 		// Using push constants, check that they were supplied.
-		ERR_FAIL_COND_MSG(!compute_list.validation.pipeline_push_constant_supplied,
+		ERR_FAIL_COND_V_MSG(!compute_list.validation.pipeline_push_constant_supplied, RDG::RecordHandle(),
 				"The shader in this pipeline requires a push constant to be set before drawing, but it's not present.");
 	}
 
@@ -6842,16 +9281,29 @@ void RenderingDevice::compute_list_dispatch(ComputeListID p_list, uint32_t p_x_g
 
 		if (compute_list.state.sets[i].pipeline_expected_format != compute_list.state.sets[i].uniform_set_format) {
 			if (compute_list.state.sets[i].uniform_set_format == 0) {
-				ERR_FAIL_MSG("Uniforms were never supplied for set (" + itos(i) + ") at the time of drawing, which are required by the pipeline.");
+				ERR_FAIL_V_MSG(RDG::RecordHandle(), "Uniforms were never supplied for set (" + itos(i) + ") at the time of drawing, which are required by the pipeline.");
 			} else if (uniform_set_owner.owns(compute_list.state.sets[i].uniform_set)) {
 				UniformSet *us = uniform_set_owner.get_or_null(compute_list.state.sets[i].uniform_set);
-				ERR_FAIL_MSG("Uniforms supplied for set (" + itos(i) + "):\n" + _shader_uniform_debug(us->shader_id, us->shader_set) + "\nare not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n" + _shader_uniform_debug(compute_list.state.pipeline_shader));
+				ERR_FAIL_V_MSG(RDG::RecordHandle(), "Uniforms supplied for set (" + itos(i) + "):\n" + _shader_uniform_debug(us->shader_id, us->shader_set) + "\nare not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n" + _shader_uniform_debug(compute_list.state.pipeline_shader));
 			} else {
-				ERR_FAIL_MSG("Uniforms supplied for set (" + itos(i) + ", which was just freed) are not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n" + _shader_uniform_debug(compute_list.state.pipeline_shader));
+				ERR_FAIL_V_MSG(RDG::RecordHandle(), "Uniforms supplied for set (" + itos(i) + ", which was just freed) are not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n" + _shader_uniform_debug(compute_list.state.pipeline_shader));
 			}
 		}
 	}
 #endif
+	// Reserve pending-clear worker dependencies before descriptor graph prefixes.
+	for (uint32_t i = 0; i < compute_list.state.set_count; ++i) {
+		if (!compute_list.state.sets[i].pipeline_expected_format || compute_list.state.sets[i].bound) {
+			continue;
+		}
+		UniformSet *set = uniform_set_owner.get_or_null(compute_list.state.sets[i].uniform_set);
+		if (set) {
+			const Error error = _uniform_set_admit_clear_transfers(set);
+			if (error != OK) {
+				return RDG::RecordHandle();
+			}
+		}
+	}
 	thread_local LocalVector<RDD::UniformSetID> valid_descriptor_ids;
 	valid_descriptor_ids.clear();
 	valid_descriptor_ids.resize(compute_list.state.set_count);
@@ -6906,7 +9358,12 @@ void RenderingDevice::compute_list_dispatch(ComputeListID p_list, uint32_t p_x_g
 			}
 			UniformSet *uniform_set = uniform_set_owner.get_or_null(compute_list.state.sets[i].uniform_set);
 			_uniform_set_update_shared(uniform_set);
-			_uniform_set_update_clears(uniform_set);
+			{
+				const Error dependency_error = _uniform_set_update_clears(uniform_set);
+				if (dependency_error != OK) {
+					return RDG::RecordHandle();
+				}
+			}
 
 			draw_graph.add_compute_list_usages(uniform_set->draw_trackers, uniform_set->draw_trackers_usage);
 			compute_list.state.sets[i].bound = true;
@@ -6917,12 +9374,35 @@ void RenderingDevice::compute_list_dispatch(ComputeListID p_list, uint32_t p_x_g
 	if (valid_set_count > 0) {
 		draw_graph.add_compute_list_bind_uniform_sets(compute_list.state.pipeline_shader_driver_id, valid_descriptor_ids, first_set_index, valid_set_count);
 	}
-	draw_graph.add_compute_list_dispatch(p_x_groups, p_y_groups, p_z_groups);
+	const RDG::RecordHandle recorded = draw_graph.add_compute_list_dispatch(p_x_groups, p_y_groups, p_z_groups);
+	if (reader.is_valid()) {
+		reader_accepted = _native_height_reader_enroll(reader, recorded) == OK;
+		if (reader_accepted) {
+			++reader->reader_dispatches;
+		}
+	}
+
+#ifdef TESTS_ENABLED
+	if (recorded.is_valid()) {
+		test_compute_dispatch_count++;
+	}
+#endif
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	if (RenderCaptureTestHooks::write_census_active()) {
+		for (uint32_t i = 0; i < compute_list.state.set_count; i++) {
+			if (compute_list.state.sets[i].pipeline_expected_format != 0) {
+				_capture_test_record_writable_set(compute_list.state.sets[i].uniform_set, RenderCaptureTestHooks::COMPUTE);
+			}
+		}
+	}
+#endif
 	compute_list.state.dispatch_count++;
+	return recorded;
 }
 
 void RenderingDevice::compute_list_dispatch_threads(ComputeListID p_list, uint32_t p_x_threads, uint32_t p_y_threads, uint32_t p_z_threads) {
 	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND(p_list != ID_TYPE_COMPUTE_LIST);
 	ERR_FAIL_COND(!compute_list.active);
@@ -6950,16 +9430,23 @@ void RenderingDevice::compute_list_dispatch_threads(ComputeListID p_list, uint32
 
 void RenderingDevice::compute_list_dispatch_indirect(ComputeListID p_list, RID p_buffer, uint32_t p_offset) {
 	ERR_RENDER_THREAD_GUARD();
+	if (native_height_active_checked_range.is_valid() && native_height_active_checked_range->reader_scope) {
+		if (native_height_active_checked_range->append_error == OK) { native_height_active_checked_range->append_error = ERR_UNAVAILABLE; }
+		return; // Exclusive reader recipe enrolls direct dispatches only.
+	}
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND(p_list != ID_TYPE_COMPUTE_LIST);
 	ERR_FAIL_COND(!compute_list.active);
 
 	Buffer *buffer = storage_buffer_owner.get_or_null(p_buffer);
 	ERR_FAIL_NULL(buffer);
+	ERR_FAIL_COND(buffer->qualification_return);
 
 	ERR_FAIL_COND_MSG(!buffer->usage.has_flag(RDD::BUFFER_USAGE_INDIRECT_BIT), "Buffer provided was not created to do indirect dispatch.");
 
-	ERR_FAIL_COND_MSG(p_offset + 12 > buffer->size, "Offset provided (+12) is past the end of buffer.");
+	ERR_FAIL_COND_MSG(p_offset % 4 != 0, "Offset must be a multiple of 4 bytes.");
+	ERR_FAIL_COND_MSG(uint64_t(p_offset) + 12 > buffer->size, "Offset provided (+12) is past the end of buffer.");
 
 #ifdef DEBUG_ENABLED
 
@@ -6992,6 +9479,19 @@ void RenderingDevice::compute_list_dispatch_indirect(ComputeListID p_list, RID p
 		}
 	}
 #endif
+	// Reserve pending-clear worker dependencies before descriptor graph prefixes.
+	for (uint32_t i = 0; i < compute_list.state.set_count; ++i) {
+		if (!compute_list.state.sets[i].pipeline_expected_format || compute_list.state.sets[i].bound) {
+			continue;
+		}
+		UniformSet *set = uniform_set_owner.get_or_null(compute_list.state.sets[i].uniform_set);
+		if (set) {
+			const Error error = _uniform_set_admit_clear_transfers(set);
+			if (error != OK) {
+				return;
+			}
+		}
+	}
 	thread_local LocalVector<RDD::UniformSetID> valid_descriptor_ids;
 	valid_descriptor_ids.clear();
 	valid_descriptor_ids.resize(compute_list.state.set_count);
@@ -7043,7 +9543,12 @@ void RenderingDevice::compute_list_dispatch_indirect(ComputeListID p_list, RID p
 
 			UniformSet *uniform_set = uniform_set_owner.get_or_null(compute_list.state.sets[i].uniform_set);
 			_uniform_set_update_shared(uniform_set);
-			_uniform_set_update_clears(uniform_set);
+			{
+				const Error dependency_error = _uniform_set_update_clears(uniform_set);
+				if (dependency_error != OK) {
+					return;
+				}
+			}
 
 			draw_graph.add_compute_list_usages(uniform_set->draw_trackers, uniform_set->draw_trackers_usage);
 			compute_list.state.sets[i].bound = true;
@@ -7056,17 +9561,39 @@ void RenderingDevice::compute_list_dispatch_indirect(ComputeListID p_list, RID p
 	}
 
 	draw_graph.add_compute_list_dispatch_indirect(buffer->driver_id, p_offset);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	if (RenderCaptureTestHooks::write_census_active()) {
+		for (uint32_t i = 0; i < compute_list.state.set_count; i++) {
+			if (compute_list.state.sets[i].pipeline_expected_format != 0) {
+				_capture_test_record_writable_set(compute_list.state.sets[i].uniform_set, RenderCaptureTestHooks::COMPUTE_INDIRECT);
+			}
+		}
+	}
+#endif
 	compute_list.state.dispatch_count++;
 
 	if (buffer->draw_tracker != nullptr) {
 		draw_graph.add_compute_list_usage(buffer->draw_tracker, RDG::RESOURCE_USAGE_INDIRECT_BUFFER_READ);
 	}
 
-	_check_transfer_worker_buffer(buffer);
+	{
+		const Error dependency_error = _check_transfer_worker_buffer(buffer);
+		if (dependency_error != OK) {
+			return;
+		}
+	}
 }
 
 void RenderingDevice::compute_list_add_barrier(ComputeListID p_list) {
 	ERR_RENDER_THREAD_GUARD();
+	if (native_height_active_checked_range.is_valid() && native_height_active_checked_range->reader_scope) {
+		if (native_height_active_checked_range->append_error == OK) { native_height_active_checked_range->append_error = ERR_UNAVAILABLE; }
+		return; // Later lists require their own authenticated reader.
+	}
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+
+	ERR_FAIL_COND(p_list != ID_TYPE_COMPUTE_LIST);
+	ERR_FAIL_COND(!compute_list.active);
 
 	compute_list_barrier_state = compute_list.state;
 	compute_list_end();
@@ -7088,13 +9615,34 @@ void RenderingDevice::compute_list_add_barrier(ComputeListID p_list) {
 }
 
 void RenderingDevice::compute_list_end() {
-	ERR_RENDER_THREAD_GUARD();
+	_compute_list_end_recorded();
+}
 
-	ERR_FAIL_COND(!compute_list.active);
-
-	draw_graph.add_compute_list_end();
-
+RDG::RecordHandle RenderingDevice::_compute_list_end_recorded() {
+	ERR_RENDER_THREAD_GUARD_V(RDG::RecordHandle());
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RDG::RecordHandle(), "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_V(!compute_list.active, RDG::RecordHandle());
+	const auto recorded = draw_graph.add_compute_list_end();
+	const Ref<NativeHeightRange> reader = native_height_active_checked_range;
+	if (reader.is_valid() && reader->reader_scope) {
+		_native_height_reader_enroll(reader, recorded);
+		for (uint32_t i = 0; i + 1 < reader->graph_count; ++i) {
+			if (!draw_graph.is_instruction_in_closed_list(reader->graphs[i].handle, recorded)) {
+				if (reader->append_error == OK) {
+					reader->append_error = ERR_INVALID_DATA;
+				}
+				reader->uncaptured_prefix = true;
+			}
+		}
+		if (!reader->reader_dispatches && reader->append_error == OK) {
+			reader->append_error = ERR_INVALID_DATA;
+		}
+		reader->reader_owns_list = false;
+		reader->recording_closed = true;
+		native_height_active_checked_range.unref();
+	}
 	compute_list = ComputeList();
+	return recorded;
 }
 
 #ifndef DISABLE_DEPRECATED
@@ -7134,6 +9682,18 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 		// If no workers are available and we've reached the max pool capacity, wait until one of them becomes available.
 		bool transfer_worker_pool_full = transfer_worker_pool_size >= transfer_worker_pool_max_size;
 		while (transfer_worker_pool_available_list.is_empty() && transfer_worker_pool_full) {
+			bool all_workers_poisoned = transfer_worker_pool_size > 0;
+			for (uint32_t worker_index = 0; worker_index < transfer_worker_pool_size; worker_index++) {
+				TransferWorker *worker = transfer_worker_pool[worker_index];
+				MutexLock worker_lock(worker->thread_mutex);
+				if (!worker->poisoned && !worker->qualification_batch_sealed && !worker->height_observer_pending) {
+					all_workers_poisoned = false;
+					break;
+				}
+			}
+			if (all_workers_poisoned) {
+				return nullptr;
+			}
 			transfer_worker_pool_condition.wait(pool_lock);
 		}
 
@@ -7147,20 +9707,21 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 			uint32_t alignment_offset = _get_alignment_offset(candidate_worker->staging_buffer_size_in_use, p_required_align);
 			uint32_t required_size = candidate_worker->staging_buffer_size_in_use + p_transfer_size + alignment_offset;
 			bool candidate_worker_busy = candidate_worker->submitted;
+			bool candidate_worker_poisoned = candidate_worker->poisoned || candidate_worker->qualification_batch_sealed || candidate_worker->height_observer_pending;
 			bool candidate_worker_full = required_size > candidate_worker->staging_buffer_size_allocated;
 			bool pick_candidate = false;
-			if (!candidate_worker_busy && !candidate_worker_full) {
+			if (!candidate_worker_poisoned && !candidate_worker_busy && !candidate_worker_full) {
 				// A worker that can fit the transfer and is not waiting for a previous execution is the best possible candidate.
 				pick_candidate = true;
-			} else if (!candidate_worker_busy) {
+			} else if (!candidate_worker_poisoned && !candidate_worker_busy) {
 				// The worker can't fit the transfer but it's not currently doing anything.
 				// We pick it as a possible candidate if the current one is busy.
 				pick_candidate = transfer_worker_busy;
-			} else if (!candidate_worker_full) {
+			} else if (!candidate_worker_poisoned && !candidate_worker_full) {
 				// The worker can fit the transfer but it's currently executing previous work.
 				// We pick it as a possible candidate if the current one is both busy and full.
 				pick_candidate = transfer_worker_busy && transfer_worker_full;
-			} else if (transfer_worker == nullptr) {
+			} else if (!candidate_worker_poisoned && transfer_worker == nullptr) {
 				// The worker can't fit the transfer and it's currently executing work, so it's the worst candidate.
 				// We only pick if no candidate has been picked yet.
 				pick_candidate = true;
@@ -7192,16 +9753,35 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 			// A worker was picked, remove it from the available list.
 			transfer_worker_pool_available_list.remove_at(available_list_index);
 		} else {
-			DEV_ASSERT(!transfer_worker_pool_full && "A transfer worker should never be created when the pool is full.");
+			// Available entries can have been poisoned by an aggregate wait.
+			// They retain ownership but cannot be lent or replaced past capacity.
+			if (transfer_worker_pool_full) {
+				return nullptr;
+			}
 
 			// No existing worker was picked, we create a new one.
 			uint32_t transfer_worker_index = transfer_worker_pool_size;
-			++transfer_worker_pool_size;
 
 			transfer_worker = memnew(TransferWorker);
 			transfer_worker->command_fence = driver->fence_create();
+			if (!transfer_worker->command_fence) {
+				memdelete(transfer_worker);
+				return nullptr;
+			}
 			transfer_worker->command_pool = driver->command_pool_create(transfer_queue_family, RDD::COMMAND_BUFFER_TYPE_PRIMARY);
+			if (!transfer_worker->command_pool) {
+				driver->fence_free(transfer_worker->command_fence);
+				memdelete(transfer_worker);
+				return nullptr;
+			}
 			transfer_worker->command_buffer = driver->command_buffer_create(transfer_worker->command_pool);
+			if (!transfer_worker->command_buffer) {
+				driver->command_pool_free(transfer_worker->command_pool);
+				driver->fence_free(transfer_worker->command_fence);
+				memdelete(transfer_worker);
+				return nullptr;
+			}
+			++transfer_worker_pool_size;
 			transfer_worker->index = transfer_worker_index;
 			transfer_worker_pool[transfer_worker_index] = transfer_worker;
 			transfer_worker_operation_used_by_draw[transfer_worker_index] = 0;
@@ -7211,7 +9791,10 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 
 	if (transfer_worker->submitted) {
 		// Wait for the worker if the command buffer was submitted but it hasn't finished processing yet.
-		_wait_for_transfer_worker(transfer_worker);
+		if (!_wait_for_transfer_worker(transfer_worker, true)) {
+			_release_transfer_worker(transfer_worker);
+			return nullptr;
+		}
 	}
 
 	uint32_t alignment_offset = _get_alignment_offset(transfer_worker->staging_buffer_size_in_use, p_required_align);
@@ -7220,13 +9803,22 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 	uint32_t required_size = transfer_worker->staging_buffer_size_in_use + p_transfer_size + alignment_offset;
 	if (required_size > transfer_worker->staging_buffer_size_allocated) {
 		// If there's not enough bytes to use on the staging buffer, we submit everything pending from the worker and wait for the work to be finished.
-		if (transfer_worker->recording) {
-			_end_transfer_worker(transfer_worker);
+		if (transfer_worker->recording || transfer_worker->submission_pending) {
+			if (transfer_worker->recording) {
+				_end_transfer_worker(transfer_worker);
+			}
 			_submit_transfer_worker(transfer_worker);
+			if (transfer_worker->poisoned) {
+				_release_transfer_worker(transfer_worker);
+				return nullptr;
+			}
 		}
 
 		if (transfer_worker->submitted) {
-			_wait_for_transfer_worker(transfer_worker);
+			if (!_wait_for_transfer_worker(transfer_worker, true)) {
+				_release_transfer_worker(transfer_worker);
+				return nullptr;
+			}
 		}
 
 		alignment_offset = 0;
@@ -7240,8 +9832,15 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 			}
 
 			uint32_t new_staging_buffer_size = Math::next_power_of_2(expected_buffer_size);
-			transfer_worker->staging_buffer_size_allocated = new_staging_buffer_size;
+			transfer_worker->staging_buffer_size_allocated = 0;
 			transfer_worker->staging_buffer = driver->buffer_create(new_staging_buffer_size, RDD::BUFFER_USAGE_TRANSFER_FROM_BIT, RDD::MEMORY_ALLOCATION_TYPE_CPU, frames_drawn);
+			if (!transfer_worker->staging_buffer) {
+				transfer_worker->poisoned = true;
+				transfer_worker->completion_error = ERR_OUT_OF_MEMORY;
+				_release_transfer_worker(transfer_worker);
+				return nullptr;
+			}
+			transfer_worker->staging_buffer_size_allocated = new_staging_buffer_size;
 		}
 	}
 
@@ -7254,7 +9853,12 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 
 	if (!transfer_worker->recording) {
 		// Begin the command buffer if the worker wasn't recording yet.
-		driver->command_buffer_begin(transfer_worker->command_buffer);
+		if (!driver->command_buffer_begin(transfer_worker->command_buffer)) {
+			transfer_worker->poisoned = true;
+			transfer_worker->completion_error = ERR_CANT_CREATE;
+			_release_transfer_worker(transfer_worker);
+			return nullptr;
+		}
 		transfer_worker->recording = true;
 	}
 
@@ -7262,40 +9866,300 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 }
 
 void RenderingDevice::_release_transfer_worker(TransferWorker *p_transfer_worker) {
+	const bool poisoned = p_transfer_worker->poisoned;
 	p_transfer_worker->thread_mutex.unlock();
 
-	transfer_worker_pool_mutex.lock();
-	transfer_worker_pool_available_list.push_back(p_transfer_worker->index);
-	transfer_worker_pool_mutex.unlock();
-	transfer_worker_pool_condition.notify_one();
+	{
+		// Drop the worker lock before taking the pool lock: acquisition and
+		// aggregate waits use pool -> worker. Even retirement must cross this
+		// mutex so it cannot notify between the pool predicate and wait entry.
+		MutexLock pool_lock(transfer_worker_pool_mutex);
+		if (!poisoned) {
+			transfer_worker_pool_available_list.push_back(p_transfer_worker->index);
+		}
+	}
+	if (poisoned) {
+		// Retirement can make the exhausted pool terminal for every waiter.
+		transfer_worker_pool_condition.notify_all();
+	} else {
+		transfer_worker_pool_condition.notify_one();
+	}
 }
 
 void RenderingDevice::_end_transfer_worker(TransferWorker *p_transfer_worker) {
 	driver->command_buffer_end(p_transfer_worker->command_buffer);
 	p_transfer_worker->recording = false;
+	p_transfer_worker->submission_pending = true;
 }
 
-void RenderingDevice::_submit_transfer_worker(TransferWorker *p_transfer_worker, VectorView<RDD::SemaphoreID> p_signal_semaphores) {
-	driver->command_queue_execute_and_present(transfer_queue, {}, p_transfer_worker->command_buffer, p_signal_semaphores, p_transfer_worker->command_fence, {});
+Error RenderingDevice::_native_height_join_worker(TransferWorker *worker, uint64_t first, uint64_t last, const RDD::QueueCallReport &report) {
+	if (!worker->height_watcher_count) {
+		return OK;
+	}
+	// Watchers freeze acquisition until original RT has captured and retained
+	// this batch. A background waiter cannot mutate the range or recycle it.
+	if (render_thread_id != Thread::get_caller_id()) {
+		return ERR_BUSY;
+	}
+	Error result = OK;
+	for (uint32_t w = 0; w < worker->height_watcher_count; ++w) {
+		auto &watcher = worker->height_watchers[w];
+		const Ref<NativeHeightRange> &range = watcher.range;
+		auto &dependency = range->workers[watcher.dependency];
+		if (!dependency.attached && !dependency.issue_attempted) {
+			if (dependency.worker != worker->index || dependency.operation < first || dependency.operation > last) {
+				if (result == OK) {
+					result = ERR_BUSY;
+				}
+				continue;
+			}
+			// Zero-prefix retry leaves the exact watcher unresolved, with no
+			// invented source and no sticky failure for a later actual issue.
+			if (report.error == ERR_BUSY && report.calls.is_empty()) {
+				if (result == OK) {
+					result = ERR_BUSY;
+				}
+				continue;
+			}
+			bool valid = report.error == OK && report.issued && report.submission_serial && report.native_issue_count &&
+					report.native_issue_count <= range->limits.worker_sources;
+			uint32_t count = 0;
+			for (const auto &fact : report.calls) {
+				if (fact.presentation_only || fact.issue == RDD::IssueFact::NotIssued) {
+					continue;
+				}
+				++count;
+				if (!fact.serial || !fact.completion_serial || fact.completion == RDD::CompletionCapability::Disabled) {
+					valid = false;
+				}
+			}
+			const bool capacity = count <= range->limits.worker_sources && range->source_count + count <= range->limits.native_sources && range->worker_edge_count + count <= range->worker_edges.size();
+			if (!count || count > range->limits.worker_sources || range->source_count + count > range->limits.native_sources ||
+					range->worker_edge_count + count > range->worker_edges.size()) {
+				valid = false;
+			}
+			// Failed reports can contain a real prefix. Preserve its observable
+			// facts and quarantine the original worker; never call it Complete.
+			if (!valid) {
+				range->issue_error = report.error != OK ? report.error : ERR_INVALID_DATA;
+				range->uncaptured_prefix = true;
+				if (result == OK || result == ERR_BUSY) {
+					result = range->issue_error;
+				}
+			}
+			dependency.issue_attempted = true;
+			dependency.first_operation = first;
+			dependency.last_operation = last;
+			for (const auto &fact : report.calls) {
+				if (!capacity || fact.presentation_only || fact.issue == RDD::IssueFact::NotIssued || !fact.serial || !fact.completion_serial || fact.completion == RDD::CompletionCapability::Disabled) {
+					continue;
+				}
+				if (fact.error != OK) {
+					range->issue_error = fact.error;
+				}
+				uint32_t source = range->source_count;
+				for (uint32_t i = 0; i < range->source_count; ++i) {
+					const auto &old = range->sources[i].original;
+					if (old.serial == fact.serial) {
+						source = i;
+						if (old.completion_serial != fact.completion_serial || old.queue_index != fact.queue_index || old.issue != fact.issue ||
+								old.error != fact.error || old.native_code != fact.native_code || old.completion != fact.completion) {
+							range->issue_error = ERR_INVALID_DATA;
+							range->uncaptured_prefix = true;
+						}
+						break;
+					}
+				}
+				if (source == range->source_count) {
+					range->sources[range->source_count++].original = fact;
+				}
+				range->worker_edges[range->worker_edge_count++] = { watcher.dependency, source };
+			}
+			dependency.attached = valid && range->issue_error == OK && !range->uncaptured_prefix;
+		}
+		const Error retained = _native_height_retain_sources(range);
+		if (range->issue_error != OK && (result == OK || result == ERR_BUSY)) {
+			result = range->issue_error;
+		}
+		if (retained != OK && (result == OK || result == ERR_BUSY)) {
+			result = retained;
+		}
+	}
+	worker->height_observer_pending = result != OK;
+	return result;
+}
+
+void RenderingDevice::_submit_transfer_worker(TransferWorker *p_transfer_worker, VectorView<RDD::SemaphoreID> p_signal_semaphores, bool p_operations_locked) {
+	QualificationSourceAdmissionScope source_admission(*this, p_transfer_worker->index);
+	RenderingDeviceDriver::QueueCallReport report;
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	const Error skinned_mesh_capture_test_driver_result =
+#endif
+			driver->command_queue_execute_and_present_observed(transfer_queue, {}, p_transfer_worker->command_buffer, p_signal_semaphores, p_transfer_worker->command_fence, {}, report);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	RenderCaptureTestHooks::observe_driver_result(uint64_t(get_instance_id()), 1, p_transfer_worker->command_fence.id, skinned_mesh_capture_test_driver_result);
+	if (skinned_mesh_capture_test_driver_result != OK) {
+		capture_test_coverage_failed.store(true);
+	}
+#endif
+
+	// Zero-prefix contention did not submit this ended recording. Keep its
+	// original pending batch and all reservations so retry can issue it once.
+	if (report.error == ERR_BUSY && report.calls.is_empty()) {
+		return;
+	}
+	// Only an original production attachment enrolls this device in capture.
+	// Ordinary transfers keep their original issue/error path without a frame
+	// dependency. Never erase an already pending production observation here.
+	if (auto *registry = production_entity_registry.load(std::memory_order_acquire)) {
+		// Join the actual covered worker operation range while its original lock
+		// still excludes recycle. Never use an unrelated later last_submission.
+		if (!p_operations_locked) {
+			p_transfer_worker->operations_mutex.lock();
+		}
+		const uint64_t first_operation = p_transfer_worker->operations_processed + 1;
+		const uint64_t last_operation = p_transfer_worker->operations_counter;
+		if (!p_operations_locked) {
+			p_transfer_worker->operations_mutex.unlock();
+		}
+		GDExtensionDeviceExit::Registry::Lock lock(*registry);
+		registry->production_capture_issue_locked(*this, UINT32_MAX, { report }, report.error, p_transfer_worker->index, first_operation, last_operation);
+		const GDExtensionDeviceExit::NativeSourceIssueView view{ report };
+		p_transfer_worker->production_observer_pending = registry->production_retain_sources_locked(*this, frame, frames[frame].qualification_epoch, &view) != OK;
+	}
+	p_transfer_worker->submission_pending = false;
+	p_transfer_worker->last_submission = report;
+	p_transfer_worker->submission_serial = report.submission_serial;
+	p_transfer_worker->submitted = report.issued;
+	if (report.error != OK || !report.issued || report.submission_serial == 0) {
+		// A rejected submission leaves an ended recording that cannot be reused
+		// or reported as a successfully completed upload.
+		p_transfer_worker->poisoned = true;
+		p_transfer_worker->completion_error = report.error != OK ? report.error : ERR_CANT_CREATE;
+		if (!p_operations_locked) {
+			p_transfer_worker->operations_mutex.lock();
+		}
+		_native_height_join_worker(p_transfer_worker, p_transfer_worker->operations_processed + 1, p_transfer_worker->operations_counter, report);
+		if (!p_operations_locked) {
+			p_transfer_worker->operations_mutex.unlock();
+		}
+		return;
+	}
 
 	for (uint32_t i = 0; i < p_signal_semaphores.size(); i++) {
 		// Indicate the frame should wait on these semaphores before executing the main command buffer.
 		frames[frame].semaphores_to_wait_on.push_back(p_signal_semaphores[i]);
 	}
 
-	p_transfer_worker->submitted = true;
-
-	{
-		MutexLock lock(p_transfer_worker->operations_mutex);
-		p_transfer_worker->operations_submitted = p_transfer_worker->operations_counter;
+	if (!p_operations_locked) {
+		p_transfer_worker->operations_mutex.lock();
+	}
+	p_transfer_worker->operations_submitted = p_transfer_worker->operations_counter;
+	_native_height_join_worker(p_transfer_worker, p_transfer_worker->operations_processed + 1, p_transfer_worker->operations_submitted, report);
+	if (!p_operations_locked) {
+		p_transfer_worker->operations_mutex.unlock();
 	}
 }
 
-void RenderingDevice::_wait_for_transfer_worker(TransferWorker *p_transfer_worker) {
-	driver->fence_wait(p_transfer_worker->command_fence);
-	driver->command_pool_reset(p_transfer_worker->command_pool);
+Error RenderingDevice::_production_join_transfer_worker(TransferWorker *worker, bool operations_locked) {
+	auto *registry = production_entity_registry.load(std::memory_order_acquire);
+	if (!registry) {
+		// Missing enrollment is a no-op only for an ordinary worker. An existing
+		// production observation must still block its original fence recycle.
+		return worker->production_observer_pending ? ERR_BUSY : OK;
+	}
+	if (!operations_locked) {
+		worker->operations_mutex.lock();
+	}
+	const uint64_t first = worker->operations_processed + 1;
+	const uint64_t last = worker->operations_submitted;
+	if (!operations_locked) {
+		worker->operations_mutex.unlock();
+	}
+	if (first > last || worker->last_submission.calls.is_empty()) {
+		return worker->production_observer_pending ? ERR_BUSY : OK;
+	}
+	GDExtensionDeviceExit::Registry::Lock lock(*registry);
+	registry->production_capture_issue_locked(*this, UINT32_MAX, { worker->last_submission }, worker->last_submission.error, worker->index, first, last);
+	const GDExtensionDeviceExit::NativeSourceIssueView view{ worker->last_submission };
+	const Error retained = registry->production_retain_sources_locked(*this, frame, frames[frame].qualification_epoch, &view);
+	worker->production_observer_pending = retained != OK;
+	return retained;
+}
+
+Error RenderingDevice::_production_retain_frame_sources(uint32_t index) {
+	auto *registry = production_entity_registry.load(std::memory_order_acquire);
+	if (!registry) {
+		return OK;
+	}
+	GDExtensionDeviceExit::Registry::Lock lock(*registry);
+	return registry->production_retain_sources_locked(*this, index, frames[index].qualification_epoch);
+}
+
+bool RenderingDevice::_wait_for_transfer_worker(TransferWorker *p_transfer_worker, bool p_blocking) {
+	// A frame joining this exact operation must retain its original completion
+	// sources before the worker fence can recycle them or reuse its staging.
+	if (p_transfer_worker->qualification_observer_pending || p_transfer_worker->submission_pending) {
+		return false;
+	}
+	if (p_transfer_worker->poisoned) {
+		return false;
+	}
+	if (!p_transfer_worker->submitted) {
+		return true;
+	}
+	if (p_transfer_worker->height_watcher_count) {
+		MutexLock operations_lock(p_transfer_worker->operations_mutex);
+		if (_native_height_join_worker(p_transfer_worker, p_transfer_worker->operations_processed + 1, p_transfer_worker->operations_submitted, p_transfer_worker->last_submission) != OK) {
+			return false;
+		}
+	}
+	const uint64_t serial = p_transfer_worker->submission_serial;
+	RDD::FencePollResult poll = p_transfer_worker->last_completion;
+	if (!poll.matches(serial)) {
+		if (!_native_disposal_admit(NativeDisposalWork::POLL)) {
+			return false;
+		}
+		poll = p_blocking ? driver->fence_wait_observed(p_transfer_worker->command_fence, serial) : driver->fence_poll(p_transfer_worker->command_fence, serial);
+		p_transfer_worker->last_completion = poll;
+	}
+	if (!poll.matches(serial)) {
+		if (serial == 0 || poll.native_error || poll.completed || (poll.completed_serial != 0 && poll.completed_serial != serial)) {
+			p_transfer_worker->poisoned = true;
+			p_transfer_worker->completion_error = FAILED;
+		}
+		return false;
+	}
+	if (_production_join_transfer_worker(p_transfer_worker, false) != OK) {
+		return false;
+	}
+	if (!_native_disposal_admit(NativeDisposalWork::RECYCLE)) {
+		return false;
+	}
+	Error recycle_error = p_blocking ? driver->fence_recycle_wait(p_transfer_worker->command_fence, serial) : driver->fence_recycle(p_transfer_worker->command_fence, serial);
+	if (recycle_error == ERR_BUSY) {
+		// Nonblocking source contention retains this exact submitted operation.
+		// It is still owned and can be observed/recycled on a later attempt.
+		return false;
+	}
+	if (recycle_error != OK) {
+		p_transfer_worker->poisoned = true;
+		p_transfer_worker->completion_error = recycle_error;
+		return false;
+	}
+	if (!driver->command_pool_reset(p_transfer_worker->command_pool)) {
+		p_transfer_worker->poisoned = true;
+		p_transfer_worker->completion_error = ERR_CANT_CREATE;
+		return false;
+	}
 	p_transfer_worker->staging_buffer_size_in_use = 0;
+	for (uint32_t i = 0; i < p_transfer_worker->height_watcher_count; ++i) {
+		p_transfer_worker->height_watchers[i].range.unref();
+	}
+	p_transfer_worker->height_watcher_count = 0;
+	p_transfer_worker->height_observer_pending = false;
 	p_transfer_worker->submitted = false;
+	p_transfer_worker->submission_serial = 0;
 
 	{
 		MutexLock lock(p_transfer_worker->operations_mutex);
@@ -7303,60 +10167,368 @@ void RenderingDevice::_wait_for_transfer_worker(TransferWorker *p_transfer_worke
 	}
 
 	_flush_barriers_for_transfer_worker(p_transfer_worker);
+	return true;
 }
 
-void RenderingDevice::_flush_barriers_for_transfer_worker(TransferWorker *p_transfer_worker) {
+void RenderingDevice::_flush_barriers_for_transfer_worker(TransferWorker *p_transfer_worker, bool p_barriers_locked) {
 	// Caller must have already acquired the mutex for the worker.
 	if (!p_transfer_worker->texture_barriers.is_empty()) {
-		MutexLock transfer_worker_lock(transfer_worker_pool_texture_barriers_mutex);
+		if (!p_barriers_locked) {
+			transfer_worker_pool_texture_barriers_mutex.lock();
+		}
 		for (uint32_t i = 0; i < p_transfer_worker->texture_barriers.size(); i++) {
 			transfer_worker_pool_texture_barriers.push_back(p_transfer_worker->texture_barriers[i]);
 		}
 
 		p_transfer_worker->texture_barriers.clear();
-	}
-}
-
-void RenderingDevice::_check_transfer_worker_operation(uint32_t p_transfer_worker_index, uint64_t p_transfer_worker_operation) {
-	TransferWorker *transfer_worker = transfer_worker_pool[p_transfer_worker_index];
-	MutexLock lock(transfer_worker->operations_mutex);
-	uint64_t &dst_operation = transfer_worker_operation_used_by_draw[transfer_worker->index];
-	dst_operation = MAX(dst_operation, p_transfer_worker_operation);
-}
-
-void RenderingDevice::_check_transfer_worker_buffer(Buffer *p_buffer) {
-	if (p_buffer->transfer_worker_index >= 0) {
-		_check_transfer_worker_operation(p_buffer->transfer_worker_index, p_buffer->transfer_worker_operation);
-		p_buffer->transfer_worker_index = -1;
-	}
-}
-
-void RenderingDevice::_check_transfer_worker_texture(Texture *p_texture) {
-	if (p_texture->transfer_worker_index >= 0) {
-		_check_transfer_worker_operation(p_texture->transfer_worker_index, p_texture->transfer_worker_operation);
-		p_texture->transfer_worker_index = -1;
-	}
-}
-
-void RenderingDevice::_check_transfer_worker_vertex_array(VertexArray *p_vertex_array) {
-	if (!p_vertex_array->transfer_worker_indices.is_empty()) {
-		for (int i = 0; i < p_vertex_array->transfer_worker_indices.size(); i++) {
-			_check_transfer_worker_operation(p_vertex_array->transfer_worker_indices[i], p_vertex_array->transfer_worker_operations[i]);
+		if (!p_barriers_locked) {
+			transfer_worker_pool_texture_barriers_mutex.unlock();
 		}
-
-		p_vertex_array->transfer_worker_indices.clear();
-		p_vertex_array->transfer_worker_operations.clear();
 	}
 }
 
-void RenderingDevice::_check_transfer_worker_index_array(IndexArray *p_index_array) {
-	if (p_index_array->transfer_worker_index >= 0) {
-		_check_transfer_worker_operation(p_index_array->transfer_worker_index, p_index_array->transfer_worker_operation);
-		p_index_array->transfer_worker_index = -1;
+Error RenderingDevice::_check_transfer_worker_operation(uint32_t index, uint64_t operation, bool *r_processed) {
+	auto *worker = transfer_worker_pool[index];
+	// Never hold operations while waiting for thread: aggregate submit uses the
+	// original thread -> operations order. A retry publishes no new dependency.
+	if (!worker->thread_mutex.try_lock()) {
+		return ERR_BUSY;
+	}
+	struct Unlock {
+		BinaryMutex &mutex;
+		~Unlock() { mutex.unlock(); }
+	} thread_unlock{ worker->thread_mutex };
+	if (!worker->operations_mutex.try_lock()) {
+		return ERR_BUSY;
+	}
+	Unlock operations_unlock{ worker->operations_mutex };
+	Ref<NativeHeightRange> checked_range;
+	if (render_thread_id == Thread::get_caller_id() && native_height_active_checked_range.is_valid()) {
+		checked_range = native_height_active_checked_range;
+		if (!operation || operation > worker->operations_counter || checked_range->recording_closed ||
+				checked_range->capture_frame != uint32_t(frame) || checked_range->capture_epoch != frames[frame].qualification_epoch) {
+			return ERR_INVALID_DATA;
+		}
+		if (checked_range->checked_transfer_count >= checked_range->checked_transfers.size()) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+	}
+	// Capacity checks precede qualification quotes and all watcher publication.
+	Ref<NativeHeightRange> height_range;
+	uint32_t height_dependency = UINT32_MAX;
+	if (render_thread_id == Thread::get_caller_id() && native_height_active_checked_range.is_valid() && worker->operations_processed < operation) {
+		if (operation > worker->operations_counter) {
+			return ERR_INVALID_DATA;
+		}
+		height_range = native_height_active_checked_range;
+		if (height_range->recording_closed || height_range->capture_frame != uint32_t(frame) || height_range->capture_epoch != frames[frame].qualification_epoch) {
+			return ERR_INVALID_DATA;
+		}
+		for (uint32_t i = 0; i < worker->height_watcher_count; ++i) {
+			if (worker->height_watchers[i].range == height_range) {
+				height_dependency = worker->height_watchers[i].dependency;
+			}
+		}
+		if (height_dependency == UINT32_MAX && (!height_range->limits.worker_sources || height_range->worker_count == height_range->limits.worker_dependencies || worker->height_watcher_count == NATIVE_HEIGHT_RANGE_CAPACITY)) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+	}
+
+	if (height_range.is_valid() && height_dependency != UINT32_MAX) {
+		const auto &dependency = height_range->workers[height_dependency];
+		if (dependency.issue_attempted && (operation < dependency.first_operation || operation > dependency.last_operation)) {
+			return ERR_INVALID_DATA;
+		}
+		if (height_range->issue_error != OK) {
+			return height_range->issue_error;
+		}
+	}
+	// Quote the current prefix plus future submit under both original locks.
+	// This bounded recipe refuses excess prefix before publishing any watcher.
+	if (height_range.is_valid()) {
+		RDD::QueueCallReport prefix;
+		uint32_t future = 0;
+		if (worker->recording || worker->submission_pending) {
+			const Error quoted = driver->qualification_worker_source_quote(worker->command_buffer, prefix, future);
+			if (quoted != OK) {
+				return quoted;
+			}
+		} else if (worker->submitted && operation <= worker->operations_submitted) {
+			prefix = worker->last_submission;
+		} else {
+			return ERR_UNAVAILABLE;
+		}
+		if (future > height_range->limits.worker_sources || prefix.calls.size() > height_range->limits.worker_sources - future ||
+				prefix.native_issue_count > height_range->limits.worker_sources - future || (!future && prefix.calls.is_empty())) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+	}
+	if (worker->operations_processed < operation) {
+		bool exact = false;
+		if (!frames.is_empty() && uint32_t(frame) < frames.size()) {
+			for (auto *ticket : frames[frame].qualification_tickets) {
+				exact = exact || ticket->credits.capacity;
+			}
+		}
+		if (exact) {
+			RDD::QueueCallReport prefix;
+			uint32_t future = 0;
+			if (worker->recording || worker->submission_pending) {
+				const Error error = driver->qualification_worker_source_quote(worker->command_buffer, prefix, future);
+				if (error != OK) {
+					return error;
+				}
+			} else {
+				prefix = worker->last_submission;
+			}
+			const Error admission = _qualification_admit_worker(index, worker->operations_counter, prefix, future);
+			if (admission != OK) {
+				return admission;
+			}
+			worker->qualification_batch_sealed = true;
+		}
+	}
+	if (height_range.is_valid()) {
+		if (height_dependency == UINT32_MAX) {
+			height_dependency = height_range->worker_count++;
+			height_range->workers[height_dependency] = { index, operation, false, false };
+			worker->height_watchers[worker->height_watcher_count++] = { height_range, height_dependency };
+			worker->height_observer_pending = true;
+		} else {
+			auto &dependency = height_range->workers[height_dependency];
+			if (operation > dependency.operation) {
+				dependency.operation = operation;
+				// A second resource in the same authenticated batch shares the
+				// existing edges and observer; it does not reopen its issue.
+				if (!dependency.issue_attempted) {
+					worker->height_observer_pending = true;
+				}
+			}
+		}
+		// The original worker locks still authenticate this historical batch.
+		if (worker->submitted && operation <= worker->operations_submitted) {
+			const Error joined = _native_height_join_worker(worker, worker->operations_processed + 1, worker->operations_submitted, worker->last_submission);
+			if (joined != OK && joined != ERR_BUSY) {
+				return joined;
+			}
+		}
+	}
+	if (checked_range.is_valid()) {
+		checked_range->checked_transfers[checked_range->checked_transfer_count++] = {
+			index, operation, height_dependency, worker->operations_processed >= operation
+		};
+	}
+	if (r_processed != nullptr) {
+		*r_processed = worker->operations_processed >= operation;
+	}
+	auto &used = transfer_worker_operation_used_by_draw[index];
+	used = MAX(used, operation);
+	return OK;
+}
+Error RenderingDevice::_check_transfer_worker_buffer(Buffer *buffer) {
+	if (buffer->transfer_worker_index < 0) {
+		return OK;
+	}
+	bool processed = false;
+	const Error error = _check_transfer_worker_operation(buffer->transfer_worker_index, buffer->transfer_worker_operation, &processed);
+	if (error == OK && processed) {
+		buffer->transfer_worker_index = -1;
+	}
+	return error;
+}
+void RenderingDevice::_settle_completed_vertex_buffer_upload_locked(RID rid) {
+	auto *buffer = vertex_buffer_owner.owns(rid) ? vertex_buffer_owner.get_or_null(rid) : nullptr;
+	if (!buffer || buffer->transfer_worker_index < 0 || !buffer->driver_id || buffer->native_external_access ||
+			buffer->native_immutable_retire_requested || buffer->qualification_return || buffer->native_disposal.cell.is_valid() ||
+			buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT) || buffer->usage.has_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT)) {
+		return;
+	}
+	const uint32_t index = uint32_t(buffer->transfer_worker_index);
+	std::unique_lock<BinaryMutex> pool_lock(transfer_worker_pool_mutex, std::try_to_lock);
+	if (!pool_lock.owns_lock() || index >= transfer_worker_pool_size || index >= transfer_worker_pool.size()) {
+		return;
+	}
+	auto *worker = transfer_worker_pool[index];
+	if (!worker || worker->index != index) {
+		return;
+	}
+	std::unique_lock<BinaryMutex> thread_lock(worker->thread_mutex, std::try_to_lock);
+	if (!thread_lock.owns_lock()) {
+		return;
+	}
+	std::unique_lock<BinaryMutex> operations_lock(worker->operations_mutex, std::try_to_lock);
+	const uint64_t operation = buffer->transfer_worker_operation;
+	// Only the original worker's processed cursor can settle this association.
+	// Unlike draw-use admission, this never quotes or registers a dependency.
+	if (operations_lock.owns_lock() && !worker->poisoned && operation && operation <= worker->operations_counter && operation <= worker->operations_processed) {
+		buffer->transfer_worker_index = -1;
 	}
 }
 
-void RenderingDevice::_submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer) {
+Error RenderingDevice::_check_transfer_worker_texture(Texture *texture) {
+	if (texture->transfer_worker_index < 0) {
+		return OK;
+	}
+	bool processed = false;
+	const Error error = _check_transfer_worker_operation(texture->transfer_worker_index, texture->transfer_worker_operation, &processed);
+	if (error == OK && processed) {
+		texture->transfer_worker_index = -1;
+	}
+	return error;
+}
+Error RenderingDevice::_check_transfer_worker_vertex_array(VertexArray *array) {
+	for (uint32_t i = 0; i < array->transfer_worker_indices.size();) {
+		bool processed = false;
+		const Error error = _check_transfer_worker_operation(array->transfer_worker_indices[i], array->transfer_worker_operations[i], &processed);
+		if (error != OK) {
+			return error;
+		}
+		if (processed) {
+			array->transfer_worker_indices.remove_at(i);
+			array->transfer_worker_operations.remove_at(i);
+		} else {
+			i++;
+		}
+	}
+	return OK;
+}
+Error RenderingDevice::_check_transfer_worker_index_array(IndexArray *array) {
+	if (array->transfer_worker_index < 0) {
+		return OK;
+	}
+	bool processed = false;
+	const Error error = _check_transfer_worker_operation(array->transfer_worker_index, array->transfer_worker_operation, &processed);
+	if (error == OK && processed) {
+		array->transfer_worker_index = -1;
+	}
+	return error;
+}
+
+Error RenderingDevice::_submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer, bool p_nonblocking) {
+	if (p_nonblocking) {
+		// Acquire every original lock before ending or issuing any worker. Refusal
+		// has no native effect; no check-then-lock window can become a blocking wait.
+		struct Locks {
+			LocalVector<BinaryMutex *> held;
+			bool take(BinaryMutex &mutex) {
+				if (!mutex.try_lock()) {
+					return false;
+				}
+				held.push_back(&mutex);
+				return true;
+			}
+			~Locks() {
+				for (uint32_t i = held.size(); i > 0; --i) {
+					held[i - 1]->unlock();
+				}
+			}
+		} locks;
+		if (!locks.take(transfer_worker_pool_mutex) || !locks.take(transfer_worker_pool_texture_barriers_mutex)) {
+			return ERR_BUSY;
+		}
+		for (uint32_t i = 0; i < transfer_worker_pool_size; ++i) {
+			auto *worker = transfer_worker_pool[i];
+			if (!locks.take(worker->thread_mutex) || !locks.take(worker->operations_mutex)) {
+				return ERR_BUSY;
+			}
+		}
+		for (uint32_t i = 0; i < transfer_worker_pool_size; ++i) {
+			auto *worker = transfer_worker_pool[i];
+			if (worker->operations_processed >= transfer_worker_operation_used_by_draw[worker->index]) {
+				continue;
+			}
+			const bool qualified = !frames[frame].qualification_tickets.is_empty();
+			if (qualified) {
+				worker->qualification_observer_pending = true;
+			}
+			if (worker->recording) {
+				if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+					return ERR_BUSY;
+				}
+				_end_transfer_worker(worker);
+			}
+			if (worker->submission_pending) {
+				uint32_t bound = 0;
+				if (native_disposal_budget && (!driver->native_issue_bound(RDD::NativeIssueKind::TRANSFER_WORKER, 1, bound) || !_native_disposal_admit(NativeDisposalWork::ISSUE, bound))) {
+					return ERR_BUSY;
+				}
+				_submit_transfer_worker(worker, frames[frame].transfer_worker_semaphores[worker->index], true);
+				if (native_disposal_usage) {
+					if (worker->last_submission.native_issue_count > bound) {
+						native_disposal_usage->issues += worker->last_submission.native_issue_count - bound;
+						return ERR_INVALID_DATA;
+					}
+					native_disposal_usage->issues -= bound - worker->last_submission.native_issue_count;
+				}
+			}
+			if (worker->submission_pending) {
+				return ERR_BUSY;
+			}
+			const Error production_retained = _production_join_transfer_worker(worker, true);
+			if (production_retained != OK) {
+				return production_retained;
+			}
+			if (qualified) {
+				// Both original worker locks still cover the operation -> submission join.
+				// Never read a later reused worker report as proof of this dependency.
+				// A failed worker may still have an actual native prefix. Join that exact
+				// report before retaining the worker as failed; never lose its callbacks.
+				const bool operation_covered = worker->operations_submitted >= transfer_worker_operation_used_by_draw[worker->index];
+				bool known = false;
+				for (const auto &report : frames[frame].qualification_hidden_reports) {
+					if (report.submission_serial == worker->last_submission.submission_serial && !report.calls.is_empty() && report.calls[0].serial == worker->last_submission.calls[0].serial) {
+						known = true;
+						break;
+					}
+				}
+				if (!known) {
+					frames[frame].qualification_hidden_reports.push_back(worker->last_submission);
+				}
+				{
+					auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
+					GDExtensionDeviceExit::Registry::Lock lock(registry);
+					// Production already joined the exact worker operation above.
+					_qualification_issue_tickets_locked(UINT32_MAX, worker->last_submission, worker->last_submission.error);
+				}
+				const Error retained = _qualification_retain_tickets(frame);
+				if (retained != OK) {
+					return retained;
+				}
+				{
+					auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
+					GDExtensionDeviceExit::Registry::Lock lock(registry);
+					for (auto *ticket : frames[frame].qualification_tickets) {
+						if (ticket->credits.capacity) {
+							for (auto &quote : ticket->worker_credits) {
+								if (quote.worker == worker->index && quote.frame == uint32_t(frame) && quote.epoch == frames[frame].qualification_epoch && quote.operation <= worker->operations_counter) {
+									const Error released = ticket->credits.release_worker_quote(quote.remaining);
+									CRASH_COND(released != OK);
+									quote.remaining = 0;
+								}
+							}
+						}
+					}
+					worker->qualification_batch_sealed = false;
+				}
+				if (!operation_covered || worker->last_submission.calls.is_empty()) {
+					return FAILED;
+				}
+				worker->qualification_observer_pending = false;
+			}
+			_flush_barriers_for_transfer_worker(worker, true);
+			if (worker->poisoned) {
+				return worker->completion_error;
+			}
+		}
+		if (!transfer_worker_pool_texture_barriers.is_empty()) {
+			if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+				return ERR_BUSY;
+			}
+			driver->command_pipeline_barrier(p_draw_command_buffer, RDD::PIPELINE_STAGE_COPY_BIT, RDD::PIPELINE_STAGE_ALL_COMMANDS_BIT, {}, {}, transfer_worker_pool_texture_barriers, {});
+			transfer_worker_pool_texture_barriers.clear();
+		}
+		return OK;
+	}
 	MutexLock transfer_worker_lock(transfer_worker_pool_mutex);
 	for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
 		TransferWorker *worker = transfer_worker_pool[i];
@@ -7370,17 +10542,21 @@ void RenderingDevice::_submit_transfer_workers(RDD::CommandBufferID p_draw_comma
 
 		{
 			MutexLock lock(worker->thread_mutex);
-			if (worker->recording) {
+			if (worker->recording || worker->submission_pending) {
 				VectorView<RDD::SemaphoreID> semaphores = p_draw_command_buffer ? frames[frame].transfer_worker_semaphores[i] : VectorView<RDD::SemaphoreID>();
-				_end_transfer_worker(worker);
+				if (worker->recording) {
+					_end_transfer_worker(worker);
+				}
 				_submit_transfer_worker(worker, semaphores);
 			}
 
+			_production_join_transfer_worker(worker, false);
 			if (p_draw_command_buffer) {
 				_flush_barriers_for_transfer_worker(worker);
 			}
 		}
 	}
+	return OK;
 }
 
 void RenderingDevice::_submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer) {
@@ -7391,19 +10567,34 @@ void RenderingDevice::_submit_transfer_barriers(RDD::CommandBufferID p_draw_comm
 	}
 }
 
-void RenderingDevice::_wait_for_transfer_workers() {
+bool RenderingDevice::_wait_for_transfer_workers() {
 	MutexLock transfer_worker_lock(transfer_worker_pool_mutex);
+	bool all_complete = true;
 	for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
 		TransferWorker *worker = transfer_worker_pool[i];
 		MutexLock lock(worker->thread_mutex);
 		if (worker->submitted) {
-			_wait_for_transfer_worker(worker);
+			if (!_wait_for_transfer_worker(worker, true)) {
+				all_complete = false;
+			}
+		}
+		if (worker->poisoned) {
+			all_complete = false;
 		}
 	}
+	return all_complete;
 }
 
 void RenderingDevice::_free_transfer_workers() {
 	MutexLock transfer_worker_lock(transfer_worker_pool_mutex);
+	for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
+		TransferWorker *worker = transfer_worker_pool[i];
+		if (worker->submitted || worker->poisoned) {
+			// Do not partially free the pool: a later pending worker keeps every
+			// pool index and its staging ownership live for a future poll.
+			return;
+		}
+	}
 	for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
 		TransferWorker *worker = transfer_worker_pool[i];
 		driver->fence_free(worker->command_fence);
@@ -7491,6 +10682,81 @@ bool RenderingDevice::_texture_make_mutable(Texture *p_texture, RID p_texture_id
 		return true;
 	}
 }
+
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+void RenderingDevice::_capture_test_record_buffer_usage(uint64_t p_driver, RDG::ResourceUsage p_usage, uint32_t p_operation) {
+	if (!RenderCaptureTestHooks::write_census_active()) {
+		return;
+	}
+	switch (p_usage) {
+		case RDG::RESOURCE_USAGE_COPY_FROM:
+		case RDG::RESOURCE_USAGE_UNIFORM_BUFFER_READ:
+		case RDG::RESOURCE_USAGE_INDIRECT_BUFFER_READ:
+		case RDG::RESOURCE_USAGE_TEXTURE_BUFFER_READ:
+		case RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ:
+		case RDG::RESOURCE_USAGE_VERTEX_BUFFER_READ:
+		case RDG::RESOURCE_USAGE_INDEX_BUFFER_READ:
+			return;
+		case RDG::RESOURCE_USAGE_COPY_TO:
+		case RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE:
+		case RDG::RESOURCE_USAGE_TEXTURE_BUFFER_READ_WRITE:
+		case RDG::RESOURCE_USAGE_GENERAL:
+			break;
+		default:
+			RenderCaptureTestHooks::write_census_poison();
+			return;
+	}
+	if (capture_test_coverage_failed) {
+		RenderCaptureTestHooks::write_census_poison();
+		return;
+	}
+	RenderCaptureTestHooks::write_census_record(p_driver, uint64_t(get_instance_id()), capture_test_allocation_registry.resolve_driver(p_driver), uint32_t(p_usage), p_operation);
+}
+void RenderingDevice::_capture_test_record_writable_uses(const Vector<RDG::ResourceTracker *> &p_trackers, const Vector<RDG::ResourceUsage> &p_usages, uint32_t p_operation) {
+	if (!RenderCaptureTestHooks::write_census_active()) {
+		return;
+	}
+	if (p_trackers.size() != p_usages.size()) {
+		RenderCaptureTestHooks::write_census_poison();
+		return;
+	}
+	for (int i = 0; i < p_trackers.size(); i++) {
+		const auto *tracker = p_trackers[i];
+		if (!tracker) {
+			RenderCaptureTestHooks::write_census_poison();
+			continue;
+		}
+		// Fixed P01 buffers do not alias texture or acceleration-structure allocations.
+		if (!tracker->buffer_driver_id) {
+			if (tracker->texture_driver_id && (p_usages[i] == RDG::RESOURCE_USAGE_STORAGE_IMAGE_READ_WRITE || p_usages[i] == RDG::RESOURCE_USAGE_GENERAL)) {
+				RenderCaptureTestHooks::observe_texture_write(uint64_t(get_instance_id()), tracker->texture_driver_id.id, p_usages[i], p_operation);
+			}
+			if (!tracker->texture_driver_id && !tracker->acceleration_structure_driver_id) {
+				RenderCaptureTestHooks::write_census_poison();
+			}
+			continue;
+		}
+		_capture_test_record_buffer_usage(tracker->buffer_driver_id.id, p_usages[i], p_operation);
+	}
+}
+void RenderingDevice::_capture_test_record_writable_set(RID p_set, uint32_t p_operation) {
+	if (!RenderCaptureTestHooks::write_census_active()) {
+		return;
+	}
+	const UniformSet *set = uniform_set_owner.get_or_null(p_set);
+	if (!set) {
+		RenderCaptureTestHooks::write_census_poison();
+		return;
+	}
+	_capture_test_record_writable_uses(set->draw_trackers, set->draw_trackers_usage, p_operation);
+	// Writable buffers must already have trackers at reflected binding creation.
+	for (const auto &entry : set->untracked_usage) {
+		if (entry.value == RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE || entry.value == RDG::RESOURCE_USAGE_TEXTURE_BUFFER_READ_WRITE || entry.value == RDG::RESOURCE_USAGE_GENERAL) {
+			RenderCaptureTestHooks::write_census_poison();
+		}
+	}
+}
+#endif
 
 bool RenderingDevice::_buffer_make_mutable(Buffer *p_buffer, RID p_buffer_id) {
 	if (p_buffer->draw_tracker != nullptr) {
@@ -7600,14 +10866,3050 @@ bool RenderingDevice::_dependencies_make_mutable(RID p_id, RDG::ResourceTracker 
 /**** FRAME MANAGEMENT ****/
 /**************************/
 
-void RenderingDevice::free_rid(RID p_rid) {
-	ERR_RENDER_THREAD_GUARD();
-
-	_free_dependencies(p_rid); // Recursively erase dependencies first, to avoid potential API problems.
-	_free_internal(p_rid);
+Error RenderingDevice::_native_height_range_validate(const Ref<NativeHeightRange> &p_range) const {
+	if (!is_main_instance || render_thread_id != Thread::get_caller_id() || !driver || native_finalization_returned) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (p_range.is_null() || p_range->device != uint64_t(get_instance_id()) || !p_range->serial) {
+		return ERR_INVALID_PARAMETER;
+	}
+	return OK;
 }
 
-void RenderingDevice::_free_internal(RID p_id) {
+Error RenderingDevice::_native_height_range_prepare_checked_capture(RendererRD::HeightCaptureCheckedSink &r_sink, Ref<NativeHeightRange> &r_range) {
+	if (&r_sink.rd != this || r_sink.native_range.is_valid() || r_sink.begin_attempted || r_sink.business_count != 0 || r_sink.cleanup_attempted || r_sink.terminal_requested) {
+		return ERR_INVALID_PARAMETER;
+	}
+	// Reserve every possible original handle from the caller's already finite
+	// business directory, plus the sink's independent cleanup End. A capture
+	// may have many surfaces; a single DrawAppendResult is not its total bound.
+	constexpr uint32_t begin_handles = 2 + sizeof(DrawListBeginResult::preparation_handles) / sizeof(RDG::RecordHandle) +
+			sizeof(DrawListBeginResult::prefix_handles) / sizeof(RDG::RecordHandle);
+	constexpr uint32_t draw_handles = 1 + DrawAppendResult::PREFIX_CAPACITY;
+	constexpr uint32_t handles_per_record = MAX(begin_handles, draw_handles);
+	const uint64_t graph_capacity = uint64_t(r_sink.business.size()) * handles_per_record + draw_handles;
+	if (graph_capacity > UINT32_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	const Error error = _native_height_range_prepare_sized(r_range, uint32_t(graph_capacity), r_sink.transfers.size());
+	if (error != OK) {
+		return error;
+	}
+	// Same finite transfer capacity as the original sink, allocated before
+	// recording. No watcher/enrollment path grows this receipt directory.
+	r_range->checked_transfers.resize(r_sink.transfers.size());
+	frames[frame].native_height_ranges.push_back(r_range);
+	r_range->recording_started = true;
+	r_range->capture_sink = &r_sink;
+	r_range->capture_frame = frame;
+	r_range->capture_epoch = frames[frame].qualification_epoch;
+	r_sink.native_capture_frame = r_range->capture_frame;
+	r_sink.native_capture_epoch = r_range->capture_epoch;
+	return OK;
+}
+
+Error RenderingDevice::_native_height_range_validate_checked_source(const Ref<NativeHeightRange> &p_range, const RendererRD::HeightCaptureCheckedSink &p_sink, const NativeDisposalWitness &p_original_depth, NativeHeightRange::Snapshot &r_snapshot) const {
+	r_snapshot = {};
+	const Error valid = _native_height_range_validate(p_range);
+	if (valid != OK) return valid;
+	if (&p_sink.rd != this || p_sink.native_range != p_range || p_sink.quoted_resources.is_null() ||
+			p_range->reader_scope || p_range->producer.is_valid() || p_range->capture_sink != &p_sink ||
+			!p_range->recording_started || !p_range->recording_closed || p_range->uncaptured_prefix ||
+			!p_sink.terminal_requested || p_sink.owns_list || p_sink.restoration_unknown ||
+			(p_range->has_recorded_effect && !p_sink.restored) ||
+			p_range->capture_frame != p_sink.native_capture_frame || !p_range->capture_epoch || p_range->capture_epoch != p_sink.native_capture_epoch ||
+			p_range->capture_records != p_sink.business_count || p_range->capture_transfers != p_sink.transfer_count ||
+			p_range->checked_transfer_count != p_range->capture_transfers || p_range->capture_cleanup != p_sink.cleanup_attempted ||
+			p_range->append_error != p_sink.first_error || p_original_depth.cell.is_null()) return ERR_INVALID_DATA;
+	// This is the original capture epoch, not today's active frame/graph. A
+	// sealed/issued range remains authentic when its frame slot advances.
+	for (uint32_t member = 0; member < p_range->graph_count; ++member) {
+		if (p_range->graphs[member].frame != p_range->capture_frame || p_range->graphs[member].frame_epoch != p_range->capture_epoch) return ERR_INVALID_DATA;
+	}
+	if ((p_range->producer_depth.cell.is_valid() && p_range->producer_depth.cell != p_original_depth.cell) ||
+			(p_range->producer_resources.is_valid() && p_range->producer_resources.ptr() != p_sink.quoted_resources.ptr()) ||
+			(p_range->has_recorded_effect && (!p_range->producer_depth.cell.is_valid() ||
+					(!p_range->observers_returned && p_range->producer_resources.is_null())))) return ERR_INVALID_DATA;
+	// Return intentionally drops the range's resource Ref. The source Frame
+	// and sink still own the original pair until the Scene owner drops Frame.
+	_native_height_range_snapshot(p_range, r_snapshot);
+	return OK;
+}
+
+Error RenderingDevice::_native_height_range_enter_checked_call(const Ref<NativeHeightRange> &p_range, RendererRD::HeightCaptureCheckedSink &r_sink) {
+	if (&r_sink.rd != this || r_sink.native_range != p_range) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const Error valid = _native_height_range_validate(p_range);
+	if (valid != OK) {
+		return valid;
+	}
+	if (p_range->capture_sink != &r_sink || p_range->capture_frame != frame || p_range->capture_epoch != frames[frame].qualification_epoch) {
+		p_range->uncaptured_prefix = true;
+		return ERR_INVALID_DATA;
+	}
+	if (!p_range->recording_started || p_range->recording_closed || p_range->observers_returned) {
+		return ERR_BUSY;
+	}
+	// An already captured business failure must still permit the original
+	// independent cleanup End. It never makes another business append legal.
+	const Error result = r_sink.cleanup_attempted ? OK : p_range->append_error;
+	if (result == OK) {
+		if (native_height_active_checked_range.is_valid()) {
+			return ERR_BUSY;
+		}
+		native_height_active_checked_range = p_range;
+	}
+	return result;
+}
+
+Error RenderingDevice::_native_height_range_enroll_original_record(const Ref<NativeHeightRange> &p_range, RendererRD::HeightCaptureCheckedSink &p_sink, uint32_t p_business_index, bool p_cleanup) {
+	if (native_height_active_checked_range == p_range) {
+		native_height_active_checked_range.unref();
+	}
+	if (&p_sink.rd != this || p_sink.native_range != p_range) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const Error valid = _native_height_range_validate(p_range);
+	if (valid != OK) {
+		return valid;
+	}
+	if (p_range->recording_closed || p_range->observers_returned) {
+		return ERR_BUSY;
+	}
+	auto fail = [&](Error p_error, bool p_unknown = false) {
+		if (p_range->append_error == OK && p_error != OK) {
+			p_range->append_error = p_error;
+		}
+		p_range->uncaptured_prefix |= p_unknown;
+	};
+	if (p_range->capture_sink != &p_sink || p_range->capture_frame != frame || p_range->capture_epoch != frames[frame].qualification_epoch ||
+			(p_cleanup ? (!p_sink.cleanup_attempted || p_range->capture_cleanup) : (p_business_index != p_range->capture_records || p_business_index >= p_sink.business_count))) {
+		fail(ERR_INVALID_DATA, true);
+		return p_range->append_error;
+	}
+	if (p_cleanup) {
+		p_range->capture_cleanup = true;
+	} else {
+		++p_range->capture_records;
+	}
+	auto save = [&](const RDG::RecordHandle &p_handle) {
+		if (!p_handle.is_valid()) {
+			return;
+		}
+		p_range->has_recorded_effect = true;
+		if (!draw_graph.contains_record(p_handle)) {
+			fail(ERR_INVALID_DATA, true);
+			return;
+		}
+		for (uint32_t i = 0; i < p_range->graph_count; ++i) {
+			const auto &old = p_range->graphs[i].handle;
+			if (old.graph_instance == p_handle.graph_instance && old.graph_frame == p_handle.graph_frame && old.kind == p_handle.kind && old.index == p_handle.index && old.offset == p_handle.offset) {
+				return;
+			}
+		}
+		if (p_range->graph_count == p_range->limits.graph_members) {
+			fail(ERR_PARAMETER_RANGE_ERROR, true);
+			return;
+		}
+		auto &member = p_range->graphs[p_range->graph_count++];
+		member.handle = p_handle;
+		member.frame = frame;
+		member.frame_epoch = frames[frame].qualification_epoch;
+	};
+	auto result = [&](Error p_error, NativeAppendEffect p_effect, bool p_complete) {
+		fail(p_error);
+		if (p_effect != NativeAppendEffect::NoNewEffect) {
+			p_range->has_recorded_effect = true;
+		}
+		if (p_effect == NativeAppendEffect::Unknown || (p_effect != NativeAppendEffect::NoNewEffect && !p_complete)) {
+			fail(ERR_INVALID_DATA, true);
+		}
+	};
+	const auto &record = p_cleanup ? p_sink.cleanup : p_sink.business[p_business_index];
+	switch (record.operation) {
+		case RendererRD::HeightCaptureCheckedSink::Operation::Begin: {
+			if (p_sink.quoted_resources.is_valid()) {
+				const Framebuffer *fb = framebuffer_owner.get_or_null(record.resource);
+				const Texture *depth = nullptr;
+				if (fb) {
+					for (RID texture_rid : fb->texture_ids) {
+						const Texture *candidate = texture_owner.get_or_null(texture_rid);
+						if (candidate && (candidate->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
+							if (depth) { fail(ERR_INVALID_DATA, true); break; }
+							depth = candidate;
+						}
+					}
+				}
+				if (!depth || depth->native_disposal.cell.is_null() || depth->native_disposal.cell->state != NativeDisposalWitness::State::LIVE) {
+					fail(ERR_INVALID_DATA, true);
+				} else {
+					p_range->producer_depth = depth->native_disposal;
+					p_range->producer_resources = p_sink.quoted_resources;
+				}
+			}
+			result(record.begin.error, record.begin.effect, record.begin.capture_complete);
+			save(record.begin.begin_handle);
+			save(record.begin.clear_handle);
+			if (record.begin.preparation_count > std::size(record.begin.preparation_handles) || record.begin.prefix_count > std::size(record.begin.prefix_handles)) {
+				fail(ERR_INVALID_DATA, true);
+				break;
+			}
+			for (uint32_t i = 0; i < record.begin.preparation_count; ++i) {
+				save(record.begin.preparation_handles[i]);
+			}
+			for (uint32_t i = 0; i < record.begin.prefix_count; ++i) {
+				save(record.begin.prefix_handles[i]);
+			}
+		} break;
+		case RendererRD::HeightCaptureCheckedSink::Operation::UniformSet:
+		case RendererRD::HeightCaptureCheckedSink::Operation::VertexArray:
+		case RendererRD::HeightCaptureCheckedSink::Operation::IndexArray:
+			result(record.bind.error, record.bind.effect, record.bind.capture_complete);
+			save(record.bind.bind_handle);
+			if (record.transfer_offset != p_range->capture_transfers || record.transfer_offset > p_sink.transfer_count ||
+				record.transfer_count > p_sink.transfer_count - record.transfer_offset || record.bind.transfer_count != record.transfer_count ||
+				p_range->checked_transfer_count < p_range->capture_transfers || record.transfer_count != p_range->checked_transfer_count - p_range->capture_transfers) {
+				fail(ERR_INVALID_DATA, true);
+			} else {
+				for (uint32_t i = 0; i < record.transfer_count; ++i) {
+					const auto &raw = p_sink.transfers[record.transfer_offset + i];
+					const auto &checked = p_range->checked_transfers[p_range->capture_transfers + i];
+					if (raw.worker != checked.worker || raw.operation != checked.operation) {
+						fail(ERR_INVALID_DATA, true);
+						continue;
+					}
+					if (!checked.processed) {
+						if (checked.dependency >= p_range->worker_count) {
+							fail(ERR_INVALID_DATA, true);
+							continue;
+						}
+						const auto &dependency = p_range->workers[checked.dependency];
+						if (dependency.worker != raw.worker || dependency.operation < raw.operation ||
+								(dependency.issue_attempted && (raw.operation < dependency.first_operation || raw.operation > dependency.last_operation))) {
+							fail(ERR_INVALID_DATA, true);
+						}
+					}
+				}
+				p_range->capture_transfers += record.transfer_count;
+			}
+			break;
+		default:
+			result(record.draw.error, record.draw.effect, record.draw.capture_complete);
+			save(record.draw.draw_handle);
+			if (record.draw.prefix_count > std::size(record.draw.prefix_handles)) {
+				fail(ERR_INVALID_DATA, true);
+				break;
+			}
+			for (uint32_t i = 0; i < record.draw.prefix_count; ++i) {
+				save(record.draw.prefix_handles[i]);
+			}
+			if (record.draw.has_transfer) {
+				fail(ERR_UNAVAILABLE, true);
+			}
+			break;
+	}
+	// Hidden checks without matching raw membership are not a covered prefix.
+	if (p_range->checked_transfer_count != p_range->capture_transfers) {
+		fail(ERR_INVALID_DATA, true);
+	}
+	return p_range->append_error;
+}
+
+Error RenderingDevice::_native_height_range_close_checked_capture(const Ref<NativeHeightRange> &p_range, RendererRD::HeightCaptureCheckedSink &r_sink) {
+	if (&r_sink.rd != this || r_sink.native_range != p_range) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const Error valid = _native_height_range_validate(p_range);
+	if (valid != OK) {
+		return valid;
+	}
+	if (p_range->capture_sink != &r_sink || !r_sink.terminal_requested) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (p_range->append_error == OK && r_sink.first_error != OK) {
+		p_range->append_error = r_sink.first_error;
+	}
+	if (p_range->capture_frame != frame || p_range->capture_epoch != frames[frame].qualification_epoch ||
+			r_sink.owns_list || r_sink.restoration_unknown || p_range->capture_records != r_sink.business_count ||
+			p_range->capture_transfers != r_sink.transfer_count || p_range->checked_transfer_count != p_range->capture_transfers || p_range->capture_cleanup != r_sink.cleanup_attempted ||
+			(p_range->has_recorded_effect && !r_sink.restored)) {
+		p_range->uncaptured_prefix = true;
+		if (p_range->append_error == OK) {
+			p_range->append_error = ERR_INVALID_DATA;
+		}
+	}
+	return _native_height_range_close(p_range); // Freezes recording only.
+}
+
+Error RenderingDevice::_native_height_range_prepare(Ref<NativeHeightRange> &r_range) {
+	// Standalone clear and fixed reader recipes retain their original bound.
+	constexpr uint32_t graph_capacity = 2 + sizeof(DrawListBeginResult::preparation_handles) / sizeof(RDG::RecordHandle) +
+			sizeof(DrawListBeginResult::prefix_handles) / sizeof(RDG::RecordHandle) + 1 + DrawAppendResult::PREFIX_CAPACITY;
+	return _native_height_range_prepare_sized(r_range, graph_capacity, graph_capacity);
+}
+
+Error RenderingDevice::_native_height_range_prepare_sized(Ref<NativeHeightRange> &r_range, uint32_t p_graph_capacity, uint32_t p_transfer_capacity) {
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	if (r_range.is_valid()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (native_height_finalization_started || production_finalization_started.load() || frame_wait_draining || native_disposal_active ||
+			!frames[frame].qualification_epoch || frames[frame].qualification_graph_closed || !frames[frame].primary_command_buffer_begun || draw_graph.has_driver_callbacks()) {
+		return ERR_BUSY;
+	}
+	if (native_height_ranges.size() >= NATIVE_HEIGHT_RANGE_CAPACITY) {
+		return ERR_BUSY;
+	}
+	uint32_t source_bound = 0;
+	if (!driver->native_call_observation_supported() || !driver->native_issue_bound(RDD::NativeIssueKind::MAIN_SLOT, 1, source_bound) || !source_bound) {
+		return ERR_UNAVAILABLE;
+	}
+	// One exclusive closed pass maps every member to the same actual main
+	// slot. Transfer dependencies are bounded by the original receipt directory.
+	if (!p_graph_capacity || !next_native_height_range_serial) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	uint32_t worker_bound = 0;
+	// Unsupported transfer observation preserves the standalone clear recipe.
+	if (!driver->native_issue_bound(RDD::NativeIssueKind::TRANSFER_WORKER, 1, worker_bound)) {
+		worker_bound = 0;
+	} else if (worker_bound) {
+		// Finite per-dependency admission allowance, not a claim that the
+		// current-submit bound includes a backend's historical prefix.
+		worker_bound = MAX(worker_bound, 16u);
+	}
+	const uint64_t worker_sources_wide = uint64_t(p_transfer_capacity) * worker_bound;
+	const uint64_t native_sources_wide = uint64_t(source_bound) + worker_sources_wide;
+	const uint64_t source_edges_wide = uint64_t(p_graph_capacity) * source_bound;
+	if (worker_sources_wide > UINT32_MAX || native_sources_wide > UINT32_MAX || source_edges_wide > UINT32_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	const uint32_t worker_sources = uint32_t(worker_sources_wide);
+	const NativeHeightRange::Limits limits{ p_graph_capacity, uint32_t(native_sources_wide), uint32_t(source_edges_wide), p_transfer_capacity, worker_bound };
+	Ref<NativeHeightRange> range = memnew(NativeHeightRange(uint64_t(get_instance_id()), next_native_height_range_serial++, limits));
+	range->graphs.resize(limits.graph_members);
+	range->sources.resize(limits.native_sources);
+	range->edges.resize(limits.source_edges);
+	range->workers.resize(limits.worker_dependencies);
+	range->worker_edges.resize(worker_sources);
+	native_height_ranges.reserve(NATIVE_HEIGHT_RANGE_CAPACITY);
+	native_height_ranges.push_back(range);
+	r_range = range;
+	return OK;
+}
+
+Error RenderingDevice::_native_height_reader_prepare(const Ref<NativeHeightRange> &p_producer, RID p_sampled_uniform_set, uint32_t p_set_index, Ref<NativeHeightRange> &r_reader) {
+	const Error valid = _native_height_range_validate(p_producer);
+	if (valid != OK) {
+		return valid;
+	}
+	if (r_reader.is_valid() || p_set_index >= MAX_UNIFORM_SETS || !p_producer->recording_closed ||
+			!p_producer->has_recorded_effect || !p_producer->graph_count || p_producer->producer_resources.is_null() ||
+			p_producer->producer_depth.cell.is_null() || p_producer->observers_returned || p_producer->producer.is_valid() || p_producer->owner_requested_return ||
+			p_producer->uncaptured_prefix || p_producer->append_error != OK || p_producer->mapping_error != OK ||
+			p_producer->issue_error != OK || p_producer->retention_error != OK || p_producer->completion_error != OK ||
+			p_producer->return_error != OK) {
+		return ERR_INVALID_DATA;
+	}
+	if (p_producer->active_readers == UINT32_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	// Authenticate before publishing a reader. The temporary projection cannot
+	// escape; the retained producer, not these public scalar fields, is authority.
+	Ref<NativeHeightRange> check = memnew(NativeHeightRange(uint64_t(get_instance_id()), 1, {}));
+	check->producer = p_producer;
+	check->reader_uniform_set = p_sampled_uniform_set;
+	check->reader_set_index = p_set_index;
+	const Error sampled = _native_height_reader_validate_sample(check);
+	if (sampled != OK) {
+		return sampled;
+	}
+	const Error prepared = _native_height_range_prepare(r_reader);
+	if (prepared != OK) {
+		return prepared;
+	}
+	r_reader->producer = p_producer;
+	r_reader->reader_uniform_set = p_sampled_uniform_set;
+	r_reader->reader_set_index = p_set_index;
+	r_reader->reader_scope = true;
+	r_reader->checked_transfers.resize(r_reader->limits.worker_dependencies);
+	// Membership authenticates this original admission; selected service never
+	// discovers readers by scanning unrelated directory rows or public IDs.
+	r_reader->next_reader = p_producer->first_reader;
+	if (r_reader->next_reader) r_reader->next_reader->previous_reader = r_reader.ptr();
+	p_producer->first_reader = r_reader.ptr();
+	if (!p_producer->selected_reader_cursor) p_producer->selected_reader_cursor = r_reader.ptr();
+	++p_producer->active_readers;
+	return OK;
+}
+
+Error RenderingDevice::_native_height_reader_validate_sample(const Ref<NativeHeightRange> &p_reader) {
+	if (p_reader.is_null() || p_reader->producer.is_null()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const auto &depth = p_reader->producer->producer_depth;
+	if (depth.cell.is_null() || depth.cell->device != uint64_t(get_instance_id()) || depth.cell->state != NativeDisposalWitness::State::LIVE) {
+		return ERR_INVALID_DATA;
+	}
+	Texture *texture = texture_owner.get_or_null(RID::from_uint64(depth.cell->rid));
+	UniformSet *set = uniform_set_owner.get_or_null(p_reader->reader_uniform_set);
+	if (!texture || !texture->driver_id || texture->native_disposal.cell != depth.cell ||
+			!depth.cell->matches(depth.cell->rid, texture->native_disposal_serial, texture->driver_id.id) || !texture->draw_tracker ||
+			texture->owner.is_valid() || texture->shared_fallback || texture->native_immutable_retire_requested ||
+			!set || !set->driver_id || set->shader_set != p_reader->reader_set_index ||
+			set->native_immutable_retire_requested || set->draw_trackers.size() != set->draw_trackers_usage.size()) {
+		return ERR_INVALID_DATA;
+	}
+	bool sampled = false;
+	for (int i = 0; i < set->draw_trackers.size(); ++i) {
+		if (set->draw_trackers[i] == texture->draw_tracker) {
+			if (set->draw_trackers_usage[i] != RDG::RESOURCE_USAGE_TEXTURE_SAMPLE) {
+				return ERR_INVALID_DATA;
+			}
+			sampled = true;
+		}
+	}
+	return sampled ? OK : ERR_INVALID_DATA;
+}
+
+Error RenderingDevice::_native_height_reader_begin(const Ref<NativeHeightRange> &p_reader, ComputeListID &r_list) {
+	r_list = INVALID_ID;
+	const Error valid = _native_height_range_validate(p_reader);
+	if (valid != OK) {
+		return valid;
+	}
+	if (p_reader->append_error != OK) {
+		return p_reader->append_error;
+	}
+	if (!p_reader->reader_scope || p_reader->owner_requested_return || p_reader->observers_returned || p_reader->reader_started || p_reader->recording_closed || native_height_active_checked_range.is_valid() ||
+			compute_list.active || draw_list.active || raytracing_list.active) {
+		return ERR_BUSY;
+	}
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	const Error sampled = _native_height_reader_validate_sample(p_reader);
+	if (sampled != OK) {
+		return sampled;
+	}
+	p_reader->capture_frame = frame;
+	p_reader->capture_epoch = frames[frame].qualification_epoch;
+	p_reader->reader_started = true;
+	p_reader->recording_started = true;
+	native_height_active_checked_range = p_reader;
+	frames[frame].native_height_ranges.push_back(p_reader);
+	r_list = compute_list_begin();
+	if (r_list == INVALID_ID) {
+		native_height_active_checked_range.unref();
+		p_reader->append_error = ERR_CANT_CREATE;
+		return p_reader->append_error;
+	}
+	p_reader->reader_owns_list = true;
+	return OK;
+}
+
+Error RenderingDevice::_native_height_reader_enroll(const Ref<NativeHeightRange> &p_reader, const RDG::RecordHandle &p_handle) {
+	if (p_reader.is_null() || !p_reader->reader_scope || p_reader->recording_closed ||
+			p_reader->capture_frame != uint32_t(frame) || p_reader->capture_epoch != frames[frame].qualification_epoch ||
+			!p_handle.is_valid() || !draw_graph.contains_record(p_handle) || p_reader->graph_count == p_reader->limits.graph_members) {
+		if (p_reader.is_valid()) {
+			p_reader->uncaptured_prefix = true;
+			if (p_reader->append_error == OK) { p_reader->append_error = ERR_INVALID_DATA; }
+		}
+		return ERR_INVALID_DATA;
+	}
+	auto &member = p_reader->graphs[p_reader->graph_count++];
+	member.handle = p_handle;
+	member.frame = frame;
+	member.frame_epoch = frames[frame].qualification_epoch;
+	p_reader->has_recorded_effect = true;
+	return OK;
+}
+
+Error RenderingDevice::_native_height_reader_dispatch(const Ref<NativeHeightRange> &p_reader, ComputeListID p_list, uint32_t p_x, uint32_t p_y, uint32_t p_z) {
+	const Error valid = _native_height_range_validate(p_reader);
+	if (valid != OK) {
+		return valid;
+	}
+	if (native_height_active_checked_range != p_reader || !p_reader->reader_scope || !p_reader->reader_owns_list || p_reader->recording_closed) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (p_reader->append_error != OK) {
+		return p_reader->append_error;
+	}
+	if (!_compute_list_dispatch_recorded(p_list, p_x, p_y, p_z).is_valid() && p_reader->append_error == OK) {
+		p_reader->append_error = ERR_INVALID_DATA;
+	}
+	return p_reader->append_error;
+}
+
+Error RenderingDevice::_native_height_reader_error(const Ref<NativeHeightRange> &p_reader, bool &r_unknown) {
+	r_unknown = false;
+	const Error valid = _native_height_range_validate(p_reader);
+	if (valid != OK) {
+		return valid;
+	}
+	if (!p_reader->reader_scope) {
+		return ERR_INVALID_PARAMETER;
+	}
+	r_unknown = p_reader->uncaptured_prefix;
+	return p_reader->append_error;
+}
+
+Error RenderingDevice::_native_height_reader_request_return(const Ref<NativeHeightRange> &p_reader) {
+	ERR_RENDER_THREAD_GUARD_V(ERR_UNAUTHORIZED);
+	const Error valid = _native_height_range_validate(p_reader);
+	if (valid != OK) {
+		return valid;
+	}
+	if (!p_reader->reader_scope || !p_reader->recording_closed || p_reader->reader_owns_list) {
+		return ERR_INVALID_PARAMETER;
+	}
+	p_reader->owner_requested_return = true;
+	return OK;
+}
+
+Error RenderingDevice::_native_height_reader_returns_step(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage) {
+	return _native_height_reader_returns_step(p_budget, r_usage, nullptr);
+}
+
+Error RenderingDevice::_native_height_reader_returns_step(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, bool *r_row_admitted) {
+	if (r_row_admitted) *r_row_admitted = false;
+	ERR_RENDER_THREAD_GUARD_V(ERR_UNAUTHORIZED);
+	if (native_height_ranges.is_empty()) {
+		return OK;
+	}
+	// A repeated one-pass turn must resume the paid row, not pay WORK again
+	// forever before the original Current poll or explicit return can run. Zero/expired budgets
+	// still cannot enter or mutate this continuation.
+	const uint64_t receipts = uint64_t(r_usage.polls) + r_usage.frees + r_usage.issues + r_usage.retains + r_usage.releases + r_usage.recycles;
+	if (!p_budget.receipts || !p_budget.passes || r_usage.passes >= p_budget.passes || receipts > p_budget.receipts ||
+			!p_budget.deadline_usec || OS::get_singleton()->get_ticks_usec() >= p_budget.deadline_usec) {
+		return ERR_BUSY;
+	}
+	const uint32_t index = native_height_reader_return_cursor % native_height_ranges.size();
+	const Ref<NativeHeightRange> reader = native_height_ranges[index];
+	if (!reader->owner_service_work_admitted) {
+		if (!_native_disposal_charge(p_budget, r_usage, NativeDisposalWork::WORK)) {
+			return ERR_BUSY;
+		}
+		reader->owner_service_work_admitted = true;
+	}
+	if (r_row_admitted) *r_row_admitted = true;
+	native_height_reader_return_cursor = index;
+	// Reuse may observe a closed producer's real completion while Current
+	// remains readable. Observation does not revoke/return its observers.
+	if (!reader->owner_requested_return && (reader->reader_scope || !reader->recording_closed || reader->native_complete)) {
+		reader->owner_service_work_admitted = false;
+		++native_height_reader_return_cursor;
+		return ERR_BUSY;
+	}
+	NativeHeightRange::Snapshot snapshot;
+	const Error observed = _native_height_range_observe(reader, p_budget, r_usage, snapshot);
+	Error returned = ERR_BUSY;
+	// A settled failure prefix is returnable, but never becomes successful content.
+	if (reader->owner_requested_return && (snapshot.native_complete || snapshot.prefix_settled || !snapshot.has_recorded_effect)) {
+		returned = _native_height_range_return(reader, p_budget, r_usage);
+	}
+	// Resume a paid observation/return episode across round-robin visits.
+	// A settled Current observation or completed explicit return closes it;
+	// a later inspection must pay its own directory WORK again.
+	if (reader->observers_returned || (!reader->owner_requested_return && (snapshot.native_complete || snapshot.prefix_settled || !snapshot.has_recorded_effect))) {
+		reader->owner_service_work_admitted = false;
+	}
+	if (!reader->observers_returned) {
+		++native_height_reader_return_cursor;
+	}
+	// Observation includes the immutable recording error as well as physical
+	// observer state. The process owner already reports a known append failure;
+	// it must not become a repeated retirement failure or hide a native error.
+	if (reader->uncaptured_prefix) {
+		return ERR_INVALID_DATA;
+	}
+	for (Error error : { reader->mapping_error, reader->issue_error, reader->retention_error, reader->completion_error, reader->return_error }) {
+		if (error != OK) {
+			return error;
+		}
+	}
+	if (observed != OK && observed != ERR_BUSY && observed != reader->append_error) {
+		return observed;
+	}
+	return returned;
+}
+
+// Mechanical submission selection only. The original RT child must separately
+// authenticate and retain its actual physical source closure before calling.
+Error RenderingDevice::_native_height_range_service_frame_preflight(const Ref<NativeHeightRange> &p_range) {
+	if (frames.is_empty() || uint32_t(frame) >= frames.size() || !p_range->recording_closed || p_range->uncaptured_prefix ||
+			draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining || draw_graph.has_driver_callbacks()) {
+		return ERR_BUSY;
+	}
+	if (native_disposal_active) {
+		return native_disposal_continuation.height_selection == p_range && !native_disposal_continuation.production_owner &&
+				native_disposal_continuation.scene_selection.cell.is_null() ? OK : ERR_BUSY;
+	}
+	if (qualification_frame_advance_pending || frame_issue_error != OK || frame_wait_error != OK || !p_range->graph_count ||
+			p_range->worker_count || p_range->checked_transfer_count || native_height_active_checked_range.is_valid()) {
+		return ERR_BUSY;
+	}
+	const auto &recording = frames[frame];
+	bool held = false;
+	for (const auto &range : recording.native_height_ranges) {
+		if (range != p_range) return ERR_BUSY;
+		held = true;
+	}
+	if (!held || !recording.primary_command_buffer_begun || recording.fence_signaled) return ERR_BUSY;
+	for (uint32_t member = 0; member < p_range->graph_count; ++member) {
+		const auto &graph = p_range->graphs[member];
+		if (graph.frame != uint32_t(frame) || graph.frame_epoch != recording.qualification_epoch || graph.issue_attempted ||
+				graph.state != NativeHeightRange::MemberState::Recorded || !draw_graph.contains_record(graph.handle)) return ERR_BUSY;
+	}
+	// Resolve original handles against the original graph. No counter interval,
+	// copied ID, or paid grant substitutes for coverage of a closed command.
+	for (uint32_t command = 0; command < draw_graph.qualification_command_count(); ++command) {
+		bool captured = false;
+		for (uint32_t member = 0; member < p_range->graph_count && !captured; ++member) {
+			uint32_t actual = UINT32_MAX;
+			captured = draw_graph._resolve_record_command_index(p_range->graphs[member].handle, actual) && actual == command;
+		}
+		if (!captured) return ERR_BUSY;
+	}
+	for (const auto &slot : frames) {
+		if (slot.fence_signaled || slot.disposal.active || !slot.qualification_tickets.is_empty() || !slot.download_buffer_get_data_requests.is_empty() ||
+				!slot.download_texture_get_data_requests.is_empty() || !slot.swap_chains_to_present.is_empty() || slot.present_attempted || !slot.present_report.calls.is_empty() || !slot.semaphores_to_wait_on.is_empty() ||
+				!slot.render_pipelines_to_dispose_of.is_empty() || !slot.compute_pipelines_to_dispose_of.is_empty() ||
+				!slot.raytracing_pipelines_to_dispose_of.is_empty() || !slot.acceleration_structures_to_dispose_of.is_empty() ||
+				!slot.uniform_sets_to_dispose_of.is_empty() || !slot.shaders_to_dispose_of.is_empty() || !slot.samplers_to_dispose_of.is_empty() ||
+				!slot.framebuffers_to_dispose_of.is_empty() || !slot.textures_to_dispose_of.is_empty() || !slot.buffers_to_dispose_of.is_empty() ||
+				!slot.qualification_hidden_reports.is_empty()) return ERR_BUSY;
+		for (const auto &range : slot.native_height_ranges) if (range != p_range) return ERR_BUSY;
+		for (const auto &report : slot.chain_reports) {
+			for (const auto &call : report.calls) if (!call.source_owner_returned) return ERR_BUSY;
+		}
+	}
+	if (!transfer_worker_pool_mutex.try_lock()) return ERR_BUSY;
+	bool idle = true;
+	for (uint32_t index = 0; index < transfer_worker_pool_size && idle; ++index) {
+		auto *worker = transfer_worker_pool[index];
+		if (!worker->thread_mutex.try_lock()) { idle = false; break; }
+		if (!worker->operations_mutex.try_lock()) { worker->thread_mutex.unlock(); idle = false; break; }
+		idle = worker->operations_processed == worker->operations_counter && !worker->recording && !worker->submission_pending &&
+				!worker->submitted && !worker->height_observer_pending && !worker->qualification_observer_pending &&
+				!worker->production_observer_pending && !worker->height_watcher_count;
+		worker->operations_mutex.unlock();
+		worker->thread_mutex.unlock();
+	}
+	transfer_worker_pool_mutex.unlock();
+	return idle ? OK : ERR_BUSY;
+}
+
+Error RenderingDevice::_native_height_range_service_step(const Ref<NativeHeightRange> &p_range, bool p_request_return, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, NativeHeightRange::Snapshot &r_snapshot, bool &r_row_admitted) {
+	r_row_admitted = false;
+	r_snapshot = {};
+	auto available = [&]() {
+		const uint64_t used = uint64_t(r_usage.polls) + r_usage.frees + r_usage.issues + r_usage.retains + r_usage.releases + r_usage.recycles;
+		return p_budget.receipts && p_budget.passes && used < p_budget.receipts && r_usage.passes < p_budget.passes &&
+				p_budget.deadline_usec && OS::get_singleton()->get_ticks_usec() < p_budget.deadline_usec;
+	};
+	// Original total grant plus cumulative usage. This check precedes every
+	// owner flag / paid episode / original continuation mutation.
+	if (!available()) return ERR_BUSY;
+	const Error valid = _native_height_range_validate(p_range);
+	if (valid != OK) return valid;
+	if (!p_range->recording_closed) return ERR_BUSY;
+	if (p_range->uncaptured_prefix) return ERR_INVALID_DATA;
+	if (native_disposal_budget || !_thread_safe_.try_lock()) return ERR_BUSY;
+	struct Unlock { RenderingDevice &rd; ~Unlock() { rd._thread_safe_.unlock(); } } unlock{ *this };
+	if (native_disposal_active && native_disposal_continuation.height_selection != p_range) return ERR_BUSY;
+	bool needs_issue = false;
+	for (uint32_t member = 0; member < p_range->graph_count; ++member) needs_issue |= !p_range->graphs[member].issue_attempted;
+	if (needs_issue || (native_disposal_active && native_disposal_continuation.height_selection == p_range)) {
+		const Error preflight = _native_height_range_service_frame_preflight(p_range);
+		if (preflight != OK) return preflight;
+	}
+	// Coverage/lock checks may consume wall time. A resumed paid episode
+	// still needs remaining original allowance before changing owner state.
+	if (!available()) return ERR_BUSY;
+	if (!p_range->owner_service_work_admitted) {
+		if (!_native_disposal_charge(p_budget, r_usage, NativeDisposalWork::WORK)) return ERR_BUSY;
+		p_range->owner_service_work_admitted = true;
+	}
+	r_row_admitted = true;
+	// Every admitted outcome, including a partial issue/retain failure, must
+	// publish its actual retained prefix before the original RD lock is left.
+	struct SnapshotOnReturn {
+		const RenderingDevice &rd;
+		Ref<NativeHeightRange> range;
+		NativeHeightRange::Snapshot &snapshot;
+		~SnapshotOnReturn() { rd._native_height_range_snapshot(range, snapshot); }
+	} snapshot_on_return{ *this, p_range, r_snapshot };
+	if (p_request_return) p_range->owner_requested_return = true;
+	if (needs_issue || (native_disposal_active && native_disposal_continuation.height_selection == p_range)) {
+		const Error advanced = _native_disposal_maintenance_step(p_budget, r_usage, nullptr, nullptr, p_range);
+		if (advanced != OK) return advanced;
+	}
+	// An ordinary original issue may have left its independent observer
+	// retain pending without an active frame continuation. Resume only this
+	// exact range, using the same original ledger, before attempting its poll.
+	{
+		native_disposal_budget = &p_budget;
+		native_disposal_usage = &r_usage;
+		const Error retained = _native_height_retain_sources(p_range);
+		native_disposal_budget = nullptr;
+		native_disposal_usage = nullptr;
+		if (retained != OK) return retained;
+	}
+	// One original admitted reader per turn, using this same total grant and
+	// cumulative ledger. The producer's return flag never supplies a reader's
+	// independent return permission. Current-only service leaves them intact.
+	Error reader_error = OK;
+	if (p_range->owner_requested_return && p_range->active_readers && available()) {
+		NativeHeightRange *selected = p_range->selected_reader_cursor ? p_range->selected_reader_cursor : p_range->first_reader;
+		if (!selected || selected->producer != p_range || !selected->reader_scope || selected->observers_returned ||
+				(selected->previous_reader ? selected->previous_reader->next_reader != selected : p_range->first_reader != selected) ||
+				(selected->next_reader && selected->next_reader->previous_reader != selected)) return ERR_INVALID_DATA;
+		const Ref<NativeHeightRange> reader = selected;
+		const Error reader_valid = _native_height_range_validate(reader);
+		if (reader_valid != OK) return reader_valid;
+		if (!reader->owner_service_work_admitted) {
+			if (!_native_disposal_charge(p_budget, r_usage, NativeDisposalWork::WORK)) return ERR_BUSY;
+			// Unrequested/open rows pay only their inspection, never acquire a
+			// pending observer-return episode from the producer's permission.
+			if (reader->owner_requested_return && reader->recording_closed && !reader->reader_owns_list) reader->owner_service_work_admitted = true;
+		}
+		p_range->selected_reader_cursor = reader->next_reader ? reader->next_reader : p_range->first_reader;
+		if (reader->owner_requested_return && reader->recording_closed && !reader->reader_owns_list) {
+			// Original ordinary issue owns reader submission. Resume only actual
+			// retained sources here; no broader frame issue is selected by proxy.
+			native_disposal_budget = &p_budget;
+			native_disposal_usage = &r_usage;
+			reader_error = _native_height_retain_sources(reader);
+			native_disposal_budget = nullptr;
+			native_disposal_usage = nullptr;
+			if (reader_error == OK) {
+				NativeHeightRange::Snapshot reader_snapshot;
+				const Error observed_reader = _native_height_range_observe(reader, p_budget, r_usage, reader_snapshot);
+				if (reader_snapshot.native_complete || reader_snapshot.prefix_settled || !reader_snapshot.has_recorded_effect) {
+					reader_error = _native_height_range_return(reader, p_budget, r_usage);
+				} else {
+					reader_error = observed_reader;
+				}
+				if (observed_reader != OK && observed_reader != ERR_BUSY && observed_reader != reader->append_error) reader_error = observed_reader;
+			}
+			if (reader->uncaptured_prefix) reader_error = ERR_INVALID_DATA;
+			for (Error error : { reader->mapping_error, reader->issue_error, reader->retention_error, reader->completion_error, reader->return_error }) {
+				if (error != OK) { reader_error = error; break; }
+			}
+			if (reader->observers_returned) reader->owner_service_work_admitted = false;
+		}
+	}
+	const Error observed = _native_height_range_observe(p_range, p_budget, r_usage, r_snapshot);
+	Error returned = ERR_BUSY;
+	if (available() && p_range->owner_requested_return && (r_snapshot.native_complete || r_snapshot.prefix_settled || !r_snapshot.has_recorded_effect)) {
+		returned = _native_height_range_return(p_range, p_budget, r_usage);
+	}
+	if (p_range->observers_returned || (!p_range->owner_requested_return && (r_snapshot.native_complete || r_snapshot.prefix_settled || !r_snapshot.has_recorded_effect))) {
+		p_range->owner_service_work_admitted = false;
+	}
+	// The pure return guard also projects any observer/error changes.
+	if (p_range->uncaptured_prefix) return ERR_INVALID_DATA;
+	for (Error error : { p_range->mapping_error, p_range->issue_error, p_range->retention_error, p_range->completion_error, p_range->return_error }) {
+		if (error != OK) return error;
+	}
+	if (reader_error != OK && reader_error != ERR_BUSY) return reader_error;
+	if (observed != OK && observed != ERR_BUSY) return observed;
+	return p_range->owner_requested_return ? returned : observed;
+}
+
+Error RenderingDevice::_native_height_reader_finish(const Ref<NativeHeightRange> &p_reader, bool &r_closed) {
+	r_closed = false;
+	const Error valid = _native_height_range_validate(p_reader);
+	if (valid != OK) {
+		return valid;
+	}
+	if (!p_reader->reader_scope) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (p_reader->recording_closed) {
+		r_closed = true;
+		return p_reader->append_error;
+	}
+	if (p_reader->reader_owns_list) {
+		if (native_height_active_checked_range != p_reader || !compute_list.active ||
+				p_reader->capture_frame != uint32_t(frame) || p_reader->capture_epoch != frames[frame].qualification_epoch) {
+			p_reader->uncaptured_prefix = true;
+			if (p_reader->append_error == OK) { p_reader->append_error = ERR_INVALID_DATA; }
+			return p_reader->append_error;
+		}
+		_compute_list_end_recorded();
+		if (p_reader->reader_owns_list) {
+			return ERR_BUSY;
+		}
+	}
+	p_reader->recording_closed = true;
+	r_closed = true;
+	if (native_height_active_checked_range == p_reader) {
+		native_height_active_checked_range.unref();
+	}
+	return p_reader->append_error;
+}
+
+Error RenderingDevice::_native_height_range_record_depth_clear(const Ref<NativeHeightRange> &p_range, const NativeDisposalWitness &p_depth, const NativeDisposalWitness &p_framebuffer, float p_clear_depth) {
+	const Error valid = _native_height_range_validate(p_range);
+	if (valid != OK) {
+		return valid;
+	}
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	if (native_height_finalization_started || production_finalization_started.load() || p_range->recording_started || p_range->recording_closed || p_range->observers_returned ||
+			frame_wait_draining || native_disposal_active || !frames[frame].qualification_epoch || frames[frame].qualification_graph_closed ||
+			!frames[frame].primary_command_buffer_begun || draw_graph.has_driver_callbacks()) {
+		return ERR_BUSY;
+	}
+	if (!Math::is_finite(p_clear_depth) || p_clear_depth < 0.0f || p_clear_depth > 1.0f || p_depth.cell.is_null() || p_framebuffer.cell.is_null()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	_THREAD_SAFE_METHOD_
+	const RID depth_rid = RID::from_uint64(p_depth.cell->rid);
+	const RID framebuffer_rid = RID::from_uint64(p_framebuffer.cell->rid);
+	const Texture *texture = texture_owner.owns(depth_rid) ? texture_owner.get_or_null(depth_rid) : nullptr;
+	const Framebuffer *fb = framebuffer_owner.owns(framebuffer_rid) ? framebuffer_owner.get_or_null(framebuffer_rid) : nullptr;
+	if (!texture || !fb || p_depth.cell->device != uint64_t(get_instance_id()) || p_framebuffer.cell->device != uint64_t(get_instance_id()) ||
+			p_depth.cell->state != NativeDisposalWitness::State::LIVE || p_framebuffer.cell->state != NativeDisposalWitness::State::LIVE ||
+			texture->native_disposal.cell != p_depth.cell || fb->native_disposal.cell != p_framebuffer.cell ||
+			!p_depth.cell->matches(depth_rid.get_id(), texture->native_disposal_serial, texture->driver_id.id) ||
+			!p_framebuffer.cell->matches(framebuffer_rid.get_id(), fb->native_disposal_serial, fb->native_disposal_backing)) {
+		return ERR_INVALID_DATA;
+	}
+	// First recipe deliberately excludes every path that could prepare hidden
+	// copies or consume a transfer operation. No unrelated Frame report is joined.
+	if (texture->format != DATA_FORMAT_D32_SFLOAT || texture->type != TEXTURE_TYPE_2D || texture->samples != TEXTURE_SAMPLES_1 ||
+			texture->depth != 1 || texture->layers != 1 || texture->mipmaps != 1 || texture->owner.is_valid() || texture->shared_fallback ||
+			texture->transfer_worker_index >= 0 || texture->pending_clear || texture->native_external_access || texture->native_immutable_retire_requested ||
+			texture->qualification_return || texture->qualification_users || texture->production_disposal_uses || p_depth.cell->production_request ||
+			p_framebuffer.cell->production_request || fb->qualification_return || fb->qualification_dependency || fb->qualification_users || fb->invalidated_callback ||
+			texture->usage_flags != (TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
+		return ERR_UNAVAILABLE;
+	}
+	if (!fb->framebuffer_cache || uint64_t(uintptr_t(fb->framebuffer_cache)) != fb->native_disposal_backing ||
+			fb->texture_ids.size() != 1 || fb->texture_ids[0] != depth_rid || fb->framebuffer_cache->textures.size() != 1 ||
+			fb->framebuffer_cache->textures[0] != texture->driver_id || fb->view_count != 1 || !texture->draw_tracker ||
+			!framebuffer_formats.has(fb->format_id)) {
+		return ERR_INVALID_DATA;
+	}
+	const FramebufferFormatKey &key = framebuffer_formats[fb->format_id].E->key();
+	if (key.passes.size() != 1 || key.passes[0].depth_attachment != 0 || !key.passes[0].color_attachments.is_empty() || key.vrs_attachment != -1) {
+		return ERR_UNAVAILABLE;
+	}
+	// Finite custody is installed before the first actual checked append.
+	frames[frame].native_height_ranges.reserve(NATIVE_HEIGHT_RANGE_CAPACITY);
+	frames[frame].native_height_ranges.push_back(p_range);
+	p_range->recording_started = true;
+	auto save = [&](const RDG::RecordHandle &handle) {
+		if (!handle.is_valid()) {
+			return;
+		}
+		p_range->has_recorded_effect = true;
+		for (uint32_t i = 0; i < p_range->graph_count; ++i) {
+			const auto &old = p_range->graphs[i].handle;
+			if (old.graph_instance == handle.graph_instance && old.graph_frame == handle.graph_frame && old.kind == handle.kind && old.index == handle.index && old.offset == handle.offset) {
+				return;
+			}
+		}
+		if (p_range->graph_count == p_range->limits.graph_members) {
+			p_range->uncaptured_prefix = true;
+			p_range->append_error = ERR_PARAMETER_RANGE_ERROR;
+			return;
+		}
+		auto &member = p_range->graphs[p_range->graph_count++];
+		member.handle = handle;
+		member.frame = frame;
+		member.frame_epoch = frames[frame].qualification_epoch;
+	};
+	const auto begin = _draw_list_begin_recorded(framebuffer_rid, DRAW_CLEAR_DEPTH, {}, p_clear_depth, 0, Rect2(), 0);
+	save(begin.begin_handle);
+	save(begin.clear_handle);
+	for (uint32_t i = 0; i < begin.preparation_count; ++i) {
+		save(begin.preparation_handles[i]);
+	}
+	for (uint32_t i = 0; i < begin.prefix_count; ++i) {
+		save(begin.prefix_handles[i]);
+	}
+	if (begin.effect != NativeAppendEffect::NoNewEffect) {
+		p_range->has_recorded_effect = true;
+	}
+	if (begin.error != OK || !begin.capture_complete || !begin.begin_handle.is_valid() || !begin.clear_handle.is_valid()) {
+		p_range->append_error = begin.error != OK ? begin.error : ERR_INVALID_DATA;
+	}
+	// Only this exact successful begin may own an active list. Never end a
+	// caller list, reset global state, or replay a failed checked prefix.
+	if (draw_list.active && begin.begin_handle.is_valid() && draw_list.begin_handle.graph_instance == begin.begin_handle.graph_instance &&
+			draw_list.begin_handle.graph_frame == begin.begin_handle.graph_frame && draw_list.begin_handle.kind == begin.begin_handle.kind &&
+			draw_list.begin_handle.index == begin.begin_handle.index && draw_list.begin_handle.offset == begin.begin_handle.offset) {
+		const auto end = _draw_list_end_recorded();
+		save(end.draw_handle);
+		for (uint32_t i = 0; i < end.prefix_count; ++i) {
+			save(end.prefix_handles[i]);
+		}
+		if (end.error != OK || !end.capture_complete || !end.draw_handle.is_valid()) {
+			p_range->append_error = end.error != OK ? end.error : ERR_INVALID_DATA;
+			p_range->uncaptured_prefix = true;
+		}
+	} else if (p_range->has_recorded_effect) {
+		p_range->uncaptured_prefix = true;
+		p_range->append_error = ERR_INVALID_DATA;
+	}
+	return p_range->append_error;
+}
+
+Error RenderingDevice::_native_height_range_close(const Ref<NativeHeightRange> &p_range) {
+	const Error valid = _native_height_range_validate(p_range);
+	if (valid != OK) {
+		return valid;
+	}
+	p_range->recording_closed = true;
+	return p_range->append_error;
+}
+
+void RenderingDevice::_native_height_seal_frame(uint32_t p_frame) {
+	for (const Ref<NativeHeightRange> &range : frames[p_frame].native_height_ranges) {
+		for (uint32_t i = 0; i < range->graph_count; ++i) {
+			auto &member = range->graphs[i];
+			if (member.frame != p_frame || member.frame_epoch != frames[p_frame].qualification_epoch || member.state != NativeHeightRange::MemberState::Recorded) {
+				continue;
+			}
+			if (draw_graph.record_mapping_state(member.handle) != RDG::RecordMappingState::Recorded ||
+					!draw_graph.resolve_record_command_buffer_slot(member.handle, member.slot) ||
+					!draw_graph.resolve_record_command_buffer(member.handle, member.command_buffer) || !member.command_buffer) {
+				member.state = NativeHeightRange::MemberState::MappingFailed;
+				range->mapping_failed = true;
+				range->mapping_error = ERR_INVALID_DATA;
+				range->uncaptured_prefix = true;
+				continue;
+			}
+			member.state = NativeHeightRange::MemberState::Sealed;
+			// One exclusive closed pass must be mapped consistently for every
+			// actual header/clear/instruction/end handle, not just its tail.
+			if (i && (member.slot != range->graphs[0].slot || member.command_buffer != range->graphs[0].command_buffer)) {
+				range->mapping_failed = true;
+				range->mapping_error = ERR_INVALID_DATA;
+				range->uncaptured_prefix = true;
+			}
+		}
+	}
+}
+
+Error RenderingDevice::_native_height_issue_slot(uint32_t p_frame, uint64_t p_epoch, uint32_t p_slot, RDD::CommandBufferID p_command, Error p_error, const RDD::QueueCallReport &p_report) {
+	if (p_error == ERR_BUSY && p_report.calls.is_empty()) {
+		return ERR_BUSY; // The original slot has not attempted a native issue.
+	}
+	Error result = OK;
+	for (const Ref<NativeHeightRange> &range : frames[p_frame].native_height_ranges) {
+		for (uint32_t i = 0; i < range->graph_count; ++i) {
+			auto &member = range->graphs[i];
+			if (member.frame != p_frame || member.frame_epoch != p_epoch || member.state != NativeHeightRange::MemberState::Sealed ||
+					member.issue_attempted || member.slot != p_slot || member.command_buffer != p_command) {
+				continue;
+			}
+			member.issue_attempted = true;
+			member.state = NativeHeightRange::MemberState::IssueAttached;
+			if (p_report.native_issue_count > range->limits.native_sources) {
+				range->uncaptured_prefix = true;
+				range->issue_error = ERR_PARAMETER_RANGE_ERROR;
+			}
+			if (p_error != OK || p_report.error != OK || !p_report.issued) {
+				range->issue_error = p_error != OK ? p_error : (p_report.error != OK ? p_report.error : FAILED);
+			}
+			uint32_t member_sources = 0;
+			for (const auto &fact : p_report.calls) {
+				if (fact.presentation_only || fact.issue == RDD::IssueFact::NotIssued) {
+					continue;
+				}
+				if (!p_report.native_issue_count || !fact.serial || !fact.completion_serial || fact.completion == RDD::CompletionCapability::Disabled) {
+					range->uncaptured_prefix = true;
+					range->issue_error = ERR_INVALID_DATA;
+					continue;
+				}
+				uint32_t source = range->source_count;
+				for (uint32_t j = 0; j < range->source_count; ++j) {
+					const auto &old = range->sources[j].original;
+					if (old.serial == fact.serial) {
+						source = j;
+						if (old.completion_serial != fact.completion_serial || old.queue_index != fact.queue_index || old.issue != fact.issue ||
+								old.error != fact.error || old.native_code != fact.native_code || old.completion != fact.completion) {
+							range->uncaptured_prefix = true;
+							range->issue_error = ERR_INVALID_DATA;
+						}
+						break;
+					}
+				}
+				if (source == range->source_count) {
+					if (range->source_count == range->limits.native_sources) {
+						range->uncaptured_prefix = true;
+						range->issue_error = ERR_PARAMETER_RANGE_ERROR;
+						continue;
+					}
+					range->sources[range->source_count++].original = fact;
+				}
+				if (range->edge_count == range->limits.source_edges) {
+					range->uncaptured_prefix = true;
+					range->issue_error = ERR_PARAMETER_RANGE_ERROR;
+					continue;
+				}
+				range->edges[range->edge_count++] = { i, source };
+				++member_sources;
+			}
+			if (!member_sources) {
+				range->uncaptured_prefix = true;
+				range->issue_error = ERR_INVALID_DATA;
+			}
+			if (range->issue_error != OK) {
+				result = range->issue_error;
+			}
+		}
+	}
+	// A busy retain never replays this already attempted native slot. The Frame
+	// remains its original owner until the independent recycle barrier succeeds.
+	const Error retained = _native_height_retain_frame_sources(p_frame);
+	return result != OK ? result : retained;
+}
+
+Error RenderingDevice::_native_height_retain_sources(const Ref<NativeHeightRange> &range) {
+	while (range->retain_cursor < range->source_count) {
+		auto &source = range->sources[range->retain_cursor];
+		if (!source.retained) {
+			if (source.retention_error != OK) {
+				return source.retention_error;
+			}
+			if (!_native_disposal_admit(NativeDisposalWork::RETAIN)) {
+				return ERR_BUSY;
+			}
+			const Error error = driver->native_call_retain(source.original.serial);
+			if (error != OK) {
+				if (error != ERR_BUSY) {
+					source.retention_error = error;
+					range->retention_error = error;
+				}
+				return error;
+			}
+			source.retained = true;
+		}
+		++range->retain_cursor;
+	}
+	if (range->uncaptured_prefix) {
+		return ERR_INVALID_DATA; // The original Frame must not retire a lost prefix.
+	}
+	return OK;
+}
+
+Error RenderingDevice::_native_height_retain_frame_sources(uint32_t p_frame) {
+	for (const Ref<NativeHeightRange> &range : frames[p_frame].native_height_ranges) {
+		const Error retained = _native_height_retain_sources(range);
+		if (retained != OK) {
+			return retained;
+		}
+	}
+	return OK;
+}
+
+void RenderingDevice::_native_height_range_snapshot(const Ref<NativeHeightRange> &p_range, NativeHeightRange::Snapshot &r_snapshot) const {
+	// Pure projection of original captured/cached state. No driver calls,
+	// budget charges, cursor progress, or completion reduction belongs here.
+	r_snapshot = {};
+	uint32_t sealed = 0, attempted = 0, retained = 0, completed = 0;
+	for (uint32_t i = 0; i < p_range->graph_count; ++i) {
+		const auto &member = p_range->graphs[i];
+		sealed += member.state == NativeHeightRange::MemberState::Sealed || member.state == NativeHeightRange::MemberState::IssueAttached;
+		attempted += member.issue_attempted;
+	}
+	for (uint32_t i = 0; i < p_range->source_count; ++i) {
+		retained += p_range->sources[i].retained;
+		completed += p_range->sources[i].complete;
+	}
+	bool workers_attached = true;
+	for (uint32_t i = 0; i < p_range->worker_count; ++i) {
+		workers_attached = workers_attached && p_range->workers[i].attached;
+	}
+	r_snapshot.recording_closed = p_range->recording_closed;
+	r_snapshot.owner_requested_return = p_range->owner_requested_return;
+	r_snapshot.has_recorded_effect = p_range->has_recorded_effect;
+	r_snapshot.mapping_closed = sealed == p_range->graph_count;
+	r_snapshot.issue_closed = workers_attached && attempted == p_range->graph_count;
+	r_snapshot.native_complete = p_range->native_complete;
+	r_snapshot.prefix_settled = p_range->prefix_settled;
+	r_snapshot.observers_returned = p_range->observers_returned;
+	r_snapshot.graph_members = p_range->graph_count;
+	r_snapshot.sealed_members = sealed;
+	r_snapshot.issued_sources = p_range->source_count;
+	r_snapshot.retained_sources = retained;
+	r_snapshot.completed_sources = completed;
+	r_snapshot.active_readers = p_range->active_readers;
+	r_snapshot.append_error = p_range->append_error;
+	r_snapshot.mapping_error = p_range->mapping_error;
+	r_snapshot.issue_error = p_range->issue_error;
+	r_snapshot.retention_error = p_range->retention_error;
+	r_snapshot.completion_error = p_range->completion_error;
+	r_snapshot.return_error = p_range->return_error;
+}
+
+Error RenderingDevice::_native_height_range_observe(const Ref<NativeHeightRange> &p_range, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, NativeHeightRange::Snapshot &r_snapshot) {
+	r_snapshot = {};
+	const Error valid = _native_height_range_validate(p_range);
+	if (valid != OK) {
+		return valid;
+	}
+	Error result = OK;
+	if (!p_range->native_complete && !p_range->observers_returned) {
+		while (p_range->poll_cursor < p_range->source_count) {
+			auto &source = p_range->sources[p_range->poll_cursor];
+			if (!source.retained) {
+				result = ERR_BUSY;
+				break;
+			}
+			if (source.completion_error != OK) {
+				result = source.completion_error;
+				break;
+			}
+			if (!source.complete) {
+				if (!_native_disposal_charge(p_budget, r_usage, NativeDisposalWork::POLL)) {
+					result = ERR_BUSY;
+					break;
+				}
+				const auto observed = driver->native_call_poll(source.original.serial);
+				if (observed.native_error) {
+					source.completion_error = FAILED;
+					source.completion_native_code = observed.native_code;
+					p_range->completion_error = FAILED;
+					result = FAILED;
+					break;
+				}
+				const bool accepted = source.original.issue == RDD::IssueFact::KnownAccepted ||
+						(source.original.issue == RDD::IssueFact::IssuedUnknown && observed.resolved_issue == RDD::IssueFact::KnownAccepted);
+				if (!accepted || source.original.error != OK || !observed.matches(source.original.completion_serial)) {
+					result = ERR_BUSY;
+					break;
+				}
+				source.complete = true;
+			}
+			++p_range->poll_cursor;
+		}
+	}
+	_native_height_range_snapshot(p_range, r_snapshot);
+	const bool clean = r_snapshot.issue_closed && p_range->append_error == OK && p_range->mapping_error == OK && p_range->issue_error == OK &&
+			p_range->retention_error == OK && p_range->completion_error == OK && !p_range->uncaptured_prefix;
+	const bool prefix_clean = r_snapshot.issue_closed && p_range->recording_closed && p_range->has_recorded_effect && p_range->graph_count &&
+			r_snapshot.mapping_closed && r_snapshot.issue_closed && p_range->source_count &&
+			r_snapshot.retained_sources == p_range->source_count && r_snapshot.completed_sources == p_range->source_count &&
+			p_range->mapping_error == OK && p_range->issue_error == OK && p_range->retention_error == OK &&
+			p_range->completion_error == OK && !p_range->uncaptured_prefix;
+	if (prefix_clean) {
+		p_range->prefix_settled = true;
+	}
+	if (clean && p_range->recording_closed && p_range->has_recorded_effect && p_range->graph_count && r_snapshot.mapping_closed &&
+			r_snapshot.issue_closed && p_range->source_count && r_snapshot.retained_sources == p_range->source_count && r_snapshot.completed_sources == p_range->source_count) {
+		p_range->native_complete = true;
+	}
+	// Only authoritative observation above reduces completion. Projection
+	// merely reports the resulting cached flags.
+	r_snapshot.native_complete = p_range->native_complete;
+	r_snapshot.prefix_settled = p_range->prefix_settled;
+	for (Error error : { p_range->append_error, p_range->mapping_error, p_range->issue_error, p_range->retention_error, p_range->completion_error, p_range->return_error }) {
+		if (error != OK) {
+			return error;
+		}
+	}
+	if (result != OK) {
+		return result;
+	}
+	return p_range->has_recorded_effect && !p_range->native_complete && !p_range->prefix_settled ? ERR_BUSY : OK;
+}
+
+Error RenderingDevice::_native_height_range_return(const Ref<NativeHeightRange> &p_range, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage) {
+	const Error valid = _native_height_range_validate(p_range);
+	if (valid != OK) {
+		return valid;
+	}
+	if (p_range->observers_returned) {
+		return OK;
+	}
+	if (p_range->return_error != OK) {
+		return p_range->return_error;
+	}
+	// Explicit producer retirement closes further reader admission. A reader
+	// must receive its separate original owner request before observer return.
+	if (!p_range->reader_scope) {
+		p_range->owner_requested_return = true;
+	} else if (!p_range->owner_requested_return) {
+		return ERR_BUSY;
+	}
+	if (p_range->uncaptured_prefix) {
+		return ERR_BUSY;
+	}
+	if (p_range->active_readers) {
+		return ERR_BUSY;
+	}
+	const bool known_no_effect = !p_range->has_recorded_effect && !p_range->uncaptured_prefix && !p_range->graph_count && !p_range->source_count && !p_range->edge_count && !p_range->worker_count;
+	if (!p_range->recording_closed || (!p_range->native_complete && !p_range->prefix_settled && !known_no_effect)) {
+		return ERR_BUSY;
+	}
+	while (p_range->return_cursor < p_range->source_count) {
+		auto &source = p_range->sources[p_range->return_cursor];
+		if (source.retained && !source.observer_returned) {
+			if (!_native_disposal_charge(p_budget, r_usage, NativeDisposalWork::RELEASE)) {
+				return ERR_BUSY;
+			}
+			const Error error = driver->native_call_release(source.original.serial);
+			if (error != OK) {
+				if (error != ERR_BUSY) {
+					p_range->return_error = error;
+				}
+				return error;
+			}
+			source.observer_returned = true;
+		}
+		++p_range->return_cursor;
+	}
+	p_range->observers_returned = true;
+	p_range->producer_resources.unref();
+	if (p_range->producer.is_valid()) {
+		DEV_ASSERT(p_range->producer->active_readers > 0);
+		auto &producer = *p_range->producer.ptr();
+		if (p_range->previous_reader) p_range->previous_reader->next_reader = p_range->next_reader;
+		else producer.first_reader = p_range->next_reader;
+		if (p_range->next_reader) p_range->next_reader->previous_reader = p_range->previous_reader;
+		if (producer.selected_reader_cursor == p_range.ptr()) {
+			producer.selected_reader_cursor = p_range->next_reader ? p_range->next_reader : producer.first_reader;
+		}
+		p_range->previous_reader = nullptr;
+		p_range->next_reader = nullptr;
+		--producer.active_readers;
+		p_range->producer.unref();
+	}
+	for (uint32_t i = 0; i < native_height_ranges.size(); ++i) {
+		if (native_height_ranges[i] == p_range) {
+			if (i < native_height_reader_return_cursor) {
+				--native_height_reader_return_cursor;
+			}
+			native_height_ranges.remove_at(i);
+			break;
+		}
+	}
+	// No later seal/issue may retarget a returned cell in a recycled Frame.
+	for (auto &f : frames) {
+		for (uint32_t i = 0; i < f.native_height_ranges.size(); ++i) {
+			if (f.native_height_ranges[i] == p_range) {
+				f.native_height_ranges.remove_at(i);
+				break;
+			}
+		}
+	}
+	return OK;
+}
+
+Error RenderingDevice::_native_height_ranges_prepare_finalization() {
+	const NativeDisposalBudget budget{ UINT32_MAX, UINT32_MAX, UINT64_MAX };
+	NativeDisposalUsage usage;
+	while (!native_height_ranges.is_empty()) {
+		// Keep a local Ref: explicit return removes the original RD/Frame refs.
+		Ref<NativeHeightRange> range = native_height_ranges[0];
+		// A producer's return barrier must not strand readers behind it in the
+		// directory. Readers are never producers, so this walk is one level.
+		if (range->active_readers) {
+			for (const Ref<NativeHeightRange> &candidate : native_height_ranges) {
+				if (candidate->producer == range) {
+					range = candidate;
+					break;
+				}
+			}
+		}
+		// Only the original sink's explicit finish/unwind can close its capture:
+		// there may be an actual checked result not yet enrolled when finalization
+		// is entered. Empty reducer arrays do not establish a no-effect prefix.
+		if ((range->capture_sink || range->reader_scope) && !range->recording_closed) {
+			return ERR_BUSY;
+		}
+		range->recording_closed = true;
+		// Finalization is the original terminal owner request, after explicit close.
+		range->owner_requested_return = true;
+		if (!range->has_recorded_effect && !range->uncaptured_prefix && !range->graph_count && !range->source_count && !range->edge_count && !range->worker_count) {
+			const Error returned = _native_height_range_return(range, budget, usage);
+			if (returned != OK) {
+				return returned;
+			}
+			continue;
+		}
+		NativeHeightRange::Snapshot snapshot;
+		const Error observed = _native_height_range_observe(range, budget, usage, snapshot);
+		// A checked capture can leave a sticky business error after its complete
+		// native prefix has settled. Preserve that error in the snapshot, but do
+		// not strand already-observed native sources or block finalization.
+		const bool sticky_business_error = snapshot.prefix_settled && snapshot.append_error != OK &&
+				snapshot.mapping_error == OK && snapshot.issue_error == OK && snapshot.retention_error == OK &&
+				snapshot.completion_error == OK && snapshot.return_error == OK;
+		if (observed != OK && !sticky_business_error) {
+			return observed;
+		}
+		const Error returned = _native_height_range_return(range, budget, usage);
+		if (returned != OK) {
+			return returned;
+		}
+	}
+	return OK;
+}
+
+Error RenderingDevice::_native_disposal_preflight() const {
+	if (!is_main_instance || render_thread_id != Thread::get_caller_id() || !driver || native_finalization_returned) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (frames.is_empty() || uint32_t(frame) >= frames.size() || draw_list.active || compute_list.active || raytracing_list.active) {
+		return ERR_BUSY;
+	}
+	return _recording_error();
+}
+
+Error RenderingDevice::_native_disposal_sampler_create(const SamplerState &p_state, RID &r_rid, NativeDisposalWitness &r_witness) {
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	_THREAD_SAFE_METHOD_
+	if (r_rid.is_valid() || r_witness.cell.is_valid()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const uint64_t serial = _reserve_backing_serial();
+	if (!serial) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	NativeDisposalWitness reserved;
+	reserved.cell.instantiate();
+	reserved.cell->device = uint64_t(get_instance_id());
+	reserved.cell->serial = serial;
+	const RID created = _sampler_create_internal(p_state, nullptr, &reserved);
+	if (created.is_null()) {
+		return ERR_CANT_CREATE;
+	}
+	r_rid = created;
+	r_witness = reserved;
+	return OK;
+}
+
+Error RenderingDevice::_native_disposal_depth_texture_create(uint32_t p_width, uint32_t p_height, RID &r_rid, NativeDisposalWitness &r_witness) {
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	_THREAD_SAFE_METHOD_
+	if (!p_width || !p_height || r_rid.is_valid() || r_witness.cell.is_valid()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const uint64_t serial = _reserve_backing_serial();
+	if (!serial) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	NativeDisposalWitness reserved;
+	reserved.cell.instantiate();
+	reserved.cell->device = uint64_t(get_instance_id());
+	reserved.cell->serial = serial;
+	const RID id = texture_owner.allocate_rid();
+	if (id.is_null()) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	TextureFormat format;
+	format.texture_type = TEXTURE_TYPE_2D;
+	format.format = DATA_FORMAT_D32_SFLOAT;
+	format.width = p_width;
+	format.height = p_height;
+	format.usage_bits = TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+	// No upload/clear is issued here. A failed allocation has no native prefix.
+	const RID created = _texture_create_internal(format, TextureView(), {}, nullptr, id, &reserved);
+	if (created.is_null()) {
+		texture_owner.initialize_rid(id, Texture());
+		texture_owner.free(id);
+		return ERR_CANT_CREATE;
+	}
+	r_rid = created;
+	r_witness = reserved;
+	return OK;
+}
+
+Error RenderingDevice::_native_disposal_depth_framebuffer_create(const NativeDisposalWitness &p_texture, RID &r_rid, NativeDisposalWitness &r_witness) {
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	_THREAD_SAFE_METHOD_
+	if (r_rid.is_valid() || r_witness.cell.is_valid()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	NativeDisposalWitness::Report target_report;
+	const Error observed = _native_disposal_observe(p_texture, target_report);
+	if (observed != OK) {
+		return observed;
+	}
+	const RID target = RID::from_uint64(target_report.rid);
+	const Texture *texture = texture_owner.owns(target) ? texture_owner.get_or_null(target) : nullptr;
+	if (!texture || target_report.state != NativeDisposalWitness::State::LIVE || texture->native_disposal.cell != p_texture.cell ||
+			!p_texture.cell->matches(target.get_id(), texture->native_disposal_serial, texture->driver_id.id)) {
+		return ERR_INVALID_DATA;
+	}
+	if (texture->qualification_return || texture->native_immutable_retire_requested || texture->owner.is_valid() || texture->shared_fallback || texture->transfer_worker_index >= 0 || texture->format != DATA_FORMAT_D32_SFLOAT ||
+			texture->samples != TEXTURE_SAMPLES_1 || texture->usage_flags != (TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
+		return ERR_UNAVAILABLE;
+	}
+	const uint64_t serial = _reserve_backing_serial();
+	if (!serial) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	NativeDisposalWitness reserved;
+	reserved.cell.instantiate();
+	reserved.cell->device = uint64_t(get_instance_id());
+	reserved.cell->serial = serial;
+	const RID id = framebuffer_owner.allocate_rid();
+	if (id.is_null()) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	Vector<RID> attachments;
+	attachments.push_back(target);
+	FramebufferPass pass;
+	pass.depth_attachment = 0;
+	Vector<FramebufferPass> passes;
+	passes.push_back(pass);
+	const RID created = _qualification_framebuffer_create_multipass(attachments, passes, INVALID_ID, 1, nullptr, nullptr, id, &reserved);
+	if (created.is_null()) {
+		framebuffer_owner.initialize_rid(id, Framebuffer());
+		framebuffer_owner.free(id);
+		// The texture was already published by its own factory. Its original
+		// caller still owns its LIVE witness and performs any rollback.
+		return ERR_CANT_CREATE;
+	}
+	r_rid = created;
+	r_witness = reserved;
+	return OK;
+}
+
+Error RenderingDevice::_native_disposal_depth_sample_set_create(const NativeDisposalWitness &p_sampler, const NativeDisposalWitness &p_texture, RID p_shader, uint32_t p_set, uint32_t p_binding, RID &r_rid, NativeDisposalWitness &r_witness) {
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	_THREAD_SAFE_METHOD_
+	if (r_rid.is_valid() || r_witness.cell.is_valid()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	NativeDisposalWitness::Report sampler_report, texture_report;
+	Error observed = _native_disposal_observe(p_sampler, sampler_report);
+	if (observed != OK) {
+		return observed;
+	}
+	observed = _native_disposal_observe(p_texture, texture_report);
+	if (observed != OK) {
+		return observed;
+	}
+	const RID sampler_rid = RID::from_uint64(sampler_report.rid);
+	const RID texture_rid = RID::from_uint64(texture_report.rid);
+	// Reject foreign validators before inspecting possibly uninitialized slots.
+	const Sampler *sampler = sampler_owner.owns(sampler_rid) ? sampler_owner.get_or_null(sampler_rid) : nullptr;
+	const Texture *texture = texture_owner.owns(texture_rid) ? texture_owner.get_or_null(texture_rid) : nullptr;
+	if (!sampler || !sampler->driver_id || sampler_report.state != NativeDisposalWitness::State::LIVE || sampler->native_disposal.cell != p_sampler.cell || sampler->native_disposal_rid != sampler_rid.get_id() ||
+			!p_sampler.cell->matches(sampler_rid.get_id(), sampler->native_disposal_serial, sampler->driver_id.id) ||
+			!texture || !texture->driver_id || texture_report.state != NativeDisposalWitness::State::LIVE || texture->native_disposal.cell != p_texture.cell || texture->native_disposal_rid != texture_rid.get_id() ||
+			!p_texture.cell->matches(texture_rid.get_id(), texture->native_disposal_serial, texture->driver_id.id)) {
+		return ERR_INVALID_DATA;
+	}
+	// Dependency invalidation callbacks run unlocked while the original root
+	// free is active. They cannot add a new descriptor child to that root.
+	if (resource_frees_in_progress.has(sampler_rid) || resource_frees_in_progress.has(texture_rid) || resource_frees_in_progress.has(p_shader)) {
+		return ERR_BUSY;
+	}
+	const Shader *shader = shader_owner.owns(p_shader) ? shader_owner.get_or_null(p_shader) : nullptr;
+	if (!shader || !shader->driver_id || shader->qualification_return || shader->native_immutable_retire_requested || !shader->native_immutable_samplers.is_empty() ||
+			sampler->qualification_return || sampler->native_immutable_retire_requested || texture->qualification_return || texture->native_immutable_retire_requested) {
+		return ERR_UNAVAILABLE;
+	}
+	if (texture->type != TEXTURE_TYPE_2D || texture->format != DATA_FORMAT_D32_SFLOAT || texture->samples != TEXTURE_SAMPLES_1 ||
+			!texture->width || !texture->height || texture->depth != 1 || texture->layers != 1 || texture->mipmaps != 1 || texture->base_layer || texture->base_mipmap ||
+			texture->usage_flags != (TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) || texture->owner.is_valid() || texture->shared_fallback ||
+			texture->transfer_worker_index >= 0 || !texture->draw_tracker) {
+		return ERR_UNAVAILABLE;
+	}
+	if (p_set >= uint32_t(shader->uniform_sets.size()) || p_set >= uint32_t(shader->set_formats.size()) || shader->uniform_sets[p_set].size() != 1) {
+		return ERR_UNAVAILABLE;
+	}
+	const ShaderUniform &binding = shader->uniform_sets[p_set][0];
+	if (binding.binding != p_binding || binding.type != UNIFORM_TYPE_SAMPLER_WITH_TEXTURE || binding.length != 1 || binding.writable) {
+		return ERR_UNAVAILABLE;
+	}
+	Vector<RID> ids;
+	const Error allocated = ids.resize(2);
+	if (allocated != OK) {
+		return allocated;
+	}
+	ids.write[0] = sampler_rid;
+	ids.write[1] = texture_rid;
+	Uniform uniform(UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, ids);
+	uniform.binding = p_binding;
+	uniform.immutable_sampler = false;
+	const uint64_t serial = _reserve_backing_serial();
+	if (!serial) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	NativeDisposalWitness reserved;
+	reserved.cell.instantiate();
+	reserved.cell->device = uint64_t(get_instance_id());
+	reserved.cell->serial = serial;
+	// The original factory reserves its RID before native creation and owns
+	// all dependency edges. It records pending_clear metadata without consuming
+	// the clear. This disposal witness grants no read/source/bind authority.
+	const RID created = _uniform_set_create_qualification(VectorView<Uniform>(&uniform, 1), p_shader, p_set, false, nullptr, nullptr, &reserved);
+	if (created.is_null()) {
+		return ERR_CANT_CREATE; // Earlier published parents remain caller-owned.
+	}
+	r_rid = created;
+	r_witness = reserved;
+	return OK;
+}
+
+Error RenderingDevice::_native_disposal_storage_create(uint32_t p_bytes, BitField<StorageBufferUsage> p_usage, RID &r_rid, NativeDisposalWitness &r_witness) {
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	if (!p_bytes || r_rid.is_valid() || r_witness.cell.is_valid()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (uint64_t(p_usage) & ~uint64_t(STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT)) {
+		return ERR_UNAVAILABLE;
+	}
+	NativeDisposalWitness reserved;
+	reserved.cell.instantiate(); // Entire observation storage exists before native creation.
+	reserved.cell->device = uint64_t(get_instance_id());
+	// No initial upload: a failed factory cannot hide a recorded upload prefix.
+	const RID rid = _storage_buffer_create_internal(p_bytes, Span<uint8_t>(), p_usage, {}, &reserved);
+	if (rid.is_null()) {
+		return ERR_CANT_CREATE;
+	}
+	r_rid = rid;
+	r_witness = reserved;
+	return OK;
+}
+
+Error RenderingDevice::_native_disposal_uniform_set_create(const VectorView<Uniform> &p_uniforms, RID p_shader, uint32_t p_set, RID &r_rid, NativeDisposalWitness &r_witness, const GDExtensionDeviceExit::ProductionRequest *p_owner, uint64_t p_group, uint64_t p_root, uint32_t p_ordinal, const VectorView<ProductionOutputUniformSource> *p_sources) {
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	if (r_rid.is_valid() || r_witness.cell.is_valid() || p_uniforms.size() == 0) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const Shader *shader = shader_owner.get_or_null(p_shader);
+	if (!shader || !shader->driver_id || shader->qualification_return) {
+		return ERR_UNAVAILABLE;
+	}
+	// This batch supports only mutable, Core-created storage buffers. Texture,
+	// VA/IA, shader/pipeline disposal and arbitrary existing resources have no
+	// production observation contract here. Reject before synchronization work.
+	for (uint32_t uniform_index = 0; uniform_index < p_uniforms.size(); ++uniform_index) {
+		const Uniform &uniform = p_uniforms[uniform_index];
+		if (uniform.uniform_type != UNIFORM_TYPE_STORAGE_BUFFER || uniform.get_id_count() != 1) {
+			return ERR_UNAVAILABLE;
+		}
+		const Buffer *buffer = storage_buffer_owner.get_or_null(uniform.get_id(0));
+		// The strict original-source overload already checked the live imported
+		// READ edge under the same Registry and RD locks. Preserve its dependency.
+		if (buffer && buffer->qualification_return && p_owner && p_sources && uniform_index < p_sources->size() &&
+				(*p_sources)[uniform_index].buffer == uniform.get_id(0) && !(*p_sources)[uniform_index].owned_group) {
+			continue;
+		}
+		if (!buffer || buffer->qualification_return || !buffer->draw_tracker || buffer->transfer_worker_index >= 0 || buffer->native_disposal.cell.is_null()) {
+			return ERR_UNAVAILABLE;
+		}
+		const auto &cell = buffer->native_disposal.cell;
+		if (cell->device != uint64_t(get_instance_id()) || cell->state != NativeDisposalWitness::State::LIVE || !cell->matches(uniform.get_id(0).get_id(), buffer->backing_serial, buffer->driver_id.id)) {
+			return ERR_INVALID_DATA;
+		}
+	}
+	const uint64_t serial = _reserve_backing_serial();
+	if (!serial) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	NativeDisposalWitness reserved;
+	reserved.cell.instantiate();
+	reserved.cell->device = uint64_t(get_instance_id());
+	reserved.cell->serial = serial;
+	if (p_owner) {
+		if (!p_owner->serial || !p_group || !p_root || p_ordinal == UINT32_MAX) {
+			return ERR_UNAUTHORIZED;
+		}
+		reserved.cell->production_request = const_cast<GDExtensionDeviceExit::ProductionRequest *>(p_owner);
+		reserved.cell->production_request_serial = p_owner->serial;
+		reserved.cell->production_group_serial = p_group;
+		reserved.cell->production_pin_serial = p_root;
+		reserved.cell->production_ordinal = p_ordinal;
+	}
+	const RID rid = _uniform_set_create_qualification(p_uniforms, p_shader, p_set, false, nullptr, nullptr, &reserved, p_owner, p_sources);
+	if (rid.is_null()) {
+		return ERR_CANT_CREATE;
+	}
+	r_rid = rid;
+	r_witness = reserved;
+	return OK;
+}
+
+Error RenderingDevice::_native_disposal_observe(const NativeDisposalWitness &p_witness, NativeDisposalWitness::Report &r_report) const {
+	// Observation is possible during recovery, but never from a foreign RD/RT.
+	if (!is_main_instance || render_thread_id != Thread::get_caller_id() || p_witness.cell.is_null() || p_witness.cell->device != uint64_t(get_instance_id())) {
+		return ERR_UNAUTHORIZED;
+	}
+	const auto &cell = p_witness.cell;
+	r_report = { cell->state, cell->rid, cell->serial };
+	return cell->state == NativeDisposalWitness::State::UNKNOWN ? ERR_INVALID_DATA : OK;
+}
+
+Error RenderingDevice::_native_disposal_depth_allocation_quote(uint32_t p_width, uint32_t p_height, NativeDepthAllocationQuote &r_quote) const {
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	if (!p_width || !p_height || r_quote.device) {
+		return ERR_INVALID_PARAMETER;
+	}
+	_THREAD_SAFE_METHOD_
+	RDD::DepthAllocationQuote native;
+	const Error error = driver->depth_allocation_quote(p_width, p_height, native);
+	if (error != OK) {
+		return error;
+	}
+	if ((native.policy != RDD::DepthAllocationQuote::Policy::MetalHeapPool && native.policy != RDD::DepthAllocationQuote::Policy::MetalHeapDedicated) || !native.native_requirement || !native.owner_reservation ||
+			native.native_requirement > native.owner_reservation || !native.alignment || (native.alignment & (native.alignment - 1))) {
+		return ERR_INVALID_DATA;
+	}
+	NativeDepthAllocationQuote quote;
+	quote.device = uint64_t(get_instance_id());
+	quote.report.width = p_width;
+	quote.report.height = p_height;
+	quote.report.policy = native.policy == RDD::DepthAllocationQuote::Policy::MetalHeapPool ? NativeDepthAllocationQuote::Policy::MetalHeapPool : NativeDepthAllocationQuote::Policy::MetalHeapDedicated;
+	quote.report.texture_native_requirement = { NativeDepthAllocationProjection::ByteKnowledge::Known, native.native_requirement };
+	quote.report.texture_owner_reservation = { NativeDepthAllocationProjection::ByteKnowledge::Known, native.owner_reservation };
+	quote.report.framebuffer_owner_reservation = { NativeDepthAllocationProjection::ByteKnowledge::Known, 0 };
+	quote.report.alignment = native.alignment;
+	quote.report.allocations = 2;
+	quote.report.parts = 1;
+	quote.report.shared_attachment_references = 1;
+	r_quote = quote;
+	return OK;
+}
+
+Error RenderingDevice::_native_disposal_depth_allocation_quote_observe(const NativeDepthAllocationQuote &p_quote, NativeDepthAllocationQuote::Report &r_report) const {
+	r_report = {};
+	if (!is_main_instance || render_thread_id != Thread::get_caller_id() || !p_quote.device || p_quote.device != uint64_t(get_instance_id())) {
+		return ERR_UNAUTHORIZED;
+	}
+	r_report = p_quote.report;
+	return OK;
+}
+
+Error RenderingDevice::_native_disposal_depth_texture_create_quoted(const NativeDepthAllocationQuote &p_quote, RID &r_rid, NativeDisposalWitness &r_witness, NativeDepthAllocationProjection &r_projection, NativeDepthAllocationQuote::CreateOutcome &r_outcome) {
+	r_outcome = NativeDepthAllocationQuote::CreateOutcome::NotCreated;
+	NativeDepthAllocationQuote::Report quote;
+	const Error observed = _native_disposal_depth_allocation_quote_observe(p_quote, quote);
+	if (observed != OK) {
+		return observed;
+	}
+	if (r_projection.device || r_rid.is_valid() || r_witness.cell.is_valid()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	// This recheck binds the original quote to the current original allocator
+	// policy before native effect. C still owns the retained E05 reservation.
+	NativeDepthAllocationQuote current;
+	const Error requoted = _native_disposal_depth_allocation_quote(quote.width, quote.height, current);
+	if (requoted != OK) {
+		return requoted;
+	}
+	if (current.report.policy != quote.policy || current.report.alignment != quote.alignment || current.report.texture_owner_reservation.bytes > quote.texture_owner_reservation.bytes) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	const Error created = _native_disposal_depth_texture_create(quote.width, quote.height, r_rid, r_witness);
+	if (created != OK) {
+		return created;
+	}
+	r_outcome = NativeDepthAllocationQuote::CreateOutcome::CreatedActualUnknown;
+	const Error captured = _native_disposal_depth_allocation_capture(r_witness, NativeDisposalWitness(), r_projection);
+	if (captured != OK) {
+		return captured;
+	}
+	if (r_projection.depth_driver_backing.knowledge != NativeDepthAllocationProjection::ByteKnowledge::Known) {
+		return ERR_UNAVAILABLE;
+	}
+	if (r_projection.depth_driver_backing.bytes > quote.texture_owner_reservation.bytes) {
+		r_outcome = NativeDepthAllocationQuote::CreateOutcome::CreatedOverReservation;
+		return ERR_OUT_OF_MEMORY;
+	}
+	r_outcome = NativeDepthAllocationQuote::CreateOutcome::CreatedVerified;
+	return OK;
+}
+
+Error RenderingDevice::_native_disposal_depth_allocation_capture(const NativeDisposalWitness &p_depth, const NativeDisposalWitness &p_framebuffer, NativeDepthAllocationProjection &r_projection) {
+	if (r_projection.device) {
+		return ERR_INVALID_PARAMETER;
+	}
+	NativeDisposalWitness::Report depth_report;
+	const Error observed = _native_disposal_observe(p_depth, depth_report);
+	if (observed != OK) {
+		return observed;
+	}
+	_THREAD_SAFE_METHOD_
+	const RID depth_rid = RID::from_uint64(depth_report.rid);
+	const Texture *texture = texture_owner.owns(depth_rid) ? texture_owner.get_or_null(depth_rid) : nullptr;
+	if (!texture || depth_report.state != NativeDisposalWitness::State::LIVE || texture->native_disposal.cell != p_depth.cell ||
+			!p_depth.cell->matches(depth_report.rid, texture->native_disposal_serial, texture->driver_id.id)) {
+		return ERR_INVALID_DATA;
+	}
+	if (texture->owner.is_valid() || texture->shared_fallback || texture->transfer_worker_index >= 0 || texture->format != DATA_FORMAT_D32_SFLOAT ||
+			texture->type != TEXTURE_TYPE_2D || texture->depth != 1 || texture->layers != 1 || texture->mipmaps != 1 || texture->samples != TEXTURE_SAMPLES_1 || texture->usage_flags != (TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
+		return ERR_UNAVAILABLE;
+	}
+	if (p_framebuffer.cell.is_valid()) {
+		NativeDisposalWitness::Report framebuffer_report;
+		const Error framebuffer_observed = _native_disposal_observe(p_framebuffer, framebuffer_report);
+		if (framebuffer_observed != OK) {
+			return framebuffer_observed;
+		}
+		const RID framebuffer_rid = RID::from_uint64(framebuffer_report.rid);
+		const Framebuffer *fb = framebuffer_owner.owns(framebuffer_rid) ? framebuffer_owner.get_or_null(framebuffer_rid) : nullptr;
+		if (!fb || framebuffer_report.state != NativeDisposalWitness::State::LIVE || fb->native_disposal.cell != p_framebuffer.cell ||
+				!p_framebuffer.cell->matches(framebuffer_report.rid, fb->native_disposal_serial, fb->native_disposal_backing) ||
+				!fb->framebuffer_cache || uint64_t(uintptr_t(fb->framebuffer_cache)) != fb->native_disposal_backing ||
+				fb->texture_ids.size() != 1 || fb->texture_ids[0] != depth_rid || fb->framebuffer_cache->textures.size() != 1 || fb->framebuffer_cache->textures[0] != texture->driver_id) {
+			return ERR_INVALID_DATA;
+		}
+	}
+	if (!driver) {
+		return ERR_UNAVAILABLE;
+	}
+	NativeDepthAllocationProjection projection;
+	projection.device = uint64_t(get_instance_id());
+	projection.depth = p_depth;
+	projection.framebuffer = p_framebuffer;
+	// This standalone original texture has no shared/view backing. The driver
+	// exposes its allocation only, never opaque driver or framebuffer overhead.
+	const uint64_t actual = driver->texture_get_allocation_size(texture->driver_id);
+	if (actual) {
+		projection.depth_driver_backing = { NativeDepthAllocationProjection::ByteKnowledge::Known, actual };
+	}
+	r_projection = projection;
+	return OK;
+}
+
+Error RenderingDevice::_native_disposal_depth_allocation_observe(const NativeDepthAllocationProjection &p_projection, NativeDepthAllocationProjection::Report &r_report) const {
+	r_report = {};
+	if (!is_main_instance || render_thread_id != Thread::get_caller_id() || !p_projection.device || p_projection.device != uint64_t(get_instance_id())) {
+		return ERR_UNAUTHORIZED;
+	}
+	r_report.depth_driver_backing = p_projection.depth_driver_backing;
+	r_report.framebuffer_created = p_projection.framebuffer.cell.is_valid();
+	const Error depth_error = _native_disposal_observe(p_projection.depth, r_report.depth);
+	Error framebuffer_error = OK;
+	if (r_report.framebuffer_created) {
+		framebuffer_error = _native_disposal_observe(p_projection.framebuffer, r_report.framebuffer);
+		r_report.shared_attachment_depth = r_report.depth;
+	}
+	r_report.all_created_children_returned = depth_error == OK && framebuffer_error == OK &&
+			r_report.depth.state == NativeDisposalWitness::State::RETURNED &&
+			(!r_report.framebuffer_created || r_report.framebuffer.state == NativeDisposalWitness::State::RETURNED);
+	return depth_error != OK ? depth_error : framebuffer_error;
+}
+
+Error RenderingDevice::_native_disposal_free(const NativeDisposalWitness &p_witness) {
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	NativeDisposalWitness::Report report;
+	const Error observed = _native_disposal_observe(p_witness, report);
+	if (observed != OK) {
+		return observed;
+	}
+	if (report.state == NativeDisposalWitness::State::ENQUEUED || report.state == NativeDisposalWitness::State::RETURNED) {
+		return OK; // Idempotent request; OK does not mean driver-free returned.
+	}
+	const RID rid = RID::from_uint64(report.rid);
+	const Buffer *buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr;
+	const UniformSet *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr;
+	const Texture *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr;
+	const Framebuffer *framebuffer = framebuffer_owner.owns(rid) ? framebuffer_owner.get_or_null(rid) : nullptr;
+	const Sampler *sampler = sampler_owner.owns(rid) ? sampler_owner.get_or_null(rid) : nullptr;
+	const auto &cell = p_witness.cell;
+	if ((!buffer || buffer->native_disposal.cell != cell || !cell->matches(rid.get_id(), buffer->backing_serial, buffer->driver_id.id)) &&
+			(!set || set->native_disposal.cell != cell || !cell->matches(rid.get_id(), set->native_disposal_serial, set->driver_id.id)) &&
+			(!texture || texture->native_disposal.cell != cell || !cell->matches(rid.get_id(), texture->native_disposal_serial, texture->driver_id.id)) &&
+			(!sampler || sampler->native_disposal.cell != cell || !cell->matches(rid.get_id(), sampler->native_disposal_serial, sampler->driver_id.id)) &&
+			(!framebuffer || framebuffer->native_disposal.cell != cell || !cell->matches(rid.get_id(), framebuffer->native_disposal_serial, uint64_t(uintptr_t(framebuffer->framebuffer_cache))))) {
+		cell->state = NativeDisposalWitness::State::UNKNOWN;
+		return ERR_INVALID_DATA;
+	}
+	if (cell->production_dependent_sets) {
+		return ERR_BUSY;
+	}
+	// Original dependency recursion, invalidation and pending-free queue own
+	// disposal. No logical free, elapsed frame count or sync writes RETURNED.
+	free_rid(rid);
+	return cell->state == NativeDisposalWitness::State::ENQUEUED || cell->state == NativeDisposalWitness::State::RETURNED ? OK : ERR_BUSY;
+}
+
+bool RenderingDevice::_native_disposal_enqueue(NativeDisposalWitness &p_witness, uint64_t p_rid, uint64_t p_serial, uint64_t p_backing) {
+	if (p_witness.cell.is_null()) {
+		return true;
+	}
+	if (p_witness.cell->production_dependent_sets) {
+		return false;
+	}
+	if (p_witness.cell->device != uint64_t(get_instance_id())) {
+		p_witness.cell->state = NativeDisposalWitness::State::UNKNOWN;
+		return false;
+	}
+	return p_witness.cell->enqueue(p_rid, p_serial, p_backing);
+}
+
+void RenderingDevice::_native_disposal_returned(NativeDisposalWitness &p_witness, uint64_t p_rid, uint64_t p_serial, uint64_t p_backing) {
+	if (p_witness.cell.is_valid()) {
+		if (p_witness.cell->device != uint64_t(get_instance_id())) {
+			p_witness.cell->state = NativeDisposalWitness::State::UNKNOWN;
+			return;
+		}
+		p_witness.cell->returned(p_rid, p_serial, p_backing);
+	}
+}
+
+Error RenderingDevice::_qualification_maintenance() {
+	return _native_disposal_maintenance();
+}
+
+Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, const GDExtensionDeviceExit::ProductionRequest *p_production_owner, const NativeDisposalWitness *p_scene_selection) {
+	return _native_disposal_maintenance_step(p_budget, r_usage, p_production_owner, p_scene_selection, Ref<NativeHeightRange>());
+}
+
+Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, const GDExtensionDeviceExit::ProductionRequest *p_production_owner, const NativeDisposalWitness *p_scene_selection, const Ref<NativeHeightRange> &p_height_selection) {
+	QualificationSourceAdmissionScope source_admission(*this);
+	NativeDrainDiagnostic::Span drain_trace("rd.maintenance", uintptr_t(this), uintptr_t(p_production_owner));
+	if (!p_budget.receipts || !p_budget.passes || !p_budget.deadline_usec || OS::get_singleton()->get_ticks_usec() >= p_budget.deadline_usec) {
+		return drain_trace.result(ERR_BUSY, "rd.return.1");
+	}
+	if (render_thread_id != Thread::get_caller_id() || !is_main_instance || !driver || native_finalization_returned) {
+		return drain_trace.result(ERR_UNAUTHORIZED, "rd.return.2");
+	}
+	if (frames.is_empty() || uint32_t(frame) >= frames.size()) {
+		return drain_trace.result(ERR_UNCONFIGURED, "rd.return.3");
+	}
+	if (frame_issue_error != OK) {
+		return drain_trace.result(frame_issue_error.load(), "rd.return.4");
+	}
+	if (draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining || native_disposal_budget) {
+		return drain_trace.result(ERR_BUSY, "rd.return.5");
+	}
+	if (!_thread_safe_.try_lock()) {
+		return drain_trace.result(ERR_BUSY, "rd.return.6");
+	}
+	struct Unlock {
+		RenderingDevice &rd;
+		~Unlock() {
+			rd.native_disposal_budget = nullptr;
+			rd.native_disposal_usage = nullptr;
+			rd._thread_safe_.unlock();
+		}
+	} unlock{ *this };
+	drain_trace.state(uintptr_t(this), uintptr_t(p_production_owner), frame, native_disposal_continuation.serial, native_disposal_continuation.phase, native_disposal_continuation.end_phase);
+	if (native_disposal_active && native_disposal_continuation.production_owner != p_production_owner) {
+		return drain_trace.result(ERR_BUSY, "rd.return.7"); // A foreign lane cannot resume the original owner's cursor.
+	}
+	// A selected Scene continuation also excludes ordinary/foreign resumption.
+	if (native_disposal_active && native_disposal_continuation.scene_selection.cell != (p_scene_selection ? p_scene_selection->cell : Ref<NativeDisposalWitness::Cell>())) {
+		return ERR_BUSY;
+	}
+	if (native_disposal_active && native_disposal_continuation.height_selection != p_height_selection) {
+		return ERR_BUSY; // Ordinary / Scene / another range cannot adopt this original cursor.
+	}
+	if (p_height_selection.is_valid() && (p_production_owner || p_scene_selection)) {
+		return ERR_INVALID_PARAMETER;
+	}
+	// Only terminal/cancelled tickets may spend their reserved cleanup slice.
+	const Error cleanup_credits = _qualification_activate_cleanup_credits();
+	if (cleanup_credits != OK) {
+		return drain_trace.result(cleanup_credits, "rd.cleanup.credit.lock");
+	}
+	native_disposal_budget = &p_budget;
+	native_disposal_usage = &r_usage;
+	if (!_native_disposal_available(NativeDisposalWork::WORK)) {
+		return drain_trace.result(ERR_BUSY, "rd.return.8");
+	}
+	auto &cursor = native_disposal_continuation;
+	if (!native_disposal_active) {
+		if (draw_graph.has_driver_callbacks()) {
+			return drain_trace.result(ERR_BUSY, "rd.return.9");
+		}
+		if (!next_native_disposal_serial) {
+			return drain_trace.result(ERR_PARAMETER_RANGE_ERROR, "rd.return.10");
+		}
+		const uint32_t target = qualification_frame_advance_pending ? uint32_t(frame) : (frame + 1) % frames.size();
+		if (p_production_owner && frames[target].disposal.active) {
+			return drain_trace.result(ERR_BUSY, "rd.return.11"); // A pre-existing ordinary drain keeps its original cutoff.
+		}
+		cursor = {};
+		cursor.production_owner = p_production_owner;
+		cursor.height_selection = p_height_selection;
+		if (p_scene_selection) {
+			cursor.scene_selection = *p_scene_selection;
+		}
+		cursor.serial = next_native_disposal_serial;
+		next_native_disposal_serial = cursor.serial == UINT64_MAX ? 0 : cursor.serial + 1;
+		cursor.target = target;
+		if (p_production_owner) {
+			// The original production preflight covered this exact prefix. Late
+			// logical frees remain appended for a later ordinary safe-frame drain.
+			_capture_disposal_cutoff(target);
+		}
+		// An ordinary advance already issued its old frame. Resume only this
+		// exact target, never execute the preceding graph again.
+		cursor.phase = qualification_frame_advance_pending ? 3 : 0;
+		native_disposal_active = true;
+	}
+	if (cursor.phase == 0) {
+		if (failed_wait_frame >= 0 && uint32_t(failed_wait_frame) != cursor.target) {
+			const Error previous = _native_disposal_stall_step(failed_wait_frame);
+			if (previous != OK) {
+				return drain_trace.result(previous, "rd.return.12");
+			}
+		}
+		const Error error = _native_disposal_stall_step(cursor.target);
+		if (error != OK) {
+			return drain_trace.result(error, "rd.return.13");
+		}
+		cursor.phase = 1;
+		cursor.command_buffer = frames[frame].command_buffer;
+	}
+	if (cursor.phase == 1) {
+		auto &f = frames[frame];
+		if (f.chain_prefix_poisoned) {
+			return drain_trace.result(_fail_frame_issue(FAILED), "rd.return.14");
+		}
+		if (f.qualification_graph_closed) {
+			cursor.end_phase = f.qualification_segment_closed ? 5 : 4;
+		}
+		if (!f.fence_signaled && f.primary_command_buffer_begun) {
+			if (cursor.end_phase == 0) {
+				uint32_t bound = 0;
+				if (!driver->native_issue_bound(RDD::NativeIssueKind::PREPARE_SEGMENT, 0, bound)) {
+					return drain_trace.result(ERR_UNAVAILABLE, "rd.return.15");
+				}
+				if (!_native_disposal_admit(NativeDisposalWork::ISSUE, bound)) {
+					return drain_trace.result(ERR_BUSY, "rd.return.16");
+				}
+				RDD::QueueCallReport hidden;
+				const Error error = driver->qualification_prepare_segment(hidden, true);
+				if (!hidden.calls.is_empty()) {
+					f.qualification_hidden_reports.push_back(hidden);
+					_qualification_issue_tickets(UINT32_MAX, hidden, error);
+				}
+				if (hidden.native_issue_count > bound) {
+					r_usage.issues = uint32_t(MIN(uint64_t(UINT32_MAX), uint64_t(r_usage.issues) + hidden.native_issue_count - bound));
+					// An invalid backend bound cannot erase its actual source prefix.
+					return drain_trace.result(_fail_frame_issue(ERR_INVALID_DATA), "rd.return.17");
+				}
+				r_usage.issues -= bound - hidden.native_issue_count;
+				if (error != OK) {
+					return drain_trace.result(error, "rd.return.18");
+				}
+				cursor.end_phase = 1;
+			}
+			if (cursor.end_phase == 1) {
+				const Error error = _submit_transfer_workers(cursor.command_buffer, true);
+				if (error != OK) {
+					return drain_trace.result(error == ERR_BUSY ? error : _fail_frame_issue(error), "rd.return.19");
+				}
+				cursor.end_phase = 2;
+			}
+			if (cursor.end_phase == 2) {
+				if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+					return drain_trace.result(ERR_BUSY, "rd.return.20");
+				}
+				// The caller validated every closed graph record against its
+				// accepted capture/quote. Recording this graph is one atomic pass;
+				// its native issues above/below are individually charged receipts.
+				cursor.end_phase = 3; // Never replay an uncertain graph prefix.
+				{
+					NativeDrainDiagnostic::Span graph_trace("graph.maintenance", uintptr_t(this), cursor.command_buffer.id, cursor.serial, frame, cursor.phase, cursor.end_phase);
+					draw_graph.end(RENDER_GRAPH_REORDER == 1, RENDER_GRAPH_FULL_BARRIERS == 1, cursor.command_buffer, f.command_buffer_pool);
+				}
+				_seal_buffer_readback_records();
+				_native_height_seal_frame(frame);
+				_qualification_seal_tickets();
+				if (draw_graph.recording_failed()) {
+					return drain_trace.result(_fail_frame_issue(FAILED), "rd.return.21");
+				}
+			}
+			if (cursor.end_phase == 3) {
+				if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+					return drain_trace.result(ERR_BUSY, "rd.return.22");
+				}
+				driver->command_buffer_end(cursor.command_buffer);
+				f.qualification_graph_closed = true;
+				cursor.end_phase = 4;
+			}
+			if (cursor.end_phase == 4) {
+				// Graph compilation may itself produce hidden copy work. Never
+				// enter the legacy end_segment wait from a bounded owner turn.
+				uint32_t bound = 0;
+				if (!driver->native_issue_bound(RDD::NativeIssueKind::PREPARE_SEGMENT, 0, bound)) {
+					return drain_trace.result(ERR_UNAVAILABLE, "rd.return.23");
+				}
+				if (!_native_disposal_admit(NativeDisposalWork::ISSUE, bound)) {
+					return drain_trace.result(ERR_BUSY, "rd.return.24");
+				}
+				RDD::QueueCallReport hidden;
+				const Error error = driver->qualification_prepare_segment(hidden, true);
+				if (!hidden.calls.is_empty()) {
+					f.qualification_hidden_reports.push_back(hidden);
+					_qualification_issue_tickets(UINT32_MAX, hidden, error);
+				}
+				if (hidden.native_issue_count > bound) {
+					r_usage.issues = uint32_t(MIN(uint64_t(UINT32_MAX), uint64_t(r_usage.issues) + hidden.native_issue_count - bound));
+					// An invalid backend bound cannot erase its actual source prefix.
+					return drain_trace.result(_fail_frame_issue(ERR_INVALID_DATA), "rd.return.25");
+				}
+				r_usage.issues -= bound - hidden.native_issue_count;
+				if (error != OK) {
+					return drain_trace.result(error, "rd.return.26");
+				}
+				cursor.end_phase = 5;
+				f.qualification_graph_closed = true;
+				f.qualification_segment_closed = true;
+			}
+		}
+		cursor.phase = 2;
+		if (!f.fence_signaled && f.primary_command_buffer_begun) {
+			cursor.slot_count = 1 + f.command_buffer_pool.buffers_used;
+			cursor.slot = f.qualification_issue_slot;
+			if (!cursor.slot) {
+				f.chain_reports.clear();
+			}
+			f.chain_reports.reserve(cursor.slot_count);
+		}
+	}
+	if (cursor.phase == 2) {
+		auto &f = frames[frame];
+		auto &pool = f.command_buffer_pool;
+		while (cursor.slot < cursor.slot_count) {
+			uint32_t bound = 0;
+			if (!driver->native_issue_bound(RDD::NativeIssueKind::MAIN_SLOT, 1, bound)) {
+				return drain_trace.result(ERR_UNAVAILABLE, "rd.return.27");
+			}
+			if (!_native_disposal_admit(NativeDisposalWork::ISSUE, bound)) {
+				return drain_trace.result(ERR_BUSY, "rd.return.28");
+			}
+			const uint32_t slot = cursor.slot;
+			const auto command = slot ? pool.buffers[slot - 1] : f.command_buffer;
+			const bool last = slot + 1 == cursor.slot_count;
+			const auto signal = last ? RDD::SemaphoreID() : pool.semaphores[slot];
+			const auto fence = last ? f.fence : RDD::FenceID();
+			const VectorView<RDD::SemaphoreID> waits = slot ? VectorView<RDD::SemaphoreID>(pool.semaphores[slot - 1]) : VectorView<RDD::SemaphoreID>(f.semaphores_to_wait_on);
+			RDD::QueueCallReport report;
+			const Error error = driver->command_queue_execute_and_present_observed(main_queue, waits, command, signal ? VectorView<RDD::SemaphoreID>(signal) : VectorView<RDD::SemaphoreID>(), fence, {}, report);
+			if (error == ERR_BUSY && report.calls.is_empty()) {
+				return drain_trace.result(ERR_BUSY, "rd.qualification.source_busy");
+			}
+			f.chain_reports.push_back(report);
+			++cursor.slot; // This exact slot was attempted; never submit it again.
+			f.qualification_issue_slot = cursor.slot;
+			_observe_buffer_readback_issue(slot, command, error, report);
+			const Error height_issue = _native_height_issue_slot(frame, f.qualification_epoch, slot, command, error, report);
+			if (height_issue != OK && height_issue != ERR_BUSY) {
+				return drain_trace.result(_fail_frame_issue(height_issue), "rd.height.issue_failed");
+			}
+			_qualification_issue_tickets(slot, report, error);
+			if (report.native_issue_count > bound) {
+				r_usage.issues = uint32_t(MIN(uint64_t(UINT32_MAX), uint64_t(r_usage.issues) + report.native_issue_count - bound));
+				return drain_trace.result(_fail_frame_issue(ERR_INVALID_DATA), "rd.return.29");
+			}
+			r_usage.issues -= bound - report.native_issue_count;
+			if (error != OK || !report.issued || report.error != OK) {
+				return drain_trace.result(_fail_frame_issue(error != OK ? error : (report.error != OK ? report.error : FAILED)), "rd.return.30");
+			}
+		}
+		if (cursor.slot_count) {
+			f.fence_signaled = true;
+			f.semaphores_to_wait_on.clear();
+			pool.buffers_used = 0;
+			// A frame that was idle and pre-observed can now have new work.
+			f.maintenance_wait = {};
+		}
+		// The attempted slot is immutable, but its original source retain may
+		// have exhausted this turn. Resume that retain before changing Frames.
+		const Error height_retain = _native_height_retain_frame_sources(frame);
+		if (height_retain != OK) {
+			return drain_trace.result(height_retain == ERR_BUSY ? ERR_BUSY : _fail_frame_issue(height_retain), "rd.height.retain_before_frame_advance");
+		}
+		frame = cursor.target;
+		qualification_frame_advance_pending = true;
+		cursor.phase = 3;
+	}
+	if (cursor.phase == 3) {
+		const Error error = _native_disposal_stall_step(frame);
+		if (error != OK) {
+			return drain_trace.result(error, "rd.return.31");
+		}
+		cursor.phase = 4;
+	}
+	if (cursor.phase == 4) {
+		// Selected Height owns no allocation-return cutoff. Its original range
+		// preflight excluded every physical disposal queue.
+		const Error error = cursor.height_selection.is_valid() ? OK : (cursor.scene_selection.cell.is_valid() ? _free_pending_scene_resource_step(frame, p_budget, r_usage) : _free_pending_resources_step(frame, p_budget, r_usage));
+		if (error != OK) {
+			return drain_trace.result(error, "rd.return.32");
+		}
+		cursor.phase = 5;
+	}
+	if (cursor.phase == 5) {
+		if (!next_qualification_frame_epoch) {
+			return drain_trace.result(ERR_PARAMETER_RANGE_ERROR, "rd.return.33");
+		}
+		auto &f = frames[frame];
+		if (cursor.begin_phase == 0) {
+			if (command_pool_reset_enabled) {
+				if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+					return drain_trace.result(ERR_BUSY, "rd.return.34");
+				}
+				if (!driver->command_pool_reset(f.command_pool)) {
+					return drain_trace.result(_fail_frame_issue(FAILED), "rd.return.35");
+				}
+			}
+			f.primary_command_buffer_begun = false;
+			// A bounded return opens the same fresh recording epoch as _begin_frame.
+			// Previous graph/segment/slot progress belongs to the returned epoch.
+			f.qualification_graph_closed = false;
+			f.qualification_segment_closed = false;
+			f.qualification_issue_busy = false;
+			f.qualification_issue_slot = 0;
+			f.present_attempted = false;
+			f.present_report = {};
+			cursor.begin_phase = 1;
+		}
+		if (cursor.begin_phase == 1) {
+			if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+				return drain_trace.result(ERR_BUSY, "rd.return.36");
+			}
+			driver->begin_segment(frame, frames_drawn++);
+			cursor.begin_phase = 2;
+		}
+		if (cursor.begin_phase == 2) {
+			if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+				return drain_trace.result(ERR_BUSY, "rd.return.37");
+			}
+			f.primary_command_buffer_begun = driver->command_buffer_begin(f.command_buffer);
+			if (!f.primary_command_buffer_begun) {
+				return drain_trace.result(_fail_frame_issue(FAILED), "rd.return.38");
+			}
+			cursor.begin_phase = 3;
+		}
+		if (cursor.begin_phase == 3) {
+			if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+				return drain_trace.result(ERR_BUSY, "rd.return.39");
+			}
+			draw_graph.begin(true);
+			f.native_height_ranges.clear();
+			f.qualification_epoch = next_qualification_frame_epoch++;
+			if (upload_staging_buffers.used) {
+				upload_staging_buffers.current = (upload_staging_buffers.current + 1) % upload_staging_buffers.blocks.size();
+				upload_staging_buffers.used = false;
+			}
+			if (download_staging_buffers.used) {
+				download_staging_buffers.current = (download_staging_buffers.current + 1) % download_staging_buffers.blocks.size();
+				download_staging_buffers.used = false;
+			}
+			cursor.begin_phase = 4;
+		}
+		if (cursor.begin_phase == 4) {
+			if (f.timestamp_count) {
+				if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+					return drain_trace.result(ERR_BUSY, "rd.return.40");
+				}
+				driver->timestamp_query_pool_get_results(f.timestamp_pool, f.timestamp_count, f.timestamp_result_values.ptr());
+			}
+			cursor.begin_phase = 5;
+		}
+		if (cursor.begin_phase == 5) {
+			if (f.timestamp_count) {
+				if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+					return drain_trace.result(ERR_BUSY, "rd.return.41");
+				}
+				driver->command_timestamp_query_pool_reset(f.command_buffer, f.timestamp_pool, f.timestamp_count);
+				SWAP(f.timestamp_names, f.timestamp_result_names);
+				SWAP(f.timestamp_cpu_values, f.timestamp_cpu_result_values);
+			}
+			f.timestamp_result_count = f.timestamp_count;
+			f.timestamp_count = 0;
+			f.index = Engine::get_singleton()->get_frames_drawn();
+			f.maintenance_wait = {};
+			frame_wait_error = OK;
+			failed_wait_frame = -1;
+			qualification_frame_advance_pending = false;
+			native_disposal_active = false;
+			cursor = {};
+		}
+	}
+	return drain_trace.result(OK, "rd.return.42");
+}
+
+// This narrow Scene lane owns exactly one original quoted-pair witness.
+// It admits no recorded graph/transfer prefix. Recorded Scene readers must use
+// their original production operation closure; an empty graph is not its proof.
+Error RenderingDevice::_native_scene_disposal_maintenance(const NativeDisposalWitness &p_selection) {
+	NativeDisposalWitness::Report report;
+	const Error observed = _native_disposal_observe(p_selection, report);
+	if (observed != OK || (report.state != NativeDisposalWitness::State::ENQUEUED && report.state != NativeDisposalWitness::State::RETURNED)) {
+		return observed != OK ? observed : ERR_INVALID_DATA;
+	}
+	if (report.state == NativeDisposalWitness::State::RETURNED && !native_disposal_active) {
+		return OK;
+	}
+	if (!driver || production_entity_registry.load(std::memory_order_acquire) || !frames.size() || draw_list.active || compute_list.active || raytracing_list.active) {
+		return ERR_BUSY;
+	}
+	if (native_disposal_active) {
+		if (native_disposal_continuation.production_owner || native_disposal_continuation.scene_selection.cell != p_selection.cell) {
+			return ERR_BUSY;
+		}
+	} else {
+		if (!_thread_safe_.try_lock()) {
+			return ERR_BUSY;
+		}
+		const uint64_t deadline = OS::get_singleton()->get_ticks_usec() + 1000;
+		const bool empty = !draw_graph.qualification_command_count() && !draw_graph.has_driver_callbacks() && frames[frame].semaphores_to_wait_on.is_empty();
+		_thread_safe_.unlock();
+		if (!empty || !transfer_worker_pool_mutex.try_lock()) {
+			return ERR_BUSY;
+		}
+		bool idle = true;
+		for (uint32_t i = 0; i < transfer_worker_pool_size; ++i) {
+			auto *worker = transfer_worker_pool[i];
+			if (OS::get_singleton()->get_ticks_usec() >= deadline || !worker->thread_mutex.try_lock()) {
+				idle = false;
+				break;
+			}
+			if (!worker->operations_mutex.try_lock()) {
+				worker->thread_mutex.unlock();
+				idle = false;
+				break;
+			}
+			idle = idle && worker->operations_processed == worker->operations_counter && !worker->recording && !worker->submission_pending;
+			const bool submitted = worker->submitted && worker->operations_submitted == worker->operations_counter &&
+					!worker->recording && !worker->submission_pending && !worker->poisoned && !worker->height_observer_pending &&
+					!worker->qualification_observer_pending && !worker->production_observer_pending && !worker->height_watcher_count;
+			worker->operations_mutex.unlock();
+			if (!idle && submitted && !native_disposal_budget) {
+				// Completion of a Scene range does not recycle its original worker
+				// fence. Let that same owner poll/recycle one bounded operation;
+				// the next Retire3 turn must still pass the original idle gate.
+				NativeDisposalBudget budget{ 1, 1, deadline };
+				NativeDisposalUsage usage;
+				struct WorkerBudget {
+					RenderingDevice &device;
+					NativeDisposalUsage *previous_usage;
+					WorkerBudget(RenderingDevice &p_device, const NativeDisposalBudget &p_budget, NativeDisposalUsage &p_usage) : device(p_device), previous_usage(p_device.native_disposal_usage) {
+						device.native_disposal_budget = &p_budget;
+						device.native_disposal_usage = &p_usage;
+					}
+					~WorkerBudget() {
+						device.native_disposal_budget = nullptr;
+						device.native_disposal_usage = previous_usage;
+					}
+				};
+				Error error = ERR_BUSY;
+				{
+					WorkerBudget scoped_budget(*this, budget, usage);
+					if (!_wait_for_transfer_worker(worker, false)) {
+						if (worker->completion_error != OK) error = worker->completion_error;
+						else if (worker->poisoned) error = FAILED;
+					}
+				}
+				worker->thread_mutex.unlock();
+				transfer_worker_pool_mutex.unlock();
+				return error;
+			}
+			worker->thread_mutex.unlock();
+			if (!idle) {
+				break;
+			}
+		}
+		transfer_worker_pool_mutex.unlock();
+		for (const auto &slot : frames) {
+			idle = idle && OS::get_singleton()->get_ticks_usec() < deadline && !slot.disposal.active &&
+					slot.qualification_tickets.is_empty() && slot.native_height_ranges.is_empty() &&
+					slot.download_buffer_get_data_requests.is_empty() && slot.download_texture_get_data_requests.is_empty() &&
+					slot.swap_chains_to_present.is_empty();
+		}
+		if (!idle) {
+			return ERR_BUSY;
+		}
+	}
+	uint32_t main_bound = 0, worker_bound = 0, prepare_bound = 0;
+	if (!driver->native_issue_bound(RDD::NativeIssueKind::MAIN_SLOT, 1, main_bound) ||
+			!driver->native_issue_bound(RDD::NativeIssueKind::TRANSFER_WORKER, 1, worker_bound) ||
+			!driver->native_issue_bound(RDD::NativeIssueKind::PREPARE_SEGMENT, 0, prepare_bound)) {
+		return ERR_UNAVAILABLE;
+	}
+	NativeDisposalBudget budget{ MAX(1u, MAX(main_bound, MAX(worker_bound, prepare_bound))), 1, OS::get_singleton()->get_ticks_usec() + 1000 };
+	NativeDisposalUsage usage;
+	return _native_disposal_maintenance_step(budget, usage, nullptr, &p_selection);
+}
+
+// Select in the original queues; no mirrored disposal directory or fake return.
+// The shared continuation has already observed this slot's native completion.
+// Other entries remain in place and are not included in this owner's receipts.
+Error RenderingDevice::_free_pending_scene_resource_step(int p_frame, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage) {
+	auto &cursor = native_disposal_continuation;
+	const auto &selected = cursor.scene_selection.cell;
+	if (selected.is_null() || selected->state != NativeDisposalWitness::State::ENQUEUED || selected->production_request) {
+		return ERR_INVALID_DATA;
+	}
+	auto &f = frames[p_frame];
+	if (!cursor.scene_scan_started) {
+		cursor.scene_framebuffer_cursor = f.framebuffers_to_dispose_of.front();
+		cursor.scene_texture_cursor = f.textures_to_dispose_of.front();
+		cursor.scene_scan_started = true;
+	}
+	while (cursor.scene_framebuffer_cursor) {
+		auto *entry = cursor.scene_framebuffer_cursor;
+		auto &fb = entry->get();
+		if (fb.native_disposal.cell != selected) {
+			if (!_native_disposal_charge(p_budget, r_usage, NativeDisposalWork::WORK)) {
+				return ERR_BUSY;
+			}
+			cursor.scene_framebuffer_cursor = entry->next();
+			continue;
+		}
+		if (!cursor.scene_disposal_phase) {
+			if (!_native_disposal_charge(p_budget, r_usage, NativeDisposalWork::WORK)) {
+				return ERR_BUSY;
+			}
+			if (!selected->matches(fb.native_disposal_rid, fb.native_disposal_serial, fb.native_disposal_backing) || fb.qualification_return || fb.qualification_dependency) {
+				return ERR_INVALID_DATA;
+			}
+			cursor.scene_disposal_phase = 1;
+		}
+		auto *cache = fb.framebuffer_cache;
+		while (cache && !cache->storage_map.is_empty()) {
+			auto item = cache->storage_map.begin();
+			if (cursor.scene_disposal_phase == 1) {
+				if (!_native_disposal_charge(p_budget, r_usage, NativeDisposalWork::FREE)) {
+					return ERR_BUSY;
+				}
+				driver->framebuffer_free(item->value.framebuffer);
+				cursor.scene_disposal_phase = 2;
+			}
+			if (!_native_disposal_charge(p_budget, r_usage, NativeDisposalWork::FREE)) {
+				return ERR_BUSY;
+			}
+			driver->render_pass_free(item->value.render_pass);
+			cache->storage_map.remove(item);
+			cursor.scene_disposal_phase = 1;
+		}
+		if (cache) {
+			memdelete(cache);
+		}
+		_native_disposal_returned(fb.native_disposal, fb.native_disposal_rid, fb.native_disposal_serial, fb.native_disposal_backing);
+		cursor.scene_framebuffer_cursor = nullptr;
+		f.framebuffers_to_dispose_of.erase(entry);
+		return OK;
+	}
+	while (cursor.scene_texture_cursor) {
+		auto *entry = cursor.scene_texture_cursor;
+		auto &texture = entry->get();
+		if (texture.native_disposal.cell != selected) {
+			if (!_native_disposal_charge(p_budget, r_usage, NativeDisposalWork::WORK)) {
+				return ERR_BUSY;
+			}
+			cursor.scene_texture_cursor = entry->next();
+			continue;
+		}
+		if (!selected->matches(texture.native_disposal_rid, texture.native_disposal_serial, texture.driver_id.id) || texture.shared_fallback || texture.qualification_return || texture.production_disposal_uses || selected->production_dependent_sets) {
+			return ERR_INVALID_DATA;
+		}
+		if (!cursor.scene_disposal_phase) {
+			if (!_native_disposal_charge(p_budget, r_usage, NativeDisposalWork::WORK)) {
+				return ERR_BUSY;
+			}
+			cursor.scene_allocation_size = driver->texture_get_allocation_size(texture.driver_id);
+			cursor.scene_disposal_phase = 1;
+		}
+		if (!_native_disposal_charge(p_budget, r_usage, NativeDisposalWork::FREE)) {
+			return ERR_BUSY;
+		}
+		driver->texture_free(texture.driver_id);
+		texture_memory -= cursor.scene_allocation_size;
+		_native_disposal_returned(texture.native_disposal, texture.native_disposal_rid, texture.native_disposal_serial, texture.driver_id.id);
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+		capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::Texture, texture.driver_id.id);
+#endif
+		cursor.scene_texture_cursor = nullptr;
+		f.textures_to_dispose_of.erase(entry);
+		cursor.scene_disposal_phase = 0;
+		return OK;
+	}
+	return OK; // This slot is not the selected resource's original queue.
+}
+
+Error RenderingDevice::_native_disposal_stall_step(uint32_t p_frame) {
+	const Error height_retain = _native_height_retain_frame_sources(p_frame);
+	if (height_retain != OK) {
+		return height_retain;
+	}
+	if (frame_issue_error != OK) {
+		return frame_issue_error;
+	}
+	if (frame_wait_draining) {
+		return ERR_BUSY;
+	}
+	auto &f = frames[p_frame];
+	auto &cursor = f.maintenance_wait;
+	const Error retain_error = _production_retain_frame_sources(p_frame);
+	if (retain_error != OK) {
+		return retain_error;
+	}
+	// Qualification owns its own publication/return path. The production caller
+	// proves that no such ticket or foreign callback shares this frozen frame.
+	if (!f.qualification_tickets.is_empty() || !f.download_texture_get_data_requests.is_empty()) {
+		return ERR_BUSY;
+	}
+	for (const auto &request : f.download_buffer_get_data_requests) {
+		if (!request.capture && (request.result.is_null() || !request.result->qualification_owned)) {
+			return ERR_BUSY;
+		}
+	}
+	auto observed = [&](const RDD::FencePollResult &p_result, uint64_t p_serial) {
+		if (p_result.native_error) {
+			frame_wait_native_code = p_result.native_code;
+			frame_wait_native_code_valid = true;
+			return FAILED;
+		}
+		return p_result.matches(p_serial) ? OK : ERR_BUSY;
+	};
+	if (cursor.phase == 0) {
+		while (cursor.report < f.chain_reports.size()) {
+			auto &report = f.chain_reports[cursor.report];
+			while (cursor.call < report.calls.size()) {
+				auto &call = report.calls.write[cursor.call];
+				if (!call.presentation_only && !call.source_owner_returned) {
+					if (!_native_disposal_admit(NativeDisposalWork::POLL)) {
+						return ERR_BUSY;
+					}
+					const Error error = observed(driver->native_call_poll(call.serial), call.completion_serial);
+					if (error != OK) {
+						return error;
+					}
+				}
+				++cursor.call;
+			}
+			cursor.call = 0;
+			++cursor.report;
+		}
+		cursor.phase = 1;
+		cursor.report = 0;
+	}
+	if (cursor.phase == 1) {
+		while (cursor.report < f.chain_reports.size()) {
+			auto &report = f.chain_reports[cursor.report];
+			while (cursor.call < report.calls.size()) {
+				auto &call = report.calls.write[cursor.call];
+				if (!report.submission_serial && !call.presentation_only && !call.source_owner_returned) {
+					if (!_native_disposal_admit(NativeDisposalWork::RECYCLE)) {
+						return ERR_BUSY;
+					}
+					const Error error = driver->native_call_recycle(call.serial);
+					if (error != OK) {
+						return error;
+					}
+					call.source_owner_returned = true;
+				}
+				++cursor.call;
+			}
+			cursor.call = 0;
+			++cursor.report;
+		}
+		cursor.phase = 2;
+		cursor.report = 0;
+	}
+	if (cursor.phase == 2) {
+		while (cursor.report < f.qualification_hidden_reports.size()) {
+			auto &report = f.qualification_hidden_reports[cursor.report];
+			while (cursor.call < report.calls.size()) {
+				auto &call = report.calls.write[cursor.call];
+				if (!call.presentation_only && !call.source_owner_returned) {
+					if (!cursor.ready) {
+						if (!_native_disposal_admit(NativeDisposalWork::POLL)) {
+							return ERR_BUSY;
+						}
+						const Error error = observed(driver->native_call_poll(call.serial), call.completion_serial);
+						if (error != OK) {
+							return error;
+						}
+						cursor.ready = true;
+					}
+					if (call.frame_observer_owned) {
+						if (!_native_disposal_admit(NativeDisposalWork::RELEASE)) {
+							return ERR_BUSY;
+						}
+						const Error error = driver->native_call_release(call.serial);
+						if (error != OK) {
+							return error;
+						}
+					}
+					call.source_owner_returned = true;
+				}
+				cursor.ready = false;
+				++cursor.call;
+			}
+			cursor.call = 0;
+			++cursor.report;
+		}
+		f.qualification_hidden_reports.clear();
+		cursor.phase = 3;
+		cursor.report = 0;
+	}
+	if (cursor.phase == 3) {
+		if (f.fence_signaled) {
+			if (f.chain_reports.is_empty() || !f.chain_reports[f.chain_reports.size() - 1].submission_serial) {
+				return ERR_UNAVAILABLE;
+			}
+			const uint64_t serial = f.chain_reports[f.chain_reports.size() - 1].submission_serial;
+			if (!cursor.ready) {
+				if (!_native_disposal_admit(NativeDisposalWork::POLL)) {
+					return ERR_BUSY;
+				}
+				const Error error = observed(driver->fence_poll(f.fence, serial), serial);
+				if (error != OK) {
+					return error;
+				}
+				cursor.ready = true;
+			}
+			if (!_native_disposal_admit(NativeDisposalWork::RECYCLE)) {
+				return ERR_BUSY;
+			}
+			const Error error = driver->fence_recycle(f.fence, serial);
+			if (error != OK) {
+				return error;
+			}
+			f.fence_signaled = false;
+			cursor.fence_returned = true;
+			f.primary_command_buffer_begun = false;
+		}
+		cursor.ready = false;
+		cursor.phase = 4;
+	}
+	// Readback mapping stays on the original frame's requests and staging. A
+	// deadline between map/unmap preserves the mapping and blocks frame reuse.
+	if (cursor.phase == 4) {
+		if (!cursor.fence_returned) {
+			// No fence return means these requests can still be recorded work in
+			// this slot (in particular a one-frame RD). Do not deliver or clear it.
+			cursor.phase = 5;
+			return OK;
+		}
+		while (cursor.request < f.download_buffer_get_data_requests.size()) {
+			const auto &request = f.download_buffer_get_data_requests[cursor.request];
+			const auto result = request.result;
+			auto *capture = request.capture;
+			if (capture && (!capture->registry || capture->registry->production_readback_delivery(*capture, true) != OK)) {
+				return ERR_BUSY;
+			}
+			struct DeliveryReturn {
+				GDExtensionDeviceExit::BufferReadbackSourceCapture *capture;
+				~DeliveryReturn() {
+					if (capture) {
+						capture->registry->production_readback_delivery(*capture, false);
+					}
+				}
+			} delivery_return{ capture };
+			// A callback reentering frame advancement cannot disturb these cursors.
+			frame_wait_draining = true;
+			struct DrainReturn {
+				std::atomic<bool> &draining;
+				~DrainReturn() { draining = false; }
+			} drain_return{ frame_wait_draining };
+			Error &error = capture ? capture->state->error : result->error;
+			bool &delivered = capture ? capture->state->delivered : result->delivered;
+			const uint64_t capacity = capture ? capture->byte_capacity : uint64_t(result->bytes.size());
+			uint8_t *bytes = capture ? capture->bytes : result->bytes.ptrw();
+			const uint64_t completed = capture ? capture->state->completed : result->completed_size;
+			if (!cursor.request_started) {
+				if (capture) {
+					if (capture->state->returned > capture->state->issued || request.result_offset != capture->state->returned || request.size > capture->state->issued - capture->state->returned) {
+						error = ERR_INVALID_DATA;
+					}
+				}
+				if (request.result_offset != completed || request.result_offset > capacity || request.size > capacity - request.result_offset) {
+					error = ERR_INVALID_DATA;
+				}
+				cursor.request_started = true;
+			}
+			while ((error == OK && !delivered && cursor.region < request.frame_local_count) || cursor.mapped) {
+				const uint32_t local = request.frame_local_index + cursor.region;
+				const auto &region = f.download_buffer_copy_regions[local];
+				if (!cursor.mapped) {
+					if (cursor.offset > request.size || region.size > request.size - cursor.offset) {
+						error = ERR_INVALID_DATA;
+						break;
+					}
+					if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+						return ERR_BUSY;
+					}
+					int64_t native_code = 0;
+					cursor.mapped = driver->buffer_map_observed(f.download_buffer_staging_buffers[local], native_code);
+					if (!cursor.mapped) {
+						error = ERR_CANT_ACQUIRE_RESOURCE;
+						if (capture) {
+							capture->native_code = native_code;
+						} else {
+							result->native_code = native_code;
+						}
+						break;
+					}
+					memcpy(bytes + request.result_offset + cursor.offset, cursor.mapped + region.dst_offset, region.size);
+				}
+				if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+					return ERR_BUSY;
+				}
+				driver->buffer_unmap(f.download_buffer_staging_buffers[local]);
+				cursor.mapped = nullptr;
+				cursor.offset += region.size;
+				++cursor.region;
+			}
+			if (error == OK && !delivered) {
+				if (cursor.offset != request.size) {
+					error = ERR_INVALID_DATA;
+				} else {
+					const uint64_t total = completed + cursor.offset;
+					if (capture) {
+						capture->state->completed = total;
+					} else {
+						result->completed_size = uint32_t(total);
+					}
+					if (request.final_segment) {
+						if (total != capacity) {
+							error = ERR_INVALID_DATA;
+						} else {
+							delivered = true;
+						}
+					}
+				}
+			}
+			cursor.region = 0;
+			cursor.offset = 0;
+			cursor.request_started = false;
+			if (capture) {
+				// The original frame no longer owns a mapped region or any
+				// resumable work for this raw capture entry, including errors.
+				if (capture->state->returned <= capture->state->issued && request.size <= capture->state->issued - capture->state->returned) {
+					capture->state->returned += request.size;
+				}
+			}
+			++cursor.request;
+		}
+		f.download_buffer_get_data_requests.clear();
+		f.download_buffer_copy_regions.clear();
+		f.download_buffer_staging_buffers.clear();
+		for (auto &report : f.chain_reports) {
+			for (auto &call : report.calls) {
+				if (!call.presentation_only) {
+					call.source_owner_returned = true;
+				}
+			}
+		}
+		cursor.phase = 5;
+	}
+	return OK;
+}
+
+Error RenderingDevice::_native_disposal_maintenance() {
+	if (native_disposal_active) {
+		const NativeDisposalBudget budget{ UINT32_MAX, UINT32_MAX, UINT64_MAX };
+		NativeDisposalUsage usage;
+		return _native_disposal_maintenance_step(budget, usage);
+	}
+	if (render_thread_id != Thread::get_caller_id() || !is_main_instance || !driver || native_finalization_returned) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (frames.is_empty() || uint32_t(frame) >= frames.size()) {
+		return ERR_UNCONFIGURED;
+	}
+	if (draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining) {
+		return ERR_BUSY;
+	}
+	if (!_thread_safe_.try_lock()) {
+		return ERR_BUSY;
+	}
+	struct Unlock {
+		Mutex &mutex;
+		~Unlock() { mutex.unlock(); }
+	} unlock{ _thread_safe_ };
+	const Error cleanup_credits = _qualification_activate_cleanup_credits();
+	if (cleanup_credits != OK) {
+		return cleanup_credits;
+	}
+	if (qualification_frame_advance_pending) {
+		return _begin_frame(false, true);
+	}
+	if (draw_graph.has_driver_callbacks()) {
+		return ERR_BUSY;
+	}
+	const uint32_t next = (frame + 1) % frames.size();
+	Error error = _stall_for_frame(next, true);
+	if (error != OK) {
+		return error;
+	}
+	for (const auto &shader : frames[next].shaders_to_dispose_of) {
+		if (!driver->shader_retire_ready_nonblocking(shader.driver_id)) {
+			return ERR_BUSY;
+		}
+	}
+	error = _end_frame(true);
+	if (error != OK) {
+		return error;
+	}
+	error = _execute_frame(false);
+	if (error != OK) {
+		return error;
+	}
+	frame = (frame + 1) % frames.size();
+	qualification_frame_advance_pending = true;
+	return _begin_frame(false, true);
+}
+
+bool RenderingDevice::_qualification_free_event_available(bool p_reserved) const {
+	if (!next_qualification_free_event) {
+		return false;
+	}
+	return p_reserved ? qualification_free_event_reservations != 0 : qualification_free_event_reservations <= UINT64_MAX - next_qualification_free_event;
+}
+
+bool RenderingDevice::_qualification_reserve_free_event(GDExtensionDeviceExit::QualificationPhysicalReturn *cell) {
+	if (!cell || cell->event_capacity_reserved || !_qualification_free_event_available(false)) {
+		return false;
+	}
+	++qualification_free_event_reservations;
+	cell->event_capacity_reserved = true;
+	return true;
+}
+
+void RenderingDevice::_qualification_release_free_event(GDExtensionDeviceExit::QualificationPhysicalReturn *cell) {
+	CRASH_COND(!cell || !cell->event_capacity_reserved || !qualification_free_event_reservations);
+	--qualification_free_event_reservations;
+	cell->event_capacity_reserved = false;
+}
+
+Error RenderingDevice::_qualification_enqueue(GDExtensionDeviceExit::QualificationPhysicalReturn *cell) {
+	if (!cell) {
+		return OK;
+	}
+	if (!qualification_retiring || !frames[frame].qualification_epoch) {
+		return ERR_BUSY;
+	}
+	MutexLock lock(cell->mutex);
+	if (!cell->use_closed || cell->enqueued || cell->free_event) {
+		return ERR_BUSY;
+	}
+	if (!_qualification_free_event_available(cell->event_capacity_reserved)) {
+		return ERR_BUSY;
+	}
+	if (cell->event_capacity_reserved) {
+		--qualification_free_event_reservations;
+		cell->event_capacity_reserved = false;
+	}
+	cell->reserved_event = next_qualification_free_event++;
+	cell->frame_slot = frame;
+	cell->frame_epoch = frames[frame].qualification_epoch;
+	cell->enqueued = true;
+	return OK;
+}
+void RenderingDevice::_qualification_freed(GDExtensionDeviceExit::QualificationPhysicalReturn *cell) {
+	if (!cell) {
+		return;
+	}
+	MutexLock lock(cell->mutex);
+	CRASH_COND(!cell->enqueued || !cell->reserved_event || cell->free_event);
+	cell->free_event = cell->reserved_event;
+}
+RID RenderingDevice::_qualification_storage_create(uint32_t bytes, GDExtensionDeviceExit::QualificationPhysicalReturn *cell) {
+	ERR_FAIL_COND_V(!cell || cell->event_capacity_reserved || !bytes || _recording_error() != OK, RID());
+#ifdef TESTS_ENABLED
+	if (is_main_instance && !test_main_screen_prepared && OS::get_singleton()->has_environment("GODOT_K03_TEST_PREPARE_MAIN_SCREEN")) {
+		ERR_FAIL_COND_V_MSG(OS::get_singleton()->get_environment("GODOT_K03_TEST_PREPARE_MAIN_SCREEN") != "1", RID(), "Invalid TESTS-only main screen preparation opt-in.");
+		for (const auto &entry : frames) {
+			ERR_FAIL_COND_V(!entry.qualification_tickets.is_empty(), RID());
+		}
+		ERR_FAIL_COND_V(!frames[frame].swap_chains_to_present.is_empty(), RID());
+		// Ticket-preparation fixture only. Boot presentation has finished; reacquire
+		// through the original path before any backing or ticket effect. Resize,
+		// flush and acquire here are not nonwaiting qualification maintenance.
+		ERR_FAIL_COND_V(screen_prepare_for_drawing(DisplayServerEnums::MAIN_WINDOW_ID) != OK, RID());
+		test_main_screen_epoch = frames[frame].qualification_epoch;
+		test_main_screen_prepared = true;
+		print_line(vformat("K03_TEST_MAIN_SCREEN_PREPARED phase=before_first_ticket frame_epoch=%d real_acquire=1 present_called=0", test_main_screen_epoch));
+	}
+#endif
+	const uint64_t serial = _reserve_backing_serial();
+	ERR_FAIL_COND_V(!serial, RID());
+	const RID rid = storage_buffer_owner.allocate_rid();
+	ERR_FAIL_COND_V(rid.is_null(), RID());
+	if (!_qualification_reserve_free_event(cell)) {
+		storage_buffer_owner.initialize_rid(rid, Buffer());
+		storage_buffer_owner.free(rid);
+		return RID();
+	}
+	Buffer buffer;
+	buffer.backing_serial = serial;
+	buffer.size = bytes;
+	buffer.usage = RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT | RDD::BUFFER_USAGE_STORAGE_BIT;
+	buffer.qualification_return = cell;
+	buffer.driver_id = driver->buffer_create(bytes, buffer.usage, RDD::MEMORY_ALLOCATION_TYPE_GPU, frames_drawn);
+	if (!buffer.driver_id) {
+		_qualification_release_free_event(cell);
+		// RID_Alloc cannot free an uninitialized reservation.
+		storage_buffer_owner.initialize_rid(rid, Buffer());
+		storage_buffer_owner.free(rid);
+		return RID();
+	}
+	buffer.draw_tracker = RDG::resource_tracker_create();
+	buffer.draw_tracker->buffer_driver_id = buffer.driver_id;
+	cell->rid = rid.get_id();
+	cell->serial = buffer.backing_serial;
+	storage_buffer_owner.initialize_rid(rid, buffer);
+	buffer_memory += bytes;
+	return rid;
+}
+
+Error RenderingDevice::_qualification_prepare_free(RID rid) {
+	// Keep the original RID and dependency edges until every transfer on the
+	// recursive free can join safely. No disposal cell or driver object moves
+	// to a returned/enqueued state on a refused reservation.
+	LocalVector<RID> pending, seen;
+	pending.push_back(rid);
+	while (!pending.is_empty()) {
+		const RID current = pending[pending.size() - 1];
+		pending.remove_at(pending.size() - 1);
+		bool known = false;
+		for (RID old : seen) {
+			if (old == current) {
+				known = true;
+				break;
+			}
+		}
+		if (known) {
+			continue;
+		}
+		seen.push_back(current);
+		if (auto edge = dependency_map.find(current)) {
+			for (RID dependent : edge->value) {
+				pending.push_back(dependent);
+			}
+		}
+		Error error = OK;
+		if (texture_owner.owns(current)) {
+			auto *texture = texture_owner.get_or_null(current);
+			if (texture) {
+				error = _check_transfer_worker_texture(texture);
+			}
+		} else {
+			Buffer *buffer = nullptr;
+			if (storage_buffer_owner.owns(current)) {
+				buffer = storage_buffer_owner.get_or_null(current);
+			} else if (vertex_buffer_owner.owns(current)) {
+				buffer = vertex_buffer_owner.get_or_null(current);
+			} else if (index_buffer_owner.owns(current)) {
+				buffer = index_buffer_owner.get_or_null(current);
+			} else if (uniform_buffer_owner.owns(current)) {
+				buffer = uniform_buffer_owner.get_or_null(current);
+			} else if (texture_buffer_owner.owns(current)) {
+				buffer = texture_buffer_owner.get_or_null(current);
+			}
+			if (buffer) {
+				error = _check_transfer_worker_buffer(buffer);
+			}
+		}
+		if (error != OK) {
+			return error;
+		}
+	}
+	return OK;
+}
+void RenderingDevice::_qualification_defer_free(RID rid) {
+	for (RID pending : qualification_deferred_frees) {
+		if (pending == rid) {
+			return;
+		}
+	}
+	qualification_deferred_frees.push_back(rid);
+}
+
+void RenderingDevice::_qualification_retry_deferred_frees() {
+	// Snapshot the finite roots for this pass, but leave custody in the original
+	// queue across every void free_rid early return. Only actual owner removal
+	// in free_rid may erase a root; callbacks can append work for the next pass.
+	const LocalVector<RID> pending(qualification_deferred_frees);
+	for (RID rid : pending) {
+		bool still_pending = false;
+		for (RID queued : qualification_deferred_frees) {
+			if (queued == rid) {
+				still_pending = true;
+				break;
+			}
+		}
+		if (still_pending) {
+			free_rid(rid);
+		}
+	}
+}
+
+void RenderingDevice::free_rid(RID p_rid) {
+	ERR_RENDER_THREAD_GUARD();
+	MutexLock immutable_lock(_thread_safe_);
+	if (production_disposal_drop_owner) {
+		// Keep the current callback proof under the same lock that closes
+		// retirement; an ordinary setter must not replace it in between.
+		if (!_production_disposal_belongs(p_rid, production_disposal_drop_owner) || !_production_output_callback_supported(p_rid)) {
+			return;
+		}
+	}
+
+	if (resource_frees_in_progress.has(p_rid)) {
+		return;
+	}
+	resource_frees_in_progress.insert(p_rid);
+	struct ResourceFreeScope {
+		RenderingDevice &device;
+		const MutexLock<Mutex> &lock;
+		NativeImmutableFreeFrame frame;
+		RID rid;
+		ResourceFreeScope(RenderingDevice &p_device, RID p_rid, const MutexLock<Mutex> &p_lock) : device(p_device), lock(p_lock), rid(p_rid) {
+			frame.previous = device.native_immutable_free_frame;
+			device.native_immutable_free_frame = &frame;
+		}
+		~ResourceFreeScope() {
+			device.resource_frees_in_progress.erase(rid);
+			if (frame.previous) {
+				device.native_immutable_free_frame = frame.previous;
+				for (RID pending : frame.returned) {
+					if (!frame.previous->returned.has(pending)) {
+						frame.previous->returned.push_back(pending);
+					}
+				}
+				return;
+			}
+			// Callback returns belong to this original synchronous free frame.
+			// Once its recursion guard closes, only original pending frees resume.
+			// Keep the actual outer stack frame visible until all synchronous
+			// retries return, including intervals with no RID recursion guard.
+			for (uint32_t i = 0; i < frame.returned.size(); ++i) {
+				const RID pending = frame.returned[i];
+				bool *retiring = nullptr;
+				const auto *holds = device._native_immutable_counter(pending, &retiring);
+				if (holds && !*holds && *retiring) {
+					lock.temp_unlock();
+					device.free_rid(pending);
+					lock.temp_relock();
+				}
+			}
+			device.native_immutable_free_frame = nullptr;
+		}
+	} free_scope{ *this, p_rid, immutable_lock };
+
+	// Cross-owner probes must reject foreign validators before inspecting a
+	// possibly uninitialized slot reserved by asynchronous native creation.
+	auto *buffer = storage_buffer_owner.owns(p_rid) ? storage_buffer_owner.get_or_null(p_rid) : nullptr;
+	auto *shader = shader_owner.owns(p_rid) ? shader_owner.get_or_null(p_rid) : nullptr;
+	auto *pipeline = compute_pipeline_owner.owns(p_rid) ? compute_pipeline_owner.get_or_null(p_rid) : nullptr;
+	auto *texture = texture_owner.owns(p_rid) ? texture_owner.get_or_null(p_rid) : nullptr;
+	auto *sampler = sampler_owner.owns(p_rid) ? sampler_owner.get_or_null(p_rid) : nullptr;
+	auto *raster_pipeline = render_pipeline_owner.owns(p_rid) ? render_pipeline_owner.get_or_null(p_rid) : nullptr;
+	auto *framebuffer = framebuffer_owner.owns(p_rid) ? framebuffer_owner.get_or_null(p_rid) : nullptr;
+	auto *uniform_set = uniform_set_owner.owns(p_rid) ? uniform_set_owner.get_or_null(p_rid) : nullptr;
+	ERR_FAIL_COND_MSG(!qualification_retiring && ((raster_pipeline && raster_pipeline->qualification_return) || (framebuffer && framebuffer->qualification_return) || (buffer && buffer->qualification_return) || (shader && shader->qualification_return) || (pipeline && pipeline->qualification_return) || (texture && texture->qualification_return) || (sampler && sampler->qualification_return) || (uniform_set && uniform_set->qualification_return)), "Qualification resources require their original owner retirement acknowledgment.");
+	ERR_FAIL_COND_MSG(texture && texture->qualification_return && texture->transfer_worker_index >= 0, "Qualification texture has an unsettled transfer worker.");
+	ERR_FAIL_COND_MSG(_qualification_resource_busy(p_rid), "Qualification ticket still owns this resource or one of its dependents.");
+	bool *retiring = nullptr;
+	if (auto *holds = _native_immutable_counter(p_rid, &retiring)) {
+		// Close future physical acquisition before dependency callbacks can run.
+		*retiring = true;
+		if (*holds) {
+			immutable_lock.temp_unlock();
+			_native_immutable_retire_dependents(p_rid);
+			immutable_lock.temp_relock();
+			// A callback may return the last hold or delete a dependent. Re-resolve
+			// the actual owner; never dereference its pre-callback pointer again.
+			const auto *remaining = _native_immutable_counter(p_rid);
+			if (!remaining || *remaining) {
+				return;
+			}
+		}
+	}
+
+	const Error dependency_admission = _qualification_prepare_free(p_rid);
+	if (dependency_admission != OK) {
+		_qualification_defer_free(p_rid);
+		return;
+	}
+	if (!_free_dependencies(p_rid, immutable_lock)) { // Keep the original guard through dependency removal and RID free.
+		// A callback can return the last pin, then destroy an owner whose
+		// dependency is this outer free. Resume that original zero-pin free
+		// after the outer recursion guard closes.
+		_qualification_defer_free(p_rid);
+		const auto *remaining = _native_immutable_counter(p_rid, &retiring);
+		if (free_scope.frame.previous && remaining && !*remaining && *retiring && !free_scope.frame.returned.has(p_rid)) {
+			free_scope.frame.returned.push_back(p_rid);
+		}
+		return;
+	}
+	_free_internal(p_rid, immutable_lock);
+	// Remove a deferred root only after its original RID owner actually freed it.
+	if (!uniform_buffer_owner.owns(p_rid) &&
+			!storage_buffer_owner.owns(p_rid) &&
+			!texture_buffer_owner.owns(p_rid) &&
+			!texture_owner.owns(p_rid) &&
+			!framebuffer_owner.owns(p_rid) &&
+			!sampler_owner.owns(p_rid) &&
+			!vertex_buffer_owner.owns(p_rid) &&
+			!vertex_array_owner.owns(p_rid) &&
+			!index_buffer_owner.owns(p_rid) &&
+			!index_array_owner.owns(p_rid) &&
+			!shader_owner.owns(p_rid) &&
+			!uniform_set_owner.owns(p_rid) &&
+			!render_pipeline_owner.owns(p_rid) &&
+			!compute_pipeline_owner.owns(p_rid) &&
+			!raytracing_pipeline_owner.owns(p_rid) &&
+			!acceleration_structure_owner.owns(p_rid) &&
+			!hit_sbt_owner.owns(p_rid)) {
+		for (uint32_t i = 0; i < qualification_deferred_frees.size(); ++i) {
+			if (qualification_deferred_frees[i] == p_rid) {
+				qualification_deferred_frees.remove_at(i);
+				break;
+			}
+		}
+	}
+}
+
+#ifdef TESTS_ENABLED
+thread_local void (*test_uniform_set_after_rid_free)(RenderingDevice *) = nullptr;
+#endif
+
+void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
+	ERR_FAIL_COND(_qualification_resource_busy(p_id));
+	auto *qualified_texture = texture_owner.owns(p_id) ? texture_owner.get_or_null(p_id) : nullptr;
+	ERR_FAIL_COND(qualified_texture && qualified_texture->qualification_return && qualified_texture->transfer_worker_index >= 0);
 #ifdef DEV_ENABLED
 	String resource_name;
 	if (resource_names.has(p_id)) {
@@ -7619,7 +13921,14 @@ void RenderingDevice::_free_internal(RID p_id) {
 	// Push everything so it's disposed of next time this frame index is processed (means, it's safe to do it).
 	if (texture_owner.owns(p_id)) {
 		Texture *texture = texture_owner.get_or_null(p_id);
-		_check_transfer_worker_texture(texture);
+		{
+			const Error dependency_error = _check_transfer_worker_texture(texture);
+			if (dependency_error != OK) {
+				return;
+			}
+		}
+		ERR_FAIL_COND(_qualification_enqueue(texture->qualification_return) != OK);
+		ERR_FAIL_COND(!_native_disposal_enqueue(texture->native_disposal, p_id.get_id(), texture->native_disposal_serial, texture->driver_id.id));
 
 		RDG::ResourceTracker *draw_tracker = texture->draw_tracker;
 		if (draw_tracker != nullptr) {
@@ -7642,80 +13951,183 @@ void RenderingDevice::_free_internal(RID p_id) {
 			}
 		}
 
+		_production_disposal_enqueued(texture->production_disposal_uses);
 		frames[frame].textures_to_dispose_of.push_back(*texture);
 		texture_owner.free(p_id);
 	} else if (framebuffer_owner.owns(p_id)) {
 		Framebuffer *framebuffer = framebuffer_owner.get_or_null(p_id);
+		ERR_FAIL_COND(_qualification_enqueue(framebuffer->qualification_return) != OK);
+		ERR_FAIL_COND(!_native_disposal_enqueue(framebuffer->native_disposal, p_id.get_id(), framebuffer->native_disposal_serial, uint64_t(uintptr_t(framebuffer->framebuffer_cache))));
+		InvalidationCallback invalidated_callback = framebuffer->invalidated_callback;
+		void *invalidated_callback_userdata = framebuffer->invalidated_callback_userdata;
 		frames[frame].framebuffers_to_dispose_of.push_back(*framebuffer);
-
-		if (framebuffer->invalidated_callback != nullptr) {
-			framebuffer->invalidated_callback(framebuffer->invalidated_callback_userdata);
-		}
-
 		framebuffer_owner.free(p_id);
+
+		if (invalidated_callback != nullptr) {
+			p_lock.temp_unlock();
+			invalidated_callback(invalidated_callback_userdata);
+			p_lock.temp_relock();
+		}
 	} else if (sampler_owner.owns(p_id)) {
-		RDD::SamplerID sampler_driver_id = *sampler_owner.get_or_null(p_id);
-		frames[frame].samplers_to_dispose_of.push_back(sampler_driver_id);
+		Sampler *sampler = sampler_owner.get_or_null(p_id);
+		ERR_FAIL_COND(_qualification_enqueue(sampler->qualification_return) != OK);
+		ERR_FAIL_COND(!_native_disposal_enqueue(sampler->native_disposal, p_id.get_id(), sampler->native_disposal_serial, sampler->driver_id.id));
+		_production_disposal_enqueued(sampler->production_disposal_uses);
+		frames[frame].samplers_to_dispose_of.push_back(*sampler);
 		sampler_owner.free(p_id);
 	} else if (vertex_buffer_owner.owns(p_id)) {
 		Buffer *vertex_buffer = vertex_buffer_owner.get_or_null(p_id);
-		_check_transfer_worker_buffer(vertex_buffer);
+		{
+			const Error dependency_error = _check_transfer_worker_buffer(vertex_buffer);
+			if (dependency_error != OK) {
+				return;
+			}
+		}
 
 		RDG::resource_tracker_free(vertex_buffer->draw_tracker);
+		_production_disposal_enqueued(vertex_buffer->production_disposal_uses);
 		frames[frame].buffers_to_dispose_of.push_back(*vertex_buffer);
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+		if (vertex_buffer->capture_test_allocation_serial) {
+			if (!capture_test_allocation_registry.release_owner(vertex_buffer->driver_id.id, vertex_buffer->capture_test_allocation_serial, p_id.get_id())) {
+				capture_test_coverage_failed.store(true);
+			}
+		} else {
+			capture_test_coverage_failed.store(true);
+		}
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+		RenderCaptureTestHooks::observe_buffer_free(p_id.get_id(), uint64_t(get_instance_id()), vertex_buffer->driver_id.id, vertex_buffer->capture_test_allocation_serial);
+#endif
+#endif
 		vertex_buffer_owner.free(p_id);
 	} else if (vertex_array_owner.owns(p_id)) {
+		auto *array = vertex_array_owner.get_or_null(p_id);
+		_production_disposal_enqueued(array->production_disposal_uses);
+		_production_disposal_returned(array->production_disposal_uses);
 		vertex_array_owner.free(p_id);
 	} else if (index_buffer_owner.owns(p_id)) {
 		IndexBuffer *index_buffer = index_buffer_owner.get_or_null(p_id);
-		_check_transfer_worker_buffer(index_buffer);
+		{
+			const Error dependency_error = _check_transfer_worker_buffer(index_buffer);
+			if (dependency_error != OK) {
+				return;
+			}
+		}
 
 		RDG::resource_tracker_free(index_buffer->draw_tracker);
+		_production_disposal_enqueued(index_buffer->production_disposal_uses);
 		frames[frame].buffers_to_dispose_of.push_back(*index_buffer);
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+		if (index_buffer->capture_test_allocation_serial) {
+			if (!capture_test_allocation_registry.release_owner(index_buffer->driver_id.id, index_buffer->capture_test_allocation_serial, p_id.get_id())) {
+				capture_test_coverage_failed.store(true);
+			}
+		} else {
+			capture_test_coverage_failed.store(true);
+		}
+#endif
 		index_buffer_owner.free(p_id);
 	} else if (index_array_owner.owns(p_id)) {
+		auto *array = index_array_owner.get_or_null(p_id);
+		_production_disposal_enqueued(array->production_disposal_uses);
+		_production_disposal_returned(array->production_disposal_uses);
 		index_array_owner.free(p_id);
 	} else if (shader_owner.owns(p_id)) {
 		Shader *shader = shader_owner.get_or_null(p_id);
+		if (shader->qualification_return && native_disposal_budget && !_native_disposal_admit(NativeDisposalWork::POLL)) {
+			return;
+		}
+		ERR_FAIL_COND(shader->qualification_return && !driver->shader_retire_ready_nonblocking(shader->driver_id));
+		ERR_FAIL_COND(_qualification_enqueue(shader->qualification_return) != OK);
 		if (shader->driver_id) { // Not placeholder?
+			_production_disposal_enqueued(shader->production_disposal_uses);
 			frames[frame].shaders_to_dispose_of.push_back(*shader);
 		}
 		shader_owner.free(p_id);
 	} else if (uniform_buffer_owner.owns(p_id)) {
 		Buffer *uniform_buffer = uniform_buffer_owner.get_or_null(p_id);
-		_check_transfer_worker_buffer(uniform_buffer);
+		{
+			const Error dependency_error = _check_transfer_worker_buffer(uniform_buffer);
+			if (dependency_error != OK) {
+				return;
+			}
+		}
 
 		RDG::resource_tracker_free(uniform_buffer->draw_tracker);
+		_production_disposal_enqueued(uniform_buffer->production_disposal_uses);
 		frames[frame].buffers_to_dispose_of.push_back(*uniform_buffer);
 		uniform_buffer_owner.free(p_id);
 	} else if (texture_buffer_owner.owns(p_id)) {
 		Buffer *texture_buffer = texture_buffer_owner.get_or_null(p_id);
-		_check_transfer_worker_buffer(texture_buffer);
+		{
+			const Error dependency_error = _check_transfer_worker_buffer(texture_buffer);
+			if (dependency_error != OK) {
+				return;
+			}
+		}
 
 		RDG::resource_tracker_free(texture_buffer->draw_tracker);
+		_production_disposal_enqueued(texture_buffer->production_disposal_uses);
 		frames[frame].buffers_to_dispose_of.push_back(*texture_buffer);
 		texture_buffer_owner.free(p_id);
 	} else if (storage_buffer_owner.owns(p_id)) {
 		Buffer *storage_buffer = storage_buffer_owner.get_or_null(p_id);
-		_check_transfer_worker_buffer(storage_buffer);
+		ERR_FAIL_COND(_qualification_enqueue(storage_buffer->qualification_return) != OK);
+		ERR_FAIL_COND(!_native_disposal_enqueue(storage_buffer->native_disposal, p_id.get_id(), storage_buffer->backing_serial, storage_buffer->driver_id.id));
+		{
+			const Error dependency_error = _check_transfer_worker_buffer(storage_buffer);
+			if (dependency_error != OK) {
+				return;
+			}
+		}
 
 		RDG::resource_tracker_free(storage_buffer->draw_tracker);
+		_production_disposal_enqueued(storage_buffer->production_disposal_uses);
 		frames[frame].buffers_to_dispose_of.push_back(*storage_buffer);
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+		if (storage_buffer->capture_test_allocation_serial) {
+			if (!capture_test_allocation_registry.release_owner(storage_buffer->driver_id.id, storage_buffer->capture_test_allocation_serial, p_id.get_id())) {
+				capture_test_coverage_failed.store(true);
+			}
+		} else {
+			capture_test_coverage_failed.store(true);
+		}
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+		RenderCaptureTestHooks::observe_buffer_free(p_id.get_id(), uint64_t(get_instance_id()), storage_buffer->driver_id.id, storage_buffer->capture_test_allocation_serial);
+#endif
+#endif
 		storage_buffer_owner.free(p_id);
 	} else if (uniform_set_owner.owns(p_id)) {
 		UniformSet *uniform_set = uniform_set_owner.get_or_null(p_id);
+		ERR_FAIL_COND(_qualification_enqueue(uniform_set->qualification_return) != OK);
+		ERR_FAIL_COND(!_native_disposal_enqueue(uniform_set->native_disposal, p_id.get_id(), uniform_set->native_disposal_serial, uniform_set->driver_id.id));
+		// The RID owner destroys the set before the synchronous callback.
+		InvalidationCallback invalidated_callback = uniform_set->invalidated_callback;
+		void *invalidated_callback_userdata = uniform_set->invalidated_callback_userdata;
+		_production_disposal_enqueued(uniform_set->production_disposal_uses);
 		frames[frame].uniform_sets_to_dispose_of.push_back(*uniform_set);
 		uniform_set_owner.free(p_id);
+#ifdef TESTS_ENABLED
+		if (test_uniform_set_after_rid_free) {
+			test_uniform_set_after_rid_free(this);
+		}
+#endif
 
-		if (uniform_set->invalidated_callback != nullptr) {
-			uniform_set->invalidated_callback(uniform_set->invalidated_callback_userdata);
+		if (invalidated_callback != nullptr) {
+			p_lock.temp_unlock();
+			invalidated_callback(invalidated_callback_userdata);
+			p_lock.temp_relock();
 		}
 	} else if (render_pipeline_owner.owns(p_id)) {
 		RenderPipeline *pipeline = render_pipeline_owner.get_or_null(p_id);
+		ERR_FAIL_COND(_qualification_enqueue(pipeline->qualification_return) != OK);
+		_production_disposal_enqueued(pipeline->production_disposal_uses);
 		frames[frame].render_pipelines_to_dispose_of.push_back(*pipeline);
 		render_pipeline_owner.free(p_id);
 	} else if (compute_pipeline_owner.owns(p_id)) {
 		ComputePipeline *pipeline = compute_pipeline_owner.get_or_null(p_id);
+		ERR_FAIL_COND(_qualification_enqueue(pipeline->qualification_return) != OK);
+		_production_disposal_enqueued(pipeline->production_disposal_uses);
 		frames[frame].compute_pipelines_to_dispose_of.push_back(*pipeline);
 		compute_pipeline_owner.free(p_id);
 	} else if (acceleration_structure_owner.owns(p_id)) {
@@ -7735,6 +14147,7 @@ void RenderingDevice::_free_internal(RID p_id) {
 	} else if (hit_sbt_owner.owns(p_id)) {
 		HitShaderBindingTable *hit_sbt = hit_sbt_owner.get_or_null(p_id);
 		RDG::resource_tracker_free(hit_sbt->draw_tracker);
+		_production_disposal_enqueued(hit_sbt->production_disposal_uses);
 		frames[frame].buffers_to_dispose_of.push_back(*hit_sbt);
 		hit_sbt_owner.free(p_id);
 	} else {
@@ -7760,8 +14173,8 @@ void RenderingDevice::set_resource_name(RID p_id, const String &p_name) {
 		//Framebuffer *framebuffer = framebuffer_owner.get_or_null(p_id);
 		// Not implemented for now as the relationship between Framebuffer and RenderPass is very complex.
 	} else if (sampler_owner.owns(p_id)) {
-		RDD::SamplerID sampler_driver_id = *sampler_owner.get_or_null(p_id);
-		driver->set_object_name(RDD::OBJECT_TYPE_SAMPLER, sampler_driver_id, p_name);
+		Sampler *sampler = sampler_owner.get_or_null(p_id);
+		driver->set_object_name(RDD::OBJECT_TYPE_SAMPLER, sampler->driver_id, p_name);
 	} else if (vertex_buffer_owner.owns(p_id)) {
 		Buffer *vertex_buffer = vertex_buffer_owner.get_or_null(p_id);
 		driver->set_object_name(RDD::OBJECT_TYPE_BUFFER, vertex_buffer->driver_id, p_name);
@@ -7813,6 +14226,7 @@ void RenderingDevice::_draw_command_begin_label(String p_label_name, const Color
 
 void RenderingDevice::draw_command_begin_label(const Span<char> p_label_name, const Color &p_color) {
 	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended during frame fence recovery or readback callbacks.");
 
 	if (!context->is_debug_utils_enabled()) {
 		return;
@@ -7829,6 +14243,7 @@ void RenderingDevice::draw_command_insert_label(String p_label_name, const Color
 
 void RenderingDevice::draw_command_end_label() {
 	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended during frame fence recovery or readback callbacks.");
 
 	draw_graph.end_label();
 }
@@ -7867,46 +14282,504 @@ RenderingDevice::DriverWorkarounds RenderingDevice::get_driver_workarounds() con
 
 void RenderingDevice::swap_buffers(bool p_present) {
 	ERR_RENDER_THREAD_GUARD();
+	if (native_disposal_active) {
+		const Error error = _native_disposal_maintenance();
+		ERR_FAIL_COND_MSG(error != OK, "Failed to resume native disposal frame advance.");
+		return;
+	}
+	if (qualification_frame_advance_pending) {
+		const Error error = _begin_frame(true);
+		if (error == ERR_BUSY && frame_issue_error.load() == OK && frame_wait_error.load() == OK && !frame_wait_native_code_valid.load()) {
+			return; // Early source contention retains this exact pending slot.
+		}
+		ERR_FAIL_COND_MSG(error != OK, vformat("Failed to finish pending rendering frame advance: error=%d issue=%d wait=%d native_code_valid=%d native_code=%d.",
+				int(error), int(frame_issue_error.load()), int(frame_wait_error.load()), int(frame_wait_native_code_valid.load()), frame_wait_native_code.load()));
+		return;
+	}
+	ERR_FAIL_COND_MSG(frame_issue_error != OK, "Cannot advance a frame after a non-replayable rendering issue failure.");
+	ERR_FAIL_COND_MSG(frame_wait_draining, "Cannot advance a frame from its readback callback.");
+	if (frame_wait_error != OK) {
+		// Retry this recording slot before advancing again. Its outstanding
+		// native fence still owns the requests and staging allocations.
+		if (failed_wait_frame == frame) {
+			const Error begin_error = _begin_frame(true);
+			ERR_FAIL_COND_MSG(begin_error != OK, "Failed to recover the rendering frame fence.");
+			return;
+		}
+		const Error wait_error = _stall_for_frame(failed_wait_frame);
+		ERR_FAIL_COND_MSG(wait_error != OK, "Failed to recover a previous rendering frame fence.");
+		frame_wait_error = OK;
+		failed_wait_frame = -1;
+	}
 
 	GodotProfileZoneGroupedFirst(_profile_zone, "_end_frame");
-	_end_frame();
+	const Error end_error = _end_frame();
+	ERR_FAIL_COND_MSG(end_error != OK, "Failed to seal the rendering frame.");
 
 	GodotProfileZoneGrouped(_profile_zone, "_execute_frame");
-	_execute_frame(p_present);
+	const Error issue_error = _execute_frame(p_present);
+	ERR_FAIL_COND_MSG(issue_error != OK, "Failed to issue the rendering frame.");
 
 	// Advance to the next frame and begin recording again.
 	frame = (frame + 1) % frames.size();
+	// Early native/ticket polling can refuse before fence recovery records an
+	// error. Retain this exact slot and suspend recording until begin succeeds.
+	qualification_frame_advance_pending = true;
 
 	GodotProfileZoneGrouped(_profile_zone, "_begin_frame");
-	_begin_frame(true);
+	const Error begin_error = _begin_frame(true);
+	if (begin_error == ERR_BUSY && frame_issue_error.load() == OK && frame_wait_error.load() == OK && !frame_wait_native_code_valid.load()) {
+		return; // No fence error was observed; recording stays suspended.
+	}
+	ERR_FAIL_COND_MSG(begin_error != OK, vformat("Failed to begin the next rendering frame: error=%d issue=%d wait=%d native_code_valid=%d native_code=%d.",
+			int(begin_error), int(frame_issue_error.load()), int(frame_wait_error.load()), int(frame_wait_native_code_valid.load()), frame_wait_native_code.load()));
 }
 
 void RenderingDevice::submit() {
 	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
 	ERR_FAIL_COND_MSG(is_main_instance, "Only local devices can submit and sync.");
 	ERR_FAIL_COND_MSG(local_device_processing, "device already submitted, call sync to wait until done.");
 
-	_end_frame();
-	_execute_frame(false);
+	const Error end_error = _end_frame();
+	ERR_FAIL_COND_MSG(end_error != OK, "Failed to seal the local rendering frame.");
+	const Error issue_error = _execute_frame(false);
+	ERR_FAIL_COND_MSG(issue_error != OK, "Failed to issue the local rendering frame.");
 	local_device_processing = true;
 }
 
 void RenderingDevice::sync() {
 	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND_MSG(frame_wait_draining, "Cannot synchronize a frame from its readback callback.");
 	ERR_FAIL_COND_MSG(is_main_instance, "Only local devices can submit and sync.");
 	ERR_FAIL_COND_MSG(!local_device_processing, "sync can only be called after a submit");
 
-	_begin_frame(true);
+	const Error begin_error = _begin_frame(true);
+	ERR_FAIL_COND_MSG(begin_error != OK, "Failed to synchronize the rendering frame.");
 	local_device_processing = false;
 }
 
+bool RenderingDevice::_native_disposal_available(NativeDisposalWork p_work, uint32_t p_count) const {
+	if (!native_disposal_budget) {
+		return true;
+	}
+	const auto &budget = *native_disposal_budget;
+	const auto &usage = *native_disposal_usage;
+	const uint64_t used = uint64_t(usage.polls) + usage.frees + usage.issues + usage.retains + usage.releases + usage.recycles;
+	return budget.receipts && budget.passes && used <= budget.receipts && (p_work == NativeDisposalWork::WORK || p_count <= budget.receipts - used) && usage.passes < budget.passes && budget.deadline_usec && OS::get_singleton()->get_ticks_usec() < budget.deadline_usec;
+}
+
+bool RenderingDevice::_native_disposal_admit(NativeDisposalWork p_work, uint32_t p_count) {
+	if (!_native_disposal_available(p_work, p_count)) {
+		return false;
+	}
+	if (!native_disposal_budget) {
+		return true;
+	}
+	auto &usage = *native_disposal_usage;
+	++usage.passes;
+	switch (p_work) {
+		case NativeDisposalWork::POLL:
+			usage.polls += p_count;
+			break;
+		case NativeDisposalWork::FREE:
+			usage.frees += p_count;
+			break;
+		case NativeDisposalWork::ISSUE:
+			usage.issues += p_count;
+			break;
+		case NativeDisposalWork::RETAIN:
+			usage.retains += p_count;
+			break;
+		case NativeDisposalWork::RELEASE:
+			usage.releases += p_count;
+			break;
+		case NativeDisposalWork::RECYCLE:
+			usage.recycles += p_count;
+			break;
+		case NativeDisposalWork::WORK:
+			break;
+	}
+	return true;
+}
+
+bool RenderingDevice::_native_disposal_charge(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, NativeDisposalWork p_work) {
+	const NativeDisposalBudget *previous_budget = native_disposal_budget;
+	NativeDisposalUsage *previous_usage = native_disposal_usage;
+	native_disposal_budget = &p_budget;
+	native_disposal_usage = &r_usage;
+	const bool admitted = _native_disposal_admit(p_work);
+	native_disposal_budget = previous_budget;
+	native_disposal_usage = previous_usage;
+	return admitted;
+}
+
+void RenderingDevice::_capture_disposal_cutoff(uint32_t p_frame) {
+	auto &f = frames[p_frame];
+	auto &cursor = f.disposal;
+	cursor = {};
+	cursor.active = true;
+	cursor.remaining[0] = f.render_pipelines_to_dispose_of.size();
+	cursor.remaining[1] = f.compute_pipelines_to_dispose_of.size();
+	cursor.remaining[2] = f.raytracing_pipelines_to_dispose_of.size();
+	cursor.remaining[3] = f.acceleration_structures_to_dispose_of.size();
+	cursor.remaining[4] = f.uniform_sets_to_dispose_of.size();
+	cursor.remaining[5] = f.shaders_to_dispose_of.size();
+	cursor.remaining[6] = f.samplers_to_dispose_of.size();
+	cursor.remaining[7] = f.framebuffers_to_dispose_of.size();
+	cursor.remaining[8] = f.textures_to_dispose_of.size();
+	cursor.remaining[9] = f.buffers_to_dispose_of.size();
+}
+
+Error RenderingDevice::_free_pending_resources_step(int p_frame, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage) {
+	// Admission precedes even the cutoff capture: a zero query cannot advance it.
+	if (!p_budget.receipts || !p_budget.passes || !p_budget.deadline_usec || OS::get_singleton()->get_ticks_usec() >= p_budget.deadline_usec) {
+		return ERR_BUSY;
+	}
+	auto &f = frames[p_frame];
+	auto &cursor = f.disposal;
+	const uint64_t used = uint64_t(r_usage.polls) + r_usage.frees + r_usage.issues + r_usage.retains + r_usage.releases + r_usage.recycles;
+	if (used >= p_budget.receipts || r_usage.passes >= p_budget.passes) {
+		return ERR_BUSY;
+	}
+	if (!cursor.active) {
+		_capture_disposal_cutoff(p_frame);
+	}
+	auto admit = [&](NativeDisposalWork p_work) { return _native_disposal_charge(p_budget, r_usage, p_work); };
+	while (cursor.kind < 10) {
+		if (!cursor.remaining[cursor.kind]) {
+			++cursor.kind;
+			continue;
+		}
+		switch (cursor.kind) {
+			case 0: {
+				if (!admit(NativeDisposalWork::FREE)) {
+					return ERR_BUSY;
+				}
+				auto &pipeline = f.render_pipelines_to_dispose_of.front()->get();
+				driver->pipeline_free(pipeline.driver_id);
+				_production_disposal_returned(pipeline.production_disposal_uses);
+				if (pipeline.qualification_dependency) {
+					CRASH_COND(!pipeline.qualification_dependency->dependent_children.load());
+					pipeline.qualification_dependency->dependent_children.fetch_sub(1);
+				}
+				if (pipeline.material_shader_hold) {
+					CRASH_COND(!pipeline.material_shader_hold->pipeline_borrowers);
+					--pipeline.material_shader_hold->pipeline_borrowers;
+				}
+				_qualification_freed(pipeline.qualification_return);
+				f.render_pipelines_to_dispose_of.pop_front();
+			} break;
+			case 1: {
+				if (!admit(NativeDisposalWork::FREE)) {
+					return ERR_BUSY;
+				}
+				ComputePipeline *pipeline = &f.compute_pipelines_to_dispose_of.front()->get();
+				driver->pipeline_free(pipeline->driver_id);
+				_production_disposal_returned(pipeline->production_disposal_uses);
+				_qualification_freed(pipeline->qualification_return);
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+				capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::ComputePipeline, pipeline->driver_id.id);
+#endif
+
+				f.compute_pipelines_to_dispose_of.pop_front();
+			} break;
+			case 2: {
+				auto &pipeline = f.raytracing_pipelines_to_dispose_of.front()->get();
+				if (!cursor.phase) {
+					if (!admit(NativeDisposalWork::FREE)) {
+						return ERR_BUSY;
+					}
+					driver->buffer_free(pipeline.sbt_buffer.driver_id);
+					buffer_memory -= pipeline.sbt_buffer.size;
+					cursor.phase = 1;
+				}
+				if (!admit(NativeDisposalWork::FREE)) {
+					return ERR_BUSY;
+				}
+				driver->raytracing_pipeline_free(pipeline.driver_id);
+				f.raytracing_pipelines_to_dispose_of.pop_front();
+			} break;
+			case 3: {
+				auto &acceleration = f.acceleration_structures_to_dispose_of.front()->get();
+				if (!cursor.phase) {
+					if (!admit(NativeDisposalWork::FREE)) {
+						return ERR_BUSY;
+					}
+					driver->acceleration_structure_free(acceleration.driver_id);
+					cursor.phase = 1;
+				}
+				if (cursor.phase == 1) {
+					if (acceleration.scratch_buffer) {
+						if (!admit(NativeDisposalWork::WORK)) {
+							return ERR_BUSY;
+						}
+						cursor.allocation_size = driver->buffer_get_allocation_size(acceleration.scratch_buffer);
+					}
+					cursor.phase = 2;
+				}
+				if (cursor.phase == 2) {
+					if (acceleration.scratch_buffer) {
+						if (!admit(NativeDisposalWork::FREE)) {
+							return ERR_BUSY;
+						}
+						driver->buffer_free(acceleration.scratch_buffer);
+						buffer_memory -= cursor.allocation_size;
+					}
+					cursor.phase = 3;
+				}
+				if (cursor.phase == 3) {
+					if (!acceleration.instance_buffers.is_empty()) {
+						if (!admit(NativeDisposalWork::WORK)) {
+							return ERR_BUSY;
+						}
+						cursor.allocation_size = uint64_t(driver->api_trait_get(RDD::API_TRAIT_ACCELERATION_STRUCTURE_INSTANCE_SIZE)) * acceleration.max_instance_count;
+					}
+					cursor.phase = 4;
+				}
+				while (cursor.item < acceleration.instance_buffers.size()) {
+					const auto id = acceleration.instance_buffers[cursor.item].driver_id;
+					if (cursor.phase == 4) {
+						if (!admit(NativeDisposalWork::WORK)) {
+							return ERR_BUSY;
+						}
+						driver->buffer_unmap(id);
+						cursor.phase = 5;
+					}
+					if (!admit(NativeDisposalWork::FREE)) {
+						return ERR_BUSY;
+					}
+					driver->buffer_free(id);
+					buffer_memory -= cursor.allocation_size;
+					++cursor.item;
+					cursor.phase = 4;
+				}
+				f.acceleration_structures_to_dispose_of.pop_front();
+			} break;
+			case 4: {
+				if (!admit(NativeDisposalWork::FREE)) {
+					return ERR_BUSY;
+				}
+				UniformSet *uniform_set = &f.uniform_sets_to_dispose_of.front()->get();
+				driver->uniform_set_free(uniform_set->driver_id);
+				_production_disposal_returned(uniform_set->production_disposal_uses);
+				_native_disposal_returned(uniform_set->native_disposal, uniform_set->native_disposal_rid, uniform_set->native_disposal_serial, uniform_set->driver_id.id);
+				for (auto &dependency : uniform_set->production_output_dependencies) {
+					CRASH_COND(dependency.cell.is_null() || !dependency.cell->production_dependent_sets);
+					--dependency.cell->production_dependent_sets;
+				}
+				for (auto *cell : uniform_set->qualification_dependencies) {
+					CRASH_COND(!cell->dependent_children.load());
+					cell->dependent_children.fetch_sub(1);
+				}
+				_qualification_freed(uniform_set->qualification_return);
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+				capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::UniformSet, uniform_set->driver_id.id);
+#endif
+
+				f.uniform_sets_to_dispose_of.pop_front();
+			} break;
+			case 5: {
+				Shader *shader = &f.shaders_to_dispose_of.front()->get();
+				if (!cursor.phase) {
+					if (!admit(NativeDisposalWork::POLL)) {
+						return ERR_BUSY;
+					}
+					if (!driver->shader_retire_ready_nonblocking(shader->driver_id)) {
+						return ERR_BUSY;
+					}
+					cursor.phase = 1;
+				}
+				if (!admit(NativeDisposalWork::FREE)) {
+					return ERR_BUSY;
+				}
+				driver->shader_free(shader->driver_id);
+				_production_disposal_returned(shader->production_disposal_uses);
+				_qualification_freed(shader->qualification_return);
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+				capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::Shader, shader->driver_id.id);
+#endif
+
+				f.shaders_to_dispose_of.pop_front();
+			} break;
+			case 6: {
+				if (!admit(NativeDisposalWork::FREE)) {
+					return ERR_BUSY;
+				}
+				auto &sampler = f.samplers_to_dispose_of.front()->get();
+				driver->sampler_free(sampler.driver_id);
+				_native_disposal_returned(sampler.native_disposal, sampler.native_disposal_rid, sampler.native_disposal_serial, sampler.driver_id.id);
+				_production_disposal_returned(sampler.production_disposal_uses);
+				_qualification_freed(sampler.qualification_return);
+				f.samplers_to_dispose_of.pop_front();
+			} break;
+			case 7: {
+				auto &framebuffer = f.framebuffers_to_dispose_of.front()->get();
+				auto *cache = framebuffer.framebuffer_cache;
+				if (cache) {
+					while (!cache->storage_map.is_empty()) {
+						auto entry = cache->storage_map.begin();
+						if (!cursor.phase) {
+							if (!admit(NativeDisposalWork::FREE)) {
+								return ERR_BUSY;
+							}
+							driver->framebuffer_free(entry->value.framebuffer);
+							cursor.phase = 1;
+						}
+						if (!admit(NativeDisposalWork::FREE)) {
+							return ERR_BUSY;
+						}
+						driver->render_pass_free(entry->value.render_pass);
+						cache->storage_map.remove(entry);
+						cursor.phase = 0;
+					}
+					memdelete(cache);
+				}
+				if (framebuffer.qualification_dependency) {
+					CRASH_COND(!framebuffer.qualification_dependency->dependent_children.load());
+					framebuffer.qualification_dependency->dependent_children.fetch_sub(1);
+				}
+				_native_disposal_returned(framebuffer.native_disposal, framebuffer.native_disposal_rid, framebuffer.native_disposal_serial, framebuffer.native_disposal_backing);
+				_qualification_freed(framebuffer.qualification_return);
+				f.framebuffers_to_dispose_of.pop_front();
+			} break;
+			case 8: {
+				Texture *texture = &f.textures_to_dispose_of.front()->get();
+				auto *fallback = texture->shared_fallback;
+				if (cursor.phase == 0) {
+					if (fallback && fallback->texture.id) {
+						if (!admit(NativeDisposalWork::WORK)) {
+							return ERR_BUSY;
+						}
+						cursor.allocation_size = driver->texture_get_allocation_size(fallback->texture);
+					}
+					cursor.phase = 1;
+				}
+				if (cursor.phase == 1) {
+					if (fallback && fallback->texture.id) {
+						if (!admit(NativeDisposalWork::FREE)) {
+							return ERR_BUSY;
+						}
+						driver->texture_free(fallback->texture);
+						texture_memory -= cursor.allocation_size;
+					}
+					cursor.phase = 2;
+				}
+				if (cursor.phase == 2) {
+					if (fallback && fallback->buffer.id) {
+						if (!admit(NativeDisposalWork::WORK)) {
+							return ERR_BUSY;
+						}
+						cursor.allocation_size = driver->buffer_get_allocation_size(fallback->buffer);
+					}
+					cursor.phase = 3;
+				}
+				if (cursor.phase == 3) {
+					if (fallback && fallback->buffer.id) {
+						if (!admit(NativeDisposalWork::FREE)) {
+							return ERR_BUSY;
+						}
+						driver->buffer_free(fallback->buffer);
+						buffer_memory -= cursor.allocation_size;
+					}
+					if (fallback) {
+						if (fallback->texture_tracker) {
+							RDG::resource_tracker_free(fallback->texture_tracker);
+						}
+						if (fallback->buffer_tracker) {
+							RDG::resource_tracker_free(fallback->buffer_tracker);
+						}
+						memdelete(fallback);
+						texture->shared_fallback = nullptr;
+					}
+					cursor.phase = 4;
+				}
+				if (cursor.phase == 4) {
+					if (!admit(NativeDisposalWork::WORK)) {
+						return ERR_BUSY;
+					}
+					cursor.allocation_size = driver->texture_get_allocation_size(texture->driver_id);
+					cursor.phase = 5;
+				}
+				if (!admit(NativeDisposalWork::FREE)) {
+					return ERR_BUSY;
+				}
+				driver->texture_free(texture->driver_id);
+				_production_disposal_returned(texture->production_disposal_uses);
+				_native_disposal_returned(texture->native_disposal, texture->native_disposal_rid, texture->native_disposal_serial, texture->driver_id.id);
+				texture_memory -= cursor.allocation_size;
+				_qualification_freed(texture->qualification_return);
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+				capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::Texture, texture->driver_id.id);
+#endif
+
+				f.textures_to_dispose_of.pop_front();
+			} break;
+			case 9: {
+				if (!admit(NativeDisposalWork::FREE)) {
+					return ERR_BUSY;
+				}
+				Buffer &buffer = f.buffers_to_dispose_of.front()->get();
+				driver->buffer_free(buffer.driver_id);
+				_production_disposal_returned(buffer.production_disposal_uses);
+				_native_disposal_returned(buffer.native_disposal, buffer.native_disposal_rid, buffer.backing_serial, buffer.driver_id.id);
+				_qualification_freed(buffer.qualification_return);
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+				if (buffer.capture_test_allocation_serial) {
+					if (!capture_test_allocation_registry.dispose(buffer.driver_id.id, buffer.capture_test_allocation_serial)) {
+						capture_test_coverage_failed.store(true);
+					} else {
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+						RenderCaptureTestHooks::observe_buffer_dispose(uint64_t(get_instance_id()), buffer.driver_id.id, buffer.capture_test_allocation_serial);
+#endif
+					}
+				}
+#endif
+				buffer_memory -= buffer.size;
+
+				f.buffers_to_dispose_of.pop_front();
+			} break;
+		}
+		--cursor.remaining[cursor.kind];
+		cursor.phase = 0;
+		cursor.item = 0;
+		cursor.allocation_size = 0;
+	}
+	cursor = {};
+	if (!f.render_pipelines_to_dispose_of.is_empty() || !f.compute_pipelines_to_dispose_of.is_empty() || !f.raytracing_pipelines_to_dispose_of.is_empty() || !f.acceleration_structures_to_dispose_of.is_empty() || !f.uniform_sets_to_dispose_of.is_empty() || !f.shaders_to_dispose_of.is_empty() || !f.samplers_to_dispose_of.is_empty() || !f.framebuffers_to_dispose_of.is_empty() || !f.textures_to_dispose_of.is_empty() || !f.buffers_to_dispose_of.is_empty()) {
+		// Appended rows were outside this original cutoff. Keep their ordinary
+		// safe-frame maintenance obligation visible after this prefix returns.
+		frames_pending_resources_for_processing = uint32_t(frames.size());
+	} else if (frames_pending_resources_for_processing > 0u) {
+		--frames_pending_resources_for_processing;
+	}
+	return OK;
+}
+
 void RenderingDevice::_free_pending_resources(int p_frame) {
+	const bool resumed_cursor = frames[p_frame].disposal.active;
+	if (resumed_cursor) {
+		const NativeDisposalBudget budget{ UINT32_MAX, UINT32_MAX, UINT64_MAX };
+		NativeDisposalUsage usage;
+		const Error error = _free_pending_resources_step(p_frame, budget, usage);
+		ERR_FAIL_COND_MSG(error != OK, "Cannot recycle an unfinished native disposal cursor.");
+	}
 	// Free in dependency usage order, so nothing weird happens.
 	// Pipelines.
 	while (frames[p_frame].render_pipelines_to_dispose_of.front()) {
 		RenderPipeline *pipeline = &frames[p_frame].render_pipelines_to_dispose_of.front()->get();
 
 		driver->pipeline_free(pipeline->driver_id);
+		_production_disposal_returned(pipeline->production_disposal_uses);
+		if (pipeline->qualification_dependency) {
+			CRASH_COND(!pipeline->qualification_dependency->dependent_children.load());
+			pipeline->qualification_dependency->dependent_children.fetch_sub(1);
+		}
+		if (pipeline->material_shader_hold) {
+			CRASH_COND(!pipeline->material_shader_hold->pipeline_borrowers);
+			--pipeline->material_shader_hold->pipeline_borrowers;
+		}
+		_qualification_freed(pipeline->qualification_return);
 
 		frames[p_frame].render_pipelines_to_dispose_of.pop_front();
 	}
@@ -7915,6 +14788,11 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		ComputePipeline *pipeline = &frames[p_frame].compute_pipelines_to_dispose_of.front()->get();
 
 		driver->pipeline_free(pipeline->driver_id);
+		_production_disposal_returned(pipeline->production_disposal_uses);
+		_qualification_freed(pipeline->qualification_return);
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+		capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::ComputePipeline, pipeline->driver_id.id);
+#endif
 
 		frames[p_frame].compute_pipelines_to_dispose_of.pop_front();
 	}
@@ -7965,6 +14843,20 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		UniformSet *uniform_set = &frames[p_frame].uniform_sets_to_dispose_of.front()->get();
 
 		driver->uniform_set_free(uniform_set->driver_id);
+		_production_disposal_returned(uniform_set->production_disposal_uses);
+		_native_disposal_returned(uniform_set->native_disposal, uniform_set->native_disposal_rid, uniform_set->native_disposal_serial, uniform_set->driver_id.id);
+		for (auto &dependency : uniform_set->production_output_dependencies) {
+			CRASH_COND(dependency.cell.is_null() || !dependency.cell->production_dependent_sets);
+			--dependency.cell->production_dependent_sets;
+		}
+		for (auto *cell : uniform_set->qualification_dependencies) {
+			CRASH_COND(!cell->dependent_children.load());
+			cell->dependent_children.fetch_sub(1);
+		}
+		_qualification_freed(uniform_set->qualification_return);
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+		capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::UniformSet, uniform_set->driver_id.id);
+#endif
 
 		frames[p_frame].uniform_sets_to_dispose_of.pop_front();
 	}
@@ -7974,15 +14866,23 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		Shader *shader = &frames[p_frame].shaders_to_dispose_of.front()->get();
 
 		driver->shader_free(shader->driver_id);
+		_production_disposal_returned(shader->production_disposal_uses);
+		_qualification_freed(shader->qualification_return);
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+		capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::Shader, shader->driver_id.id);
+#endif
 
 		frames[p_frame].shaders_to_dispose_of.pop_front();
 	}
 
 	// Samplers.
 	while (frames[p_frame].samplers_to_dispose_of.front()) {
-		RDD::SamplerID sampler = frames[p_frame].samplers_to_dispose_of.front()->get();
+		Sampler &sampler = frames[p_frame].samplers_to_dispose_of.front()->get();
 
-		driver->sampler_free(sampler);
+		driver->sampler_free(sampler.driver_id);
+		_native_disposal_returned(sampler.native_disposal, sampler.native_disposal_rid, sampler.native_disposal_serial, sampler.driver_id.id);
+		_production_disposal_returned(sampler.production_disposal_uses);
+		_qualification_freed(sampler.qualification_return);
 
 		frames[p_frame].samplers_to_dispose_of.pop_front();
 	}
@@ -7991,6 +14891,12 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 	while (frames[p_frame].framebuffers_to_dispose_of.front()) {
 		Framebuffer *framebuffer = &frames[p_frame].framebuffers_to_dispose_of.front()->get();
 		draw_graph.framebuffer_cache_free(driver, framebuffer->framebuffer_cache);
+		if (framebuffer->qualification_dependency) {
+			CRASH_COND(!framebuffer->qualification_dependency->dependent_children.load());
+			framebuffer->qualification_dependency->dependent_children.fetch_sub(1);
+		}
+		_native_disposal_returned(framebuffer->native_disposal, framebuffer->native_disposal_rid, framebuffer->native_disposal_serial, framebuffer->native_disposal_backing);
+		_qualification_freed(framebuffer->qualification_return);
 		frames[p_frame].framebuffers_to_dispose_of.pop_front();
 	}
 
@@ -8005,6 +14911,12 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 
 		texture_memory -= driver->texture_get_allocation_size(texture->driver_id);
 		driver->texture_free(texture->driver_id);
+		_production_disposal_returned(texture->production_disposal_uses);
+		_native_disposal_returned(texture->native_disposal, texture->native_disposal_rid, texture->native_disposal_serial, texture->driver_id.id);
+		_qualification_freed(texture->qualification_return);
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+		capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::Texture, texture->driver_id.id);
+#endif
 
 		frames[p_frame].textures_to_dispose_of.pop_front();
 	}
@@ -8013,12 +14925,26 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 	while (frames[p_frame].buffers_to_dispose_of.front()) {
 		Buffer &buffer = frames[p_frame].buffers_to_dispose_of.front()->get();
 		driver->buffer_free(buffer.driver_id);
+		_production_disposal_returned(buffer.production_disposal_uses);
+		_native_disposal_returned(buffer.native_disposal, buffer.native_disposal_rid, buffer.backing_serial, buffer.driver_id.id);
+		_qualification_freed(buffer.qualification_return);
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+		if (buffer.capture_test_allocation_serial) {
+			if (!capture_test_allocation_registry.dispose(buffer.driver_id.id, buffer.capture_test_allocation_serial)) {
+				capture_test_coverage_failed.store(true);
+			} else {
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+				RenderCaptureTestHooks::observe_buffer_dispose(uint64_t(get_instance_id()), buffer.driver_id.id, buffer.capture_test_allocation_serial);
+#endif
+			}
+		}
+#endif
 		buffer_memory -= buffer.size;
 
 		frames[p_frame].buffers_to_dispose_of.pop_front();
 	}
 
-	if (frames_pending_resources_for_processing > 0u) {
+	if (!resumed_cursor && frames_pending_resources_for_processing > 0u) {
 		--frames_pending_resources_for_processing;
 	}
 }
@@ -8045,15 +14971,58 @@ uint64_t RenderingDevice::get_memory_usage(MemoryType p_type) const {
 	}
 }
 
-void RenderingDevice::_begin_frame(bool p_presented) {
+Error RenderingDevice::_begin_frame(bool p_presented, bool p_nonblocking) {
+	if (native_disposal_active) {
+		return ERR_BUSY;
+	}
+	frames[frame].maintenance_wait = {};
+	if (!next_qualification_frame_epoch) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	if (frame_issue_error != OK) {
+		return frame_issue_error;
+	}
+	if (frame_wait_draining) {
+		return ERR_BUSY;
+	}
 	GodotProfileZoneGroupedFirst(_profile_zone, "_stall_for_frame");
+	if (failed_wait_frame >= 0 && failed_wait_frame != frame) {
+		const Error previous_error = _stall_for_frame(failed_wait_frame, p_nonblocking);
+		if (previous_error != OK) {
+			return previous_error;
+		}
+	}
 	// Before writing to this frame, wait for it to be finished.
-	_stall_for_frame(frame);
+	const Error wait_error = _stall_for_frame(frame, p_nonblocking);
+	if (wait_error != OK) {
+#ifdef TESTS_ENABLED
+		static thread_local uint32_t begin_wait_traces = 0;
+		if (begin_wait_traces < 16 && OS::get_singleton()->has_environment("GODOT_QUALIFICATION_CAPACITY_TRACE")) {
+			++begin_wait_traces;
+			print_line(vformat("QFRAME begin_wait frame=%d error=%d nonblocking=%d pending=%d wait_error=%d failed_frame=%d native_code_valid=%d native_code=%d", frame, int(wait_error), int(p_nonblocking), int(qualification_frame_advance_pending.load()), int(frame_wait_error.load()), failed_wait_frame, int(frame_wait_native_code_valid.load()), frame_wait_native_code.load()));
+		}
+#endif
+		return wait_error;
+	}
+	if (p_nonblocking) {
+		for (const Shader &shader : frames[frame].shaders_to_dispose_of) {
+			if (!driver->shader_retire_ready_nonblocking(shader.driver_id)) {
+				return ERR_BUSY;
+			}
+		}
+	}
+	frames[frame].primary_command_buffer_begun = false;
+	frames[frame].qualification_graph_closed = false;
+	frames[frame].qualification_segment_closed = false;
+	frames[frame].qualification_issue_busy = false;
+	frames[frame].qualification_issue_slot = 0;
+	frames[frame].present_attempted = false;
+	frames[frame].present_report = RDD::QueueCallReport();
 
 	if (command_pool_reset_enabled) {
 		GodotProfileZoneGrouped(_profile_zone, "driver->command_pool_reset");
 		bool reset = driver->command_pool_reset(frames[frame].command_pool);
-		ERR_FAIL_COND(!reset);
+		ERR_FAIL_COND_V(!reset, _fail_frame_issue(FAILED));
 	}
 
 	if (p_presented) {
@@ -8066,11 +15035,26 @@ void RenderingDevice::_begin_frame(bool p_presented) {
 	GodotProfileZoneGrouped(_profile_zone, "driver->begin_segment");
 	driver->begin_segment(frame, frames_drawn++);
 	GodotProfileZoneGrouped(_profile_zone, "driver->command_buffer_begin");
-	driver->command_buffer_begin(frames[frame].command_buffer);
+	frames[frame].primary_command_buffer_begun = driver->command_buffer_begin(frames[frame].command_buffer);
+	if (!frames[frame].primary_command_buffer_begun) {
+		frames[frame].chain_prefix_poisoned = true;
+	}
 
 	// Reset the graph.
 	GodotProfileZoneGrouped(_profile_zone, "draw_graph.begin");
-	draw_graph.begin();
+	draw_graph.begin(frames[frame].primary_command_buffer_begun);
+	if (!frames[frame].primary_command_buffer_begun) {
+		return _fail_frame_issue(FAILED);
+	}
+
+	frames[frame].native_height_ranges.clear();
+	frames[frame].qualification_epoch = next_qualification_frame_epoch++;
+	// A refused free retained its exact original owner and edges. Retry only
+	// after a real frame return, in a fresh recording epoch with no old ticket
+	// membership; this never waits for a worker sealed by the frame being ended.
+	if (frames[frame].qualification_tickets.is_empty()) {
+		_qualification_retry_deferred_frees();
+	}
 
 	// Erase pending resources.
 	GodotProfileZoneGrouped(_profile_zone, "_free_pending_resources");
@@ -8097,9 +15081,118 @@ void RenderingDevice::_begin_frame(bool p_presented) {
 	frames[frame].timestamp_result_count = frames[frame].timestamp_count;
 	frames[frame].timestamp_count = 0;
 	frames[frame].index = Engine::get_singleton()->get_frames_drawn();
+	frame_wait_error = OK;
+	failed_wait_frame = -1;
+	qualification_frame_advance_pending = false;
+	return OK;
 }
 
-void RenderingDevice::_end_frame() {
+Error RenderingDevice::_fail_frame_issue(Error p_error) {
+	CRASH_COND(p_error == OK);
+	Error expected = OK;
+	frame_issue_error.compare_exchange_strong(expected, p_error);
+	const Error error = frame_issue_error.load();
+	frames[frame].chain_prefix_poisoned = true;
+	for (const BufferGetDataRequest &request : frames[frame].download_buffer_get_data_requests) {
+		if (request.capture && request.capture->registry && request.capture->registry->production_readback_delivery(*request.capture, true) == OK) {
+			if (request.capture->state->error == OK) {
+				request.capture->state->error = error;
+			}
+			request.capture->registry->production_readback_delivery(*request.capture, false);
+		}
+		if (request.result.is_valid() && request.result->error == OK) {
+			request.result->error = error;
+		}
+	}
+	for (const TextureGetDataRequest &request : frames[frame].download_texture_get_data_requests) {
+		if (request.result.is_valid() && request.result->error == OK) {
+			request.result->error = error;
+		}
+	}
+	return error;
+}
+
+void RenderingDevice::_seal_buffer_readback_records() {
+	for (const BufferGetDataRequest &request : frames[frame].download_buffer_get_data_requests) {
+		if (request.result.is_null()) {
+			continue;
+		}
+		for (BufferGetDataResult::CopyRecord &copy : request.result->copies) {
+			// A result can span several graph epochs. Earlier sealed copies must
+			// retain their original mapping when the staging graph is reset.
+			if (copy.mapping_sealed || !draw_graph.contains_record(copy.handle)) {
+				continue;
+			}
+			copy.mapping = draw_graph.record_mapping_state(copy.handle);
+			if (copy.mapping == RDG::RecordMappingState::Recorded) {
+				const bool slot_found = draw_graph.resolve_record_command_buffer_slot(copy.handle, copy.command_slot);
+				const bool buffer_found = draw_graph.resolve_record_command_buffer(copy.handle, copy.command_buffer);
+				CRASH_COND(!slot_found || !buffer_found);
+			}
+			copy.mapping_sealed = true;
+		}
+	}
+}
+
+void RenderingDevice::_observe_buffer_readback_issue(uint32_t p_slot, RDD::CommandBufferID p_command_buffer, Error p_error, const RDD::QueueCallReport &p_report) {
+	for (const BufferGetDataRequest &request : frames[frame].download_buffer_get_data_requests) {
+		if (request.result.is_null()) {
+			continue;
+		}
+		for (BufferGetDataResult::CopyRecord &copy : request.result->copies) {
+			if (!copy.mapping_sealed || copy.issue_attempted || copy.mapping != RDG::RecordMappingState::Recorded || !draw_graph.contains_record(copy.handle) || copy.command_slot != p_slot) {
+				continue;
+			}
+			CRASH_COND(copy.command_buffer != p_command_buffer);
+			copy.issue_attempted = true;
+			copy.queue_error = p_error;
+			copy.issue_report = p_report;
+		}
+	}
+}
+
+Error RenderingDevice::_end_frame(bool p_nonblocking) {
+	QualificationSourceAdmissionScope source_admission(*this);
+	// The original RD mutex excludes a concurrent producer adding copy-queue work
+	// between the bounded preparation and end_segment. The maintenance caller
+	// already owns this recursive mutex; an ordinary frame must acquire it too.
+	const bool qualification_frame = p_nonblocking || !frames[frame].qualification_tickets.is_empty();
+	struct QualificationUnlock {
+		Mutex *mutex = nullptr;
+		~QualificationUnlock() {
+			if (mutex) {
+				mutex->unlock();
+			}
+		}
+	} qualification_unlock;
+	if (qualification_frame) {
+		if (!_thread_safe_.try_lock()) {
+			return ERR_BUSY;
+		}
+		qualification_unlock.mutex = &_thread_safe_;
+	}
+	if (frame_issue_error != OK) {
+		return frame_issue_error;
+	}
+	if (frames[frame].chain_prefix_poisoned) {
+		return _fail_frame_issue(FAILED);
+	}
+	if (frames[frame].qualification_graph_closed) {
+		if (frames[frame].qualification_segment_closed) {
+			return OK;
+		}
+		const Error error = driver->end_segment_checked(qualification_frame);
+		if (error == OK) {
+			frames[frame].qualification_segment_closed = true;
+		}
+		return error;
+	}
+	if (frames[frame].fence_signaled) {
+		return OK;
+	}
+	if (!frames[frame].primary_command_buffer_begun) {
+		return OK;
+	}
 	if (draw_list.active) {
 		ERR_PRINT("Found open draw list at the end of the frame, this should never happen (further drawing will likely not work).");
 	}
@@ -8112,23 +15205,64 @@ void RenderingDevice::_end_frame() {
 		ERR_PRINT("Found open raytracing list at the end of the frame, this should never happen (further raytracing will likely not work).");
 	}
 
+	if (qualification_frame) {
+		if (draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining || draw_graph.has_driver_callbacks()) {
+			return ERR_BUSY;
+		}
+		RDD::QueueCallReport hidden;
+		const Error error = driver->qualification_prepare_segment(hidden, p_nonblocking);
+		if (!hidden.calls.is_empty()) {
+			frames[frame].qualification_hidden_reports.push_back(hidden);
+			_qualification_issue_tickets(UINT32_MAX, hidden, error);
+		}
+		if (error != OK) {
+			return error;
+		}
+	}
+
 	// The command buffer must be copied into a stack variable as the driver workarounds can change the command buffer in use.
 	RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
 	GodotProfileZoneGroupedFirst(_profile_zone, "_submit_transfer_workers");
-	_submit_transfer_workers(command_buffer);
+	const Error transfer_error = _submit_transfer_workers(command_buffer, qualification_frame);
+	if (transfer_error != OK) {
+		return transfer_error == ERR_BUSY ? transfer_error : _fail_frame_issue(transfer_error);
+	}
 	GodotProfileZoneGrouped(_profile_zone, "_submit_transfer_barriers");
-	_submit_transfer_barriers(command_buffer);
+	if (!qualification_frame) {
+		_submit_transfer_barriers(command_buffer);
+	}
 
 	GodotProfileZoneGrouped(_profile_zone, "draw_graph.end");
-	draw_graph.end(RENDER_GRAPH_REORDER == 1, RENDER_GRAPH_FULL_BARRIERS == 1, command_buffer, frames[frame].command_buffer_pool);
+	{
+		NativeDrainDiagnostic::Span graph_trace("graph.ordinary", uintptr_t(this), command_buffer.id, frame, frames[frame].swap_chains_to_present.size(), frames[frame].fence_signaled, qualification_frame);
+		draw_graph.end(RENDER_GRAPH_REORDER == 1, RENDER_GRAPH_FULL_BARRIERS == 1, command_buffer, frames[frame].command_buffer_pool);
+	}
+	_seal_buffer_readback_records();
+	_native_height_seal_frame(frame);
+	_qualification_seal_tickets();
+	if (draw_graph.recording_failed()) {
+		return _fail_frame_issue(FAILED);
+	}
 	GodotProfileZoneGrouped(_profile_zone, "driver->command_buffer_end");
 	driver->command_buffer_end(command_buffer);
 	GodotProfileZoneGrouped(_profile_zone, "driver->end_segment");
-	driver->end_segment();
+	frames[frame].qualification_graph_closed = true;
+	const Error segment_error = driver->end_segment_checked(qualification_frame);
+	if (segment_error == OK) {
+		frames[frame].qualification_segment_closed = true;
+	}
+	return segment_error;
 }
 
-void RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingDeviceDriver::FenceID p_draw_fence,
+bool RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingDeviceDriver::FenceID p_draw_fence,
 		RenderingDeviceDriver::SemaphoreID p_dst_draw_semaphore_to_signal) {
+	QualificationSourceAdmissionScope source_admission(*this);
+	if (frame_issue_error != OK) {
+		return false;
+	}
+	if (frames[frame].chain_prefix_poisoned || !frames[frame].primary_command_buffer_begun) {
+		return false;
+	}
 	// Execute command buffers and use semaphores to wait on the execution of the previous one.
 	// Normally there's only one command buffer, but driver workarounds can force situations where
 	// there'll be more.
@@ -8136,8 +15270,13 @@ void RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingD
 	RDG::CommandBufferPool &buffer_pool = frames[frame].command_buffer_pool;
 	if (buffer_pool.buffers_used > 0) {
 		command_buffer_count += buffer_pool.buffers_used;
-		buffer_pool.buffers_used = 0;
 	}
+	if (!frames[frame].qualification_issue_slot) {
+		frames[frame].chain_reports.clear();
+	}
+	frames[frame].qualification_issue_busy = false;
+	frames[frame].chain_reports.reserve(command_buffer_count);
+	frames[frame].chain_prefix_poisoned = false;
 
 	thread_local LocalVector<RDD::SwapChainID> swap_chains;
 	swap_chains.clear();
@@ -8148,7 +15287,12 @@ void RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingD
 	thread_local LocalVector<RDD::SemaphoreID> wait_semaphores;
 	wait_semaphores = frames[frame].semaphores_to_wait_on;
 
-	for (uint32_t i = 0; i < command_buffer_count; i++) {
+	bool all_issued = true;
+	if (frames[frame].qualification_issue_slot) {
+		wait_semaphores.resize(1);
+		wait_semaphores[0] = buffer_pool.semaphores[frames[frame].qualification_issue_slot - 1];
+	}
+	for (uint32_t i = frames[frame].qualification_issue_slot; i < command_buffer_count; i++) {
 		RDD::CommandBufferID command_buffer;
 		RDD::SemaphoreID signal_semaphore;
 		RDD::FenceID signal_fence;
@@ -8172,19 +15316,64 @@ void RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingD
 			// Semaphores always need to be signaled if it's not the last command buffer.
 		}
 
-		driver->command_queue_execute_and_present(main_queue, wait_semaphores, command_buffer,
+		RenderingDeviceDriver::QueueCallReport report;
+		const Error queue_error = driver->command_queue_execute_and_present_observed(main_queue, wait_semaphores, command_buffer,
 				signal_semaphore ? signal_semaphore : VectorView<RDD::SemaphoreID>(), signal_fence,
-				swap_chains);
+				swap_chains, report);
+		if (queue_error == ERR_BUSY && report.calls.is_empty()) {
+			frames[frame].qualification_issue_busy = true;
+			return false;
+		}
+		_observe_buffer_readback_issue(i, command_buffer, queue_error, report);
+		const Error height_issue = _native_height_issue_slot(frame, frames[frame].qualification_epoch, i, command_buffer, queue_error, report);
+		if (height_issue != OK && height_issue != ERR_BUSY) {
+			_fail_frame_issue(height_issue);
+			all_issued = false;
+		}
+		_qualification_issue_tickets(i, report, queue_error);
+		frames[frame].chain_reports.push_back(report);
+		frames[frame].qualification_issue_slot = i + 1;
+		if (queue_error != OK || !report.issued || report.error != OK) {
+			_fail_frame_issue(queue_error != OK ? queue_error : (report.error != OK ? report.error : FAILED));
+			all_issued = false;
+		}
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+		RenderCaptureTestHooks::observe_driver_result(uint64_t(get_instance_id()), 1, signal_fence.id, queue_error);
+		if (queue_error != OK) {
+			capture_test_coverage_failed.store(true);
+		}
+#endif
 
 		// Make the next command buffer wait on the semaphore signaled by this one.
+		if (!all_issued) {
+			break;
+		}
 		wait_semaphores.resize(1);
 		wait_semaphores[0] = signal_semaphore;
 	}
 
-	frames[frame].semaphores_to_wait_on.clear();
+	if (all_issued) {
+		frames[frame].semaphores_to_wait_on.clear();
+		buffer_pool.buffers_used = 0;
+	} else {
+		frames[frame].chain_prefix_poisoned = !frames[frame].chain_reports.is_empty();
+	}
+	return all_issued;
 }
 
-void RenderingDevice::_execute_frame(bool p_present) {
+Error RenderingDevice::_execute_frame(bool p_present) {
+	if (frame_issue_error != OK) {
+		return frame_issue_error;
+	}
+	if (frames[frame].fence_signaled) {
+		return OK;
+	}
+	if (frames[frame].chain_prefix_poisoned) {
+		return _fail_frame_issue(FAILED);
+	}
+	if (!frames[frame].primary_command_buffer_begun) {
+		return OK;
+	}
 	// Check whether this frame should present the swap chains and in which queue.
 	const bool frame_can_present = p_present && !frames[frame].swap_chains_to_present.is_empty();
 	const bool separate_present_queue = main_queue != present_queue;
@@ -8196,47 +15385,273 @@ void RenderingDevice::_execute_frame(bool p_present) {
 			: RDD::SemaphoreID(nullptr);
 	const bool present_swap_chain = frame_can_present && !separate_present_queue;
 
-	execute_chained_cmds(present_swap_chain, frames[frame].fence, semaphore);
+	const bool frame_issued = execute_chained_cmds(present_swap_chain, frames[frame].fence, semaphore);
 	// Indicate the fence has been signaled so the next time the frame's contents need to be
 	// used, the CPU needs to wait on the work to be completed.
-	frames[frame].fence_signaled = true;
+	frames[frame].fence_signaled = frame_issued;
+	if (!frame_issued) {
+		if (frames[frame].qualification_issue_busy && frame_issue_error == OK) {
+			return ERR_BUSY;
+		}
+		return _fail_frame_issue(frame_issue_error != OK ? frame_issue_error.load() : FAILED);
+	}
 
 	if (frame_can_present) {
-		if (separate_present_queue) {
+		if (separate_present_queue && frame_issued) {
 			// Issue the presentation separately if the presentation queue is different from the main queue.
-			driver->command_queue_execute_and_present(present_queue, frames[frame].semaphore, {}, {}, {}, frames[frame].swap_chains_to_present);
+
+			// Keep presentation separate from each command-buffer slot's report.
+			frames[frame].present_attempted = true;
+			const Error present_error = driver->command_queue_execute_and_present_observed(present_queue, frames[frame].semaphore, {}, {}, {}, frames[frame].swap_chains_to_present, frames[frame].present_report);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+			RenderCaptureTestHooks::observe_driver_result(uint64_t(get_instance_id()), 1, 0, present_error);
+			if (present_error != OK) {
+				capture_test_coverage_failed.store(true);
+			}
+#endif
+			if (present_error != OK) {
+				return _fail_frame_issue(present_error);
+			}
 		}
 
 		frames[frame].swap_chains_to_present.clear();
 	}
+	return OK;
 }
 
-void RenderingDevice::_stall_for_frame(uint32_t p_frame) {
-	thread_local PackedByteArray packed_byte_array;
+Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
+	if (native_disposal_active) {
+		return _native_disposal_stall_step(p_frame);
+	}
+	if (frame_issue_error != OK) {
+		return frame_issue_error;
+	}
+	if (frame_wait_draining) {
+		return ERR_BUSY;
+	}
+	const Error height_retain = _native_height_retain_frame_sources(p_frame);
+	if (height_retain != OK) {
+		return height_retain;
+	}
+	frame_wait_native_code = 0;
+	frame_wait_native_code_valid = false;
+	// Original Frame ownership covers every actual slot call, including slots
+	// without the final fence. Qualification only polls; ordinary frame waits may
+	// use the original native wait, then recycle the same sources independently.
+	if (driver->native_call_observation_supported()) {
+		for (auto &report : frames[p_frame].chain_reports) {
+			for (auto &call : report.calls) {
+				if (call.presentation_only || call.source_owner_returned) {
+					continue;
+				}
+				const auto completion = p_nonblocking ? driver->native_call_poll(call.serial) : driver->native_call_wait(call.serial);
+				if (completion.native_error) {
+					frame_wait_native_code = completion.native_code;
+					frame_wait_native_code_valid = true;
+					return FAILED;
+				}
+				if (!completion.matches(call.completion_serial)) {
+					return ERR_BUSY;
+				}
+			}
+		}
+	}
+	const Error ticket_poll = _qualification_poll_tickets(p_frame);
+	if (ticket_poll != OK) {
+		return ticket_poll;
+	}
+	if (driver->native_call_observation_supported()) {
+		for (auto &report : frames[p_frame].chain_reports) {
+			if (!report.submission_serial) {
+				for (auto &call : report.calls) {
+					if (call.presentation_only || call.source_owner_returned) {
+						continue;
+					}
+					const Error recycled = p_nonblocking ? driver->native_call_recycle(call.serial) : driver->native_call_recycle_wait(call.serial);
+					if (recycled != OK) {
+						return recycled;
+					}
+					call.source_owner_returned = true;
+				}
+			}
+		}
+	}
+
+	for (auto &report : frames[p_frame].qualification_hidden_reports) {
+		for (auto &call : report.calls) {
+			if (call.presentation_only || call.source_owner_returned) {
+				continue;
+			}
+			const auto completion = p_nonblocking ? driver->native_call_poll(call.serial) : driver->native_call_wait(call.serial);
+			if (completion.native_error) {
+				frame_wait_native_code = completion.native_code;
+				frame_wait_native_code_valid = true;
+				return FAILED;
+			}
+			if (!completion.matches(call.completion_serial)) {
+				return ERR_BUSY;
+			}
+			if (call.frame_observer_owned) {
+				const Error released = driver->native_call_release(call.serial);
+				if (released != OK) {
+					return released;
+				}
+			}
+			call.source_owner_returned = true; // Return this Frame's observer exactly once, preserving actual source identity.
+		}
+	}
+	frames[p_frame].qualification_hidden_reports.clear();
 
 	if (frames[p_frame].fence_signaled) {
 		GodotProfileZoneGroupedFirst(_profile_zone, "driver->fence_wait");
-		driver->fence_wait(frames[p_frame].fence);
+
+		Error wait_error = OK;
+		if (p_nonblocking) {
+			// This continuation owns no extension Callable. An unrelated legacy
+			// callback remains for the ordinary frame path to deliver.
+			if (!frames[p_frame].download_texture_get_data_requests.is_empty()) {
+				return ERR_BUSY;
+			}
+			for (const auto &request : frames[p_frame].download_buffer_get_data_requests) {
+				if (!request.capture && (request.result.is_null() || !request.result->qualification_owned)) {
+					return ERR_BUSY;
+				}
+			}
+			const auto &reports = frames[p_frame].chain_reports;
+			if (reports.is_empty() || !reports[reports.size() - 1].submission_serial) {
+				frame_wait_native_code_valid = true;
+				return ERR_UNAVAILABLE;
+			}
+			const uint64_t serial = reports[reports.size() - 1].submission_serial;
+			const auto completion = driver->fence_poll(frames[p_frame].fence, serial);
+			if (completion.native_error) {
+				frame_wait_native_code = completion.native_code;
+				frame_wait_native_code_valid = true;
+				wait_error = FAILED;
+			} else if (!completion.matches(serial)) {
+				return ERR_BUSY;
+			} else {
+				wait_error = driver->fence_recycle(frames[p_frame].fence, serial);
+			}
+		} else {
+			wait_error = driver->fence_wait(frames[p_frame].fence);
+		}
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+		RenderCaptureTestHooks::observe_driver_result(uint64_t(get_instance_id()), 2, frames[p_frame].fence.id, wait_error);
+		if (wait_error != OK) {
+			capture_test_coverage_failed.store(true);
+		}
+#endif
+		if (wait_error != OK) {
+			frames[p_frame].primary_command_buffer_begun = false;
+			frame_wait_error = wait_error;
+			if (!frame_wait_native_code_valid.load()) {
+				frame_wait_native_code_valid = true;
+			}
+			failed_wait_frame = p_frame;
+			return wait_error;
+		}
 		frames[p_frame].fence_signaled = false;
+		frames[p_frame].primary_command_buffer_begun = false;
+		frame_wait_draining = true;
 
 		// Flush any pending requests for asynchronous buffer downloads.
 		if (!frames[p_frame].download_buffer_get_data_requests.is_empty()) {
 			GodotProfileZoneGrouped(_profile_zone, "flush asynchronous buffer downloads");
-			for (uint32_t i = 0; i < frames[p_frame].download_buffer_get_data_requests.size(); i++) {
-				const BufferGetDataRequest &request = frames[p_frame].download_buffer_get_data_requests[i];
-				packed_byte_array.resize(request.size);
+			const LocalVector<BufferGetDataRequest> requests = std::move(frames[p_frame].download_buffer_get_data_requests);
+			for (uint32_t i = 0; i < requests.size(); i++) {
+				const BufferGetDataRequest &request = requests[i];
+				const Ref<BufferGetDataResult> result = request.result;
+				auto *capture = request.capture;
+				if (capture && (!capture->registry || capture->registry->production_readback_delivery(*capture, true) != OK)) {
+					continue;
+				}
+				auto finish_delivery = [&]() {
+					if (capture) {
+						if (capture->state->returned <= capture->state->issued && request.size <= capture->state->issued - capture->state->returned) {
+							capture->state->returned += request.size;
+						}
+						capture->registry->production_readback_delivery(*capture, false);
+					}
+				};
+				struct DeliveryReturn {
+					decltype(finish_delivery) &finish;
+					~DeliveryReturn() { finish(); }
+				} delivery_return{ finish_delivery };
+				if (!capture && result.is_null()) {
+					continue;
+				}
+				if (capture) {
+					if (request.result_offset != capture->state->returned || request.size > capture->state->issued - capture->state->returned) {
+						capture->state->error = ERR_INVALID_DATA;
+						continue;
+					}
+				}
+				Error &result_error = capture ? capture->state->error : result->error;
+				bool &delivered = capture ? capture->state->delivered : result->delivered;
+				const uint64_t byte_size = capture ? capture->byte_capacity : uint64_t(result->bytes.size());
+				uint8_t *byte_data = capture ? capture->bytes : result->bytes.ptrw();
+				uint64_t completed = capture ? capture->state->completed : result->completed_size;
+				if (result_error != OK || delivered) {
+					continue;
+				}
+				if (request.result_offset != completed || request.result_offset > byte_size || request.size > byte_size - request.result_offset) {
+					result_error = ERR_INVALID_DATA;
+					continue;
+				}
 
 				uint32_t array_offset = 0;
 				for (uint32_t j = 0; j < request.frame_local_count; j++) {
 					uint32_t local_index = request.frame_local_index + j;
 					const RDD::BufferCopyRegion &region = frames[p_frame].download_buffer_copy_regions[local_index];
-					uint8_t *buffer_data = driver->buffer_map(frames[p_frame].download_buffer_staging_buffers[local_index]);
-					memcpy(&packed_byte_array.write[array_offset], &buffer_data[region.dst_offset], region.size);
+					if (region.size > request.size - array_offset) {
+						result_error = ERR_INVALID_DATA;
+						break;
+					}
+					int64_t native_code = 0;
+					uint8_t *buffer_data = driver->buffer_map_observed(frames[p_frame].download_buffer_staging_buffers[local_index], native_code);
+					if (buffer_data == nullptr) {
+						result_error = ERR_CANT_ACQUIRE_RESOURCE;
+						if (capture) {
+							capture->native_code = native_code;
+						} else {
+							result->native_code = native_code;
+						}
+						ERR_PRINT("Failed to map an asynchronous readback staging buffer.");
+						break;
+					}
+					memcpy(byte_data + request.result_offset + array_offset, buffer_data + region.dst_offset, region.size);
 					driver->buffer_unmap(frames[p_frame].download_buffer_staging_buffers[local_index]);
 					array_offset += region.size;
 				}
+				if (result_error != OK) {
+					continue;
+				}
+				if (array_offset != request.size) {
+					result_error = ERR_INVALID_DATA;
+					continue;
+				}
+				completed += array_offset;
+				if (capture) {
+					capture->state->completed = completed;
+				} else {
+					result->completed_size = uint32_t(completed);
+				}
+				if (!request.final_segment) {
+					continue;
+				}
+				if (completed != byte_size) {
+					result_error = ERR_INVALID_DATA;
+					continue;
+				}
+				delivered = true;
 
-				request.callback.call(packed_byte_array);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+				RenderCaptureTestHooks::observe_readback_completed(request.buffer.get_id(), byte_size);
+#endif
+				if (!capture && !result->qualification_owned) {
+					request.callback.call(result->bytes);
+				}
 			}
 
 			frames[p_frame].download_buffer_staging_buffers.clear();
@@ -8247,10 +15662,13 @@ void RenderingDevice::_stall_for_frame(uint32_t p_frame) {
 		// Flush any pending requests for asynchronous texture downloads.
 		if (!frames[p_frame].download_texture_get_data_requests.is_empty()) {
 			GodotProfileZoneGrouped(_profile_zone, "flush asynchronous texture downloads");
-			for (uint32_t i = 0; i < frames[p_frame].download_texture_get_data_requests.size(); i++) {
-				const TextureGetDataRequest &request = frames[p_frame].download_texture_get_data_requests[i];
-				uint32_t texture_size = get_image_format_required_size(request.format, request.width, request.height, request.depth, request.mipmaps);
-				packed_byte_array.resize(texture_size);
+			const LocalVector<TextureGetDataRequest> requests = std::move(frames[p_frame].download_texture_get_data_requests);
+			for (uint32_t i = 0; i < requests.size(); i++) {
+				const TextureGetDataRequest &request = requests[i];
+				const Ref<TextureGetDataResult> result = request.result;
+				if (result.is_null() || result->error != OK || result->delivered) {
+					continue;
+				}
 
 				// Find the block size of the texture's format.
 				uint32_t block_w = 0;
@@ -8270,8 +15688,13 @@ void RenderingDevice::_stall_for_frame(uint32_t p_frame) {
 					uint32_t region_h = MIN(region_size, h - region.texture_offset.y);
 
 					uint8_t *buffer_data = driver->buffer_map(frames[p_frame].download_texture_staging_buffers[local_index]);
+					if (buffer_data == nullptr) {
+						result->error = ERR_CANT_ACQUIRE_RESOURCE;
+						ERR_PRINT("Failed to map an asynchronous texture readback staging buffer.");
+						break;
+					}
 					const uint8_t *read_ptr = buffer_data + region.buffer_offset;
-					uint8_t *write_ptr = packed_byte_array.ptrw() + frames[p_frame].download_texture_mipmap_offsets[local_index];
+					uint8_t *write_ptr = result->bytes.ptrw() + frames[p_frame].download_texture_mipmap_offsets[local_index];
 					uint32_t unit_size = pixel_size;
 					if (block_w != 1 || block_h != 1) {
 						unit_size = block_size;
@@ -8287,7 +15710,20 @@ void RenderingDevice::_stall_for_frame(uint32_t p_frame) {
 					driver->buffer_unmap(frames[p_frame].download_texture_staging_buffers[local_index]);
 				}
 
-				request.callback.call(packed_byte_array);
+				// Every prefix lands in the same payload before its staging is reused.
+				// Failed maps remain sticky and never expose a partial success payload.
+				if (result->error != OK) {
+					continue;
+				}
+				result->completed_regions += request.frame_local_count;
+				if (request.final_segment) {
+					if (result->completed_regions != result->issued_regions) {
+						result->error = ERR_INVALID_DATA;
+						continue;
+					}
+					result->delivered = true;
+					request.callback.call(result->bytes);
+				}
 			}
 
 			GodotProfileZoneGrouped(_profile_zone, "clear buffers");
@@ -8296,24 +15732,59 @@ void RenderingDevice::_stall_for_frame(uint32_t p_frame) {
 			frames[p_frame].download_texture_mipmap_offsets.clear();
 			frames[p_frame].download_texture_get_data_requests.clear();
 		}
+		_qualification_return_frame_tickets(p_frame);
+		for (auto &report : frames[p_frame].chain_reports) {
+			for (auto &call : report.calls) {
+				if (!call.presentation_only) {
+					call.source_owner_returned = true;
+				}
+			}
+		}
+		frame_wait_draining = false;
 	}
+	return OK;
 }
 
-void RenderingDevice::_stall_for_previous_frames() {
+Error RenderingDevice::_stall_for_previous_frames() {
+	if (failed_wait_frame >= 0) {
+		const Error wait_error = _stall_for_frame(failed_wait_frame);
+		if (wait_error != OK) {
+			return wait_error;
+		}
+	}
 	for (uint32_t i = 0; i < frames.size(); i++) {
-		_stall_for_frame(i);
+		const Error wait_error = _stall_for_frame(i);
+		if (wait_error != OK) {
+			return wait_error;
+		}
 	}
+	return OK;
 }
 
-void RenderingDevice::_flush_and_stall_for_all_frames(bool p_begin_frame) {
-	_stall_for_previous_frames();
-	_end_frame();
-	_execute_frame(false);
+Error RenderingDevice::_flush_and_stall_for_all_frames(bool p_begin_frame) {
+	if (frame_issue_error != OK) {
+		return frame_issue_error;
+	}
+	if (frame_wait_draining) {
+		return ERR_BUSY;
+	}
+	const Error wait_error = _stall_for_previous_frames();
+	if (wait_error != OK) {
+		return wait_error;
+	}
+	const Error end_error = _end_frame();
+	if (end_error != OK) {
+		return end_error;
+	}
+	const Error issue_error = _execute_frame(false);
+	if (issue_error != OK) {
+		return issue_error;
+	}
 
 	if (p_begin_frame) {
-		_begin_frame();
+		return _begin_frame();
 	} else {
-		_stall_for_frame(frame);
+		return _stall_for_frame(frame);
 	}
 }
 
@@ -8323,6 +15794,17 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 	Error err;
 	RenderingContextDriver::SurfaceID main_surface = 0;
 	is_main_instance = (singleton == this) && (p_main_window != DisplayServerEnums::INVALID_WINDOW_ID);
+#ifdef TESTS_ENABLED
+	uint32_t test_staging_block_bytes = 0;
+	if (is_main_instance && OS::get_singleton()->has_environment("GODOT_K03_TEST_MAIN_RD_STAGING_BLOCK_BYTES")) {
+		const String value = OS::get_singleton()->get_environment("GODOT_K03_TEST_MAIN_RD_STAGING_BLOCK_BYTES");
+		ERR_FAIL_COND_V_MSG(!value.is_valid_int(), ERR_INVALID_PARAMETER, "Invalid TESTS-only main RD staging block bytes.");
+		const int64_t block = value.to_int();
+		ERR_FAIL_COND_V_MSG(block < 32 || block > 4096 || (block & (block - 1)), ERR_INVALID_PARAMETER, "Invalid TESTS-only main RD staging block bytes.");
+		test_staging_block_bytes = uint32_t(block);
+	}
+#endif
+
 	if (p_main_window != DisplayServerEnums::INVALID_WINDOW_ID) {
 		// Retrieve the surface from the main window if it was specified.
 		main_surface = p_context->surface_get_from_window(p_main_window);
@@ -8331,6 +15813,7 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 
 	context = p_context;
 	driver = context->driver_create();
+	driver->session_owner = this;
 
 	print_verbose("Devices:");
 	int32_t device_index = Engine::get_singleton()->get_gpu_index();
@@ -8523,11 +16006,12 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 
 	// Initialize recording on the first frame.
 	driver->begin_segment(frame, frames_drawn++);
-	driver->command_buffer_begin(frames[0].command_buffer);
+	frames[0].primary_command_buffer_begun = driver->command_buffer_begin(frames[0].command_buffer);
+	ERR_FAIL_COND_V_MSG(!frames[0].primary_command_buffer_begun, FAILED, "Failed to begin the initial command buffer.");
 
 	// Create draw graph and start it initialized as well.
 	draw_graph.initialize(driver, &_render_pass_create_from_graph, frames.size(), main_queue_family, SECONDARY_COMMAND_BUFFERS_PER_FRAME);
-	draw_graph.begin();
+	draw_graph.begin(frames[0].primary_command_buffer_begun);
 
 	for (uint32_t i = 0; i < frames.size(); i++) {
 		// Reset all queries in a query pool before doing any operations with them..
@@ -8548,12 +16032,22 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 	// Copy the sizes to the download staging buffers.
 	download_staging_buffers.block_size = upload_staging_buffers.block_size;
 	download_staging_buffers.max_size = upload_staging_buffers.max_size;
+#ifdef TESTS_ENABLED
+	if (test_staging_block_bytes) {
+		// Explicit resource-pressure control only. Preserve frame age, progress,
+		// completion and Registry authority; apply before the first allocation.
+		ERR_FAIL_COND_V(!upload_staging_buffers.blocks.is_empty() || !download_staging_buffers.blocks.is_empty(), ERR_ALREADY_IN_USE);
+		const uint32_t blocks = MAX(4U, uint32_t(frames.size()));
+		ERR_FAIL_COND_V(blocks > UINT32_MAX / test_staging_block_bytes, ERR_PARAMETER_RANGE_ERROR);
+		upload_staging_buffers.block_size = download_staging_buffers.block_size = test_staging_block_bytes;
+		upload_staging_buffers.max_size = download_staging_buffers.max_size = blocks * test_staging_block_bytes;
+		print_line(vformat("K03_TEST_MAIN_RD_STAGING block=%d max=%d initial_upload_blocks=%d initial_download_blocks=%d frame_count=%d", test_staging_block_bytes, upload_staging_buffers.max_size, upload_staging_buffers.blocks.size(), download_staging_buffers.blocks.size(), frames.size()));
+	}
+#endif
 
-	texture_upload_region_size_px = GLOBAL_GET("rendering/rendering_device/staging_buffer/texture_upload_region_size_px");
-	texture_upload_region_size_px = Math::nearest_power_of_2_templated(texture_upload_region_size_px);
+	texture_upload_region_size_px = _normalize_staging_region_size(int64_t(GLOBAL_GET("rendering/rendering_device/staging_buffer/texture_upload_region_size_px")));
 
-	texture_download_region_size_px = GLOBAL_GET("rendering/rendering_device/staging_buffer/texture_download_region_size_px");
-	texture_download_region_size_px = Math::nearest_power_of_2_templated(texture_download_region_size_px);
+	texture_download_region_size_px = _normalize_staging_region_size(int64_t(GLOBAL_GET("rendering/rendering_device/staging_buffer/texture_download_region_size_px")));
 
 	// Ensure current staging block is valid and at least one per frame exists.
 	upload_staging_buffers.current = 0;
@@ -8599,7 +16093,7 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 	// Find the best method available for VRS on the current hardware.
 	_vrs_detect_method();
 
-	return OK;
+	return GDExtensionDeviceExit::Registry::get_singleton().device_created(this);
 }
 
 Vector<uint8_t> RenderingDevice::_load_pipeline_cache() {
@@ -8698,6 +16192,7 @@ void RenderingDevice::_free_rids(T &p_owner, const char *p_type) {
 
 void RenderingDevice::capture_timestamp(const String &p_name) {
 	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND_MSG(draw_list.active && draw_list.state.draw_count > 0, "Capturing timestamps during draw list creation is not allowed. Offending timestamp was: " + p_name);
 	ERR_FAIL_COND_MSG(compute_list.active && compute_list.state.dispatch_count > 0, "Capturing timestamps during compute list creation is not allowed. Offending timestamp was: " + p_name);
@@ -8713,6 +16208,20 @@ void RenderingDevice::capture_timestamp(const String &p_name) {
 
 uint64_t RenderingDevice::get_driver_resource(DriverResource p_resource, RID p_rid, uint64_t p_index) {
 	ERR_RENDER_THREAD_GUARD_V(0);
+
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	// A native device, queue or descriptor export bypasses buffer-local hooks.
+	// Conservatively retain this loss of coverage for the whole RD lifetime.
+	if (p_resource == DRIVER_RESOURCE_LOGICAL_DEVICE || p_resource == DRIVER_RESOURCE_COMMAND_QUEUE || p_resource == DRIVER_RESOURCE_TOPMOST_OBJECT || p_resource == DRIVER_RESOURCE_UNIFORM_SET) {
+		capture_test_allocation_registry.mark_device_access_escaped();
+	}
+#endif
+
+	MutexLock immutable_lock(_thread_safe_);
+	const bool device_export = p_resource == DRIVER_RESOURCE_LOGICAL_DEVICE || p_resource == DRIVER_RESOURCE_COMMAND_QUEUE || p_resource == DRIVER_RESOURCE_TOPMOST_OBJECT || p_resource == DRIVER_RESOURCE_UNIFORM_SET;
+	ERR_FAIL_COND_V(device_export && native_immutable_hold_count, 0);
+	const bool native_export = p_resource != DRIVER_RESOURCE_TEXTURE_DATA_FORMAT && p_resource != DRIVER_RESOURCE_QUEUE_FAMILY && p_resource != DRIVER_RESOURCE_PHYSICAL_DEVICE;
+	ERR_FAIL_COND_V(native_export && (native_immutable_resource_is_held(p_rid) || native_immutable_resource_is_retiring(p_rid)), 0);
 
 	uint64_t driver_id = 0;
 	switch (p_resource) {
@@ -8731,18 +16240,21 @@ uint64_t RenderingDevice::get_driver_resource(DriverResource p_resource, RID p_r
 		case DRIVER_RESOURCE_TEXTURE_DATA_FORMAT: {
 			Texture *tex = texture_owner.get_or_null(p_rid);
 			ERR_FAIL_NULL_V(tex, 0);
+			ERR_FAIL_COND_V(tex->qualification_return, 0);
 
 			driver_id = tex->driver_id.id;
 		} break;
 		case DRIVER_RESOURCE_SAMPLER: {
-			RDD::SamplerID *sampler_driver_id = sampler_owner.get_or_null(p_rid);
-			ERR_FAIL_NULL_V(sampler_driver_id, 0);
+			Sampler *sampler = sampler_owner.get_or_null(p_rid);
+			ERR_FAIL_NULL_V(sampler, 0);
+			ERR_FAIL_COND_V(sampler->qualification_return, 0);
 
-			driver_id = (*sampler_driver_id).id;
+			driver_id = sampler->driver_id.id;
 		} break;
 		case DRIVER_RESOURCE_UNIFORM_SET: {
 			UniformSet *uniform_set = uniform_set_owner.get_or_null(p_rid);
 			ERR_FAIL_NULL_V(uniform_set, 0);
+			ERR_FAIL_COND_V(uniform_set->qualification_return || !uniform_set->qualification_dependencies.is_empty(), 0);
 
 			driver_id = uniform_set->driver_id.id;
 		} break;
@@ -8760,12 +16272,19 @@ uint64_t RenderingDevice::get_driver_resource(DriverResource p_resource, RID p_r
 				buffer = storage_buffer_owner.get_or_null(p_rid);
 			}
 			ERR_FAIL_NULL_V(buffer, 0);
+			ERR_FAIL_COND_V(buffer->qualification_return, 0);
 
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+			if (buffer->capture_test_allocation_serial && !capture_test_allocation_registry.mark_access_escaped(buffer->driver_id.id, buffer->capture_test_allocation_serial)) {
+				capture_test_coverage_failed.store(true);
+			}
+#endif
 			driver_id = buffer->driver_id.id;
 		} break;
 		case DRIVER_RESOURCE_COMPUTE_PIPELINE: {
 			ComputePipeline *compute_pipeline = compute_pipeline_owner.get_or_null(p_rid);
 			ERR_FAIL_NULL_V(compute_pipeline, 0);
+			ERR_FAIL_COND_V(compute_pipeline->qualification_return, 0);
 
 			driver_id = compute_pipeline->driver_id.id;
 		} break;
@@ -8780,7 +16299,25 @@ uint64_t RenderingDevice::get_driver_resource(DriverResource p_resource, RID p_r
 		} break;
 	}
 
-	return driver->get_resource_native_handle(p_resource, driver_id);
+	const uint64_t handle = driver->get_resource_native_handle(p_resource, driver_id);
+	if (handle && native_export) {
+		if (device_export) {
+			native_immutable_device_escaped = true;
+		}
+		RID escaped_rid = p_rid;
+		while (escaped_rid.is_valid()) {
+			bool *escaped = nullptr;
+			if (_native_immutable_counter(escaped_rid, nullptr, &escaped)) {
+				*escaped = true;
+			}
+			// A texture view exports the same mutable physical image as its
+			// original parent. Lost coverage belongs to that backing, including
+			// sibling views reached later through their actual owner closure.
+			const auto *texture = texture_owner.owns(escaped_rid) ? texture_owner.get_or_null(escaped_rid) : nullptr;
+			escaped_rid = texture ? texture->owner : RID();
+		}
+	}
+	return handle;
 }
 
 String RenderingDevice::get_driver_and_device_memory_report() const {
@@ -8858,17 +16395,58 @@ uint64_t RenderingDevice::limit_get(Limit p_limit) const {
 	return driver->limit_get(p_limit);
 }
 
+void RenderingDevice::_finalize_on_rendering_server_thread() {
+	finalize();
+	// A void finalizer can return early after a failed invariant. Do not let the
+	// actual RT exit and hand an unresolved/native-destroyed object to main.
+	GDExtensionDeviceExit::require_close_success(native_finalization_returned ? OK : ERR_BUSY, GDExtensionDeviceExit::CloseRoute::LAST_REF);
+}
+
+Error RenderingDevice::_begin_production_finalization() {
+	{
+		MutexLock immutable_lock(_thread_safe_);
+		production_finalization_started.store(true, std::memory_order_release);
+		if (native_immutable_hold_count || native_immutable_free_frame || !resource_frees_in_progress.is_empty()) {
+			return ERR_BUSY;
+		}
+	}
+	auto *registry = production_entity_registry.load(std::memory_order_acquire);
+	return (registry ? *registry : GDExtensionDeviceExit::Registry::get_singleton()).device_begin_finalization(this);
+}
+
 void RenderingDevice::finalize() {
 	ERR_RENDER_THREAD_GUARD();
+	native_height_finalization_started = true;
+	const Error entity_return = _begin_production_finalization();
+	ERR_FAIL_COND_MSG(entity_return != OK, "RenderingDevice native finalization is blocked by an original production entity obligation.");
 
-	if (!frames.is_empty()) {
-		// Wait for all frames to have finished rendering.
-		_flush_and_stall_for_all_frames(false);
+	if (!native_height_finalization_drained) {
+		if (!frames.is_empty()) {
+			// Wait for all frames to have finished rendering.
+			if (_flush_and_stall_for_all_frames(false) != OK) {
+				CRASH_NOW_MSG("Frame fence wait failed during destructive RenderingDevice finalization; dependent resources were not released.");
+			}
+		}
+
+		// Wait for transfer workers to finish.
+		_submit_transfer_workers();
+		if (!_wait_for_transfer_workers()) {
+			CRASH_NOW_MSG("Transfer worker completion failed during destructive RenderingDevice finalization; dependent resources were not released.");
+		}
+		native_height_finalization_drained = true;
 	}
+	// Returning an observer is distinct from successful frame/worker drain.
+	// BUSY preserves this post-drain phase, all cells, and the live driver.
+	const Error height_return = _native_height_ranges_prepare_finalization();
+	ERR_FAIL_COND_MSG(height_return != OK, "RenderingDevice finalization is blocked by an original native height range obligation.");
 
-	// Wait for transfer workers to finish.
-	_submit_transfer_workers();
-	_wait_for_transfer_workers();
+	// The original owners remain authoritative while deferred roots are pending.
+	// All transfer workers are complete here, so retry through the ordinary free
+	// path before the final owner sweep, retaining any original refusal.
+	{
+		_qualification_retry_deferred_frees();
+		ERR_FAIL_COND_MSG(!qualification_deferred_frees.is_empty(), "Deferred resource return is still blocked during RenderingDevice finalization.");
+	}
 
 	// Delete everything the graph has created.
 	draw_graph.finalize();
@@ -8976,11 +16554,12 @@ void RenderingDevice::finalize() {
 	framebuffer_formats.clear();
 
 	// Delete the swap chains created for the screens.
-	for (const KeyValue<DisplayServerEnums::WindowID, RDD::SwapChainID> &it : screen_swap_chains) {
+	for (KeyValue<DisplayServerEnums::WindowID, RDD::SwapChainID> &it : screen_swap_chains) {
 		driver->swap_chain_free(it.value);
+		// Keep the original window key through DisplayServer's later close. Zero
+		// is written only after this driver's free returned, never on RID erasure.
+		it.value = RDD::SwapChainID();
 	}
-
-	screen_swap_chains.clear();
 
 	// Delete the command queues.
 	if (present_queue) {
@@ -9015,6 +16594,7 @@ void RenderingDevice::finalize() {
 	// All these should be clear at this point.
 	ERR_FAIL_COND(dependency_map.size());
 	ERR_FAIL_COND(reverse_dependency_map.size());
+	native_finalization_returned = true;
 }
 
 void RenderingDevice::_set_max_fps(int p_max_fps) {
@@ -9097,6 +16677,10 @@ void RenderingDevice::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("index_array_create", "index_buffer", "index_offset", "index_count"), &RenderingDevice::index_array_create);
 
 	ClassDB::bind_method(D_METHOD("shader_compile_spirv_from_source", "shader_source", "allow_cache"), &RenderingDevice::_shader_compile_spirv_from_source, DEFVAL(true));
+	BIND_BITFIELD_FLAG(SHADER_COMPILE_FLAG_DISABLE_FAST_MATH);
+	ClassDB::bind_method(D_METHOD("shader_compile_binary_from_spirv_with_options", "spirv", "shader_name", "flags"), &RenderingDevice::_shader_compile_binary_from_spirv_with_options);
+	ClassDB::bind_method(D_METHOD("shader_create_from_spirv_with_options", "spirv", "shader_name", "flags"), &RenderingDevice::_shader_create_from_spirv_with_options);
+	ClassDB::bind_method(D_METHOD("shader_get_compile_flags", "shader"), &RenderingDevice::shader_get_compile_flags);
 	ClassDB::bind_method(D_METHOD("shader_compile_binary_from_spirv", "spirv_data", "name"), &RenderingDevice::_shader_compile_binary_from_spirv, DEFVAL(""));
 	ClassDB::bind_method(D_METHOD("shader_create_from_spirv", "spirv_data", "name"), &RenderingDevice::_shader_create_from_spirv, DEFVAL(""));
 	ClassDB::bind_method(D_METHOD("shader_create_from_bytecode", "binary_data", "placeholder_rid"), &RenderingDevice::shader_create_from_bytecode, DEFVAL(RID()));
@@ -9862,11 +17446,22 @@ void RenderingDevice::_bind_methods() {
 }
 
 void RenderingDevice::make_current() {
-	render_thread_id = Thread::get_caller_id();
+	const Thread::ID next = Thread::get_caller_id();
+	const Error error = GDExtensionDeviceExit::Registry::get_singleton().device_execution_moved(this, render_thread_id, next);
+	ERR_FAIL_COND_MSG(error != OK, "RenderingDevice execution-thread migration was refused by its original registry.");
+	render_thread_id = next;
 }
 
 RenderingDevice::~RenderingDevice() {
-	finalize();
+	// A void finalize refusal must never fall through to C++ member destruction.
+	GDExtensionDeviceExit::require_close_success(_begin_production_finalization(), GDExtensionDeviceExit::CloseRoute::LAST_REF);
+	// The original RS owns the execution thread. Its completed native teardown
+	// is distinct from the later DisplayServer/Object owner destruction.
+	if (!native_finalization_returned) {
+		finalize();
+	}
+	GDExtensionDeviceExit::require_close_success(native_finalization_returned ? OK : ERR_BUSY, GDExtensionDeviceExit::CloseRoute::LAST_REF);
+	GDExtensionDeviceExit::Registry::get_singleton().device_destroyed(this);
 
 	if (singleton == this) {
 		singleton = nullptr;
@@ -10028,6 +17623,10 @@ Ref<RDShaderSPIRV> RenderingDevice::_shader_compile_spirv_from_source(const Ref<
 }
 
 Vector<uint8_t> RenderingDevice::_shader_compile_binary_from_spirv(const Ref<RDShaderSPIRV> &p_spirv, const String &p_shader_name) {
+	return _shader_compile_binary_from_spirv_with_options(p_spirv, p_shader_name, {});
+}
+
+Vector<uint8_t> RenderingDevice::_shader_compile_binary_from_spirv_with_options(const Ref<RDShaderSPIRV> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags) {
 	ERR_FAIL_COND_V(p_spirv.is_null(), Vector<uint8_t>());
 
 	Vector<ShaderStageSPIRVData> stage_data;
@@ -10044,10 +17643,14 @@ Vector<uint8_t> RenderingDevice::_shader_compile_binary_from_spirv(const Ref<RDS
 		stage_data.push_back(sd);
 	}
 
-	return shader_compile_binary_from_spirv(stage_data, p_shader_name);
+	return shader_compile_binary_from_spirv_with_options(stage_data, p_shader_name, p_flags);
 }
 
 RID RenderingDevice::_shader_create_from_spirv(const Ref<RDShaderSPIRV> &p_spirv, const String &p_shader_name) {
+	return _shader_create_from_spirv_with_options(p_spirv, p_shader_name, {});
+}
+
+RID RenderingDevice::_shader_create_from_spirv_with_options(const Ref<RDShaderSPIRV> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags) {
 	ERR_FAIL_COND_V(p_spirv.is_null(), RID());
 
 	Vector<ShaderStageSPIRVData> stage_data;
@@ -10063,7 +17666,7 @@ RID RenderingDevice::_shader_create_from_spirv(const Ref<RDShaderSPIRV> &p_spirv
 		}
 		stage_data.push_back(sd);
 	}
-	return shader_create_from_spirv(stage_data);
+	return shader_create_from_spirv_with_options(stage_data, p_shader_name, p_flags);
 }
 
 RID RenderingDevice::_uniform_set_create(const TypedArray<RDUniform> &p_uniforms, RID p_shader, uint32_t p_shader_set) {
@@ -10275,3 +17878,460 @@ static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_ATTACHMENT_COLOR_RE
 static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_ATTACHMENT_DEPTH_STENCIL_READ_WRITE, RDG::RESOURCE_USAGE_ATTACHMENT_DEPTH_STENCIL_READ_WRITE));
 static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_GENERAL, RDG::RESOURCE_USAGE_GENERAL));
 static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_MAX, RDG::RESOURCE_USAGE_MAX));
+
+// Capture original producer outcomes after the caller has admitted the operation.
+// The copied identity does not itself grant operation or resource permission.
+GDExtensionDeviceExit::CheckedRecordAppend RenderingDevice::_record_source_dispatch(const GDExtensionDeviceExit::OriginalOperationIdentity &identity, ComputeListID list, uint32_t x, uint32_t y, uint32_t z, const void *push_data, uint32_t push_size) {
+	using Observation = GDExtensionDeviceExit::CheckedRecordAppend;
+	Observation observed;
+	observed.error = GDExtensionDeviceExit::bind_checked_record_append(observed, identity);
+	if (observed.error != OK) {
+		return observed;
+	}
+	if (render_thread_id != Thread::get_caller_id()) {
+		observed.error = ERR_UNAUTHORIZED;
+		return observed;
+	}
+	if (_recording_error() != OK || list != ID_TYPE_COMPUTE_LIST || !compute_list.active || !x || !y || !z || x > driver->limit_get(LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_X) || y > driver->limit_get(LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_Y) || z > driver->limit_get(LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_Z)) {
+		observed.error = ERR_INVALID_PARAMETER;
+		return observed;
+	}
+	auto *pipeline = compute_pipeline_owner.get_or_null(compute_list.state.pipeline);
+	if (!pipeline || !pipeline->driver_id || !pipeline->shader_driver_id || !shader_owner.owns(pipeline->shader) || compute_list.state.set_count > MAX_UNIFORM_SETS || pipeline->set_formats.size() != compute_list.state.set_count) {
+		observed.error = ERR_INVALID_DATA;
+		return observed;
+	}
+	const auto *shader = shader_owner.get_or_null(pipeline->shader);
+	if (!shader || shader->driver_id != pipeline->shader_driver_id || compute_list.state.pipeline_shader != pipeline->shader || compute_list.state.pipeline_shader_driver_id != pipeline->shader_driver_id) {
+		observed.error = ERR_INVALID_DATA;
+		return observed;
+	}
+	// The identity joins the original operation; it never authorizes another
+	// family's resources. Preserve the existing qualification ownership boundary.
+	if ((pipeline->qualification_return && ((!qualification_recording && !_production_resource_permitted(compute_list.state.pipeline)) || pipeline->qualification_return->use_closed.load())) ||
+			(shader->qualification_return && ((!qualification_recording && !_production_resource_permitted(pipeline->shader)) || shader->qualification_return->use_closed.load()))) {
+		observed.error = ERR_UNAUTHORIZED;
+		return observed;
+	}
+#ifdef DEBUG_ENABLED
+	if (!compute_list.validation.pipeline_active || compute_list.validation.pipeline_push_constant_size != pipeline->push_constant_size) {
+		observed.error = ERR_INVALID_DATA;
+		return observed;
+	}
+#endif
+	if (push_size != pipeline->push_constant_size || (push_size && (!push_data || push_size > MAX_PUSH_CONSTANT_SIZE))) {
+		observed.error = ERR_UNAVAILABLE;
+		return observed;
+	}
+	for (uint32_t i = 0; i < compute_list.state.set_count; ++i) {
+		const auto &binding = compute_list.state.sets[i];
+		if (!binding.pipeline_expected_format) {
+			continue;
+		}
+		auto *set = uniform_set_owner.get_or_null(binding.uniform_set);
+		if (set && !qualification_recording && !_production_resource_permitted(binding.uniform_set) && (set->qualification_return || !set->qualification_dependencies.is_empty())) {
+			observed.error = ERR_UNAUTHORIZED;
+			return observed;
+		}
+		if (!set || !set->driver_id || set->driver_id != binding.uniform_set_driver_id || set->shader_set != i || set->format != pipeline->set_formats[i] || pipeline->set_formats[i] != binding.pipeline_expected_format || binding.pipeline_expected_format != binding.uniform_set_format || !set->shared_textures_to_update.is_empty() || !set->pending_clear_textures.is_empty()) {
+			observed.error = ERR_UNAVAILABLE;
+			return observed;
+		}
+	}
+	// Every checked/public dispatch refusal is above the first push effect.
+	// The shared mechanical tail has no failing return after descriptor prepare;
+	// empty shared/clear lists above also exclude hidden preparation work.
+	if (push_size) {
+		compute_list_set_push_constant(list, push_data, push_size);
+	}
+	observed.handle = _compute_list_dispatch_recorded(list, x, y, z);
+	observed.state = observed.handle.is_valid() ? Observation::State::Appended : Observation::State::Unknown;
+	observed.error = observed.handle.is_valid() ? OK : FAILED;
+	return observed;
+}
+GDExtensionDeviceExit::CheckedRecordAppend RenderingDevice::_record_source_buffer_copy(const GDExtensionDeviceExit::OriginalOperationIdentity &identity, RID from, RID to, uint32_t from_offset, uint32_t to_offset, uint32_t size) {
+	using Observation = GDExtensionDeviceExit::CheckedRecordAppend;
+	Observation observed;
+	observed.error = GDExtensionDeviceExit::bind_checked_record_append(observed, identity);
+	if (observed.error != OK) {
+		return observed;
+	}
+	if (render_thread_id != Thread::get_caller_id()) {
+		observed.error = ERR_UNAUTHORIZED;
+		return observed;
+	}
+	auto *src = _get_buffer_from_owner(from);
+	auto *dst = _get_buffer_from_owner(to);
+	if (!src || !dst || !src->driver_id || !dst->driver_id) {
+		observed.error = ERR_UNAVAILABLE;
+		return observed;
+	}
+	const auto actual = _buffer_copy_recorded(from, to, from_offset, to_offset, size);
+	observed.transfer_count = actual.transfer_count;
+	for (uint32_t i = 0; i < actual.transfer_count; ++i) {
+		observed.transfers[i] = { actual.transfers[i].worker, actual.transfers[i].operation };
+	}
+	observed.became_mutable = actual.destination_became_mutable;
+	observed.handle = actual.copy_handle;
+	observed.error = actual.error;
+	observed.state = actual.effect == NativeAppendEffect::Recorded ? Observation::State::Appended : actual.effect == NativeAppendEffect::NoNewEffect ? Observation::State::Rejected
+																																					 : Observation::State::Unknown;
+	return observed;
+}
+
+GDExtensionDeviceExit::CheckedRecordAppend RenderingDevice::_record_source_buffer_upload(const GDExtensionDeviceExit::OriginalOperationIdentity &identity, RID destination, uint32_t offset, uint32_t size, const void *data, GDExtensionDeviceExit::BufferUploadSourceCapture &capture) {
+	using Observation = GDExtensionDeviceExit::CheckedRecordAppend;
+	Observation observed;
+	observed.error = GDExtensionDeviceExit::bind_checked_record_append(observed, identity);
+	if (observed.error != OK) {
+		return observed;
+	}
+	if (render_thread_id != Thread::get_caller_id()) {
+		observed.error = ERR_UNAUTHORIZED;
+		return observed;
+	}
+	auto *buffer = _get_buffer_from_owner(destination);
+	if (_recording_error() != OK || draw_list.active || compute_list.active || raytracing_list.active || !buffer || !buffer->driver_id || !size || !data || offset > buffer->size || size > buffer->size - offset) {
+		observed.error = ERR_INVALID_PARAMETER;
+		return observed;
+	}
+	if (buffer->qualification_return && !_production_resource_permitted(destination)) {
+		observed.error = ERR_UNAUTHORIZED;
+		return observed;
+	}
+	const uint32_t first = capture.count;
+	const uint32_t consumed = capture.consumed;
+	observed.error = _buffer_update(buffer, destination, offset, size, data, nullptr, &capture);
+	if (capture.transfer_worker != UINT32_MAX) {
+		observed.transfers[0] = { capture.transfer_worker, capture.transfer_operation };
+		observed.transfer_count = 1;
+	}
+	observed.became_mutable = capture.became_mutable;
+	if (capture.count > first) {
+		observed.handle = capture.segment(capture.count - 1).handle;
+		bool exact = true;
+		uint32_t next = consumed;
+		for (uint32_t i = first; i < capture.count; ++i) {
+			const auto &segment = capture.segment(i);
+			exact &= segment.handle.is_valid() && draw_graph.contains_record(segment.handle) && segment.begin == next && segment.end > segment.begin && segment.end <= size;
+			next = segment.end;
+		}
+		exact &= next == capture.consumed;
+		observed.state = !exact ? Observation::State::Unknown : capture.consumed == size ? Observation::State::Appended
+																						 : Observation::State::KnownPrefix;
+	} else if (capture.prefix_possible) {
+		observed.state = Observation::State::KnownPrefix;
+	}
+	return observed;
+}
+
+RenderingDevice::SourceDrawAppendResult RenderingDevice::_record_source_draw_indirect(const GDExtensionDeviceExit::OriginalOperationIdentity &identity, DrawListID list, bool use_indices, RID buffer, uint32_t offset, uint32_t draw_count, uint32_t stride) {
+	using Observation = GDExtensionDeviceExit::CheckedRecordAppend;
+	SourceDrawAppendResult result;
+	result.observed.error = GDExtensionDeviceExit::bind_checked_record_append(result.observed, identity);
+	if (result.observed.error != OK) {
+		result.native.error = result.observed.error;
+		return result;
+	}
+	if (render_thread_id != Thread::get_caller_id()) {
+		result.observed.error = ERR_UNAUTHORIZED;
+		result.native.error = result.observed.error;
+		return result;
+	}
+	if (list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT)) {
+		result.observed.error = ERR_INVALID_PARAMETER;
+		result.native.error = result.observed.error;
+		return result;
+	}
+	// Keep the original checked draw as the only span/preparation/append path.
+	// Unknown includes a refused draw with real descriptor-prefix obligations.
+	result.native = _draw_list_draw_indirect_recorded(list, use_indices, buffer, offset, draw_count, stride, true);
+	result.observed.handle = result.native.draw_handle;
+	result.observed.error = result.native.error;
+	result.observed.state = result.native.effect == NativeAppendEffect::Recorded ? Observation::State::Appended : result.native.effect == NativeAppendEffect::NoNewEffect ? Observation::State::Rejected
+																																										  : Observation::State::Unknown;
+	return result;
+}
+
+// An existing request's exact reverse pins permit these mechanical resources
+// only during its core-owned record borrow. This is not an admission issuer.
+bool RenderingDevice::_production_resource_permitted(RID rid) {
+	if (_production_output_raster_permitted(rid)) {
+		return true;
+	}
+	const auto *request = production_recording_request;
+	if (!request || !request->serial || !request->frozen || !request->capture_inflight) {
+		return false;
+	}
+	const auto &guard = production_output_guard_recording;
+	if (guard.request == request && guard.request_serial == request->serial && guard.action_ordinal == request->next_action && guard.pin_serial) {
+		for (uint32_t i = 0; i < guard.count; ++i) {
+			if (guard.resources[i] != rid || guard.witnesses[i].cell.is_null()) {
+				continue;
+			}
+			const auto *buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr;
+			const auto *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr;
+			const auto &physical = **guard.witnesses[i].cell;
+			if (physical.production_request == request && physical.production_request_serial == request->serial && physical.production_pin_serial == guard.pin_serial &&
+					physical.state == NativeDisposalWitness::State::LIVE &&
+					((buffer && buffer->native_disposal.cell == guard.witnesses[i].cell && physical.matches(rid.get_id(), buffer->backing_serial, buffer->driver_id.id)) ||
+							(set && set->native_disposal.cell == guard.witnesses[i].cell && physical.matches(rid.get_id(), set->native_disposal_serial, set->driver_id.id)))) {
+				return true;
+			}
+		}
+	}
+	for (uint32_t i = 0; i < request->resource_count; ++i) {
+		const auto &slot = request->resources[i];
+		if (!slot.imported || (slot.primary != rid && slot.secondary != rid)) {
+			continue;
+		}
+		// The original capture_inflight pin and RD recording lock stabilize
+		// these rows on RT while Registry is unlocked for the native call.
+		// Recheck owner closure as well as the exact actual factory witness.
+		if (slot.output_guard_readonly) {
+			if ((slot.output_guard_history ? GDExtensionDeviceExit::Registry::get_singleton().production_output_history_guard_uses_locked(*request, slot, request->next_action) : request->next_action == slot.output_guard_consumer) &&
+					GDExtensionDeviceExit::Registry::get_singleton().production_output_guard_matches_locked(*request, slot, *this)) { return true; }
+			continue;
+		}
+		if ((!slot.output_predecessor_view.is_empty() && GDExtensionDeviceExit::Registry::get_singleton().production_output_predecessor_matches_locked(*request, slot, *this)) ||
+				(slot.output_alias_prepared && GDExtensionDeviceExit::Registry::get_singleton().production_output_alias_matches_locked(*request, slot, *this))) {
+			return true;
+		}
+		for (uint32_t u = 0; u < slot.use_count; ++u) {
+			const auto &use = slot.uses[u];
+			if (use.rid == rid.get_id() && use.request == request && use.request_serial == request->serial && use.same_physical() && use.linked() && !use.physical->use_closed.load()) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+// Keep the original Core-to-native service edge in this already rooted server
+// object, so static archive extraction does not depend on Core link order.
+bool RenderingDevice::_production_output_owner_matches(
+		GDExtensionDeviceExit::ProductionOutputOwnerKind p_kind, RID p_particles, uint64_t p_generation, uint32_t p_slot, uint64_t p_lease,
+		const GDExtensionDeviceExit::ProductionOutputPin &p_pin,
+		GDExtensionProductionRequestRefV1 p_request) {
+	return RendererRD::ParticlesStorage::_production_output_owner_matches(
+			p_kind, p_particles, p_generation, p_slot, p_lease, p_pin, *this, p_request);
+}
+Error RenderingDevice::_production_output_generation_ready(RID p_particles, uint64_t p_generation,
+		const GDExtensionDeviceExit::ProductionOutputPin &p_pin, GDExtensionProductionRequestRefV1 p_request,
+		uint32_t &r_unused, uint32_t &r_returned) {
+	return RendererRD::ParticlesStorage::_production_output_generation_ready(p_particles, p_generation, p_pin, *this, p_request, r_unused, r_returned);
+}
+Error RenderingDevice::_production_output_owner_service(
+		GDExtensionDeviceExit::ProductionOutputOwnerKind p_kind, RID p_particles, uint64_t p_generation, uint32_t p_slot, uint64_t p_lease,
+		GDExtensionDeviceExit::ProductionOutputPin &p_pin,
+		const GDExtensionProductionServiceBudgetV1 &p_budget,
+		GDExtensionDeviceExit::ProductionServiceUsage &r_usage) {
+	return RendererRD::ParticlesStorage::_production_output_service(
+			p_kind, p_particles, p_generation, p_slot, p_lease, p_pin, p_budget, r_usage);
+}
+
+// The four original output leaves live in this already rooted server object,
+// keeping Core registration independent of static server archive link order.
+namespace GDExtensionDeviceExit {
+namespace {
+struct OutputMemoryRange {
+	uintptr_t begin = 0, end = 0;
+};
+bool output_range(const void *p_data, uint64_t p_count, size_t p_stride, size_t p_alignment, OutputMemoryRange &r_range) {
+	r_range = {};
+	if (!p_count) {
+		return true;
+	}
+	const uintptr_t begin = reinterpret_cast<uintptr_t>(p_data);
+	if (!begin || begin % p_alignment || p_count > (UINTPTR_MAX - begin) / p_stride) {
+		return false;
+	}
+	r_range = { begin, begin + uintptr_t(p_count * p_stride) };
+	return true;
+}
+bool output_overlaps(const OutputMemoryRange &p_a, const OutputMemoryRange &p_b) {
+	return p_a.begin < p_b.end && p_b.begin < p_a.end;
+}
+template <typename T>
+bool output_object(const T *p_value, OutputMemoryRange &r_range) {
+	return output_range(p_value, 1, sizeof(T), alignof(T), r_range);
+}
+template <size_t N>
+GDExtensionOutputStatusV1 output_interface_status(Error p_error, const char (&p_detail)[N]) {
+	return { int32_t(p_error), uint32_t(N - 1), p_detail };
+}
+template <typename T>
+void output_interface_failure(T &r_result, Error p_error, const char *p_detail, uint32_t p_length) {
+	r_result = {};
+	r_result.abi = { 1, sizeof(T), 0 };
+	r_result.status = { int32_t(p_error), p_length, p_detail };
+}
+template <typename T>
+bool output_create_spans(const OutputMemoryRange &p_input, const OutputMemoryRange &p_output, const GDExtensionOutputCreateInputV1 &p_config, T &r_result) {
+	OutputMemoryRange surfaces, materials;
+	if (!output_range(p_config.surfaces.data, p_config.surfaces.count, sizeof(uint64_t), alignof(uint64_t), surfaces) ||
+			!output_range(p_config.surface_materials.data, p_config.surface_materials.count, sizeof(uint64_t), alignof(uint64_t), materials)) {
+		// An invalid span may designate the output: no write until all extents
+		// have been proven disjoint. This is a caller contract failure.
+		return false;
+	}
+	if (output_overlaps(p_output, surfaces) || output_overlaps(p_output, materials)) {
+		return false;
+	}
+	if (output_overlaps(p_input, surfaces) || output_overlaps(p_input, materials) || output_overlaps(surfaces, materials)) {
+		output_interface_failure(r_result, ERR_INVALID_PARAMETER, "CONTRACT", 8);
+		return false;
+	}
+	return true;
+}
+} // namespace
+
+void device_session_output_create_v1(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCreateInputV1 *p_input, GDExtensionOutputCreateResultV1 *r_result) {
+	OutputMemoryRange input, output;
+	if (!output_object(r_result, output)) {
+		return;
+	}
+	if (!output_object(p_input, input)) {
+		return; // Invalid input extent cannot establish nonaliasing output.
+	}
+	if (output_overlaps(input, output)) {
+		return; // Do not overwrite borrowed input through an aliased output.
+	}
+	if (!output_create_spans(input, output, *p_input, *r_result)) {
+		return;
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		output_interface_failure(*r_result, ERR_UNAVAILABLE, "renderer_unavailable", 20);
+		return;
+	}
+	storage->particles_external_create_typed(p_context, p_request, *p_input, *r_result);
+}
+void device_session_output_metadata_query_v1(const GDExtensionOutputMetadataQueryInputV1 *p_input, GDExtensionOutputMetadataQueryResultV1 *r_result) {
+	OutputMemoryRange input, output;
+	if (!output_object(r_result, output) || !output_object(p_input, input) || output_overlaps(input, output)) {
+		return;
+	}
+	if (!output_create_spans(input, output, p_input->config, *r_result)) {
+		return;
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		output_interface_failure(*r_result, ERR_UNAVAILABLE, "renderer_unavailable", 20);
+		return;
+	}
+	storage->particles_external_metadata_query(*p_input, *r_result);
+}
+void device_session_output_create_v3(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCreateInputV3 *p_input, GDExtensionOutputCreateResultV1 *r_result) {
+	OutputMemoryRange input, output;
+	if (!output_object(r_result, output) || !output_object(p_input, input) || output_overlaps(input, output)) {
+		return;
+	}
+	if (!output_create_spans(input, output, p_input->config, *r_result)) {
+		return;
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		output_interface_failure(*r_result, ERR_UNAVAILABLE, "renderer_unavailable", 20);
+		return;
+	}
+	storage->particles_external_create_typed_v3(p_context, p_request, *p_input, *r_result);
+}
+void device_session_output_create_v2(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCreateInputV2 *p_input, GDExtensionOutputCreateResultV1 *r_result) {
+	OutputMemoryRange input, output;
+	if (!output_object(r_result, output) || !output_object(p_input, input) || output_overlaps(input, output)) {
+		return;
+	}
+	// Include the outer header and resource selector in the forbidden input
+	// range. Checking only the nested config would allow a span to alias them.
+	if (!output_create_spans(input, output, p_input->config, *r_result)) {
+		return;
+	}
+	if (p_input->abi.abi_version != 2 || p_input->abi.struct_size != sizeof(*p_input) || p_input->abi.reserved ||
+			p_input->reserved || p_input->metadata_resource_slot == UINT32_MAX) {
+		output_interface_failure(*r_result, ERR_INVALID_PARAMETER, "CONTRACT", 8);
+		return;
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		output_interface_failure(*r_result, ERR_UNAVAILABLE, "renderer_unavailable", 20);
+		return;
+	}
+	storage->particles_external_create_typed_v2(p_context, p_request, p_input->config, p_input->metadata_resource_slot, *r_result);
+}
+void device_session_output_acquire_v1(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, uint64_t p_action_ordinal, const GDExtensionOutputAcquireInputV1 *p_input, GDExtensionOutputAcquireResultV1 *r_result) {
+	OutputMemoryRange input, output;
+	if (!output_object(r_result, output) || !output_object(p_input, input) || output_overlaps(input, output)) {
+		return;
+	}
+	Registry::get_singleton().production_output_acquire(p_context, p_request, p_action_ordinal, p_input, r_result);
+}
+void device_session_output_poll_v1(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputGenerationInputV1 *p_input, GDExtensionOutputPollResultV1 *r_result) {
+	OutputMemoryRange input, output;
+	if (!output_object(r_result, output) || !output_object(p_input, input) || output_overlaps(input, output)) {
+		return;
+	}
+	Registry::get_singleton().production_output_poll(p_context, p_request, p_input, r_result);
+}
+void device_session_output_seal_v1(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputSealInputV1 *p_input, GDExtensionOutputSealResultV1 *r_result) {
+	OutputMemoryRange input, output;
+	if (!output_object(r_result, output)) {
+		return;
+	}
+	if (!output_object(p_input, input)) {
+		return; // Invalid input extent cannot establish nonaliasing output.
+	}
+	if (output_overlaps(input, output)) {
+		return;
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		output_interface_failure(*r_result, ERR_UNAVAILABLE, "renderer_unavailable", 20);
+		return;
+	}
+	storage->particles_external_seal_typed(p_context, p_request, *p_input, *r_result);
+}
+GDExtensionOutputStatusV1 device_session_output_cancel_v1(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCancelInputV1 *p_input) {
+	OutputMemoryRange input;
+	if (!output_object(p_input, input)) {
+		return output_interface_status(ERR_INVALID_PARAMETER, "CONTRACT");
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	return storage ? storage->particles_external_cancel_typed(p_context, p_request, *p_input) : output_interface_status(ERR_UNAVAILABLE, "renderer_unavailable");
+}
+GDExtensionOutputStatusV1 device_session_output_withdraw_v1(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputGenerationInputV1 *p_input) {
+	OutputMemoryRange input;
+	if (!output_object(p_input, input)) {
+		return output_interface_status(ERR_INVALID_PARAMETER, "CONTRACT");
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	return storage ? storage->particles_external_withdraw_typed(p_context, p_request, *p_input) : output_interface_status(ERR_UNAVAILABLE, "renderer_unavailable");
+}
+} // namespace GDExtensionDeviceExit
+
+Error RenderingDevice::shader_get_native_raster_layout_if_ready(RID p_shader, ShaderReflection &r_layout) {
+	if (!native_immutable_is_render_thread()) { return ERR_UNAUTHORIZED; }
+	_THREAD_SAFE_METHOD_
+	const Shader *shader = shader_owner.owns(p_shader) ? shader_owner.get_or_null(p_shader) : nullptr;
+	if (!shader || native_immutable_resource_is_retiring(p_shader)) { return ERR_INVALID_DATA; }
+	if (!shader->driver_id) { return ERR_UNAVAILABLE; }
+	if (_native_render_pipeline_shader_shape(*shader) != NativeRenderPipelineShaderShape::SUPPORTED || shader->has_multiview || shader->has_dynamic_buffers) { return ERR_UNAVAILABLE; }
+	r_layout = static_cast<const ShaderReflection &>(*shader);
+	return OK;
+}
+
+Error RenderingDevice::framebuffer_format_get_native_layout(FramebufferFormatID format, NativeFramebufferLayout &out) {
+	if (!native_immutable_is_render_thread()) { return ERR_UNAUTHORIZED; }
+	_THREAD_SAFE_METHOD_
+	const auto *actual = framebuffer_formats.getptr(format);
+	if (!actual || !actual->E || !actual->render_pass) { return ERR_INVALID_DATA; }
+	NativeFramebufferLayout layout;
+	layout.attachments = actual->E->key().attachments;
+	layout.passes = actual->E->key().passes;
+	layout.view_count = actual->view_count;
+	layout.vrs_method = actual->E->key().vrs_method;
+	layout.vrs_attachment = actual->E->key().vrs_attachment;
+	layout.vrs_texel_size = actual->E->key().vrs_texel_size;
+	out = std::move(layout);
+	return OK;
+}

@@ -1,0 +1,1236 @@
+/**************************************************************************/
+/*  gdextension_interface_loader.cpp                                      */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
+// THIS FILE IS GENERATED. EDITS WILL BE LOST.
+
+#include <godot_cpp/core/error_macros.hpp>
+#include <godot_cpp/core/gdextension_interface_loader.hpp>
+#include <godot_cpp/core/load_proc_address.inc>
+
+namespace godot {
+
+namespace gdextension_interface {
+
+// Godot 4.1 or newer.
+#if GODOT_VERSION_MINOR >= 1
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 5
+GDExtensionInterfaceGetGodotVersion get_godot_version = nullptr;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 6
+GDExtensionInterfaceMemAlloc mem_alloc = nullptr;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 6
+GDExtensionInterfaceMemRealloc mem_realloc = nullptr;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 6
+GDExtensionInterfaceMemFree mem_free = nullptr;
+#endif
+GDExtensionInterfacePrintError print_error = nullptr;
+GDExtensionInterfacePrintErrorWithMessage print_error_with_message = nullptr;
+GDExtensionInterfacePrintWarning print_warning = nullptr;
+GDExtensionInterfacePrintWarningWithMessage print_warning_with_message = nullptr;
+GDExtensionInterfacePrintScriptError print_script_error = nullptr;
+GDExtensionInterfacePrintScriptErrorWithMessage print_script_error_with_message = nullptr;
+GDExtensionInterfaceGetNativeStructSize get_native_struct_size = nullptr;
+GDExtensionInterfaceVariantNewCopy variant_new_copy = nullptr;
+GDExtensionInterfaceVariantNewNil variant_new_nil = nullptr;
+GDExtensionInterfaceVariantDestroy variant_destroy = nullptr;
+GDExtensionInterfaceVariantCall variant_call = nullptr;
+GDExtensionInterfaceVariantCallStatic variant_call_static = nullptr;
+GDExtensionInterfaceVariantEvaluate variant_evaluate = nullptr;
+GDExtensionInterfaceVariantSet variant_set = nullptr;
+GDExtensionInterfaceVariantSetNamed variant_set_named = nullptr;
+GDExtensionInterfaceVariantSetKeyed variant_set_keyed = nullptr;
+GDExtensionInterfaceVariantSetIndexed variant_set_indexed = nullptr;
+GDExtensionInterfaceVariantGet variant_get = nullptr;
+GDExtensionInterfaceVariantGetNamed variant_get_named = nullptr;
+GDExtensionInterfaceVariantGetKeyed variant_get_keyed = nullptr;
+GDExtensionInterfaceVariantGetIndexed variant_get_indexed = nullptr;
+GDExtensionInterfaceVariantIterInit variant_iter_init = nullptr;
+GDExtensionInterfaceVariantIterNext variant_iter_next = nullptr;
+GDExtensionInterfaceVariantIterGet variant_iter_get = nullptr;
+GDExtensionInterfaceVariantHash variant_hash = nullptr;
+GDExtensionInterfaceVariantRecursiveHash variant_recursive_hash = nullptr;
+GDExtensionInterfaceVariantHashCompare variant_hash_compare = nullptr;
+GDExtensionInterfaceVariantBooleanize variant_booleanize = nullptr;
+GDExtensionInterfaceVariantDuplicate variant_duplicate = nullptr;
+GDExtensionInterfaceVariantStringify variant_stringify = nullptr;
+GDExtensionInterfaceVariantGetType variant_get_type = nullptr;
+GDExtensionInterfaceVariantHasMethod variant_has_method = nullptr;
+GDExtensionInterfaceVariantHasMember variant_has_member = nullptr;
+GDExtensionInterfaceVariantHasKey variant_has_key = nullptr;
+GDExtensionInterfaceVariantGetTypeName variant_get_type_name = nullptr;
+GDExtensionInterfaceVariantCanConvert variant_can_convert = nullptr;
+GDExtensionInterfaceVariantCanConvertStrict variant_can_convert_strict = nullptr;
+GDExtensionInterfaceGetVariantFromTypeConstructor get_variant_from_type_constructor = nullptr;
+GDExtensionInterfaceGetVariantToTypeConstructor get_variant_to_type_constructor = nullptr;
+GDExtensionInterfaceVariantGetPtrOperatorEvaluator variant_get_ptr_operator_evaluator = nullptr;
+GDExtensionInterfaceVariantGetPtrBuiltinMethod variant_get_ptr_builtin_method = nullptr;
+GDExtensionInterfaceVariantGetPtrConstructor variant_get_ptr_constructor = nullptr;
+GDExtensionInterfaceVariantGetPtrDestructor variant_get_ptr_destructor = nullptr;
+GDExtensionInterfaceVariantConstruct variant_construct = nullptr;
+GDExtensionInterfaceVariantGetPtrSetter variant_get_ptr_setter = nullptr;
+GDExtensionInterfaceVariantGetPtrGetter variant_get_ptr_getter = nullptr;
+GDExtensionInterfaceVariantGetPtrIndexedSetter variant_get_ptr_indexed_setter = nullptr;
+GDExtensionInterfaceVariantGetPtrIndexedGetter variant_get_ptr_indexed_getter = nullptr;
+GDExtensionInterfaceVariantGetPtrKeyedSetter variant_get_ptr_keyed_setter = nullptr;
+GDExtensionInterfaceVariantGetPtrKeyedGetter variant_get_ptr_keyed_getter = nullptr;
+GDExtensionInterfaceVariantGetPtrKeyedChecker variant_get_ptr_keyed_checker = nullptr;
+GDExtensionInterfaceVariantGetConstantValue variant_get_constant_value = nullptr;
+GDExtensionInterfaceVariantGetPtrUtilityFunction variant_get_ptr_utility_function = nullptr;
+GDExtensionInterfaceStringNewWithLatin1Chars string_new_with_latin1_chars = nullptr;
+GDExtensionInterfaceStringNewWithUtf8Chars string_new_with_utf8_chars = nullptr;
+GDExtensionInterfaceStringNewWithUtf16Chars string_new_with_utf16_chars = nullptr;
+GDExtensionInterfaceStringNewWithUtf32Chars string_new_with_utf32_chars = nullptr;
+GDExtensionInterfaceStringNewWithWideChars string_new_with_wide_chars = nullptr;
+GDExtensionInterfaceStringNewWithLatin1CharsAndLen string_new_with_latin1_chars_and_len = nullptr;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+GDExtensionInterfaceStringNewWithUtf8CharsAndLen string_new_with_utf8_chars_and_len = nullptr;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+GDExtensionInterfaceStringNewWithUtf16CharsAndLen string_new_with_utf16_chars_and_len = nullptr;
+#endif
+GDExtensionInterfaceStringNewWithUtf32CharsAndLen string_new_with_utf32_chars_and_len = nullptr;
+GDExtensionInterfaceStringNewWithWideCharsAndLen string_new_with_wide_chars_and_len = nullptr;
+GDExtensionInterfaceStringToLatin1Chars string_to_latin1_chars = nullptr;
+GDExtensionInterfaceStringToUtf8Chars string_to_utf8_chars = nullptr;
+GDExtensionInterfaceStringToUtf16Chars string_to_utf16_chars = nullptr;
+GDExtensionInterfaceStringToUtf32Chars string_to_utf32_chars = nullptr;
+GDExtensionInterfaceStringToWideChars string_to_wide_chars = nullptr;
+GDExtensionInterfaceStringOperatorIndex string_operator_index = nullptr;
+GDExtensionInterfaceStringOperatorIndexConst string_operator_index_const = nullptr;
+GDExtensionInterfaceStringOperatorPlusEqString string_operator_plus_eq_string = nullptr;
+GDExtensionInterfaceStringOperatorPlusEqChar string_operator_plus_eq_char = nullptr;
+GDExtensionInterfaceStringOperatorPlusEqCstr string_operator_plus_eq_cstr = nullptr;
+GDExtensionInterfaceStringOperatorPlusEqWcstr string_operator_plus_eq_wcstr = nullptr;
+GDExtensionInterfaceStringOperatorPlusEqC32str string_operator_plus_eq_c32str = nullptr;
+GDExtensionInterfaceXmlParserOpenBuffer xml_parser_open_buffer = nullptr;
+GDExtensionInterfaceFileAccessStoreBuffer file_access_store_buffer = nullptr;
+GDExtensionInterfaceFileAccessGetBuffer file_access_get_buffer = nullptr;
+GDExtensionInterfaceWorkerThreadPoolAddNativeGroupTask worker_thread_pool_add_native_group_task = nullptr;
+GDExtensionInterfaceWorkerThreadPoolAddNativeTask worker_thread_pool_add_native_task = nullptr;
+GDExtensionInterfacePackedByteArrayOperatorIndex packed_byte_array_operator_index = nullptr;
+GDExtensionInterfacePackedByteArrayOperatorIndexConst packed_byte_array_operator_index_const = nullptr;
+GDExtensionInterfacePackedFloat32ArrayOperatorIndex packed_float32_array_operator_index = nullptr;
+GDExtensionInterfacePackedFloat32ArrayOperatorIndexConst packed_float32_array_operator_index_const = nullptr;
+GDExtensionInterfacePackedFloat64ArrayOperatorIndex packed_float64_array_operator_index = nullptr;
+GDExtensionInterfacePackedFloat64ArrayOperatorIndexConst packed_float64_array_operator_index_const = nullptr;
+GDExtensionInterfacePackedInt32ArrayOperatorIndex packed_int32_array_operator_index = nullptr;
+GDExtensionInterfacePackedInt32ArrayOperatorIndexConst packed_int32_array_operator_index_const = nullptr;
+GDExtensionInterfacePackedInt64ArrayOperatorIndex packed_int64_array_operator_index = nullptr;
+GDExtensionInterfacePackedInt64ArrayOperatorIndexConst packed_int64_array_operator_index_const = nullptr;
+GDExtensionInterfacePackedStringArrayOperatorIndex packed_string_array_operator_index = nullptr;
+GDExtensionInterfacePackedStringArrayOperatorIndexConst packed_string_array_operator_index_const = nullptr;
+GDExtensionInterfacePackedVector2ArrayOperatorIndex packed_vector2_array_operator_index = nullptr;
+GDExtensionInterfacePackedVector2ArrayOperatorIndexConst packed_vector2_array_operator_index_const = nullptr;
+GDExtensionInterfacePackedVector3ArrayOperatorIndex packed_vector3_array_operator_index = nullptr;
+GDExtensionInterfacePackedVector3ArrayOperatorIndexConst packed_vector3_array_operator_index_const = nullptr;
+GDExtensionInterfacePackedColorArrayOperatorIndex packed_color_array_operator_index = nullptr;
+GDExtensionInterfacePackedColorArrayOperatorIndexConst packed_color_array_operator_index_const = nullptr;
+GDExtensionInterfaceArrayOperatorIndex array_operator_index = nullptr;
+GDExtensionInterfaceArrayOperatorIndexConst array_operator_index_const = nullptr;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 5
+GDExtensionInterfaceArrayRef array_ref = nullptr;
+#endif
+GDExtensionInterfaceArraySetTyped array_set_typed = nullptr;
+GDExtensionInterfaceDictionaryOperatorIndex dictionary_operator_index = nullptr;
+GDExtensionInterfaceDictionaryOperatorIndexConst dictionary_operator_index_const = nullptr;
+GDExtensionInterfaceObjectMethodBindCall object_method_bind_call = nullptr;
+GDExtensionInterfaceObjectMethodBindPtrcall object_method_bind_ptrcall = nullptr;
+GDExtensionInterfaceObjectDestroy object_destroy = nullptr;
+GDExtensionInterfaceGlobalGetSingleton global_get_singleton = nullptr;
+GDExtensionInterfaceObjectGetInstanceBinding object_get_instance_binding = nullptr;
+GDExtensionInterfaceObjectSetInstanceBinding object_set_instance_binding = nullptr;
+GDExtensionInterfaceObjectSetInstance object_set_instance = nullptr;
+GDExtensionInterfaceObjectGetClassName object_get_class_name = nullptr;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 7
+GDExtensionInterfaceObjectCastTo object_cast_to = nullptr;
+#endif
+GDExtensionInterfaceObjectGetInstanceFromId object_get_instance_from_id = nullptr;
+GDExtensionInterfaceObjectGetInstanceId object_get_instance_id = nullptr;
+GDExtensionInterfaceRefGetObject ref_get_object = nullptr;
+GDExtensionInterfaceRefSetObject ref_set_object = nullptr;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 2
+GDExtensionInterfaceScriptInstanceCreate script_instance_create = nullptr;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 4
+GDExtensionInterfaceClassdbConstructObject classdb_construct_object = nullptr;
+#endif
+GDExtensionInterfaceClassdbGetMethodBind classdb_get_method_bind = nullptr;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 7
+GDExtensionInterfaceClassdbGetClassTag classdb_get_class_tag = nullptr;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 2
+GDExtensionInterfaceClassdbRegisterExtensionClass classdb_register_extension_class = nullptr;
+#endif
+GDExtensionInterfaceClassdbRegisterExtensionClassMethod classdb_register_extension_class_method = nullptr;
+GDExtensionInterfaceClassdbRegisterExtensionClassIntegerConstant classdb_register_extension_class_integer_constant = nullptr;
+GDExtensionInterfaceClassdbRegisterExtensionClassProperty classdb_register_extension_class_property = nullptr;
+GDExtensionInterfaceClassdbRegisterExtensionClassPropertyGroup classdb_register_extension_class_property_group = nullptr;
+GDExtensionInterfaceClassdbRegisterExtensionClassPropertySubgroup classdb_register_extension_class_property_subgroup = nullptr;
+GDExtensionInterfaceClassdbRegisterExtensionClassSignal classdb_register_extension_class_signal = nullptr;
+GDExtensionInterfaceClassdbUnregisterExtensionClass classdb_unregister_extension_class = nullptr;
+GDExtensionInterfaceGetLibraryPath get_library_path = nullptr;
+GDExtensionInterfaceEditorAddPlugin editor_add_plugin = nullptr;
+GDExtensionInterfaceEditorRemovePlugin editor_remove_plugin = nullptr;
+#endif // GODOT_VERSION_MINOR >= 1
+
+// Godot 4.2 or newer.
+#if GODOT_VERSION_MINOR >= 2
+GDExtensionInterfaceStringResize string_resize = nullptr;
+GDExtensionInterfaceStringNameNewWithLatin1Chars string_name_new_with_latin1_chars = nullptr;
+GDExtensionInterfaceStringNameNewWithUtf8Chars string_name_new_with_utf8_chars = nullptr;
+GDExtensionInterfaceStringNameNewWithUtf8CharsAndLen string_name_new_with_utf8_chars_and_len = nullptr;
+GDExtensionInterfaceObjectFreeInstanceBinding object_free_instance_binding = nullptr;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+GDExtensionInterfaceScriptInstanceCreate2 script_instance_create2 = nullptr;
+#endif
+GDExtensionInterfacePlaceholderScriptInstanceCreate placeholder_script_instance_create = nullptr;
+GDExtensionInterfacePlaceholderScriptInstanceUpdate placeholder_script_instance_update = nullptr;
+GDExtensionInterfaceObjectGetScriptInstance object_get_script_instance = nullptr;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+GDExtensionInterfaceCallableCustomCreate callable_custom_create = nullptr;
+#endif
+GDExtensionInterfaceCallableCustomGetUserdata callable_custom_get_userdata = nullptr;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+GDExtensionInterfaceClassdbRegisterExtensionClass2 classdb_register_extension_class2 = nullptr;
+#endif
+GDExtensionInterfaceClassdbRegisterExtensionClassPropertyIndexed classdb_register_extension_class_property_indexed = nullptr;
+#endif // GODOT_VERSION_MINOR >= 2
+
+// Godot 4.3 or newer.
+#if GODOT_VERSION_MINOR >= 3
+GDExtensionInterfaceStringNewWithUtf8CharsAndLen2 string_new_with_utf8_chars_and_len2 = nullptr;
+GDExtensionInterfaceStringNewWithUtf16CharsAndLen2 string_new_with_utf16_chars_and_len2 = nullptr;
+GDExtensionInterfaceImagePtrw image_ptrw = nullptr;
+GDExtensionInterfaceImagePtr image_ptr = nullptr;
+GDExtensionInterfacePackedVector4ArrayOperatorIndex packed_vector4_array_operator_index = nullptr;
+GDExtensionInterfacePackedVector4ArrayOperatorIndexConst packed_vector4_array_operator_index_const = nullptr;
+GDExtensionInterfaceObjectHasScriptMethod object_has_script_method = nullptr;
+GDExtensionInterfaceObjectCallScriptMethod object_call_script_method = nullptr;
+GDExtensionInterfaceScriptInstanceCreate3 script_instance_create3 = nullptr;
+GDExtensionInterfaceCallableCustomCreate2 callable_custom_create2 = nullptr;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 4
+GDExtensionInterfaceClassdbRegisterExtensionClass3 classdb_register_extension_class3 = nullptr;
+#endif
+GDExtensionInterfaceClassdbRegisterExtensionClassVirtualMethod classdb_register_extension_class_virtual_method = nullptr;
+GDExtensionInterfaceEditorHelpLoadXmlFromUtf8Chars editor_help_load_xml_from_utf8_chars = nullptr;
+GDExtensionInterfaceEditorHelpLoadXmlFromUtf8CharsAndLen editor_help_load_xml_from_utf8_chars_and_len = nullptr;
+#endif // GODOT_VERSION_MINOR >= 3
+
+// Godot 4.4 or newer.
+#if GODOT_VERSION_MINOR >= 4
+GDExtensionInterfaceVariantGetObjectInstanceId variant_get_object_instance_id = nullptr;
+GDExtensionInterfaceVariantGetPtrInternalGetter variant_get_ptr_internal_getter = nullptr;
+GDExtensionInterfaceDictionarySetTyped dictionary_set_typed = nullptr;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 7
+GDExtensionInterfaceClassdbConstructObject2 classdb_construct_object2 = nullptr;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 5
+GDExtensionInterfaceClassdbRegisterExtensionClass4 classdb_register_extension_class4 = nullptr;
+#endif
+#endif // GODOT_VERSION_MINOR >= 4
+
+// Godot 4.5 or newer.
+#if GODOT_VERSION_MINOR >= 5
+GDExtensionInterfaceGetGodotVersion2 get_godot_version2 = nullptr;
+GDExtensionInterfaceObjectSetScriptInstance object_set_script_instance = nullptr;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 7
+GDExtensionInterfaceClassdbRegisterExtensionClass5 classdb_register_extension_class5 = nullptr;
+#endif
+GDExtensionInterfaceEditorRegisterGetClassesUsedCallback editor_register_get_classes_used_callback = nullptr;
+GDExtensionInterfaceRegisterMainLoopCallbacks register_main_loop_callbacks = nullptr;
+#endif // GODOT_VERSION_MINOR >= 5
+
+// Godot 4.6 or newer.
+#if GODOT_VERSION_MINOR >= 6
+GDExtensionInterfaceMemAlloc2 mem_alloc2 = nullptr;
+GDExtensionInterfaceMemRealloc2 mem_realloc2 = nullptr;
+GDExtensionInterfaceMemFree2 mem_free2 = nullptr;
+#endif // GODOT_VERSION_MINOR >= 6
+
+// Godot 4.7 or newer.
+#if GODOT_VERSION_MINOR >= 7
+GDExtensionInterfaceVariantGetTypeByName variant_get_type_by_name = nullptr;
+GDExtensionInterfaceClassdbConstructObject3 classdb_construct_object3 = nullptr;
+GDExtensionInterfaceClassdbRegisterExtensionClass6 classdb_register_extension_class6 = nullptr;
+GDExtensionInterfaceDeviceExitBootstrapLibraryV1 device_exit_bootstrap_library_v1 = nullptr;
+GDExtensionInterfaceDeviceExitRetainLibraryViewV1 device_exit_retain_library_view_v1 = nullptr;
+GDExtensionInterfaceDeviceExitCopyLibrarySnapshotV1 device_exit_copy_library_snapshot_v1 = nullptr;
+GDExtensionInterfaceDeviceExitReleaseLibraryViewV1 device_exit_release_library_view_v1 = nullptr;
+GDExtensionInterfaceDeviceExitCloneLibraryViewV1 device_exit_clone_library_view_v1 = nullptr;
+GDExtensionInterfaceDeviceExitRegisterGuardV1 device_exit_register_guard_v1 = nullptr;
+GDExtensionInterfaceDeviceExitBorrowGuardedLibraryV1 device_exit_borrow_guarded_library_v1 = nullptr;
+GDExtensionInterfaceDeviceExitBorrowInitializeLevelV1 device_exit_borrow_initialize_level_v1 = nullptr;
+GDExtensionInterfaceDeviceExitBorrowDeinitLevelV1 device_exit_borrow_deinit_level_v1 = nullptr;
+GDExtensionInterfaceDeviceExitBorrowLevelCleanupV1 device_exit_borrow_level_cleanup_v1 = nullptr;
+GDExtensionInterfaceDeviceExitScheduleObjectCleanupV1 device_exit_schedule_object_cleanup_v1 = nullptr;
+GDExtensionInterfaceDeviceExitAcquireCodeHoldV1 device_exit_acquire_code_hold_v1 = nullptr;
+GDExtensionInterfaceDeviceExitCloneCodeHoldV1 device_exit_clone_code_hold_v1 = nullptr;
+GDExtensionInterfaceDeviceExitReleaseCodeHoldV1 device_exit_release_code_hold_v1 = nullptr;
+GDExtensionInterfaceDeviceExitAfterBindingInitializeV1 device_exit_after_binding_initialize_v1 = nullptr;
+GDExtensionInterfaceDeviceExitBeginUserTerminatorV1 device_exit_begin_user_terminator_v1 = nullptr;
+GDExtensionInterfaceDeviceExitAfterUserTerminatorV1 device_exit_after_user_terminator_v1 = nullptr;
+GDExtensionInterfaceDeviceExitAfterBindingDeinitV1 device_exit_after_binding_deinit_v1 = nullptr;
+GDExtensionInterfaceDeviceExitPublishExitResultV1 device_exit_publish_exit_result_v1 = nullptr;
+GDExtensionInterfaceDeviceExitTerminateInitializeBlockedV1 device_exit_terminate_initialize_blocked_v1 = nullptr;
+GDExtensionInterfaceDeviceExitTerminateBlockedV1 device_exit_terminate_blocked_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionBindV1 device_session_bind_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionCopyV1 device_session_copy_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionResolveV1 device_session_resolve_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionReleaseContextV1 device_session_release_context_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionReleaseSessionV1 device_session_release_session_v1 = nullptr;
+GDExtensionInterfaceDeviceExitRegisterSceneReadyV1 device_exit_register_scene_ready_v1 = nullptr;
+GDExtensionInterfaceDeviceExitRegisterSceneReadyV2 device_exit_register_scene_ready_v2 = nullptr;
+GDExtensionInterfaceDeviceExitSceneReadyScheduleObjectCleanupV1 device_exit_scene_ready_schedule_object_cleanup_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionBindSceneReadyV1 device_session_bind_scene_ready_v1 = nullptr;
+GDExtensionInterfaceDeviceExitSceneReadyAbortV1 device_exit_scene_ready_abort_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionBindMainSceneReadyV1 device_session_bind_main_scene_ready_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationOpenV1 device_session_qualification_open_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationBackingV1 device_session_qualification_backing_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationRecordV1 device_session_qualification_record_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationObserveV1 device_session_qualification_observe_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationObserveV2 device_session_qualification_observe_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationFactsV1 device_session_qualification_facts_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationCopyV1 device_session_qualification_copy_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationReleaseV1 device_session_qualification_release_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationCloseV1 device_session_qualification_close_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationStorageCreateV1 device_session_qualification_storage_create_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationStorageRetireV1 device_session_qualification_storage_retire_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationStorageRetireObserveV1 device_session_qualification_storage_retire_observe_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationStorageRetireReleaseV1 device_session_qualification_storage_retire_release_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationPrepareUploadsV1 device_session_qualification_prepare_uploads_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationPrepareUploadsV2 device_session_qualification_prepare_uploads_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationUploadV1 device_session_qualification_upload_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationRecordPreparedV1 device_session_qualification_record_prepared_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationRecordPreparedV2 device_session_qualification_record_prepared_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationRecordPreparedV3 device_session_qualification_record_prepared_v3 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationNativeUnitCreateV1 device_session_qualification_native_unit_create_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationNativeUnitRetireV1 device_session_qualification_native_unit_retire_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationNativeUnitRetireObserveV1 device_session_qualification_native_unit_retire_observe_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationNativeUnitRetireReleaseV1 device_session_qualification_native_unit_retire_release_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationCancelV1 device_session_qualification_cancel_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationRtConfigureV1 device_session_qualification_rt_configure_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationRtReserveV1 device_session_qualification_rt_reserve_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationRtActivateV1 device_session_qualification_rt_activate_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationRtObserveV1 device_session_qualification_rt_observe_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationRtReleaseV1 device_session_qualification_rt_release_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationTextureCreateV1 device_session_qualification_texture_create_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationSamplerCreateV1 device_session_qualification_sampler_create_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationSetCreateV1 device_session_qualification_set_create_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationTextureUploadV1 device_session_qualification_texture_upload_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationResourceRetireV1 device_session_qualification_resource_retire_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationResourceRetireObserveV1 device_session_qualification_resource_retire_observe_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationResourceRetireReleaseV1 device_session_qualification_resource_retire_release_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionBindHostProducerV1 device_session_bind_host_producer_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionCloneProducerRegistrationV1 device_session_clone_producer_registration_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionCopyProducerRegistrationV1 device_session_copy_producer_registration_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionReleaseProducerRegistrationV1 device_session_release_producer_registration_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionSystemScalarRecordV1 device_session_system_scalar_record_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionSystemScalarObserveV1 device_session_system_scalar_observe_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionSystemScalarFactsV1 device_session_system_scalar_facts_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionSystemScalarCopyV1 device_session_system_scalar_copy_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionSystemScalarCancelV1 device_session_system_scalar_cancel_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionSystemScalarReleaseV1 device_session_system_scalar_release_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionQuoteV1 device_session_production_quote_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionAcceptV1 device_session_production_accept_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionInstallRecordReceiverV1 device_session_production_install_record_receiver_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionReserveV1 device_session_production_reserve_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionRasterReserveV1 device_session_production_raster_reserve_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionRecordScheduleV1 device_session_production_record_schedule_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionOutputCancelScheduleV1 device_session_production_output_cancel_schedule_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionRecordConsumeV1 device_session_production_record_consume_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionAppendV1 device_session_production_append_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionCloseSegmentV1 device_session_production_close_segment_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionAckSegmentV1 device_session_production_ack_segment_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionOpenV1 device_session_production_open_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionSetCreateV1 device_session_production_set_create_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionStorageCreateV1 device_session_production_storage_create_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionStorageRetireV1 device_session_production_storage_retire_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionStorageObserveV1 device_session_production_storage_observe_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionStorageReleaseV1 device_session_production_storage_release_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionImportUnitV1 device_session_production_import_unit_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionImportStorageV1 device_session_production_import_storage_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionImportSetV1 device_session_production_import_set_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPrepareDispatchV1 device_session_production_prepare_dispatch_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPrepareCopyV1 device_session_production_prepare_copy_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPrepareUploadV1 device_session_production_prepare_upload_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPrepareReadbackV1 device_session_production_prepare_readback_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionObserveV1 device_session_production_observe_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionFactsV1 device_session_production_facts_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionCopyV1 device_session_production_copy_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionCancelV1 device_session_production_cancel_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionReleaseV1 device_session_production_release_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionCloseV1 device_session_production_close_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionInstallationObserveV1 device_session_production_installation_observe_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationRasterUnitCreateV1 device_session_qualification_raster_unit_create_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationRasterUnitRetireV1 device_session_qualification_raster_unit_retire_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationRasterUnitRetireObserveV1 device_session_qualification_raster_unit_retire_observe_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationRasterUnitRetireReleaseV1 device_session_qualification_raster_unit_retire_release_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationRecordPreparedV4 device_session_qualification_record_prepared_v4 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationObserveV3 device_session_qualification_observe_v3 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionReserveV2 device_session_production_reserve_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionReserveReadbackSourcesV1 device_session_production_reserve_readback_sources_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPrepareDispatchV2 device_session_production_prepare_dispatch_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPrepareCopyV2 device_session_production_prepare_copy_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPrepareUploadV2 device_session_production_prepare_upload_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPrepareReadbackV2 device_session_production_prepare_readback_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionReadRevisionV1 device_session_production_read_revision_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionAppendV2 device_session_production_append_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionCloseSegmentV2 device_session_production_close_segment_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2 device_session_production_record_consume_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionObserveV2 device_session_production_observe_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionFactsV2 device_session_production_facts_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionReleaseV2 device_session_production_release_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputCreateV1 device_session_output_create_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputCreateV2 device_session_output_create_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputSealV1 device_session_output_seal_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputCancelV1 device_session_output_cancel_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputWithdrawV1 device_session_output_withdraw_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionRasterBeginV1 device_session_production_raster_begin_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionRasterEndV1 device_session_production_raster_end_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionRecordHistoryV1 device_session_production_record_history_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionRasterPrepareV1 device_session_production_raster_prepare_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionRasterPrepareReportV1 device_session_production_raster_prepare_report_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPrepareOutputV1 device_session_production_prepare_output_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputAcquireV1 device_session_output_acquire_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputPollV1 device_session_output_poll_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputCreateV3 device_session_output_create_v3 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputMetadataQueryV1 device_session_output_metadata_query_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionSceneOperationQueryV1 device_session_scene_operation_query_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionSceneOperationBindV1 device_session_scene_operation_bind_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionScenePhaseCapabilityV1 device_session_scene_phase_capability_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionCameraReadyRelayV1 device_session_camera_ready_relay_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionCameraReadyBindRelayV1 device_session_camera_ready_bind_relay_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionCameraReadyBindViewportV1 device_session_camera_ready_bind_viewport_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionCameraReadyCloseV1 device_session_camera_ready_close_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionScenePhaseRelayV1 device_session_scene_phase_relay_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionScenePhaseRegisterV1 device_session_scene_phase_register_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionScenePhaseUnregisterV1 device_session_scene_phase_unregister_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationSceneDepthQuoteV1 device_session_qualification_scene_depth_quote_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationSceneDepthCreateV1 device_session_qualification_scene_depth_create_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationSceneDepthRetireV1 device_session_qualification_scene_depth_retire_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationSceneDepthObserveV1 device_session_qualification_scene_depth_observe_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationSceneDepthReleaseV1 device_session_qualification_scene_depth_release_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionObserveV3 device_session_production_observe_v3 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionOutputReturnConsumeV1 device_session_production_output_return_consume_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionRequestRequirementsV1 device_session_production_request_requirements_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionRequestRequirementsV2 device_session_production_request_requirements_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionCaptureCameraV1 device_session_production_capture_camera_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionRetainCameraReadyV1 device_session_production_retain_camera_ready_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionReadCameraReadyV1 device_session_production_read_camera_ready_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionReadCameraV1 device_session_production_read_camera_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPrepareHostTransformV1 device_session_production_prepare_host_transform_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPrepareOutputSceneV1 device_session_production_prepare_output_scene_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionReadHostTransformV1 device_session_production_read_host_transform_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPrepareOutputPlanV1 device_session_production_prepare_output_plan_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionFinalizeOutputV1 device_session_production_finalize_output_v1 = nullptr;
+GDExtensionInterfaceDeviceExitRegisterPrepareV1 device_exit_register_prepare_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputConsumedBorrowV2 device_session_output_consumed_borrow_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputConsumedReadV2 device_session_output_consumed_read_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputConsumedReturnV2 device_session_output_consumed_return_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputConsumedPrepareV2 device_session_output_consumed_prepare_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPrepareOutputV2 device_session_production_prepare_output_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPrepareOutputPlanV2 device_session_production_prepare_output_plan_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputMetadataSelectionQueryV2 device_session_output_metadata_selection_query_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputMetadataSelectionPrepareV2 device_session_output_metadata_selection_prepare_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputMetadataSelectionReadV2 device_session_output_metadata_selection_read_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputMetadataSelectionReturnV2 device_session_output_metadata_selection_return_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputCreateV4 device_session_output_create_v4 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputSceneQueryCommitV2 device_session_output_scene_query_commit_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputDeviceFactsV2 device_session_output_device_facts_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionOutputSelectionFactsV2 device_session_output_selection_facts_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPrepareNativeRecordV2 device_session_production_prepare_native_record_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPreparedResultReadV2 device_session_production_prepared_result_read_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionStageOutputPlanV2 device_session_production_stage_output_plan_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionRecordConsumeV3 device_session_production_record_consume_v3 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionStageCameraPayloadV2 device_session_production_stage_camera_payload_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionReadStagedOutputInputV2 device_session_production_read_staged_output_input_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPrepareNativeBatchV2 device_session_production_prepare_native_batch_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionNativeBatchReadV2 device_session_production_native_batch_read_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionStageOutputPlanWithPredecessorV2 device_session_production_stage_output_plan_with_predecessor_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationSceneDepthServiceReserveV2 device_session_qualification_scene_depth_service_reserve_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationSceneDepthServiceActivateV2 device_session_qualification_scene_depth_service_activate_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationSceneDepthServiceObserveV2 device_session_qualification_scene_depth_service_observe_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationRecordMethodV1 device_session_qualification_record_method_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionQualificationObserveMethodV1 device_session_qualification_observe_method_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionStageOutputPlanWithHistoryGuardV2 device_session_production_stage_output_plan_with_history_guard_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionStageOutputHistoryFallbackV2 device_session_production_stage_output_history_fallback_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPrepareHistoryFallbackDispatchV2 device_session_production_prepare_history_fallback_dispatch_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPrepareHistoryFallbackUploadV2 device_session_production_prepare_history_fallback_upload_v2 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionStageOutputHistoryStaticV2 device_session_production_stage_output_history_static_v2 = nullptr;
+#endif // GODOT_VERSION_MINOR >= 7
+
+// Godot 4.8 or newer.
+#if GODOT_VERSION_MINOR >= 8
+GDExtensionInterfaceDeviceSessionProductionControlReceiptV1 device_session_production_control_receipt_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionCameraReadyBindRequestV1 device_session_camera_ready_bind_request_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionPrepareHostViewV1 device_session_production_prepare_host_view_v1 = nullptr;
+GDExtensionInterfaceDeviceSessionProductionReadHostViewV1 device_session_production_read_host_view_v1 = nullptr;
+#endif // GODOT_VERSION_MINOR >= 8
+
+} // namespace gdextension_interface
+
+namespace internal {
+
+bool load_gdextension_interface(GDExtensionInterfaceGetProcAddress p_get_proc_address) {
+	// Godot 4.1 or newer.
+#if GODOT_VERSION_MINOR >= 1
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 5
+	const auto pending_get_godot_version = (GDExtensionInterfaceGetGodotVersion)p_get_proc_address("get_godot_version");
+	if (!pending_get_godot_version) return false;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 6
+	const auto pending_mem_alloc = (GDExtensionInterfaceMemAlloc)p_get_proc_address("mem_alloc");
+	if (!pending_mem_alloc) return false;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 6
+	const auto pending_mem_realloc = (GDExtensionInterfaceMemRealloc)p_get_proc_address("mem_realloc");
+	if (!pending_mem_realloc) return false;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 6
+	const auto pending_mem_free = (GDExtensionInterfaceMemFree)p_get_proc_address("mem_free");
+	if (!pending_mem_free) return false;
+#endif
+	const auto pending_print_error_with_message = (GDExtensionInterfacePrintErrorWithMessage)p_get_proc_address("print_error_with_message");
+	if (!pending_print_error_with_message) return false;
+	const auto pending_print_warning = (GDExtensionInterfacePrintWarning)p_get_proc_address("print_warning");
+	if (!pending_print_warning) return false;
+	const auto pending_print_warning_with_message = (GDExtensionInterfacePrintWarningWithMessage)p_get_proc_address("print_warning_with_message");
+	if (!pending_print_warning_with_message) return false;
+	const auto pending_print_script_error = (GDExtensionInterfacePrintScriptError)p_get_proc_address("print_script_error");
+	if (!pending_print_script_error) return false;
+	const auto pending_print_script_error_with_message = (GDExtensionInterfacePrintScriptErrorWithMessage)p_get_proc_address("print_script_error_with_message");
+	if (!pending_print_script_error_with_message) return false;
+	const auto pending_get_native_struct_size = (GDExtensionInterfaceGetNativeStructSize)p_get_proc_address("get_native_struct_size");
+	if (!pending_get_native_struct_size) return false;
+	const auto pending_variant_new_copy = (GDExtensionInterfaceVariantNewCopy)p_get_proc_address("variant_new_copy");
+	if (!pending_variant_new_copy) return false;
+	const auto pending_variant_new_nil = (GDExtensionInterfaceVariantNewNil)p_get_proc_address("variant_new_nil");
+	if (!pending_variant_new_nil) return false;
+	const auto pending_variant_destroy = (GDExtensionInterfaceVariantDestroy)p_get_proc_address("variant_destroy");
+	if (!pending_variant_destroy) return false;
+	const auto pending_variant_call = (GDExtensionInterfaceVariantCall)p_get_proc_address("variant_call");
+	if (!pending_variant_call) return false;
+	const auto pending_variant_call_static = (GDExtensionInterfaceVariantCallStatic)p_get_proc_address("variant_call_static");
+	if (!pending_variant_call_static) return false;
+	const auto pending_variant_evaluate = (GDExtensionInterfaceVariantEvaluate)p_get_proc_address("variant_evaluate");
+	if (!pending_variant_evaluate) return false;
+	const auto pending_variant_set = (GDExtensionInterfaceVariantSet)p_get_proc_address("variant_set");
+	if (!pending_variant_set) return false;
+	const auto pending_variant_set_named = (GDExtensionInterfaceVariantSetNamed)p_get_proc_address("variant_set_named");
+	if (!pending_variant_set_named) return false;
+	const auto pending_variant_set_keyed = (GDExtensionInterfaceVariantSetKeyed)p_get_proc_address("variant_set_keyed");
+	if (!pending_variant_set_keyed) return false;
+	const auto pending_variant_set_indexed = (GDExtensionInterfaceVariantSetIndexed)p_get_proc_address("variant_set_indexed");
+	if (!pending_variant_set_indexed) return false;
+	const auto pending_variant_get = (GDExtensionInterfaceVariantGet)p_get_proc_address("variant_get");
+	if (!pending_variant_get) return false;
+	const auto pending_variant_get_named = (GDExtensionInterfaceVariantGetNamed)p_get_proc_address("variant_get_named");
+	if (!pending_variant_get_named) return false;
+	const auto pending_variant_get_keyed = (GDExtensionInterfaceVariantGetKeyed)p_get_proc_address("variant_get_keyed");
+	if (!pending_variant_get_keyed) return false;
+	const auto pending_variant_get_indexed = (GDExtensionInterfaceVariantGetIndexed)p_get_proc_address("variant_get_indexed");
+	if (!pending_variant_get_indexed) return false;
+	const auto pending_variant_iter_init = (GDExtensionInterfaceVariantIterInit)p_get_proc_address("variant_iter_init");
+	if (!pending_variant_iter_init) return false;
+	const auto pending_variant_iter_next = (GDExtensionInterfaceVariantIterNext)p_get_proc_address("variant_iter_next");
+	if (!pending_variant_iter_next) return false;
+	const auto pending_variant_iter_get = (GDExtensionInterfaceVariantIterGet)p_get_proc_address("variant_iter_get");
+	if (!pending_variant_iter_get) return false;
+	const auto pending_variant_hash = (GDExtensionInterfaceVariantHash)p_get_proc_address("variant_hash");
+	if (!pending_variant_hash) return false;
+	const auto pending_variant_recursive_hash = (GDExtensionInterfaceVariantRecursiveHash)p_get_proc_address("variant_recursive_hash");
+	if (!pending_variant_recursive_hash) return false;
+	const auto pending_variant_hash_compare = (GDExtensionInterfaceVariantHashCompare)p_get_proc_address("variant_hash_compare");
+	if (!pending_variant_hash_compare) return false;
+	const auto pending_variant_booleanize = (GDExtensionInterfaceVariantBooleanize)p_get_proc_address("variant_booleanize");
+	if (!pending_variant_booleanize) return false;
+	const auto pending_variant_duplicate = (GDExtensionInterfaceVariantDuplicate)p_get_proc_address("variant_duplicate");
+	if (!pending_variant_duplicate) return false;
+	const auto pending_variant_stringify = (GDExtensionInterfaceVariantStringify)p_get_proc_address("variant_stringify");
+	if (!pending_variant_stringify) return false;
+	const auto pending_variant_get_type = (GDExtensionInterfaceVariantGetType)p_get_proc_address("variant_get_type");
+	if (!pending_variant_get_type) return false;
+	const auto pending_variant_has_method = (GDExtensionInterfaceVariantHasMethod)p_get_proc_address("variant_has_method");
+	if (!pending_variant_has_method) return false;
+	const auto pending_variant_has_member = (GDExtensionInterfaceVariantHasMember)p_get_proc_address("variant_has_member");
+	if (!pending_variant_has_member) return false;
+	const auto pending_variant_has_key = (GDExtensionInterfaceVariantHasKey)p_get_proc_address("variant_has_key");
+	if (!pending_variant_has_key) return false;
+	const auto pending_variant_get_type_name = (GDExtensionInterfaceVariantGetTypeName)p_get_proc_address("variant_get_type_name");
+	if (!pending_variant_get_type_name) return false;
+	const auto pending_variant_can_convert = (GDExtensionInterfaceVariantCanConvert)p_get_proc_address("variant_can_convert");
+	if (!pending_variant_can_convert) return false;
+	const auto pending_variant_can_convert_strict = (GDExtensionInterfaceVariantCanConvertStrict)p_get_proc_address("variant_can_convert_strict");
+	if (!pending_variant_can_convert_strict) return false;
+	const auto pending_get_variant_from_type_constructor = (GDExtensionInterfaceGetVariantFromTypeConstructor)p_get_proc_address("get_variant_from_type_constructor");
+	if (!pending_get_variant_from_type_constructor) return false;
+	const auto pending_get_variant_to_type_constructor = (GDExtensionInterfaceGetVariantToTypeConstructor)p_get_proc_address("get_variant_to_type_constructor");
+	if (!pending_get_variant_to_type_constructor) return false;
+	const auto pending_variant_get_ptr_operator_evaluator = (GDExtensionInterfaceVariantGetPtrOperatorEvaluator)p_get_proc_address("variant_get_ptr_operator_evaluator");
+	if (!pending_variant_get_ptr_operator_evaluator) return false;
+	const auto pending_variant_get_ptr_builtin_method = (GDExtensionInterfaceVariantGetPtrBuiltinMethod)p_get_proc_address("variant_get_ptr_builtin_method");
+	if (!pending_variant_get_ptr_builtin_method) return false;
+	const auto pending_variant_get_ptr_constructor = (GDExtensionInterfaceVariantGetPtrConstructor)p_get_proc_address("variant_get_ptr_constructor");
+	if (!pending_variant_get_ptr_constructor) return false;
+	const auto pending_variant_get_ptr_destructor = (GDExtensionInterfaceVariantGetPtrDestructor)p_get_proc_address("variant_get_ptr_destructor");
+	if (!pending_variant_get_ptr_destructor) return false;
+	const auto pending_variant_construct = (GDExtensionInterfaceVariantConstruct)p_get_proc_address("variant_construct");
+	if (!pending_variant_construct) return false;
+	const auto pending_variant_get_ptr_setter = (GDExtensionInterfaceVariantGetPtrSetter)p_get_proc_address("variant_get_ptr_setter");
+	if (!pending_variant_get_ptr_setter) return false;
+	const auto pending_variant_get_ptr_getter = (GDExtensionInterfaceVariantGetPtrGetter)p_get_proc_address("variant_get_ptr_getter");
+	if (!pending_variant_get_ptr_getter) return false;
+	const auto pending_variant_get_ptr_indexed_setter = (GDExtensionInterfaceVariantGetPtrIndexedSetter)p_get_proc_address("variant_get_ptr_indexed_setter");
+	if (!pending_variant_get_ptr_indexed_setter) return false;
+	const auto pending_variant_get_ptr_indexed_getter = (GDExtensionInterfaceVariantGetPtrIndexedGetter)p_get_proc_address("variant_get_ptr_indexed_getter");
+	if (!pending_variant_get_ptr_indexed_getter) return false;
+	const auto pending_variant_get_ptr_keyed_setter = (GDExtensionInterfaceVariantGetPtrKeyedSetter)p_get_proc_address("variant_get_ptr_keyed_setter");
+	if (!pending_variant_get_ptr_keyed_setter) return false;
+	const auto pending_variant_get_ptr_keyed_getter = (GDExtensionInterfaceVariantGetPtrKeyedGetter)p_get_proc_address("variant_get_ptr_keyed_getter");
+	if (!pending_variant_get_ptr_keyed_getter) return false;
+	const auto pending_variant_get_ptr_keyed_checker = (GDExtensionInterfaceVariantGetPtrKeyedChecker)p_get_proc_address("variant_get_ptr_keyed_checker");
+	if (!pending_variant_get_ptr_keyed_checker) return false;
+	const auto pending_variant_get_constant_value = (GDExtensionInterfaceVariantGetConstantValue)p_get_proc_address("variant_get_constant_value");
+	if (!pending_variant_get_constant_value) return false;
+	const auto pending_variant_get_ptr_utility_function = (GDExtensionInterfaceVariantGetPtrUtilityFunction)p_get_proc_address("variant_get_ptr_utility_function");
+	if (!pending_variant_get_ptr_utility_function) return false;
+	const auto pending_string_new_with_latin1_chars = (GDExtensionInterfaceStringNewWithLatin1Chars)p_get_proc_address("string_new_with_latin1_chars");
+	if (!pending_string_new_with_latin1_chars) return false;
+	const auto pending_string_new_with_utf8_chars = (GDExtensionInterfaceStringNewWithUtf8Chars)p_get_proc_address("string_new_with_utf8_chars");
+	if (!pending_string_new_with_utf8_chars) return false;
+	const auto pending_string_new_with_utf16_chars = (GDExtensionInterfaceStringNewWithUtf16Chars)p_get_proc_address("string_new_with_utf16_chars");
+	if (!pending_string_new_with_utf16_chars) return false;
+	const auto pending_string_new_with_utf32_chars = (GDExtensionInterfaceStringNewWithUtf32Chars)p_get_proc_address("string_new_with_utf32_chars");
+	if (!pending_string_new_with_utf32_chars) return false;
+	const auto pending_string_new_with_wide_chars = (GDExtensionInterfaceStringNewWithWideChars)p_get_proc_address("string_new_with_wide_chars");
+	if (!pending_string_new_with_wide_chars) return false;
+	const auto pending_string_new_with_latin1_chars_and_len = (GDExtensionInterfaceStringNewWithLatin1CharsAndLen)p_get_proc_address("string_new_with_latin1_chars_and_len");
+	if (!pending_string_new_with_latin1_chars_and_len) return false;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+	const auto pending_string_new_with_utf8_chars_and_len = (GDExtensionInterfaceStringNewWithUtf8CharsAndLen)p_get_proc_address("string_new_with_utf8_chars_and_len");
+	if (!pending_string_new_with_utf8_chars_and_len) return false;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+	const auto pending_string_new_with_utf16_chars_and_len = (GDExtensionInterfaceStringNewWithUtf16CharsAndLen)p_get_proc_address("string_new_with_utf16_chars_and_len");
+	if (!pending_string_new_with_utf16_chars_and_len) return false;
+#endif
+	const auto pending_string_new_with_utf32_chars_and_len = (GDExtensionInterfaceStringNewWithUtf32CharsAndLen)p_get_proc_address("string_new_with_utf32_chars_and_len");
+	if (!pending_string_new_with_utf32_chars_and_len) return false;
+	const auto pending_string_new_with_wide_chars_and_len = (GDExtensionInterfaceStringNewWithWideCharsAndLen)p_get_proc_address("string_new_with_wide_chars_and_len");
+	if (!pending_string_new_with_wide_chars_and_len) return false;
+	const auto pending_string_to_latin1_chars = (GDExtensionInterfaceStringToLatin1Chars)p_get_proc_address("string_to_latin1_chars");
+	if (!pending_string_to_latin1_chars) return false;
+	const auto pending_string_to_utf8_chars = (GDExtensionInterfaceStringToUtf8Chars)p_get_proc_address("string_to_utf8_chars");
+	if (!pending_string_to_utf8_chars) return false;
+	const auto pending_string_to_utf16_chars = (GDExtensionInterfaceStringToUtf16Chars)p_get_proc_address("string_to_utf16_chars");
+	if (!pending_string_to_utf16_chars) return false;
+	const auto pending_string_to_utf32_chars = (GDExtensionInterfaceStringToUtf32Chars)p_get_proc_address("string_to_utf32_chars");
+	if (!pending_string_to_utf32_chars) return false;
+	const auto pending_string_to_wide_chars = (GDExtensionInterfaceStringToWideChars)p_get_proc_address("string_to_wide_chars");
+	if (!pending_string_to_wide_chars) return false;
+	const auto pending_string_operator_index = (GDExtensionInterfaceStringOperatorIndex)p_get_proc_address("string_operator_index");
+	if (!pending_string_operator_index) return false;
+	const auto pending_string_operator_index_const = (GDExtensionInterfaceStringOperatorIndexConst)p_get_proc_address("string_operator_index_const");
+	if (!pending_string_operator_index_const) return false;
+	const auto pending_string_operator_plus_eq_string = (GDExtensionInterfaceStringOperatorPlusEqString)p_get_proc_address("string_operator_plus_eq_string");
+	if (!pending_string_operator_plus_eq_string) return false;
+	const auto pending_string_operator_plus_eq_char = (GDExtensionInterfaceStringOperatorPlusEqChar)p_get_proc_address("string_operator_plus_eq_char");
+	if (!pending_string_operator_plus_eq_char) return false;
+	const auto pending_string_operator_plus_eq_cstr = (GDExtensionInterfaceStringOperatorPlusEqCstr)p_get_proc_address("string_operator_plus_eq_cstr");
+	if (!pending_string_operator_plus_eq_cstr) return false;
+	const auto pending_string_operator_plus_eq_wcstr = (GDExtensionInterfaceStringOperatorPlusEqWcstr)p_get_proc_address("string_operator_plus_eq_wcstr");
+	if (!pending_string_operator_plus_eq_wcstr) return false;
+	const auto pending_string_operator_plus_eq_c32str = (GDExtensionInterfaceStringOperatorPlusEqC32str)p_get_proc_address("string_operator_plus_eq_c32str");
+	if (!pending_string_operator_plus_eq_c32str) return false;
+	const auto pending_xml_parser_open_buffer = (GDExtensionInterfaceXmlParserOpenBuffer)p_get_proc_address("xml_parser_open_buffer");
+	if (!pending_xml_parser_open_buffer) return false;
+	const auto pending_file_access_store_buffer = (GDExtensionInterfaceFileAccessStoreBuffer)p_get_proc_address("file_access_store_buffer");
+	if (!pending_file_access_store_buffer) return false;
+	const auto pending_file_access_get_buffer = (GDExtensionInterfaceFileAccessGetBuffer)p_get_proc_address("file_access_get_buffer");
+	if (!pending_file_access_get_buffer) return false;
+	const auto pending_worker_thread_pool_add_native_group_task = (GDExtensionInterfaceWorkerThreadPoolAddNativeGroupTask)p_get_proc_address("worker_thread_pool_add_native_group_task");
+	if (!pending_worker_thread_pool_add_native_group_task) return false;
+	const auto pending_worker_thread_pool_add_native_task = (GDExtensionInterfaceWorkerThreadPoolAddNativeTask)p_get_proc_address("worker_thread_pool_add_native_task");
+	if (!pending_worker_thread_pool_add_native_task) return false;
+	const auto pending_packed_byte_array_operator_index = (GDExtensionInterfacePackedByteArrayOperatorIndex)p_get_proc_address("packed_byte_array_operator_index");
+	if (!pending_packed_byte_array_operator_index) return false;
+	const auto pending_packed_byte_array_operator_index_const = (GDExtensionInterfacePackedByteArrayOperatorIndexConst)p_get_proc_address("packed_byte_array_operator_index_const");
+	if (!pending_packed_byte_array_operator_index_const) return false;
+	const auto pending_packed_float32_array_operator_index = (GDExtensionInterfacePackedFloat32ArrayOperatorIndex)p_get_proc_address("packed_float32_array_operator_index");
+	if (!pending_packed_float32_array_operator_index) return false;
+	const auto pending_packed_float32_array_operator_index_const = (GDExtensionInterfacePackedFloat32ArrayOperatorIndexConst)p_get_proc_address("packed_float32_array_operator_index_const");
+	if (!pending_packed_float32_array_operator_index_const) return false;
+	const auto pending_packed_float64_array_operator_index = (GDExtensionInterfacePackedFloat64ArrayOperatorIndex)p_get_proc_address("packed_float64_array_operator_index");
+	if (!pending_packed_float64_array_operator_index) return false;
+	const auto pending_packed_float64_array_operator_index_const = (GDExtensionInterfacePackedFloat64ArrayOperatorIndexConst)p_get_proc_address("packed_float64_array_operator_index_const");
+	if (!pending_packed_float64_array_operator_index_const) return false;
+	const auto pending_packed_int32_array_operator_index = (GDExtensionInterfacePackedInt32ArrayOperatorIndex)p_get_proc_address("packed_int32_array_operator_index");
+	if (!pending_packed_int32_array_operator_index) return false;
+	const auto pending_packed_int32_array_operator_index_const = (GDExtensionInterfacePackedInt32ArrayOperatorIndexConst)p_get_proc_address("packed_int32_array_operator_index_const");
+	if (!pending_packed_int32_array_operator_index_const) return false;
+	const auto pending_packed_int64_array_operator_index = (GDExtensionInterfacePackedInt64ArrayOperatorIndex)p_get_proc_address("packed_int64_array_operator_index");
+	if (!pending_packed_int64_array_operator_index) return false;
+	const auto pending_packed_int64_array_operator_index_const = (GDExtensionInterfacePackedInt64ArrayOperatorIndexConst)p_get_proc_address("packed_int64_array_operator_index_const");
+	if (!pending_packed_int64_array_operator_index_const) return false;
+	const auto pending_packed_string_array_operator_index = (GDExtensionInterfacePackedStringArrayOperatorIndex)p_get_proc_address("packed_string_array_operator_index");
+	if (!pending_packed_string_array_operator_index) return false;
+	const auto pending_packed_string_array_operator_index_const = (GDExtensionInterfacePackedStringArrayOperatorIndexConst)p_get_proc_address("packed_string_array_operator_index_const");
+	if (!pending_packed_string_array_operator_index_const) return false;
+	const auto pending_packed_vector2_array_operator_index = (GDExtensionInterfacePackedVector2ArrayOperatorIndex)p_get_proc_address("packed_vector2_array_operator_index");
+	if (!pending_packed_vector2_array_operator_index) return false;
+	const auto pending_packed_vector2_array_operator_index_const = (GDExtensionInterfacePackedVector2ArrayOperatorIndexConst)p_get_proc_address("packed_vector2_array_operator_index_const");
+	if (!pending_packed_vector2_array_operator_index_const) return false;
+	const auto pending_packed_vector3_array_operator_index = (GDExtensionInterfacePackedVector3ArrayOperatorIndex)p_get_proc_address("packed_vector3_array_operator_index");
+	if (!pending_packed_vector3_array_operator_index) return false;
+	const auto pending_packed_vector3_array_operator_index_const = (GDExtensionInterfacePackedVector3ArrayOperatorIndexConst)p_get_proc_address("packed_vector3_array_operator_index_const");
+	if (!pending_packed_vector3_array_operator_index_const) return false;
+	const auto pending_packed_color_array_operator_index = (GDExtensionInterfacePackedColorArrayOperatorIndex)p_get_proc_address("packed_color_array_operator_index");
+	if (!pending_packed_color_array_operator_index) return false;
+	const auto pending_packed_color_array_operator_index_const = (GDExtensionInterfacePackedColorArrayOperatorIndexConst)p_get_proc_address("packed_color_array_operator_index_const");
+	if (!pending_packed_color_array_operator_index_const) return false;
+	const auto pending_array_operator_index = (GDExtensionInterfaceArrayOperatorIndex)p_get_proc_address("array_operator_index");
+	if (!pending_array_operator_index) return false;
+	const auto pending_array_operator_index_const = (GDExtensionInterfaceArrayOperatorIndexConst)p_get_proc_address("array_operator_index_const");
+	if (!pending_array_operator_index_const) return false;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 5
+	const auto pending_array_ref = (GDExtensionInterfaceArrayRef)p_get_proc_address("array_ref");
+	if (!pending_array_ref) return false;
+#endif
+	const auto pending_array_set_typed = (GDExtensionInterfaceArraySetTyped)p_get_proc_address("array_set_typed");
+	if (!pending_array_set_typed) return false;
+	const auto pending_dictionary_operator_index = (GDExtensionInterfaceDictionaryOperatorIndex)p_get_proc_address("dictionary_operator_index");
+	if (!pending_dictionary_operator_index) return false;
+	const auto pending_dictionary_operator_index_const = (GDExtensionInterfaceDictionaryOperatorIndexConst)p_get_proc_address("dictionary_operator_index_const");
+	if (!pending_dictionary_operator_index_const) return false;
+	const auto pending_object_method_bind_call = (GDExtensionInterfaceObjectMethodBindCall)p_get_proc_address("object_method_bind_call");
+	if (!pending_object_method_bind_call) return false;
+	const auto pending_object_method_bind_ptrcall = (GDExtensionInterfaceObjectMethodBindPtrcall)p_get_proc_address("object_method_bind_ptrcall");
+	if (!pending_object_method_bind_ptrcall) return false;
+	const auto pending_object_destroy = (GDExtensionInterfaceObjectDestroy)p_get_proc_address("object_destroy");
+	if (!pending_object_destroy) return false;
+	const auto pending_global_get_singleton = (GDExtensionInterfaceGlobalGetSingleton)p_get_proc_address("global_get_singleton");
+	if (!pending_global_get_singleton) return false;
+	const auto pending_object_get_instance_binding = (GDExtensionInterfaceObjectGetInstanceBinding)p_get_proc_address("object_get_instance_binding");
+	if (!pending_object_get_instance_binding) return false;
+	const auto pending_object_set_instance_binding = (GDExtensionInterfaceObjectSetInstanceBinding)p_get_proc_address("object_set_instance_binding");
+	if (!pending_object_set_instance_binding) return false;
+	const auto pending_object_set_instance = (GDExtensionInterfaceObjectSetInstance)p_get_proc_address("object_set_instance");
+	if (!pending_object_set_instance) return false;
+	const auto pending_object_get_class_name = (GDExtensionInterfaceObjectGetClassName)p_get_proc_address("object_get_class_name");
+	if (!pending_object_get_class_name) return false;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 7
+	const auto pending_object_cast_to = (GDExtensionInterfaceObjectCastTo)p_get_proc_address("object_cast_to");
+	if (!pending_object_cast_to) return false;
+#endif
+	const auto pending_object_get_instance_from_id = (GDExtensionInterfaceObjectGetInstanceFromId)p_get_proc_address("object_get_instance_from_id");
+	if (!pending_object_get_instance_from_id) return false;
+	const auto pending_object_get_instance_id = (GDExtensionInterfaceObjectGetInstanceId)p_get_proc_address("object_get_instance_id");
+	if (!pending_object_get_instance_id) return false;
+	const auto pending_ref_get_object = (GDExtensionInterfaceRefGetObject)p_get_proc_address("ref_get_object");
+	if (!pending_ref_get_object) return false;
+	const auto pending_ref_set_object = (GDExtensionInterfaceRefSetObject)p_get_proc_address("ref_set_object");
+	if (!pending_ref_set_object) return false;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 2
+	const auto pending_script_instance_create = (GDExtensionInterfaceScriptInstanceCreate)p_get_proc_address("script_instance_create");
+	if (!pending_script_instance_create) return false;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 4
+	const auto pending_classdb_construct_object = (GDExtensionInterfaceClassdbConstructObject)p_get_proc_address("classdb_construct_object");
+	if (!pending_classdb_construct_object) return false;
+#endif
+	const auto pending_classdb_get_method_bind = (GDExtensionInterfaceClassdbGetMethodBind)p_get_proc_address("classdb_get_method_bind");
+	if (!pending_classdb_get_method_bind) return false;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 7
+	const auto pending_classdb_get_class_tag = (GDExtensionInterfaceClassdbGetClassTag)p_get_proc_address("classdb_get_class_tag");
+	if (!pending_classdb_get_class_tag) return false;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 2
+	const auto pending_classdb_register_extension_class = (GDExtensionInterfaceClassdbRegisterExtensionClass)p_get_proc_address("classdb_register_extension_class");
+	if (!pending_classdb_register_extension_class) return false;
+#endif
+	const auto pending_classdb_register_extension_class_method = (GDExtensionInterfaceClassdbRegisterExtensionClassMethod)p_get_proc_address("classdb_register_extension_class_method");
+	if (!pending_classdb_register_extension_class_method) return false;
+	const auto pending_classdb_register_extension_class_integer_constant = (GDExtensionInterfaceClassdbRegisterExtensionClassIntegerConstant)p_get_proc_address("classdb_register_extension_class_integer_constant");
+	if (!pending_classdb_register_extension_class_integer_constant) return false;
+	const auto pending_classdb_register_extension_class_property = (GDExtensionInterfaceClassdbRegisterExtensionClassProperty)p_get_proc_address("classdb_register_extension_class_property");
+	if (!pending_classdb_register_extension_class_property) return false;
+	const auto pending_classdb_register_extension_class_property_group = (GDExtensionInterfaceClassdbRegisterExtensionClassPropertyGroup)p_get_proc_address("classdb_register_extension_class_property_group");
+	if (!pending_classdb_register_extension_class_property_group) return false;
+	const auto pending_classdb_register_extension_class_property_subgroup = (GDExtensionInterfaceClassdbRegisterExtensionClassPropertySubgroup)p_get_proc_address("classdb_register_extension_class_property_subgroup");
+	if (!pending_classdb_register_extension_class_property_subgroup) return false;
+	const auto pending_classdb_register_extension_class_signal = (GDExtensionInterfaceClassdbRegisterExtensionClassSignal)p_get_proc_address("classdb_register_extension_class_signal");
+	if (!pending_classdb_register_extension_class_signal) return false;
+	const auto pending_classdb_unregister_extension_class = (GDExtensionInterfaceClassdbUnregisterExtensionClass)p_get_proc_address("classdb_unregister_extension_class");
+	if (!pending_classdb_unregister_extension_class) return false;
+	const auto pending_get_library_path = (GDExtensionInterfaceGetLibraryPath)p_get_proc_address("get_library_path");
+	if (!pending_get_library_path) return false;
+	const auto pending_editor_add_plugin = (GDExtensionInterfaceEditorAddPlugin)p_get_proc_address("editor_add_plugin");
+	if (!pending_editor_add_plugin) return false;
+	const auto pending_editor_remove_plugin = (GDExtensionInterfaceEditorRemovePlugin)p_get_proc_address("editor_remove_plugin");
+	if (!pending_editor_remove_plugin) return false;
+#endif // GODOT_VERSION_MINOR >= 1
+
+	// Godot 4.2 or newer.
+#if GODOT_VERSION_MINOR >= 2
+	const auto pending_string_resize = (GDExtensionInterfaceStringResize)p_get_proc_address("string_resize");
+	if (!pending_string_resize) return false;
+	const auto pending_string_name_new_with_latin1_chars = (GDExtensionInterfaceStringNameNewWithLatin1Chars)p_get_proc_address("string_name_new_with_latin1_chars");
+	if (!pending_string_name_new_with_latin1_chars) return false;
+	const auto pending_string_name_new_with_utf8_chars = (GDExtensionInterfaceStringNameNewWithUtf8Chars)p_get_proc_address("string_name_new_with_utf8_chars");
+	if (!pending_string_name_new_with_utf8_chars) return false;
+	const auto pending_string_name_new_with_utf8_chars_and_len = (GDExtensionInterfaceStringNameNewWithUtf8CharsAndLen)p_get_proc_address("string_name_new_with_utf8_chars_and_len");
+	if (!pending_string_name_new_with_utf8_chars_and_len) return false;
+	const auto pending_object_free_instance_binding = (GDExtensionInterfaceObjectFreeInstanceBinding)p_get_proc_address("object_free_instance_binding");
+	if (!pending_object_free_instance_binding) return false;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+	const auto pending_script_instance_create2 = (GDExtensionInterfaceScriptInstanceCreate2)p_get_proc_address("script_instance_create2");
+	if (!pending_script_instance_create2) return false;
+#endif
+	const auto pending_placeholder_script_instance_create = (GDExtensionInterfacePlaceholderScriptInstanceCreate)p_get_proc_address("placeholder_script_instance_create");
+	if (!pending_placeholder_script_instance_create) return false;
+	const auto pending_placeholder_script_instance_update = (GDExtensionInterfacePlaceholderScriptInstanceUpdate)p_get_proc_address("placeholder_script_instance_update");
+	if (!pending_placeholder_script_instance_update) return false;
+	const auto pending_object_get_script_instance = (GDExtensionInterfaceObjectGetScriptInstance)p_get_proc_address("object_get_script_instance");
+	if (!pending_object_get_script_instance) return false;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+	const auto pending_callable_custom_create = (GDExtensionInterfaceCallableCustomCreate)p_get_proc_address("callable_custom_create");
+	if (!pending_callable_custom_create) return false;
+#endif
+	const auto pending_callable_custom_get_userdata = (GDExtensionInterfaceCallableCustomGetUserdata)p_get_proc_address("callable_custom_get_userdata");
+	if (!pending_callable_custom_get_userdata) return false;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+	const auto pending_classdb_register_extension_class2 = (GDExtensionInterfaceClassdbRegisterExtensionClass2)p_get_proc_address("classdb_register_extension_class2");
+	if (!pending_classdb_register_extension_class2) return false;
+#endif
+	const auto pending_classdb_register_extension_class_property_indexed = (GDExtensionInterfaceClassdbRegisterExtensionClassPropertyIndexed)p_get_proc_address("classdb_register_extension_class_property_indexed");
+	if (!pending_classdb_register_extension_class_property_indexed) return false;
+#endif // GODOT_VERSION_MINOR >= 2
+
+	// Godot 4.3 or newer.
+#if GODOT_VERSION_MINOR >= 3
+	const auto pending_string_new_with_utf8_chars_and_len2 = (GDExtensionInterfaceStringNewWithUtf8CharsAndLen2)p_get_proc_address("string_new_with_utf8_chars_and_len2");
+	if (!pending_string_new_with_utf8_chars_and_len2) return false;
+	const auto pending_string_new_with_utf16_chars_and_len2 = (GDExtensionInterfaceStringNewWithUtf16CharsAndLen2)p_get_proc_address("string_new_with_utf16_chars_and_len2");
+	if (!pending_string_new_with_utf16_chars_and_len2) return false;
+	const auto pending_image_ptrw = (GDExtensionInterfaceImagePtrw)p_get_proc_address("image_ptrw");
+	if (!pending_image_ptrw) return false;
+	const auto pending_image_ptr = (GDExtensionInterfaceImagePtr)p_get_proc_address("image_ptr");
+	if (!pending_image_ptr) return false;
+	const auto pending_packed_vector4_array_operator_index = (GDExtensionInterfacePackedVector4ArrayOperatorIndex)p_get_proc_address("packed_vector4_array_operator_index");
+	if (!pending_packed_vector4_array_operator_index) return false;
+	const auto pending_packed_vector4_array_operator_index_const = (GDExtensionInterfacePackedVector4ArrayOperatorIndexConst)p_get_proc_address("packed_vector4_array_operator_index_const");
+	if (!pending_packed_vector4_array_operator_index_const) return false;
+	const auto pending_object_has_script_method = (GDExtensionInterfaceObjectHasScriptMethod)p_get_proc_address("object_has_script_method");
+	if (!pending_object_has_script_method) return false;
+	const auto pending_object_call_script_method = (GDExtensionInterfaceObjectCallScriptMethod)p_get_proc_address("object_call_script_method");
+	if (!pending_object_call_script_method) return false;
+	const auto pending_script_instance_create3 = (GDExtensionInterfaceScriptInstanceCreate3)p_get_proc_address("script_instance_create3");
+	if (!pending_script_instance_create3) return false;
+	const auto pending_callable_custom_create2 = (GDExtensionInterfaceCallableCustomCreate2)p_get_proc_address("callable_custom_create2");
+	if (!pending_callable_custom_create2) return false;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 4
+	const auto pending_classdb_register_extension_class3 = (GDExtensionInterfaceClassdbRegisterExtensionClass3)p_get_proc_address("classdb_register_extension_class3");
+	if (!pending_classdb_register_extension_class3) return false;
+#endif
+	const auto pending_classdb_register_extension_class_virtual_method = (GDExtensionInterfaceClassdbRegisterExtensionClassVirtualMethod)p_get_proc_address("classdb_register_extension_class_virtual_method");
+	if (!pending_classdb_register_extension_class_virtual_method) return false;
+	const auto pending_editor_help_load_xml_from_utf8_chars = (GDExtensionInterfaceEditorHelpLoadXmlFromUtf8Chars)p_get_proc_address("editor_help_load_xml_from_utf8_chars");
+	if (!pending_editor_help_load_xml_from_utf8_chars) return false;
+	const auto pending_editor_help_load_xml_from_utf8_chars_and_len = (GDExtensionInterfaceEditorHelpLoadXmlFromUtf8CharsAndLen)p_get_proc_address("editor_help_load_xml_from_utf8_chars_and_len");
+	if (!pending_editor_help_load_xml_from_utf8_chars_and_len) return false;
+#endif // GODOT_VERSION_MINOR >= 3
+
+	// Godot 4.4 or newer.
+#if GODOT_VERSION_MINOR >= 4
+	const auto pending_variant_get_object_instance_id = (GDExtensionInterfaceVariantGetObjectInstanceId)p_get_proc_address("variant_get_object_instance_id");
+	if (!pending_variant_get_object_instance_id) return false;
+	const auto pending_variant_get_ptr_internal_getter = (GDExtensionInterfaceVariantGetPtrInternalGetter)p_get_proc_address("variant_get_ptr_internal_getter");
+	if (!pending_variant_get_ptr_internal_getter) return false;
+	const auto pending_dictionary_set_typed = (GDExtensionInterfaceDictionarySetTyped)p_get_proc_address("dictionary_set_typed");
+	if (!pending_dictionary_set_typed) return false;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 7
+	const auto pending_classdb_construct_object2 = (GDExtensionInterfaceClassdbConstructObject2)p_get_proc_address("classdb_construct_object2");
+	if (!pending_classdb_construct_object2) return false;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 5
+	const auto pending_classdb_register_extension_class4 = (GDExtensionInterfaceClassdbRegisterExtensionClass4)p_get_proc_address("classdb_register_extension_class4");
+	if (!pending_classdb_register_extension_class4) return false;
+#endif
+#endif // GODOT_VERSION_MINOR >= 4
+
+	// Godot 4.5 or newer.
+#if GODOT_VERSION_MINOR >= 5
+	const auto pending_get_godot_version2 = (GDExtensionInterfaceGetGodotVersion2)p_get_proc_address("get_godot_version2");
+	if (!pending_get_godot_version2) return false;
+	const auto pending_object_set_script_instance = (GDExtensionInterfaceObjectSetScriptInstance)p_get_proc_address("object_set_script_instance");
+	if (!pending_object_set_script_instance) return false;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 7
+	const auto pending_classdb_register_extension_class5 = (GDExtensionInterfaceClassdbRegisterExtensionClass5)p_get_proc_address("classdb_register_extension_class5");
+	if (!pending_classdb_register_extension_class5) return false;
+#endif
+	const auto pending_editor_register_get_classes_used_callback = (GDExtensionInterfaceEditorRegisterGetClassesUsedCallback)p_get_proc_address("editor_register_get_classes_used_callback");
+	if (!pending_editor_register_get_classes_used_callback) return false;
+	const auto pending_register_main_loop_callbacks = (GDExtensionInterfaceRegisterMainLoopCallbacks)p_get_proc_address("register_main_loop_callbacks");
+	if (!pending_register_main_loop_callbacks) return false;
+#endif // GODOT_VERSION_MINOR >= 5
+
+	// Godot 4.6 or newer.
+#if GODOT_VERSION_MINOR >= 6
+	const auto pending_mem_alloc2 = (GDExtensionInterfaceMemAlloc2)p_get_proc_address("mem_alloc2");
+	if (!pending_mem_alloc2) return false;
+	const auto pending_mem_realloc2 = (GDExtensionInterfaceMemRealloc2)p_get_proc_address("mem_realloc2");
+	if (!pending_mem_realloc2) return false;
+	const auto pending_mem_free2 = (GDExtensionInterfaceMemFree2)p_get_proc_address("mem_free2");
+	if (!pending_mem_free2) return false;
+#endif // GODOT_VERSION_MINOR >= 6
+
+	// Godot 4.7 or newer.
+#if GODOT_VERSION_MINOR >= 7
+	const auto pending_variant_get_type_by_name = (GDExtensionInterfaceVariantGetTypeByName)p_get_proc_address("variant_get_type_by_name");
+	if (!pending_variant_get_type_by_name) return false;
+	const auto pending_classdb_construct_object3 = (GDExtensionInterfaceClassdbConstructObject3)p_get_proc_address("classdb_construct_object3");
+	if (!pending_classdb_construct_object3) return false;
+	const auto pending_classdb_register_extension_class6 = (GDExtensionInterfaceClassdbRegisterExtensionClass6)p_get_proc_address("classdb_register_extension_class6");
+	if (!pending_classdb_register_extension_class6) return false;
+	const auto pending_device_exit_bootstrap_library_v1 = (GDExtensionInterfaceDeviceExitBootstrapLibraryV1)p_get_proc_address("device_exit_bootstrap_library_v1");
+	if (!pending_device_exit_bootstrap_library_v1) return false;
+	const auto pending_device_exit_retain_library_view_v1 = (GDExtensionInterfaceDeviceExitRetainLibraryViewV1)p_get_proc_address("device_exit_retain_library_view_v1");
+	if (!pending_device_exit_retain_library_view_v1) return false;
+	const auto pending_device_exit_copy_library_snapshot_v1 = (GDExtensionInterfaceDeviceExitCopyLibrarySnapshotV1)p_get_proc_address("device_exit_copy_library_snapshot_v1");
+	if (!pending_device_exit_copy_library_snapshot_v1) return false;
+	const auto pending_device_exit_release_library_view_v1 = (GDExtensionInterfaceDeviceExitReleaseLibraryViewV1)p_get_proc_address("device_exit_release_library_view_v1");
+	if (!pending_device_exit_release_library_view_v1) return false;
+	const auto pending_device_exit_clone_library_view_v1 = (GDExtensionInterfaceDeviceExitCloneLibraryViewV1)p_get_proc_address("device_exit_clone_library_view_v1");
+	if (!pending_device_exit_clone_library_view_v1) return false;
+#endif // GODOT_VERSION_MINOR >= 7
+
+	// Godot 4.8 or newer.
+#if GODOT_VERSION_MINOR >= 8
+#endif // GODOT_VERSION_MINOR >= 8
+
+#if GODOT_VERSION_MINOR >= 1
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 5
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 6
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 6
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 6
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 5
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 7
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 2
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 4
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 7
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 2
+#endif
+#endif
+#if GODOT_VERSION_MINOR >= 2
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+#endif
+#endif
+#if GODOT_VERSION_MINOR >= 3
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 4
+#endif
+#endif
+#if GODOT_VERSION_MINOR >= 4
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 7
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 5
+#endif
+#endif
+#if GODOT_VERSION_MINOR >= 5
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 7
+#endif
+#endif
+#if GODOT_VERSION_MINOR >= 6
+#endif
+#if GODOT_VERSION_MINOR >= 7
+#endif
+#if GODOT_VERSION_MINOR >= 8
+#endif
+#if GODOT_VERSION_MINOR >= 1
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 5
+	::godot::gdextension_interface::get_godot_version = pending_get_godot_version;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 6
+	::godot::gdextension_interface::mem_alloc = pending_mem_alloc;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 6
+	::godot::gdextension_interface::mem_realloc = pending_mem_realloc;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 6
+	::godot::gdextension_interface::mem_free = pending_mem_free;
+#endif
+	::godot::gdextension_interface::print_error_with_message = pending_print_error_with_message;
+	::godot::gdextension_interface::print_warning = pending_print_warning;
+	::godot::gdextension_interface::print_warning_with_message = pending_print_warning_with_message;
+	::godot::gdextension_interface::print_script_error = pending_print_script_error;
+	::godot::gdextension_interface::print_script_error_with_message = pending_print_script_error_with_message;
+	::godot::gdextension_interface::get_native_struct_size = pending_get_native_struct_size;
+	::godot::gdextension_interface::variant_new_copy = pending_variant_new_copy;
+	::godot::gdextension_interface::variant_new_nil = pending_variant_new_nil;
+	::godot::gdextension_interface::variant_destroy = pending_variant_destroy;
+	::godot::gdextension_interface::variant_call = pending_variant_call;
+	::godot::gdextension_interface::variant_call_static = pending_variant_call_static;
+	::godot::gdextension_interface::variant_evaluate = pending_variant_evaluate;
+	::godot::gdextension_interface::variant_set = pending_variant_set;
+	::godot::gdextension_interface::variant_set_named = pending_variant_set_named;
+	::godot::gdextension_interface::variant_set_keyed = pending_variant_set_keyed;
+	::godot::gdextension_interface::variant_set_indexed = pending_variant_set_indexed;
+	::godot::gdextension_interface::variant_get = pending_variant_get;
+	::godot::gdextension_interface::variant_get_named = pending_variant_get_named;
+	::godot::gdextension_interface::variant_get_keyed = pending_variant_get_keyed;
+	::godot::gdextension_interface::variant_get_indexed = pending_variant_get_indexed;
+	::godot::gdextension_interface::variant_iter_init = pending_variant_iter_init;
+	::godot::gdextension_interface::variant_iter_next = pending_variant_iter_next;
+	::godot::gdextension_interface::variant_iter_get = pending_variant_iter_get;
+	::godot::gdextension_interface::variant_hash = pending_variant_hash;
+	::godot::gdextension_interface::variant_recursive_hash = pending_variant_recursive_hash;
+	::godot::gdextension_interface::variant_hash_compare = pending_variant_hash_compare;
+	::godot::gdextension_interface::variant_booleanize = pending_variant_booleanize;
+	::godot::gdextension_interface::variant_duplicate = pending_variant_duplicate;
+	::godot::gdextension_interface::variant_stringify = pending_variant_stringify;
+	::godot::gdextension_interface::variant_get_type = pending_variant_get_type;
+	::godot::gdextension_interface::variant_has_method = pending_variant_has_method;
+	::godot::gdextension_interface::variant_has_member = pending_variant_has_member;
+	::godot::gdextension_interface::variant_has_key = pending_variant_has_key;
+	::godot::gdextension_interface::variant_get_type_name = pending_variant_get_type_name;
+	::godot::gdextension_interface::variant_can_convert = pending_variant_can_convert;
+	::godot::gdextension_interface::variant_can_convert_strict = pending_variant_can_convert_strict;
+	::godot::gdextension_interface::get_variant_from_type_constructor = pending_get_variant_from_type_constructor;
+	::godot::gdextension_interface::get_variant_to_type_constructor = pending_get_variant_to_type_constructor;
+	::godot::gdextension_interface::variant_get_ptr_operator_evaluator = pending_variant_get_ptr_operator_evaluator;
+	::godot::gdextension_interface::variant_get_ptr_builtin_method = pending_variant_get_ptr_builtin_method;
+	::godot::gdextension_interface::variant_get_ptr_constructor = pending_variant_get_ptr_constructor;
+	::godot::gdextension_interface::variant_get_ptr_destructor = pending_variant_get_ptr_destructor;
+	::godot::gdextension_interface::variant_construct = pending_variant_construct;
+	::godot::gdextension_interface::variant_get_ptr_setter = pending_variant_get_ptr_setter;
+	::godot::gdextension_interface::variant_get_ptr_getter = pending_variant_get_ptr_getter;
+	::godot::gdextension_interface::variant_get_ptr_indexed_setter = pending_variant_get_ptr_indexed_setter;
+	::godot::gdextension_interface::variant_get_ptr_indexed_getter = pending_variant_get_ptr_indexed_getter;
+	::godot::gdextension_interface::variant_get_ptr_keyed_setter = pending_variant_get_ptr_keyed_setter;
+	::godot::gdextension_interface::variant_get_ptr_keyed_getter = pending_variant_get_ptr_keyed_getter;
+	::godot::gdextension_interface::variant_get_ptr_keyed_checker = pending_variant_get_ptr_keyed_checker;
+	::godot::gdextension_interface::variant_get_constant_value = pending_variant_get_constant_value;
+	::godot::gdextension_interface::variant_get_ptr_utility_function = pending_variant_get_ptr_utility_function;
+	::godot::gdextension_interface::string_new_with_latin1_chars = pending_string_new_with_latin1_chars;
+	::godot::gdextension_interface::string_new_with_utf8_chars = pending_string_new_with_utf8_chars;
+	::godot::gdextension_interface::string_new_with_utf16_chars = pending_string_new_with_utf16_chars;
+	::godot::gdextension_interface::string_new_with_utf32_chars = pending_string_new_with_utf32_chars;
+	::godot::gdextension_interface::string_new_with_wide_chars = pending_string_new_with_wide_chars;
+	::godot::gdextension_interface::string_new_with_latin1_chars_and_len = pending_string_new_with_latin1_chars_and_len;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+	::godot::gdextension_interface::string_new_with_utf8_chars_and_len = pending_string_new_with_utf8_chars_and_len;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+	::godot::gdextension_interface::string_new_with_utf16_chars_and_len = pending_string_new_with_utf16_chars_and_len;
+#endif
+	::godot::gdextension_interface::string_new_with_utf32_chars_and_len = pending_string_new_with_utf32_chars_and_len;
+	::godot::gdextension_interface::string_new_with_wide_chars_and_len = pending_string_new_with_wide_chars_and_len;
+	::godot::gdextension_interface::string_to_latin1_chars = pending_string_to_latin1_chars;
+	::godot::gdextension_interface::string_to_utf8_chars = pending_string_to_utf8_chars;
+	::godot::gdextension_interface::string_to_utf16_chars = pending_string_to_utf16_chars;
+	::godot::gdextension_interface::string_to_utf32_chars = pending_string_to_utf32_chars;
+	::godot::gdextension_interface::string_to_wide_chars = pending_string_to_wide_chars;
+	::godot::gdextension_interface::string_operator_index = pending_string_operator_index;
+	::godot::gdextension_interface::string_operator_index_const = pending_string_operator_index_const;
+	::godot::gdextension_interface::string_operator_plus_eq_string = pending_string_operator_plus_eq_string;
+	::godot::gdextension_interface::string_operator_plus_eq_char = pending_string_operator_plus_eq_char;
+	::godot::gdextension_interface::string_operator_plus_eq_cstr = pending_string_operator_plus_eq_cstr;
+	::godot::gdextension_interface::string_operator_plus_eq_wcstr = pending_string_operator_plus_eq_wcstr;
+	::godot::gdextension_interface::string_operator_plus_eq_c32str = pending_string_operator_plus_eq_c32str;
+	::godot::gdextension_interface::xml_parser_open_buffer = pending_xml_parser_open_buffer;
+	::godot::gdextension_interface::file_access_store_buffer = pending_file_access_store_buffer;
+	::godot::gdextension_interface::file_access_get_buffer = pending_file_access_get_buffer;
+	::godot::gdextension_interface::worker_thread_pool_add_native_group_task = pending_worker_thread_pool_add_native_group_task;
+	::godot::gdextension_interface::worker_thread_pool_add_native_task = pending_worker_thread_pool_add_native_task;
+	::godot::gdextension_interface::packed_byte_array_operator_index = pending_packed_byte_array_operator_index;
+	::godot::gdextension_interface::packed_byte_array_operator_index_const = pending_packed_byte_array_operator_index_const;
+	::godot::gdextension_interface::packed_float32_array_operator_index = pending_packed_float32_array_operator_index;
+	::godot::gdextension_interface::packed_float32_array_operator_index_const = pending_packed_float32_array_operator_index_const;
+	::godot::gdextension_interface::packed_float64_array_operator_index = pending_packed_float64_array_operator_index;
+	::godot::gdextension_interface::packed_float64_array_operator_index_const = pending_packed_float64_array_operator_index_const;
+	::godot::gdextension_interface::packed_int32_array_operator_index = pending_packed_int32_array_operator_index;
+	::godot::gdextension_interface::packed_int32_array_operator_index_const = pending_packed_int32_array_operator_index_const;
+	::godot::gdextension_interface::packed_int64_array_operator_index = pending_packed_int64_array_operator_index;
+	::godot::gdextension_interface::packed_int64_array_operator_index_const = pending_packed_int64_array_operator_index_const;
+	::godot::gdextension_interface::packed_string_array_operator_index = pending_packed_string_array_operator_index;
+	::godot::gdextension_interface::packed_string_array_operator_index_const = pending_packed_string_array_operator_index_const;
+	::godot::gdextension_interface::packed_vector2_array_operator_index = pending_packed_vector2_array_operator_index;
+	::godot::gdextension_interface::packed_vector2_array_operator_index_const = pending_packed_vector2_array_operator_index_const;
+	::godot::gdextension_interface::packed_vector3_array_operator_index = pending_packed_vector3_array_operator_index;
+	::godot::gdextension_interface::packed_vector3_array_operator_index_const = pending_packed_vector3_array_operator_index_const;
+	::godot::gdextension_interface::packed_color_array_operator_index = pending_packed_color_array_operator_index;
+	::godot::gdextension_interface::packed_color_array_operator_index_const = pending_packed_color_array_operator_index_const;
+	::godot::gdextension_interface::array_operator_index = pending_array_operator_index;
+	::godot::gdextension_interface::array_operator_index_const = pending_array_operator_index_const;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 5
+	::godot::gdextension_interface::array_ref = pending_array_ref;
+#endif
+	::godot::gdextension_interface::array_set_typed = pending_array_set_typed;
+	::godot::gdextension_interface::dictionary_operator_index = pending_dictionary_operator_index;
+	::godot::gdextension_interface::dictionary_operator_index_const = pending_dictionary_operator_index_const;
+	::godot::gdextension_interface::object_method_bind_call = pending_object_method_bind_call;
+	::godot::gdextension_interface::object_method_bind_ptrcall = pending_object_method_bind_ptrcall;
+	::godot::gdextension_interface::object_destroy = pending_object_destroy;
+	::godot::gdextension_interface::global_get_singleton = pending_global_get_singleton;
+	::godot::gdextension_interface::object_get_instance_binding = pending_object_get_instance_binding;
+	::godot::gdextension_interface::object_set_instance_binding = pending_object_set_instance_binding;
+	::godot::gdextension_interface::object_set_instance = pending_object_set_instance;
+	::godot::gdextension_interface::object_get_class_name = pending_object_get_class_name;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 7
+	::godot::gdextension_interface::object_cast_to = pending_object_cast_to;
+#endif
+	::godot::gdextension_interface::object_get_instance_from_id = pending_object_get_instance_from_id;
+	::godot::gdextension_interface::object_get_instance_id = pending_object_get_instance_id;
+	::godot::gdextension_interface::ref_get_object = pending_ref_get_object;
+	::godot::gdextension_interface::ref_set_object = pending_ref_set_object;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 2
+	::godot::gdextension_interface::script_instance_create = pending_script_instance_create;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 4
+	::godot::gdextension_interface::classdb_construct_object = pending_classdb_construct_object;
+#endif
+	::godot::gdextension_interface::classdb_get_method_bind = pending_classdb_get_method_bind;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 7
+	::godot::gdextension_interface::classdb_get_class_tag = pending_classdb_get_class_tag;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 2
+	::godot::gdextension_interface::classdb_register_extension_class = pending_classdb_register_extension_class;
+#endif
+	::godot::gdextension_interface::classdb_register_extension_class_method = pending_classdb_register_extension_class_method;
+	::godot::gdextension_interface::classdb_register_extension_class_integer_constant = pending_classdb_register_extension_class_integer_constant;
+	::godot::gdextension_interface::classdb_register_extension_class_property = pending_classdb_register_extension_class_property;
+	::godot::gdextension_interface::classdb_register_extension_class_property_group = pending_classdb_register_extension_class_property_group;
+	::godot::gdextension_interface::classdb_register_extension_class_property_subgroup = pending_classdb_register_extension_class_property_subgroup;
+	::godot::gdextension_interface::classdb_register_extension_class_signal = pending_classdb_register_extension_class_signal;
+	::godot::gdextension_interface::classdb_unregister_extension_class = pending_classdb_unregister_extension_class;
+	::godot::gdextension_interface::get_library_path = pending_get_library_path;
+	::godot::gdextension_interface::editor_add_plugin = pending_editor_add_plugin;
+	::godot::gdextension_interface::editor_remove_plugin = pending_editor_remove_plugin;
+#endif
+#if GODOT_VERSION_MINOR >= 2
+	::godot::gdextension_interface::string_resize = pending_string_resize;
+	::godot::gdextension_interface::string_name_new_with_latin1_chars = pending_string_name_new_with_latin1_chars;
+	::godot::gdextension_interface::string_name_new_with_utf8_chars = pending_string_name_new_with_utf8_chars;
+	::godot::gdextension_interface::string_name_new_with_utf8_chars_and_len = pending_string_name_new_with_utf8_chars_and_len;
+	::godot::gdextension_interface::object_free_instance_binding = pending_object_free_instance_binding;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+	::godot::gdextension_interface::script_instance_create2 = pending_script_instance_create2;
+#endif
+	::godot::gdextension_interface::placeholder_script_instance_create = pending_placeholder_script_instance_create;
+	::godot::gdextension_interface::placeholder_script_instance_update = pending_placeholder_script_instance_update;
+	::godot::gdextension_interface::object_get_script_instance = pending_object_get_script_instance;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+	::godot::gdextension_interface::callable_custom_create = pending_callable_custom_create;
+#endif
+	::godot::gdextension_interface::callable_custom_get_userdata = pending_callable_custom_get_userdata;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 3
+	::godot::gdextension_interface::classdb_register_extension_class2 = pending_classdb_register_extension_class2;
+#endif
+	::godot::gdextension_interface::classdb_register_extension_class_property_indexed = pending_classdb_register_extension_class_property_indexed;
+#endif
+#if GODOT_VERSION_MINOR >= 3
+	::godot::gdextension_interface::string_new_with_utf8_chars_and_len2 = pending_string_new_with_utf8_chars_and_len2;
+	::godot::gdextension_interface::string_new_with_utf16_chars_and_len2 = pending_string_new_with_utf16_chars_and_len2;
+	::godot::gdextension_interface::image_ptrw = pending_image_ptrw;
+	::godot::gdextension_interface::image_ptr = pending_image_ptr;
+	::godot::gdextension_interface::packed_vector4_array_operator_index = pending_packed_vector4_array_operator_index;
+	::godot::gdextension_interface::packed_vector4_array_operator_index_const = pending_packed_vector4_array_operator_index_const;
+	::godot::gdextension_interface::object_has_script_method = pending_object_has_script_method;
+	::godot::gdextension_interface::object_call_script_method = pending_object_call_script_method;
+	::godot::gdextension_interface::script_instance_create3 = pending_script_instance_create3;
+	::godot::gdextension_interface::callable_custom_create2 = pending_callable_custom_create2;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 4
+	::godot::gdextension_interface::classdb_register_extension_class3 = pending_classdb_register_extension_class3;
+#endif
+	::godot::gdextension_interface::classdb_register_extension_class_virtual_method = pending_classdb_register_extension_class_virtual_method;
+	::godot::gdextension_interface::editor_help_load_xml_from_utf8_chars = pending_editor_help_load_xml_from_utf8_chars;
+	::godot::gdextension_interface::editor_help_load_xml_from_utf8_chars_and_len = pending_editor_help_load_xml_from_utf8_chars_and_len;
+#endif
+#if GODOT_VERSION_MINOR >= 4
+	::godot::gdextension_interface::variant_get_object_instance_id = pending_variant_get_object_instance_id;
+	::godot::gdextension_interface::variant_get_ptr_internal_getter = pending_variant_get_ptr_internal_getter;
+	::godot::gdextension_interface::dictionary_set_typed = pending_dictionary_set_typed;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 7
+	::godot::gdextension_interface::classdb_construct_object2 = pending_classdb_construct_object2;
+#endif
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 5
+	::godot::gdextension_interface::classdb_register_extension_class4 = pending_classdb_register_extension_class4;
+#endif
+#endif
+#if GODOT_VERSION_MINOR >= 5
+	::godot::gdextension_interface::get_godot_version2 = pending_get_godot_version2;
+	::godot::gdextension_interface::object_set_script_instance = pending_object_set_script_instance;
+#if !defined(DISABLE_DEPRECATED) || GODOT_VERSION_MINOR < 7
+	::godot::gdextension_interface::classdb_register_extension_class5 = pending_classdb_register_extension_class5;
+#endif
+	::godot::gdextension_interface::editor_register_get_classes_used_callback = pending_editor_register_get_classes_used_callback;
+	::godot::gdextension_interface::register_main_loop_callbacks = pending_register_main_loop_callbacks;
+#endif
+#if GODOT_VERSION_MINOR >= 6
+	::godot::gdextension_interface::mem_alloc2 = pending_mem_alloc2;
+	::godot::gdextension_interface::mem_realloc2 = pending_mem_realloc2;
+	::godot::gdextension_interface::mem_free2 = pending_mem_free2;
+#endif
+#if GODOT_VERSION_MINOR >= 7
+	::godot::gdextension_interface::variant_get_type_by_name = pending_variant_get_type_by_name;
+	::godot::gdextension_interface::classdb_construct_object3 = pending_classdb_construct_object3;
+	::godot::gdextension_interface::classdb_register_extension_class6 = pending_classdb_register_extension_class6;
+	::godot::gdextension_interface::device_exit_bootstrap_library_v1 = pending_device_exit_bootstrap_library_v1;
+	::godot::gdextension_interface::device_exit_retain_library_view_v1 = pending_device_exit_retain_library_view_v1;
+	::godot::gdextension_interface::device_exit_copy_library_snapshot_v1 = pending_device_exit_copy_library_snapshot_v1;
+	::godot::gdextension_interface::device_exit_release_library_view_v1 = pending_device_exit_release_library_view_v1;
+	::godot::gdextension_interface::device_exit_clone_library_view_v1 = pending_device_exit_clone_library_view_v1;
+#endif
+#if GODOT_VERSION_MINOR >= 8
+#endif
+	return true;
+}
+
+} // namespace internal
+
+} // namespace godot

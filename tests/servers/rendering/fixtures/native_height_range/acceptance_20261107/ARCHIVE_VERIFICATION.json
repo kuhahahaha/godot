@@ -1,0 +1,69 @@
+{
+  "status": "PASS_ARCHIVE_STANDALONE_D32_CLEAR",
+  "payload_files": 148,
+  "copied_original_entries": 143,
+  "source_snapshots": 23,
+  "cpu": [
+    {
+      "suite": "THIRD_CPU",
+      "cases": 11,
+      "assertions": 344,
+      "skipped": 2272,
+      "host_sha256": "dc470ec119af6c28eaaf7a36a554fd5d218d33f9d8a159e9376e2b8015c22e83"
+    },
+    {
+      "suite": "FINAL_FOCUSED",
+      "cases": 60,
+      "assertions": 6902,
+      "skipped": 2223,
+      "host_sha256": "1e4b08bf515d6c40e3b8a106c3d535bb8564e467c99a9a4bbdf2d3a5c06f739b"
+    },
+    {
+      "suite": "FINAL_FULL_CPU",
+      "cases": 2280,
+      "assertions": 585821,
+      "skipped": 3,
+      "host_sha256": "1e4b08bf515d6c40e3b8a106c3d535bb8564e467c99a9a4bbdf2d3a5c06f739b"
+    }
+  ],
+  "final_height_gpu": {
+    "host_sha256": "1e4b08bf515d6c40e3b8a106c3d535bb8564e467c99a9a4bbdf2d3a5c06f739b",
+    "cases": [
+      {
+        "case": 0,
+        "checks": 34,
+        "callbacks": 1,
+        "draws_before_complete_return": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "case": 1,
+        "checks": 34,
+        "callbacks": 4,
+        "draws_before_complete_return": [
+          0,
+          1,
+          2
+        ]
+      }
+    ]
+  },
+  "final_quote_gpu_checks": [
+    29,
+    29
+  ],
+  "controlled_red_assertion_failures": {
+    "slot_buffer": 5,
+    "ordinary_issue": 7,
+    "bounded_issue": 7,
+    "ordinary_retain": 1,
+    "bounded_retain": 1
+  },
+  "hooks_passed": 10,
+  "historical_failed_fixture_runs_preserved": true,
+  "production_scene_public_abi_worker_hidden_height_draw_reader_refund_complete": false,
+  "actual_finalize_lastref_child_run": false
+}

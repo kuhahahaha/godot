@@ -1,0 +1,208 @@
+{
+  "schema": 1,
+  "status": "red_green_verified_by_root",
+  "source_baseline_revision": "67be378a87798185a0ff209a5c8f50308c303601",
+  "scope": "ParticleProcessMaterial emission point/normal/color texture changed synchronization only",
+  "build_command": "scons -Q platform=macos target=editor tests=yes debug_symbols=no module_particles_runtime_tests_enabled=yes -j3",
+  "run_command": "bin/godot.macos.editor.arm64 --display-driver macos --rendering-method mobile --rendering-driver metal --audio-driver Dummy --path tests/scene/fixtures/particle_emission_texture_changed --script run.gd",
+  "runtime": {
+    "driver": "Metal 4.0",
+    "renderer": "Forward Mobile",
+    "device": "Apple M3 Pro (Apple9)"
+  },
+  "results": {
+    "red": {
+      "checks": 185,
+      "failures": [
+        "first shared resource A to B all slots: latest emission_point_texture RID",
+        "first shared resource A to B all slots: latest emission_normal_texture RID",
+        "first shared resource A to B all slots: latest emission_color_texture RID",
+        "second shared resource A to B all slots: latest emission_point_texture RID",
+        "second shared resource A to B all slots: latest emission_normal_texture RID",
+        "second shared resource A to B all slots: latest emission_color_texture RID",
+        "Same-ref setters preserve one subscription per slot",
+        "first changed after same-ref setters: latest emission_point_texture RID",
+        "first changed after same-ref setters: latest emission_normal_texture RID",
+        "first changed after same-ref setters: latest emission_color_texture RID",
+        "first shared resource now null RID: latest emission_point_texture RID",
+        "first shared resource now null RID: latest emission_normal_texture RID",
+        "first shared resource now null RID: latest emission_color_texture RID",
+        "second shared resource now null RID: latest emission_point_texture RID",
+        "second shared resource now null RID: latest emission_normal_texture RID",
+        "second shared resource now null RID: latest emission_color_texture RID",
+        "first render-thread signal uses current A: latest emission_point_texture RID",
+        "first render-thread signal uses current A: latest emission_normal_texture RID",
+        "first render-thread signal uses current A: latest emission_color_texture RID",
+        "emission_point_texture: shared resource retains other two slot subscriptions",
+        "emission_point_texture: replacement has one subscription",
+        "emission_point_texture replacement retains shared other slots: latest emission_normal_texture RID",
+        "emission_point_texture replacement retains shared other slots: latest emission_color_texture RID",
+        "emission_point_texture queued replacement notification reads current shared B: latest emission_point_texture RID",
+        "emission_point_texture queued replacement notification reads current shared B: latest emission_normal_texture RID",
+        "emission_point_texture queued replacement notification reads current shared B: latest emission_color_texture RID",
+        "emission_point_texture: null detaches exactly one shared subscription",
+        "emission_point_texture detached slot remains null and other slots update: latest emission_normal_texture RID",
+        "emission_point_texture detached slot remains null and other slots update: latest emission_color_texture RID",
+        "emission_normal_texture: shared resource retains other two slot subscriptions",
+        "emission_normal_texture: replacement has one subscription",
+        "emission_normal_texture shared remaining slots still update: latest emission_point_texture RID",
+        "emission_normal_texture shared remaining slots still update: latest emission_color_texture RID",
+        "emission_normal_texture queued replacement notification reads current shared B: latest emission_normal_texture RID",
+        "emission_normal_texture queued shared notification reads current null: latest emission_point_texture RID",
+        "emission_normal_texture queued shared notification reads current null: latest emission_color_texture RID",
+        "emission_normal_texture: null detaches exactly one shared subscription",
+        "emission_color_texture: shared resource retains other two slot subscriptions",
+        "emission_color_texture: replacement has one subscription",
+        "emission_color_texture shared remaining slots still update: latest emission_point_texture RID",
+        "emission_color_texture shared remaining slots still update: latest emission_normal_texture RID",
+        "emission_color_texture queued replacement notification reads current shared B: latest emission_color_texture RID",
+        "emission_color_texture queued shared notification reads current null: latest emission_point_texture RID",
+        "emission_color_texture queued shared notification reads current null: latest emission_normal_texture RID",
+        "emission_color_texture: null detaches exactly one shared subscription",
+        "surviving material updates after other material destruction: latest emission_point_texture RID",
+        "surviving material updates after other material destruction: latest emission_normal_texture RID",
+        "surviving material updates after other material destruction: latest emission_color_texture RID"
+      ],
+      "observations": 28,
+      "all_observations_main_rd_and_three_params": true,
+      "runtime_error_diagnostics": [],
+      "exit_code_reported_by_root": 1
+    },
+    "green": {
+      "checks": 185,
+      "failures": [],
+      "observations": 28,
+      "all_observations_main_rd_and_three_params": true,
+      "runtime_error_diagnostics": [],
+      "exit_code_reported_by_root": 0
+    }
+  },
+  "red_identity": {
+    "artifact": {
+      "bytes": 156531640,
+      "sha256": "2dde15a04a877b1c93e5cbe92147b0a985dce61a1805232efef75c1df4c313e6"
+    },
+    "selection": {
+      "schema": 1,
+      "core_stamp": "793925c97f5034ce32181d59879eb86e95608f9354132047adb63eb379a9063c",
+      "compiler_route": "BuiltinGlslangV1",
+      "compiler_stamp": "e61daf5348fdc4a6baee8a9ae235025c722c7101b04c9edfd8156b49f329b584",
+      "platform": "macos",
+      "architecture": "arm64",
+      "target_kind": "Executable"
+    },
+    "independent_binary_copy_retained": false,
+    "sidecar_provenance": "Copied unchanged from the previous collision fixture green.controlled_build.json; root reported the RED executable had this exact SHA-256. Runtime banner retains the pre-commit 60d14b9c6 build revision.",
+    "fixture_sha256": "bdf97f700ea6ce812bc4f10c12cd21af40c904ef6d00043b3dde462522f8f744"
+  },
+  "green_identity": {
+    "artifact": {
+      "bytes": 156531656,
+      "sha256": "67199631ee6edc968a0f52d2a0af709d2c14735ab28e9051c0c3754ea5b5a281"
+    },
+    "selection": {
+      "schema": 1,
+      "core_stamp": "290a3e3996015921a6e4dd1e6834d33b13d84735aaa5d622587b37262eeae448",
+      "compiler_route": "BuiltinGlslangV1",
+      "compiler_stamp": "d54bb495a68d4957a9202bbb7ab1c54cfc420fa26025227438ce15e779e08c39",
+      "platform": "macos",
+      "architecture": "arm64",
+      "target_kind": "Executable"
+    },
+    "source_files": [
+      {
+        "path": "scene/resources/particle_process_material.cpp",
+        "baseline_sha256": "8831b454c00c9812c7be35e94c79be2206752c8c935c7dddff95a3b67ac4bb5a",
+        "green_sha256": "3df2f1ec42d6296b828e11c18b2adf159dc4bf630fb323b38c36ba255efc5f2a",
+        "diff_sha256": "450f353b341c607cb539b84322a8f42479968451520f6d2582bf9dbfa43c53b8"
+      },
+      {
+        "path": "scene/resources/particle_process_material.h",
+        "baseline_sha256": "89cf6a1fd9da2c4ccb6b0cc7b912c90e05d3ca489ab0aa852b4150c1a9bb56ab",
+        "green_sha256": "0ecf2e1e7b935a3ef8e163e8692ea9af52a2ce0f85e723e2916244affaa01c3c",
+        "diff_sha256": "96ef81215ad4deca3d3ee6b54a8f563b2193ccb4852972f58f24926c7f76e38d"
+      }
+    ],
+    "two_source_paths_diff_sha256": "8469f27fa91c57b6bdf58a7184ecf067657d49d00c653ca48efca6e8fb01123e",
+    "diff_scope": [
+      "scene/resources/particle_process_material.cpp",
+      "scene/resources/particle_process_material.h"
+    ],
+    "fixture_sha256": "bdf97f700ea6ce812bc4f10c12cd21af40c904ef6d00043b3dde462522f8f744"
+  },
+  "neighbors": {
+    "command": "bin/godot.macos.editor.arm64 --headless --test '--test-case=*[GPUParticles]*,*[CPUParticles]*,*[Particles]*'",
+    "test_cases": 18,
+    "assertions": 90,
+    "failures": 0,
+    "exit_code_reported_by_root": 0,
+    "qualification": "CPU/headless neighbor regression only; not actual GPU qualification."
+  },
+  "static_review": {
+    "reviewer_agent": "/root/review_collision_fixture",
+    "evidence": "Direct read-only review of production source and fixture, reported by messages to root; no separate review file exists.",
+    "result": "No static blocker reported.",
+    "reviewed_semantics": [
+      "Each slot has an independent deferred callback reading its current member; shared resources retain remaining slot callbacks.",
+      "Original valid-resource to RID / null-resource to Variant NIL behavior is retained.",
+      "Point-valid flag retains resource-reference validity semantics.",
+      "Color setter retains shader-change queuing; resource-changed callback does not queue a variant change because the key depends on reference validity.",
+      "Object destruction disconnects incoming signals; dead-target queued callbacks are skipped."
+    ],
+    "qualification": "Shader variant behavior and exact NIL semantics are source-review findings, not dynamically measured oracles in this fixture."
+  },
+  "normalization": {
+    "rule": "Capture preserves RID values; every non-RID value, including Variant NIL, is normalized to RID() before comparison.",
+    "limit": "Detached/null-RID comparisons do not independently assert the raw Variant type. Populated comparisons still require the exact current nonzero RID."
+  },
+  "parse_attempt": {
+    "counted_as_behavior_red": false,
+    "issue": "First draft inferred weakref() as Variant; warnings-as-errors caused parse failure.",
+    "repair": "Explicit WeakRef variable type at run.gd:157.",
+    "clean_red_and_green_fixture_identical": true,
+    "initial_parse_log_retained": false
+  },
+  "fixture_files": {
+    "run.gd": "bdf97f700ea6ce812bc4f10c12cd21af40c904ef6d00043b3dde462522f8f744",
+    "project.godot": "a4eb6885a63fd3b09d3b7a86932fe7fb12c32289600701e9535cfcb0ee929207",
+    "README.md": "a0d5ccbc120d474fe7de325eac19b00bb13328075d3a57b6f9797dd9e3765e01"
+  },
+  "logs": {
+    "red_run.log": {
+      "bytes": 13431,
+      "sha256": "6a8da77e3d03971e53421f332a7bcfdfd8f2b335a145b0088102792fe74ea5d2",
+      "original_path": "/tmp/b4-emission-texture-red-run.log"
+    },
+    "green_run.log": {
+      "bytes": 9210,
+      "sha256": "340fe9777d631257fb45a930bf5e39d25f358a8867c0889c6a79ab02b305bc6e",
+      "original_path": "/tmp/b4-emission-texture-green-run.log"
+    },
+    "green_build.log": {
+      "bytes": 2715,
+      "sha256": "2dba6355f7a25ef88f8442d9212f121dcedc0a2d441eaa9979e04dc23ee9cd9e",
+      "original_path": "/tmp/b4-emission-texture-green-build.log"
+    },
+    "neighbors.log": {
+      "bytes": 298,
+      "sha256": "a5c906dc38a68f3da4299870dca64f8b85bb2c4bbc00de9a3799d1f0e2985699",
+      "original_path": "/tmp/b4-emission-texture-neighbors.log"
+    }
+  },
+  "sidecars": {
+    "red.controlled_build.json": "42c7da0e977bda43cd7b84900f2bfcaa74182301cf3745e317dc3caab8bb05e6",
+    "green.controlled_build.json": "4f5666724fd188edc48a8554f966cf36700f3a67de5494a5a3bf093f3d17852c"
+  },
+  "proof_scope": [
+    "Public RenderingServer.material_get_param on callbacks dispatched to the actual main RenderingDevice render thread.",
+    "Exact latest RID association of all three emission texture parameters.",
+    "A/B textures have distinct contents and distinct RIDs and remain alive during all stages.",
+    "Shared resources across three slots and two materials, repeated same-reference setters, null underlying RID and recovery, render-thread signal emission, per-slot replacement/null detach, queued notifications, receiver destruction."
+  ],
+  "limits": [
+    "No shader sampling, particle motion, or physical-effect claim.",
+    "No independently preserved RED executable copy.",
+    "Return codes reported by root; raw logs have no exit-code trailers.",
+    "Other curve/ramp texture setters are follow-up evidence outside this patch and runtime acceptance."
+  ]
+}

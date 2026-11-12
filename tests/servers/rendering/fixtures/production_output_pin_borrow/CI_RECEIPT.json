@@ -1,0 +1,142 @@
+{
+  "run": 42027283091,
+  "conclusion": "success",
+  "success_count": 20,
+  "logs": [
+    {
+      "job": "🏁 Windows / Template w/ GCC (target=template_release, use_mingw=yes)",
+      "id": 127244828443,
+      "conclusion": "success",
+      "fetch_exit": 0,
+      "bytes": 2684044,
+      "sha256": "027e9d366303ebcf7d91ce10e21b5869eefb1585f354649914ae26d106a8079e",
+      "fetch_stderr": ""
+    },
+    {
+      "job": "🐧 Linux / Editor with doubles and GCC sanitizers (target=editor, dev_build=yes, scu_build=yes, precision=double, use_asan=yes, use_ubsan=yes, linker=lld)",
+      "id": 127244828449,
+      "conclusion": "success",
+      "fetch_exit": 0,
+      "bytes": 23924720,
+      "sha256": "7ed734124fa9f3b0edf3218bdf36ca4bc9d34bb3fc35cfd86fe9be616d819c57",
+      "fetch_stderr": ""
+    },
+    {
+      "job": "🐧 Linux / Minimal template (target=template_release, everything disabled)",
+      "id": 127244828487,
+      "conclusion": "success",
+      "fetch_exit": 0,
+      "bytes": 1756600,
+      "sha256": "5927cb62647bdb064521b38b2dec62c401e2680190f59e20dff0e11559ec3e7a",
+      "fetch_stderr": ""
+    },
+    {
+      "job": "🐧 Linux / Editor w/ Mono (target=editor)",
+      "id": 127244828494,
+      "conclusion": "success",
+      "fetch_exit": 0,
+      "bytes": 4505380,
+      "sha256": "449e7a220898fb659c1e96f7d94b0d6fe8b5a1b13e5fd43926ba349b4be4db88",
+      "fetch_stderr": ""
+    },
+    {
+      "job": "🐧 Linux / Template w/ Mono, debug (target=template_debug)",
+      "id": 127244828569,
+      "conclusion": "success",
+      "fetch_exit": 0,
+      "bytes": 2986767,
+      "sha256": "ae2fcd39a2897117617062e8cbdd0fa48b7e4624b65dcab3b84d9f42ad96b2fa",
+      "fetch_stderr": ""
+    },
+    {
+      "job": "🐧 Linux / Template w/ Mono, release (target=template_release)",
+      "id": 127244828729,
+      "conclusion": "success",
+      "fetch_exit": 0,
+      "bytes": 2987487,
+      "sha256": "d6effc109ef1c306fb8e6d1316e320a09054ed6504be1693fe12063af6abab7c",
+      "fetch_stderr": ""
+    }
+  ],
+  "tested_commit": "3a013cc17abef284f3784a4983b75ad032462ed7",
+  "run_url": "https://github.com/kuhahahaha/godot/actions/runs/42027283091",
+  "scope": "existing committed pin-borrow baseline only; does not cover later dirty Mesh or /tmp D32 candidates",
+  "raw_log_directory": "work/b4-ci-pin-borrow-20261105/final",
+  "diagnostic_clean": false,
+  "diagnostics": [
+    {
+      "job_id": 127244828443,
+      "runtime_diagnostic_count": 0,
+      "runtime_diagnostics": {}
+    },
+    {
+      "job_id": 127244828449,
+      "runtime_diagnostic_count": 105,
+      "runtime_diagnostics": {
+        "^[[1mcore/string/ustring.cpp:227:8:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mnull pointer passed as argument 2, which is declared to never be null^[[1m^[[0m": 5,
+        "^[[1mmodules/gdscript/gdscript_vm.cpp:809:13:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mstore to misaligned address 0x5250001092e4 for type '<unknown> *', which requires 8 byte alignment^[[1m^[[0m": 1,
+        "^[[1mmodules/gdscript/gdscript_vm.cpp:816:42:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mload of misaligned address 0x51d0000b87c4 for type '<unknown> *', which requires 8 byte alignment^[[1m^[[0m": 1,
+        "^[[1mmodules/mbedtls/crypto_mbedtls.cpp:531:8:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mnull pointer passed as argument 1, which is declared to never be null^[[1m^[[0m": 1,
+        "^[[1mcore/variant/variant_op.h:125:82:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mdivision by zero^[[1m^[[0m": 1,
+        "^[[1mcore/string/optimized_translation.cpp:266:20:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mindex 1 out of bounds for type 'Elem [1]'^[[1m^[[0m": 1,
+        "^[[1mcore/string/optimized_translation.cpp:276:21:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mindex 1 out of bounds for type 'Elem [1]'^[[1m^[[0m": 1,
+        "^[[1mcore/string/optimized_translation.cpp:276:51:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mindex 1 out of bounds for type 'Elem [1]'^[[1m^[[0m": 1,
+        "^[[1mcore/string/optimized_translation.cpp:277:74:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mindex 1 out of bounds for type 'Elem [1]'^[[1m^[[0m": 1,
+        "^[[1mcore/string/optimized_translation.cpp:277:44:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mindex 1 out of bounds for type 'Elem [1]'^[[1m^[[0m": 1,
+        "^[[1mscene/resources/style_box_flat.cpp:442:35:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mdivision by zero^[[1m^[[0m": 5,
+        "^[[1mthirdparty/harfbuzz/src/OT/Layout/Common/CoverageFormat2.hh:197:36:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mindex 1 out of bounds for type 'RangeRecord [1]'^[[1m^[[0m": 10,
+        "^[[1mthirdparty/harfbuzz/src/OT/Layout/Common/CoverageFormat2.hh:198:43:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mindex 1 out of bounds for type 'RangeRecord [1]'^[[1m^[[0m": 10,
+        "^[[1mthirdparty/thorvg/src/common/tvgMath.cpp:453:32:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mdivision by zero^[[1m^[[0m": 5,
+        "^[[1mthirdparty/thorvg/src/common/tvgMath.cpp:453:46:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mdivision by zero^[[1m^[[0m": 5,
+        "^[[1mservers/rendering/shader_language.h:745:10:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mload of value 823362400, which is not a valid value for type 'Hint'^[[1m^[[0m": 2,
+        "^[[1mtests//scene/test_primitives.cpp:134:42:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mdivision by zero^[[1m^[[0m": 1,
+        "^[[1mtests//scene/test_primitives.cpp:134:85:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mdivision by zero^[[1m^[[0m": 1,
+        "^[[1mtests//servers/rendering/test_multimesh_rebuild.cpp:53:3:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mload of value 99, which is not a valid value for type 'MultimeshTransformFormat'^[[1m^[[0m": 1,
+        "^[[1mthirdparty/harfbuzz/src/OT/Color/CBDT/../../../hb-open-type.hh:559:18:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mindex 2705 out of bounds for type 'NumType [1]'^[[1m^[[0m": 2,
+        "^[[1mthirdparty/sdl/thread/SDL_thread.c:109:27:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mindex 1 out of bounds for type '<unknown> [1]'^[[1m^[[0m": 4,
+        "^[[1mthirdparty/sdl/thread/SDL_thread.c:110:27:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mindex 1 out of bounds for type '<unknown> [1]'^[[1m^[[0m": 4,
+        "^[[1meditor/docks/editor_dock_manager.cpp:373:45:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mload of value 3200171710, which is not a valid value for type 'DockLayout'^[[1m^[[0m": 3,
+        "^[[1mservers/rendering/shader_language.h:745:10:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mload of value 1351512640, which is not a valid value for type 'Hint'^[[1m^[[0m": 2,
+        "^[[1mthirdparty/harfbuzz/src/OT/Color/CBDT/../../../hb-open-type.hh:559:18:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mindex 2082 out of bounds for type 'NumType [1]'^[[1m^[[0m": 6,
+        "^[[1mscene/debugger/view_3d_controller.cpp:485:97:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mdivision by zero^[[1m^[[0m": 3,
+        "^[[1mscene/debugger/view_3d_controller.cpp:486:97:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mdivision by zero^[[1m^[[0m": 3,
+        "^[[1mthirdparty/sdl/thread/SDL_thread.c:133:31:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mindex 1 out of bounds for type '<unknown> [1]'^[[1m^[[0m": 4,
+        "^[[1mservers/rendering/renderer_rd/shader_rd.cpp:1270:9:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mnull pointer passed as argument 2, which is declared to never be null^[[1m^[[0m": 2,
+        "^[[1mservers/rendering/shader_language.h:745:10:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mload of value 2311967808, which is not a valid value for type 'Hint'^[[1m^[[0m": 2,
+        "^[[1mservers/rendering/renderer_geometry_instance.cpp:78:53:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mdivision by zero^[[1m^[[0m": 2,
+        "^[[1mservers/rendering/shader_language.h:745:10:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mload of value 4277064488, which is not a valid value for type 'Hint'^[[1m^[[0m": 2,
+        "^[[1mservers/rendering/shader_language.h:745:10:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mload of value 1336963280, which is not a valid value for type 'Hint'^[[1m^[[0m": 2,
+        "^[[1mmodules/gdscript/gdscript_vm.cpp:809:13:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mstore to misaligned address 0x5140006e2194 for type '<unknown> *', which requires 8 byte alignment^[[1m^[[0m": 1,
+        "^[[1mmodules/gdscript/gdscript_vm.cpp:816:42:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mload of misaligned address 0x5140006e2194 for type '<unknown> *', which requires 8 byte alignment^[[1m^[[0m": 1,
+        "^[[1mcore/math/vector2.h:255:33:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mdivision by zero^[[1m^[[0m": 1,
+        "^[[1mcore/math/vector2.h:255:19:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mdivision by zero^[[1m^[[0m": 1,
+        "^[[1mcore/math/vector3.h:469:47:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mdivision by zero^[[1m^[[0m": 1,
+        "^[[1mcore/math/vector3.h:469:33:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mdivision by zero^[[1m^[[0m": 1,
+        "^[[1mcore/math/vector3.h:469:19:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mdivision by zero^[[1m^[[0m": 1,
+        "^[[1mcore/variant/variant_internal.h:563:19:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mload of value 2147483647, which is not a valid value for type 'PlaneAlignment'^[[1m^[[0m": 1,
+        "^[[1mcore/variant/variant_internal.h:563:19:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mload of value 2147483647, which is not a valid value for type 'PlaneSemanticLabel'^[[1m^[[0m": 1,
+        "^[[1mcore/variant/variant_internal.h:563:19:^[[1m^[[31m runtime error: ^[[1m^[[0m^[[1mload of value 2147483647, which is not a valid value for type 'EntityTrackingState'^[[1m^[[0m": 1
+      }
+    },
+    {
+      "job_id": 127244828487,
+      "runtime_diagnostic_count": 0,
+      "runtime_diagnostics": {}
+    },
+    {
+      "job_id": 127244828494,
+      "runtime_diagnostic_count": 0,
+      "runtime_diagnostics": {}
+    },
+    {
+      "job_id": 127244828569,
+      "runtime_diagnostic_count": 0,
+      "runtime_diagnostics": {}
+    },
+    {
+      "job_id": 127244828729,
+      "runtime_diagnostic_count": 0,
+      "runtime_diagnostics": {}
+    }
+  ]
+}

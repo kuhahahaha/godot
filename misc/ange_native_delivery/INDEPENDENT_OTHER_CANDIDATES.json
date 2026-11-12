@@ -1,0 +1,1110 @@
+{
+  "active_source": "The B file SHA-256 in INDEPENDENT_AUDIT.json is authoritative for final active bytes.",
+  "baseline_lineage": "Unchanged inherited source is pinned by baseline SOURCE_SNAPSHOT.json. Formal35 and later exact patch order are separate provenance layers.",
+  "groups": {
+    "B_vs_current_dirty_C": [
+      "core/extension/gdextension_camera_ready.cpp",
+      "core/extension/gdextension_interface.gen.h",
+      "core/extension/gdextension_interface.json",
+      "core/extension/gdextension_library_exit_guard.h",
+      "core/extension/gdextension_output_history_fallback.h",
+      "core/extension/gdextension_output_history_guard_uses.h",
+      "core/extension/gdextension_production_action.cpp",
+      "core/extension/gdextension_production_interface.cpp",
+      "core/extension/gdextension_production_output.cpp",
+      "core/extension/gdextension_production_owned.cpp",
+      "core/extension/gdextension_production_request.cpp",
+      "core/extension/gdextension_production_request.h",
+      "core/extension/gdextension_production_resources.cpp",
+      "core/extension/gdextension_production_window.cpp",
+      "core/extension/gdextension_qualification.cpp",
+      "core/extension/gdextension_qualification_abi.cpp",
+      "core/extension/gdextension_qualification_internal.h",
+      "core/extension/gdextension_qualification_paid_service.h",
+      "core/extension/gdextension_qualification_rt.cpp",
+      "core/extension/gdextension_qualification_scene_depth.cpp",
+      "core/extension/gdextension_qualification_ticket.cpp",
+      "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.cpp",
+      "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.h",
+      "servers/rendering/native_height_range.h",
+      "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp",
+      "servers/rendering/renderer_rd/height_capture_checked_sink.h",
+      "servers/rendering/renderer_rd/storage_rd/external_output_owner.h",
+      "servers/rendering/renderer_rd/storage_rd/external_output_packet.cpp",
+      "servers/rendering/renderer_rd/storage_rd/height_frame.cpp",
+      "servers/rendering/renderer_rd/storage_rd/height_frame.h",
+      "servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp",
+      "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp",
+      "servers/rendering/renderer_rd/storage_rd/particles_storage.h",
+      "servers/rendering/renderer_scene_cull.h",
+      "servers/rendering/rendering_device.cpp",
+      "servers/rendering/rendering_device.h",
+      "servers/rendering/rendering_device_graph.h",
+      "servers/rendering/rendering_device_immutable_hold.cpp",
+      "servers/rendering/rendering_device_output_read.cpp",
+      "tests/core/extension/test_production_request.cpp",
+      "tests/servers/rendering/fixtures/typed_renderer_native/host_scene.inc",
+      "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc",
+      "tests/servers/rendering/fixtures/typed_renderer_native/project.godot",
+      "tests/servers/rendering/fixtures/typed_renderer_native/run.gd",
+      "tests/servers/rendering/fixtures/typed_renderer_native/run_host_scene.gd",
+      "tests/servers/rendering/fixtures/typed_renderer_native/run_retire.gd",
+      "tests/servers/rendering/fixtures/typed_renderer_native/run_staged_camera.gd",
+      "tests/servers/rendering/fixtures/typed_renderer_native/selection_facts.inc",
+      "tests/servers/rendering/fixtures/typed_renderer_native/staged_camera.inc",
+      "tests/servers/rendering/fixtures/typed_renderer_native/staged_writer_source.inc",
+      "tests/servers/rendering/test_external_output_custody_bridge.h",
+      "tests/servers/rendering/test_native_height_range.cpp",
+      "tests/servers/rendering/test_qualification_rt.cpp",
+      "tests/servers/rendering/test_qualification_ticket.cpp"
+    ],
+    "five_diagnostic_production_files": [
+      "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp",
+      "servers/rendering/renderer_rd/storage_rd/external_output_packet.cpp",
+      "servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp",
+      "servers/rendering/rendering_device_immutable_hold.cpp",
+      "servers/rendering/rendering_device_output_read.cpp"
+    ],
+    "formal35": [
+      "core/extension/gdextension_camera_ready.cpp",
+      "core/extension/gdextension_interface.gen.h",
+      "core/extension/gdextension_interface.json",
+      "core/extension/gdextension_library_exit_guard.h",
+      "core/extension/gdextension_output_history_fallback.h",
+      "core/extension/gdextension_output_history_guard_uses.h",
+      "core/extension/gdextension_production_action.cpp",
+      "core/extension/gdextension_production_interface.cpp",
+      "core/extension/gdextension_production_output.cpp",
+      "core/extension/gdextension_production_owned.cpp",
+      "core/extension/gdextension_production_request.cpp",
+      "core/extension/gdextension_production_request.h",
+      "core/extension/gdextension_production_resources.cpp",
+      "core/extension/gdextension_production_window.cpp",
+      "core/extension/gdextension_qualification.cpp",
+      "core/extension/gdextension_qualification_abi.cpp",
+      "core/extension/gdextension_qualification_internal.h",
+      "core/extension/gdextension_qualification_paid_service.h",
+      "core/extension/gdextension_qualification_rt.cpp",
+      "core/extension/gdextension_qualification_scene_depth.cpp",
+      "core/extension/gdextension_qualification_ticket.cpp",
+      "servers/rendering/native_height_range.h",
+      "servers/rendering/renderer_rd/height_capture_checked_sink.h",
+      "servers/rendering/renderer_rd/storage_rd/external_output_owner.h",
+      "servers/rendering/renderer_rd/storage_rd/height_frame.cpp",
+      "servers/rendering/renderer_rd/storage_rd/height_frame.h",
+      "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp",
+      "servers/rendering/renderer_rd/storage_rd/particles_storage.h",
+      "servers/rendering/renderer_scene_cull.h",
+      "servers/rendering/rendering_device.cpp",
+      "servers/rendering/rendering_device.h",
+      "servers/rendering/rendering_device_graph.h",
+      "tests/servers/rendering/test_native_height_range.cpp",
+      "tests/servers/rendering/test_qualification_rt.cpp",
+      "tests/servers/rendering/test_qualification_ticket.cpp"
+    ],
+    "inherited_production_without_later_patch": [
+      "core/extension/gdextension.cpp",
+      "core/extension/gdextension.h",
+      "core/extension/gdextension_camera_ready.h",
+      "core/extension/gdextension_device_session.cpp",
+      "core/extension/gdextension_external_output_interface.h",
+      "core/extension/gdextension_guard_enrollment.cpp",
+      "core/extension/gdextension_host_transform.cpp",
+      "core/extension/gdextension_interface.cpp",
+      "core/extension/gdextension_library_exit_guard.cpp",
+      "core/extension/gdextension_manager.cpp",
+      "core/extension/gdextension_manager.h",
+      "core/extension/gdextension_output_config_facts.h",
+      "core/extension/gdextension_production_metadata.cpp",
+      "core/extension/gdextension_production_metadata_selection.cpp",
+      "core/extension/gdextension_record_source.cpp",
+      "core/extension/gdextension_record_source.h",
+      "core/extension/gdextension_scene_phase.h",
+      "core/extension/gdextension_typed_lifecycle.cpp",
+      "core/extension/make_interface_header.py",
+      "drivers/metal/rendering_device_driver_metal.cpp",
+      "main/main.cpp",
+      "main/main.h",
+      "platform/macos/display_server_macos_base.mm",
+      "platform/macos/os_macos.mm",
+      "servers/rendering/multi_uma_buffer.h",
+      "servers/rendering/renderer_geometry_instance.h",
+      "servers/rendering/renderer_rd/environment/gi.h",
+      "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h",
+      "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp",
+      "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h",
+      "servers/rendering/renderer_rd/height_capture_checked_sink.cpp",
+      "servers/rendering/renderer_rd/native_material_recipe_roster.h",
+      "servers/rendering/renderer_rd/native_pipeline_factory_rd.h",
+      "servers/rendering/renderer_rd/renderer_scene_render_rd.cpp",
+      "servers/rendering/renderer_rd/renderer_scene_render_rd.h",
+      "servers/rendering/renderer_rd/shaders/particles.glsl",
+      "servers/rendering/renderer_rd/shaders/particles_copy.glsl",
+      "servers/rendering/renderer_rd/shaders/particles_external_guard.glsl",
+      "servers/rendering/renderer_rd/storage_rd/external_output_packet.h",
+      "servers/rendering/renderer_rd/storage_rd/external_output_storage.cpp",
+      "servers/rendering/renderer_rd/storage_rd/external_output_storage.h",
+      "servers/rendering/renderer_rd/storage_rd/height_frame_resources.cpp",
+      "servers/rendering/renderer_rd/storage_rd/height_frame_resources.h",
+      "servers/rendering/renderer_rd/storage_rd/material_storage.cpp",
+      "servers/rendering/renderer_rd/storage_rd/material_storage.h",
+      "servers/rendering/renderer_rd/storage_rd/render_data_rd.h",
+      "servers/rendering/renderer_rd/storage_rd/render_scene_data_rd.cpp",
+      "servers/rendering/renderer_rd/storage_rd/render_scene_data_rd.h",
+      "servers/rendering/renderer_rd/storage_rd/scene_connect_config.h",
+      "servers/rendering/renderer_scene_cull.cpp",
+      "servers/rendering/renderer_viewport.cpp",
+      "servers/rendering/renderer_viewport.h",
+      "servers/rendering/rendering_device_graph.cpp",
+      "servers/rendering/rendering_server.cpp",
+      "servers/rendering/rendering_server.h",
+      "servers/rendering/rendering_server_default.cpp",
+      "servers/rendering/rendering_server_default.h",
+      "servers/rendering/storage/particles_storage.h"
+    ],
+    "inherited_tests_and_evidence": [
+      "modules/particles_runtime_tests/particles_external_guard_test_fixture.cpp",
+      "modules/particles_runtime_tests/particles_external_output_test_fixture.cpp",
+      "modules/particles_runtime_tests/particles_heightfield_clear_test_fixture.cpp",
+      "tests/core/extension/test_device_session_qualification_scene_depth.cpp",
+      "tests/core/extension/test_production_host_transform.cpp",
+      "tests/core/extension/test_production_native_observe.cpp",
+      "tests/core/object/device_exit_startup_fixture.h",
+      "tests/core/object/test_device_exit_entry.cpp",
+      "tests/core/object/test_device_exit_typed_abi.cpp",
+      "tests/scene/fixtures/cpu_particle_one_shot_tail/green-final.json",
+      "tests/scene/fixtures/cpu_particle_one_shot_tail/green.json",
+      "tests/scene/fixtures/cpu_particle_one_shot_tail/red-final.json",
+      "tests/scene/fixtures/cpu_particle_one_shot_tail/red.json",
+      "tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls-diagnostic.json",
+      "tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls.json",
+      "tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/clean-pass.json",
+      "tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/duplicate.json",
+      "tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/error-diagnostic.json",
+      "tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/exit-mismatch.json",
+      "tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/missing.json",
+      "tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/rid-leak.json",
+      "tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/timeout.json",
+      "tests/scene/fixtures/particle_emitter_velocity/run.py",
+      "tests/scene/test_gpu_particles.cpp",
+      "tests/servers/rendering/fixtures/host_view_receiver_native/harness.inc",
+      "tests/servers/rendering/fixtures/host_view_receiver_native/project.godot",
+      "tests/servers/rendering/fixtures/host_view_receiver_native/run.gd",
+      "tests/servers/rendering/fixtures/native_height_range/run.gd.uid",
+      "tests/servers/rendering/fixtures/particle_deferred_retry/run.py",
+      "tests/servers/rendering/fixtures/particle_external_guard/harness.cpp.in",
+      "tests/servers/rendering/fixtures/particle_external_guard_native/README.md",
+      "tests/servers/rendering/fixtures/particle_external_guard_native/run.gd",
+      "tests/servers/rendering/fixtures/particle_external_guard_native/run_native.py",
+      "tests/servers/rendering/fixtures/particle_external_output_native/README.md",
+      "tests/servers/rendering/fixtures/particle_external_output_native/run.gd",
+      "tests/servers/rendering/fixtures/particle_external_output_native/run_native.py",
+      "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run.gd.uid",
+      "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_source_selection.py",
+      "tests/servers/rendering/fixtures/particle_scene_phase_managed_native/run.gd",
+      "tests/servers/rendering/test_external_output_prefix.cpp",
+      "tests/servers/rendering/test_material_storage_native_hold.cpp",
+      "tests/servers/rendering/test_native_consumed_proof_channel.cpp",
+      "tests/servers/rendering/test_native_consumed_proof_channel.h",
+      "tests/servers/rendering/test_native_disposal.cpp",
+      "tests/servers/rendering/test_native_material_mesh_fixture.h",
+      "tests/servers/rendering/test_particles_process_retry.cpp",
+      "tests/servers/rendering/test_particles_trail_failure.cpp",
+      "tests/servers/rendering/test_qualification_physical.cpp",
+      "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+      "tests/servers/rendering/test_rendering_device_graph_handles.cpp",
+      "tests/servers/rendering/test_scene_connect_config.cpp",
+      "tests/servers/rendering/test_viewport_camera_source_observer.cpp"
+    ],
+    "post_formal_production_paths": [
+      "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp",
+      "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h",
+      "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp",
+      "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp",
+      "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h",
+      "servers/rendering/renderer_rd/storage_rd/external_output_owner.cpp",
+      "servers/rendering/renderer_rd/storage_rd/external_output_packet.cpp",
+      "servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp",
+      "servers/rendering/renderer_rd/storage_rd/mesh_storage.h",
+      "servers/rendering/renderer_rd/storage_rd/particles_storage_external.cpp",
+      "servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp",
+      "servers/rendering/renderer_rd/uniform_set_cache_rd.cpp",
+      "servers/rendering/renderer_rd/uniform_set_cache_rd.h",
+      "servers/rendering/rendering_device_immutable_hold.cpp",
+      "servers/rendering/rendering_device_output_read.cpp"
+    ],
+    "post_formal_test_paths": [
+      "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.cpp",
+      "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.h",
+      "tests/core/extension/test_production_request.cpp",
+      "tests/servers/rendering/fixtures/typed_renderer_native/host_scene.inc",
+      "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc",
+      "tests/servers/rendering/fixtures/typed_renderer_native/project.godot",
+      "tests/servers/rendering/fixtures/typed_renderer_native/run.gd",
+      "tests/servers/rendering/fixtures/typed_renderer_native/run_host_scene.gd",
+      "tests/servers/rendering/fixtures/typed_renderer_native/run_retire.gd",
+      "tests/servers/rendering/fixtures/typed_renderer_native/run_staged_camera.gd",
+      "tests/servers/rendering/fixtures/typed_renderer_native/selection_facts.inc",
+      "tests/servers/rendering/fixtures/typed_renderer_native/staged_camera.inc",
+      "tests/servers/rendering/fixtures/typed_renderer_native/staged_writer_source.inc",
+      "tests/servers/rendering/test_external_output_custody_bridge.h",
+      "tests/servers/rendering/test_external_output_owner_state.cpp",
+      "tests/servers/rendering/test_mesh_storage_external.cpp"
+    ],
+    "raw_line_ending_only_vs_clean_head": [
+      "misc/msvs/nmake.substitution.props",
+      "misc/msvs/props.template",
+      "misc/msvs/sln.template",
+      "misc/msvs/vcxproj.filters.template",
+      "misc/msvs/vcxproj.template",
+      "modules/mono/editor/Godot.NET.Sdk/Godot.NET.Sdk.sln",
+      "modules/mono/editor/Godot.NET.Sdk/Godot.NET.Sdk/Godot.NET.Sdk.csproj",
+      "modules/mono/editor/Godot.NET.Sdk/Godot.SourceGenerators.Sample/Godot.SourceGenerators.Sample.csproj",
+      "modules/mono/editor/Godot.NET.Sdk/Godot.SourceGenerators.Tests/Godot.SourceGenerators.Tests.csproj",
+      "modules/mono/editor/Godot.NET.Sdk/Godot.SourceGenerators/Godot.SourceGenerators.csproj",
+      "modules/mono/editor/GodotTools/GodotTools.BuildLogger/GodotTools.BuildLogger.csproj",
+      "modules/mono/editor/GodotTools/GodotTools.Core/GodotTools.Core.csproj",
+      "modules/mono/editor/GodotTools/GodotTools.IdeMessaging.CLI/GodotTools.IdeMessaging.CLI.csproj",
+      "modules/mono/editor/GodotTools/GodotTools.IdeMessaging/GodotTools.IdeMessaging.csproj",
+      "modules/mono/editor/GodotTools/GodotTools.OpenVisualStudio/GodotTools.OpenVisualStudio.csproj",
+      "modules/mono/editor/GodotTools/GodotTools.ProjectEditor/GodotTools.ProjectEditor.csproj",
+      "modules/mono/editor/GodotTools/GodotTools.Shared/GodotTools.Shared.csproj",
+      "modules/mono/editor/GodotTools/GodotTools.sln",
+      "modules/mono/editor/GodotTools/GodotTools/GodotTools.csproj",
+      "modules/mono/glue/GodotSharp/Godot.SourceGenerators.Internal/Godot.SourceGenerators.Internal.csproj",
+      "modules/mono/glue/GodotSharp/GodotPlugins/GodotPlugins.csproj",
+      "modules/mono/glue/GodotSharp/GodotSharp.sln",
+      "modules/mono/glue/GodotSharp/GodotSharp/GodotSharp.csproj",
+      "modules/mono/glue/GodotSharp/GodotSharpEditor/GodotSharpEditor.csproj",
+      "platform/android/java/gradlew.bat",
+      "tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-alias-readback-map-failure-cursor-r3.log",
+      "tests/scene/fixtures/mono_predelete_dispose/MonoPredeleteDispose.csproj"
+    ]
+  },
+  "patch_history": [
+    {
+      "files": [
+        "core/extension/gdextension_qualification_scene_depth.cpp",
+        "servers/rendering/native_height_range.h",
+        "servers/rendering/rendering_device.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/scene-paid-service-executor-p2fix-context-20261111/SOURCE_FROM35.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 1,
+      "sha256": "f20e25e8ffbb2a5d547cccea909a8f21ac56802f7e7159fe684c046aea2ec212"
+    },
+    {
+      "files": [
+        "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.cpp",
+        "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.h",
+        "tests/core/extension/test_production_request.cpp",
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc",
+        "tests/servers/rendering/fixtures/typed_renderer_native/project.godot",
+        "tests/servers/rendering/fixtures/typed_renderer_native/run.gd"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-fixture-candidate-20261111/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 2,
+      "sha256": "d0eb841c36994a07c1008ca0bc60ebd85f6aac0bc563fd42ffe2cedefc8dae05"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-producer-generation-fix-20261111/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 3,
+      "sha256": "59439225a0b355c18c3c3cdc810f7de24b8a7d972f28a2052aa9cfa02db6a928"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-producer-generation-fix-20261111/r3/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 4,
+      "sha256": "5d8da3deee7dda9d23fb959a9fc0e4793aeb167df017c46b77418b014004f3cf"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc",
+        "tests/servers/rendering/fixtures/typed_renderer_native/run.gd"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-producer-generation-fix-20261111/r4/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 5,
+      "sha256": "56d0f59c700236abe6d890e84c5b6ccc1cd6b957472105d4b5e68905bda74c58"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-producer-generation-fix-20261111/r5/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 6,
+      "sha256": "afaf24f552b2a8d1df0be763f28492b0ba0763f30e6b31fb09fcc171009d76ff"
+    },
+    {
+      "files": [
+        "core/extension/gdextension_production_action.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/native-append-metadata-kind-fix-20261111/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 7,
+      "sha256": "4cc67a074e824b0ed80e440935bc3f28ebee00d39be1f4444b793c37dcc0a64f"
+    },
+    {
+      "files": [
+        "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.cpp",
+        "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.h",
+        "tests/core/extension/test_production_request.cpp",
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc",
+        "tests/servers/rendering/fixtures/typed_renderer_native/run_retire.gd"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-prefix-retirement-20261111/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 8,
+      "sha256": "bf23d416254f3682299be860c4b4e68df33d18883bb82b737c3f0562e591bd9e"
+    },
+    {
+      "files": [
+        "tests/core/extension/test_production_request.cpp",
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc",
+        "tests/servers/rendering/fixtures/typed_renderer_native/run.gd"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-source-qualification-successor-20261111/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 9,
+      "sha256": "e8d09a650c475ae124000127ac6e425a8c0500114c54e849e787fb38fca6e3b8"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-source-qualification-successor-20261111/r2/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 10,
+      "sha256": "b8d176f7b64176986e6db3d791c83eccf793d6a44479e90e50d41393bad0ec13"
+    },
+    {
+      "files": [
+        "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.cpp",
+        "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.h",
+        "tests/core/extension/test_production_request.cpp",
+        "tests/servers/rendering/fixtures/typed_renderer_native/host_scene.inc",
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc",
+        "tests/servers/rendering/fixtures/typed_renderer_native/run_host_scene.gd"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-host-scene-successor-20261111/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 11,
+      "sha256": "a5792211c6aea9f470573c5e3cbbbc480e9a2a73a1d7410f242899c90411e160"
+    },
+    {
+      "files": [
+        "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.cpp",
+        "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.h",
+        "tests/core/extension/test_production_request.cpp",
+        "tests/servers/rendering/fixtures/typed_renderer_native/host_scene.inc",
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc",
+        "tests/servers/rendering/fixtures/typed_renderer_native/run_staged_camera.gd",
+        "tests/servers/rendering/fixtures/typed_renderer_native/staged_camera.inc",
+        "tests/servers/rendering/fixtures/typed_renderer_native/staged_writer_source.inc",
+        "tests/servers/rendering/test_external_output_custody_bridge.h"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-camera-successor-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 12,
+      "sha256": "9d82d2a7eee51fc9dec876d2fe1e11d433bc500351eac0c6e98a9035cf16705c"
+    },
+    {
+      "files": [
+        "core/extension/gdextension_production_action.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/staged-camera-upload-lifetime-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 13,
+      "sha256": "78a6bf1cf0336cbe1968ab948359c2bcdfd8f9e982544720cb2a804713873a04"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc",
+        "tests/servers/rendering/fixtures/typed_renderer_native/staged_camera.inc"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-camera-observe-r2-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 14,
+      "sha256": "d2dd482a40fbede21ca8809fcfe2194f792dccfefd232f7e971a7ecc0dbe145c"
+    },
+    {
+      "files": [
+        "tests/core/extension/test_production_request.cpp",
+        "tests/servers/rendering/fixtures/typed_renderer_native/staged_camera.inc",
+        "tests/servers/rendering/test_external_output_custody_bridge.h"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-camera-finalize-diagnostic-r3-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 15,
+      "sha256": "162ba6d55577870d493b3f8a99211d6b4fe057586f6875a7a5810b338a28778c"
+    },
+    {
+      "files": [
+        "servers/rendering/renderer_rd/storage_rd/particles_storage_external.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-installed-guard-layout-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 16,
+      "sha256": "42272252bd81c4a6fa56241b1a2ec9b04b28e70093c711a697bb9c3f3aa33240"
+    },
+    {
+      "files": [
+        "tests/core/extension/test_production_request.cpp",
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc",
+        "tests/servers/rendering/fixtures/typed_renderer_native/run_staged_camera.gd",
+        "tests/servers/rendering/fixtures/typed_renderer_native/staged_camera.inc",
+        "tests/servers/rendering/test_external_output_custody_bridge.h"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-camera-raster-r4-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 17,
+      "sha256": "0885e601402019c87f47c1398bb29188c2ea52a3ed6418c59e3c1991a313bd65"
+    },
+    {
+      "files": [
+        "core/extension/gdextension_production_output.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/core-staged-prelist-preparation-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 18,
+      "sha256": "e42f53b33799b70af145c2efdffbde7b0ff718479f9981f27eb5a6e1a1da9509"
+    },
+    {
+      "files": [
+        "core/extension/gdextension_production_output.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/core-staged-prelist-preparation-20261112/pipeline-member-revalidation.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 19,
+      "sha256": "63e60bf12f432fbe8841403a0073a7b4d613003f7c42c8a6489a902547d9cb9d"
+    },
+    {
+      "files": [
+        "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp",
+        "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h",
+        "servers/rendering/renderer_rd/storage_rd/particles_storage.h",
+        "servers/rendering/renderer_rd/storage_rd/particles_storage_external.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/mobile-prelist-external-pipeline-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 20,
+      "sha256": "2784e588e241ce4a83a409ce512038a6362bf4c365fd6e8985d7b4128c213b7e"
+    },
+    {
+      "files": [
+        "tests/core/extension/test_production_request.cpp",
+        "tests/servers/rendering/fixtures/typed_renderer_native/staged_camera.inc"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-material-layout-diagnostic-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 21,
+      "sha256": "2d8a6aa8256c2dae72edf2ea89bee60a6db985bdc3dba908ea38121b7766232b"
+    },
+    {
+      "files": [
+        "tests/core/extension/test_production_request.cpp",
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-material-warmup-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 22,
+      "sha256": "f53d0b34677b7ba9d5dbf5dfdc21510e760e3eb40c9874b326e0896aa4802d57"
+    },
+    {
+      "files": [
+        "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-mobile-pipeline-phase-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_diagnostics_in_production_files",
+      "sequence": 23,
+      "sha256": "433496bb2f423ab99a6de1b30dc01a3def1bd82cd99db492570766369fc6599e"
+    },
+    {
+      "files": [
+        "servers/rendering/renderer_rd/storage_rd/external_output_packet.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-mobile-prospective-phase-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_diagnostics_in_production_files",
+      "sequence": 24,
+      "sha256": "ebfbf4434c7fb1fee8572cd421779907e78faf82914b0feb7fb8be9d5f577958"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-explicit-mesh-attributes-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 25,
+      "sha256": "918ab9d8ff9e0ffa26d29d527c9ff6a8009419610859aa1846da04671a7ac95a"
+    },
+    {
+      "files": [
+        "servers/rendering/renderer_rd/storage_rd/external_output_packet.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-closure-size-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_diagnostics_in_production_files",
+      "sequence": 26,
+      "sha256": "15cc266ca1dc2c7498008d266255a1082c00763e463cfb5081c05118ae576461"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/fixtures/typed_renderer_native/staged_camera.inc"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-preparation-capacity-106-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 27,
+      "sha256": "9bc617a9b87f7a59f023956c3f797d2a6f46499b572a4282e53b03ede117deb8"
+    },
+    {
+      "files": [
+        "servers/rendering/rendering_device_immutable_hold.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-resource-preflight-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_diagnostics_in_production_files",
+      "sequence": 28,
+      "sha256": "9076e9d9b5865017e035c7360885549abe4df513cdb9f1787d6c41be28a751f8"
+    },
+    {
+      "files": [
+        "servers/rendering/renderer_rd/uniform_set_cache_rd.h",
+        "servers/rendering/renderer_rd/uniform_set_cache_rd.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/uniform-set-cache-invalidation-ownership-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 29,
+      "sha256": "84a74eba0a3997a4921d9d70e92dadee59b80a6546febd823b6a57e1cfd9102f"
+    },
+    {
+      "files": [
+        "servers/rendering/rendering_device.h",
+        "servers/rendering/rendering_device_immutable_hold.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/native-output-cache-observer-rd-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 30,
+      "sha256": "f246a28988845d40abe6c6365a95c8fd6608d170970e720e68715941a8610835"
+    },
+    {
+      "files": [
+        "servers/rendering/rendering_device_immutable_hold.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-texture-worker-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_diagnostics_in_production_files",
+      "sequence": 31,
+      "sha256": "0501c8301b603ad60e720f2a656a35abd851c33afcb514a92be9c3ffa393bc02"
+    },
+    {
+      "files": [
+        "servers/rendering/rendering_device_immutable_hold.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/native-output-processed-texture-observer-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 32,
+      "sha256": "4d2811f89ef4b9246789ad2ae640bcb2474cc45e90eb5a662ff77bb54bc1e4ba"
+    },
+    {
+      "files": [
+        "servers/rendering/rendering_device_immutable_hold.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-resource-identity-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_diagnostics_in_production_files",
+      "sequence": 33,
+      "sha256": "79a6b958575d79c135de96286ef7677caea015084da671ff01295b037f5c5425"
+    },
+    {
+      "files": [
+        "servers/rendering/rendering_device.h",
+        "servers/rendering/rendering_device_immutable_hold.cpp",
+        "servers/rendering/renderer_rd/storage_rd/external_output_packet.cpp",
+        "servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp",
+        "tests/servers/rendering/test_mesh_storage_external.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/native-output-material-dependent-closure-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 34,
+      "sha256": "12a016933a976591548404daeecc25d4ead4e87dc67ccb5b4793ab8220149504"
+    },
+    {
+      "files": [
+        "servers/rendering/rendering_device_output_read.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/native-raster-material-empty-set-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 35,
+      "sha256": "4222bd913ad4cb52418d954cfe81f2973593d2c6a7e8873ffda7bb7968cc69ea"
+    },
+    {
+      "files": [
+        "servers/rendering/rendering_device.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/rd-draw-subpass-begin-identity-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 36,
+      "sha256": "a755f6bf7ad4af8e0831c68e269528ed8a73578835a20326c19d0ef0f8922717"
+    },
+    {
+      "files": [
+        "servers/rendering/rendering_device_output_read.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-raster-receipt-trace-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_diagnostics_in_production_files",
+      "sequence": 37,
+      "sha256": "b05a70e9a62f8ebf49a2f620b99d5a58abb18a5cb13e87fd8abb13258df0b493"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/fixtures/typed_renderer_native/staged_camera.inc"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-segment-ack-diagnostic-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 38,
+      "sha256": "32bb6757621a0195fca98ddcd93d12ab860d06508fac0b133252e85a1fc49d9f"
+    },
+    {
+      "files": [
+        "servers/rendering/rendering_device_output_read.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-vertex-array-identity-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 39,
+      "sha256": "f37bf41f69881d28790417b5a18819d885ad0e68fc020fea62dc62c45b97a13b"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/test_mesh_storage_external.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/ordinary-vertex-fallback-transfer-coverage-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 40,
+      "sha256": "f9020b155946b790a3b73221f9f68f0c113f271783d46e3fc0f4563ae3b529fd"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-default-triangle-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 41,
+      "sha256": "5cf8182483fc01a594a307aa7387ddd535b70814f9abe5bcd8761d7115fe6d9b"
+    },
+    {
+      "files": [
+        "servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp",
+        "servers/rendering/rendering_device.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-vertex-readiness-r6-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_diagnostics_in_production_files",
+      "sequence": 42,
+      "sha256": "415be63f6ad4d53eac3fab76acccb5e238a4945b787f6085fcf0edb513050ff2"
+    },
+    {
+      "files": [
+        "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp",
+        "servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp",
+        "servers/rendering/renderer_rd/storage_rd/mesh_storage.h",
+        "servers/rendering/rendering_device.cpp",
+        "servers/rendering/rendering_device.h",
+        "tests/servers/rendering/test_mesh_storage_external.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/ordinary-mesh-fallback-upload-settle-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 43,
+      "sha256": "fbde2ffd212e4a02a93efc2d26c3befb1a2b4eba41a64661c587303fa47e12c5"
+    },
+    {
+      "files": [
+        "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp",
+        "servers/rendering/renderer_rd/storage_rd/particles_storage.h",
+        "servers/rendering/renderer_rd/storage_rd/particles_storage_external.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-material-cold-start-20261112/production.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 44,
+      "sha256": "d46f1928c0f4a207d2446e8dbec6088cbc955af782f845243475d1be49707fa3"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-material-cold-start-default-geometry-20261112/fixture.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 45,
+      "sha256": "455f662c47e354bec511ddce85d51bd4da2bb5a8d5f106ba17b4bd1bf3669c5e"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc",
+        "tests/servers/rendering/fixtures/typed_renderer_native/host_scene.inc",
+        "tests/servers/rendering/fixtures/typed_renderer_native/selection_facts.inc"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-selection-facts-cold-r6-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 46,
+      "sha256": "042bc73b5d44245ef039b862f98466f032590f62dbbd5a960660cbacd500dd83"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/fixtures/typed_renderer_native/selection_facts.inc"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-selection-facts-retained-attachment-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 47,
+      "sha256": "7615a355fb1881009272117826019cbc5c88a8187b0f5d08eb73ff3304426f0d"
+    },
+    {
+      "files": [
+        "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp",
+        "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h"
+      ],
+      "hash_valid": true,
+      "path": "work/clustered-opaque-prelist-external-pipeline-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 48,
+      "sha256": "a0a85f9c01561c16ae7b01c48d798cf68666aa2a47aec318b425129642d7caf3"
+    },
+    {
+      "files": [
+        "core/extension/gdextension_production_output.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/core-staged-renderer-backend-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 49,
+      "sha256": "ca20ae30d0b99e5f3e5eae009ade402604f9a905185f6962bd04475c9360f8f5"
+    },
+    {
+      "files": [
+        "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/clustered-instance192-ready-geometry-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 50,
+      "sha256": "4b8daf47567c016e96de7f9b003910f8269421dd99a0675ae5d4ce706511352b"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-staged-clustered-cold-r6-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 51,
+      "sha256": "3d5df08502f03d03d1f77ef2b30693537d5d9b3a8febbc49e47905f9eef3a34e"
+    },
+    {
+      "files": [
+        "servers/rendering/renderer_rd/storage_rd/external_output_owner.cpp",
+        "tests/core/extension/test_production_request.cpp",
+        "tests/servers/rendering/test_external_output_owner_state.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/instance192-preparation-pass-intent-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 52,
+      "sha256": "32a78fc592880dcfe7a97b04a35d40cd08894b544f8c1bff5d458516f361939d"
+    },
+    {
+      "files": [
+        "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp",
+        "tests/servers/rendering/test_mesh_storage_external.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/clustered-instance192-opaque-depth-state-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 53,
+      "sha256": "fb753c7815a04ede225cee3fc4f339770f0106b76ebabf64cae5d1e4a98e9712"
+    },
+    {
+      "files": [
+        "tests/core/extension/test_production_request.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/native-preparation-continuation-cpu-scene-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 54,
+      "sha256": "eb1bb8ebeed41da7b03f2c84cbe12d10a54283491f461055feb06d553d913e4f"
+    },
+    {
+      "files": [
+        "tests/core/extension/test_production_request.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/native-preparation-continuation-pipeline-revalidation-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 55,
+      "sha256": "c47f2b35c698937ad80fa9ad480967efbf504ce18263ccc53d78e5fc5fed5ea2"
+    },
+    {
+      "files": [
+        "tests/core/extension/test_production_request.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/native-preparation-continuation-cpu-failure-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 56,
+      "sha256": "f0a3b334a26d57dbe78fab5a4051662cb1a6518ef6abe1136898d77cb1999c8f"
+    },
+    {
+      "files": [
+        "tests/core/extension/test_production_request.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-plan-scene-fixture-cpu-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 57,
+      "sha256": "511383b2f9f1ffe70600a35a4e69b97f2443fc55570f0f6e07f48fa3df0409ab"
+    },
+    {
+      "files": [
+        "tests/core/extension/test_production_request.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-plan-guard-quota-scene-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 58,
+      "sha256": "36ba510bf54bf4adb952547138a8e107f958587633007dde71b091d8036cdeec"
+    },
+    {
+      "files": [
+        "tests/core/extension/test_production_request.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-records-writer-camera-fixture-cpu-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 59,
+      "sha256": "8e3ee714d9a278e73821b3092e4c9087cab9a5707aa1fc044c8949bc5a0f7d95"
+    },
+    {
+      "files": [
+        "tests/core/extension/test_production_request.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/alias-readback-reflection-scene-cpu-20261112/r2/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 60,
+      "sha256": "2d97078df89e5d70dbe368f495ca6e2683305cbdf5accb799e31808b56549fba"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/test_external_output_owner_state.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/owner-bank-camera-capture-fixture-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 61,
+      "sha256": "3e3deec9490ea503c3cdeadbd566d8fd28ec10c091ff90746c4c8161db452b2a"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc",
+        "tests/servers/rendering/fixtures/typed_renderer_native/staged_camera.inc",
+        "tests/servers/rendering/fixtures/typed_renderer_native/host_scene.inc",
+        "tests/servers/rendering/fixtures/typed_renderer_native/run_staged_camera.gd"
+      ],
+      "hash_valid": true,
+      "path": "work/staged-acquire-bank-refusal-20261112/fixture.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 62,
+      "sha256": "04114cff80cfbd8766bdc6fa9efef1eba6741e9dfab8904321a24ed94e379ece"
+    },
+    {
+      "files": [
+        "tests/core/extension/test_production_request.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/staged-acquire-bank-refusal-20261112/fixture-terminal-controls.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 63,
+      "sha256": "a94a73dfe260cfcef505de99caee2ce6a38f8770bcf690fc81fec24e83eeaf7e"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/fixtures/typed_renderer_native/run_staged_camera.gd"
+      ],
+      "hash_valid": true,
+      "path": "work/staged-acquire-bank-refusal-20261112/refusal-script-maintenance.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 64,
+      "sha256": "1a5cc89a41a45685505ab4822dcdda41f42dabe7b649e2693d9a8e836014bf14"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/fixtures/typed_renderer_native/run_staged_camera.gd"
+      ],
+      "hash_valid": true,
+      "path": "work/staged-acquire-bank-refusal-20261112/refusal-script-free.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 65,
+      "sha256": "29ecd4e254291f435e6c241835e1084f9cb8769203a1affebee8ffaea9c0f25f"
+    },
+    {
+      "files": [
+        "core/extension/gdextension_production_output.cpp"
+      ],
+      "hash_valid": true,
+      "path": "work/staged-acquire-bank-refusal-20261112/production.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 66,
+      "sha256": "6489dbb19d5f34ed9b7c2cc2e3a9e635fd05557b0bc6f08f267bd67e442b44fb"
+    },
+    {
+      "files": [
+        "tests/servers/rendering/fixtures/typed_renderer_native/producer.inc",
+        "tests/servers/rendering/fixtures/typed_renderer_native/selection_facts.inc"
+      ],
+      "hash_valid": true,
+      "path": "work/typed-renderer-mobile-transparent-profile-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "test_fixture_or_script",
+      "sequence": 67,
+      "sha256": "284c524ecd253287801e13f4a0174bd49b9352c4a4c3eb571a1d51394633365c"
+    },
+    {
+      "files": [
+        "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp",
+        "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h"
+      ],
+      "hash_valid": true,
+      "path": "work/mobile-instance192-transparent-prelist-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 68,
+      "sha256": "991f5a3153af16cf5072b6e5ff2f2a0c31777ea3a3a1ab922fa3d42227e009cc"
+    },
+    {
+      "files": [
+        "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp",
+        "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h"
+      ],
+      "hash_valid": true,
+      "path": "work/clustered-instance192-transparent-prelist-20261112/candidate.patch",
+      "qualification": "Applied history. Later patches may supersede these bytes. Final source hashes govern the frozen host.",
+      "role": "production_or_mixed_regression",
+      "sequence": 69,
+      "sha256": "a9ba2e23b15aff9e4071b872204b098cdb3b3841f14f873fbe659aefca5a59d7"
+    }
+  ]
+}

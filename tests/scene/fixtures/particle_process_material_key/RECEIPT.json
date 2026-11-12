@@ -1,0 +1,65 @@
+{
+  "date": "2026-11-11",
+  "status": "CPU_ENGINE_REGRESSION_PASS",
+  "baseline_head": "f39df955b88144a8f8c01285d39694d6874ae557",
+  "build_source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/particle-current-engine-build-20261111/source",
+  "build_log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/particle-current-engine-build-20261111/shader-diagnostic/accepted-build.log",
+  "build_exit": 0,
+  "binary": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/particle-current-engine-build-20261111/source/bin/godot.macos.template_debug.arm64",
+  "binary_sha256": "4069cb4062f01f041c0cde4e54c7a879a5502aaeac80f06ffce65d5e3c7c4e48",
+  "controlled_build": {
+    "schema": 1,
+    "selection": {
+      "schema": 1,
+      "core_stamp": "dfe1a27364c4de13c223ea13645cac190d79aa308c4214b005db07abda0dbb32",
+      "compiler_route": "BuiltinGlslangV1",
+      "compiler_stamp": "c121b863486fe462783f6d0c737e21a5e30b41bd59a8fc07de3d1276229a813c",
+      "platform": "macos",
+      "architecture": "arm64",
+      "target_kind": "Executable"
+    },
+    "status": "available",
+    "reason": null,
+    "artifact": {
+      "bytes": 97319184,
+      "sha256": "4069cb4062f01f041c0cde4e54c7a879a5502aaeac80f06ffce65d5e3c7c4e48"
+    }
+  },
+  "source_sha256": {
+    "scene/resources/particle_process_material.h": "1555d0e7741cb636d60c65e39178cec81199ec78d8a389ca1e19ecbceebf0a5c",
+    "tests/scene/test_particle_process_material.cpp": "92d7f6c47c73e04d22310656e348c775d08d71d39b74d12d795a38d47fdc1e42"
+  },
+  "snapshot_modified_existing_sources": [
+    "scene/resources/particle_process_material.h"
+  ],
+  "added_test_source": "tests/scene/test_particle_process_material.cpp",
+  "red": {
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/particle-current-engine-build-20261111/source/bin/godot.macos.template_debug.arm64",
+      "--test",
+      "--test-case=[ParticleProcessMaterial]*",
+      "--no-skip=true"
+    ],
+    "tests": 2,
+    "assertions": 18,
+    "failed_assertions": 3,
+    "exit": 1,
+    "shader_rid_leaks": 3,
+    "baseline_header": "git show f39df955b88144a8f8c01285d39694d6874ae557:scene/resources/particle_process_material.h"
+  },
+  "green": {
+    "focused_tests": 2,
+    "focused_assertions": 18,
+    "neighbor_tests": 41,
+    "neighbor_assertions": 1315,
+    "neighbor_selector": "[ParticlesReadback]*,[ParticlesProcessRetry]*,[ParticlesTrail]*,[GPUParticles]*,[CPUParticles]*,[Particles]*,[ParticleProcessMaterial]*",
+    "exit": 0,
+    "shader_rid_leaks": 0
+  },
+  "independent_review": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/dummy-shader-leak-trace-20261111/ROOT_CAUSE.md",
+  "limits": [
+    "Dummy renderer CPU lifecycle tests; not real GPU execution.",
+    "Full Godot test suite not run.",
+    "The original snapshot build receipt remains the original-build identity; this receipt pins the incremental fix build."
+  ]
+}

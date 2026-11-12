@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r1/runner/run_control.py", line 140, in <module>
+    assert [int(m[1]) for m in matches] == selected, 'Missing/reordered original occurrence completion'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Missing/reordered original occurrence completion

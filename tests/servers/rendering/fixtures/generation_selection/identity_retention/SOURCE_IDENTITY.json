@@ -1,0 +1,17 @@
+{
+  "base_commit": "b04a74f5f8e558ff6f0d4663f9b3703c44421105",
+  "sources": [
+    {
+      "path": "tests/core/extension/test_production_request.cpp",
+      "sha256": "c866c6172c7db9bbd230b6cea885ff2f82052cf98703ce9b92c49b0930a65425"
+    },
+    {
+      "path": "tests/servers/rendering/test_external_output_custody_bridge.h",
+      "sha256": "414dfa33493140bdd71685a53568beda7120a233dda23206db9941c8aba3ce57"
+    },
+    {
+      "path": "tests/servers/rendering/test_external_output_owner_state.cpp",
+      "sha256": "6a7a53e81b60ee3eb086d4501bc566c8a7685300dac01460c4199ccb3454e06f"
+    }
+  ]
+}

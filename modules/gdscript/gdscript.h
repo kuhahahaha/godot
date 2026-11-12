@@ -38,6 +38,12 @@
 #include "core/object/script_language.h"
 #include "core/templates/rb_set.h"
 
+#ifdef TESTS_ENABLED
+namespace GDScriptLifecycleTests {
+class LanguageLockAccessor;
+}
+#endif
+
 class GDScriptNativeClass : public RefCounted {
 	GDCLASS(GDScriptNativeClass, RefCounted);
 
@@ -408,6 +414,9 @@ public:
 };
 
 class GDScriptLanguage : public ScriptLanguage {
+#ifdef TESTS_ENABLED
+	friend class GDScriptLifecycleTests::LanguageLockAccessor;
+#endif
 	friend class GDScriptFunctionState;
 
 	static GDScriptLanguage *singleton;

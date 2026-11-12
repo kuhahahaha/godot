@@ -1,0 +1,47 @@
+[
+  {
+    "path": "core/extension/gdextension_production_output.cpp",
+    "bytes": 44367,
+    "sha256": "8303a5a511f2eab09deca3c0a24ccb5c1306ff2fc8eca2f909a030d7885bbab0"
+  },
+  {
+    "path": "servers/rendering/renderer_rd/storage_rd/external_output_owner.cpp",
+    "bytes": 37030,
+    "sha256": "ca6f8a2d7f720f3c8b6ac3611cf3a6c0e69b4b92d28660ce10eafc87050e6531"
+  },
+  {
+    "path": "servers/rendering/renderer_rd/storage_rd/external_output_owner.h",
+    "bytes": 15706,
+    "sha256": "abe2c0da44f8dd9e057648b804c915d06262a998b6fc00df88fb44a5c02530be"
+  },
+  {
+    "path": "servers/rendering/renderer_rd/storage_rd/external_output_packet.h",
+    "bytes": 13371,
+    "sha256": "65b1ebd28509417fd15883900342a293080ee8f0bad7c7f17b8f76e1e69c4b4f"
+  },
+  {
+    "path": "servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp",
+    "bytes": 24656,
+    "sha256": "d3e4cdef2173be4f72bb1e97f9c8f6c3e272f8f9846211fb1cbe0f0c5caa4d5e"
+  },
+  {
+    "path": "tests/core/extension/test_production_request.cpp",
+    "bytes": 746311,
+    "sha256": "fdbf69b1feeef3c4fb1a5d82e60766dd8d890ba765e1807711f4f73ae79bdcf2"
+  },
+  {
+    "path": "tests/servers/rendering/test_external_output_custody_bridge.h",
+    "bytes": 9220,
+    "sha256": "f1a6ba28731ce8b27c43791f1564184be124729c3b5865109232fae71fb0fe89"
+  },
+  {
+    "path": "tests/servers/rendering/test_external_output_owner_state.cpp",
+    "bytes": 57297,
+    "sha256": "81728a7964a6096c4042f998837da53d66ca5683645065c3f5136645d2c6b406"
+  },
+  {
+    "path": "tests/servers/rendering/test_record_source.cpp",
+    "bytes": 68838,
+    "sha256": "9ea86fa137d95620d7d055013676b206210d3d9de32513642ba8843ecd24e1a5"
+  }
+]

@@ -44,6 +44,16 @@
 #include "servers/rendering/rendering_server_types.h"
 #include "servers/server_wrap_mt_common.h"
 
+namespace GDExtensionDeviceExit {
+class Registry;
+}
+
+#ifdef TESTS_ENABLED
+namespace TestProductionRequest {
+struct Access;
+}
+#endif
+
 class RenderingServerDefault : public RenderingServer {
 	GDSOFTCLASS(RenderingServerDefault, RenderingServer);
 
@@ -77,6 +87,11 @@ class RenderingServerDefault : public RenderingServer {
 	uint64_t print_frame_profile_ticks_from = 0;
 	uint32_t print_frame_profile_frame_count = 0;
 
+	bool particles_refresh_rate_initialized = false;
+	float particles_screen_refresh_rate = 60.0f;
+	uint64_t particles_refresh_rate_last_update_usec = 0;
+	void _update_particles_screen_refresh_rate();
+
 	mutable CommandQueueMT command_queue;
 
 	Thread::ID server_thread = Thread::MAIN_ID;
@@ -92,6 +107,16 @@ class RenderingServerDefault : public RenderingServer {
 	void _run_post_draw_steps();
 	void _init();
 	void _finish();
+	friend class GDExtensionDeviceExit::Registry;
+#ifdef TESTS_ENABLED
+	friend struct TestProductionRequest::Access;
+#endif
+	bool _try_qualification_service(uint64_t, uint64_t, uint32_t, uint32_t, uint32_t);
+	bool _try_qualification_rt_dispatch(uint64_t, uint64_t);
+	void _qualification_rt_dispatch(uint64_t, uint64_t);
+	bool _try_production_control_dispatch(uint64_t, uint64_t, uint64_t, uint64_t);
+	void _production_control_dispatch(uint64_t, uint64_t, uint64_t, uint64_t);
+	void _qualification_service(uint64_t, uint64_t, uint32_t, uint32_t, uint32_t);
 
 	void _free(RID p_rid);
 
@@ -612,6 +637,15 @@ public:
 #define ServerName RendererParticlesStorage
 #define server_name RSG::particles_storage
 
+	// These result-returning calls never enqueue or synchronize across threads.
+	virtual Dictionary particles_external_create(const Dictionary &p_config) override;
+	virtual Dictionary particles_external_acquire(RID p_particles, const Dictionary &p_request) override;
+	virtual Dictionary particles_external_seal(RID p_particles, const PackedByteArray &p_lease_token, const Dictionary &p_seal) override;
+	virtual Error particles_external_cancel(RID p_particles, const PackedByteArray &p_lease_token) override;
+	virtual Error particles_external_withdraw(RID p_particles, const PackedByteArray &p_generation) override;
+	virtual Dictionary particles_scene_connect(RID p_receiver_instance, const Dictionary &p_config) override;
+	virtual Dictionary particles_external_poll(RID p_particles, const PackedByteArray &p_generation) override;
+
 	FUNCRIDSPLIT(particles)
 
 	FUNC2(particles_set_mode, RID, RSE::ParticlesMode)
@@ -653,6 +687,7 @@ public:
 	FUNC3(particles_set_draw_pass_mesh, RID, int, RID)
 
 	FUNC1R(AABB, particles_get_current_aabb, RID)
+	FUNC1R(PackedByteArray, particles_get_current_data, RID)
 	FUNC2(particles_set_emission_transform, RID, const Transform3D &)
 	FUNC2(particles_set_emitter_velocity, RID, const Vector3 &)
 	FUNC2(particles_set_interp_to_end, RID, float)

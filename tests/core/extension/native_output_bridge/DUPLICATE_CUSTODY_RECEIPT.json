@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "commit": "daa344006a",
+  "scope": "duplicate custody return lifecycle regression",
+  "changes": [
+    "VIEW_RETURN wrapper second release returns ERR_DOES_NOT_EXIST and leaves cell custody unchanged",
+    "READ_CANCEL wrapper second cancel returns ERR_DOES_NOT_EXIST and leaves returned cell unchanged",
+    "SURFACE_RETURN owner-private second surface_return returns ERR_INVALID_PARAMETER and leaves surface cell custody unchanged"
+  ],
+  "verification": {
+    "single_object_compile": "passed for tests/servers/rendering/test_external_output_owner_state.cpp",
+    "existing_binary_external_output": "pre-change binary only; not used as evidence for new assertions",
+    "full_rebuild": "stopped intentionally due 449MB free disk after unrelated object compilation; not a test failure",
+    "new_assertions_runtime": "passed in rebuilt bin/godot.macos.editor.arm64: 28 cases, 8165 assertions, 0 failures (ExternalOutput + exact native output closure filters)",
+    "rebuilt_binary": "scons -Q tests=yes platform=macos target=editor module_particles_runtime_tests_enabled=yes -j2; exit 0",
+    "surface_assertion_runtime": "pending CI/local rebuild; source diff passes git diff --check"
+  },
+  "limits": [
+    "Does not prove U04/source/Host production successor admission",
+    "Does not prove native/GPU completion"
+  ]
+}

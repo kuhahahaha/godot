@@ -91,6 +91,19 @@ struct SurfaceData {
 	Vector<uint8_t> index_data;
 	uint32_t index_count = 0;
 
+	// E25 source authenticity metadata. This is descriptive ingress metadata;
+	// it is never an authority token or a source-memory lease.
+	enum class IndexProvenanceKind : uint8_t {
+		NONE = 0,
+		TYPED_SIGNED32 = 1,
+		RAW_UNSIGNED16 = 2,
+		RAW_UNSIGNED32 = 3,
+	};
+	uint32_t index_provenance_schema = 0;
+	IndexProvenanceKind index_provenance_kind = IndexProvenanceKind::NONE;
+	uint32_t index_provenance_word_count = 0;
+	Vector<int32_t> index_provenance_words;
+
 	AABB aabb;
 	struct LOD {
 		float edge_length = 0.0f;

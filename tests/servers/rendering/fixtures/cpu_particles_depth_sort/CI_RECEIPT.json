@@ -1,0 +1,23 @@
+{
+  "scope": "CPU depth fixture CI annotations/list narrowing/executable bit only; original runtime/source receipts unchanged",
+  "source_commit": "308bb6e9fd4064338c6f04c6b54906aa34901462",
+  "ci": {
+    "run": 42081091563,
+    "job": 127434001362,
+    "failure": "shebang not executable; three mypy errors",
+    "raw_log": "/tmp/b4-ci-a17/static.log"
+  },
+  "before_sha256": "911af0ee070d7c01c2a79b61e4b4c464e2d929289b680a23b1014d5e916897ae",
+  "after_sha256": "727203fa560924c61c222230b02dcec9e85300e7ced099595e73df3e4a60e559",
+  "mode_before": "100644",
+  "mode_after": "100755",
+  "validation": {
+    "mypy": "1.19.1 original exact three errors reproduced; new passes using repository pyproject.toml",
+    "ruff_check": "pass",
+    "ruff_format": "pass",
+    "codespell": "pass",
+    "oracle_replay": "original RED and GREEN each29checks identical; malformed rejects unchanged",
+    "independent_review": "/tmp/b4-ci-a17/REVIEW.md; actualPython3.9 equal and2file mypy pass"
+  },
+  "not_run": "no new engine build/GPU run; not a new host/source qualification"
+}

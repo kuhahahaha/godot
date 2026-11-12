@@ -1,0 +1,30 @@
+{
+  "binary": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/rid-leak.sh",
+  "fixture_sha256": {
+    "run.gd": "cd06d9743adef3441c9985dcb38b05cd43e025c9d8aabf7d475990921c29792a",
+    "project.godot": "825c930eab3b14b751293252fac14d12cf001b8ab22cb3f34e995b3a0c7fa9f7"
+  },
+  "command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/rid-leak.sh",
+    "--headless",
+    "--path",
+    "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-one-shot-tail-bijr6uhr",
+    "--script",
+    "res://run.gd"
+  ],
+  "engine_exit": 0,
+  "timed_out": false,
+  "stdout": "CPU_ONESHOT_ENGINE={\"failures\":[]}\n",
+  "stderr": "WARNING: 1 RID of type CanvasItem was leaked.\n",
+  "errors": [
+    "Engine reported ERROR or RID/ObjectDB leak diagnostics"
+  ],
+  "result": {
+    "failures": []
+  },
+  "acceptance_scope": "headless CPU particle/public-buffer only; not GPU, renderer, or pixel acceptance",
+  "binary_sha256": "fc3be8db9f18d7e7c7e346e6ed05b19f4051a7142c0df0af7ea0bebb1ff5aa0d",
+  "binary_size": 134,
+  "binary_mtime_ns": 1794392071471537106,
+  "passed": false
+}

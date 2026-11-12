@@ -1,0 +1,38 @@
+ERROR: Condition "!pipeline.driver_id" is true. Returning: RID()
+   at: _qualification_render_pipeline_create_internal (servers/rendering/rendering_device.cpp:6063)
+ERROR: Condition "!pipeline.driver_id" is true. Returning: RID()
+   at: _qualification_render_pipeline_create_internal (servers/rendering/rendering_device.cpp:6063)
+ERROR: Condition "!pipeline.driver_id" is true. Returning: RID()
+   at: _qualification_render_pipeline_create_internal (servers/rendering/rendering_device.cpp:6063)
+Unicode parsing error, some characters were replaced with � (U+FFFD): Invalid UTF-8 leading byte (ff)
+ERROR: Attempted to save a foreign camera source token.
+   at: viewport_set_prev_camera_data (servers/rendering/renderer_viewport.cpp:1285)
+ERROR: Attempted to save a foreign camera source token.
+   at: viewport_set_prev_camera_data (servers/rendering/renderer_viewport.cpp:1285)
+ERROR: Attempted to save a foreign camera source token.
+   at: viewport_set_prev_camera_data (servers/rendering/renderer_viewport.cpp:1285)
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_external_output_create_interface.cpp:445:
+TEST CASE:  [B4][OutputMetadataWire] unavailable renderer and absent original context clear only disjoint results
+
+tests/servers/rendering/test_external_output_create_interface.cpp:334: ERROR: CHECK( p_result.status.error == p_error ) is NOT correct!
+  values: CHECK( 0 == 4 )
+
+tests/servers/rendering/test_external_output_create_interface.cpp:335: ERROR: CHECK( p_result.status.detail_length > 0 ) is NOT correct!
+  values: CHECK( 0 >  0 )
+
+tests/servers/rendering/test_external_output_create_interface.cpp:340: ERROR: CHECK( memcmp(&p_result.requirements, &empty, sizeof(empty)) == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_external_output_create_interface.cpp:495: FATAL ERROR: REQUIRE( quoted.status.detail_length == sizeof(query_detail) - 1 ) is NOT correct!
+  values: REQUIRE( 0 == 27 )
+
+tests/servers/rendering/test_external_output_create_interface.cpp:496: ERROR: CHECK( memcmp(quoted.status.detail, query_detail, sizeof(query_detail) - 1) == 0 ) is NOT correct!
+  values: CHECK( -1 == 0 )
+
+===============================================================================
+[doctest] test cases:   210 |   209 passed | 1 failed | 1996 skipped
+[doctest] assertions: 91122 | 91117 passed | 5 failed |
+[doctest] Status: FAILURE!

@@ -1,0 +1,18 @@
+ERROR: Condition "!pipeline.driver_id" is true. Returning: RID()
+   at: _qualification_render_pipeline_create_internal (servers/rendering/rendering_device.cpp:6041)
+ERROR: Condition "!pipeline.driver_id" is true. Returning: RID()
+   at: _qualification_render_pipeline_create_internal (servers/rendering/rendering_device.cpp:6041)
+ERROR: Condition "!pipeline.driver_id" is true. Returning: RID()
+   at: _qualification_render_pipeline_create_internal (servers/rendering/rendering_device.cpp:6041)
+ERROR: Attempted to save a foreign camera source token.
+   at: viewport_set_prev_camera_data (servers/rendering/renderer_viewport.cpp:1285)
+ERROR: Attempted to save a foreign camera source token.
+   at: viewport_set_prev_camera_data (servers/rendering/renderer_viewport.cpp:1285)
+ERROR: Attempted to save a foreign camera source token.
+   at: viewport_set_prev_camera_data (servers/rendering/renderer_viewport.cpp:1285)
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:   179 |   179 passed | 0 failed | 2008 skipped
+[doctest] assertions: 80359 | 80359 passed | 0 failed |
+[doctest] Status: SUCCESS!

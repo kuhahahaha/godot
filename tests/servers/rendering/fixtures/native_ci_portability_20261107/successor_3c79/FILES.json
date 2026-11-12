@@ -1,0 +1,324 @@
+[
+  {
+    "source": "work/ci-native-pass-successor-20261107/HANDOFF.md",
+    "archive": "ci/HANDOFF.md",
+    "original_bytes": 4276,
+    "original_sha256": "3aab0bc45e135c6e8e99501469768bacd990cf1ed71be66666cc4022887ca826",
+    "archive_sha256": "3aab0bc45e135c6e8e99501469768bacd990cf1ed71be66666cc4022887ca826"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/HANDOFF_STATUS.json",
+    "archive": "ci/HANDOFF_STATUS.json.gz",
+    "original_bytes": 12018,
+    "original_sha256": "48c7e62946931f3a8e1ac871314eee0f9dc7d56ebabf8c1eead64febba97de1a",
+    "archive_sha256": "8fd22979f16fd14f0daca5c4b62bc5bb31f5255e7c22b9259907f0041f9d9e3d"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/owned-shadow/GREEN.log.txt",
+    "archive": "ci/owned-shadow/GREEN.log.txt.gz",
+    "original_bytes": 0,
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "archive_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/owned-shadow/PREIMAGE.cpp",
+    "archive": "ci/owned-shadow/PREIMAGE.cpp.gz",
+    "original_bytes": 52815,
+    "original_sha256": "ac2f852605ea6a405947f35b84326f8803acc4c5e4f0204a3610c32c0eb57cc9",
+    "archive_sha256": "724b192645bc775060904546ff7fd8658883dc7b734e70a309c4d1e7a9de1249"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/owned-shadow/RED.log.txt",
+    "archive": "ci/owned-shadow/RED.log.txt.gz",
+    "original_bytes": 494,
+    "original_sha256": "1a6ff4e89390bc2ce635cf12018079965f497c2040f2c4271260f7e24ff188e7",
+    "archive_sha256": "57302d86b01fd510fb4cf02763aa7d5bc8700d72dc825b861f8b00eca6895ec2"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/owned-shadow/RESULT.json",
+    "archive": "ci/owned-shadow/RESULT.json",
+    "original_bytes": 3909,
+    "original_sha256": "41985b9c7c8bab4fbee4b3ce8e9586486466d5fadd4e1e4521dcda5175dd34e2",
+    "archive_sha256": "41985b9c7c8bab4fbee4b3ce8e9586486466d5fadd4e1e4521dcda5175dd34e2"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/physics2d-fixture/PREIMAGE.cpp.txt",
+    "archive": "ci/physics2d-fixture/PREIMAGE.cpp.txt.gz",
+    "original_bytes": 17873,
+    "original_sha256": "f83989deeb918105fa660acee5cdff8e7bd20e903ec8009a202f88c8d229ecfc",
+    "archive_sha256": "271e267f67b1c2f27c642f7b49948b922b93f3c77165fdafe07bc68f8c50dcb3"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/physics2d-fixture/REVIEW.md",
+    "archive": "ci/physics2d-fixture/REVIEW.md",
+    "original_bytes": 3460,
+    "original_sha256": "0ede9ff0072e587c08f4f3fcdf103080fefd5d605079b500578b57870dcb8de8",
+    "archive_sha256": "0ede9ff0072e587c08f4f3fcdf103080fefd5d605079b500578b57870dcb8de8"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/physics2d-fixture/SOURCE_IDENTITY.json",
+    "archive": "ci/physics2d-fixture/SOURCE_IDENTITY.json",
+    "original_bytes": 269,
+    "original_sha256": "188a1bb6c7cece896e81086ab2d889cf095760fefcbaf70740817b37e9a96426",
+    "archive_sha256": "188a1bb6c7cece896e81086ab2d889cf095760fefcbaf70740817b37e9a96426"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888627_FIRST_ERROR.log.txt",
+    "archive": "ci/JOB_128416888627_FIRST_ERROR.log.txt.gz",
+    "original_bytes": 2215,
+    "original_sha256": "d57096e66af38babcc63150fbeb9384630154d127314f30d5fbaa2407baaf282",
+    "archive_sha256": "cb8bb3b2641190cb3a9ec03351ba7cffd6aaa66c56c5934f9f47c0de189cc1c1"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888638_FIRST_ERROR.log.txt",
+    "archive": "ci/JOB_128416888638_FIRST_ERROR.log.txt.gz",
+    "original_bytes": 1429,
+    "original_sha256": "0f4470376d5775e59734bee2f87e822ea9c1a5a337c23e4209f34f9f2a69b1e8",
+    "archive_sha256": "b71ddd8ddb2a98bd54baf3f72b9b77289e74bb30d69511ad7d16f89b3bd6a3d6"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888646_FIRST_ERROR.log.txt",
+    "archive": "ci/JOB_128416888646_FIRST_ERROR.log.txt.gz",
+    "original_bytes": 1373,
+    "original_sha256": "d3ae278277f2e599e64b56e3f481271c60eff33ea0745fa5536a9a9365e8f370",
+    "archive_sha256": "9251e98f9874a466725c945980e13a94b89ed1b3ddff884f4215c7a164d05dd8"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888747_FIRST_ERROR.log.txt",
+    "archive": "ci/JOB_128416888747_FIRST_ERROR.log.txt.gz",
+    "original_bytes": 1373,
+    "original_sha256": "dccbc6df7ad12307cfd6b8b8605031a192fe6596913222d389f0b0e7680b572e",
+    "archive_sha256": "1cb4bfd9d5f0f07742de126bc5af96d5a1c193e27979c98675c8ec69d9a9b0ba"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888750_FIRST_ERROR.log.txt",
+    "archive": "ci/JOB_128416888750_FIRST_ERROR.log.txt.gz",
+    "original_bytes": 1373,
+    "original_sha256": "2acc33fd55b24e34266401aea6ea93b9c48f29b58e065ff1b23eacf913a9130d",
+    "archive_sha256": "c407f6b1ccd179503c9aa5a24911af174eaf7a449a043cfb4254b4594b98a532"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888806_FIRST_ERROR.log.txt",
+    "archive": "ci/JOB_128416888806_FIRST_ERROR.log.txt.gz",
+    "original_bytes": 8439,
+    "original_sha256": "1db1c035db3503f68fd9f75dccce36823b0142be552ebeb1d4280729294803f1",
+    "archive_sha256": "dd265b6ecf5e24f529ab3aa30379813dcf3c970aca895a4cfbd5023287f16f15"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888636_FIRST_FAILURE_6897.log.txt",
+    "archive": "ci/JOB_128416888636_FIRST_FAILURE_6897.log.txt.gz",
+    "original_bytes": 1472,
+    "original_sha256": "c9b12b6d301a03227d11b93e93e49bd666c6df38681c070fedd1c32420310da0",
+    "archive_sha256": "c0e073780ef159dfe74c749f7123c454547448c1b19619a3422b1e3fcadf5e94"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888636_FIRST_FAILURE_6900.log.txt",
+    "archive": "ci/JOB_128416888636_FIRST_FAILURE_6900.log.txt.gz",
+    "original_bytes": 810,
+    "original_sha256": "ee00d5c922bf1c47164f34c372199a1152ae1506026dc99b31f17694e35fa039",
+    "archive_sha256": "dd2eeec7003334f32aaea7e1a1b5c936c5326735974a767e16e7b842cce0c4d4"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888636_FIRST_FAILURE_6903.log.txt",
+    "archive": "ci/JOB_128416888636_FIRST_FAILURE_6903.log.txt.gz",
+    "original_bytes": 787,
+    "original_sha256": "c20d686e3e35e1ab10443c253157f5b12340bd353d9d0c8110c85ec0c00674cf",
+    "archive_sha256": "07b6df1592c59f300914ea424635d67d43761e146ae10c26eb0acbc5911e857a"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888636_FIRST_FAILURE_6906.log.txt",
+    "archive": "ci/JOB_128416888636_FIRST_FAILURE_6906.log.txt.gz",
+    "original_bytes": 787,
+    "original_sha256": "f6eba6e25ceb3a1a9d9ce2954f618444b88a3309ef8f0aeb3e380b57b6d2a44f",
+    "archive_sha256": "3719d2c77954c943794ae6ef6cf120d1258622a0038abc62f92e6597b4027c47"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888636_FIRST_FAILURE_6909.log.txt",
+    "archive": "ci/JOB_128416888636_FIRST_FAILURE_6909.log.txt.gz",
+    "original_bytes": 788,
+    "original_sha256": "1077d897294abb6c6a6cf8a06807f0d0da765cf45570936e0283c3c16c444cee",
+    "archive_sha256": "22613f68978538a22cb00678cadafdc943472cec9614e52e4757ed6323e9094a"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888636_FIRST_FAILURE_6912.log.txt",
+    "archive": "ci/JOB_128416888636_FIRST_FAILURE_6912.log.txt.gz",
+    "original_bytes": 789,
+    "original_sha256": "f7369abdfb5ed40475b6341e96d2ba26f76d3394bc38c54fb0f03a0f19a3ce15",
+    "archive_sha256": "5ca792267fb579a245dbebae793e74e6a858502236aaadd2797f8e11a0a5c11e"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888636_FIRST_FAILURE_6915.log.txt",
+    "archive": "ci/JOB_128416888636_FIRST_FAILURE_6915.log.txt.gz",
+    "original_bytes": 813,
+    "original_sha256": "6a39b902b813b1d1d56c2a47776c26f5df863de1843bd8c99ca5bca2ef75f27f",
+    "archive_sha256": "b330262cc085f22c425f5c1617d4a23e1da6ac9b451c7ca3d777c17550541e87"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888636_FIRST_FAILURE_6918.log.txt",
+    "archive": "ci/JOB_128416888636_FIRST_FAILURE_6918.log.txt.gz",
+    "original_bytes": 835,
+    "original_sha256": "edaaebc8f08ad1bdcb0994a06fa0445deb5812060c5b267645de5baafc2757bb",
+    "archive_sha256": "a4da2317059826be8ae37b38270db380c3b1e640a980e08ab63c0897d7036cdc"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888636_FIRST_FAILURE_6921.log.txt",
+    "archive": "ci/JOB_128416888636_FIRST_FAILURE_6921.log.txt.gz",
+    "original_bytes": 855,
+    "original_sha256": "0ce6f707f1203a3304ecc525b8182413199c7b9541fa6f8c2d2a7e010025a61a",
+    "archive_sha256": "793e8a6245cedae95f5a71dc613a083a770a9cb10b3c58c0eded17c4b3700915"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888636_FIRST_FAILURE_6924.log.txt",
+    "archive": "ci/JOB_128416888636_FIRST_FAILURE_6924.log.txt.gz",
+    "original_bytes": 897,
+    "original_sha256": "ac65bd10337fdd7488e56238c77ed7e0f8560db56e64b3bd297ea67bebdc9bc6",
+    "archive_sha256": "7014caac581cddd23a2e5ec3c10bc7038c8a6eef55f37a7e443de9fa945018dc"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888686_FIRST_FAILURE_7907.log.txt",
+    "archive": "ci/JOB_128416888686_FIRST_FAILURE_7907.log.txt.gz",
+    "original_bytes": 975,
+    "original_sha256": "03c362b6e13abb8d0d5f6c08a9a94b51976cb2be4f43df798a31bd5abbd1900a",
+    "archive_sha256": "807da5d9967f6815d419d559dd073d0104cc52e2a62236b2b91712c5215a3cb7"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888686_FIRST_FAILURE_7917.log.txt",
+    "archive": "ci/JOB_128416888686_FIRST_FAILURE_7917.log.txt.gz",
+    "original_bytes": 984,
+    "original_sha256": "ac14706585539db8063487e3a61cd0b849827c9a3de17ff153fc7e5c1d2883b4",
+    "archive_sha256": "859d24105c1f81d488e0fac5e5a4de3e21b2a4cc880ddf5872aa098cd42e1d3d"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888686_FIRST_FAILURE_7927.log.txt",
+    "archive": "ci/JOB_128416888686_FIRST_FAILURE_7927.log.txt.gz",
+    "original_bytes": 1530,
+    "original_sha256": "b0017e5184a5c0d1f030abd7b617c36082eccd519501efc909cda6d480ae1857",
+    "archive_sha256": "b9395f2c39ee965621e7bddbd19469d7f4d2802b860a9c0fda989b501183e98f"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888627_IDENTITY.json",
+    "archive": "ci/JOB_128416888627_IDENTITY.json",
+    "original_bytes": 345,
+    "original_sha256": "f4d1005253c046f29cd69e19a175f9b1c73c8941210ceac311bcb4d218377e87",
+    "archive_sha256": "f4d1005253c046f29cd69e19a175f9b1c73c8941210ceac311bcb4d218377e87"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888636_IDENTITY.json",
+    "archive": "ci/JOB_128416888636_IDENTITY.json",
+    "original_bytes": 644,
+    "original_sha256": "8069078bca4e171fd9dec001211ccf707af8b3db5c6db69b6e1d367ac6efb937",
+    "archive_sha256": "8069078bca4e171fd9dec001211ccf707af8b3db5c6db69b6e1d367ac6efb937"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888638_IDENTITY.json",
+    "archive": "ci/JOB_128416888638_IDENTITY.json",
+    "original_bytes": 383,
+    "original_sha256": "3d29a618372d1fb717351de2cb245851adb87b3851d5ae2418be2fa95a7a6fb8",
+    "archive_sha256": "3d29a618372d1fb717351de2cb245851adb87b3851d5ae2418be2fa95a7a6fb8"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888641_IDENTITY.json",
+    "archive": "ci/JOB_128416888641_IDENTITY.json",
+    "original_bytes": 534,
+    "original_sha256": "6d5655fd6e7df9a2fa63683bf20f465b7e9cddf51d48e0429e54a040723ea0ae",
+    "archive_sha256": "6d5655fd6e7df9a2fa63683bf20f465b7e9cddf51d48e0429e54a040723ea0ae"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888646_IDENTITY.json",
+    "archive": "ci/JOB_128416888646_IDENTITY.json",
+    "original_bytes": 381,
+    "original_sha256": "3df14b17d0b8fde84d8634b3cf6226a8d61f66288812ce63d590f6a4e986aef1",
+    "archive_sha256": "3df14b17d0b8fde84d8634b3cf6226a8d61f66288812ce63d590f6a4e986aef1"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888686_IDENTITY.json",
+    "archive": "ci/JOB_128416888686_IDENTITY.json",
+    "original_bytes": 642,
+    "original_sha256": "84f8a1f8f4c4521e21726722a03a35873c47c437a1d79a30b977b6b8804cc7eb",
+    "archive_sha256": "84f8a1f8f4c4521e21726722a03a35873c47c437a1d79a30b977b6b8804cc7eb"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888693_IDENTITY.json",
+    "archive": "ci/JOB_128416888693_IDENTITY.json.gz",
+    "original_bytes": 16110,
+    "original_sha256": "12b9f6dfeedd6682756e01dd1d4a273499a7a813c961417379134ddd19ab975e",
+    "archive_sha256": "791e9eeeefa5f253dfd4b0ac7fb930398df5ef57440e8523d778bcea37800db4"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888717_IDENTITY.json",
+    "archive": "ci/JOB_128416888717_IDENTITY.json",
+    "original_bytes": 534,
+    "original_sha256": "f85340e2b787d50b8cbcf9f760f0c5874728962192a14f961dd6efb61dc88589",
+    "archive_sha256": "f85340e2b787d50b8cbcf9f760f0c5874728962192a14f961dd6efb61dc88589"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888747_IDENTITY.json",
+    "archive": "ci/JOB_128416888747_IDENTITY.json",
+    "original_bytes": 381,
+    "original_sha256": "03e0be180f243ef688a16387e67c3eb414ee7ad01e2d0d0d685ba5aa32217a7c",
+    "archive_sha256": "03e0be180f243ef688a16387e67c3eb414ee7ad01e2d0d0d685ba5aa32217a7c"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888750_IDENTITY.json",
+    "archive": "ci/JOB_128416888750_IDENTITY.json",
+    "original_bytes": 381,
+    "original_sha256": "341613df83535727e2539f12bced588cc27871f598f7b6e26fe7c4b3a8fa4b87",
+    "archive_sha256": "341613df83535727e2539f12bced588cc27871f598f7b6e26fe7c4b3a8fa4b87"
+  },
+  {
+    "source": "work/ci-native-pass-successor-20261107/JOB_128416888806_IDENTITY.json",
+    "archive": "ci/JOB_128416888806_IDENTITY.json",
+    "original_bytes": 381,
+    "original_sha256": "fea79bd2b502119ced0f28a83ff523debf842f650c001551726d478b9d4e2996",
+    "archive_sha256": "fea79bd2b502119ced0f28a83ff523debf842f650c001551726d478b9d4e2996"
+  },
+  {
+    "source": "work/native-depth-allocation-parent-20261107/RED_D32.log.txt",
+    "archive": "local/RED_D32.log.txt.gz",
+    "original_bytes": 775,
+    "original_sha256": "b517da927ea255eae77b362f6284459dc2a8197a4b798e2032d32d6582fb8d7d",
+    "archive_sha256": "dc92ee02fca8731286cdc8cfeb4ae86a98bbc15e3d4c8cde94338622eb6069ea"
+  },
+  {
+    "source": "work/native-depth-allocation-parent-20261107/RED_D32.xml",
+    "archive": "local/RED_D32.xml.gz",
+    "original_bytes": 367244,
+    "original_sha256": "1461b8fd8574fad593496a8efc855d04f8fd6d05a0328b5aacf69f597bf915e5",
+    "archive_sha256": "26d592ba3d48efe46801340e02dc13bb7300f2edc93fb7fd6bbbe1011054e9b2"
+  },
+  {
+    "source": "work/native-depth-allocation-parent-20261107/RED_VALIDATION.json",
+    "archive": "local/RED_VALIDATION.json",
+    "original_bytes": 1878,
+    "original_sha256": "73037aa34f4f10699cfca7ec80ae792efda0ca5e172583c3d58bc71953593485",
+    "archive_sha256": "73037aa34f4f10699cfca7ec80ae792efda0ca5e172583c3d58bc71953593485"
+  },
+  {
+    "source": "work/native-depth-allocation-parent-20261107/GREEN_FINAL_BUILD_RESULT.json",
+    "archive": "local/GREEN_FINAL_BUILD_RESULT.json",
+    "original_bytes": 335,
+    "original_sha256": "4f791062469e7a0d0958f01fdfce5351b3bde18a0d54bc24fa8d1d9d67e73d9f",
+    "archive_sha256": "4f791062469e7a0d0958f01fdfce5351b3bde18a0d54bc24fa8d1d9d67e73d9f"
+  },
+  {
+    "source": "work/native-depth-allocation-parent-20261107/GREEN_FINAL_FOCUSED_RESULT.json",
+    "archive": "local/GREEN_FINAL_FOCUSED_RESULT.json",
+    "original_bytes": 536,
+    "original_sha256": "ed9729e7a43b921e83e98f56021634aaa48a6e411e74ae51bbc91c5e2455bfb2",
+    "archive_sha256": "ed9729e7a43b921e83e98f56021634aaa48a6e411e74ae51bbc91c5e2455bfb2"
+  },
+  {
+    "source": "work/native-depth-allocation-parent-20261107/GREEN_FINAL_FULL_RESULT.json",
+    "archive": "local/GREEN_FINAL_FULL_RESULT.json",
+    "original_bytes": 454,
+    "original_sha256": "3bf8026ec768edcbdc3d658c4c4bd79c49a7c6ce555f0d707f4f2849f820da19",
+    "archive_sha256": "3bf8026ec768edcbdc3d658c4c4bd79c49a7c6ce555f0d707f4f2849f820da19"
+  },
+  {
+    "source": "work/native-depth-allocation-parent-20261107/CPU_XML_AUDIT.json",
+    "archive": "local/CPU_XML_AUDIT.json.gz",
+    "original_bytes": 12687,
+    "original_sha256": "250f95faf01978f9cbfdcea33d4e2eb86406303d758cff6580554fd96562dcc0",
+    "archive_sha256": "f75f4ac54878e97f400fc9bf2263701d010a6717ad2065c4edc2ae80fdfe382d"
+  }
+]

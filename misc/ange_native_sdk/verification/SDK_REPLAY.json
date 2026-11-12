@@ -1,0 +1,122 @@
+{
+  "schema_sha256": "1a7a839114b3ec7a79a9d5026fe78214023c6ed2370cd7784a5a6bdf4ffec1ca",
+  "products": {
+    "include/gdextension_interface.h": {
+      "sha256": "eab76f80861bdb12ef2130cd4408ce05640ebcf7d0420ed1e03aaf82def42f2d",
+      "bytes": 474324
+    },
+    "include/godot_cpp/core/gdextension_interface_loader.hpp": {
+      "sha256": "c536d841e791f55552bdc5e046308e23afa22b667336ff3b5047fbdf4f53b828",
+      "bytes": 43031
+    },
+    "src/gdextension_interface_loader.cpp": {
+      "sha256": "381915de40d91cf045e9eee1159d109c7e2c2869213cc92f29189fb2273136d0",
+      "bytes": 102552
+    }
+  },
+  "results": [
+    {
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "-c",
+        "import sys;from pathlib import Path;sys.path.insert(0,sys.argv[1]);import binding_generator as g;g.generate_gdextension_interface_header(sys.argv[3]+\"/include/gdextension_interface.h\",sys.argv[2]);g.generate_gdextension_interface_loader(sys.argv[2],Path(sys.argv[3]))",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/sdk/tools/godot-cpp",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/sdk/schema/gdextension_interface.json",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/sdk"
+      ],
+      "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/sdk",
+      "exit": 0,
+      "seconds": 0.11651741701643914,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "-c",
+        "import sys;from pathlib import Path;sys.path.insert(0,sys.argv[1]);import binding_generator as g;g.generate_gdextension_interface_header(sys.argv[3]+\"/include/gdextension_interface.h\",sys.argv[2]);g.generate_gdextension_interface_loader(sys.argv[2],Path(sys.argv[3]))",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/sdk/tools/godot-cpp",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/sdk/schema/gdextension_interface.json",
+        "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/native-interface-sdk-replay-9rs8404w"
+      ],
+      "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/sdk",
+      "exit": 0,
+      "seconds": 0.1138526659924537,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "clang",
+        "-std=c11",
+        "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/sdk/include",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/sdk/probes/interface_include.c",
+        "-fsyntax-only"
+      ],
+      "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/sdk",
+      "exit": 0,
+      "seconds": 0.03503791702678427,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/sdk/include",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/sdk/probes/interface_include.cpp",
+        "-fsyntax-only"
+      ],
+      "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/sdk",
+      "exit": 0,
+      "seconds": 0.035335916036274284,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/sdk/include",
+        "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/sdk/support/godot-cpp/include",
+        "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/sdk/support/godot-cpp/gen/include",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/sdk/src/gdextension_interface_loader.cpp",
+        "-fsyntax-only"
+      ],
+      "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/sdk",
+      "exit": 0,
+      "seconds": 0.1154317079926841,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "clang++",
+        "--version"
+      ],
+      "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/sdk",
+      "exit": 0,
+      "seconds": 0.017047417000867426,
+      "stdout_bytes": 200,
+      "stderr_bytes": 0,
+      "stdout_sha256": "b8a2569d699eec50baaf1719096d0801d16fb28fbcb2df7ffd0a07cd26d9fd47",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "double_generation_exact": true,
+  "formal_products_exact": true,
+  "inputs_unchanged": true,
+  "scope": "Custom native interface header plus loader declaration/implementation. Include and loader syntax only; no ANGE/RmlUi libraries, executable link or runtime validation."
+}

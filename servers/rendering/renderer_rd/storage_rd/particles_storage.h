@@ -30,10 +30,12 @@
 
 #pragma once
 
+#include "core/extension/gdextension_interface.gen.h"
 #include "core/templates/local_vector.h"
 #include "core/templates/rid_owner.h"
 #include "core/templates/self_list.h"
 #include "servers/rendering/renderer_rd/pipeline_deferred_rd.h"
+#include "servers/rendering/renderer_rd/effects/particles_external_guard.h"
 #include "servers/rendering/renderer_rd/shaders/particles.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/particles_copy.glsl.gen.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
@@ -42,16 +44,98 @@
 #include "servers/rendering/storage/particles_storage.h"
 #include "servers/rendering/storage/utilities.h"
 
+namespace GDExtensionDeviceExit {
+enum class ProductionOutputOwnerKind : uint8_t;
+class ProductionOutputPin;
+class ProductionRequest;
+struct ProductionOutputHistoryBorrow;
+} //namespace GDExtensionDeviceExit
+
+class RenderDataRD;
+class RendererSceneRenderRD;
+class RenderGeometryInstance;
+
+class ParticlesRuntimeTestFixture;
+class ParticlesHeightfieldClearTestFixture;
+class ParticlesExternalGuardTestFixture;
+#ifdef TESTS_ENABLED
+class TestNativeHeightRangeAccess;
+#endif
+
 namespace RendererRD {
 
 class SortEffects;
+class HeightCaptureCheckedSink;
+class ParticlesExternalGuard;
+#ifdef TESTS_ENABLED
+class ExternalLinkedOwnerTest;
+#endif
+class ExternalOutputOwner;
+struct ExternalOutputConfig;
+class ExternalPipelinePreparation;
+class ExternalSurfaceSelection;
+class ExternalPacketBinding;
+class ExternalPacketViewLease;
+enum class ExternalPacketPass : uint8_t;
+struct ExternalPacketPipelineRequest;
 
 class ParticlesStorage : public RendererParticlesStorage {
+	friend class HeightCaptureCheckedSink;
+
 private:
+	class HeightFrameResources;
+	class HeightFrame;
+	// Retains only the exact existing Current; caller owns phase/sample admission.
+	Error _scene_height_current_acquire(RID, const RenderingDevice *, uint32_t, Ref<HeightFrame> &) const;
+#if defined(TESTS_ENABLED) && defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+	friend class ::ParticlesRuntimeTestFixture;
+	friend class ::ParticlesHeightfieldClearTestFixture;
+	friend class ::ParticlesExternalGuardTestFixture;
+#endif
+#ifdef TESTS_ENABLED
+	friend class ExternalLinkedOwnerTest;
+	friend class ::TestNativeHeightRangeAccess;
+	// Private CPU component construction: normal fields and RID_Owner only.
+	explicit ParticlesStorage(ExternalLinkedOwnerTest *);
+	bool external_output_component_test = false;
+	friend class TestParticlesTrailAccess;
+	friend class TestParticlesReadbackAccess;
+	friend class TestParticlesProcessRetryAccess;
+#endif
+	friend class ::GDExtensionDeviceExit::Registry;
+	friend class ::RenderingDevice;
+	// Fixed original Core -> native owner service. Core re-resolves its finite
+	// row after return; no owner/wrapper pointer is persisted in the Core arena.
+	static Error _production_output_generation_ready(RID, uint64_t, const GDExtensionDeviceExit::ProductionOutputPin &, RenderingDevice &, GDExtensionProductionRequestRefV1, uint32_t &, uint32_t &);
+	static bool _production_output_owner_matches(GDExtensionDeviceExit::ProductionOutputOwnerKind, RID, uint64_t, uint32_t, uint64_t, const GDExtensionDeviceExit::ProductionOutputPin &, RenderingDevice &, GDExtensionProductionRequestRefV1);
+	static Error _production_output_service(GDExtensionDeviceExit::ProductionOutputOwnerKind p_kind, RID p_particles, uint64_t p_generation, uint32_t p_slot, uint64_t p_lease_serial, GDExtensionDeviceExit::ProductionOutputPin &p_pin, const GDExtensionProductionServiceBudgetV1 &p_budget, GDExtensionDeviceExit::ProductionServiceUsage &r_usage);
+	static Error _external_typed_context(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, bool);
+	// Value-only projection made while the original Registry/RD call is held.
+	// It retains no authority, view, Host pointer, witness or new native owner.
+	struct ExternalGuardHistorySnapshot {
+		uint64_t request_serial = 0, lease_serial = 0;
+		RenderingDevice::ProductionOutputUniformSource predecessor_read;
+		GDExtensionProductionHostTransformV1 current_host = {};
+		Transform3D previous_host;
+		ParticlesExternalGuard::GeometryProofHeader proof;
+		Vector<ParticlesExternalGuard::SurfaceProof> surfaces;
+	};
+	Error _external_guard_copy_history_locked(const GDExtensionDeviceExit::ProductionOutputHistoryBorrow &, const RD::ProductionOutputUniformSource &, RID, uint32_t, ExternalGuardHistorySnapshot &);
+	uint64_t next_external_generation = 1;
+	static bool _external_decode_create(const GDExtensionOutputCreateInputV1 &, ExternalOutputConfig &, uint32_t &, GDExtensionOutputCreateResultV1 &);
+	void _external_create_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCreateInputV1 &, uint32_t, uint32_t, uint32_t, uint32_t, GDExtensionOutputCreateResultV1 &);
+	Error _external_instance_preparation_error() const;
+	Error _external_metadata_requirements(const ExternalOutputConfig &, const GDExtensionOutputMetadataLimitsV1 &, GDExtensionOutputMetadataRequirementsV1 &) const;
+	void _external_create_received(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const ExternalOutputConfig &, GDExtensionDeviceExit::ProductionOutputMetadataLease &, uint32_t, uint32_t, uint32_t, GDExtensionOutputCreateResultV1 &, bool p_generation_selection = false);
+	GDExtensionOutputStatusV1 _external_seal_body(RID, const uint8_t *, const GDExtensionOutputCommonInputV1 &, const uint8_t *);
+	Error _external_cancel_body(RID, const uint8_t *);
+	Error _external_withdraw_body(RID, uint64_t);
 	static ParticlesStorage *singleton;
 
 	/* EFFECTS */
 	SortEffects *sort_effects = nullptr;
+	ParticlesExternalGuard *external_guard = nullptr;
+	Error external_guard_preparation_error = ERR_UNCONFIGURED;
 
 	/* PARTICLES */
 
@@ -160,6 +244,9 @@ private:
 	};
 
 	struct Particles {
+		// Immutable after creation; the original particle RID remains the owner.
+		// A non-null pointer must never enter native simulation or amount paths.
+		ExternalOutputOwner *external = nullptr;
 		RSE::ParticlesMode mode = RSE::PARTICLES_MODE_3D;
 		bool inactive = true;
 		double inactive_time = 0.0;
@@ -196,6 +283,10 @@ private:
 		bool trail_bind_poses_dirty = false;
 		RID trail_bind_pose_buffer;
 		RID trail_bind_pose_uniform_set;
+#ifdef TESTS_ENABLED
+		bool test_reject_trail_allocation_once = false;
+		uint32_t test_trail_uniform_attempts = 0;
+#endif
 
 		RID particle_buffer;
 		RID particle_instance_buffer;
@@ -216,6 +307,12 @@ private:
 		RID particles_sort_uniform_set;
 
 		bool dirty = false;
+		bool retry_pending = false;
+		Error process_error = OK; // A managed native prefix failure cannot be replayed.
+		bool frame_delta_committed = false;
+		uint32_t frame_delta_committed_frame = UINT32_MAX;
+		real_t pre_process_time_remaining = 0.0;
+		bool pre_process_pending = false;
 		SelfList<Particles> update_list;
 
 		RID sub_emitter;
@@ -265,6 +362,7 @@ private:
 		bool trails_enabled = false;
 		LocalVector<ParticlesFrameParams> frame_history;
 		LocalVector<ParticlesFrameParams> trail_params;
+		double trail_params_speed_scale = 1.0;
 
 		Particles() :
 				update_list(this) {
@@ -272,10 +370,24 @@ private:
 		}
 	};
 
-	void _particles_process(Particles *p_particles, double p_delta);
+	static void _particles_commit_process_state(Particles *p_particles, Particles *p_sub_emitter, bool p_sub_emitter_was_emitting, bool p_success);
+	static void _particles_restore_process_history(Particles *p_particles, const ParticlesFrameParams &p_previous_first, const ParticlesFrameParams &p_previous_last, double p_previous_trail_speed_scale);
+	static bool _particles_get_total_amount(const Particles *p_particles, uint32_t &r_total_amount);
+	static bool _particles_amount_is_valid(int p_amount);
+	static bool _particles_lifetime_is_valid(double p_lifetime);
+	static bool _particles_trail_lifetime_is_valid(double p_lifetime);
+	static bool _particles_process_time_is_valid(double p_time);
+	static bool _particles_fixed_fps_is_valid(int p_fps);
+	static bool _particles_speed_scale_is_valid(double p_scale);
+	static bool _particles_ratio_is_valid(double p_ratio);
+	static bool _particles_collision_base_size_is_valid(real_t p_size);
+	static bool _particles_get_buffer_size(uint64_t p_count, uint64_t p_element_size, uint64_t p_header_size, uint32_t &r_size);
+	bool _particles_process(Particles *p_particles, double p_delta);
+	static bool _particles_get_data_size(const Particles *p_particles, uint64_t &r_size);
 	void _particles_allocate_emission_buffer(Particles *particles);
 	void _particles_ensure_unused_emission_buffer(Particles *particles);
-	void _particles_ensure_unused_trail_buffer(Particles *particles);
+	static bool _particles_ensure_unused_trail_buffer(Particles *particles);
+	static bool _particles_ensure_trail_uniform(Particles *particles, RID p_shader);
 	void _particles_free_data(Particles *particles);
 	void _particles_update_buffers(Particles *particles);
 
@@ -290,6 +402,7 @@ private:
 			uint32_t sub_emitter_mode;
 			uint32_t can_emit;
 			uint32_t trail_pass;
+			uint32_t invocation_offset;
 		};
 
 		ParticlesShaderRD shader;
@@ -325,7 +438,7 @@ private:
 
 			uint32_t align_src;
 			uint32_t align_axis;
-			uint32_t pad1;
+			uint32_t invocation_offset;
 			uint32_t pad2;
 		};
 
@@ -406,6 +519,7 @@ private:
 
 	struct ParticlesCollision {
 		RSE::ParticlesCollisionType type = RSE::PARTICLES_COLLISION_TYPE_SPHERE_ATTRACT;
+		uint64_t scene_shape_revision = 1;
 		uint32_t cull_mask = 0xFFFFFFFF;
 		float radius = 1.0;
 		Vector3 extents = Vector3(1, 1, 1);
@@ -413,10 +527,8 @@ private:
 		float attractor_attenuation = 1.0;
 		float attractor_directionality = 0.0;
 		RID field_texture;
-		RID heightfield_texture;
-		RID heightfield_fb;
-		Size2i heightfield_fb_size;
 		uint32_t heightfield_mask = (1 << 20) - 1;
+		HashSet<RID> instances;
 
 		RSE::ParticlesCollisionHeightfieldResolution heightfield_resolution = RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_1024;
 
@@ -426,8 +538,28 @@ private:
 	struct ParticlesCollisionInstance {
 		RID collision;
 		Transform3D transform;
+		uint64_t scene_source_key = 0;
 		bool active = false;
+		RID heightfield_texture;
+		RID heightfield_fb;
+		Size2i heightfield_fb_size;
+		// Only the original Registry phase receiver installs pending_frame.
+		// Presence of either typed frame selects the managed owner path.
+		bool scene_managed = false;
+		// One prepared target from its original charged C allocation. The
+		// original SceneCull source pass consumes it, before the G read phase.
+		GDExtensionQualificationBridgeRefV1 staged_height_bridge = {};
+		GDExtensionStorageSceneDepthRefV1 staged_height_facet = {};
+		Ref<HeightFrameResources> staged_height_resources;
+		uint32_t staged_height_native_capacity = 0, staged_height_transfer_capacity = 0;
+		uint64_t next_scene_content_ordinal = 1;
+		Ref<HeightFrame> pending_frame;
+		Ref<HeightFrame> current_frame;
 	};
+	static void _heightfield_before_modify(void *p_instance);
+	void _heightfield_free_instance_target(ParticlesCollisionInstance *p_instance);
+	void _heightfield_invalidate_base_instances(RID p_collision);
+	uint64_t next_scene_source_key = 1;
 
 	mutable RID_Owner<ParticlesCollision, true> particles_collision_owner;
 
@@ -435,9 +567,16 @@ private:
 
 public:
 	static ParticlesStorage *get_singleton();
+	// True means the original managed path handled this source, not capture success.
+	bool particles_collision_capture_scene_candidate(RendererSceneRenderRD &p_renderer, RID p_instance, const PagedArray<RenderGeometryInstance *> &p_geometry);
 
 	ParticlesStorage();
 	virtual ~ParticlesStorage();
+
+	// Engine-owned preparation only; this issues no producer capability.
+	const ParticlesExternalGuard *get_external_guard() const { return external_guard; }
+	Error get_external_guard_preparation_error() const { return external_guard_preparation_error; }
+	bool is_external_guard_prepared() const;
 
 	bool free(RID p_rid);
 
@@ -447,6 +586,63 @@ public:
 
 	virtual RID particles_allocate() override;
 	virtual void particles_initialize(RID p_rid) override;
+
+	// Synchronous typed bodies only. Registration/Host anchor is not supplied here.
+	Error _external_transforms_prepare_owned_prefix(ExternalPipelinePreparation &);
+	Error _external_storage_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1, RID, uint32_t);
+	static Error _external_guard_copy_host_inverse(const GDExtensionProductionHostTransformV1 &, const PackedByteArray &, const Transform3D &, ParticlesExternalGuard::GeometryProofHeader &);
+	Error _external_guard_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1, RID, uint32_t, const Vector<RD::ProductionOutputUniformSource> &, const uint64_t *, const uint32_t *, const GDExtensionProductionHostTransformV1 &, const ExternalGuardHistorySnapshot *, uint32_t, uint32_t, ParticlesExternalGuard::LayoutPlan &);
+	// The assigned row stays closed until the original owned reservation succeeds.
+	Error _external_pipeline_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1, RID, uint32_t, uint32_t, ExternalPipelinePreparation &, uint32_t p_max_resources);
+	Error _external_preparation_bank_reserve_owned_prefix(GDExtensionProductionPhysicalContextRefV1, RID, uint32_t, uint32_t p_max_resources);
+	Error _external_pipeline_reserve_owned_prefix(GDExtensionProductionPhysicalContextRefV1, RID, uint32_t, uint32_t, ExternalPipelinePreparation &, uint32_t p_max_resources);
+	using ExternalPreparationBody = Error (*)(void *, const ExternalSurfaceSelection &, ExternalPipelinePreparation &);
+	enum class ExternalDrawPreparation { PREPARE_FOR_DRAW,
+		PREPARED_ONLY };
+	using ExternalPipelinePrepareForView = Error (*)(void *, const ExternalSurfaceSelection &, const ExternalPacketViewLease &, const ExternalPacketPipelineRequest &, const ExternalPipelinePreparation *&);
+	using ExternalPushPrepareForBinding = Error (*)(void *, const ExternalPacketBinding &, const void *&, uint32_t &);
+	Error particles_external_prepare_pipeline(const ExternalSurfaceSelection &, const ExternalPacketViewLease &, const ExternalPacketPipelineRequest &, ExternalPreparationBody, void *, const ExternalPipelinePreparation *&, bool p_pre_list = false);
+	static Error _production_output_preparation_prepare_finish_row(ExternalPipelinePreparation &);
+	static Error _production_output_preparation_finish_locked(GDExtensionDeviceExit::ProductionOutputPreparationScope &, RenderingDevice &, GDExtensionDeviceExit::ProductionRequest &);
+	static Error _production_output_preparation_finish_row_locked(ExternalPipelinePreparation &, RenderingDevice &, GDExtensionDeviceExit::ProductionRequest &, uint64_t);
+	static bool _production_output_preparation_matches(RID, uint64_t, uint32_t, uint64_t, uint32_t, uint64_t, const GDExtensionDeviceExit::ProductionOutputPin &, RenderingDevice &, RID *&, ExternalPipelinePreparation *&, const GDExtensionDeviceExit::ProductionOutputPreparationScope * = nullptr, bool p_cleanup = false, uint32_t p_preparation_index = UINT32_MAX);
+	void particles_external_create_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCreateInputV1 &, GDExtensionOutputCreateResultV1 &);
+	void particles_external_metadata_query(const GDExtensionOutputMetadataQueryInputV1 &, GDExtensionOutputMetadataQueryResultV1 &);
+	void particles_external_create_typed_v3(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCreateInputV3 &, GDExtensionOutputCreateResultV1 &);
+	void particles_external_create_typed_v2(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCreateInputV1 &, uint32_t, GDExtensionOutputCreateResultV1 &);
+	static uint64_t particles_external_scene_metadata_bytes();
+	void particles_external_seal_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputSealInputV1 &, GDExtensionOutputSealResultV1 &);
+	GDExtensionOutputStatusV1 particles_external_cancel_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCancelInputV1 &);
+	GDExtensionOutputStatusV1 particles_external_withdraw_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputGenerationInputV1 &);
+	virtual Dictionary particles_external_create(const Dictionary &p_config) override;
+	virtual Dictionary particles_external_acquire(RID p_particles, const Dictionary &p_request) override;
+	virtual Dictionary particles_external_seal(RID p_particles, const PackedByteArray &p_lease_token, const Dictionary &p_seal) override;
+	virtual Error particles_external_cancel(RID p_particles, const PackedByteArray &p_lease_token) override;
+	virtual Error particles_external_withdraw(RID p_particles, const PackedByteArray &p_generation) override;
+	virtual Dictionary particles_external_poll(RID p_particles, const PackedByteArray &p_generation) override;
+	bool particles_is_external(RID p_particles) const override;
+	bool particles_is_external_scene_only(RID p_particles) const override;
+	// Validates the original immutable output owner; no tag grants custody.
+	Error particles_scene_validate_receiver(RID p_particles, uint64_t p_generation, const RenderingDevice *p_device) const;
+	// Core-only native cache/read providers. No ClassDB method or record grant.
+	struct ExternalSceneMaterialFacts {
+		bool casts_shadows = false;
+		bool animated = false;
+	};
+	using ExternalSceneMaterialVisit = void (*)(void *, RID, RID);
+	// RT source observation only; callback updates the caller's existing native
+	// dependency/uniform directory. No surface cell, holder or draw grant.
+	Error particles_external_scene_material_facts(RID p_particles, ExternalSceneMaterialFacts &r_facts, ExternalSceneMaterialVisit p_visit, void *p_context) const;
+	uint32_t particles_external_surface_count(RID p_particles) const;
+	Error particles_external_surface_acquire(RID p_particles, uint32_t p_ordinal, ExternalSurfaceSelection &r_selection);
+	Error particles_external_surface_release(ExternalSurfaceSelection &p_selection);
+	Error particles_external_view_acquire(const ExternalSurfaceSelection &p_selection, const ::RenderDataRD *p_render_data, ExternalPacketViewLease &r_view);
+	// Cold renderer shader preparation, before opening the paid preparation row.
+	bool particles_external_view_can_prepare_shader(const ExternalPacketViewLease &p_view) const;
+	Error particles_external_resolve(const ExternalPacketViewLease &p_view, const ExternalPacketPipelineRequest &p_pipeline, RD::DrawListID p_list, ExternalPacketBinding &r_binding);
+	Error particles_external_draw(const ExternalSurfaceSelection &p_surface, const ::RenderDataRD *p_render_data, RD::DrawListID p_list, const ExternalPacketPipelineRequest &p_pipeline, ExternalPipelinePrepareForView p_prepare, void *p_renderer, ExternalPushPrepareForBinding p_prepare_push, void *p_push_context, ExternalDrawPreparation p_preparation = ExternalDrawPreparation::PREPARE_FOR_DRAW);
+	Error particles_external_end_draw_list();
+
 	virtual void particles_free(RID p_rid) override;
 
 	virtual void particles_set_mode(RID p_particles, RSE::ParticlesMode p_mode) override;
@@ -502,24 +698,29 @@ public:
 	virtual RID particles_get_draw_pass_mesh(RID p_particles, int p_pass) const override;
 
 	virtual void particles_set_view_axis(RID p_particles, const Vector3 &p_axis, const Vector3 &p_up_axis) override;
+	virtual Vector<uint8_t> particles_get_current_data(RID p_particles) const override;
 
 	virtual bool particles_is_inactive(RID p_particles) const override;
 
 	_FORCE_INLINE_ RSE::ParticlesMode particles_get_mode(RID p_particles) {
 		Particles *particles = particles_owner.get_or_null(p_particles);
 		ERR_FAIL_NULL_V(particles, RSE::PARTICLES_MODE_2D);
+		ERR_FAIL_COND_V(particles->external, RSE::PARTICLES_MODE_2D);
 		return particles->mode;
 	}
 
 	_FORCE_INLINE_ uint32_t particles_get_frame_counter(RID p_particles) {
 		Particles *particles = particles_owner.get_or_null(p_particles);
 		ERR_FAIL_NULL_V(particles, false);
+		ERR_FAIL_COND_V(particles->external, 0);
 		return particles->frame_counter;
 	}
 
 	_FORCE_INLINE_ uint32_t particles_get_amount(RID p_particles, uint32_t &r_trail_divisor) {
 		Particles *particles = particles_owner.get_or_null(p_particles);
 		ERR_FAIL_NULL_V(particles, 0);
+		r_trail_divisor = 1;
+		ERR_FAIL_COND_V(particles->external, 0);
 
 		if (particles->trails_enabled && particles->trail_bind_poses.size() > 1) {
 			r_trail_divisor = particles->trail_bind_poses.size();
@@ -527,12 +728,17 @@ public:
 			r_trail_divisor = 1;
 		}
 
-		return particles->amount * r_trail_divisor;
+		uint32_t total_amount = 0;
+		if (!_particles_get_total_amount(particles, total_amount)) {
+			return 0;
+		}
+		return total_amount;
 	}
 
 	_FORCE_INLINE_ bool particles_has_collision(RID p_particles) {
 		Particles *particles = particles_owner.get_or_null(p_particles);
 		ERR_FAIL_NULL_V(particles, false);
+		ERR_FAIL_COND_V(particles->external, false);
 
 		return particles->has_collision_cache;
 	}
@@ -540,6 +746,7 @@ public:
 	_FORCE_INLINE_ uint32_t particles_is_using_local_coords(RID p_particles) {
 		Particles *particles = particles_owner.get_or_null(p_particles);
 		ERR_FAIL_NULL_V(particles, false);
+		ERR_FAIL_COND_V(particles->external, false);
 
 		return particles->use_local_coords;
 	}
@@ -547,6 +754,7 @@ public:
 	_FORCE_INLINE_ RID particles_get_instance_buffer_uniform_set(RID p_particles, RID p_shader, uint32_t p_set) {
 		Particles *particles = particles_owner.get_or_null(p_particles);
 		ERR_FAIL_NULL_V(particles, RID());
+		ERR_FAIL_COND_V(particles->external, RID());
 		if (particles->particles_transforms_buffer_uniform_set.is_null() || !RD::get_singleton()->uniform_set_is_valid(particles->particles_transforms_buffer_uniform_set)) {
 			_particles_update_buffers(particles);
 			Vector<RD::Uniform> uniforms;
@@ -560,6 +768,9 @@ public:
 			}
 
 			particles->particles_transforms_buffer_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, p_shader, p_set);
+			if (particles->particles_transforms_buffer_uniform_set.is_null()) {
+				return RID();
+			}
 		}
 
 		return particles->particles_transforms_buffer_uniform_set;
@@ -597,7 +808,8 @@ public:
 	virtual AABB particles_collision_get_aabb(RID p_particles_collision) const override;
 	Vector3 particles_collision_get_extents(RID p_particles_collision) const;
 	virtual bool particles_collision_is_heightfield(RID p_particles_collision) const override;
-	RID particles_collision_get_heightfield_framebuffer(RID p_particles_collision) const;
+	RID particles_collision_get_heightfield_framebuffer(RID p_collision_instance) const;
+	RID particles_collision_instance_get_collision(RID p_collision_instance) const;
 	virtual uint32_t particles_collision_get_height_field_mask(RID p_particles_collision) const override;
 	virtual void particles_collision_set_height_field_mask(RID p_particles_collision, uint32_t p_heightfield_mask) override;
 	virtual uint32_t particles_collision_get_cull_mask(RID p_particles_collision) const override;
@@ -611,6 +823,8 @@ public:
 	virtual void particles_collision_instance_free(RID p_rid) override;
 	virtual void particles_collision_instance_set_transform(RID p_collision_instance, const Transform3D &p_transform) override;
 	virtual void particles_collision_instance_set_active(RID p_collision_instance, bool p_active) override;
+	bool particles_collision_instance_get_scene_sphere(RID p_collision_instance, uint64_t &r_source_key, uint64_t &r_shape_revision, Transform3D &r_transform, float &r_radius) const;
+	bool particles_collision_instance_get_scene_heightfield(RID p_collision_instance, uint64_t &r_source_key, uint64_t &r_shape_revision, Transform3D &r_transform, Vector3 &r_extents, RSE::ParticlesCollisionHeightfieldResolution &r_resolution) const;
 };
 
 } // namespace RendererRD

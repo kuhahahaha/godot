@@ -1469,6 +1469,18 @@ void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render
 	//assign render data
 	RenderDataRD render_data;
 	{
+		// Preserve the exact camera source tuple through RenderDataRD. Consumers
+		// may use it to match a packet to the viewport epoch; no frame counter or
+		// mutable camera state is substituted here.
+		render_data.set_camera_source(p_camera_data->source_view_id, p_camera_data->source_view_epoch, p_camera_data->source_capture_ordinal);
+		// This RenderDataRD is passed unchanged to Mobile or Clustered and all
+		// its color passes. Ordinary unregistered cameras create no source borrow.
+		if (p_camera_data->has_source_token() && p_camera_data->source_viewport.is_valid() && RSG::viewport) {
+			if (render_data.retain_native_camera_source(*RSG::viewport, *p_camera_data, p_render_buffers)) {
+				RSG::viewport->viewport_notify_camera_source_retained(p_camera_data->source_viewport, render_data.get_native_camera_source());
+			}
+		}
+		render_data.set_previous_camera_source(p_prev_camera_data->source_view_id, p_prev_camera_data->source_view_epoch, p_prev_camera_data->source_capture_ordinal);
 		render_data.render_buffers = rb;
 		render_data.scene_data = &scene_data;
 
@@ -1526,6 +1538,31 @@ void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render
 		clear_color = RSG::texture_storage->get_default_clear_color();
 	}
 
+	// Genuine early native seam: no renderer draw/compute/ray list is active.
+	// Keep it separate from delayed source delivery and compositor phase flags.
+	// Production facets currently inherit the closed native default. The DSO
+	// receiver cannot run until its original RS/RD lifetime guard is integrated.
+	if (RSG::viewport && render_data.get_native_camera_source().is_valid()) {
+		auto capture = render_data.get_native_camera_source();
+		auto *viewport = RSG::viewport->viewport_owner.get_or_null(capture->get_viewport());
+		if (viewport) {
+			auto deliver = [&](RendererViewport::Viewport::CameraSourceSubscriber *subscriber) {
+				RendererViewport::CameraInvocationScope invocation(*RSG::viewport, capture);
+				if (invocation.select(subscriber) && invocation.is_recordable(subscriber, capture)) {
+					render_data.native_invocation = &invocation;
+					subscriber->camera_source_native_invocation(invocation);
+					render_data.native_invocation = nullptr;
+				}
+			};
+			deliver(viewport->camera_source_observer);
+			for (auto *subscriber = viewport->camera_source_subscribers; subscriber;) {
+				// Original close custody stays retained if another node detaches.
+				auto *next = subscriber->next_subscriber;
+				deliver(subscriber);
+				subscriber = next;
+			}
+		}
+	}
 	//calls _pre_opaque_render between depth pre-pass and opaque pass
 	_render_scene(&render_data, clear_color);
 }
@@ -1534,21 +1571,70 @@ void RendererSceneRenderRD::render_material(const Transform3D &p_cam_transform, 
 	_render_material(p_cam_transform, p_cam_projection, p_cam_orthogonal, p_instances, p_framebuffer, p_region, 1.0);
 }
 
-void RendererSceneRenderRD::render_particle_collider_heightfield(RID p_collider, const Transform3D &p_transform, const PagedArray<RenderGeometryInstance *> &p_instances) {
+Transform3D RendererSceneRenderRD::heightfield_capture_camera(const Transform3D &p_transform, float p_scaled_half_height) {
+	const Vector3 up = p_transform.basis.get_column(Vector3::AXIS_Y).normalized();
+	const Vector3 back = -p_transform.basis.get_column(Vector3::AXIS_Z).normalized();
+	const Vector3 position = p_transform.origin + up * p_scaled_half_height;
+	Transform3D camera;
+	camera.set_look_at(position, position - up, back);
+	return camera;
+}
+
+bool RendererSceneRenderRD::heightfield_capture_preflight(const Transform3D &p_transform, const Vector3 &p_extents, Transform3D &r_camera, Projection &r_projection) {
+	const real_t determinant = p_transform.basis.determinant();
+	if (!p_transform.is_finite() || !Math::is_finite(determinant) || determinant == 0.0) {
+		return false;
+	}
+	const Vector3 extents = p_extents * p_transform.basis.get_scale();
+	if (!extents.is_finite() || extents.x <= 0.0 || extents.y <= 0.0 || extents.z <= 0.0) {
+		return false;
+	}
+	Projection projection;
+	projection.set_orthogonal(-extents.x, extents.x, -extents.z, extents.z, 0, extents.y * 2.0);
+	const real_t projection_determinant = projection.determinant();
+	if (!Math::is_finite(projection_determinant) || projection_determinant == 0.0) {
+		return false;
+	}
+	const Projection inverse_projection = projection.inverse();
+	for (int column = 0; column < 4; ++column) {
+		if (!projection[column].is_finite() || !inverse_projection[column].is_finite()) {
+			return false;
+		}
+	}
+	const Transform3D camera = heightfield_capture_camera(p_transform, extents.y);
+	if (!camera.is_finite() || !camera.affine_inverse().is_finite()) {
+		return false;
+	}
+	r_camera = camera;
+	r_projection = projection;
+	return true;
+}
+
+Error RendererSceneRenderRD::render_particle_collider_heightfield_checked(RID p_framebuffer, const Transform3D &p_transform, const Vector3 &p_extents, const PagedArray<RenderGeometryInstance *> &p_instances, RendererRD::HeightCaptureCheckedSink &p_sink) {
+	Projection projection;
+	Transform3D camera;
+	if (!heightfield_capture_preflight(p_transform, p_extents, camera, projection)) {
+		return p_sink.reject(ERR_INVALID_PARAMETER);
+	}
+	return _render_particle_collider_heightfield_checked(p_framebuffer, camera, projection, p_instances, p_sink);
+}
+
+void RendererSceneRenderRD::render_particle_collider_heightfield(RID p_collision_instance, const Transform3D &p_transform, const PagedArray<RenderGeometryInstance *> &p_instances) {
 	RendererRD::ParticlesStorage *particles_storage = RendererRD::ParticlesStorage::get_singleton();
+	const RID collider = particles_storage->particles_collision_instance_get_collision(p_collision_instance);
 
-	ERR_FAIL_COND(!particles_storage->particles_collision_is_heightfield(p_collider));
-	Vector3 extents = particles_storage->particles_collision_get_extents(p_collider) * p_transform.basis.get_scale();
+	ERR_FAIL_COND(!particles_storage->particles_collision_is_heightfield(collider));
 	Projection cm;
-	cm.set_orthogonal(-extents.x, extents.x, -extents.z, extents.z, 0, extents.y * 2.0);
-
-	Vector3 cam_pos = p_transform.origin;
-	cam_pos.y += extents.y;
-
 	Transform3D cam_xform;
-	cam_xform.set_look_at(cam_pos, cam_pos - p_transform.basis.get_column(Vector3::AXIS_Y), -p_transform.basis.get_column(Vector3::AXIS_Z).normalized());
+	// Validate all capture constants before acquiring a framebuffer or recording work.
+	ERR_FAIL_COND(!heightfield_capture_preflight(p_transform, particles_storage->particles_collision_get_extents(collider), cam_xform, cm));
 
-	RID fb = particles_storage->particles_collision_get_heightfield_framebuffer(p_collider);
+	if (particles_storage->particles_collision_capture_scene_candidate(*this, p_collision_instance, p_instances)) {
+		return;
+	}
+
+	RID fb = particles_storage->particles_collision_get_heightfield_framebuffer(p_collision_instance);
+	ERR_FAIL_COND(fb.is_null());
 
 	_render_particle_collider_heightfield(fb, cam_xform, cm, p_instances);
 }

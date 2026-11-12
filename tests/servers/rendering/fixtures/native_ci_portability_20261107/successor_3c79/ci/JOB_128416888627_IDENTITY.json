@@ -1,0 +1,11 @@
+{
+  "id": 128416888627,
+  "bytes": 1971684,
+  "sha256": "dc7208e7eb509f68e955738c9ac880e5d8bc220c51e5d403ebac2d3df103573f",
+  "matches": [
+    {
+      "line": 3389,
+      "text": "2026-11-07T13:59:53.6940278Z ##[error]core\\extension\\gdextension_production_owned.cpp(398): error C2220: the following warning is treated as an error"
+    }
+  ]
+}

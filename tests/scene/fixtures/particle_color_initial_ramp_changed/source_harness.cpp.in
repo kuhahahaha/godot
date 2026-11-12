@@ -1,0 +1,116 @@
+// Supporting harness for method-level counters unavailable through the public engine API.
+#include <algorithm>
+#include <cstdio>
+#include <functional>
+#include <map>
+#include <vector>
+
+constexpr int CONNECT_DEFERRED = 1;
+struct RID { int value = 0; };
+struct Variant {
+	bool is_rid = false;
+	int value = 0;
+	Variant() = default;
+	Variant(RID rid) : is_rid(true), value(rid.value) {}
+	bool operator==(const Variant &other) const { return is_rid == other.is_rid && value == other.value; }
+};
+struct Callable { void *target; std::function<void()> invoke; };
+template <class T> Callable callable_mp(T *target, void (T::*method)()) {
+	return { target, [=] { (target->*method)(); } };
+}
+std::vector<std::function<void()>> deferred;
+struct Texture2D {
+	RID rid;
+	struct Connection { Callable callable; int flags; };
+	std::vector<Connection> connections;
+	RID get_rid() { return rid; }
+	void connect_changed(Callable callable, int flags) { connections.push_back({ callable, flags }); }
+	void disconnect_changed(Callable callable) {
+		connections.erase(std::remove_if(connections.begin(), connections.end(), [&](const Connection &c) { return c.callable.target == callable.target; }), connections.end());
+	}
+	void change(int value) {
+		rid.value = value;
+		for (auto &c : connections) {
+			if (c.flags & CONNECT_DEFERRED) deferred.push_back(c.callable.invoke);
+			else c.callable.invoke();
+		}
+	}
+};
+template <class T> struct Ref {
+	T *ptr = nullptr;
+	bool is_valid() const { return ptr; }
+	T *operator->() const { return ptr; }
+	bool operator!=(const Ref &other) const { return ptr != other.ptr; }
+};
+struct RenderingServer {
+	std::map<int, Variant> values;
+	std::map<int, int> writes;
+	static RenderingServer *get_singleton() { static RenderingServer server; return &server; }
+	void material_set_param(int id, int, Variant value) { values[id] = value; ++writes[id]; }
+};
+struct Names { int color_initial_ramp = 1; } names;
+struct ParticleProcessMaterial {
+	Ref<Texture2D> color_initial_ramp;
+	Names *shader_names = &names;
+	int id;
+	int variants = 0;
+	int _get_material() { return id; }
+	void _queue_shader_change() { ++variants; }
+	void notify_property_list_changed() {}
+	void set_color_initial_ramp(const Ref<Texture2D> &);
+	void _color_initial_ramp_changed();
+};
+void drain() {
+	auto pending = deferred;
+	deferred.clear();
+	for (auto &callback : pending) callback();
+}
+// EXTRACTED_METHODS
+int main() {
+	int checks = 0, failures = 0;
+	auto check = [&](bool condition, const char *label) { ++checks; if (!condition) { ++failures; std::printf("FAIL %s\n", label); } };
+	Texture2D old{ {11} }, replacement{ {22} };
+	ParticleProcessMaterial first{}, second{};
+	first.id = 1; second.id = 2;
+	auto server = RenderingServer::get_singleton();
+	auto value = [&](int id, int rid) { return server->values[id] == Variant(RID{ rid }); };
+	first.set_color_initial_ramp({ &old }); second.set_color_initial_ramp({ &old });
+	check(value(1, 11) && value(2, 11), "initial shared RID");
+	check(old.connections.size() == 2, "one connection per material");
+	bool flags = !old.connections.empty();
+	for (auto &c : old.connections) flags &= c.flags == CONNECT_DEFERRED;
+	check(flags, "actual supplied deferred flags");
+	int variants = first.variants + second.variants;
+	old.change(33);
+	check(value(1, 11), "notification stays queued");
+	drain();
+	check(value(1, 33) && value(2, 33), "shared notification updates");
+	check(first.variants + second.variants == variants, "content-only change queues no shader variant");
+	old.rid.value = 44;
+	first.set_color_initial_ramp({ &old }); first.set_color_initial_ramp({ &old });
+	check(value(1, 44), "silent RID same-ref setter refreshes immediately");
+	check(old.connections.size() == 2, "same-ref setter does not duplicate connections");
+	old.change(55);
+	first.set_color_initial_ramp({ &replacement });
+	replacement.rid.value = 66;
+	variants = first.variants;
+	drain();
+	check(value(1, 66), "queued old notification reads current member");
+	check(first.variants == variants, "queued old notification queues no shader variant");
+	check(old.connections.size() == 1 && old.connections[0].callable.target == &second, "old target connection absent");
+	int writes = server->writes[1];
+	old.change(77); drain();
+	check(server->writes[1] == writes, "old mutation performs no write on detached material");
+	replacement.change(0); drain();
+	check(value(1, 0), "empty wrapper keeps RID Variant");
+	replacement.change(88); drain();
+	check(value(1, 88), "wrapper recovery");
+	replacement.change(99);
+	first.set_color_initial_ramp({});
+	check(server->values[1] == Variant(), "null setter clears to NIL immediately");
+	check(replacement.connections.empty(), "clear disconnects target");
+	drain();
+	check(server->values[1] == Variant(), "queued old notification retains NIL");
+	std::printf("color-initial-ramp supporting extracted source: %d/%d passed\n", checks - failures, checks);
+	return failures ? 1 : 0;
+}

@@ -1,0 +1,418 @@
+[
+  {
+    "raw": "work/native-depth-allocation-parent-20261107/GREEN_FINAL_FOCUSED.xml",
+    "raw_sha256": "a64058efa1ac8fbd90e51bc07c69f175df981ef217d28ec965587f85228c779c",
+    "derivation": "Removed console reporter banner/summary lines only; raw mixed-reporter output retained verbatim.",
+    "overall_asserts": {
+      "successes": "6841",
+      "failures": "0"
+    },
+    "overall_cases": {
+      "successes": "55",
+      "failures": "0",
+      "skipped": "2217"
+    },
+    "target_cases": [
+      {
+        "name": "[PhysicsWrapper2DR1Gates] pump-origin finish returns from step and each Main boundary services it",
+        "results": {
+          "successes": "44",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[PhysicsWrapper2DR1Gates] barrier precedes PARK and acknowledgment waits for trailing cleanup",
+        "results": {
+          "successes": "10",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[PhysicsWrapper2DR1Gates] late admitted publisher and end-sync release tail precede sealed pump finish",
+        "results": {
+          "successes": "13",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[PhysicsWrapper2DR1Gates] rejected Main boundary admission still services a raced foreign stop",
+        "results": {
+          "successes": "12",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[RenderingDevice][NativeDisposal][DepthAllocation] original allocation snapshot and all actual children return",
+        "results": {
+          "successes": "149",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[RenderingDevice][NativeDisposal][DepthAllocationQuote] original finite quote gates creation and preserves failed actual prefix",
+        "results": {
+          "successes": "133",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[K03][FrameWait] ordinary native source retirement waits while typed Busy retains source",
+        "results": {
+          "successes": "8",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] failed fence preserves requests and retry delivers once",
+        "results": {
+          "successes": "18",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] failed wait stops frame reset and flush",
+        "results": {
+          "successes": "8",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] failed staging wait preserves charged blocks",
+        "results": {
+          "successes": "8",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] failed epoch rejects new readbacks and staging reuse",
+        "results": {
+          "successes": "21",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] healthy callback cannot reopen its draining frame",
+        "results": {
+          "successes": "9",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] previous slot retry preserves the active recording slot",
+        "results": {
+          "successes": "11",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] texture wait error retains its exact callback batch",
+        "results": {
+          "successes": "17",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] segmented result retains prefix until one exact final callback",
+        "results": {
+          "successes": "14",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] incomplete or failed result never publishes a success callback",
+        "results": {
+          "successes": "28",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] queue failure cannot reset or replay a readback frame",
+        "results": {
+          "successes": "50",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] failed graph seal cannot issue or map its queued readback",
+        "results": {
+          "successes": "11",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] successful readback issue remains tied to its original graph",
+        "results": {
+          "successes": "13",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] present failure never replaces a command slot report",
+        "results": {
+          "successes": "14",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] split issue preserves earlier call report and unattempted suffix",
+        "results": {
+          "successes": "24",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] reused native slot cannot overwrite an earlier graph issue",
+        "results": {
+          "successes": "19",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] native pool reset and primary begin failure close admission immediately",
+        "results": {
+          "successes": "30",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] ordinary advance retries an early native wait before rotating again",
+        "results": {
+          "successes": "29",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      }
+    ]
+  },
+  {
+    "raw": "work/native-depth-allocation-parent-20261107/GREEN_FINAL_FULL.xml",
+    "raw_sha256": "4b756a634f7f77ed37c1bbdcdc5cede10e8020840fc0d0bee25844cfac5db0cb",
+    "derivation": "Removed console reporter banner/summary lines only; raw mixed-reporter output retained verbatim.",
+    "overall_asserts": {
+      "successes": "585450",
+      "failures": "0"
+    },
+    "overall_cases": {
+      "successes": "2269",
+      "failures": "0",
+      "skipped": "3"
+    },
+    "target_cases": [
+      {
+        "name": "[PhysicsWrapper2DR1Gates] pump-origin finish returns from step and each Main boundary services it",
+        "results": {
+          "successes": "44",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[PhysicsWrapper2DR1Gates] barrier precedes PARK and acknowledgment waits for trailing cleanup",
+        "results": {
+          "successes": "10",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[PhysicsWrapper2DR1Gates] late admitted publisher and end-sync release tail precede sealed pump finish",
+        "results": {
+          "successes": "13",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[PhysicsWrapper2DR1Gates] rejected Main boundary admission still services a raced foreign stop",
+        "results": {
+          "successes": "12",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[RenderingDevice][NativeDisposal][DepthAllocation] original allocation snapshot and all actual children return",
+        "results": {
+          "successes": "149",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[RenderingDevice][NativeDisposal][DepthAllocationQuote] original finite quote gates creation and preserves failed actual prefix",
+        "results": {
+          "successes": "133",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[K03][FrameWait] ordinary native source retirement waits while typed Busy retains source",
+        "results": {
+          "successes": "8",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] failed fence preserves requests and retry delivers once",
+        "results": {
+          "successes": "18",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] failed wait stops frame reset and flush",
+        "results": {
+          "successes": "8",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] failed staging wait preserves charged blocks",
+        "results": {
+          "successes": "8",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] failed epoch rejects new readbacks and staging reuse",
+        "results": {
+          "successes": "21",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] healthy callback cannot reopen its draining frame",
+        "results": {
+          "successes": "9",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] previous slot retry preserves the active recording slot",
+        "results": {
+          "successes": "11",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] texture wait error retains its exact callback batch",
+        "results": {
+          "successes": "17",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] segmented result retains prefix until one exact final callback",
+        "results": {
+          "successes": "14",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] incomplete or failed result never publishes a success callback",
+        "results": {
+          "successes": "28",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] queue failure cannot reset or replay a readback frame",
+        "results": {
+          "successes": "50",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] failed graph seal cannot issue or map its queued readback",
+        "results": {
+          "successes": "11",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] successful readback issue remains tied to its original graph",
+        "results": {
+          "successes": "13",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] present failure never replaces a command slot report",
+        "results": {
+          "successes": "14",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] split issue preserves earlier call report and unattempted suffix",
+        "results": {
+          "successes": "24",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] reused native slot cannot overwrite an earlier graph issue",
+        "results": {
+          "successes": "19",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] native pool reset and primary begin failure close admission immediately",
+        "results": {
+          "successes": "30",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      },
+      {
+        "name": "[R01][FrameWait] ordinary advance retries an early native wait before rotating again",
+        "results": {
+          "successes": "29",
+          "failures": "0",
+          "test_case_success": "true"
+        }
+      }
+    ]
+  }
+]

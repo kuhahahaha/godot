@@ -1,0 +1,45 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/core/extension/test_production_request.cpp:10711:
+TEST CASE:  [SceneTree][ProductionRequest][OutputAliasReadbackFreeze] original accepted alias plan validates exact producer role and read span without physical effects
+
+tests/core/extension/test_production_request.cpp:10205: ERROR: CHECK( error == (mutation == 10 ? OK : ERR_INVALID_DATA) ) is NOT correct!
+  values: CHECK( 2 == 30 )
+  logged: alias freeze mutation=2
+
+tests/core/extension/test_production_request.cpp:10205: ERROR: CHECK( error == (mutation == 10 ? OK : ERR_INVALID_DATA) ) is NOT correct!
+  values: CHECK( 2 == 30 )
+  logged: alias freeze mutation=3
+
+tests/core/extension/test_production_request.cpp:10205: ERROR: CHECK( error == (mutation == 10 ? OK : ERR_INVALID_DATA) ) is NOT correct!
+  values: CHECK( 2 == 30 )
+  logged: alias freeze mutation=4
+
+tests/core/extension/test_production_request.cpp:10205: ERROR: CHECK( error == (mutation == 10 ? OK : ERR_INVALID_DATA) ) is NOT correct!
+  values: CHECK( 2 == 30 )
+  logged: alias freeze mutation=5
+
+tests/core/extension/test_production_request.cpp:10205: ERROR: CHECK( error == (mutation == 10 ? OK : ERR_INVALID_DATA) ) is NOT correct!
+  values: CHECK( 2 == 30 )
+  logged: alias freeze mutation=6
+
+tests/core/extension/test_production_request.cpp:10205: ERROR: CHECK( error == (mutation == 10 ? OK : ERR_INVALID_DATA) ) is NOT correct!
+  values: CHECK( 2 == 30 )
+  logged: alias freeze mutation=7
+
+tests/core/extension/test_production_request.cpp:10205: ERROR: CHECK( error == (mutation == 10 ? OK : ERR_INVALID_DATA) ) is NOT correct!
+  values: CHECK( 2 == 30 )
+  logged: alias freeze mutation=8
+
+tests/core/extension/test_production_request.cpp:10205: ERROR: CHECK( error == (mutation == 10 ? OK : ERR_INVALID_DATA) ) is NOT correct!
+  values: CHECK( 2 == 0 )
+  logged: alias freeze mutation=10
+
+tests/core/extension/test_production_request.cpp:10206: ERROR: CHECK( request.frozen == (mutation == 10) ) is NOT correct!
+  values: CHECK( false == true )
+
+===============================================================================
+[doctest] test cases:   1 |   0 passed | 1 failed | 2211 skipped
+[doctest] assertions: 225 | 216 passed | 9 failed |
+[doctest] Status: FAILURE!

@@ -1,0 +1,940 @@
+{
+  "base": "d5e6a59f0c3a84d840814170777691a9dc58f133",
+  "source_files": {
+    "core/extension/gdextension_production_request.h": "0b7cc29b8bc55eebeca7291936f19d5f18208375d70295f0f00a04b53831ced0",
+    "core/extension/gdextension_production_request.cpp": "5368360f7a08900dea4466443ea87fad7039696e0621a4dc0301ad48d06adad7",
+    "core/extension/gdextension_production_owned.cpp": "dd2e91b186d281db8278bb1df3b83befe8c6d60ae84b2885c567e5b24e539d67",
+    "core/extension/gdextension_production_set.cpp": "99e6b254c4761a55cc11874c865bf92201e5c20fa0764d78d77d59bc7ac22bc0",
+    "core/extension/gdextension_production_action.cpp": "bbe8f8175afdc689b2ce3a7994925b7c0a2deabdf2bbda3e56f713c3fd0aaa10",
+    "core/extension/gdextension_production_window.cpp": "9920324772b38dc102be2003e52997f995a6cd69f4bd8a6a89a322401cf66ac3",
+    "core/extension/gdextension_interface.json": "d206dbf4631a43563f968a93ac06108f830b7cfac044b921316fdf37056decc0",
+    "tests/core/extension/test_production_request.cpp": "46206e5ae02db4e023f70d3f7f24f0cdc2b229f74592c313f35ead526631f264",
+    "tests/core/extension/test_production_native_observe.cpp": "cbc490d20eb18000fc50157af2d51f920f793df225d236a766ac9246a6dac4bb",
+    "core/extension/gdextension_library_exit_guard.h": "2490d447075dd0f8d29d1fe48e9909727586fb39e3767084b2ab8a6614cabe06",
+    "core/extension/gdextension_production_interface.cpp": "3286e1838fb635b7f34e2979f07c88417f3f1dbd5093109c4f28d556dd6e9775",
+    "core/extension/gdextension_device_session.cpp": "f6636d21687e4fcfbc89d650540de42df7cbf6e0e0c56fb108742276334c4de1",
+    "tests/servers/rendering/test_production_resource_use.cpp": "93d66fd27cfca985ba1c126255f90544468b6c2214ba5772e826f682914161e9",
+    "scu_builders.py": "6a290cc0f1d1c6129d066a4813e814dca967640744d4d6da74ffd128aac0f22c"
+  },
+  "host_sha256": "430e50e49e8389867b97c48cb3e669e43f03e1a8a6f167b9e224f8d68605ab98",
+  "host_embedded_base": "d5e6a59f0c3a84d840814170777691a9dc58f133",
+  "generated_sdk_sha256": "e93903bc4ef2fa1a7bcda6fda60d267b0a169c4bf6fbe5dc9c58ca1c5f649341",
+  "generated_sdk_bytes": 291392,
+  "budget_bytes": 40,
+  "report_bytes": 168,
+  "record_report_bytes": 376,
+  "common_abi_bytes": 16,
+  "procedures": 29,
+  "build": {
+    "exit_code": 0,
+    "seconds": 20.37364029197488,
+    "input_unchanged": true,
+    "host_sha256": "430e50e49e8389867b97c48cb3e669e43f03e1a8a6f167b9e224f8d68605ab98"
+  },
+  "runtime": {
+    "typed-release": {
+      "exit_code": 0,
+      "seconds": 2.1118917500134557,
+      "cases": {
+        "successes": "2",
+        "failures": "0"
+      },
+      "assertions": {
+        "successes": "442",
+        "failures": "0"
+      },
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "expected_names_match": true,
+      "expected_count_match": null
+    },
+    "cursor-contention": {
+      "exit_code": 0,
+      "seconds": 0.07955383398802951,
+      "cases": {
+        "successes": "1",
+        "failures": "0"
+      },
+      "assertions": {
+        "successes": "320",
+        "failures": "0"
+      },
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "expected_names_match": true,
+      "expected_count_match": null
+    },
+    "request": {
+      "exit_code": 0,
+      "seconds": 0.8775342080043629,
+      "cases": {
+        "successes": "21",
+        "failures": "0"
+      },
+      "assertions": {
+        "successes": "11911",
+        "failures": "0"
+      },
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "expected_names_match": true,
+      "expected_count_match": null
+    },
+    "native": {
+      "exit_code": 0,
+      "seconds": 0.12762320798356086,
+      "cases": {
+        "successes": "21",
+        "failures": "0"
+      },
+      "assertions": {
+        "successes": "15912",
+        "failures": "0"
+      },
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "expected_names_match": true,
+      "expected_count_match": null
+    },
+    "resource-use": {
+      "exit_code": 0,
+      "seconds": 0.07750029204180464,
+      "cases": {
+        "successes": "2",
+        "failures": "0"
+      },
+      "assertions": {
+        "successes": "234",
+        "failures": "0"
+      },
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "expected_names_match": true,
+      "expected_count_match": null
+    },
+    "full": {
+      "exit_code": 0,
+      "seconds": 18.828036083024926,
+      "cases": {
+        "successes": "2070",
+        "failures": "0"
+      },
+      "assertions": {
+        "successes": "516960",
+        "failures": "0"
+      },
+      "stdout_bytes": 571,
+      "stderr_bytes": 4017,
+      "expected_names_match": null,
+      "expected_count_match": true
+    }
+  },
+  "raw_evidence": "work/b4-public-owner-final-20261105",
+  "release_red": "work/b4-release-budget-mono-red-20261105/VERIFIED_RED.json",
+  "independent_reviews": [
+    "installer aba690",
+    "budget6b037+terminal69f7+cause/profile950c+attempt0bd2",
+    "test-onlyTSAN19f251",
+    "SCU300e"
+  ],
+  "ci_pending": [
+    "Linux GCC double SCU",
+    "Linux ThreadSanitizer current source",
+    "Mono managed compile/runtime and original PCK export"
+  ],
+  "scope": "installed public physical transport and explicit-budget cleanup CPU proof; not Runtime logical authorization, real GPU or full six-chain acceptance",
+  "host_composition": "also contains separately reviewed Mono common Object cleanup; no Mono module or managed validation in this local host",
+  "initializer_followup": {
+    "ci_run": 41986561968,
+    "jobs": [
+      127108813337,
+      127108813589
+    ],
+    "failure": "Clang Wall/Wextra missing ready aggregate member initializer",
+    "fix": "Semaphore ready{} default member initializer; same default construction",
+    "source_file": "tests/core/extension/test_production_native_observe.cpp",
+    "source_sha256": "dc9be21b94e0785f85f47b82f1dfd72e23ccd046394701f026bc6c6d0257d85d",
+    "strict": "actual warning RED reproduced, Wall/Wextra/Wmissing-field-initializers \u00b1DEV fullTU GREEN",
+    "build": {
+      "exit_code": 0,
+      "seconds": 18.633499291026965,
+      "input_unchanged": true,
+      "host_sha256": "ae02bd31bea07ae92c077f0744311c902a04cf5d071cc9fc8067429ff7ced3bf"
+    },
+    "cursor_runtime": {
+      "exit_code": 0,
+      "cases": {
+        "successes": "1",
+        "failures": "0"
+      },
+      "assertions": {
+        "successes": "320",
+        "failures": "0"
+      },
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "expected_names_match": true
+    },
+    "scope": "same production/lock/scope/watchdog behavior; platformClangCI still must rerun"
+  },
+  "platform_shadow_and_loader_followup": {
+    "base": "1b761af71505eb65b7b2547ed785437aab71ae47",
+    "ci_run": 41987284289,
+    "failed_jobs": [
+      127111536302,
+      127111536341,
+      127111536498,
+      127111536543,
+      127111536568,
+      127111536699,
+      127111536708
+    ],
+    "failure": "test-local zero at 1914 shadows zero at 1817; GCC -Werror=shadow and MSVC C4456/C2220",
+    "fix": "rename only inner zero and its use to release_zero",
+    "red_green": "original full TU RED1 and candidate GREEN0 with -Wshadow, DEV and non-DEV; actual D complete TU strict Wall/Wextra/Wshadow/missing-field-initializers GREEN0",
+    "loader_coverage": "same actual version-one FunctionLoader testcase; actual supplied guarded and legacy getters check all29; common3 remain nonnull with equal pointers; original enrollment/init/preflight/deinit/close preserved",
+    "source_files": {
+      "tests/core/extension/test_production_request.cpp": "7f5a5bb84a2325831bea7517820ef2665aa82297042462be0257c6e8c9b44be4",
+      "tests/core/object/test_device_exit_typed_abi.cpp": "2f92ab3db8fabf2faceb8c23cb00400197974d2139930f19a8735e047e320860"
+    },
+    "build": {
+      "exit_code": 0,
+      "seconds": 15.223047791980207,
+      "input_unchanged": true,
+      "host_sha256": "d730518019a9382d78d7460a44d1f907d130aa264c88cd50023842b7ee21e6a9"
+    },
+    "runtime": {
+      "loader": {
+        "exit": 0,
+        "seconds": 2.5841181250289083,
+        "cases": {
+          "successes": "1",
+          "failures": "0"
+        },
+        "assertions": {
+          "successes": "97",
+          "failures": "0"
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0,
+        "names": [
+          "[DeviceExit][TypedABI] version one selects guarded lookup and requires enrollment"
+        ]
+      },
+      "public": {
+        "exit": 0,
+        "seconds": 0.8027069999952801,
+        "cases": {
+          "successes": "2",
+          "failures": "0"
+        },
+        "assertions": {
+          "successes": "442",
+          "failures": "0"
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0,
+        "names": [
+          "[SceneTree][ProductionRequest] installed typed production port follows original owner RT FIFO and late ACK",
+          "[ProductionRequest] installed typed production procedures reject foreign references without enrollment"
+        ]
+      },
+      "request": {
+        "exit": 0,
+        "seconds": 0.8565406670095399,
+        "cases": {
+          "successes": "21",
+          "failures": "0"
+        },
+        "assertions": {
+          "successes": "11911",
+          "failures": "0"
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0,
+        "names": [
+          "[ProductionRequest] quote checks dimensions before reserving real cells",
+          "[ProductionRequest] forged metadata never resolves an original attachment",
+          "[ProductionRequest] payload retry is exact and the finite batch freezes before effects",
+          "[ProductionRequest] attachment quote retains each request command prefix",
+          "[ProductionRequest] actual accepted arena reserves two requests and refunds on close",
+          "[ProductionRequest] original entity hold blocks actual finalize until exact return",
+          "[ProductionRequest] device loss invalidates work but preserves unknown entity obligation",
+          "[ProductionRequest] refused finalize preserves original qualification close on same device",
+          "[SceneTree][ProductionRequest] singleton RS FIFO returns retained control to original owner",
+          "[SceneTree][ProductionRequest] refused singleton fixture never claims default record zero",
+          "[SceneTree][ProductionRequest] public Observe hands owner maintenance to original RS FIFO",
+          "[SceneTree][ProductionRequest] owned storage creates on RT and retires across bounded owner turns",
+          "[SceneTree][ProductionRequest] create Busy return then owner seal rejects retry without losing request",
+          "[SceneTree][ProductionRequest] owner set bindings survive FIFO Busy and input lifetime through actual RT create",
+          "[SceneTree][ProductionRequest] protected original FIFO frame issues and expires physical record context",
+          "[SceneTree][ProductionRequest] KEEP scope return closes prefix and owner ACK survives actual seal and close",
+          "[SceneTree][ProductionRequest] actual 64 append frame pause preserves original suffix without cancellation",
+          "[SceneTree][ProductionRequest] protected upload KnownPrefix returns exact same-parent suffix in later FIFO frame",
+          "[SceneTree][ProductionRequest] fresh accepted metadata frame rejects ordinary ClassDB record and deferred escape",
+          "[SceneTree][ProductionRequest] installed typed production port follows original owner RT FIFO and late ACK",
+          "[ProductionRequest] installed typed production procedures reject foreign references without enrollment"
+        ]
+      }
+    },
+    "local_evidence": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-ci-shadow-loader-20261105",
+    "scope": "CPU actual-loader and original FIFO only; new platform run, Mono managed execution and live GPU still pending"
+  },
+  "private_output_custody": {
+    "base": "413f32b65b (source baseline a638a36536)",
+    "frozen_candidate": "e214f2c2238db5d92d35c58c41edf97abfc484214a0c54f32cb5ad949da37ca3",
+    "source_files": {
+      "core/extension/gdextension_library_exit_guard.h": "262502ba5aee05bcbd502f22b5efba787ca123754979ac2a2ada4d4e86028607",
+      "core/extension/gdextension_production_request.h": "61bfa5f9bc96bd680b7a3991b8926b9b136e28c0c060d0e641c5620024b7a70c",
+      "core/extension/gdextension_production_request.cpp": "430669d303478eac0de27e4707b546018f16ff1816bdff01956ba343fac1c7e6",
+      "core/extension/gdextension_production_window.cpp": "173540c343e4ea3362e3dd8775dccd58a007fab0277ea2ade638a73cef9fb3c8",
+      "tests/core/extension/test_production_request.cpp": "5de98e5ec52b887da0eb8970f95c524a198d0d09697ec3d9af40bccd3148bf1e",
+      "core/extension/gdextension_production_resources.cpp": "b441e6b4c503d856e4732fe7110e993ca1facf31ee81ac85a290cac70b868b3d"
+    },
+    "build": {
+      "exit_code": 0,
+      "seconds": 612.1628047089907,
+      "input_unchanged": true,
+      "host_sha256": "325c28a273215222084c47795988ebbff3753fbdaff469623675a15473e8a8a7"
+    },
+    "runtime": {
+      "public": {
+        "exit_code": 0,
+        "seconds": 2.0853875419707038,
+        "cases": {
+          "successes": "2",
+          "failures": "0"
+        },
+        "assertions": {
+          "successes": "456",
+          "failures": "0"
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "request": {
+        "exit_code": 0,
+        "seconds": 0.8400121250306256,
+        "cases": {
+          "successes": "21",
+          "failures": "0"
+        },
+        "assertions": {
+          "successes": "11925",
+          "failures": "0"
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "native": {
+        "exit_code": 0,
+        "seconds": 0.0787209160043858,
+        "cases": {
+          "successes": "21",
+          "failures": "0"
+        },
+        "assertions": {
+          "successes": "15912",
+          "failures": "0"
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "resource": {
+        "exit_code": 0,
+        "seconds": 0.06828154204413295,
+        "cases": {
+          "successes": "2",
+          "failures": "0"
+        },
+        "assertions": {
+          "successes": "234",
+          "failures": "0"
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "full": {
+        "exit_code": 0,
+        "seconds": 16.999136625032406,
+        "cases": {
+          "successes": "2070",
+          "failures": "0"
+        },
+        "assertions": {
+          "successes": "517049",
+          "failures": "0"
+        },
+        "stdout_bytes": 571,
+        "stderr_bytes": 4017
+      }
+    },
+    "scope": "Core-only move-only arena custody in spare finite UseCells; no public ABI, source/Scene/U08 grant, backing disposal or P2 completion",
+    "review": "independent source review; missing role and expiry-negative short-circuit found before freeze and fixed",
+    "evidence": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-production-output-pin-runtime-20261105"
+  },
+  "windows_deadline_followup": {
+    "actual_ci_run": 41988992429,
+    "raw_failed_jobs": {
+      "msvc": {
+        "job": 127117217504,
+        "sha256": "494d3c891ab8f47454cebfd7a0974b1856ef0f6c289f66aa6ea6883682c12979",
+        "bytes": 2883714
+      },
+      "clang": {
+        "job": 127117217554,
+        "sha256": "df8d9be7ebaf1f25b883701e5a8de7267f649399c00a8fa439204e06ed1c3340",
+        "bytes": 3269539
+      },
+      "template": {
+        "job": 127117217363,
+        "sha256": "e0fc7018f087183bdafe293079e97b3ce87b3cbdca7f0ce10555ef6dbe3511f6",
+        "bytes": 2080563
+      }
+    },
+    "failure": "single actual FIFO test, both subcases fail Pending expiry1951/1952 then old serial/deadline mismatch1967/2011; eight assertions in each Windows job",
+    "source_cause": "OS_Windows::delay_usec >=1000 calls Sleep(p_usec/1000); single sleep may round down and return before original deadline",
+    "fix": "both test expiry waits observe actual get_ticks_usec()>original deadline; unchanged serial/budget/native cleanup assertions and production code",
+    "source_sha256": "2484a48ea7b292158c3f526c79b1663e492a7f0b5945fc45cbf71d50768c47a6",
+    "incremental_build_exit": 0,
+    "strict_tus": [
+      {
+        "dev": true,
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTESTS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/core/extension",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "tests/core/extension/test_production_request.cpp",
+          "-DDEV_ENABLED"
+        ],
+        "exit": 0,
+        "diagnostic": ""
+      },
+      {
+        "dev": false,
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTESTS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/core/extension",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "tests/core/extension/test_production_request.cpp"
+        ],
+        "exit": 0,
+        "diagnostic": ""
+      }
+    ],
+    "runtime": {
+      "host_sha256": "a4b8e7aa575690393d4afce582f7ab8f6c662ddea8587a15c3aaa947a9e76184",
+      "source_sha256": "2484a48ea7b292158c3f526c79b1663e492a7f0b5945fc45cbf71d50768c47a6",
+      "runtime": {
+        "public": {
+          "exit": 0,
+          "cases": {
+            "successes": "2",
+            "failures": "0"
+          },
+          "assertions": {
+            "successes": "456",
+            "failures": "0"
+          },
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        },
+        "request": {
+          "exit": 0,
+          "cases": {
+            "successes": "21",
+            "failures": "0"
+          },
+          "assertions": {
+            "successes": "11925",
+            "failures": "0"
+          },
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        }
+      },
+      "scope": "macOS runtime; actual Windows platform recheck pending"
+    },
+    "review": "independent source and raw-log review clean",
+    "windows_actual_recheck": "pending, no local Windows execution or green CI claim"
+  },
+  "scu_test_collection_followup": {
+    "actual_ci_run": 41988992429,
+    "job": 127117217482,
+    "raw_log_sha256": "3599ea10f93254fe86eec2ab7d1bc64bcec88df11424cad8b582993fe1f12e34",
+    "failure": "Linux double/GCC SCU linked tests archive without seven ForceLink definitions because three source directories absent from original SCU test collection",
+    "fix": "include core/extension, servers/physics_2d and servers/physics_3d in existing tests process_folder list",
+    "collection": {
+      "red": {
+        "expected_include_counts": {
+          "tests/core/extension/test_production_request.cpp": 0,
+          "tests/core/extension/test_production_native_observe.cpp": 0,
+          "tests/servers/physics_2d/test_wrapper_r1_gates_2d.cpp": 0,
+          "tests/servers/physics_2d/test_wrapper_stop_2d.cpp": 0,
+          "tests/servers/physics_3d/test_query_retirement.cpp": 0,
+          "tests/servers/physics_3d/test_wrapper_stop.cpp": 0,
+          "tests/servers/physics_3d/test_wrapper_r1_gates.cpp": 0
+        },
+        "total_generated_sources": 228,
+        "all_generated_sources_unique": true
+      },
+      "green": {
+        "expected_include_counts": {
+          "tests/core/extension/test_production_request.cpp": 1,
+          "tests/core/extension/test_production_native_observe.cpp": 1,
+          "tests/servers/physics_2d/test_wrapper_r1_gates_2d.cpp": 1,
+          "tests/servers/physics_2d/test_wrapper_stop_2d.cpp": 1,
+          "tests/servers/physics_3d/test_query_retirement.cpp": 1,
+          "tests/servers/physics_3d/test_wrapper_stop.cpp": 1,
+          "tests/servers/physics_3d/test_wrapper_r1_gates.cpp": 1
+        },
+        "total_generated_sources": 235,
+        "all_generated_sources_unique": true
+      },
+      "all_force_link_sources": {
+        "count": 230,
+        "missing_from_generated": []
+      }
+    },
+    "strict": [
+      {
+        "unit": "scu_tests.gen.cpp",
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTESTS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-DDEV_ENABLED",
+          "-DREAL_T_IS_DOUBLE",
+          "-DSCU_BUILD_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green/tests/.scu/scu_tests.gen.cpp"
+        ],
+        "exit": 0
+      },
+      {
+        "unit": "scu_tests_exception.gen.cpp",
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTESTS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-DDEV_ENABLED",
+          "-DREAL_T_IS_DOUBLE",
+          "-DSCU_BUILD_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green/tests/.scu/scu_tests_exception.gen.cpp"
+        ],
+        "exit": 0
+      },
+      {
+        "unit": "scu_tests_exception_1.gen.cpp",
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTESTS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-DDEV_ENABLED",
+          "-DREAL_T_IS_DOUBLE",
+          "-DSCU_BUILD_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green/tests/.scu/scu_tests_exception_1.gen.cpp"
+        ],
+        "exit": 0
+      },
+      {
+        "unit": "scu_tests_exception_2.gen.cpp",
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTESTS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-DDEV_ENABLED",
+          "-DREAL_T_IS_DOUBLE",
+          "-DSCU_BUILD_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green/tests/.scu/scu_tests_exception_2.gen.cpp"
+        ],
+        "exit": 0
+      },
+      {
+        "unit": "scu_tests_exception_3.gen.cpp",
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTESTS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-DDEV_ENABLED",
+          "-DREAL_T_IS_DOUBLE",
+          "-DSCU_BUILD_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green/tests/.scu/scu_tests_exception_3.gen.cpp"
+        ],
+        "exit": 0
+      }
+    ],
+    "scope": "actual original generator RED missing7; GREEN includes all7 exactly once and all original force-link source files; five generated full SCU TUs strict double DEV syntax0; actual Linux link/runtime recheck pending"
+  },
+  "clangd_include_followup": {
+    "actual_ci_run": 41996276774,
+    "job": 127140385046,
+    "failed_step": "Style checks via clangd-tidy",
+    "diagnostic": "gdextension_production_request.cpp33 gdextension_production_registration.h not used directly [unused-includes]",
+    "raw_log_sha256": "f93e02c615092e267fc9fa5b578bd943cf45d3a84e547bbf12789b5cb033cc97",
+    "fix": "remove only that unused direct include; no ABI or behavior change",
+    "strict": [
+      {
+        "tests": true,
+        "dev": true,
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "core/extension/gdextension_production_request.cpp",
+          "-DTESTS_ENABLED",
+          "-DDEV_ENABLED"
+        ],
+        "exit": 0,
+        "diagnostic": ""
+      },
+      {
+        "tests": true,
+        "dev": false,
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "core/extension/gdextension_production_request.cpp",
+          "-DTESTS_ENABLED"
+        ],
+        "exit": 0,
+        "diagnostic": ""
+      },
+      {
+        "tests": false,
+        "dev": true,
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "core/extension/gdextension_production_request.cpp",
+          "-DDEV_ENABLED"
+        ],
+        "exit": 0,
+        "diagnostic": ""
+      },
+      {
+        "tests": false,
+        "dev": false,
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "core/extension/gdextension_production_request.cpp"
+        ],
+        "exit": 0,
+        "diagnostic": ""
+      }
+    ],
+    "normal_editor_build_exit": 0,
+    "runtime": {
+      "host_sha256": "0b1d03416b332abf4dd72e4d4e77cd9f7550d28226c0bfdcdafb38acf8120fa4",
+      "results": {
+        "public": {
+          "exit": 0,
+          "cases": {
+            "successes": "2",
+            "failures": "0"
+          },
+          "assertions": {
+            "successes": "456",
+            "failures": "0"
+          },
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        },
+        "request": {
+          "exit": 0,
+          "cases": {
+            "successes": "21",
+            "failures": "0"
+          },
+          "assertions": {
+            "successes": "11925",
+            "failures": "0"
+          },
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        }
+      }
+    },
+    "actual_clangd_tidy_recheck": "pending; local check-mode was not an equivalent passing lint result",
+    "local_evidence": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-ci-537-unused-include-20261105"
+  },
+  "matched_trimmed_server": {
+    "manifest": {
+      "core_head": "6e6cb02dd9e1fe5444a7ff4073e319a0b20ef795",
+      "original_linked_sha256": "051c03d90c223fcede1dea40f118ff7bfc2fa934b9cfe7ea818a8a61388d3381",
+      "packaged_sha256": "03939e2ebb17a741342d77d0c4293cdebf2d31004884a6e84dee506e7675bff7",
+      "packaged_bytes": 56623536,
+      "binary": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-matching-trimmed-server-20261105/handoff/ange_server",
+      "selection": {
+        "schema": 1,
+        "core_stamp": "6864becee12f610346aa03b08e6e25708ec9981c2ef286c8ba78acf0980942cf",
+        "compiler_route": "BuiltinGlslangV1",
+        "compiler_stamp": "95bee6ce3fff32c6f9e47e1e82edc614090f1f32caab372082be316ebc3b1848",
+        "platform": "macos",
+        "architecture": "arm64",
+        "target_kind": "Executable"
+      },
+      "module_match": true,
+      "module_definitions": "modules_enabled.gen.h copied before later profile reconfiguration",
+      "known_legacy_ignored": [
+        "navigation"
+      ],
+      "runtime": [
+        {
+          "name": "version",
+          "command": [
+            "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-matching-trimmed-server-20261105/handoff/ange_server",
+            "--headless",
+            "--version"
+          ],
+          "exit": 0,
+          "stdout": "4.7.2.stable.custom_build.6e6cb02dd\n",
+          "stderr": ""
+        },
+        {
+          "name": "native-smoke",
+          "command": [
+            "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-matching-trimmed-server-20261105/handoff/ange_server",
+            "--headless",
+            "--path",
+            "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-matching-trimmed-server-20261105/native-smoke",
+            "--quit-after",
+            "2"
+          ],
+          "exit": 0,
+          "stdout": "Godot Engine v4.7.2.stable.custom_build.6e6cb02dd (2026-11-05 08:59:21 UTC) - https://godotengine.org\n\n",
+          "stderr": ""
+        }
+      ],
+      "smoke_project": "native Node only, explicit actual Jolt3D/Dummy2D selection and empty exported global-class cache, no script or DSO",
+      "scope": "matched original A template_release profile and no-script headless startup/shutdown only; no actual ANGE DSO/SceneReady/producer/Runtime/GPU qualification",
+      "source_json_sha256": "d206dbf4631a43563f968a93ac06108f830b7cfac044b921316fdf37056decc0"
+    },
+    "build": {
+      "exit_code": 0,
+      "seconds": 358.5395419159904,
+      "head": "6e6cb02dd9e1fe5444a7ff4073e319a0b20ef795",
+      "input_unchanged": true,
+      "artifact": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.template_release.arm64",
+      "sha256": "051c03d90c223fcede1dea40f118ff7bfc2fa934b9cfe7ea818a8a61388d3381"
+    },
+    "A_received": "copied packaged binary and sidecar, exactSHA preserved, actual --headless --version0; DSO/SceneReady/producer/GPU integration still A-owned pending"
+  },
+  "scu_actual_ci_537": {
+    "run": 41996276774,
+    "source": "53701c7e788f9f5d8e81b687512560310ebe2916",
+    "job": 127140385096,
+    "conclusion": "success",
+    "raw_sha256": "e0c69b4b6dd93b57f51c1d91d09eccc64eededb4a8d9acf88376713a9ca04e2e",
+    "raw_bytes": 4821758,
+    "build": "scons: done building targets.",
+    "unit_cases": 1979,
+    "unit_assertions": 516733,
+    "unit_failed": 0,
+    "unit_skipped": 3,
+    "scope": "actual SCU link and unit runner success; not diagnostic-clean sanitizer/wholeGPU evidence",
+    "diagnostics": {
+      "runtime_error_lines": 42,
+      "asan_error_lines": 0,
+      "lsan_error_lines": 1,
+      "notes": "original CI check_ci_log accepted job while headless import logs include UBSan findings in core/string, thirdparty, style_box_flat/view_3d_controller and fontconfig 288-byte LeakSanitizer report; preserved without suppression changes"
+    }
+  },
+  "ci_actual_23b_final": {
+    "run": 42005031739,
+    "source": "23b6815116a3b02f537ff1e364fe6201fd3309fa",
+    "status": "completed",
+    "conclusion": "success",
+    "success": 20,
+    "scope": "CI source23b only, not current closure workingtree",
+    "logs": {
+      "scu": {
+        "sha256": "8dc26800110a8e00d44dce1278409970c292f491b0cad7c1f89912aa2e69a692",
+        "bytes": 7862177,
+        "runtime_error_lines": 105,
+        "lsan_summaries": [
+          "2026-11-05T10:33:25.0415798Z SUMMARY: AddressSanitizer: 288 byte(s) leaked in 2 allocation(s).",
+          "2026-11-05T10:36:28.7786685Z SUMMARY: AddressSanitizer: 1233 byte(s) leaked in 17 allocation(s).",
+          "2026-11-05T10:37:54.9052208Z SUMMARY: AddressSanitizer: 1064 byte(s) leaked in 7 allocation(s).",
+          "2026-11-05T10:39:26.4718393Z SUMMARY: AddressSanitizer: 680 byte(s) leaked in 5 allocation(s)."
+        ],
+        "unit_lines": [
+          "2026-11-05T10:31:58.1793739Z [doctest] test cases:   1979 |   1979 passed | 0 failed | 3 skipped",
+          "2026-11-05T10:31:58.1794397Z [doctest] assertions: 516733 | 516733 passed | 0 failed |"
+        ],
+        "mono_marker": false
+      },
+      "mono": {
+        "sha256": "207b746449a55340871b51136452fba09f9e827f269424fa5e9278e173f54c08",
+        "bytes": 4511495,
+        "runtime_error_lines": 0,
+        "lsan_summaries": [],
+        "unit_lines": [
+          "2026-11-05T10:21:32.4964051Z [doctest] test cases:   1980 |   1980 passed | 0 failed | 3 skipped",
+          "2026-11-05T10:21:32.4964949Z [doctest] assertions: 515167 | 515167 passed | 0 failed |"
+        ],
+        "mono_marker": true
+      }
+    }
+  }
+}

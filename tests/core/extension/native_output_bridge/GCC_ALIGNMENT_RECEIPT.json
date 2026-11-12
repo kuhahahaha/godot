@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "component": "GCC duplicated-branches alignment follow-up",
+  "failing_commit": "0545e03db7e2aed66abcb239c29c178c6c2d923d",
+  "failing_run": 42104219838,
+  "directly_inspected_jobs": {
+    "linux_mono_debug": 127515026181,
+    "mingw_template": 127515026297
+  },
+  "diagnostic": "-Werror=duplicated-branches at ProductionActionRows::aligned and ProductionReadbackRows::aligned; equal V1/V2 alignof ternary operands",
+  "fix": "select typed pointer in separate statements; retain legacy precedence, null refusal and each type alignment",
+  "header_sha256": "6feb89425f98a45d7626b7c2b6a85125feef60982379c23996407e640099e9b2",
+  "candidate_patch_sha256": "74c90b3c061dee5b477f456df1dcc332d28e6b0f60c868c3a2e563a44d5ee136",
+  "source_equivalence": {
+    "source_only_equivalence_cases": 27225,
+    "alignments": [
+      1,
+      2,
+      4,
+      8,
+      16
+    ],
+    "pointer_values": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32
+    ],
+    "covers_both_null_and_legacy_priority": true,
+    "patch_apply_check_exit": 0,
+    "compiled": false,
+    "Godot_build": false
+  },
+  "local_combined_build": "work/b4-linked-owner-test-20261106/BUILD_RESULT.json",
+  "local_combined_source_pins": "work/b4-linked-owner-test-20261106/SOURCE_FIXED.json",
+  "local_targeted": {
+    "cases": 51,
+    "assertions": 33579,
+    "failures": 0
+  },
+  "local_full": {
+    "cases": 2090,
+    "assertions": 523835,
+    "failures": 0
+  },
+  "limits": [
+    "Local editor build uses Apple clang, not GCC or MinGW.",
+    "Remote GCC/MinGW success requires the next CI run.",
+    "Local combined build also includes six test-seam/test files, recorded in exact pins.",
+    "Other failed jobs were observed by status but their logs were not individually inspected."
+  ]
+}

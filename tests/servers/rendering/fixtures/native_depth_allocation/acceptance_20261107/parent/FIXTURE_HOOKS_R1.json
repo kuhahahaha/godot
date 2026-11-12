@@ -1,0 +1,62 @@
+[
+  {
+    "hook": "clang-format",
+    "exit": 0,
+    "output": "clang-format.............................................................Passed\nclang-format-glsl....................................(no files to check)Skipped\n"
+  },
+  {
+    "hook": "validate-includes",
+    "exit": 0,
+    "output": "validate-includes........................................................Passed\n"
+  },
+  {
+    "hook": "copyright-headers",
+    "exit": 0,
+    "output": "copyright-headers........................................................Passed\n"
+  },
+  {
+    "hook": "header-guards",
+    "exit": 0,
+    "output": "header-guards............................................................Passed\n"
+  },
+  {
+    "hook": "ruff-check",
+    "exit": 0,
+    "output": "ruff check...............................................................Passed\n"
+  },
+  {
+    "hook": "ruff-format",
+    "exit": 0,
+    "output": "ruff format..............................................................Passed\n"
+  },
+  {
+    "hook": "mypy",
+    "exit": 1,
+    "output": "mypy.....................................................................Failed\n- hook id: mypy\n- exit code: 1\n\ntests/servers/rendering/fixtures/native_depth_allocation/run_native.py:88:26: error:\nMissing type parameters for generic type \"dict\"  [type-arg]\n    def source_manifest() -> dict:\n                             ^\ntests/servers/rendering/fixtures/native_depth_allocation/run_native.py:204:5: error:\nNeed type annotation for \"identities\" (hint:\n\"identities: dict[<type>, <type>] = ...\")  [var-annotated]\n        identities = {}\n        ^~~~~~~~~~\ntests/servers/rendering/fixtures/native_depth_allocation/run_native.py:246:40: error:\nValue of type \"Optional[Any]\" is not indexable  [index]\n            if not known_bytes(backing) or backing[\"bytes\"] > quote[\"textu...\n                                           ^~~~~~~~~~~~~~~~\ntests/servers/rendering/fixtures/native_depth_allocation/run_native.py:248:45: error:\nValue of type \"Optional[Any]\" is not indexable  [index]\n            if actual is not None and actual != backing[\"bytes\"]:\n                                                ^~~~~~~~~~~~~~~~\ntests/servers/rendering/fixtures/native_depth_allocation/run_native.py:250:18: error:\nValue of type \"Optional[Any]\" is not indexable  [index]\n            actual = backing[\"bytes\"]\n                     ^~~~~~~~~~~~~~~~\nFound 5 errors in 1 file (checked 1 source file)\n\n"
+  },
+  {
+    "hook": "file-format",
+    "exit": 0,
+    "output": "file-format..............................................................Passed\n"
+  },
+  {
+    "hook": "codespell",
+    "exit": 0,
+    "output": "codespell................................................................Passed\n"
+  },
+  {
+    "hook": "check-executables-have-shebangs",
+    "exit": 0,
+    "output": "check that executables have shebangs.................(no files to check)Skipped\n"
+  },
+  {
+    "hook": "check-shebang-scripts-are-executable",
+    "exit": 0,
+    "output": "check that scripts with shebangs are executable..........................Passed\n"
+  },
+  {
+    "hook": "validate-codeowners",
+    "exit": 0,
+    "output": "validate-codeowners......................................................Passed\n"
+  }
+]

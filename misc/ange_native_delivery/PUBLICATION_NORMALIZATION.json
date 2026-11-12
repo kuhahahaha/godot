@@ -1,0 +1,13 @@
+{
+  "path": "tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-alias-readback-map-failure-cursor-r3.log",
+  "reason": "Inert historical log normalized to the declared default Git LF checkout; no compiled source change",
+  "before": {
+    "sha256": "db8ece9b166f83340c8c6d95bd9d4a3d3aa6bd0e62cca420b4126246db520872",
+    "bytes": 1561
+  },
+  "after": {
+    "sha256": "b95e29a1b856f7b8d74d2060842bf2ac31ad73a94610d17532125de61aa909b2",
+    "bytes": 1534
+  },
+  "replacement": "CRLF -> LF"
+}

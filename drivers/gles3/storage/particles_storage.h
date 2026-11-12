@@ -261,6 +261,8 @@ private:
 	void _particles_allocate_history_buffers(Particles *particles);
 	void _particles_update_instance_buffer(Particles *particles, const Vector3 &p_axis, const Vector3 &p_up_axis);
 
+	static bool _particles_get_lifetime_split(uint64_t p_amount, double p_phase, uint32_t &r_split);
+
 	template <typename T>
 	void _particles_reverse_lifetime_sort(Particles *particles);
 
@@ -365,6 +367,7 @@ public:
 
 	virtual void particles_request_process(RID p_particles) override;
 	virtual AABB particles_get_current_aabb(RID p_particles) override;
+	virtual Vector<uint8_t> particles_get_current_data(RID p_particles) const override;
 	virtual AABB particles_get_aabb(RID p_particles) const override;
 
 	virtual void particles_set_emission_transform(RID p_particles, const Transform3D &p_transform) override;
@@ -475,6 +478,7 @@ public:
 
 	virtual RID particles_collision_instance_create(RID p_collision) override;
 	virtual void particles_collision_instance_free(RID p_rid) override;
+	RID particles_collision_instance_get_collision(RID p_collision_instance) const;
 	virtual void particles_collision_instance_set_transform(RID p_collision_instance, const Transform3D &p_transform) override;
 	virtual void particles_collision_instance_set_active(RID p_collision_instance, bool p_active) override;
 };

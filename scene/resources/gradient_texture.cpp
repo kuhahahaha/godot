@@ -72,6 +72,7 @@ void GradientTexture1D::set_gradient(Ref<Gradient> p_gradient) {
 	if (gradient.is_valid()) {
 		gradient->connect_changed(callable_mp(this, &GradientTexture1D::_queue_update));
 	}
+	_advance_content_revision();
 	_queue_update();
 	emit_changed();
 }
@@ -101,7 +102,7 @@ void GradientTexture1D::_update() const {
 		Gradient &g = **gradient;
 		// `create()` isn't available for non-uint8_t data, so fill in the data manually.
 		for (int i = 0; i < width; i++) {
-			float ofs = float(i) / (width - 1);
+			float ofs = width > 1 ? float(i) / float(width - 1) : 0.0f;
 			image->set_pixel(i, 0, g.get_color_at_offset(ofs));
 		}
 
@@ -120,7 +121,7 @@ void GradientTexture1D::_update() const {
 			Gradient &g = **gradient;
 
 			for (int i = 0; i < width; i++) {
-				float ofs = float(i) / (width - 1);
+				float ofs = width > 1 ? float(i) / float(width - 1) : 0.0f;
 				Color color = g.get_color_at_offset(ofs);
 
 				wd8[i * 4 + 0] = uint8_t(color.get_r8());
@@ -144,6 +145,9 @@ void GradientTexture1D::_update() const {
 
 void GradientTexture1D::set_width(int p_width) {
 	ERR_FAIL_COND_MSG(p_width <= 0 || p_width > 16384, "Texture dimensions have to be within 1 to 16384 range.");
+	if (width != p_width) {
+		_advance_content_revision();
+	}
 	width = p_width;
 	_queue_update();
 	emit_changed();
@@ -159,6 +163,7 @@ void GradientTexture1D::set_use_hdr(bool p_enabled) {
 	}
 
 	use_hdr = p_enabled;
+	_advance_content_revision();
 	_queue_update();
 	emit_changed();
 }
@@ -288,6 +293,9 @@ float GradientTexture2D::_get_gradient_offset_at(int x, int y) const {
 	}
 	float ofs = 0;
 	Vector2 pos;
+	// A one-pixel axis represents the normalized origin. Initialize both
+	// components so the unused division path cannot leave indeterminate data.
+	pos = Vector2();
 	if (width > 1) {
 		pos.x = static_cast<float>(x) / (width - 1);
 	}

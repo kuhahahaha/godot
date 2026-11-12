@@ -1,0 +1,13 @@
+{
+  "raw": "GREEN_R2_FULL.xml",
+  "raw_sha256": "35cf2879d9033a2dfd777aab44fb90b202175886ed5f0036ddcd897afb704c4f",
+  "overall_asserts": {
+    "successes": "585464",
+    "failures": "0"
+  },
+  "overall_cases": {
+    "successes": "2269",
+    "failures": "0",
+    "skipped": "3"
+  }
+}

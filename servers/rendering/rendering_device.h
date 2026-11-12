@@ -30,6 +30,51 @@
 
 #pragma once
 
+#include "core/extension/gdextension_qualification_physical.h"
+#include "core/extension/gdextension_record_source.h"
+#include "servers/rendering/native_depth_allocation_projection.h"
+#include "servers/rendering/native_disposal_witness.h"
+#include "servers/rendering/native_height_range.h"
+
+#ifdef TESTS_ENABLED
+#include "modules/modules_enabled.gen.h" // IWYU pragma: keep. For test module feature macros.
+#endif
+
+namespace GDExtensionDeviceExit {
+class ProductionAttachment;
+}
+
+namespace RendererRD {
+class ExternalOutputStorage;
+class ExternalOutputOwner;
+class ExternalPacketBinding;
+class ExternalPipelinePreparation;
+class ParticlesStorage;
+class HeightCaptureCheckedSink;
+class MaterialStorage;
+class MeshStorage;
+class NativeMaterialRecipeRoster;
+} //namespace RendererRD
+
+#ifdef TESTS_ENABLED
+namespace TestProductionRequest {
+struct Access;
+}
+namespace TestProductionNativeObserve {
+struct Access;
+}
+namespace RendererRD {
+class TestParticlesProcessRetryAccess;
+class TestMultimeshRebuildAccess;
+} //namespace RendererRD
+#endif
+
+#include <atomic>
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+#include "servers/rendering/render_capture_test_tracking.h"
+#endif
+
+#include "core/object/ref_counted.h"
 #include "core/object/worker_thread_pool.h"
 #include "core/os/condition_variable.h"
 #include "core/os/thread_safe.h"
@@ -45,6 +90,10 @@
 #include "servers/rendering/rendering_device_enums.h"
 #include "servers/rendering/rendering_device_graph.h"
 
+namespace GDExtensionDeviceExit {
+struct CheckedRecordAppend;
+struct OriginalOperationIdentity;
+} //namespace GDExtensionDeviceExit
 class RDTextureFormat;
 class RDTextureView;
 class RDAttachmentFormat;
@@ -64,7 +113,26 @@ class RDAccelerationStructureInstance;
 class RDPipelineShader;
 class RDHitGroup;
 
+namespace GDExtensionDeviceExit {
+enum class ProductionOutputOwnerKind : uint8_t;
+class ProductionOutputPin;
+class ProductionOutputPreparationScope;
+class ProductionUseCell;
+} //namespace GDExtensionDeviceExit
 class RenderingDevice : public RenderingDeviceCommons {
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	friend class RenderCaptureTestAccess;
+#endif
+#if defined(TESTS_ENABLED) && defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+	friend class ParticlesRuntimeTestFixture;
+	friend class ParticlesExternalGuardTestFixture;
+	friend class ParticlesExternalOutputTestFixture;
+	friend class NativeDepthAllocationTestFixture;
+	friend class NativeHeightRangeTestFixture;
+#endif
+
+	friend class RendererRD::MeshStorage;
+	friend class RendererRD::HeightCaptureCheckedSink;
 	GDCLASS(RenderingDevice, Object)
 
 	_THREAD_SAFE_CLASS_
@@ -80,7 +148,68 @@ public:
 	typedef void (*InvalidationCallback)(void *);
 
 private:
+	friend class GDExtensionDeviceExit::Registry;
+	friend class ::RendererRD::ExternalPacketBinding;
+	friend class ::RendererRD::ExternalOutputOwner;
+	friend struct GDExtensionDeviceExit::QualificationTicket;
+	friend struct GDExtensionDeviceExit::QualificationResource;
+	friend class RenderingServerDefault;
+	friend class RendererRD::ExternalOutputStorage;
+	friend class RendererRD::ExternalPipelinePreparation;
+	friend class RendererRD::ParticlesStorage;
+	friend class RendererRD::MaterialStorage;
+	friend class RendererRD::NativeMaterialRecipeRoster;
+#ifdef TESTS_ENABLED
+	friend class TestExternalOutputAccess;
+	friend class TestIndexed144DeviceAccess;
+	friend class TestMaterialStorageNativeHoldDeviceAccess;
+	friend class TestShaderCompilePolicyAccess;
+	friend class TestTransferWorkerAccess;
+	friend class TestFrameWaitAccess;
+	friend class TestQualificationFrameAccess;
+	friend class TestQualificationSerialAccess;
+	friend class TestQualificationFinalizeAccess;
+	friend class TestQualificationPhysicalAccess;
+	friend class TestNativeDisposalAccess;
+	friend class TestNativeHeightRangeAccess;
+	friend class TestQualificationSceneDepthAccess;
+	friend class TestCheckedBindAccess;
+	friend class TestVertexArrayRangeAccess;
+	friend class TestExternalOutputPrefixAccess;
+	friend class TestQualificationAckAccess;
+	friend class TestQualificationStagingAccess;
+	friend class TestQualificationTicketAccess;
+	friend class TestRecordSourceAccess;
+	friend class TestProductionResourceUseAccess;
+	friend struct TestProductionRequest::Access;
+	friend struct TestProductionNativeObserve::Access;
+	friend class TestQualificationRtAccess;
+	friend class RendererRD::TestParticlesProcessRetryAccess;
+	friend class RendererRD::TestMultimeshRebuildAccess;
+	void test_arm_buffer_update_fault(RID p_buffer, uint32_t p_count) {
+		test_buffer_update_fault_buffer = p_buffer;
+		test_buffer_update_fault_count = p_count;
+#if defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+		test_buffer_update_fault_skip = 0;
+#endif
+		test_buffer_update_fault_hits = 0;
+	}
+#if defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+	void test_arm_buffer_update_fault_after(RID p_buffer, uint32_t p_count, uint32_t p_skip) {
+		test_arm_buffer_update_fault(p_buffer, p_count);
+		test_buffer_update_fault_skip = p_skip;
+	}
+#endif
+	uint32_t test_get_buffer_update_fault_hits() const { return test_buffer_update_fault_hits; }
+	void test_reset_compute_dispatch_count() { test_compute_dispatch_count = 0; }
+	uint32_t test_get_compute_dispatch_count() const { return test_compute_dispatch_count; }
+#endif
 	static RenderingDevice *singleton;
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+	RenderCaptureTestAllocationRegistry capture_test_allocation_registry;
+	RenderCaptureTestResourceRegistry capture_test_resource_registry;
+	std::atomic<bool> capture_test_coverage_failed = false;
+#endif
 
 	RenderingContextDriver *context = nullptr;
 	RenderingDeviceDriver *driver = nullptr;
@@ -88,6 +217,31 @@ private:
 
 	bool local_device_processing = false;
 	bool is_main_instance = false;
+#ifdef TESTS_ENABLED
+	bool test_main_screen_prepared = false;
+	uint64_t test_main_screen_epoch = 0;
+#endif
+	bool native_finalization_returned = false;
+	// Entity-edge publication/removal is protected by its original Registry.
+	// The atomic owner selects that Registry before acquiring its lock.
+	std::atomic<GDExtensionDeviceExit::Registry *> production_entity_registry{ nullptr };
+	GDExtensionDeviceExit::ProductionAttachment *production_entity_holds = nullptr;
+	std::atomic<bool> production_finalization_started{ false };
+	Error _begin_production_finalization();
+
+#ifdef TESTS_ENABLED
+	// Test-only synchronous upload fault injection. The hook is armed only for
+	// an exact buffer RID and is consumed at the public buffer_update boundary,
+	// before staging or command recording can mutate device state.
+	RID test_buffer_update_fault_buffer;
+	uint32_t test_buffer_update_fault_count = 0;
+#if defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+	uint32_t test_buffer_update_fault_skip = 0;
+#endif
+	uint32_t test_buffer_update_fault_hits = 0;
+	uint32_t test_compute_dispatch_count = 0;
+#endif
+	void _finalize_on_rendering_server_thread();
 
 protected:
 	static void _bind_methods();
@@ -121,10 +275,11 @@ public:
 private:
 	HashMap<RID, HashSet<RID>> dependency_map; // IDs to IDs that depend on it.
 	HashMap<RID, HashSet<RID>> reverse_dependency_map; // Same as above, but in reverse.
+	HashSet<RID> resource_frees_in_progress; // Accessed only on the render thread.
 
 	void _add_dependency(RID p_id, RID p_depends_on);
 	void _remove_dependency(RID p_id, RID p_depends_on);
-	void _free_dependencies(RID p_id);
+	bool _free_dependencies(RID p_id, const MutexLock<Mutex> &p_outer_lock);
 
 private:
 	/***************************/
@@ -175,14 +330,107 @@ private:
 	};
 
 	Error _staging_buffer_allocate(StagingBuffers &p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, uint32_t &r_alloc_offset, uint32_t &r_alloc_size, StagingRequiredAction &r_required_action, bool p_can_segment = true);
-	void _staging_buffer_execute_required_action(StagingBuffers &p_staging_buffers, StagingRequiredAction p_required_action);
+	Error _staging_buffer_execute_required_action(StagingBuffers &p_staging_buffers, StagingRequiredAction p_required_action);
 	Error _insert_staging_block(StagingBuffers &p_staging_buffers);
 
 	StagingBuffers upload_staging_buffers;
 	StagingBuffers download_staging_buffers;
 
+	std::atomic<uint64_t> next_backing_serial = 1;
+	uint64_t _reserve_backing_serial();
+	uint64_t next_qualification_object_serial = 1;
+	uint64_t next_qualification_free_event = 1;
+	uint64_t qualification_free_event_reservations = 0;
+	uint64_t next_qualification_frame_epoch = 1;
+	bool qualification_retiring = false;
+	bool qualification_recording = false;
+	GDExtensionDeviceExit::ProductionRequest *production_recording_request = nullptr;
+	bool _production_resource_permitted(RID);
+	bool _production_output_raster_permitted(RID);
+	Error _production_output_read_record(::RendererRD::ExternalPacketBinding &, DrawListID, const void *, uint32_t);
+	Error _production_output_empty_read_record(::RendererRD::ExternalPacketBinding &, DrawListID);
+	Error _production_output_reads_close();
+	struct ProductionOutputRasterRecording {
+		::RendererRD::ExternalOutputOwner *owner = nullptr;
+		uint32_t read = UINT32_MAX;
+		GDExtensionDeviceExit::ProductionRequest *request = nullptr;
+		RDG::RecordHandle begin;
+		uint64_t groups[5] = {};
+		RID storage_reads[3];
+	} production_output_raster_recording;
+	::RendererRD::ExternalOutputOwner *production_output_list_head_owner = nullptr;
+	uint32_t production_output_list_head_read = UINT32_MAX, production_output_list_reads = 0;
+	GDExtensionDeviceExit::CheckedRecordAppend _record_source_dispatch(const GDExtensionDeviceExit::OriginalOperationIdentity &, ComputeListID, uint32_t, uint32_t, uint32_t, const void * = nullptr, uint32_t = 0);
+	GDExtensionDeviceExit::CheckedRecordAppend _record_source_buffer_copy(const GDExtensionDeviceExit::OriginalOperationIdentity &, RID, RID, uint32_t, uint32_t, uint32_t);
+	GDExtensionDeviceExit::CheckedRecordAppend _record_source_buffer_upload(const GDExtensionDeviceExit::OriginalOperationIdentity &, RID, uint32_t, uint32_t, const void *, GDExtensionDeviceExit::BufferUploadSourceCapture &);
+	struct SourceDrawAppendResult;
+	SourceDrawAppendResult _record_source_draw_indirect(const GDExtensionDeviceExit::OriginalOperationIdentity &, DrawListID, bool, RID, uint32_t, uint32_t, uint32_t);
+	RDG::RecordHandle _compute_list_end_recorded();
+	RDG::RecordHandle _compute_list_dispatch_recorded(ComputeListID p_list, uint32_t p_x, uint32_t p_y, uint32_t p_z);
+	Error _qualification_maintenance();
+	bool _qualification_resource_busy(RID p_rid);
+	Error _qualification_pin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket, const LocalVector<RID> &p_resources);
+	void _qualification_unpin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket);
+	Error _qualification_admit_frame_ticket(GDExtensionDeviceExit::QualificationTicket *p_ticket);
+	Error _qualification_admit_worker(uint32_t p_worker, uint64_t p_operation, const RDD::QueueCallReport &p_prefix, uint32_t p_future);
+	Error _qualification_admit_extra_main(uint32_t p_slots);
+	Error _qualification_activate_cleanup_credits();
+	Error _qualification_prepare_free(RID p_rid);
+	void _qualification_defer_free(RID p_rid);
+	void _qualification_retry_deferred_frees();
+	LocalVector<RID> qualification_deferred_frees;
+
+	Error _qualification_admit_native_serials(const uint64_t *p_serials, uint32_t p_count, uint32_t p_worker, bool p_copy = false);
+	void _qualification_cancel_native_serials(const uint64_t *p_serials, uint32_t p_count, uint32_t p_worker, bool p_copy = false);
+	bool _qualification_capture_hidden_source(const RDD::QueueCallReport &p_report);
+	struct QualificationSourceAdmissionScope {
+		RenderingDevice &rd;
+		uint32_t worker;
+		RDD::NativeSourceAdmission admission;
+		RDD::NativeSourceAdmissionScope scope;
+		QualificationSourceAdmissionScope(RenderingDevice &p_rd, uint32_t p_worker = UINT32_MAX) : rd(p_rd), worker(p_worker), admission{ this, admit, cancel, OK, capture_hidden, can_block }, scope(admission) {}
+		static Error admit(void *p_owner, const uint64_t *p_serials, uint32_t p_count, bool p_copy) {
+			auto &self = *static_cast<QualificationSourceAdmissionScope *>(p_owner);
+			return self.rd._qualification_admit_native_serials(p_serials, p_count, self.worker, p_copy);
+		}
+		static bool can_block(void *p_owner);
+		static bool capture_hidden(void *p_owner, const RDD::QueueCallReport &p_report) {
+			return static_cast<QualificationSourceAdmissionScope *>(p_owner)->rd._qualification_capture_hidden_source(p_report);
+		}
+		static void cancel(void *p_owner, const uint64_t *p_serials, uint32_t p_count, bool p_copy) {
+			auto &self = *static_cast<QualificationSourceAdmissionScope *>(p_owner);
+			self.rd._qualification_cancel_native_serials(p_serials, p_count, self.worker, p_copy);
+		}
+	};
+	void _qualification_add_frame_ticket(GDExtensionDeviceExit::QualificationTicket *p_ticket);
+	void _qualification_seal_tickets();
+	void _qualification_issue_tickets(uint32_t p_slot, const RDD::QueueCallReport &p_report, Error p_error);
+	void _qualification_issue_tickets_locked(uint32_t p_slot, const RDD::QueueCallReport &p_report, Error p_error);
+	Error _qualification_retain_tickets(uint32_t p_frame);
+	Error _qualification_poll_tickets(uint32_t p_frame);
+	void _qualification_return_frame_tickets(uint32_t p_frame);
+	std::atomic<bool> qualification_frame_advance_pending{ false };
+	Error _qualification_enqueue(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	bool _qualification_free_event_available(bool p_reserved) const;
+	bool _qualification_reserve_free_event(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	void _qualification_release_free_event(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	void _qualification_freed(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	RID _qualification_storage_create(uint32_t p_bytes, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+
 	struct Buffer {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
+		NativeDisposalWitness native_disposal;
+		uint64_t native_disposal_rid = 0;
+		uint32_t qualification_users = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
+		uint64_t backing_serial = 0;
 		RDD::BufferID driver_id;
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+		uint64_t capture_test_allocation_serial = 0;
+#endif
 		uint32_t size = 0;
 		BitField<RDD::BufferUsageBits> usage = {};
 		RDG::ResourceTracker *draw_tracker = nullptr;
@@ -210,16 +458,260 @@ private:
 	RID_Owner<Buffer, true> storage_buffer_owner;
 	RID_Owner<Buffer, true> texture_buffer_owner;
 
+	class BufferGetDataResult : public RefCounted {
+	public:
+		// Owned storage for one raw async request across internal staging flushes.
+		// Copy identities are observations, not authenticated completion proof.
+		struct CopyRecord {
+			RDG::RecordHandle handle;
+			RDD::BufferID source;
+			RDD::BufferID destination;
+			RDD::BufferCopyRegion region;
+			bool mapping_sealed = false;
+			RDG::RecordMappingState mapping = RDG::RecordMappingState::Pending;
+			uint32_t command_slot = UINT32_MAX;
+			RDD::CommandBufferID command_buffer;
+			bool issue_attempted = false;
+			Error queue_error = OK;
+			RDD::QueueCallReport issue_report = {};
+		};
+		PackedByteArray bytes;
+		LocalVector<CopyRecord> copies;
+		uint32_t completed_size = 0;
+		uint32_t issued_size = 0;
+		uint64_t request_serial = 0;
+		// Captured from the original buffer at the first actual copy append.
+		// Continuations must retain this same request/backing/range association.
+		uint64_t source_backing_serial = 0;
+		uint32_t source_offset = 0;
+		uint32_t source_size = 0;
+		Error error = OK;
+		int64_t native_code = 0;
+		bool delivered = false;
+		bool qualification_owned = false;
+	};
+
+	Error _buffer_get_data_async(RID, const Callable &, uint32_t, uint32_t, const Ref<BufferGetDataResult> &p_owned = {}, GDExtensionDeviceExit::BufferReadbackSourceCapture *p_capture = nullptr);
+
 	struct BufferGetDataRequest {
+		RID buffer;
 		uint32_t frame_local_index = 0;
 		uint32_t frame_local_count = 0;
 		Callable callback;
 		uint32_t size = 0;
+		uint32_t result_offset = 0;
+		bool final_segment = true;
+		Ref<BufferGetDataResult> result;
+		GDExtensionDeviceExit::BufferReadbackSourceCapture *capture = nullptr;
 	};
 
-	Error _buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_t p_offset, uint32_t p_size, const void *p_data);
+	struct QualificationUploadProgress {
+		struct Segment {
+			RDG::RecordHandle handle;
+			uint32_t begin = 0, end = 0;
+		};
+		LocalVector<Segment> segments;
+		uint32_t consumed = 0, max_segments = 0;
+	};
+	Error _buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_t p_offset, uint32_t p_size, const void *p_data, QualificationUploadProgress *p_progress = nullptr, GDExtensionDeviceExit::BufferUploadSourceCapture *p_source = nullptr);
+
+	enum class NativeAppendEffect : uint8_t {
+		NoNewEffect,
+		NativePrefixOnly,
+		Recorded,
+		Unknown,
+	};
+	struct NativeTransferDependency {
+		uint32_t worker = 0;
+		uint64_t operation = 0;
+	};
+	struct CopyAppendResult {
+		Error error = OK;
+		NativeAppendEffect effect = NativeAppendEffect::NoNewEffect;
+		RDG::RecordHandle copy_handle;
+		NativeTransferDependency transfers[2];
+		uint32_t transfer_count = 0;
+		bool destination_became_mutable = false;
+		CopyAppendResult(Error p_error = OK) : error(p_error) {}
+	};
+	enum class DrawCaptureProfile : uint8_t {
+		ProceduralTriangle,
+		GeometryDirect,
+		GeometryPrepared,
+	};
+	struct DrawAppendResult {
+		Error error = OK;
+		NativeAppendEffect effect = NativeAppendEffect::NoNewEffect;
+		RDG::RecordHandle draw_handle;
+		// At most one preparation and one bind per original uniform set.
+		static constexpr uint32_t PREFIX_CAPACITY = 32;
+		RDG::RecordHandle prefix_handles[PREFIX_CAPACITY];
+		uint32_t prefix_count = 0;
+		bool capture_complete = false;
+		NativeTransferDependency transfer;
+		bool has_transfer = false;
+		DrawAppendResult failure(Error p_error) const {
+			DrawAppendResult result = *this;
+			result.error = p_error;
+			return result;
+		}
+	};
+	// CPU binding acceptance is distinct from a native graph instruction.
+	// Uniform sets remain deferred state; VA/IA capture the actual bind append.
+	struct BindAppendResult {
+		Error error = OK;
+		NativeAppendEffect effect = NativeAppendEffect::NoNewEffect;
+		RDG::RecordHandle bind_handle;
+		uint32_t transfer_count = 0;
+		bool state_accepted = false;
+		bool state_changed = false;
+		bool capture_complete = false;
+		BindAppendResult failure(Error p_error) const {
+			BindAppendResult result = *this;
+			result.error = p_error;
+			return result;
+		}
+	};
+	BindAppendResult _draw_list_bind_uniform_set_recorded(DrawListID p_list, RID p_uniform_set, uint32_t p_index, bool p_capture = true, NativeTransferDependency *p_transfers = nullptr, uint32_t p_transfer_capacity = 0);
+	BindAppendResult _draw_list_bind_vertex_array_recorded(DrawListID p_list, RID p_vertex_array, NativeTransferDependency *p_transfers, uint32_t p_transfer_capacity, bool p_capture = true);
+	BindAppendResult _draw_list_bind_index_array_recorded(DrawListID p_list, RID p_index_array, NativeTransferDependency *p_transfers, uint32_t p_transfer_capacity, bool p_capture = true);
+	bool _draw_list_usage_conflicts(const RDG::ResourceTracker *p_tracker, RDG::ResourceUsage p_usage) const;
+	// Mechanical original-owner join only; all native prefix and transfer facts
+	// stay attached for the packet owner even when the draw itself is refused.
+	struct SourceDrawAppendResult {
+		GDExtensionDeviceExit::CheckedRecordAppend observed;
+		DrawAppendResult native;
+	};
+	struct DrawListBeginResult {
+		Error error = OK;
+		NativeAppendEffect effect = NativeAppendEffect::NoNewEffect;
+		DrawListID list = INVALID_ID;
+		RDG::RecordHandle begin_handle;
+		RDG::RecordHandle clear_handle;
+		RDG::RecordHandle preparation_handles[1];
+		uint32_t preparation_count = 0;
+		RDG::RecordHandle prefix_handles[2];
+		uint32_t prefix_count = 0;
+		bool capture_complete = false;
+		DrawListBeginResult failure(Error p_error) const {
+			DrawListBeginResult result = *this;
+			result.error = p_error;
+			return result;
+		}
+	};
+	DrawListBeginResult _draw_list_begin_recorded(RID p_framebuffer, uint32_t p_draw_flags_bits, VectorView<Color> p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region, uint32_t p_breadcrumb, bool p_capture = true);
+	DrawAppendResult _draw_list_bind_render_pipeline_recorded(DrawListID p_list, RID p_render_pipeline, bool p_capture = true);
+	DrawAppendResult _draw_list_set_push_constant_recorded(DrawListID p_list, const void *p_data, uint32_t p_data_size, bool p_capture = true);
+	DrawAppendResult _draw_list_draw_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances, uint32_t p_procedural_vertices, bool p_capture = true, DrawCaptureProfile p_profile = DrawCaptureProfile::ProceduralTriangle);
+	DrawAppendResult _draw_list_draw_geometry_direct_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances = 1);
+	DrawAppendResult _draw_list_draw_geometry_prepared_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances = 1);
+	DrawAppendResult _draw_list_enable_scissor_recorded(DrawListID p_list, const Rect2 &p_rect, bool p_capture = true);
+	DrawAppendResult _draw_list_end_recorded(bool p_capture = true);
+	CopyAppendResult _buffer_copy_recorded(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size);
+	DrawAppendResult _draw_list_draw_indirect_recorded(DrawListID p_list, bool p_use_indices, RID p_buffer, uint32_t p_offset, uint32_t p_draw_count, uint32_t p_stride, bool p_capture = true);
 
 public:
+	// Core physical retention only: no source, packet, window or Runtime grant.
+	class NativeImmutableHold {
+		friend class RenderingDevice;
+		friend class GDExtensionDeviceExit::Registry;
+		friend class RendererRD::MaterialStorage;
+#ifdef TESTS_ENABLED
+		friend class TestNativeDisposalAccess;
+#endif
+		RID material_origin;
+		uint64_t material_origin_generation = 0;
+		RenderingDevice *device = nullptr;
+		Vector<RID> resources;
+		// Small original source holds live entirely in their quoted owner row.
+		RID inline_resources[3];
+		uint32_t inline_count = 0;
+		bool pins_returned = false;
+		uint32_t pipeline_borrowers = 0;
+		Span<const RID> _resource_span() const {
+			return inline_count ? Span<const RID>(inline_resources, inline_count) : Span<const RID>(resources.ptr(), resources.size());
+		}
+		void _clear_resources() {
+			for (RID &rid : inline_resources) {
+				rid = RID();
+			}
+			inline_count = 0;
+			resources.clear();
+		}
+
+	public:
+		NativeImmutableHold() = default;
+		NativeImmutableHold(const NativeImmutableHold &) = delete;
+		NativeImmutableHold &operator=(const NativeImmutableHold &) = delete;
+		NativeImmutableHold(NativeImmutableHold &&other) { *this = static_cast<NativeImmutableHold &&>(other); }
+		NativeImmutableHold &operator=(NativeImmutableHold &&other) {
+			if (this == &other) {
+				return *this;
+			}
+			CRASH_COND(device || pipeline_borrowers || other.pipeline_borrowers);
+			device = other.device;
+			resources = static_cast<Vector<RID> &&>(other.resources);
+			inline_count = other.inline_count;
+			for (uint32_t i = 0; i < 3; ++i) {
+				inline_resources[i] = other.inline_resources[i];
+				other.inline_resources[i] = RID();
+			}
+			other.inline_count = 0;
+			pins_returned = other.pins_returned;
+			material_origin = other.material_origin;
+			material_origin_generation = other.material_origin_generation;
+			other.material_origin = RID();
+			other.material_origin_generation = 0;
+			other.device = nullptr;
+			other.pins_returned = false;
+			return *this;
+		}
+		~NativeImmutableHold() { CRASH_COND(device || pipeline_borrowers); } // Original owner must explicitly return it.
+		bool is_valid() const { return device && !pins_returned; }
+		bool is_active() const { return device != nullptr; }
+	};
+	// Bound only by the original private Mesh directory capture transaction.
+	// The numeric projections cannot create custody; the actual accepted group
+	// retains the physical shares and the same original output pin retains it.
+	class NativeOutputGroupBinding {
+		friend class RenderingDevice;
+		friend class RendererRD::MeshStorage;
+		uint64_t registry_instance = 0, request_serial = 0, pin_serial = 0, group_serial = 0;
+
+	public:
+		NativeOutputGroupBinding() = default;
+		NativeOutputGroupBinding(const NativeOutputGroupBinding &) = delete;
+		NativeOutputGroupBinding &operator=(const NativeOutputGroupBinding &) = delete;
+		NativeOutputGroupBinding(NativeOutputGroupBinding &&other) { *this = static_cast<NativeOutputGroupBinding &&>(other); }
+		NativeOutputGroupBinding &operator=(NativeOutputGroupBinding &&other) {
+			if (this != &other) {
+				CRASH_COND(group_serial);
+				registry_instance = other.registry_instance;
+				request_serial = other.request_serial;
+				pin_serial = other.pin_serial;
+				group_serial = other.group_serial;
+				other.registry_instance = other.request_serial = other.pin_serial = other.group_serial = 0;
+			}
+			return *this;
+		}
+		~NativeOutputGroupBinding() { CRASH_COND(group_serial); }
+		bool is_empty() const { return group_serial == 0; }
+	};
+	Error native_immutable_hold_acquire(const VectorView<RID> &p_roots, NativeImmutableHold &r_hold, uint32_t p_max_resources = 256);
+	Error native_immutable_hold_release(NativeImmutableHold &r_hold);
+	bool native_immutable_is_render_thread() const;
+	// A necessary native condition, never a grant by itself. The caller must
+	// retain its original invocation, selected registration and lifetime guard.
+	bool native_renderer_recording_window_available() const {
+		return native_immutable_is_render_thread() && driver && !native_immutable_device_escaped &&
+				!draw_list.active && !compute_list.active && !raytracing_list.active &&
+				!draw_graph.has_driver_callbacks() && !production_finalization_started.load(std::memory_order_acquire);
+	}
+
+	bool native_immutable_resource_is_held(RID p_rid) const;
+	bool native_immutable_resource_is_retiring(RID p_rid) const;
+	bool native_immutable_pipeline_matches_shader(RID p_pipeline, RID p_shader) const;
+	bool native_immutable_uniform_set_matches_pipeline(RID p_set, RID p_pipeline, uint32_t p_set_index) const;
 	Error buffer_copy(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size);
 	/**
 	 * @brief Updates the given GPU buffer at offset and size with the given CPU data.
@@ -334,6 +826,13 @@ public:
 	// for a framebuffer to render into it.
 
 	struct Texture {
+		NativeDisposalWitness native_disposal;
+		uint64_t native_disposal_rid = 0;
+		uint64_t native_disposal_serial = 0;
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
 		struct SharedFallback {
 			uint32_t revision = 1;
 			RDD::TextureID texture;
@@ -344,6 +843,8 @@ public:
 		};
 
 		RDD::TextureID driver_id;
+		uint32_t qualification_users = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
 
 		TextureType type = TEXTURE_TYPE_MAX;
 		DataFormat format = DATA_FORMAT_MAX;
@@ -412,17 +913,26 @@ public:
 
 	uint32_t _texture_layer_count(Texture *p_texture) const;
 	uint32_t _texture_alignment(Texture *p_texture) const;
+	static uint32_t _normalize_staging_region_size(int64_t p_size);
 	Error _texture_initialize(RID p_texture, uint32_t p_layer, const Vector<uint8_t> &p_data, RDD::TextureLayout p_dst_layout, bool p_immediate_flush);
 	void _texture_check_shared_fallback(Texture *p_texture);
 	void _texture_update_shared_fallback(RID p_texture_rid, Texture *p_texture, bool p_for_writing);
 	void _texture_free_shared_fallback(Texture *p_texture);
 	void _texture_copy_shared(RID p_src_texture_rid, Texture *p_src_texture, RID p_dst_texture_rid, Texture *p_dst_texture);
-	void _texture_create_reinterpret_buffer(Texture *p_texture);
-	void _texture_check_pending_clear(RID p_texture_rid, Texture *p_texture);
-	void _texture_clear_color(RID p_texture_rid, Texture *p_texture, const Color &p_color, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers);
-	void _texture_clear_depth_stencil(RID p_texture_rid, Texture *p_texture, float p_depth, uint8_t p_stencil, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers);
+	bool _texture_create_reinterpret_buffer(Texture *p_texture);
+	Error _texture_check_pending_clear(RID p_texture_rid, Texture *p_texture);
+	Error _texture_clear_color(RID p_texture_rid, Texture *p_texture, const Color &p_color, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers);
+	Error _texture_clear_depth_stencil(RID p_texture_rid, Texture *p_texture, float p_depth, uint8_t p_stencil, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers);
 	uint32_t _texture_vrs_method_to_usage_bits() const;
 	void _texture_ensure_shareable_format(RID p_texture, const DataFormat &p_shareable_format);
+
+	struct TextureGetDataResult : RefCounted {
+		PackedByteArray bytes;
+		Error error = OK;
+		uint32_t issued_regions = 0;
+		uint32_t completed_regions = 0;
+		bool delivered = false;
+	};
 
 	struct TextureGetDataRequest {
 		uint32_t frame_local_index = 0;
@@ -433,6 +943,8 @@ public:
 		uint32_t depth = 0;
 		uint32_t mipmaps = 0;
 		RDD::DataFormat format = RDD::DATA_FORMAT_MAX;
+		Ref<TextureGetDataResult> result;
+		bool final_segment = true;
 	};
 
 public:
@@ -460,6 +972,11 @@ public:
 		}
 	};
 
+private:
+	RID _texture_create_internal(const TextureFormat &p_format, const TextureView &p_view, const Vector<Vector<uint8_t>> &p_data, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved, const NativeDisposalWitness *p_native_disposal = nullptr);
+	RID _qualification_texture_create(const TextureFormat &p_format, const TextureView &p_view, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+
+public:
 	RID texture_create(const TextureFormat &p_format, const TextureView &p_view, const Vector<Vector<uint8_t>> &p_data = Vector<Vector<uint8_t>>());
 	RID texture_create_shared(const TextureView &p_view, RID p_with_texture);
 	RID texture_create_from_extension(TextureType p_type, DataFormat p_format, TextureSamples p_samples, BitField<RenderingDevice::TextureUsageBits> p_usage, uint64_t p_image, uint64_t p_width, uint64_t p_height, uint64_t p_depth, uint64_t p_layers, uint64_t p_mipmaps = 1);
@@ -687,6 +1204,15 @@ private:
 	HashMap<FramebufferFormatID, FramebufferFormat> framebuffer_formats;
 
 	struct Framebuffer {
+		NativeDisposalWitness native_disposal;
+		uint64_t native_disposal_rid = 0;
+		uint64_t native_disposal_serial = 0;
+		// Exact cache identity, retained after its last child has returned.
+		uint64_t native_disposal_backing = 0;
+		uint32_t qualification_users = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
+		// This edge survives RID invalidation and returns after the actual driver free.
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_dependency = nullptr;
 		FramebufferFormatID format_id;
 		uint32_t storage_mask = 0;
 		Vector<RID> texture_ids;
@@ -698,6 +1224,8 @@ private:
 	};
 
 	RID_Owner<Framebuffer, true> framebuffer_owner;
+	RID _qualification_framebuffer_create_multipass(const Vector<RID> &, const Vector<FramebufferPass> &, FramebufferFormatID, uint32_t, GDExtensionDeviceExit::QualificationPhysicalReturn *, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID, const NativeDisposalWitness *p_native_disposal = nullptr);
+	RID _qualification_framebuffer_create(RID, GDExtensionDeviceExit::QualificationPhysicalReturn *, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
 
 public:
 	// This ID is warranted to be unique for the same formats, does not need to be freed
@@ -705,6 +1233,17 @@ public:
 	FramebufferFormatID framebuffer_format_create_multipass(const Vector<AttachmentFormat> &p_attachments, const Vector<FramebufferPass> &p_passes, uint32_t p_view_count = 1, int32_t p_vrs_attachment = -1);
 	FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = TEXTURE_SAMPLES_1);
 	TextureSamples framebuffer_format_get_texture_samples(FramebufferFormatID p_format, uint32_t p_pass = 0);
+	struct NativeFramebufferLayout {
+		Vector<AttachmentFormat> attachments;
+		Vector<FramebufferPass> passes;
+		uint32_t view_count = 0;
+		VRSMethod vrs_method = VRS_METHOD_NONE;
+		int32_t vrs_attachment = ATTACHMENT_UNUSED;
+		Size2i vrs_texel_size;
+	};
+	// Existing original format only. No cache/render-pass factory or default.
+	Error framebuffer_format_get_native_layout(FramebufferFormatID, NativeFramebufferLayout &);
+
 
 	RID framebuffer_create(const Vector<RID> &p_texture_attachments, FramebufferFormatID p_format_check = INVALID_ID, uint32_t p_view_count = 1);
 	RID framebuffer_create_multipass(const Vector<RID> &p_texture_attachments, const Vector<FramebufferPass> &p_passes, FramebufferFormatID p_format_check = INVALID_ID, uint32_t p_view_count = 1);
@@ -719,7 +1258,21 @@ public:
 	/**** SAMPLER ****/
 	/*****************/
 private:
-	RID_Owner<RDD::SamplerID, true> sampler_owner;
+	struct Sampler {
+		NativeDisposalWitness native_disposal;
+		uint64_t native_disposal_rid = 0;
+		uint64_t native_disposal_serial = 0;
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
+		RDD::SamplerID driver_id;
+		uint32_t qualification_users = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
+	};
+	RID_Owner<Sampler, true> sampler_owner;
+	RID _qualification_sampler_create(const SamplerState &p_state, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	RID _sampler_create_internal(const SamplerState &p_state, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, const NativeDisposalWitness *p_native_disposal = nullptr);
 
 public:
 	RID sampler_create(const SamplerState &p_state);
@@ -814,6 +1367,10 @@ private:
 	HashMap<VertexFormatID, VertexDescriptionCache> vertex_formats;
 
 	struct VertexArray {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
 		RID buffer;
 		VertexFormatID description;
 		int vertex_count = 0;
@@ -829,6 +1386,21 @@ private:
 
 	RID_Owner<VertexArray, true> vertex_array_owner;
 
+	// Scratch-only preflight; caller must retain sources and revalidate before factories.
+	// No format ID, VA RID, hold, or dependency is published by these helpers.
+	static Error _vertex_format_normalize(const Vector<VertexAttribute> &p_attributes, VertexDescriptionCache &r_description);
+	Error _vertex_array_prepare_locked(uint32_t p_vertex_count, const Vector<VertexAttribute> &p_attributes, const Vector<RID> &p_src_buffers, const Vector<uint64_t> &p_offsets, VertexArray &r_array, HashSet<RID> &r_used_buffers);
+	struct NativeVertexArrayPreflight {
+		Vector<VertexAttribute> attributes;
+		Vector<RID> used_buffers;
+		uint32_t max_instances_allowed = UINT32_MAX;
+	};
+	// Validates only direct used VB eligibility. Full closure/G and existing VA/IA,
+	// external history and detached-directory roots are independent later gates.
+	Error _native_vertex_array_preflight(uint32_t p_vertex_count, const Vector<VertexAttribute> &p_attributes, const Vector<RID> &p_buffers, const Vector<uint64_t> &p_offsets, NativeVertexArrayPreflight &r_result);
+	Error _native_immutable_resource_eligibility_locked(RID p_rid, uint32_t p_increments = 1);
+	Error _native_immutable_hold_capacity_locked(uint32_t p_increments) const;
+
 	struct IndexBuffer : public Buffer {
 		uint32_t max_index = 0; // Used for validation.
 		uint32_t index_count = 0;
@@ -839,6 +1411,10 @@ private:
 	RID_Owner<IndexBuffer, true> index_buffer_owner;
 
 	struct IndexArray {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
 		uint32_t max_index = 0; // Remember the maximum index here too, for validation.
 		RDD::BufferID driver_id; // Not owned, inherited from index buffer.
 		RDG::ResourceTracker *draw_tracker = nullptr; // Not owned, inherited from index buffer.
@@ -872,6 +1448,9 @@ public:
 	// This ID is warranted to be unique for the same formats, does not need to be freed
 	VertexFormatID vertex_format_create(const Vector<VertexAttribute> &p_vertex_descriptions);
 	RID vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const Vector<RID> &p_src_buffers, const Vector<uint64_t> &p_offsets = Vector<uint64_t>());
+
+	// Internal Indexed144 admission check. This does not expose arbitrary buffers to the public API.
+	bool validate_external_indexed_surface_buffers(RID p_current_vertex_buffer, RID p_previous_vertex_buffer, RID p_index_buffer, RID p_index_array, uint32_t p_vertex_capacity, uint32_t p_index_capacity);
 
 	RID index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, Span<uint8_t> p_data = {}, bool p_use_restart_indices = false, BitField<BufferCreationBits> p_creation_bits = 0);
 	RID _index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, const Vector<uint8_t> &p_data, bool p_use_restart_indices = false, BitField<BufferCreationBits> p_creation_bits = 0) {
@@ -939,12 +1518,28 @@ private:
 	// does not submit something invalid.
 
 	struct Shader : public ShaderReflection {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
+		Vector<RID> native_immutable_samplers;
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
+		BitField<ShaderCompileFlags> compile_flags = {};
 		String name; // Used for debug.
 		RDD::ShaderID driver_id;
 		uint32_t layout_hash = 0;
 		BitField<RDD::PipelineStageBits> stage_bits = {};
 		Vector<uint32_t> set_formats;
 	};
+
+	enum class NativeRenderPipelineShaderShape {
+		SUPPORTED,
+		NOT_RASTERIZATION,
+		MISSING_VERTEX,
+	};
+	static NativeRenderPipelineShaderShape _native_render_pipeline_shader_shape(const Shader &p_shader);
+	bool _native_immutable_uniform_set_matches_formats_locked(RID p_set, const Vector<uint32_t> &p_formats, uint32_t p_set_index) const;
+	bool _native_immutable_uniform_set_matches_future_render_pipeline(RID p_set, RID p_shader, uint32_t p_set_index) const;
 
 	String _shader_uniform_debug(RID p_shader, int p_set = -1);
 
@@ -1030,6 +1625,9 @@ public:
 	bool has_feature(const Features p_feature) const;
 
 	Vector<uint8_t> shader_compile_spirv_from_source(ShaderStage p_stage, const String &p_source_code, ShaderLanguage p_language = SHADER_LANGUAGE_GLSL, String *r_error = nullptr, bool p_allow_cache = true);
+	Vector<uint8_t> shader_compile_binary_from_spirv_with_options(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags);
+	RID shader_create_from_spirv_with_options(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags);
+	BitField<ShaderCompileFlags> shader_get_compile_flags(RID p_shader) const;
 	Vector<uint8_t> shader_compile_binary_from_spirv(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name = "");
 
 	RID shader_create_from_spirv(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name = "");
@@ -1038,6 +1636,10 @@ public:
 	void shader_destroy_modules(RID p_shader);
 
 	uint64_t shader_get_vertex_input_attribute_mask(RID p_shader);
+	// Read-only original render-thread lookup; refuses placeholders and preserves output on failure.
+	Error shader_get_native_vertex_input_mask_if_ready(RID p_shader, uint64_t &r_input_mask);
+	// Read-only original ready reflection; caller retains exact incarnation.
+	Error shader_get_native_raster_layout_if_ready(RID p_shader, ShaderReflection &r_layout);
 
 	/******************/
 	/**** UNIFORMS ****/
@@ -1132,6 +1734,8 @@ public:
 	RID shader_create_from_bytecode_with_samplers(const Vector<uint8_t> &p_shader_binary, RID p_placeholder = RID(), const Vector<PipelineImmutableSampler> &p_immutable_samplers = Vector<PipelineImmutableSampler>());
 
 private:
+	RID _qualification_shader_create(const Vector<uint8_t> &, RID, const Vector<PipelineImmutableSampler> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
+	RID _qualification_pipeline_create(RID, const Vector<PipelineSpecializationConstant> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID, GDExtensionDeviceExit::ProductionUseCell *p_output_cell = nullptr);
 	static const uint32_t MAX_UNIFORM_SETS = 16;
 	static const uint32_t MAX_PUSH_CONSTANT_SIZE = 128;
 
@@ -1144,6 +1748,19 @@ private:
 	// the above restriction is not too serious.
 
 	struct UniformSet {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
+		NativeDisposalWitness native_disposal;
+		uint64_t native_disposal_rid = 0;
+		uint64_t native_disposal_serial = 0;
+		RID production_material_origin;
+		uint64_t production_material_origin_generation = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
+		uint32_t qualification_users = 0;
+		LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> qualification_dependencies;
+		LocalVector<NativeDisposalWitness> production_output_dependencies;
 		uint32_t format = 0;
 		RID shader_id;
 		uint32_t shader_set = 0;
@@ -1158,6 +1775,7 @@ private:
 			RID texture;
 		};
 
+		LocalVector<RID> writable_resources; // Actual reflected writable bindings, never caller permission.
 		LocalVector<AttachableTexture> attachable_textures; // Used for validation.
 		Vector<RDG::ResourceTracker *> draw_trackers;
 		Vector<RDG::ResourceUsage> draw_trackers_usage;
@@ -1169,10 +1787,266 @@ private:
 		void *invalidated_callback_userdata = nullptr;
 	};
 
+	// Mechanical ports for an original Core owner; deliberately private. No
+	// arbitrary-RID enrollment or qualification ticket authorizes these calls.
+	Error _production_output_generation_ready(RID, uint64_t, const GDExtensionDeviceExit::ProductionOutputPin &, GDExtensionProductionRequestRefV1, uint32_t &, uint32_t &);
+	bool _production_output_owner_matches(GDExtensionDeviceExit::ProductionOutputOwnerKind, RID, uint64_t, uint32_t, uint64_t, const GDExtensionDeviceExit::ProductionOutputPin &, GDExtensionProductionRequestRefV1);
+	Error _production_output_owner_service(GDExtensionDeviceExit::ProductionOutputOwnerKind, RID, uint64_t, uint32_t, uint64_t, GDExtensionDeviceExit::ProductionOutputPin &, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);
+	Error _production_output_owned_pipeline_preflight(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);
+	Error _production_output_owned_render_pipeline_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, RID &);
+	Error _production_output_owned_pipeline_preflight(GDExtensionDeviceExit::ProductionOutputPreparationScope &);
+	Error _production_output_owned_render_pipeline_create(GDExtensionDeviceExit::ProductionOutputPreparationScope &, RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, RID &);
+	Error _production_output_owned_render_pipeline_create_locked(GDExtensionDeviceExit::Registry &, GDExtensionDeviceExit::ProductionRequest &, uint64_t, uint32_t, RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, RID &);
+	Error _production_output_owned_reserve(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint32_t, uint64_t &);
+	Error _production_output_owned_rollback(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t &);
+	Error _production_output_owned_storage_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, uint32_t, BitField<StorageBufferUsage>, RID &, NativeDisposalWitness &);
+	Error _production_output_owned_uniform_set_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, const VectorView<Uniform> &, RID, uint32_t, RID &, NativeDisposalWitness &);
+	// One exact buffer source per binding. Owned resources retain their original
+	// slot group; imported sources name the accepted action's actual READ row.
+	struct ProductionOutputGuardRecording {
+		GDExtensionDeviceExit::ProductionRequest *request = nullptr;
+		uint64_t request_serial = 0, pin_serial = 0;
+		uint32_t action_ordinal = UINT32_MAX, count = 0;
+		RID resources[12];
+		NativeDisposalWitness witnesses[12];
+	} production_output_guard_recording;
+	Error _production_output_guard_begin_locked(GDExtensionDeviceExit::ProductionRequest &, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint64_t, const VectorView<RID> &);
+	void _production_output_guard_end_locked();
+	struct ProductionOutputUniformSource {
+		RID buffer;
+		uint64_t owned_group = 0;
+		uint32_t owned_ordinal = UINT32_MAX;
+		uint32_t resource_slot = UINT32_MAX, use_index = UINT32_MAX;
+		uint64_t byte_offset = 0, byte_size = 0;
+	};
+	Error _production_output_owned_uniform_set_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, const VectorView<Uniform> &, RID, uint32_t, RID &, NativeDisposalWitness &, const VectorView<ProductionOutputUniformSource> &);
+	Error _production_output_owned_uniform_set_create(GDExtensionDeviceExit::ProductionOutputPreparationScope &, uint64_t, uint32_t, const VectorView<Uniform> &, RID, uint32_t, RID &, NativeDisposalWitness &, const VectorView<ProductionOutputUniformSource> &);
+	Error _production_output_owned_uniform_set_create_locked(GDExtensionDeviceExit::Registry &, GDExtensionDeviceExit::ProductionRequest &, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, const VectorView<Uniform> &, RID, uint32_t, RID &, NativeDisposalWitness &, const VectorView<ProductionOutputUniformSource> &);
+
+	Error _production_output_owned_seal(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);
+	Error _production_output_owned_seal_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t, uint64_t);
+	Error _production_output_owned_create_preflight_locked(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, GDExtensionDeviceExit::ProductionRequest *&);
+	Error _production_output_owned_bind_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t, uint64_t, uint32_t, const NativeDisposalWitness &);
+	Error _production_output_owned_bind(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, const NativeDisposalWitness &);
+	Error _production_output_owned_cancel_unbound(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);
+	bool _production_output_cache_observer_callback_supported_locked(RID, const GDExtensionDeviceExit::ProductionRequest &, const GDExtensionDeviceExit::ProductionDisposalUse *);
+	bool _production_output_callback_supported(RID);
+	void _production_output_set_material_origin(RID, RID, uint64_t);
+	Error _native_immutable_hold_expand_directory(const VectorView<RID> &, NativeImmutableHold &, uint32_t);
+	Error _production_output_directory_bind_adopted_locked(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, const VectorView<RID> &, NativeOutputGroupBinding &);
+	Error _production_output_directory_capture(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, const VectorView<RID> &, uint32_t, NativeOutputGroupBinding &);
+	Error _production_output_directory_return(GDExtensionDeviceExit::ProductionOutputPin &, NativeOutputGroupBinding &, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);
+	Error _production_output_directory_mark_root(GDExtensionDeviceExit::ProductionOutputPin &, const NativeOutputGroupBinding &, RID, bool, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);
+	// Shared primitives only. Callers must already retain authenticated original
+	// Registry and RD locks. No scope/window or source permission is issued here.
+	enum class NativeClosureMode {
+		DEPENDENCIES,
+		BIDIRECTIONAL,
+		MATERIAL_DISPOSAL,
+	};
+	Error _production_output_hold_inventory_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_reserved_group, const VectorView<NativeImmutableHold *> &, uint32_t p_limit, uint32_t &r_count, NativeClosureMode p_mode = NativeClosureMode::BIDIRECTIONAL);
+	template <typename Visitor>
+	Error _native_immutable_visit_related_locked(RID p_rid, NativeClosureMode p_mode, Visitor &&p_visit);
+	struct NativeProspectiveKey {
+		RID actual;
+		uint32_t future = UINT32_MAX;
+		bool operator==(const NativeProspectiveKey &p_other) const { return actual == p_other.actual && future == p_other.future; }
+	};
+	struct NativeProspectiveInput {
+		NativeProspectiveKey key;
+		enum Kind { UNIFORM_BUFFER,
+			STORAGE_BUFFER,
+			TEXTURE,
+			SAMPLER } kind = UNIFORM_BUFFER;
+	};
+	struct NativeProspectiveSymbol {
+		enum Kind {
+			FUTURE_VERTEX_ARRAY,
+			FUTURE_RENDER_PIPELINE,
+			FUTURE_UNIFORM_BUFFER,
+			FUTURE_STORAGE_BUFFER,
+			FUTURE_TEXTURE,
+			FUTURE_UNIFORM_SET,
+			FUTURE_FRAMEBUFFER
+		} kind = FUTURE_VERTEX_ARRAY;
+		Vector<RID> dependencies; // Unchanged legacy VA VBs / one pipeline shader.
+		RID shader; // Exact original shader for a future uniform set only.
+		Vector<NativeProspectiveInput> inputs; // Coalesced actual/future binding or attachment roots.
+	};
+	// Keys/counts only: not authority, immutable eligibility, or group admission.
+	// Caller holds RD lock and must retain exact source/material plans.
+	Error _native_prospective_closure_keys_locked(const VectorView<NativeProspectiveKey> &p_roots, const VectorView<NativeProspectiveSymbol> &p_symbols, uint32_t p_limit, NativeClosureMode p_mode, Vector<NativeProspectiveKey> &r_nodes);
+	Error _native_prospective_closure_keys_locked(const VectorView<NativeProspectiveKey> &p_roots, const VectorView<NativeProspectiveSymbol> &p_symbols, uint32_t p_limit, bool p_bidirectional, Vector<NativeProspectiveKey> &r_nodes) {
+		return _native_prospective_closure_keys_locked(p_roots, p_symbols, p_limit, p_bidirectional ? NativeClosureMode::BIDIRECTIONAL : NativeClosureMode::DEPENDENCIES, r_nodes);
+	}
+	struct NativeProspectiveHoldRoots {
+		Vector<NativeProspectiveKey> roots;
+		uint32_t limit = 256; // Actual leaf bound, not adoption group G.
+	};
+	// Private count/eligibility prerequisite only. Caller holds RD lock and supplies
+	// exact retained-owner roots for NEW holds only, with factory symbols coalesced.
+	// No scope, material raw-root admission, reservation or callback authority here.
+	Error _native_prospective_hold_increments_locked(const VectorView<NativeProspectiveHoldRoots> &p_holds, const VectorView<NativeProspectiveSymbol> &p_symbols);
+	struct NativeProspectiveMaterialOrigin {
+		RID material;
+		uint64_t generation = 0;
+	};
+	struct NativeProspectiveDisposalMetadata {
+		uint32_t kind = UINT32_MAX;
+		uint64_t serial = 0, native_driver_id = 0;
+		bool qualified_borrow = false;
+	};
+	// Shared original-owner predicate from actual staging. Does not stage a cell.
+	Error _production_output_resource_preflight_locked(GDExtensionDeviceExit::ProductionRequest &p_request, RID p_rid, uint32_t p_pins, const VectorView<NativeProspectiveMaterialOrigin> &p_origins, NativeProspectiveDisposalMetadata &r_metadata);
+	// Read-only original reservation layout. pin_serial0 preserves inventory
+	// semantics; authenticated admission/adoption must supply the original pin.
+	Error _production_output_owned_destination_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t, uint32_t, GDExtensionDeviceExit::ProductionUseCell *&);
+	Error _production_output_hold_reservation_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_pin_serial, uint64_t p_reserved_group, uint32_t p_limit, uint32_t &r_group_index, bool p_require_unstaged = true);
+	Error _production_output_hold_stage_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_reserved_group, const VectorView<NativeImmutableHold *> &, uint32_t p_limit, uint32_t &r_count, NativeClosureMode p_mode = NativeClosureMode::BIDIRECTIONAL);
+	void _production_output_hold_inventory_clear_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_reserved_group);
+	Error _production_output_hold_adopt_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_pin_serial, uint64_t p_reserved_group, const VectorView<NativeImmutableHold *> &, uint32_t p_limit, uint64_t &r_group, NativeClosureMode p_mode = NativeClosureMode::BIDIRECTIONAL);
+	Error _production_output_hold_capture_locked(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, NativeImmutableHold &, uint64_t &);
+	Error _production_output_hold_returned_locked(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, GDExtensionDeviceExit::ProductionDisposalObservation &);
+	Error _production_output_hold_capture(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, NativeImmutableHold &, uint64_t &);
+	bool _production_output_hold_contains(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, RID);
+	bool _production_output_owned_storage_contains(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, RID);
+	Error _production_output_hold_begin_return(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);
+	Error _production_output_retire_service(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &, GDExtensionDeviceExit::ProductionDisposalObservation &);
+	Error _production_output_hold_returned(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, GDExtensionDeviceExit::ProductionDisposalObservation &);
+	GDExtensionDeviceExit::ProductionDisposalUse **_production_disposal_head(RID, uint32_t &, uint64_t &, uint64_t &);
+	bool _production_disposal_belongs(RID, const GDExtensionDeviceExit::ProductionRequest *);
+	const GDExtensionDeviceExit::ProductionRequest *production_disposal_drop_owner = nullptr;
+	void _production_disposal_enqueued(GDExtensionDeviceExit::ProductionDisposalUse *&);
+	void _production_disposal_returned(GDExtensionDeviceExit::ProductionDisposalUse *&);
+	Error _native_disposal_preflight() const;
+	RID _storage_buffer_create_internal(uint32_t p_bytes, Span<uint8_t> p_data, BitField<StorageBufferUsage> p_usage, BitField<BufferCreationBits> p_creation_bits, const NativeDisposalWitness *p_native_disposal);
+	// Disposal observations only: neither content holds nor recording/completion authority.
+	Error _native_disposal_sampler_create(const SamplerState &p_state, RID &r_rid, NativeDisposalWitness &r_witness);
+	Error _native_disposal_depth_texture_create(uint32_t p_width, uint32_t p_height, RID &r_rid, NativeDisposalWitness &r_witness);
+	Error _native_disposal_depth_framebuffer_create(const NativeDisposalWitness &p_texture, RID &r_rid, NativeDisposalWitness &r_witness);
+	Error _native_disposal_depth_sample_set_create(const NativeDisposalWitness &p_sampler, const NativeDisposalWitness &p_texture, RID p_shader, uint32_t p_set, uint32_t p_binding, RID &r_rid, NativeDisposalWitness &r_witness);
+	Error _native_disposal_storage_create(uint32_t p_bytes, BitField<StorageBufferUsage> p_usage, RID &r_rid, NativeDisposalWitness &r_witness);
+	Error _native_disposal_uniform_set_create(const VectorView<Uniform> &p_uniforms, RID p_shader, uint32_t p_set, RID &r_rid, NativeDisposalWitness &r_witness, const GDExtensionDeviceExit::ProductionRequest *p_owner = nullptr, uint64_t p_group = 0, uint64_t p_root = 0, uint32_t p_ordinal = UINT32_MAX, const VectorView<ProductionOutputUniformSource> *p_sources = nullptr);
+	Error _native_disposal_free(const NativeDisposalWitness &p_witness);
+	Error _native_disposal_observe(const NativeDisposalWitness &p_witness, NativeDisposalWitness::Report &r_report) const;
+	// Live capture snapshots actual original driver bytes; later observation
+	// follows retained witnesses across RID invalidation and physical return.
+	Error _native_disposal_depth_allocation_quote(uint32_t p_width, uint32_t p_height, NativeDepthAllocationQuote &r_quote) const;
+	Error _native_disposal_depth_allocation_quote_observe(const NativeDepthAllocationQuote &p_quote, NativeDepthAllocationQuote::Report &r_report) const;
+	// Failed actual verification preserves created RID/witness and projection;
+	// the original owner must retire that prefix before its reservation returns.
+	Error _native_disposal_depth_texture_create_quoted(const NativeDepthAllocationQuote &p_quote, RID &r_rid, NativeDisposalWitness &r_witness, NativeDepthAllocationProjection &r_projection, NativeDepthAllocationQuote::CreateOutcome &r_outcome);
+	Error _native_disposal_depth_allocation_capture(const NativeDisposalWitness &p_depth, const NativeDisposalWitness &p_framebuffer, NativeDepthAllocationProjection &r_projection);
+	Error _native_disposal_depth_allocation_observe(const NativeDepthAllocationProjection &p_projection, NativeDepthAllocationProjection::Report &r_report) const;
+	Error _native_disposal_maintenance();
+	struct NativeDisposalBudget {
+		uint32_t receipts = 0;
+		uint32_t passes = 0;
+		uint64_t deadline_usec = 0;
+	};
+	struct NativeDisposalUsage {
+		uint32_t polls = 0;
+		uint32_t frees = 0;
+		uint32_t issues = 0;
+		uint32_t retains = 0;
+		uint32_t releases = 0;
+		uint32_t recycles = 0;
+		uint32_t passes = 0;
+	};
+	static constexpr uint32_t NATIVE_HEIGHT_RANGE_CAPACITY = 64;
+	LocalVector<Ref<NativeHeightRange>> native_height_ranges;
+	uint64_t next_native_height_range_serial = 1;
+	uint32_t native_height_reader_return_cursor = 0;
+	Ref<NativeHeightRange> native_height_active_checked_range;
+	bool native_height_finalization_started = false;
+	bool native_height_finalization_drained = false;
+	Error _native_height_range_validate(const Ref<NativeHeightRange> &p_range) const;
+	Error _native_height_range_prepare_checked_capture(RendererRD::HeightCaptureCheckedSink &r_sink, Ref<NativeHeightRange> &r_range);
+	// Pure original-object validation: no submit, poll, charge or cursor change.
+	Error _native_height_range_validate_checked_source(const Ref<NativeHeightRange> &p_range, const RendererRD::HeightCaptureCheckedSink &p_sink, const NativeDisposalWitness &p_original_depth, NativeHeightRange::Snapshot &r_snapshot) const;
+	Error _native_height_range_enter_checked_call(const Ref<NativeHeightRange> &p_range, RendererRD::HeightCaptureCheckedSink &r_sink);
+	Error _native_height_range_enroll_original_record(const Ref<NativeHeightRange> &p_range, RendererRD::HeightCaptureCheckedSink &r_sink, uint32_t p_business_index, bool p_cleanup);
+	Error _native_height_range_close_checked_capture(const Ref<NativeHeightRange> &p_range, RendererRD::HeightCaptureCheckedSink &r_sink);
+	Error _native_height_range_prepare(Ref<NativeHeightRange> &r_range);
+	Error _native_height_range_prepare_sized(Ref<NativeHeightRange> &r_range, uint32_t p_graph_capacity, uint32_t p_transfer_capacity);
+	Error _native_height_reader_prepare(const Ref<NativeHeightRange> &p_producer, RID p_sampled_uniform_set, uint32_t p_set_index, Ref<NativeHeightRange> &r_reader);
+	Error _native_height_reader_begin(const Ref<NativeHeightRange> &p_reader, ComputeListID &r_list);
+	Error _native_height_reader_dispatch(const Ref<NativeHeightRange> &p_reader, ComputeListID p_list, uint32_t p_x, uint32_t p_y, uint32_t p_z);
+	Error _native_height_reader_error(const Ref<NativeHeightRange> &p_reader, bool &r_unknown);
+	void _compute_list_add_barrier_recorded(ComputeListID p_list, const Ref<NativeHeightRange> &p_next);
+	Error _native_height_reader_request_return(const Ref<NativeHeightRange> &p_reader);
+	Error _native_height_reader_returns_step(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage);
+	Error _native_height_reader_returns_step(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, bool *r_row_admitted);
+	// Caller must retain/authenticate its original RT child and physical source closure.
+	Error _native_height_range_service_frame_preflight(const Ref<NativeHeightRange> &p_range);
+	Error _native_height_range_service_step(const Ref<NativeHeightRange> &p_range, bool p_request_return, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, NativeHeightRange::Snapshot &r_snapshot, bool &r_row_admitted);
+	Error _native_height_reader_finish(const Ref<NativeHeightRange> &p_reader, bool &r_closed);
+	Error _native_height_reader_validate_sample(const Ref<NativeHeightRange> &p_reader);
+	Error _native_height_reader_enroll(const Ref<NativeHeightRange> &p_reader, const RDG::RecordHandle &p_handle);
+	Error _native_height_range_record_depth_clear(const Ref<NativeHeightRange> &p_range, const NativeDisposalWitness &p_depth, const NativeDisposalWitness &p_framebuffer, float p_clear_depth);
+	Error _native_height_range_close(const Ref<NativeHeightRange> &p_range);
+	void _native_height_range_snapshot(const Ref<NativeHeightRange> &p_range, NativeHeightRange::Snapshot &r_snapshot) const;
+	Error _native_height_range_observe(const Ref<NativeHeightRange> &p_range, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, NativeHeightRange::Snapshot &r_snapshot);
+	Error _native_height_range_return(const Ref<NativeHeightRange> &p_range, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage);
+	void _native_height_seal_frame(uint32_t p_frame);
+	Error _native_height_issue_slot(uint32_t p_frame, uint64_t p_epoch, uint32_t p_slot, RDD::CommandBufferID p_command, Error p_error, const RDD::QueueCallReport &p_report);
+	Error _native_height_retain_frame_sources(uint32_t p_frame);
+	Error _native_height_retain_sources(const Ref<NativeHeightRange> &p_range);
+	Error _native_height_ranges_prepare_finalization();
+	// WORK accounts command recording/CPU phases only. Receipts count actual
+	// native observation, ownership return, issue and physical free calls.
+	enum class NativeDisposalWork : uint8_t { POLL,
+		FREE,
+		ISSUE,
+		RETAIN,
+		RELEASE,
+		RECYCLE,
+		WORK };
+	std::atomic<bool> native_disposal_active = false;
+	uint64_t next_native_disposal_serial = 1;
+	struct NativeDisposalContinuation {
+		uint64_t serial = 0;
+		NativeDisposalWitness scene_selection;
+		Ref<NativeHeightRange> height_selection; // Original mechanical selector; caller owns business authority.
+		List<Framebuffer>::Element *scene_framebuffer_cursor = nullptr;
+		List<Texture>::Element *scene_texture_cursor = nullptr;
+		bool scene_scan_started = false;
+		uint32_t scene_disposal_phase = 0;
+		uint64_t scene_allocation_size = 0;
+		const GDExtensionDeviceExit::ProductionRequest *production_owner = nullptr;
+		uint32_t phase = 0;
+		uint32_t target = 0;
+		uint32_t end_phase = 0;
+		uint32_t begin_phase = 0;
+		uint32_t slot = 0;
+		uint32_t slot_count = 0;
+		RDD::CommandBufferID command_buffer;
+	} native_disposal_continuation;
+	const NativeDisposalBudget *native_disposal_budget = nullptr;
+	NativeDisposalUsage *native_disposal_usage = nullptr;
+	bool _native_disposal_available(NativeDisposalWork p_work, uint32_t p_count = 1) const;
+	bool _native_disposal_admit(NativeDisposalWork p_work, uint32_t p_count = 1);
+	Error _production_output_drop_step(GDExtensionDeviceExit::ProductionRequest &, const NativeDisposalBudget &, NativeDisposalUsage &);
+	Error _native_disposal_stall_step(uint32_t p_frame);
+	bool _native_disposal_charge(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, NativeDisposalWork p_work);
+	Error _native_disposal_maintenance_step(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, const GDExtensionDeviceExit::ProductionRequest *p_production_owner = nullptr, const NativeDisposalWitness *p_scene_selection = nullptr);
+	Error _native_disposal_maintenance_step(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, const GDExtensionDeviceExit::ProductionRequest *p_production_owner, const NativeDisposalWitness *p_scene_selection, const Ref<NativeHeightRange> &p_height_selection);
+	Error _native_scene_disposal_maintenance(const NativeDisposalWitness &p_selection);
+	Error _free_pending_scene_resource_step(int p_frame, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage);
+	void _capture_disposal_cutoff(uint32_t p_frame);
+	Error _free_pending_resources_step(int p_frame, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage);
+
+	bool _native_disposal_enqueue(NativeDisposalWitness &p_witness, uint64_t p_rid, uint64_t p_serial, uint64_t p_backing);
+	void _native_disposal_returned(NativeDisposalWitness &p_witness, uint64_t p_rid, uint64_t p_serial, uint64_t p_backing);
+
+	RID _qualification_uniform_set_create(const VectorView<Uniform> &, RID, uint32_t, GDExtensionDeviceExit::QualificationPhysicalReturn *, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> &);
+	RID _uniform_set_create_qualification(const VectorView<Uniform> &, RID, uint32_t, bool, GDExtensionDeviceExit::QualificationPhysicalReturn *, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> *, const NativeDisposalWitness *p_native_disposal = nullptr, const GDExtensionDeviceExit::ProductionRequest *p_production = nullptr, const VectorView<ProductionOutputUniformSource> *p_sources = nullptr);
+	Error _qualification_texture_upload(RID, const uint8_t *, uint32_t, QualificationUploadProgress &);
 	RID_Owner<UniformSet, true> uniform_set_owner;
 
 	void _uniform_set_update_shared(UniformSet *p_uniform_set);
-	void _uniform_set_update_clears(UniformSet *p_uniform_set);
+	Error _uniform_set_update_clears(UniformSet *p_uniform_set);
+	Error _uniform_set_admit_clear_transfers(UniformSet *p_set);
 
 public:
 	/** Bake a set of uniforms that can be bound at runtime with the given shader.
@@ -1207,18 +2081,28 @@ public:
 	// was not supplied as intended.
 private:
 	struct RenderPipeline {
-		// Cached values for validation.
-#ifdef DEBUG_ENABLED
+		NativeImmutableHold *material_shader_hold = nullptr;
+		uint32_t qualification_users = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
+		// This edge survives RID invalidation and returns after the actual driver free.
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_dependency = nullptr;
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
+		// Original creation facts needed by checked drawing in every build.
 		struct Validation {
-			FramebufferFormatID framebuffer_format;
+			FramebufferFormatID framebuffer_format = INVALID_ID;
 			uint32_t render_pass = 0;
+			VertexFormatID vertex_format = INVALID_ID;
+			RenderPrimitive primitive = RENDER_PRIMITIVE_MAX;
+#ifdef DEBUG_ENABLED
 			uint32_t dynamic_state = 0;
-			VertexFormatID vertex_format;
 			bool uses_restart_indices = false;
 			uint32_t primitive_minimum = 0;
 			uint32_t primitive_divisor = 0;
-		} validation;
 #endif
+		} validation;
 		// Actual pipeline.
 		RID shader;
 		RDD::ShaderID shader_driver_id;
@@ -1230,6 +2114,15 @@ private:
 	};
 
 	RID_Owner<RenderPipeline, true> render_pipeline_owner;
+	Error _native_render_pipeline_validate_values(RID, FramebufferFormatID &, VertexFormatID, RenderPrimitive, const PipelineRasterizationState &, const PipelineMultisampleState &, const PipelineDepthStencilState &, const PipelineColorBlendState &, BitField<PipelineDynamicStateFlags>, uint32_t, const Vector<PipelineSpecializationConstant> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID, GDExtensionDeviceExit::ProductionUseCell *, bool p_allow_default_framebuffer, const Vector<VertexAttribute> *p_future_attributes, Shader *&, FramebufferFormat &, RDD::VertexFormatID &);
+	// Private physical prerequisite only; the original typed caller supplies selection authority.
+	Error _production_material_pipeline_reserve_locked(GDExtensionDeviceExit::Registry &, GDExtensionDeviceExit::ProductionRequest &, uint32_t);
+	Error _production_material_pipeline_cleanup_locked(GDExtensionDeviceExit::Registry &, GDExtensionDeviceExit::ProductionRequest &, uint32_t);
+	Error _production_material_pipeline_destination_locked(GDExtensionDeviceExit::Registry &, GDExtensionDeviceExit::ProductionRequest &, uint32_t);
+	Error _production_material_pipeline_create_locked(GDExtensionDeviceExit::Registry &, GDExtensionDeviceExit::ProductionRequest &, uint32_t, NativeImmutableHold &, RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants);
+	RID _qualification_render_pipeline_create_internal(RID, FramebufferFormatID, VertexFormatID, RenderPrimitive, const PipelineRasterizationState &, const PipelineMultisampleState &, const PipelineDepthStencilState &, const PipelineColorBlendState &, BitField<PipelineDynamicStateFlags>, uint32_t, const Vector<PipelineSpecializationConstant> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID, GDExtensionDeviceExit::ProductionUseCell *p_output_cell = nullptr);
+	RID _native_render_pipeline_create_internal(RID, FramebufferFormatID, VertexFormatID, RenderPrimitive, const PipelineRasterizationState &, const PipelineMultisampleState &, const PipelineDepthStencilState &, const PipelineColorBlendState &, BitField<PipelineDynamicStateFlags>, uint32_t, const Vector<PipelineSpecializationConstant> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID, GDExtensionDeviceExit::ProductionUseCell *p_output_cell, NativeImmutableHold *p_material_hold);
+	RID _qualification_render_pipeline_create(RID, FramebufferFormatID, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
 
 	bool pipeline_cache_enabled = false;
 	size_t pipeline_cache_size = 0;
@@ -1240,6 +2133,12 @@ private:
 	static void _save_pipeline_cache(void *p_data);
 
 	struct ComputePipeline {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
+		uint32_t qualification_users = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
 		RID shader;
 		RDD::ShaderID shader_driver_id;
 		uint32_t shader_layout_hash = 0;
@@ -1436,6 +2335,8 @@ private:
 	// also run in release builds.
 
 	struct DrawList {
+		// Original graph begin identity, not source or execution authority.
+		RDG::RecordHandle begin_handle;
 		Rect2i viewport;
 		bool active = false;
 
@@ -1455,6 +2356,7 @@ private:
 			RDD::ShaderID pipeline_shader_driver_id;
 			uint32_t pipeline_shader_layout_hash = 0;
 			uint32_t pipeline_push_constant_size = 0;
+			bool checked_push_constant_supplied = false;
 			RID vertex_array;
 			RID index_array;
 			uint32_t draw_count = 0;
@@ -1494,9 +2396,7 @@ private:
 
 	DrawList draw_list;
 	uint32_t draw_list_subpass_count = 0;
-#ifdef DEBUG_ENABLED
 	FramebufferFormatID draw_list_framebuffer_format = INVALID_ID;
-#endif
 	uint32_t draw_list_current_subpass = 0;
 
 	LocalVector<RID> draw_list_bound_textures;
@@ -1687,6 +2587,9 @@ private:
 	/**** TRANSFER WORKER ****/
 	/*************************/
 
+	struct TransferWorker;
+	Error _production_join_transfer_worker(TransferWorker *, bool);
+	Error _production_retain_frame_sources(uint32_t);
 	struct TransferWorker {
 		uint32_t index = 0;
 		RDD::BufferID staging_buffer;
@@ -1699,6 +2602,24 @@ private:
 		LocalVector<RDD::TextureBarrier> texture_barriers;
 		bool recording = false;
 		bool submitted = false;
+		bool qualification_observer_pending = false;
+		// Immutable current batch after a qualification dependency reserves it.
+		// Cleared only after exact source join/retain; not a frame-wide exclusion.
+		bool qualification_batch_sealed = false;
+		struct HeightWatcher {
+			Ref<NativeHeightRange> range;
+			uint32_t dependency = 0;
+		};
+		HeightWatcher height_watchers[NATIVE_HEIGHT_RANGE_CAPACITY];
+		uint32_t height_watcher_count = 0;
+		bool height_observer_pending = false;
+		bool production_observer_pending = false;
+		bool submission_pending = false;
+		bool poisoned = false;
+		RDD::QueueCallReport last_submission;
+		RDD::FencePollResult last_completion;
+		Error completion_error = OK;
+		uint64_t submission_serial = 0;
 		BinaryMutex thread_mutex;
 		uint64_t operations_processed = 0;
 		uint64_t operations_submitted = 0;
@@ -1716,20 +2637,22 @@ private:
 	BinaryMutex transfer_worker_pool_texture_barriers_mutex;
 	ConditionVariable transfer_worker_pool_condition;
 
+	Error _native_height_join_worker(TransferWorker *p_worker, uint64_t p_first, uint64_t p_last, const RDD::QueueCallReport &p_report);
 	TransferWorker *_acquire_transfer_worker(uint32_t p_transfer_size, uint32_t p_required_align, uint32_t &r_staging_offset);
 	void _release_transfer_worker(TransferWorker *p_transfer_worker);
 	void _end_transfer_worker(TransferWorker *p_transfer_worker);
-	void _submit_transfer_worker(TransferWorker *p_transfer_worker, VectorView<RDD::SemaphoreID> p_signal_semaphores = VectorView<RDD::SemaphoreID>());
-	void _wait_for_transfer_worker(TransferWorker *p_transfer_worker);
-	void _flush_barriers_for_transfer_worker(TransferWorker *p_transfer_worker);
-	void _check_transfer_worker_operation(uint32_t p_transfer_worker_index, uint64_t p_transfer_worker_operation);
-	void _check_transfer_worker_buffer(Buffer *p_buffer);
-	void _check_transfer_worker_texture(Texture *p_texture);
-	void _check_transfer_worker_vertex_array(VertexArray *p_vertex_array);
-	void _check_transfer_worker_index_array(IndexArray *p_index_array);
-	void _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID());
+	void _submit_transfer_worker(TransferWorker *p_transfer_worker, VectorView<RDD::SemaphoreID> p_signal_semaphores = VectorView<RDD::SemaphoreID>(), bool p_operations_locked = false);
+	bool _wait_for_transfer_worker(TransferWorker *p_transfer_worker, bool p_blocking = false);
+	void _flush_barriers_for_transfer_worker(TransferWorker *p_transfer_worker, bool p_barriers_locked = false);
+	Error _check_transfer_worker_operation(uint32_t p_transfer_worker_index, uint64_t p_transfer_worker_operation, bool *r_processed = nullptr);
+	Error _check_transfer_worker_buffer(Buffer *p_buffer);
+	void _settle_completed_vertex_buffer_upload_locked(RID p_buffer);
+	Error _check_transfer_worker_texture(Texture *p_texture);
+	Error _check_transfer_worker_vertex_array(VertexArray *p_vertex_array);
+	Error _check_transfer_worker_index_array(IndexArray *p_index_array);
+	Error _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID(), bool p_nonblocking = false);
 	void _submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer);
-	void _wait_for_transfer_workers();
+	bool _wait_for_transfer_workers();
 	void _free_transfer_workers();
 
 	/***********************/
@@ -1737,7 +2660,23 @@ private:
 	/***********************/
 
 	bool _texture_make_mutable(Texture *p_texture, RID p_texture_id);
+	struct NativeImmutableFreeFrame {
+		NativeImmutableFreeFrame *previous = nullptr;
+		LocalVector<RID> returned;
+	};
+	NativeImmutableFreeFrame *native_immutable_free_frame = nullptr;
+	uint32_t native_immutable_hold_count = 0;
+	bool native_immutable_device_escaped = false;
+	Buffer *_native_immutable_buffer(RID p_rid);
+	void _native_immutable_retire_dependents(RID p_rid);
+	uint32_t *_native_immutable_counter(RID p_rid, bool **r_retiring = nullptr, bool **r_escaped = nullptr);
+	bool _native_immutable_uniform_set_writes(const UniformSet &p_set) const;
 	bool _buffer_make_mutable(Buffer *p_buffer, RID p_buffer_id);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	void _capture_test_record_writable_uses(const Vector<RDG::ResourceTracker *> &p_trackers, const Vector<RDG::ResourceUsage> &p_usages, uint32_t p_operation);
+	void _capture_test_record_writable_set(RID p_set, uint32_t p_operation);
+	void _capture_test_record_buffer_usage(uint64_t p_driver, RDG::ResourceUsage p_usage, uint32_t p_operation);
+#endif
 	bool _vertex_array_make_mutable(VertexArray *p_vertex_array, RID p_resource_id, RDG::ResourceTracker *p_resource_tracker);
 	bool _index_array_make_mutable(IndexArray *p_index_array, RDG::ResourceTracker *p_resource_tracker);
 	bool _uniform_set_make_mutable(UniformSet *p_uniform_set, RID p_resource_id, RDG::ResourceTracker *p_resource_tracker);
@@ -1778,11 +2717,36 @@ private:
 	// when the frame is cycled.
 
 	struct Frame {
+		uint64_t qualification_epoch = 0;
+		LocalVector<Ref<NativeHeightRange>> native_height_ranges;
+		// Cursor over the original owner queues. Counts seal this drain's cutoff;
+		// callback/reentrant additions remain in the queues for the next safe epoch.
+		struct DisposalCursor {
+			bool active = false;
+			uint32_t remaining[10] = {};
+			uint32_t kind = 0;
+			uint32_t phase = 0;
+			uint32_t item = 0;
+			uint64_t allocation_size = 0;
+		} disposal;
+		struct MaintenanceWait {
+			uint32_t phase = 0;
+			uint32_t report = 0;
+			uint32_t call = 0;
+			bool ready = false;
+			bool fence_returned = false;
+			uint32_t request = 0;
+			uint32_t region = 0;
+			uint64_t offset = 0;
+			bool request_started = false;
+			uint8_t *mapped = nullptr;
+		} maintenance_wait;
+
 		// List in usage order, from last to free to first to free.
 		List<Buffer> buffers_to_dispose_of;
 		List<Texture> textures_to_dispose_of;
 		List<Framebuffer> framebuffers_to_dispose_of;
-		List<RDD::SamplerID> samplers_to_dispose_of;
+		List<Sampler> samplers_to_dispose_of;
 		List<Shader> shaders_to_dispose_of;
 		List<UniformSet> uniform_sets_to_dispose_of;
 		List<RenderPipeline> render_pipelines_to_dispose_of;
@@ -1813,6 +2777,16 @@ private:
 		// Signaled by the command buffer submission. Must wait on this fence before beginning command recording for the frame.
 		RDD::FenceID fence;
 		bool fence_signaled = false;
+		bool primary_command_buffer_begun = true;
+		bool qualification_graph_closed = false, qualification_segment_closed = false, qualification_issue_busy = false;
+		uint32_t qualification_issue_slot = 0;
+		LocalVector<RenderingDeviceDriver::QueueCallReport> chain_reports;
+		// Owns source observer references transferred by the original hidden queue.
+		LocalVector<RDD::QueueCallReport> qualification_hidden_reports;
+		LocalVector<GDExtensionDeviceExit::QualificationTicket *> qualification_tickets;
+		RDD::QueueCallReport present_report;
+		bool present_attempted = false;
+		bool chain_prefix_poisoned = false;
 
 		// Semaphores the frame must wait on before executing the command buffer.
 		LocalVector<RDD::SemaphoreID> semaphores_to_wait_on;
@@ -1850,6 +2824,23 @@ private:
 	int frame = 0;
 	TightLocalVector<Frame> frames;
 	uint64_t frames_drawn = 0;
+	std::atomic<Error> frame_wait_error = OK;
+	std::atomic<int64_t> frame_wait_native_code = 0;
+	std::atomic<bool> frame_wait_native_code_valid = false;
+	std::atomic<Error> frame_issue_error = OK;
+	int failed_wait_frame = -1;
+	std::atomic<bool> frame_wait_draining = false;
+	Error _recording_error() const {
+		const Error issue_error = frame_issue_error.load();
+		if (issue_error != OK) {
+			return issue_error;
+		}
+		if (!frames.is_empty() && uint32_t(frame) < frames.size() && frames[frame].qualification_graph_closed) {
+			return ERR_BUSY; // A source retry cannot reopen the already closed graph.
+		}
+		const Error wait_error = frame_wait_error.load();
+		return wait_error != OK ? wait_error : ((frame_wait_draining.load() || qualification_frame_advance_pending.load() || native_disposal_active.load()) ? ERR_BUSY : OK);
+	}
 
 	// Whenever logic/physics request a graphics operation (not just deleting a resource) that requires
 	// us to flush all graphics commands, we must set frames_pending_resources_for_processing = frames.size().
@@ -1863,23 +2854,26 @@ public:
 
 private:
 	void _free_pending_resources(int p_frame);
+	Error _fail_frame_issue(Error p_error);
+	void _seal_buffer_readback_records();
+	void _observe_buffer_readback_issue(uint32_t p_slot, RDD::CommandBufferID p_command_buffer, Error p_error, const RDD::QueueCallReport &p_report);
 
 	uint64_t texture_memory = 0;
 	uint64_t buffer_memory = 0;
 
 protected:
-	void execute_chained_cmds(bool p_present_swap_chain,
+	bool execute_chained_cmds(bool p_present_swap_chain,
 			RenderingDeviceDriver::FenceID p_draw_fence,
 			RenderingDeviceDriver::SemaphoreID p_dst_draw_semaphore_to_signal);
 
 public:
-	void _free_internal(RID p_id);
-	void _begin_frame(bool p_presented = false);
-	void _end_frame();
-	void _execute_frame(bool p_present);
-	void _stall_for_frame(uint32_t p_frame);
-	void _stall_for_previous_frames();
-	void _flush_and_stall_for_all_frames(bool p_begin_frame = true);
+	void _free_internal(RID p_id, const MutexLock<Mutex> &p_lock);
+	Error _begin_frame(bool p_presented = false, bool p_nonblocking = false);
+	Error _end_frame(bool p_nonblocking = false);
+	Error _execute_frame(bool p_present);
+	Error _stall_for_frame(uint32_t p_frame, bool p_nonblocking = false);
+	Error _stall_for_previous_frames();
+	Error _flush_and_stall_for_all_frames(bool p_begin_frame = true);
 
 	template <typename T>
 	void _free_rids(T &p_owner, const char *p_type);
@@ -2000,6 +2994,8 @@ private:
 	void _draw_list_bind_vertex_buffers_format(DrawListID p_list, VertexFormatID p_vertex_format, uint32_t p_vertex_count, const TypedArray<RID> &p_vertex_buffers, const Vector<int64_t> &p_offsets = Vector<int64_t>());
 
 	Ref<RDShaderSPIRV> _shader_compile_spirv_from_source(const Ref<RDShaderSource> &p_source, bool p_allow_cache = true);
+	Vector<uint8_t> _shader_compile_binary_from_spirv_with_options(const Ref<RDShaderSPIRV> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags);
+	RID _shader_create_from_spirv_with_options(const Ref<RDShaderSPIRV> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags);
 	Vector<uint8_t> _shader_compile_binary_from_spirv(const Ref<RDShaderSPIRV> &p_bytecode, const String &p_shader_name = "");
 	RID _shader_create_from_spirv(const Ref<RDShaderSPIRV> &p_spirv, const String &p_shader_name = "");
 
@@ -2023,6 +3019,7 @@ private:
 
 VARIANT_ENUM_CAST_EXT(RenderingDeviceEnums::DeviceType, RenderingDevice::DeviceType)
 VARIANT_ENUM_CAST(RenderingDevice::DriverResource)
+VARIANT_BITFIELD_CAST(RenderingDevice::ShaderCompileFlags)
 VARIANT_ENUM_CAST(RenderingDevice::ShaderStage)
 VARIANT_ENUM_CAST(RenderingDevice::ShaderLanguage)
 VARIANT_ENUM_CAST(RenderingDevice::CompareOperator)

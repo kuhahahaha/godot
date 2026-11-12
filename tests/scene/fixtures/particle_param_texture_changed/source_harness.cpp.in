@@ -1,0 +1,234 @@
+// Supporting harness for the indexed sampler callback contract.
+#include <algorithm>
+#include <cstdio>
+#include <functional>
+#include <map>
+#include <string>
+#include <vector>
+
+constexpr int CONNECT_DEFERRED = 1;
+struct RID { int value = 0; };
+struct Variant {
+	bool is_rid = false;
+	int value = 0;
+	Variant() = default;
+	Variant(RID rid) : is_rid(true), value(rid.value) {}
+	bool operator==(const Variant &other) const { return is_rid == other.is_rid && value == other.value; }
+};
+std::vector<std::function<void()>> deferred;
+struct Callable {
+	void *target = nullptr;
+	std::function<void()> invoke;
+	std::function<void(int)> invoke_parameter;
+	int parameter = -1;
+	std::string method_key;
+	bool is_null() const { return target == nullptr; }
+	Callable bind(int value) const {
+		Callable result;
+		result.target = target;
+		result.parameter = value;
+		result.method_key = method_key;
+		const std::function<void(int)> callback = invoke_parameter;
+		result.invoke = [callback, value] { callback(value); };
+		return result;
+	}
+};
+enum Parameter {
+	PARAM_INITIAL_LINEAR_VELOCITY,
+	PARAM_ANGULAR_VELOCITY,
+	PARAM_ORBIT_VELOCITY,
+	PARAM_LINEAR_ACCEL,
+	PARAM_RADIAL_ACCEL,
+	PARAM_TANGENTIAL_ACCEL,
+	PARAM_DAMPING,
+	PARAM_ANGLE,
+	PARAM_SCALE,
+	PARAM_HUE_VARIATION,
+	PARAM_ANIM_SPEED,
+	PARAM_ANIM_OFFSET,
+	PARAM_TURB_INFLUENCE_OVER_LIFE,
+	PARAM_TURB_VEL_INFLUENCE,
+	PARAM_TURB_INIT_DISPLACEMENT,
+	PARAM_RADIAL_VELOCITY,
+	PARAM_DIRECTIONAL_VELOCITY,
+	PARAM_SCALE_OVER_VELOCITY,
+	PARAM_MAX,
+};
+template <class T> Callable callable_mp(T *target, void (T::*method)(Parameter)) {
+	return { target, {}, [=](int parameter) { (target->*method)(static_cast<Parameter>(parameter)); } };
+}
+template <class T> Callable callable_mp(T *target, void (T::*method)(int)) {
+	return { target, {}, [=](int parameter) { (target->*method)(parameter); } };
+}
+template <class T> Callable callable_mp(T *target, void (T::*method)()) {
+	Callable result;
+	result.target = target;
+	result.invoke = [=] { (target->*method)(); };
+	result.method_key.assign(reinterpret_cast<const char *>(&method), sizeof(method));
+	return result;
+}
+struct Texture2D {
+	RID rid;
+	struct Connection { Callable callable; int flags; };
+	std::vector<Connection> connections;
+	Texture2D() = default;
+	Texture2D(RID value) : rid(value) {}
+	virtual ~Texture2D() = default;
+	RID get_rid() const { return rid; }
+	void connect_changed(Callable callable, int flags) {
+		for (const auto &c : connections) {
+			if (c.callable.target == callable.target && c.callable.method_key == callable.method_key) return;
+		}
+		connections.push_back({ callable, flags });
+	}
+	void disconnect_changed(Callable callable) {
+		connections.erase(std::remove_if(connections.begin(), connections.end(), [&](const Connection &c) {
+			return c.callable.target == callable.target && c.callable.method_key == callable.method_key;
+		}), connections.end());
+	}
+	void change(int value) {
+		rid.value = value;
+		auto pending = connections;
+		for (auto &c : pending) {
+			if (c.flags & CONNECT_DEFERRED) deferred.push_back(c.callable.invoke);
+			else c.callable.invoke();
+		}
+	}
+};
+template <class T> struct Ref {
+	T *ptr = nullptr;
+	Ref() = default;
+	Ref(T *value) : ptr(value) {}
+	template <class U> Ref(const Ref<U> &other) : ptr(dynamic_cast<T *>(other.ptr)) {}
+	bool is_valid() const { return ptr; }
+	T *operator->() const { return ptr; }
+	};
+struct StringName { std::string value; StringName() = default; StringName(const char *name) : value(name) {} };
+struct RenderingServer {
+	std::map<std::pair<int, std::string>, Variant> values;
+	std::map<int, int> writes;
+	static RenderingServer *get_singleton() { static RenderingServer server; return &server; }
+	void material_set_param(int id, StringName name, Variant value) { values[{ id, name.value }] = value; ++writes[id]; }
+};
+struct Names {
+	StringName angular_velocity_texture = "angular_velocity_texture";
+	StringName orbit_velocity_texture = "orbit_velocity_curve";
+	StringName linear_accel_texture = "linear_accel_texture";
+	StringName radial_accel_texture = "radial_accel_texture";
+	StringName tangent_accel_texture = "tangent_accel_texture";
+	StringName damping_texture = "damping_texture";
+	StringName angle_texture = "angle_texture";
+	StringName scale_texture = "scale_curve";
+	StringName hue_variation_texture = "hue_rot_curve";
+	StringName anim_speed_texture = "animation_speed_curve";
+	StringName anim_offset_texture = "animation_offset_curve";
+	StringName turbulence_influence_over_life = "turbulence_influence_over_life";
+	StringName radial_velocity_texture = "radial_velocity_curve";
+	StringName scale_over_velocity_texture = "scale_over_velocity_curve";
+	StringName directional_velocity_texture = "directional_velocity_curve";
+} names;
+struct ParticleProcessMaterial {
+	using Parameter = ::Parameter;
+	static constexpr Parameter PARAM_INITIAL_LINEAR_VELOCITY = ::PARAM_INITIAL_LINEAR_VELOCITY;
+	static constexpr Parameter PARAM_ANGULAR_VELOCITY = ::PARAM_ANGULAR_VELOCITY;
+	static constexpr Parameter PARAM_ORBIT_VELOCITY = ::PARAM_ORBIT_VELOCITY;
+	static constexpr Parameter PARAM_LINEAR_ACCEL = ::PARAM_LINEAR_ACCEL;
+	static constexpr Parameter PARAM_RADIAL_ACCEL = ::PARAM_RADIAL_ACCEL;
+	static constexpr Parameter PARAM_TANGENTIAL_ACCEL = ::PARAM_TANGENTIAL_ACCEL;
+	static constexpr Parameter PARAM_DAMPING = ::PARAM_DAMPING;
+	static constexpr Parameter PARAM_ANGLE = ::PARAM_ANGLE;
+	static constexpr Parameter PARAM_SCALE = ::PARAM_SCALE;
+	static constexpr Parameter PARAM_HUE_VARIATION = ::PARAM_HUE_VARIATION;
+	static constexpr Parameter PARAM_ANIM_SPEED = ::PARAM_ANIM_SPEED;
+	static constexpr Parameter PARAM_ANIM_OFFSET = ::PARAM_ANIM_OFFSET;
+	static constexpr Parameter PARAM_TURB_INFLUENCE_OVER_LIFE = ::PARAM_TURB_INFLUENCE_OVER_LIFE;
+	static constexpr Parameter PARAM_TURB_VEL_INFLUENCE = ::PARAM_TURB_VEL_INFLUENCE;
+	static constexpr Parameter PARAM_TURB_INIT_DISPLACEMENT = ::PARAM_TURB_INIT_DISPLACEMENT;
+	static constexpr Parameter PARAM_RADIAL_VELOCITY = ::PARAM_RADIAL_VELOCITY;
+	static constexpr Parameter PARAM_DIRECTIONAL_VELOCITY = ::PARAM_DIRECTIONAL_VELOCITY;
+	static constexpr Parameter PARAM_SCALE_OVER_VELOCITY = ::PARAM_SCALE_OVER_VELOCITY;
+	static constexpr Parameter PARAM_MAX = ::PARAM_MAX;
+	Ref<Texture2D> tex_parameters[PARAM_MAX];
+	Names *shader_names = &names;
+	int id = 0;
+	int variants = 0;
+	int _get_material() { return id; }
+	void _queue_shader_change() { ++variants; }
+	void notify_property_list_changed() {}
+	void _param_texture_changed(Parameter);
+	template <Parameter P>
+	void _param_texture_changed_slot() { _param_texture_changed(P); }
+	Callable _get_param_texture_changed(Parameter);
+	void set_param_texture(Parameter, const Ref<Texture2D> &);
+};
+static void _adjust_curve_range(const Ref<Texture2D> &, float, float) {}
+#define ERR_FAIL_INDEX(index, max) do { if ((index) < 0 || (index) >= (max)) return; } while (false)
+void drain() {
+	auto pending = deferred;
+	deferred.clear();
+	for (auto &callback : pending) callback();
+}
+// EXTRACTED_METHODS
+int main() {
+	int checks = 0, failures = 0;
+	auto check = [&](bool condition, const char *label) { ++checks; if (!condition) { ++failures; std::printf("FAIL %s\n", label); } };
+	Texture2D old{ {11} }, replacement{ {22} }, shared{ {33} };
+	ParticleProcessMaterial first{}, second{};
+	first.id = 1; second.id = 2;
+	auto server = RenderingServer::get_singleton();
+	auto value = [&](int id, const char *name, int rid) { return server->values[{ id, name }] == Variant(RID{ rid }); };
+	first.set_param_texture(PARAM_ANGULAR_VELOCITY, { &old });
+	second.set_param_texture(PARAM_ANGULAR_VELOCITY, { &old });
+	check(value(1, "angular_velocity_texture", 11) && value(2, "angular_velocity_texture", 11), "shared initial RID");
+	check(old.connections.size() == 2, "one connection per shared wrapper");
+	check(old.connections[0].flags == CONNECT_DEFERRED && old.connections[1].flags == CONNECT_DEFERRED, "deferred callbacks");
+	int variants = first.variants + second.variants;
+	old.change(44);
+	check(value(1, "angular_velocity_texture", 11), "notification stays queued");
+	drain();
+	check(value(1, "angular_velocity_texture", 44) && value(2, "angular_velocity_texture", 44), "shared callback refresh");
+	check(first.variants + second.variants == variants, "content change does not queue shader variant");
+	old.rid.value = 55;
+	first.set_param_texture(PARAM_ANGULAR_VELOCITY, { &old });
+	first.set_param_texture(PARAM_ANGULAR_VELOCITY, { &old });
+	check(value(1, "angular_velocity_texture", 55) && old.connections.size() == 2, "same-reference refresh without duplicate");
+	old.change(66);
+	first.set_param_texture(PARAM_ANGULAR_VELOCITY, { &replacement });
+	replacement.rid.value = 77;
+	variants = first.variants;
+	drain();
+	check(value(1, "angular_velocity_texture", 77), "queued old callback reads current slot");
+	check(first.variants == variants && old.connections.size() == 1, "replacement detaches old callback");
+	int writes = server->writes[1];
+	old.change(88); drain();
+	check(server->writes[1] == writes, "detached old wrapper performs no write");
+	replacement.change(0); drain();
+	check(value(1, "angular_velocity_texture", 0), "empty wrapper RID retained");
+	first.set_param_texture(PARAM_ANGULAR_VELOCITY, {});
+	check(server->values[{ 1, "angular_velocity_texture" }] == Variant(), "clear writes NIL");
+	check(replacement.connections.empty(), "clear disconnects wrapper");
+	replacement.change(99); drain();
+	check(server->values[{ 1, "angular_velocity_texture" }] == Variant(), "detached mutation stays NIL");
+	const int non_sampler_writes = server->writes[1];
+	first.set_param_texture(PARAM_INITIAL_LINEAR_VELOCITY, { &shared });
+	check(server->writes[1] == non_sampler_writes, "non-sampler slot does none");
+	check(shared.connections.empty(), "non-sampler slot has no callback");
+	ParticleProcessMaterial cross{};
+	cross.id = 3;
+	cross.set_param_texture(PARAM_ANGULAR_VELOCITY, { &shared });
+	cross.set_param_texture(PARAM_DAMPING, { &shared });
+	check(shared.connections.size() == 2, "shared slots retain distinct methods");
+	shared.change(44); drain();
+	check(value(3, "angular_velocity_texture", 44) && value(3, "damping_texture", 44), "shared slots both refresh");
+	cross.set_param_texture(PARAM_ANGULAR_VELOCITY, { &replacement });
+	check(shared.connections.size() == 1, "replacement preserves other slot subscription");
+	shared.change(55); drain();
+	check(value(3, "angular_velocity_texture", 99) && value(3, "damping_texture", 55), "replacement preserves independent slot values");
+	cross.set_param_texture(PARAM_ANGULAR_VELOCITY, {});
+	shared.change(66); drain();
+	check(server->values[{ 3, "angular_velocity_texture" }] == Variant() && value(3, "damping_texture", 66), "clear preserves remaining shared slot");
+	cross.set_param_texture(PARAM_DAMPING, {});
+	check(shared.connections.empty(), "all shared slots detach");
+	std::printf("param-texture supporting extracted source: %d/%d passed\n", checks - failures, checks);
+	return failures ? 1 : 0;
+}

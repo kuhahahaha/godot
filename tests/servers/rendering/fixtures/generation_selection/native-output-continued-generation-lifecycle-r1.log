@@ -1,0 +1,31 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/core/extension/test_production_request.cpp:10769:
+TEST CASE:  [SceneTree][ProductionRequest][GenerationSelection] original slab and root retain CPU selection through bounded return
+
+tests/core/extension/test_production_request.cpp:10769: FATAL ERROR: test case CRASHED: SIGSEGV - Segmentation violation signal
+
+===============================================================================
+[doctest] test cases: 1 | 0 passed | 1 failed | 2209 skipped
+[doctest] assertions: 2 | 2 passed | 0 failed |
+[doctest] Status: FAILURE!
+
+================================================================
+handle_crash: Program crashed with signal 11
+Engine version: Godot Engine v4.7.2.stable.custom_build (f70990f9c167645a17dbfe043ada43205891334d)
+Dumping the backtrace. Please include this when reporting the bug on: https://github.com/godotengine/godot/issues
+Load address: 100ad0000
+
+[1] 193064144 (libsystem_platform.dylib+4144) - _sigtramp + 56
+[2] 104fd5348 (main+4505348) - SDL_GetPerformanceFrequency + 35337380
+[3] 104fd5348 (main+4505348) - SDL_GetPerformanceFrequency + 35337380
+[4] 1050e24b0 (main+46124b0) - SDL_GetPerformanceFrequency + 36439564
+[5] 100f95b50 (main+4c5b50) - main + 1960528
+[6] 100eab62c (main+3db62c) - main + 1000748
+[7] 100e68b00 (main+398b00) - main + 727552
+[8] 100dbb498 (main+2eb498) - main + 17304
+[9] 100db7490 (main+2e7490) - main (in godot.macos.editor.arm64) + 912
+[10] 192c83e80 (dyld+31e80) - start + 6688
+-- END OF C++ BACKTRACE --
+================================================================

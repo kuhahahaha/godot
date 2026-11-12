@@ -1,0 +1,47 @@
+D32 sampled-set disposal factory — production handoff 2026-11-06
+
+FROZEN: servers/rendering/rendering_device.cpp and .h only.
+Base parent sampler commit: c1908ae55b1fe117a06d6d9e0d3e355433868a1d.
+Diff: 82-line helper plus 1 declaration (83 additions); no shared factory changes.
+Patch: /tmp/b4-sampled-set-implementation.patch.
+Plan: /tmp/b4-sampled-disposal-implementation-plan.txt Task 2.
+No test edits, builds, tests or commits performed by this agent.
+
+Private signature:
+Error _native_disposal_depth_sample_set_create(const NativeDisposalWitness &p_sampler, const NativeDisposalWitness &p_texture, RID p_shader, uint32_t p_set, uint32_t p_binding, RID &r_rid, NativeDisposalWitness &r_witness);
+
+Self-review findings and choices:
+- Existing main RD/render thread/recording/list preflight; fresh outputs under RD mutex.
+- Original observer validates each witness device/owner. owns() precedes each resource get_or_null (sampler, texture, shader), retaining foreign pending-slot isolation.
+- Sampler and texture must have explicit nonzero native IDs, LIVE original witness, identical cell, exact stored RID and matches(original RID, original incarnation serial, actual native ID). matches also requires nonzero rid/serial/backing. No copied or ordinary/view witness adoption.
+- Active resource_frees_in_progress sampler, texture OR shader returns Busy before any native factory. It prevents creation from callbacks in the original free frame. Existing retiring resources outside that frame refuse Unavailable. Existing immutable hold semantics remain unchanged.
+- Shader requires nonzero native ID, no qualification cell, no retire request, no immutable sampler vector. The latter is intentionally conservative because no per-binding immutable layout map survives in ShaderUniform.
+- Shader set index valid in both uniform_sets and set_formats. Exactly one reflected binding, requested binding number, SAMPLER_WITH_TEXTURE, array length 1, writable=false. No caller arbitrary Uniform array accepted.
+- Texture is exact witnessed D32 2D root: one sample/depth/layer/mip, positive width/height, base layer/mip zero, exact SAMPLING|DEPTH_STENCIL_ATTACHMENT flags, original nonnull tracker, no owner/view/shared fallback/pending transfer. Qualification and retire-requested sampler/texture refuse.
+- Bounded two-ID Vector uses checked resize before serial/native creation. Construct one combined Uniform with IDs in sampler-then-texture order, binding assigned without uint32-to-int narrowing, immutable_sampler=false.
+- New set witness has original nonwrapping serial/device. Call unchanged _uniform_set_create_qualification with p_linear_pool=false, no qualification cell/children or production request. Original common body reserves RID before driver call, initializes original owner, installs dependency edges and retains attachable/tracker/pending_clear metadata.
+- No call to _uniform_set_update_clears/_texture_check_pending_clear, transfer wait, upload or graph append. Rejected pending transfer cannot be consumed. Failed common creation publishes no outputs, and all earlier published parents remain caller-owned for explicit rollback.
+- Existing storage-only _native_disposal_uniform_set_create unchanged. Sampler, texture/framebuffer, set free/enqueue/returned logic unchanged from already verified parent commits.
+
+Error taxonomy:
+preflight/observe errors propagate; occupied outputs INVALID_PARAMETER;
+identity/state/nonzero native ID failures INVALID_DATA;
+in-progress original free BUSY;
+unsupported shader/resource/reflection/retiring profile UNAVAILABLE;
+Vector allocation Error propagates; serial exhaustion OUT_OF_MEMORY;
+common factory null result CANT_CREATE.
+
+Verification performed: repository clang-format and git diff --check passed.
+No build/runtime claims. Sol owns original shader-container/factory/strict entry
+receipt tests, root owns builds and negative/full verification.
+
+Useful mutation for root: remove only reflected binding.length != 1 rejection
+or only immutable shader layout guard; the corresponding admission test must
+fail before any driver set creation. To test this helper's narrow D32 boundary,
+remove only exact texture usage equality or shared_fallback rejection; no
+shared factory mutation is required. Retain original state for rollback.
+
+This is disposal observation only. It does not provide read permission,
+source ownership, material/geometry resolver, descriptor execution capture,
+HEIGHT_RASTER result, GPU completion or output-release authority. Successful
+factory creation does not consume pending_clear or prove sampled content valid.

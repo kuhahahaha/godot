@@ -1,0 +1,104 @@
+{
+  "base": "7975920ea3",
+  "scope": "Original six ClassDB-bound synchronous RenderingServer entry points; direct storage delegation on render thread and immediate refusal on other threads",
+  "sources": [
+    {
+      "path": "servers/rendering/rendering_server.h",
+      "sha256": "4ba691f83913ba2c9d86e403b4c59dad9fa56258efb7d7395a3016125ebc0e20"
+    },
+    {
+      "path": "servers/rendering/rendering_server.cpp",
+      "sha256": "6cb5220c084568fd0d7873b8d999127c1eff54439be8ba2672fa99aef084cd5d"
+    },
+    {
+      "path": "servers/rendering/rendering_server_default.h",
+      "sha256": "431927949369f300d88b27b8274f2c3b9ef5b5812eaaa92e57cbcb93575e11d8"
+    },
+    {
+      "path": "servers/rendering/rendering_server_default.cpp",
+      "sha256": "892a2a4153c3ec501cec5672b71ebbd766fc7199e1794a9692bf7c29018a9949"
+    },
+    {
+      "path": "tests/servers/rendering/test_external_output_contract.cpp",
+      "sha256": "cf6635d3b767a33045ffea4ca84055f99ef32e57df0dfc70ded90253bb8d6a99"
+    },
+    {
+      "path": "doc/classes/RenderingServer.xml",
+      "sha256": "63951a226f57128a431e32068e9caef96bfb751694e7fa3b793fecd9cab5c0c2"
+    }
+  ],
+  "combined_verification": {
+    "host_sha256": "4fe70b6694e4c72a2ead7aa9f2b9ded7e103c3fd6e8e4b397dd6f840dde04714",
+    "build": {
+      "exit": 0,
+      "elapsed": 14.017907790956087
+    },
+    "full": {
+      "exit": 0,
+      "counts": {
+        "OverallResultsAsserts": {
+          "successes": "521421",
+          "failures": "0"
+        },
+        "OverallResultsTestCases": {
+          "successes": "2082",
+          "failures": "0"
+        }
+      },
+      "stdout_bytes": 571,
+      "stderr_bytes": 4017
+    },
+    "limitation": "Host compiled both six-RS surface and native SDF rollback fix; no standalone binary identity claim. Existing negative-test stdout571/stderr4017 and MoltenVK linker target warning retained."
+  },
+  "targeted_surface": {
+    "exit": 0,
+    "counts": {
+      "OverallResultsAsserts": {
+        "successes": "116",
+        "failures": "0"
+      },
+      "OverallResultsTestCases": {
+        "successes": "3",
+        "failures": "0",
+        "skipped": "2082"
+      }
+    }
+  },
+  "classdb_red": {
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+      "--headless",
+      "--path",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-six-rs-surface-runtime-20261106",
+      "--script",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-six-rs-surface-runtime-20261106/missing_api_probe.gd"
+    ],
+    "exit": 1,
+    "host_sha256": "3c91810bf133b9ae4fb9555141cefa6d1be7f5d5dcfe8905d8c094fbb5666de2"
+  },
+  "classdb_green": {
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+      "--headless",
+      "--path",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-six-rs-surface-runtime-20261106",
+      "--script",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-six-rs-surface-runtime-20261106/missing_api_probe.gd"
+    ],
+    "exit": 0,
+    "host_sha256": "4fe70b6694e4c72a2ead7aa9f2b9ded7e103c3fd6e8e4b397dd6f840dde04714"
+  },
+  "doctool": {
+    "exit": 0,
+    "RenderingServer_xml_byte_exact": true,
+    "generated_sha256": "63951a226f57128a431e32068e9caef96bfb751694e7fa3b793fecd9cab5c0c2"
+  },
+  "independent_review": "/tmp/b4-six-rs-surface-20261105/independent-native-ci-review.txt",
+  "evidence_directory": "work/b4-six-rs-sdf-green-20261106",
+  "limits": [
+    "Storage continues to reject missing original admission/source/mapping/Host/record/observation joins; six methods do not fabricate those joins.",
+    "No enqueue or synchronous cross-thread result transport is used; caller schedules the original outer render-thread callback.",
+    "RT test delegates to Dummy storage and checks its refusal/no allocation; no new production positive source/writer/draw admission or GPU acceptance from these interface tests.",
+    "Initial C++ test callback lacked Object identity; corrected before successful build. One later ClassDB probe used an incorrect script path; both failed tool attempts retained alongside actual identical-script RED/GREEN."
+  ]
+}

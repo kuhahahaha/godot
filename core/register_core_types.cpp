@@ -130,8 +130,37 @@ extern void unregister_global_constants();
 static ResourceUID *resource_uid = nullptr;
 
 static bool _is_core_extensions_registered = false;
+static bool _extension_teardown_in_progress = false;
+static uint64_t _active_extension_cycle = 0;
+static uint64_t _finalizing_extension_cycle = 0;
+
+static void _create_extension_manager() {
+	ERR_FAIL_COND(gdextension_manager != nullptr);
+	gdextension_manager = memnew(GDExtensionManager);
+}
+
+static void _destroy_extension_manager() {
+	memdelete(gdextension_manager);
+	gdextension_manager = nullptr;
+	const uint64_t ended_cycle = _finalizing_extension_cycle;
+	_finalizing_extension_cycle = 0;
+	GDExtensionDeviceExit::Registry::get_singleton().finish_engine_cycle(ended_cycle);
+}
+
+#ifdef TESTS_ENABLED
+namespace TestDeviceExitStartup {
+// Exercise the same owned manager destruction/creation as core startup and
+// shutdown without claiming all ClassDB and ObjectDB globals are restartable.
+void replace_core_extension_manager() {
+	_destroy_extension_manager();
+	_create_extension_manager();
+}
+}
+#endif
 
 void register_core_types() {
+	ERR_FAIL_COND(_active_extension_cycle != 0 || _finalizing_extension_cycle != 0 || _extension_teardown_in_progress);
+	_is_core_extensions_registered = false;
 	OS::get_singleton()->benchmark_begin_measure("Core", "Register Types");
 
 	//consistency check
@@ -304,7 +333,7 @@ void register_core_types() {
 
 	resource_uid = memnew(ResourceUID);
 
-	gdextension_manager = memnew(GDExtensionManager);
+	_create_extension_manager();
 
 	if constexpr (GD_IS_CLASS_ENABLED(GDExtension)) {
 		resource_loader_gdextension.instantiate();
@@ -347,6 +376,7 @@ void register_core_types() {
 
 	worker_thread_pool = memnew(WorkerThreadPool);
 
+	GDExtensionDeviceExit::Registry::get_singleton().service_started(1u << 7);
 	OS::get_singleton()->benchmark_end_measure("Core", "Register Types");
 }
 
@@ -389,30 +419,45 @@ void register_core_singletons() {
 	OS::get_singleton()->benchmark_end_measure("Core", "Register Singletons");
 }
 
-void register_core_extensions() {
-	OS::get_singleton()->benchmark_begin_measure("Core", "Register Extensions");
-
-	// Hardcoded for now.
-	GDExtension::initialize_gdextensions();
+Error register_core_extensions() {
+	if (_is_core_extensions_registered || _active_extension_cycle != 0 || _finalizing_extension_cycle != 0 || _extension_teardown_in_progress) {
+		return ERR_BUSY;
+	}
+	const Error err = GDExtension::initialize_gdextensions(_active_extension_cycle);
+	if (err != OK) {
+		return err;
+	}
+	const String benchmark_context = "Core Extensions " + String::num_uint64(_active_extension_cycle);
+	OS::get_singleton()->benchmark_begin_measure(benchmark_context, "Register");
 	gdextension_manager->load_extensions();
 	gdextension_manager->initialize_extensions(GDExtension::INITIALIZATION_LEVEL_CORE);
 	_is_core_extensions_registered = true;
-
-	OS::get_singleton()->benchmark_end_measure("Core", "Register Extensions");
+	OS::get_singleton()->benchmark_end_measure(benchmark_context, "Register");
+	return OK;
 }
 
 void unregister_core_extensions() {
-	OS::get_singleton()->benchmark_begin_measure("Core", "Unregister Extensions");
-
-	if (_is_core_extensions_registered) {
-		gdextension_manager->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_CORE);
+	if (_extension_teardown_in_progress || (!_is_core_extensions_registered && _active_extension_cycle == 0)) {
+		return;
 	}
-	GDExtension::finalize_gdextensions();
-
-	OS::get_singleton()->benchmark_end_measure("Core", "Unregister Extensions");
+	_extension_teardown_in_progress = true;
+	const String benchmark_context = "Core Extensions " + String::num_uint64(_active_extension_cycle);
+	OS::get_singleton()->benchmark_begin_measure(benchmark_context, "Unregister");
+	if (_is_core_extensions_registered) {
+		_is_core_extensions_registered = false;
+		GDExtensionDeviceExit::require_close_success(gdextension_manager->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_CORE), GDExtensionDeviceExit::CloseRoute::LEVEL_DEINIT);
+	}
+	if (_active_extension_cycle != 0) {
+		_finalizing_extension_cycle = _active_extension_cycle;
+		_active_extension_cycle = 0;
+		GDExtension::finalize_gdextensions(_finalizing_extension_cycle);
+	}
+	OS::get_singleton()->benchmark_end_measure(benchmark_context, "Unregister");
+	_extension_teardown_in_progress = false;
 }
 
 void unregister_core_types() {
+	GDExtensionDeviceExit::require_close_success(GDExtensionDeviceExit::Registry::get_singleton().service_stopping(1u << 7), GDExtensionDeviceExit::CloseRoute::LAST_REF);
 	OS::get_singleton()->benchmark_begin_measure("Core", "Unregister Types");
 
 	// Destroy singletons in reverse order to ensure dependencies are not broken.
@@ -430,7 +475,7 @@ void unregister_core_types() {
 	memdelete(_geometry_3d);
 	memdelete(_geometry_2d);
 
-	memdelete(gdextension_manager);
+	_destroy_extension_manager();
 
 	memdelete(resource_uid);
 

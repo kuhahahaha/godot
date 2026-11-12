@@ -50,6 +50,260 @@
 
 #include "rendering_device_driver_metal.h"
 
+#include "core/extension/gdextension_library_exit_guard.h"
+
+thread_local LocalVector<RenderingDeviceDriverMetal::CompletionRecord *> *RenderingDeviceDriverMetal::active_completion_records = nullptr;
+thread_local uint64_t RenderingDeviceDriverMetal::active_native_serial = 0;
+thread_local uint32_t RenderingDeviceDriverMetal::active_native_serial_count = 0;
+thread_local uint32_t *RenderingDeviceDriverMetal::active_native_issue_count = nullptr;
+uint64_t RenderingDeviceDriverMetal::reserve_native_call_serials(uint32_t count) {
+	if (!count) {
+		return 0;
+	}
+	uint64_t current = next_native_call_serial.load();
+	while (current) {
+		if (uint64_t(count - 1) > UINT64_MAX - current) {
+			return 0;
+		}
+		const uint64_t next = current + count;
+		if (next_native_call_serial.compare_exchange_weak(current, next)) {
+			return current;
+		}
+	}
+	return 0;
+}
+RenderingDeviceDriver::FencePollResult RenderingDeviceDriverMetal::native_call_poll(uint64_t serial) {
+	FencePollResult out;
+	if (!serial || !completion_records_mutex.try_lock()) {
+		return out;
+	}
+	for (auto *record : completion_records) {
+		if (record->serial == serial) {
+			out.completed_serial = record->serial;
+			if (record->completed.load()) {
+				out.completed = !record->failed.load();
+				out.native_error = record->failed.load();
+				out.native_code = record->native_code.load();
+				// The exact registered command's completion callback is an authoritative
+				// acceptance resolution for Metal's void commit, unlike a quiet tail fence.
+				if (out.completed) {
+					out.resolved_issue = IssueFact::KnownAccepted;
+				}
+			}
+			break;
+		}
+	}
+	completion_records_mutex.unlock();
+	return out;
+}
+RenderingDeviceDriver::FencePollResult RenderingDeviceDriverMetal::native_call_wait(uint64_t serial) {
+	NS::SharedPtr<MTL::CommandBuffer> command;
+	{
+		MutexLock lock(completion_records_mutex);
+		for (auto *record : completion_records) {
+			if (record->serial == serial) {
+				command = record->command_buffer;
+				break;
+			}
+		}
+	}
+	if (!command) {
+		return {};
+	}
+	command->waitUntilCompleted();
+	FencePollResult out;
+	MutexLock lock(completion_records_mutex);
+	for (auto *record : completion_records) {
+		if (record->serial == serial) {
+			out.completed_serial = serial;
+			out.native_error = record->failed.load();
+			out.completed = record->completed.load() && !out.native_error;
+			out.native_code = record->native_code.load();
+			if (out.completed) {
+				out.resolved_issue = IssueFact::KnownAccepted;
+			}
+			break;
+		}
+	}
+	return out;
+}
+Error RenderingDeviceDriverMetal::native_call_recycle(uint64_t serial) {
+	if (!serial) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (!completion_records_mutex.try_lock()) {
+		return ERR_BUSY;
+	}
+	for (uint32_t i = 0; i < completion_records.size(); ++i) {
+		auto *record = completion_records[i];
+		if (record->serial != serial) {
+			continue;
+		}
+		if (!record->completed.load() || record->failed.load()) {
+			completion_records_mutex.unlock();
+			return ERR_BUSY;
+		}
+		// The original fence owns these pointers until its checked recycle. Calls
+		// without a fence are retired by the original frame's successful observation.
+		if (!record->fence_owned.load()) {
+			record->retired.store(true);
+			if (!record->observers) {
+				completion_records.remove_at(i);
+				memdelete(record);
+			}
+		}
+		completion_records_mutex.unlock();
+		return OK;
+	}
+	completion_records_mutex.unlock();
+	return ERR_DOES_NOT_EXIST;
+}
+
+Error RenderingDeviceDriverMetal::native_call_retain(uint64_t serial) {
+	if (!serial) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (!completion_records_mutex.try_lock()) {
+		return ERR_BUSY;
+	}
+	for (auto *record : completion_records) {
+		if (record->serial == serial) {
+			if (record->observers == UINT32_MAX) {
+				completion_records_mutex.unlock();
+				return ERR_PARAMETER_RANGE_ERROR;
+			}
+			++record->observers;
+			completion_records_mutex.unlock();
+			return OK;
+		}
+	}
+	completion_records_mutex.unlock();
+	return ERR_DOES_NOT_EXIST;
+}
+Error RenderingDeviceDriverMetal::native_call_release(uint64_t serial) {
+	if (!serial) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (!completion_records_mutex.try_lock()) {
+		return ERR_BUSY;
+	}
+	for (uint32_t i = 0; i < completion_records.size(); ++i) {
+		auto *record = completion_records[i];
+		if (record->serial != serial) {
+			continue;
+		}
+		if (!record->observers) {
+			completion_records_mutex.unlock();
+			return ERR_DOES_NOT_EXIST;
+		}
+		--record->observers;
+		if (!record->observers && record->retired.load()) {
+			completion_records.remove_at(i);
+			memdelete(record);
+		}
+		completion_records_mutex.unlock();
+		return OK;
+	}
+	completion_records_mutex.unlock();
+	return ERR_DOES_NOT_EXIST;
+}
+
+RenderingDeviceDriverMetal::CompletionRecord *RenderingDeviceDriverMetal::register_completion_record(MTL::CommandBuffer *p_command_buffer, uint64_t p_serial, bool p_collection_locked, bool p_independent_source) {
+	const bool batch_source = active_completion_records && !p_independent_source;
+	const uint64_t serial = batch_source ? (active_native_serial_count ? (--active_native_serial_count, active_native_serial++) : 0) : reserve_native_call_serials(1);
+	if (!serial || (!batch_source && admit_native_source(serial, p_independent_source) != OK)) {
+		return nullptr;
+	}
+
+	uint64_t registry = 0, epoch = 0;
+	session_loss_identity(registry, epoch);
+	p_command_buffer->addCompletedHandler([registry, epoch](MTL::CommandBuffer *completed) {
+		NS::Error *error = completed->error();
+		if (error && error->code() == MTL::CommandBufferErrorDeviceRemoved) {
+			notify_session_device_lost(registry, epoch);
+		}
+	});
+	CompletionRecord *record = memnew(CompletionRecord);
+	record->serial = serial;
+	record->command_buffer = NS::RetainPtr(p_command_buffer);
+	p_command_buffer->addCompletedHandler([record](MTL::CommandBuffer *p_completed) {
+		const MTL::CommandBufferStatus status = p_completed->status();
+		record->native_code.store(static_cast<int64_t>(status));
+		record->failed.store(status != MTL::CommandBufferStatusCompleted);
+		record->completed.store(true);
+	});
+	if (!p_collection_locked) {
+		completion_records_mutex.lock();
+	}
+	completion_records.push_back(record);
+	if (batch_source) {
+		active_completion_records->push_back(record);
+	}
+	if (!p_collection_locked) {
+		completion_records_mutex.unlock();
+	}
+	return record;
+}
+
+bool RenderingDeviceDriverMetal::completion_records_complete(const LocalVector<CompletionRecord *> &p_records) const {
+	MutexLock lock(const_cast<Mutex &>(completion_records_mutex));
+	for (CompletionRecord *record : p_records) {
+		if (!record->completed.load() || record->failed.load()) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool RenderingDeviceDriverMetal::completion_records_failed(const LocalVector<CompletionRecord *> &p_records, int64_t &r_native_code) const {
+	MutexLock lock(const_cast<Mutex &>(completion_records_mutex));
+	for (CompletionRecord *record : p_records) {
+		if (record->completed.load() && record->failed.load()) {
+			r_native_code = record->native_code.load();
+			return true;
+		}
+	}
+	return false;
+}
+
+void RenderingDeviceDriverMetal::retire_completion_records(const LocalVector<CompletionRecord *> &p_records) {
+	MutexLock lock(completion_records_mutex);
+	for (CompletionRecord *record : p_records) {
+		if (!record->completed.load() || record->retired.exchange(true)) {
+			continue;
+		}
+		record->fence_owned.store(false);
+		if (record->observers) {
+			continue;
+		}
+		for (uint32_t i = 0; i < completion_records.size(); i++) {
+			if (completion_records[i] == record) {
+				completion_records.remove_at(i);
+				break;
+			}
+		}
+		memdelete(record);
+	}
+}
+
+void RenderingDeviceDriverMetal::drain_completion_records() {
+	LocalVector<CompletionRecord *> records;
+	{
+		MutexLock lock(completion_records_mutex);
+		for (auto *record : completion_records) {
+			GDExtensionDeviceExit::require_close_success(record->observers ? ERR_BUSY : OK, GDExtensionDeviceExit::CloseRoute::LAST_REF);
+		}
+		records = std::move(completion_records);
+	}
+	// Wait outside the collection lock and before the derived driver releases
+	// command-buffer wrappers and their scratch resources. waitUntilCompleted
+	// also waits for completion handlers, whose last access publishes completed.
+	for (CompletionRecord *record : records) {
+		record->command_buffer->waitUntilCompleted();
+		memdelete(record);
+	}
+}
+
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
 #include "core/error/error_macros.h"
@@ -150,6 +404,7 @@ RDD::BufferID RenderingDeviceDriverMetal::buffer_create(uint64_t p_size, BitFiel
 		buf_info = VersatileResource::allocate<BufferInfo>(resources_allocator);
 	}
 	*static_cast<MetalBuffer *>(buf_info) = buffer;
+	buf_info->logical_size = original_size;
 
 	return BufferID(buf_info);
 }
@@ -247,6 +502,43 @@ bool RenderingDeviceDriverMetal::is_valid_linear(const TextureFormat &p_format) 
 			&& p_format.mipmaps == 1 // Linear textures must have 1 mipmap level.
 			&& p_format.array_layers == 1 // Linear textures must have 1 array layer.
 			&& p_format.samples == TEXTURE_SAMPLES_1; // Linear textures must have 1 sample.
+}
+
+NS::SharedPtr<MTL::TextureDescriptor> RenderingDeviceDriverMetal::_depth_allocation_descriptor(uint32_t p_width, uint32_t p_height) const {
+	NS::SharedPtr<MTL::TextureDescriptor> desc = NS::TransferPtr(MTL::TextureDescriptor::alloc()->init());
+	desc->setTextureType(MTL::TextureType2D);
+	desc->setPixelFormat((MTL::PixelFormat)pixel_formats->getMTLPixelFormat(DATA_FORMAT_D32_SFLOAT));
+	desc->setWidth(p_width);
+	desc->setHeight(p_height);
+	desc->setDepth(1);
+	desc->setMipmapLevelCount(1);
+	desc->setResourceOptions(base_hazard_tracking | MTL::ResourceCPUCacheModeDefaultCache | MTL::ResourceStorageModePrivate);
+	desc->setUsage(MTL::TextureUsageShaderRead | MTL::TextureUsageRenderTarget);
+	return desc;
+}
+
+Error RenderingDeviceDriverMetal::depth_allocation_quote(uint32_t p_width, uint32_t p_height, DepthAllocationQuote &r_quote) {
+	r_quote = {};
+	// Match the original RD texture-create limit before descriptor construction
+	// or a native size query; oversized descriptors are not native probes.
+	const uint64_t max_size = limit_get(LIMIT_MAX_TEXTURE_SIZE_2D);
+	if (!p_width || !p_height || p_width > max_size || p_height > max_size) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (!allocator || !pixel_formats ||
+			!flags::any(pixel_formats->getCapabilities((MTL::PixelFormat)pixel_formats->getMTLPixelFormat(DATA_FORMAT_D32_SFLOAT)), kMTLFmtCapsDSAtt)) {
+		return ERR_UNAVAILABLE;
+	}
+	const auto desc = _depth_allocation_descriptor(p_width, p_height);
+	MetalAllocator::TextureAllocationQuote quote;
+	if (!allocator->texture_allocation_quote(desc.get(), quote)) {
+		return ERR_UNAVAILABLE;
+	}
+	r_quote.policy = quote.dedicated ? DepthAllocationQuote::Policy::MetalHeapDedicated : DepthAllocationQuote::Policy::MetalHeapPool;
+	r_quote.native_requirement = quote.native_requirement;
+	r_quote.owner_reservation = quote.owner_reservation;
+	r_quote.alignment = quote.alignment;
+	return OK;
 }
 
 RDD::TextureID RenderingDeviceDriverMetal::texture_create(const TextureFormat &p_format, const TextureView &p_view) {
@@ -402,6 +694,14 @@ RDD::TextureID RenderingDeviceDriverMetal::texture_create(const TextureFormat &p
 	}
 
 	desc->setUsage(usage);
+
+	// Quote and actual creation use the same original standalone D32 recipe.
+	// All other descriptors retain the general construction above.
+	if (p_format.texture_type == TEXTURE_TYPE_2D && p_format.format == DATA_FORMAT_D32_SFLOAT &&
+			p_format.depth == 1 && p_format.array_layers == 1 && p_format.mipmaps == 1 && p_format.samples == TEXTURE_SAMPLES_1 &&
+			p_format.usage_bits == (TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) && p_format.shareable_formats.is_empty() && no_swizzle && can_be_attachment) {
+		desc = _depth_allocation_descriptor(p_format.width, p_format.height);
+	}
 
 	// Allocate memory.
 
@@ -1182,6 +1482,8 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 	Vector<RenderingShaderContainer::Shader> &shaders = shader_container->shaders;
 	Vector<RSCM::StageData> &mtl_shaders = shader_container->mtl_shaders;
 
+	ERR_FAIL_COND_V(!mtl_reflection_data.has_valid_profile(), RDD::ShaderID());
+
 	// We need to regenerate the shader if the cache is moved to an incompatible device or argument buffer support differs.
 	ERR_FAIL_COND_V_MSG(!device_properties->features.argument_buffers_supported() && mtl_reflection_data.uses_argument_buffers(),
 			RDD::ShaderID(),
@@ -1196,13 +1498,10 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 			RDD::ShaderID(),
 			"Shader was generated for a newer Apple GPU");
 
-	NS::SharedPtr<MTL::CompileOptions> options = NS::TransferPtr(MTL::CompileOptions::alloc()->init());
-	uint32_t major = mtl_reflection_data.msl_version / 10000;
-	uint32_t minor = (mtl_reflection_data.msl_version / 100) % 100;
-	options->setLanguageVersion(MTL::LanguageVersion((major << 0x10) + minor));
-	if (__builtin_available(macOS 15.0, iOS 18.0, tvOS 18.0, visionOS 2.0, *)) {
-		options->setEnableLogging(mtl_reflection_data.needs_debug_logging());
-	}
+	ERR_FAIL_COND_V(mtl_reflection_data.profile.platform != device_profile.platform, RDD::ShaderID());
+	ERR_FAIL_COND_V(uint32_t(mtl_reflection_data.profile.platform) > uint32_t(MetalDeviceProfile::Platform::visionOS), RDD::ShaderID());
+	ERR_FAIL_COND_V(uint32_t(mtl_reflection_data.profile.gpu) < 1001 || uint32_t(mtl_reflection_data.profile.gpu) > 1009, RDD::ShaderID());
+	ERR_FAIL_COND_V(shaders.size() != mtl_shaders.size() || shaders.is_empty(), RDD::ShaderID());
 
 	HashMap<RDD::ShaderStage, std::shared_ptr<MDLibrary>> libraries;
 
@@ -1215,10 +1514,14 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 		if (shader.shader_stage == RDD::ShaderStage::SHADER_STAGE_COMPUTE) {
 			pipeline_type = PIPELINE_TYPE_COMPUTE;
 		}
-		if (std::optional<std::shared_ptr<MDLibrary>> lib = shader_cache_get_library(shader_data.hash); lib) {
-			libraries[shader.shader_stage] = std::move(*lib);
-			continue;
-		}
+		ERR_FAIL_COND_V(shader_data.source_size == 0 || shader_data.compile_path_version != 1 || shader_data.supports_fast_math > 1 || shader_data.is_position_invariant > 1, RDD::ShaderID());
+		const bool effective_disable = ShaderCompilePolicy::effective_disable(shader_container->get_compile_flags(), shader_data.supports_fast_math);
+		ERR_FAIL_COND_V(shader_data.effective_disable_fast_math != uint32_t(effective_disable), RDD::ShaderID());
+		const uint64_t payload_size = uint64_t(shader_data.source_size) + shader_data.library_size;
+		ERR_FAIL_COND_V(payload_size != (shader.code_decompressed_size ? shader.code_decompressed_size : uint64_t(shader.code_compressed_bytes.size())), RDD::ShaderID());
+		ERR_FAIL_COND_V(shader.code_compression_flags & ~uint32_t(RenderingShaderContainer::COMPRESSION_FLAG_ZSTD), RDD::ShaderID());
+		ERR_FAIL_COND_V(shader.code_compression_flags && !shader.code_decompressed_size, RDD::ShaderID());
+		ERR_FAIL_COND_V(shader_data.library_size > 0 && (mtl_reflection_data.os_min_version.is_null() || mtl_reflection_data.os_min_version > device_properties->os_version), RDD::ShaderID());
 
 		if (shader.code_decompressed_size > 0) {
 			decompressed_code.resize(shader.code_decompressed_size);
@@ -1228,7 +1531,84 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 			decompressed_code = shader.code_compressed_bytes;
 		}
 
-		ShaderCacheEntry *cd = memnew(ShaderCacheEntry(*this, shader_data.hash));
+		SHA256Digest source_digest(reinterpret_cast<const char *>(decompressed_code.ptr()), shader_data.source_size);
+		ERR_FAIL_COND_V(memcmp(source_digest.data, shader_data.hash.data, sizeof(source_digest.data)) != 0, RDD::ShaderID());
+		ShaderCompilePolicy::LibraryKeyInput key_input;
+		key_input.compile_path_version = shader_data.compile_path_version;
+		key_input.stage = shader.shader_stage;
+		key_input.source = decompressed_code.slice(0, shader_data.source_size);
+		key_input.requested_flags = static_cast<uint32_t>(shader_container->get_compile_flags());
+		key_input.effective_disable = effective_disable;
+		key_input.msl_version = mtl_reflection_data.msl_version;
+		key_input.position_invariance = shader_data.is_position_invariant;
+		key_input.enable_logging = mtl_reflection_data.needs_debug_logging();
+		key_input.compiled_platform = uint32_t(mtl_reflection_data.profile.platform);
+		key_input.compiled_gpu_family = uint32_t(mtl_reflection_data.profile.gpu);
+		key_input.profile_min_os_version = mtl_reflection_data.profile.min_os_version;
+		key_input.binary_os_min_version = shader_data.library_size ? uint32_t(mtl_reflection_data.os_min_version) : UINT32_MAX;
+		key_input.actual_platform = uint32_t(device_profile.platform);
+		key_input.actual_gpu_family = uint32_t(device_profile.gpu);
+		key_input.actual_os_version = device_properties->os_version;
+		key_input.origin = shader_data.library_size ? 1 : 0;
+		key_input.library_size = shader_data.library_size;
+		if (shader_data.library_size) {
+			SHA256Digest metallib_digest(reinterpret_cast<const char *>(decompressed_code.ptr() + shader_data.source_size), shader_data.library_size);
+			memcpy(key_input.metallib_sha256, metallib_digest.data, sizeof(key_input.metallib_sha256));
+		}
+		NS::SharedPtr<MTL::CompileOptions> options;
+		if (!shader_data.library_size) {
+			options = make_shader_compile_options(mtl_reflection_data.msl_version, mtl_reflection_data.needs_debug_logging(), shader_data.is_position_invariant, effective_disable);
+		}
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 150000 || __IPHONE_OS_VERSION_MAX_ALLOWED >= 180000 || __TV_OS_VERSION_MAX_ALLOWED >= 180000 || defined(VISIONOS_ENABLED)
+		if (__builtin_available(macOS 15.0, iOS 18.0, tvOS 18.0, visionOS 2.0, *)) {
+			if (options) {
+				key_input.math_floating_point_functions = uint32_t(options->mathFloatingPointFunctions());
+			}
+		}
+#endif
+		const PackedByteArray key_bytes = ShaderCompilePolicy::library_key(key_input);
+		ERR_FAIL_COND_V(key_bytes.size() != 32, RDD::ShaderID());
+		const SHA256Digest library_key(reinterpret_cast<const char *>(key_bytes.ptr()));
+#ifdef TESTS_ENABLED
+		Dictionary audit;
+		audit["shader_name"] = String::utf8(shader_name.get_data());
+		audit["stage"] = int(shader.shader_stage);
+		audit["source_digest"] = String::hex_encode_buffer(source_digest.data, sizeof(source_digest.data));
+		audit["library_key"] = String::hex_encode_buffer(key_bytes.ptr(), key_bytes.size());
+		audit["required_flags"] = key_input.requested_flags;
+		audit["effective_disable"] = effective_disable;
+		audit["compile_path"] = shader_data.library_size ? "precompiled_metallib" : "runtime_source";
+		audit["phase"] = "library_lookup";
+		audit["cache_hit"] = false;
+		if (shader_data.library_size) {
+			audit["metallib_digest"] = String::hex_encode_buffer(key_input.metallib_sha256, 32);
+			audit["library_size"] = shader_data.library_size;
+			audit["container_digest"] = shader_container->get_loaded_container_digest();
+			audit["container_size"] = shader_container->get_loaded_container_size();
+		}
+#endif
+		if (std::optional<std::shared_ptr<MDLibrary>> lib = shader_cache_get_library(library_key); lib) {
+#ifdef TESTS_ENABLED
+			audit["cache_hit"] = true;
+			const uint64_t creation_seq = (*lib)->audit_creation_seq();
+			audit["creation_seq"] = creation_seq ? Variant(creation_seq) : Variant();
+			ShaderCompileAudit::emit(audit);
+#endif
+			libraries[shader.shader_stage] = std::move(*lib);
+			continue;
+		}
+#ifdef TESTS_ENABLED
+		ShaderCompileAudit::emit(audit);
+		if (options) {
+			audit["phase"] = "runtime_options";
+			audit["actual_options"] = observe_shader_compile_options(options.get());
+			ShaderCompileAudit::emit(audit);
+		}
+#endif
+		ShaderCacheEntry *cd = memnew(ShaderCacheEntry(*this, library_key));
+#ifdef TESTS_ENABLED
+		cd->audit_context = audit;
+#endif
 		cd->name = shader_name;
 		cd->stage = shader.shader_stage;
 
@@ -1239,6 +1619,10 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 			ERR_FAIL_COND_V_MSG(mtl_reflection_data.os_min_version > device_properties->os_version,
 					RDD::ShaderID(),
 					"Metal shader binary was generated for a newer target OS");
+#ifdef TESTS_ENABLED
+			audit["phase"] = "binary_load";
+			cd->creation_seq = ShaderCompileAudit::emit(audit);
+#endif
 			dispatch_data_t binary = dispatch_data_create(decompressed_code.ptr() + shader_data.source_size, shader_data.library_size, dispatch_get_main_queue(), DISPATCH_DATA_DESTRUCTOR_DEFAULT);
 			library = MDLibrary::create(cd, device,
 #if DEV_ENABLED
@@ -1246,16 +1630,10 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 #endif
 					binary);
 		} else {
-			options->setPreserveInvariance(shader_data.is_position_invariant);
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 150000 || __IPHONE_OS_VERSION_MIN_REQUIRED >= 180000 || __TV_OS_VERSION_MIN_REQUIRED >= 180000 || defined(VISIONOS_ENABLED)
-			options->setMathMode(MTL::MathModeFast);
-#else
-			options->setFastMathEnabled(true);
-#endif
 			library = MDLibrary::create(cd, device, source.get(), options.get(), _shader_load_strategy);
 		}
 
-		shader_cache_set_entry(shader_data.hash, cd);
+		shader_cache_set_entry(library_key, cd);
 		libraries[shader.shader_stage] = library;
 	}
 
@@ -1278,10 +1656,12 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 		set.uniforms.resize(set_size);
 
 		uint8_t dynamic_count = 0;
+		bool has_storage_buffer = false;
 
 		LocalVector<UniformInfo>::Iterator iter = set.uniforms.begin();
 		for (uint32_t j = 0; j < set_size; j++) {
 			const ShaderUniform &uniform = refl_set.ptr()[j];
+			has_storage_buffer |= uniform.type == UNIFORM_TYPE_STORAGE_BUFFER || uniform.type == UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC;
 			const RSCM::UniformData &bind = mtl_set.ptr()[j];
 
 			switch (uniform.type) {
@@ -1304,10 +1684,18 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 				continue;
 			}
 #define VAL(x) (x == UINT32_MAX ? 0 : x)
-			uint32_t max = std::max({ VAL(ui.arg_buffer.texture), VAL(ui.arg_buffer.buffer), VAL(ui.arg_buffer.sampler) });
-			max += ui.arrayLength > 0 ? ui.arrayLength - 1 : 0;
-			set.buffer_size = std::max(set.buffer_size, (max + 1) * (uint32_t)sizeof(uint64_t));
+			const uint64_t end = uint64_t(std::max({ VAL(ui.arg_buffer.texture), VAL(ui.arg_buffer.buffer), VAL(ui.arg_buffer.sampler) })) + std::max(ui.arrayLength, 1u);
+			ERR_FAIL_COND_V_MSG(end > uint64_t(INT32_MAX) / sizeof(uint64_t), ShaderID(), "Metal argument layout exceeds the allocation limit.");
+			set.buffer_size = std::max(set.buffer_size, uint32_t(end * sizeof(uint64_t)));
 #undef VAL
+		}
+		// Layout depends only on the reflected set, never active-stage usage or
+		// OpArrayLength presence. A no-length shader can create a set for another
+		// compatible shader that does use length(). The tail shares ownership of
+		// the ordinary argument allocation (or its per-command dynamic copy).
+		if (has_storage_buffer) {
+			ERR_FAIL_COND_V_MSG(!set.buffer_sizes.initialize(set.buffer_size / sizeof(uint64_t)), ShaderID(), "Metal buffer-size table exceeds the argument allocation limit.");
+			set.buffer_size = set.buffer_sizes.allocation_size;
 		}
 
 		if (dynamic_count > 0) {
@@ -1345,6 +1733,21 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 	return RDD::ShaderID(shader);
 }
 
+bool RenderingDeviceDriverMetal::shader_retire_ready_nonblocking(ShaderID p_shader) const {
+	if (!p_shader) {
+		return false;
+	}
+	const auto *shader = reinterpret_cast<MDShader *>(p_shader.id);
+	if (const auto *compute_shader = dynamic_cast<const MDComputeShader *>(shader)) {
+		return compute_shader->kernel && compute_shader->kernel->retire_ready_nonblocking();
+	}
+	if (const auto *render_shader = dynamic_cast<const MDRenderShader *>(shader)) {
+		return render_shader->vert && render_shader->frag &&
+				render_shader->vert->retire_ready_nonblocking() && render_shader->frag->retire_ready_nonblocking();
+	}
+	return false;
+}
+
 void RenderingDeviceDriverMetal::shader_free(ShaderID p_shader) {
 	MDShader *obj = (MDShader *)p_shader.id;
 	delete obj;
@@ -1364,6 +1767,7 @@ RDD::UniformSetID RenderingDeviceDriverMetal::uniform_set_create(VectorView<Boun
 	MDShader *shader = (MDShader *)(p_shader.id);
 	ERR_FAIL_INDEX_V_MSG(p_set_index, shader->sets.size(), UniformSetID(), "Set index out of range");
 	const UniformSet &shader_set = shader->sets.get(p_set_index);
+	ERR_FAIL_COND_V(p_uniforms.size() != shader_set.uniforms.size(), UniformSetID());
 	MDUniformSet *set = memnew(MDUniformSet);
 	// Determine if there are any dynamic uniforms in this set.
 	bool is_dynamic = !shader_set.dynamic_uniforms.is_empty();
@@ -1371,7 +1775,11 @@ RDD::UniformSetID RenderingDeviceDriverMetal::uniform_set_create(VectorView<Boun
 	Vector<uint8_t> arg_buffer_data;
 
 	if (device_properties->features.argument_buffers_supported()) {
-		arg_buffer_data.resize(shader_set.buffer_size);
+		if (arg_buffer_data.resize(shader_set.buffer_size) != OK) {
+			memdelete(set);
+			ERR_FAIL_V(UniformSetID());
+		}
+		arg_buffer_data.fill(0);
 
 		// If argument buffers are enabled, we have already verified availability, so we can skip the runtime check.
 		GODOT_CLANG_WARNING_PUSH_AND_IGNORE("-Wunguarded-availability-new")
@@ -1404,6 +1812,14 @@ RDD::UniformSetID RenderingDeviceDriverMetal::uniform_set_create(VectorView<Boun
 			const BoundUniform &uniform = p_uniforms[i];
 			const UniformInfo &ui = shader_set.uniforms[i];
 			const UniformInfo::Indexes &idx = ui.arg_buffer;
+			if (shader_set.buffer_sizes.resource_count != 0 &&
+					(uniform.type == UNIFORM_TYPE_STORAGE_BUFFER || uniform.type == UNIFORM_TYPE_UNIFORM_BUFFER || uniform.is_dynamic())) {
+				const BufferInfo *buffer = (const BufferInfo *)uniform.ids[0].id;
+				if (!shader_set.buffer_sizes.write_length(ptr, idx.buffer, buffer->logical_size)) {
+					memdelete(set);
+					ERR_FAIL_V_MSG(UniformSetID(), "Metal descriptor byte length exceeds the size-table ABI.");
+				}
+			}
 
 			switch (uniform.type) {
 				case UNIFORM_TYPE_SAMPLER: {
@@ -1506,12 +1922,29 @@ RDD::UniformSetID RenderingDeviceDriverMetal::uniform_set_create(VectorView<Boun
 
 		if (!is_dynamic) {
 			set->arg_buffer = allocator->new_buffer(shader_set.buffer_size, base_hazard_tracking | MTL::ResourceStorageModePrivate);
+			if (!set->arg_buffer.buffer) {
+				memdelete(set);
+				ERR_FAIL_V_MSG(UniformSetID(), "Failed to allocate Metal argument buffer.");
+			}
+			if (shader_set.buffer_sizes.resource_count != 0 &&
+					!shader_set.buffer_sizes.write_address(arg_buffer_data.ptrw(), set->arg_buffer.buffer->gpuAddress())) {
+				allocator->free_buffer(set->arg_buffer);
+				memdelete(set);
+				ERR_FAIL_V_MSG(UniformSetID(), "Metal buffer-size table address overflow.");
+			}
 #if DEV_ENABLED
 			char label[64];
 			snprintf(label, sizeof(label), "Uniform Set %u", p_set_index);
 			set->arg_buffer.buffer->setLabel(NS::String::string(label, NS::UTF8StringEncoding));
 #endif
-			_copy_queue_copy_to_buffer(arg_buffer_data, set->arg_buffer.buffer.get());
+			const Error copy_error = _copy_queue_copy_to_buffer(arg_buffer_data, set->arg_buffer.buffer.get());
+			if (copy_error != OK) {
+				// Refusal happens before this destination is encoded. Any earlier
+				// flushed prefix remains in the original Frame completion reports.
+				allocator->free_buffer(set->arg_buffer);
+				memdelete(set);
+				return UniformSetID();
+			}
 		} else {
 			// Store the arg buffer data for dynamic uniform sets.
 			// It will be copied and updated at bind time.
@@ -2495,8 +2928,13 @@ void RenderingDeviceDriverMetal::begin_segment(uint32_t p_frame_index, uint32_t 
 }
 
 void RenderingDeviceDriverMetal::end_segment() {
+	const Error error = end_segment_checked();
+	ERR_FAIL_COND_MSG(error != OK, "Metal copy queue segment completion was refused.");
+}
+
+Error RenderingDeviceDriverMetal::end_segment_checked(bool p_nonblocking) {
 	MutexLock lock(copy_queue_mutex);
-	_copy_queue_flush();
+	return _copy_queue_flush(p_nonblocking);
 }
 
 #pragma mark - Misc
@@ -2603,10 +3041,19 @@ uint64_t RenderingDeviceDriverMetal::get_resource_native_handle(DriverResource p
 	}
 }
 
-void RenderingDeviceDriverMetal::_copy_queue_copy_to_buffer(Span<uint8_t> p_src_data, MTL::Buffer *p_dst_buffer, uint64_t p_dst_offset) {
+Error RenderingDeviceDriverMetal::_copy_queue_copy_to_buffer(Span<uint8_t> p_src_data, MTL::Buffer *p_dst_buffer, uint64_t p_dst_offset) {
 	MutexLock lock(copy_queue_mutex);
+	if (copy_queue_completion_record) {
+		const Error error = _copy_queue_flush();
+		if (error != OK) {
+			return error;
+		}
+	}
 	if (_copy_queue_buffer_available() < p_src_data.size()) {
-		_copy_queue_flush();
+		const Error error = _copy_queue_flush();
+		if (error != OK) {
+			return error;
+		}
 	}
 
 	MTL::BlitCommandEncoder *blit_encoder = _copy_queue_blit_encoder();
@@ -2616,19 +3063,125 @@ void RenderingDeviceDriverMetal::_copy_queue_copy_to_buffer(Span<uint8_t> p_src_
 	blit_encoder->copyFromBuffer(copy_queue_buffer.buffer.get(), copy_queue_buffer_offset, p_dst_buffer, p_dst_offset, p_src_data.size());
 
 	_copy_queue_buffer_consume(p_src_data.size());
+	return OK;
 }
 
-void RenderingDeviceDriverMetal::_copy_queue_flush() {
-	if (!copy_queue_blit_encoder) {
-		return;
+Error RenderingDeviceDriverMetal::qualification_prepare_segment(QueueCallReport &report, bool p_nonblocking) {
+	report = {};
+	if (p_nonblocking) {
+		if (!copy_queue_mutex.try_lock()) {
+			return ERR_BUSY;
+		}
+	} else {
+		copy_queue_mutex.lock();
 	}
-
-	copy_queue_blit_encoder.get()->endEncoding();
-	copy_queue_blit_encoder.reset();
-	copy_queue_command_buffer.get()->commit();
-	copy_queue_command_buffer.get()->waitUntilCompleted();
+	struct Unlock {
+		Mutex &mutex;
+		~Unlock() { mutex.unlock(); }
+	} copy_unlock{ copy_queue_mutex };
+	if (!copy_queue_blit_encoder && !copy_queue_completion_record) {
+		return OK;
+	}
+	if (p_nonblocking) {
+		if (!completion_records_mutex.try_lock()) {
+			return ERR_BUSY;
+		}
+	} else {
+		completion_records_mutex.lock();
+	}
+	CompletionRecord *record = copy_queue_completion_record;
+	if (!record) {
+		// Reserve the exact callback identity and transfer one observer to the Frame
+		// before this original queue commits. Refusal is still zero native effects.
+		record = register_completion_record(copy_queue_command_buffer.get(), 0, true, true);
+		if (!record) {
+			completion_records_mutex.unlock();
+			return active_native_source_admission && active_native_source_admission->error != OK ? active_native_source_admission->error : ERR_PARAMETER_RANGE_ERROR;
+		}
+		record->observers = 1;
+		copy_queue_completion_record = record;
+		NativeCallFact fact;
+		fact.frame_observer_owned = true;
+		fact.queue_index = 2;
+		fact.serial = record->serial;
+		fact.issue = IssueFact::IssuedUnknown;
+		fact.completion = CompletionCapability::CommandBuffer;
+		fact.completion_serial = record->serial;
+		report.calls.push_back(fact);
+		report.issued = true;
+		report.native_issue_count = 1;
+		copy_queue_blit_encoder.get()->endEncoding();
+		copy_queue_blit_encoder.reset();
+		copy_queue_command_buffer.get()->commit();
+		if (p_nonblocking) {
+			completion_records_mutex.unlock();
+			return ERR_BUSY;
+		}
+	}
+	// Never hold completion_records_mutex while waiting on Metal. The completion
+	// callback and native release/poll paths share this mutex; holding it across
+	// waitUntilCompleted starves native_call_release indefinitely.
+	completion_records_mutex.unlock();
+	if (!p_nonblocking && !record->completed.load()) {
+		copy_queue_command_buffer.get()->waitUntilCompleted();
+	}
+	if (!record->completed.load()) {
+		return ERR_BUSY;
+	}
+	if (record->failed.load()) {
+		return FAILED;
+	}
+	completion_records_mutex.lock();
+	if (!record->completed.load()) {
+		completion_records_mutex.unlock();
+		return ERR_BUSY;
+	}
+	if (record->failed.load()) {
+		completion_records_mutex.unlock();
+		return FAILED;
+	}
+	// Original staging bytes cannot be reused before this actual callback.
+	// Frame/ticket observers keep the same source alive after owner retirement.
+	record->retired.store(true);
+	copy_queue_completion_record = nullptr;
 	copy_queue_command_buffer.reset();
 	copy_queue_buffer_offset = 0;
+	if (!record->observers) {
+		for (uint32_t i = 0; i < completion_records.size(); ++i) {
+			if (completion_records[i] == record) {
+				completion_records.remove_at(i);
+				break;
+			}
+		}
+		memdelete(record);
+	}
+	completion_records_mutex.unlock();
+	return OK;
+}
+
+Error RenderingDeviceDriverMetal::_copy_queue_flush(bool p_nonblocking) {
+	// Reuse this original copy queue's existing CompletionRecord issuer and
+	// prepare path. Admission precedes registration, endEncoding and commit;
+	// refusal leaves the encoder, staging bytes and destination custody intact.
+	QueueCallReport report;
+	const Error error = qualification_prepare_segment(report, p_nonblocking || !native_source_can_block());
+	if (!report.calls.is_empty()) {
+		report.error = error == ERR_BUSY ? OK : error;
+		// prepare transfers one real observer. The existing Frame keeps it
+		// even on a failed native prefix; outside an RD scope return it here.
+#ifdef TESTS_ENABLED
+		if (OS::get_singleton()->has_environment("GODOT_QUALIFICATION_CAPACITY_TRACE")) {
+			print_line(vformat("QCAP source=copy_queue_flush original_completion_record=1 serial=%d native_issues=%d", report.calls[0].serial, report.native_issue_count));
+		}
+#endif
+		if (!capture_hidden_native_source(report)) {
+			for (const auto &call : report.calls) {
+				const Error released = native_call_release(call.serial);
+				CRASH_COND(released != OK);
+			}
+		}
+	}
+	return error;
 }
 
 Error RenderingDeviceDriverMetal::_copy_queue_initialize() {
@@ -2887,6 +3440,7 @@ RenderingDeviceDriverMetal::RenderingDeviceDriverMetal(RenderingContextDriverMet
 }
 
 RenderingDeviceDriverMetal::~RenderingDeviceDriverMetal() {
+	drain_completion_records();
 	for (KeyValue<SHA256Digest, ShaderCacheEntry *> &kv : _shader_cache) {
 		memdelete(kv.value);
 	}

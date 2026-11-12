@@ -286,7 +286,7 @@ Variant GDScriptFunctionState::_signal_callback(const Variant **p_args, int p_ar
 }
 
 bool GDScriptFunctionState::is_valid(bool p_extended_check) const {
-	if (function == nullptr) {
+	if (function == nullptr || resume_phase != RESUME_PENDING) {
 		return false;
 	}
 
@@ -307,6 +307,11 @@ bool GDScriptFunctionState::is_valid(bool p_extended_check) const {
 }
 
 Variant GDScriptFunctionState::resume(const Variant &p_arg) {
+	// Native threads must enter through ScriptServer before touching script
+	// state. Refuse before consuming links or copying the resume argument.
+	if (!Thread::is_main_thread() && !ScriptServer::thread_is_entered()) {
+		return Variant();
+	}
 	ERR_FAIL_NULL_V(function, Variant());
 	{
 		MutexLock lock(GDScriptLanguage::singleton->mutex);
@@ -325,30 +330,50 @@ Variant GDScriptFunctionState::resume(const Variant &p_arg) {
 			return Variant();
 #endif
 		}
+		if (resume_phase != RESUME_PENDING) {
+#ifdef DEBUG_ENABLED
+			ERR_FAIL_V_MSG(Variant(), "Resumed function '" + state.function_name + "()' re-entered while completion is being delivered.");
+#else
+			return Variant();
+#endif
+		}
+		// Reserve this state before callbacks can run. The reservation remains set
+		// until terminal cleanup, so nested completion callbacks cannot re-enter it.
+		resume_phase = RESUME_RESERVING;
 		// Do these now to avoid locking again after the call.
 		scripts_list.remove_from_list();
 		instances_list.remove_from_list();
+		resume_phase = RESUME_RESERVED;
 	}
+	// A manually resumed await never passes through the signal emitter's
+	// one-shot disconnect path. Remove the pending await connection before
+	// running user code, while the state is already reserved against re-entry.
+	_clear_connections();
 
 	state.result = p_arg;
 	Callable::CallError err;
 	Variant ret = function->call(nullptr, nullptr, 0, err, &state);
 
 	function = nullptr; // Cleaned up.
+	resume_phase = RESUME_CLEANED;
 	state.result = Variant();
 
 	return ret;
 }
 
 void GDScriptFunctionState::_clear_stack() {
-	if (state.stack_size) {
-		Variant *stack = (Variant *)state.stack.ptr();
+	const int extent = state.stack_size;
+	if (extent) {
+		// Variant destruction can reenter cleanup or destroy this state. Claim the
+		// extent and keep the storage locally before invoking any destructors.
+		state.stack_size = 0;
+		Vector<uint8_t> owned_stack = std::move(state.stack);
+		Variant *stack = (Variant *)owned_stack.ptr();
 		// First `GDScriptFunction::FIXED_ADDRESSES_MAX` stack addresses are special
 		// and not copied to the state, so we skip them here.
-		for (int i = GDScriptFunction::FIXED_ADDRESSES_MAX; i < state.stack_size; i++) {
+		for (int i = GDScriptFunction::FIXED_ADDRESSES_MAX; i < extent; i++) {
 			stack[i].~Variant();
 		}
-		state.stack_size = 0;
 	}
 }
 
@@ -359,6 +384,13 @@ void GDScriptFunctionState::_clear_connections() {
 	for (Object::Connection &c : conns) {
 		c.signal.disconnect(c.callable);
 	}
+}
+
+void GDScriptFunctionState::_cancel_pending() {
+	// Cancellation is terminal before any user-visible cleanup can re-enter the
+	// state. Keep the transition under the language mutex at the callers.
+	function = nullptr;
+	resume_phase = RESUME_CLEANED;
 }
 
 void GDScriptFunctionState::_bind_methods() {
@@ -379,6 +411,8 @@ GDScriptFunctionState::~GDScriptFunctionState() {
 		MutexLock lock(GDScriptLanguage::singleton->mutex);
 		scripts_list.remove_from_list();
 		instances_list.remove_from_list();
-		_clear_stack();
 	}
+	// Captured values can run user cleanup. The state no longer participates in
+	// either pending list, so release its owned stack after unlocking.
+	_clear_stack();
 }

@@ -298,6 +298,11 @@ public:
 
 class API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0)) MDCommandBuffer : public MDCommandBufferBase {
 	friend class MDUniformSet;
+ friend class RenderingDeviceDriverMetal;
+ // These are references to the driver's original CompletionRecord owners,
+ // retained here only until this exact command wrapper enters queue execution.
+ LocalVector<RDM::CompletionRecord *> pending_completion_records;
+ bool completion_record_failed = false;
 
 private:
 #pragma mark - Common State
@@ -551,6 +556,9 @@ public:
 
 	_FORCE_INLINE_ MTL::CommandBuffer *get_command_buffer() const {
 		return commandBuffer.get();
+	}
+	_FORCE_INLINE_ MTL::CommandBuffer *ensure_command_buffer() {
+		return command_buffer();
 	}
 
 	void _begin() override;

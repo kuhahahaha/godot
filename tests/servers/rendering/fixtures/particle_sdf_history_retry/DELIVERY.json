@@ -1,0 +1,191 @@
+{
+  "base": "7975920ea3",
+  "scope": "Native particle SDF trail history rollback after exact frame-parameter upload refusal",
+  "sources": [
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp",
+      "sha256": "a254d2fc628d5362fba04a10edfc1b5020f472a2da0f3cd84bd0cebb6d9ee320"
+    },
+    {
+      "path": "modules/particles_runtime_tests/particles_runtime_test_fixture.cpp",
+      "sha256": "8860d7346f4f84070c70c3baea321e352431ac18e0841a996f84ee779d6acfb6"
+    },
+    {
+      "path": "modules/particles_runtime_tests/particles_runtime_test_fixture.h",
+      "sha256": "42271d304d0454d67b1e7ed03891ac1d74ecbee6677d1670b3c774452a2e4809"
+    },
+    {
+      "path": "tests/servers/rendering/fixtures/particle_runtime_native/run_native.py",
+      "sha256": "787e7cb97cf59681a236e5023653f778f7d3d9abb4d78de5b67c6b61058d0c0e"
+    },
+    {
+      "path": "tests/servers/rendering/fixtures/particle_runtime_native/probe.gd",
+      "sha256": "9c562f06accf188287b67b0ee32fb8ddf7bc9ae43863072ed318e2330e23c6cd"
+    },
+    {
+      "path": "tests/servers/rendering/fixtures/particle_runtime_native/README.md",
+      "sha256": "c6504cbcb72e56291b57bdf77500a0bf0e9c7c66bdc2276e33d33100259f2264"
+    }
+  ],
+  "combined_verification": {
+    "host_sha256": "4fe70b6694e4c72a2ead7aa9f2b9ded7e103c3fd6e8e4b397dd6f840dde04714",
+    "build": {
+      "exit": 0,
+      "elapsed": 14.017907790956087
+    },
+    "full": {
+      "exit": 0,
+      "counts": {
+        "OverallResultsAsserts": {
+          "successes": "521421",
+          "failures": "0"
+        },
+        "OverallResultsTestCases": {
+          "successes": "2082",
+          "failures": "0"
+        }
+      },
+      "stdout_bytes": 571,
+      "stderr_bytes": 4017
+    },
+    "limitation": "Host compiled both six-RS surface and native SDF rollback fix; no standalone binary identity claim. Existing negative-test stdout571/stderr4017 and MoltenVK linker target warning retained."
+  },
+  "red": {
+    "process_exit": 43,
+    "checks": {
+      "one_result": true,
+      "not_timeout": true,
+      "no_fatal_or_exit_leaks": true,
+      "exact_expected_engine_errors": true,
+      "actual_metal_startup": true,
+      "native_and_outer_success": false,
+      "host_and_metadata_unchanged": true,
+      "source_unchanged": true
+    },
+    "target_failures": [
+      "SDF extension rejected frame restores original collider history",
+      "SDF extension rejected frame restores original collider history",
+      "SDF extension rejected frame restores original trail samples",
+      "SDF extension rejected frame restores original trail samples",
+      "SDF extension rejected frame restores original collider history",
+      "SDF extension rejected frame restores original collider history",
+      "SDF extension rejected frame restores original trail samples",
+      "SDF extension rejected frame restores original trail samples",
+      "SDF extension recovery retains unmodified historical collider",
+      "SDF extension recovery retains unmodified historical collider",
+      "SDF extension original trail history reaches actual device buffer"
+    ],
+    "done": true,
+    "released": true,
+    "allocation_count": 30,
+    "native_resource_count": 26,
+    "original_readbacks": 6,
+    "sdf_readbacks": 2,
+    "total_checks": 362,
+    "false_checks": 11
+  },
+  "green": {
+    "process_exit": 0,
+    "checks": {
+      "one_result": true,
+      "not_timeout": true,
+      "no_fatal_or_exit_leaks": true,
+      "exact_expected_engine_errors": true,
+      "actual_metal_startup": true,
+      "native_and_outer_success": true,
+      "host_and_metadata_unchanged": true,
+      "source_unchanged": true
+    },
+    "check_count": 362,
+    "false_check_count": 0,
+    "original_checks": 292,
+    "additional_checks": 70,
+    "readbacks": 6,
+    "sdf_readbacks": 2,
+    "allocation_count": 30,
+    "native_resource_count": 26,
+    "device": "Apple M3 Pro (Apple9)",
+    "device_api": "4.0",
+    "released": true,
+    "done": true,
+    "host_sha256": "4fe70b6694e4c72a2ead7aa9f2b9ded7e103c3fd6e8e4b397dd6f840dde04714",
+    "stdout_sha256": "1806e890b4397f0c67cb5ca5439405239a71bc53325b4b4d85e8e33d66f65ad8",
+    "stderr_sha256": "a92c682c53bb34a9d618d3086125c9552c80af7ff630cd0395885ab04e353e65"
+  },
+  "independent_review": {
+    "review": "independent actual main-Metal RED/GREEN evidence and oracle review",
+    "red_host_sha256": "be4384b4aa95fe39ab7a88d57da238d30ab36aac708d112135f87bd6f40886c4",
+    "green_host_sha256": "4fe70b6694e4c72a2ead7aa9f2b9ded7e103c3fd6e8e4b397dd6f840dde04714",
+    "red_exit": 43,
+    "green_exit": 0,
+    "exact_original_292_and_additive_70_true": true,
+    "exact_362_label_multiplicity_unchanged_between_red_green": true,
+    "red_11_failures_are_target_only": {
+      "SDF extension rejected frame restores original collider history": 4,
+      "SDF extension rejected frame restores original trail samples": 4,
+      "SDF extension recovery retains unmodified historical collider": 2,
+      "SDF extension original trail history reaches actual device buffer": 1
+    },
+    "green_failed_checks": 0,
+    "original_and_sdf_readbacks": {
+      "readbacks_queued": 6,
+      "readbacks_completed": 6,
+      "sdf_readbacks_queued": 2,
+      "sdf_readbacks_completed": 2
+    },
+    "physical_close": {
+      "done": true,
+      "released": true,
+      "allocation_count": 30,
+      "native_resource_count": 26,
+      "true_observations": {
+        "original buffer allocation identity": 30,
+        "original allocation owner authenticated": 30,
+        "owner release removes original buffer RID": 30,
+        "original native resource identity": 26,
+        "original native physical return acknowledged": 26
+      }
+    },
+    "exact_13_engine_diagnostics_unchanged": {
+      "Failed to reset particle sub-emitter buffer.": 2,
+      "Failed to update particle emission buffer.": 2,
+      "Failed to update particle frame parameters buffer.": 8,
+      "Failed to create particle fallback trail buffer.": 1
+    },
+    "all_outer_checks_true": {
+      "one_result": true,
+      "not_timeout": true,
+      "no_fatal_or_exit_leaks": true,
+      "exact_expected_engine_errors": true,
+      "actual_metal_startup": true,
+      "native_and_outer_success": true,
+      "host_and_metadata_unchanged": true,
+      "source_unchanged": true
+    },
+    "source_drift_red_to_green": {
+      "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp": {
+        "red": "0fedf0155222b1ee132faa9b158880a94184f4d1259e6a8a006d19fc75b14436",
+        "green": "a254d2fc628d5362fba04a10edfc1b5020f472a2da0f3cd84bd0cebb6d9ee320"
+      }
+    },
+    "fixture_runner_probe_docs_bytes_unchanged": true,
+    "current_sources_match_green_manifest": true,
+    "green_raw_result_matches_report": true,
+    "red_result_sha256": "9fb0babffa67f379a2eb95ee85cf810b6d0c26dda2705ee964ed4998f7398ac8",
+    "green_result_sha256": "168f081a57db0db42cbfdf0adc2bb5edb0bd775b8bbc220516d95781955971f1",
+    "reviewer_build_or_native_rerun": false,
+    "qualification_scope": "fixed native particle SDF retry/trail/device-params/shader activity/physical retirement fixture; no ANGE product, B4 whole output or arbitrary GPU workload qualification",
+    "full2082_and_doctool": "parent reports pass; not independently reexecuted by this reviewer"
+  },
+  "evidence_directories": [
+    "work/b4-six-rs-sdf-red-20261106",
+    "work/b4-six-rs-sdf-green-20261106"
+  ],
+  "limits": [
+    "This qualifies the fixed native main-Metal retry/readback/physical-return workload, not an ANGE producer, whole OutputReleased, Core owner/source/Host join or full Sprite output.",
+    "The test checks retained collider history and actual uploaded trail parameter words; it does not qualify SDF collision numerical behavior.",
+    "Valid SDF with history greater than two uses temporary interior-collider scratch; histories up to two incur no scratch allocation. Scratch is allocated before history mutation; allocation exhaustion remains the existing fatal engine allocation policy.",
+    "Exactly 13 deliberately injected native errors are retained and matched by message/multiplicity. No blanket error exclusion is used.",
+    "The original 292 checks and six readbacks remain required; the extension explicitly adds 70 checks and two readbacks, four allocations and four native resource observations."
+  ]
+}

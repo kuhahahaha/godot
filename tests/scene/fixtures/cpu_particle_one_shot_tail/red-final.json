@@ -1,0 +1,101 @@
+{
+  "binary": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/particle-current-engine-build-20261111/shader-diagnostic/godot.before.arm64",
+  "fixture_sha256": {
+    "run.gd": "4d08a8e1613246518e6c64bb31243804ba5f5a6c5fb9222fb9327c9afa51260b",
+    "project.godot": "825c930eab3b14b751293252fac14d12cf001b8ab22cb3f34e995b3a0c7fa9f7"
+  },
+  "command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/particle-current-engine-build-20261111/shader-diagnostic/godot.before.arm64",
+    "--headless",
+    "--path",
+    "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-one-shot-tail-7xmnk1go",
+    "--script",
+    "res://run.gd"
+  ],
+  "engine_exit": 1,
+  "timed_out": false,
+  "stdout": "Godot Engine v4.7.2.stable.custom_build - https://godotengine.org\n\nCPU_ONESHOT_ENGINE={\"2d_birth_count\":\"not publicly observable in this fixture\",\"failures\":[\"3D missing old-cycle tail birth: {\\\"active_indices\\\":[2,3,4,5,6],\\\"buffer_size\\\":160,\\\"dimension\\\":3,\\\"emitting\\\":false,\\\"finished\\\":0,\\\"stage\\\":\\\"four_steps\\\"}\",\"3D restart missing old-cycle tail birth\"],\"rows\":[{\"dimension\":2,\"emitting\":false,\"finished\":0,\"stage\":\"four_steps\"},{\"dimension\":2,\"emitting\":false,\"finished\":1,\"stage\":\"drained\"},{\"dimension\":2,\"emitting\":false,\"finished\":1,\"stage\":\"restart_four_steps\"},{\"dimension\":2,\"finished\":2,\"stage\":\"restart_drained\"},{\"active_indices\":[2,3,4,5,6],\"buffer_size\":160,\"dimension\":3,\"emitting\":false,\"finished\":0,\"stage\":\"four_steps\"},{\"active_indices\":[],\"buffer_size\":160,\"dimension\":3,\"emitting\":false,\"finished\":1,\"stage\":\"drained\"},{\"active_indices\":[2,3,4,5,6],\"buffer_size\":160,\"dimension\":3,\"emitting\":false,\"finished\":1,\"stage\":\"restart_four_steps\"},{\"active_indices\":[],\"buffer_size\":160,\"dimension\":3,\"finished\":2,\"stage\":\"restart_drained\"}]}\n",
+  "stderr": "",
+  "errors": [
+    "Engine reported regression failures"
+  ],
+  "result": {
+    "2d_birth_count": "not publicly observable in this fixture",
+    "failures": [
+      "3D missing old-cycle tail birth: {\"active_indices\":[2,3,4,5,6],\"buffer_size\":160,\"dimension\":3,\"emitting\":false,\"finished\":0,\"stage\":\"four_steps\"}",
+      "3D restart missing old-cycle tail birth"
+    ],
+    "rows": [
+      {
+        "dimension": 2,
+        "emitting": false,
+        "finished": 0,
+        "stage": "four_steps"
+      },
+      {
+        "dimension": 2,
+        "emitting": false,
+        "finished": 1,
+        "stage": "drained"
+      },
+      {
+        "dimension": 2,
+        "emitting": false,
+        "finished": 1,
+        "stage": "restart_four_steps"
+      },
+      {
+        "dimension": 2,
+        "finished": 2,
+        "stage": "restart_drained"
+      },
+      {
+        "active_indices": [
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "buffer_size": 160,
+        "dimension": 3,
+        "emitting": false,
+        "finished": 0,
+        "stage": "four_steps"
+      },
+      {
+        "active_indices": [],
+        "buffer_size": 160,
+        "dimension": 3,
+        "emitting": false,
+        "finished": 1,
+        "stage": "drained"
+      },
+      {
+        "active_indices": [
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "buffer_size": 160,
+        "dimension": 3,
+        "emitting": false,
+        "finished": 1,
+        "stage": "restart_four_steps"
+      },
+      {
+        "active_indices": [],
+        "buffer_size": 160,
+        "dimension": 3,
+        "finished": 2,
+        "stage": "restart_drained"
+      }
+    ]
+  },
+  "binary_sha256": "9b9fe0e9583aeb70a06451fa86fe2adf63a56fc33e912b1d2eb59fb3a9093072",
+  "binary_size": 97319152,
+  "binary_mtime_ns": 1794376740152981585,
+  "passed": false
+}

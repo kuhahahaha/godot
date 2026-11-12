@@ -31,6 +31,11 @@
 #include "render_forward_mobile.h"
 
 #include "core/config/project_settings.h"
+#ifdef TESTS_ENABLED
+#include "core/os/os.h"
+#include <cstdio>
+#endif
+#include "servers/rendering/render_capture_test_hooks.h"
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/light_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
@@ -40,6 +45,8 @@
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
 #include "servers/rendering/storage/ltc_lut.gen.h"
+
+#include "modules/modules_enabled.gen.h"
 
 #ifndef XR_DISABLED
 #include "servers/xr/xr_interface.h"
@@ -389,7 +396,7 @@ void RenderForwardMobile::mesh_generate_pipelines(RID p_mesh, bool p_background_
 			SceneShaderForwardMobile::MaterialData *material_shadow = static_cast<SceneShaderForwardMobile::MaterialData *>(material_storage->material_get_data(scene_shader.default_material, RendererRD::MaterialStorage::SHADER_TYPE_3D));
 			if (material_shadow != nullptr) {
 				shader_shadow = material_shadow->shader_data;
-				if (shadow_mesh.is_valid()) {
+				if (shadow_mesh.is_valid() && !mesh_storage->mesh_surface_is_external(mesh_surface)) {
 					mesh_surface_shadow = mesh_storage->mesh_get_surface(shadow_mesh, i);
 				}
 			}
@@ -471,7 +478,28 @@ bool RenderForwardMobile::_render_buffers_can_be_storage() {
 	return false;
 }
 
-RID RenderForwardMobile::_setup_render_pass_uniform_set(RenderListType p_render_list, const RenderDataRD *p_render_data, bool p_is_multiview, RID p_radiance_texture, const RendererRD::MaterialStorage::Samplers &p_samplers, bool p_use_directional_shadow_atlas, uint32_t p_pass_offset) {
+RID RenderForwardMobile::_setup_render_pass_uniform_set(RenderListType p_render_list, const RenderDataRD *p_render_data, bool p_is_multiview, RID p_radiance_texture, const RendererRD::MaterialStorage::Samplers &p_samplers, bool p_use_directional_shadow_atlas, uint32_t p_pass_offset, Error *p_error, Vector<RD::Uniform> *p_native_sources) {
+	if (p_native_sources) {
+#ifdef MODULE_TEXTURE_STREAMING_ENABLED
+		if (p_error) { *p_error = ERR_UNAVAILABLE; }
+		return RID();
+#endif
+		if (!p_error) { return RID(); }
+		if (!RD::get_singleton() || !RD::get_singleton()->native_immutable_is_render_thread()) {
+			*p_error = ERR_UNAUTHORIZED;
+			return RID();
+		}
+		*p_error = OK;
+		if (p_render_list < 0 || p_render_list >= RENDER_LIST_MAX || scene_state.instance_buffer[p_render_list]._get_if_ready(0u).is_null()) {
+			*p_error = ERR_BUSY;
+			return RID();
+		}
+		if (scene_state.uniform_buffers._get_if_ready(uint32_t(0u - p_pass_offset)).is_null()) {
+			*p_error = ERR_BUSY;
+			return RID();
+		}
+	}
+
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 
@@ -518,12 +546,17 @@ RID RenderForwardMobile::_setup_render_pass_uniform_set(RenderListType p_render_
 		u.binding = 1;
 		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC;
 		if (scene_state.instance_buffer[p_render_list].get_size(0u) == 0u) {
+			if (p_native_sources) { *p_error = ERR_BUSY; return RID(); }
 			// Any buffer will do since it's not used, so just create one.
 			// We can't use scene_shader.default_vec4_xform_buffer because it's not dynamic.
 			scene_state.instance_buffer[p_render_list].set_storage_size(0u, INSTANCE_DATA_BUFFER_MIN_SIZE * sizeof(SceneState::InstanceData));
 			scene_state.instance_buffer[p_render_list].prepare_for_upload();
 		}
 		RID instance_buffer = scene_state.instance_buffer[p_render_list]._get(0u);
+		if (p_error && instance_buffer.is_null()) {
+			*p_error = ERR_CANT_CREATE;
+			return RID();
+		}
 		u.append_id(instance_buffer);
 		uniforms.push_back(u);
 	}
@@ -754,7 +787,19 @@ RID RenderForwardMobile::_setup_render_pass_uniform_set(RenderListType p_render_
 	}
 #endif // MODULE_TEXTURE_STREAMING_ENABLED
 
-	return UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_rd, RENDER_PASS_UNIFORM_SET, uniforms);
+	if (p_native_sources) {
+		Vector<RD::Uniform> sources;
+		if (sources.resize(uniforms.size()) != OK) { *p_error = ERR_OUT_OF_MEMORY; return RID(); }
+		for (uint32_t i = 0; i < uniforms.size(); i++) { sources.write[i] = uniforms[i]; }
+		*p_native_sources = std::move(sources);
+		return RID(); // Source collection has no UniformSet identity.
+	}
+
+	const RID uniform_set = UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_rd, RENDER_PASS_UNIFORM_SET, uniforms);
+	if (p_error && uniform_set.is_null()) {
+		*p_error = ERR_CANT_CREATE;
+	}
+	return uniform_set;
 }
 
 void RenderForwardMobile::_setup_lightmaps(const RenderDataRD *p_render_data, const PagedArray<RID> &p_lightmaps, const Transform3D &p_cam_transform) {
@@ -790,7 +835,6 @@ void RenderForwardMobile::_setup_lightmaps(const RenderDataRD *p_render_data, co
 
 		scene_state.lightmap_ids[i] = p_lightmaps[i];
 		scene_state.lightmap_has_sh[i] = light_storage->lightmap_uses_spherical_harmonics(lightmap);
-
 
 		scene_state.lightmaps_used++;
 	}
@@ -864,6 +908,18 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 
 	ERR_FAIL_NULL(p_render_data);
+
+	// External packets must carry an admitted camera source tuple. Ordinary
+	// Mesh packets keep the existing path because `external` remains false.
+	if (!RenderDataRD::admission_succeeded(p_render_data->admit_camera_status())) {
+		ERR_PRINT("External render packet has no admitted camera source.");
+		return;
+	}
+	if (p_render_data->packet_identity.external && !p_render_data->previous_camera_source_admitted()) {
+		ERR_PRINT("External render packet has no admitted previous camera source.");
+		p_render_data->retire_packet();
+		return;
+	}
 
 	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
 	ERR_FAIL_COND(rb.is_null());
@@ -1306,8 +1362,28 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 			c.write[1] = Color(0, 0, 0, 0);
 			clear_flags |= RD::DRAW_CLEAR_COLOR_1;
 		}
-		RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(opaque_framebuffer, clear_flags, c, 0.0f, 0, p_render_data->render_region, breadcrumb);
 		RD::FramebufferFormatID fb_format = RD::get_singleton()->framebuffer_get_format(opaque_framebuffer);
+		NativePassSelection opaque_pass;
+		ERR_FAIL_COND_MSG(!_select_native_pass(PASS_MODE_COLOR, p_render_data->scene_data->view_count, defer_fog, fb_format, 0, opaque_pass), "Invalid native pass selection");
+		const bool has_merged_alpha = merge_transparent_pass && render_list[RENDER_LIST_ALPHA].element_info.size() > 0;
+		RenderListParameters merged_alpha_params(render_list[RENDER_LIST_ALPHA].elements.ptr(), render_list[RENDER_LIST_ALPHA].element_info.ptr(), render_list[RENDER_LIST_ALPHA].elements.size(), reverse_cull, PASS_MODE_COLOR_TRANSPARENT, RID(), base_specialization, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, !is_reflection_probe);
+		if (has_merged_alpha) {
+			// The existing fog branch switches this container to subpass 1
+			// before sky and merged alpha, without deferring alpha's fog.
+			ERR_FAIL_COND_MSG(!_select_native_pass(PASS_MODE_COLOR_TRANSPARENT, p_render_data->scene_data->view_count, false, fb_format, defer_fog ? 1u : 0u, merged_alpha_params.native_pass), "Invalid native pass selection");
+		}
+		RenderListParameters opaque_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_COLOR, rp_uniform_set, base_specialization, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, !is_reflection_probe);
+		opaque_params.native_pass = opaque_pass;
+		const bool prepare_external_color = !is_reflection_probe && opaque_params.view_count == 1 && p_render_data->get_native_camera_source().is_valid();
+		if (prepare_external_color) {
+			opaque_params.external_prepared_render_data = p_render_data;
+			_prepare_external_color(opaque_params);
+			if (has_merged_alpha) {
+				merged_alpha_params.external_prepared_render_data = p_render_data;
+				_prepare_external_color(merged_alpha_params);
+			}
+		}
+		RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(opaque_framebuffer, clear_flags, c, 0.0f, 0, p_render_data->render_region, breadcrumb);
 
 		if (copy_canvas) {
 			if (p_render_data->scene_data->view_count > 1) {
@@ -1320,13 +1396,8 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 			}
 		}
 
-		if (render_list[RENDER_LIST_OPAQUE].elements.size() > 0) {
-			RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_COLOR, rp_uniform_set, base_specialization, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, !is_reflection_probe);
-			render_list_params.defer_opaque_fog = defer_fog;
-			render_list_params.framebuffer_format = fb_format;
-			render_list_params.subpass = RD::get_singleton()->draw_list_get_current_pass(); // Should now always be 0.
-
-			_render_list(draw_list, fb_format, &render_list_params, 0, render_list_params.element_count);
+		if (opaque_params.element_count > 0) {
+			_render_list(draw_list, &opaque_params, 0, opaque_params.element_count);
 		}
 
 		RD::get_singleton()->draw_command_end_label(); //Render Opaque
@@ -1345,18 +1416,13 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 		}
 
 		if (merge_transparent_pass) {
-			if (render_list[RENDER_LIST_ALPHA].element_info.size() > 0) {
+			if (has_merged_alpha) {
 				// transparent pass
 
 				RD::get_singleton()->draw_command_begin_label("Render Transparent");
 
-				rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_ALPHA, p_render_data, is_multiview, radiance_texture, samplers, true);
-
-				RenderListParameters render_list_params(render_list[RENDER_LIST_ALPHA].elements.ptr(), render_list[RENDER_LIST_ALPHA].element_info.ptr(), render_list[RENDER_LIST_ALPHA].elements.size(), reverse_cull, PASS_MODE_COLOR_TRANSPARENT, rp_uniform_set, base_specialization, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, !is_reflection_probe);
-				render_list_params.framebuffer_format = fb_format;
-				render_list_params.subpass = RD::get_singleton()->draw_list_get_current_pass(); // Should now always be 0.
-
-				_render_list(draw_list, fb_format, &render_list_params, 0, render_list_params.element_count);
+				merged_alpha_params.render_pass_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_ALPHA, p_render_data, is_multiview, radiance_texture, samplers, true);
+				_render_list(draw_list, &merged_alpha_params, 0, merged_alpha_params.element_count);
 
 				RD::get_singleton()->draw_command_end_label(); // Render Transparent Subpass
 			}
@@ -1426,12 +1492,18 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 				// this may be needed if we re-introduced steps that change info, not sure which do so in the previous implementation
 				//_setup_environment(p_render_data, is_reflection_probe, screen_size, screen_size, p_default_bg_color, false);
 
-				RenderListParameters render_list_params(render_list[RENDER_LIST_ALPHA].elements.ptr(), render_list[RENDER_LIST_ALPHA].element_info.ptr(), render_list[RENDER_LIST_ALPHA].elements.size(), reverse_cull, PASS_MODE_COLOR, rp_uniform_set, base_specialization, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, !is_reflection_probe);
-				render_list_params.framebuffer_format = fb_format;
-				render_list_params.subpass = RD::get_singleton()->draw_list_get_current_pass(); // Should now always be 0.
+				const PassMode alpha_mode = prepare_external_color ? PASS_MODE_COLOR_TRANSPARENT : PASS_MODE_COLOR;
+				RenderListParameters render_list_params(render_list[RENDER_LIST_ALPHA].elements.ptr(), render_list[RENDER_LIST_ALPHA].element_info.ptr(), render_list[RENDER_LIST_ALPHA].elements.size(), reverse_cull, alpha_mode, rp_uniform_set, base_specialization, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, !is_reflection_probe);
+				// The exact prepared key starts at subpass zero of this new list.
+				const uint32_t alpha_subpass = prepare_external_color ? 0 : RD::get_singleton()->draw_list_get_current_pass();
+				ERR_FAIL_COND_MSG(!_select_native_pass(render_list_params.pass_mode, render_list_params.view_count, render_list_params.defer_opaque_fog, fb_format, alpha_subpass, render_list_params.native_pass), "Invalid native pass selection");
+				if (prepare_external_color) {
+					render_list_params.external_prepared_render_data = p_render_data;
+					_prepare_external_color(render_list_params);
+				}
 
 				draw_list = RD::get_singleton()->draw_list_begin(framebuffer, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 1.0f, 0, p_render_data->render_region, breadcrumb);
-				_render_list(draw_list, fb_format, &render_list_params, 0, render_list_params.element_count);
+				_render_list(draw_list, &render_list_params, 0, render_list_params.element_count);
 				RD::get_singleton()->draw_list_end();
 
 				RD::get_singleton()->draw_command_end_label(); // Render Transparent Pass
@@ -1809,8 +1881,10 @@ void RenderForwardMobile::_render_material(const Transform3D &p_cam_transform, c
 			Color(0, 0, 0, 0),
 			Color(0, 0, 0, 0)
 		};
+		const RD::FramebufferFormatID fb_format = RD::get_singleton()->framebuffer_get_format(p_framebuffer);
+		ERR_FAIL_COND_MSG(!_select_native_pass(render_list_params.pass_mode, render_list_params.view_count, render_list_params.defer_opaque_fog, fb_format, render_list_params.subpass, render_list_params.native_pass), "Invalid native pass selection");
 		RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_framebuffer, RD::DRAW_CLEAR_ALL, clear, 0.0f, 0, p_region);
-		_render_list(draw_list, RD::get_singleton()->framebuffer_get_format(p_framebuffer), &render_list_params, 0, render_list_params.element_count);
+		_render_list(draw_list, &render_list_params, 0, render_list_params.element_count);
 		RD::get_singleton()->draw_list_end();
 	}
 
@@ -1860,6 +1934,8 @@ void RenderForwardMobile::_render_uv2(const PagedArray<RenderGeometryInstance *>
 			Color(0, 0, 0, 0)
 		};
 
+		const RD::FramebufferFormatID fb_format = RD::get_singleton()->framebuffer_get_format(p_framebuffer);
+		ERR_FAIL_COND_MSG(!_select_native_pass(render_list_params.pass_mode, render_list_params.view_count, render_list_params.defer_opaque_fog, fb_format, render_list_params.subpass, render_list_params.native_pass), "Invalid native pass selection");
 		RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_framebuffer, RD::DRAW_CLEAR_ALL, clear, 0.0f, 0, p_region);
 
 		const int uv_offset_count = 9;
@@ -1881,10 +1957,10 @@ void RenderForwardMobile::_render_uv2(const PagedArray<RenderGeometryInstance *>
 			ofs.x /= p_region.size.width;
 			ofs.y /= p_region.size.height;
 			render_list_params.uv_offset = ofs;
-			_render_list(draw_list, RD::get_singleton()->framebuffer_get_format(p_framebuffer), &render_list_params, 0, render_list_params.element_count); //first wireframe, for pseudo conservative
+			_render_list(draw_list, &render_list_params, 0, render_list_params.element_count); //first wireframe, for pseudo conservative
 		}
 		render_list_params.uv_offset = Vector2();
-		_render_list(draw_list, RD::get_singleton()->framebuffer_get_format(p_framebuffer), &render_list_params, 0, render_list_params.element_count); //second regular triangles
+		_render_list(draw_list, &render_list_params, 0, render_list_params.element_count); //second regular triangles
 
 		RD::get_singleton()->draw_list_end();
 	}
@@ -1897,11 +1973,28 @@ void RenderForwardMobile::_render_sdfgi(Ref<RenderSceneBuffersRD> p_render_buffe
 }
 
 void RenderForwardMobile::_render_particle_collider_heightfield(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances) {
-	RENDER_TIMESTAMP("Setup GPUParticlesCollisionHeightField3D");
+	_render_particle_collider_heightfield_impl(p_fb, p_cam_transform, p_cam_projection, p_instances, nullptr);
+}
 
-	RD::get_singleton()->draw_command_begin_label("Render Collider Heightfield");
+Error RenderForwardMobile::_render_particle_collider_heightfield_checked(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances, RendererRD::HeightCaptureCheckedSink &r_sink) {
+	return _render_particle_collider_heightfield_impl(p_fb, p_cam_transform, p_cam_projection, p_instances, &r_sink);
+}
 
-	_update_render_base_uniform_set();
+Error RenderForwardMobile::_render_particle_collider_heightfield_impl(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances, RendererRD::HeightCaptureCheckedSink *p_sink) {
+	if (p_sink && p_sink->get_error() != OK) {
+		return p_sink->get_error();
+	}
+	if (!p_sink) {
+		RENDER_TIMESTAMP("Setup GPUParticlesCollisionHeightField3D");
+		RD::get_singleton()->draw_command_begin_label("Render Collider Heightfield");
+	}
+
+	Error setup_error = OK;
+	Error *setup_result = p_sink ? &setup_error : nullptr;
+	_update_render_base_uniform_set(setup_result);
+	if (p_sink && setup_error != OK) {
+		return p_sink->reject(setup_error);
+	}
 
 	RenderSceneDataRD scene_data;
 	scene_data.flip_y = true;
@@ -1921,24 +2014,42 @@ void RenderForwardMobile::_render_particle_collider_heightfield(RID p_fb, const 
 	render_data.instances = &p_instances;
 
 	Size2i screen_size = RD::get_singleton()->framebuffer_get_size(p_fb);
-	_setup_environment(&render_data, true, screen_size, screen_size, Color(), false, false);
+	_setup_environment(&render_data, true, screen_size, screen_size, Color(), false, false, setup_result);
+	if (p_sink && setup_error != OK) {
+		return p_sink->reject(setup_error);
+	}
 
 	PassMode pass_mode = PASS_MODE_SHADOW;
 
 	_fill_render_list(RENDER_LIST_SECONDARY, &render_data, pass_mode);
 	render_list[RENDER_LIST_SECONDARY].sort_by_key();
-	_fill_instance_data(RENDER_LIST_SECONDARY);
+	_fill_instance_data(RENDER_LIST_SECONDARY, 0, -1, true, setup_result);
+	if (p_sink && setup_error != OK) {
+		return p_sink->reject(setup_error);
+	}
 
-	RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_SECONDARY, nullptr, false, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default());
+	RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_SECONDARY, nullptr, false, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default(), false, 0u, setup_result);
+	if (p_sink && setup_error != OK) {
+		return p_sink->reject(setup_error);
+	}
 
-	RENDER_TIMESTAMP("Render Collider Heightfield");
+	if (!p_sink) {
+		RENDER_TIMESTAMP("Render Collider Heightfield");
+	}
 
 	{
 		//regular forward for now
 		RenderListParameters render_list_params(render_list[RENDER_LIST_SECONDARY].elements.ptr(), render_list[RENDER_LIST_SECONDARY].element_info.ptr(), render_list[RENDER_LIST_SECONDARY].elements.size(), false, pass_mode, rp_uniform_set, scene_shader.default_specialization);
-		_render_list_with_draw_list(&render_list_params, p_fb);
+		if (p_sink) {
+			_render_height_list_checked(&render_list_params, p_fb, *p_sink);
+		} else {
+			_render_list_with_draw_list(&render_list_params, p_fb, RD::DRAW_CLEAR_DEPTH);
+		}
 	}
-	RD::get_singleton()->draw_command_end_label();
+	if (!p_sink) {
+		RD::get_singleton()->draw_command_end_label();
+	}
+	return p_sink ? p_sink->get_error() : OK;
 }
 
 void RenderForwardMobile::base_uniforms_changed() {
@@ -1948,15 +2059,32 @@ void RenderForwardMobile::base_uniforms_changed() {
 	render_base_uniform_set = RID();
 }
 
-void RenderForwardMobile::_update_render_base_uniform_set() {
+void RenderForwardMobile::_update_render_base_uniform_set(Error *p_error, Vector<RD::Uniform> *p_native_sources) {
+	if (p_native_sources) {
+#ifdef MODULE_TEXTURE_STREAMING_ENABLED
+		if (p_error) { *p_error = ERR_UNAVAILABLE; }
+		return;
+#endif
+		if (!p_error) { return; }
+		if (!RD::get_singleton() || !RD::get_singleton()->native_immutable_is_render_thread()) {
+			*p_error = ERR_UNAUTHORIZED;
+			return;
+		}
+		*p_error = OK;
+		if (ltc.lut1_texture.is_null() || ltc.lut2_texture.is_null()) {
+			*p_error = ERR_BUSY;
+			return;
+		}
+	}
+
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
-	if (render_base_uniform_set.is_null() || !RD::get_singleton()->uniform_set_is_valid(render_base_uniform_set) || (lightmap_texture_array_version != light_storage->lightmap_array_get_version())) {
-		if (render_base_uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(render_base_uniform_set)) {
+	if (p_native_sources || render_base_uniform_set.is_null() || !RD::get_singleton()->uniform_set_is_valid(render_base_uniform_set) || (lightmap_texture_array_version != light_storage->lightmap_array_get_version())) {
+		if (!p_native_sources && render_base_uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(render_base_uniform_set)) {
 			RD::get_singleton()->free_rid(render_base_uniform_set);
 		}
 
-		lightmap_texture_array_version = light_storage->lightmap_array_get_version();
+		if (!p_native_sources) { lightmap_texture_array_version = light_storage->lightmap_array_get_version(); }
 
 		thread_local LocalVector<RD::Uniform> uniforms;
 		uniforms.clear();
@@ -2060,7 +2188,7 @@ void RenderForwardMobile::_update_render_base_uniform_set() {
 			uniforms.push_back(u);
 		}
 
-		{ // Lookup-table for Area Lights - Linearly transformed cosines (LTC)
+		if (!p_error) { // Lookup-table for Area Lights - Linearly transformed cosines (LTC)
 			if (ltc.lut1_texture.is_null() || ltc.lut2_texture.is_null()) {
 				Ref<Image> lut1_image;
 				int dimensions = LTC_LUT_DIMENSIONS;
@@ -2087,13 +2215,62 @@ void RenderForwardMobile::_update_render_base_uniform_set() {
 
 				ltc.lut2_texture = RS::get_singleton()->texture_2d_create(lut2_image);
 			}
+		} else { // Lookup-table for Area Lights - Linearly transformed cosines (LTC)
+			int dimensions = LTC_LUT_DIMENSIONS;
+			if (ltc.lut1_texture.is_null()) {
+				Ref<Image> lut1_image;
+				int lut1_bytes = 4 * dimensions * dimensions;
+				size_t lut1_size = lut1_bytes * 4; // float
+
+				Vector<uint8_t> lut1_data;
+				lut1_data.resize(lut1_size);
+
+				memcpy(lut1_data.ptrw(), LTC_LUT1, lut1_size);
+				lut1_image = Image::create_from_data(dimensions, dimensions, false, Image::FORMAT_RGBAF, lut1_data);
+
+				if (p_error && lut1_image.is_null()) {
+					*p_error = ERR_CANT_CREATE;
+					return;
+				}
+				ltc.lut1_texture = RS::get_singleton()->texture_2d_create(lut1_image);
+				if (p_error && ltc.lut1_texture.is_null()) {
+					*p_error = ERR_CANT_CREATE;
+					return;
+				}
+			}
+			if (ltc.lut2_texture.is_null()) {
+				int lut2_bytes = 4 * dimensions * dimensions;
+				size_t lut2_size = lut2_bytes * 4;
+
+				Ref<Image> lut2_image;
+				Vector<uint8_t> lut2_data;
+				lut2_data.resize(lut2_size);
+
+				memcpy(lut2_data.ptrw(), LTC_LUT2, lut2_size);
+				lut2_image = Image::create_from_data(dimensions, dimensions, false, Image::FORMAT_RGBAF, lut2_data);
+
+				if (p_error && lut2_image.is_null()) {
+					*p_error = ERR_CANT_CREATE;
+					return;
+				}
+				ltc.lut2_texture = RS::get_singleton()->texture_2d_create(lut2_image);
+				if (p_error && ltc.lut2_texture.is_null()) {
+					*p_error = ERR_CANT_CREATE;
+					return;
+				}
+			}
 		}
 
 		{
 			RD::Uniform u;
 			u.binding = 15;
 			u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
-			u.append_id(RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut1_texture));
+			const RID texture = RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut1_texture);
+			if (p_error && texture.is_null()) {
+				*p_error = ERR_CANT_CREATE;
+				return;
+			}
+			u.append_id(texture);
 			uniforms.push_back(u);
 		}
 
@@ -2101,7 +2278,12 @@ void RenderForwardMobile::_update_render_base_uniform_set() {
 			RD::Uniform u;
 			u.binding = 16;
 			u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
-			u.append_id(RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut2_texture));
+			const RID texture = RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut2_texture);
+			if (p_error && texture.is_null()) {
+				*p_error = ERR_CANT_CREATE;
+				return;
+			}
+			u.append_id(texture);
 			uniforms.push_back(u);
 		}
 
@@ -2114,7 +2296,18 @@ void RenderForwardMobile::_update_render_base_uniform_set() {
 			uniforms.push_back(u);
 		}
 
+		if (p_native_sources) {
+			Vector<RD::Uniform> sources;
+			if (sources.resize(uniforms.size()) != OK) { *p_error = ERR_OUT_OF_MEMORY; return; }
+			for (uint32_t i = 0; i < uniforms.size(); i++) { sources.write[i] = uniforms[i]; }
+			*p_native_sources = std::move(sources);
+			return;
+		}
+
 		render_base_uniform_set = UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_rd, SCENE_UNIFORM_SET, uniforms);
+	}
+	if (p_error && !RD::get_singleton()->uniform_set_is_valid(render_base_uniform_set)) {
+		*p_error = ERR_CANT_CREATE;
 	}
 }
 
@@ -2142,7 +2335,7 @@ void RenderForwardMobile::SceneState::grow_instance_buffer(RenderListType p_rend
 	}
 }
 
-void RenderForwardMobile::_fill_instance_data(RenderListType p_render_list, uint32_t p_offset, int32_t p_max_elements, bool p_update_buffer) {
+void RenderForwardMobile::_fill_instance_data(RenderListType p_render_list, uint32_t p_offset, int32_t p_max_elements, bool p_update_buffer, Error *p_error) {
 	RenderList *rl = &render_list[p_render_list];
 	uint32_t element_total = p_max_elements >= 0 ? uint32_t(p_max_elements) : rl->elements.size();
 
@@ -2151,11 +2344,19 @@ void RenderForwardMobile::_fill_instance_data(RenderListType p_render_list, uint
 	uint64_t frame = RSG::rasterizer->get_frame_number();
 
 	scene_state.grow_instance_buffer(p_render_list, p_offset + element_total, p_offset != 0u);
+	if (p_error && element_total > 0u && scene_state.instance_buffer[p_render_list]._get(0u).is_null()) {
+		*p_error = ERR_CANT_CREATE;
+		return;
+	}
 	if (!scene_state.curr_gpu_ptr[p_render_list] && element_total > 0u) {
 		// The old buffer was replaced for another larger one. We must start copying from scratch.
 		element_total += p_offset;
 		p_offset = 0u;
 		scene_state.curr_gpu_ptr[p_render_list] = reinterpret_cast<SceneState::InstanceData *>(scene_state.instance_buffer[p_render_list].map_raw_for_upload(0u));
+		if (p_error && !scene_state.curr_gpu_ptr[p_render_list]) {
+			*p_error = ERR_CANT_CREATE;
+			return;
+		}
 	}
 	for (uint32_t i = 0; i < element_total; i++) {
 		GeometryInstanceSurfaceDataCache *surface = rl->elements[i + p_offset];
@@ -2239,6 +2440,7 @@ _FORCE_INLINE_ static uint32_t _indices_to_primitives(RSE::PrimitiveType p_primi
 }
 
 void RenderForwardMobile::_fill_render_list(RenderListType p_render_list, const RenderDataRD *p_render_data, PassMode p_pass_mode, bool p_append) {
+	active_render_data = p_render_data;
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 
 	if (p_render_list == RENDER_LIST_OPAQUE) {
@@ -2348,6 +2550,10 @@ void RenderForwardMobile::_fill_render_list(RenderListType p_render_list, const 
 		}
 
 		while (surf) {
+			if (!RenderDataRD::admission_succeeded(p_render_data->admit_surface_status(surf->material_generation))) {
+				surf = surf->next;
+				continue;
+			}
 			surf->sort.uses_lightmap = 0;
 
 			// LOD
@@ -2431,7 +2637,7 @@ void RenderForwardMobile::_fill_render_list(RenderListType p_render_list, const 
 	}
 }
 
-void RenderForwardMobile::_setup_environment(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, bool p_opaque_render_buffers, bool p_pancake_shadows) {
+void RenderForwardMobile::_setup_environment(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, bool p_opaque_render_buffers, bool p_pancake_shadows, Error *p_error) {
 	RID env = is_environment(p_render_data->environment) ? p_render_data->environment : RID();
 	RID reflection_probe_instance = p_render_data->reflection_probe.is_valid() ? RendererRD::LightStorage::get_singleton()->reflection_probe_instance_get_probe(p_render_data->reflection_probe) : RID();
 
@@ -2444,57 +2650,361 @@ void RenderForwardMobile::_setup_environment(const RenderDataRD *p_render_data, 
 
 	// Start a new setup.
 	scene_state.uniform_buffers.prepare_for_upload();
-	p_render_data->scene_data->update_ubo(scene_state.uniform_buffers.get_for_upload(0u), get_debug_draw_mode(), env, reflection_probe_instance, p_render_data->camera_attributes, p_pancake_shadows, p_screen_size, p_viewport_size, p_default_bg_color, luminance_multiplier, p_opaque_render_buffers, false);
+	const RID uniform_buffer = scene_state.uniform_buffers.get_for_upload(0u);
+	if (p_error && uniform_buffer.is_null()) {
+		*p_error = ERR_CANT_CREATE;
+		return;
+	}
+	p_render_data->scene_data->update_ubo(uniform_buffer, get_debug_draw_mode(), env, reflection_probe_instance, p_render_data->camera_attributes, p_pancake_shadows, p_screen_size, p_viewport_size, p_default_bg_color, luminance_multiplier, p_opaque_render_buffers, false, p_error);
 }
 
 /// RENDERING ///
 
-void RenderForwardMobile::_render_list(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
-	//use template for faster performance (pass mode comparisons are inlined)
+bool RenderForwardMobile::_select_native_pass(PassMode p_pass_mode, uint32_t p_view_count, bool p_defer_opaque_fog, RD::FramebufferFormatID p_framebuffer_format, uint32_t p_subpass, NativePassSelection &r_selection) {
+	NativePassSelection selected;
+	selected.pass_mode = p_pass_mode;
+	selected.framebuffer_format = p_framebuffer_format;
+	selected.subpass = p_subpass;
 
-	switch (p_params->pass_mode) {
-		case PASS_MODE_COLOR: {
-			_render_list_template<PASS_MODE_COLOR>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
-		} break;
+	switch (p_pass_mode) {
+		case PASS_MODE_COLOR:
 		case PASS_MODE_COLOR_TRANSPARENT: {
-			_render_list_template<PASS_MODE_COLOR_TRANSPARENT>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			if (p_defer_opaque_fog) {
+				selected.version = p_view_count > 1 ? SceneShaderForwardMobile::SHADER_VERSION_COLOR_FOG_MASK_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_COLOR_FOG_MASK;
+				selected.lightmap_version = p_view_count > 1 ? SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_FOG_MASK_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_FOG_MASK;
+			} else {
+				selected.version = p_view_count > 1 ? SceneShaderForwardMobile::SHADER_VERSION_COLOR_PASS_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_COLOR_PASS;
+				selected.lightmap_version = p_view_count > 1 ? SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_COLOR_PASS_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_COLOR_PASS;
+			}
 		} break;
 		case PASS_MODE_SHADOW: {
-			_render_list_template<PASS_MODE_SHADOW>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			selected.version = p_view_count > 1 ? SceneShaderForwardMobile::SHADER_VERSION_SHADOW_PASS_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_SHADOW_PASS;
+			selected.lightmap_version = selected.version;
 		} break;
 		case PASS_MODE_SHADOW_DP: {
-			_render_list_template<PASS_MODE_SHADOW_DP>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			if (p_view_count > 1) {
+				return false;
+			}
+			selected.version = SceneShaderForwardMobile::SHADER_VERSION_SHADOW_PASS_DP;
+			selected.lightmap_version = selected.version;
 		} break;
 		case PASS_MODE_DEPTH_MATERIAL: {
-			_render_list_template<PASS_MODE_DEPTH_MATERIAL>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			if (p_view_count > 1) {
+				return false;
+			}
+			selected.version = SceneShaderForwardMobile::SHADER_VERSION_DEPTH_PASS_WITH_MATERIAL;
+			selected.lightmap_version = selected.version;
 		} break;
 		case PASS_MODE_MOTION_VECTORS: {
-			_render_list_template<PASS_MODE_MOTION_VECTORS>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			// Preserve the original motion version even for a mono view.
+			selected.version = SceneShaderForwardMobile::SHADER_VERSION_MOTION_VECTORS_MULTIVIEW;
+			selected.lightmap_version = selected.version;
+		} break;
+		default:
+			return false;
+	}
+
+	r_selection = selected;
+	return true;
+}
+
+void RenderForwardMobile::_render_list(RenderingDevice::DrawListID p_draw_list, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
+	//use template for faster performance (pass mode comparisons are inlined)
+
+	switch (p_params->native_pass.pass_mode) {
+		case PASS_MODE_COLOR: {
+			_render_list_template<PASS_MODE_COLOR>(p_draw_list, p_params, p_from_element, p_to_element);
+		} break;
+		case PASS_MODE_COLOR_TRANSPARENT: {
+			_render_list_template<PASS_MODE_COLOR_TRANSPARENT>(p_draw_list, p_params, p_from_element, p_to_element);
+		} break;
+		case PASS_MODE_SHADOW: {
+			_render_list_template<PASS_MODE_SHADOW>(p_draw_list, p_params, p_from_element, p_to_element);
+		} break;
+		case PASS_MODE_SHADOW_DP: {
+			_render_list_template<PASS_MODE_SHADOW_DP>(p_draw_list, p_params, p_from_element, p_to_element);
+		} break;
+		case PASS_MODE_DEPTH_MATERIAL: {
+			_render_list_template<PASS_MODE_DEPTH_MATERIAL>(p_draw_list, p_params, p_from_element, p_to_element);
+		} break;
+		case PASS_MODE_MOTION_VECTORS: {
+			_render_list_template<PASS_MODE_MOTION_VECTORS>(p_draw_list, p_params, p_from_element, p_to_element);
 		}
 	}
 }
 
 void RenderForwardMobile::_render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags, const Vector<Color> &p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region) {
 	RD::FramebufferFormatID fb_format = RD::get_singleton()->framebuffer_get_format(p_framebuffer);
-	p_params->framebuffer_format = fb_format;
+	ERR_FAIL_COND_MSG(!_select_native_pass(p_params->pass_mode, p_params->view_count, p_params->defer_opaque_fog, fb_format, p_params->subpass, p_params->native_pass), "Invalid native pass selection");
 
 	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_framebuffer, p_draw_flags, p_clear_color_values, p_clear_depth_value, p_clear_stencil_value, p_region);
-	_render_list(draw_list, fb_format, p_params, 0, p_params->element_count);
+	_render_list(draw_list, p_params, 0, p_params->element_count);
 	RD::get_singleton()->draw_list_end();
+	active_render_data = nullptr;
+}
+
+Error RenderForwardMobile::_render_height_list_checked(RenderListParameters *p_params, RID p_framebuffer, RendererRD::HeightCaptureCheckedSink &r_sink) {
+	RD *rd = RD::get_singleton();
+	if (!rd->uniform_set_is_valid(render_base_uniform_set) || !rd->uniform_set_is_valid(p_params->render_pass_uniform_set) || !rd->uniform_set_is_valid(scene_shader.default_vec4_xform_uniform_set)) {
+		return r_sink.reject(ERR_INVALID_DATA);
+	}
+	const RD::FramebufferFormatID format = rd->framebuffer_get_format(p_framebuffer);
+	if (!_select_native_pass(p_params->pass_mode, p_params->view_count, p_params->defer_opaque_fog, format, p_params->subpass, p_params->native_pass)) {
+		return r_sink.reject(ERR_INVALID_PARAMETER);
+	}
+	LocalVector<PreparedHeightGeometry> prepared;
+	prepared.reserve(p_params->element_count);
+	// This is the existing resolver template in preparation mode, not a second
+	// resolver or a pipeline cache. No list is open during resource lookup.
+	_render_list_template<PASS_MODE_SHADOW>(RD::INVALID_ID, p_params, 0, p_params->element_count, &r_sink, &prepared);
+	if (r_sink.get_error() != OK) {
+		return r_sink.get_error();
+	}
+	{
+		// Count the exact calls made below from this prepared list, using the
+		// same bind-elision conditions. Geometry is prepared only once.
+		uint64_t native_records = 5; // Begin, three global sets, End.
+		uint64_t transfer_records = 0;
+		auto count_transfers = [&](RendererRD::HeightCaptureCheckedSink::Operation operation, RID resource) -> Error {
+			uint32_t bound = 0;
+			const Error error = r_sink.get_bind_transfer_bound(operation, resource, bound);
+			if (error != OK) {
+				return error;
+			}
+			// Each prior sum fits uint32 capacity, so uint64 cannot wrap.
+			transfer_records += bound;
+			return transfer_records <= r_sink.get_transfer_capacity() ? OK : ERR_BUSY;
+		};
+		using HeightOperation = RendererRD::HeightCaptureCheckedSink::Operation;
+		for (RID set : { render_base_uniform_set, p_params->render_pass_uniform_set, scene_shader.default_vec4_xform_uniform_set }) {
+			const Error error = count_transfers(HeightOperation::UniformSet, set);
+			if (error != OK) {
+				return r_sink.reject(error);
+			}
+		}
+		RID previous_vertex_array;
+		RID previous_index_array;
+		RID previous_pipeline;
+		RID previous_transforms;
+		RID previous_material;
+		for (const PreparedHeightGeometry &item : prepared) {
+			Error error = OK;
+			if (previous_vertex_array != item.vertex_array) {
+				++native_records;
+				error = count_transfers(HeightOperation::VertexArray, item.vertex_array);
+			}
+			previous_vertex_array = item.vertex_array;
+			if (error == OK && previous_index_array != item.index_array && item.index_array.is_valid()) {
+				++native_records;
+				error = count_transfers(HeightOperation::IndexArray, item.index_array);
+			}
+			previous_index_array = item.index_array;
+			if (previous_pipeline != item.pipeline) {
+				++native_records;
+			}
+			previous_pipeline = item.pipeline;
+			if (error == OK && item.transforms.is_valid() && previous_transforms != item.transforms) {
+				++native_records;
+				error = count_transfers(HeightOperation::UniformSet, item.transforms);
+			}
+			previous_transforms = item.transforms;
+			if (error == OK && item.material.is_valid() && previous_material != item.material) {
+				++native_records;
+				error = count_transfers(HeightOperation::UniformSet, item.material);
+			}
+			previous_material = item.material;
+			if (error != OK) {
+				return r_sink.reject(error);
+			}
+			native_records += 2; // Push constant and direct draw.
+		}
+		if (native_records > r_sink.get_business_capacity()) {
+			return r_sink.reject(ERR_BUSY); // Before Begin and before_modify.
+		}
+	}
+	if (r_sink.begin(p_framebuffer, RD::DRAW_CLEAR_DEPTH) != OK) {
+		return r_sink.finish();
+	}
+	if (r_sink.bind_uniform_set(render_base_uniform_set, SCENE_UNIFORM_SET) != OK ||
+			r_sink.bind_uniform_set(p_params->render_pass_uniform_set, RENDER_PASS_UNIFORM_SET) != OK ||
+			r_sink.bind_uniform_set(scene_shader.default_vec4_xform_uniform_set, TRANSFORMS_UNIFORM_SET) != OK) {
+		return r_sink.finish();
+	}
+	RID previous_vertex_array;
+	RID previous_index_array;
+	RID previous_pipeline;
+	RID previous_transforms;
+	RID previous_material;
+	for (const PreparedHeightGeometry &item : prepared) {
+		if (previous_vertex_array != item.vertex_array && r_sink.bind_vertex_array(item.vertex_array) != OK) {
+			return r_sink.finish();
+		}
+		previous_vertex_array = item.vertex_array;
+		if (previous_index_array != item.index_array && item.index_array.is_valid() && r_sink.bind_index_array(item.index_array) != OK) {
+			return r_sink.finish();
+		}
+		previous_index_array = item.index_array;
+		if (previous_pipeline != item.pipeline && r_sink.bind_pipeline(item.pipeline) != OK) {
+			return r_sink.finish();
+		}
+		previous_pipeline = item.pipeline;
+		if (item.transforms.is_valid() && previous_transforms != item.transforms && r_sink.bind_uniform_set(item.transforms, TRANSFORMS_UNIFORM_SET) != OK) {
+			return r_sink.finish();
+		}
+		previous_transforms = item.transforms;
+		if (item.material.is_valid() && previous_material != item.material && r_sink.bind_uniform_set(item.material, MATERIAL_UNIFORM_SET) != OK) {
+			return r_sink.finish();
+		}
+		previous_material = item.material;
+		if (r_sink.set_push_constant(&item.push_constant, item.push_constant_size) != OK || r_sink.draw_geometry_prepared(item.index_array.is_valid(), item.instance_count) != OK) {
+			return r_sink.finish();
+		}
+	}
+	return r_sink.finish();
+}
+
+bool RenderForwardMobile::_select_native_surface_pipeline(const RenderListParameters &p_params, uint32_t p_element,
+		const NativeSurfacePipelineOverride &p_override, NativeSurfacePipelineSelection &r_selection) {
+	const GeometryInstanceSurfaceDataCache *surf = p_params.elements[p_element];
+	const GeometryInstanceForwardMobile *inst = surf->owner;
+	if (inst->instance_count == 0) {
+		return false;
+	}
+	const bool allow_override = surf->external_surface_index == UINT32_MAX && p_override.shader;
+	const bool shadow_pass = p_params.native_pass.pass_mode == PASS_MODE_SHADOW || p_params.native_pass.pass_mode == PASS_MODE_SHADOW_DP;
+	NativeSurfacePipelineSelection selected;
+	auto &specialization = selected.base_key.shader_specialization;
+	specialization = p_params.base_specialization;
+	specialization.multimesh = bool(inst->flags_cache & INSTANCE_DATA_FLAG_MULTIMESH);
+	specialization.multimesh_format_2d = bool(inst->flags_cache & INSTANCE_DATA_FLAG_MULTIMESH_FORMAT_2D);
+	specialization.multimesh_has_color = bool(inst->flags_cache & INSTANCE_DATA_FLAG_MULTIMESH_HAS_COLOR);
+	specialization.multimesh_has_custom_data = bool(inst->flags_cache & INSTANCE_DATA_FLAG_MULTIMESH_HAS_CUSTOM_DATA);
+	if (shadow_pass) {
+		selected.material_uniform_set = surf->material_uniform_set_shadow;
+		selected.shader = surf->shader_shadow;
+		selected.mesh_surface = surf->surface_shadow;
+	} else {
+		specialization.use_light_projector = inst->use_projector;
+		specialization.use_light_soft_shadows = inst->use_soft_shadow;
+		specialization.omni_lights = SceneShaderForwardMobile::shader_count_for(inst->omni_light_count);
+		specialization.spot_lights = SceneShaderForwardMobile::shader_count_for(inst->spot_light_count);
+		specialization.area_lights = SceneShaderForwardMobile::shader_count_for(inst->area_light_count);
+		specialization.reflection_probes = SceneShaderForwardMobile::shader_count_for(inst->reflection_probe_count);
+		specialization.decals = inst->decals_count > 0;
+		selected.material_uniform_set = allow_override ? p_override.material_uniform_set : surf->material_uniform_set;
+		selected.shader = allow_override ? p_override.shader : surf->shader;
+		selected.used_material = allow_override ? nullptr : surf->material;
+		selected.mesh_surface = surf->surface;
+	}
+	if (p_params.native_pass.pass_mode == PASS_MODE_DEPTH_MATERIAL || (shadow_pass && (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_DOUBLE_SIDED_SHADOWS))) {
+		selected.cull_variant = SceneShaderForwardMobile::ShaderData::CULL_VARIANT_DOUBLE_SIDED;
+	} else {
+		const bool mirror = inst->mirror != p_params.reverse_cull;
+		selected.cull_variant = mirror ? SceneShaderForwardMobile::ShaderData::CULL_VARIANT_REVERSED : SceneShaderForwardMobile::ShaderData::CULL_VARIANT_NORMAL;
+	}
+	selected.base_key.primitive_type = surf->primitive;
+	selected.base_key.version = p_params.native_pass.version_for_surface(p_params.element_info[p_element].uses_lightmap);
+	selected.base_key.framebuffer_format_id = p_params.native_pass.framebuffer_format;
+	selected.base_key.wireframe = p_params.force_wireframe;
+	selected.base_key.render_pass = p_params.native_pass.subpass;
+	selected.base_key.ubershader = false;
+	r_selection = selected;
+	return true;
+}
+
+RendererRD::ExternalPacketPipelineRequest RenderForwardMobile::_external_pipeline_request(const RenderListParameters &p_params,
+		const GeometryInstanceSurfaceDataCache &p_surface, const NativeSurfacePipelineSelection &p_selection) {
+	const auto &pipeline_specialization = p_selection.base_key.shader_specialization;
+	RendererRD::ExternalPacketPipelineRequest external_request;
+	external_request.backend = RendererRD::ExternalPacketPipelineRequest::Backend::MOBILE;
+	external_request.framebuffer_format = p_selection.base_key.framebuffer_format_id;
+	external_request.version = p_selection.base_key.version;
+	external_request.color_flags = 0;
+	external_request.subpass = p_selection.base_key.render_pass;
+	external_request.view_count = p_params.view_count;
+	external_request.wireframe = p_params.force_wireframe;
+	external_request.reverse_cull = p_params.reverse_cull;
+	external_request.double_sided_shadow = (p_surface.flags & GeometryInstanceSurfaceDataCache::FLAG_USES_DOUBLE_SIDED_SHADOWS) != 0;
+	external_request.specialization[0] = pipeline_specialization.packed_0;
+	external_request.specialization[1] = pipeline_specialization.packed_1;
+	static_assert(sizeof(external_request.specialization[2]) == sizeof(pipeline_specialization.packed_2));
+	memcpy(&external_request.specialization[2], &pipeline_specialization.packed_2, sizeof(external_request.specialization[2]));
+	switch (p_params.native_pass.pass_mode) {
+		case PASS_MODE_COLOR:
+			external_request.pass = RendererRD::ExternalPacketPass::OPAQUE;
+			break;
+		case PASS_MODE_COLOR_TRANSPARENT:
+			external_request.pass = RendererRD::ExternalPacketPass::TRANSPARENT;
+			break;
+		case PASS_MODE_SHADOW:
+		case PASS_MODE_SHADOW_DP:
+			external_request.pass = RendererRD::ExternalPacketPass::SHADOW;
+			break;
+		case PASS_MODE_MOTION_VECTORS:
+			external_request.pass = RendererRD::ExternalPacketPass::MOTION;
+			break;
+		default:
+			external_request.pass = RendererRD::ExternalPacketPass::DEPTH;
+	}
+	return external_request;
+}
+
+void RenderForwardMobile::_prepare_external_color(const RenderListParameters &p_params) {
+	const bool transparent = p_params.native_pass.pass_mode == PASS_MODE_COLOR_TRANSPARENT;
+	const uint32_t pass = transparent ? RendererRD::ExternalOutputConfig::PASS_TRANSPARENT : RendererRD::ExternalOutputConfig::PASS_OPAQUE;
+	const uint32_t surface_flag = transparent ? GeometryInstanceSurfaceDataCache::FLAG_PASS_ALPHA : GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE;
+	auto *particles_storage = RendererRD::ParticlesStorage::get_singleton();
+	for (int i = 0; i < p_params.element_count; i++) {
+		const auto &element = *p_params.elements[i];
+		const auto &surface = element.external_surface;
+		if (element.external_surface_index == UINT32_MAX || surface.is_empty() ||
+				!(surface.get_pass_mask() & pass) || !(element.flags & surface_flag)) {
+			continue;
+		}
+		NativeSurfacePipelineSelection selected;
+		if (!_select_native_surface_pipeline(p_params, i, {}, selected) || !selected.mesh_surface || !selected.shader) {
+			continue;
+		}
+		const auto request = _external_pipeline_request(p_params, element, selected);
+		RendererRD::ExternalPacketViewLease view;
+		if (particles_storage->particles_external_view_acquire(surface, p_params.external_prepared_render_data, view) != OK) {
+			continue;
+		}
+		if (view.get_profile() == RendererRD::ExternalOutputConfig::INSTANCE_192 && selected.shader->instance192_shader_supported()) {
+			const auto version = selected.base_key.version;
+			RID native_shader;
+			uint64_t input_mask = 0;
+			const Error ready = selected.shader->get_native_shader_if_ready(version, false, false, true, native_shader, input_mask);
+			if ((ready == ERR_UNAVAILABLE || ready == ERR_BUSY) && particles_storage->particles_external_view_can_prepare_shader(view)) {
+				// Enable the real renderer's exact precision group before the paid
+				// preparation begins. Its backend still observes shader readiness.
+				const RID variant = selected.shader->get_shader_variant(version, false, false, true);
+				if (variant.is_valid() && selected.shader->get_native_shader_if_ready(version, false, false, true, native_shader, input_mask) == ERR_BUSY) {
+					selected.shader->is_valid(); // Join any other outstanding groups of this version.
+				}
+			}
+		}
+		const RendererRD::ExternalPipelinePreparation *preparation = nullptr;
+		// The original row retains preparation errors and partial custody. Only
+		// the in-list resolver can accept a complete ready row for this key.
+		external_pipeline_prepare_for_view(surface, view, request, preparation, true);
+		ERR_FAIL_COND(view.release_checked() != OK);
+	}
 }
 
 template <RenderForwardMobile::PassMode p_pass_mode>
-void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
+void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_draw_list, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element, RendererRD::HeightCaptureCheckedSink *p_height_sink, LocalVector<PreparedHeightGeometry> *p_height_geometry) {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	RendererRD::ParticlesStorage *particles_storage = RendererRD::ParticlesStorage::get_singleton();
 
 	RD::DrawListID draw_list = p_draw_list;
-	RD::FramebufferFormatID framebuffer_format = p_framebuffer_Format;
 
-	//global scope bindings
-	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, render_base_uniform_set, SCENE_UNIFORM_SET);
-	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, p_params->render_pass_uniform_set, RENDER_PASS_UNIFORM_SET);
-	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, scene_shader.default_vec4_xform_uniform_set, TRANSFORMS_UNIFORM_SET);
+	if (!p_height_sink) {
+		//global scope bindings
+		RD::get_singleton()->draw_list_bind_uniform_set(draw_list, render_base_uniform_set, SCENE_UNIFORM_SET);
+		RD::get_singleton()->draw_list_bind_uniform_set(draw_list, p_params->render_pass_uniform_set, RENDER_PASS_UNIFORM_SET);
+		RD::get_singleton()->draw_list_bind_uniform_set(draw_list, scene_shader.default_vec4_xform_uniform_set, TRANSFORMS_UNIFORM_SET);
+	}
 
 	RID material_uniform_set;
 	RID prev_material_uniform_set;
@@ -2510,23 +3020,31 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 	SceneShaderForwardMobile::ShaderData::PipelineKey pipeline_key;
 	uint32_t pipeline_hash = 0;
 	uint32_t prev_pipeline_hash = 0;
+	RID height_previous_pipeline;
+	bool height_saw_indexed = false;
 
-	bool shadow_pass = (p_pass_mode == PASS_MODE_SHADOW) || (p_pass_mode == PASS_MODE_SHADOW_DP);
+	NativeSurfacePipelineOverride debug_override;
+#ifdef DEBUG_ENABLED
+	if (unlikely(get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_LIGHTING)) {
+		debug_override.material_uniform_set = scene_shader.default_material_uniform_set;
+		debug_override.shader = scene_shader.default_material_shader_ptr;
+	} else if (unlikely(get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_OVERDRAW)) {
+		debug_override.material_uniform_set = scene_shader.overdraw_material_uniform_set;
+		debug_override.shader = scene_shader.overdraw_material_shader_ptr;
+	} else if (unlikely(get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_PSSM_SPLITS)) {
+		debug_override.material_uniform_set = scene_shader.debug_shadow_splits_material_uniform_set;
+		debug_override.shader = scene_shader.debug_shadow_splits_material_shader_ptr;
+	}
+#endif
 
 	for (uint32_t i = p_from_element; i < p_to_element; i++) {
 		const GeometryInstanceSurfaceDataCache *surf = p_params->elements[i];
 		const RenderElementInfo &element_info = p_params->element_info[i];
-		const GeometryInstanceForwardMobile *inst = surf->owner;
-
-		if (inst->instance_count == 0) {
+		NativeSurfacePipelineSelection selected;
+		if (!_select_native_surface_pipeline(*p_params, i, debug_override, selected)) {
 			continue;
 		}
-
-		SceneShaderForwardMobile::ShaderSpecialization pipeline_specialization = p_params->base_specialization;
-		pipeline_specialization.multimesh = bool(inst->flags_cache & INSTANCE_DATA_FLAG_MULTIMESH);
-		pipeline_specialization.multimesh_format_2d = bool(inst->flags_cache & INSTANCE_DATA_FLAG_MULTIMESH_FORMAT_2D);
-		pipeline_specialization.multimesh_has_color = bool(inst->flags_cache & INSTANCE_DATA_FLAG_MULTIMESH_HAS_COLOR);
-		pipeline_specialization.multimesh_has_custom_data = bool(inst->flags_cache & INSTANCE_DATA_FLAG_MULTIMESH_HAS_CUSTOM_DATA);
+		const SceneShaderForwardMobile::ShaderSpecialization pipeline_specialization = selected.base_key.shader_specialization;
 
 		SceneState::PushConstant push_constant;
 		push_constant.base_index = i + p_params->element_offset;
@@ -2538,43 +3056,23 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 			push_constant.uv_offset = 0;
 		}
 
-		if (shadow_pass) {
-			material_uniform_set = surf->material_uniform_set_shadow;
-			shader = surf->shader_shadow;
-			mesh_surface = surf->surface_shadow;
-
-		} else {
-			pipeline_specialization.use_light_projector = inst->use_projector;
-			pipeline_specialization.use_light_soft_shadows = inst->use_soft_shadow;
-			pipeline_specialization.omni_lights = SceneShaderForwardMobile::shader_count_for(inst->omni_light_count);
-			pipeline_specialization.spot_lights = SceneShaderForwardMobile::shader_count_for(inst->spot_light_count);
-			pipeline_specialization.area_lights = SceneShaderForwardMobile::shader_count_for(inst->area_light_count);
-			pipeline_specialization.reflection_probes = SceneShaderForwardMobile::shader_count_for(inst->reflection_probe_count);
-			pipeline_specialization.decals = inst->decals_count > 0;
-
-#ifdef DEBUG_ENABLED
-			if (unlikely(get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_LIGHTING)) {
-				material_uniform_set = scene_shader.default_material_uniform_set;
-				shader = scene_shader.default_material_shader_ptr;
-			} else if (unlikely(get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_OVERDRAW)) {
-				material_uniform_set = scene_shader.overdraw_material_uniform_set;
-				shader = scene_shader.overdraw_material_shader_ptr;
-			} else if (unlikely(get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_PSSM_SPLITS)) {
-				material_uniform_set = scene_shader.debug_shadow_splits_material_uniform_set;
-				shader = scene_shader.debug_shadow_splits_material_shader_ptr;
-			} else {
-#endif
-				material_uniform_set = surf->material_uniform_set;
-				shader = surf->shader;
-				surf->material->set_as_used();
-#ifdef DEBUG_ENABLED
-			}
-#endif
-			mesh_surface = surf->surface;
+		material_uniform_set = selected.material_uniform_set;
+		shader = selected.shader;
+		mesh_surface = selected.mesh_surface;
+		if (selected.used_material) {
+			selected.used_material->set_as_used();
 		}
 
-		if (!mesh_surface) {
+		if (!mesh_surface || (p_height_sink && !shader)) {
+			if (p_height_sink) {
+				p_height_sink->reject(ERR_INVALID_DATA);
+				return;
+			}
 			continue;
+		}
+		if (p_height_sink && surf->primitive != RSE::PRIMITIVE_TRIANGLES) {
+			p_height_sink->reject(ERR_UNAVAILABLE);
+			return;
 		}
 
 		//request a redraw if one of the shaders uses TIME
@@ -2582,59 +3080,63 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 			should_request_redraw = true;
 		}
 
-		//find cull variant
-		SceneShaderForwardMobile::ShaderData::CullVariant cull_variant;
-
-		if (p_pass_mode == PASS_MODE_DEPTH_MATERIAL || ((p_pass_mode == PASS_MODE_SHADOW || p_pass_mode == PASS_MODE_SHADOW_DP) && surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_DOUBLE_SIDED_SHADOWS)) {
-			cull_variant = SceneShaderForwardMobile::ShaderData::CULL_VARIANT_DOUBLE_SIDED;
-		} else {
-			bool mirror = surf->owner->mirror;
-			if (p_params->reverse_cull) {
-				mirror = !mirror;
+		pipeline_key = selected.base_key;
+		RID xforms_uniform_set = surf->owner->transforms_uniform_set.is_valid() ? surf->owner->transforms_uniform_set : scene_shader.default_vec4_xform_uniform_set;
+		if (surf->external_surface_index != UINT32_MAX) {
+			// Dispatch before ordinary VA creation, pipeline compilation, binding and native offsets.
+			if (p_height_sink) {
+				p_height_sink->reject(ERR_UNAVAILABLE);
+				return;
 			}
-			cull_variant = mirror ? SceneShaderForwardMobile::ShaderData::CULL_VARIANT_REVERSED : SceneShaderForwardMobile::ShaderData::CULL_VARIANT_NORMAL;
+			const bool prepared_only = p_params->external_prepared_render_data != nullptr;
+			const RenderDataRD *external_render_data = prepared_only ? p_params->external_prepared_render_data : active_render_data;
+			if (!external_render_data || surf->external_surface.is_empty()) {
+				continue;
+			}
+			const auto external_request = _external_pipeline_request(*p_params, *surf, selected);
+			struct ExternalPushContext {
+				SceneState::PushConstant *push;
+				const SceneShaderForwardMobile::ShaderSpecialization *specialization;
+			} push_context = { &push_constant, &pipeline_specialization };
+			push_constant.multimesh_motion_vectors_current_offset = 0;
+			push_constant.multimesh_motion_vectors_previous_offset = 0;
+			using ExternalDrawPreparation = RendererRD::ParticlesStorage::ExternalDrawPreparation;
+			const Error external_error = particles_storage->particles_external_draw(surf->external_surface, external_render_data, draw_list, external_request,
+					+[](void *renderer, const RendererRD::ExternalSurfaceSelection &surface, const RendererRD::ExternalPacketViewLease &view, const RendererRD::ExternalPacketPipelineRequest &request, const RendererRD::ExternalPipelinePreparation *&out) {
+						return static_cast<RenderForwardMobile *>(renderer)->external_pipeline_prepare_for_view(surface, view, request, out);
+					}, this,
+					+[](void *context, const RendererRD::ExternalPacketBinding &binding, const void *&out_push, uint32_t &out_bytes) {
+						auto &selected_push = *static_cast<ExternalPushContext *>(context);
+						out_push = selected_push.push;
+						if (binding.uses_ubershader()) {
+							selected_push.push->ubershader.specialization = *selected_push.specialization;
+							selected_push.push->ubershader.constants = {};
+							selected_push.push->ubershader.constants.cull_mode = binding.get_cull_mode();
+							out_bytes = sizeof(SceneState::PushConstant);
+						} else {
+							out_bytes = sizeof(SceneState::PushConstant) - sizeof(SceneState::PushConstantUbershader);
+						}
+						return OK;
+					}, &push_context, prepared_only ? ExternalDrawPreparation::PREPARED_ONLY : ExternalDrawPreparation::PREPARE_FOR_DRAW);
+			// Checked recording can partially bind before refusal. Never reuse ordinary cached state.
+			prev_shader = nullptr;
+			prev_pipeline_hash = 0;
+			prev_vertex_array_rd = RID();
+			prev_index_array_rd = RID();
+			prev_xforms_uniform_set = RID();
+			prev_material_uniform_set = RID();
+			if (external_error != OK && external_error != ERR_UNAVAILABLE) {
+				return;
+			}
+
+			continue;
 		}
 
-		pipeline_key.primitive_type = surf->primitive;
-		RID xforms_uniform_set = surf->owner->transforms_uniform_set;
-
-		switch (p_pass_mode) {
-			case PASS_MODE_COLOR:
-			case PASS_MODE_COLOR_TRANSPARENT: {
-				if (element_info.uses_lightmap) {
-					pipeline_key.version = p_params->view_count > 1 ? SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_COLOR_PASS_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_COLOR_PASS;
-				} else {
-					pipeline_key.version = p_params->view_count > 1 ? SceneShaderForwardMobile::SHADER_VERSION_COLOR_PASS_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_COLOR_PASS;
-				}
-				if (p_params->defer_opaque_fog) {
-					bool lightmap = pipeline_key.version == SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_COLOR_PASS || pipeline_key.version == SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_COLOR_PASS_MULTIVIEW;
-					pipeline_key.version = p_params->view_count > 1 ? (lightmap ? SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_FOG_MASK_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_COLOR_FOG_MASK_MULTIVIEW) : (lightmap ? SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_FOG_MASK : SceneShaderForwardMobile::SHADER_VERSION_COLOR_FOG_MASK);
-				}
-			} break;
-			case PASS_MODE_SHADOW: {
-				pipeline_key.version = p_params->view_count > 1 ? SceneShaderForwardMobile::SHADER_VERSION_SHADOW_PASS_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_SHADOW_PASS;
-			} break;
-			case PASS_MODE_SHADOW_DP: {
-				ERR_FAIL_COND_MSG(p_params->view_count > 1, "Multiview not supported for shadow DP pass");
-				pipeline_key.version = SceneShaderForwardMobile::SHADER_VERSION_SHADOW_PASS_DP;
-			} break;
-			case PASS_MODE_DEPTH_MATERIAL: {
-				ERR_FAIL_COND_MSG(p_params->view_count > 1, "Multiview not supported for material pass");
-				pipeline_key.version = SceneShaderForwardMobile::SHADER_VERSION_DEPTH_PASS_WITH_MATERIAL;
-			} break;
-			case PASS_MODE_MOTION_VECTORS: {
-				pipeline_key.version = SceneShaderForwardMobile::SHADER_VERSION_MOTION_VECTORS_MULTIVIEW;
-			}
-		}
-
-		pipeline_key.framebuffer_format_id = framebuffer_format;
-		pipeline_key.wireframe = p_params->force_wireframe;
-		pipeline_key.render_pass = p_params->subpass;
-		pipeline_key.ubershader = 0;
+		pipeline_key.indexed144 = mesh_storage->mesh_surface_is_external(mesh_surface);
 
 		bool emulate_point_size = shader->uses_point_size && scene_shader.emulate_point_size;
 
-		const RD::PolygonCullMode cull_mode = shader->get_cull_mode_from_cull_variant(cull_variant);
+		const RD::PolygonCullMode cull_mode = selected.get_cull_mode();
 		RD::VertexFormatID vertex_format = -1;
 		RID pipeline_rd;
 		RID vertex_array_rd;
@@ -2643,11 +3145,16 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 		bool pipeline_valid = false;
 		while (pipeline_key.ubershader < ubershader_iterations) {
 			// Skeleton and blend shape.
-			uint64_t input_mask = shader->get_vertex_input_mask(pipeline_key.version, pipeline_key.ubershader);
+			uint64_t input_mask = shader->get_vertex_input_mask(pipeline_key.version, pipeline_key.ubershader, pipeline_key.indexed144);
 			if (surf->owner->mesh_instance.is_valid()) {
 				mesh_storage->mesh_instance_surface_get_vertex_arrays_and_format(surf->owner->mesh_instance, surf->surface_index, input_mask, p_pass_mode == PASS_MODE_MOTION_VECTORS, emulate_point_size, vertex_array_rd, vertex_format);
 			} else {
 				mesh_storage->mesh_surface_get_vertex_arrays_and_format(mesh_surface, input_mask, p_pass_mode == PASS_MODE_MOTION_VECTORS, emulate_point_size, vertex_array_rd, vertex_format);
+			}
+
+			if (p_height_sink && (!vertex_array_rd.is_valid() || vertex_format == RD::INVALID_ID)) {
+				p_height_sink->reject(ERR_INVALID_DATA);
+				return;
 			}
 
 			pipeline_key.vertex_format_id = vertex_format;
@@ -2688,6 +3195,18 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 			}
 		}
 
+		if (p_height_sink) {
+			if (!pipeline_valid) {
+				p_height_sink->reject(ERR_CANT_CREATE);
+				return;
+			}
+			if (pipeline_rd.is_valid()) {
+				height_previous_pipeline = pipeline_rd;
+			} else {
+				pipeline_rd = height_previous_pipeline;
+			}
+		}
+
 		if (pipeline_valid) {
 			if (!emulate_point_size) {
 				index_array_rd = mesh_storage->mesh_surface_get_index_array(mesh_surface, element_info.lod_index);
@@ -2695,34 +3214,36 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 				index_array_rd = RID();
 			}
 
-			if (prev_vertex_array_rd != vertex_array_rd) {
-				RD::get_singleton()->draw_list_bind_vertex_array(draw_list, vertex_array_rd);
-				prev_vertex_array_rd = vertex_array_rd;
-			}
-
-			if (prev_index_array_rd != index_array_rd) {
-				if (index_array_rd.is_valid()) {
-					RD::get_singleton()->draw_list_bind_index_array(draw_list, index_array_rd);
-				}
-				prev_index_array_rd = index_array_rd;
-			}
-
-			if (!pipeline_rd.is_null()) {
-				RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, pipeline_rd);
-			}
-
-			if (xforms_uniform_set.is_valid() && prev_xforms_uniform_set != xforms_uniform_set) {
-				RD::get_singleton()->draw_list_bind_uniform_set(draw_list, xforms_uniform_set, TRANSFORMS_UNIFORM_SET);
-				prev_xforms_uniform_set = xforms_uniform_set;
-			}
-
-			if (material_uniform_set != prev_material_uniform_set) {
-				// Update uniform set.
-				if (material_uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(material_uniform_set)) { // Material may not have a uniform set.
-					RD::get_singleton()->draw_list_bind_uniform_set(draw_list, material_uniform_set, MATERIAL_UNIFORM_SET);
+			if (!p_height_sink) {
+				if (prev_vertex_array_rd != vertex_array_rd) {
+					RD::get_singleton()->draw_list_bind_vertex_array(draw_list, vertex_array_rd);
+					prev_vertex_array_rd = vertex_array_rd;
 				}
 
-				prev_material_uniform_set = material_uniform_set;
+				if (prev_index_array_rd != index_array_rd) {
+					if (index_array_rd.is_valid()) {
+						RD::get_singleton()->draw_list_bind_index_array(draw_list, index_array_rd);
+					}
+					prev_index_array_rd = index_array_rd;
+				}
+
+				if (!pipeline_rd.is_null()) {
+					RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, pipeline_rd);
+				}
+
+				if (xforms_uniform_set.is_valid() && prev_xforms_uniform_set != xforms_uniform_set) {
+					RD::get_singleton()->draw_list_bind_uniform_set(draw_list, xforms_uniform_set, TRANSFORMS_UNIFORM_SET);
+					prev_xforms_uniform_set = xforms_uniform_set;
+				}
+
+				if (material_uniform_set != prev_material_uniform_set) {
+					// Update uniform set.
+					if (material_uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(material_uniform_set)) { // Material may not have a uniform set.
+						RD::get_singleton()->draw_list_bind_uniform_set(draw_list, material_uniform_set, MATERIAL_UNIFORM_SET);
+					}
+
+					prev_material_uniform_set = material_uniform_set;
+				}
 			}
 
 			if (surf->owner->base_flags & INSTANCE_DATA_FLAG_PARTICLES) {
@@ -2744,7 +3265,11 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 				push_constant_size = sizeof(SceneState::PushConstant) - sizeof(SceneState::PushConstantUbershader);
 			}
 
-			RD::get_singleton()->draw_list_set_push_constant(draw_list, &push_constant, push_constant_size);
+			if (!p_height_sink) {
+
+
+				RD::get_singleton()->draw_list_set_push_constant(draw_list, &push_constant, push_constant_size);
+			}
 
 			uint32_t instance_count = surf->owner->instance_count > 1 ? surf->owner->instance_count : 1;
 			if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_PARTICLE_TRAILS) {
@@ -2752,17 +3277,67 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 			}
 
 			bool indirect = bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH_INDIRECT);
+			if (p_height_sink) {
+				// Keep indirect and emulated-point draws outside the prepared profile.
+				if (emulate_point_size || indirect) {
+					p_height_sink->reject(ERR_UNAVAILABLE);
+					return;
+				}
+				const bool source_indexed = mesh_storage->mesh_surface_get_format(mesh_surface) & RSE::ARRAY_FORMAT_INDEX;
+				if (source_indexed && !index_array_rd.is_valid()) {
+					p_height_sink->reject(ERR_INVALID_DATA);
+					return;
+				}
+				if (height_saw_indexed && !index_array_rd.is_valid()) {
+					// The present checked RD profile cannot clear a stale IA binding.
+					p_height_sink->reject(ERR_UNAVAILABLE);
+					return;
+				}
+				height_saw_indexed |= index_array_rd.is_valid();
+				const bool material_required = shader->ubo_size || !shader->texture_uniforms.is_empty();
+				if ((material_required && !material_uniform_set.is_valid()) || (material_uniform_set.is_valid() && !RD::get_singleton()->uniform_set_is_valid(material_uniform_set))) {
+					p_height_sink->reject(ERR_INVALID_DATA);
+					return;
+				}
+				PreparedHeightGeometry prepared;
+				prepared.vertex_array = vertex_array_rd;
+				prepared.index_array = index_array_rd;
+				prepared.pipeline = pipeline_rd;
+				prepared.transforms = xforms_uniform_set;
+				prepared.material = material_uniform_set;
+				prepared.push_constant = push_constant;
+				prepared.push_constant_size = push_constant_size;
+				prepared.instance_count = instance_count;
+				p_height_geometry->push_back(prepared);
+				continue;
+			}
 
+			RID indirect_command;
+			if (indirect) {
+				indirect_command = mesh_storage->_multimesh_get_command_buffer_rd_rid(surf->owner->data->base);
+				if (!indirect_command.is_valid()) {
+					continue;
+				}
+			}
+
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+			const uint64_t skinned_mesh_capture_test_before_draw = RenderCaptureTestHooks::draw_record_count();
+#endif
 			if (emulate_point_size) {
 				if (indirect) {
 					WARN_PRINT("Indirect draws are not supported when emulating point size.");
 				}
 				RD::get_singleton()->draw_list_draw(draw_list, false, mesh_storage->mesh_surface_get_vertex_count(mesh_surface), instance_count * 6);
 			} else if (indirect) {
-				RD::get_singleton()->draw_list_draw_indirect(draw_list, index_array_rd.is_valid(), mesh_storage->_multimesh_get_command_buffer_rd_rid(surf->owner->data->base), surf->surface_index * sizeof(uint32_t) * mesh_storage->INDIRECT_MULTIMESH_COMMAND_STRIDE, 1, 0);
+				RD::get_singleton()->draw_list_draw_indirect(draw_list, index_array_rd.is_valid(), indirect_command, surf->surface_index * sizeof(uint32_t) * mesh_storage->INDIRECT_MULTIMESH_COMMAND_STRIDE, 1, 0);
 			} else {
 				RD::get_singleton()->draw_list_draw(draw_list, index_array_rd.is_valid(), instance_count);
 			}
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+			if ((p_pass_mode == PASS_MODE_COLOR || p_pass_mode == PASS_MODE_COLOR_TRANSPARENT) && surf->owner->mesh_instance.is_valid()) {
+				RenderCaptureTestHooks::observe_draw(surf->owner->mesh_instance, surf->surface_index, vertex_array_rd, skinned_mesh_capture_test_before_draw, 2, uint32_t(p_pass_mode));
+			}
+#endif
 		}
 	}
 
@@ -2836,6 +3411,10 @@ void RenderForwardMobile::geometry_instance_free(RenderGeometryInstance *p_geome
 	GeometryInstanceSurfaceDataCache *surf = ginstance->surface_caches;
 	while (surf) {
 		GeometryInstanceSurfaceDataCache *next = surf->next;
+		if (!surf->external_surface.is_empty()) {
+			const Error released = RendererRD::ParticlesStorage::get_singleton()->particles_external_surface_release(surf->external_surface);
+			CRASH_COND(released != OK);
+		}
 		geometry_instance_surface_alloc.free(surf);
 		surf = next;
 	}
@@ -2919,6 +3498,10 @@ void RenderForwardMobile::GeometryInstanceForwardMobile::_mark_dirty() {
 
 	while (surf) {
 		GeometryInstanceSurfaceDataCache *next = surf->next;
+		if (!surf->external_surface.is_empty()) {
+			const Error released = RendererRD::ParticlesStorage::get_singleton()->particles_external_surface_release(surf->external_surface);
+			CRASH_COND(released != OK);
+		}
 		RenderForwardMobile::get_singleton()->geometry_instance_surface_alloc.free(surf);
 		surf = next;
 	}
@@ -2945,7 +3528,7 @@ void RenderForwardMobile::_update_global_pipeline_data_requirements_from_light_s
 	global_pipeline_data_required.use_shadow_dual_paraboloid = light_storage->get_shadow_dual_paraboloid_used();
 }
 
-void RenderForwardMobile::_geometry_instance_add_surface_with_material(GeometryInstanceForwardMobile *ginstance, uint32_t p_surface, SceneShaderForwardMobile::MaterialData *p_material, uint32_t p_material_id, uint32_t p_shader_id, RID p_mesh) {
+void RenderForwardMobile::_geometry_instance_add_surface_with_material(GeometryInstanceForwardMobile *ginstance, uint32_t p_surface, SceneShaderForwardMobile::MaterialData *p_material, uint32_t p_material_id, uint32_t p_shader_id, RID p_mesh, RendererRD::ExternalSurfaceSelection *p_external) {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	uint32_t flags = 0;
 
@@ -3004,13 +3587,13 @@ void RenderForwardMobile::_geometry_instance_add_surface_with_material(GeometryI
 
 	SceneShaderForwardMobile::MaterialData *material_shadow = nullptr;
 	void *surface_shadow = nullptr;
-	if (p_material->shader_data->uses_shared_shadow_material()) {
+	if (!p_external && p_material->shader_data->uses_shared_shadow_material()) {
 		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_SHARED_SHADOW_MATERIAL;
 		material_shadow = static_cast<SceneShaderForwardMobile::MaterialData *>(RendererRD::MaterialStorage::get_singleton()->material_get_data(scene_shader.default_material, RendererRD::MaterialStorage::SHADER_TYPE_3D));
 
 		RID shadow_mesh = mesh_storage->mesh_get_shadow_mesh(p_mesh);
 
-		if (shadow_mesh.is_valid()) {
+		if (shadow_mesh.is_valid() && !mesh_storage->mesh_surface_is_external(mesh_storage->mesh_get_surface(p_mesh, p_surface))) {
 			surface_shadow = mesh_storage->mesh_get_surface(shadow_mesh, p_surface);
 		}
 
@@ -3024,12 +3607,17 @@ void RenderForwardMobile::_geometry_instance_add_surface_with_material(GeometryI
 
 	sdcache->shader = p_material->shader_data;
 	sdcache->material = p_material;
+	sdcache->material_generation = p_material->generation;
 	sdcache->material_uniform_set = p_material->uniform_set;
-	sdcache->surface = mesh_storage->mesh_get_surface(p_mesh, p_surface);
+	sdcache->surface = p_external ? p_external->geometry_source->get_retained_surface() : mesh_storage->mesh_get_surface(p_mesh, p_surface);
 	sdcache->primitive = mesh_storage->mesh_surface_get_primitive(sdcache->surface);
 	sdcache->surface_index = p_surface;
+	if (p_external) {
+		sdcache->external_surface_index = p_external->get_flattened_surface();
+		sdcache->external_surface = std::move(*p_external);
+	}
 
-	if (ginstance->data->dirty_dependencies) {
+	if (!p_external && ginstance->data->dirty_dependencies) {
 		RSG::utilities->base_update_dependency(p_mesh, &ginstance->data->dependency_tracker);
 	}
 
@@ -3057,13 +3645,16 @@ void RenderForwardMobile::_geometry_instance_add_surface_with_material(GeometryI
 	sdcache->sort.priority = p_material->priority;
 
 	uint64_t format = RendererRD::MeshStorage::get_singleton()->mesh_surface_get_format(sdcache->surface);
-	if (p_material->shader_data->uses_tangent && !p_material->shader_data->writes_tangent && !(format & RSE::ARRAY_FORMAT_TANGENT)) {
+	if (!p_external && p_material->shader_data->uses_tangent && !p_material->shader_data->writes_tangent && !(format & RSE::ARRAY_FORMAT_TANGENT)) {
 		String shader_path = p_material->shader_data->path.is_empty() ? "" : "(" + p_material->shader_data->path + ")";
 		String mesh_path = mesh_storage->mesh_get_path(p_mesh).is_empty() ? "" : "(" + mesh_storage->mesh_get_path(p_mesh) + ")";
 		WARN_PRINT_ED(vformat("Attempting to use a shader %s that requires tangents with a mesh %s that doesn't contain tangents. Ensure that meshes are imported with the 'ensure_tangents' option. If creating your own meshes, add an `ARRAY_TANGENT` array (when using ArrayMesh) or call `generate_tangents()` (when using SurfaceTool).", shader_path, mesh_path));
 	}
 
 #if PRELOAD_PIPELINES_ON_SURFACE_CACHE_CONSTRUCTION
+	if (p_external) {
+		return; // External preparation owns its exact Instance192 pipeline rows.
+	}
 	if (!sdcache->compilation_dirty_element.in_list()) {
 		geometry_surface_compilation_dirty_list.add(&sdcache->compilation_dirty_element);
 	}
@@ -3144,6 +3735,11 @@ void RenderForwardMobile::_geometry_instance_update(RenderGeometryInstance *p_ge
 		ginstance->data->dependency_tracker.update_begin();
 	}
 
+	// Only the original SceneOnly profile is metadata without particle geometry.
+	// Render profiles keep their own native consumer/admission requirements.
+	const bool scene_only_particles = ginstance->data->base_type == RSE::INSTANCE_PARTICLES && particles_storage->particles_is_external_scene_only(ginstance->data->base);
+	const bool external_particles = ginstance->data->base_type == RSE::INSTANCE_PARTICLES && particles_storage->particles_is_external(ginstance->data->base);
+
 	//add geometry for drawing
 	switch (ginstance->data->base_type) {
 		case RSE::INSTANCE_MESH: {
@@ -3168,6 +3764,10 @@ void RenderForwardMobile::_geometry_instance_update(RenderGeometryInstance *p_ge
 		} break;
 
 		case RSE::INSTANCE_MULTIMESH: {
+			if (!mesh_storage->_multimesh_get_buffer_rd_rid(ginstance->data->base).is_valid()) {
+				ginstance->instance_count = 0;
+				break;
+			}
 			RID mesh = mesh_storage->multimesh_get_mesh(ginstance->data->base);
 			if (mesh.is_valid()) {
 				const RID *materials = nullptr;
@@ -3194,6 +3794,34 @@ void RenderForwardMobile::_geometry_instance_update(RenderGeometryInstance *p_ge
 		} break;
 #endif
 		case RSE::INSTANCE_PARTICLES: {
+			if (scene_only_particles) {
+				ginstance->instance_count = 0;
+				break;
+			}
+			if (external_particles) {
+				const uint32_t surface_count = particles_storage->particles_external_surface_count(ginstance->data->base);
+				for (uint32_t flattened = 0; flattened < surface_count; ++flattened) {
+					RendererRD::ExternalSurfaceSelection selected;
+					if (particles_storage->particles_external_surface_acquire(ginstance->data->base, flattened, selected) != OK) {
+						continue;
+					}
+					RendererRD::MaterialStorage::MaterialData *material_data = nullptr;
+					const Error material_error = RendererRD::MaterialStorage::get_singleton()->material_get_native_preparation_data(selected.material_selection, selected.material_generation, material_data);
+					auto *material = static_cast<SceneShaderForwardMobile::MaterialData *>(material_data);
+					if (material_error != OK || !material_data || material_data->get_native_recipe_backend() != 1 || !material || !material->shader_data || !material->shader_data->is_valid() ||
+							!selected.geometry_source || !selected.geometry_source->get_retained_surface()) {
+						const Error released = particles_storage->particles_external_surface_release(selected);
+						CRASH_COND(released != OK);
+						continue;
+					}
+					// Native surface ordinals can restart for each retained mesh; packet ordinals cannot.
+					_geometry_instance_add_surface_with_material(ginstance, selected.native_surface, material, selected.material_selection.get_local_index(), 0, selected.mesh, &selected);
+				}
+				// CPU eligibility only. The guarded indirect command owns the actual instance count,
+				// including capacity zero and the explicit empty packet path.
+				ginstance->instance_count = ginstance->surface_caches ? 1 : 0;
+				break;
+			}
 			int draw_passes = particles_storage->particles_get_draw_passes(ginstance->data->base);
 
 			for (int j = 0; j < draw_passes; j++) {
@@ -3226,7 +3854,20 @@ void RenderForwardMobile::_geometry_instance_update(RenderGeometryInstance *p_ge
 	bool store_transform = true;
 	ginstance->base_flags = 0;
 
-	if (ginstance->data->base_type == RSE::INSTANCE_MULTIMESH) {
+	if (scene_only_particles) {
+		ginstance->transforms_uniform_set = RID();
+		if (ginstance->data->dirty_dependencies) {
+			particles_storage->particles_update_dependency(ginstance->data->base, &ginstance->data->dependency_tracker);
+		}
+	} else if (external_particles) {
+		// Keep render-list instances distinct. Instance192 ignores the native multimesh layout.
+		ginstance->base_flags = INSTANCE_DATA_FLAG_PARTICLES | INSTANCE_DATA_FLAG_MULTIMESH;
+		ginstance->transforms_uniform_set = RID();
+		store_transform = false; // C already contains Host for Local output.
+		if (ginstance->data->dirty_dependencies) {
+			particles_storage->particles_update_dependency(ginstance->data->base, &ginstance->data->dependency_tracker);
+		}
+	} else if (ginstance->data->base_type == RSE::INSTANCE_MULTIMESH) {
 		ginstance->base_flags |= INSTANCE_DATA_FLAG_MULTIMESH;
 
 		if (mesh_storage->multimesh_get_transform_format(ginstance->data->base) == RSE::MULTIMESH_TRANSFORM_2D) {
@@ -3242,7 +3883,7 @@ void RenderForwardMobile::_geometry_instance_update(RenderGeometryInstance *p_ge
 			ginstance->base_flags |= INSTANCE_DATA_FLAG_MULTIMESH_INDIRECT;
 		}
 
-		ginstance->transforms_uniform_set = mesh_storage->multimesh_get_3d_uniform_set(ginstance->data->base, scene_shader.default_shader_rd, TRANSFORMS_UNIFORM_SET);
+		ginstance->transforms_uniform_set = mesh_storage->_multimesh_get_buffer_rd_rid(ginstance->data->base).is_valid() ? mesh_storage->multimesh_get_3d_uniform_set(ginstance->data->base, scene_shader.default_shader_rd, TRANSFORMS_UNIFORM_SET) : RID();
 
 	} else if (ginstance->data->base_type == RSE::INSTANCE_PARTICLES) {
 		ginstance->base_flags |= INSTANCE_DATA_FLAG_PARTICLES;
@@ -3411,7 +4052,8 @@ void RenderForwardMobile::_mesh_compile_pipeline_for_surface(SceneShaderForwardM
 	}
 
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
-	uint64_t input_mask = p_shader->get_vertex_input_mask(r_pipeline_key.version, true);
+	r_pipeline_key.indexed144 = mesh_storage->mesh_surface_is_external(p_mesh_surface);
+	uint64_t input_mask = p_shader->get_vertex_input_mask(r_pipeline_key.version, true, r_pipeline_key.indexed144);
 	bool emulate_point_size = p_shader->uses_point_size && scene_shader.emulate_point_size;
 	r_pipeline_key.vertex_format_id = mesh_storage->mesh_surface_get_vertex_format(p_mesh_surface, input_mask, p_instanced_surface, false, emulate_point_size);
 	r_pipeline_key.ubershader = true;
@@ -3566,6 +4208,7 @@ void RenderForwardMobile::_geometry_instance_dependency_changed(Dependency::Depe
 		case Dependency::DEPENDENCY_CHANGED_MATERIAL:
 		case Dependency::DEPENDENCY_CHANGED_MESH:
 		case Dependency::DEPENDENCY_CHANGED_PARTICLES:
+		case Dependency::DEPENDENCY_CHANGED_PARTICLES_INSTANCES:
 		case Dependency::DEPENDENCY_CHANGED_MULTIMESH:
 		case Dependency::DEPENDENCY_CHANGED_SKELETON_DATA: {
 			static_cast<RenderGeometryInstance *>(p_tracker->userdata)->_mark_dirty();
@@ -3721,4 +4364,286 @@ RenderForwardMobile::~RenderForwardMobile() {
 		RD::get_singleton()->free_rid(scene_state.lightmap_capture_buffer);
 		memdelete_arr(scene_state.lightmap_captures);
 	}
+}
+
+Error RenderForwardMobile::external_pipeline_prepare(const RendererRD::ExternalSurfaceSelection &p_surface, RendererRD::ExternalPipelinePreparation &r_preparation) {
+	using namespace RendererRD;
+#ifdef TESTS_ENABLED
+	const bool trace_enabled = OS::get_singleton()->get_environment("ANGE_TEST_STAGED_MOBILE_PIPELINE_PHASE") == "1";
+	auto trace_result = [&](const char *p_stage, Error p_error) {
+		if (trace_enabled) {
+			std::fprintf(stdout, "STAGED_MOBILE_PIPELINE_PHASE stage=%s error=%d\n", p_stage, int(p_error));
+			std::fflush(stdout);
+		}
+	};
+#endif
+	auto *rd = RD::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread()) {
+#ifdef TESTS_ENABLED
+		trace_result("render_thread", ERR_UNAUTHORIZED);
+#endif
+		return ERR_UNAUTHORIZED;
+	}
+	auto fail = [&]([[maybe_unused]] const char *p_stage, Error p_error) {
+		r_preparation.last_error = p_error;
+#ifdef TESTS_ENABLED
+		trace_result(p_stage, p_error);
+#endif
+		return p_error;
+	};
+	// Owner must open this finite row only after accepting the original source,
+	// charge and preparation opportunity. This method never creates that grant.
+	if (!r_preparation.owner || r_preparation.owner != p_surface.owner || r_preparation.source_sealed ||
+			!r_preparation.serial || r_preparation.generation != p_surface.generation || !r_preparation.max_resources ||
+			!r_preparation.pipeline_pin || !r_preparation.pipeline_owned_group || !r_preparation.pipeline_original_root ||
+			!p_surface.geometry_source || !p_surface.geometry_source->is_valid()) {
+		return fail("preparation_input", ERR_UNCONFIGURED);
+	}
+	if (r_preparation.created_pipeline.is_valid() || r_preparation.material.is_active() ||
+			r_preparation.geometry[0].is_active() || r_preparation.geometry[1].is_active()) {
+		return fail("preparation_reentry", ERR_ALREADY_IN_USE);
+	}
+	const Error prefix_ready = r_preparation._pipeline_preflight();
+	if (prefix_ready != OK) {
+		return fail("original_prefix", prefix_ready);
+	}
+	const ExternalPacketPipelineRequest &request = r_preparation.selection;
+	if (request.backend != ExternalPacketPipelineRequest::Backend::MOBILE || request.view_count != 1 ||
+			request.version >= SceneShaderForwardMobile::SHADER_VERSION_MAX ||
+			p_surface.primitive >= RSE::PRIMITIVE_MAX) {
+		return fail("selection_input", ERR_INVALID_PARAMETER);
+	}
+	auto *storage = MaterialStorage::get_singleton();
+	MaterialStorage::MaterialData *original = nullptr;
+	const Error selected = storage->material_get_native_preparation_data(p_surface.material_selection, p_surface.material_generation, original);
+	if (selected != OK) {
+		return fail("material_lookup", selected);
+	}
+	auto *material = static_cast<SceneShaderForwardMobile::MaterialData *>(original);
+	auto *shader = material->shader_data;
+	const bool instance192 = p_surface.profile == ExternalOutputConfig::INSTANCE_192;
+	const bool indexed144 = p_surface.profile == ExternalOutputConfig::INDEXED_144;
+	// Instance192 derives from its original generation's flattened source.
+	// Indexed144 keeps the original slot-owned source/backing association.
+	if (instance192 && (!r_preparation.source_geometry || p_surface.geometry_source != r_preparation.source_geometry || p_surface.material_selection != r_preparation.source_material || p_surface.material_generation != r_preparation.source_material_generation || !r_preparation.source_geometry->metadata_matches(p_surface.primitive, p_surface.surface_format, p_surface.surface_aabb, p_surface.surface_uv_scale))) {
+		return fail("geometry_source_match", ERR_INVALID_DATA);
+	}
+	const auto *geometry_source = instance192 ? r_preparation.source_geometry : p_surface.geometry_source;
+	if ((!instance192 && !indexed144) || indexed144 != p_surface.geometry_source->is_external() || !shader ||
+			(instance192 && !shader->instance192_shader_supported()) || shader->uses_point_size || shader->uses_particle_trails) {
+		return fail("shader_profile", ERR_UNAVAILABLE);
+	}
+	// This is the original shader classifier, not a product qualification claim.
+	ExternalMaterialPassClassification classification;
+	classification.transparent = shader->uses_alpha_pass();
+	classification.opaque = !classification.transparent;
+	classification.depth = classification.opaque || shader->uses_depth_in_alpha_pass();
+	classification.shadow = classification.depth;
+	classification.subsurface = shader->uses_sss;
+	classification.screen_texture = shader->uses_screen_texture;
+	classification.depth_texture = shader->uses_depth_texture;
+	classification.normal_texture = shader->uses_normal_texture;
+	classification.stencil = shader->stencil_enabled;
+	classification.uses_time = shader->uses_time;
+	classification.motion = shader->is_animated();
+	classification.double_sided_shadow = request.double_sided_shadow;
+	bool eligible = false;
+	switch (request.pass) {
+		case ExternalPacketPass::OPAQUE:
+			eligible = classification.opaque && (p_surface.pass_mask & ExternalOutputConfig::PASS_OPAQUE);
+			break;
+		case ExternalPacketPass::TRANSPARENT:
+			eligible = classification.transparent && (p_surface.pass_mask & ExternalOutputConfig::PASS_TRANSPARENT);
+			break;
+		case ExternalPacketPass::DEPTH:
+			eligible = classification.depth && (p_surface.pass_mask & ExternalOutputConfig::PASS_DEPTH);
+			break;
+		case ExternalPacketPass::SHADOW:
+			eligible = classification.shadow && (p_surface.pass_mask & ExternalOutputConfig::PASS_SHADOW);
+			break;
+		case ExternalPacketPass::PROBE:
+			eligible = (p_surface.pass_mask & ExternalOutputConfig::PASS_PROBE);
+			break;
+		case ExternalPacketPass::MOTION:
+			return fail("motion_pass", ERR_UNAVAILABLE);
+	}
+	if (!eligible) {
+		return fail("pass_classification", ERR_UNAVAILABLE);
+	}
+	SceneShaderForwardMobile::ShaderData::PipelineKey key = {};
+	const Error keyed = shader->get_external_pipeline_key(request, p_surface.primitive, instance192, indexed144, classification.transparent, key);
+	if (keyed != OK) {
+		return fail("pipeline_key", keyed);
+	}
+	RID native_shader;
+	uint64_t input_mask = 0;
+	Error error = shader->get_native_shader_if_ready(key.version, false, indexed144, instance192, native_shader, input_mask);
+	if (error != OK) {
+		return fail("shader_readiness", error);
+	}
+	SceneShaderForwardMobile::ShaderData::NativePipelineValuePlan observed;
+	MaterialStorage::NativeMaterialFuturePipelinePlan material_observed;
+	if (instance192) {
+		// Consume this exact ready key/state and retained source in the original
+		// row's aggregate closure/capacity/origin validator before factories.
+		// Native execution revalidates actual derived VA/VF and ready Shader;
+		// the observation itself grants no physical custody or public readiness.
+		MeshStorage::mesh_surface_settle_completed_fallback_uploads(*geometry_source, input_mask);
+		error = shader->get_external_pipeline_value_plan(request, p_surface.primitive, instance192, indexed144, native_shader, *geometry_source, observed);
+		if (error != OK) {
+			return fail("value_plan", error);
+		}
+		if (observed.native_shader != native_shader || observed.input_mask != input_mask ||
+				observed.key.version != key.version || observed.key.framebuffer_format_id != key.framebuffer_format_id ||
+				observed.key.primitive_type != key.primitive_type || observed.key.cull_mode != key.cull_mode ||
+				observed.key.wireframe != key.wireframe || observed.key.ubershader != key.ubershader ||
+				observed.key.instance192 != key.instance192 || observed.key.indexed144 != key.indexed144 ||
+				observed.key.shader_specialization.packed_0 != key.shader_specialization.packed_0 ||
+				observed.key.shader_specialization.packed_1 != key.shader_specialization.packed_1 ||
+				memcmp(&observed.key.shader_specialization.packed_2, &key.shader_specialization.packed_2, sizeof(key.shader_specialization.packed_2)) != 0 || observed.key.render_pass != key.render_pass) {
+			return fail("value_plan_match", ERR_INVALID_DATA);
+		}
+		error = r_preparation._prospective_admission(observed.native_shader, observed.input_mask, observed.geometry, material->uniform_set,
+				observed.key.framebuffer_format_id, observed.state.primitive, observed.state.raster, observed.state.multisample,
+				observed.state.depth_stencil, observed.state.blend, observed.key.render_pass, observed.state.specialization, material_observed);
+		if (error != OK) {
+			return fail("prospective_admission", error);
+		}
+	}
+	error = MeshStorage::mesh_surface_hold_derive(*geometry_source, input_mask, false, false, 0, r_preparation.geometry[0]);
+	if (error != OK) {
+		return fail("geometry_derive", error);
+	}
+	if (instance192) {
+		error = r_preparation._prospective_execution_geometry_matches(observed.geometry);
+		if (error != OK) {
+			return fail("prospective_geometry_match", error);
+		}
+	}
+	key.vertex_format_id = r_preparation.geometry[0].get_vertex_format();
+	r_preparation.last_error = ERR_CANT_CREATE;
+	r_preparation.created_pipeline = shader->create_native_pipeline(key, &r_preparation, instance192 ? &observed : nullptr);
+	if (r_preparation.created_pipeline.is_null()) {
+		return fail("pipeline_factory", r_preparation.last_error);
+	}
+	// Keep both prefixes in the admitted row on every failure. Its original
+	// service path, not this stack frame, owns retirement and resource charges.
+	error = storage->material_native_hold_acquire(p_surface.material_selection, native_shader,
+			r_preparation.created_pipeline, material->uniform_set, r_preparation.material, r_preparation.max_resources, p_surface.material_generation, instance192 ? &material_observed : nullptr);
+	if (error != OK) {
+		return fail("material_hold", error);
+	}
+	r_preparation.selected_geometry = 0;
+	r_preparation.classification = classification;
+	r_preparation.ubershader = false;
+	r_preparation.cull_mode = key.cull_mode;
+	return fail("complete", OK);
+}
+
+Error RenderForwardMobile::external_pipeline_prepare_for_view(const RendererRD::ExternalSurfaceSelection &surface, const RendererRD::ExternalPacketViewLease &view, const RendererRD::ExternalPacketPipelineRequest &selection, const RendererRD::ExternalPipelinePreparation *&out, bool p_pre_list) {
+	return RendererRD::ParticlesStorage::get_singleton()->particles_external_prepare_pipeline(surface, view, selection, +[](void *renderer, const RendererRD::ExternalSurfaceSelection &source, RendererRD::ExternalPipelinePreparation &row) { return static_cast<RenderForwardMobile *>(renderer)->external_pipeline_prepare(source, row); }, this, out, p_pre_list);
+}
+
+Error RenderForwardMobile::build_native_material_fixed_pass_data(Vector<uint8_t> &r_instance, Vector<uint8_t> &r_implementation, Vector<uint8_t> &r_cluster, Vector<uint8_t> &r_push) {
+#ifdef REAL_T_IS_DOUBLE
+ return ERR_UNAVAILABLE;
+#else
+ SceneState::InstanceData instance{};
+ const Transform3D identity;
+ RendererRD::MaterialStorage::store_transform(identity, instance.transform);
+ RendererRD::MaterialStorage::store_transform(identity, instance.prev_transform);
+ instance.layer_mask = 1;
+ instance.set_compressed_aabb(AABB(Vector3(-0.5, -0.5, 0), Vector3(1, 1, 0)));
+ instance.set_uv_scale(Vector4());
+ auto bytes = [](const void *data, uint32_t size) {
+  Vector<uint8_t> result;
+  if (result.resize(size) != OK) { return result; }
+  memcpy(result.ptrw(), data, size);
+  return result;
+ };
+ Vector<uint8_t> implementation_bytes, cluster_bytes;
+ // Pipeline specialization light counts must be NONE. Light code only
+ // checks sentinel after the first light. Decals/probes stop at i=0.
+ for (int i = 0; i < 2; ++i) {
+  instance.omni_lights[i] = instance.spot_lights[i] = instance.area_lights[i] = UINT32_MAX;
+  instance.decals[i] = instance.reflection_probes[i] = UINT32_MAX;
+ }
+ const uint32_t push[4] = {};
+ Vector<uint8_t> instance_bytes = bytes(&instance, sizeof(instance));
+ Vector<uint8_t> push_bytes = bytes(push, sizeof(push));
+ if (instance_bytes.size() != sizeof(instance) || push_bytes.size() != sizeof(push)) { return ERR_OUT_OF_MEMORY; }
+ r_instance = instance_bytes;
+ r_implementation = implementation_bytes;
+ r_cluster = cluster_bytes;
+ r_push = push_bytes;
+ return OK;
+#endif
+}
+
+Error RenderForwardMobile::_plan_native_material_recipe(RID selected_material, RID selected_mesh, uint32_t selected_surface, RD::FramebufferFormatID actual_format, RendererRD::NativeMaterialRecipeRoster &plan, uint32_t limit) {
+	using namespace RendererRD;
+	auto *storage = MaterialStorage::get_singleton();
+	auto *meshes = MeshStorage::get_singleton();
+	if (!storage || !meshes || get_singleton() != this) { return ERR_UNCONFIGURED; }
+	Error error = plan._begin(*storage, *meshes, selected_material, selected_mesh, selected_surface, actual_format, limit);
+	if (error != OK) { return error; }
+	auto fail = [&](Error error) { const Error returned = plan.release(); return returned == OK ? error : returned; };
+	MaterialStorage::MaterialData *original = nullptr;
+	error = plan._material_data(original);
+	if (error != OK) { return fail(error); }
+	if (!original || original->get_native_recipe_backend() != 1) { return fail(ERR_UNAVAILABLE); }
+	auto *material = static_cast<SceneShaderForwardMobile::MaterialData *>(original);
+	if (!material->shader_data) { return fail(ERR_UNAVAILABLE); }
+	ExternalPacketPipelineRequest request;
+	request.backend = ExternalPacketPipelineRequest::Backend::MOBILE;
+	request.pass = ExternalPacketPass::OPAQUE;
+	request.framebuffer_format = actual_format;
+	request.version = SceneShaderForwardMobile::SHADER_VERSION_COLOR_PASS;
+	request.view_count = 1;
+	SceneShaderForwardMobile::ShaderSpecialization specialization = {};
+	specialization.omni_lights = SceneShaderForwardMobile::shader_count_for(0);
+	specialization.spot_lights = SceneShaderForwardMobile::shader_count_for(0);
+	specialization.area_lights = SceneShaderForwardMobile::shader_count_for(0);
+	specialization.reflection_probes = SceneShaderForwardMobile::shader_count_for(0);
+	specialization.directional_lights = SceneShaderForwardMobile::shader_count_for(0);
+	specialization.decals = false;
+	specialization.disable_fog = true;
+	specialization.luminance_multiplier = 1.0f;
+	request.specialization[0] = specialization.packed_0;
+	request.specialization[1] = specialization.packed_1;
+	memcpy(&request.specialization[2], &specialization.packed_2, sizeof(request.specialization[2]));
+	SceneShaderForwardMobile::ShaderData::NativePipelineValuePlan pipeline;
+	error = material->shader_data->get_external_pipeline_value_plan(request, plan.surface.get_primitive(), true, false, plan.material.get_plan().material.snapshot.shader, plan.surface, pipeline);
+	if (error != OK) { return fail(error); }
+	if (pipeline.input_mask != plan.material.get_input_mask() || pipeline.native_shader != plan.material.get_plan().material.snapshot.shader) { return fail(ERR_INVALID_DATA); }
+	plan.primitive = pipeline.state.primitive;
+	plan.raster = pipeline.state.raster;
+	plan.multisample = pipeline.state.multisample;
+	plan.depth_stencil = pipeline.state.depth_stencil;
+	plan.blend = pipeline.state.blend;
+	plan.specialization = pipeline.state.specialization;
+	Vector<RD::Uniform> base, pass;
+	_update_render_base_uniform_set(&error, &base);
+	if (error != OK) { return fail(error); }
+	const auto &samplers = storage->samplers_rd_get_default();
+	_setup_render_pass_uniform_set(RENDER_LIST_OPAQUE, nullptr, false, RID(), samplers, false, 0u, &error, &pass);
+	if (error != OK) { return fail(error); }
+	NativeMaterialRecipeRoster::FixedData fixed;
+	error = RenderSceneDataRD::build_native_material_fixed_scene_data(fixed.scene);
+	if (error == OK) { error = build_native_material_fixed_pass_data(fixed.instance, fixed.implementation, fixed.cluster, fixed.push); }
+	if (error != OK) { return fail(error); }
+	// Exact finite Instance192 current/reset CPU input. No GPU or mesh-byte
+	// qualification is inferred from these bytes or the retained candidate.
+	float instance[48] = {};
+	instance[0] = instance[5] = instance[10] = 1.0f;
+	instance[11] = -2.0f;
+	instance[12] = instance[17] = instance[22] = 1.0f;
+	instance[24] = instance[29] = instance[34] = 1.0f;
+	instance[35] = 2.0f;
+	instance[36] = instance[37] = instance[38] = instance[39] = 1.0f;
+	if (fixed.current.resize(sizeof(instance)) != OK) { return fail(ERR_OUT_OF_MEMORY); }
+	memcpy(fixed.current.ptrw(), instance, sizeof(instance));
+	fixed.previous = fixed.current;
+	error = plan._finish(NativeMaterialRecipeRoster::Backend::MOBILE, pipeline.geometry, base, pass, fixed, limit);
+	return error == OK ? OK : fail(error);
 }

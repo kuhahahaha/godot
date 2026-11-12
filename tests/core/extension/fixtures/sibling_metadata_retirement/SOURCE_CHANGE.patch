@@ -1,0 +1,303 @@
+diff --git a/core/extension/gdextension_production_request.cpp b/core/extension/gdextension_production_request.cpp
+index ac46ef7fff..8b75a026a3 100644
+--- a/core/extension/gdextension_production_request.cpp
++++ b/core/extension/gdextension_production_request.cpp
+@@ -1925,6 +1925,18 @@ Error Registry::production_output_owner_bind(ProductionOutputPin &pin, Rendering
+ 	if (request.output_owner_cursor == UINT32_MAX) {
+ 		request.output_owner_cursor = pin.cell_index;
+ 	}
++	if (kind == ProductionOutputOwnerKind::GENERATION) {
++		for (uint32_t i = 0; i < request.resource_count; ++i) {
++			auto &resource = request.resources[i];
++			if (resource.request == &request && resource.request_serial == request.serial &&
++					resource.declaration.resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1 &&
++					resource.declaration.ownership == GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 &&
++					resource.metadata_created && !resource.metadata_returned && resource.metadata_data && resource.metadata_consumer &&
++					resource.metadata_root_serial == pin.serial) {
++				resource.metadata_generation_bound = true;
++			}
++		}
++	}
+ 	return OK;
+ }
+ 
+@@ -2067,13 +2079,19 @@ Error Registry::production_output_generation_return(ProductionOutputPin &pin, Re
+ 	if (projected != OK) {
+ 		return projected;
+ 	}
+-	// The placement owner remains alive until the released particles RID is
+-	// actually freed. Only this root's own CPU allocation may outlive its pin;
+-	// the complete request report and reclaim gate still include that resource.
++	// Each installed generation's placement owner remains alive until its RID
++	// is actually freed. Sibling generations must be able to return their roots
++	// independently, including after a sibling root was unpinned but before its
++	// particles_free. A metadata bind to an uninstalled pin is not this proof.
++	// The complete request report and reclaim gate still count every allocation.
+ 	uint32_t owner_metadata_pending = 0;
+ 	for (uint32_t i = 0; i < request.resource_count; ++i) {
+ 		const auto &resource = request.resources[i];
+-		owner_metadata_pending += resource.metadata_data && resource.metadata_root_serial == pin.serial;
++		owner_metadata_pending += resource.request == &request && resource.request_serial == request.serial &&
++				resource.declaration.resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1 &&
++				resource.declaration.ownership == GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 &&
++				resource.metadata_created && !resource.metadata_returned && resource.metadata_data && resource.metadata_consumer &&
++				resource.metadata_root_serial && resource.metadata_generation_bound;
+ 	}
+ 	if (request.source_device_lost || (request.compute_list_open || request.draw_list_open) || (!request.cancelled && request.next_action != request.action_count) ||
+ 			terminal.root_source.possible_obligations || terminal.root_source.physical_returns_pending != owner_metadata_pending ||
+diff --git a/core/extension/gdextension_production_request.h b/core/extension/gdextension_production_request.h
+index 1096621d14..75dd3fdac7 100644
+--- a/core/extension/gdextension_production_request.h
++++ b/core/extension/gdextension_production_request.h
+@@ -224,6 +224,9 @@ class ProductionResourceSlot {
+ 	void *metadata_data = nullptr;
+ 	uint64_t metadata_root_serial = 0;
+ 	bool metadata_created = false, metadata_returned = false;
++	// Set only by successful real GENERATION owner installation. Survives root
++	// unpin until the actual placement allocation returns at particles_free.
++	bool metadata_generation_bound = false;
+ 	Error handoff_error = OK;
+ };
+ class ProductionActionCell {
+diff --git a/tests/core/extension/test_production_request.cpp b/tests/core/extension/test_production_request.cpp
+index 46f9cfeda6..39efb9d8bb 100644
+--- a/tests/core/extension/test_production_request.cpp
++++ b/tests/core/extension/test_production_request.cpp
+@@ -5021,9 +5021,13 @@ struct Access {
+ 		GDExtensionInterfaceDeviceSessionOutputWithdrawV1 withdraw = nullptr;
+ 		GDExtensionOutputCreateResultV1 created{};
+ 		GDExtensionDeviceExit::ProductionOutputMetadataLease unrelated;
+-		bool extra_metadata = false;
++		GDExtensionDeviceExit::ProductionOutputPin unrelated_pin;
++		bool extra_metadata = false, bound_unlinked = false;
+ 		uint32_t calls = 0;
+ 		~SceneMetadataProbe() {
++			if (!unrelated_pin.is_empty()) {
++				CHECK(fixture->registry.production_output_unpin(unrelated_pin) == OK);
++			}
+ 			if (!unrelated.is_empty()) {
+ 				CHECK(fixture->registry.production_output_metadata_return(unrelated) == OK);
+ 			}
+@@ -5061,6 +5065,12 @@ struct Access {
+ 				const uint64_t revision = fixture.request->revision;
+ 				REQUIRE(fixture.registry.production_output_metadata_create(context, ref, 1, fixture.rd, 32, 8, probe.unrelated) == OK);
+ 				CHECK(fixture.request->revision == revision + 1);
++				if (probe.bound_unlinked) {
++					REQUIRE(fixture.registry.production_output_pin(context, ref, fixture.rd, probe.unrelated_pin) == OK);
++					REQUIRE(fixture.registry.production_output_metadata_bind(probe.unrelated, probe.unrelated_pin) == OK);
++					CHECK(fixture.request->resources[1].metadata_root_serial != 0);
++				}
++				CHECK_FALSE(fixture.request->resources[1].metadata_generation_bound);
+ 			}
+ 			GDExtensionOutputGenerationInputV1 generation{};
+ 			generation.abi = production_dto_abi<GDExtensionOutputGenerationInputV1>();
+@@ -5071,7 +5081,7 @@ struct Access {
+ 			CHECK(probe.native->withdrawing());
+ 		}
+ 	};
+-	static void output_scene_metadata(bool extra_metadata) {
++	static void output_scene_metadata(bool extra_metadata, bool bound_unlinked = false) {
+ 		using namespace GDExtensionDeviceExit;
+ 		auto *server = ordinal_server();
+ 		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
+@@ -5093,6 +5103,7 @@ struct Access {
+ 		SceneMetadataProbe probe;
+ 		probe.fixture = &fixture;
+ 		probe.extra_metadata = extra_metadata;
++		probe.bound_unlinked = bound_unlinked;
+ 		probe.create = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputCreateV2>(gdextension_get_guarded_proc_address("device_session_output_create_v2"));
+ 		probe.withdraw = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputWithdrawV1>(gdextension_get_guarded_proc_address("device_session_output_withdraw_v1"));
+ 		REQUIRE(probe.create != nullptr);
+@@ -5112,6 +5123,7 @@ struct Access {
+ 		CHECK(request.action_count == 0);
+ 		CHECK(request.graph_count == 0);
+ 		CHECK(request.native_count == 0);
++		CHECK(request.resources[0].metadata_generation_bound);
+ 		const uint64_t root_serial = native.generation_serial();
+ 		REQUIRE(root_serial != 0);
+ 		const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+@@ -5136,6 +5148,19 @@ struct Access {
+ 				ProductionControlOutput blocked{};
+ 				REQUIRE(fixture.registry.production_control_consume(ref, serial, &blocked) == OK);
+ 			}
++			if (bound_unlinked) {
++				CHECK(fixture.registry.production_output_metadata_return(probe.unrelated) == ERR_BUSY);
++				REQUIRE(fixture.registry.production_output_unpin(probe.unrelated_pin) == OK);
++				CHECK(request.resources[1].metadata_root_serial != 0);
++				CHECK_FALSE(request.resources[1].metadata_generation_bound);
++				// Removing the uninstalled pin does not turn its allocation into
++				// generation-owned metadata. Actual return is still required.
++				const uint64_t serial = dispatch();
++				CHECK(request.control.output.result.native_error == ERR_BUSY);
++				CHECK_FALSE(request.control.output.output_generation.native_released);
++				ProductionControlOutput blocked{};
++				REQUIRE(fixture.registry.production_control_consume(ref, serial, &blocked) == OK);
++			}
+ 			const uint64_t revision = request.revision;
+ 			REQUIRE(fixture.registry.production_output_metadata_return(probe.unrelated) == OK);
+ 			CHECK(request.revision == revision + 1);
+@@ -5189,6 +5214,148 @@ struct Access {
+ 		fixture.cleanup_owner();
+ 		CHECK(fixture.owner_cleaned);
+ 	}
++	struct TwoSceneMetadataProbe {
++		GDExtensionInterfaceDeviceSessionOutputCreateV2 create = nullptr;
++		GDExtensionInterfaceDeviceSessionOutputWithdrawV1 withdraw = nullptr;
++		GDExtensionOutputCreateResultV1 created[2]{};
++		uint32_t calls = 0;
++		static void receive(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
++			auto &probe = *static_cast<TwoSceneMetadataProbe *>(opaque);
++			++probe.calls;
++			GDExtensionOutputCreateInputV2 input{};
++			input.abi = GDExtensionDeviceExit::production_dto_abi<GDExtensionOutputCreateInputV2>();
++			input.abi.abi_version = 2;
++			input.config.abi = GDExtensionDeviceExit::production_dto_abi<GDExtensionOutputCreateInputV1>();
++			input.config.profile = 3;
++			input.config.max_views = input.config.max_inflight = 1;
++			input.config.space = input.config.query_enabled = 1;
++			for (uint32_t axis = 0; axis < 3; ++axis) {
++				input.config.bounds.size[axis] = input.config.query_bounds.size[axis] = 1;
++			}
++			for (uint32_t i = 0; i < 2; ++i) {
++				input.metadata_resource_slot = i;
++				probe.create(context, ref, &input, &probe.created[i]);
++				REQUIRE(probe.created[i].status.error == OK);
++				REQUIRE(probe.created[i].particles != 0);
++				REQUIRE(probe.created[i].generation != 0);
++			}
++			CHECK(probe.created[0].particles != probe.created[1].particles);
++			CHECK(probe.created[0].generation != probe.created[1].generation);
++			for (uint32_t i = 0; i < 2; ++i) {
++				GDExtensionOutputGenerationInputV1 generation{};
++				generation.abi = GDExtensionDeviceExit::production_dto_abi<GDExtensionOutputGenerationInputV1>();
++				generation.particles = probe.created[i].particles;
++				generation.generation = probe.created[i].generation;
++				REQUIRE(probe.withdraw(context, ref, &generation).error == OK);
++			}
++		}
++	};
++	static void output_scene_metadata_two_generations() {
++		using namespace GDExtensionDeviceExit;
++		auto *server = ordinal_server();
++		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
++			return;
++		}
++		const auto consume = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
++		const auto release = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReleaseV2>("device_session_production_release_v2");
++		REQUIRE(consume != nullptr);
++		REQUIRE(release != nullptr);
++		OrdinalPlan plan;
++		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 2, 2, 0, 0, 0, 2, 0, 0 };
++		plan.action_count = plan.use_count = plan.readback_count = 0;
++		plan.resource_count = 2;
++		for (uint32_t i = 0; i < 2; ++i) {
++			plan.resources[i] = { GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, RendererRD::ParticlesStorage::particles_external_scene_metadata_bytes(), 0 };
++		}
++		SingletonEnrollment fixture;
++		fixture.public_port = true;
++		TwoSceneMetadataProbe probe;
++		probe.create = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputCreateV2>(gdextension_get_guarded_proc_address("device_session_output_create_v2"));
++		probe.withdraw = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputWithdrawV1>(gdextension_get_guarded_proc_address("device_session_output_withdraw_v1"));
++		REQUIRE(probe.create != nullptr);
++		REQUIRE(probe.withdraw != nullptr);
++		REQUIRE(ordinal_initialize(fixture, server, plan, &TwoSceneMetadataProbe::receive, &probe) == OK);
++		// One real storage instance, two actual CreateV2 results. No fabricated roots.
++		RendererRD::ExternalLinkedOwnerTest native(fixture.rd, true);
++		auto *storage = RendererRD::ParticlesStorage::get_singleton();
++		auto &request = *fixture.request;
++		const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request.serial };
++		uint64_t record_control = 0;
++		REQUIRE(fixture.port.record_schedule(ref, &record_control) == OK);
++		server->sync();
++		GDExtensionProductionRecordReportV2 recorded{};
++		REQUIRE(consume(ref, record_control, &recorded).native_error == OK);
++		REQUIRE(probe.calls == 1);
++		CHECK(recorded.report.physical_returns_pending == 2);
++		CHECK(request.action_count == 0);
++		CHECK(request.graph_count == 0);
++		CHECK(request.native_count == 0);
++		REQUIRE(request.resources[0].metadata_root_serial != 0);
++		REQUIRE(request.resources[1].metadata_root_serial != 0);
++		CHECK(request.resources[0].metadata_root_serial != request.resources[1].metadata_root_serial);
++		CHECK(request.resources[0].metadata_generation_bound);
++		CHECK(request.resources[1].metadata_generation_bound);
++		const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
++		bool returned[2] = {};
++		for (uint32_t turn = 0; turn < 2; ++turn) {
++			uint64_t serial = 0;
++			REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &budget) == OK);
++			REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);
++			server->sync();
++			REQUIRE(request.control.state == ProductionControlState::RETURNED);
++			ProductionControlOutput output{};
++			REQUIRE(fixture.registry.production_control_consume(ref, serial, &output) == OK);
++			CHECK(output.result.native_error == OK);
++			// Neither owner can wait for the other owner's metadata to be freed.
++			// On the second turn the first root pin is already gone, but its RID
++			// and real metadata allocation deliberately remain alive.
++			REQUIRE_MESSAGE(output.output_generation.native_released, "Two genuine SceneOnly roots must terminal independently before either particles_free");
++			const auto &terminal = output.output_generation;
++			const uint32_t index = terminal.particles == probe.created[0].particles ? 0 : 1;
++			CHECK(terminal.particles == probe.created[index].particles);
++			CHECK(terminal.generation == probe.created[index].generation);
++			CHECK(terminal.root_serial == request.resources[index].metadata_root_serial);
++			CHECK_FALSE(returned[index]);
++			returned[index] = true;
++			CHECK(terminal.root_source.physical_returns_pending == 2);
++			CHECK(output.service_usage.controls == 1);
++			CHECK(output.service_usage.passes == 1);
++			CHECK(output.service_usage.receipts == 0);
++			CHECK(fixture.registry.production_release(ref).native_error == ERR_BUSY);
++			CHECK(storage->owns_particles(RID::from_uint64(probe.created[0].particles)));
++			CHECK(storage->owns_particles(RID::from_uint64(probe.created[1].particles)));
++		}
++		CHECK(returned[0]);
++		CHECK(returned[1]);
++		CHECK(request.output_owner_head == UINT32_MAX);
++		CHECK(request.output_owner_cursor == UINT32_MAX);
++		for (uint32_t i = 0; i < 2; ++i) {
++			const RID rid = RID::from_uint64(probe.created[i].particles);
++			storage->particles_free(rid);
++			CHECK_FALSE(storage->owns_particles(rid));
++			CHECK(request.resources[i].metadata_returned);
++			CHECK(request.resources[i].metadata_data == nullptr);
++			GDExtensionProductionReportV2 live{};
++			REQUIRE(fixture.registry.production_report_contents_locked(request, live) == OK);
++			CHECK(live.physical_returns_pending == 1 - i);
++			if (i == 0) {
++				CHECK(fixture.registry.production_release(ref).native_error == ERR_BUSY);
++			}
++		}
++		CHECK(fixture.driver.issues == 0);
++		for (uint32_t turn = 0; turn < 8 && request.serial; ++turn) {
++			GDExtensionProductionServiceBudgetV1 remaining{};
++			GDExtensionProductionReportV2 report{};
++			const Error error = Error(release(ref, &budget, &remaining, &report).native_error);
++			CHECK((error == OK || error == ERR_BUSY));
++			if (request.serial) {
++				server->sync();
++			}
++		}
++		CHECK(request.serial == 0);
++		fixture.cleanup_owner();
++		CHECK(fixture.owner_cleaned);
++	}
+ 	struct SceneMetadataDirectoryProbe {
+ 		SingletonEnrollment *fixture = nullptr;
+ 		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
+@@ -9382,9 +9549,15 @@ TEST_CASE("[SceneTree][ProductionRequest][OutputMetadataFactory] bound live unli
+ TEST_CASE("[SceneTree][ProductionRequest][OutputSceneMetadata] real SceneOnly root terminal retains metadata until actual particles free") {
+ 	Access::output_scene_metadata(false);
+ }
++TEST_CASE("[SceneTree][ProductionRequest][OutputSceneMetadata] two actual SceneOnly generations terminal before either metadata allocation returns") {
++	Access::output_scene_metadata_two_generations();
++}
+ TEST_CASE("[SceneTree][ProductionRequest][OutputSceneMetadata] unrelated metadata blocks SceneOnly terminal until actual return") {
+ 	Access::output_scene_metadata(true);
+ }
++TEST_CASE("[SceneTree][ProductionRequest][OutputSceneMetadata] metadata bound only to an uninstalled pin still blocks generation terminal") {
++	Access::output_scene_metadata(true, true);
++}
+ TEST_CASE("[SceneTree][ProductionRequest][OutputSceneMetadata] exhausted original pin capacity refunds real SceneOnly metadata allocation") {
+ 	Access::output_scene_metadata_refund();
+ }

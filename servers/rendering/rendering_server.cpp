@@ -2706,6 +2706,13 @@ void RenderingServer::_bind_methods() {
 
 	/* PARTICLES API */
 
+	ClassDB::bind_method(D_METHOD("particles_external_create", "config"), &RenderingServer::particles_external_create);
+	ClassDB::bind_method(D_METHOD("particles_external_acquire", "particles", "request"), &RenderingServer::particles_external_acquire);
+	ClassDB::bind_method(D_METHOD("particles_external_seal", "particles", "lease_token", "seal"), &RenderingServer::particles_external_seal);
+	ClassDB::bind_method(D_METHOD("particles_external_cancel", "particles", "lease_token"), &RenderingServer::particles_external_cancel);
+	ClassDB::bind_method(D_METHOD("particles_external_withdraw", "particles", "generation"), &RenderingServer::particles_external_withdraw);
+	ClassDB::bind_method(D_METHOD("particles_scene_connect", "receiver_instance", "config"), &RenderingServer::particles_scene_connect);
+	ClassDB::bind_method(D_METHOD("particles_external_poll", "particles", "generation"), &RenderingServer::particles_external_poll);
 	ClassDB::bind_method(D_METHOD("particles_create"), &RenderingServer::particles_create);
 	ClassDB::bind_method(D_METHOD("particles_set_mode", "particles", "mode"), &RenderingServer::particles_set_mode);
 	ClassDB::bind_method(D_METHOD("particles_set_emitting", "particles", "emitting"), &RenderingServer::particles_set_emitting);
@@ -2745,6 +2752,7 @@ void RenderingServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("particles_set_draw_passes", "particles", "count"), &RenderingServer::particles_set_draw_passes);
 	ClassDB::bind_method(D_METHOD("particles_set_draw_pass_mesh", "particles", "pass", "mesh"), &RenderingServer::particles_set_draw_pass_mesh);
 	ClassDB::bind_method(D_METHOD("particles_get_current_aabb", "particles"), &RenderingServer::particles_get_current_aabb);
+	ClassDB::bind_method(D_METHOD("particles_get_current_data", "particles"), &RenderingServer::particles_get_current_data);
 	ClassDB::bind_method(D_METHOD("particles_set_emission_transform", "particles", "transform"), &RenderingServer::particles_set_emission_transform);
 
 	BIND_ENUM_CONSTANT(RSE::PARTICLES_MODE_2D);

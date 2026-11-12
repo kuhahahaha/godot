@@ -1,0 +1,101 @@
+OBSERVE retry implementation handoff (2026-11-06)
+
+Tree: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104
+Source/test edits frozen for parent verification. No builds or commits run here.
+Files changed by this task only:
+  core/extension/gdextension_production_request.cpp
+  tests/core/extension/test_production_request.cpp
+No public ABI, headers, RD, queues, or registries changed.
+
+Root cause and compatibility:
+Old RETURNED branch compared the offered budget with the immutable old budget.
+Different live budget consumed and accepted again in the same call; different
+expired budget discarded the old result and returned OK. Expired offered budget
+with a live original PENDING/QUEUED control also returned misleading OK.
+New nonzero RETURNED retry consumes exactly once and returns the actual old
+native_error, regardless of offered budget, with no replacement admission.
+New nonzero retry retires an original PENDING whose retained immutable budget
+has expired to a proven no-effect result(OK), then consumes it. This uses the
+same existing cell and RELEASE's never-published expiry precedent. No native
+service, budget renewal, or physical completion is asserted.
+A nonzero expired offer while the original PENDING budget is still live, or
+while original QUEUED/EXECUTING, now returns ERR_BUSY instead of OK. This is the
+intentional compatibility correction to the old ambiguous metadata behavior.
+Zero budget queries preserve their existing behavior.
+
+Exact public caller semantics:
+1. Zero controls, receipts, passes, OR deadline means metadata query only. OK
+   from this shape never establishes control consumption, even after expiry.
+2. Nonzero live offer with no outstanding control can accept/schedule one new
+   OBSERVE and returns Busy on normal asynchronous admission.
+3. Nonzero retry of live original PENDING retains the original serial/budget.
+   Only a currently live offer permits FIFO publication. Offered values never
+   replace or recharge its immutable execution budget.
+4. Original expired PENDING has never published: any nonzero retry consumes
+   its no-effect return, preserving serial, without admission of a new turn.
+5. QUEUED/EXECUTING is never synthesized as no-effect on deadline expiry. It
+   remains Busy until real FIFO execution returns. A lookup/schedule race may
+   conservatively return Busy for a turn which just returned; retry consumes.
+6. RETURNED consumes only that old turn and returns its actual native_error.
+   Busy can therefore mean either outstanding or consumed-with-Busy. Ordinary
+   service calls alone do not expose this distinction. Never infer state from
+   OBSERVE service_pending/service_control_serial, which remain RELEASE fields.
+7. Strict drain-only protocol without any new ABI: offer valid DTO with all
+   counts nonzero and an already-expired NONZERO deadline. Preserve every old
+   diagnostic and repeat this expired offer until OK. Such an offer cannot
+   accept any new turn. Busy may consume an old Busy result; the next expired
+   call then returns OK with no cell outstanding. If original PENDING is live,
+   it stays Busy until its own finite immutable deadline expires, then returns
+   no-effect/consumed. Queued work must actually return. An expired nonzero OK
+   now establishes no outstanding control at this call; it is NOT GPU, physical
+   obligation, logical request completion, or runtime receipt evidence.
+8. After that drain boundary, caller may invoke cancellation/release, or make
+   a deliberately separate live service call if physical maintenance is still
+   needed. Do not use a live offer as the drain-only confirmation: with an empty
+   cell it may accept new work.
+9. Existing restrictions remain: a different outstanding kind returns Busy;
+   invalid owner/ref fails validation. A RETURNED output_generation.native_released
+   still refuses public consumption with ERR_UNAVAILABLE because its full typed
+   internal result must be consumed by the original capable owner. Public drain
+   cannot replace that seam. Treat errors as diagnostics, never consumption proof.
+
+Regression:
+Existing case name (unchanged):
+[SceneTree][ProductionRequest] public Observe hands owner maintenance to original RS FIFO
+Helper: Access::singleton_split_owner_observe / SplitOwner.
+Uses actual Registry, original server FIFO, distinct creating owner and RT.
+Added/changed checks:
+- FIFO saturated; accepted original budget actually expires using monotonic
+  clock; zero query preserves PENDING; saved nonzero budget consumes no-effect
+  return without driver retain/poll or serial replacement.
+- Expired offered budget while original is still live PENDING returns Busy.
+- Expired offer while original is QUEUED returns Busy and preserves serial.
+- Refreshed live deadline and changed receipts consume RETURNED without requeue.
+- Different expired offer still consumes a normal returned OK.
+- Hold actual RD mutex on owner while original FIFO executes to obtain a real
+  returned Busy; changed expired offer must return Busy and consume; next
+  expired offer returns OK without a new serial or driver activity.
+- Existing same-budget, zero-query, foreign-thread, owner-seal and RELEASE checks
+  remain. Main rendezvous loop increases from five to six for actual Busy turn.
+
+Saved artifacts:
+/tmp/b4-observe-retry-red.patch : test-only diff versus HEAD (expected RED, not run).
+/tmp/b4-observe-retry-implementation.patch : exact production-only fix diff.
+
+Parent negative-control recipe (does not discard unrelated work):
+cd /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104
+git apply --reverse --check /tmp/b4-observe-retry-implementation.patch
+git apply --reverse /tmp/b4-observe-retry-implementation.patch
+[rebuild parent selected engine target and run the named existing test case]
+git apply --check /tmp/b4-observe-retry-implementation.patch
+git apply /tmp/b4-observe-retry-implementation.patch
+[rebuild same target and rerun same test case]
+
+This reverses only this production function's fix; the new regression remains.
+Do not reverse the test patch for RED. No git checkout/reset needed. Because the
+existing fixture aggregates owner check failures into test.passed, RED's final
+failure may report that summary assertion rather than each original check.
+The FIFO phase count and cleanup still execute on both code versions.
+
+Verification performed here: clang-format on two changed files; git diff --check
+passed. Actual RED/GREEN and native integration are NOT RUN here, owned by parent.

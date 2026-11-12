@@ -1,0 +1,147 @@
+{
+  "schema": 1,
+  "subject": "Independent retirement of sibling SceneOnly generations sharing one original request",
+  "base_commit": "9558cdc89578886e081b59b472fc476f3202467d",
+  "source_files": [
+    {
+      "path": "core/extension/gdextension_production_request.h",
+      "sha256": "c20491171145d04a56f16782b72e18843a1ef77d93393e1eae47fe1e860c80c5"
+    },
+    {
+      "path": "core/extension/gdextension_production_request.cpp",
+      "sha256": "2faa9a5717c34c7503214b70c87363ccd39cb825a29aaf4ef3bb8215ddda8084"
+    },
+    {
+      "path": "tests/core/extension/test_production_request.cpp",
+      "sha256": "06c0d9a3d1513cdb9cbdca985835cf75b5b511b322139f96badc98371b2dd558"
+    }
+  ],
+  "compiled_overlay_files": [
+    {
+      "path": "servers/rendering/rendering_device.cpp",
+      "sha256": "6e5ec272227a6b118cdc6207958b54d34344b7e3365636d40b5650b728060d17"
+    },
+    {
+      "path": "tests/servers/rendering/test_checked_draw_bind.cpp",
+      "sha256": "73ac947f2209b73c7d78be78560e7e3f57a1a60a921ba2fd20ff72d9a8206040"
+    },
+    {
+      "path": "tests/servers/rendering/test_record_source.cpp",
+      "sha256": "5a09257a8e96b504cab9d3f71fffae46f408a7ea1bee3f8bf5669cb92ad57a32"
+    },
+    {
+      "path": "tests/servers/rendering/test_external_output_contract.cpp",
+      "sha256": "96ff90c355c0012a087c9e0db7f480932e29220b189946fbb800829eacfe08fb"
+    }
+  ],
+  "source_patch": "SOURCE_CHANGE.patch",
+  "compiled_overlay_patch": "COMPILED_OVERLAY.patch",
+  "red": {
+    "exit_code": -6,
+    "test_revision": "Initial two-generation regression, before green uninstalled-pin negative control was added",
+    "binary_identity": null,
+    "binary_identity_note": "Red binary was not frozen; no size or digest is claimed. Final SOURCE_CHANGE.patch is the green source delta, not an exact red-source snapshot.",
+    "first_semantic_failures": [
+      "output.result.native_error == OK observed 44 (ERR_BUSY), expected 0",
+      "output.output_generation.native_released observed false"
+    ],
+    "termination_note": "Subsequent live-RID fixture destruction raised SIGABRT; core dumps disabled. Crash alone is not the detection oracle.",
+    "log": "checked-metadata-red.log"
+  },
+  "green": {
+    "build_exit_code": 0,
+    "binary": {
+      "bytes": 156730024,
+      "sha256": "d75aa4372d76d47aa98640cb39a7f5db55da86b6f9139daf480372ab10e11c79"
+    },
+    "focused": {
+      "exit_code": 0,
+      "test_cases_passed": 66,
+      "assertions_passed": 6623,
+      "log": "checked-draw-metadata-focused-green.log"
+    },
+    "combined": {
+      "exit_code": 0,
+      "test_cases_passed": 179,
+      "assertions_passed": 80359,
+      "log": "checked-draw-metadata-combined-green.log"
+    }
+  },
+  "verification_scope": [
+    "Two guarded CreateV2 results and withdrawals in the same original protected request",
+    "Both generation terminals before either particles_free, including second terminal after first root unpin",
+    "Actual metadata returns pending 2 -> 1 -> 0 through real particles_free",
+    "Nonzero metadata root serial bound only to an uninstalled pin remains blocking before and after unpin",
+    "Final request release remains blocked until all metadata allocations actually return"
+  ],
+  "preserved_gates": [
+    "original source/device and native identity",
+    "open list and unfinished action",
+    "possible obligations and known-vs-complete obligations",
+    "all non-generation metadata and other physical returns",
+    "complete request report and final reclaim"
+  ],
+  "production_change": "Persistent private metadata_generation_bound is set only after successful real GENERATION owner binding. Sibling CPU allocations may outlive their individual pins; uninstalled pins do not qualify.",
+  "independent_review": {
+    "reviewer": "Sol /root/review_collision_fixture",
+    "status": "passed",
+    "provenance": "Root relay of completed independent source review; no separate review artifact fabricated."
+  },
+  "limitations": [
+    "No real GPU execution or native driver completion qualification is claimed by this mechanical test fixture.",
+    "No dynamic source, Full/profile/camera, read issuer, runtime/full-ready, or platform qualification claim.",
+    "The green binary includes the separately listed checked-draw overlay; aggregate test counts are not exclusive to this metadata fix."
+  ],
+  "artifacts": [
+    {
+      "path": "COMMANDS.json",
+      "bytes": 2252,
+      "sha256": "109612949e101baa10d38be950c59f5dd86bc4449b13eeeee15c61485a014533"
+    },
+    {
+      "path": "COMPILED_OVERLAY.patch",
+      "bytes": 16945,
+      "sha256": "ef180fc02864f48860192b4474b3748b0bc861ea7a11f4b3c58413ecdab0c55d"
+    },
+    {
+      "path": "SOURCE_CHANGE.patch",
+      "bytes": 17047,
+      "sha256": "8b8ee67f99bd931569a7ff3f602ba89f9a370947ad605c50ce580524ea46a424"
+    },
+    {
+      "path": "checked-draw-metadata-combined-green.log",
+      "bytes": 1225,
+      "sha256": "350517a71b91cda669d6d56777481a1f869e85d5d50e1eca330be8b1e78b0611"
+    },
+    {
+      "path": "checked-draw-metadata-focused-green.log",
+      "bytes": 726,
+      "sha256": "3760a5858a7df385213ff467b0d9d67a09b327c6d957753850ddda6152e46c12"
+    },
+    {
+      "path": "checked-draw-metadata-green-build.log",
+      "bytes": 3846,
+      "sha256": "e35d803b3843d6fb1b0848961ab43cd6390fa8256880556e18ded6a8bc430d53"
+    },
+    {
+      "path": "checked-draw-metadata-green-runs.json",
+      "bytes": 944,
+      "sha256": "382d555e054265ca747552afdfc095e9900961daf7a82e9a08d76d5d07d20a86"
+    },
+    {
+      "path": "checked-draw-metadata-red-runs.json",
+      "bytes": 631,
+      "sha256": "f5e5a1cefacee3e33bd5fcc24f93ee369024e48517f5c7e60c4a6283d92a4b16"
+    },
+    {
+      "path": "checked-draw-red.log",
+      "bytes": 16725,
+      "sha256": "f99a022b3106980ae7e8d10f4dbb3e33256058cbdb56be31538c8b0da5ceb053"
+    },
+    {
+      "path": "checked-metadata-red.log",
+      "bytes": 6548,
+      "sha256": "88916a16c9c410d8b376ee04ddbe5660c8328daa8c514469b62840dfb3417d18"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "head": "e6156718c0487fa084d66f7bec2ab7bc4049559b",
+  "files": [
+    {
+      "path": "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h",
+      "bytes": 33143,
+      "sha256": "4c55a6364c5a2a496cbb1f341897fabf2471d1e14d3ba212f33bd906c2ad9410"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp",
+      "bytes": 177416,
+      "sha256": "86af804e34a90a1d8f66cb97cb9319b2d1a35998c43b782964152f95a6b83654"
+    },
+    {
+      "path": "tests/servers/rendering/test_mobile_native_pass_selection.cpp",
+      "bytes": 8932,
+      "sha256": "a22daab4d05ce570d63f43ba583ccff5f803002752b0fe549ed2600a2ee57a12"
+    }
+  ],
+  "original_cpp_HEAD_sha256": "ceb765cd77cbdfbc6ec2a1d34d16d56296337a31b1fe8c1d33d2637b4881bc49",
+  "author_freeze_reference": "work/sprite-mobile-native-pass-selection-20261107/PRE_BUILD_SOURCE_IDENTITY.json"
+}

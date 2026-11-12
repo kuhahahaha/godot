@@ -1,0 +1,5 @@
+config_version=5
+[application]
+config/name="Native paid HostView receiver fixture"
+[rendering]
+renderer/rendering_method="mobile"

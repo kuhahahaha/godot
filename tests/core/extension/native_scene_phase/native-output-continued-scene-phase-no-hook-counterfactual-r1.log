@@ -1,0 +1,13 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/core/extension/test_production_request.cpp:12123:
+TEST CASE:  [SceneTree][ProductionRequest][NativeScenePhase] actual early hook owns bounded typed delivery expiry and original relay close
+
+tests/core/extension/test_production_request.cpp:5053: ERROR: CHECK( probe.typed_calls == occurrence + 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+===============================================================================
+[doctest] test cases:   4 |   3 passed | 1 failed | 2214 skipped
+[doctest] assertions: 320 | 319 passed | 1 failed |
+[doctest] Status: FAILURE!

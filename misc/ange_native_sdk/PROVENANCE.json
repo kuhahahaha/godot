@@ -1,0 +1,14 @@
+{
+  "source_schema": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/typed-renderer-fixture-native-build-20261111/source/core/extension/gdextension_interface.json",
+  "source_schema_sha256": "1a7a839114b3ec7a79a9d5026fe78214023c6ed2370cd7784a5a6bdf4ffec1ca",
+  "formal_generator_directory": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-context-20261111/final-source-package/tools",
+  "formal_generator_receipt": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-context-20261111/GENERATED.json",
+  "support_source_root": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-numeric-frozen-source-20261107/godot-cpp",
+  "support_files": [
+    "include/godot_cpp/core/error_macros.hpp",
+    "include/godot_cpp/core/defs.hpp",
+    "include/godot_cpp/core/load_proc_address.inc",
+    "gen/include/godot_cpp/core/version.hpp"
+  ],
+  "scope": "Complete custom native interface SDK increment: 1 interface header and 2 loader products. No ANGE/RmlUi libraries; no engine/DSO binaries or runtime acceptance."
+}

@@ -1,0 +1,54 @@
+{
+  "status": "SOURCE_REVIEW_PASS_RUNTIME_PENDING",
+  "reviewer": "camera_real_consumer_fixture_sol independent task context",
+  "files": [
+    {
+      "path": "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h",
+      "sha256": "00f3c3dd763d6238a482d801c7442f2bf1fe7bed6c2ba43141d018928cd601c9",
+      "manifest_matches": true
+    },
+    {
+      "path": "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp",
+      "sha256": "e8bcef4ead15b2b47bc31c74e68a9f668eba9c7724365ba118b6c60ad8b09239",
+      "manifest_matches": true
+    },
+    {
+      "path": "tests/servers/rendering/test_clustered_native_pass_selection.cpp",
+      "sha256": "df1af9ede7821a88aba977d0982652be3d5090b5408c38fd472042a861fb8ec6",
+      "manifest_matches": true
+    }
+  ],
+  "preimages": [
+    {
+      "path": "work/sprite-clustered-native-pass-selection-20261107/PREIMAGE.h",
+      "sha256": "be246b5e7246abcfe05b3cbf049dcec682967b4202bb6c15313028247b0a8114"
+    },
+    {
+      "path": "work/sprite-clustered-native-pass-selection-20261107/PREIMAGE.cpp",
+      "sha256": "fce8379a7351214497e611c2955f32d759293373b4c892e126b3a55ed265ea0c"
+    }
+  ],
+  "exhaustive_color_check": {
+    "range": "0..65535",
+    "original_explicit_allowed_flags": [
+      0,
+      1,
+      2,
+      4,
+      5,
+      6,
+      8,
+      9,
+      10,
+      12,
+      13,
+      14
+    ],
+    "new_predicate_mismatches": [],
+    "unknown_high_bits": "predicate rejects every bit outside mask 15"
+  },
+  "blocking_findings": [],
+  "build": "NOT RUN (parent owns)",
+  "GPU": "NOT RUN (parent owns)",
+  "tests": "NOT RUN; static source review only"
+}

@@ -1,0 +1,9 @@
+General D32 native cohort is implemented on the original qualification bridge and ticket. D32 uses sampling plus depth attachment only; uploads remain refused. Raster shader/pipeline/framebuffer retirement retains their actual distinct physical obligations. Atomic V4 records depth before the original compute and owned asynchronous readback, with real draw-fact spans and initial content revision zero.
+
+The original actual Metal run exposed a real append-accounting error: frame enrollment synchronously joined hidden native facts, so a valid begin graph fact was incorrectly rejected. The fix captures its stable index before enrollment and retains every native fact. The preserved RED exits201; the revised engine reaches revision1 and native completion.
+
+Current final engine regression:2077 cases,520906 assertions,zero failures. The checked RD graph test and explicit synthetic poll/observe3 tests remain separate from GPU acceptance. The actual GPU process now exits0 and both clear/scissor cohorts, exact128-byte owned readbacks,ten refusal cases and three raster physical returns satisfy their checks; the final runner exits0 with every check true and exact inputs unchanged. Nonzero RT returns are accepted only when their exact operation/error pair matches a checked retry or one of the ten checked refusals; all other errors fail.
+
+History owner sources were selected by exact artifact reproduction because the old receipt omitted its owner source-head pin. They reproduce the complete original unit JSON and both GLSL sources. The current SDK archive is separately pinned and differs from the old archive; no original binary/source pair identity is claimed.
+
+Full particle production writer/Host receiver, original source issuance and specialized Scene provider qualification remain open. DELIVERY.json records scope, hashes and raw evidence locations.

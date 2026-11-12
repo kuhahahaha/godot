@@ -1,0 +1,44 @@
+{
+  "status": "CPU_REGRESSION_PASSED_GPU_SCENE_RUN_PENDING",
+  "base_commit": "27d0f6fd8c",
+  "candidate_sha256": "1fb8648de0787d33b85c7ab00158fc02f83a40ff06a0721ae9c73e479b56d55d",
+  "source_before_sha256": "bb780b621ad5fea301e3520da9a59652e3ffb6dfe5a94307d5a669f93958ab33",
+  "source_after_sha256": "4d480157d78fc03d51c5b3aeaa827dd90eaa7bbf3c071e2b47e35ab538cf5419",
+  "test_sha256": "a277ea8ce77b126d4b58731a86a4a21e23966d05c1806f730915139a31cb7ab2",
+  "red": {
+    "cases": 2,
+    "failed_cases": 2,
+    "assertions": 34,
+    "failed_assertions": 6,
+    "exit_code": 1,
+    "native_error": 44
+  },
+  "green": {
+    "focused": [
+      2,
+      44
+    ],
+    "ProductionRequest": [
+      64,
+      50331
+    ],
+    "ProductionNativeObserve": [
+      22,
+      17617
+    ],
+    "particle_cpu_neighbors": [
+      13,
+      75
+    ],
+    "exit_codes": 0
+  },
+  "logs_sha256": {
+    "red-build.log": "759545622d72e20de7e1d66ae13b72326628481151a6ce7199520652ac4eabc0",
+    "red-tests.log": "b83db61e1358aa56edf872ef79700a32c04074f66612e32910e8f9aa99dbb087",
+    "green-build.log": "9ca142167989d1001ccaf8343019b4b3fa2020ddb4e4713df82c749c0f231abf",
+    "green-focused.log": "322b0dd0cfc782d48e7d7d07e1c40c7857a756c3b6803d31202c6f2449f922ab",
+    "green-production.log": "3b71fdb52f45cca7ed6503f837c01e3888f67e30d98bb2cd3ec1e99fdb3f427f",
+    "green-observe.log": "1be07d730875e0cb2f9d847e7781ebd9bc6424b69d75095c51b41236f0d9ef83",
+    "green-particles.log": "644e9589a56cc17f048c9b55a15addcc171e0f1d07b95830e8c081ad0f737cad"
+  }
+}

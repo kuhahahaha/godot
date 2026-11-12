@@ -1,0 +1,24 @@
+{
+  "files": {
+    "probes/interface_include.cpp": "3dd854a4fc073af10cf7a80b05e3de41152902aeb5c6348735884c72992d2a93",
+    "probes/interface_include.c": "3dd854a4fc073af10cf7a80b05e3de41152902aeb5c6348735884c72992d2a93",
+    "schema/gdextension_interface.json": "1a7a839114b3ec7a79a9d5026fe78214023c6ed2370cd7784a5a6bdf4ffec1ca",
+    "support/godot-cpp/gen/include/godot_cpp/core/version.hpp": "110d16e0bd57aad026a94a75d9e7689957e853954eca60178c5c4eb20c81fe44",
+    "support/godot-cpp/include/godot_cpp/core/load_proc_address.inc": "83a6a378c49d74cff0b651b4b0d4286d61652a9c82ceaa9c3eec8416485371bd",
+    "support/godot-cpp/include/godot_cpp/core/error_macros.hpp": "88661cdc883a17322b36609c025644f1efd2e7e79e2a7bc3358096457d7aaefc",
+    "support/godot-cpp/include/godot_cpp/core/defs.hpp": "0ce8ed1e3d749de2a2db42a6ad7dad61452f0e94a9478f6c6a6f9951d4f1acdd",
+    "tools/core/methods.py": "5d860ccce735661b778edaf37478317c1b8e763af272d5355de1bc43688da154",
+    "tools/core/platform_methods.py": "193d261360af7d902c5df68ff88d395b9b22cced3d99040f22273b8e03604f4b",
+    "tools/core/make_interface_header.py": "465353fab2820ad8d9dd40d063da981fe62f6efefc1920629f927339f7e5d2f0",
+    "tools/godot-cpp/binding_generator.py": "1a5f78f4801c47f1874171535371809e0fd58140f07776870488b6a4f62a46bd",
+    "tools/godot-cpp/make_interface_header.py": "c99b1aaedb48c3bfbf1f1c6f867c8207d0f97abc104081f276e2410505600beb",
+    "tools/core/misc/utility/color.py": "09b4e0a20f676ef47ca83d4a8623b3e1726f62244ec1e13ecf60cbce0bdc2036",
+    "replay_sdk.py": "4db71a34f9fc22e854269072cdf3a965d3c951963ab36531278e22d3b577cc0c"
+  },
+  "expected_products": {
+    "include/gdextension_interface.h": "eab76f80861bdb12ef2130cd4408ce05640ebcf7d0420ed1e03aaf82def42f2d",
+    "src/gdextension_interface_loader.cpp": "381915de40d91cf045e9eee1159d109c7e2c2869213cc92f29189fb2273136d0",
+    "include/godot_cpp/core/gdextension_interface_loader.hpp": "c536d841e791f55552bdc5e046308e23afa22b667336ff3b5047fbdf4f53b828"
+  },
+  "authenticated_generator_receipt_sha256": "72cabee4edf95732e084d37dbee4458764c22e80c3d13083d1910b42ad93f1cd"
+}

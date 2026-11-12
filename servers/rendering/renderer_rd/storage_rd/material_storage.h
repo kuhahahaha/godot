@@ -41,10 +41,23 @@
 #include "servers/rendering/storage/utilities.h"
 
 struct Projection;
+class ShaderRD;
 
 namespace RendererRD {
 
+class ParticlesStorage;
+class NativeMaterialRecipeRoster;
+
 class MaterialStorage : public RendererMaterialStorage {
+	friend class ParticlesStorage;
+	friend class ::RenderingDevice;
+	friend class NativeMaterialRecipeRoster;
+#ifdef TESTS_ENABLED
+	friend class TestMaterialStorageNativeHoldAccess;
+	struct NativeHoldTestTag {};
+	explicit MaterialStorage(NativeHoldTestTag);
+	bool native_hold_test_minimal = false;
+#endif
 public:
 	enum ShaderType {
 		SHADER_TYPE_2D,
@@ -57,6 +70,34 @@ public:
 	};
 
 	struct ShaderData {
+		// Compiler observation only: not material/profile qualification or GPU readiness.
+		// Consume under the original material selection lease; do not retain as authority.
+		// Rejection facts for the finite current/reset opaque material recipe.
+		// Zero means only that these compiler gates passed, never GPU qualification.
+		enum NativeMaterialRecipeRejection : uint32_t {
+			MATERIAL_RECIPE_VERTEX_WRITE = 1u << 0,
+			MATERIAL_RECIPE_VERTEX_MODE = 1u << 1,
+			MATERIAL_RECIPE_ALPHA = 1u << 2,
+			MATERIAL_RECIPE_DISCARD = 1u << 3,
+			MATERIAL_RECIPE_TIME = 1u << 4,
+			MATERIAL_RECIPE_DEPTH_WRITE = 1u << 5,
+			MATERIAL_RECIPE_CLIP_WRITE = 1u << 6,
+			MATERIAL_RECIPE_DEPTH_MODE = 1u << 7,
+			MATERIAL_RECIPE_FRAMEBUFFER_READ = 1u << 8,
+			MATERIAL_RECIPE_STENCIL = 1u << 9,
+			MATERIAL_RECIPE_WIREFRAME = 1u << 10,
+			MATERIAL_RECIPE_CULL_SCOPE = 1u << 11,
+		};
+		struct NativeInstance192ShaderFeatures {
+			ShaderRD *shader = nullptr;
+			RID version;
+			bool needs_inverse = false;
+			// Exact compiler no-VERTEX/POSITION displacement fact under this Version.
+			bool zero_displacement = false;
+			uint32_t material_recipe_rejections = UINT32_MAX;
+			uint32_t output_pass_mask = 0; // ExternalOutputConfig wire domain, CPU eligibility only.
+		};
+
 		enum BlendMode {
 			BLEND_MODE_MIX,
 			BLEND_MODE_ADD,
@@ -83,6 +124,7 @@ public:
 		virtual bool casts_shadows() const = 0;
 		virtual RenderingServerTypes::ShaderNativeSourceCode get_native_source_code() const = 0;
 		virtual Pair<ShaderRD *, RID> get_native_shader_and_version() const = 0;
+		virtual Error get_native_instance192_shader_features(NativeInstance192ShaderFeatures &r_features) const { return ERR_UNAVAILABLE; }
 
 		virtual ~ShaderData() {}
 
@@ -90,7 +132,134 @@ public:
 		static bool blend_mode_uses_blend_alpha(BlendMode p_mode);
 	};
 
+	struct NativeMaterialSnapshot {
+		RID shader, pipeline, uniform_set, uniform_buffer;
+		uint32_t uniform_set_index = 0;
+		Vector<uint8_t> uniform_bytes;
+		Vector<RID> textures, samplers;
+		uint64_t material_generation = 0;
+		int32_t priority = 0;
+	};
+	// Explicit Core physical retention. No packet or Runtime authority is issued.
+	// CPU selection only: no VA, descriptor, shader version or pipeline custody.
+	class NativeSelectionLease {
+		friend class NativeMaterialRecipeRoster;
+		friend class MaterialStorage;
+		MaterialStorage *owner = nullptr;
+		RenderingDevice *device = nullptr;
+		RID rid;
+		uint64_t generation = 0;
+
+	public:
+		NativeSelectionLease() = default;
+		NativeSelectionLease(const NativeSelectionLease &) = delete;
+		NativeSelectionLease &operator=(const NativeSelectionLease &) = delete;
+		~NativeSelectionLease() { CRASH_COND(owner); }
+		bool is_active() const { return owner != nullptr; }
+	};
+	Error material_selection_acquire(RID p_rid, NativeSelectionLease &r_lease, uint64_t p_expected_generation);
+	Error material_selection_release(NativeSelectionLease &r_lease);
+	struct NativeSelectionShaderFeatures {
+		RID material;
+		uint64_t material_generation = 0;
+		ShaderData::NativeInstance192ShaderFeatures compiled;
+	};
+	// Current compiler facts under an existing selection; not full qualification.
+	// The returned pointers/version are borrowed only while that selection is held.
+	Error material_selection_get_shader_features(const NativeSelectionLease &p_lease, NativeSelectionShaderFeatures &r_features) const;
+	struct NativeSelectionShaderObservation {
+		RID material;
+		uint64_t material_generation = 0;
+		RID shader_version;
+		bool needs_inverse = false;
+		bool zero_displacement = false;
+		uint32_t material_recipe_rejections = UINT32_MAX;
+		uint32_t output_pass_mask = 0;
+	};
+	// Pointer-free compiler observation under the same original held selection.
+	// No new custody, profile qualification or GPU readiness is issued. The
+	// version is an equality projection, never a stand-alone shader-use grant.
+	// Every failure leaves r_observation unchanged.
+	Error material_selection_get_shader_observation(const NativeSelectionLease &p_lease, NativeSelectionShaderObservation &r_observation) const;
+
+	struct NativeMaterialRootPlan {
+		NativeMaterialSnapshot snapshot;
+		RID uniform_state_shader;
+		uint64_t uniform_state_owner_generation = 0; // Observation, not callback authorization.
+		Vector<RID> roots; // Exact RAW entries, before immutable closure deduplication.
+	};
+	// Read-only observation under this original selection, not a physical hold,
+	// admission, callback origin or replayable permit. Caller must retain the
+	// lease and revalidate before execution. The pipeline must ALREADY exist:
+	// actual pipeline/set formats are checked; a future pipeline is refused.
+	// Failure leaves r_plan unchanged. No shader/descriptor/pipeline is created.
+	Error material_selection_get_native_hold_plan(const NativeSelectionLease &p_lease, RID p_shader, RID p_pipeline, RID p_uniform_set, NativeMaterialRootPlan &r_plan, uint32_t p_max_resources = 256) const;
+
+	struct NativeMaterialFuturePipelinePlan {
+		NativeMaterialRootPlan material; // Actual roots only; snapshot.pipeline is absent.
+		RD::NativeProspectiveSymbol pipeline;
+		Vector<RD::NativeProspectiveKey> roots; // Local future ordinal0 at raw entry1.
+	};
+	// Pure future-layout/root observation. One original typed future render node
+	// depends on this exact ready shader; no RID, factory, hold or origin exists.
+	// Core must relocate ordinal0 by the actual factory identity, not descriptor
+	// equality, when combining groups. Full admission/revalidation is separate.
+	Error material_selection_get_future_pipeline_hold_plan(const NativeSelectionLease &p_lease, RID p_shader, RID p_uniform_set, NativeMaterialFuturePipelinePlan &r_plan, uint32_t p_max_resources = 256) const;
+
+	// Source retention before quote only. No pipeline, VA, shader compilation,
+	// descriptor creation, accepted request or Material qualification is issued.
+	class NativeRecipeSource {
+		friend class NativeMaterialRecipeRoster;
+		friend class MaterialStorage;
+		MaterialStorage *owner = nullptr;
+		NativeSelectionLease selection;
+		RD::NativeImmutableHold physical;
+		NativeMaterialFuturePipelinePlan plan;
+		uint64_t input_mask = 0;
+		RD::ShaderReflection layout;
+		Vector<RD::Uniform> uniform_sources;
+		uint32_t borrowed_closure_nodes = 0, material_future_closure_nodes = 0;
+
+	public:
+		NativeRecipeSource() = default;
+		NativeRecipeSource(const NativeRecipeSource &) = delete;
+		NativeRecipeSource &operator=(const NativeRecipeSource &) = delete;
+		~NativeRecipeSource() { CRASH_COND(owner); }
+		bool is_active() const { return owner != nullptr; }
+		bool is_valid() const { return owner && physical.is_valid(); }
+		const NativeMaterialFuturePipelinePlan &get_plan() const { return plan; }
+		uint64_t get_input_mask() const { return is_valid() ? input_mask : 0; }
+		const RD::ShaderReflection &get_layout() const { return layout; }
+		const Vector<RD::Uniform> &get_uniform_sources() const { return uniform_sources; }
+		uint32_t get_borrowed_closure_nodes() const { return is_valid() ? borrowed_closure_nodes : 0; }
+		uint32_t get_material_future_closure_nodes() const { return is_valid() ? material_future_closure_nodes : 0; }
+	};
+	Error material_recipe_source_acquire(RID p_material, NativeRecipeSource &r_source, uint32_t p_max_resources = 256);
+	Error material_recipe_source_release(NativeRecipeSource &r_source);
+
+	class NativeMaterialHold {
+		bool physical_transferred = false, metadata_returned = false, metadata_return_active = false;
+		friend class MaterialStorage;
+		RenderingDevice *device = nullptr;
+		RID material;
+		RenderingDevice::NativeImmutableHold native;
+		NativeMaterialSnapshot snapshot;
+
+	public:
+		NativeMaterialHold() = default;
+		NativeMaterialHold(const NativeMaterialHold &) = delete;
+		NativeMaterialHold &operator=(const NativeMaterialHold &) = delete;
+		~NativeMaterialHold() { CRASH_COND(device); }
+		bool is_active() const { return device != nullptr; }
+		bool is_valid() const { return native.is_valid(); }
+		const NativeMaterialSnapshot &get_snapshot() const { return snapshot; }
+	};
 	struct MaterialData {
+		// Original backend chooses its actual normal opaque Instance192 variant.
+		// Refusal leaves all outputs unchanged; no compilation is requested.
+		virtual uint32_t get_native_recipe_backend() const { return 0; }
+		virtual Error get_native_recipe_shader_if_ready(RID &r_shader, uint64_t &r_mask, RID &r_set) const { return ERR_UNAVAILABLE; }
+		uint64_t generation = 0;
 		Vector<RendererRD::TextureStorage::RenderTarget *> render_target_cache;
 		void update_uniform_buffer(const HashMap<StringName, ShaderLanguage::ShaderNode::Uniform> &p_uniforms, const uint32_t *p_uniform_offsets, const HashMap<StringName, Variant> &p_parameters, uint8_t *p_buffer, uint32_t p_buffer_size, bool p_use_linear_color);
 		void update_textures(const HashMap<StringName, Variant> &p_parameters, const HashMap<StringName, HashMap<int, RID>> &p_default_textures, const Vector<ShaderCompiler::GeneratedCode::Texture> &p_texture_uniforms, RID *p_textures, bool p_use_linear_color, bool p_3d_material);
@@ -108,7 +277,24 @@ public:
 
 	private:
 		friend class MaterialStorage;
+#ifdef TESTS_ENABLED
+		friend class TestMaterialStorageNativeHoldAccess;
+#endif
 
+		struct NativeUniformSetState {
+			uint64_t owner_generation = 0;
+			RID uniform_set, shader, uniform_buffer;
+			uint32_t uniform_set_index = 0;
+			Vector<uint8_t> uniform_bytes;
+			Vector<RID> textures;
+			Vector<RD::Uniform> uniform_sources; // Original builder list for this exact set incarnation.
+			bool supported = false;
+		};
+		NativeUniformSetState native_uniform_sets[2];
+		bool native_immutable_busy() const;
+		// A failed RD allocation/upload must remain retryable on the next queue turn.
+		bool update_retry_pending = false;
+		bool update_uniform_set_changed = false;
 		RID self;
 		List<RID>::Element *global_buffer_E = nullptr;
 		List<RID>::Element *global_texture_E = nullptr;
@@ -265,6 +451,7 @@ private:
 	struct Material;
 
 	struct Shader {
+		uint32_t selection_holds = 0;
 		Mutex *mutex = nullptr;
 		ShaderData *data = nullptr;
 		String code;
@@ -289,6 +476,9 @@ private:
 
 	struct Material {
 		RID self;
+		uint64_t generation = 1;
+		uint32_t native_immutable_holds = 0;
+		uint32_t selection_holds = 0;
 		MaterialData *data = nullptr;
 		Shader *shader = nullptr;
 		//shortcut to shader data and type
@@ -315,9 +505,27 @@ private:
 	Mutex material_update_list_mutex;
 
 	static void _material_uniform_set_erased(void *p_material);
+	static bool _shader_native_immutable_busy(const Shader *p_shader);
+	void _material_set_shader(RID p_material, RID p_shader, bool p_freeing);
 
 public:
 	static MaterialStorage *get_singleton();
+
+private:
+	Error _material_selection_native_hold_plan_ready(const NativeSelectionLease &p_lease) const;
+	Error _material_native_hold_plan(RID p_material, RID p_shader, RID p_pipeline, RID p_uniform_set, NativeMaterialRootPlan &r_plan, uint32_t p_max_resources, uint64_t p_expected_generation, bool p_future_pipeline = false) const;
+
+	// Only synchronous original Core group capture may borrow this address.
+	// Core must move the actual hold, never save a wrapper pointer or clone RIDs.
+	static bool _native_hold_callback_is_owned(RID, uint64_t, RD::InvalidationCallback, void *, RID);
+	static RD::NativeImmutableHold *_native_hold_transfer_source(NativeMaterialHold &);
+	static Error _native_hold_mark_transferred(NativeMaterialHold &);
+	static Error _native_hold_begin_return(NativeMaterialHold &);
+	static Error _native_hold_finish_return(NativeMaterialHold &);
+
+public:
+	Error material_native_hold_acquire(RID p_material, RID p_shader, RID p_pipeline, RID p_uniform_set, NativeMaterialHold &r_hold, uint32_t p_max_resources = 256, uint64_t p_expected_generation = 0, const NativeMaterialFuturePipelinePlan *p_expected_future = nullptr);
+	static Error material_native_hold_release(NativeMaterialHold &r_hold);
 
 	MaterialStorage();
 	virtual ~MaterialStorage();
@@ -499,6 +707,9 @@ public:
 
 	virtual void material_set_next_pass(RID p_material, RID p_next_material) override;
 	virtual void material_set_render_priority(RID p_material, int priority) override;
+	uint64_t material_get_generation(RID p_material) const;
+	// Borrowed only for synchronous render-thread preparation; no source admission or lifetime grant.
+	Error material_get_native_preparation_data(RID p_material, uint64_t p_expected_generation, MaterialData *&r_data);
 
 	virtual bool material_is_animated(RID p_material) override;
 	virtual bool material_casts_shadows(RID p_material) override;

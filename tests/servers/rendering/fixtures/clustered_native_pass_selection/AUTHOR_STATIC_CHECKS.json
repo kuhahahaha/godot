@@ -1,0 +1,29 @@
+[
+  {
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/ci-scene117-20261107/hook-cache/repohfnjdql6/py_env-python3/bin/clang-format",
+      "--dry-run",
+      "--Werror",
+      "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h",
+      "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp",
+      "tests/servers/rendering/test_clustered_native_pass_selection.cpp"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "git",
+      "diff",
+      "--check",
+      "--",
+      "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h",
+      "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp",
+      "tests/servers/rendering/test_clustered_native_pass_selection.cpp"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+]

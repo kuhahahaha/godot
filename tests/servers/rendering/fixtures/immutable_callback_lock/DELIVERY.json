@@ -1,0 +1,18 @@
+{
+  "files": {
+    "core/extension/gdextension_production_owned.cpp": "ac0a7ccc1502efe53065f9cd9ddceef0c4ef9cd77d82681f9aef8a7183c938ba",
+    "core/extension/gdextension_qualification.cpp": "f33d2534ba92a299d037379c3d405f4cfcb1b962c9705b3c6c3ee465e4577821",
+    "core/extension/gdextension_qualification_typed.cpp": "3de56ee875cf1f28c71585350c588247641b3585438aff283c754297488b5c83",
+    "servers/rendering/rendering_device.cpp": "69359329744de992bed6b5db9100775e1c3026a66aa5644ad942612a9c7d3e94",
+    "servers/rendering/rendering_device.h": "dcc87f6ae72462aab13b6ce378993c5c94364838af0e13507c276ccf077ff6ae",
+    "servers/rendering/rendering_device_immutable_hold.cpp": "d8e27f78f9024e0c171c311ca8718e90786fd58caaccda8d45c3eb8bf5877895",
+    "tests/servers/rendering/test_material_storage_native_hold.cpp": "50f4bfeb9d4624a0d69983144f4cb1388e3a310e93ad68b64fdbde1f7cdc9e5b",
+    "tests/servers/rendering/test_mesh_storage_external.cpp": "63f09bf680adcb5b89d185fdef4f908eb51466253610bbb38718c9b381e36d95",
+    "tests/servers/rendering/test_qualification_physical.cpp": "5764eb88a409245e7baa0e56a95a9c0b60697ced826d30ffd6824926d8db8892"
+  },
+  "verified_hunk_identity": "eight whole files match frozen green build inputs; qualification differs solely by separately uncommitted metadata admission gate, proved by exact byte comparison",
+  "host_sha256": "e5c614f4deae461fd4eac140f1c27f5be5737de3ca597372e700eaf4f30f4663",
+  "green": "work/b4-core-window-lock-pipeline-green-20261105/runtime/material/PROCESS.json",
+  "red": "work/b4-actual-lock-pipeline-red-20261105/VERIFIED_RED.json",
+  "platform_tsan": "CI_TSAN.json: actual pushed-source job and unit tests passed; CPU probe alone is not TSAN qualification"
+}

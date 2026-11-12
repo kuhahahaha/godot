@@ -1,0 +1,20 @@
+{
+  "name": "ordinary_issue",
+  "final_sha256": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc",
+  "negative_sha256": "ead366fd5bc45988fae5c1b729d4b4d9dfd379b81e8d4d7f716bdc6274f3c3d0",
+  "mutation_from": "const Error height_issue = _native_height_issue_slot(frame, frames[frame].qualification_epoch, i, command_buffer, queue_error, report);",
+  "mutation_to": "const Error height_issue = OK; // Controlled negative: omitted ordinary enrollment.",
+  "function_position": [],
+  "build_exit": 0,
+  "build_seconds": 18.56,
+  "host_sha256": "d53d21de1d3d510b9722f465d4cde875f9e9ad9afc1edfdbc04bd42f331c847a",
+  "test_command": [
+    "bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--test-case=*NativeHeightRange*ordinary and bounded actual issue*",
+    "--reporters=xml",
+    "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/ordinary_issue/CPU.xml"
+  ],
+  "test_exit": 1
+}

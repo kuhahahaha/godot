@@ -1,0 +1,906 @@
+{
+  "passed": true,
+  "host_sha256": "1e4b08bf515d6c40e3b8a106c3d535bb8564e467c99a9a4bbdf2d3a5c06f739b",
+  "sources_before": {
+    "modules/particles_runtime_tests/native_depth_allocation_test_fixture.h": {
+      "bytes": 3622,
+      "sha256": "f1b52e9eaaa187793e21d86142cc7cb4012adeac4cfd4cc188265caeb9c9927c"
+    },
+    "modules/particles_runtime_tests/native_depth_allocation_test_fixture.cpp": {
+      "bytes": 21609,
+      "sha256": "615f3d430eafa9c63a5e14c8c449e2a42f955e89512df9e529da4742b9c1cc3a"
+    },
+    "modules/particles_runtime_tests/register_types.cpp": {
+      "bytes": 3304,
+      "sha256": "ffe51f0bcfbc3af75650ed09d009ba9669540f8086e3da0a72b0535d5051260d"
+    },
+    "modules/particles_runtime_tests/config.py": {
+      "bytes": 148,
+      "sha256": "8a6606d2863710e709e0c5d2f22089b9b695df1817c7c6d414832d4c3d80581c"
+    },
+    "modules/particles_runtime_tests/SCsub": {
+      "bytes": 157,
+      "sha256": "3dbdfe30851ced12958d0967ecf4ff10814e829eba2ce9fa85f0c71b1faef0a0"
+    },
+    "servers/rendering/native_depth_allocation_projection.h": {
+      "bytes": 5285,
+      "sha256": "9c635eb1ccf5aaa93c1c8a3b10a4005f6647c1019d59e048a0ce7982a2b5fdf5"
+    },
+    "servers/rendering/native_disposal_witness.h": {
+      "bytes": 5240,
+      "sha256": "e98592a01b167d4d1fd16c4dda880a5af8ca16053d50e94c3c99ccd9fc2a77fb"
+    },
+    "servers/rendering/rendering_device.h": {
+      "bytes": 131046,
+      "sha256": "8ebd7390f6bcc63e7f7474dcc749f1fa0cbfcbdcd3f07f14cab7e2b77bbb5b74"
+    },
+    "servers/rendering/rendering_device.cpp": {
+      "bytes": 746353,
+      "sha256": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc"
+    },
+    "servers/rendering/rendering_device_driver.h": {
+      "bytes": 55236,
+      "sha256": "9446494541b4e828716880bc12ede7d3c1abb09b30fbeec0bce19cf106738025"
+    },
+    "drivers/metal/metal_allocator.h": {
+      "bytes": 9765,
+      "sha256": "1440f26c7600ccdb20bfec559d500c71b085a6c89e965c2e49707fa4b109de5f"
+    },
+    "drivers/metal/metal_allocator.cpp": {
+      "bytes": 15553,
+      "sha256": "a8ac57a2f0eea3c837ef7439de8ba76399074c9848fcf3563c57d25dd135e706"
+    },
+    "drivers/metal/rendering_device_driver_metal.h": {
+      "bytes": 34682,
+      "sha256": "c05d74151123ed2bc8f07e7a600b99c10f1b6b395b6647beba71f1f27071a868"
+    },
+    "drivers/metal/rendering_device_driver_metal.cpp": {
+      "bytes": 150018,
+      "sha256": "fbf9b0a98735bb8efaed901ec7e5e6694576c39fc6f764601e9d5dc780ea3bad"
+    },
+    "main/main.cpp": {
+      "bytes": 220359,
+      "sha256": "ee9e9cc51309eaeb36f2a832b1035ed0c390865bedf1b48e34da7aeffcf162e7"
+    },
+    "tests/servers/rendering/fixtures/native_depth_allocation/project.godot": {
+      "bytes": 137,
+      "sha256": "490081240b5283b2de8dc90fd8414707c8f5e228dad89f10daa788009a4c6812"
+    },
+    "tests/servers/rendering/fixtures/native_depth_allocation/run.gd": {
+      "bytes": 2516,
+      "sha256": "0814051d3a3d43a7be00f5af54ff9ccd86487f2d81fe70885bc9f33702f62450"
+    },
+    "tests/servers/rendering/fixtures/native_depth_allocation/run_native.py": {
+      "bytes": 13485,
+      "sha256": "755e3da7da233a495ebf6485ce1ec97c11a84100c19351f8e6a63b38fd9f5932"
+    },
+    "tests/servers/rendering/fixtures/native_depth_allocation/README.md": {
+      "bytes": 5696,
+      "sha256": "14292e593bd6c5e0cd51d4547cc3a0ca3a91b34f3a23305343ce2d1ba2709476"
+    }
+  },
+  "host_and_sources_unchanged": true,
+  "source_identity_is_not_build_provenance": true,
+  "cases": [
+    {
+      "case_index": 0,
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/native_depth_allocation",
+        "--render-thread",
+        "safe",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--script",
+        "run.gd",
+        "--",
+        "--case=0"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "typed_unavailable": false,
+      "report": {
+        "boundaries": {
+          "maximum_texture_size_2d": 16384,
+          "over_height": {
+            "error": 31,
+            "height": 16385,
+            "observe_error": 4,
+            "original_counters_unchanged": true,
+            "quote_empty": true,
+            "width": 1
+          },
+          "over_width": {
+            "error": 31,
+            "height": 1,
+            "observe_error": 4,
+            "original_counters_unchanged": true,
+            "quote_empty": true,
+            "width": 16385
+          },
+          "zero_height": {
+            "error": 31,
+            "height": 0,
+            "observe_error": 4,
+            "original_counters_unchanged": true,
+            "quote_empty": true,
+            "width": 64
+          },
+          "zero_width": {
+            "error": 31,
+            "height": 64,
+            "observe_error": 4,
+            "original_counters_unchanged": true,
+            "quote_empty": true,
+            "width": 0
+          }
+        },
+        "case_index": 0,
+        "checks": [
+          {
+            "check": "main_rd_rt",
+            "ok": true
+          },
+          {
+            "check": "disabled_outside_lists",
+            "ok": true
+          },
+          {
+            "check": "fixed_case",
+            "ok": true
+          },
+          {
+            "check": "quote_zero_extent_rejected",
+            "ok": true
+          },
+          {
+            "check": "quote_over_limit_rejected",
+            "ok": true
+          },
+          {
+            "check": "quote_issued",
+            "ok": true
+          },
+          {
+            "check": "quote_observed",
+            "ok": true
+          },
+          {
+            "check": "quote_descriptor_policy",
+            "ok": true
+          },
+          {
+            "check": "quote_native_bytes",
+            "ok": true
+          },
+          {
+            "check": "quote_scope_unknown",
+            "ok": true
+          },
+          {
+            "check": "quoted_create_verified",
+            "ok": true
+          },
+          {
+            "check": "actual_depth_within_quote",
+            "ok": true
+          },
+          {
+            "check": "framebuffer_created",
+            "ok": true
+          },
+          {
+            "check": "pair_captured",
+            "ok": true
+          },
+          {
+            "check": "live_original_children",
+            "ok": true
+          },
+          {
+            "check": "shared_attachment_identity",
+            "ok": true
+          },
+          {
+            "check": "unknown_overhead_preserved",
+            "ok": true
+          },
+          {
+            "check": "depth_clear_recorded",
+            "ok": true
+          },
+          {
+            "check": "original_driver_framebuffer_materialized",
+            "ok": true
+          },
+          {
+            "check": "retire_framebuffer",
+            "ok": true
+          },
+          {
+            "check": "framebuffer_enqueued_not_returned",
+            "ok": true
+          },
+          {
+            "check": "only_framebuffer_driver_returned",
+            "ok": true
+          },
+          {
+            "check": "half_returned_original_identities",
+            "ok": true
+          },
+          {
+            "check": "retire_depth",
+            "ok": true
+          },
+          {
+            "check": "depth_enqueued_not_returned",
+            "ok": true
+          },
+          {
+            "check": "both_driver_returned",
+            "ok": true
+          },
+          {
+            "check": "returned_original_identities_bytes",
+            "ok": true
+          },
+          {
+            "check": "repeat_retire",
+            "ok": true
+          },
+          {
+            "check": "no_next_draw",
+            "ok": true
+          }
+        ],
+        "complete": true,
+        "create_error": 0,
+        "create_outcome": 1,
+        "deadline_usec": 20000000,
+        "device": {
+          "api": "4.0",
+          "driver": "metal",
+          "name": "Apple M3 Pro (Apple9)",
+          "renderer": "mobile"
+        },
+        "elapsed_usec": 4335,
+        "error": 0,
+        "failures": [],
+        "maintenance_calls": 6,
+        "native_framebuffer_instances": [
+          {
+            "framebuffer": 517913281232,
+            "render_pass": 518114827360
+          }
+        ],
+        "physical_prefix_returned": true,
+        "producer_complete": false,
+        "quote": {
+          "alignment": 128,
+          "allocations": 2,
+          "framebuffer_driver_backing": {
+            "knowledge": "UnknownNotExposed"
+          },
+          "framebuffer_owner_reservation": {
+            "bytes": 0,
+            "knowledge": "Known"
+          },
+          "height": 64,
+          "opaque_driver_overhead": {
+            "knowledge": "UnknownNotExposed"
+          },
+          "parts": 1,
+          "policy": 1,
+          "shared_attachment_references": 1,
+          "texture_native_requirement": {
+            "bytes": 16512,
+            "knowledge": "Known"
+          },
+          "texture_owner_reservation": {
+            "bytes": 16640,
+            "knowledge": "Known"
+          },
+          "width": 64
+        },
+        "reservation_refunded": false,
+        "retained_on_failure": false,
+        "schema": 1,
+        "snapshots": {
+          "depth_enqueued": {
+            "all_created_children_returned": false,
+            "attachment_reference": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 2
+            },
+            "depth_driver_backing": {
+              "bytes": 16512,
+              "knowledge": "Known"
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 3
+            },
+            "framebuffer_created": true,
+            "framebuffer_driver_backing": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "framebuffer_object": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "opaque_driver_overhead": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "shared_attachment_depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 2
+            }
+          },
+          "framebuffer_enqueued": {
+            "all_created_children_returned": false,
+            "attachment_reference": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            },
+            "depth_driver_backing": {
+              "bytes": 16512,
+              "knowledge": "Known"
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 2
+            },
+            "framebuffer_created": true,
+            "framebuffer_driver_backing": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "framebuffer_object": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "opaque_driver_overhead": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "shared_attachment_depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            }
+          },
+          "framebuffer_returned": {
+            "all_created_children_returned": false,
+            "attachment_reference": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            },
+            "depth_driver_backing": {
+              "bytes": 16512,
+              "knowledge": "Known"
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 3
+            },
+            "framebuffer_created": true,
+            "framebuffer_driver_backing": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "framebuffer_object": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "opaque_driver_overhead": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "shared_attachment_depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            }
+          },
+          "live": {
+            "all_created_children_returned": false,
+            "attachment_reference": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            },
+            "depth_driver_backing": {
+              "bytes": 16512,
+              "knowledge": "Known"
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 1
+            },
+            "framebuffer_created": true,
+            "framebuffer_driver_backing": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "framebuffer_object": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "opaque_driver_overhead": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "shared_attachment_depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            }
+          },
+          "returned": {
+            "all_created_children_returned": true,
+            "attachment_reference": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 3
+            },
+            "depth_driver_backing": {
+              "bytes": 16512,
+              "knowledge": "Known"
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 3
+            },
+            "framebuffer_created": true,
+            "framebuffer_driver_backing": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "framebuffer_object": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "opaque_driver_overhead": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "shared_attachment_depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 3
+            }
+          }
+        },
+        "started": true,
+        "whole_output_released": false
+      },
+      "stdout_sha256": "051313e3275abaef53adfc6deebcba1e6f5e7635bd284c3c7e6dd0b908e9eca5",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "case_index": 1,
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/native_depth_allocation",
+        "--render-thread",
+        "safe",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--script",
+        "run.gd",
+        "--",
+        "--case=1"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "typed_unavailable": false,
+      "report": {
+        "boundaries": {
+          "maximum_texture_size_2d": 16384,
+          "over_height": {
+            "error": 31,
+            "height": 16385,
+            "observe_error": 4,
+            "original_counters_unchanged": true,
+            "quote_empty": true,
+            "width": 1
+          },
+          "over_width": {
+            "error": 31,
+            "height": 1,
+            "observe_error": 4,
+            "original_counters_unchanged": true,
+            "quote_empty": true,
+            "width": 16385
+          },
+          "zero_height": {
+            "error": 31,
+            "height": 0,
+            "observe_error": 4,
+            "original_counters_unchanged": true,
+            "quote_empty": true,
+            "width": 64
+          },
+          "zero_width": {
+            "error": 31,
+            "height": 64,
+            "observe_error": 4,
+            "original_counters_unchanged": true,
+            "quote_empty": true,
+            "width": 0
+          }
+        },
+        "case_index": 1,
+        "checks": [
+          {
+            "check": "main_rd_rt",
+            "ok": true
+          },
+          {
+            "check": "disabled_outside_lists",
+            "ok": true
+          },
+          {
+            "check": "fixed_case",
+            "ok": true
+          },
+          {
+            "check": "quote_zero_extent_rejected",
+            "ok": true
+          },
+          {
+            "check": "quote_over_limit_rejected",
+            "ok": true
+          },
+          {
+            "check": "quote_issued",
+            "ok": true
+          },
+          {
+            "check": "quote_observed",
+            "ok": true
+          },
+          {
+            "check": "quote_descriptor_policy",
+            "ok": true
+          },
+          {
+            "check": "quote_native_bytes",
+            "ok": true
+          },
+          {
+            "check": "quote_scope_unknown",
+            "ok": true
+          },
+          {
+            "check": "quoted_create_verified",
+            "ok": true
+          },
+          {
+            "check": "actual_depth_within_quote",
+            "ok": true
+          },
+          {
+            "check": "framebuffer_created",
+            "ok": true
+          },
+          {
+            "check": "pair_captured",
+            "ok": true
+          },
+          {
+            "check": "live_original_children",
+            "ok": true
+          },
+          {
+            "check": "shared_attachment_identity",
+            "ok": true
+          },
+          {
+            "check": "unknown_overhead_preserved",
+            "ok": true
+          },
+          {
+            "check": "depth_clear_recorded",
+            "ok": true
+          },
+          {
+            "check": "original_driver_framebuffer_materialized",
+            "ok": true
+          },
+          {
+            "check": "retire_framebuffer",
+            "ok": true
+          },
+          {
+            "check": "framebuffer_enqueued_not_returned",
+            "ok": true
+          },
+          {
+            "check": "only_framebuffer_driver_returned",
+            "ok": true
+          },
+          {
+            "check": "half_returned_original_identities",
+            "ok": true
+          },
+          {
+            "check": "retire_depth",
+            "ok": true
+          },
+          {
+            "check": "depth_enqueued_not_returned",
+            "ok": true
+          },
+          {
+            "check": "both_driver_returned",
+            "ok": true
+          },
+          {
+            "check": "returned_original_identities_bytes",
+            "ok": true
+          },
+          {
+            "check": "repeat_retire",
+            "ok": true
+          },
+          {
+            "check": "no_next_draw",
+            "ok": true
+          }
+        ],
+        "complete": true,
+        "create_error": 0,
+        "create_outcome": 1,
+        "deadline_usec": 20000000,
+        "device": {
+          "api": "4.0",
+          "driver": "metal",
+          "name": "Apple M3 Pro (Apple9)",
+          "renderer": "mobile"
+        },
+        "elapsed_usec": 11997,
+        "error": 0,
+        "failures": [],
+        "maintenance_calls": 12,
+        "native_framebuffer_instances": [
+          {
+            "framebuffer": 533969760784,
+            "render_pass": 533968874000
+          }
+        ],
+        "physical_prefix_returned": true,
+        "producer_complete": false,
+        "quote": {
+          "alignment": 128,
+          "allocations": 2,
+          "framebuffer_driver_backing": {
+            "knowledge": "UnknownNotExposed"
+          },
+          "framebuffer_owner_reservation": {
+            "bytes": 0,
+            "knowledge": "Known"
+          },
+          "height": 4096,
+          "opaque_driver_overhead": {
+            "knowledge": "UnknownNotExposed"
+          },
+          "parts": 1,
+          "policy": 2,
+          "shared_attachment_references": 1,
+          "texture_native_requirement": {
+            "bytes": 135266304,
+            "knowledge": "Known"
+          },
+          "texture_owner_reservation": {
+            "bytes": 135266304,
+            "knowledge": "Known"
+          },
+          "width": 8192
+        },
+        "reservation_refunded": false,
+        "retained_on_failure": false,
+        "schema": 1,
+        "snapshots": {
+          "depth_enqueued": {
+            "all_created_children_returned": false,
+            "attachment_reference": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 2
+            },
+            "depth_driver_backing": {
+              "bytes": 135266304,
+              "knowledge": "Known"
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 3
+            },
+            "framebuffer_created": true,
+            "framebuffer_driver_backing": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "framebuffer_object": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "opaque_driver_overhead": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "shared_attachment_depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 2
+            }
+          },
+          "framebuffer_enqueued": {
+            "all_created_children_returned": false,
+            "attachment_reference": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            },
+            "depth_driver_backing": {
+              "bytes": 135266304,
+              "knowledge": "Known"
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 2
+            },
+            "framebuffer_created": true,
+            "framebuffer_driver_backing": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "framebuffer_object": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "opaque_driver_overhead": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "shared_attachment_depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            }
+          },
+          "framebuffer_returned": {
+            "all_created_children_returned": false,
+            "attachment_reference": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            },
+            "depth_driver_backing": {
+              "bytes": 135266304,
+              "knowledge": "Known"
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 3
+            },
+            "framebuffer_created": true,
+            "framebuffer_driver_backing": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "framebuffer_object": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "opaque_driver_overhead": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "shared_attachment_depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            }
+          },
+          "live": {
+            "all_created_children_returned": false,
+            "attachment_reference": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            },
+            "depth_driver_backing": {
+              "bytes": 135266304,
+              "knowledge": "Known"
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 1
+            },
+            "framebuffer_created": true,
+            "framebuffer_driver_backing": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "framebuffer_object": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "opaque_driver_overhead": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "shared_attachment_depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            }
+          },
+          "returned": {
+            "all_created_children_returned": true,
+            "attachment_reference": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 3
+            },
+            "depth_driver_backing": {
+              "bytes": 135266304,
+              "knowledge": "Known"
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 3
+            },
+            "framebuffer_created": true,
+            "framebuffer_driver_backing": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "framebuffer_object": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "opaque_driver_overhead": {
+              "knowledge": "UnknownNotExposed"
+            },
+            "shared_attachment_depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 3
+            }
+          }
+        },
+        "started": true,
+        "whole_output_released": false
+      },
+      "stdout_sha256": "f1d5a31c3a04512ec50622cb3a00b7010b010bab60228f42fec264e69fab0b28",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

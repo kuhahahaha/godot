@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "component": "Ordinary render pipeline reserves actual RID before driver allocation",
+  "base_commit": "e291407d440d9e68226d0506cd5dad9d157f09e8",
+  "source_pins": {
+    "tests/servers/rendering/test_native_disposal.cpp": "147a4bd1d1c721a81428f00112871e7510c2fb94ada2aa8799d78d41bdfc7fd1",
+    "servers/rendering/rendering_device.cpp": "2b05c20c009412f27b5b05ae8bee5012dd26f1aa48e2d696b3747f048acec779"
+  },
+  "host_sha256": "1d5309e6d08123deed6ffd62daa03ec7bce6bc86e2b5c52627ca6ebe500d8667",
+  "controlled_metadata_sha256": "cfcbb84a48cc3e3dd7b0bf0962e8499258c1f44487cae0f230cf9d574f835612",
+  "results": {
+    "red": {
+      "path": "work/b4-render-pipeline-rid-capacity-20261106/targeted-red/RESULT.json",
+      "sha256": "caff57e42519bcdbbc8e630435283b9b66c53ffc3af63a743b60220cdce6baa5",
+      "exit": 1,
+      "test_cases": {
+        "successes": "0",
+        "failures": "1"
+      },
+      "asserts": {
+        "successes": "93",
+        "failures": "1"
+      },
+      "validation_pass": false
+    },
+    "green": {
+      "path": "work/b4-render-pipeline-rid-capacity-20261106/targeted-green/RESULT.json",
+      "sha256": "89896aa7b24edf73f17de27d13239bcf2e674bb795b1aef8952ea0b3c149bb3a",
+      "exit": 0,
+      "test_cases": {
+        "successes": "1",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "85",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "full": {
+      "path": "work/b4-render-pipeline-rid-capacity-20261106/full/RESULT.json",
+      "sha256": "b43b4e68be2ded07ad4da11b21d046cc0a5f7f5fe0652660d0891683f2e24ce9",
+      "exit": 0,
+      "test_cases": {
+        "successes": "2099",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "527491",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "native390": {
+      "path": "work/b4-render-pipeline-rid-capacity-20261106/native390/RESULT.json",
+      "sha256": "e0159a173a29b258c2623d7a40cc68f632f1c0692f539401b2e19a239fb45b83",
+      "gpu_pass": true,
+      "checks": {
+        "one_result": true,
+        "not_timeout": true,
+        "no_fatal_or_exit_leaks": true,
+        "exact_expected_engine_errors": true,
+        "actual_metal_startup": true,
+        "native_and_outer_success": true,
+        "host_and_metadata_unchanged": true,
+        "source_unchanged": true
+      }
+    }
+  },
+  "red_failure": "Only driver.pipeline_calls == before_full fails (1 == 0); 93 assertions pass; normalexit1 and empty stdout/stderr.",
+  "verified_behavior": [
+    "Actual default thread-safe RID owner arena is filled using its real rounded chunk capacity; old public factory calls driver despite no available RID.",
+    "Fixed ordinary path reserves a real RID before driver create, refuses full capacity before any native allocation, initializes that same RID on success.",
+    "Both quiet and nonquiet driver failures return the initialized empty CPU reservation; six sole-slot retries preserve capacity.",
+    "Later public creation reuses the remaining actual slot, and original pending disposal frees its native pipeline exactly once.",
+    "Qualification pre-reserved branch remains unchanged."
+  ],
+  "limits": [
+    "CPU RasterCapacityDriver supplies shader/native metadata; no GLSL compilation or source admission qualification.",
+    "Only ordinary pipeline factory changed; material output preparation/admission/root joins remain independent work.",
+    "RED-only orphan cleanup uses actual driver free and removes the old empty-RID dependency after assertions; it does not manufacture a replacement RID or production success.",
+    "Separate actual Metal native390 regression verifies normal runtime, not forcing GPU RID capacity exhaustion.",
+    "Green85 vs Red93 successful assertions differ because nine RED-only orphan cleanup checks do not execute after the fixed path avoided creation."
+  ],
+  "independent_final_review": {
+    "path": "work/b4-render-pipeline-rid-capacity-20261106/FINAL_INDEPENDENT_REVIEW.md",
+    "sha256": "a59a3ee40f49d99b72fc254035a919987e55900300bed7cef3b87f3892232246",
+    "checks_passed": 74,
+    "checks_total": 74,
+    "disposition": "accepted ordinary factory CPU-native custody scope; no blocker"
+  }
+}

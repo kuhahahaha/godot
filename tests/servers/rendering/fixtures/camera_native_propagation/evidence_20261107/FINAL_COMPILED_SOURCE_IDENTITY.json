@@ -1,0 +1,102 @@
+[
+  {
+    "path": "core/extension/gdextension_interface.cpp",
+    "bytes": 100021,
+    "sha256": "09cb81fa64a0b8e54e32547717891fb015b0ed8156e60c870d005417d04ed6bc"
+  },
+  {
+    "path": "core/io/native_drain_diagnostic.h",
+    "bytes": 8434,
+    "sha256": "8b7868f86f044e3d02258bead2eaaa8a22585788b53c1f5df6ce734f28af8c32"
+  },
+  {
+    "path": "servers/rendering/renderer_scene_render.h",
+    "bytes": 22510,
+    "sha256": "b2ac2a9f2240c8ce259d1fde219ba8f0911f23d1f4a6c2eb28a2bf323cccd35d"
+  },
+  {
+    "path": "servers/rendering/renderer_scene_cull.cpp",
+    "bytes": 193521,
+    "sha256": "f00c29e093b4f83727f1156756f32da68b55d26406e4b99739b046f20404f07a"
+  },
+  {
+    "path": "servers/rendering/renderer_viewport.h",
+    "bytes": 17663,
+    "sha256": "c35f2fedf7aac9327755ce951c13172e3ef606c6c7a1319f2f17bf265fd279b3"
+  },
+  {
+    "path": "servers/rendering/renderer_viewport.cpp",
+    "bytes": 81142,
+    "sha256": "e86c0c648364340fc9930061a5817b570cb4b7d66601cef1aac4197aa80adca6"
+  },
+  {
+    "path": "servers/rendering/renderer_rd/storage_rd/render_data_rd.h",
+    "bytes": 15872,
+    "sha256": "a6e80ab180c10a6c3626a043c43fad10135ebe68eea1023003aacbf66793f661"
+  },
+  {
+    "path": "servers/rendering/renderer_rd/renderer_scene_render_rd.cpp",
+    "bytes": 91859,
+    "sha256": "e445e1cb6629bbbfd15dc20f7bd52b4cffe10c55424e958f7dcedb9c0e11c8c7"
+  },
+  {
+    "path": "tests/servers/rendering/test_viewport_camera_source.cpp",
+    "bytes": 44565,
+    "sha256": "2906681304f962b04bf3643def3aab84fe16506f0c64ae66c562dac10627f0af"
+  },
+  {
+    "path": "tests/servers/rendering/test_render_data_camera_source.cpp",
+    "bytes": 9050,
+    "sha256": "ddaa1a80d665ae012bea8b9aecd0255388175522562fc4a388885868722833b2"
+  },
+  {
+    "path": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+    "bytes": 41021,
+    "sha256": "adde3dab916724170e91da48694f90459e9ff3dbdd02dc30120662ddcb12a37d"
+  },
+  {
+    "path": "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h",
+    "bytes": 38728,
+    "sha256": "00f3c3dd763d6238a482d801c7442f2bf1fe7bed6c2ba43141d018928cd601c9"
+  },
+  {
+    "path": "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp",
+    "bytes": 249497,
+    "sha256": "e8bcef4ead15b2b47bc31c74e68a9f668eba9c7724365ba118b6c60ad8b09239"
+  },
+  {
+    "path": "tests/servers/rendering/test_clustered_native_pass_selection.cpp",
+    "bytes": 8864,
+    "sha256": "df1af9ede7821a88aba977d0982652be3d5090b5408c38fd472042a861fb8ec6"
+  },
+  {
+    "path": "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.h",
+    "bytes": 3300,
+    "sha256": "ff531de1510683e7182f3482a57c888518f809fec4023139e7c27c1ddb80b44e"
+  },
+  {
+    "path": "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.cpp",
+    "bytes": 20848,
+    "sha256": "0ef48782b6f70b8f07c8e983486cee6ef8504ebb9717cf0fb4041e13ac195f2f"
+  },
+  {
+    "path": "tests/servers/rendering/fixtures/camera_native_propagation/README.md",
+    "bytes": 2906,
+    "sha256": "ff4ba85d7d5e3bc0b046b69b7354a429b16d36d12d70f232af39b2d4d8c15e6a"
+  },
+  {
+    "path": "tests/servers/rendering/fixtures/camera_native_propagation/run_native.py",
+    "bytes": 5495,
+    "sha256": "1c36efc16c27190870a5bed396ad238301ade7081b65a04af0c63157b985e62f"
+  },
+  {
+    "path": "tests/servers/rendering/fixtures/camera_native_propagation/run.gd",
+    "bytes": 5227,
+    "sha256": "ceca655fed497124db3a1a91af414fa73423d75b8d8ed605e2c3a06ddf59a36a"
+  },
+  {
+    "path": "tests/servers/rendering/fixtures/camera_native_propagation/project.godot",
+    "bytes": 123,
+    "sha256": "73a518a6b9a15ebfc757b7065fe2a06b5fe845ce171f6675f934f095ee8b8624"
+  }
+]

@@ -1,0 +1,321 @@
+{
+  "base": "fdbe10678dfeeb5f91ec304113efb3f7ada190ab",
+  "scope": "Native Forward Mobile particle instance-resource recovery dependency invalidation; no pixel or full Sprite acceptance",
+  "sources": [
+    {
+      "path": "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp",
+      "sha256": "a3c8eca1cfd7dc9f58d7fde221449f62a6792f897de299ea1c1ec040bd8bb5ec"
+    },
+    {
+      "path": "modules/particles_runtime_tests/particles_runtime_test_fixture.cpp",
+      "sha256": "7d10de49c9dcbcb00ac21255cebcf29b7bdb1171ebd49fadae1e77c74fa41143"
+    },
+    {
+      "path": "modules/particles_runtime_tests/particles_runtime_test_fixture.h",
+      "sha256": "b1b310c26866fc54f1d2ca1bd15ebdf60d17e9812b899aaf363ace36195da288"
+    },
+    {
+      "path": "tests/servers/rendering/fixtures/particle_runtime_native/run_native.py",
+      "sha256": "9b55ccebdf5a644457e8a2f42c6a6fe20ad203884bed816a5783eeb0d69a1ef4"
+    },
+    {
+      "path": "tests/servers/rendering/fixtures/particle_runtime_native/probe.gd",
+      "sha256": "b5a4b8117d4031d7f238c980a7a872aaf11e09474383de84ec349a9abeebfc01"
+    },
+    {
+      "path": "tests/servers/rendering/fixtures/particle_runtime_native/README.md",
+      "sha256": "9e82d5680cc20940c550586d31eb34886bc157f4433d0fb8e2017cc3cce31ed3"
+    }
+  ],
+  "red_green": {
+    "red": {
+      "status": "PASS",
+      "mode": "red",
+      "path": "work/b4-mobile-instance-red2-20261106/native/RESULT.json",
+      "checks": {
+        "strict_counter": true,
+        "baseline_362_required": true,
+        "baseline_362_count": true,
+        "reviewed_mobile_delta_28": true,
+        "exact_native_rows": true,
+        "exact_failures": true,
+        "exact_false_checks": true,
+        "strict_boolean_checks": true,
+        "owner_closed": true,
+        "eight_async_readbacks": true,
+        "exact_allocations_31": true,
+        "exact_resources": true,
+        "physical_acks_all_resources": true,
+        "buffer_owners_closed": true,
+        "metal_mobile": true,
+        "outer_status": true,
+        "exact_13_result_diagnostics": true,
+        "outer_one_result": true,
+        "outer_not_timeout": true,
+        "outer_no_fatal_or_exit_leaks": true,
+        "outer_exact_expected_engine_errors": true,
+        "outer_actual_metal_startup": true,
+        "outer_host_and_metadata_unchanged": true,
+        "outer_source_unchanged": true,
+        "outer_native_status": true,
+        "stdout_hash_matches": true,
+        "stderr_hash_matches": true,
+        "exact_13_raw_diagnostics": true
+      },
+      "failed_validation": [],
+      "observed_native_rows": 386,
+      "baseline_required_rows": 362,
+      "reviewed_added_rows": 28,
+      "observed_added_rows": 24,
+      "failures": [
+        "Mobile recovery notification queues existing geometry",
+        "Mobile recovery refreshes cached native descriptor",
+        "Mobile recovery descriptor references rebuilt instances"
+      ],
+      "readbacks": {
+        "original": 6,
+        "SDF": 2
+      },
+      "allocations": 31,
+      "resources": 28,
+      "physical_acks": 28,
+      "diagnostics": {
+        "Failed to reset particle sub-emitter buffer.": 2,
+        "Failed to update particle emission buffer.": 2,
+        "Failed to update particle frame parameters buffer.": 8,
+        "Failed to create particle fallback trail buffer.": 1
+      },
+      "device": {
+        "driver": "metal",
+        "renderer": "mobile",
+        "device_name": "Apple M3 Pro (Apple9)",
+        "device_vendor": "Apple",
+        "device_api": "4.0"
+      },
+      "host_sha256": "5ac9d6ec2f857be95599113269c524fe4033c77b07f0657aecc9dcb6fef5eb3c",
+      "metadata_sha256": "b4549a3dbda4dfc5a44c05d219205b6f34d9bdac40f52f41a3bd3e6e2bbd43c3",
+      "source_manifest_is_not_build_provenance": true
+    },
+    "green": {
+      "status": "PASS",
+      "mode": "green",
+      "path": "work/b4-mobile-instance-green2-20261106/native/RESULT.json",
+      "checks": {
+        "strict_counter": true,
+        "baseline_362_required": true,
+        "baseline_362_count": true,
+        "reviewed_mobile_delta_28": true,
+        "exact_native_rows": true,
+        "exact_failures": true,
+        "exact_false_checks": true,
+        "strict_boolean_checks": true,
+        "owner_closed": true,
+        "eight_async_readbacks": true,
+        "exact_allocations_31": true,
+        "exact_resources": true,
+        "physical_acks_all_resources": true,
+        "buffer_owners_closed": true,
+        "metal_mobile": true,
+        "outer_status": true,
+        "exact_13_result_diagnostics": true,
+        "outer_one_result": true,
+        "outer_not_timeout": true,
+        "outer_no_fatal_or_exit_leaks": true,
+        "outer_exact_expected_engine_errors": true,
+        "outer_actual_metal_startup": true,
+        "outer_host_and_metadata_unchanged": true,
+        "outer_source_unchanged": true,
+        "outer_native_status": true,
+        "stdout_hash_matches": true,
+        "stderr_hash_matches": true,
+        "exact_13_raw_diagnostics": true
+      },
+      "failed_validation": [],
+      "observed_native_rows": 390,
+      "baseline_required_rows": 362,
+      "reviewed_added_rows": 28,
+      "observed_added_rows": 28,
+      "failures": [],
+      "readbacks": {
+        "original": 6,
+        "SDF": 2
+      },
+      "allocations": 31,
+      "resources": 29,
+      "physical_acks": 29,
+      "diagnostics": {
+        "Failed to reset particle sub-emitter buffer.": 2,
+        "Failed to update particle emission buffer.": 2,
+        "Failed to update particle frame parameters buffer.": 8,
+        "Failed to create particle fallback trail buffer.": 1
+      },
+      "device": {
+        "driver": "metal",
+        "renderer": "mobile",
+        "device_name": "Apple M3 Pro (Apple9)",
+        "device_vendor": "Apple",
+        "device_api": "4.0"
+      },
+      "host_sha256": "17cc42bfe1ae89e53cbc4827a4c38b73c5798a53e6c501b0c929e59a2e6be8e1",
+      "metadata_sha256": "c4615357d782795bb9332a505318b592c10b866817cb945628728137e8990bbc",
+      "source_manifest_is_not_build_provenance": true
+    },
+    "complete": true,
+    "scope": "fixed native Metal Mobile descriptor invalidation recovery only; no pixel, ANGE product, holder, or arbitrary renderer qualification"
+  },
+  "combined_full_engine": {
+    "exit": 0,
+    "elapsed": 20.634100625058636,
+    "stdout_bytes": 571,
+    "stderr_bytes": 4017,
+    "counts": {
+      "OverallResultsAsserts": {
+        "successes": "521421",
+        "failures": "0"
+      },
+      "OverallResultsTestCases": {
+        "successes": "2082",
+        "failures": "0"
+      }
+    }
+  },
+  "evidence": [
+    "work/b4-mobile-instance-red2-20261106",
+    "work/b4-mobile-instance-green2-20261106"
+  ],
+  "initial_attempts": {
+    "red": "work/b4-mobile-instance-red-20261106",
+    "green": "work/b4-mobile-instance-green-20261106",
+    "status": "Invalid production comparison: fixture omitted original culler public set_material_override initialization and therefore original particle dependency enrollment. Records retained; final corrected fixture byte-identical RED2/GREEN2."
+  },
+  "limits": [
+    "Fixed actual main Metal Mobile descriptor refresh and physical close; no rendered pixel/motion-vector qualification or ANGE producer/whole OutputReleased.",
+    "Original 292 checks plus SDF70 preserved; additive28. Missing refresh in RED creates no final transform set, so RED386/28 resources versus GREEN390/29; each actual resource physically returned.",
+    "Thirteen deliberately injected diagnostics retained exactly; full suite stdout571/stderr4017 existing negative diagnostics retained.",
+    "Build/source snapshots and controlled host identity are retained separately; passive runner source manifest alone is not build provenance."
+  ],
+  "style": [
+    {
+      "command": [
+        "/tmp/b4-ci-style-tools/bin/clang-format",
+        "--version"
+      ],
+      "exit": 0,
+      "stdout": "clang-format version 21.1.7\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "/tmp/b4-ci-style-tools/bin/clang-format",
+        "--dry-run",
+        "--Werror",
+        "modules/particles_runtime_tests/particles_runtime_test_fixture.cpp",
+        "modules/particles_runtime_tests/particles_runtime_test_fixture.h"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "/tmp/b4-ci-style-tools/bin/codespell",
+        "modules/particles_runtime_tests/particles_runtime_test_fixture.cpp",
+        "modules/particles_runtime_tests/particles_runtime_test_fixture.h",
+        "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp",
+        "tests/servers/rendering/fixtures/particle_runtime_native/README.md",
+        "tests/servers/rendering/fixtures/particle_mobile_instance_recovery/RECEIPT.md"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "/tmp/b4-ci-style-tools/bin/ruff",
+        "check",
+        "tests/servers/rendering/fixtures/particle_runtime_native/run_native.py"
+      ],
+      "exit": 0,
+      "stdout": "All checks passed!\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "source_drift_red_green": [
+    {
+      "path": "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp",
+      "red": null,
+      "green": "a3c8eca1cfd7dc9f58d7fde221449f62a6792f897de299ea1c1ec040bd8bb5ec"
+    }
+  ],
+  "independent_final_review": {
+    "review": "corrected Mobile fixture RED2/GREEN2 independent evidence/source review",
+    "original_362_true_both": true,
+    "green_390_true": true,
+    "red_false": [
+      "Mobile recovery notification queues existing geometry",
+      "Mobile recovery refreshes cached native descriptor",
+      "Mobile recovery descriptor references rebuilt instances"
+    ],
+    "red_exit": 43,
+    "green_exit": 0,
+    "allocations_both": 31,
+    "red_resources_and_acks": 28,
+    "green_resources_and_acks": 29,
+    "eight_readbacks_complete_both": true,
+    "done_released_both": true,
+    "raw_logs_hashes_and_embedded_results_verified": true,
+    "host_bytes_match_sha256_both": true,
+    "red_host_sha256": "5ac9d6ec2f857be95599113269c524fe4033c77b07f0657aecc9dcb6fef5eb3c",
+    "green_host_sha256": "17cc42bfe1ae89e53cbc4827a4c38b73c5798a53e6c501b0c929e59a2e6be8e1",
+    "only_source_change": {
+      "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp": {
+        "red": "c5bfed7e23f9927b757258baeb515688dd00c1e8237887f18adbd65970cc3f6a",
+        "green": "a3c8eca1cfd7dc9f58d7fde221449f62a6792f897de299ea1c1ec040bd8bb5ec"
+      }
+    },
+    "one_case_fix_reverse_matches_red_exactly": true,
+    "fixture_probe_runner_docs_identical_both": true,
+    "current_sources_and_DELIVERY_hashes_match_green": true,
+    "actual_culler_initialization_confirmed": "renderer_scene_cull.cpp:725 creates geometry then730 calls set_material_override; renderer_geometry_instance.cpp:40 setter unconditionally sets dirty_dependencies=true; corrected fixture uses same public setter before first updater",
+    "first_pair": "invalid comparison due to fixture enrollment omission; retained but not accepted as sufficient RED/GREEN",
+    "full_suite_record": {
+      "exit": 0,
+      "elapsed": 20.634100625058636,
+      "stdout_bytes": 571,
+      "stderr_bytes": 4017,
+      "counts": {
+        "OverallResultsAsserts": {
+          "successes": "521421",
+          "failures": "0"
+        },
+        "OverallResultsTestCases": {
+          "successes": "2082",
+          "failures": "0"
+        }
+      }
+    },
+    "scope": "fixed native descriptor recovery/physical close, no pixels/ANGE/whole output qualification",
+    "build_gpu_rerun_by_reviewer": false,
+    "full_suite_xml_verified": {
+      "OverallResultsAsserts": {
+        "successes": "521421",
+        "failures": "0"
+      },
+      "OverallResultsTestCases": {
+        "successes": "2082",
+        "failures": "0"
+      }
+    },
+    "full_suite_command_host_sha_matches_green": true
+  }
+}

@@ -49,22 +49,26 @@ sort_buffer;
 
 layout(push_constant, std430) uniform Params {
 	uint total_elements;
-	uint pad[3];
+	uint pad[3]; // pad[0] is the logical X-group offset.
 	ivec4 job_params;
 }
 params;
 
 void main() {
+	uint logical_group = params.pad[0] + gl_WorkGroupID.x;
 #ifdef MODE_SORT_BLOCK
 
-	uvec3 Gid = gl_WorkGroupID;
-	uvec3 DTid = gl_GlobalInvocationID;
 	uvec3 GTid = gl_LocalInvocationID;
 	uint GI = gl_LocalInvocationIndex;
 
-	int GlobalBaseIndex = int((Gid.x * SORT_SIZE) + GTid.x);
+	uint logical_group_base = logical_group * SORT_SIZE;
+	if (logical_group_base >= params.total_elements) {
+		return;
+	}
+
+	int GlobalBaseIndex = int(logical_group_base + GTid.x);
 	int LocalBaseIndex = int(GI);
-	int numElementsInThreadGroup = int(min(SORT_SIZE, params.total_elements - (Gid.x * SORT_SIZE)));
+	int numElementsInThreadGroup = int(min(SORT_SIZE, params.total_elements - logical_group_base));
 
 	// Load shared data
 
@@ -114,15 +118,14 @@ void main() {
 
 #ifdef MODE_SORT_STEP
 
-	uvec3 Gid = gl_WorkGroupID;
 	uvec3 GTid = gl_LocalInvocationID;
 
 	ivec4 tgp;
 
-	tgp.x = int(Gid.x) * 256;
+	tgp.x = int(logical_group) * 256;
 	tgp.y = 0;
 	tgp.z = int(params.total_elements);
-	tgp.w = min(512, max(0, tgp.z - int(Gid.x) * 512));
+	tgp.w = min(512, max(0, tgp.z - int(logical_group) * 512));
 
 	uint localID = int(tgp.x) + GTid.x; // calculate threadID within this sortable-array
 
@@ -146,17 +149,19 @@ void main() {
 
 #ifdef MODE_SORT_INNER
 
-	uvec3 Gid = gl_WorkGroupID;
-	uvec3 DTid = gl_GlobalInvocationID;
 	uvec3 GTid = gl_LocalInvocationID;
 	uint GI = gl_LocalInvocationIndex;
 
 	ivec4 tgp;
+	uint logical_group_base = logical_group * 512;
+	if (logical_group_base >= params.total_elements) {
+		return;
+	}
 
-	tgp.x = int(Gid.x * 256);
+	tgp.x = int(logical_group * 256);
 	tgp.y = 0;
 	tgp.z = int(params.total_elements.x);
-	tgp.w = int(min(512, max(0, params.total_elements - Gid.x * 512)));
+	tgp.w = int(min(512, params.total_elements - logical_group_base));
 
 	int GlobalBaseIndex = int(tgp.y + tgp.x * 2 + GTid.x);
 	int LocalBaseIndex = int(GI);

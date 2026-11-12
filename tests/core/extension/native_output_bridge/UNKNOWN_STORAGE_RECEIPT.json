@@ -1,0 +1,61 @@
+{
+  "scope": "Integrated UNKNOWN backing mismatch retention; test-only bridge, no production/public ABI",
+  "source_sha256": {
+    "tests/servers/rendering/test_external_output_custody_bridge.h": "fc17f34c8a7845e852b27a51a854693e7cd54c94677857a484f0a2b598ed3618",
+    "tests/servers/rendering/test_external_output_owner_state.cpp": "bf73be283531b07401f5c2cbc4458685cc48c12cd88e10ab193a1917da265f8f",
+    "tests/servers/rendering/test_external_output_prefix.cpp": "149855bfb2ff929a94f60f05065ea20bba6d27d7d5b482c1acf40f39a2e706be",
+    "tests/core/extension/test_production_request.cpp": "0c453767525ea0986484918449b8ac0296c3cbf889627c7cf18a580f47ba22e7"
+  },
+  "build": "work/b4-owned-storage-next-20261106/BUILD_UNKNOWN.log",
+  "targeted": {
+    "exit": 0,
+    "seconds": 1.63,
+    "host_before": "129ca8f4da2c115cbad51100b9bfe3ae2ee255164007480eb381abab12ddc833",
+    "host_after": "129ca8f4da2c115cbad51100b9bfe3ae2ee255164007480eb381abab12ddc833",
+    "stdout_bytes": 0,
+    "stderr_bytes": 0,
+    "test_cases": {
+      "successes": "7",
+      "failures": "0"
+    },
+    "asserts": {
+      "successes": "13273",
+      "failures": "0"
+    },
+    "validation_pass": true,
+    "raw_result": "work/b4-owned-storage-next-20261106/targeted-unknown-r1/RESULT.json"
+  },
+  "coverage": [
+    "capacity 2 and zero",
+    "actual _native_disposal_free backing serial mismatch",
+    "repeated original OBSERVE retains group/storage/pin/arena/children/RIDs and no driver frees",
+    "test-only exact restore then original retirement"
+  ],
+  "limits": [
+    "No GPU rendering assertion",
+    "Linux TSAN and clangd-tidy await new CI42154714457"
+  ],
+  "full": {
+    "exit": 0,
+    "seconds": 17.79,
+    "host_before": "129ca8f4da2c115cbad51100b9bfe3ae2ee255164007480eb381abab12ddc833",
+    "host_after": "129ca8f4da2c115cbad51100b9bfe3ae2ee255164007480eb381abab12ddc833",
+    "stdout_bytes": 571,
+    "stderr_bytes": 4512,
+    "test_cases": {
+      "successes": "2120",
+      "failures": "0"
+    },
+    "asserts": {
+      "successes": "544514",
+      "failures": "0"
+    },
+    "validation_pass": true,
+    "raw_result": "work/b4-owned-storage-next-20261106/full-unknown-r1/RESULT.json"
+  },
+  "stderr_comparison": {
+    "baseline": "work/b4-owned-storage-next-20261106/full-layout-extrema/stderr.log",
+    "equal": true,
+    "normalization": "8+digit dynamic IDs"
+  }
+}

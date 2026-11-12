@@ -58,7 +58,7 @@ public:
 	SortEffects();
 	~SortEffects();
 
-	void sort_buffer(RID p_uniform_set, int p_size);
+	bool sort_buffer(RID p_uniform_set, int p_size);
 };
 
 } // namespace RendererRD

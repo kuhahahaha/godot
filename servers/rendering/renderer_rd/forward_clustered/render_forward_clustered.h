@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/templates/paged_allocator.h"
+#include "servers/rendering/renderer_rd/native_material_recipe_roster.h"
 #include "servers/rendering/multi_uma_buffer.h"
 #include "servers/rendering/renderer_rd/cluster_builder_rd.h"
 #include "servers/rendering/renderer_rd/effects/fsr2.h"
@@ -38,9 +39,11 @@
 #include "servers/rendering/renderer_rd/effects/ss_effects.h"
 #include "servers/rendering/renderer_rd/effects/taa.h"
 #include "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h"
+#include "servers/rendering/renderer_rd/height_capture_checked_sink.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/best_fit_normal.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/integrate_dfg.glsl.gen.h"
+#include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 
 #ifdef METAL_ENABLED
 #include "servers/rendering/renderer_rd/effects/metal_fx.h"
@@ -55,10 +58,20 @@
 #define RB_TEX_VOXEL_GI SNAME("voxel_gi")
 #define RB_TEX_VOXEL_GI_MSAA SNAME("voxel_gi_msaa")
 
+#ifdef TESTS_ENABLED
+class ParticlesHeightfieldClearTestFixture;
+#endif
+
 namespace RendererSceneRenderImplementation {
 
 class RenderForwardClustered : public RendererSceneRenderRD {
 	friend SceneShaderForwardClustered;
+	friend class TestClusteredNativePassSelection;
+#ifdef TESTS_ENABLED
+	friend class ::ParticlesHeightfieldClearTestFixture;
+	uint64_t test_heightfield_source_pass_entries = 0;
+	uint64_t test_viewport_scene_entries = 0;
+#endif
 
 	enum {
 		SCENE_UNIFORM_SET = 0,
@@ -174,9 +187,15 @@ private:
 
 	uint64_t lightmap_texture_array_version = 0xFFFFFFFF;
 
-	void _update_render_base_uniform_set();
+	// Internal retained requirements only; no request/action, factory or numeric F.
+	Error _plan_native_material_recipe(RID p_material, RID p_mesh, uint32_t p_surface, RD::FramebufferFormatID p_actual_format, RendererRD::NativeMaterialRecipeRoster &r_plan, uint32_t p_limit = 256);
+	static Error build_native_material_fixed_pass_data(Vector<uint8_t> &r_instance, Vector<uint8_t> &r_implementation, Vector<uint8_t> &r_cluster, Vector<uint8_t> &r_push);
+
+	// Private source-only mode: original raw bindings, no native/cache effects.
+	void _update_render_base_uniform_set(Error *p_error = nullptr, Vector<RD::Uniform> *p_native_sources = nullptr);
 	RID _setup_sdfgi_render_pass_uniform_set(RID p_albedo_texture, RID p_emission_texture, RID p_emission_aniso_texture, RID p_geom_facing_texture, const RendererRD::MaterialStorage::Samplers &p_samplers, uint32_t p_uniform_buffer_index);
-	RID _setup_render_pass_uniform_set(RenderListType p_render_list, const RenderDataRD *p_render_data, RID p_radiance_texture, const RendererRD::MaterialStorage::Samplers &p_samplers, uint32_t p_uniform_buffer_index, bool p_use_directional_shadow_atlas = false);
+	// Private source-only mode: original raw bindings, no native/cache effects.
+	RID _setup_render_pass_uniform_set(RenderListType p_render_list, const RenderDataRD *p_render_data, RID p_radiance_texture, const RendererRD::MaterialStorage::Samplers &p_samplers, uint32_t p_uniform_buffer_index, bool p_use_directional_shadow_atlas = false, Error *p_error = nullptr, Vector<RD::Uniform> *p_native_sources = nullptr);
 
 	struct BestFitNormal {
 		BestFitNormalShaderRD shader;
@@ -216,6 +235,22 @@ private:
 		COLOR_PASS_FLAG_MOTION_VECTORS = 1 << 3,
 	};
 
+	// Fixed native pass inputs selected before draw_list_begin. This is source
+	// selection only; it grants no external preparation or accepted draw authority.
+	struct NativePassSelection {
+		PassMode pass_mode = PASS_MODE_MAX;
+		uint32_t color_pass_flags = 0;
+		SceneShaderForwardClustered::PipelineVersion version = SceneShaderForwardClustered::PIPELINE_VERSION_MAX;
+		uint32_t base_color_pass_flags = 0;
+		RD::FramebufferFormatID framebuffer_format = 0;
+
+		bool includes_surface(uint32_t p_color_pass_inclusion_mask) const {
+			return pass_mode != PASS_MODE_COLOR || p_color_pass_inclusion_mask == 0 || (color_pass_flags & p_color_pass_inclusion_mask) != 0;
+		}
+	};
+
+	static bool _select_native_pass(PassMode p_pass_mode, uint32_t p_color_pass_flags, uint32_t p_view_count, RD::FramebufferFormatID p_framebuffer_format, NativePassSelection &r_selection);
+
 	struct GeometryInstanceSurfaceDataCache;
 	struct RenderElementInfo;
 
@@ -233,7 +268,8 @@ private:
 		Vector2 uv_offset;
 		float lod_distance_multiplier = 0.0;
 		float screen_mesh_lod_threshold = 0.0;
-		RD::FramebufferFormatID framebuffer_format = 0;
+		NativePassSelection native_pass;
+		const RenderDataRD *external_prepared_render_data = nullptr;
 		uint32_t element_offset = 0;
 		bool use_directional_soft_shadow = false;
 		SceneShaderForwardClustered::ShaderSpecialization base_specialization = {};
@@ -447,7 +483,7 @@ private:
 
 	static RenderForwardClustered *singleton;
 
-	uint32_t _setup_environment(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, bool p_opaque_render_buffers = false, bool p_apply_alpha_multiplier = false, bool p_pancake_shadows = false);
+	uint32_t _setup_environment(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, bool p_opaque_render_buffers = false, bool p_apply_alpha_multiplier = false, bool p_pancake_shadows = false, Error *p_error = nullptr);
 	void _setup_voxelgis(const PagedArray<RID> &p_voxelgis);
 	void _setup_lightmaps(const RenderDataRD *p_render_data, const PagedArray<RID> &p_lightmaps, const Transform3D &p_cam_transform);
 
@@ -469,15 +505,42 @@ private:
 	static_assert(std::is_trivially_destructible_v<RenderElementInfo>);
 	static_assert(std::is_trivially_constructible_v<RenderElementInfo>);
 
-	template <PassMode p_pass_mode, uint32_t p_color_pass_flags = 0>
-	_FORCE_INLINE_ void _render_list_template(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
-	void _render_list(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
-	void _render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags = RD::DRAW_DEFAULT_ALL, const Vector<Color> &p_clear_color_values = Vector<Color>(), float p_clear_depth_value = 0.0, uint32_t p_clear_stencil_value = 0, const Rect2 &p_region = Rect2());
+	// Prepared by the SAME source template before the checked list begins.
+	// These RIDs remain owned by the renderer storage; this descriptor creates
+	// neither immutable custody nor a source-membership/retirement receipt.
+	struct PreparedHeightGeometry {
+		RID vertex_array;
+		RID index_array;
+		RID pipeline;
+		RID transforms;
+		RID material;
+		SceneState::PushConstant push_constant;
+		uint32_t push_constant_size = 0;
+		uint32_t instance_count;
+	};
+	Error _render_height_list_checked(RenderListParameters *p_params, RID p_framebuffer, RendererRD::HeightCaptureCheckedSink &r_sink);
+	Error _render_particle_collider_heightfield_impl(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances, RendererRD::HeightCaptureCheckedSink *p_sink);
 
-	void _fill_instance_data(RenderListType p_render_list, int *p_render_info = nullptr, uint32_t p_offset = 0, int32_t p_max_elements = -1, bool p_update_buffer = true);
+	struct NativeSurfacePipelineSelection {
+		SceneShaderForwardClustered::ShaderSpecialization specialization;
+		uint32_t color_pass_flags;
+	};
+
+	template <PassMode p_pass_mode>
+	static _FORCE_INLINE_ NativeSurfacePipelineSelection _select_native_surface_pipeline(const RenderListParameters &p_params, const GeometryInstanceSurfaceDataCache &p_surface, const RenderElementInfo &p_element_info);
+	static RendererRD::ExternalPacketPipelineRequest _external_pipeline_request(const RenderListParameters &p_params, const GeometryInstanceSurfaceDataCache &p_surface, const NativeSurfacePipelineSelection &p_selected);
+	void _prepare_external_color(const RenderListParameters &p_params);
+
+	template <PassMode p_pass_mode>
+	_FORCE_INLINE_ void _render_list_template(RenderingDevice::DrawListID p_draw_list, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element, RendererRD::HeightCaptureCheckedSink *p_height_sink = nullptr, LocalVector<PreparedHeightGeometry> *p_height_geometry = nullptr);
+	void _render_list(RenderingDevice::DrawListID p_draw_list, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
+	void _render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags = RD::DRAW_DEFAULT_ALL, const Vector<Color> &p_clear_color_values = Vector<Color>(), float p_clear_depth_value = 0.0, uint32_t p_clear_stencil_value = 0, const Rect2 &p_region = Rect2(), const RenderDataRD *p_color_render_data = nullptr);
+
+	void _fill_instance_data(RenderListType p_render_list, int *p_render_info = nullptr, uint32_t p_offset = 0, int32_t p_max_elements = -1, bool p_update_buffer = true, Error *p_error = nullptr);
 	void _fill_render_list(RenderListType p_render_list, const RenderDataRD *p_render_data, PassMode p_pass_mode, bool p_using_sdfgi = false, bool p_using_opaque_gi = false, bool p_using_motion_pass = false, bool p_append = false);
 
 	HashMap<Size2i, RID> sdfgi_framebuffer_size_cache;
+	const RenderDataRD *active_render_data = nullptr;
 
 	struct GeometryInstanceData;
 	class GeometryInstanceForwardClustered;
@@ -534,12 +597,15 @@ private:
 		RSE::PrimitiveType primitive = RSE::PRIMITIVE_MAX;
 		uint32_t flags = 0;
 		uint32_t surface_index = 0;
+		uint32_t external_surface_index = UINT32_MAX;
+		RendererRD::ExternalSurfaceSelection external_surface;
 		uint32_t color_pass_inclusion_mask = 0;
 
 		void *surface = nullptr;
 		RID material_uniform_set;
 		SceneShaderForwardClustered::ShaderData *shader = nullptr;
 		SceneShaderForwardClustered::MaterialData *material = nullptr;
+		uint64_t material_generation = 0;
 
 		void *surface_shadow = nullptr;
 		RID material_uniform_set_shadow;
@@ -660,7 +726,7 @@ private:
 
 	void _update_global_pipeline_data_requirements_from_project();
 	void _update_global_pipeline_data_requirements_from_light_storage();
-	void _geometry_instance_add_surface_with_material(GeometryInstanceForwardClustered *ginstance, uint32_t p_surface, SceneShaderForwardClustered::MaterialData *p_material, uint32_t p_material_id, uint32_t p_shader_id, RID p_mesh);
+	void _geometry_instance_add_surface_with_material(GeometryInstanceForwardClustered *ginstance, uint32_t p_surface, SceneShaderForwardClustered::MaterialData *p_material, uint32_t p_material_id, uint32_t p_shader_id, RID p_mesh, RendererRD::ExternalSurfaceSelection *p_external = nullptr);
 	void _geometry_instance_add_surface_with_material_chain(GeometryInstanceForwardClustered *ginstance, uint32_t p_surface, SceneShaderForwardClustered::MaterialData *p_material, RID p_mat_src, RID p_mesh);
 	void _geometry_instance_add_surface(GeometryInstanceForwardClustered *ginstance, uint32_t p_surface, RID p_material, RID p_mesh);
 	void _geometry_instance_update(RenderGeometryInstance *p_geometry_instance);
@@ -806,8 +872,13 @@ protected:
 	virtual void _render_uv2(const PagedArray<RenderGeometryInstance *> &p_instances, RID p_framebuffer, const Rect2i &p_region) override;
 	virtual void _render_sdfgi(Ref<RenderSceneBuffersRD> p_render_buffers, const Vector3i &p_from, const Vector3i &p_size, const AABB &p_bounds, const PagedArray<RenderGeometryInstance *> &p_instances, const RID &p_albedo_texture, const RID &p_emission_texture, const RID &p_emission_aniso_texture, const RID &p_geom_facing_texture, float p_exposure_normalization) override;
 	virtual void _render_particle_collider_heightfield(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances) override;
+	virtual Error _render_particle_collider_heightfield_checked(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances, RendererRD::HeightCaptureCheckedSink &r_sink) override;
 
 public:
+	// Native preparation only; does not qualify source, bounds, history or GPU support.
+	Error external_pipeline_prepare(const RendererRD::ExternalSurfaceSelection &p_surface, RendererRD::ExternalPipelinePreparation &r_preparation);
+	Error external_pipeline_prepare_for_view(const RendererRD::ExternalSurfaceSelection &, const RendererRD::ExternalPacketViewLease &, const RendererRD::ExternalPacketPipelineRequest &, const RendererRD::ExternalPipelinePreparation *&, bool p_pre_list = false);
+
 	static RenderForwardClustered *get_singleton() { return singleton; }
 
 	ClusterBuilderSharedDataRD *get_cluster_builder_shared() { return &cluster_builder_shared; }

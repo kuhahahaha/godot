@@ -470,6 +470,7 @@ public:
 		RID scene_data_ubo;
 
 		RID get_voxel_gi_buffer();
+		RID get_voxel_gi_buffer_if_ready() const { return voxel_gi_buffer; }
 
 		virtual void configure(RenderSceneBuffersRD *p_render_buffers) override {}
 		virtual void free_data() override;

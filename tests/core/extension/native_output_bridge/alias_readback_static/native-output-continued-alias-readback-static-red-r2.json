@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--test-case=*[OutputAliasReadbackFreeze]*"
+  ],
+  "binary_bytes": 156994696,
+  "binary_sha256": "b884db0616c9bd122511459e7d2637d5ea19b0bd3b8c511d50a3d73b40d1fbe7",
+  "exit": 1,
+  "elapsed": 1.3866591659607366,
+  "scope": "CPU/dummy only; acceptance requires diagnostic and assertion inspection"
+}

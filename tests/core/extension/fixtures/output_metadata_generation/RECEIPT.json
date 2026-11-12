@@ -1,0 +1,61 @@
+{
+  "base": "d2d4ed48f9302e1f19a0085635628daa42a923e6",
+  "scope": "Original accepted CPU metadata physical allocation and SceneOnly native generation mechanics; controlled CPU driver, not GPU acceptance or R01 logical admission.",
+  "build_command": "scons -Q platform=macos target=editor tests=yes debug_symbols=no module_particles_runtime_tests_enabled=yes -j3",
+  "focused": {
+    "filter": "*[OutputMetadataFactory]*,*[OutputSceneMetadata]*,*[OutputCreateWire]*",
+    "exit_code": 0,
+    "cases": 10,
+    "assertions": 1443
+  },
+  "regressions": {
+    "filter": "*[ProductionRequest]*,*[ProductionNativeObserve]*,*[B4]*,*[ViewportHistory]*",
+    "exit_code": 0,
+    "cases": 136,
+    "assertions": 73241,
+    "expected_diagnostics": {
+      "pipeline_driver_failure": 3,
+      "foreign_camera_token": 3
+    }
+  },
+  "binary": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "bytes": 156647368,
+    "sha256": "fabdbce9805b1787d6645dbd66d0c81f6cd453ca6317b5f7bce39a64acb89e1d"
+  },
+  "source_sha256": {
+    "core/extension/gdextension_external_output_interface.h": "84ad66ea0c0cccb42d162b8e30c7e3b7a0fd401f5a04b08bfcd4763a77f6f0cc",
+    "core/extension/gdextension_interface.json": "4060a242f4e52eabdbb84a27ae3fe094f60f6603144693f362e11f59efa0420a",
+    "core/extension/gdextension_library_exit_guard.h": "7934c58969a0a09d4edf55205aea5c9c02be3e4f121655d21dcf0e1e85ada36f",
+    "core/extension/gdextension_production_interface.cpp": "3651a1e1f615792fac2da5763bd303f756956f1ca4ddb6442e3881d5a7f17259",
+    "core/extension/gdextension_production_request.cpp": "67440273bbf059a457b6602b8521d21ca211b701e9bcd846a587e6088013593f",
+    "core/extension/gdextension_production_request.h": "dba371ba85a9091721173c585e1276a976907e37d8f54a9f599fe7304b351739",
+    "servers/rendering/renderer_rd/storage_rd/external_output_owner.cpp": "fc173228626cf751b6d2bc3ff6b3394e91529a03c55cb5249f4b67da1b47546e",
+    "servers/rendering/renderer_rd/storage_rd/external_output_owner.h": "e742003d948067d4eaa40762bb50bc01092e40f709d58b3a2d7822c2012a0013",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp": "f3001bde8f53b4e147e94dd7a08442fbc4a6ffabe7c3d34511435ec7c5c12480",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.h": "42d4deb12e9b56632bc491b53313a182c7bfdb631c8b0ed07564e72a136295ef",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage_external.cpp": "9ddebc25513c66c2ad6824e2ef6e0528d2520d5568d1c9cf349bd36c53f01374",
+    "servers/rendering/rendering_device.cpp": "b9f29cb21579f20351cdfc819336a2f80e8a49b664060a04ef418dc9049f4950",
+    "tests/core/extension/test_production_request.cpp": "103a7bf33546a33eb1338b1bc1fdfb3ba7c149db1af2f55c9f0929ce2ea23cd1",
+    "tests/servers/rendering/test_external_output_custody_bridge.h": "165601f21d379abffd54abe2e45b92eaadad9483830679e46062963d004efed0",
+    "tests/servers/rendering/test_external_output_owner_state.cpp": "8032c0ab647e65079de768306a6ea94977842d239a0e7b7f7dcfc257afb0b9ed",
+    "core/extension/gdextension_production_metadata.cpp": "62f2cc2424691302f621efa957df4119cda3ef0270f32a32507145d4ce692413",
+    "tests/servers/rendering/test_external_output_create_interface.cpp": "862a8bcd7e6048b45c9ee9562f76d6a1c4eb86eb69f0495f943f0c372a046dc2"
+  },
+  "files_sha256": {
+    "SOURCE_CHANGE.patch": "f70937afe0bdc0b74a9423f4d089f75330592caa3e5669ab8a367cd4e0744fa0",
+    "build-verified.log": "5ec5cf79dfddf03195105abf8da44dffa3a2984d805a67180c53bd8b7ba7ca1d",
+    "build-initial.log": "f679f01f38b63dbeae71d31391a8fe05f6685e91b600494f2e277cb73a70092d",
+    "regressions.log": "683e9da2ed6e103536c54927e265cbce0b56009e59e7466ba686a94a79cebeff",
+    "focused.log": "c7d17341975a2388ead99ecf9677f3d1f622eb4c6e4b4bcc155537063c602d22",
+    "controlled_build.json": "5c2b7098cea9e6c82eb658fb0c0e3c13ef1e0e358b1ed82ebdad11d9c9a123ae"
+  },
+  "known_limits": [
+    "Actual R01 local/delegated account and HostOutputCustody join owned externally; protected physical request is not logical grant.",
+    "RID_Owner pool directories/chunks live until storage destruction; not charged/refunded as this per-generation allocation.",
+    "physical_bytes bounds the requested usable block, following existing arena allocator conventions; allocator headers are not a separate Runtime payment.",
+    "Instance192/Indexed144 remain refused pending real fixed shader/preparation resources and selected target.",
+    "No actual source acquire, selected-view transport, external renderer draw, full117/1290 qualification, or E06 Verified is established.",
+    "Early capacity/declaration and Thread/cleanup fixture failures were corrected; no RED claim is made from those failures."
+  ]
+}

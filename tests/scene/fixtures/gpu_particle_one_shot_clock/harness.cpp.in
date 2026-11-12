@@ -1,0 +1,83 @@
+#include <cstdio>
+#define SceneStringName(x) #x
+struct RS {
+    static RS *get_singleton() { static RS rs; return &rs; }
+    void particles_restart(int) {}
+    void particles_set_emitting(int, bool) {}
+};
+using RenderingServer = RS;
+struct Math { static int rand() { return 1; } };
+struct Particle {
+    int particles = 1, finished = 0;
+    double time = 0, emission_time = 1, active_time = 2, process_delta = .25;
+    double lifetime = 1, explosiveness_ratio = 0, speed_scale = 1;
+    bool one_shot = true, active = true, emitting = true, signal_canceled = false;
+    bool processing = true, use_fixed_seed = true;
+    void set_seed(int) {}
+    double get_process_delta_time() { return process_delta; }
+    void set_process_internal(bool value) { processing = value; }
+    void emit_signal(const char *) { finished++; }
+    void process() { @PROCESS@ }
+    void restart(bool p_keep_seed = true) { @RESTART@ }
+    void set_emitting(bool p_emitting) { @EMITTING@ }
+    void ticks(int count) { for (int i = 0; i < count; i++) if (processing) process(); }
+};
+int main() {
+    int checks = 0, failures = 0;
+    auto check = [&](bool ok, const char *name) {
+        checks++;
+        if (!ok) { failures++; std::fprintf(stderr, "FAIL: %s\n", name); }
+    };
+    {
+        Particle p; p.speed_scale = 0; p.ticks(40);
+        check(p.time == 0 && p.emitting && p.active && p.finished == 0, "zero speed stays emitting after ten wall lifetimes");
+        p.speed_scale = 1; p.ticks(9);
+        check(!p.emitting && !p.active && p.finished == 1, "resume completes once");
+    }
+    {
+        Particle p; p.speed_scale = .5; p.ticks(8);
+        check(p.emitting && p.active && p.finished == 0, "half speed emission exact threshold stays emitting");
+        p.ticks(1); check(!p.emitting && p.active && p.finished == 0, "half speed emission stops above threshold");
+        p.ticks(7); check(p.active && p.finished == 0, "half speed finished exact threshold stays active");
+        p.ticks(1); check(!p.active && p.finished == 1, "half speed finishes above threshold");
+    }
+    {
+        Particle p; p.speed_scale = 2; p.ticks(2);
+        check(p.emitting && p.finished == 0, "double speed emission exact threshold");
+        p.ticks(1); check(!p.emitting && p.active, "double speed shortens emission");
+        p.ticks(1); check(p.active && p.finished == 0, "double speed finished exact threshold");
+        p.ticks(1); check(!p.active && p.finished == 1, "double speed shortens completion");
+    }
+    {
+        Particle p; p.speed_scale = .5; p.ticks(4); // .5 simulated seconds.
+        p.speed_scale = 0; p.ticks(40);
+        check(p.emitting && p.finished == 0 && p.time == .5, "mid-shot pause preserves elapsed time");
+        p.speed_scale = 2; p.ticks(1); // Exactly 1 simulated second.
+        check(p.emitting && p.finished == 0, "speed change integrates prior elapsed time");
+        p.ticks(2); check(!p.emitting && p.active && p.finished == 0, "integrated finished threshold remains strict");
+        p.ticks(1); check(p.finished == 1 && !p.active, "speed change finishes above integrated threshold");
+        p.ticks(20); p.process();
+        check(p.finished == 1 && !p.processing, "finished at most once even with extra notification");
+        p.speed_scale = 0; p.restart(); p.ticks(20);
+        check(p.emitting && p.active && p.processing && p.time == 0 && !p.signal_canceled && p.finished == 1, "restart reactivates and resets paused clock");
+        p.speed_scale = 1; p.ticks(8);
+        check(p.finished == 1 && p.active, "restart starts a full new clock");
+        p.ticks(1); check(p.finished == 2 && !p.active, "restarted shot finishes once");
+    }
+    {
+        Particle p; p.ticks(1); p.set_emitting(true); // Existing active shot cancels its finished signal.
+        check(p.signal_canceled, "re-emitting an active shot cancels its signal");
+        p.speed_scale = 0; p.ticks(40); p.speed_scale = 2; p.ticks(8);
+        check(p.finished == 0 && !p.active && !p.emitting, "speed changes preserve canceled finished signal");
+        p.restart(); p.ticks(5);
+        check(!p.signal_canceled && p.finished == 1, "restart clears canceled signal");
+    }
+    {
+        Particle p; p.set_emitting(false); p.speed_scale = 0; p.ticks(40);
+        check(!p.emitting && p.finished == 0, "paused manually stopped emission stays stopped");
+        p.speed_scale = 1; p.ticks(9);
+        check(!p.emitting && p.finished == 1, "manual stop preserves existing completion semantics");
+    }
+    std::printf("%d/%d checks passed\n", checks - failures, checks);
+    return failures ? 1 : 0;
+}

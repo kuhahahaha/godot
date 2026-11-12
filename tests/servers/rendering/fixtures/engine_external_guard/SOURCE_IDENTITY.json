@@ -1,0 +1,14 @@
+[
+  {
+    "path": "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp",
+    "sha256": "64f37bc8cd1fc483ae1c50655381528b7a21de361bdd9b1fd69cfee1520142d4"
+  },
+  {
+    "path": "servers/rendering/renderer_rd/storage_rd/particles_storage.h",
+    "sha256": "8e24f976d6ab11d2dc84e5b3654c355433ad0ff1f543629555389af87f2eb204"
+  },
+  {
+    "path": "tests/servers/rendering/test_external_output_owner_state.cpp",
+    "sha256": "a553d2660f0d4df879c3814f91b80400566acc2eb69dad6991a5db7fc6724ebc"
+  }
+]

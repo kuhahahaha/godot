@@ -1,0 +1,67 @@
+{
+  "date": "2026-11-06",
+  "fixed_artifact": {
+    "source_commit": "3ee60f924d83f1e190c0dced5447a0aae63a027f",
+    "artifact": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/fixed-core-3ee60f924d/godot.macos.editor.arm64",
+    "bytes": 156448920,
+    "sha256": "d9f3335d4e1b5693f17ad53560cec977e11abd9f80230273a625a173727216de",
+    "controlled_receipt": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/fixed-core-3ee60f924d/godot.macos.editor.arm64.controlled_build.json",
+    "selection_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/fixed-core-3ee60f924d/engine_build_selection.gen.json",
+    "selection": {
+      "schema": 1,
+      "core_stamp": "15e66c8d5d2001866d4d18acbb405a1f9aad889c7f67c51e2571f4700c990bf4",
+      "compiler_route": "BuiltinGlslangV1",
+      "compiler_stamp": "d1242582012931ad49bd5937395a5b68643f4dc572c9ec9969b717e5bfa9d3a9",
+      "platform": "macos",
+      "architecture": "arm64",
+      "target_kind": "Executable"
+    },
+    "generated_abi_sha256": "28ff0c8ef0c2c77d09a6a24d8115956ffb56a55fc51f2dc2f616c133fdd325e5"
+  },
+  "source_sha256": {
+    "core/extension/gdextension_interface.json": "a4d7d2ff2efda12124b6cb1fdd7142d1558eab46afd177c1a5428723361ecbb3",
+    "core/extension/gdextension_library_exit_guard.h": "07c2cc48bf29fd738a6f40fdd577946fb71f860265294e276dc573f2fce663e9",
+    "core/extension/gdextension_production_interface.cpp": "0196de9c98b99e0b390ddd6e09cc085b67ecb10edbc8aa206b67934831c2cff5",
+    "core/extension/gdextension_production_owned.cpp": "eb90cec7b799b522f50264395197b68cf82b9f0a7ff408b330fd8b87326bd176",
+    "core/extension/gdextension_production_request.cpp": "bb780b621ad5fea301e3520da9a59652e3ffb6dfe5a94307d5a669f93958ab33",
+    "core/extension/gdextension_production_request.h": "1b7eef356120be03461eed3d8e91847c8d9f6ad91a172996386e7b44952e5ecf",
+    "core/extension/gdextension_production_window.cpp": "8872e1877dd3ec2f89762055ae5bf92c178a3dc9b84455eea6b870ae7ccd431e",
+    "core/extension/gdextension_qualification_physical.h": "98c3b5696c1e44c6d4089a8405362913491e4878c0cd5027bb744d1760b7a64d",
+    "servers/rendering/rendering_device.cpp": "8900bd42396864a6b5d46e3c24a4929b1ffbf5529870cae3f56deb8b533857ac",
+    "tests/core/extension/test_production_request.cpp": "f598040207852de52cf6e6a3617a15d4b612c5cda1f6b0c42f6b4b5544b5ed81"
+  },
+  "logs_sha256": {
+    "/tmp/b4-raster-prepare-build-v2.log": "a8daef1c3270e35288051c0bd23850a301f28fdd9768ab65b2b52884548e6fe2",
+    "/tmp/b4-raster-prepare-fixed-build.log": "bd9186b51f60b7f2bc99ac89eecb2429303b5672d03edecc49cf96ebb29fc8d1",
+    "/tmp/b4-raster-prepare-list.log": "74179690ef93c22ef608ef76d6d54250426dac3b001e8927ba68a70214188952",
+    "/tmp/b4-raster-fixed-focused-tests.log": "7bc1bea1f251e25322135d4061be4e027e51522d681030dc12374bd156cdfce6",
+    "/tmp/b4-raster-fixed-production-tests.log": "5b6eb8068867236b7ede0bd10812b7941dc1989cb285cdef57fcbf2294c874c9",
+    "/tmp/b4-raster-fixed-native-tests.log": "63b2473f23ec0545816ee34fe7d211c4ea7747eee480604cc0351deb10a64b3f",
+    "/tmp/b4-raster-fixed-particles-tests.log": "98a220b43506fa90c8d5fb22a12b6e2aca9ab7f35ddb61814c05aecd8c3dd653"
+  },
+  "results": {
+    "raster_prepare": {
+      "cases": 1,
+      "subcases": 7,
+      "assertions": 6959,
+      "exit_code": 0
+    },
+    "production_request": {
+      "cases": 61,
+      "assertions": 45287,
+      "exit_code": 0
+    },
+    "native_observe": {
+      "cases": 22,
+      "assertions": 17617,
+      "exit_code": 0
+    },
+    "particle_cpu": {
+      "cases": 18,
+      "assertions": 90,
+      "exit_code": 0
+    }
+  },
+  "gpu_acceptance": false,
+  "framebuffer_driver_free_verified": false
+}

@@ -1,0 +1,20 @@
+{
+  "status": "test-only frozen; root build and child executions pending",
+  "files": [
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/test_native_height_range.cpp",
+      "bytes": 25069,
+      "sha256": "d6545f305e3600946690cf11915fdcf57f3e33b30fc13b10f16e513a2ce39d3b"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/native_height_range_finalize/run_finalize_entry.py",
+      "bytes": 1964,
+      "sha256": "f1b2023fbbcaaa8d147f40097e781e3f9a0356a57e52f851ed37dd08bd38f061"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/native_height_range_finalize/README.md",
+      "bytes": 2887,
+      "sha256": "a48568ede106dfe57df1f024b2377026c0b8b87856cce9a9f881e4bbdf636a58"
+    }
+  ]
+}

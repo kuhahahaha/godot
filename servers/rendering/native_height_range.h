@@ -1,0 +1,210 @@
+/**************************************************************************/
+/*  native_height_range.h                                                 */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
+#pragma once
+
+#include "core/object/ref_counted.h"
+#include "core/templates/local_vector.h"
+#include "servers/rendering/native_disposal_witness.h"
+#include "servers/rendering/rendering_device_driver.h"
+#include "servers/rendering/rendering_device_graph.h"
+
+class RenderingDevice;
+namespace GDExtensionDeviceExit { class Registry; }
+#ifdef TESTS_ENABLED
+namespace TestProductionNativeObserve { struct Access; }
+#endif
+
+// Original RD mechanical custody for one checked height producer or one
+// exclusive compute reader retaining its exact original producer.
+// No public constructor, recording, source enrollment, or completion setter.
+// RD/Frame keep the cell alive until every actual observer is returned.
+class NativeHeightRange final : public RefCounted {
+	friend class RenderingDevice;
+	friend class GDExtensionDeviceExit::Registry;
+#ifdef TESTS_ENABLED
+	friend class TestNativeHeightRangeAccess;
+	friend struct TestProductionNativeObserve::Access;
+#endif
+
+public:
+	struct Snapshot {
+		bool recording_closed = false;
+		bool has_recorded_effect = false;
+		bool mapping_closed = false;
+		bool issue_closed = false;
+		bool native_complete = false;
+		bool prefix_settled = false;
+		bool observers_returned = false;
+		// Original native state projection only; not permission to close a Scene row.
+		bool owner_requested_return = false;
+		uint32_t graph_members = 0;
+		uint32_t sealed_members = 0;
+		uint32_t issued_sources = 0;
+		uint32_t retained_sources = 0;
+		uint32_t completed_sources = 0;
+		uint32_t active_readers = 0;
+		Error append_error = OK;
+		Error mapping_error = OK;
+		Error issue_error = OK;
+		Error retention_error = OK;
+		Error completion_error = OK;
+		Error return_error = OK;
+	};
+
+	// Never call a driver, submit, poll, release, or free backing here.
+	~NativeHeightRange() = default;
+
+private:
+	struct Limits {
+		uint32_t graph_members = 0;
+		uint32_t native_sources = 0;
+		uint32_t source_edges = 0;
+		uint32_t worker_dependencies = 0;
+		uint32_t worker_sources = 0;
+	};
+
+	enum class MemberState : uint8_t {
+		Recorded,
+		Sealed,
+		IssueAttached,
+		MappingFailed,
+	};
+	struct GraphMember {
+		RenderingDeviceGraph::RecordHandle handle;
+		uint32_t frame = 0;
+		uint64_t frame_epoch = 0;
+		MemberState state = MemberState::Recorded;
+		uint32_t slot = UINT32_MAX;
+		RenderingDeviceDriver::CommandBufferID command_buffer;
+		bool issue_attempted = false;
+	};
+	struct NativeSource {
+		RenderingDeviceDriver::NativeCallFact original;
+		bool retained = false;
+		bool complete = false;
+		bool observer_returned = false;
+		Error retention_error = OK;
+		Error completion_error = OK;
+		int64_t completion_native_code = 0;
+	};
+	struct SourceEdge {
+		uint32_t member = 0;
+		uint32_t source = 0;
+	};
+
+	struct WorkerDependency {
+		uint32_t worker = 0;
+		uint64_t operation = 0;
+		bool attached = false;
+		bool issue_attempted = false;
+		uint64_t first_operation = 0;
+		uint64_t last_operation = 0;
+	};
+	struct WorkerSourceEdge {
+		uint32_t dependency = 0;
+		uint32_t source = 0;
+	};
+	// Exact successful dependency checks from the original synchronous checked
+	// call. Raw sink transfers must consume these original worker-lock receipts.
+	struct CheckedTransfer {
+		uint32_t worker = 0;
+		uint64_t operation = 0;
+		uint32_t dependency = UINT32_MAX;
+		bool processed = false;
+	};
+	LocalVector<CheckedTransfer> checked_transfers;
+	uint32_t checked_transfer_count = 0;
+	LocalVector<WorkerDependency> workers;
+	LocalVector<WorkerSourceEdge> worker_edges;
+	uint32_t worker_count = 0;
+	uint32_t worker_edge_count = 0;
+
+	// A reader is a distinct range; this keeps the exact original producer
+	// alive until this reader has explicitly returned all native observers.
+	Ref<NativeHeightRange> producer;
+	// Weak intrusive membership, established only by actual reader admission.
+	// The RD directory owns each reader; reader->producer retains the owner.
+	// Actual observer return unlinks before either owning reference is dropped.
+	NativeHeightRange *first_reader = nullptr;
+	NativeHeightRange *selected_reader_cursor = nullptr;
+	NativeHeightRange *previous_reader = nullptr;
+	NativeHeightRange *next_reader = nullptr;
+	Ref<RefCounted> producer_resources;
+	NativeDisposalWitness producer_depth;
+	RID reader_uniform_set;
+	uint32_t reader_set_index = UINT32_MAX;
+	uint32_t reader_dispatches = 0;
+	bool reader_scope = false;
+	bool reader_started = false;
+	bool reader_owns_list = false;
+	bool owner_requested_return = false;
+	bool owner_service_work_admitted = false; // Original directory WORK, paid once per service episode.
+	uint32_t active_readers = 0;
+	const uint64_t device;
+	const uint64_t serial; // RD incarnation only; no E09/business identity.
+	const Limits limits;
+	// Prepare sizes all storage before any actual append/native issue. Counts
+	// delimit occupied rows; hooks must not resize after recording starts.
+	LocalVector<GraphMember> graphs;
+	LocalVector<NativeSource> sources;
+	LocalVector<SourceEdge> edges;
+	uint32_t graph_count = 0;
+	uint32_t source_count = 0;
+	uint32_t edge_count = 0;
+	uint32_t retain_cursor = 0;
+	uint32_t poll_cursor = 0;
+	uint32_t return_cursor = 0;
+	// Original sink identity is compared only; no dereference or native work
+	// survives the synchronous checked call or the sink's lifetime.
+	const void *capture_sink = nullptr;
+	uint32_t capture_frame = 0;
+	uint64_t capture_epoch = 0;
+	uint32_t capture_records = 0;
+	uint32_t capture_transfers = 0;
+	bool capture_cleanup = false;
+	bool recording_started = false;
+	bool recording_closed = false;
+	bool has_recorded_effect = false;
+	bool uncaptured_prefix = false;
+	bool mapping_failed = false;
+	bool native_complete = false; // Cached only after authoritative observation.
+	bool prefix_settled = false; // Physical prefix is fully observed and returnable; does not imply business success.
+	bool observers_returned = false;
+	Error append_error = OK;
+	Error mapping_error = OK;
+	Error issue_error = OK;
+	Error retention_error = OK;
+	Error completion_error = OK;
+	Error return_error = OK;
+
+	NativeHeightRange(uint64_t p_device, uint64_t p_serial, const Limits &p_limits) :
+			device(p_device), serial(p_serial), limits(p_limits) {}
+};

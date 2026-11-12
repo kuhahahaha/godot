@@ -38,6 +38,9 @@
 #endif
 
 #include <cstdlib>
+#ifdef TESTS_ENABLED
+#include "memory_allocation_test_hooks.h"
+#endif
 
 #ifdef DEBUG_ENABLED
 static SafeNumeric<uint64_t> _current_mem_usage;
@@ -53,6 +56,9 @@ void *operator new(size_t p_size, void *(*p_allocfunc)(size_t p_size)) {
 }
 
 void *Memory::alloc_aligned_static(size_t p_bytes, size_t p_alignment) {
+#ifdef TESTS_ENABLED
+	MemoryAllocationTest::observe();
+#endif
 	DEV_ASSERT(Math::is_power_of_2(p_alignment));
 
 	void *p1, *p2;
@@ -88,6 +94,9 @@ void Memory::free_aligned_static(void *p_memory) {
 
 template <bool p_ensure_zero>
 void *Memory::alloc_static(size_t p_bytes, bool p_pad_align) {
+#ifdef TESTS_ENABLED
+	MemoryAllocationTest::observe();
+#endif
 #ifdef DEBUG_ENABLED
 	bool prepad = true;
 #else
@@ -124,6 +133,9 @@ template void *Memory::alloc_static<true>(size_t p_bytes, bool p_pad_align);
 template void *Memory::alloc_static<false>(size_t p_bytes, bool p_pad_align);
 
 void *Memory::realloc_static(void *p_memory, size_t p_bytes, bool p_pad_align) {
+#ifdef TESTS_ENABLED
+	MemoryAllocationTest::observe();
+#endif
 	if (p_memory == nullptr) {
 		return alloc_static(p_bytes, p_pad_align);
 	}

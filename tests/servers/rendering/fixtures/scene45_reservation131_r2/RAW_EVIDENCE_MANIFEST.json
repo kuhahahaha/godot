@@ -1,0 +1,67 @@
+[
+  {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/RUN_CONFIG.json",
+    "bytes": 276229,
+    "sha256": "e3fedf88710153c68beac5c110327087ac7735698af7f786a85e98d105f6775a"
+  },
+  {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/runner/probe.cpp",
+    "bytes": 44262,
+    "sha256": "51e38db85385164f7de82f2cb3425e23da709754175970fb0439ab9eefdf3bfa"
+  },
+  {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/runtime/probe.dylib",
+    "bytes": 13677912,
+    "sha256": "650bd06bc6ea9e2b3ece22cb904f823ee30ce33182791b0a98d2ae603e8b9737"
+  },
+  {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/FULL_RUN_OUTPUT.txt",
+    "bytes": 3466,
+    "sha256": "38d88e853a285eedc32cfd7d98f78869dec35653ea119570ecc99a114f328d73"
+  },
+  {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/CANCEL_RUN_OUTPUT.txt",
+    "bytes": 96,
+    "sha256": "133108bdc24dfd510a4d0617da508fbab93fc0bdc79530a4c462e053fff30207"
+  },
+  {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/native-artifacts/POSITIVE.log",
+    "bytes": 816386,
+    "sha256": "59acec8975ceb1635199157a6400e66b8cbe6188fe72c26dd7e84561ae218e19"
+  },
+  {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/native-artifacts/CANCEL_PREFIX.log",
+    "bytes": 4946,
+    "sha256": "bb36af8908a4d06d2be4e2617ff3f7aca5fb649ba1a85f9c3326d06c553e2386"
+  },
+  {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-r2-qrt-diagnosis-20261107/FULL_POSITIVE_RESULTS.json",
+    "bytes": 1292410,
+    "sha256": "e27edbfc3b4a02dafe981c2af248f995404009ee50a844b92b5341096a149baa"
+  },
+  {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-r2-qrt-diagnosis-20261107/FULL_POSITIVE_RUN_INPUTS_BEFORE.json",
+    "bytes": 904988,
+    "sha256": "5df6554a4b1f8a94e7720ff956855c84f4ffcedb53bc9887529a57b30353f869"
+  },
+  {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-r2-qrt-diagnosis-20261107/FULL_POSITIVE_INPUTS_AFTER.json",
+    "bytes": 904988,
+    "sha256": "5df6554a4b1f8a94e7720ff956855c84f4ffcedb53bc9887529a57b30353f869"
+  },
+  {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/native-artifacts/RESULTS.json",
+    "bytes": 7937,
+    "sha256": "10b78aa892979bccf8d3e3ec79a0d26b85aa7435d06fb1b79f7424d511b38438"
+  },
+  {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/native-artifacts/RUN_INPUTS_BEFORE.json",
+    "bytes": 904988,
+    "sha256": "5df6554a4b1f8a94e7720ff956855c84f4ffcedb53bc9887529a57b30353f869"
+  },
+  {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/native-artifacts/RUN_INPUTS_AFTER.json",
+    "bytes": 904988,
+    "sha256": "5df6554a4b1f8a94e7720ff956855c84f4ffcedb53bc9887529a57b30353f869"
+  }
+]

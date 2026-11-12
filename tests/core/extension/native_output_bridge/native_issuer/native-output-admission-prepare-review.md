@@ -1,0 +1,48 @@
+# Native output reserve / prepare / freeze 进行中审查
+
+2026-11-07。只读生产源码，未构建/运行测试。生产文件正在并行修改；本记录是读取时快照的源码审查，不是最终完成收据。范围：`gdextension_production_request.cpp` reserve/freeze、`gdextension_production_output.cpp` source/prepare helpers、`gdextension_production_request.h` 原source字段，以及 `[OutputNativeAdmission]` 测试。
+
+## 已发现并实时修正的问题
+
+首次读取 `production_prepare_output` 时，非absent role仅检查 `role.use_index < request.use_count`，没有检查该use属于当前action。后面的“每个action use都有role”是单向覆盖，不能禁止role指向其它action的WRITE row：本action只有source READ、role引用另action合法WRITE仍可能prepare。已实时报告根与native_output_join代理。后续读取已见新增 `role.use_index < action.first_use` / 差值>=action.use_count拒绝，源码上关闭此问题；未运行负例。
+
+同轮后续读取已见 `output_input_equal` 逐字段比较与token固定bytes比较，替换原整struct memcmp。它覆盖particles/common identity、bounds、camera、tokens、content/version/pass及reserved，ABI由入口DTO验证；不比较padding，不会因编译器填充字节差异拒绝相同合法输入。role逐字段比较也无padding依赖。
+
+## Reserve 接纳与测试实际覆盖
+
+`production_reserve_metadata_rows_locked` 的 resource loop显式将OUTPUT_ALIAS限制为contract2 STORAGE；仍要求非零generation/physical_bytes，保留UNIT、OUTPUT_METADATA原ownership规则。action loop将NATIVE_OUTPUT仅加给contract2，并严格要求physical_unit/readback_slot sentinel和CONTINUE；保留原canonical/ordinal/use范围规则。readback writer声明覆盖已增加OUTPUT_ALIAS <-> NATIVE_OUTPUT对应限制，但这不是实际readback实现证明。
+
+`Access::output_native_admission` 使用原SingletonEnrollment/OrdinalPlan与installed reserve_v2正例，合法容量、canonical interval以及未预先改变imported/prepared位。正例仅声明接纳并检查未prepared/无RID/无physical uses，原drain/cancel/release清理。没有拿无source的声明reserve正例冒充合法output prepare。
+
+用例敏感性：
+
+- 合法V2是共同正对照。physical_unit=0、readback_slot=0、CLOSE_AFTER分别命中新action要求；越界boundary是既有通用范围保护。
+- V1新action使用CREATED_BY_OWNER普通storage，V1新alias使用旧UPLOAD，分别隔离；canonical begin10/end11及action canonical10合法，不被V1连续区间约束提前挡住。
+- SET/OUTPUT_ALIAS拒绝主要验证新增alias仅STORAGE限制。UNIT/OUTPUT_ALIAS还会被原UNIT必须RETAINED规则拒绝；OUTPUT_METADATA/OUTPUT_ALIAS还会被原metadata必须CREATED规则拒绝。因此后二者证明拒绝契约，不能声称它们对新增generic alias guard具有独立mutation sensitivity。
+- 零bytes/零generation验证既有resource extent/identity约束继续适用于新ownership。
+- 普通import_storage的负输入ABI/instance/非零handle满足入口前置条件且request未freeze；ownership gate失败为ERR_INVALID_DATA。如仅放宽ownership，找不到此声明backing会落到ERR_DOES_NOT_EXIST，故当前期望不是被顶层参数错误遮蔽。它不是对某个真实导入backing的成功验证。
+- 普通storage_create用匹配slot/part/generation/bytes且非零attempt，request有return capacity；ownership是首个不满足条件。无imported/prepared私有状态写入。
+
+当前这些测试不覆盖prepare、完整source span、retry、alias bound witness、deferred SET、freeze或GPU成功；根需按本轮最终源另跑，不能把admission测试通过泛化到后几层。
+
+## Source span 与准备顺序
+
+`production_output_source_matches_locked` 验证非空source span在当前action use区间内并在request use范围内，anchor属于span；每个span row必须为非零READ STORAGE且request归属正确；逐资源核对request_serial、generation非零、非output alias、imported、未retire/return、唯一linked/same_physical dependency且未use_closed，并核对真实buffer qualification_return/backing_serial/size与use byte range。anchor额外核对原resource指针和指定generation。第二个loop要求action全部READ STORAGE uses都在该span。prepare随后要求action的其余storage uses逐个由精确WRITE role覆盖，拒绝额外RW/ATOMIC/metadata use。
+
+这证明物理source投影覆盖完整声明READ集；它不证明B的selected-root/Pending/finalized语义角色与这些READ一一关联。原ABI注释与prepare尾注均保留这一边界。非anchor每个source的generation来自不可变原resource declaration，不是用anchor generation替代它们。
+
+prepare先完成原request/action身份、span容量、source真实RD检查、所有role及全use闭包、重试一致性，然后才批量写output_input/source/capacity/roles/alias_prepared与action.prepared。前面任何ERR_BUSY/identity/range/role错误均尚未发布这些位。source_check是临时检查对象而非替换原source表。
+
+当前read容量校验为paired zero或paired nonzero，并用除法避免乘积溢出；它只检查单action上界，没有独立预留一个无限扩展read arena。最终实际read实现仍必须在首append前核对剩余完整预算，并消费同一个action的保留范围。此部分不由本次prepare检查证明。
+
+## Freeze 与仍未完成的边界
+
+读取时 `production_freeze_locked` 新alias分支要求原ownership、prepared关联、无imported/owned_serial/uses，并在所属action roles找到slot/bytes/generation相等；deferred SET分支要求SET/CREATED_BY_OWNER、已保存binding范围、未imported/creating，且binding至少含一个prepared alias、所有其余绑定已imported。这是原受控prepare/create产生状态的freeze接纳，不是实际物理资源成功。
+
+freeze分支尚没有独立重走完整source RD检查，也没有重新校验role.use_index/action kind/request关联；正常生产路径依赖reserve/prepare不可变元数据及只由receiver写私有位这一不变量。实际acquire/pin路径必须再次调用source_matches，实际SET factory/append必须校验native backing完整闭包。不能为测试直接置位来证明freeze。
+
+读取时readback碰到output_alias_prepared直接返回ERR_UNAVAILABLE，注释明确不从disposal witness伪造qualification readback source。该行为安全拒绝，但代表alias readback未接通；reserve允许的readback声明不等于freeze可执行。
+
+`output_decode` 在文件中对common reserved/相机/finite bounds等做实际acquire语义校验；prepare入口当前只做DTO/部分reserved检查。若后续需要把prepare称作完整合法acquire input预检，应复用无副作用校验；否则收据只称物理source/role准备。不可把下游拒绝当作已获得完整输出能力。
+
+最终待验收：最终源码身份、prepare真实fixture与失败顺序测试、source-span遗漏/跨action source及role用例、重复prepare等价/字段变化拒绝、资源/容量失败无published state、deferred SET真实工厂、read continuation闭包与最终运行记录。未获得GPU或TSan证据。

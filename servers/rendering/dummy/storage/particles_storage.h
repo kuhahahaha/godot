@@ -66,6 +66,7 @@ public:
 	virtual void particles_set_fractional_delta(RID p_particles, bool p_enable) override {}
 	virtual void particles_set_subemitter(RID p_particles, RID p_subemitter_particles) override {}
 	virtual void particles_set_view_axis(RID p_particles, const Vector3 &p_axis, const Vector3 &p_up_axis) override {}
+	virtual Vector<uint8_t> particles_get_current_data(RID p_particles) const override { return Vector<uint8_t>(); }
 	virtual void particles_set_collision_base_size(RID p_particles, real_t p_size) override {}
 
 	virtual void particles_set_transform_align(RID p_particles, RSE::ParticlesTransformAlign p_transform_align) override {}

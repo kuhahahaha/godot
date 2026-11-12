@@ -1,0 +1,1 @@
+Effective negative attempts: removing the binding writable guard was run against the focused profile after a fresh build, but the live test process exceeded the local observation window and was terminated before an authoritative result; it is not counted as evidence. The restored source was rebuilt and the full suite below is authoritative.

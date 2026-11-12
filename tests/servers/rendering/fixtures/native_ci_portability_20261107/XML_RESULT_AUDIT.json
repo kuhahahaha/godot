@@ -1,0 +1,501 @@
+[
+  {
+    "name": "FINAL_FULL_CPU",
+    "overall_assertions": {
+      "successes": "584847",
+      "failures": "1"
+    },
+    "overall_cases": {
+      "successes": "2262",
+      "failures": "1",
+      "skipped": "3"
+    },
+    "FrameWait_cases": [
+      {
+        "name": "[K03][FrameWait] ordinary native source retirement waits while typed Busy retains source",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "309",
+        "successes": "8",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] failed fence preserves requests and retry delivers once",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "426",
+        "successes": "18",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] failed wait stops frame reset and flush",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "455",
+        "successes": "8",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] failed staging wait preserves charged blocks",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "471",
+        "successes": "8",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] failed epoch rejects new readbacks and staging reuse",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "487",
+        "successes": "21",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] healthy callback cannot reopen its draining frame",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "527",
+        "successes": "9",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] previous slot retry preserves the active recording slot",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "548",
+        "successes": "11",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] texture wait error retains its exact callback batch",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "574",
+        "successes": "17",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] segmented result retains prefix until one exact final callback",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "658",
+        "successes": "14",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] incomplete or failed result never publishes a success callback",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "683",
+        "successes": "28",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] queue failure cannot reset or replay a readback frame",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "709",
+        "successes": "50",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] failed graph seal cannot issue or map its queued readback",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "752",
+        "successes": "11",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] successful readback issue remains tied to its original graph",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "773",
+        "successes": "13",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] present failure never replaces a command slot report",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "800",
+        "successes": "14",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] split issue preserves earlier call report and unattempted suffix",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "828",
+        "successes": "24",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] reused native slot cannot overwrite an earlier graph issue",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "866",
+        "successes": "19",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] native pool reset and primary begin failure close admission immediately",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "904",
+        "successes": "30",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] ordinary advance retries an early native wait before rotating again",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "938",
+        "successes": "29",
+        "failures": "0",
+        "test_case_success": "true"
+      }
+    ],
+    "FrameWait_count": 18,
+    "FrameWait_assertions": 332,
+    "failures": [
+      {
+        "name": "[SceneTree][PhysicsQueryRetirement] real backend dispatch control",
+        "file": "tests/servers/physics_3d/test_query_retirement.cpp",
+        "line": "76",
+        "expressions": [
+          {
+            "original": "valid_config",
+            "expanded": "false",
+            "success": "false",
+            "type": "CHECK",
+            "filename": "tests/servers/physics_3d/test_query_retirement.cpp",
+            "line": "80"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "FINAL_CONFIGURED_FULL_CPU",
+    "overall_assertions": {
+      "successes": "584864",
+      "failures": "0"
+    },
+    "overall_cases": {
+      "successes": "2263",
+      "failures": "0",
+      "skipped": "3"
+    },
+    "FrameWait_cases": [
+      {
+        "name": "[K03][FrameWait] ordinary native source retirement waits while typed Busy retains source",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "309",
+        "successes": "8",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] failed fence preserves requests and retry delivers once",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "426",
+        "successes": "18",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] failed wait stops frame reset and flush",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "455",
+        "successes": "8",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] failed staging wait preserves charged blocks",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "471",
+        "successes": "8",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] failed epoch rejects new readbacks and staging reuse",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "487",
+        "successes": "21",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] healthy callback cannot reopen its draining frame",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "527",
+        "successes": "9",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] previous slot retry preserves the active recording slot",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "548",
+        "successes": "11",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] texture wait error retains its exact callback batch",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "574",
+        "successes": "17",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] segmented result retains prefix until one exact final callback",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "658",
+        "successes": "14",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] incomplete or failed result never publishes a success callback",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "683",
+        "successes": "28",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] queue failure cannot reset or replay a readback frame",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "709",
+        "successes": "50",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] failed graph seal cannot issue or map its queued readback",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "752",
+        "successes": "11",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] successful readback issue remains tied to its original graph",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "773",
+        "successes": "13",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] present failure never replaces a command slot report",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "800",
+        "successes": "14",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] split issue preserves earlier call report and unattempted suffix",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "828",
+        "successes": "24",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] reused native slot cannot overwrite an earlier graph issue",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "866",
+        "successes": "19",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] native pool reset and primary begin failure close admission immediately",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "904",
+        "successes": "30",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] ordinary advance retries an early native wait before rotating again",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "938",
+        "successes": "29",
+        "failures": "0",
+        "test_case_success": "true"
+      }
+    ],
+    "FrameWait_count": 18,
+    "FrameWait_assertions": 332,
+    "failures": []
+  },
+  {
+    "name": "FINAL_FOCUSED",
+    "overall_assertions": {
+      "successes": "841",
+      "failures": "0"
+    },
+    "overall_cases": {
+      "successes": "27",
+      "failures": "0",
+      "skipped": "2239"
+    },
+    "FrameWait_cases": [
+      {
+        "name": "[K03][FrameWait] ordinary native source retirement waits while typed Busy retains source",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "309",
+        "successes": "8",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] failed fence preserves requests and retry delivers once",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "426",
+        "successes": "18",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] failed wait stops frame reset and flush",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "455",
+        "successes": "8",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] failed staging wait preserves charged blocks",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "471",
+        "successes": "8",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] failed epoch rejects new readbacks and staging reuse",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "487",
+        "successes": "21",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] healthy callback cannot reopen its draining frame",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "527",
+        "successes": "9",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] previous slot retry preserves the active recording slot",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "548",
+        "successes": "11",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] texture wait error retains its exact callback batch",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "574",
+        "successes": "17",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] segmented result retains prefix until one exact final callback",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "658",
+        "successes": "14",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] incomplete or failed result never publishes a success callback",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "683",
+        "successes": "28",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] queue failure cannot reset or replay a readback frame",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "709",
+        "successes": "50",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] failed graph seal cannot issue or map its queued readback",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "752",
+        "successes": "11",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] successful readback issue remains tied to its original graph",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "773",
+        "successes": "13",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] present failure never replaces a command slot report",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "800",
+        "successes": "14",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] split issue preserves earlier call report and unattempted suffix",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "828",
+        "successes": "24",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] reused native slot cannot overwrite an earlier graph issue",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "866",
+        "successes": "19",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] native pool reset and primary begin failure close admission immediately",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "904",
+        "successes": "30",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "name": "[R01][FrameWait] ordinary advance retries an early native wait before rotating again",
+        "file": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+        "line": "938",
+        "successes": "29",
+        "failures": "0",
+        "test_case_success": "true"
+      }
+    ],
+    "FrameWait_count": 18,
+    "FrameWait_assertions": 332,
+    "failures": []
+  }
+]

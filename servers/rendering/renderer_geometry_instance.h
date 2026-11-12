@@ -38,8 +38,14 @@
 
 // API definition for our RenderGeometryInstance class so we can expose this through GDExtension in the near future
 class RenderGeometryInstance {
+	RID native_scene_instance; // Exact SceneCull identity value; no ownership or source grant.
+
 public:
 	virtual ~RenderGeometryInstance() {}
+
+	// Native SceneCull plumbing only; not a RenderingServer/ClassDB property.
+	void set_native_scene_instance(RID p_instance) { native_scene_instance = p_instance; }
+	RID get_native_scene_instance() const { return native_scene_instance; }
 
 	virtual void _mark_dirty() = 0;
 

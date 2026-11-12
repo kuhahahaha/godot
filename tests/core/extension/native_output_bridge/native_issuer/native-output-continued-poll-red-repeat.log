@@ -1,0 +1,22 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/core/extension/test_production_request.cpp:10129:
+TEST CASE:  [SceneTree][ProductionRequest][OutputPollAggregation] CPU slot reuse and partial receipt projection retain actual physical returns without double counting
+
+tests/core/extension/test_production_request.cpp:6301: ERROR: CHECK( result.physical_returned == expected ) is NOT correct!
+  values: CHECK( 0 == 2 )
+
+tests/core/extension/test_production_request.cpp:6301: ERROR: CHECK( result.physical_returned == expected ) is NOT correct!
+  values: CHECK( 2 == 4 )
+
+tests/core/extension/test_production_request.cpp:6301: ERROR: CHECK( result.physical_returned == expected ) is NOT correct!
+  values: CHECK( 2 == 4 )
+
+tests/core/extension/test_production_request.cpp:6301: ERROR: CHECK( result.physical_returned == expected ) is NOT correct!
+  values: CHECK( 2 == 4 )
+
+===============================================================================
+[doctest] test cases:   1 |   0 passed | 1 failed | 2198 skipped
+[doctest] assertions: 216 | 212 passed | 4 failed |
+[doctest] Status: FAILURE!

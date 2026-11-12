@@ -1,0 +1,25 @@
+Building for macOS 11.0+.
+WARNING: The screen reader support driver requires dependencies to be installed.
+You can install them by running `python3 misc/scripts/install_accesskit.py`.
+See the documentation for more information:
+	https://docs.godotengine.org/en/latest/engine_details/development/compiling/compiling_for_macos.html
+Alternatively, disable this driver by compiling with `accesskit=no` explicitly.
+WARNING: The ANGLE rendering driver requires dependencies to be installed.
+You can install them by running `python misc/scripts/install_angle.py`.
+See the documentation for more information:
+	https://docs.godotengine.org/en/latest/engine_details/development/compiling/compiling_for_windows.html
+Alternatively, disable this driver by compiling with `angle=no` explicitly.
+MoltenVK found at: /opt/homebrew/Frameworks/MoltenVK.xcframework
+Building for platform "macos", architecture "arm64", target "editor".
+Compiling tests/core/extension/test_production_request.cpp ...
+Compiling tests/servers/rendering/test_external_output_prefix.cpp ...
+Compiling tests/servers/rendering/test_external_output_owner_state.cpp ...
+tests/servers/rendering/test_external_output_owner_state.cpp:142:19: error: 'production_output_metadata_create' is a private member of 'GDExtensionDeviceExit::Registry'
+  142 |         error = registry.production_output_metadata_create(context, request, 0, *expected_device, layout.total_bytes, layout.alignment, metadata, true);
+      |                          ^
+./core/extension/gdextension_library_exit_guard.h:910:8: note: declared private here
+  910 |         Error production_output_metadata_create(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint32_t, RenderingDevice &, uint64_t, uint32_t, ProductionOutputMetadataLease &, bool p_exact_bytes = false);
+      |               ^
+1 error generated.
+scons: *** [bin/obj/tests/servers/rendering/test_external_output_owner_state.macos.editor.arm64.o] Error 1
+INFO: Time elapsed: 00:00:05.49

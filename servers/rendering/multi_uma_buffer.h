@@ -347,6 +347,13 @@ public:
 	// Gets the raw buffer. Use with care.
 	// If you call this function, make sure to have called prepare_for_upload() first.
 	// Do not call _get() then prepare_for_upload().
+	// Read an already prepared incarnation only. Never grow/prepare a buffer.
+	// Preserve the original unsigned wrap used by negative pass offsets.
+	RID _get_if_ready(uint32_t p_idx) const {
+		const uint32_t index = curr_idx * NUM_BUFFERS + p_idx;
+		return index < buffers.size() ? buffers[index] : RID();
+	}
+
 	RID _get(uint32_t p_idx) {
 		return buffers[curr_idx * NUM_BUFFERS + p_idx];
 	}

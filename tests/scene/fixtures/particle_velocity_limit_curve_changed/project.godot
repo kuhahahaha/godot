@@ -1,0 +1,5 @@
+config_version=5
+[application]
+config/name="Particle velocity limit curve changed regression"
+[rendering]
+renderer/rendering_method="mobile"

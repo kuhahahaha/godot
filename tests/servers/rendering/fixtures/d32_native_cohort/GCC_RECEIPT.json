@@ -1,0 +1,119 @@
+{
+  "scope": "D32 Windows-target GCC compile portability only; no MSVC, Vulkan GPU or D3D12 GPU execution claim",
+  "base_commit": "86b470990a55815c074231f5e60938c38c18faa3",
+  "compiler": "x86_64-w64-mingw32-g++ (GCC) 15.2.0",
+  "target": "x86_64-w64-mingw32",
+  "changed_source": "core/extension/gdextension_qualification_rt.cpp",
+  "red_source_sha256": "e33e9ea9ab431e912597695740074f8d3a186c88e933c1601f76fdc73a832d34",
+  "green_source_sha256": "724e87529c7c62b93a0d9ce1687324ed37bbaef202a4b80a8d3b20b5ac925e24",
+  "patch_sha256": "365528c350d9bb7feda4fa45b5090cd5d1589e310577b21f60d03f950e72565e",
+  "change": "Rename original_cell lambda parameter cell to physical; preserve its identity checks unchanged.",
+  "red": {
+    "exit": 1,
+    "diagnostic": "gdextension_qualification_rt.cpp:486:77: error: declaration of 'cell' shadows a previous local [-Werror=shadow]; outer declaration at342: auto *cell = bridge->rt",
+    "flags": [
+      "-std=c++17",
+      "-fsyntax-only",
+      "-fno-exceptions",
+      "-Wall",
+      "-Wextra",
+      "-Wshadow",
+      "-Wno-unused-parameter",
+      "-Werror"
+    ],
+    "platform_defines": [
+      "WINDOWS_ENABLED",
+      "THREADS_ENABLED",
+      "DEBUG_ENABLED",
+      "TOOLS_ENABLED",
+      "TESTS_ENABLED",
+      "RD_ENABLED",
+      "VULKAN_ENABLED",
+      "D3D12_ENABLED"
+    ],
+    "log_sha256": "cdb93e95ac52f47564c9151b94c9e07fd211a698613f931f927e16c311eb066e"
+  },
+  "green": {
+    "exit": 0,
+    "same_flags_and_defines": true,
+    "diagnostics": "empty",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "root_applied_source_exit": 0,
+    "root_applied_log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "other_core_tus_strict_syntax": [
+    {
+      "source": "core/extension/gdextension_qualification_raster.cpp",
+      "exit": 0
+    },
+    {
+      "source": "core/extension/gdextension_qualification_typed.cpp",
+      "exit": 0
+    },
+    {
+      "source": "core/extension/gdextension_qualification_ticket.cpp",
+      "exit": 0
+    }
+  ],
+  "ci": {
+    "workflow": ".github/workflows/runner.yml",
+    "previous_success": {
+      "run": 42027283091,
+      "event": "push",
+      "head": "3a013cc17abef284f3784a4983b75ad032462ed7"
+    },
+    "d32_push_run": {
+      "run": 42058993609,
+      "event": "push",
+      "head": "86b470990a55815c074231f5e60938c38c18faa3",
+      "last_observed": "queued",
+      "url": "https://github.com/kuhahahaha/godot/actions/runs/42058993609"
+    }
+  },
+  "integration": {
+    "core_source_inclusion": "core/extension/SCsub env.add_source_files(env.core_sources, \"*.cpp\") includes raster",
+    "tests": "tests/SCsub recursive cpp discovery + TEST_FORCE_LINK",
+    "capability_boundary": "Vulkan supports DISABLE_FAST_MATH; D3D12 inherits supported_compile_flags {} and rejects requested flag before native allocation."
+  },
+  "local_evidence": {
+    "directory": "/tmp/b4-d32-crossplatform-audit-20261105",
+    "red_green_commands": "GCC_RED_GREEN.json",
+    "patch": "gcc-shadow-fix.patch",
+    "logs": [
+      "gdextension_qualification_rt-strict-windows.log",
+      "RT_GCC_GREEN.log"
+    ]
+  },
+  "reproduction_command": "x86_64-w64-mingw32-g++ -std=c++17 -fsyntax-only -fno-exceptions -Wall -Wextra -Wshadow -Wno-unused-parameter -Werror -DWINDOWS_ENABLED -DTHREADS_ENABLED -DDEBUG_ENABLED -DTOOLS_ENABLED -DTESTS_ENABLED -DRD_ENABLED -DVULKAN_ENABLED -DD3D12_ENABLED -I<checkout> -I<checkout>/thirdparty -I<checkout>/thirdparty/zlib -I<checkout>/platform/windows <source>",
+  "scu_integration": {
+    "base_generator_sha256": "258ce6538214d170c722d56b985ae7e8b62cbc0aa499d476fe518002eeaabece",
+    "candidate_generator_sha256": "b5c5a395d3e94cd5a09de344522d995823394cc893bfeb864117f8b71befaba2",
+    "patch_sha256": "c4cb5f7aed3947e757811f868bfeffdc077f200cc72ecb6e93cf6bef12469f35",
+    "scu_limit": 1024,
+    "actual_generator": "Unmodified actual scu_builders.py process_folder; staged core/extension source symlinks and generated files under /tmp only. Original exception list vs same list with qualification_raster isolated.",
+    "flags_boundary": "Same strict Windows-target GCC flags; include -Wno-misleading-indentation matching existing Linux CI compilation flags.",
+    "red": {
+      "exit": 1,
+      "diagnostics": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/gdextension_qualification_raster.cpp:54:21: error: call of overloaded 'aligned(GDExtensionQualificationRasterBackingV1*&)' is ambiguous",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/gdextension_qualification_raster.cpp:54:38: error: call of overloaded 'aligned(const GDExtensionQualificationRasterCreateV1*&)' is ambiguous",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/gdextension_qualification_raster.cpp:58:23: error: call of overloaded 'valid_abi(const GDExtensionDeviceExitAbi*)' is ambiguous",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/gdextension_qualification_raster.cpp:58:46: error: call of overloaded 'valid_abi(const GDExtensionDeviceExitAbi*)' is ambiguous"
+      ],
+      "log_sha256": "1965922846ebbd8e87c3652fba8579211ff888be1c0ffdb3e917de00a7d5d9da",
+      "group_sha256": "d415bdeb60788f9505ac133380d8ec2a32b9a29c6230e7d2200e46e7c6e34248"
+    },
+    "green_original_group": {
+      "exit": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "group_sha256": "536e9b33ab790a8d5899c491aa1e6eea6b2e2188c3e4c2187c57d8d5d26b3755"
+    },
+    "green_isolated_raster": {
+      "exit": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "group_sha256": "7beda837c603b1b873a4e92fec104b2624f441f85da02a0d9aa31d87c5aa76ef"
+    },
+    "command_receipt": "SCU_RED_GREEN.json",
+    "scope": "SCU generation + Windows-target syntax; no engine binary build or GPU run"
+  }
+}

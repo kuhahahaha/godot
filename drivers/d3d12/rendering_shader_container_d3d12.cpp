@@ -255,41 +255,40 @@ uint32_t RenderingShaderContainerD3D12::_format_version() const {
 	return FORMAT_VERSION;
 }
 
-uint32_t RenderingShaderContainerD3D12::_from_bytes_reflection_extra_data(const uint8_t *p_bytes) {
-	reflection_data_d3d12 = *(const ReflectionDataD3D12 *)(p_bytes);
-	reflection_binding_set_data_d3d12.resize(reflection_data.set_count);
-	for (uint32_t i = 0; i < reflection_binding_set_data_d3d12.size(); i++) {
-		reflection_binding_set_data_d3d12.ptrw()[i] = *(const ReflectionBindingSetDataD3D12 *)(p_bytes + sizeof(ReflectionDataD3D12) + (i * sizeof(ReflectionBindingSetDataD3D12)));
+bool RenderingShaderContainerD3D12::_from_bytes_reflection_extra_data(ContainerReader &r_reader) {
+	if (!r_reader.read(&reflection_data_d3d12, sizeof(ReflectionDataD3D12)) || reflection_data.set_count > r_reader.remaining() / sizeof(ReflectionBindingSetDataD3D12)) {
+		return false;
 	}
-	return sizeof(ReflectionDataD3D12) + (reflection_binding_set_data_d3d12.size() * sizeof(ReflectionBindingSetDataD3D12));
+	reflection_binding_set_data_d3d12.resize(reflection_data.set_count);
+	return r_reader.read(reflection_binding_set_data_d3d12.ptrw(), uint64_t(reflection_data.set_count) * sizeof(ReflectionBindingSetDataD3D12));
 }
 
-uint32_t RenderingShaderContainerD3D12::_from_bytes_reflection_binding_uniform_extra_data_start(const uint8_t *p_bytes) {
+bool RenderingShaderContainerD3D12::_from_bytes_reflection_binding_uniform_extra_data_start(ContainerReader &r_reader) {
 	reflection_binding_set_uniforms_data_d3d12.resize(reflection_binding_set_uniforms_data.size());
-	return 0;
+	return true;
 }
 
-uint32_t RenderingShaderContainerD3D12::_from_bytes_reflection_binding_uniform_extra_data(const uint8_t *p_bytes, uint32_t p_index) {
-	reflection_binding_set_uniforms_data_d3d12.ptrw()[p_index] = *(const ReflectionBindingDataD3D12 *)(p_bytes);
-	return sizeof(ReflectionBindingDataD3D12);
+bool RenderingShaderContainerD3D12::_from_bytes_reflection_binding_uniform_extra_data(ContainerReader &r_reader, uint32_t p_index) {
+	return r_reader.read(&reflection_binding_set_uniforms_data_d3d12.write[p_index], sizeof(ReflectionBindingDataD3D12));
 }
 
-uint32_t RenderingShaderContainerD3D12::_from_bytes_reflection_specialization_extra_data_start(const uint8_t *p_bytes) {
+bool RenderingShaderContainerD3D12::_from_bytes_reflection_specialization_extra_data_start(ContainerReader &r_reader) {
 	reflection_specialization_data_d3d12.resize(reflection_specialization_data.size());
-	return 0;
+	return true;
 }
 
-uint32_t RenderingShaderContainerD3D12::_from_bytes_reflection_specialization_extra_data(const uint8_t *p_bytes, uint32_t p_index) {
-	reflection_specialization_data_d3d12.ptrw()[p_index] = *(const ReflectionSpecializationDataD3D12 *)(p_bytes);
-	return sizeof(ReflectionSpecializationDataD3D12);
+bool RenderingShaderContainerD3D12::_from_bytes_reflection_specialization_extra_data(ContainerReader &r_reader, uint32_t p_index) {
+	return r_reader.read(&reflection_specialization_data_d3d12.write[p_index], sizeof(ReflectionSpecializationDataD3D12));
 }
 
-uint32_t RenderingShaderContainerD3D12::_from_bytes_footer_extra_data(const uint8_t *p_bytes) {
-	ContainerFooterD3D12 footer = *(const ContainerFooterD3D12 *)(p_bytes);
+bool RenderingShaderContainerD3D12::_from_bytes_footer_extra_data(ContainerReader &r_reader) {
+	ContainerFooterD3D12 footer;
+	if (!r_reader.read(&footer, sizeof(footer)) || footer.root_signature_length > r_reader.remaining() || footer.root_signature_length > INT32_MAX) {
+		return false;
+	}
 	root_signature_crc = footer.root_signature_crc;
 	root_signature_bytes.resize(footer.root_signature_length);
-	memcpy(root_signature_bytes.ptrw(), p_bytes + sizeof(ContainerFooterD3D12), root_signature_bytes.size());
-	return sizeof(ContainerFooterD3D12) + footer.root_signature_length;
+	return r_reader.read(root_signature_bytes.ptrw(), footer.root_signature_length);
 }
 
 uint32_t RenderingShaderContainerD3D12::_to_bytes_reflection_extra_data(uint8_t *p_bytes) const {

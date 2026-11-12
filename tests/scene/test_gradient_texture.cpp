@@ -52,6 +52,19 @@ TEST_CASE("[SceneTree][GradientTexture1D] Create GradientTexture1D") {
 	CHECK(gradient_texture->is_using_hdr());
 }
 
+TEST_CASE("[SceneTree][GradientTexture1D] Width one samples the gradient endpoint") {
+	Ref<GradientTexture1D> gradient_texture = memnew(GradientTexture1D);
+	Ref<Gradient> test_gradient = memnew(Gradient);
+	test_gradient->set_colors(PackedColorArray{Color(0.2, 0.4, 0.6, 0.8), Color(0.9, 0.1, 0.3, 1.0)});
+	gradient_texture->set_gradient(test_gradient);
+	gradient_texture->set_width(1);
+
+	Ref<Image> image = gradient_texture->get_image();
+	REQUIRE(image.is_valid());
+	CHECK(image->get_width() == 1);
+	CHECK(image->get_pixel(0, 0).is_equal_approx(test_gradient->get_color(0)));
+}
+
 TEST_CASE("[SceneTree][GradientTexture2D] Create GradientTexture2D") {
 	Ref<GradientTexture2D> gradient_texture = memnew(GradientTexture2D);
 
@@ -79,6 +92,39 @@ TEST_CASE("[SceneTree][GradientTexture2D] Create GradientTexture2D") {
 
 	gradient_texture->set_repeat(GradientTexture2D::Repeat::REPEAT);
 	CHECK(gradient_texture->get_repeat() == GradientTexture2D::Repeat::REPEAT);
+}
+
+TEST_CASE("[SceneTree][GradientTexture2D] Width or height one samples deterministically") {
+	Ref<GradientTexture2D> gradient_texture = memnew(GradientTexture2D);
+	Ref<Gradient> test_gradient = memnew(Gradient);
+	test_gradient->set_colors(PackedColorArray{Color(0.2, 0.4, 0.6, 0.8), Color(0.9, 0.1, 0.3, 1.0)});
+	gradient_texture->set_gradient(test_gradient);
+	gradient_texture->set_fill_from(Vector2(0, 0));
+	gradient_texture->set_fill_to(Vector2(0, 1));
+	gradient_texture->set_width(1);
+	gradient_texture->set_height(2);
+
+	Ref<Image> image = gradient_texture->get_image();
+	REQUIRE(image.is_valid());
+	CHECK(image->get_width() == 1);
+	CHECK(image->get_height() == 2);
+	CHECK(image->get_pixel(0, 0).is_equal_approx(test_gradient->get_color(0)));
+	CHECK(image->get_pixel(0, 1).r > image->get_pixel(0, 0).r);
+	CHECK(image->get_pixel(0, 1).g < image->get_pixel(0, 0).g);
+
+	Ref<GradientTexture2D> horizontal_gradient = memnew(GradientTexture2D);
+	horizontal_gradient->set_gradient(test_gradient);
+	horizontal_gradient->set_width(2);
+	horizontal_gradient->set_height(1);
+	horizontal_gradient->set_fill_from(Vector2(0, 0));
+	horizontal_gradient->set_fill_to(Vector2(1, 0));
+	image = horizontal_gradient->get_image();
+	REQUIRE(image.is_valid());
+	CHECK(image->get_width() == 2);
+	CHECK(image->get_height() == 1);
+	CHECK(image->get_pixel(0, 0).is_equal_approx(test_gradient->get_color(0)));
+	CHECK(image->get_pixel(1, 0).r > image->get_pixel(0, 0).r);
+	CHECK(image->get_pixel(1, 0).g < image->get_pixel(0, 0).g);
 }
 
 } // namespace TestGradientTexture

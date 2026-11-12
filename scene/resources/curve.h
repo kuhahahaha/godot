@@ -38,7 +38,20 @@
 class Curve : public Resource {
 	GDCLASS(Curve, Resource);
 
+#ifdef TESTS_ENABLED
+	friend class TestResourceSnapshotAccess;
+#endif
+	uint64_t _content_revision = 1;
+	void _advance_content_revision() {
+		// Saturation permanently denies later native capture; never reset/ABA.
+		if (_content_revision != UINT64_MAX) {
+			++_content_revision;
+		}
+	}
+
 public:
+	uint64_t get_content_revision() const { return _content_revision; }
+
 	static const char *SIGNAL_RANGE_CHANGED;
 	static const char *SIGNAL_DOMAIN_CHANGED;
 
@@ -142,6 +155,10 @@ public:
 	real_t sample_baked(real_t p_offset) const;
 
 	void ensure_default_setup(real_t p_min, real_t p_max);
+
+#ifdef TESTS_ENABLED
+	real_t _test_get_baked_value(int p_index) const { return _baked_cache[p_index]; }
+#endif
 
 protected:
 	bool _set(const StringName &p_name, const Variant &p_value) { return property_helper.property_set_value(p_name, p_value); }

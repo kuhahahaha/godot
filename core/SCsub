@@ -4,6 +4,9 @@ from misc.utility.scons_hints import *
 import os
 
 import core_builders
+import engine_build_identity
+
+Export("engine_build_identity")
 
 import methods
 

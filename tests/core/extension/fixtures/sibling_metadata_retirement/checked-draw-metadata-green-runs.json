@@ -1,0 +1,30 @@
+{
+  "focused": {
+    "command": [
+      "bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*[CheckedBind]*,*[RecordSource]*,*[OutputSceneMetadata]*,*[OutputMetadataFactory]*,*[B4]*"
+    ],
+    "exit_code": 0,
+    "binary": {
+      "bytes": 156730024,
+      "sha256": "d75aa4372d76d47aa98640cb39a7f5db55da86b6f9139daf480372ab10e11c79"
+    },
+    "log": "work/checked-draw-metadata-focused-green.log"
+  },
+  "combined": {
+    "command": [
+      "bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*[ProductionRequest]*,*[ProductionNativeObserve]*,*[B4]*,*[ViewportHistory]*,*[CheckedBind]*,*[RecordSource]*,*[NativeDisposal]*,*[QualificationTicket]*"
+    ],
+    "exit_code": 0,
+    "binary": {
+      "bytes": 156730024,
+      "sha256": "d75aa4372d76d47aa98640cb39a7f5db55da86b6f9139daf480372ab10e11c79"
+    },
+    "log": "work/checked-draw-metadata-combined-green.log"
+  }
+}

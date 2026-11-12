@@ -1,0 +1,12 @@
+{
+  "command": [
+    "bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--test-case=*NativeHeightRange*",
+    "--reporters=xml",
+    "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FIRST_CPU.xml"
+  ],
+  "exit": 0,
+  "seconds": 1.7
+}

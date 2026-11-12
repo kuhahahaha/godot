@@ -10,6 +10,10 @@
 /* Include our forward mobile UBOs definitions etc. */
 #include "scene_forward_mobile_inc.glsl"
 
+#if defined(USE_INDEXED144_VERTEX_INPUT) && defined(MODE_RENDER_MOTION_VECTORS)
+layout(location = 10) out flat uint indexed144_history_interp;
+#endif
+
 #define SHADER_IS_SRGB false
 #define SHADER_SPACE_FAR 0.0
 
@@ -32,12 +36,14 @@ layout(location = 0) in vec4 vertex_angle_attrib;
 
 //only for pure render depth when normal is not used
 
-#ifdef NORMAL_USED
+#if defined(NORMAL_USED) || defined(TANGENT_USED)
 // Contains Normal/Axis in RG, can contain tangent in BA.
 layout(location = 1) in vec4 axis_tangent_attrib;
 #endif
 
-// Location 2 is unused.
+#if defined(USE_INDEXED144_VERTEX_INPUT) && (defined(NORMAL_USED) || defined(TANGENT_USED))
+layout(location = 2) in vec4 tangent_attrib;
+#endif
 
 #if defined(COLOR_USED)
 layout(location = 3) in vec4 color_attrib;
@@ -75,11 +81,14 @@ layout(location = 10) in uvec4 bone_attrib;
 layout(location = 11) in vec4 weight_attrib;
 #endif
 
-#if defined(MODE_RENDER_MOTION_VECTORS)
+#if defined(MODE_RENDER_MOTION_VECTORS) && !defined(USE_INSTANCE192_OUTPUT)
 layout(location = 12) in vec4 previous_vertex_attrib;
 
 #if defined(NORMAL_USED) || defined(TANGENT_USED)
 layout(location = 13) in vec4 previous_normal_attrib;
+#ifdef USE_INDEXED144_VERTEX_INPUT
+layout(location = 14) in vec4 previous_tangent_attrib;
+#endif
 #endif
 
 #endif // MODE_RENDER_MOTION_VECTORS
@@ -95,6 +104,9 @@ void axis_angle_to_tbn(vec3 axis, float angle, out vec3 tangent, out vec3 binorm
 }
 
 /* Varyings */
+#ifdef USE_INSTANCE192_OUTPUT
+layout(location = 10) out flat uvec2 instance192_interp;
+#endif
 
 layout(location = 0) out vec3 vertex_interp;
 
@@ -209,6 +221,9 @@ uint multimesh_stride() {
 void _unpack_vertex_attributes(vec4 p_vertex_in, vec3 p_compressed_aabb_position, vec3 p_compressed_aabb_size,
 #if defined(NORMAL_USED) || defined(TANGENT_USED)
 		vec4 p_normal_in,
+#ifdef USE_INDEXED144_VERTEX_INPUT
+		vec4 p_tangent_in,
+#endif
 #ifdef NORMAL_USED
 		out vec3 r_normal,
 #endif
@@ -216,6 +231,16 @@ void _unpack_vertex_attributes(vec4 p_vertex_in, vec3 p_compressed_aabb_position
 		out vec3 r_binormal,
 #endif
 		out vec3 r_vertex) {
+#ifdef USE_INDEXED144_VERTEX_INPUT
+	r_vertex = p_vertex_in.xyz;
+#ifdef NORMAL_USED
+	r_normal = p_normal_in.xyz;
+#endif
+#if defined(NORMAL_USED) || defined(TANGENT_USED)
+	r_tangent = p_tangent_in.xyz;
+	r_binormal = normalize(cross(p_normal_in.xyz, p_tangent_in.xyz)) * p_tangent_in.w;
+#endif
+#else
 
 	r_vertex = p_vertex_in.xyz * p_compressed_aabb_size + p_compressed_aabb_position;
 #ifdef NORMAL_USED
@@ -244,6 +269,7 @@ void _unpack_vertex_attributes(vec4 p_vertex_in, vec3 p_compressed_aabb_position
 		r_binormal *= binormal_sign;
 	}
 #endif
+#endif
 }
 
 void vertex_shader(in vec3 vertex,
@@ -254,7 +280,11 @@ void vertex_shader(in vec3 vertex,
 		in vec3 tangent_highp,
 		in vec3 binormal_highp,
 #endif
-		in uint instance_index, in uint multimesh_offset, in mat3x4 in_model_matrix,
+		in uint instance_index, in uint multimesh_offset,
+#ifdef USE_INSTANCE192_OUTPUT
+		in bool instance192_previous_record,
+#endif
+		in mat3x4 in_model_matrix,
 #ifdef USE_DOUBLE_PRECISION
 		in vec3 model_precision,
 		in vec3 view_precision,
@@ -286,6 +316,7 @@ void vertex_shader(in vec3 vertex,
 			in_inv_view_matrix[2],
 			vec4(0.0, 0.0, 0.0, 1.0)));
 
+#ifndef USE_INSTANCE192_OUTPUT
 	mat4 model_matrix = transpose(mat4(in_model_matrix[0],
 			in_model_matrix[1],
 			in_model_matrix[2],
@@ -298,9 +329,24 @@ void vertex_shader(in vec3 vertex,
 		model_normal_matrix = mat3(model_matrix);
 	}
 
+#endif
+
+#ifdef USE_INSTANCE192_OUTPUT
+	Instance192Record instance192_record = instance192_read(uint(gl_InstanceIndex), instance192_previous_record);
+	// C already includes Host for Local output. Never multiply the scene Host.
+	mat4 model_matrix = instance192_record.model;
+	mat3 model_normal_matrix = instance192_record.normal;
+	mat4 instance192_inverse_model_matrix = instance192_record.inverse_model;
+	instance_custom = instance192_record.custom;
+#ifdef COLOR_USED
+	color_highp *= instance192_record.color;
+#endif
+#endif
+
 	mat4 matrix;
 	mat4 read_model_matrix = model_matrix;
 
+#ifndef USE_INSTANCE192_OUTPUT
 	if (sc_multimesh()) {
 		//multimesh, instances are for it
 
@@ -385,6 +431,15 @@ void vertex_shader(in vec3 vertex,
 #endif // !defined(USE_DOUBLE_PRECISION) || defined(SKIP_TRANSFORM_USED) || defined(VERTEX_WORLD_COORDS_USED) || defined(MODEL_MATRIX_USED)
 		model_normal_matrix = model_normal_matrix * mat3(matrix);
 	}
+#endif
+
+#ifdef INV_MODEL_MATRIX_USED
+#ifdef USE_INSTANCE192_OUTPUT
+	mat4 read_inv_model_matrix = instance192_record.inverse_model;
+#else
+	mat4 read_inv_model_matrix = inverse(read_model_matrix);
+#endif
+#endif
 
 #ifdef UV_USED
 	uv_interp = uv_attrib;
@@ -696,6 +751,12 @@ void vertex_shader(in vec3 vertex,
 }
 
 void main() {
+#if defined(USE_INDEXED144_VERTEX_INPUT) && defined(MODE_RENDER_MOTION_VECTORS)
+	indexed144_history_interp = uint(indexed144_history_valid(gl_VertexIndex));
+#endif
+#ifdef USE_INSTANCE192_OUTPUT
+	instance192_interp = uvec2(uint(gl_InstanceIndex), instance192_flags(uint(gl_InstanceIndex)));
+#endif
 #if defined(MODE_RENDER_MOTION_VECTORS)
 	vec3 prev_vertex;
 #ifdef NORMAL_USED
@@ -707,11 +768,32 @@ void main() {
 #endif
 
 	_unpack_vertex_attributes(
+#ifdef USE_INSTANCE192_OUTPUT
+			vertex_angle_attrib,
+#elif defined(USE_INDEXED144_VERTEX_INPUT)
+			indexed144_history_interp != 0u ? previous_vertex_attrib : vertex_angle_attrib,
+#else
 			previous_vertex_attrib,
+#endif
 			instances.data[draw_call.instance_index].compressed_aabb_position_pad.xyz,
 			instances.data[draw_call.instance_index].compressed_aabb_size_pad.xyz,
 #if defined(NORMAL_USED) || defined(TANGENT_USED)
+#ifdef USE_INSTANCE192_OUTPUT
+			axis_tangent_attrib,
+#elif defined(USE_INDEXED144_VERTEX_INPUT)
+			indexed144_history_interp != 0u ? previous_normal_attrib : axis_tangent_attrib,
+#else
 			previous_normal_attrib,
+#endif
+#ifdef USE_INDEXED144_VERTEX_INPUT
+#ifdef USE_INSTANCE192_OUTPUT
+			tangent_attrib,
+#elif defined(USE_INDEXED144_VERTEX_INPUT)
+			indexed144_history_interp != 0u ? previous_tangent_attrib : tangent_attrib,
+#else
+			previous_tangent_attrib,
+#endif
+#endif
 #ifdef NORMAL_USED
 			prev_normal,
 #endif
@@ -728,7 +810,11 @@ void main() {
 			prev_tangent,
 			prev_binormal,
 #endif
-			draw_call.instance_index, draw_call.multimesh_motion_vectors_previous_offset, instances.data[draw_call.instance_index].prev_transform,
+			draw_call.instance_index, draw_call.multimesh_motion_vectors_previous_offset,
+#ifdef USE_INSTANCE192_OUTPUT
+			true,
+#endif
+			instances.data[draw_call.instance_index].prev_transform,
 #ifdef USE_DOUBLE_PRECISION
 			instances.data[draw_call.instance_index].prev_model_precision.xyz,
 			scene_data_block.prev_data.inv_view_precision,
@@ -774,6 +860,9 @@ void main() {
 			instances.data[draw_call.instance_index].compressed_aabb_size_pad.xyz,
 #if defined(NORMAL_USED) || defined(TANGENT_USED)
 			axis_tangent_attrib,
+#ifdef USE_INDEXED144_VERTEX_INPUT
+			tangent_attrib,
+#endif
 #ifdef NORMAL_USED
 			normal,
 #endif
@@ -790,7 +879,11 @@ void main() {
 			tangent,
 			binormal,
 #endif
-			draw_call.instance_index, draw_call.multimesh_motion_vectors_current_offset, instances.data[draw_call.instance_index].transform,
+			draw_call.instance_index, draw_call.multimesh_motion_vectors_current_offset,
+#ifdef USE_INSTANCE192_OUTPUT
+			false,
+#endif
+			instances.data[draw_call.instance_index].transform,
 #ifdef USE_DOUBLE_PRECISION
 			instances.data[draw_call.instance_index].model_precision.xyz,
 			scene_data_block.data.inv_view_precision,
@@ -844,6 +937,12 @@ void main() {
 /* Include our forward mobile UBOs definitions etc. */
 #include "scene_forward_mobile_inc.glsl"
 
+#if defined(USE_INDEXED144_VERTEX_INPUT) && defined(MODE_RENDER_MOTION_VECTORS)
+layout(location = 10) in flat uint indexed144_history_interp;
+#endif
+#ifdef USE_INSTANCE192_OUTPUT
+layout(location = 10) in flat uvec2 instance192_interp;
+#endif
 
 /* Varyings */
 
@@ -1049,7 +1148,6 @@ layout(location = 1) out float fog_eligibility;
 	Only supporting normal fog here.
 */
 
-
 #include "../environment/mobile_fog_transport_inc.glsl"
 
 hvec4 fog_process(vec3 vertex) {
@@ -1118,8 +1216,12 @@ hvec4 fog_process(vec3 vertex) {
 #endif //!MODE_RENDER DEPTH
 
 void main() {
-#ifdef UBERSHADER
-	bool front_facing = gl_FrontFacing;
+#ifdef USE_INSTANCE192_OUTPUT
+	if (instance192_discard_face(MATERIAL_FRONT_FACING)) {
+		discard;
+	}
+#elif defined(UBERSHADER)
+	bool front_facing = MATERIAL_FRONT_FACING;
 	if (uc_cull_mode() == POLYGON_CULL_BACK && !front_facing) {
 		discard;
 	} else if (uc_cull_mode() == POLYGON_CULL_FRONT && front_facing) {
@@ -1184,7 +1286,7 @@ void main() {
 #ifdef NORMAL_USED
 	vec3 normal_highp = normal_interp;
 #if defined(DO_SIDE_CHECK)
-	if (!gl_FrontFacing) {
+	if (!MATERIAL_FRONT_FACING) {
 		normal_highp = -normal_highp;
 	}
 #endif // DO_SIDE_CHECK
@@ -1250,6 +1352,19 @@ void main() {
 	} else {
 		model_normal_matrix = mat3(read_model_matrix);
 	}
+#ifdef USE_INSTANCE192_OUTPUT
+	Instance192Record instance192_record = instance192_read(instance192_interp.x, false);
+	read_model_matrix = instance192_record.model;
+	model_normal_matrix = instance192_record.normal;
+#endif
+
+#ifdef INV_MODEL_MATRIX_USED
+#ifdef USE_INSTANCE192_OUTPUT
+	mat4 read_inv_model_matrix = instance192_record.inverse_model;
+#else
+	mat4 read_inv_model_matrix = inverse(read_model_matrix);
+#endif
+#endif
 
 	mat4 read_view_matrix = transpose(mat4(scene_data.view_matrix[0],
 			scene_data.view_matrix[1],
@@ -1378,7 +1493,11 @@ void main() {
 
 // alpha hash can be used in unison with alpha antialiasing
 #ifdef ALPHA_HASH_USED
+#ifdef USE_INSTANCE192_OUTPUT
+	vec3 object_pos = (instance192_record.inverse_model * inv_view_matrix * vec4(vertex, 1.0)).xyz;
+#else
 	vec3 object_pos = (inverse(read_model_matrix) * inv_view_matrix * vec4(vertex, 1.0)).xyz;
+#endif
 #ifdef MODE_RENDER_MATERIAL
 	if (alpha < compute_alpha_hash_threshold(object_pos, alpha_hash_scale)) {
 		alpha = half(0.0);
@@ -1486,17 +1605,19 @@ void main() {
 
 #endif //!CUSTOM_FOG_USED
 
- if(native_ap_enabled()) {
-  vec4 ap=native_ap_process(vertex);
-  if(!use_native_height_fog) {
-   // Preserve the native depth/custom fog layer, when present. Its source
-   // is already exposed; the shared tail expects canonical scene radiance.
-   native_height_fog=vec4(vec3(fog.rgb)*float(fog.a)/max(scene_data.emissive_exposure_normalization,1e-8),1.0-float(fog.a));
-  }
-  native_height_fog=vec4(native_height_fog.rgb+native_height_fog.a*ap.rgb,native_height_fog.a*clamp(ap.a,0.0,1.0));
-  if(scene_data.aerial_perspective.z>0.0) native_height_fog=ap;
-  use_native_height_fog=true;
- }
+	if (native_ap_enabled()) {
+		vec4 ap = native_ap_process(vertex);
+		if (!use_native_height_fog) {
+			// Preserve the native depth/custom fog layer, when present. Its source
+			// is already exposed; the shared tail expects canonical scene radiance.
+			native_height_fog = vec4(vec3(fog.rgb) * float(fog.a) / max(scene_data.emissive_exposure_normalization, 1e-8), 1.0 - float(fog.a));
+		}
+		native_height_fog = vec4(native_height_fog.rgb + native_height_fog.a * ap.rgb, native_height_fog.a * clamp(ap.a, 0.0, 1.0));
+		if (scene_data.aerial_perspective.z > 0.0) {
+			native_height_fog = ap;
+		}
+		use_native_height_fog = true;
+	}
 
 #endif // deferred native fog
 #endif //!FOG_DISABLED
@@ -1646,7 +1767,9 @@ void main() {
 		float lod = sqrt(roughness) * MAX_ROUGHNESS_LOD;
 		indirect_specular_light = hvec3(sample_sky_radiance(vec3(ref_vec), 0.0, lod).rgb);
 #endif //USE_RADIANCE_OCTMAP_ARRAY
-		if (scene_data.sky_capture_data.x == 0.0) { indirect_specular_light *= REFLECTION_MULTIPLIER; }
+		if (scene_data.sky_capture_data.x == 0.0) {
+			indirect_specular_light *= REFLECTION_MULTIPLIER;
+		}
 		indirect_specular_light *= half(scene_data.IBL_exposure_normalization);
 		indirect_specular_light *= horizon * horizon;
 		indirect_specular_light *= half(scene_data.ambient_light_color_energy.a);
@@ -1670,7 +1793,9 @@ void main() {
 			float roughness_lod = MAX_ROUGHNESS_LOD;
 			hvec3 octmap_ambient = hvec3(sample_sky_radiance(ambient_dir, 0.0, roughness_lod).rgb);
 #endif //USE_RADIANCE_OCTMAP_ARRAY
-			if (scene_data.sky_capture_data.x == 0.0) { octmap_ambient *= REFLECTION_MULTIPLIER; }
+			if (scene_data.sky_capture_data.x == 0.0) {
+				octmap_ambient *= REFLECTION_MULTIPLIER;
+			}
 			octmap_ambient *= half(scene_data.IBL_exposure_normalization);
 			ambient_light = mix(ambient_light, octmap_ambient * half(scene_data.ambient_light_color_energy.a), half(scene_data.ambient_color_sky_mix));
 		}
@@ -2393,36 +2518,36 @@ void main() {
 #endif
 
 #ifndef FOG_DISABLED
- if (use_native_height_fog) {
-  vec3 fog_L = native_height_fog.rgb * scene_data.emissive_exposure_normalization / sc_luminance_multiplier();
+	if (use_native_height_fog) {
+		vec3 fog_L = native_height_fog.rgb * scene_data.emissive_exposure_normalization / sc_luminance_multiplier();
 #ifdef HEIGHT_FOG_BLEND_MUL
-  out_color.rgb = hvec3(mix(vec3(1.0), vec3(out_color.rgb), native_height_fog.a));
+		out_color.rgb = hvec3(mix(vec3(1.0), vec3(out_color.rgb), native_height_fog.a));
 #else
-  out_color.rgb *= half(native_height_fog.a);
+		out_color.rgb *= half(native_height_fog.a);
 #if !defined(HEIGHT_FOG_BLEND_ADD_SUB)
 #ifdef HEIGHT_FOG_BLEND_PREMULTIPLIED
-  out_color.rgb += hvec3(fog_L * float(alpha));
+		out_color.rgb += hvec3(fog_L * float(alpha));
 #else
-  out_color.rgb += hvec3(fog_L);
+		out_color.rgb += hvec3(fog_L);
 #endif
 #endif
 #endif
-  float air_debug=scene_data.aerial_perspective.z>0.0?scene_data.aerial_perspective.z:scene_data.height_fog.options.y;
-  if (air_debug == 1.0) {
-   out_color.rgb = hvec3(vec3(native_height_fog.a) / sc_luminance_multiplier());
-  } else if (air_debug == 2.0) {
-   out_color.rgb = hvec3(native_height_fog.rgb / sc_luminance_multiplier());
-  }
- }
+		float air_debug = scene_data.aerial_perspective.z > 0.0 ? scene_data.aerial_perspective.z : scene_data.height_fog.options.y;
+		if (air_debug == 1.0) {
+			out_color.rgb = hvec3(vec3(native_height_fog.a) / sc_luminance_multiplier());
+		} else if (air_debug == 2.0) {
+			out_color.rgb = hvec3(native_height_fog.rgb / sc_luminance_multiplier());
+		}
+	}
 #endif
 
 #ifdef DEFER_OPAQUE_FOG
- fog_eligibility = 0.0;
+	fog_eligibility = 0.0;
 #ifdef DEFER_NATIVE_FOG
- fog_eligibility = 1.0;
+	fog_eligibility = 1.0;
 #endif
 #endif
- frag_color = out_color;
+	frag_color = out_color;
 
 	if (sc_use_material_debanding()) {
 		// From https://alex.vlachos.com/graphics/Alex_Vlachos_Advanced_VR_Rendering_GDC2015.pdf
@@ -2459,5 +2584,15 @@ void main() {
 	vec3 prev_ndc = prev_screen_position.xyz / prev_screen_position.w;
 	prev_ndc.y = -prev_ndc.y;
 	frag_color = vec4(ndc - prev_ndc, 0.0);
+#if defined(USE_INDEXED144_VERTEX_INPUT) && defined(MODE_RENDER_MOTION_VECTORS)
+	if (indexed144_history_interp == 0u) {
+		frag_color = vec4(0.0);
+	}
+#endif
+#ifdef USE_INSTANCE192_OUTPUT
+	if (!instance192_has_history(instance192_interp.y)) {
+		frag_color = vec4(0.0);
+	}
+#endif
 #endif
 }

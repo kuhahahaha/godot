@@ -82,6 +82,13 @@ TextureStorage *TextureStorage::get_singleton() {
 	return singleton;
 }
 
+#ifdef TESTS_ENABLED
+TextureStorage::TextureStorage(NativeHoldTestTag) {
+	singleton = this;
+	native_hold_test_minimal = true;
+}
+#endif
+
 TextureStorage::TextureStorage() {
 	singleton = this;
 
@@ -664,6 +671,12 @@ TextureStorage::TextureStorage() {
 }
 
 TextureStorage::~TextureStorage() {
+#ifdef TESTS_ENABLED
+	if (native_hold_test_minimal) {
+		singleton = nullptr;
+		return;
+	}
+#endif
 	rt_sdf.shader.version_free(rt_sdf.shader_version);
 
 	free_decal_data();
@@ -1608,9 +1621,34 @@ RID TextureStorage::texture_create_from_native_handle(RSE::TextureType p_type, I
 	RID rd_texture = RD::get_singleton()->texture_create_from_extension(type, format, RD::TEXTURE_SAMPLES_1, usage_flags, p_native_handle, p_width, p_height, p_depth, p_layers, 1);
 
 	RID texture = texture_allocate();
-	texture_rd_initialize(texture, rd_texture, p_layered_type);
+	if (!texture_rd_initialize(texture, rd_texture, p_layered_type)) {
+		// The RID was reserved before validation; initialize an empty cell before
+		// freeing it so a failed external import cannot leave an uninitialized RID.
+		texture_owner.initialize_rid(texture, Texture());
+		texture_owner.free(texture);
+		if (rd_texture.is_valid()) {
+			RD::get_singleton()->free_rid(rd_texture);
+		}
+		return RID();
+	}
 
 	return texture;
+}
+
+bool TextureStorage::_native_immutable_busy(const Texture *p_texture) {
+	if (!p_texture || !RD::get_singleton()) {
+		return false;
+	}
+	auto *rd = RD::get_singleton();
+	if (rd->native_immutable_resource_is_held(p_texture->rd_texture) || rd->native_immutable_resource_is_held(p_texture->rd_texture_srgb)) {
+		return true;
+	}
+	for (RID slice : p_texture->cached_rd_slices) {
+		if (rd->native_immutable_resource_is_held(slice)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 void TextureStorage::_texture_2d_update(RID p_texture, const Ref<Image> &p_image, int p_layer, bool p_immediate) {
@@ -1618,6 +1656,7 @@ void TextureStorage::_texture_2d_update(RID p_texture, const Ref<Image> &p_image
 
 	Texture *tex = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL(tex);
+	ERR_FAIL_COND_MSG(_native_immutable_busy(tex), "Texture native inputs are immutable while retained.");
 	ERR_FAIL_COND(tex->is_render_target);
 	ERR_FAIL_COND(p_image->get_width() != tex->width || p_image->get_height() != tex->height);
 	ERR_FAIL_COND(p_image->get_format() != tex->format);
@@ -1642,6 +1681,7 @@ void TextureStorage::texture_2d_update(RID p_texture, const Ref<Image> &p_image,
 void TextureStorage::texture_3d_update(RID p_texture, const Vector<Ref<Image>> &p_data) {
 	Texture *tex = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL(tex);
+	ERR_FAIL_COND_MSG(_native_immutable_busy(tex), "Texture native inputs are immutable while retained.");
 	ERR_FAIL_COND(tex->type != TextureStorage::TYPE_3D);
 
 	Image::Image3DValidateError verr = Image::validate_3d_image(tex->format, tex->width, tex->height, tex->depth, tex->mipmaps > 1, p_data);
@@ -1683,6 +1723,7 @@ void TextureStorage::texture_external_update(RID p_texture, int p_width, int p_h
 void TextureStorage::texture_proxy_update(RID p_texture, RID p_proxy_to) {
 	Texture *tex = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL(tex);
+	ERR_FAIL_COND_MSG(_native_immutable_busy(tex), "Texture native inputs are immutable while retained.");
 	ERR_FAIL_COND(!tex->is_proxy);
 	Texture *proxy_to = texture_owner.get_or_null(p_proxy_to);
 	ERR_FAIL_NULL(proxy_to);
@@ -1989,6 +2030,8 @@ Vector<Ref<Image>> TextureStorage::texture_3d_get(RID p_texture) const {
 
 void TextureStorage::texture_drawable_generate_mipmaps(RID p_texture) {
 	Texture *tex = get_texture(p_texture);
+	ERR_FAIL_NULL(tex);
+	ERR_FAIL_COND_MSG(_native_immutable_busy(tex), "Texture native inputs are immutable while retained.");
 	CopyEffects *copy_effects = CopyEffects::get_singleton();
 	ERR_FAIL_NULL(copy_effects);
 
@@ -2025,6 +2068,7 @@ void TextureStorage::texture_replace(RID p_texture, RID p_by_texture) {
 	ERR_FAIL_COND(tex->proxy_to.is_valid()); //can't replace proxy
 	Texture *by_tex = texture_owner.get_or_null(p_by_texture);
 	ERR_FAIL_NULL(by_tex);
+	ERR_FAIL_COND_MSG(_native_immutable_busy(tex) || _native_immutable_busy(by_tex), "Texture native inputs are immutable while retained.");
 	ERR_FAIL_COND(by_tex->proxy_to.is_valid()); //can't replace proxy
 
 	if (tex == by_tex) {
@@ -2160,24 +2204,24 @@ Size2 TextureStorage::texture_size_with_proxy(RID p_proxy) {
 	return texture_2d_get_size(p_proxy);
 }
 
-void TextureStorage::texture_rd_initialize(RID p_texture, const RID &p_rd_texture, const RSE::TextureLayeredType p_layer_type) {
-	ERR_FAIL_COND(!RD::get_singleton()->texture_is_valid(p_rd_texture));
+bool TextureStorage::texture_rd_initialize(RID p_texture, const RID &p_rd_texture, const RSE::TextureLayeredType p_layer_type) {
+	ERR_FAIL_COND_V(!RD::get_singleton()->texture_is_valid(p_rd_texture), false);
 
 	// TODO : investigate if we can support this, will need to be able to obtain the order and obtain the slice info
-	ERR_FAIL_COND_MSG(RD::get_singleton()->texture_is_shared(p_rd_texture), "Please create the texture object using the original texture");
+	ERR_FAIL_COND_V_MSG(RD::get_singleton()->texture_is_shared(p_rd_texture), false, "Please create the texture object using the original texture");
 
 	RD::TextureFormat tf = RD::get_singleton()->texture_get_format(p_rd_texture);
-	ERR_FAIL_COND(!(tf.usage_bits & RD::TEXTURE_USAGE_SAMPLING_BIT));
+	ERR_FAIL_COND_V(!(tf.usage_bits & RD::TEXTURE_USAGE_SAMPLING_BIT), false);
 
 	TextureFromRDFormat imfmt;
 	_texture_format_from_rd(tf.format, imfmt);
-	ERR_FAIL_COND(imfmt.image_format == Image::FORMAT_MAX);
+	ERR_FAIL_COND_V(imfmt.image_format == Image::FORMAT_MAX, false);
 
 	Texture texture;
 
 	switch (tf.texture_type) {
 		case RD::TEXTURE_TYPE_2D: {
-			ERR_FAIL_COND(tf.array_layers != 1);
+			ERR_FAIL_COND_V(tf.array_layers != 1, false);
 			texture.type = TextureStorage::TYPE_2D;
 		} break;
 		case RD::TEXTURE_TYPE_2D_ARRAY:
@@ -2185,16 +2229,16 @@ void TextureStorage::texture_rd_initialize(RID p_texture, const RID &p_rd_textur
 		case RD::TEXTURE_TYPE_CUBE_ARRAY: {
 			// RenderingDevice doesn't distinguish between Array textures and Cube textures
 			// this condition covers TextureArrays, TextureCube, and TextureCubeArray.
-			ERR_FAIL_COND(tf.array_layers == 1);
+			ERR_FAIL_COND_V(tf.array_layers == 1, false);
 			texture.type = TextureStorage::TYPE_LAYERED;
 			texture.layered_type = p_layer_type;
 		} break;
 		case RD::TEXTURE_TYPE_3D: {
-			ERR_FAIL_COND(tf.array_layers != 1);
+			ERR_FAIL_COND_V(tf.array_layers != 1, false);
 			texture.type = TextureStorage::TYPE_3D;
 		} break;
 		default: {
-			ERR_FAIL_MSG("This RD texture can't be used as a render texture");
+			ERR_FAIL_V_MSG(false, "This RD texture can't be used as a render texture");
 		} break;
 	}
 
@@ -2226,11 +2270,18 @@ void TextureStorage::texture_rd_initialize(RID p_texture, const RID &p_rd_textur
 
 	// We create a shared texture here even if our view matches, so we don't obtain ownership.
 	texture.rd_texture = RD::get_singleton()->texture_create_shared(rd_view, p_rd_texture);
+	if (texture.rd_texture.is_null()) {
+		return false;
+	}
 	if (imfmt.rd_format_srgb != RD::DATA_FORMAT_MAX) {
 		// The texture supports sRGB override, create it for 3D usage.
 		rd_view.format_override = imfmt.rd_format_srgb == tf.format ? RD::DATA_FORMAT_MAX : imfmt.rd_format_srgb;
 		texture.rd_format_srgb = imfmt.rd_format_srgb;
 		texture.rd_texture_srgb = RD::get_singleton()->texture_create_shared(rd_view, p_rd_texture);
+		if (texture.rd_texture_srgb.is_null()) {
+			RD::get_singleton()->free_rid(texture.rd_texture);
+			return false;
+		}
 	}
 
 	// TODO figure out what to do with slices
@@ -2241,6 +2292,7 @@ void TextureStorage::texture_rd_initialize(RID p_texture, const RID &p_rd_textur
 	texture.is_proxy = false;
 
 	texture_owner.initialize_rid(p_texture, texture);
+	return true;
 }
 
 RID TextureStorage::texture_get_rd_texture(RID p_texture, bool p_srgb) const {

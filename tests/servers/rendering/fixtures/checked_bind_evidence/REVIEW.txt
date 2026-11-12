@@ -1,0 +1,15 @@
+Independent read-only review: checked draw binding extraction
+Reviewed current rendering_device.h, rendering_device.cpp, and test_checked_draw_bind.cpp, including root's split CHECK assertions and normalized file header. No actionable correctness findings within this extraction's scope.
+
+Ordinary public void entry points share the prior body with capture disabled. Existing mutation and graph append order, repeated-RID short circuit, transfer consumption, driver payload widths, and debug attachment validation remain intact. The new begin-handle assignments retain original graph identities.
+
+Capture preflights list identity, active original begin, VA paired arrays/capacity, worker pool slot and operation-vector validity, tracker presence/conflict, and IA byte offset representability before transfer consumption or CPU binding changes. Dependency output preserves each original pair, including duplicate worker entries; original helper still combines operation maxima and clears the source fields. Usage conflict comparison matches ResourceTracker::reset_if_outdated and add_draw_list_usage across both list and frame changes.
+
+Uniform success reports deferred CPU acceptance without claiming native append. Its existing attachment-alias validation remains after mutation, and failure() preserves state_changed. VA/IA append results retain actual returned graph handle, Recorded effect, state facts, and captured dependencies if the post-append handle validation fails. No evidence is upgraded to native completion or source authority.
+
+Tests compare checked and ordinary full driver payload (including a 64-bit vertex offset), actual graph handle mapping, duplicate binds, transfer pair preservation/maxima/clearing, no-effect preflight refusals, uniform late-mutation failure, same-list conflicts, new-list reuse, and cross-frame reset. I did not build or run tests, per assignment. The new malformed transfer-vector/worker-slot/null-tracker preflights are inspected source paths rather than directly covered negative cases in this TU; post-append failure preservation is likewise source-reviewed rather than fault-injected.
+
+SHA-256:
+f5a2378bfdef9fcd04ac552ba6956f02074c5b5c228615e8c40d69c9ef597029  servers/rendering/rendering_device.h
+d91ee5b4428ba1d5526bf2f38c495fbbeb8f6be93679a6621941a6bc3349ca18  servers/rendering/rendering_device.cpp
+7de1d0825b5c98c8c04bec74c577a056e546a949b1fbd2aca1ad4c46370d6533  tests/servers/rendering/test_checked_draw_bind.cpp

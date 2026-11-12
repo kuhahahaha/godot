@@ -1,0 +1,85 @@
+HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=mobile source=sphere
+COMMAND ["/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "mobile", "--path", "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.e6156718c (2026-11-07 12:36:29 UTC) - https://godotengine.org
+Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"active":true,"attractor_count":0,"collided":true,"collider_count":1,"depth":0.25,"driver":"Apple M3 Pro (Apple9)","force":[0.0,1.0,0.0],"frame_counter":1,"legacy_normal":true,"neighbor_case":"sphere","normal":[0.0,1.0,0.0],"pass":true,"position":[0.0,1.25,0.0],"textures_used":0,"velocity":[0.0,1.0,0.0]}
+
+HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=forward_plus source=sphere
+COMMAND ["/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "forward_plus", "--path", "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.e6156718c (2026-11-07 12:36:29 UTC) - https://godotengine.org
+Metal 4.0 - Forward+ - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"active":true,"attractor_count":0,"collided":true,"collider_count":1,"depth":0.25,"driver":"Apple M3 Pro (Apple9)","force":[0.0,1.0,0.0],"frame_counter":1,"legacy_normal":true,"neighbor_case":"sphere","normal":[0.0,1.0,0.0],"pass":true,"position":[0.0,1.25,0.0],"textures_used":0,"velocity":[0.0,1.0,0.0]}
+
+HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=mobile source=box
+COMMAND ["/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "mobile", "--path", "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.e6156718c (2026-11-07 12:36:29 UTC) - https://godotengine.org
+Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"active":true,"attractor_count":0,"collided":true,"collider_count":1,"depth":0.125,"driver":"Apple M3 Pro (Apple9)","force":[1.0,0.0,0.0],"frame_counter":1,"legacy_normal":true,"neighbor_case":"box","normal":[1.0,0.0,0.0],"pass":true,"position":[1.25,0.0,0.0],"textures_used":0,"velocity":[1.0,0.0,0.0]}
+
+HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=forward_plus source=box
+COMMAND ["/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "forward_plus", "--path", "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.e6156718c (2026-11-07 12:36:29 UTC) - https://godotengine.org
+Metal 4.0 - Forward+ - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"active":true,"attractor_count":0,"collided":true,"collider_count":1,"depth":0.125,"driver":"Apple M3 Pro (Apple9)","force":[1.0,0.0,0.0],"frame_counter":1,"legacy_normal":true,"neighbor_case":"box","normal":[1.0,0.0,0.0],"pass":true,"position":[1.25,0.0,0.0],"textures_used":0,"velocity":[1.0,0.0,0.0]}
+
+HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=mobile source=sdf
+COMMAND ["/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "mobile", "--path", "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.e6156718c (2026-11-07 12:36:29 UTC) - https://godotengine.org
+Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"active":true,"attractor_count":0,"collided":true,"collider_count":1,"depth":0.125,"driver":"Apple M3 Pro (Apple9)","force":[1.0,0.0,0.0],"frame_counter":1,"legacy_normal":true,"neighbor_case":"sdf","normal":[1.0,0.0,0.0],"pass":true,"position":[0.25,0.0,0.0],"textures_used":1,"velocity":[1.0,0.0,0.0]}
+
+HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=forward_plus source=sdf
+COMMAND ["/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "forward_plus", "--path", "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.e6156718c (2026-11-07 12:36:29 UTC) - https://godotengine.org
+Metal 4.0 - Forward+ - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"active":true,"attractor_count":0,"collided":true,"collider_count":1,"depth":0.125,"driver":"Apple M3 Pro (Apple9)","force":[1.0,0.0,0.0],"frame_counter":1,"legacy_normal":true,"neighbor_case":"sdf","normal":[1.0,0.0,0.0],"pass":true,"position":[0.25,0.0,0.0],"textures_used":1,"velocity":[1.0,0.0,0.0]}
+
+HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=mobile source=sphere_attractor
+COMMAND ["/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "mobile", "--path", "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.e6156718c (2026-11-07 12:36:29 UTC) - https://godotengine.org
+Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"active":true,"attractor_count":1,"collided":false,"collider_count":0,"depth":1.0,"driver":"Apple M3 Pro (Apple9)","force":[-1.0,0.0,0.0],"frame_counter":1,"legacy_normal":true,"neighbor_case":"sphere_attractor","normal":[-0.0166666675359011,0.0,0.0],"pass":true,"position":[1.0,0.0,0.0],"textures_used":0,"velocity":[-0.0166666675359011,0.0,0.0]}
+
+HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=forward_plus source=sphere_attractor
+COMMAND ["/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "forward_plus", "--path", "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.e6156718c (2026-11-07 12:36:29 UTC) - https://godotengine.org
+Metal 4.0 - Forward+ - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"active":true,"attractor_count":1,"collided":false,"collider_count":0,"depth":1.0,"driver":"Apple M3 Pro (Apple9)","force":[-1.0,0.0,0.0],"frame_counter":1,"legacy_normal":true,"neighbor_case":"sphere_attractor","normal":[-0.0166666675359011,0.0,0.0],"pass":true,"position":[1.0,0.0,0.0],"textures_used":0,"velocity":[-0.0166666675359011,0.0,0.0]}
+
+HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=mobile source=box_attractor
+COMMAND ["/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "mobile", "--path", "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.e6156718c (2026-11-07 12:36:29 UTC) - https://godotengine.org
+Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"active":true,"attractor_count":1,"collided":false,"collider_count":0,"depth":1.0,"driver":"Apple M3 Pro (Apple9)","force":[-1.0,0.0,0.0],"frame_counter":1,"legacy_normal":true,"neighbor_case":"box_attractor","normal":[-0.0166666675359011,0.0,0.0],"pass":true,"position":[1.0,0.0,0.0],"textures_used":0,"velocity":[-0.0166666675359011,0.0,0.0]}
+
+HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=forward_plus source=box_attractor
+COMMAND ["/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "forward_plus", "--path", "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.e6156718c (2026-11-07 12:36:29 UTC) - https://godotengine.org
+Metal 4.0 - Forward+ - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"active":true,"attractor_count":1,"collided":false,"collider_count":0,"depth":1.0,"driver":"Apple M3 Pro (Apple9)","force":[-1.0,0.0,0.0],"frame_counter":1,"legacy_normal":true,"neighbor_case":"box_attractor","normal":[-0.0166666675359011,0.0,0.0],"pass":true,"position":[1.0,0.0,0.0],"textures_used":0,"velocity":[-0.0166666675359011,0.0,0.0]}
+
+HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=mobile source=vector_attractor
+COMMAND ["/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "mobile", "--path", "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.e6156718c (2026-11-07 12:36:29 UTC) - https://godotengine.org
+Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"active":true,"attractor_count":1,"collided":false,"collider_count":0,"depth":1.0,"driver":"Apple M3 Pro (Apple9)","force":[-2.0,0.0,0.0],"frame_counter":1,"legacy_normal":true,"neighbor_case":"vector_attractor","normal":[-0.0333333350718021,0.0,0.0],"pass":true,"position":[0.0,0.0,0.0],"textures_used":1,"velocity":[-0.0333333350718021,0.0,0.0]}
+
+HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer=forward_plus source=vector_attractor
+COMMAND ["/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "forward_plus", "--path", "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.e6156718c (2026-11-07 12:36:29 UTC) - https://godotengine.org
+Metal 4.0 - Forward+ - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_PASS {"active":true,"attractor_count":1,"collided":false,"collider_count":0,"depth":1.0,"driver":"Apple M3 Pro (Apple9)","force":[-2.0,0.0,0.0],"frame_counter":1,"legacy_normal":true,"neighbor_case":"vector_attractor","normal":[-0.0333333350718021,0.0,0.0],"pass":true,"position":[0.0,0.0,0.0],"textures_used":1,"velocity":[-0.0333333350718021,0.0,0.0]}
+
+HEIGHTFIELD_LEGACY_NEIGHBORS_MATRIX_PASS 12 real Metal GPU cases

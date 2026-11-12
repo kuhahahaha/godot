@@ -1,0 +1,165 @@
+/**************************************************************************/
+/*  gdextension_production_output_poll.cpp                                */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
+#include "core/extension/gdextension_production_request.h"
+#include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
+#include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/rendering_device.h"
+
+namespace GDExtensionDeviceExit {
+namespace {
+template <size_t N>
+GDExtensionOutputStatusV1 output_poll_status(Error p_error, const char (&p_detail)[N]) {
+	return { int32_t(p_error), uint32_t(N - 1), p_detail };
+}
+bool output_poll_same_request(GDExtensionProductionRequestRefV1 p_a, GDExtensionProductionRequestRefV1 p_b) {
+	return p_a.registry_instance == p_b.registry_instance && p_a.handle_serial == p_b.handle_serial;
+}
+} // namespace
+
+void Registry::production_output_poll(ProductionPhysicalContextRef p_context, GDExtensionProductionRequestRefV1 p_ref, const GDExtensionOutputGenerationInputV1 *p_input, GDExtensionOutputPollResultV1 *r_result) {
+	// The public leaf has already established complete, disjoint DTO extents.
+	if (!p_input || !r_result || uintptr_t(p_input) % alignof(GDExtensionOutputGenerationInputV1) || uintptr_t(r_result) % alignof(GDExtensionOutputPollResultV1)) {
+		return;
+	}
+	*r_result = {};
+	r_result->abi = production_dto_abi<GDExtensionOutputPollResultV1>();
+	r_result->action_ordinal = UINT64_MAX;
+	r_result->status = output_poll_status(ERR_INVALID_PARAMETER, "CONTRACT");
+	if (!production_dto_valid(*p_input) || !p_input->particles || !p_input->generation) {
+		return;
+	}
+	MutexLock lock(mutex);
+	ProductionRequest *request = nullptr;
+	RenderingDevice *rd = nullptr;
+	const Error authenticated = production_physical_request_locked(p_context, p_ref, request, rd, false);
+	if (authenticated != OK) {
+		r_result->status = output_poll_status(authenticated, "original_record_context");
+		return;
+	}
+	if (!rd || rd != RenderingDevice::get_singleton() || !rd->is_main_instance) {
+		r_result->status = output_poll_status(ERR_UNAUTHORIZED, "original_output_device");
+		return;
+	}
+	if (request->capture_inflight || !rd->_thread_safe_.try_lock()) {
+		r_result->status = output_poll_status(ERR_BUSY, "output_device_busy");
+		return;
+	}
+	struct RdUnlock {
+		Mutex &mutex;
+		~RdUnlock() { mutex.unlock(); }
+	} unlock{ rd->_thread_safe_ };
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	const auto *particles = storage ? storage->particles_owner.get_or_null(RID::from_uint64(p_input->particles)) : nullptr;
+	using Owner = RendererRD::ExternalOutputOwner;
+	if (!particles || !particles->external || particles->external->device != rd || particles->external->generation != p_input->generation || particles->external->generation_registry != this) {
+		r_result->status = output_poll_status(ERR_UNAUTHORIZED, "original_output_owner");
+		return;
+	}
+	const auto &owner = *particles->external;
+	const bool released = owner.state == Owner::GenerationState::RELEASED;
+	if (!owner.generation_root_serial || !owner.generation_request.handle_serial || owner.generation_request.registry_instance != instance ||
+			(owner.generation_pin.is_empty() ? !released : !owner.generation_root_matches(owner.generation_pin) || !production_output_pin_matches_locked(owner.generation_pin, owner.generation_request, *rd))) {
+		r_result->status = output_poll_status(ERR_UNAUTHORIZED, "original_output_generation");
+		return;
+	}
+	bool associated = output_poll_same_request(owner.generation_request, p_ref);
+	uint64_t action_ordinal = UINT64_MAX;
+	bool multiple_actions = false, unknown = false;
+	uint64_t physical_returned = 0;
+	for (uint32_t i = 0; i < owner.slot_count; ++i) {
+		const auto &slot = owner.slots[i];
+		const bool original_registry = slot.original_registry == this || (slot.state == Owner::LeaseState::RELEASED && !slot.original_registry && slot.original_pin.is_empty());
+		if (original_registry && output_poll_same_request(slot.original_request, p_ref)) {
+			associated = true;
+			if (slot.original_action_ordinal != UINT64_MAX) {
+				if (slot.original_action_ordinal >= request->action_count || request->actions[slot.original_action_ordinal].request != request) {
+					r_result->status = output_poll_status(ERR_INVALID_DATA, "output_action_mismatch");
+					return;
+				}
+				const auto &action = request->actions[slot.original_action_ordinal];
+				if (action.output_particles.get_id() != p_input->particles || action.output_generation != owner.generation || action.output_slot != i || action.output_lease != slot.lease_serial) {
+					r_result->status = output_poll_status(ERR_INVALID_DATA, "output_slot_incarnation");
+					return;
+				}
+				unknown |= action.output_state == ProductionActionCell::OutputState::UNKNOWN;
+				if (action_ordinal == UINT64_MAX) {
+					action_ordinal = slot.original_action_ordinal;
+				} else if (action_ordinal != slot.original_action_ordinal) {
+					multiple_actions = true;
+				}
+			}
+		}
+	}
+	if (!associated) {
+		r_result->status = output_poll_status(ERR_UNAUTHORIZED, "original_output_request");
+		return;
+	}
+	for (uint32_t i = 0; i < owner.slot_count; ++i) {
+		const auto &slot = owner.slots[i];
+		if (!slot.storage) {
+			// This count survives destruction of the physically returned storage.
+			physical_returned += slot.physical_returned;
+			continue;
+		}
+		unknown |= slot.storage->unknown;
+		for (const auto &resource : slot.storage->resources) {
+			if (resource.rid.is_null()) {
+				continue;
+			}
+			NativeDisposalWitness::Report observation;
+			const Error observed = rd->_native_disposal_observe(resource.witness, observation);
+			if (observed != OK && observation.state != NativeDisposalWitness::State::UNKNOWN) {
+				r_result->status = output_poll_status(observed, "output_physical_observation");
+				return;
+			}
+			unknown |= observation.state == NativeDisposalWitness::State::UNKNOWN;
+			physical_returned += observation.state == NativeDisposalWitness::State::RETURNED;
+		}
+	}
+	for (uint32_t i = 0; owner.read_cells && i < owner.read_capacity; ++i) {
+		unknown |= owner.read_cells[i].state == Owner::ReadCell::State::UNKNOWN;
+	}
+	GDExtensionProductionReportV2 report{};
+	production_report_locked(*request, report);
+	r_result->generation = owner.generation;
+	r_result->state = uint32_t(owner.state) + 1;
+	r_result->custody = unknown ? GDEXTENSION_OUTPUT_CUSTODY_UNKNOWN_V1 : released ? GDEXTENSION_OUTPUT_NO_CUSTODY_V1
+																				   : GDEXTENSION_OUTPUT_CUSTODY_ACCEPTED_V1;
+	r_result->known = report.known_obligations;
+	r_result->possible = report.possible_obligations;
+	r_result->complete = report.complete_obligations;
+	r_result->physical_returned = physical_returned;
+	r_result->request_serial = request->serial;
+	r_result->action_ordinal = multiple_actions ? UINT64_MAX : action_ordinal;
+	r_result->status = unknown ? output_poll_status(ERR_INVALID_DATA, "output_custody_unknown") : output_poll_status(OK, "");
+}
+} // namespace GDExtensionDeviceExit

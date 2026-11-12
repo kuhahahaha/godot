@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "component": "Live selected geometry custody through original Core group",
+  "base_commit": "2cbe2271ec",
+  "source_pins": {
+    "servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp": "801c9a8173292f7ed6943c84ba739ccaac31705bc1566686adfc95274a9d622a",
+    "servers/rendering/renderer_rd/storage_rd/mesh_storage.h": "4ae07d5c8fd8f898f4a1e35b94e74cdaa98c067ab906dd54bd8f5e9b86e7c877",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp": "9ed92b2c3ccea9922fc6f4c055036dee4b6c9c71afe39f50089e0ec0b51acedf",
+    "tests/core/extension/test_production_request.cpp": "8322ce6d6d1315d6d22058c4b0f562643c2fc20053d45f13dd417ab59338dd56",
+    "tests/servers/rendering/test_external_output_custody_bridge.h": "7c79370a8196a7d2390dfd7cfccaa20f3e84fc388f3c56f5b665481f65c3b2e5",
+    "tests/servers/rendering/test_external_output_owner_state.cpp": "e75c4b53fa1d2979888e5548ed7c8b937885b6e49da8f16ea1da1777287dacca"
+  },
+  "host_sha256": "fcacda63f2890080b7395805d1c89c3bbbc6ff36e564e47aead8ecce5a34e2ad",
+  "controlled_metadata_sha256": "0156baf22f683b86e850fab782accd55d851bf48349da6fd5de2966d9fd6cf44",
+  "results": {
+    "red": {
+      "path": "work/b4-live-geometry-20261106/targeted-red/RESULT.json",
+      "sha256": "f32cb402e99fb83d888584c9cf833c327c64c702f54291b3c99e2e38f0e20de1",
+      "exit": 1,
+      "test_cases": {
+        "successes": "0",
+        "failures": "3"
+      },
+      "asserts": {
+        "successes": "279",
+        "failures": "5"
+      },
+      "validation_pass": false
+    },
+    "green": {
+      "path": "work/b4-live-geometry-20261106/targeted-green/RESULT.json",
+      "sha256": "56b7e57f1e36766856894113db82c20b9f048281fb9ffdb2414e5f814701f1ba",
+      "exit": 0,
+      "test_cases": {
+        "successes": "3",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "647",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "full": {
+      "path": "work/b4-live-geometry-20261106/full/RESULT.json",
+      "sha256": "47330605ee3be96445f10fba526fec1f555daa93bc9dab3a4468d1e928fd9a78",
+      "exit": 0,
+      "test_cases": {
+        "successes": "2093",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "524482",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "native390": {
+      "path": "work/b4-live-geometry-20261106/native390/RESULT.json",
+      "sha256": "725da5f806cef067604f27ad9cfaf9e7cb154b693f9d428b13935546c0f52e6f",
+      "gpu_pass": true,
+      "checks": {
+        "one_result": true,
+        "not_timeout": true,
+        "no_fatal_or_exit_leaks": true,
+        "exact_expected_engine_errors": true,
+        "actual_metal_startup": true,
+        "native_and_outer_success": true,
+        "host_and_metadata_unchanged": true,
+        "source_unchanged": true
+      }
+    }
+  },
+  "verified_behavior": [
+    "Actual live Surface hold is captured into original charged Core group before metadata share return.",
+    "Cached selected geometry survives pointer clearing, move and real mesh detach with an untransferred COW neighbor.",
+    "Original OBSERVE reports actual borrowed_detached separately from physical_returned and only then finishes live wrapper.",
+    "Actual no-group-row capture rollback clears staged uses and preserves original physical/metadata custody.",
+    "Existing ordinary and Indexed144 NativeSurfaceHold cases ran in full suite."
+  ],
+  "limits": [
+    "CPU QuoteDriver component cases do not issue source admission or execute shaders.",
+    "Separate existing Metal native390 regression verifies normal runtime only.",
+    "No successful public create/seal, material pipeline preparation, generation directory or whole-release claim.",
+    "Pending/Unknown completion, owner clear without neighbor before group settlement and deliberately interposed capture-to-mark failure remain untested here.",
+    "Capture-to-mark must remain immediate on the original render thread."
+  ],
+  "independent_review": {
+    "path": "work/b4-live-geometry-20261106/FINAL_INDEPENDENT_REVIEW.md",
+    "sha256": "e2d509318d682706a2b57092c1df6c1f90f22330ae9cafa486026699b705565d",
+    "disposition": "accepted bounded component; no blocking finding; wider claims remain open"
+  }
+}

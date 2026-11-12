@@ -38,6 +38,7 @@
 
 #include <Metal/Metal.hpp>
 
+#include <atomic>
 #include <optional>
 #include <variant>
 
@@ -63,6 +64,10 @@ class API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0)) RenderingDeviceDriverMet
 	friend class MTL3::MDCommandBuffer;
 	friend class MTL4::MDCommandBuffer;
 	friend class MDUniformSet;
+#ifdef TESTS_ENABLED
+	friend class TestMetalCompletionAccess;
+	friend class TestQualificationMetalCallAccess;
+#endif
 
 	template <typename T>
 	using Result = std::variant<T, Error>;
@@ -76,6 +81,31 @@ public:
 #pragma mark - Generic
 
 protected:
+	struct CompletionRecord {
+		std::atomic<bool> completed = false;
+		std::atomic<bool> failed = false;
+		std::atomic<bool> retired = false;
+		std::atomic<int64_t> native_code = 0;
+		uint64_t serial = 0;
+		std::atomic<bool> fence_owned{ false };
+		uint32_t observers = 0;
+		NS::SharedPtr<MTL::CommandBuffer> command_buffer;
+	};
+
+	std::atomic<uint64_t> next_native_call_serial{ 1 };
+	uint64_t reserve_native_call_serials(uint32_t p_count);
+	static thread_local uint64_t active_native_serial;
+	static thread_local uint32_t active_native_serial_count;
+	Mutex completion_records_mutex;
+	LocalVector<CompletionRecord *> completion_records;
+	static thread_local LocalVector<CompletionRecord *> *active_completion_records;
+	static thread_local uint32_t *active_native_issue_count;
+	CompletionRecord *register_completion_record(MTL::CommandBuffer *p_command_buffer, uint64_t p_serial, bool p_collection_locked = false, bool p_independent_source = false);
+	bool completion_records_complete(const LocalVector<CompletionRecord *> &p_records) const;
+	bool completion_records_failed(const LocalVector<CompletionRecord *> &p_records, int64_t &r_native_code) const;
+	void retire_completion_records(const LocalVector<CompletionRecord *> &p_records);
+	void drain_completion_records();
+
 	RenderingContextDriverMetal *context_driver = nullptr;
 	RenderingContextDriver::Device context_device;
 	MTL::Device *device = nullptr;
@@ -111,6 +141,7 @@ protected:
 	// If this is not nullptr, there are pending copy operations.
 	NS::SharedPtr<MTL::CommandBuffer> copy_queue_command_buffer;
 	NS::SharedPtr<MTL::BlitCommandEncoder> copy_queue_blit_encoder;
+	CompletionRecord *copy_queue_completion_record = nullptr;
 	MetalBuffer copy_queue_buffer;
 	NS::UInteger copy_queue_buffer_offset = 0;
 
@@ -146,8 +177,8 @@ protected:
 		return copy_queue_blit_encoder.get();
 	}
 
-	void _copy_queue_copy_to_buffer(Span<uint8_t> p_src_data, MTL::Buffer *p_dst_buffer, uint64_t p_dst_offset = 0);
-	void _copy_queue_flush();
+	Error _copy_queue_copy_to_buffer(Span<uint8_t> p_src_data, MTL::Buffer *p_dst_buffer, uint64_t p_dst_offset = 0);
+	Error _copy_queue_flush(bool p_nonblocking = false);
 	Error _copy_queue_initialize();
 
 	NS::SharedPtr<MTL::CaptureScope> device_scope;
@@ -170,6 +201,13 @@ protected:
 	LocalVector<MTL::Texture *> imported_textures;
 
 public:
+	Error qualification_prepare_segment(QueueCallReport &r_report, bool p_nonblocking = true) override;
+	bool native_call_observation_supported() const override { return true; }
+	FencePollResult native_call_poll(uint64_t p_native_serial) override;
+	FencePollResult native_call_wait(uint64_t p_native_serial) override;
+	Error native_call_recycle(uint64_t p_native_serial) override;
+	Error native_call_retain(uint64_t p_native_serial) override;
+	Error native_call_release(uint64_t p_native_serial) override;
 	void encode_imported_resources(MTL::RenderCommandEncoder *p_enc);
 	void encode_imported_resources(MTL::ComputeCommandEncoder *p_enc);
 
@@ -207,6 +245,9 @@ public:
 
 public:
 	struct BufferInfo : MetalBuffer {
+		// Descriptor-visible bytes, excluding allocator padding and all other
+		// persistent frames. Dynamic size_bytes is a stride, not this extent.
+		uint64_t logical_size = 0;
 		_FORCE_INLINE_ bool is_dynamic() const { return _frame_idx != UINT32_MAX; }
 		_FORCE_INLINE_ uint32_t frame_index() const { return _frame_idx; }
 		_FORCE_INLINE_ void set_frame_index(uint32_t p_frame_index) { _frame_idx = p_frame_index; }
@@ -232,6 +273,7 @@ public:
 private:
 	// Returns true if the texture is a valid linear format.
 	bool is_valid_linear(const TextureFormat &p_format) const;
+	NS::SharedPtr<MTL::TextureDescriptor> _depth_allocation_descriptor(uint32_t p_width, uint32_t p_height) const;
 
 public:
 	struct TextureInfo : MetalTexture {
@@ -245,6 +287,7 @@ public:
 		bool imported = false;
 	};
 
+	Error depth_allocation_quote(uint32_t p_width, uint32_t p_height, DepthAllocationQuote &r_quote) override final;
 	virtual TextureID texture_create(const TextureFormat &p_format, const TextureView &p_view) override final;
 	virtual TextureID texture_create_from_extension(uint64_t p_native_texture, TextureType p_type, DataFormat p_format, uint32_t p_array_layers, bool p_depth_stencil, uint32_t p_mipmaps) override final;
 	virtual TextureID texture_create_shared(TextureID p_original_texture, const TextureView &p_view) override final;
@@ -365,6 +408,7 @@ private:
 
 public:
 	virtual ShaderID shader_create_from_container(const Ref<RenderingShaderContainer> &p_shader_container, const Vector<ImmutableSampler> &p_immutable_samplers) override final;
+	bool shader_retire_ready_nonblocking(ShaderID p_shader) const override;
 	virtual void shader_free(ShaderID p_shader) override final;
 	virtual void shader_destroy_modules(ShaderID p_shader) override final;
 	virtual const RenderingShaderContainerFormat &get_shader_container_format() const override final;
@@ -541,6 +585,7 @@ public:
 
 	virtual void begin_segment(uint32_t p_frame_index, uint32_t p_frames_drawn) override final;
 	virtual void end_segment() override final;
+	virtual Error end_segment_checked(bool p_nonblocking = false) override final;
 
 #pragma mark - Miscellaneous
 

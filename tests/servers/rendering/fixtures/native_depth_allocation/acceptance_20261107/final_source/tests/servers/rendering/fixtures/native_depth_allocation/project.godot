@@ -1,0 +1,5 @@
+config_version=5
+[application]
+config/name="Native depth allocation original Metal quote"
+[rendering]
+renderer/rendering_method="mobile"

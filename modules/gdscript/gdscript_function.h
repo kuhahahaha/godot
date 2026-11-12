@@ -43,6 +43,12 @@
 class GDScriptInstance;
 class GDScript;
 
+#ifdef TESTS_ENABLED
+namespace GDScriptTests {
+class TestGDScriptFunctionStateAccessor;
+}
+#endif
+
 class GDScriptDataType {
 public:
 	Vector<GDScriptDataType> container_element_types;
@@ -502,12 +508,29 @@ public:
 class GDScriptFunctionState : public RefCounted {
 	GDCLASS(GDScriptFunctionState, RefCounted);
 	friend class GDScriptFunction;
+	friend class GDScript;
+	friend class GDScriptInstance;
+#ifdef TESTS_ENABLED
+	friend class GDScriptTests::TestGDScriptFunctionStateAccessor;
+#endif
 	GDScriptFunction *function = nullptr;
+	enum ResumePhase : uint8_t {
+		RESUME_PENDING,
+		RESUME_RESERVING,
+		RESUME_RESERVED,
+		RESUME_CLEANED,
+	};
+	// Reservation is advanced under the language mutex before VM re-entry. A
+	// completion callback can synchronously observe RESERVED and cannot resume
+	// the same state a second time.
+	ResumePhase resume_phase = RESUME_PENDING;
 	GDScriptFunction::CallState state;
 	Variant _signal_callback(const Variant **p_args, int p_argcount, Callable::CallError &r_error);
 
 	SelfList<GDScriptFunctionState> scripts_list;
 	SelfList<GDScriptFunctionState> instances_list;
+	// Internal terminal transition; the two cancellation owners hold the language mutex.
+	void _cancel_pending();
 
 protected:
 	static void _bind_methods();

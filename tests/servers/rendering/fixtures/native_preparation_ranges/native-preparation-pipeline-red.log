@@ -1,0 +1,46 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_native_disposal.cpp:932:
+TEST CASE:  [RenderingDevice][NativeDisposal][CheckedPipelineCompatibility] original factories require exact framebuffer and pass before checked bind effects
+
+tests/servers/rendering/test_native_disposal.cpp:888: ERROR: CHECK( result.error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 0 == 31 )
+
+tests/servers/rendering/test_native_disposal.cpp:889: ERROR: CHECK( result.effect == RD::NativeAppendEffect::NoNewEffect ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_native_disposal.cpp:890: ERROR: CHECK_FALSE( result.draw_handle.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_native_disposal.cpp:893: ERROR: CHECK_FALSE( result.capture_complete ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_native_disposal.cpp:895: ERROR: CHECK( rd.draw_list.state.pipeline == previous_pipeline ) is NOT correct!
+  values: CHECK( RID(98784247809) == RID(0) )
+
+tests/servers/rendering/test_native_disposal.cpp:896: ERROR: CHECK( rd.draw_list.state.pipeline_shader == previous_shader ) is NOT correct!
+  values: CHECK( RID(77309411328) == RID(0) )
+
+tests/servers/rendering/test_native_disposal.cpp:888: ERROR: CHECK( result.error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 0 == 31 )
+
+tests/servers/rendering/test_native_disposal.cpp:889: ERROR: CHECK( result.effect == RD::NativeAppendEffect::NoNewEffect ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_native_disposal.cpp:890: ERROR: CHECK_FALSE( result.draw_handle.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_native_disposal.cpp:893: ERROR: CHECK_FALSE( result.capture_complete ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_native_disposal.cpp:895: ERROR: CHECK( rd.draw_list.state.pipeline == previous_pipeline ) is NOT correct!
+  values: CHECK( RID(103079215106) == RID(98784247809) )
+
+tests/servers/rendering/test_native_disposal.cpp:888: ERROR: CHECK( result.error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 0 == 31 )
+
+===============================================================================
+[doctest] test cases:   1 |  0 passed |  1 failed | 2190 skipped
+[doctest] assertions: 105 | 93 passed | 12 failed |
+[doctest] Status: FAILURE!

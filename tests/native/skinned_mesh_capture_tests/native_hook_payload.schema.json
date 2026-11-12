@@ -1,0 +1,118 @@
+{
+  "type": "object",
+  "required": [
+    "rid",
+    "allocation_serial",
+    "sequence",
+    "offset",
+    "size",
+    "range",
+    "kind",
+    "device",
+    "driver",
+    "source_rid",
+    "source_offset",
+    "session_serial_hint",
+    "source_allocation_serial",
+    "writable_usage",
+    "write_operation",
+    "content_version",
+    "operation_error",
+    "success",
+    "failed_prefix"
+  ],
+  "properties": {
+    "rid": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "allocation_serial": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "size": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "range": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "kind": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "device": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "driver": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "source_rid": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "source_offset": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "session_serial_hint": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "source_allocation_serial": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "writable_usage": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "write_operation": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "content_version": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "operation_error": {
+      "type": "integer",
+      "minimum": -2147483648,
+      "maximum": 2147483647
+    },
+    "success": {
+      "type": "boolean"
+    },
+    "failed_prefix": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false
+}

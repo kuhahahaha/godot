@@ -30,7 +30,9 @@
 
 #pragma once
 
-#include "core/math/math_defs.h" // real_t
+#include "core/math/math_funcs.h"
+#include "core/variant/dictionary.h"
+#include "core/variant/variant.h"
 #include "servers/rendering/rendering_server_enums.h"
 
 class RID;
@@ -43,6 +45,9 @@ template <typename T>
 class Vector;
 
 class RendererParticlesStorage {
+protected:
+	int screen_refresh_rate = 60;
+
 public:
 	virtual ~RendererParticlesStorage() {}
 
@@ -51,6 +56,35 @@ public:
 	virtual RID particles_allocate() = 0;
 	virtual void particles_initialize(RID p_rid) = 0;
 	virtual void particles_free(RID p_rid) = 0;
+
+	// Compatibility and Dummy have no native ExternalOutput implementation.
+	// These defaults never allocate a RID, token, or output resource.
+	virtual Dictionary particles_external_create(const Dictionary &p_config) {
+		Dictionary result;
+		result["error"] = ERR_UNAVAILABLE;
+		result["detail"] = StringName("backend_unsupported");
+		return result;
+	}
+	virtual Dictionary particles_external_acquire(RID p_particles, const Dictionary &p_request) {
+		Dictionary result;
+		result["error"] = ERR_UNAVAILABLE;
+		result["detail"] = StringName("backend_unsupported");
+		return result;
+	}
+	virtual Dictionary particles_external_seal(RID p_particles, const PackedByteArray &p_lease_token, const Dictionary &p_seal) {
+		Dictionary result;
+		result["error"] = ERR_UNAVAILABLE;
+		result["detail"] = StringName("backend_unsupported");
+		return result;
+	}
+	virtual Error particles_external_cancel(RID p_particles, const PackedByteArray &p_lease_token) { return ERR_UNAVAILABLE; }
+	virtual Error particles_external_withdraw(RID p_particles, const PackedByteArray &p_generation) { return ERR_UNAVAILABLE; }
+	virtual Dictionary particles_external_poll(RID p_particles, const PackedByteArray &p_generation) {
+		Dictionary result;
+		result["error"] = ERR_UNAVAILABLE;
+		result["detail"] = StringName("backend_unsupported");
+		return result;
+	}
 
 	virtual void particles_set_mode(RID p_particles, RSE::ParticlesMode p_mode) = 0;
 
@@ -71,6 +105,13 @@ public:
 	virtual void particles_set_process_material(RID p_particles, RID p_material) = 0;
 	virtual RID particles_get_process_material(RID p_particles) const = 0;
 	virtual void particles_set_fixed_fps(RID p_particles, int p_fps) = 0;
+	// Called on the rendering thread with the main-thread display snapshot.
+	void particles_set_screen_refresh_rate(float p_hz) {
+		if (!Math::is_finite(p_hz) || p_hz < 1.0f || p_hz > 1000.0f) {
+			p_hz = 60.0f;
+		}
+		screen_refresh_rate = int(Math::round(p_hz));
+	}
 	virtual void particles_set_interpolate(RID p_particles, bool p_enable) = 0;
 	virtual void particles_set_fractional_delta(RID p_particles, bool p_enable) = 0;
 	virtual void particles_set_collision_base_size(RID p_particles, real_t p_size) = 0;
@@ -89,6 +130,9 @@ public:
 	virtual void particles_set_subemitter(RID p_particles, RID p_subemitter_particles) = 0;
 
 	virtual bool particles_is_inactive(RID p_particles) const = 0;
+	virtual bool particles_is_external(RID p_particles) const { return false; }
+	// Metadata-only routing from the original output profile, not a render grant.
+	virtual bool particles_is_external_scene_only(RID p_particles) const { return false; }
 
 	virtual void particles_set_draw_order(RID p_particles, RSE::ParticlesDrawOrder p_order) = 0;
 
@@ -107,6 +151,9 @@ public:
 	virtual RID particles_get_draw_pass_mesh(RID p_particles, int p_pass) const = 0;
 
 	virtual void particles_set_view_axis(RID p_particles, const Vector3 &p_axis, const Vector3 &p_up_axis) = 0;
+	// Returns the latest GPU particle storage snapshot as raw bytes. This is a
+	// synchronous CPU readback for diagnostics and native consumers.
+	virtual Vector<uint8_t> particles_get_current_data(RID p_particles) const = 0;
 
 	virtual void particles_add_collision(RID p_particles, RID p_particles_collision_instance) = 0;
 	virtual void particles_remove_collision(RID p_particles, RID p_particles_collision_instance) = 0;

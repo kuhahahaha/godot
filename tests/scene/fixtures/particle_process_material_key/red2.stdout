@@ -1,0 +1,24 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/scene/test_particle_process_material.cpp:15:
+TEST CASE:  [ParticleProcessMaterial] shared 2D shader retires with the final material
+
+tests/scene/test_particle_process_material.cpp:37: ERROR: CHECK_FALSE( storage->owns_shader(shader) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+tests/scene/test_particle_process_material.cpp:40:
+TEST CASE:  [ParticleProcessMaterial] changing a shared variant retires each shader with its last user
+
+tests/scene/test_particle_process_material.cpp:62: ERROR: CHECK_FALSE( storage->owns_shader(changed_shader) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/scene/test_particle_process_material.cpp:65: ERROR: CHECK_FALSE( storage->owns_shader(shared_shader) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+[doctest] test cases:  2 |  0 passed | 2 failed | 2465 skipped
+[doctest] assertions: 18 | 15 passed | 3 failed |
+[doctest] Status: FAILURE!
+ERROR: 3 RID allocations of type 'N13RendererDummy15MaterialStorage11DummyShaderE' were leaked at exit.

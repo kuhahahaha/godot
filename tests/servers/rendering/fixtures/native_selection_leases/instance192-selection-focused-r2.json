@@ -1,0 +1,12 @@
+{
+  "argv": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--test-case=*[MaterialNativeHold]*,*[NativeSurfaceHold]*"
+  ],
+  "binary_bytes": 156895480,
+  "binary_sha256": "315aacf6eab040a516feed4ce29e052f6af9fd9a2bf0f3df29543b9cf3aec6fb",
+  "exit": 0,
+  "elapsed": 1.5227800409775227
+}

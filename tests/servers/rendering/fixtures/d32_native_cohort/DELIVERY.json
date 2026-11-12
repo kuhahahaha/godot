@@ -1,0 +1,299 @@
+{
+  "scope": "General native D32 sampling/depth-attachment, original raster lifecycle, copied RT18-20 and atomic V4 same-ticket depth-to-compute/readback substrate; not full particle production output or Scene E18 provider qualification",
+  "base_commit": "4d3f4c109920cc926c8ccb4439d9d80dc288a590",
+  "sources": [
+    {
+      "path": "core/extension/gdextension_interface.json",
+      "sha256": "737a088b381352bc6e1ce86885481b5d1a681ff93032964c0e64d1f83d389650"
+    },
+    {
+      "path": "core/extension/gdextension_library_exit_guard.h",
+      "sha256": "0fb607204726f36790bf6ebcd0723aa24725eb18034955e3c732f1a1b777de6f"
+    },
+    {
+      "path": "core/extension/gdextension_qualification.cpp",
+      "sha256": "71845f5fde77a3060b87b0c7258463fc9699baff5bae2650bea5bebf5e41960a"
+    },
+    {
+      "path": "core/extension/gdextension_qualification_depth.h",
+      "sha256": "b7306c9310465c0af3dff7bf4ddcf52f51d2105dba030f5e58e0d5f6cdfbebcc"
+    },
+    {
+      "path": "core/extension/gdextension_qualification_internal.h",
+      "sha256": "e2a43fbc9a56123447ffd99377fd6b55b1e92a3136dc92de841827a2b3238ea8"
+    },
+    {
+      "path": "core/extension/gdextension_qualification_raster.cpp",
+      "sha256": "cd46f46a3eeab027b56169f112b1e59e1827154dcb8042fa151b2f2fb5b28812"
+    },
+    {
+      "path": "core/extension/gdextension_qualification_rd.cpp",
+      "sha256": "7110f8e37961aa27a9d959cf78470c2696d5da6bbb28090d951afb31f263bda7"
+    },
+    {
+      "path": "core/extension/gdextension_qualification_rt.cpp",
+      "sha256": "e33e9ea9ab431e912597695740074f8d3a186c88e933c1601f76fdc73a832d34"
+    },
+    {
+      "path": "core/extension/gdextension_qualification_rt_depth.h",
+      "sha256": "2f9cc859bc098e5e9a4cf72346c63938c771b83b015e410122fa2543f04b85b0"
+    },
+    {
+      "path": "core/extension/gdextension_qualification_ticket.cpp",
+      "sha256": "629b8824f345e88e6eb86614c55d5687729933684b6f8f78136ca55db81cee91"
+    },
+    {
+      "path": "core/extension/gdextension_qualification_typed.cpp",
+      "sha256": "b93e23f1ad376713346429abc01fd7d91aff4fb76328a372364b04ee23c43616"
+    },
+    {
+      "path": "servers/rendering/rendering_device.cpp",
+      "sha256": "25e1d9437d008f44c085a04c5cd00d5ec917316afbf7aad65da8c0259e77e171"
+    },
+    {
+      "path": "servers/rendering/rendering_device.h",
+      "sha256": "d1a5a8dae7e47568738fc8073f9e589c18204c1206622bc0d7b809d05bd8cad9"
+    },
+    {
+      "path": "servers/rendering/rendering_device_graph.cpp",
+      "sha256": "b1b813b8eb60fd07678a93de0fba0994baf08c1edfcc2ad7dc7065e5d5e8927e"
+    },
+    {
+      "path": "servers/rendering/rendering_device_graph.h",
+      "sha256": "da9ccf69a946911279ae9f2262c169c9814e4dafe34d436bfb4847bf4d533bcb"
+    },
+    {
+      "path": "tests/core/extension/test_gdextension_qualification_depth.cpp",
+      "sha256": "a446cfbc8850ff6297645d617b2389616f90938d30ec863b98ccf19450ca0fbb"
+    },
+    {
+      "path": "tests/servers/rendering/test_qualification_ticket.cpp",
+      "sha256": "04bb9ee8a344683cbd7740b63c1f63412e52686edf673d037f55c722a65ec868"
+    },
+    {
+      "path": "tests/servers/rendering/test_rendering_device_graph_handles.cpp",
+      "sha256": "fe512ddc935ffb8d49a5f8577091d93493ec7b89be25e4bf0d83fa0c760dfa11"
+    }
+  ],
+  "assembled_freeze_sha256": "8e1d06bddcdd442e865e299deb5f05c2777d1a60a73d5a87938f3dec4b5b3a6f",
+  "hidden_fact_fix_sha256": "d80083d69556147a9f36eadf25344aa3c97a4a829b4c8907c3153f8a961de1e2",
+  "engine": {
+    "host_sha256": "68ceddd88234a8b36142f92254bf726bfb36a119c4d2aa305af93fb023692df5",
+    "results": {
+      "d32_graph": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "47",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "1",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "qualification": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "45778",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "137",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 776
+      },
+      "closure": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "2790",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "1",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "request": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "15134",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "22",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "material": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "983",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "3",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "mesh": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "371",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "2",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "public": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "875",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "2",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "full": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "520906",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "2077",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 571,
+        "stderr_bytes": 4017
+      }
+    }
+  },
+  "build_command": [
+    "/Users/macbookair/.local/bin/scons",
+    "-Q",
+    "tests=yes",
+    "platform=macos",
+    "target=editor",
+    "module_particles_runtime_tests_enabled=yes",
+    "-j3"
+  ],
+  "build_exit": 0,
+  "strict_assembly": {
+    "checks": 38,
+    "failures": 0
+  },
+  "gpu": {
+    "status": "actual mainRD Metal native substrate accepted; process0/all checks true/exact inputs unchanged",
+    "raw": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-d32-combined-runtime-20261105/native",
+    "native_generation": "actual mainRD Metal, Apple M3 Pro; exit0",
+    "actual_record_red": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-d32-combined-runtime-20261105/native/actual_red_missing_begin",
+      "exit": 201,
+      "cause": "valid begin graph fact incorrectly rejected when frame enrollment synchronously appended genuine hidden native facts"
+    },
+    "actual_green_process_exit": 0,
+    "history_reproduction": {
+      "candidate_git_head": "6a26262c9aacba6012824edc26fd44c67e518104",
+      "original_source_head_pin": "missing from original control; candidate selected via artifact reproduction, not asserted exact original source commit",
+      "owner_object_count": 43,
+      "all_compiles_exit_zero": true,
+      "all_object_and_dependency_hashes_rechecked": true,
+      "offline_original_export_exit": 0,
+      "unit_json_exact_equal_original": true,
+      "unit_digest": "848e31c6359945c13dc9785ae3d78a664b18fdadf2cbc976562c3f029eb8e309",
+      "recipe_digest": "f6b54917378b341889d182550ddbedf817eb26f316d474235b7be25a8dbd4419",
+      "profile_digest": "d6f2e7229bec8bc17d56e7c561571f78830bc4113fd30bc0ae830a58ac3c0ce0",
+      "source_comparison": {
+        "capture.comp": {
+          "sha256": "4a6f75a4414fef00f0c30a1da3c443d8603484e082524efee396b549c4275a05",
+          "exact_original_bytes": true
+        },
+        "body.comp": {
+          "sha256": "6c9c4f7481bacb9ff5d3c74e05cb27c8b107b098fbefab8b9941aee135508546",
+          "exact_original_bytes": true
+        }
+      },
+      "sdk_pair": "CurrentSDK archive as separately recorded; not original frozenSDK archive",
+      "runtime_acceptance": "Pending root rebuilt DSO and original SceneReady/unit/SPV/reflection gates"
+    },
+    "sdk_pair": {
+      "sdk_root": "/Users/macbookair/Documents/Work/ANGE/godot-cpp",
+      "head": "b12a6c6431fef44e1098a9e3c9ac05ac3c7461f0",
+      "dirty": "",
+      "archive": "/Users/macbookair/Documents/Work/ANGE/godot-cpp/bin/libgodot-cpp.macos.template_debug.arm64.a",
+      "archive_sha256": "34f77beb94df3872ef112f155da1d4b66b4783c1917dc52146107dfc00804809",
+      "old_archive_sha256": "c9c7db4288399d9587ef8d615ea0fccea9c70596638d86bac0bc60cca17c30a3",
+      "old_match": false,
+      "claim": "Current SDK archive input, source tree observational context only; no source-matched archive rebuild claimed. Original guarded lifecycle/mainRD/factory/source/reflection runtime checks remain mandatory."
+    },
+    "final_checks": {
+      "exit": true,
+      "real_metal": true,
+      "actual_retained_unit": true,
+      "both_original_interfaces": true,
+      "qrt_original_returns": true,
+      "completion": true,
+      "actual_fact_fields": true,
+      "physical_unit_returns": true,
+      "physical_storage_returns": true,
+      "d32_clear_and_scissors": true,
+      "d32_native_refusals": true,
+      "d32_three_real_physical": true,
+      "d32_exact_owned_words": true,
+      "bridge_close": true,
+      "real_binding_terminal": true,
+      "sdk_user_levels": true,
+      "manager_close": true,
+      "image_finalizer_before_return": true,
+      "clean": true,
+      "owned_readback_present": true,
+      "original_exact_readback": true,
+      "request_issued": true
+    },
+    "results_sha256": "323b5f6ad4eea4a0b0e902a4561afcd949ccf04ac9024861772c571684effef9",
+    "input_manifest_sha256": "885f67c0960a80449d21d2b95b267a0daf8a913d0e371e7007bfef72e4b5938f",
+    "runner_classifier_patch_sha256": "d459ace21185866f6d2c262cc2e9b61df49b1d9f98bfa30a62668dfcfc8fba63"
+  },
+  "limits": [
+    "No Runtime logical/source-window authority or FinalOutputSourceRef issuer inferred",
+    "No full typed-frame -> seven output buffers/Instance192 -> same-view Host consumer acceptance",
+    "No specialized Scene E18/PASS_MODE_SHADOW/HeightCaptureCheckedSink acceptance",
+    "Real GPU NativePrefixOnly/Unknown fault injection not performed; reducer inputs remain explicit synthetic tests",
+    "Original historical owner source head was not pinned; candidate reproduces exact original unit JSON/GLSL, not asserted original provenance",
+    "Existing full/qualification negative-test stderr and linker OS-version warnings retained"
+  ]
+}

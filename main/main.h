@@ -36,6 +36,10 @@
 template <typename T>
 class Vector;
 
+namespace GDExtensionDeviceExit {
+enum class CloseRoute;
+}
+
 class Main {
 	enum CLIOptionAvailability {
 		CLI_OPTION_AVAILABILITY_EDITOR,
@@ -46,6 +50,8 @@ class Main {
 	};
 
 	static void print_header(bool p_rich);
+	static void cleanup_setup2_extension_failure();
+	static void cleanup_setup_failure(Error p_error, const char *p_execpath = nullptr);
 	static void print_help_copyright(const char *p_notice);
 	static void print_help_title(const char *p_title);
 	static void print_help_option(const char *p_option, const char *p_description, CLIOptionAvailability p_availability = CLI_OPTION_AVAILABILITY_TEMPLATE_RELEASE);
@@ -82,6 +88,8 @@ public:
 
 	static bool is_iterating();
 
+	// Ordinary outer owner continuation before any platform pre-finalize seal.
+	static Error prepare_extensions_for_natural_close(GDExtensionDeviceExit::CloseRoute p_route);
 	static void cleanup(bool p_force = false);
 };
 

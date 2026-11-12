@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "component": "Original material shader mutations invalidate selected native generation",
+  "base_commit": "0739f328a8",
+  "source_pins": {
+    "servers/rendering/renderer_rd/storage_rd/material_storage.cpp": "b5a59603ce211c95b08ab8e1fa53d0e2b017667ec6ba0da0b7b6658d099cdd84",
+    "servers/rendering/renderer_rd/storage_rd/material_storage.h": "ca5f6b725611c64724bcdb79f8da86cf1ab4cc336930daacd3a88abb8a7e644e",
+    "tests/servers/rendering/test_material_storage_native_hold.cpp": "24ff30059dd66268509cd48d292aa872803e84293348479295cb95edb7cc581b"
+  },
+  "host_sha256": "02a71894580c2af3b4ea315f567dfb5b8e4f39ca1bb41b4767a7c7dd0ef61ed3",
+  "controlled_metadata_sha256": "10b3683b249ba1518a8db6a35476e59ce5b6cf1752310453c670efb3ca114489",
+  "results": {
+    "red": {
+      "path": "work/b4-material-generation-20261106/targeted-red/RESULT.json",
+      "sha256": "6b3a8a6c0532c7b61e920168c5dad3ecad8b6c5ddbb7c1e9aec8ede8c938e438",
+      "exit": 1,
+      "test_cases": {
+        "successes": "3",
+        "failures": "1"
+      },
+      "asserts": {
+        "successes": "1118",
+        "failures": "6"
+      },
+      "validation_pass": false
+    },
+    "green": {
+      "path": "work/b4-material-generation-20261106/targeted-green/RESULT.json",
+      "sha256": "1ddfbffb1dfc58066735d3bac1b7533583fe131917fc7db8844ac17e5e93f89b",
+      "exit": 0,
+      "test_cases": {
+        "successes": "4",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "1122",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "full": {
+      "path": "work/b4-material-generation-20261106/full/RESULT.json",
+      "sha256": "80190d494294fd71cdd868aeadc07d1dd34e7f23ee61f44c206633f5429aceeb",
+      "exit": 0,
+      "test_cases": {
+        "successes": "2094",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "524621",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "native390": {
+      "path": "work/b4-material-generation-20261106/native390/RESULT.json",
+      "sha256": "2b51418a7b115889a40eb3dba7cf70eca1bdbf66d3d9eec442cf36528bbe7cf7",
+      "gpu_pass": true,
+      "checks": {
+        "one_result": true,
+        "not_timeout": true,
+        "no_fatal_or_exit_leaks": true,
+        "exact_expected_engine_errors": true,
+        "actual_metal_startup": true,
+        "native_and_outer_success": true,
+        "host_and_metadata_unchanged": true,
+        "source_unchanged": true
+      }
+    }
+  },
+  "red_scope": "Actual expected-generation guard and identical final tests; both shader owner mutation traversals retain original no-increment behavior. Six target assertions fail while prior three cases pass.",
+  "green_scope": "Only two existing owner traversals advance saturating generation and synchronize MaterialData; no tests or acquire guard changed after RED.",
+  "verified_behavior": [
+    "Shader code and default texture changes invalidate prior selected Material generation.",
+    "Reselected current generation acquires actual active native hold and immutable UBO; unconditional rejection cannot pass.",
+    "Held mutation refusal preserves stored shader code/default selection and material generation.",
+    "Both actual shader mutations saturate at UINT64_MAX; selected MAX generation refuses before native acquisition."
+  ],
+  "limits": [
+    "Existing CPU driver fixture supplies native shader metadata; no GLSL compilation or changed native shader program is proven.",
+    "No public source admission, full material pipeline preparation caller or created pipeline failure-prefix retirement.",
+    "Default expected_generation zero preserves existing unselected callers.",
+    "Separate actual Metal native390 normal-runtime regression passed; it does not qualify this generation test as GPU evidence."
+  ],
+  "independent_review": {
+    "path": "work/b4-material-generation-20261106/FINAL_INDEPENDENT_REVIEW.md",
+    "sha256": "217592a97e9d8e8a99b56cd1bd7fa1db8909aa43f020b3dfff64f5d5cd4f1afe",
+    "checks_passed": 80,
+    "checks_total": 80,
+    "disposition": "accepted bounded component; no blocker"
+  }
+}

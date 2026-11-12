@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--test-case=*[OutputPollAggregation]*"
+  ],
+  "binary_bytes": 156862392,
+  "binary_sha256": "3ee69d04801cabeaf040721c2c2179606a34edb9e955a0bec1696588b8e2d2f3",
+  "exit": 1,
+  "elapsed": 1.4378064160700887,
+  "scope": "CPU/dummy only; acceptance requires diagnostic and assertion inspection"
+}

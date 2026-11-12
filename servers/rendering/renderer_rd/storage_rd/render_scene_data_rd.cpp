@@ -71,11 +71,10 @@ RID RenderSceneDataRD::create_uniform_buffer() {
 	return RD::get_singleton()->uniform_buffer_create(sizeof(UBODATA));
 }
 
-void RenderSceneDataRD::update_ubo(RID p_uniform_buffer, RSE::ViewportDebugDraw p_debug_mode, RID p_env, RID p_reflection_probe_instance, RID p_camera_attributes, bool p_pancake_shadows, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, float p_luminance_multiplier, bool p_opaque_render_buffers, bool p_apply_alpha_multiplier) {
+void RenderSceneDataRD::update_ubo(RID p_uniform_buffer, RSE::ViewportDebugDraw p_debug_mode, RID p_env, RID p_reflection_probe_instance, RID p_camera_attributes, bool p_pancake_shadows, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, float p_luminance_multiplier, bool p_opaque_render_buffers, bool p_apply_alpha_multiplier, Error *p_error) {
 	RendererSceneRenderRD *render_scene_render = RendererSceneRenderRD::get_singleton();
 
-	UBODATA ubo_data;
-	memset(&ubo_data, 0, sizeof(UBODATA));
+	UBODATA ubo_data{};
 
 	// just for easy access..
 	UBO &ubo = ubo_data.ubo;
@@ -323,9 +322,50 @@ void RenderSceneDataRD::update_ubo(RID p_uniform_buffer, RSE::ViewportDebugDraw 
 	}
 
 	uniform_buffer = p_uniform_buffer;
-	RD::get_singleton()->buffer_update(uniform_buffer, 0, sizeof(UBODATA), &ubo);
+	const Error error = RD::get_singleton()->buffer_update(uniform_buffer, 0, sizeof(UBODATA), &ubo);
+	if (p_error && *p_error == OK) {
+		*p_error = error;
+	}
 }
 
 RID RenderSceneDataRD::get_uniform_buffer() const {
 	return uniform_buffer;
+}
+
+Error RenderSceneDataRD::build_native_material_fixed_scene_data(Vector<uint8_t> &r_bytes) {
+#ifdef REAL_T_IS_DOUBLE
+	return ERR_UNAVAILABLE; // Instance192 original shader explicitly refuses this path.
+#else
+	UBODATA data{};
+	Projection camera;
+	camera.set_orthogonal(-1.0, 1.0, -1.0, 1.0, 1.0, 3.0);
+	Projection correction;
+	correction.set_depth_correction(false);
+	const Projection projection = correction * camera;
+	const Transform3D identity;
+	auto &ubo = data.ubo;
+	RendererRD::MaterialStorage::store_camera(projection, ubo.projection_matrix);
+	RendererRD::MaterialStorage::store_camera(projection.inverse(), ubo.inv_projection_matrix);
+	RendererRD::MaterialStorage::store_transform_transposed_3x4(identity, ubo.inv_view_matrix);
+	RendererRD::MaterialStorage::store_transform_transposed_3x4(identity, ubo.view_matrix);
+	RendererRD::MaterialStorage::store_camera(projection, ubo.projection_matrix_view[0]);
+	RendererRD::MaterialStorage::store_camera(projection.inverse(), ubo.inv_projection_matrix_view[0]);
+	RendererRD::MaterialStorage::store_transform(identity, ubo.main_cam_inv_view_matrix);
+	RendererRD::MaterialStorage::store_transform_transposed_3x4(identity, ubo.radiance_inverse_xform);
+	ubo.viewport_size[0] = ubo.viewport_size[1] = 32.0f;
+	ubo.screen_pixel_size[0] = ubo.screen_pixel_size[1] = 1.0f / 32.0f;
+	ubo.z_near = 1.0f;
+	ubo.z_far = 3.0f;
+	ubo.camera_visible_layers = 1;
+	ubo.pass_alpha_multiplier = 1.0f;
+	ubo.emissive_exposure_normalization = 1.0f;
+	ubo.IBL_exposure_normalization = 1.0f;
+	ubo.height_fog_view[0] = 1.0f; // Original orthographic flag, no fog enabled.
+	data.prev_ubo = ubo; // Reset, no historical scene input.
+	Vector<uint8_t> bytes;
+	if (bytes.resize(sizeof(data)) != OK) { return ERR_OUT_OF_MEMORY; }
+	memcpy(bytes.ptrw(), &data, sizeof(data));
+	r_bytes = bytes;
+	return OK;
+#endif
 }

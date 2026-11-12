@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "component": "Four-operation shared typed output bodies and payload header",
+  "base_commit": "36964570cd8517e6a9c94e909bef6c540d2a1e03",
+  "source_pins": {
+    "core/extension/gdextension_external_output_typed.h": "f1fe23eebc6b7b3806df5c7205f0eda09cbac803b76bd6365585d86e87f662ea",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.h": "a9dd3233e8d5f972b214936b9468d3f47005cc955efe5e725bf95da57f313711",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage_external.cpp": "0d91551a0e11c02c757142a30005618e3036963d117dc3598597bc8be0816be3"
+  },
+  "header_sha256": "f1fe23eebc6b7b3806df5c7205f0eda09cbac803b76bd6365585d86e87f662ea",
+  "host_sha256": "16594576de51447191f95adce9e77af4d50ee4056f97361d1f404439b31625bc",
+  "results": {
+    "build": {
+      "path": "work/b4-typed-output-four-20261106/BUILD_RESULT.json",
+      "sha256": "06acb5055c07466c872497048a660918d8f639cdefd7f3a06dd597a2ed8d2e47"
+    },
+    "full": {
+      "path": "work/b4-typed-output-four-20261106/full/RESULT.json",
+      "sha256": "d56c69676094ce855b76fec50f5ca89447490c4f2465baf72113962a21a352fc"
+    },
+    "layout": {
+      "path": "work/b4-typed-output-four-20261106/LAYOUT.json",
+      "sha256": "7147143d6a2df0c59c9535cfc566b17c9274159038a8771a4a0845980b78d75e"
+    },
+    "style": {
+      "path": "work/b4-typed-output-four-20261106/STYLE.json",
+      "sha256": "d32ffd465faac4a42378f6c218f5a253a4ad3e97426b3f2594374b8212ee76b7"
+    }
+  },
+  "full_suite": {
+    "cases": 2089,
+    "assertions": 523709,
+    "failures": 0
+  },
+  "independent_review": {
+    "path": "/tmp/native-output-typed-interface-independent-review/REVIEW.md",
+    "sha256": "e37688ef8d2fa585c551f083c072f2e879e926c9aff0fea91e674e0b492b4da9",
+    "required_fix": "R1 finite/range checks before real_t cast; applied and independently reconciled"
+  },
+  "r1_standalone": {
+    "path": "/tmp/native-output-typed-body-r1/VERIFICATION.json",
+    "sha256": "7bfa4a750e1f8e8aaf1933fbda63bb855abe81dad609633201c9c45371aeaaa5",
+    "float_checks": 59,
+    "double_checks": 59,
+    "scope": "standalone conversion only, not Godot typed invocation"
+  },
+  "limits": [
+    "No external proc registration or protected Host/attachment forwarding yet.",
+    "No successful create/seal issuer; both preserve original Unavailable.",
+    "Acquire/poll result ABI and successful projection remain pending.",
+    "No direct runtime test of typed class invocation or actual external source admission.",
+    "No new native GPU run for this body-only component; preceding bridge native390 evidence is a distinct host/component.",
+    "Pointer-bearing header spans use native ABI and require original charged retained backing."
+  ]
+}

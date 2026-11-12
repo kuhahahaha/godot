@@ -1,0 +1,12 @@
+{
+  "base_head": "530c7bd9ef44436d30fe45e2905cb85c3e565e79",
+  "files": {
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.h": "25cde7aa6888e73d482fec101897dbb31a8b902958b0b584953646a786aca6b2",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp": "102a0ee51d6f87c421f1656c4e7be00de7cdca18ed22f264f42b38194bd28e1b",
+    "tests/core/extension/test_production_request.cpp": "4ae5460b22a820430db903932063d5e09b5a36f79380259df6dfed7742a4e87c",
+    "tests/servers/rendering/test_external_output_owner_state.cpp": "45d80c6ed410d2dc2b668dd99a60a47e8c556c07ee8938f7378464953428be95",
+    "tests/servers/rendering/test_external_output_custody_bridge.h": "a8740e43fcd3e3404f85b2e826a58db26e31afea1be2d756798881f3afe5c127"
+  },
+  "build_run": false,
+  "tests_run": false
+}

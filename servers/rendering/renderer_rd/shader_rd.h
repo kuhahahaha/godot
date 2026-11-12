@@ -38,8 +38,19 @@
 #include "servers/rendering/rendering_server_types.h"
 
 class StringBuilder;
+#ifdef TESTS_ENABLED
+namespace RendererRD {
+class TestMaterialStorageNativeHoldAccess;
+}
+#endif
 
 class ShaderRD {
+#ifdef TESTS_ENABLED
+	friend class TestShaderCompilePolicyAccess;
+	friend class RendererRD::TestMaterialStorageNativeHoldAccess;
+#endif
+	static void _rollback_cache_load(Vector<RID> &r_variants, Vector<Vector<uint8_t>> &r_variant_data, const LocalVector<int> &p_group_indices, const LocalVector<int> &p_loaded_indices, void (*p_free_shader)(RID, void *), void *p_context);
+
 public:
 	struct VariantDefine {
 		int group = 0;
@@ -228,6 +239,10 @@ public:
 	}
 
 	bool version_is_valid(RID p_version);
+	// Read-only render-thread lookup; outputs are unchanged on refusal.
+	Error version_get_native_shader_if_ready(RID p_version, int p_variant, RID &r_shader, uint64_t &r_input_mask);
+	bool version_native_shader_is_ready(RID p_version, RID p_shader);
+	bool version_native_is_held(RID p_version);
 
 	bool version_free(RID p_version);
 

@@ -1,0 +1,39 @@
+2026-11-06 original K03 relay increment — source ready for parent build/review
+Worktree: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104
+Started against source 5d56fc5de3; shared tree contains concurrent parent/other changes.
+
+Authority: original K03 FR_particle_device_exit_PROTOCOL §§6,8 and K06_SEAM §4. Parent explicitly requested original relay dependency implementation, then scoped this increment to internal original-owner relay without RD wrapping. No new public/generated ABI, owner grant, second Registry, raw callback registration, or physical context is introduced.
+
+Files changed by this agent only:
+- core/extension/gdextension_interface.cpp
+- core/extension/gdextension_library_exit_guard.h
+- core/extension/gdextension_library_exit_guard.cpp
+- tests/core/object/test_device_exit_typed_abi.cpp
+
+Implemented internal capability:
+1. register_normal_relay accepts only direct original CallableCustomExtension already enrolled with its actual opt-in RecordRef and CleanupAction; arbitrary legacy, ObjectID or bind/unbind wrapper is rejected. Enrollment reads core metadata only and never executes is_valid/hash/DSO code. Nonempty output is refused unchanged.
+2. A bounded 4096-cell array inside the original Registry retains exactly one Callable reference per relay. Serial uses the existing nonwrapping Registry serial issuer and explicit internal NormalRelayToken domain (instance + serial). This is not the planned exported RelayToken ABI.
+3. call_normal_relay holds a core delivery reservation across the original Callable call path. It never copies the DSO Callable onto a foreign delivery thread. Original Callable CallbackScope still performs actual atomic normal gate admission. The snapshot's active_deliveries counts conservative delivery reservations, not a new source of authenticated DSO entry facts.
+4. cancel stops new relay deliveries; already reserved deliveries may return. release_holder cancels and requires the exact original Callable destruction thread. Active delivery/reentrant release returns Busy; wrong thread returns Unauthorized without cancellation. Actual destruction happens outside Registry mutex through the unchanged original CleanupScope/free_func path.
+5. cell_released and holder_closed are separate observations. holder_closed is set only at unlink_holder_locked for matching original record slot + library generation + HolderRetirement serial, after the real return frame retirement. A Registry copy release cannot acknowledge an external queue copy. Non-relay holders skip relay scanning.
+6. forget refuses live/active/releasing cells. Empty closed observations may be reclaimed when a later engine cycle invalidates the old token domain; no nonempty cell is destroyed under the Registry mutex.
+
+New test (existing registered TU, no force-link changes needed):
+[DeviceExit][TypedABI] original normal relay observes exact Callable retirement
+Four subcases:
+- cancellation and one registry copy do not acknowledge queued external holder
+- release inside admitted relay waits for actual entry return
+- holder acknowledgment does not borrow another Callable in the same generation
+- original generation close suppresses delivery before explicit cancellation
+Common checks: empty/transformed callback refusal, no DSO validation/hash at registration, nonempty output preservation, foreign/stale token refusal, wrong-thread release leaves routing open, original callback positive delivery, live forget refused, free callback cannot observe its own holder retired, exact final-free count and eventual original preflight/deinit/close.
+
+Self-review: read entire own diff against original callp/CallbackScope/CleanupScope/HolderRetirement flow; kept DSO callbacks/destructors outside mutex, protected callback storage from concurrent release through active_deliveries, preserved existing source-owned final-return acknowledgment, and added cycle tombstone reclamation. clang-format applied to owned files. git diff --check passed.
+
+Not run by this agent: compilation, engine tests, GPU tests, race stress, exhaustion tests. Parent requested no builds/commits and owns shared build 28575 and independent review. No commit made.
+
+Remaining boundaries / review attention:
+- This is the real internal original-owner dependency; no production queue or RD async readback adapter calls it yet. Do not claim the full §6 mailbox/queue closure or K06 phase delivery implemented.
+- No relay_publish request-id deduplication API, mailbox, owned byte payload, or public phase POD ABI has been adopted here. Core call signature is internal Callable/Variant only.
+- Actual RD enqueue/consumer/release-thread mapping, no-next-draw owner pump and original request-bound R02 physical frame must be integrated separately and precisely. No fabricated physical frame or K06 success assertion.
+- Direct enrolled Callables only; ObjectID targets, bound Variants, raw DSO callback wrappers and other queue owners remain outside this increment.
+- Bounded scan complexity is O(4096) per relay operation and only relay-observed holder retirement; nonrelay holder retirement avoids this scan. Concurrent release/delivery is guarded, but threaded stress and capacity exhaustion remain unexecuted.

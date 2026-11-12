@@ -1,0 +1,13 @@
+{
+  "base_commit": "e9f596d726a546f72bbc0031b172244e287b4a66",
+  "sources": [
+    {
+      "path": "core/extension/gdextension_production_action.cpp",
+      "sha256": "8b6abaf1340f0cd321848b3cf0cd70ad7f37bdbbffd636f7cac50ae39d017886"
+    },
+    {
+      "path": "tests/core/extension/test_production_request.cpp",
+      "sha256": "117626be8e21cfdaf60c8b3fd8c0581d0ac5fa22b720a30c7a8c57674253b93d"
+    }
+  ]
+}

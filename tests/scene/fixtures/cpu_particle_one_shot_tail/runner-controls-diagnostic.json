@@ -1,0 +1,38 @@
+[
+  {
+    "case": "missing",
+    "runner_exit": 1,
+    "errors": [
+      "Engine timed out",
+      "Expected exactly one result marker, found 0"
+    ],
+    "timed_out": true
+  },
+  {
+    "case": "duplicate",
+    "runner_exit": 1,
+    "errors": [
+      "Engine timed out",
+      "Expected exactly one result marker, found 0"
+    ],
+    "timed_out": true
+  },
+  {
+    "case": "exit-mismatch",
+    "runner_exit": 1,
+    "errors": [
+      "Engine timed out",
+      "Expected exactly one result marker, found 0"
+    ],
+    "timed_out": true
+  },
+  {
+    "case": "timeout",
+    "runner_exit": 1,
+    "errors": [
+      "Engine timed out",
+      "Expected exactly one result marker, found 0"
+    ],
+    "timed_out": true
+  }
+]

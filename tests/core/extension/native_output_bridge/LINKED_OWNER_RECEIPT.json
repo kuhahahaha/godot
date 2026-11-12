@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "component": "Original linked native owner metadata runtime regression",
+  "source_pins": {
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.h": "a816fea6ac5950f7fa2316338189083558bf9569867d115e60236e7d4a8ff39b",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp": "bec9426d4589d59259fa7d7dffec52713ce80c713b22633b41f7088632daa2cd",
+    "servers/rendering/renderer_rd/storage_rd/external_output_owner.h": "c4e7b40bfe9e6a7bcd3f3e308fa039bffdb26532e7df103986cab70302afb39f",
+    "tests/servers/rendering/test_external_output_custody_bridge.h": "4eca78cff0c8fda182929c0ce9b4f0e6162526e71287fac6751324d0a7423dc9",
+    "tests/servers/rendering/test_external_output_owner_state.cpp": "6bb8de01cd4034761993831ff76a2d90ef9813347e95b790ead12a5693d93379",
+    "tests/core/extension/test_production_request.cpp": "a6d9c2eb3fc03b5273b03502eefb0c94bd541e6c3c021905c856d7a7ca71664a",
+    "core/extension/gdextension_production_request.h": "6feb89425f98a45d7626b7c2b6a85125feef60982379c23996407e640099e9b2"
+  },
+  "host_sha256": "0eb5214193bdb389c7386279a9666f7406a53fa58dd7eb506fe948bee9e32b1c",
+  "controlled_metadata_sha256": "058a8c8109cc6f867d303053b9c5aee76335304f30e88bb99bdef281934962b5",
+  "new_case": "[SceneTree][ProductionRequest][LinkedOwnerComponent] original OBSERVE traverses and unlinks two real roots within one-pass slices",
+  "results": {
+    "build": {
+      "path": "work/b4-linked-owner-test-20261106/BUILD_RESULT.json",
+      "sha256": "e22c583339bc2694563815e5cfeaa7471163362512c678ac0feb1d81ae1d6521",
+      "exit": 0
+    },
+    "targeted": {
+      "path": "work/b4-linked-owner-test-20261106/targeted/RESULT.json",
+      "sha256": "f43296888058c4c8db05c05f24ad563068ea06d52c013fa162f9ef4bb75fad7d",
+      "exit": 0,
+      "test_cases": {
+        "successes": "51",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "33579",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "full": {
+      "path": "work/b4-linked-owner-test-20261106/full/RESULT.json",
+      "sha256": "2fc9296f20170729a5d03c4e4a37131a6f844cc48b6928df4e9de109027e9647",
+      "exit": 0,
+      "test_cases": {
+        "successes": "2090",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "523835",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "native390": {
+      "path": "work/b4-linked-owner-test-20261106/native390/RESULT.json",
+      "sha256": "8176635c5ce81d6f80b17a025b29bb00840cd3c80148a78735e5ce6c5573d2b2",
+      "exit": 0,
+      "gpu_pass": true,
+      "checks": {
+        "one_result": true,
+        "not_timeout": true,
+        "no_fatal_or_exit_leaks": true,
+        "exact_expected_engine_errors": true,
+        "actual_metal_startup": true,
+        "native_and_outer_success": true,
+        "host_and_metadata_unchanged": true,
+        "source_unchanged": true
+      }
+    }
+  },
+  "verified_behavior": [
+    "Actual accepted V2 zero-action arena with two originally quoted use cells.",
+    "Original protected RECORD issues both pins directly into actual native owner slot objects.",
+    "Wrong-generation bind refuses; exact locator binds both roots.",
+    "Zero-budget original OBSERVE preserves cursor and history marker.",
+    "Three original one-pass controls perform history clear, second-root unpin, final-root unpin and native metadata owner RELEASED.",
+    "Each actual component phase charges one pass/control and zero native receipts; wrapper adds no synthetic pass.",
+    "capture_inflight returns to zero; list head/prev/next/cursor repair and original request RELEASE are asserted."
+  ],
+  "limits": [
+    "Test-only guarded ParticlesStorage construction skips GPU shader/material setup and initializes normal C++ members/RID_Owner.",
+    "One native metadata owner and two root slots; no real source admission is issued.",
+    "Synthetic logical history marker is not a consumed tuple.",
+    "No native commands, completion injection, geometry/material/storage return or Unknown branch is exercised by the new case.",
+    "Separate existing actual Metal native390 regression verifies the normal constructor/runtime path only, not this output source admission.",
+    "Teardown crashes on leaked pins/state instead of fabricating RELEASED."
+  ],
+  "build_failure_preserved": "INITIAL_BUILD_RESULT.json and BUILD.log preserve initial test private-field access error; fixed by inspecting bounded original use rows without widening visibility."
+}

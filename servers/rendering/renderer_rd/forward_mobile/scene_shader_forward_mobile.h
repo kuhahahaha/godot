@@ -30,10 +30,17 @@
 
 #pragma once
 
+#include "servers/rendering/renderer_rd/native_pipeline_factory_rd.h"
 #include "servers/rendering/renderer_rd/pipeline_hash_map_rd.h"
 #include "servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl.gen.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
 #include "servers/rendering/rendering_server_types.h"
+
+namespace RendererRD {
+class ExternalPipelinePreparation;
+struct ExternalPacketPipelineRequest;
+}
 
 namespace RendererSceneRenderImplementation {
 
@@ -83,6 +90,7 @@ public:
 		SHADER_GROUP_FP32_MULTIVIEW,
 		SHADER_GROUP_FP16,
 		SHADER_GROUP_FP16_MULTIVIEW,
+		SHADER_GROUP_MAX,
 	};
 
 	struct ShaderSpecialization {
@@ -207,6 +215,8 @@ public:
 			uint32_t render_pass = 0;
 			uint32_t wireframe = false;
 			uint32_t ubershader = false;
+			bool indexed144 = false;
+			bool instance192 = false;
 
 			uint32_t hash() const {
 				uint32_t h = hash_murmur3_one_32(vertex_format_id);
@@ -220,16 +230,89 @@ public:
 				h = hash_murmur3_one_32(render_pass, h);
 				h = hash_murmur3_one_32(wireframe, h);
 				h = hash_murmur3_one_32(ubershader, h);
+				if (indexed144) {
+					h = hash_murmur3_one_32(1, h);
+				}
+				if (instance192) {
+					h = hash_murmur3_one_32(2, h);
+				}
 				return hash_fmix32(h);
 			}
 		};
 
+		struct NativePipelineValueState {
+			RD::RenderPrimitive primitive = RD::RENDER_PRIMITIVE_MAX;
+			RD::PipelineRasterizationState raster;
+			RD::PipelineMultisampleState multisample;
+			RD::PipelineDepthStencilState depth_stencil;
+			RD::PipelineColorBlendState blend;
+			Vector<RD::PipelineSpecializationConstant> specialization;
+		};
+		struct NativePipelineValuePlan {
+			PipelineKey key = {};
+			RID native_shader;
+			uint64_t input_mask = 0;
+			RendererRD::MeshStorage::NativeVertexArrayPlan geometry;
+			NativePipelineValueState state;
+		};
+		// Same value construction used by original external preparation. Caller
+		// retains the original material/profile/pass selection; this grants none.
+		Error get_external_pipeline_key(const RendererRD::ExternalPacketPipelineRequest &, RSE::PrimitiveType,
+				bool p_instance192, bool p_indexed144, bool p_transparent, PipelineKey &r_key);
+		// Observation under retained original owners, not a pipeline permit.
+		// Exact shader must already be ready. Missing VF stays zero with actual
+		// attributes; never synthesize an ID or execute a factory to fill it.
+		// Failure leaves output untouched. Recompute before admitted execution.
+		Error get_external_pipeline_value_plan(const RendererRD::ExternalPacketPipelineRequest &, RSE::PrimitiveType,
+				bool p_instance192, bool p_indexed144, RID p_expected_ready_shader,
+				const RendererRD::MeshStorage::NativeSurfaceHold &, NativePipelineValuePlan &r_plan);
+
+	private:
+		// Deterministic values only. Context is sampled from original owners by
+		// the caller. Both actual factory and prospective observation use it.
+		NativePipelineValueState _build_native_pipeline_value_state(PipelineKey, RD::TextureSamples,
+				bool p_emulate_point_size, bool p_depth_prepass) const;
+#ifdef TESTS_ENABLED
+		friend class TestBackendPipelineValuePlanAccess;
+#endif
+	public:
+#ifdef TESTS_ENABLED
+		struct NativeValuePlanTestTag {};
+		explicit ShaderData(NativeValuePlanTestTag) : shader_list_element(this) {}
+#endif
 		void _create_pipeline(PipelineKey p_pipeline_key);
+		// Exact uncached pipeline; caller owns the original RD retirement root.
+		RID create_native_pipeline(PipelineKey p_pipeline_key, RendererRD::ExternalPipelinePreparation *p_output = nullptr, const NativePipelineValuePlan *p_observed = nullptr);
+		// Exact observed leaf only. The sink's original owner supplies admission,
+		// stable-root custody and RT return; this method grants none.
+		RID create_native_pipeline_checked(PipelineKey, const NativePipelineValuePlan &, const RendererRD::NativePipelineFactorySink &, Error &r_factory_error);
+		// Shared by all external color-pass preparation, including probes.
+		// Fog-mask variants force disabled blending in the original builder.
+		static bool external_color_version_supported(ShaderVersion p_version, bool p_transparent) {
+			switch (p_version) {
+				case SHADER_VERSION_COLOR_PASS:
+				case SHADER_VERSION_LIGHTMAP_COLOR_PASS:
+					return true;
+				case SHADER_VERSION_COLOR_FOG_MASK:
+				case SHADER_VERSION_LIGHTMAP_FOG_MASK:
+					return !p_transparent;
+				default:
+					return false;
+			}
+		}
 		PipelineHashMapRD<PipelineKey, ShaderData, void (ShaderData::*)(PipelineKey)> pipeline_hash_map;
 
 		RID version;
 
-		static const uint32_t VERTEX_INPUT_MASKS_SIZE = SHADER_VERSION_MAX * 2;
+	private:
+		RID native_features_version;
+		bool native_features_need_inverse = false;
+		uint32_t native_material_recipe_rejections = UINT32_MAX;
+		bool native_writes_depth = false;
+		bool native_writes_clip_scale = false;
+
+	public:
+		static const uint32_t VERTEX_INPUT_MASKS_SIZE = SHADER_VERSION_MAX * 6;
 		std::atomic<uint64_t> vertex_input_masks[VERTEX_INPUT_MASKS_SIZE] = {};
 
 		Vector<ShaderCompiler::GeneratedCode::Texture> texture_uniforms;
@@ -260,6 +343,7 @@ public:
 		bool uses_tangent = false;
 		bool writes_tangent = false;
 		bool uses_particle_trails = false;
+		bool instance192_unqualified_vertex_modes = false;
 		bool uses_normal_map = false;
 		bool uses_bent_normal_map = false;
 		bool wireframe = false;
@@ -311,11 +395,17 @@ public:
 		virtual bool is_animated() const;
 		virtual bool casts_shadows() const;
 		virtual RenderingServerTypes::ShaderNativeSourceCode get_native_source_code() const;
+		// Structural support only: caller must still pin a qualified material,
+		// bounds/source/history proof and backend mirror-cull calibration.
+		bool instance192_shader_supported() const;
 		virtual Pair<ShaderRD *, RID> get_native_shader_and_version() const;
+		Error get_native_instance192_shader_features(NativeInstance192ShaderFeatures &r_features) const override;
 		RD::PolygonCullMode get_cull_mode_from_cull_variant(CullVariant p_cull_variant);
 		void _clear_vertex_input_mask_cache();
-		RID get_shader_variant(ShaderVersion p_shader_version, bool p_ubershader) const;
-		uint64_t get_vertex_input_mask(ShaderVersion p_shader_version, bool p_ubershader);
+		// Read-only exact variant lookup; outputs are unchanged on refusal.
+		Error get_native_shader_if_ready(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144, bool p_instance192, RID &r_shader, uint64_t &r_input_mask) const;
+		RID get_shader_variant(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144 = false, bool p_instance192 = false) const;
+		uint64_t get_vertex_input_mask(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144 = false, bool p_instance192 = false);
 		bool is_valid() const;
 
 		SelfList<ShaderData> shader_list_element;
@@ -330,6 +420,8 @@ public:
 	}
 
 	struct MaterialData : public RendererRD::MaterialStorage::MaterialData {
+		uint32_t get_native_recipe_backend() const override { return 1; }
+		Error get_native_recipe_shader_if_ready(RID &r_shader, uint64_t &r_mask, RID &r_set) const override;
 		ShaderData *shader_data = nullptr;
 		RID uniform_set;
 		uint64_t last_pass = 0;
@@ -350,6 +442,10 @@ public:
 	}
 
 	SceneForwardMobileShaderRD shader;
+	static constexpr uint32_t INDEXED144_VARIANT_OFFSET = SHADER_VERSION_MAX * 4;
+	static constexpr uint32_t INSTANCE192_VARIANT_OFFSET = INDEXED144_VARIANT_OFFSET * 2;
+	Vector<int> indexed144_shader_groups;
+	Vector<int> instance192_shader_groups;
 	ShaderCompiler compiler;
 	bool use_fp16 = false;
 	bool emulate_point_size = false;

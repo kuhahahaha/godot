@@ -38,7 +38,21 @@ class Gradient : public Resource {
 	GDCLASS(Gradient, Resource);
 	OBJ_SAVE_TYPE(Gradient);
 
+	friend class ResourceSnapshotAccess;
+#ifdef TESTS_ENABLED
+	friend class TestResourceSnapshotAccess;
+#endif
+	uint64_t _content_revision = 1;
+	void _advance_content_revision() {
+		// Saturation permanently denies later native capture; never reset/ABA.
+		if (_content_revision != UINT64_MAX) {
+			++_content_revision;
+		}
+	}
+
 public:
+	uint64_t get_content_revision() const { return _content_revision; }
+
 	enum InterpolationMode {
 		GRADIENT_INTERPOLATE_LINEAR,
 		GRADIENT_INTERPOLATE_CONSTANT,

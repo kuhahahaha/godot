@@ -50,6 +50,7 @@
 
 #include "metal3_objects.h"
 
+#include "core/io/native_drain_diagnostic.h"
 #include "drivers/metal/metal_utils.h"
 #include "drivers/metal/pixel_formats.h"
 #include "drivers/metal/rendering_device_driver_metal3.h"
@@ -256,8 +257,27 @@ void MDCommandBuffer::_end() {
 }
 
 void MDCommandBuffer::_commit() {
+	NativeDrainDiagnostic::Span drain_trace("metal.commit", uintptr_t(this), uintptr_t(device_driver));
 	end();
-	commandBuffer->commit();
+	// An empty recording still needs a native submission for its fence and
+	// completion handler. Native command buffers are otherwise created lazily.
+	MTL::CommandBuffer *cb = command_buffer();
+	CRASH_COND_MSG(cb == nullptr, "Metal command buffer allocation failed before submission.");
+	auto *record = device_driver->register_completion_record(cb, 0);
+	if (!record) {
+		completion_record_failed = true;
+		return;
+	}
+	if (!device_driver->active_completion_records) {
+		pending_completion_records.push_back(record);
+	}
+	if (device_driver->active_native_issue_count) {
+		++*device_driver->active_native_issue_count;
+	}
+	{
+		NativeDrainDiagnostic::Span submit_trace("metal.cb_commit", uintptr_t(this), uintptr_t(cb), uintptr_t(device_driver));
+		cb->commit();
+	}
 	commandBuffer.reset();
 	state_begin = false;
 }
@@ -1885,6 +1905,12 @@ void MDCommandBuffer::_bind_uniforms_argument_buffers(MDUniformSet *p_set, MDSha
 
 		// Copy the base argument buffer data.
 		memcpy(alloc.ptr, p_set->arg_buffer_data.ptr(), buffer_size);
+		if (shader_set.buffer_sizes.resource_count != 0) {
+			// This allocation, not the cached CPU template or a prior frame,
+			// owns the size table reached through the copied argument pointer.
+			ERR_FAIL_COND(!shader_set.buffer_sizes.write_address(alloc.ptr, alloc.buffer->gpuAddress(), alloc.offset));
+			enc->useResource(alloc.buffer, MTL::ResourceUsageRead);
+		}
 
 		// Update dynamic buffer GPU addresses.
 		uint64_t *ptr = (uint64_t *)alloc.ptr;
@@ -1908,6 +1934,9 @@ void MDCommandBuffer::_bind_uniforms_argument_buffers(MDUniformSet *p_set, MDSha
 		enc->setVertexBuffer(alloc.buffer, alloc.offset, p_set_index);
 		enc->setFragmentBuffer(alloc.buffer, alloc.offset, p_set_index);
 	} else {
+		if (shader_set.buffer_sizes.resource_count != 0) {
+			enc->useResource(p_set->arg_buffer.buffer.get(), MTL::ResourceUsageRead);
+		}
 		enc->setVertexBuffer(p_set->arg_buffer.buffer.get(), 0, p_set_index);
 		enc->setFragmentBuffer(p_set->arg_buffer.buffer.get(), 0, p_set_index);
 	}
@@ -2041,6 +2070,10 @@ void MDCommandBuffer::_bind_uniforms_argument_buffers_compute(MDUniformSet *p_se
 
 		// Copy the base argument buffer data.
 		memcpy(alloc.ptr, p_set->arg_buffer_data.ptr(), buffer_size);
+		if (shader_set.buffer_sizes.resource_count != 0) {
+			ERR_FAIL_COND(!shader_set.buffer_sizes.write_address(alloc.ptr, alloc.buffer->gpuAddress(), alloc.offset));
+			enc->useResource(alloc.buffer, MTL::ResourceUsageRead);
+		}
 
 		// Update dynamic buffer GPU addresses.
 		uint64_t *ptr = (uint64_t *)alloc.ptr;
@@ -2063,6 +2096,9 @@ void MDCommandBuffer::_bind_uniforms_argument_buffers_compute(MDUniformSet *p_se
 
 		enc->setBuffer(alloc.buffer, alloc.offset, p_set_index);
 	} else {
+		if (shader_set.buffer_sizes.resource_count != 0) {
+			enc->useResource(p_set->arg_buffer.buffer.get(), MTL::ResourceUsageRead);
+		}
 		enc->setBuffer(p_set->arg_buffer.buffer.get(), 0, p_set_index);
 	}
 }

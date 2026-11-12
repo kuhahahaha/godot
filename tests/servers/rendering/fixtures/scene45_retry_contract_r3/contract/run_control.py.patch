@@ -1,0 +1,89 @@
+--- r2/runner/run_control.py
++++ r3/runner/run_control.py
+@@ -74,6 +74,77 @@
+         for part, extension in [('source','comp'),('spirv','spv'),('container','bin')]:
+             assert sha(root / 'input' / f'{kind}.{extension}') == generation['physical'][i][part]
+ 
++def record_return_contract(text, case, qrt, completion):
++    def fields(line):
++        return dict(re.findall(r'(\w+)=([^ ]+)', line))
++    identities = [fields(line) for line in text.splitlines() if line.startswith('QRT_CALL_IDENTITY ')]
++    retries = [fields(line) for line in text.splitlines() if line.startswith('ORIGINAL_RECORD_RETRY ')]
++    accepts = [fields(line) for line in text.splitlines() if line.startswith('ORIGINAL_RECORD_ACCEPT ')]
++    headers = [fields(line) for line in text.splitlines() if line.startswith('ORIGINAL_RECORD_SNAPSHOT ')]
++    snapshots = [fields(line) for line in text.splitlines() if line.startswith('ORIGINAL_RECORD_SNAPSHOT_FACT ')]
++    if len(identities) != len(qrt):
++        return False
++    by_operation = {x['operation']: x for x in identities}
++    if len(by_operation) != len(identities):
++        return False
++    for kind, operation, slot, result, segments, error in qrt:
++        x = by_operation.get(operation, {})
++        if any(x.get(k) != v for k,v in [('kind',kind),('slot',slot),('error',error),('state','2')]):
++            return False
++        if error != '0' and not (kind == '9' and error == '44' and x.get('reason') == ('16' if case == 'cancel_prefix' else '19')):
++            return False
++    if case == 'cancel_prefix':
++        return not retries and not accepts and bool(re.search(r'ORIGINAL_CANCEL_REFUSAL error=44 reason=16 no_new_record=1', text))
++    if not completion or len(accepts) != 1:
++        return False
++    accepted = accepts[0]
++    a = by_operation.get(accepted.get('operation'), {})
++    if a.get('kind') != '9' or a.get('error') != '0' or a.get('reason') != '0' or a.get('bridge') != accepted.get('bridge') or a.get('request') != accepted.get('request'):
++        return False
++    try:
++        ticket_registry, ticket_serial = [int(v) for v in accepted['ticket'].split(':')]
++        expected_payload = hashlib.sha256(ticket_registry.to_bytes(8, 'little') + ticket_serial.to_bytes(8, 'little')).hexdigest()
++        if ticket_serial != int(completion[1]) or a.get('payload') != expected_payload:
++            return False
++    except (ValueError, KeyError):
++        return False
++    record_calls = [x for x in identities if x['kind'] == '9']
++    expected_headers = {(x['operation'], 'before') for x in record_calls} | {(x['operation'], 'after') for x in record_calls if x['error'] != '0'}
++    if len(headers) != len(expected_headers) or {(h.get('operation'), h.get('stage')) for h in headers} != expected_headers:
++        return False
++    for h in headers:
++        if any(h.get(k) != accepted.get(k) for k in ('generation','nonce','request_digest','unit_digest')) or h.get('record') != '0' or h.get('source') != '0:0:0' or h.get('readback') != '0' or h.get('owned') != '0':
++            return False
++        facts = [f for f in snapshots if f.get('operation') == h['operation'] and f.get('stage') == h['stage']]
++        if len(facts) != int(h['facts']) or [int(f['index']) for f in facts] != list(range(len(facts))) or any(f.get('revision') != h['revision'] or f.get('semantic') not in ('4','5','6') for f in facts):
++            return False
++    if len(record_calls) != len(retries) + 1 or [x['operation'] for x in record_calls if x['error'] == '0'] != [accepted['operation']]:
++        return False
++    failed = [x for x in identities if x['error'] != '0']
++    if len(retries) != len(failed) or len({x.get('operation') for x in retries}) != len(retries) or int(accepted.get('attempts', '0')) != len(retries) + 1 or not 1 <= int(accepted['attempts']) <= 5000:
++        return False
++    for retry in retries:
++        x = by_operation.get(retry.get('operation'), {})
++        if x not in failed or int(x['operation']) >= int(accepted['operation']):
++            return False
++        if any(retry.get(k) != accepted.get(k) for k in ('bridge','ticket','request')) or any(x.get(k) != accepted.get(k) for k in ('bridge','request')) or x.get('payload') != expected_payload or retry.get('error') != '44' or retry.get('reason') != '19':
++            return False
++        if any(retry.get(k) != '0' for k in ('before_record','after_record','before_readback','after_readback','before_owned','after_owned')) or any(retry.get(k) != '0:0:0' for k in ('before_source','after_source')):
++            return False
++        for stage in ('before','after'):
++            header = next(h for h in headers if h['operation'] == retry['operation'] and h['stage'] == stage)
++            if header['revision'] != retry[stage + '_revision'] or header['facts'] != retry[stage + '_facts']:
++                return False
++            facts = [f for f in snapshots if f.get('operation') == retry['operation'] and f.get('stage') == stage]
++            if len(facts) != int(retry[stage + '_facts']) or [int(f['index']) for f in facts] != list(range(len(facts))) or any(f.get('revision') != retry[stage + '_revision'] or f.get('semantic') not in ('4','5','6') for f in facts):
++                return False
++    # The successful admission must have a pre-call snapshot too; append facts
++    # only arise after this final exact original operation returns OK.
++    final_before = [f for f in snapshots if f.get('operation') == accepted['operation'] and f.get('stage') == 'before']
++    if not final_before or any(f.get('semantic') not in ('4','5','6') for f in final_before):
++        return False
++    return True
++
+ def validate_occurrence(text, lifecycle, metadata, output, case, rc, timeout):
+     qrt = re.findall(r'QRT_NATIVE_RETURN kind=(\d+) operation=(\d+) slot=(\d+) result=(\d+) segments=(\d+) error=(-?\d+) reply_ack=1', text)
+     completion = re.search(r'ORIGINAL_NATIVE_COMPLETION ticket=(\d+) revision=(\d+) readback_request=(\d+) facts=(\d+) known=(\d+) possible=(\d+) mode=' + case, text)
+@@ -83,7 +154,7 @@
+         'real_metal': 'Metal ' in lifecycle and 'Apple M3 Pro' in lifecycle,
+         'actual_retained_unit': f'unit={metadata["unit_digest"]} flags={metadata["required_compile_flags"]} same_exported_identity=1' in text,
+         'both_original_interfaces': len(re.findall(r'ORIGINAL_INTERFACE_MATCH physical=[01] ', text)) == 2,
+-        'qrt_original_returns': bool(qrt) and all(int(x[-1]) == 0 for x in qrt if not (case == 'cancel_prefix' and int(x[0]) == 9)),
++        'qrt_original_returns': bool(qrt) and record_return_contract(text, case, qrt, completion),
+         'completion': bool(completion) and int(completion[6]) == 0 and int(completion[4]) == len(facts),
+         'actual_fact_fields': bool(facts) and all(int(f[4]) and int(f[5]) == 1 and int(f[6]) == 2 and int(f[7]) == 0 and int(f[8]) and int(f[9]) for f in facts),
+         'physical_unit_returns': len(re.findall(r'ORIGINAL_UNIT_PHYSICAL_RETURN index=[01] shader_event=[1-9]\d* pipeline_event=[1-9]\d*', text)) == 2,

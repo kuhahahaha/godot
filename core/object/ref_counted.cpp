@@ -32,17 +32,62 @@
 
 #include "core/object/class_db.h"
 #include "core/object/script_instance.h"
+#ifdef TESTS_ENABLED
+#include "core/object/ref_counted_test_hooks.h"
+#endif
 
 bool RefCounted::init_ref() {
-	if (reference()) {
-		if (!is_referenced() && refcount_init.unref()) {
-			unreference(); // first referencing is already 1, so compensate for the ref above
-		}
+	ReferenceCohort cohort;
+	bool result = false;
+	const Error admitted = cohort.execute(this, false, [](void *context, ReferenceCohort &p_cohort) {
+		GDExtensionDeviceExit::record_binding_entry_result(OK);
+		return static_cast<RefCounted *>(context)->_init_ref(p_cohort);
+	}, this, result);
+	if (admitted != OK) {
+		GDExtensionDeviceExit::record_binding_entry_result(admitted);
+	}
+	return admitted == OK && result;
+}
 
-		return true;
-	} else {
+bool RefCounted::_init_ref(ReferenceCohort &cohort) {
+#ifdef TESTS_ENABLED
+	const auto observer = RefCountedReleaseTest::channel;
+	RefCountedReleaseTest::Observation observation{ cohort.get_operation_id() };
+	{
+		MutexLock lock(_instance_binding_mutex);
+		observation.object_read_pins = _binding_read_cohorts;
+	}
+	observer.emit(RefCountedReleaseTest::Phase::ADMITTED, observation);
+#endif
+	// The outer fence spans the original compensation. Nested operations use
+	// the same exact callback vector and keep its Object pin until this epilogue.
+	if (!dereference_count.try_increment(2)) {
+		GDExtensionDeviceExit::record_binding_entry_result(ERR_PARAMETER_RANGE_ERROR);
 		return false;
 	}
+	const bool success = _reference(cohort);
+	if (success && !is_referenced() && refcount_init.unref()) {
+		_unreference(cohort, true);
+	}
+	cohort.retire_object_pin();
+#ifdef TESTS_ENABLED
+	{
+		MutexLock lock(_instance_binding_mutex);
+		observation.object_read_pins = _binding_read_cohorts;
+	}
+	observation.pin_retired = true;
+	observation.completion_count = dereference_count.get();
+	observer.emit(RefCountedReleaseTest::Phase::INIT_PIN_RETIRED, observation);
+#endif
+#ifdef TESTS_ENABLED
+	observation.completion_count = dereference_count.decrement(2);
+#else
+	dereference_count.decrement(2);
+#endif
+#ifdef TESTS_ENABLED
+	observer.emit(RefCountedReleaseTest::Phase::INIT_COMPLETE, observation);
+#endif
+	return success;
 }
 
 void RefCounted::deinit_ref() {
@@ -72,57 +117,116 @@ int RefCounted::get_reference_count() const {
 }
 
 bool RefCounted::reference() {
-	uint32_t rc_val = refcount.refval();
-	bool success = rc_val != 0;
+	ReferenceCohort cohort;
+	bool result = false;
+	const Error admitted = cohort.execute(this, false, [](void *context, ReferenceCohort &p_cohort) {
+		return static_cast<RefCounted *>(context)->_reference(p_cohort);
+	}, this, result);
+	GDExtensionDeviceExit::record_binding_entry_result(admitted);
+	return admitted == OK && result;
+}
 
-	if (success && rc_val <= 2 /* higher is not relevant */) {
-		if (get_script_instance()) {
-			get_script_instance()->refcount_incremented();
-		}
-		if (_get_extension() && _get_extension()->reference) {
-			_get_extension()->reference(_get_extension_instance());
-		}
-
-		_instance_binding_reference(true);
+bool RefCounted::_reference(ReferenceCohort &p_cohort) {
+	const uint32_t rc_val = refcount.refval();
+	const bool success = rc_val != 0;
+	if (success && rc_val <= 2) {
+		p_cohort.invoke(true);
 	}
-
 	return success;
 }
 
 bool RefCounted::unreference() {
-	dereference_count.increment();
-	uint32_t rc_val = refcount.unrefval();
+	ReferenceCohort cohort;
+	bool result = false;
+	const Error admitted = cohort.execute(this, true, [](void *context, ReferenceCohort &p_cohort) {
+		return static_cast<RefCounted *>(context)->_unreference(p_cohort, false);
+	}, this, result);
+	if (admitted != OK) {
+		GDExtensionDeviceExit::stop_lifetime_entry(admitted == ERR_PARAMETER_RANGE_ERROR ? GDExtensionDeviceExit::LifetimeFailure::LIMIT : (admitted == ERR_BUSY ? GDExtensionDeviceExit::LifetimeFailure::ASSOCIATION_BUSY : GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED));
+	}
+	return result;
+}
+
+bool RefCounted::_unreference(ReferenceCohort &p_cohort, bool p_borrowed) {
+#ifdef TESTS_ENABLED
+	const auto observer = RefCountedReleaseTest::channel;
+	RefCountedReleaseTest::Observation observation{ p_cohort.get_operation_id(), 0, false, p_borrowed };
+	if (!p_borrowed) {
+		observer.emit(RefCountedReleaseTest::Phase::ADMITTED, observation);
+	}
+#endif
+	if (!(p_borrowed ? dereference_count.increment_borrowed() : dereference_count.try_increment(1))) {
+		GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::LIMIT);
+	}
+#ifdef TESTS_ENABLED
+	{
+		MutexLock lock(_instance_binding_mutex);
+		observation.object_read_pins = _binding_read_cohorts;
+	}
+	observation.completion_count = dereference_count.get();
+	observer.emit(RefCountedReleaseTest::Phase::BEFORE_MUTATION, observation);
+#endif
+	const uint32_t rc_val = refcount.unrefval();
 	bool die = rc_val == 0;
-
-	if (rc_val <= 1 /* higher is not relevant */) {
-		if (get_script_instance()) {
-			bool script_ret = get_script_instance()->refcount_decremented();
-			die = die && script_ret;
-		}
-		if (_get_extension() && _get_extension()->unreference) {
-			_get_extension()->unreference(_get_extension_instance());
-		}
-
-		bool binding_ret = _instance_binding_reference(false);
-		die = die && binding_ret;
+	if (rc_val <= 1) {
+		const bool callback_ret = p_cohort.invoke(false);
+		die = die && callback_ret;
 	}
-
-	dereference_count.decrement();
-
-	// If we are going to be destroyed we need to ensure that no other thread
-	// is still inside our critical section. If they are they might see
-	// a (partially) destroyed Object for get_script_instance, _get_extension,
-	// or _instance_binding_reference.
+#ifdef TESTS_ENABLED
+	observation.refcount_result = rc_val;
+	observation.terminal = die;
+	observer.emit(RefCountedReleaseTest::Phase::CALLBACK_RESULTS, observation);
+#endif
+	const uint64_t release_id = p_cohort.get_operation_id();
 	if (die) {
-		// It is unlikely that we will spin here for very long.
-		// Only threads that see die == true will spin, which should only
-		// ever be one. Only threads seeing rc_val == 1 and rc_val == 0
-		// will do anything at all in the critical section.
-		while (dereference_count.get()) {
-			// Spin
+		if (p_borrowed) {
+			// Valid first-reference compensation always retains its initialized
+			// native owner; it cannot become the terminal releaser.
+			GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
 		}
+		_reserve_terminal_release(release_id);
 	}
-
+	if (!p_borrowed) {
+		p_cohort.retire_object_pin();
+#ifdef TESTS_ENABLED
+		{
+			MutexLock lock(_instance_binding_mutex);
+			observation.object_read_pins = _binding_read_cohorts;
+		}
+		observation.pin_retired = true;
+		observation.completion_count = dereference_count.get();
+		observer.emit(RefCountedReleaseTest::Phase::PIN_RETIRED, observation);
+#endif
+	}
+// A nonterminal completion is the last Object access. The cohort's
+// remaining destructor owns only core generation frames.
+#ifdef TESTS_ENABLED
+	observation.completion_count = dereference_count.decrement(p_borrowed ? 0 : 1);
+#else
+	dereference_count.decrement(p_borrowed ? 0 : 1);
+#endif
+#ifdef TESTS_ENABLED
+	observer.emit(RefCountedReleaseTest::Phase::COMPLETE, observation);
+#endif
+	if (die) {
+#ifdef TESTS_ENABLED
+		// Observe pending once; retain the original completion-counter join.
+		if (dereference_count.get()) {
+			observer.emit(RefCountedReleaseTest::Phase::JOIN_PENDING, observation);
+		}
+#endif
+		while (dereference_count.get()) {
+			// Original terminal completion join; no association reader wait.
+		}
+#ifdef TESTS_ENABLED
+		observation.completion_count = 0; // The original acquire loop observed zero.
+		observer.emit(RefCountedReleaseTest::Phase::JOIN_ZERO, observation);
+#endif
+		_complete_terminal_release(release_id);
+#ifdef TESTS_ENABLED
+		observer.emit(RefCountedReleaseTest::Phase::TERMINAL_READY, observation);
+#endif
+	}
 	return die;
 }
 

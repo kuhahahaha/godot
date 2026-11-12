@@ -148,6 +148,11 @@ void WorkerThreadPool::_process_task(Task *p_task) {
 		}
 
 		task_mutex.lock();
+#ifdef THREADS_ENABLED
+		if (p_task->is_pump_task) {
+			pump_task_count--;
+		}
+#endif
 		p_task->completed = true;
 		p_task->pool_thread_index = -1;
 		if (p_task->waiting_user) {

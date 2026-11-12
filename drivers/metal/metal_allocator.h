@@ -101,6 +101,14 @@ public:
 	virtual ~MetalAllocator() = default;
 
 	virtual MetalBuffer new_buffer(NS::UInteger p_length, MTL::ResourceOptions p_options) = 0;
+	struct TextureAllocationQuote {
+		uint64_t native_requirement = 0, owner_reservation = 0, alignment = 0;
+		bool dedicated = false;
+	};
+	virtual bool texture_allocation_quote(const MTL::TextureDescriptor *p_desc, TextureAllocationQuote &r_quote) {
+		r_quote = {};
+		return false;
+	}
 	virtual MetalTexture new_texture(const MTL::TextureDescriptor *p_desc) = 0;
 	virtual void free_buffer(MetalBuffer &p_buffer) = 0;
 	virtual void free_texture(MetalTexture &p_texture) = 0;
@@ -191,6 +199,7 @@ private:
 	std::atomic<uint64_t> generation = 1;
 
 	static uint64_t _preferred_block_size(uint32_t p_pool);
+	static bool _pool_allocation_units(uint64_t p_size, uint64_t p_align, uint32_t &r_units);
 	static uint32_t _pool_for_options(MTL::ResourceOptions p_options);
 	static uint32_t _pool_for_texture(const MTL::TextureDescriptor *p_desc);
 	NS::SharedPtr<MTL::Heap> _create_heap(uint32_t p_pool, uint64_t p_size);
@@ -207,6 +216,7 @@ public:
 	~MetalHeapAllocator() override;
 
 	MetalBuffer new_buffer(NS::UInteger p_length, MTL::ResourceOptions p_options) override;
+	bool texture_allocation_quote(const MTL::TextureDescriptor *p_desc, TextureAllocationQuote &r_quote) override;
 	MetalTexture new_texture(const MTL::TextureDescriptor *p_desc) override;
 	void free_buffer(MetalBuffer &p_buffer) override;
 	void free_texture(MetalTexture &p_texture) override;

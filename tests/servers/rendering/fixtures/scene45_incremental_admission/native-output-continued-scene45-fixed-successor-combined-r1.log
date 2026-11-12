@@ -1,0 +1,43 @@
+ERROR: Condition "!pipeline.driver_id" is true. Returning: RID()
+   at: _qualification_render_pipeline_create_internal (servers/rendering/rendering_device.cpp:6093)
+ERROR: Condition "!pipeline.driver_id" is true. Returning: RID()
+   at: _qualification_render_pipeline_create_internal (servers/rendering/rendering_device.cpp:6093)
+ERROR: Condition "!pipeline.driver_id" is true. Returning: RID()
+   at: _qualification_render_pipeline_create_internal (servers/rendering/rendering_device.cpp:6093)
+ERROR: FATAL: Index p_index = 0 is out of bounds (count = 0).
+   at: operator[] (./core/templates/local_vector.h:206)
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+
+================================================================
+handle_crash: Program crashed with signal 5
+Engine version: Godot Engine v4.7.2.stable.custom_build (776fd86b5a7397b67b46c217170b8019f9401bd0)
+Dumping the backtrace. Please include this when reporting the bug on: https://github.com/godotengine/godot/issues
+Load address: 100e24000
+
+[1] 193064144 (libsystem_platform.dylib+4144) - _sigtramp + 56
+[2] 10607985c (main+525585c) - TT_RunIns + 1441608
+[3] 10511478c (main+42f078c) - SDL_GetPerformanceFrequency + 32923656
+[4] 10510d484 (main+42e9484) - SDL_GetPerformanceFrequency + 32894208
+[5] 105107e84 (main+42e3e84) - SDL_GetPerformanceFrequency + 32872192
+[6] 105de2524 (main+4fbe524) - ZSTD_DCtx_setParameter + 6178784
+[7] 1015d7410 (main+7b3410) - main + 5030672
+[8] 1012b272c (main+48e72c) - main + 1734188
+[9] 101228600 (main+404600) - main + 1168640
+[10] 1011ff630 (main+3db630) - main + 1000752
+[11] 1011bcb04 (main+398b04) - main + 727556
+[12] 10110f498 (main+2eb498) - main + 17304
+[13] 10110b490 (main+2e7490) - main (in godot.macos.editor.arm64) + 912
+[14] 192c83e80 (dyld+31e80) - start + 6688
+-- END OF C++ BACKTRACE --
+================================================================
+===============================================================================
+tests/core/extension/test_production_request.cpp:11985:
+TEST CASE:  [SceneTree][ProductionRequest][V1Compatibility] protected append echoes invalid canonical and clears expired context output
+
+tests/core/extension/test_production_request.cpp:11985: FATAL ERROR: test case CRASHED: SIGABRT - Abort (abnormal termination) signal
+
+===============================================================================
+[doctest] test cases:    70 |    69 passed | 1 failed | 2159 skipped
+[doctest] assertions: 36839 | 36839 passed | 0 failed |
+[doctest] Status: FAILURE!

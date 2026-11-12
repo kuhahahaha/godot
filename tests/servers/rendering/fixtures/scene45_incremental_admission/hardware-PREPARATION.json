@@ -1,0 +1,30 @@
+{
+  "scope": "new fixed host and same original runner/source load; no GPU run yet",
+  "original_config": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-numeric-frozen-source-20261107/SCENE_CONFIG.json",
+  "host": {
+    "bytes": 157292840,
+    "sha256": "c75363e8d05143b779f960e17a3648d8b70d71dbcac312c2d11695cc11952469"
+  },
+  "runner_copies": {
+    "generate_native.py": {
+      "bytes": 8043,
+      "sha256": "abcf908ba7d5760330cf5426452aab7b6076086ce3e8846e14ae42cd66ab46e8"
+    },
+    "scene_config.py": {
+      "bytes": 1414,
+      "sha256": "d27565c2326731254b3518582b9aa7ea3b4153489ebe845f81e39b7d33152eac"
+    },
+    "run_control.py": {
+      "bytes": 12264,
+      "sha256": "b104f959355878df0bcdbb3f70ac0d84b29cc5a9996cd4f0db595ab00bdabc4c"
+    },
+    "probe.cpp": {
+      "bytes": 44262,
+      "sha256": "777988618e6264a67598cd7f289ed5f3e1d513faf5fcccd691d5c4ecccc81c8c"
+    },
+    "original_unit.h": {
+      "bytes": 4310,
+      "sha256": "8208d7290d91b1deec6ebfbfa974dc8b1739889940b682a6a2957b20bcd881ea"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "focused": {
+    "OverallResultsAsserts": {
+      "successes": "6902",
+      "failures": "0"
+    },
+    "OverallResultsTestCases": {
+      "successes": "61",
+      "failures": "0",
+      "skipped": "2223"
+    },
+    "test_cases": 2284,
+    "failed_cases": []
+  },
+  "full": {
+    "OverallResultsAsserts": {
+      "successes": "585821",
+      "failures": "0"
+    },
+    "OverallResultsTestCases": {
+      "successes": "2281",
+      "failures": "0",
+      "skipped": "3"
+    },
+    "test_cases": 2284,
+    "failed_cases": []
+  }
+}

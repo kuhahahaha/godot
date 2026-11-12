@@ -34,15 +34,18 @@
 #include "core/config/project_settings.h"
 #include "core/core_constants.h"
 #include "core/extension/gdextension.h"
+#include "core/extension/gdextension_library_exit_guard.h"
 #include "core/input/input.h"
 #include "core/io/json.h"
 #include "core/io/resource_loader.h"
 #include "core/io/resource_saver.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
+#include "core/object/message_queue.h"
 #include "core/object/script_language.h"
 #include "core/os/keyboard.h"
 #include "core/os/os.h"
+#include "servers/rendering/rendering_server.h"
 #include "core/string/string_builder.h"
 #include "core/version.h"
 #include "editor/doc/doc_data_compressed.gen.h"
@@ -3081,6 +3084,9 @@ void EditorHelp::_gen_doc_thread(void *p_udata) {
 }
 
 void EditorHelp::_gen_extensions_docs() {
+	if (doc_shutting_down.is_set()) {
+		return;
+	}
 	doc->generate((DocTools::GENERATE_FLAG_SKIP_BASIC_TYPES | DocTools::GENERATE_FLAG_EXTENSION_CLASSES_ONLY));
 
 	// Append extra doc data, as it gets overridden by the generation step.
@@ -3093,6 +3099,9 @@ static void _load_script_doc_cache(bool p_changes) {
 }
 
 void EditorHelp::load_script_doc_cache() {
+	if (doc_shutting_down.is_set()) {
+		return;
+	}
 	if (!ProjectSettings::get_singleton()->is_project_loaded()) {
 		print_verbose("Skipping loading script doc cache since no project is open.");
 		return;
@@ -3167,6 +3176,9 @@ static void _regenerate_script_doc_cache(bool p_changes) {
 }
 
 void EditorHelp::regenerate_script_doc_cache() {
+	if (doc_shutting_down.is_set()) {
+		return;
+	}
 	if (EditorFileSystem::get_singleton()->is_scanning()) {
 		// Wait until EditorFileSystem scanning is complete to use updated filesystem structure.
 		EditorFileSystem::get_singleton()->connect(SNAME("sources_changed"), callable_mp_static(_regenerate_script_doc_cache), CONNECT_ONE_SHOT);
@@ -3175,7 +3187,11 @@ void EditorHelp::regenerate_script_doc_cache() {
 
 	_wait_for_thread(worker_thread);
 	_wait_for_thread(loader_thread);
+	script_loader_active.set();
 	loader_thread.start(_regen_script_doc_thread, EditorFileSystem::get_singleton()->get_filesystem());
+	if (!loader_thread.is_started()) {
+		script_loader_active.clear();
+	}
 }
 
 // Runs on worker_thread since it writes to DocData.
@@ -3205,6 +3221,9 @@ void EditorHelp::_regen_script_doc_thread(void *p_udata) {
 	// All ResourceLoader::load() calls are done, so we can no longer deadlock with main thread.
 	// Switch to back to worker_thread from loader_thread to resynchronize access to DocData.
 	worker_thread.start(_finish_regen_script_doc_thread, nullptr);
+	// Publish only after the existing worker owns the loader's join. The main
+	// thread may then join the worker without racing a later worker start.
+	script_loader_active.clear();
 }
 
 void EditorHelp::_reload_scripts_documentation(EditorFileSystemDirectory *p_dir) {
@@ -3252,6 +3271,9 @@ void EditorHelp::save_script_doc_cache() {
 }
 
 void EditorHelp::generate_doc(bool p_use_cache, bool p_use_script_cache) {
+	if (doc_shutting_down.is_set()) {
+		return;
+	}
 	doc_generation_count++;
 	OS::get_singleton()->benchmark_begin_measure("EditorHelp", vformat("Generate Documentation (Run %d)", doc_generation_count));
 
@@ -3362,8 +3384,44 @@ void EditorHelp::update_doc() {
 	_update_doc();
 }
 
-void EditorHelp::cleanup_doc() {
+void EditorHelp::begin_doc_lifetime() {
+	ERR_FAIL_COND(doc || worker_thread.is_started() || loader_thread.is_started());
+	_script_docs_loaded.clear();
+	_docs_to_add.clear();
+	_docs_to_remove.clear();
+	_docs_to_remove_by_path.clear();
+	doc_shutting_down.clear();
+}
+
+void EditorHelp::finish_doc_generation() {
+	doc_shutting_down.set();
+	using namespace GDExtensionDeviceExit;
+	// A loader may need a later main-queue semaphore callback. An owner exit
+	// inside that same flush cannot advance it or safely release its state.
+	require_close_success(MessageQueue::get_main_singleton()->is_flushing() ? ERR_BUSY : OK, CloseRoute::SHUTDOWN);
+	// Loading a script may await a main-queue connection/semaphore callback.
+	// Keep the original filesystem and editor alive until that load returns;
+	// directly joining the loader on main would prevent its completion.
+	while (script_loader_active.is_set()) {
+		// Match ResourceLoader::_ensure_load_progress for single-threaded RS.
+		if (!OS::get_singleton()->is_separate_thread_rendering_enabled()) {
+			RenderingServer::get_singleton()->sync();
+		}
+		require_close_success(MessageQueue::get_main_singleton()->flush(), CloseRoute::SHUTDOWN);
+		OS::get_singleton()->delay_usec(1000);
+	}
 	_wait_for_thread();
+	// Normally the finishing worker consumed this join. Also cover a refused
+	// worker start without transferring the loader's ownership elsewhere.
+	_wait_for_thread(loader_thread);
+	// Joined producers cannot enqueue any more old callbacks. Consume their
+	// remaining deferred entries while admission is still closed, before a
+	// later native owner can begin a new documentation lifetime.
+	require_close_success(MessageQueue::get_main_singleton()->flush(), CloseRoute::SHUTDOWN);
+}
+
+void EditorHelp::cleanup_doc() {
+	finish_doc_generation();
 	memdelete(doc);
 	doc = nullptr;
 }

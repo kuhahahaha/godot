@@ -598,7 +598,7 @@ String ShaderRD::_version_get_sha1(Version *p_version) const {
 }
 
 static const char *shader_file_header = "GDSC";
-static const uint32_t cache_file_version = 4;
+static const uint32_t cache_file_version = 5;
 
 String ShaderRD::_get_cache_file_relative_path(Version *p_version, int p_group, const String &p_api_name) {
 	String sha1 = _version_get_sha1(p_version);
@@ -609,6 +609,19 @@ String ShaderRD::_get_cache_file_path(Version *p_version, int p_group, const Str
 	const String &shader_cache_dir = p_user_dir ? shader_cache_user_dir : shader_cache_res_dir;
 	String relative_path = _get_cache_file_relative_path(p_version, p_group, p_api_name);
 	return shader_cache_dir.path_join(relative_path);
+}
+
+void ShaderRD::_rollback_cache_load(Vector<RID> &r_variants, Vector<Vector<uint8_t>> &r_variant_data, const LocalVector<int> &p_group_indices, const LocalVector<int> &p_loaded_indices, void (*p_free_shader)(RID, void *), void *p_context) {
+	for (int index : p_loaded_indices) {
+		RID shader = r_variants[index];
+		if (shader.is_valid()) {
+			r_variants.write[index] = RID();
+			p_free_shader(shader, p_context);
+		}
+	}
+	for (int index : p_group_indices) {
+		r_variant_data.write[index].clear();
+	}
 }
 
 bool ShaderRD::_load_from_cache(Version *p_version, int p_group) {
@@ -641,6 +654,7 @@ bool ShaderRD::_load_from_cache(Version *p_version, int p_group) {
 
 	ERR_FAIL_COND_V(variant_count != (uint32_t)group_to_variant_map[p_group].size(), false); //should not happen but check
 
+	LocalVector<int> loaded_indices;
 	for (uint32_t i = 0; i < variant_count; i++) {
 		int variant_id = group_to_variant_map[p_group][i];
 		uint32_t variant_size = f->get_32();
@@ -673,14 +687,12 @@ bool ShaderRD::_load_from_cache(Version *p_version, int p_group) {
 		{
 			RID shader = RD::get_singleton()->shader_create_from_bytecode_with_samplers(p_version->variant_data[variant_id], p_version->variants[variant_id], immutable_samplers);
 			if (shader.is_null()) {
-				for (uint32_t j = 0; j < i; j++) {
-					int variant_free_id = group_to_variant_map[p_group][j];
-					RD::get_singleton()->free_rid(p_version->variants[variant_free_id]);
-				}
+				_rollback_cache_load(p_version->variants, p_version->variant_data, group_to_variant_map[p_group], loaded_indices, [](RID p_shader, void *) { RD::get_singleton()->free_rid(p_shader); }, nullptr);
 				ERR_FAIL_COND_V(shader.is_null(), false);
 			}
 
 			p_version->variants.write[variant_id] = shader;
+			loaded_indices.push_back(variant_id);
 		}
 	}
 
@@ -818,6 +830,7 @@ void ShaderRD::version_set_code(RID p_version, const HashMap<String, String> &p_
 
 	Version *version = version_owner.get_or_null(p_version);
 	ERR_FAIL_NULL(version);
+	ERR_FAIL_COND_MSG(version_native_is_held(p_version), "Shader native inputs are immutable while retained.");
 
 	MutexLock lock(*version->mutex);
 
@@ -835,6 +848,7 @@ void ShaderRD::version_set_compute_code(RID p_version, const HashMap<String, Str
 
 	Version *version = version_owner.get_or_null(p_version);
 	ERR_FAIL_NULL(version);
+	ERR_FAIL_COND_MSG(version_native_is_held(p_version), "Shader native inputs are immutable while retained.");
 
 	MutexLock lock(*version->mutex);
 
@@ -851,6 +865,7 @@ void ShaderRD::version_set_raytracing_code(RID p_version, const HashMap<String, 
 
 	Version *version = version_owner.get_or_null(p_version);
 	ERR_FAIL_NULL(version);
+	ERR_FAIL_COND_MSG(version_native_is_held(p_version), "Shader native inputs are immutable while retained.");
 
 	version->raygen_globals = p_raygen_globals.utf8();
 	version->any_hit_globals = p_any_hit_globals.utf8();
@@ -860,6 +875,79 @@ void ShaderRD::version_set_raytracing_code(RID p_version, const HashMap<String, 
 	version->uniforms = p_uniforms.utf8();
 
 	_version_set(version, p_code, p_custom_defines);
+}
+
+Error ShaderRD::version_get_native_shader_if_ready(RID p_version, int p_variant, RID &r_shader, uint64_t &r_input_mask) {
+	auto *rd = RD::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (p_variant < 0 || p_variant >= variant_defines.size()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (!variants_enabled[p_variant] || !group_enabled[variant_to_group[p_variant]]) {
+		return ERR_UNAVAILABLE;
+	}
+	Version *version = version_owner.get_or_null(p_version);
+	if (!version) {
+		return ERR_INVALID_PARAMETER;
+	}
+	MutexLock lock(*version->mutex);
+	if (version->dirty || !version->valid || version->initialize_needed) {
+		return ERR_BUSY;
+	}
+	for (auto task : version->group_compilation_tasks) {
+		if (task) {
+			return ERR_BUSY;
+		}
+	}
+	if (p_variant >= version->variants.size() || p_variant >= version->variant_data.size()) {
+		return ERR_UNAVAILABLE;
+	}
+	const RID shader = version->variants[p_variant];
+	// Disabled groups own placeholders; failed compilation can leave one behind.
+	if (shader.is_null() || version->variant_data[p_variant].is_empty()) {
+		return ERR_UNAVAILABLE;
+	}
+	uint64_t input_mask = 0;
+	const Error ready = rd->shader_get_native_vertex_input_mask_if_ready(shader, input_mask);
+	if (ready != OK) {
+		return ready;
+	}
+	r_shader = shader;
+	r_input_mask = input_mask;
+	return OK;
+}
+
+bool ShaderRD::version_native_shader_is_ready(RID p_version, RID p_shader) {
+	Version *version = version_owner.get_or_null(p_version);
+	if (!version || p_shader.is_null()) {
+		return false;
+	}
+	MutexLock lock(*version->mutex);
+	if (version->dirty || !version->valid) {
+		return false;
+	}
+	for (auto task : version->group_compilation_tasks) {
+		if (task) {
+			return false;
+		}
+	}
+	return version->variants.has(p_shader);
+}
+
+bool ShaderRD::version_native_is_held(RID p_version) {
+	Version *version = version_owner.get_or_null(p_version);
+	if (!version || !RD::get_singleton()) {
+		return false;
+	}
+	MutexLock lock(*version->mutex);
+	for (RID shader : version->variants) {
+		if (RD::get_singleton()->native_immutable_resource_is_held(shader)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 bool ShaderRD::version_is_valid(RID p_version) {
@@ -897,11 +985,14 @@ bool ShaderRD::version_free(RID p_version) {
 			shader_versions_embedded_set.erase({ this, p_version });
 		}
 
-		version->mutex->lock();
+		// free() destroys Version and makes its slot reusable. Keep the original
+		// mutex independently so cleanup never reads the released slot.
+		Mutex *const version_mutex = version->mutex;
+		version_mutex->lock();
 		_clear_version(version);
 		version_owner.free(p_version);
-		version->mutex->unlock();
-		memdelete(version->mutex);
+		version_mutex->unlock();
+		memdelete(version_mutex);
 	} else {
 		return false;
 	}
@@ -942,7 +1033,12 @@ void ShaderRD::enable_group(int p_group) {
 	for (const RID &version_rid : version_owner.get_owned_list()) {
 		Version *version = version_owner.get_or_null(version_rid);
 		version->mutex->lock();
-		_compile_version_start(version, p_group);
+		// A pending code change must refresh every enabled group together on
+		// the next version access. Compiling only this group would clear dirty
+		// and leave the existing groups on their previous source.
+		if (!version->dirty) {
+			_compile_version_start(version, p_group);
+		}
 		version->mutex->unlock();
 	}
 }

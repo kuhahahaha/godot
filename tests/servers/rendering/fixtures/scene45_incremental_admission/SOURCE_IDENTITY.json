@@ -1,0 +1,162 @@
+{
+  "base_commit": "776fd86b5a7397b67b46c217170b8019f9401bd0",
+  "fixed_patch_sha256": "b1d54d883089236208f231d29e6c2a36ed9b3005e6761df7e6f6bc31e6b754a9",
+  "sources": [
+    {
+      "path": "core/extension/gdextension_device_session.cpp",
+      "sha256": "30875b090936934e1ca279e65baa12de4f45bcaefd85c291c3e07f5fd792f79f"
+    },
+    {
+      "path": "core/extension/gdextension_guard_enrollment.cpp",
+      "sha256": "038ad1a5a2204109d71961455872bb128b6d9d031b50b596f095be594af6c894"
+    },
+    {
+      "path": "core/extension/gdextension_interface.cpp",
+      "sha256": "d00b1a740b5d39a0b04f2c7d1a828bafe9e3d87d2eb8851b2c0a00c25c5cb8c1"
+    },
+    {
+      "path": "core/extension/gdextension_library_exit_guard.cpp",
+      "sha256": "5c3a5cc8bccf16b11ab9d9e7220649d903c15aff90d242d643da7b7a2e94648c"
+    },
+    {
+      "path": "core/extension/gdextension_library_exit_guard.h",
+      "sha256": "0e92b0088206ac15870b5d07eb81a90288054ada66ae1ed8092c932d95e821b0"
+    },
+    {
+      "path": "core/extension/gdextension_production_action.cpp",
+      "sha256": "41b085195ff9cd235e4d94877e5905c1adebda27249b0c4652c91050c05338a1"
+    },
+    {
+      "path": "core/extension/gdextension_production_legacy.cpp",
+      "sha256": "6af9647c46ebb9942371546b13be5c27535b84f7ed46184c2ea66f955c74e6b0"
+    },
+    {
+      "path": "core/extension/gdextension_production_metadata.cpp",
+      "sha256": "ab77f9adbd603d87c1d0ae1c65f74aced9e7054b4b3802d02100ae2302796838"
+    },
+    {
+      "path": "core/extension/gdextension_production_output.cpp",
+      "sha256": "a9c0fb621028cca7b831a7b4a59aeed8af351b0d853e09d05c5a6192ef758974"
+    },
+    {
+      "path": "core/extension/gdextension_production_output_poll.cpp",
+      "sha256": "c94284bc8600d44fa85937c026802a66054130c9ffd628c5f8806db1ae412aeb"
+    },
+    {
+      "path": "core/extension/gdextension_production_owned.cpp",
+      "sha256": "ac2f852605ea6a405947f35b84326f8803acc4c5e4f0204a3610c32c0eb57cc9"
+    },
+    {
+      "path": "core/extension/gdextension_production_registration.cpp",
+      "sha256": "c62c829244ca2eef9c475b19e3229c90c2bd9e7d05f37f738b847c6fb866875c"
+    },
+    {
+      "path": "core/extension/gdextension_production_request.cpp",
+      "sha256": "8a4c9816689994263762f7fa831bb121556befbcc17cfab32f62bcd183d90407"
+    },
+    {
+      "path": "core/extension/gdextension_production_resources.cpp",
+      "sha256": "1666bd4a9ae9029333eadbed4afaa31eb9a453eae4193a1d0835878b4e10017d"
+    },
+    {
+      "path": "core/extension/gdextension_production_set.cpp",
+      "sha256": "fbd65677d8bea0c0eb61e86944afa4e8f9c5b8385d37f0f75996a3c8983941b2"
+    },
+    {
+      "path": "core/extension/gdextension_production_window.cpp",
+      "sha256": "d7d8483fe72bc6ce8fef1123eea5f8eec4dfaf02fd8b296f5241a5d93033328c"
+    },
+    {
+      "path": "core/extension/gdextension_qualification.cpp",
+      "sha256": "8bf80a8755f291974ae907d252125701f77c0ba4fc9d3caa901d3aff05674c65"
+    },
+    {
+      "path": "core/extension/gdextension_qualification_internal.h",
+      "sha256": "b739a2a19e53011777bc73e812ccd488a1de571e4de76011229dc72405f8935d"
+    },
+    {
+      "path": "core/extension/gdextension_qualification_raster.cpp",
+      "sha256": "4504721d7e9c7b635dc878900ec85eccdb4057959a0c678dc18303c807e09af8"
+    },
+    {
+      "path": "core/extension/gdextension_qualification_rd.cpp",
+      "sha256": "536bf13be5fd5ecb76e4a34355332932e29ddc4a4eaa7135a7758a56a954b058"
+    },
+    {
+      "path": "core/extension/gdextension_qualification_rt.cpp",
+      "sha256": "ae248f8f9a8fa1c779721412511744c122f168b3dd9bf293fb447d5729a9668e"
+    },
+    {
+      "path": "core/extension/gdextension_qualification_ticket.cpp",
+      "sha256": "642005e1a345da4111c024ac2205e1fa0262a7b105129a616beec66eacd05e37"
+    },
+    {
+      "path": "core/extension/gdextension_qualification_typed.cpp",
+      "sha256": "5d0bec0c916a08c6d82e68df9660764652cd087ff05945d9454a9a54c4a5afce"
+    },
+    {
+      "path": "core/extension/gdextension_record_source.cpp",
+      "sha256": "ad3296cea31812b28eb17ae073a149cc52b9dec018b1502061162d932ee12f1a"
+    },
+    {
+      "path": "core/extension/gdextension_record_source.h",
+      "sha256": "f33149e046ee271e205ff2d619060fbd73023089bc8e781b1af105b293c2e57f"
+    },
+    {
+      "path": "core/extension/gdextension_scene_ready.cpp",
+      "sha256": "67896875164ce213cbae2028b96336459ad4c1ba1860051bd27411ea3045d4df"
+    },
+    {
+      "path": "core/extension/gdextension_system_scalar.cpp",
+      "sha256": "30e708c02277436860af4622f6de3d99664e7136b73f4f520144fe7ff7ee3163"
+    },
+    {
+      "path": "drivers/metal/rendering_device_driver_metal.cpp",
+      "sha256": "ad21cbb73c959c8e7bedcc3c34f50faeca3b1753a19561b504efbc31e8f21e73"
+    },
+    {
+      "path": "drivers/metal/rendering_device_driver_metal.h",
+      "sha256": "6192b4c06690a7fb9be2c8752457d5f3e33382f8a3f7a7f4e894431e3553c824"
+    },
+    {
+      "path": "drivers/metal/rendering_device_driver_metal3.cpp",
+      "sha256": "3af3215e96799ce51b5fe58eb53ff2223e437ff2aa4d8ef3417e373c7799d74c"
+    },
+    {
+      "path": "drivers/metal/rendering_device_driver_metal3.h",
+      "sha256": "c1c84c8317ab5a89a09b2146bc7db879f0ab2c1dfb39f184f5da386f27b27605"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage_external.cpp",
+      "sha256": "8002afd1c1d176d9d8eb75bba5628bb30d16483fade1dcf74a5dc1c6b56e41ec"
+    },
+    {
+      "path": "servers/rendering/rendering_device.cpp",
+      "sha256": "0ea72823cbc39ffa242d5fc8d5ebb66a1a895811fe9f5623218ffb922031a91a"
+    },
+    {
+      "path": "servers/rendering/rendering_device.h",
+      "sha256": "3d4bbb6fda5ac84098e68b09811b025dbec3b2d84879f31a1a319cc4243d8ddd"
+    },
+    {
+      "path": "servers/rendering/rendering_device_driver.cpp",
+      "sha256": "269aff7d30f85672adc77abd9531c7fa6ac1946deeb1e9c2030132fceb8ee9b2"
+    },
+    {
+      "path": "servers/rendering/rendering_device_driver.h",
+      "sha256": "02ae93839eb68b54e9564223f19c72a4436a998f6d0c4206a6aa90b50f818357"
+    },
+    {
+      "path": "servers/rendering/rendering_device_immutable_hold.cpp",
+      "sha256": "7c39591aa6f8e0e7894a5626228c038112b7d8931f0876459ffaffd2b89bce68"
+    },
+    {
+      "path": "servers/rendering/rendering_device_output_retire.cpp",
+      "sha256": "b0ab1e9eb75c9beeb9f41ee0f86cc9c401252c1afb59bbb155c5c3c9df5c1bac"
+    },
+    {
+      "path": "tests/servers/rendering/test_record_source.cpp",
+      "sha256": "e1313f3e19f5e98e03f7e0b00f58fe7cd351cfae8d65bfc86ecd9955fc7dbb0b"
+    }
+  ]
+}

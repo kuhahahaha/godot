@@ -1,0 +1,166 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_vertex_array_range.cpp:183:
+TEST CASE:  [RenderingDevice][VertexArrayRange] public factories include binding offsets in vertex ranges
+  last element crosses tail by one byte
+
+tests/servers/rendering/test_vertex_array_range.cpp:130: ERROR: CHECK( array_rid.is_valid() == p_accept ) is NOT correct!
+  values: CHECK( true == false )
+
+tests/servers/rendering/test_vertex_array_range.cpp:149: ERROR: CHECK( f.device.vertex_array_owner.get_rid_count() == arrays_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_vertex_array_range.cpp:150: ERROR: CHECK( f.device.dependency_map.size() == dependencies_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_vertex_array_range.cpp:151: ERROR: CHECK( f.device.reverse_dependency_map.size() == reverse_dependencies_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+===============================================================================
+tests/servers/rendering/test_vertex_array_range.cpp:183:
+TEST CASE:  [RenderingDevice][VertexArrayRange] public factories include binding offsets in vertex ranges
+  binding offset exceeds the buffer
+
+tests/servers/rendering/test_vertex_array_range.cpp:130: ERROR: CHECK( array_rid.is_valid() == p_accept ) is NOT correct!
+  values: CHECK( true == false )
+
+tests/servers/rendering/test_vertex_array_range.cpp:149: ERROR: CHECK( f.device.vertex_array_owner.get_rid_count() == arrays_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_vertex_array_range.cpp:150: ERROR: CHECK( f.device.dependency_map.size() == dependencies_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_vertex_array_range.cpp:151: ERROR: CHECK( f.device.reverse_dependency_map.size() == reverse_dependencies_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+===============================================================================
+tests/servers/rendering/test_vertex_array_range.cpp:183:
+TEST CASE:  [RenderingDevice][VertexArrayRange] public factories include binding offsets in vertex ranges
+  binding plus attribute offset overflows uint64
+
+tests/servers/rendering/test_vertex_array_range.cpp:130: ERROR: CHECK( array_rid.is_valid() == p_accept ) is NOT correct!
+  values: CHECK( true == false )
+
+tests/servers/rendering/test_vertex_array_range.cpp:149: ERROR: CHECK( f.device.vertex_array_owner.get_rid_count() == arrays_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_vertex_array_range.cpp:150: ERROR: CHECK( f.device.dependency_map.size() == dependencies_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_vertex_array_range.cpp:151: ERROR: CHECK( f.device.reverse_dependency_map.size() == reverse_dependencies_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+===============================================================================
+tests/servers/rendering/test_vertex_array_range.cpp:183:
+TEST CASE:  [RenderingDevice][VertexArrayRange] public factories include binding offsets in vertex ranges
+  binding plus strided extent overflows uint64
+
+tests/servers/rendering/test_vertex_array_range.cpp:130: ERROR: CHECK( array_rid.is_valid() == p_accept ) is NOT correct!
+  values: CHECK( true == false )
+
+tests/servers/rendering/test_vertex_array_range.cpp:149: ERROR: CHECK( f.device.vertex_array_owner.get_rid_count() == arrays_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_vertex_array_range.cpp:150: ERROR: CHECK( f.device.dependency_map.size() == dependencies_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_vertex_array_range.cpp:151: ERROR: CHECK( f.device.reverse_dependency_map.size() == reverse_dependencies_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+===============================================================================
+tests/servers/rendering/test_vertex_array_range.cpp:186:
+TEST CASE:  [RenderingDevice][VertexArrayRange] public factories retain reachable instance ranges
+  all-instance zero vertex count remains valid at exact end
+
+tests/servers/rendering/test_vertex_array_range.cpp:142: ERROR: CHECK( array->max_instances_allowed == p_instances ) is NOT correct!
+  values: CHECK( 4 == 1 )
+
+===============================================================================
+tests/servers/rendering/test_vertex_array_range.cpp:186:
+TEST CASE:  [RenderingDevice][VertexArrayRange] public factories retain reachable instance ranges
+  base and attribute offsets reduce reachable instance count
+
+tests/servers/rendering/test_vertex_array_range.cpp:142: ERROR: CHECK( array->max_instances_allowed == p_instances ) is NOT correct!
+  values: CHECK( 4 == 3 )
+
+===============================================================================
+tests/servers/rendering/test_vertex_array_range.cpp:186:
+TEST CASE:  [RenderingDevice][VertexArrayRange] public factories retain reachable instance ranges
+  overlapping aligned elements count only complete reads
+
+tests/servers/rendering/test_vertex_array_range.cpp:142: ERROR: CHECK( array->max_instances_allowed == p_instances ) is NOT correct!
+  values: CHECK( 8 == 7 )
+
+===============================================================================
+tests/servers/rendering/test_vertex_array_range.cpp:186:
+TEST CASE:  [RenderingDevice][VertexArrayRange] public factories retain reachable instance ranges
+  first instance crosses the tail
+
+tests/servers/rendering/test_vertex_array_range.cpp:130: ERROR: CHECK( array_rid.is_valid() == p_accept ) is NOT correct!
+  values: CHECK( true == false )
+
+tests/servers/rendering/test_vertex_array_range.cpp:149: ERROR: CHECK( f.device.vertex_array_owner.get_rid_count() == arrays_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_vertex_array_range.cpp:150: ERROR: CHECK( f.device.dependency_map.size() == dependencies_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_vertex_array_range.cpp:151: ERROR: CHECK( f.device.reverse_dependency_map.size() == reverse_dependencies_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+===============================================================================
+tests/servers/rendering/test_vertex_array_range.cpp:186:
+TEST CASE:  [RenderingDevice][VertexArrayRange] public factories retain reachable instance ranges
+  attribute offset exceeds buffer without unsigned subtraction wrap
+
+tests/servers/rendering/test_vertex_array_range.cpp:130: ERROR: CHECK( array_rid.is_valid() == p_accept ) is NOT correct!
+  values: CHECK( true == false )
+
+tests/servers/rendering/test_vertex_array_range.cpp:149: ERROR: CHECK( f.device.vertex_array_owner.get_rid_count() == arrays_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_vertex_array_range.cpp:150: ERROR: CHECK( f.device.dependency_map.size() == dependencies_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_vertex_array_range.cpp:151: ERROR: CHECK( f.device.reverse_dependency_map.size() == reverse_dependencies_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+===============================================================================
+tests/servers/rendering/test_vertex_array_range.cpp:186:
+TEST CASE:  [RenderingDevice][VertexArrayRange] public factories retain reachable instance ranges
+  binding offset exceeds the buffer
+
+tests/servers/rendering/test_vertex_array_range.cpp:130: ERROR: CHECK( array_rid.is_valid() == p_accept ) is NOT correct!
+  values: CHECK( true == false )
+
+tests/servers/rendering/test_vertex_array_range.cpp:149: ERROR: CHECK( f.device.vertex_array_owner.get_rid_count() == arrays_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_vertex_array_range.cpp:150: ERROR: CHECK( f.device.dependency_map.size() == dependencies_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_vertex_array_range.cpp:151: ERROR: CHECK( f.device.reverse_dependency_map.size() == reverse_dependencies_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+===============================================================================
+tests/servers/rendering/test_vertex_array_range.cpp:186:
+TEST CASE:  [RenderingDevice][VertexArrayRange] public factories retain reachable instance ranges
+  instance attribute address addition overflows uint64
+
+tests/servers/rendering/test_vertex_array_range.cpp:130: ERROR: CHECK( array_rid.is_valid() == p_accept ) is NOT correct!
+  values: CHECK( true == false )
+
+tests/servers/rendering/test_vertex_array_range.cpp:149: ERROR: CHECK( f.device.vertex_array_owner.get_rid_count() == arrays_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_vertex_array_range.cpp:150: ERROR: CHECK( f.device.dependency_map.size() == dependencies_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_vertex_array_range.cpp:151: ERROR: CHECK( f.device.reverse_dependency_map.size() == reverse_dependencies_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+===============================================================================
+[doctest] test cases:   2 |   0 passed |  2 failed | 2189 skipped
+[doctest] assertions: 369 | 334 passed | 35 failed |
+[doctest] Status: FAILURE!

@@ -1,0 +1,104 @@
+{
+  "schema": 1,
+  "component": "C06 physical action ordinal transport V2",
+  "base_commit": "fdc68493bef2a880befc8e864a8f089250f705cd",
+  "source_pins": {
+    "core/extension/gdextension_interface.json": "2fbed5dc0f0f38cd194100df15750ae76c1425484dffb38e3c3cb6e006b01c16",
+    "core/extension/gdextension_library_exit_guard.h": "34d2fe644b641974eb6be0c39d5b3381401bb1815a5bd879afd9cdaf70b84082",
+    "core/extension/gdextension_production_action.cpp": "5cf95e97cdc6008a9ba0ff24169f268b10618caf51b059fb8afb1f00ea2defee",
+    "core/extension/gdextension_production_interface.cpp": "03f80798cfc8a79d48b29ccfbdf3290f809566b0c6d4b2fc7efb0b9e0f27d7dd",
+    "core/extension/gdextension_production_owned.cpp": "a08dd560c23d86dd55c97a180bac537bc242c6cb35a8a59246250de826df2a1d",
+    "core/extension/gdextension_production_request.cpp": "2726f0ecd2fb50f5685bf41799176fd76406e55fea6d3736b8930c763ee67c4e",
+    "core/extension/gdextension_production_request.h": "b3e6fdc4976076e361f6ee27e49fc2bdd2713756354852cb0e0a3d1d2913f19f",
+    "core/extension/gdextension_production_window.cpp": "f0e9205ddc7326dc8fb236021ce16301b032a0b17bbb1617897f7f2fed5c59cd",
+    "servers/rendering/rendering_device_immutable_hold.cpp": "7cbcb21ffb15fdb5dfd4910627e8662dd687a514872515e2f6caf5763612f9bf",
+    "servers/rendering/rendering_device_output_retire.cpp": "39d20137fc48de352ff10b4aa7c16d1f756e2d57589c95d4222418085e6e79b2",
+    "tests/core/extension/test_production_native_observe.cpp": "722da2ac7052fbbc17eb5d0c194c287c84a38e55e08b7cbdf629f19cdb7011c9",
+    "tests/core/extension/test_production_request.cpp": "16f278163b173b8e3d8d191249cf2ca373b27bdd47c753aa8b3b48536795dc87",
+    "core/extension/gdextension_production_legacy.cpp": "08bfa126642ab555b40a47992dd237a1e1ee93025584f8afb3f312d9de3dd5ec",
+    "core/extension/gdextension_production_legacy_projection.h": "4c22c6b063a11a812bddbab744a44393727f06b470b30d47ffa9e7fd22f95725"
+  },
+  "host": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-c06-v2-20261106/final-host/editor.arm64",
+    "sha256": "0c882b933ea1ab94e8fee22447ff0c42f4bf470871a1ade6655fc44ffcb526f3",
+    "controlled_metadata_sha256": "5ffb82225ea4794cba395a972a4978fe6549d7b3c620317ec93c00d79d806abb",
+    "build_source": "work/b4-c06-v2-20261106/runtime-fix/SOURCE.json",
+    "dirty_source_build": true
+  },
+  "results": {
+    "runtime-fix": {
+      "evidence": "work/b4-c06-v2-20261106/runtime-fix/RESULT.json",
+      "sha256": "6eceae44aa3ccc15aaa3405eefafaa4efaa6ff8f9125734e27e540b52ca24ea0",
+      "exit": 0
+    },
+    "targeted3": {
+      "evidence": "work/b4-c06-v2-20261106/targeted3/RESULT.json",
+      "sha256": "543be8832c97f5f235aa7eb8d82c4da1cc93a96f67947c0f61c59cc1adc32e33",
+      "exit": 0,
+      "test_cases": {
+        "successes": "50",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "33413",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "full": {
+      "evidence": "work/b4-c06-v2-20261106/full/RESULT.json",
+      "sha256": "849113f194676677738e53476a0916d45f34240692080333073e81da9ea1b622",
+      "exit": 0,
+      "test_cases": {
+        "successes": "2089",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "523669",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "native390": {
+      "evidence": "work/b4-c06-v2-20261106/native390/RESULT.json",
+      "sha256": "a5a249843be26922a655645f1f0b46ef2e71501eed78631e740a037791fe21f4",
+      "exit": 0,
+      "gpu_pass": true,
+      "checks": {
+        "one_result": true,
+        "not_timeout": true,
+        "no_fatal_or_exit_leaks": true,
+        "exact_expected_engine_errors": true,
+        "actual_metal_startup": true,
+        "native_and_outer_success": true,
+        "host_and_metadata_unchanged": true,
+        "source_unchanged": true
+      }
+    }
+  },
+  "independent_reviews": {
+    "source": {
+      "path": "/tmp/c06-v2-wire/FINAL_SOURCE_REVIEW.md",
+      "sha256": "156643c77a2ea46c98f53cae2d6002de7905a4cdf452f956332e0c22ad27a07f"
+    },
+    "runtime_fix": {
+      "path": "/tmp/c06-v2-wire/RUNTIME_FIX_REVIEW.md",
+      "sha256": "3ff2a298eebe02721afee940ffe51ce2ccde5c24286252b9814ca97b0a926561"
+    },
+    "v1_compatibility": {
+      "path": "/tmp/c06-v2-wire/V1_COMPAT_FINAL_REVIEW.md",
+      "sha256": "2d665d76ec6a645a12290b7dce2f2c32f5b0228663c1675b4624ec1a664daaec"
+    },
+    "native_test": {
+      "path": "/tmp/c06-native-observe-v2-independent-review/FINAL_REVIEW.md",
+      "sha256": "4d0e0ccc1b95c5342cc1cf5e55044b516cc6bceb6716d64694e5a5b7a41bf50a"
+    }
+  },
+  "scope_limits": [
+    "Physical ordinal transport does not issue source mapping, once/window, logical coverage or publication receipts.",
+    "V2 native component tests use existing CPU backing-driver seams, not GPU shader execution or original public source admission.",
+    "KnownPrefix verifies cancellation and retirement; it does not test V2 successful suffix retry or Unknown.",
+    "The separate actual Metal 390-check particle regression does not qualify V2 shader execution or whole output release.",
+    "Acquire/poll typed output and original owner joins remain subsequent queue work."
+  ]
+}

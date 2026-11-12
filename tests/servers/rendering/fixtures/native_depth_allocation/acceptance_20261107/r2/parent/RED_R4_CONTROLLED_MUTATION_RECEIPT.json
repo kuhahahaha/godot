@@ -1,0 +1,12 @@
+{
+  "record_basis": "Parent controlled RED_R4 exec command history, not runner runtime source pins. Derived negative hash reconstructed now from preserved preimage and exact mutation; no claim of a separate contemporaneous R4 source-hash measurement.",
+  "path": "servers/rendering/rendering_device.cpp",
+  "preserved_final_source": "tests/servers/rendering/fixtures/native_depth_allocation/acceptance_20261107/final_source/servers/rendering/rendering_device.cpp.gz",
+  "final_sha256": "80a4827f1abc43102d5832e4d74d4477ddeb4f42167eb0c4b1032bf17c118790",
+  "negative_sha256_reconstructed": "540588c44268f225fd72f965f386c2b40fd21a1d4f0ffcb2e5e68104054226fe",
+  "replace_from": "r_report.depth.state == NativeDisposalWitness::State::RETURNED &&",
+  "replace_to": "(r_report.framebuffer_created || r_report.depth.state == NativeDisposalWitness::State::RETURNED) &&",
+  "build_result": "RED_R4_BUILD_RESULT.json",
+  "host_result": "RED_R4_GPU_RESULT.json",
+  "finally_restore": "SOURCE_RESTORATION_R4.json"
+}

@@ -1,0 +1,21 @@
+{
+  "scope": "P1 false-positive repair only; final root-formatted runner. No implementation edits/build/GPU by reviewer.",
+  "files": {
+    "tests/servers/rendering/test_native_height_range.cpp": {
+      "bytes": 25423,
+      "sha256": "5f69c203a88f8b5ca3ae66e117b79ed98044480c6017b07275a95edb1d581b3b"
+    },
+    "tests/servers/rendering/fixtures/native_height_range_finalize/run_finalize_entry.py": {
+      "bytes": 2623,
+      "sha256": "1d6b71d80f2abf774dfc021e38ce17391347fa63077c6829a4bafdb4835bff6b"
+    },
+    "tests/servers/rendering/fixtures/native_height_range_finalize/README.md": {
+      "bytes": 3274,
+      "sha256": "80bac6fc01b2f66b45e89e816bec0f4ad6c243f094b518b7957da48e05ae7759"
+    },
+    "servers/rendering/rendering_device.cpp": {
+      "bytes": 746353,
+      "sha256": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc"
+    }
+  }
+}

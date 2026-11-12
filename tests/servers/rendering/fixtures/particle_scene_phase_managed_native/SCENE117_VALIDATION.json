@@ -1,0 +1,818 @@
+{
+  "schema": "scene117-local-validation-v1",
+  "date": "2026-11-07",
+  "status": "PASS_WITH_EXPLICIT_SCOPE",
+  "execution_owner": "root unified local run; receipt assembled by independent read-only evidence review",
+  "source_package": {
+    "coordinator": "117 (same ZIP as 116)",
+    "zip_bytes": 22276,
+    "zip_sha256": "1642d11163e44a2aad622d028661bea7be6141bdbb157565429d93eff9c8e072",
+    "source_adaptation_commit": "257ca8f736c806cc0a13e3a760df942836c2f899",
+    "is_local_execution_identity": false,
+    "source_host": "Apple M5 (source receipt), not local host"
+  },
+  "local_host": {
+    "device": "Apple M3 Pro (Apple9)",
+    "driver": "Metal 4.0",
+    "platform": "macOS arm64",
+    "engine_log_stamp": "4.7.2.stable.custom_build.2fe8bd00b (2026-11-07 10:05:50 UTC)",
+    "stamp_is_adoption_commit": false,
+    "binary": {
+      "bytes": 157524408,
+      "sha256": "17145c0f3a2b86607045572133cb4e8d4918117592c8d3bca79d744439657a2b"
+    }
+  },
+  "inputs": {
+    "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.cpp": {
+      "bytes": 11416,
+      "sha256": "9a675520a8e9335d489c51bc0fa15a1ddea87b9b2861e7e90a87d492f36b9f77"
+    },
+    "modules/particles_runtime_tests/particles_scene_pairs_test_fixture.h": {
+      "bytes": 581,
+      "sha256": "e3be9c7341d33620b735da2201690d1ca5add362b7d5525b5dc78bba0934a1e0"
+    },
+    "servers/rendering/renderer_scene_cull.cpp": {
+      "bytes": 193278,
+      "sha256": "0ae17a6aaf080d05adda8631be5bb46ce80f328a483cad7f4b2709b654a71ee1"
+    },
+    "tests/core/extension/test_production_request.cpp": {
+      "bytes": 740800,
+      "sha256": "46051275555fe66b4052c88fe5ba6a70c4e9fd8b6277f6278a0178102efcc7a1"
+    },
+    "tests/servers/rendering/test_external_output_custody_bridge.h": {
+      "bytes": 9146,
+      "sha256": "3c87c2988d58ea6b8d4f7a8a4c618f84348623f54c3f293dace8ea0ec680ba27"
+    },
+    "tests/servers/rendering/test_external_output_owner_state.cpp": {
+      "bytes": 53391,
+      "sha256": "a2bc1afda2eac3672e05900387b070aeccfdccad265f6e94e9fd416b9cc5b24e"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_phase_managed_native/README.md": {
+      "bytes": 1446,
+      "sha256": "b725e628337f16a0ff4b806d6f4b8955252a78d73a444e537b8120fa265d5b03"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_phase_managed_native/run.gd": {
+      "bytes": 1151,
+      "sha256": "fb9e0c5b2f8ecac60e758497091dd8f2f9d9bca66d1c0cc52d19ce3dabd2fae8"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_phase_managed_native/project.godot": {
+      "bytes": 131,
+      "sha256": "015b8dc03a507a5ef0bf50de26d13acd29a3ab828d8453e1c6ef5b61e12f7a7b"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_viewport_invariance_native/README.md": {
+      "bytes": 4120,
+      "sha256": "1eb32b428947b254c8e8b7e23c445cd9d14551492a3e5a965b6bcceffcee15e4"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_viewport_invariance_native/run_native.py": {
+      "bytes": 6492,
+      "sha256": "38e4341422b658521665a2a008db22c4d2db6ddf1263597677485b92966788d2"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_viewport_invariance_native/run.gd": {
+      "bytes": 6829,
+      "sha256": "4c0f5abb3f695243eeaf4796fdb83d208452f496d41c67d2bed023b31ccef48a"
+    },
+    "tests/servers/rendering/fixtures/particle_scene_viewport_invariance_native/project.godot": {
+      "bytes": 135,
+      "sha256": "53505e0111d78230c7d71a7090d65695ab5fe8edcaa9f8ae860385fd3a5ba142"
+    },
+    "bin/godot.macos.editor.arm64": {
+      "bytes": 157524408,
+      "sha256": "17145c0f3a2b86607045572133cb4e8d4918117592c8d3bca79d744439657a2b"
+    }
+  },
+  "inputs_before_after_equal": true,
+  "current_files_match_recorded_inputs": false,
+  "build": {
+    "exit_code": 0,
+    "exit_evidence": "root execution report; build log records final artifact and elapsed12.38s",
+    "log": {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_BUILD.log",
+      "bytes": 1909,
+      "sha256": "ec18f68600384c009cc72d863338ad76758ad590a3f01d77d6fa2569cb8509d2",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 2
+      }
+    },
+    "warnings": [
+      "AccessKit dependency setup",
+      "ANGLE dependency setup",
+      "MoltenVK macOS12 object linked for macOS11"
+    ]
+  },
+  "red_to_green": {
+    "viewport": {
+      "red": {
+        "phase": "new managed/viewport harness with original local cull (aa6b storage/renderers remain applied)",
+        "preimage_sha256": "6d08b7dafa1e01f1527972433982c46a53f11551b6cd51422bf97b60d21b3faf",
+        "green_source_sha256": "3830f7478a7d82f9cbaa4bc376576baa43767d94a618008a0e701c75e47ac0fb",
+        "build_exit": 0,
+        "command": [
+          "python3",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_scene_viewport_invariance_native/run_native.py",
+          "--binary",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+          "--capture-dir",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_LOCAL_RED_CAPTURES",
+          "--display-driver",
+          "macos"
+        ],
+        "viewport_exit": 1,
+        "immutable_inputs": true,
+        "green_source_restored": true
+      },
+      "red_log": {
+        "path": "work/k06-owner-interface-20261107/SCENE117_LOCAL_RED_VIEWPORT.log",
+        "bytes": 11425,
+        "sha256": "0d2f5931816e40673781fe878998bfcc7e9401b3a008fd0f5be40fc250741d66"
+      },
+      "red_details": "Both renderers emit legacy draw-pass/process/view-axis diagnostics; mobile draws2->3, Forward+ draws2->2 but runner rejects diagnostics. All before/after RGBA remain equal.",
+      "final_cull": "seven Scene117 routing hunks plus original afa76 height query guard"
+    },
+    "managed": {
+      "mobile": {
+        "before": {
+          "checks": 55,
+          "passed": 50,
+          "failed_checks": [
+            "managed_height_distinct_source",
+            "managed_height_other_query_unaffected",
+            "managed_height_query_empty",
+            "managed_height_query_left",
+            "managed_height_query_right"
+          ]
+        },
+        "final": {
+          "checks": {
+            "cull_mask": true,
+            "height_cull_mask": true,
+            "height_one_source": true,
+            "height_two_sources_ambiguous": true,
+            "height_update": true,
+            "height_visibility": true,
+            "kept_pair_pose_revision": true,
+            "kept_pair_shape_revision": true,
+            "kept_pair_type_restore_revision": true,
+            "kept_pair_type_revision": true,
+            "managed_bad_generation": true,
+            "managed_commit_left": true,
+            "managed_commit_requery": true,
+            "managed_commit_right": true,
+            "managed_dirty_rejected": true,
+            "managed_distinct_source": true,
+            "managed_enrollment_cleanup": true,
+            "managed_foreign_device": true,
+            "managed_height_commit_empty_query": true,
+            "managed_height_distinct_source": true,
+            "managed_height_other_query_unaffected": true,
+            "managed_height_query_ambiguous": true,
+            "managed_height_query_empty": true,
+            "managed_height_query_left": true,
+            "managed_height_query_right": true,
+            "managed_height_restore_left_query": true,
+            "managed_left_revision": true,
+            "managed_original_record": true,
+            "managed_original_request_release": true,
+            "managed_original_root_return": true,
+            "managed_outside_envelope": true,
+            "managed_phase_close_waits_holder": true,
+            "managed_phase_live_original_frame": true,
+            "managed_phase_no_draw_admission_closed": true,
+            "managed_phase_original_close": true,
+            "managed_phase_original_device": true,
+            "managed_phase_original_expiry": true,
+            "managed_phase_original_free": true,
+            "managed_phase_original_occurrence": true,
+            "managed_phase_typed_only": true,
+            "managed_phase_waiting_return_without_draw": true,
+            "managed_rejected_snapshot_zero": true,
+            "managed_right_unchanged": true,
+            "managed_same_base_left": true,
+            "managed_same_base_right": true,
+            "managed_stale_revision": true,
+            "ordinary_receiver_not_promoted": true,
+            "ordinary_snapshot_rejected_and_empty": true,
+            "receiver_visibility": true,
+            "rejected_commit_preserves_pairs": true,
+            "same_base_receivers": true,
+            "source_recreate": true,
+            "source_release": true,
+            "source_update": true,
+            "source_visibility": true
+          },
+          "pass": true
+        }
+      },
+      "forward_plus": {
+        "before": {
+          "checks": 55,
+          "passed": 50,
+          "failed_checks": [
+            "managed_height_distinct_source",
+            "managed_height_other_query_unaffected",
+            "managed_height_query_empty",
+            "managed_height_query_left",
+            "managed_height_query_right"
+          ]
+        },
+        "final": {
+          "checks": {
+            "cull_mask": true,
+            "height_cull_mask": true,
+            "height_one_source": true,
+            "height_two_sources_ambiguous": true,
+            "height_update": true,
+            "height_visibility": true,
+            "kept_pair_pose_revision": true,
+            "kept_pair_shape_revision": true,
+            "kept_pair_type_restore_revision": true,
+            "kept_pair_type_revision": true,
+            "managed_bad_generation": true,
+            "managed_commit_left": true,
+            "managed_commit_requery": true,
+            "managed_commit_right": true,
+            "managed_dirty_rejected": true,
+            "managed_distinct_source": true,
+            "managed_enrollment_cleanup": true,
+            "managed_foreign_device": true,
+            "managed_height_commit_empty_query": true,
+            "managed_height_distinct_source": true,
+            "managed_height_other_query_unaffected": true,
+            "managed_height_query_ambiguous": true,
+            "managed_height_query_empty": true,
+            "managed_height_query_left": true,
+            "managed_height_query_right": true,
+            "managed_height_restore_left_query": true,
+            "managed_left_revision": true,
+            "managed_original_record": true,
+            "managed_original_request_release": true,
+            "managed_original_root_return": true,
+            "managed_outside_envelope": true,
+            "managed_phase_close_waits_holder": true,
+            "managed_phase_live_original_frame": true,
+            "managed_phase_no_draw_admission_closed": true,
+            "managed_phase_original_close": true,
+            "managed_phase_original_device": true,
+            "managed_phase_original_expiry": true,
+            "managed_phase_original_free": true,
+            "managed_phase_original_occurrence": true,
+            "managed_phase_typed_only": true,
+            "managed_phase_waiting_return_without_draw": true,
+            "managed_rejected_snapshot_zero": true,
+            "managed_right_unchanged": true,
+            "managed_same_base_left": true,
+            "managed_same_base_right": true,
+            "managed_stale_revision": true,
+            "ordinary_receiver_not_promoted": true,
+            "ordinary_snapshot_rejected_and_empty": true,
+            "receiver_visibility": true,
+            "rejected_commit_preserves_pairs": true,
+            "same_base_receivers": true,
+            "source_recreate": true,
+            "source_release": true,
+            "source_update": true,
+            "source_visibility": true
+          },
+          "pass": true
+        }
+      }
+    },
+    "height_fix_original_commit": "afa76b6244d44695d9c0031126176603b6a4bbdd"
+  },
+  "final_runs": {
+    "results": [
+      {
+        "label": "MANAGED_MOBILE",
+        "command": [
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+          "--display-driver",
+          "macos",
+          "--rendering-driver",
+          "metal",
+          "--rendering-method",
+          "mobile",
+          "--path",
+          "tests/servers/rendering/fixtures/particle_scene_phase_managed_native",
+          "--script",
+          "run.gd"
+        ],
+        "exit_code": 0,
+        "seconds": 2.16,
+        "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_MANAGED_MOBILE.log"
+      },
+      {
+        "label": "MANAGED_FORWARD_PLUS",
+        "command": [
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+          "--display-driver",
+          "macos",
+          "--rendering-driver",
+          "metal",
+          "--rendering-method",
+          "forward_plus",
+          "--path",
+          "tests/servers/rendering/fixtures/particle_scene_phase_managed_native",
+          "--script",
+          "run.gd"
+        ],
+        "exit_code": 0,
+        "seconds": 0.71,
+        "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_MANAGED_FORWARD_PLUS.log"
+      },
+      {
+        "label": "VIEWPORT",
+        "command": [
+          "python3",
+          "tests/servers/rendering/fixtures/particle_scene_viewport_invariance_native/run_native.py",
+          "--binary",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+          "--capture-dir",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CAPTURES",
+          "--display-driver",
+          "macos"
+        ],
+        "exit_code": 0,
+        "seconds": 2.35,
+        "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_VIEWPORT.log"
+      },
+      {
+        "label": "CPU",
+        "command": [
+          "bin/godot.macos.editor.arm64",
+          "--headless",
+          "--test",
+          "--test-case=*ProductionRequest*,*ProductionNativeObserve*,*RecordSource*,*ExternalOutput*,*[K03][P2]*,*EngineGuardLifecycle*,*GenerationMetadataLayout*,*SceneOnlyRouting*,*ReadbackSource*,*ScenePhase*",
+          "--reporters=xml",
+          "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CPU.xml"
+        ],
+        "exit_code": 0,
+        "seconds": 4.11,
+        "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CPU.log"
+      }
+    ],
+    "inputs_unchanged": true
+  },
+  "regressions": [
+    {
+      "label": "CAPTURE16",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_native.py",
+        "--binary",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+        "--display-driver",
+        "macos",
+        "--rendering-driver",
+        "metal"
+      ],
+      "exit_code": 0,
+      "seconds": 10.74,
+      "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CAPTURE16.log",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 0
+      },
+      "sha256": "d45275bae8c530c7cbea367488ea50166576cb2708c4185652b5c83c60743c28"
+    },
+    {
+      "label": "LEGACY8",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_legacy_native.py",
+        "--binary",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+        "--display-driver",
+        "macos"
+      ],
+      "exit_code": 0,
+      "seconds": 4.68,
+      "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_LEGACY8.log",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 0
+      },
+      "sha256": "71d9cb3fb7cf39fd55608c7c2b86c0e2c652e6a92ba7cba7a3f595c79e953fe1"
+    },
+    {
+      "label": "ORDINARY_MOBILE",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+        "--display-driver",
+        "macos",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--path",
+        "tests/servers/rendering/fixtures/particle_scene_pairs_native",
+        "--script",
+        "run.gd"
+      ],
+      "exit_code": 0,
+      "seconds": 0.89,
+      "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_ORDINARY_MOBILE.log",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 0
+      },
+      "sha256": "a0b70f59dcd8cabe8d6b04255c19f604a4aab2d0875edcbf5a56892b706c751f"
+    },
+    {
+      "label": "ORDINARY_FORWARD_PLUS",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+        "--display-driver",
+        "macos",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "forward_plus",
+        "--path",
+        "tests/servers/rendering/fixtures/particle_scene_pairs_native",
+        "--script",
+        "run.gd"
+      ],
+      "exit_code": 0,
+      "seconds": 0.93,
+      "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_ORDINARY_FORWARD_PLUS.log",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 0
+      },
+      "sha256": "81ea58bba09362d7e2313207885b585136993179c0f56e2235fbe9e1070ca3b1"
+    }
+  ],
+  "viewport_records": [
+    {
+      "checks": {
+        "managed_enrollment_cleanup": true,
+        "managed_original_record": true,
+        "managed_original_request_release": true,
+        "managed_original_root_return": true,
+        "managed_phase_close_waits_holder": true,
+        "managed_phase_live_original_frame": true,
+        "managed_phase_no_draw_admission_closed": true,
+        "managed_phase_original_close": true,
+        "managed_phase_original_device": true,
+        "managed_phase_original_expiry": true,
+        "managed_phase_original_free": true,
+        "managed_phase_original_occurrence": true,
+        "managed_phase_typed_only": true,
+        "managed_phase_waiting_return_without_draw": true,
+        "viewport_original_root_live": true,
+        "viewport_post_draw_query_unchanged": true,
+        "viewport_post_draw_revisions_unchanged": true,
+        "viewport_post_draw_snapshot": true,
+        "viewport_post_draw_source_unchanged": true,
+        "viewport_receiver_query_committed": true,
+        "viewport_receiver_retained_until_observation": true,
+        "viewport_receiver_snapshot": true
+      },
+      "external_scene_connection": "not-present",
+      "mode": "managed",
+      "pair_membership": "not-observed",
+      "pass": true,
+      "viewport_ready": true,
+      "views": {
+        "side": {
+          "after_draw_calls": 2,
+          "after_nonuniform_pixels": 1300,
+          "after_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CAPTURES/mobile/side_after.png",
+          "after_sha256": "3235d4d3f8e63c27cd916647c8a0b2cb29eef7ab92813e73daaa068b936b2a21",
+          "before_draw_calls": 2,
+          "before_nonuniform_pixels": 1300,
+          "before_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CAPTURES/mobile/side_before.png",
+          "before_sha256": "3235d4d3f8e63c27cd916647c8a0b2cb29eef7ab92813e73daaa068b936b2a21",
+          "height": 128,
+          "rgba_equal": true,
+          "saved": true,
+          "width": 128
+        },
+        "top": {
+          "after_draw_calls": 2,
+          "after_nonuniform_pixels": 1300,
+          "after_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CAPTURES/mobile/top_after.png",
+          "after_sha256": "3235d4d3f8e63c27cd916647c8a0b2cb29eef7ab92813e73daaa068b936b2a21",
+          "before_draw_calls": 2,
+          "before_nonuniform_pixels": 1300,
+          "before_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CAPTURES/mobile/top_before.png",
+          "before_sha256": "3235d4d3f8e63c27cd916647c8a0b2cb29eef7ab92813e73daaa068b936b2a21",
+          "height": 128,
+          "rgba_equal": true,
+          "saved": true,
+          "width": 128
+        }
+      }
+    },
+    {
+      "checks": {
+        "managed_enrollment_cleanup": true,
+        "managed_original_record": true,
+        "managed_original_request_release": true,
+        "managed_original_root_return": true,
+        "managed_phase_close_waits_holder": true,
+        "managed_phase_live_original_frame": true,
+        "managed_phase_no_draw_admission_closed": true,
+        "managed_phase_original_close": true,
+        "managed_phase_original_device": true,
+        "managed_phase_original_expiry": true,
+        "managed_phase_original_free": true,
+        "managed_phase_original_occurrence": true,
+        "managed_phase_typed_only": true,
+        "managed_phase_waiting_return_without_draw": true,
+        "viewport_original_root_live": true,
+        "viewport_post_draw_query_unchanged": true,
+        "viewport_post_draw_revisions_unchanged": true,
+        "viewport_post_draw_snapshot": true,
+        "viewport_post_draw_source_unchanged": true,
+        "viewport_receiver_query_committed": true,
+        "viewport_receiver_retained_until_observation": true,
+        "viewport_receiver_snapshot": true
+      },
+      "external_scene_connection": "not-present",
+      "mode": "managed",
+      "pair_membership": "not-observed",
+      "pass": true,
+      "viewport_ready": true,
+      "views": {
+        "side": {
+          "after_draw_calls": 2,
+          "after_nonuniform_pixels": 1300,
+          "after_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CAPTURES/forward_plus/side_after.png",
+          "after_sha256": "ff6c135a03a63519d78a8d98187c3c6c91478ba31f8cc3413a6fea642ed734fc",
+          "before_draw_calls": 2,
+          "before_nonuniform_pixels": 1300,
+          "before_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CAPTURES/forward_plus/side_before.png",
+          "before_sha256": "ff6c135a03a63519d78a8d98187c3c6c91478ba31f8cc3413a6fea642ed734fc",
+          "height": 128,
+          "rgba_equal": true,
+          "saved": true,
+          "width": 128
+        },
+        "top": {
+          "after_draw_calls": 2,
+          "after_nonuniform_pixels": 1300,
+          "after_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CAPTURES/forward_plus/top_after.png",
+          "after_sha256": "ff6c135a03a63519d78a8d98187c3c6c91478ba31f8cc3413a6fea642ed734fc",
+          "before_draw_calls": 2,
+          "before_nonuniform_pixels": 1300,
+          "before_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CAPTURES/forward_plus/top_before.png",
+          "before_sha256": "ff6c135a03a63519d78a8d98187c3c6c91478ba31f8cc3413a6fea642ed734fc",
+          "height": 128,
+          "rgba_equal": true,
+          "saved": true,
+          "width": 128
+        }
+      }
+    }
+  ],
+  "ordinary_records": {
+    "mobile": {
+      "checks": {
+        "cull_mask": true,
+        "height_cull_mask": true,
+        "height_one_source": true,
+        "height_two_sources_ambiguous": true,
+        "height_update": true,
+        "height_visibility": true,
+        "kept_pair_pose_revision": true,
+        "kept_pair_shape_revision": true,
+        "kept_pair_type_restore_revision": true,
+        "kept_pair_type_revision": true,
+        "ordinary_receiver_not_promoted": true,
+        "ordinary_snapshot_rejected_and_empty": true,
+        "receiver_visibility": true,
+        "rejected_commit_preserves_pairs": true,
+        "same_base_receivers": true,
+        "source_recreate": true,
+        "source_release": true,
+        "source_update": true,
+        "source_visibility": true
+      },
+      "pass": true
+    },
+    "forward_plus": {
+      "checks": {
+        "cull_mask": true,
+        "height_cull_mask": true,
+        "height_one_source": true,
+        "height_two_sources_ambiguous": true,
+        "height_update": true,
+        "height_visibility": true,
+        "kept_pair_pose_revision": true,
+        "kept_pair_shape_revision": true,
+        "kept_pair_type_restore_revision": true,
+        "kept_pair_type_revision": true,
+        "ordinary_receiver_not_promoted": true,
+        "ordinary_snapshot_rejected_and_empty": true,
+        "receiver_visibility": true,
+        "rejected_commit_preserves_pairs": true,
+        "same_base_receivers": true,
+        "source_recreate": true,
+        "source_release": true,
+        "source_update": true,
+        "source_visibility": true
+      },
+      "pass": true
+    }
+  },
+  "cpu": {
+    "cases_passed": 216,
+    "assertions_passed": 90654,
+    "failed_cases": 0,
+    "failed_assertions": 0,
+    "skipped_cases": 2042,
+    "expected_negative_diagnostics": 3,
+    "diagnostic_site": "_qualification_render_pipeline_create_internal !pipeline.driver_id",
+    "xml": {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CPU.xml",
+      "bytes": 385362,
+      "sha256": "5b762b8a981282ff9fad6eed843f3a7cfec5821f7d42ebd75ea1502150684ec6"
+    }
+  },
+  "runtime_gpu_log_diagnostics_zero": true,
+  "logs": {
+    "SCENE117_HEIGHT_FINAL_BUILD.log": {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_BUILD.log",
+      "bytes": 1909,
+      "sha256": "ec18f68600384c009cc72d863338ad76758ad590a3f01d77d6fa2569cb8509d2",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 2
+      }
+    },
+    "SCENE117_HEIGHT_FINAL_CAPTURE16.log": {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CAPTURE16.log",
+      "bytes": 13545,
+      "sha256": "d45275bae8c530c7cbea367488ea50166576cb2708c4185652b5c83c60743c28",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 0
+      }
+    },
+    "SCENE117_HEIGHT_FINAL_CPU.log": {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CPU.log",
+      "bytes": 495,
+      "sha256": "1fbf3d30a19652bfad6bc356bc349d15201ec079f2ea1a085db33445ab47d7ac",
+      "diagnostics": {
+        "ERROR:": 3,
+        "WARNING:": 0
+      }
+    },
+    "SCENE117_HEIGHT_FINAL_LEGACY8.log": {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_LEGACY8.log",
+      "bytes": 7829,
+      "sha256": "71d9cb3fb7cf39fd55608c7c2b86c0e2c652e6a92ba7cba7a3f595c79e953fe1",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 0
+      }
+    },
+    "SCENE117_HEIGHT_FINAL_MANAGED_FORWARD_PLUS.log": {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_MANAGED_FORWARD_PLUS.log",
+      "bytes": 2038,
+      "sha256": "fc7fc070c6bb8a3e2a74e69cec425750468718fba98b8e89e403e2a625ca1c29",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 0
+      }
+    },
+    "SCENE117_HEIGHT_FINAL_MANAGED_MOBILE.log": {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_MANAGED_MOBILE.log",
+      "bytes": 2044,
+      "sha256": "e88ae96758ea503bfe748efc79c6408bbb0fb17b398c23f4d92a14519f062c60",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 0
+      }
+    },
+    "SCENE117_HEIGHT_FINAL_ORDINARY_FORWARD_PLUS.log": {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_ORDINARY_FORWARD_PLUS.log",
+      "bytes": 764,
+      "sha256": "81ea58bba09362d7e2313207885b585136993179c0f56e2235fbe9e1070ca3b1",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 0
+      }
+    },
+    "SCENE117_HEIGHT_FINAL_ORDINARY_MOBILE.log": {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_ORDINARY_MOBILE.log",
+      "bytes": 770,
+      "sha256": "a0b70f59dcd8cabe8d6b04255c19f604a4aab2d0875edcbf5a56892b706c751f",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 0
+      }
+    },
+    "SCENE117_HEIGHT_FINAL_VIEWPORT.log": {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_VIEWPORT.log",
+      "bytes": 6558,
+      "sha256": "f16030f67c40206528471bda7b99b0d14128b7716ef67f98076b209a3a2f4604",
+      "diagnostics": {
+        "ERROR:": 0,
+        "WARNING:": 0
+      }
+    }
+  },
+  "captures": [
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CAPTURES/forward_plus/side_after.png",
+      "bytes": 450,
+      "sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CAPTURES/forward_plus/side_before.png",
+      "bytes": 450,
+      "sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CAPTURES/forward_plus/top_after.png",
+      "bytes": 450,
+      "sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CAPTURES/forward_plus/top_before.png",
+      "bytes": 450,
+      "sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CAPTURES/mobile/side_after.png",
+      "bytes": 450,
+      "sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CAPTURES/mobile/side_before.png",
+      "bytes": 450,
+      "sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CAPTURES/mobile/top_after.png",
+      "bytes": 450,
+      "sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_CAPTURES/mobile/top_before.png",
+      "bytes": 450,
+      "sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    }
+  ],
+  "evidence_metadata": [
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_INPUTS_BEFORE.json",
+      "bytes": 2545,
+      "sha256": "9a092269241f83de61db6cd15ba0f38e8534fb7d4a30f9d920e8602d1c9124a2"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_INPUTS_AFTER.json",
+      "bytes": 2545,
+      "sha256": "9a092269241f83de61db6cd15ba0f38e8534fb7d4a30f9d920e8602d1c9124a2"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_RESULT.json",
+      "bytes": 3123,
+      "sha256": "9961b204055f66475ad8135e925dcb4669f288317b30b54c1676cd5355371a8d"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_FINAL_REGRESSIONS.json",
+      "bytes": 3196,
+      "sha256": "5f4768a9e9c001e593a3f15931eb98ce85a564d21f0e7b9c799de2baeaa37846"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_LOCAL_RED_INPUTS_BEFORE.json",
+      "bytes": 4200,
+      "sha256": "ec5f99d270a2dce646acf18314fdb8fdc68a7427fc3ce0ee874953440374ec13"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_LOCAL_RED_INPUTS_AFTER.json",
+      "bytes": 4200,
+      "sha256": "ec5f99d270a2dce646acf18314fdb8fdc68a7427fc3ce0ee874953440374ec13"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_LOCAL_GREEN_RESULT.json",
+      "bytes": 2610,
+      "sha256": "86918befb7d15b62b5c92423da37a98cef7f4e91d9b074e9b31169961e4ce0d9"
+    }
+  ],
+  "limits": [
+    "Managed native typed phase/SceneOnly routing and viewport invariance only; not Full/P01/public connected Scene acceptance.",
+    "Viewport explicitly reports external_scene_connection=not-present and pair_membership=not-observed.",
+    "Equal top/side captures do not establish visually distinct coverage; no independent image interpretation is claimed.",
+    "Legacy local runner is preliminary8, not source117 contract10; neighbors12 not run.",
+    "No E09 actual operation/scope, K06 production COW/charge/retirement, INSTANCE192/INDEXED144, B/R01 logical initializedness or owner publication qualification follows.",
+    "CPU dummy/headless results are not real GPU evidence."
+  ],
+  "recorded_inputs_verified_before_post_run_document_edit": true,
+  "document_only_after_run": [
+    {
+      "path": "tests/servers/rendering/fixtures/particle_scene_phase_managed_native/README.md",
+      "bytes": 1686,
+      "sha256": "7ae22fc4f36e2714c99d20cd6fc3fdd8bb243548ff85cc3714c5c2a7d90825ae",
+      "recorded_run_identity": {
+        "bytes": 1446,
+        "sha256": "b725e628337f16a0ff4b806d6f4b8955252a78d73a444e537b8120fa265d5b03"
+      },
+      "reason": "Post-run README clarification marks47-check source evidence historical and points to current55 local receipt; no compiled or script change."
+    }
+  ],
+  "current_compiled_source_scripts_host_match_run_inputs": true
+}

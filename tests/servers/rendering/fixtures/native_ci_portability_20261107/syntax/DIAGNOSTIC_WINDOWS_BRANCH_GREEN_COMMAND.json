@@ -1,0 +1,19 @@
+{
+  "command": [
+    "x86_64-w64-mingw32-g++",
+    "-std=c++17",
+    "-fsyntax-only",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-include",
+    "work/ci-native-drain-portability-20261107/WINDOWS_SYNTAX_PREFIX.h",
+    "-Iwork/ci-native-drain-portability-20261107/windows-syntax-stubs",
+    "-I.",
+    "-x",
+    "c++",
+    "core/io/native_drain_diagnostic.h"
+  ],
+  "exit_code": 0,
+  "scope": "Actual modified header MSVC conditional branch; real MinGW Windows CRT declarations; OS/Thread declaration-only stubs. Not MSVC/UCRT build."
+}

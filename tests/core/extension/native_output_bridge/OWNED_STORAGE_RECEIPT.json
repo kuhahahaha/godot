@@ -1,0 +1,88 @@
+{
+  "schema": 1,
+  "component": "Original Core owned Instance192 stable-slot storage prefix",
+  "base_commit": "d9f3882f12596be6563017156356edb23b7ccab5",
+  "source_pins": {
+    "servers/rendering/renderer_rd/storage_rd/external_output_storage.cpp": "5c0f67d5a5f5ce1611ea1094a1e05f19552d2d4560cc8bab2f64187b50c798ce",
+    "servers/rendering/renderer_rd/storage_rd/external_output_storage.h": "f600b8061dcef21f9ae7b8d31d0e9db672f35ae370a1412f012c9dc220e742ae",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.h": "e530e31247927a328289caf08d963ab7a57887da33a59be82aa3975315bc8dd5",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp": "d892e7e7c300a32a1df9e28c20d92288e70497b7bb576e7fc052d57624e9daf8",
+    "servers/rendering/rendering_device.h": "d9bf93f3ba13d1f24bbe19fe771aa80d69fb3396c558cdb9f69b414000c290ff",
+    "servers/rendering/rendering_device_immutable_hold.cpp": "269cdd95c9c2508dc93827bb21482a2ba6c5e7654424688251acfe976eb0188f",
+    "tests/core/extension/test_production_request.cpp": "0b6bafd2b7c14e15f0c917d7f3dc2eb4190e99f38a3182f963dff4b3ee8e54ff",
+    "tests/servers/rendering/test_external_output_custody_bridge.h": "68de29819af42c41d93709e948da8b55e4c6a036b00d4b03d496e51608c7b77c",
+    "tests/servers/rendering/test_external_output_owner_state.cpp": "b5ccaaf1932f7cda6777599fee449715ce573a610750fd738fbb69050eda397c"
+  },
+  "host_sha256": "283ae7f1ad0603b3f4b98e454b36f4d507b28b7a98cff1d591686d50a1860433",
+  "metadata_sha256": "236a8df27aeb18d2dc00a97c3e0b405611fcc59bc785956fb549b9a712835911",
+  "results": {
+    "targeted": {
+      "path": "work/b4-owned-storage-next-20261106/targeted-integrated-r4/RESULT.json",
+      "sha256": "4c3b97bd359118d819fc40aeff0739714b6688d8a9a950ad3f0228c6ddc6ff86",
+      "exit": 0,
+      "test_cases": {
+        "successes": "4",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "9354",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "full": {
+      "path": "work/b4-owned-storage-next-20261106/full-r4/RESULT.json",
+      "sha256": "fa788ff12785594c32930d64846cf4779973b2e17da59444ed8e3483c39d8be2",
+      "exit": 0,
+      "test_cases": {
+        "successes": "2116",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "540515",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "metal": {
+      "path": "work/b4-owned-storage-next-20261106/native390-r4/RESULT.json",
+      "sha256": "0e28842eba6c069a0a8aa89adcdf3b11152344965ba017d23dcb566c2b3af552",
+      "gpu_pass": true,
+      "checks": {
+        "one_result": true,
+        "not_timeout": true,
+        "no_fatal_or_exit_leaks": true,
+        "exact_expected_engine_errors": true,
+        "actual_metal_startup": true,
+        "native_and_outer_success": true,
+        "host_and_metadata_unchanged": true,
+        "source_unchanged": true
+      }
+    }
+  },
+  "behavior": [
+    "All extents preflight before original group reservation; C2 seven resources total1448 bytes, C0 five resources total680 bytes.",
+    "Original stable slot holds every actual factory RID/witness; each driver refusal retains exact successful prefix and returns remaining uncreated reservations.",
+    "Unsealed owned membership uses exact original factory provenance and intrusive owned member; immutable borrowed hold checks remain unchanged.",
+    "Exact protected RECORD metadata rollback restores only pristine reservation rows; consumed serial remains consumed; close gates allow cleanup.",
+    "Foreign context refuses without native effects; first native preflight BUSY rolls reservation back and retries with fresh serial.",
+    "Original one-pass/one-receipt OBSERVE retires each real driver buffer once before metadata/slot pin return; no public tokens."
+  ],
+  "attempts": [
+    "R1 target aborted after incorrect immutable hold check rejected unsealed storage; raw XML/log and source retained.",
+    "R2 compile rejected Ref single dereference; corrected to exact Cell reference.",
+    "R3 target/full/Metal passed; R4 added foreign context and real preflight BUSY rollback/retry and repeated full/native validation.",
+    "Hypothetical factory-success/bind-failure blocker retracted after exact locked-state reachability review; no speculative marker/recovery path added."
+  ],
+  "limits": [
+    "Private CPU-backed original component; Metal390 is existing actual particle regression, not new storage GPU admission proof.",
+    "No original generation successor/source/U08/Host/phase admission, public usable lease/writable or visible draw implemented.",
+    "Indexed144 storage and explicit invalid-extent/foreign accepted request/Unknown/zero-budget integration matrix increments remain open.",
+    "Remote CI for this batch pending; prior d9f3882f12 run42145192138 still in progress."
+  ],
+  "independent_final_review": {
+    "path": "work/b4-owned-storage-next-20261106/FINAL_INDEPENDENT_REVIEW.md",
+    "sha256": "aaa49fc72d8968c8fc7dfdb1b815ccf0f7c891b386af2387ac499fe023fc3d81",
+    "result": "No blocking source/raw-evidence defect"
+  }
+}

@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "core/object/ref_counted.h"
 #include "core/templates/rid_owner.h"
 #include "servers/display/display_server_enums.h"
 #include "servers/rendering/renderer_scene_render.h"
@@ -37,12 +38,127 @@
 #include "servers/rendering/rendering_server_types.h"
 #include "servers/rendering/storage/render_scene_buffers.h"
 
+class TestRendererInvocationAccess;
+class RendererSceneRenderRD;
+class RenderingDevice;
+
 class RendererViewport {
 public:
 	struct CanvasBase {
 	};
 
+	class CameraInvocationScope;
 	struct Viewport {
+		struct ViewPresentationKey {
+			uint64_t view_id = 0;
+			uint64_t view_epoch = 0;
+			uint64_t present_seq = 0;
+		};
+
+		struct CameraSourceToken {
+			uint64_t view_id = 0;
+			uint64_t view_epoch = 0;
+			uint64_t capture_ordinal = 0;
+
+			bool is_valid() const { return view_id != 0 && capture_ordinal != 0; }
+			bool operator==(const CameraSourceToken &p_other) const {
+				return view_id == p_other.view_id && view_epoch == p_other.view_epoch && capture_ordinal == p_other.capture_ordinal;
+			}
+			bool operator!=(const CameraSourceToken &p_other) const { return !(*this == p_other); }
+		};
+
+		// Original native invocation facts. A buffer Ref keeps the owner object
+		// alive, not its mutable attachments or permission for a later invocation.
+		struct CameraInvocation {
+			RID camera;
+			Ref<RenderSceneBuffers> render_buffers;
+			RID render_target;
+			Size2i target_size;
+			Size2i internal_size;
+			uint32_t view_count = 0;
+			bool use_xr = false;
+		};
+
+		// Retains source data only, not a live viewport or rendering permission.
+		// Lazily copied from the existing completed-camera capture on first borrow.
+		class CameraCapture : public RefCounted {
+			friend class RendererViewport;
+
+			const RID viewport;
+			const ViewPresentationKey presentation_key;
+			const CameraSourceToken token;
+			const CameraInvocation invocation;
+			const RendererSceneRender::CameraData camera_data;
+			// Exactly one value snapshot, never a chain retaining earlier captures.
+			const CameraSourceToken previous_token;
+			const RendererSceneRender::CameraData previous_camera_data;
+
+			CameraCapture(RID p_viewport, const ViewPresentationKey &p_key, const CameraSourceToken &p_token, const RendererSceneRender::CameraData &p_camera_data, const CameraInvocation &p_invocation, const CameraSourceToken &p_previous_token, const RendererSceneRender::CameraData &p_previous_camera_data) :
+					viewport(p_viewport), presentation_key(p_key), token(p_token), invocation(p_invocation), camera_data(p_camera_data), previous_token(p_previous_token), previous_camera_data(p_previous_camera_data) {}
+
+		public:
+			RID get_viewport() const { return viewport; }
+			const CameraInvocation &get_invocation() const { return invocation; }
+			const ViewPresentationKey &get_presentation_key() const { return presentation_key; }
+			const CameraSourceToken &get_token() const { return token; }
+			const RendererSceneRender::CameraData &get_camera_data() const { return camera_data; }
+			const CameraSourceToken &get_previous_camera_token() const { return previous_token; }
+			const RendererSceneRender::CameraData *get_previous_camera_data() const { return previous_token.is_valid() && previous_token.view_epoch ? &previous_camera_data : nullptr; }
+		};
+
+		// Core-native facet only. The original registration owns any external
+		// service/DSO custody; the renderer stores no extension callback pointer.
+		class CameraSourceSubscriber {
+			friend class RendererViewport;
+			friend class RendererSceneRenderRD;
+			friend class CameraInvocationScope;
+			RendererViewport *registered_owner = nullptr;
+			RID registered_viewport;
+			CameraSourceSubscriber *next_subscriber = nullptr;
+			RefCounted *legacy_owner = nullptr;
+			Ref<RefCounted> registration_keepalive;
+			CameraSourceToken subscriber_notified_token;
+			bool registered_subscriber = false;
+			bool detach_pending = false;
+			CameraSourceSubscriber *pending_next = nullptr;
+			Ref<CameraCapture> pending_capture;
+			bool pending_queued = false;
+			CameraSourceSubscriber *pending_close_next = nullptr;
+			bool close_queued = false;
+
+		protected:
+			CameraSourceSubscriber(RefCounted *p_legacy_owner) : legacy_owner(p_legacy_owner) {}
+
+		public:
+			CameraSourceSubscriber() = default;
+			CameraSourceSubscriber(const CameraSourceSubscriber &) = delete;
+			CameraSourceSubscriber &operator=(const CameraSourceSubscriber &) = delete;
+			virtual ~CameraSourceSubscriber() = default;
+			bool is_camera_source_detaching() const { return detach_pending; }
+			// Retained notifications are drained at the original RS safe point,
+			// after the complete viewport draw stack has returned.
+			// Native-only entry. Default is closed: the existing delayed retained
+			// relay and DSO ProductionRecordReceiver are never called here.
+			virtual bool camera_source_has_native_executor() const { return false; }
+			virtual void camera_source_native_invocation(const CameraInvocationScope &) {}
+			virtual void camera_source_retained(const Ref<CameraCapture> &p_capture) = 0;
+			virtual void camera_source_closed() = 0;
+		};
+
+		// Compatibility observers retain Object/RefCounted identity. Embedded native
+		// subscribers use only the plain facet and their original owner custody.
+		class CameraSourceObserver : public RefCounted, public CameraSourceSubscriber {
+		public:
+			CameraSourceObserver() : CameraSourceSubscriber(this) {}
+		};
+
+		// One preallocated original observer per registered viewport.
+		CameraSourceSubscriber *camera_source_observer = nullptr;
+		// Nodes are supplied by finite original association owners, never allocated here.
+		CameraSourceSubscriber *camera_source_subscribers = nullptr;
+		uint64_t camera_source_subscriber_count = 0;
+		CameraSourceToken camera_source_notified_token;
+
 		RID self;
 		RID parent;
 
@@ -76,6 +192,37 @@ public:
 
 		RendererSceneRender::CameraData prev_camera_data;
 		uint64_t prev_camera_data_frame = 0;
+		RendererSceneRender::CameraData staged_camera_data;
+		CameraSourceToken staged_camera_token;
+		bool staged_camera_data_valid = false;
+		// Frozen at the actual pre-cull camera invocation, independently of
+		// post-render staging and previous-camera adoption.
+		RendererSceneRender::CameraData captured_camera_data;
+		// Frozen at the same invocation, before this camera can be adopted.
+		RendererSceneRender::CameraData captured_previous_camera_data = {};
+		CameraSourceToken captured_previous_camera_token;
+		bool captured_camera_data_valid = false;
+		// Fixed F32 key inputs frozen with the native camera, never latest state.
+		float captured_camera_origin[3] = {};
+		float captured_camera_forward[3] = {};
+		ViewPresentationKey captured_presentation_key;
+		CameraInvocation captured_invocation;
+		mutable Ref<CameraCapture> captured_camera;
+
+		// E15/E16 identity is owned by the registered viewport. These fields
+		// are updated only at the real camera invocation and color adoption
+		// boundaries; they are never inferred from the global frame counter.
+		ViewPresentationKey presentation_key;
+		ViewPresentationKey revoked_resource_key;
+		// One original view lineage for this viewport RID lifetime. Withdrawal
+		// cannot substitute another view and overwrite its epoch tombstone.
+		uint64_t presentation_view_id = 0;
+		uint64_t highest_presentation_epoch = 0;
+		CameraSourceToken previous_camera_token;
+		CameraSourceToken current_camera_token;
+		uint64_t camera_capture_ordinal = 0;
+		bool presentation_registered = false;
+		bool native_presentation_issued = false;
 
 		bool use_occlusion_culling = false;
 		bool occlusion_buffer_dirty = false;
@@ -186,14 +333,40 @@ public:
 		}
 	};
 
+	// A native invocation owns one exact capture and selects one ORIGINAL
+	// subscriber. Retaining the capture outside this stack grants no permission.
+	class CameraInvocationScope {
+		friend class RendererSceneRenderRD;
+		friend class TestRendererInvocationAccess;
+		RendererViewport &owner;
+		Ref<Viewport::CameraCapture> capture;
+		Viewport::CameraSourceSubscriber *selected = nullptr;
+		Ref<RefCounted> registration_keepalive;
+		RenderingDevice *device = nullptr;
+		bool active = false;
+		CameraInvocationScope(RendererViewport &, const Ref<Viewport::CameraCapture> &);
+		bool select(Viewport::CameraSourceSubscriber *);
+
+	public:
+		CameraInvocationScope(const CameraInvocationScope &) = delete;
+		CameraInvocationScope &operator=(const CameraInvocationScope &) = delete;
+		~CameraInvocationScope();
+		bool is_current(const Viewport::CameraSourceSubscriber *, const Ref<Viewport::CameraCapture> &) const;
+		bool is_recordable(const Viewport::CameraSourceSubscriber *, const Ref<Viewport::CameraCapture> &) const;
+		const Ref<Viewport::CameraCapture> &get_capture() const { return capture; }
+		RenderingDevice *get_device() const { return device; }
+	};
+
 	HashMap<String, RID> timestamp_vp_map;
 
 	uint64_t draw_viewports_pass = 0;
 
 	mutable RID_Owner<Viewport, true> viewport_owner;
+	// Original native viewport lineage issuer; never a Runtime view registry.
+	uint64_t next_native_presentation_view_id = 1;
 
 	Vector<Viewport *> active_viewports;
-	Vector<Viewport *> sorted_active_viewports;
+	Vector<RID> sorted_active_viewports;
 	bool sorted_active_viewports_dirty = false;
 
 	int total_objects_drawn = 0;
@@ -203,7 +376,17 @@ public:
 	int num_viewports_with_motion_vectors = 0;
 
 private:
-	Vector<Viewport *> _sort_active_viewports();
+	Viewport::CameraSourceSubscriber *pending_camera_source_observers = nullptr;
+	uint64_t pending_camera_source_observer_count = 0;
+	bool draining_camera_source_observers = false;
+	uint32_t camera_invocation_stack_depth = 0;
+	Viewport::CameraSourceSubscriber *pending_camera_source_closes = nullptr;
+	friend class RendererSceneRenderRD;
+	friend class TestRendererInvocationAccess;
+	void _remove_pending_camera_source_observer(Viewport::CameraSourceSubscriber *p_observer);
+	Viewport::CameraSourceSubscriber *_detach_camera_source_observer(Viewport *p_viewport);
+	void _close_camera_source_observers(Viewport::CameraSourceSubscriber *p_observers);
+	Vector<RID> _sort_active_viewports();
 	void _viewport_set_size(Viewport *p_viewport, int p_width, int p_height, uint32_t p_view_count);
 	bool _viewport_requires_motion_vectors(Viewport *p_viewport);
 	void _viewport_set_force_motion_vectors(Viewport *p_viewport, bool p_force_motion_vectors);
@@ -249,7 +432,49 @@ public:
 	RID viewport_get_occluder_debug_texture(RID p_viewport) const;
 
 	void viewport_set_prev_camera_data(RID p_viewport, const RendererSceneRender::CameraData *p_camera_data);
+	void viewport_set_prev_camera_data(RID p_viewport, const RendererSceneRender::CameraData *p_camera_data, const Viewport::CameraSourceToken &p_token);
+	bool viewport_stage_camera_data(RID p_viewport, const RendererSceneRender::CameraData *p_camera_data, const Viewport::CameraSourceToken &p_token);
+	bool viewport_adopt_camera_data(RID p_viewport);
 	const RendererSceneRender::CameraData *viewport_get_prev_camera_data(RID p_viewport);
+	Viewport::CameraSourceToken viewport_get_previous_camera_token(RID p_viewport) const;
+	Viewport::CameraSourceToken viewport_get_current_camera_token(RID p_viewport) const;
+	Viewport::CameraSourceToken viewport_begin_camera_capture(RID p_viewport);
+	// Internal registered-viewport association only. Freeze the completed actual
+	// camera before culling; lookup copies it without granting a view/permit.
+	Viewport::CameraSourceToken viewport_begin_camera_capture(RID p_viewport, RendererSceneRender::CameraData &r_camera_data);
+	// Actual renderer entry: validates original camera/buffer owner before issuing
+	// an ordinal. One invocation retains all real eye projections in CameraData;
+	// this does not invent a selected-eye binding for an external mono profile.
+	Viewport::CameraSourceToken viewport_begin_camera_capture(RID p_viewport, RendererSceneRender::CameraData &r_camera_data, RID p_camera, const Ref<RenderSceneBuffers> &p_render_buffers);
+
+	// Only the current invocation is available. Failure leaves the output intact.
+	bool viewport_get_camera_capture(RID p_viewport, const Viewport::CameraSourceToken &p_token, RendererSceneRender::CameraData &r_camera_data) const;
+	// Exact retained source borrow. Later captures, invalidation and viewport free
+	// do not rewrite this immutable payload. Failure leaves the output intact.
+	// Render-thread access only, like the source capture. The viewport caches only
+	// its current borrow; old payloads live only while a caller retains them.
+	// This ordinary source primitive does not settle external-output budgets:
+	// an accepted output arena must account native bytes before retaining it.
+	bool viewport_get_camera_capture_ref(RID p_viewport, const Viewport::CameraSourceToken &p_token, Ref<Viewport::CameraCapture> &r_capture) const;
+	// Internal core-owner association only; numeric RID/key values do not issue
+	// U05/service authority. No camera notification is made by registration.
+	bool viewport_bind_camera_source_observer(RID p_viewport, const Ref<Viewport::CameraSourceObserver> &p_observer);
+	bool viewport_unbind_camera_source_observer(RID p_viewport, const Ref<Viewport::CameraSourceObserver> &p_observer);
+	// Core-only fanout for independently retained original associations. No U05 grant.
+	bool viewport_subscribe_camera_source(RID p_viewport, Viewport::CameraSourceSubscriber *p_observer);
+	bool viewport_unsubscribe_camera_source(RID p_viewport, Viewport::CameraSourceSubscriber *p_observer);
+	bool viewport_subscribe_camera_source(RID p_viewport, const Ref<Viewport::CameraSourceObserver> &p_observer);
+	bool viewport_unsubscribe_camera_source(RID p_viewport, const Ref<Viewport::CameraSourceObserver> &p_observer);
+	// The common RD renderer calls this only after its exact RenderData retain.
+	bool viewport_notify_camera_source_retained(RID p_viewport, const Ref<Viewport::CameraCapture> &p_capture);
+	// One finite drain at the original RS boundary after all viewport draw stacks.
+	// A notification queued by a callback cannot replenish this drain's budget.
+	void drain_camera_source_observers();
+	Viewport::ViewPresentationKey viewport_get_presentation_key(RID p_viewport) const;
+	// Core RT receiver only, reached from authenticated paid Host-view action.
+	Error viewport_receive_host_view(RID p_viewport, RID p_camera, Viewport::ViewPresentationKey &r_key);
+	bool viewport_register_presentation_key(RID p_viewport, const Viewport::ViewPresentationKey &p_key);
+	void viewport_invalidate_presentation_key(RID p_viewport, bool p_resource_change = false);
 
 	void viewport_set_disable_2d(RID p_viewport, bool p_disable);
 	void viewport_set_environment_mode(RID p_viewport, RSE::ViewportEnvironmentMode p_mode);

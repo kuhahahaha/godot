@@ -1,0 +1,122 @@
+Building for macOS 11.0+.
+WARNING: The screen reader support driver requires dependencies to be installed.
+You can install them by running `python3 misc/scripts/install_accesskit.py`.
+See the documentation for more information:
+	https://docs.godotengine.org/en/latest/engine_details/development/compiling/compiling_for_macos.html
+Alternatively, disable this driver by compiling with `accesskit=no` explicitly.
+WARNING: The ANGLE rendering driver requires dependencies to be installed.
+You can install them by running `python misc/scripts/install_angle.py`.
+See the documentation for more information:
+	https://docs.godotengine.org/en/latest/engine_details/development/compiling/compiling_for_windows.html
+Alternatively, disable this driver by compiling with `angle=no` explicitly.
+MoltenVK found at: /opt/homebrew/Frameworks/MoltenVK.xcframework
+Building for platform "macos", architecture "arm64", target "editor".
+Compiling tests/core/extension/test_production_request.cpp ...
+tests/core/extension/test_production_request.cpp:240:18: warning: operator '?:' has lower precedence than '<<'; '<<' will be evaluated first [-Wparentheses]
+  240 |                                 CHECK(upload ? alias_upload_live : (destination == BufferID(501) && alias_download_live));
+      |                                 ~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2974:34: note: expanded from macro 'CHECK'
+ 2974 | #define CHECK(...) DOCTEST_CHECK(__VA_ARGS__)
+      |                    ~~~~~~~~~~~~~~^~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2445:65: note: expanded from macro 'DOCTEST_CHECK'
+ 2445 | #define DOCTEST_CHECK(...) DOCTEST_ASSERT_IMPLEMENT_1(DT_CHECK, __VA_ARGS__)
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2401:49: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_1'
+ 2401 |         DOCTEST_ASSERT_IMPLEMENT_2(assert_type, __VA_ARGS__);                                      \
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2395:16: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_2'
+ 2393 |     DOCTEST_WRAP_IN_TRY(DOCTEST_RB.setResult(                                                      \
+      |     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 2394 |             doctest::detail::ExpressionDecomposer(doctest::assertType::assert_type)                \
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 2395 |             << __VA_ARGS__)) /* NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) */         \
+      |             ~~~^~~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2147:32: note: expanded from macro 'DOCTEST_WRAP_IN_TRY'
+ 2147 | #define DOCTEST_WRAP_IN_TRY(x) x;
+      |                                ^
+tests/core/extension/test_production_request.cpp:240:18: note: place parentheses around the '<<' expression to silence this warning
+  240 |                                 CHECK(upload ? alias_upload_live : (destination == BufferID(501) && alias_download_live));
+      |                                 ~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2974:34: note: expanded from macro 'CHECK'
+ 2974 | #define CHECK(...) DOCTEST_CHECK(__VA_ARGS__)
+      |                    ~~~~~~~~~~~~~~^~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2445:65: note: expanded from macro 'DOCTEST_CHECK'
+ 2445 | #define DOCTEST_CHECK(...) DOCTEST_ASSERT_IMPLEMENT_1(DT_CHECK, __VA_ARGS__)
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2401:49: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_1'
+ 2401 |         DOCTEST_ASSERT_IMPLEMENT_2(assert_type, __VA_ARGS__);                                      \
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2395:16: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_2'
+ 2393 |     DOCTEST_WRAP_IN_TRY(DOCTEST_RB.setResult(                                                      \
+      |     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 2394 |             doctest::detail::ExpressionDecomposer(doctest::assertType::assert_type)                \
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 2395 |             << __VA_ARGS__)) /* NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) */         \
+      |             ~~~^~~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2147:32: note: expanded from macro 'DOCTEST_WRAP_IN_TRY'
+ 2147 | #define DOCTEST_WRAP_IN_TRY(x) x;
+      |                                ^
+tests/core/extension/test_production_request.cpp:240:18: note: place parentheses around the '?:' expression to evaluate it first
+  240 |                                 CHECK(upload ? alias_upload_live : (destination == BufferID(501) && alias_download_live));
+      |                                       ~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2974:34: note: expanded from macro 'CHECK'
+ 2974 | #define CHECK(...) DOCTEST_CHECK(__VA_ARGS__)
+      |                                  ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2445:65: note: expanded from macro 'DOCTEST_CHECK'
+ 2445 | #define DOCTEST_CHECK(...) DOCTEST_ASSERT_IMPLEMENT_1(DT_CHECK, __VA_ARGS__)
+      |                                                                 ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2401:49: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_1'
+ 2401 |         DOCTEST_ASSERT_IMPLEMENT_2(assert_type, __VA_ARGS__);                                      \
+      |                                                 ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2395:16: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_2'
+ 2395 |             << __VA_ARGS__)) /* NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) */         \
+      |                ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2147:32: note: expanded from macro 'DOCTEST_WRAP_IN_TRY'
+ 2147 | #define DOCTEST_WRAP_IN_TRY(x) x;
+      |                                ^
+tests/core/extension/test_production_request.cpp:6831:95: error: cannot initialize a parameter of type 'const GDExtensionProductionReadbackV2 *' with an rvalue of type 'const GDExtensionProductionReadbackV1 *'
+ 6831 |                 REQUIRE(reserve(fixture.attachment, &operation, &capacity, actions, 3, sources, 4, uses, 6, &readback, 1, &ref).native_error == OK);
+      |                                                                                                             ^~~~~~~~~
+./thirdparty/doctest/doctest.h:2981:38: note: expanded from macro 'REQUIRE'
+ 2981 | #define REQUIRE(...) DOCTEST_REQUIRE(__VA_ARGS__)
+      |                                      ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2446:69: note: expanded from macro 'DOCTEST_REQUIRE'
+ 2446 | #define DOCTEST_REQUIRE(...) DOCTEST_ASSERT_IMPLEMENT_1(DT_REQUIRE, __VA_ARGS__)
+      |                                                                     ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2401:49: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_1'
+ 2401 |         DOCTEST_ASSERT_IMPLEMENT_2(assert_type, __VA_ARGS__);                                      \
+      |                                                 ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2395:16: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_2'
+ 2395 |             << __VA_ARGS__)) /* NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) */         \
+      |                ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2147:32: note: expanded from macro 'DOCTEST_WRAP_IN_TRY'
+ 2147 | #define DOCTEST_WRAP_IN_TRY(x) x;
+      |                                ^
+./thirdparty/doctest/doctest.h:1545:9: error: static assertion failed due to requirement 'deferred_false<bool>::value': Expression Too Complex Please Rewrite As Binary Comparison!
+ 1545 |         DOCTEST_FORBIT_EXPRESSION(Expression_lhs, ||)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:1395:23: note: expanded from macro 'DOCTEST_FORBIT_EXPRESSION'
+ 1395 |         static_assert(deferred_false<R>::value,                                                    \
+      |                       ^~~~~~~~~~~~~~~~~~~~~~~~
+tests/core/extension/test_production_request.cpp:227:54: note: in instantiation of function template specialization 'doctest::detail::Expression_lhs<const bool &&>::operator||<bool>' requested here
+  227 |                                 CHECK((id == BufferID(500) && alias_upload_live) || (id == BufferID(501) && alias_download_live));
+      |                                                                                  ^
+./thirdparty/doctest/doctest.h:2974:34: note: expanded from macro 'CHECK'
+ 2974 | #define CHECK(...) DOCTEST_CHECK(__VA_ARGS__)
+      |                                  ^
+./thirdparty/doctest/doctest.h:2445:65: note: expanded from macro 'DOCTEST_CHECK'
+ 2445 | #define DOCTEST_CHECK(...) DOCTEST_ASSERT_IMPLEMENT_1(DT_CHECK, __VA_ARGS__)
+      |                                                                 ^
+./thirdparty/doctest/doctest.h:2401:49: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_1'
+ 2401 |         DOCTEST_ASSERT_IMPLEMENT_2(assert_type, __VA_ARGS__);                                      \
+      |                                                 ^
+./thirdparty/doctest/doctest.h:2395:16: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_2'
+ 2395 |             << __VA_ARGS__)) /* NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) */         \
+      |                ^
+./thirdparty/doctest/doctest.h:2147:32: note: expanded from macro 'DOCTEST_WRAP_IN_TRY'
+ 2147 | #define DOCTEST_WRAP_IN_TRY(x) x;
+      |                                ^
+1 warning and 2 errors generated.
+Generating core/version_hash.gen.cpp ...
+scons: *** [bin/obj/tests/core/extension/test_production_request.macos.editor.arm64.o] Error 1
+INFO: Time elapsed: 00:00:06.35

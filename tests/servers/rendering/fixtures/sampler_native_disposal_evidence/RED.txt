@@ -1,0 +1,86 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_native_disposal.cpp:229:
+TEST CASE:  [RenderingDevice][NativeDisposal][Sampler] actual driver return owns ordinary and bounded receipts
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  ordinary original queue
+
+tests/servers/rendering/test_native_disposal.cpp:1221: ERROR: CHECK( state(first_witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+tests/servers/rendering/test_native_disposal.cpp:1222: ERROR: CHECK( state(second_witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+===============================================================================
+tests/servers/rendering/test_native_disposal.cpp:229:
+TEST CASE:  [RenderingDevice][NativeDisposal][Sampler] actual driver return owns ordinary and bounded receipts
+  bounded original queue returns one sampler at a time
+
+tests/servers/rendering/test_native_disposal.cpp:1214: ERROR: CHECK( state(first_witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+===============================================================================
+tests/servers/rendering/test_native_disposal.cpp:229:
+TEST CASE:  [RenderingDevice][NativeDisposal][Sampler] actual driver return owns ordinary and bounded receipts
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  bounded original queue returns one sampler at a time
+
+tests/servers/rendering/test_native_disposal.cpp:1221: ERROR: CHECK( state(first_witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+tests/servers/rendering/test_native_disposal.cpp:1222: ERROR: CHECK( state(second_witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+===============================================================================
+tests/servers/rendering/test_native_disposal.cpp:232:
+TEST CASE:  [RenderingDevice][NativeDisposal][Sampler] failed factories leave original rollback ownership intact
+
+tests/servers/rendering/test_native_disposal.cpp:1316: ERROR: CHECK( state(witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+===============================================================================
+tests/servers/rendering/test_native_disposal.cpp:235:
+TEST CASE:  [RenderingDevice][NativeDisposal][Sampler] foreign stale and forged identities cannot sign returned
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  original immutable hold defers sampler enqueue
+
+tests/servers/rendering/test_native_disposal.cpp:1385: ERROR: CHECK( state(witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+tests/servers/rendering/test_native_disposal.cpp:1402: ERROR: CHECK( state(next_witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+===============================================================================
+tests/servers/rendering/test_native_disposal.cpp:235:
+TEST CASE:  [RenderingDevice][NativeDisposal][Sampler] foreign stale and forged identities cannot sign returned
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  owner serial mismatch
+
+tests/servers/rendering/test_native_disposal.cpp:1385: ERROR: CHECK( state(witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+tests/servers/rendering/test_native_disposal.cpp:1402: ERROR: CHECK( state(next_witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+===============================================================================
+tests/servers/rendering/test_native_disposal.cpp:235:
+TEST CASE:  [RenderingDevice][NativeDisposal][Sampler] foreign stale and forged identities cannot sign returned
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  exact driver backing mismatch
+
+tests/servers/rendering/test_native_disposal.cpp:1385: ERROR: CHECK( state(witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+tests/servers/rendering/test_native_disposal.cpp:1402: ERROR: CHECK( state(next_witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+===============================================================================
+[doctest] test cases:   4 |   1 passed |  3 failed | 2140 skipped
+[doctest] assertions: 287 | 275 passed | 12 failed |
+[doctest] Status: FAILURE!

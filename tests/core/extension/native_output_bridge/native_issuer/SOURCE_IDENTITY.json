@@ -1,0 +1,120 @@
+{
+  "base": "2b7524bf4e2a16d979e3e512186b7ceb82224c50",
+  "files": [
+    {
+      "path": "core/extension/gdextension_external_output_interface.h",
+      "bytes": 3755,
+      "sha256": "880c93ccd8e25146e4ba8360f46d738aca583daa87a376af30fd0f6a7bd65653"
+    },
+    {
+      "path": "core/extension/gdextension_interface.json",
+      "bytes": 806682,
+      "sha256": "09d303cb33385cc1402ae78b595a8f24ea900633ebfb4cc0a2b644f83cbb07ff"
+    },
+    {
+      "path": "core/extension/gdextension_library_exit_guard.h",
+      "bytes": 76892,
+      "sha256": "895ebc975d1abee76e486910a16d99def8d7567ba678ab1e9d5a719e17b0b92d"
+    },
+    {
+      "path": "core/extension/gdextension_production_action.cpp",
+      "bytes": 35346,
+      "sha256": "e21d496963d46d16baf27ada5b525219e6cdc55f790b87cf81d44fe8b88b130d"
+    },
+    {
+      "path": "core/extension/gdextension_production_interface.cpp",
+      "bytes": 38573,
+      "sha256": "3f3d1087bf1ab6030640273051cdf88c0a739130615c5a253ef4e9e8349cf23f"
+    },
+    {
+      "path": "core/extension/gdextension_production_owned.cpp",
+      "bytes": 52733,
+      "sha256": "a4ab585abbc7cbe7850dff299cb31956cd6ab05c6d6f01cc69d1471addf83062"
+    },
+    {
+      "path": "core/extension/gdextension_production_request.cpp",
+      "bytes": 140288,
+      "sha256": "94bd74ffd4a915f2f02f00e9f3697cad46dcbc65a0f7a8cf22a5e3ef71eb7b85"
+    },
+    {
+      "path": "core/extension/gdextension_production_request.h",
+      "bytes": 22887,
+      "sha256": "571bf8b17bdee1370bd8b9e4909e65e1bd38a178751eba2a59723f41c695bbec"
+    },
+    {
+      "path": "core/extension/gdextension_production_resources.cpp",
+      "bytes": 13199,
+      "sha256": "6725c0d27d757c25f7fcfc0016550110154162d1326c4975ff0d74a9f00601cd"
+    },
+    {
+      "path": "servers/rendering/native_disposal_witness.h",
+      "bytes": 5240,
+      "sha256": "e98592a01b167d4d1fd16c4dda880a5af8ca16053d50e94c3c99ccd9fc2a77fb"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/external_output_owner.cpp",
+      "bytes": 26560,
+      "sha256": "adbf064efc531feafe7c7dd7f514e78c0062bc589b493c445472481cfa851e70"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/external_output_owner.h",
+      "bytes": 13581,
+      "sha256": "fa7e60efb1451d554d81019c60237bc7c5d05c257f46ef30dd61eabbed37efcf"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/external_output_storage.h",
+      "bytes": 5890,
+      "sha256": "16bb370d27adb1f930f31f2634f1b6ac2a76618e160a7136da426d4c3526b61c"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp",
+      "bytes": 22241,
+      "sha256": "5a8d72de16876c92b5903226860d7d20479566f8f19115d9ba63bfecf3a16eaa"
+    },
+    {
+      "path": "servers/rendering/rendering_device.cpp",
+      "bytes": 696081,
+      "sha256": "35611105c41a283d0994a4726a7e724190951a43665555e5550b5b2c4dd0f8ab"
+    },
+    {
+      "path": "servers/rendering/rendering_device.h",
+      "bytes": 125554,
+      "sha256": "a5a3a75c53baa9fef00d267775216e39d5f34b14deb052be9ecac330ce43d880"
+    },
+    {
+      "path": "servers/rendering/rendering_device_immutable_hold.cpp",
+      "bytes": 78810,
+      "sha256": "6e2c9bdcb0eb70e9da2288c6ee963ee2f20f7d6eabd98332c2c5552ab0957cbf"
+    },
+    {
+      "path": "tests/core/extension/test_production_request.cpp",
+      "bytes": 578850,
+      "sha256": "589974e5fd4f713c13689d4046e963f9012e28c6845970165e3a7e2d889e8e33"
+    },
+    {
+      "path": "tests/servers/rendering/test_external_output_create_interface.cpp",
+      "bytes": 13406,
+      "sha256": "c33de696605061578ec173acf600776c7a4b110487cb797420ae6329754e3346"
+    },
+    {
+      "path": "core/extension/gdextension_production_output.cpp",
+      "bytes": 43425,
+      "sha256": "e4885c0ae5096a3d44b41a617fb379f4c536e00bbca54688b7b8541b32ca864c"
+    },
+    {
+      "path": "core/extension/gdextension_production_output_poll.cpp",
+      "bytes": 9279,
+      "sha256": "dec4ba530be2bb7af18dafc6a438024c7310ee9c65756254b8b168dc0cf81221"
+    },
+    {
+      "path": "tests/servers/rendering/test_external_output_custody_bridge.h",
+      "bytes": 7543,
+      "sha256": "fad6c264a6991724cc2bb3f7af3d1cf435142b550ed2409a845c3cd586893c69"
+    },
+    {
+      "path": "tests/servers/rendering/test_external_output_owner_state.cpp",
+      "bytes": 37798,
+      "sha256": "c398173e40d06da9f23c9dadc81e052d9a1372710e7fb889124b3e1816160fbe"
+    }
+  ]
+}

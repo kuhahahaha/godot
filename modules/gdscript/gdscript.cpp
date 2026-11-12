@@ -808,7 +808,6 @@ Error GDScript::reload(bool p_keep_state) {
 	}
 #endif
 
-	valid = false;
 	GDScriptParser parser;
 	Error err;
 	if (!binary_tokens.is_empty()) {
@@ -844,6 +843,10 @@ Error GDScript::reload(bool p_keep_state) {
 	}
 
 	can_run = ScriptServer::is_scripting_enabled() || parser.is_tool();
+	// Keep the last committed image callable while parsing and analysis are in
+	// flight. A syntax/analysis failure must not invalidate an already loaded
+	// script; the compiler will publish the replacement image on success.
+	valid = false;
 
 	GDScriptCompiler compiler;
 	err = compiler.compile(&parser, this, p_keep_state);
@@ -1498,6 +1501,7 @@ void GDScript::cancel_pending_functions(bool warn) {
 		}
 #endif
 		ObjectID state_id = state->get_instance_id();
+		state->_cancel_pending();
 		state->_clear_connections();
 		if (ObjectDB::get_instance(state_id)) {
 			state->_clear_stack();
@@ -2072,6 +2076,7 @@ GDScriptInstance::~GDScriptInstance() {
 		pending_func_states.remove(E);
 		GDScriptFunctionState *state = E->self();
 		ObjectID state_id = state->get_instance_id();
+		state->_cancel_pending();
 		state->_clear_connections();
 		if (ObjectDB::get_instance(state_id)) {
 			state->_clear_stack();

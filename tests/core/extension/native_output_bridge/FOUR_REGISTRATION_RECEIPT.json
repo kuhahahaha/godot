@@ -1,0 +1,156 @@
+{
+  "schema": 1,
+  "scope": "four registered typed output ABI and original owner cleanup component; not full native output admission",
+  "base_commit": "8b0f1efaa695b5e13f54ef8eea30b3684ec890cf",
+  "source_pins": {
+    "core/extension/gdextension_interface.json": "5fcc67be99e9dec71d2a35d121b26a3f3dae19e075bcb3cbe23a94e52a5428ef",
+    "core/extension/gdextension_external_output_typed.h": "e559674350660a730124c677a954c005580acfc2eeecc5ef1af7f0c857b35519",
+    "core/extension/gdextension_external_output_interface.h": "64dfda0e783a1641fd51f00595c1baf2b6ca7e1fefbe9e60cb2b042de13deab5",
+    "core/extension/gdextension_production_interface.cpp": "d3423ac055becac1a6bab9add541e91d2a7c5b87518aff13bc362d1f1b2fc7ba",
+    "servers/rendering/rendering_device.cpp": "10cdd7dd661a05381cbb8abad602f1ae76d13d766e63cddb7cd63971bdb1e245",
+    "tests/core/extension/test_production_request.cpp": "b047fa1627ddc4264e9474842d938d2771bde4a6c5d6ad9bb3a5e1cd88632352",
+    "tests/servers/rendering/test_external_output_custody_bridge.h": "df48fd4e2d12624b3dd123aeb1d10fba18e05261c54d2d29e5a327c1ffc2defa",
+    "tests/servers/rendering/test_external_output_owner_state.cpp": "f46a9bf2a1f56ada20666cac3f9ce5178addea07efcba42b0e5a1ae48642bb8e",
+    "servers/rendering/renderer_rd/storage_rd/material_storage.cpp": "b5a59603ce211c95b08ab8e1fa53d0e2b017667ec6ba0da0b7b6658d099cdd84",
+    "servers/rendering/renderer_rd/storage_rd/material_storage.h": "ca5f6b725611c64724bcdb79f8da86cf1ab4cc336930daacd3a88abb8a7e644e",
+    "tests/servers/rendering/test_material_storage_native_hold.cpp": "24ff30059dd66268509cd48d292aa872803e84293348479295cb95edb7cc581b",
+    "core/extension/gdextension_library_exit_guard.h": "c8d287c6a0599acebdc6a7b34941942444ce9dcc6ed87167003019a0ad75b92f",
+    "core/extension/gdextension_production_request.cpp": "fc8200e26458d9e94778f4d4b83606dbba02b326762becde8a6b7992ba51c914",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage_external.cpp": "1f064f54607ce19a083743f53d2ef830a05602ef101505ac404603e343733c02"
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1586,
+      "sha256": "ec40df7b6a77de403329120f831a2637f079a0498ae8be36552e22f4ac2c97a1"
+    },
+    {
+      "path": "gdextension_external_output_typed.h",
+      "bytes": 2834,
+      "sha256": "e559674350660a730124c677a954c005580acfc2eeecc5ef1af7f0c857b35519"
+    },
+    {
+      "path": "gdextension_interface.gen.h",
+      "bytes": 343458,
+      "sha256": "09e6d4fd87682515ec55355022840fdac18b06b83640d90171a60acda59ca29a"
+    },
+    {
+      "path": "gdextension_interface.json",
+      "bytes": 765500,
+      "sha256": "5fcc67be99e9dec71d2a35d121b26a3f3dae19e075bcb3cbe23a94e52a5428ef"
+    }
+  ],
+  "exact_procs": [
+    "device_session_output_create_v1",
+    "device_session_output_seal_v1",
+    "device_session_output_cancel_v1",
+    "device_session_output_withdraw_v1"
+  ],
+  "host_sha256": "3454261cf610522c013dd42b400e26f5faefbdb192c228b978b1cc692b40053b",
+  "results": {
+    "red": {
+      "path": "work/b4-four-registration-20261106/targeted-red-v3/RESULT.json",
+      "sha256": "74ae1ed2aa0e6250711c0fefca991af5f6ec0df51dff68e8e2f6d8e42c88bc71",
+      "exit": 1,
+      "test_cases": {
+        "successes": "0",
+        "failures": "1"
+      },
+      "asserts": {
+        "successes": "1130",
+        "failures": "19"
+      },
+      "validation_pass": false
+    },
+    "green": {
+      "path": "work/b4-four-registration-20261106/targeted-green/RESULT.json",
+      "sha256": "28a98c8cca7cc603fa54eec6048a413412ee09142c877f06cb600ffeb3f9faf1",
+      "exit": 0,
+      "test_cases": {
+        "successes": "1",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "1154",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "full": {
+      "path": "work/b4-four-registration-20261106/full/RESULT.json",
+      "sha256": "4b95b616e76264296b5c796033d967acca94046494e5e7b5c60eebf5e1ced4c2",
+      "exit": 0,
+      "test_cases": {
+        "successes": "2095",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "525775",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "native390": {
+      "path": "work/b4-four-registration-20261106/native390/RESULT.json",
+      "sha256": "99dd7da3cdc38222628d5bd6cd17e2e9950df686178e0112a9b03dcc6b76615d",
+      "gpu_pass": true,
+      "checks": {
+        "one_result": true,
+        "not_timeout": true,
+        "no_fatal_or_exit_leaks": true,
+        "exact_expected_engine_errors": true,
+        "actual_metal_startup": true,
+        "native_and_outer_success": true,
+        "host_and_metadata_unchanged": true,
+        "source_unchanged": true
+      }
+    }
+  },
+  "old_sdk_manifest_sha256": "ab1651d8c4a9d5bed42ff3a617b803d32f68ca5cb64f9cfc9585272211eb2ad2",
+  "sdk_manifest": {
+    "path": "work/b4-four-registration-20261106/sdk-registered-v1/MANIFEST.json",
+    "sha256": "72feb52ec765905da759c88db1d5da459ef803454c6251ebe60267e2d90be348"
+  },
+  "source_identity_limit": "RED_V3_SOURCE originally omitted three clean base cleanup files; post-run git8b reconstruction is explicitly retained in RED_V3_CLEANUP_SOURCE_RECONSTRUCTED.json, not relabeled as pre-build capture.",
+  "rejected_attempt": "targeted-red/ original v2 missing required metadata callback, initialization31+crash; preserved, not accepted RED.",
+  "limits": [
+    "Create/seal still true Unavailable for their missing original joins.",
+    "Distinct cleanup request has no original successor association; typed withdraw has no generation root.",
+    "Acquire/Poll results/procs and nonempty lease issuer remain missing.",
+    "CPU component tests do not qualify native GPU/source/admission/whole-output release.",
+    "Actual C++ export dump plus C11/Cpp17 layout compile/run matched Python SDK layout, not a producer execution."
+  ],
+  "additional_verification": {
+    "actual_cpp_export": {
+      "path": "work/b4-four-registration-20261106/actual-cpp-export/RESULT.json",
+      "sha256": "554ab6b2ffe80fd153ec24a672f9cf4a9e9f613ac58c05f00faca5d3531fa966"
+    },
+    "actual_cpp_export_layout": {
+      "path": "work/b4-four-registration-20261106/actual-cpp-export/COMPILE_LAYOUT_RESULT.json",
+      "sha256": "f5c76a173e1d69d60297976277ae25d13168e0e3c6ba8827654f4887fc7fac4d"
+    },
+    "final_sdk_pair_compile_layout_aliases": {
+      "path": "work/b4-four-registration-20261106/sdk-registered-verification/RESULT.json",
+      "sha256": "744ef8482bafa1b25fe7e641a7e7bfc240546c6742b5ee474e7e3e9b6aeb0f40"
+    },
+    "original_hooks": {
+      "path": "work/b4-four-registration-20261106/GREEN_ORIGINAL_HOOKS.json",
+      "sha256": "c10d6f85a52d73db0ad466bd9f7f25ca17bde8e427872b1b72127ae1db085557"
+    },
+    "clang_codespell": {
+      "path": "work/b4-four-registration-20261106/GREEN_STYLE.json",
+      "sha256": "d32ffd465faac4a42378f6c218f5a253a4ad3e97426b3f2594374b8212ee76b7"
+    },
+    "valid_red_independent_review": {
+      "path": "work/b4-four-registration-20261106/V3_RED_INDEPENDENT_REVIEW.md",
+      "sha256": "5ad5a7dc4cdc35b6324f367723969100b54c03848d7c1516c34729f4eedb7cec"
+    }
+  },
+  "final_independent_review": {
+    "path": "work/b4-four-registration-20261106/FINAL_INDEPENDENT_REVIEW.md",
+    "sha256": "fbb867c4a7494ccd1917e9dfb5c446c7cbee2b92a920992a4d5442a37e8a110c",
+    "checks_passed": 157,
+    "checks_total": 157,
+    "disposition": "accepted bounded ABI/custody component; no blocker"
+  }
+}

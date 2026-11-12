@@ -1,0 +1,25 @@
+{
+  "schema": "independent-cohort-audit-artifacts-v1",
+  "files": {
+    "independent_audit.py": {
+      "bytes": 12333,
+      "sha256": "deb5e277290180625e8403c7746ee0e2557b4ff8c83f15cacc2d8a6b9ffe959d"
+    },
+    "INDEPENDENT_AUDIT.json": {
+      "bytes": 3003355,
+      "sha256": "e7e00d770e8c97e994bf8ed3728850d865aa1967343bc8676684a816ce4e1c16"
+    },
+    "INDEPENDENT_OTHER_CANDIDATES.json": {
+      "bytes": 57722,
+      "sha256": "e744f07b924d78acb47320e177264768fffa7a85d26f5bbee1a2b2aa2be723b9"
+    },
+    "INDEPENDENT_INPUT_PINS.json": {
+      "bytes": 14591,
+      "sha256": "3bdb404b913b79020ac5da296ad4fbde305834dc54a91fcb5f296d4fd862ad0c"
+    },
+    "INDEPENDENT_INTAKE.md": {
+      "bytes": 7012,
+      "sha256": "ed28821ecbd0e7a5d243e36a458a5ccecc30ea56b88781874bb9ca6100af1b18"
+    }
+  }
+}

@@ -1,0 +1,1434 @@
+{
+  "entries": [
+    {
+      "path": "parent/FIRST_BUILD_RESULT.json",
+      "category": "historical_failed_fixture",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FIRST_BUILD_RESULT.json",
+      "original_bytes": 335,
+      "original_sha256": "a6b5caf05f98c44e8bb87e83cad2ecdf9d0f873b7a3bc0dae31f86fd239695f2",
+      "stored_bytes": 335,
+      "stored_sha256": "a6b5caf05f98c44e8bb87e83cad2ecdf9d0f873b7a3bc0dae31f86fd239695f2"
+    },
+    {
+      "path": "parent/FIRST_BUILD.log.txt.gz",
+      "category": "historical_failed_fixture",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FIRST_BUILD.log.txt",
+      "original_bytes": 12612,
+      "original_sha256": "82ac8ebc50d0825bb930731697109de3794b27dfd190c0356146b47a3764b38c",
+      "stored_bytes": 2315,
+      "stored_sha256": "72364311aec850fff61a139cb55607544075dd68913c4479c9cd4c878425a9bf"
+    },
+    {
+      "path": "parent/FIRST_CPU_RESULT.json",
+      "category": "historical_failed_fixture",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FIRST_CPU_RESULT.json",
+      "original_bytes": 360,
+      "original_sha256": "acf8240fe71de23cbf2d95f7d53510e98da52f71a20ae87a141ed824dd077df0",
+      "stored_bytes": 360,
+      "stored_sha256": "acf8240fe71de23cbf2d95f7d53510e98da52f71a20ae87a141ed824dd077df0"
+    },
+    {
+      "path": "parent/FIRST_CPU.log.txt.gz",
+      "category": "historical_failed_fixture",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FIRST_CPU.log.txt",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "parent/FIRST_CPU.xml.gz",
+      "category": "historical_failed_fixture",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FIRST_CPU.xml",
+      "original_bytes": 366033,
+      "original_sha256": "a1d34d1f98f5520f57e81c2c130d6a347d081d0192d3fb8a25b911ba5c730a7e",
+      "stored_bytes": 46992,
+      "stored_sha256": "10b8590fd42885bead2d65c6268d1cf8be69f4c16343269909815b267209cec5"
+    },
+    {
+      "path": "parent/FIRST_FULL_CPU_RESULT.json",
+      "category": "historical_failed_fixture",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FIRST_FULL_CPU_RESULT.json",
+      "original_bytes": 449,
+      "original_sha256": "647e69b7e0869a5c4ceceb2820c8302abd00618c28c6831a2a0e08f8c0e055db",
+      "stored_bytes": 449,
+      "stored_sha256": "647e69b7e0869a5c4ceceb2820c8302abd00618c28c6831a2a0e08f8c0e055db"
+    },
+    {
+      "path": "parent/FIRST_FULL_CPU.log.txt.gz",
+      "category": "historical_failed_fixture",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FIRST_FULL_CPU.log.txt",
+      "original_bytes": 5083,
+      "original_sha256": "022eec018683af4942ebc796904613a151d83a275ea3d36cc10c55f51381e87a",
+      "stored_bytes": 1320,
+      "stored_sha256": "0d3fb4a549233a76aa7c14d3ccb0928074210a23bf43b3248fd3bda0163cf9a9"
+    },
+    {
+      "path": "parent/FIRST_FULL_CPU.xml.gz",
+      "category": "historical_failed_fixture",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FIRST_FULL_CPU.xml",
+      "original_bytes": 1165087,
+      "original_sha256": "cfbe624875071795fad0ebca7225fc2c821e828e8eb15304b3ac45550bf83022",
+      "stored_bytes": 82593,
+      "stored_sha256": "8712a459a7011b9104cd02dacaf269e4510da1a9bfee4a81d03ae2e22479ffcd"
+    },
+    {
+      "path": "parent/FIRST_GPU_RESULT.json",
+      "category": "historical_failed_fixture",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FIRST_GPU_RESULT.json",
+      "original_bytes": 647,
+      "original_sha256": "46977561c070a63128afa41f8167acd09218008ba19ad994210d4a6e1acf72a3",
+      "stored_bytes": 647,
+      "stored_sha256": "46977561c070a63128afa41f8167acd09218008ba19ad994210d4a6e1acf72a3"
+    },
+    {
+      "path": "parent/FIRST_GPU.log.txt.gz",
+      "category": "historical_failed_fixture",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FIRST_GPU.log.txt",
+      "original_bytes": 28908,
+      "original_sha256": "e73d01ca31f39272daf32888c621ca7d78bc9450386c07ceea568cada7bb04d9",
+      "stored_bytes": 3255,
+      "stored_sha256": "0ad6cd95fb64c4e3199d7afae3e26116b426d1caa12434c80f63e919b403fd50"
+    },
+    {
+      "path": "parent/SECOND_BUILD_RESULT.json",
+      "category": "historical_failed_fixture",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/SECOND_BUILD_RESULT.json",
+      "original_bytes": 335,
+      "original_sha256": "1f773079db8554de1d8f0a6173210c2626d446e390a82b7a45e52b94092cd114",
+      "stored_bytes": 335,
+      "stored_sha256": "1f773079db8554de1d8f0a6173210c2626d446e390a82b7a45e52b94092cd114"
+    },
+    {
+      "path": "parent/SECOND_BUILD.log.txt.gz",
+      "category": "historical_failed_fixture",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/SECOND_BUILD.log.txt",
+      "original_bytes": 2248,
+      "original_sha256": "e205f94dc8883d0ca7b620cdb0a2fef7070b212508d01784b7a25584f384a2e8",
+      "stored_bytes": 967,
+      "stored_sha256": "16a5af5b2220a902b62f80ec17e902dd9e8254819872a24d18728b4f0b9a2817"
+    },
+    {
+      "path": "parent/SECOND_GPU_RESULT.json",
+      "category": "historical_failed_fixture",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/SECOND_GPU_RESULT.json",
+      "original_bytes": 548,
+      "original_sha256": "7a550d1db330e7527d1f6e31c4ffffe98735490579a7794f1583e4386e5536d6",
+      "stored_bytes": 548,
+      "stored_sha256": "7a550d1db330e7527d1f6e31c4ffffe98735490579a7794f1583e4386e5536d6"
+    },
+    {
+      "path": "parent/SECOND_GPU.log.txt.gz",
+      "category": "historical_failed_fixture",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/SECOND_GPU.log.txt",
+      "original_bytes": 36435,
+      "original_sha256": "7a253c89030307b623ab46031e0d9038ec651a43e7a5a0d6273e49aeaf1eb85e",
+      "stored_bytes": 3331,
+      "stored_sha256": "d74be70d9274a370134b1f24bc98aeaf1e0c8980dd2f6a36f8cfb79b1f05365d"
+    },
+    {
+      "path": "parent/THIRD_BUILD_RESULT.json",
+      "category": "third_clean_baseline",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/THIRD_BUILD_RESULT.json",
+      "original_bytes": 335,
+      "original_sha256": "c974840e5feb7e175526489aff14464faef8be65ee4932c63c0244a6edc4d94f",
+      "stored_bytes": 335,
+      "stored_sha256": "c974840e5feb7e175526489aff14464faef8be65ee4932c63c0244a6edc4d94f"
+    },
+    {
+      "path": "parent/THIRD_BUILD.log.txt.gz",
+      "category": "third_clean_baseline",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/THIRD_BUILD.log.txt",
+      "original_bytes": 2183,
+      "original_sha256": "385528e67ad7901641b1bd2cb810aae7e557c4ae338b8bb825b6ea904d0e7ba1",
+      "stored_bytes": 951,
+      "stored_sha256": "7e8c1b46b7d0cb62d11833066e15e88611dfd9fb62f39d610727e5ed086eb677"
+    },
+    {
+      "path": "parent/THIRD_CPU_RESULT.json",
+      "category": "third_clean_baseline",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/THIRD_CPU_RESULT.json",
+      "original_bytes": 546,
+      "original_sha256": "af5102924be8771fb5632b9692e4126d3c8304b328e21eb9ef75c752d62ee6ed",
+      "stored_bytes": 546,
+      "stored_sha256": "af5102924be8771fb5632b9692e4126d3c8304b328e21eb9ef75c752d62ee6ed"
+    },
+    {
+      "path": "parent/THIRD_CPU.log.txt.gz",
+      "category": "third_clean_baseline",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/THIRD_CPU.log.txt",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "parent/THIRD_CPU.xml.gz",
+      "category": "third_clean_baseline",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/THIRD_CPU.xml",
+      "original_bytes": 366988,
+      "original_sha256": "e61bc3c5cf3eed877a6e175685c106bc24104e2d6e2172d346d7b0695afc20bc",
+      "stored_bytes": 47159,
+      "stored_sha256": "f93ceaaeebb51c38045e54ecc54651d3045c97c99d929c025a7eade93e5cd4ac"
+    },
+    {
+      "path": "parent/THIRD_GPU_RESULT.json",
+      "category": "third_clean_baseline",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/THIRD_GPU_RESULT.json",
+      "original_bytes": 647,
+      "original_sha256": "1abb2120087c9b6181632e664f28bdb079232fa716c75083b263a56ce659a09e",
+      "stored_bytes": 647,
+      "stored_sha256": "1abb2120087c9b6181632e664f28bdb079232fa716c75083b263a56ce659a09e"
+    },
+    {
+      "path": "parent/THIRD_GPU.log.txt.gz",
+      "category": "third_clean_baseline",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/THIRD_GPU.log.txt",
+      "original_bytes": 36803,
+      "original_sha256": "9740022a7780feee524cf4d7673a1f04c3d39d3d668c9c3a08f49d2245b5c524",
+      "stored_bytes": 3319,
+      "stored_sha256": "212570f88deb1c45545a965d0eae38edefe8ac197bf1365f70bb559bd7dcf4ff"
+    },
+    {
+      "path": "parent/FIRST_BUILD_SOURCE_PINS.json",
+      "category": "historical_source_identity",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FIRST_BUILD_SOURCE_PINS.json",
+      "original_bytes": 1149,
+      "original_sha256": "8312b7a6bbe31129aaa9c5f14b6b56577d15952ced006ce732c91aff76d9314b",
+      "stored_bytes": 1149,
+      "stored_sha256": "8312b7a6bbe31129aaa9c5f14b6b56577d15952ced006ce732c91aff76d9314b"
+    },
+    {
+      "path": "parent/SOURCE_FORMAT_R2.log.txt.gz",
+      "category": "historical_source_identity",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/SOURCE_FORMAT_R2.log.txt",
+      "original_bytes": 160,
+      "original_sha256": "7dc5e279b7465e560d8fd24d3946eb5ee5dfb418fd388e73cc3fbf031cc5eddf",
+      "stored_bytes": 78,
+      "stored_sha256": "7d80a7b15a5bb0d49c8f5c6927b92296b3fb815b1547a34e18adba31a15a8225"
+    },
+    {
+      "path": "parent/SOURCE_HOOKS_R1.json",
+      "category": "historical_source_identity",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/SOURCE_HOOKS_R1.json",
+      "original_bytes": 1209,
+      "original_sha256": "8ca99ab8e917353759f038489ee9023a2130d82f197561966e616ce16942730c",
+      "stored_bytes": 1209,
+      "stored_sha256": "8ca99ab8e917353759f038489ee9023a2130d82f197561966e616ce16942730c"
+    },
+    {
+      "path": "parent/SOURCE_HOOKS_R2.json",
+      "category": "historical_source_identity",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/SOURCE_HOOKS_R2.json",
+      "original_bytes": 1148,
+      "original_sha256": "02a865b56a7cdfc3d01a2d7d142113773984f0c0ae82d438d3e2863b143b77e8",
+      "stored_bytes": 1148,
+      "stored_sha256": "02a865b56a7cdfc3d01a2d7d142113773984f0c0ae82d438d3e2863b143b77e8"
+    },
+    {
+      "path": "parent/first_gpu/0/stderr.log.gz",
+      "category": "historical_failed_fixture",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/first_gpu/0/stderr.log",
+      "original_bytes": 5522,
+      "original_sha256": "624ed767b46796cfee8a1db3d387263d95a4f46aeea760c9eaee6dffa83b618d",
+      "stored_bytes": 506,
+      "stored_sha256": "1cdb14bea926a39bd8bd8ecb726b6f0dcef103d626a4447bd22c8c417f5675ea"
+    },
+    {
+      "path": "parent/first_gpu/0/stdout.log.gz",
+      "category": "historical_failed_fixture",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/first_gpu/0/stdout.log",
+      "original_bytes": 4339,
+      "original_sha256": "84f214bf7b789ffe0a17300546ac6580582ff99417d987fe19cda84444f4f951",
+      "stored_bytes": 1005,
+      "stored_sha256": "024f5a0d3f3ca70ef9dbb2a68cdb7b428671730409cc4e269f5568257fdca6da"
+    },
+    {
+      "path": "parent/first_gpu/1/stderr.log.gz",
+      "category": "historical_failed_fixture",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/first_gpu/1/stderr.log",
+      "original_bytes": 406,
+      "original_sha256": "13d9f58ebc08c7fe4df97d64da99490aaa5657831d4662330df08dbe9a875f7b",
+      "stored_bytes": 195,
+      "stored_sha256": "293bce1164d8ed19f03d480b7b035186cf26b1d354a657fbfb45750f5f7c7561"
+    },
+    {
+      "path": "parent/first_gpu/1/stdout.log.gz",
+      "category": "historical_failed_fixture",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/first_gpu/1/stdout.log",
+      "original_bytes": 8250,
+      "original_sha256": "4f6db975ee6e987faa47e3795922001a617df567b85e18d8d114d9e5ed9a6bd5",
+      "stored_bytes": 1223,
+      "stored_sha256": "f3eee2c79dc29337c9a7bb186e2236b27ec387c8d73b5205749b3ea9ee4daa12"
+    },
+    {
+      "path": "parent/first_gpu/result.json",
+      "category": "historical_failed_fixture",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/first_gpu/result.json",
+      "original_bytes": 28908,
+      "original_sha256": "e73d01ca31f39272daf32888c621ca7d78bc9450386c07ceea568cada7bb04d9",
+      "stored_bytes": 28908,
+      "stored_sha256": "e73d01ca31f39272daf32888c621ca7d78bc9450386c07ceea568cada7bb04d9"
+    },
+    {
+      "path": "parent/second_gpu/0/stderr.log.gz",
+      "category": "historical_failed_fixture",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/second_gpu/0/stderr.log",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "parent/second_gpu/0/stdout.log.gz",
+      "category": "historical_failed_fixture",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/second_gpu/0/stdout.log",
+      "original_bytes": 8250,
+      "original_sha256": "335a4bde6789857328c97833a32b044aefab3f6ec1c3b64e0defd0f2e300b0d8",
+      "stored_bytes": 1222,
+      "stored_sha256": "8288aac5791261829c18f0294f029b5b8087b64cf230adff2de7fa365a08912e"
+    },
+    {
+      "path": "parent/second_gpu/1/stderr.log.gz",
+      "category": "historical_failed_fixture",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/second_gpu/1/stderr.log",
+      "original_bytes": 1096,
+      "original_sha256": "c9990a9cbb222b0e57ddd5c627a4f748f5d05aff04deac732d27e455205b9338",
+      "stored_bytes": 206,
+      "stored_sha256": "1f9b3e5c48787b9c62e6572abc7f11544f60d63755e0747517d599ea031e54a3"
+    },
+    {
+      "path": "parent/second_gpu/1/stdout.log.gz",
+      "category": "historical_failed_fixture",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/second_gpu/1/stdout.log",
+      "original_bytes": 8251,
+      "original_sha256": "46805bcece8df716c73dcc5b4a5d1b3ba7e147c7e9a1ee882c7e3ca6c836dce6",
+      "stored_bytes": 1225,
+      "stored_sha256": "04d7acd41429044469f7d7160efa13181f06e0e7bf9bc91c58c62b8a134cb470"
+    },
+    {
+      "path": "parent/second_gpu/result.json",
+      "category": "historical_failed_fixture",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/second_gpu/result.json",
+      "original_bytes": 36435,
+      "original_sha256": "7a253c89030307b623ab46031e0d9038ec651a43e7a5a0d6273e49aeaf1eb85e",
+      "stored_bytes": 36435,
+      "stored_sha256": "7a253c89030307b623ab46031e0d9038ec651a43e7a5a0d6273e49aeaf1eb85e"
+    },
+    {
+      "path": "parent/third_gpu/0/stderr.log.gz",
+      "category": "third_clean_gpu",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/third_gpu/0/stderr.log",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "parent/third_gpu/0/stdout.log.gz",
+      "category": "third_clean_gpu",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/third_gpu/0/stdout.log",
+      "original_bytes": 8365,
+      "original_sha256": "6c0fd80f14c331e74c3de75ed3ded716fca084e399565cd509c2154771d106db",
+      "stored_bytes": 1254,
+      "stored_sha256": "bb6a79bdc33c3c185b17c030e03b7f2ecbae17e1ccccb8450c7599a1ee8b796d"
+    },
+    {
+      "path": "parent/third_gpu/1/stderr.log.gz",
+      "category": "third_clean_gpu",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/third_gpu/1/stderr.log",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "parent/third_gpu/1/stdout.log.gz",
+      "category": "third_clean_gpu",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/third_gpu/1/stdout.log",
+      "original_bytes": 8366,
+      "original_sha256": "597f3d4a66feb79685dc49974a1aa6574e2c8a3f9442cd88dbd35de8f5c1cf3b",
+      "stored_bytes": 1259,
+      "stored_sha256": "6413a99738f12162c7dcf42faba5419fb23d5f519b7a17d5300a0c01aecf1db7"
+    },
+    {
+      "path": "parent/third_gpu/result.json",
+      "category": "third_clean_gpu",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/third_gpu/result.json",
+      "original_bytes": 36803,
+      "original_sha256": "9740022a7780feee524cf4d7673a1f04c3d39d3d668c9c3a08f49d2245b5c524",
+      "stored_bytes": 36803,
+      "stored_sha256": "9740022a7780feee524cf4d7673a1f04c3d39d3d668c9c3a08f49d2245b5c524"
+    },
+    {
+      "path": "parent/red/FINAL_RD.cpp.gz",
+      "category": "controlled_red",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/FINAL_RD.cpp",
+      "original_bytes": 746353,
+      "original_sha256": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc",
+      "stored_bytes": 134174,
+      "stored_sha256": "7b040d710f2a294364b3cd675ff623a2483f5b3e7e2f4a9d15498dc19333dacd"
+    },
+    {
+      "path": "parent/red/RESULTS.json",
+      "category": "controlled_red",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/RESULTS.json",
+      "original_bytes": 5157,
+      "original_sha256": "fbee590e9fba9038b5997b247943d834c873d78e900a67b335c636a878666594",
+      "stored_bytes": 5157,
+      "stored_sha256": "fbee590e9fba9038b5997b247943d834c873d78e900a67b335c636a878666594"
+    },
+    {
+      "path": "parent/red/SOURCE_RESTORATION.json",
+      "category": "controlled_red",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/SOURCE_RESTORATION.json",
+      "original_bytes": 103,
+      "original_sha256": "95bed675f9634a7e1a46b984d8e3f8de876bc358b15a750426c08dd64d38cd36",
+      "stored_bytes": 103,
+      "stored_sha256": "95bed675f9634a7e1a46b984d8e3f8de876bc358b15a750426c08dd64d38cd36"
+    },
+    {
+      "path": "parent/red/XML_AUDIT.json",
+      "category": "controlled_red",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/XML_AUDIT.json",
+      "original_bytes": 1907,
+      "original_sha256": "1f0b1fbeeceb2b20facd3e97bdba3f6062d00edf4f7c4f89bdc0bd4dcac5e695",
+      "stored_bytes": 1907,
+      "stored_sha256": "1f0b1fbeeceb2b20facd3e97bdba3f6062d00edf4f7c4f89bdc0bd4dcac5e695"
+    },
+    {
+      "path": "parent/red/bounded_issue/BUILD.log.txt.gz",
+      "category": "controlled_red",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/bounded_issue/BUILD.log.txt",
+      "original_bytes": 1906,
+      "original_sha256": "680e307d2184d545742d37d71b7c3d11d37135c87de7ef5791d531a49429de1f",
+      "stored_bytes": 891,
+      "stored_sha256": "3638ef29fa0289f04eb7589fc816dba5d86c6f1726ae4a079d84b542cde24822"
+    },
+    {
+      "path": "parent/red/bounded_issue/CPU.log.txt.gz",
+      "category": "controlled_red",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/bounded_issue/CPU.log.txt",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "parent/red/bounded_issue/CPU.xml.gz",
+      "category": "controlled_red",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/bounded_issue/CPU.xml",
+      "original_bytes": 367962,
+      "original_sha256": "9e63f6f5d2757dd0835eb32243bc77215a5ae3a4d0b27708b55df751cba84ba4",
+      "stored_bytes": 47256,
+      "stored_sha256": "8f1241d38a576a674f80576fb42454e5acd7c1471f949aeac9f9df249e3bff74"
+    },
+    {
+      "path": "parent/red/bounded_issue/RESULT.json",
+      "category": "controlled_red",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/bounded_issue/RESULT.json",
+      "original_bytes": 996,
+      "original_sha256": "3079b005ac5f9542f6ac3030dec71876cb49eb9d5bb31474a28ad25298f66aea",
+      "stored_bytes": 996,
+      "stored_sha256": "3079b005ac5f9542f6ac3030dec71876cb49eb9d5bb31474a28ad25298f66aea"
+    },
+    {
+      "path": "parent/red/bounded_retain/BUILD.log.txt.gz",
+      "category": "controlled_red",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/bounded_retain/BUILD.log.txt",
+      "original_bytes": 1906,
+      "original_sha256": "5f1f103367bb6892f8add0878872623d535fa45888f409a16ab67fb3d2236a4f",
+      "stored_bytes": 892,
+      "stored_sha256": "736d64966e86c644acad3161bc8e423a5dd4dbae226e1bc687bab51781de1b7e"
+    },
+    {
+      "path": "parent/red/bounded_retain/CPU.log.txt.gz",
+      "category": "controlled_red",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/bounded_retain/CPU.log.txt",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "parent/red/bounded_retain/CPU.xml.gz",
+      "category": "controlled_red",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/bounded_retain/CPU.xml",
+      "original_bytes": 366315,
+      "original_sha256": "bd8814af0435e4d428d0c46a45c123e521fe8584b22e9fa19ca8bc85dffc4f5a",
+      "stored_bytes": 47109,
+      "stored_sha256": "da297a102c19d8a07202ba47b1e1df34209e4386782167b3639d14c4aaf4bec5"
+    },
+    {
+      "path": "parent/red/bounded_retain/RESULT.json",
+      "category": "controlled_red",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/bounded_retain/RESULT.json",
+      "original_bytes": 1014,
+      "original_sha256": "c6170a365ba5fd09f374fcdb82faa6e513db510dea29d589ed01bd8dff0b32c4",
+      "stored_bytes": 1014,
+      "stored_sha256": "c6170a365ba5fd09f374fcdb82faa6e513db510dea29d589ed01bd8dff0b32c4"
+    },
+    {
+      "path": "parent/red/ordinary_issue/BUILD.log.txt.gz",
+      "category": "controlled_red",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/ordinary_issue/BUILD.log.txt",
+      "original_bytes": 1906,
+      "original_sha256": "bbf3f24fa055ac7a4c1929d14bbf1e6651fbb4cccc4b68d372b9d43eb911da40",
+      "stored_bytes": 892,
+      "stored_sha256": "65c159c15fb8148e0c9fd0643e263560761d4610b4d539c3bd4569e2ec1373d2"
+    },
+    {
+      "path": "parent/red/ordinary_issue/CPU.log.txt.gz",
+      "category": "controlled_red",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/ordinary_issue/CPU.log.txt",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "parent/red/ordinary_issue/CPU.xml.gz",
+      "category": "controlled_red",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/ordinary_issue/CPU.xml",
+      "original_bytes": 367962,
+      "original_sha256": "1bdc6e899f85d4a4e07506a8a6ba0a2a0ec4229972431b43ef4425a1061ce206",
+      "stored_bytes": 47256,
+      "stored_sha256": "173c2d2327f715afd27e8d0e5a9a859d4351d2e0cf4904cbe2c3335327f9e38b"
+    },
+    {
+      "path": "parent/red/ordinary_issue/RESULT.json",
+      "category": "controlled_red",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/ordinary_issue/RESULT.json",
+      "original_bytes": 1021,
+      "original_sha256": "f5e922bc4c71dfeb0a5996266da8b3a671e382f88f3ff2ba390b20c51696c68c",
+      "stored_bytes": 1021,
+      "stored_sha256": "f5e922bc4c71dfeb0a5996266da8b3a671e382f88f3ff2ba390b20c51696c68c"
+    },
+    {
+      "path": "parent/red/ordinary_retain/BUILD.log.txt.gz",
+      "category": "controlled_red",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/ordinary_retain/BUILD.log.txt",
+      "original_bytes": 1906,
+      "original_sha256": "18fb3f232518975eda9cb284127bb9ac259ecb646121486f0a0122738661c2aa",
+      "stored_bytes": 892,
+      "stored_sha256": "184152aa3c044fad5a56e242c8d628b4daec4afd8fc339dcb083664e1d451705"
+    },
+    {
+      "path": "parent/red/ordinary_retain/CPU.log.txt.gz",
+      "category": "controlled_red",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/ordinary_retain/CPU.log.txt",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "parent/red/ordinary_retain/CPU.xml.gz",
+      "category": "controlled_red",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/ordinary_retain/CPU.xml",
+      "original_bytes": 366315,
+      "original_sha256": "3d24c7e37a2cd24f91ed6e385a0b2fd7d51c0ed8ac8416606722879d73a8a176",
+      "stored_bytes": 47109,
+      "stored_sha256": "880c974e8f23f496cd7b31ea667459ecdf9f7280d4591eb2354b25f5a866e8c8"
+    },
+    {
+      "path": "parent/red/ordinary_retain/RESULT.json",
+      "category": "controlled_red",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/ordinary_retain/RESULT.json",
+      "original_bytes": 1016,
+      "original_sha256": "4d94f98b8b95238c2e9427b7a69bb2c036652967538a2a810b8d57131e32de4a",
+      "stored_bytes": 1016,
+      "stored_sha256": "4d94f98b8b95238c2e9427b7a69bb2c036652967538a2a810b8d57131e32de4a"
+    },
+    {
+      "path": "parent/red/slot_buffer/BUILD.log.txt.gz",
+      "category": "controlled_red",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/slot_buffer/BUILD.log.txt",
+      "original_bytes": 1906,
+      "original_sha256": "e30ea4b7ca842e9a267ab0cf466ea27361510f56c32147d2380cb35ec1b11d3f",
+      "stored_bytes": 891,
+      "stored_sha256": "45b81090577ac4e07837604bf042db58ffef097da90835bba1b9c0c4cdf4cab8"
+    },
+    {
+      "path": "parent/red/slot_buffer/CPU.log.txt.gz",
+      "category": "controlled_red",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/slot_buffer/CPU.log.txt",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "parent/red/slot_buffer/CPU.xml.gz",
+      "category": "controlled_red",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/slot_buffer/CPU.xml",
+      "original_bytes": 367433,
+      "original_sha256": "b2f21b041a3b4d7e20b32813095f76b6d7c7994ea2fa75fb37a71a3d5524b647",
+      "stored_bytes": 47199,
+      "stored_sha256": "b831adea754e8639cb8077df2169fcffa3316d0c2ebc4667361c471cb54de3db"
+    },
+    {
+      "path": "parent/red/slot_buffer/RESULT.json",
+      "category": "controlled_red",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/slot_buffer/RESULT.json",
+      "original_bytes": 894,
+      "original_sha256": "813313018634c47b3a72026dae98db845131fcd8b6e4ab0a524d97b95bbf87a1",
+      "stored_bytes": 894,
+      "stored_sha256": "813313018634c47b3a72026dae98db845131fcd8b6e4ab0a524d97b95bbf87a1"
+    },
+    {
+      "path": "independent_review/REVIEW_PRIOR.md",
+      "category": "independent_review",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/independent-review/REVIEW.md",
+      "original_bytes": 12136,
+      "original_sha256": "3263f30b7a6d4b7657e861036811a1af337fb91f09796b05439a7ab709b8fd89",
+      "stored_bytes": 12136,
+      "stored_sha256": "3263f30b7a6d4b7657e861036811a1af337fb91f09796b05439a7ab709b8fd89"
+    },
+    {
+      "path": "independent_review/SOURCE_PINS.json",
+      "category": "independent_review",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/independent-review/SOURCE_PINS.json",
+      "original_bytes": 2144,
+      "original_sha256": "80bcb226ed283ad81d55089718cbcaaa7e19dfe4917cda1c04b930fb2dae1eb3",
+      "stored_bytes": 2144,
+      "stored_sha256": "80bcb226ed283ad81d55089718cbcaaa7e19dfe4917cda1c04b930fb2dae1eb3"
+    },
+    {
+      "path": "independent_review/RED_MUTATION_PLAN.md",
+      "category": "independent_review",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/independent-review/RED_MUTATION_PLAN.md",
+      "original_bytes": 5744,
+      "original_sha256": "f44ec11afcf39f4dd8ff3475ee55c13e2e1d0b0fc6369b992f16b64921470a51",
+      "stored_bytes": 5744,
+      "stored_sha256": "f44ec11afcf39f4dd8ff3475ee55c13e2e1d0b0fc6369b992f16b64921470a51"
+    },
+    {
+      "path": "design/FIRST_SLICE.md",
+      "category": "scope_and_source_identity",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/FIRST_SLICE.md",
+      "original_bytes": 16978,
+      "original_sha256": "55cf494d272ed6b10e807c95d0d39f2545d2dacb936fb8846cbb0067f608271e",
+      "stored_bytes": 16978,
+      "stored_sha256": "55cf494d272ed6b10e807c95d0d39f2545d2dacb936fb8846cbb0067f608271e"
+    },
+    {
+      "path": "design/implementation/FREEZE_R1.md",
+      "category": "scope_and_source_identity",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/implementation/FREEZE_R1.md",
+      "original_bytes": 6533,
+      "original_sha256": "d294d72efa41af5940f558d0f4e6478d6f84588f3862f0497771849d7c6606e1",
+      "stored_bytes": 6533,
+      "stored_sha256": "d294d72efa41af5940f558d0f4e6478d6f84588f3862f0497771849d7c6606e1"
+    },
+    {
+      "path": "design/implementation/SOURCE_FREEZE_R1.json",
+      "category": "scope_and_source_identity",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/implementation/SOURCE_FREEZE_R1.json",
+      "original_bytes": 1211,
+      "original_sha256": "2119e1f4f3fef65a429c2f28266a6528b05cc9b4dfd899ffd625ca42c4be8874",
+      "stored_bytes": 1211,
+      "stored_sha256": "2119e1f4f3fef65a429c2f28266a6528b05cc9b4dfd899ffd625ca42c4be8874"
+    },
+    {
+      "path": "design/implementation/FINALIZATION.md",
+      "category": "scope_and_source_identity",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/implementation/FINALIZATION.md",
+      "original_bytes": 4485,
+      "original_sha256": "b390e1b0369e81b42f76cfc2a90017950f6136414f3c036074ffc1705aa0fdf0",
+      "stored_bytes": 4485,
+      "stored_sha256": "b390e1b0369e81b42f76cfc2a90017950f6136414f3c036074ffc1705aa0fdf0"
+    },
+    {
+      "path": "design/implementation/FINALIZER_TEST_RUNNER.md",
+      "category": "scope_and_source_identity",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/implementation/FINALIZER_TEST_RUNNER.md",
+      "original_bytes": 1358,
+      "original_sha256": "283d44ff72a39871b23b632a3037a3d13ba34a5d64fe26d82760990693cec48d",
+      "stored_bytes": 1358,
+      "stored_sha256": "283d44ff72a39871b23b632a3037a3d13ba34a5d64fe26d82760990693cec48d"
+    },
+    {
+      "path": "final_source/modules/particles_runtime_tests/native_height_range_test_fixture.h.gz",
+      "category": "final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/modules/particles_runtime_tests/native_height_range_test_fixture.h",
+      "original_bytes": 3973,
+      "original_sha256": "efdfef65ba34d36842ff253ff38567ffa9588689d52a873f3fa62bf1225fdae5",
+      "stored_bytes": 1531,
+      "stored_sha256": "398e20c182134267231a2e0c2dcfe871a3978693b30a6e32c888491c49cef98e"
+    },
+    {
+      "path": "final_source/modules/particles_runtime_tests/native_height_range_test_fixture.cpp.gz",
+      "category": "final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/modules/particles_runtime_tests/native_height_range_test_fixture.cpp",
+      "original_bytes": 21131,
+      "original_sha256": "772171c18df15c1f3763ffd91e9640ef7dbd4749a975ddfaf291ebb41de0d282",
+      "stored_bytes": 5202,
+      "stored_sha256": "8810670655bf2c0b41087eacda61c2f8811267cc9e7f46184032bd322c932c18"
+    },
+    {
+      "path": "final_source/modules/particles_runtime_tests/register_types.cpp.gz",
+      "category": "final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/modules/particles_runtime_tests/register_types.cpp",
+      "original_bytes": 3304,
+      "original_sha256": "ffe51f0bcfbc3af75650ed09d009ba9669540f8086e3da0a72b0535d5051260d",
+      "stored_bytes": 1123,
+      "stored_sha256": "20ac48d2fadeaebd6387dccaef080a66365c19e2c9e770299b5b48c5cc9ef00d"
+    },
+    {
+      "path": "final_source/modules/particles_runtime_tests/config.py",
+      "category": "final_source",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/modules/particles_runtime_tests/config.py",
+      "original_bytes": 148,
+      "original_sha256": "8a6606d2863710e709e0c5d2f22089b9b695df1817c7c6d414832d4c3d80581c",
+      "stored_bytes": 148,
+      "stored_sha256": "8a6606d2863710e709e0c5d2f22089b9b695df1817c7c6d414832d4c3d80581c"
+    },
+    {
+      "path": "final_source/modules/particles_runtime_tests/SCsub",
+      "category": "final_source",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/modules/particles_runtime_tests/SCsub",
+      "original_bytes": 157,
+      "original_sha256": "3dbdfe30851ced12958d0967ecf4ff10814e829eba2ce9fa85f0c71b1faef0a0",
+      "stored_bytes": 157,
+      "stored_sha256": "3dbdfe30851ced12958d0967ecf4ff10814e829eba2ce9fa85f0c71b1faef0a0"
+    },
+    {
+      "path": "final_source/servers/rendering/native_height_range.h.gz",
+      "category": "final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/native_height_range.h",
+      "original_bytes": 5456,
+      "original_sha256": "275cad52905be03664ccbd501286297674fcbdaddfdc4b58ddaf86ad2b2c1665",
+      "stored_bytes": 1952,
+      "stored_sha256": "1528704e90c1a2b0df44e998409149dfb7bc979ca6a7b8a4e521e0a271623588"
+    },
+    {
+      "path": "final_source/servers/rendering/native_depth_allocation_projection.h.gz",
+      "category": "final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/native_depth_allocation_projection.h",
+      "original_bytes": 5285,
+      "original_sha256": "9c635eb1ccf5aaa93c1c8a3b10a4005f6647c1019d59e048a0ce7982a2b5fdf5",
+      "stored_bytes": 1938,
+      "stored_sha256": "50dca433b1d14fc1c0d1473259adb639c54c177b0db6418bd0d1056aa5c13d2e"
+    },
+    {
+      "path": "final_source/servers/rendering/native_disposal_witness.h.gz",
+      "category": "final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/native_disposal_witness.h",
+      "original_bytes": 5240,
+      "original_sha256": "e98592a01b167d4d1fd16c4dda880a5af8ca16053d50e94c3c99ccd9fc2a77fb",
+      "stored_bytes": 1971,
+      "stored_sha256": "b1328609c1f53cf13f7b78d58c52e4d49205e614906e68560f16f1bac9d8e366"
+    },
+    {
+      "path": "final_source/servers/rendering/rendering_device.h.gz",
+      "category": "final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/rendering_device.h",
+      "original_bytes": 131046,
+      "original_sha256": "8ebd7390f6bcc63e7f7474dcc749f1fa0cbfcbdcd3f07f14cab7e2b77bbb5b74",
+      "stored_bytes": 28853,
+      "stored_sha256": "5dc5787f6144dff64eb160df8b215c05e940e7bcf194b41a99caef2745314aaf"
+    },
+    {
+      "path": "final_source/servers/rendering/rendering_device.cpp.gz",
+      "category": "final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/rendering_device.cpp",
+      "original_bytes": 746353,
+      "original_sha256": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc",
+      "stored_bytes": 134174,
+      "stored_sha256": "7b040d710f2a294364b3cd675ff623a2483f5b3e7e2f4a9d15498dc19333dacd"
+    },
+    {
+      "path": "final_source/servers/rendering/rendering_device_driver.h.gz",
+      "category": "final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/rendering_device_driver.h",
+      "original_bytes": 55236,
+      "original_sha256": "9446494541b4e828716880bc12ede7d3c1abb09b30fbeec0bce19cf106738025",
+      "stored_bytes": 13994,
+      "stored_sha256": "1cd3fb360ed2c5977de758365a1d911e8b0ba536a6da53888b64f1e8bb0f700d"
+    },
+    {
+      "path": "final_source/servers/rendering/rendering_device_graph.h.gz",
+      "category": "final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/rendering_device_graph.h",
+      "original_bytes": 42620,
+      "original_sha256": "ae8081a0aeffe0a4acc4b5646622eb6fbf298416353f63592c6a901bc6bcbbcd",
+      "stored_bytes": 8170,
+      "stored_sha256": "6d734618a7e506483d7feacc1672b93be7a153754c762d9a8c1621f44433302e"
+    },
+    {
+      "path": "final_source/servers/rendering/rendering_device_graph.cpp.gz",
+      "category": "final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/rendering_device_graph.cpp",
+      "original_bytes": 184096,
+      "original_sha256": "a6512f39ebbec0b0d36e4866d58e42e47c2e423bf17e51c27606945663475d64",
+      "stored_bytes": 28402,
+      "stored_sha256": "8b4abe5d58abc47a4af2d24b41e6b64482fb4ceaf55632dafb32c6a7b8e74af0"
+    },
+    {
+      "path": "final_source/drivers/metal/metal_allocator.h.gz",
+      "category": "final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/drivers/metal/metal_allocator.h",
+      "original_bytes": 9765,
+      "original_sha256": "1440f26c7600ccdb20bfec559d500c71b085a6c89e965c2e49707fa4b109de5f",
+      "stored_bytes": 3298,
+      "stored_sha256": "e074c85cd8240c8be81f26b7e3d6bf4f796fc8fa754129116edf4ebedc25eda3"
+    },
+    {
+      "path": "final_source/drivers/metal/metal_allocator.cpp.gz",
+      "category": "final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/drivers/metal/metal_allocator.cpp",
+      "original_bytes": 15553,
+      "original_sha256": "a8ac57a2f0eea3c837ef7439de8ba76399074c9848fcf3563c57d25dd135e706",
+      "stored_bytes": 4201,
+      "stored_sha256": "f3f0f0daf2a7d491c0954c11073276a3a173349baf76416690f851b1b7d02404"
+    },
+    {
+      "path": "final_source/drivers/metal/rendering_device_driver_metal.h.gz",
+      "category": "final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/drivers/metal/rendering_device_driver_metal.h",
+      "original_bytes": 34682,
+      "original_sha256": "c05d74151123ed2bc8f07e7a600b99c10f1b6b395b6647beba71f1f27071a868",
+      "stored_bytes": 8463,
+      "stored_sha256": "b1e02000376dc84c36aa213efb1c239e12c2d765c441849b4a0f457cafd539e9"
+    },
+    {
+      "path": "final_source/drivers/metal/rendering_device_driver_metal.cpp.gz",
+      "category": "final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/drivers/metal/rendering_device_driver_metal.cpp",
+      "original_bytes": 150018,
+      "original_sha256": "fbf9b0a98735bb8efaed901ec7e5e6694576c39fc6f764601e9d5dc780ea3bad",
+      "stored_bytes": 34088,
+      "stored_sha256": "5cb2f5e3d5f907c4722f4a8c6af03ac38ef5c60de098dcfbe07448703e59f6d1"
+    },
+    {
+      "path": "final_source/main/main.cpp.gz",
+      "category": "final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/main/main.cpp",
+      "original_bytes": 220359,
+      "original_sha256": "ee9e9cc51309eaeb36f2a832b1035ed0c390865bedf1b48e34da7aeffcf162e7",
+      "stored_bytes": 50567,
+      "stored_sha256": "52fe2ac9a141e2429ca71f5500b348f54d4c96211728ee7054153c56566e8e5f"
+    },
+    {
+      "path": "final_source/tests/servers/rendering/fixtures/native_height_range/project.godot",
+      "category": "final_source",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/native_height_range/project.godot",
+      "original_bytes": 133,
+      "original_sha256": "2d1bd6e7aadee04cbaaf8e292f5364068fc7c73107cbf5aad0ed6f9e3be5fc62",
+      "stored_bytes": 133,
+      "stored_sha256": "2d1bd6e7aadee04cbaaf8e292f5364068fc7c73107cbf5aad0ed6f9e3be5fc62"
+    },
+    {
+      "path": "final_source/tests/servers/rendering/fixtures/native_height_range/run.gd",
+      "category": "final_source",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/native_height_range/run.gd",
+      "original_bytes": 3643,
+      "original_sha256": "9a9eb7a1f422548162629280862352cc6a02f8b135608e8087ef80f28a1a844c",
+      "stored_bytes": 3643,
+      "stored_sha256": "9a9eb7a1f422548162629280862352cc6a02f8b135608e8087ef80f28a1a844c"
+    },
+    {
+      "path": "final_source/tests/servers/rendering/fixtures/native_height_range/run_native.py",
+      "category": "final_source",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/native_height_range/run_native.py",
+      "original_bytes": 14523,
+      "original_sha256": "3bea1628a08864d37dbaa4e61c3fcbd4d07471c5826d2da473d3a3c84ebf0a87",
+      "stored_bytes": 14523,
+      "stored_sha256": "3bea1628a08864d37dbaa4e61c3fcbd4d07471c5826d2da473d3a3c84ebf0a87"
+    },
+    {
+      "path": "final_source/tests/servers/rendering/fixtures/native_height_range/README.md",
+      "category": "final_source",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/native_height_range/README.md",
+      "original_bytes": 4119,
+      "original_sha256": "c4d66c274560fddea6964fa4ef6fb6764ec549db95bd71bc0af4d60f5df43be2",
+      "stored_bytes": 4119,
+      "stored_sha256": "c4d66c274560fddea6964fa4ef6fb6764ec549db95bd71bc0af4d60f5df43be2"
+    },
+    {
+      "path": "final_source/tests/servers/rendering/test_native_height_range.cpp.gz",
+      "category": "final_source",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/test_native_height_range.cpp",
+      "original_bytes": 20747,
+      "original_sha256": "4f82240406cde33cf553d5b0a1ae623e2ada15b5891f93a7eb02f53053dbff1a",
+      "stored_bytes": 4892,
+      "stored_sha256": "524dc5f1451a7a1ac3f0ef8c3198c0a479e82849f413a9c80f83bca853fd3891"
+    },
+    {
+      "path": "parent/FINAL_SOURCE_PINS.json",
+      "category": "final_source_pins",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FINAL_SOURCE_PINS.json",
+      "original_bytes": 1854,
+      "original_sha256": "a6442b8ce35a8ede869c27c93cd0aeb29b6b9de4987bf00c789adb0bd4839c61",
+      "stored_bytes": 1854,
+      "stored_sha256": "a6442b8ce35a8ede869c27c93cd0aeb29b6b9de4987bf00c789adb0bd4839c61"
+    },
+    {
+      "path": "parent/RESTORED_BUILD_RESULT.json",
+      "category": "final_restored_build",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/RESTORED_BUILD_RESULT.json",
+      "original_bytes": 335,
+      "original_sha256": "1d92f51cfca3517dccbf3f29ddcbd41a76723b04cbc53874cd87252a93f3d59d",
+      "stored_bytes": 335,
+      "stored_sha256": "1d92f51cfca3517dccbf3f29ddcbd41a76723b04cbc53874cd87252a93f3d59d"
+    },
+    {
+      "path": "parent/RESTORED_BUILD.log.txt.gz",
+      "category": "final_restored_build",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/RESTORED_BUILD.log.txt",
+      "original_bytes": 1906,
+      "original_sha256": "8e72f7a02ee2ff09d4d2c509fe89d86816587f10d63e2260741fd249bc19fdbd",
+      "stored_bytes": 892,
+      "stored_sha256": "f7bc1d973804c0de4ab953e6ed82f77ffaa3d26a40473e05b7ba339c8c3dc725"
+    },
+    {
+      "path": "parent/FINAL_FOCUSED_RESULT.json",
+      "category": "final_restored_acceptance",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FINAL_FOCUSED_RESULT.json",
+      "original_bytes": 726,
+      "original_sha256": "4c0ec062b5ac5f6e873ab37f0da44b37aeacb139d16b78b6d05f22e5156110b8",
+      "stored_bytes": 726,
+      "stored_sha256": "4c0ec062b5ac5f6e873ab37f0da44b37aeacb139d16b78b6d05f22e5156110b8"
+    },
+    {
+      "path": "parent/FINAL_FOCUSED.log.txt.gz",
+      "category": "final_restored_acceptance",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FINAL_FOCUSED.log.txt",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "parent/FINAL_FOCUSED.xml.gz",
+      "category": "final_restored_acceptance",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FINAL_FOCUSED.xml",
+      "original_bytes": 375564,
+      "original_sha256": "574e018bc680b88e5969a3aa7bd0446651ad9b50ba00792a38d0a3040a56755f",
+      "stored_bytes": 47947,
+      "stored_sha256": "ff8b7597d31969327b2a7936dfac081c7dd7b0ee7e4637be08eb6ed37febf6a2"
+    },
+    {
+      "path": "parent/FINAL_FULL_CPU_RESULT.json",
+      "category": "final_restored_acceptance",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FINAL_FULL_CPU_RESULT.json",
+      "original_bytes": 634,
+      "original_sha256": "7298b36d06d88cb999e874ca1bbd82aa3a1f5b3204c4219e9daf88bb10d01825",
+      "stored_bytes": 634,
+      "stored_sha256": "7298b36d06d88cb999e874ca1bbd82aa3a1f5b3204c4219e9daf88bb10d01825"
+    },
+    {
+      "path": "parent/FINAL_FULL_CPU.log.txt.gz",
+      "category": "final_restored_acceptance",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FINAL_FULL_CPU.log.txt",
+      "original_bytes": 5083,
+      "original_sha256": "40eecf55e80de518de583a5e3ab3f6f8148fa3c8fc4e37a8e32278633997bffa",
+      "stored_bytes": 1320,
+      "stored_sha256": "8b0173988eb82293aaa57303d7720dd17d4dd34d858ac70a6c7bdc7f6e948b58"
+    },
+    {
+      "path": "parent/FINAL_FULL_CPU.xml.gz",
+      "category": "final_restored_acceptance",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FINAL_FULL_CPU.xml",
+      "original_bytes": 1166041,
+      "original_sha256": "3fa742c8c66aada27870a9a63bb1a89cf4483514f41cba965ae02072a27cc0cf",
+      "stored_bytes": 82742,
+      "stored_sha256": "8085f9dd77e3062c0c7e66d3b790c4dcf0a0b13134789df43c98cd7dd9c850f2"
+    },
+    {
+      "path": "parent/FINAL_GPU_RESULT.json",
+      "category": "final_restored_acceptance",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FINAL_GPU_RESULT.json",
+      "original_bytes": 768,
+      "original_sha256": "1f9083b21da1f15e8e61448f804495c3aebec853f67206f3543911aa232f10eb",
+      "stored_bytes": 768,
+      "stored_sha256": "1f9083b21da1f15e8e61448f804495c3aebec853f67206f3543911aa232f10eb"
+    },
+    {
+      "path": "parent/FINAL_GPU.log.txt.gz",
+      "category": "final_restored_acceptance",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FINAL_GPU.log.txt",
+      "original_bytes": 36803,
+      "original_sha256": "5a70b504a6a29313999f1b44356922d9b8da40b35ee1ca21fbab5557d8b28c5d",
+      "stored_bytes": 3323,
+      "stored_sha256": "fb32c527b974c20dc6506555e27d137037a5a696bebd204edf6d4e7dc59544ac"
+    },
+    {
+      "path": "parent/FINAL_QUOTE_GPU_RESULT.json",
+      "category": "final_restored_acceptance",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FINAL_QUOTE_GPU_RESULT.json",
+      "original_bytes": 778,
+      "original_sha256": "93c1547255c17b81af12caaab7364587eaa1156f5483d83c86895bfc3e44c6c5",
+      "stored_bytes": 778,
+      "stored_sha256": "93c1547255c17b81af12caaab7364587eaa1156f5483d83c86895bfc3e44c6c5"
+    },
+    {
+      "path": "parent/FINAL_QUOTE_GPU.log.txt.gz",
+      "category": "final_restored_acceptance",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FINAL_QUOTE_GPU.log.txt",
+      "original_bytes": 26641,
+      "original_sha256": "5a0fcf2a81ade8e29c355be259baafc1a6785fbab220805691fa9deffba6559c",
+      "stored_bytes": 3069,
+      "stored_sha256": "59739a874b1d02b9e26dff2027ac201ae50e3ffe81215c499cde04963c4132e4"
+    },
+    {
+      "path": "parent/FINAL_CPU_XML_AUDIT.json",
+      "category": "final_acceptance_audit",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FINAL_CPU_XML_AUDIT.json",
+      "original_bytes": 585,
+      "original_sha256": "e2a7b05545b518f30ce2237022329d4f9e6f6197426926faec738fe3026a4753",
+      "stored_bytes": 585,
+      "stored_sha256": "e2a7b05545b518f30ce2237022329d4f9e6f6197426926faec738fe3026a4753"
+    },
+    {
+      "path": "parent/FINAL_HOOKS.json",
+      "category": "final_acceptance_audit",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FINAL_HOOKS.json",
+      "original_bytes": 1587,
+      "original_sha256": "424d195434038f907ba6f1bab3b820c37da63f97f57ae18ea84ca1b0aa7e473d",
+      "stored_bytes": 1587,
+      "stored_sha256": "424d195434038f907ba6f1bab3b820c37da63f97f57ae18ea84ca1b0aa7e473d"
+    },
+    {
+      "path": "parent/final_gpu/0/stderr.log.gz",
+      "category": "final_restored_gpu",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_gpu/0/stderr.log",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "parent/final_gpu/0/stdout.log.gz",
+      "category": "final_restored_gpu",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_gpu/0/stdout.log",
+      "original_bytes": 8365,
+      "original_sha256": "9b76fe3dd270433fe580ac246b0eb86cfadfcf988453d90cc5c30a4e139af514",
+      "stored_bytes": 1254,
+      "stored_sha256": "b091bf377d361915bdaa8722f49bad4aa5a1cfaa29ce2e46b8f25b383a52c434"
+    },
+    {
+      "path": "parent/final_gpu/1/stderr.log.gz",
+      "category": "final_restored_gpu",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_gpu/1/stderr.log",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "parent/final_gpu/1/stdout.log.gz",
+      "category": "final_restored_gpu",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_gpu/1/stdout.log",
+      "original_bytes": 8366,
+      "original_sha256": "f9c89057b7ef6d15639520e42aaaebb538ce1d00a60b6c64473c908e5b853a16",
+      "stored_bytes": 1259,
+      "stored_sha256": "a29fc6eda811c8f0b94b487195cab7093af6249931254d8d48519a67ee32d709"
+    },
+    {
+      "path": "parent/final_gpu/result.json",
+      "category": "final_restored_gpu",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_gpu/result.json",
+      "original_bytes": 36803,
+      "original_sha256": "5a70b504a6a29313999f1b44356922d9b8da40b35ee1ca21fbab5557d8b28c5d",
+      "stored_bytes": 36803,
+      "stored_sha256": "5a70b504a6a29313999f1b44356922d9b8da40b35ee1ca21fbab5557d8b28c5d"
+    },
+    {
+      "path": "parent/final_quote_gpu/0/stderr.log.gz",
+      "category": "final_restored_gpu",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_quote_gpu/0/stderr.log",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "parent/final_quote_gpu/0/stdout.log.gz",
+      "category": "final_restored_gpu",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_quote_gpu/0/stdout.log",
+      "original_bytes": 5824,
+      "original_sha256": "051313e3275abaef53adfc6deebcba1e6f5e7635bd284c3c7e6dd0b908e9eca5",
+      "stored_bytes": 1255,
+      "stored_sha256": "9f8822859654fdc4cf1533c777ee433d03a8cea6eb044a7e1305ff59da63b791"
+    },
+    {
+      "path": "parent/final_quote_gpu/1/stderr.log.gz",
+      "category": "final_restored_gpu",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_quote_gpu/1/stderr.log",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_bytes": 20,
+      "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "parent/final_quote_gpu/1/stdout.log.gz",
+      "category": "final_restored_gpu",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_quote_gpu/1/stdout.log",
+      "original_bytes": 5858,
+      "original_sha256": "f1d5a31c3a04512ec50622cb3a00b7010b010bab60228f42fec264e69fab0b28",
+      "stored_bytes": 1264,
+      "stored_sha256": "7b8562dcd500f6ff0887f93668beec77d71c98295003af946d59d1fbd89cfcd8"
+    },
+    {
+      "path": "parent/final_quote_gpu/result.json",
+      "category": "final_restored_gpu",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_quote_gpu/result.json",
+      "original_bytes": 26641,
+      "original_sha256": "5a0fcf2a81ade8e29c355be259baafc1a6785fbab220805691fa9deffba6559c",
+      "stored_bytes": 26641,
+      "stored_sha256": "5a0fcf2a81ade8e29c355be259baafc1a6785fbab220805691fa9deffba6559c"
+    },
+    {
+      "path": "independent_review/REVIEW.md",
+      "category": "latest_independent_final_review",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/independent-review/REVIEW.md",
+      "original_bytes": 16654,
+      "original_sha256": "717b8c6516481d8edcb55a8622266b67cd86c81f63e199281965f928ef388cab",
+      "stored_bytes": 16654,
+      "stored_sha256": "717b8c6516481d8edcb55a8622266b67cd86c81f63e199281965f928ef388cab"
+    },
+    {
+      "path": "parent/FINAL_CAMERA_RESULT.json",
+      "category": "final_same_host_neighbor",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FINAL_CAMERA_RESULT.json",
+      "original_bytes": 577,
+      "original_sha256": "3c7dc85aa1b722e32296204275edb9405c60d750630f194e573e6459cb5d10bb",
+      "stored_bytes": 577,
+      "stored_sha256": "3c7dc85aa1b722e32296204275edb9405c60d750630f194e573e6459cb5d10bb"
+    },
+    {
+      "path": "parent/FINAL_CAMERA.log.txt.gz",
+      "category": "final_same_host_neighbor",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FINAL_CAMERA.log.txt",
+      "original_bytes": 6914,
+      "original_sha256": "dda2e509f74497ad858ee7cb2ca6248879bf1d4ce622f15d406533334766ba7a",
+      "stored_bytes": 1335,
+      "stored_sha256": "0b08f302b715eef83d6c33cd8a62ee44cebc367bc351d5be54d8a56407e315d4"
+    },
+    {
+      "path": "parent/FINAL_VIEWPORT_RESULT.json",
+      "category": "final_same_host_neighbor",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FINAL_VIEWPORT_RESULT.json",
+      "original_bytes": 594,
+      "original_sha256": "a77298e81f2420e8e75c5619746ec490ed62f931f53ad67ce990536fc20942f5",
+      "stored_bytes": 594,
+      "stored_sha256": "a77298e81f2420e8e75c5619746ec490ed62f931f53ad67ce990536fc20942f5"
+    },
+    {
+      "path": "parent/FINAL_VIEWPORT.log.txt.gz",
+      "category": "final_same_host_neighbor",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FINAL_VIEWPORT.log.txt",
+      "original_bytes": 6558,
+      "original_sha256": "511a1ef7fd727dfb4e17da2b84ad70436b0c8f68b401ac199e5a7ba828a0d53c",
+      "stored_bytes": 1154,
+      "stored_sha256": "6c462194cace9ba00ec3c1eaba81434bdbb5b42f2ff2d604b9d0f573e986d308"
+    },
+    {
+      "path": "parent/FINAL_HEIGHT_RESULT.json",
+      "category": "final_same_host_neighbor",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FINAL_HEIGHT_RESULT.json",
+      "original_bytes": 471,
+      "original_sha256": "1fd1b9b889ac2cd57d7ba41de2d9c2d25004c09f72a0758d2e92b21efd735c90",
+      "stored_bytes": 471,
+      "stored_sha256": "1fd1b9b889ac2cd57d7ba41de2d9c2d25004c09f72a0758d2e92b21efd735c90"
+    },
+    {
+      "path": "parent/FINAL_HEIGHT.log.txt.gz",
+      "category": "final_same_host_neighbor",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/FINAL_HEIGHT.log.txt",
+      "original_bytes": 13545,
+      "original_sha256": "b1b1306b0fd8a888c696ee29290f684eb62b5afba57a270afc88fc187b527fa3",
+      "stored_bytes": 738,
+      "stored_sha256": "d641bd8f2d5fb6c1a3979f376c96f159659b7f33eb3733cdafb206e310719a17"
+    },
+    {
+      "path": "parent/final_camera/forward_plus/first.png",
+      "category": "final_same_host_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_camera/forward_plus/first.png",
+      "original_bytes": 440,
+      "original_sha256": "d5dd6a7152411b634a2d1dd488d34ab5fed0727b943fddf58aea13117ce5020b",
+      "stored_bytes": 440,
+      "stored_sha256": "d5dd6a7152411b634a2d1dd488d34ab5fed0727b943fddf58aea13117ce5020b"
+    },
+    {
+      "path": "parent/final_camera/forward_plus/run.log.gz",
+      "category": "final_same_host_neighbor_runlog",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_camera/forward_plus/run.log",
+      "original_bytes": 2825,
+      "original_sha256": "3d452a03cd2486ad7e06582303e42d5a2bd3847dea1897385c6fcfd46e873d32",
+      "stored_bytes": 936,
+      "stored_sha256": "076ae8e5c21620796430642b27bb0f6cf6c2c1b3379f9e9afc05cb7966dc0b07"
+    },
+    {
+      "path": "parent/final_camera/forward_plus/second.png",
+      "category": "final_same_host_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_camera/forward_plus/second.png",
+      "original_bytes": 441,
+      "original_sha256": "c4750e678abd067e38120f72c84ef25204de7e633bcfb44c9b615fc267571f8e",
+      "stored_bytes": 441,
+      "stored_sha256": "c4750e678abd067e38120f72c84ef25204de7e633bcfb44c9b615fc267571f8e"
+    },
+    {
+      "path": "parent/final_camera/forward_plus/unregistered.png",
+      "category": "final_same_host_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_camera/forward_plus/unregistered.png",
+      "original_bytes": 440,
+      "original_sha256": "d5dd6a7152411b634a2d1dd488d34ab5fed0727b943fddf58aea13117ce5020b",
+      "stored_bytes": 440,
+      "stored_sha256": "d5dd6a7152411b634a2d1dd488d34ab5fed0727b943fddf58aea13117ce5020b"
+    },
+    {
+      "path": "parent/final_camera/mobile/first.png",
+      "category": "final_same_host_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_camera/mobile/first.png",
+      "original_bytes": 440,
+      "original_sha256": "5fc440eacb6c7d5986d2e587f5815eecd40cbf512d07f33ef2d851f1dcbec50d",
+      "stored_bytes": 440,
+      "stored_sha256": "5fc440eacb6c7d5986d2e587f5815eecd40cbf512d07f33ef2d851f1dcbec50d"
+    },
+    {
+      "path": "parent/final_camera/mobile/run.log.gz",
+      "category": "final_same_host_neighbor_runlog",
+      "encoding": "gzip",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_camera/mobile/run.log",
+      "original_bytes": 2813,
+      "original_sha256": "cd398f40aa8a74ca2af414181ce002e8ee39eef9b8404b23a3767354959f0194",
+      "stored_bytes": 935,
+      "stored_sha256": "ae12b6f031701ee47d3fbb480eec5ee2d7ac0afad8976752b68822b2b185820b"
+    },
+    {
+      "path": "parent/final_camera/mobile/second.png",
+      "category": "final_same_host_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_camera/mobile/second.png",
+      "original_bytes": 441,
+      "original_sha256": "4a432985e7db314b92b9e5161ebb8789659277e9bb5f11fcc6f13368660b5a16",
+      "stored_bytes": 441,
+      "stored_sha256": "4a432985e7db314b92b9e5161ebb8789659277e9bb5f11fcc6f13368660b5a16"
+    },
+    {
+      "path": "parent/final_camera/mobile/unregistered.png",
+      "category": "final_same_host_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_camera/mobile/unregistered.png",
+      "original_bytes": 440,
+      "original_sha256": "5fc440eacb6c7d5986d2e587f5815eecd40cbf512d07f33ef2d851f1dcbec50d",
+      "stored_bytes": 440,
+      "stored_sha256": "5fc440eacb6c7d5986d2e587f5815eecd40cbf512d07f33ef2d851f1dcbec50d"
+    },
+    {
+      "path": "parent/final_viewport/forward_plus/side_after.png",
+      "category": "final_same_host_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_viewport/forward_plus/side_after.png",
+      "original_bytes": 450,
+      "original_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de",
+      "stored_bytes": 450,
+      "stored_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    {
+      "path": "parent/final_viewport/forward_plus/side_before.png",
+      "category": "final_same_host_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_viewport/forward_plus/side_before.png",
+      "original_bytes": 450,
+      "original_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de",
+      "stored_bytes": 450,
+      "stored_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    {
+      "path": "parent/final_viewport/forward_plus/top_after.png",
+      "category": "final_same_host_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_viewport/forward_plus/top_after.png",
+      "original_bytes": 450,
+      "original_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de",
+      "stored_bytes": 450,
+      "stored_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    {
+      "path": "parent/final_viewport/forward_plus/top_before.png",
+      "category": "final_same_host_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_viewport/forward_plus/top_before.png",
+      "original_bytes": 450,
+      "original_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de",
+      "stored_bytes": 450,
+      "stored_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de"
+    },
+    {
+      "path": "parent/final_viewport/mobile/side_after.png",
+      "category": "final_same_host_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_viewport/mobile/side_after.png",
+      "original_bytes": 450,
+      "original_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9",
+      "stored_bytes": 450,
+      "stored_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    },
+    {
+      "path": "parent/final_viewport/mobile/side_before.png",
+      "category": "final_same_host_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_viewport/mobile/side_before.png",
+      "original_bytes": 450,
+      "original_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9",
+      "stored_bytes": 450,
+      "stored_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    },
+    {
+      "path": "parent/final_viewport/mobile/top_after.png",
+      "category": "final_same_host_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_viewport/mobile/top_after.png",
+      "original_bytes": 450,
+      "original_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9",
+      "stored_bytes": 450,
+      "stored_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    },
+    {
+      "path": "parent/final_viewport/mobile/top_before.png",
+      "category": "final_same_host_neighbor_png",
+      "encoding": "identity",
+      "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_viewport/mobile/top_before.png",
+      "original_bytes": 450,
+      "original_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9",
+      "stored_bytes": 450,
+      "stored_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9"
+    }
+  ]
+}

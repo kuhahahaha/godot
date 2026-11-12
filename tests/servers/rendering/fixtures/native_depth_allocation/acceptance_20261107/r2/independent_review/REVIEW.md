@@ -1,0 +1,28 @@
+# Independent source review: original native depth allocation quote
+
+Reviewer: default Sol child `/root/depth_quote_independent_sol`, 2026-11-07. Scope is the source identities in `SOURCE_PINS.json`. No build, GPU process, CPU test, commit or production-source edit was performed by this reviewer. Existing parent runtime results are not treated as this reviewer's independently executed evidence.
+
+## Finding
+
+- **P2, test teardown reliability, fixed in source under parent authorization; runtime verification remains with root.** `tests/servers/rendering/test_native_disposal.cpp`, `TestNativeDisposalAccess::depth_allocation_quote()`: original `REQUIRE` calls could unwind before the final `detach(foreign); detach(rd);`. These fixtures intentionally attach partial stub RenderingDevices, so ordinary RD destruction can enter full finalization with their partial state and hide the actual failed requirement. The adjacent projection test already uses a local scope teardown. The quote test now uses that pattern: release its original LIVE witness, dispose the original queue, detach both partial devices on all exits. All original assertions remain; it introduces no production behavior change. Exact function diff and file identity are in `QUOTE_TEST_TEARDOWN.diff` / `QUOTE_TEST_TEARDOWN_IDENTITY.json`. `git diff --check` returned 0. There is no framebuffer-format cleanup in this quote-only method because it never creates a framebuffer.
+
+No additional production blocker was found in the inspected slice. This is a bounded source review, not a claim that the production Scene/C cross-DSO adapter is implemented or that all native backends are qualified.
+
+## Source checks
+
+- `drivers/metal/metal_allocator.cpp:145-160` checks nonzero power-of-two alignment, padding addition and rounding overflow, and uint32 unit range. Both real pool allocation and quote call the same helper. The OffsetAllocator inspected at `thirdparty/offset_allocator/offsetAllocator.cpp:205` uses bins to select a block but sets allocated node size to the exact requested units; the quote does not accidentally omit an allocator bin-size rounding charge.
+- The dedicated quote uses the same native requirement and threshold as the real heap allocation; the pool quote includes the same alignment padding and 256-byte units. This is an owner reservation for the resource extent, not a bound on the whole cached heap or driver overhead.
+- `drivers/metal/rendering_device_driver_metal.cpp:507-542` uses a shared original D32 descriptor helper for both quote and the exact standalone texture-create recipe at 698-705. Width/height zero or beyond the device 2D limit are refused before native query. Format/shape/mip/layer/sample/usage/storage policy match. The passthrough MetalDeviceAllocator retains typed unsupported behavior; base RDD likewise returns unavailable for other backends.
+- RD quoted create re-observes original device provenance, rejects nonempty outputs, re-quotes current descriptor/policy/alignment/reservation before native creation, and verifies the exposed actual allocation. Over-reservation and unknown actual remain errors after a real create, while retaining the original RID/witness and available projection rather than silently discarding cleanup custody.
+- Capture validates original RID/serial/backing and standalone D32 shape; optional framebuffer must retain exactly that original attachment. Subsequent observation reads retained cells and the captured allocation, not a later RID incarnation. Unexposed framebuffer/object/attachment/opaque fields retain UnknownNotExposed. Aggregate requires both actual children RETURNED, or the original depth alone when no framebuffer was created; unknown cells do not sign an aggregate.
+- Real GPU fixture records an original clear, closes the draw list and drives original maintenance until the actual lazy cache has non-null render-pass/framebuffer IDs. It retires framebuffer while depth is LIVE, checks the conjunction on every drain observation, then retires depth. Python requires the exact five-state sequence, stable identities/known bytes, actual within quote, no additional draw, all 29 distinct checks, actual Metal/Mobile startup and no warning/error/leak/crash/timeout. Its source manifest explicitly is not build provenance.
+- Failed GPU prefixes remain with original RD custody and are reported as failed/retained; they are never accepted, refunded, or called producer Complete. The fixture is not evidence for Scene publication or a production owner bridge.
+
+## Coverage limits and useful follow-ups
+
+These are disclosed limits, not production defects found by this review:
+
+- Arithmetic overflow/invalid alignment branches in the original allocator helper are source-reviewed, not directly exercised by the two device cases. Existing CPU quote fake covers changed policy/greater reservation, unknown actual, over-reservation and foreign device; it does not directly inject malformed initial backend requirement/alignment, a refreshed alignment change, or smaller refreshed requirement.
+- Real device cases exercise pool and dedicated on the tested Metal device. They do not exercise hardware with a different threshold/size result, passthrough hazard mode, Vulkan, D3D12 or native OOM. Typed unavailable must remain a failure/unavailable result, never a GPU pass.
+- The quoted-create CPU fixture's teardown repair still needs parent build/focused verification. Actual post-create unknown/over-reservation are covered by its injected driver, not by a fabricated GPU witness.
+- The shared Metal descriptor helper is used in the exact D32 recipe. Neighbor textures continue general descriptor construction. This review did not independently execute a renderer-wide regression suite.

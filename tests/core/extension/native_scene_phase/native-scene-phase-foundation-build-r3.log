@@ -1,0 +1,238 @@
+Building for macOS 11.0+.
+WARNING: The screen reader support driver requires dependencies to be installed.
+You can install them by running `python3 misc/scripts/install_accesskit.py`.
+See the documentation for more information:
+	https://docs.godotengine.org/en/latest/engine_details/development/compiling/compiling_for_macos.html
+Alternatively, disable this driver by compiling with `accesskit=no` explicitly.
+WARNING: The ANGLE rendering driver requires dependencies to be installed.
+You can install them by running `python misc/scripts/install_angle.py`.
+See the documentation for more information:
+	https://docs.godotengine.org/en/latest/engine_details/development/compiling/compiling_for_windows.html
+Alternatively, disable this driver by compiling with `angle=no` explicitly.
+MoltenVK found at: /opt/homebrew/Frameworks/MoltenVK.xcframework
+Building for platform "macos", architecture "arm64", target "editor".
+Generating core/extension/gdextension_interface.gen.h ...
+Generating core/extension/gdextension_interface_dump.gen.h ...
+Compiling platform/macos/godot_window_delegate.mm ...
+Compiling platform/macos/godot_main_macos.mm ...
+In file included from platform/macos/godot_main_macos.mm:32:
+In file included from platform/macos/os_macos.h:35:
+In file included from ./core/input/input_event.h:34:
+In file included from ./core/io/resource.h:33:
+In file included from ./core/io/resource_uid.h:33:
+In file included from ./core/object/object.h:34:
+In file included from ./core/extension/gdextension_library_exit_guard.h:34:
+In file included from ./core/extension/gdextension_scene_phase.h:4:
+./core/object/ref_counted.h:36:27: error: expected class name
+   36 | class RefCounted : public Object {
+      |                           ^
+./core/object/ref_counted.h:37:22: error: unknown type name 'Object'
+   37 |         GDCLASS(RefCounted, Object);
+      |                             ^
+./core/object/ref_counted.h:37:2: error: a type specifier is required for all declarations
+   37 |         GDCLASS(RefCounted, Object);
+      |         ^
+In file included from platform/macos/godot_window_delegate.mm:33:
+In file included from platform/macos/display_server_macos.h:33:
+In file included from platform/macos/display_server_macos_base.h:35:
+In file included from ./servers/display/display_server.h:34:
+In file included from ./core/io/image.h:33:
+In file included from ./core/io/resource.h:33:
+In file included from ./core/io/resource_uid.h:33:
+In file included from ./core/object/object.h:34:
+In file included from ./core/extension/gdextension_library_exit_guard.h:34:
+In file included from ./core/extension/gdextension_scene_phase.h:4:
+./core/object/ref_counted.h:36:27: error: expected class name
+   36 | class RefCounted : public Object {
+      |                           ^
+./core/object/ref_counted.h:39:16: error: use of undeclared identifier 'TestDeviceExitEntry'
+   39 |         friend struct TestDeviceExitEntry::Access;
+      |                       ^
+./core/object/ref_counted.h:37:22: error: unknown type name 'Object'
+   37 |         GDCLASS(RefCounted, Object);
+      |                             ^
+./core/object/ref_counted.h:37:2: error: a type specifier is required for all declarations
+   37 |         GDCLASS(RefCounted, Object);
+      |         ^
+./core/object/ref_counted.h:81:17: error: unknown type name 'ReferenceCohort'
+   81 |         bool _init_ref(ReferenceCohort &p_cohort);
+      |                        ^
+./core/object/ref_counted.h:82:18: error: unknown type name 'ReferenceCohort'
+   82 |         bool _reference(ReferenceCohort &p_cohort);
+      |                         ^
+./core/object/ref_counted.h:39:16: error: use of undeclared identifier 'TestDeviceExitEntry'
+   39 |         friend struct TestDeviceExitEntry::Access;
+      |                       ^
+./core/object/ref_counted.h:83:20: error: unknown type name 'ReferenceCohort'
+   83 |         bool _unreference(ReferenceCohort &p_cohort, bool p_borrowed);
+      |                           ^
+./core/object/ref_counted.h:81:17: error: unknown type name 'ReferenceCohort'
+   81 |         bool _init_ref(ReferenceCohort &p_cohort);
+      |                        ^
+./core/object/ref_counted.h:89:19: error: unknown type name 'AncestralClass'
+   89 |         static constexpr AncestralClass static_ancestral_class = AncestralClass::REF_COUNTED;
+      |                          ^
+./core/object/ref_counted.h:82:18: error: unknown type name 'ReferenceCohort'
+   82 |         bool _reference(ReferenceCohort &p_cohort);
+      |                         ^
+./core/object/ref_counted.h:89:59: error: use of undeclared identifier 'AncestralClass'
+   89 |         static constexpr AncestralClass static_ancestral_class = AncestralClass::REF_COUNTED;
+      |                                                                  ^
+./core/object/ref_counted.h:172:11: error: unknown type name 'Variant'
+  172 |         operator Variant() const {
+      |                  ^
+./core/object/ref_counted.h:134:31: error: incomplete result type 'String' in function definition
+  134 |         static _FORCE_INLINE_ String get_class_static() {
+      |                                      ^
+./core/error/error_macros.h:35:7: note: forward declaration of 'String'
+   35 | class String;
+      |       ^
+./core/object/ref_counted.h:83:20: error: unknown type name 'ReferenceCohort'
+   83 |         bool _unreference(ReferenceCohort &p_cohort, bool p_borrowed);
+      |                           ^
+In file included from platform/macos/godot_main_macos.mm:32:
+In file included from platform/macos/os_macos.h:35:
+In file included from ./core/input/input_event.h:34:
+In file included from ./core/io/resource.h:33:
+In file included from ./core/io/resource_uid.h:33:
+In file included from ./core/object/object.h:34:
+In file included from ./core/extension/gdextension_library_exit_guard.h:34:
+In file included from ./core/extension/gdextension_scene_phase.h:4:
+./core/object/ref_counted.h:270:3: error: use of undeclared identifier 'unref'
+  270 |                 unref();
+      |                 ^~~~~
+./core/object/ref_counted.h:275:8: error: explicit specialization of undeclared template struct 'memnew_result'
+  275 | struct memnew_result<T, std::enable_if_t<std::is_base_of_v<./core/object/ref_counted.h:89:19: error: unknown type name 'AncestralClass'
+   89 |         static constexpr AncestralClass static_ancestralRefCounted, T>>> {
+      |        ^            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+_class = AncestralClass::REF_COUNTED;
+      |                          ^
+./core/object/ref_counted.h:285:2: error: a type specifier is required for all declarations
+  285 |         GDCLASS(WeakRef, RefCounted);
+      |         ^
+./core/object/ref_counted.h:287:11: error: field has incomplete type 'ObjectID'
+  287 |         ObjectID ref;
+      |                  ^
+./core/error/error_macros.h:36:7: note: forward declaration of 'ObjectID'
+   36 | class ObjectID;
+      |       ^
+In file included from platform/macos/godot_main_macos.mm:32:
+In file included from platform/macos/os_macos.h:35:
+In file included from ./core/input/input_event.h:34:
+In file included from ./core/io/resource.h:33:
+In file included from ./core/io/resource_uid.h:33:
+In file included from ./core/object/object.h:34:
+In file included from ./core/extension/gdextension_library_exit_guard.h:34:
+In file included from ./core/extension/gdextension_scene_phase.h:4:
+./core/object/ref_counted.h:293:2: error: unknown type name 'Variant'
+  293 |         Variant get_ref() const;
+      |         ^
+./core/object/ref_counted.h:294:15: error: unknown type name 'Object'
+  294 |         void set_obj(Object *p_object);
+      |                      ^
+./core/object/ref_counted.h:89:59: error: use of undeclared identifier 'AncestralClass'
+   89 |         static constexpr AncestralClass static_ancestral_class = AncestralClass::REF_COUNTED;
+      |                                                                  ^
+./core/object/ref_counted.h:303:8: error: use of undeclared identifier 'ObjectDB'; did you mean 'ObjectID'?
+  303 | Ref<T> ObjectDB::get_ref(ObjectID p_instance_id) {
+      |        ^~~~~~~~
+      |        ObjectID
+./core/error/error_macros.h:36:7: note: 'ObjectID' declared here
+   36 | class ObjectID;
+      |       ^
+./core/object/ref_counted.h:172:11: error: unknown type name 'Variant'
+  172 |         operator Variant() const {
+      |                  ^
+./core/object/ref_counted.h:134:31: error: incomplete result type 'String' in function definition
+  134 |         static _FORCE_INLINE_ String get_class_static() {
+      |                                      ^
+./core/error/error_macros.h:35:7: note: forward declaration of 'String'
+   35 | class String;
+      |       ^
+In file included from platform/macos/godot_main_macos.mm:32:
+In file included from platform/macos/os_macos.h:35:
+In file included from ./core/input/input_event.h:34:
+In file included from ./core/io/resource.h:33:
+In file included from ./core/io/resource_uid.h:33:
+In file included from ./core/object/object.h:34:
+In file included from ./core/extension/gdextension_library_exit_guard.h:34:
+In file included from ./core/extension/gdextension_scene_phase.h:4:
+./core/object/ref_counted.h:303:8: error: use of undeclared identifier 'ObjectDB'; did you mean 'ObjectID'?
+  303 | Ref<T> ObjectDB::get_ref(ObjectID p_instance_id) {
+      |        ^~~~~~~~
+      |        ObjectID
+./core/error/error_macros.h:36:7: note: 'ObjectID' declared here
+   36 | class ObjectID;
+      |       ^
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+In file included from platform/macos/godot_window_delegate.mm:33:
+In file included from platform/macos/display_server_macos.h:33:
+In file included from platform/macos/display_server_macos_base.h:35:
+In file included from ./servers/display/display_server.h:34:
+In file included from ./core/io/image.h:33:
+In file included from ./core/io/resource.h:33:
+In file included from ./core/io/resource_uid.h:33:
+In file included from ./core/object/object.h:34:
+In file included from ./core/extension/gdextension_library_exit_guard.h:34:
+In file included from ./core/extension/gdextension_scene_phase.h:4:
+./core/object/ref_counted.h:270:3: error: use of undeclared identifier 'unref'
+  270 |                 unref();
+      |                 ^~~~~
+./core/object/ref_counted.h:275:8: error: explicit specialization of undeclared template struct 'memnew_result'
+  275 | struct memnew_result<T, std::enable_if_t<std::is_base_of_v<RefCounted, T>>> {
+      |        ^            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+./core/object/ref_counted.h:285:2: error: a type specifier is required for all declarations
+  285 |         GDCLASS(WeakRef, RefCounted);
+      |         ^
+./core/object/ref_counted.h:287:11: error: field has incomplete type 'ObjectID'
+  287 |         ObjectID ref;
+      |                  ^
+./core/error/error_macros.h:36:7: note: forward declaration of 'ObjectID'
+   36 | class ObjectID;
+      |       ^
+In file included from platform/macos/godot_window_delegate.mm:33:
+In file included from platform/macos/display_server_macos.h:33:
+In file included from platform/macos/display_server_macos_base.h:35:
+In file included from ./servers/display/display_server.h:34:
+In file included from ./core/io/image.h:33:
+In file included from ./core/io/resource.h:33:
+In file included from ./core/io/resource_uid.h:33:
+In file included from ./core/object/object.h:34:
+In file included from ./core/extension/gdextension_library_exit_guard.h:34:
+In file included from ./core/extension/gdextension_scene_phase.h:4:
+./core/object/ref_counted.h:293:2: error: unknown type name 'Variant'
+  293 |         Variant get_ref() const;
+      |         ^
+./core/object/ref_counted.h:294:15: error: unknown type name 'Object'
+  294 |         void set_obj(Object *p_object);
+      |                      ^
+./core/object/ref_counted.h:303:8: error: use of undeclared identifier 'ObjectDB'; did you mean 'ObjectID'?
+  303 | Ref<T> ObjectDB::get_ref(ObjectID p_instance_id) {
+      |        ^~~~~~~~
+      |        ObjectID
+./core/error/error_macros.h:36:7: note: 'ObjectID' declared here
+   36 | class ObjectID;
+      |       ^
+In file included from platform/macos/godot_window_delegate.mm:33:
+In file included from platform/macos/display_server_macos.h:33:
+In file included from platform/macos/display_server_macos_base.h:35:
+In file included from ./servers/display/display_server.h:34:
+In file included from ./core/io/image.h:33:
+In file included from ./core/io/resource.h:33:
+In file included from ./core/io/resource_uid.h:33:
+In file included from ./core/object/object.h:34:
+In file included from ./core/extension/gdextension_library_exit_guard.h:34:
+In file included from ./core/extension/gdextension_scene_phase.h:4:
+./core/object/ref_counted.h:303:8: error: use of undeclared identifier 'ObjectDB'; did you mean 'ObjectID'?
+  303 | Ref<T> ObjectDB::get_ref(ObjectID p_instance_id) {
+      |        ^~~~~~~~
+      |        ObjectID
+./core/error/error_macros.h:36:7: note: 'ObjectID' declared here
+   36 | class ObjectID;
+      |       ^
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+20 errors generated.
+scons: *** [bin/obj/platform/macos/godot_window_delegate.macos.editor.arm64.o] Error 1
+20 errors generated.
+scons: *** [bin/obj/platform/macos/godot_main_macos.macos.editor.arm64.o] Error 1
+INFO: Time elapsed: 00:00:01.46

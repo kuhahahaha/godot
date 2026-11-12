@@ -1,0 +1,20 @@
+{
+  "status": "FAIL",
+  "mode": "offline-standard-library-no-GPU",
+  "images": [],
+  "decoder_self_test": [
+    {
+      "color_type": 2,
+      "filters_0_to_4": true,
+      "known_rgba_equal": true,
+      "crc_corruption_rejected": true
+    },
+    {
+      "color_type": 6,
+      "filters_0_to_4": true,
+      "known_rgba_equal": true,
+      "crc_corruption_rejected": true
+    }
+  ],
+  "error": "ValueError: image path outside evidence: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/retain_restored_gpu/mobile/first.png"
+}

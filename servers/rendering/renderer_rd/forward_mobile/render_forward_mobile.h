@@ -31,10 +31,13 @@
 #pragma once
 
 #include "core/templates/paged_allocator.h"
+#include "servers/rendering/renderer_rd/native_material_recipe_roster.h"
 #include "servers/rendering/multi_uma_buffer.h"
 #include "servers/rendering/renderer_rd/environment/aerial_perspective.h"
 #include "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h"
+#include "servers/rendering/renderer_rd/height_capture_checked_sink.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
+#include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 
 #define RB_SCOPE_MOBILE SNAME("mobile")
 
@@ -44,12 +47,16 @@ namespace RendererSceneRenderImplementation {
 
 class RenderForwardMobile : public RendererSceneRenderRD {
 	friend SceneShaderForwardMobile;
+#ifdef TESTS_ENABLED
+	friend class TestMobileNativePassSelection;
+#endif
 
 protected:
 	struct GeometryInstanceSurfaceDataCache;
 
 private:
 	static RenderForwardMobile *singleton;
+	const RenderDataRD *active_render_data = nullptr;
 	RendererRD::AerialPerspective aerial_perspective;
 	RendererRD::MobileFog mobile_fog;
 
@@ -125,6 +132,22 @@ private:
 		PASS_MODE_MOTION_VECTORS,
 	};
 
+	// Fixed native pass inputs selected before draw_list_begin. Surface
+	// lightmap selection remains dynamic; this grants no external draw authority.
+	struct NativePassSelection {
+		PassMode pass_mode = PASS_MODE_COLOR;
+		SceneShaderForwardMobile::ShaderVersion version = SceneShaderForwardMobile::SHADER_VERSION_MAX;
+		SceneShaderForwardMobile::ShaderVersion lightmap_version = SceneShaderForwardMobile::SHADER_VERSION_MAX;
+		RD::FramebufferFormatID framebuffer_format = 0;
+		uint32_t subpass = 0;
+
+		SceneShaderForwardMobile::ShaderVersion version_for_surface(bool p_uses_lightmap) const {
+			return p_uses_lightmap ? lightmap_version : version;
+		}
+	};
+
+	static bool _select_native_pass(PassMode p_pass_mode, uint32_t p_view_count, bool p_defer_opaque_fog, RD::FramebufferFormatID p_framebuffer_format, uint32_t p_subpass, NativePassSelection &r_selection);
+
 	struct RenderElementInfo;
 
 	struct RenderListParameters {
@@ -141,11 +164,12 @@ private:
 		SceneShaderForwardMobile::ShaderSpecialization base_specialization;
 		float lod_distance_multiplier = 0.0;
 		float screen_mesh_lod_threshold = 0.0;
-		RD::FramebufferFormatID framebuffer_format = 0;
 		uint32_t element_offset = 0;
 		uint32_t subpass = 0;
 		bool use_material_feedback = false;
 		bool defer_opaque_fog = false;
+		NativePassSelection native_pass;
+		const RenderDataRD *external_prepared_render_data = nullptr;
 
 		RenderListParameters(GeometryInstanceSurfaceDataCache **p_elements, RenderElementInfo *p_element_info, int p_element_count, bool p_reverse_cull, PassMode p_pass_mode, RID p_render_pass_uniform_set, SceneShaderForwardMobile::ShaderSpecialization p_base_specialization, bool p_force_wireframe = false, const Vector2 &p_uv_offset = Vector2(), float p_lod_distance_multiplier = 0.0, float p_screen_mesh_lod_threshold = 0.0, uint32_t p_view_count = 1, uint32_t p_element_offset = 0, bool p_use_material_feedback = false) {
 			elements = p_elements;
@@ -166,6 +190,32 @@ private:
 		}
 	};
 
+	// Exact ordinary surface selection, shared with future pre-list preparation.
+	// Native backing classification and vertex format are resolved from this
+	// selected source by their original MeshStorage owner.
+	struct NativeSurfacePipelineOverride {
+		SceneShaderForwardMobile::ShaderData *shader = nullptr;
+		RID material_uniform_set;
+	};
+
+	struct NativeSurfacePipelineSelection {
+		SceneShaderForwardMobile::ShaderData *shader = nullptr;
+		SceneShaderForwardMobile::MaterialData *used_material = nullptr;
+		void *mesh_surface = nullptr;
+		RID material_uniform_set;
+		SceneShaderForwardMobile::ShaderData::CullVariant cull_variant = SceneShaderForwardMobile::ShaderData::CULL_VARIANT_MAX;
+		SceneShaderForwardMobile::ShaderData::PipelineKey base_key = {};
+
+		RD::PolygonCullMode get_cull_mode() const {
+			return shader->get_cull_mode_from_cull_variant(cull_variant);
+		}
+	};
+
+	static bool _select_native_surface_pipeline(const RenderListParameters &p_params, uint32_t p_element,
+			const NativeSurfacePipelineOverride &p_override, NativeSurfacePipelineSelection &r_selection);
+	static RendererRD::ExternalPacketPipelineRequest _external_pipeline_request(const RenderListParameters &, const GeometryInstanceSurfaceDataCache &, const NativeSurfacePipelineSelection &);
+	void _prepare_external_color(const RenderListParameters &);
+
 	/* Render shadows */
 
 	void _render_shadow_pass(RID p_light, RID p_shadow_atlas, int p_pass, const PagedArray<RenderGeometryInstance *> &p_instances, float p_lod_distance_multiplier = 0, float p_screen_mesh_lod_threshold = 0.0, bool p_open_pass = true, bool p_close_pass = true, bool p_clear_region = true, RenderingServerTypes::RenderInfo *p_render_info = nullptr, const Transform3D &p_main_cam_transform = Transform3D());
@@ -176,17 +226,23 @@ private:
 
 	/* Render Scene */
 
-	RID _setup_render_pass_uniform_set(RenderListType p_render_list, const RenderDataRD *p_render_data, bool p_is_multiview, RID p_radiance_texture, const RendererRD::MaterialStorage::Samplers &p_samplers, bool p_use_directional_shadow_atlas = false, uint32_t p_pass_offset = 0u);
+	// Internal retained requirements only; no request/action, factory or numeric F.
+	Error _plan_native_material_recipe(RID p_material, RID p_mesh, uint32_t p_surface, RD::FramebufferFormatID p_actual_format, RendererRD::NativeMaterialRecipeRoster &r_plan, uint32_t p_limit = 256);
+	static Error build_native_material_fixed_pass_data(Vector<uint8_t> &r_instance, Vector<uint8_t> &r_implementation, Vector<uint8_t> &r_cluster, Vector<uint8_t> &r_push);
+
+	// Private source-only mode: original raw bindings, no native/cache effects.
+	RID _setup_render_pass_uniform_set(RenderListType p_render_list, const RenderDataRD *p_render_data, bool p_is_multiview, RID p_radiance_texture, const RendererRD::MaterialStorage::Samplers &p_samplers, bool p_use_directional_shadow_atlas = false, uint32_t p_pass_offset = 0u, Error *p_error = nullptr, Vector<RD::Uniform> *p_native_sources = nullptr);
 	void _pre_opaque_render(RenderDataRD *p_render_data);
 
 	uint64_t lightmap_texture_array_version = 0xFFFFFFFF;
 
-	void _update_render_base_uniform_set();
+	// Private source-only mode: original raw bindings, no native/cache effects.
+	void _update_render_base_uniform_set(Error *p_error = nullptr, Vector<RD::Uniform> *p_native_sources = nullptr);
 
-	void _fill_instance_data(RenderListType p_render_list, uint32_t p_offset = 0, int32_t p_max_elements = -1, bool p_update_buffer = true);
+	void _fill_instance_data(RenderListType p_render_list, uint32_t p_offset = 0, int32_t p_max_elements = -1, bool p_update_buffer = true, Error *p_error = nullptr);
 	void _fill_render_list(RenderListType p_render_list, const RenderDataRD *p_render_data, PassMode p_pass_mode, bool p_append = false);
 
-	void _setup_environment(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, bool p_opaque_render_buffers = false, bool p_pancake_shadows = false);
+	void _setup_environment(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, bool p_opaque_render_buffers = false, bool p_pancake_shadows = false, Error *p_error = nullptr);
 	void _setup_lightmaps(const RenderDataRD *p_render_data, const PagedArray<RID> &p_lightmaps, const Transform3D &p_cam_transform);
 
 	RID render_base_uniform_set;
@@ -420,9 +476,25 @@ private:
 	static_assert(std::is_trivially_destructible_v<RenderElementInfo>);
 	static_assert(std::is_trivially_constructible_v<RenderElementInfo>);
 
+	// Prepared by the SAME source template before the checked list begins.
+	// These RIDs remain owned by the renderer storage; this descriptor creates
+	// neither immutable custody nor a source-membership/retirement receipt.
+	struct PreparedHeightGeometry {
+		RID vertex_array;
+		RID index_array;
+		RID pipeline;
+		RID transforms;
+		RID material;
+		SceneState::PushConstant push_constant;
+		uint32_t push_constant_size = 0;
+		uint32_t instance_count;
+	};
+	Error _render_height_list_checked(RenderListParameters *p_params, RID p_framebuffer, RendererRD::HeightCaptureCheckedSink &r_sink);
+	Error _render_particle_collider_heightfield_impl(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances, RendererRD::HeightCaptureCheckedSink *p_sink);
+
 	template <PassMode p_pass_mode>
-	_FORCE_INLINE_ void _render_list_template(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
-	void _render_list(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
+	_FORCE_INLINE_ void _render_list_template(RenderingDevice::DrawListID p_draw_list, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element, RendererRD::HeightCaptureCheckedSink *p_height_sink = nullptr, LocalVector<PreparedHeightGeometry> *p_height_geometry = nullptr);
+	void _render_list(RenderingDevice::DrawListID p_draw_list, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
 	void _render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_clear_colors = RD::DRAW_DEFAULT_ALL, const Vector<Color> &p_clear_color_values = Vector<Color>(), float p_clear_depth_value = 0.0, uint32_t p_clear_stencil_value = 0, const Rect2 &p_region = Rect2());
 
 	RenderList render_list[RENDER_LIST_MAX];
@@ -518,11 +590,14 @@ protected:
 		RSE::PrimitiveType primitive = RSE::PRIMITIVE_MAX;
 		uint32_t flags = 0;
 		uint32_t surface_index = 0;
+		uint32_t external_surface_index = UINT32_MAX;
+		RendererRD::ExternalSurfaceSelection external_surface;
 
 		void *surface = nullptr;
 		RID material_uniform_set;
 		SceneShaderForwardMobile::ShaderData *shader = nullptr;
 		SceneShaderForwardMobile::MaterialData *material = nullptr;
+		uint64_t material_generation = 0;
 
 		void *surface_shadow = nullptr;
 		RID material_uniform_set_shadow;
@@ -605,6 +680,7 @@ protected:
 	virtual void _render_uv2(const PagedArray<RenderGeometryInstance *> &p_instances, RID p_framebuffer, const Rect2i &p_region) override;
 	virtual void _render_sdfgi(Ref<RenderSceneBuffersRD> p_render_buffers, const Vector3i &p_from, const Vector3i &p_size, const AABB &p_bounds, const PagedArray<RenderGeometryInstance *> &p_instances, const RID &p_albedo_texture, const RID &p_emission_texture, const RID &p_emission_aniso_texture, const RID &p_geom_facing_texture, float p_exposure_normalization) override;
 	virtual void _render_particle_collider_heightfield(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances) override;
+	virtual Error _render_particle_collider_heightfield_checked(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances, RendererRD::HeightCaptureCheckedSink &r_sink) override;
 
 	/* Forward ID */
 
@@ -643,6 +719,10 @@ protected:
 	};
 
 public:
+	// Native preparation only; does not qualify source, bounds, history or GPU support.
+	Error external_pipeline_prepare(const RendererRD::ExternalSurfaceSelection &p_surface, RendererRD::ExternalPipelinePreparation &r_preparation);
+	Error external_pipeline_prepare_for_view(const RendererRD::ExternalSurfaceSelection &, const RendererRD::ExternalPacketViewLease &, const RendererRD::ExternalPacketPipelineRequest &, const RendererRD::ExternalPipelinePreparation *&, bool p_pre_list = false);
+
 	static RenderForwardMobile *get_singleton() { return singleton; }
 
 	virtual RID reflection_probe_create_framebuffer(RID p_color, RID p_depth) override;
@@ -709,7 +789,7 @@ public:
 
 	void _update_global_pipeline_data_requirements_from_project();
 	void _update_global_pipeline_data_requirements_from_light_storage();
-	void _geometry_instance_add_surface_with_material(GeometryInstanceForwardMobile *ginstance, uint32_t p_surface, SceneShaderForwardMobile::MaterialData *p_material, uint32_t p_material_id, uint32_t p_shader_id, RID p_mesh);
+	void _geometry_instance_add_surface_with_material(GeometryInstanceForwardMobile *ginstance, uint32_t p_surface, SceneShaderForwardMobile::MaterialData *p_material, uint32_t p_material_id, uint32_t p_shader_id, RID p_mesh, RendererRD::ExternalSurfaceSelection *p_external = nullptr);
 	void _geometry_instance_add_surface_with_material_chain(GeometryInstanceForwardMobile *ginstance, uint32_t p_surface, SceneShaderForwardMobile::MaterialData *p_material, RID p_mat_src, RID p_mesh);
 	void _geometry_instance_add_surface(GeometryInstanceForwardMobile *ginstance, uint32_t p_surface, RID p_material, RID p_mesh);
 	void _geometry_instance_update(RenderGeometryInstance *p_geometry_instance);

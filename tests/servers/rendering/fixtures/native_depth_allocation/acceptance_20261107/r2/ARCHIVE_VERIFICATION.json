@@ -1,0 +1,32 @@
+{
+  "status": "PASS_ARCHIVE_R2_FINAL",
+  "payload_files": 71,
+  "copied_original_entries": 54,
+  "source_snapshots": 19,
+  "host_sha256": "c5e4bc1951643a6968c69a73d15b19abd0479de174bfa8e5898a4a689a83f939",
+  "cpu_cases": 2269,
+  "cpu_assertions": 585464,
+  "cpu_skipped": 3,
+  "gpu": [
+    {
+      "case": 0,
+      "checks": 29,
+      "actual_depth_bytes": 16512,
+      "texture_credit_bytes": 16640,
+      "framebuffer_credit_bytes": 0
+    },
+    {
+      "case": 1,
+      "checks": 29,
+      "actual_depth_bytes": 135266304,
+      "texture_credit_bytes": 135266304,
+      "framebuffer_credit_bytes": 0
+    }
+  ],
+  "hooks_passed": 10,
+  "r1_raw_evidence_preserved_with_versioned_packaging": true,
+  "historical_neighbor_host_sha256": "7e2c5796c813a48b7587fbec6356c0ae9f90f735abf621cf0c6ea8e17b317774",
+  "red_negative_hash_is_later_reconstruction": true,
+  "independent_review_is_prior_revision": true,
+  "production_cross_dso_complete": false
+}

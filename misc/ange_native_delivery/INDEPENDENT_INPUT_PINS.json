@@ -1,0 +1,280 @@
+{
+  "adoption": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/typed-renderer-generation-build-20261111/STAGED_CAMERA_CLUSTERED_TRANSPARENT_GREEN_ADOPTION.json",
+    "sha256": "e6096724e9531d6f4c47c3517605b201f88e96fc8ad4d94f75d288271a1bb7f6"
+  },
+  "baseline_snapshot": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/typed-renderer-generation-build-20261111/source/SOURCE_SNAPSHOT.json",
+    "sha256": "c7491b1320457fedeb97251203d2d274455ff3c5b86341cc82758710834817ea"
+  },
+  "frozen_artifact": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/typed-renderer-generation-build-20261111/frozen-staged-camera-clustered-transparent/FROZEN_ARTIFACT.json",
+    "sha256": "704c059187816c957fe310d6a3f8494b15cf28a9f882581439f04d97e7febb02"
+  },
+  "frozen_files": {
+    "ADOPTION.json": {
+      "actual_sha256": "e6096724e9531d6f4c47c3517605b201f88e96fc8ad4d94f75d288271a1bb7f6",
+      "expected": {
+        "bytes": 34013,
+        "sha256": "e6096724e9531d6f4c47c3517605b201f88e96fc8ad4d94f75d288271a1bb7f6"
+      }
+    },
+    "BUILD_RESULT.json": {
+      "actual_sha256": "e2b7831decc7761ea6b23a3fa8c46b26ecadae4c90c6dbc031f42b37c0bdb612",
+      "expected": {
+        "bytes": 677,
+        "sha256": "e2b7831decc7761ea6b23a3fa8c46b26ecadae4c90c6dbc031f42b37c0bdb612"
+      }
+    },
+    "engine_build_identity.gen.cpp": {
+      "actual_sha256": "cbe1d7f78e2c33772a5e684988e83ae726104f0390582164667e3e30c0bc4106",
+      "expected": {
+        "bytes": 425,
+        "sha256": "cbe1d7f78e2c33772a5e684988e83ae726104f0390582164667e3e30c0bc4106"
+      }
+    },
+    "engine_build_identity.gen.json": {
+      "actual_sha256": "eb4b44522208b625c6572974e8a5164ab61cc2070da0544433cee1b5c1d624d1",
+      "expected": {
+        "bytes": 83230,
+        "sha256": "eb4b44522208b625c6572974e8a5164ab61cc2070da0544433cee1b5c1d624d1"
+      }
+    },
+    "engine_build_identity.py": {
+      "actual_sha256": "4a4da5b4d6abd5076367f84006bbdd000e76de61e7b7bb13b15532aae65f1eb0",
+      "expected": {
+        "bytes": 30036,
+        "sha256": "4a4da5b4d6abd5076367f84006bbdd000e76de61e7b7bb13b15532aae65f1eb0"
+      }
+    },
+    "engine_build_selection.gen.json": {
+      "actual_sha256": "37d5e9ce4c14e8e057687182476c617889a53e3e57bb1b49748df1537b4342bd",
+      "expected": {
+        "bytes": 311,
+        "sha256": "37d5e9ce4c14e8e057687182476c617889a53e3e57bb1b49748df1537b4342bd"
+      }
+    },
+    "gdextension_interface.json": {
+      "actual_sha256": "1a7a839114b3ec7a79a9d5026fe78214023c6ed2370cd7784a5a6bdf4ffec1ca",
+      "expected": {
+        "bytes": 1037043,
+        "sha256": "1a7a839114b3ec7a79a9d5026fe78214023c6ed2370cd7784a5a6bdf4ffec1ca"
+      }
+    },
+    "godot.macos.template_debug.arm64": {
+      "actual_sha256": "634a559cbedfbe53b3cd05a76551c36a00fa12e397847df8ee8439f4b6a552b9",
+      "expected": {
+        "bytes": 97716096,
+        "sha256": "634a559cbedfbe53b3cd05a76551c36a00fa12e397847df8ee8439f4b6a552b9"
+      }
+    },
+    "godot.macos.template_debug.arm64.controlled_build.json": {
+      "actual_sha256": "f22a8dc8f3a4bd3ee0202896df538575b60b648d22225f08f3bb6494ae10f796",
+      "expected": {
+        "bytes": 529,
+        "sha256": "f22a8dc8f3a4bd3ee0202896df538575b60b648d22225f08f3bb6494ae10f796"
+      }
+    }
+  },
+  "schema_sha256": "1a7a839114b3ec7a79a9d5026fe78214023c6ed2370cd7784a5a6bdf4ffec1ca",
+  "sdk_manifest_entries": {
+    "sdk/HANDOFF.md": {
+      "actual_sha256": "9a60769ffaf10169959cc74a4190093d730611e07d810adfb167d6b115699fb2",
+      "expected": {
+        "bytes": 1969,
+        "mode": 420,
+        "sha256": "9a60769ffaf10169959cc74a4190093d730611e07d810adfb167d6b115699fb2"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/HANDOFF.md"
+    },
+    "sdk/INPUT_PINS.json": {
+      "actual_sha256": "9719db2312d10728fcca20ebc26bbda5c9f0fc518b0abcc1304a53b73b57e1da",
+      "expected": {
+        "bytes": 2093,
+        "mode": 420,
+        "sha256": "9719db2312d10728fcca20ebc26bbda5c9f0fc518b0abcc1304a53b73b57e1da"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/INPUT_PINS.json"
+    },
+    "sdk/PROVENANCE.json": {
+      "actual_sha256": "54090fd3fd3ab38e0e0c74ef593de561c6ab9774c96465d80d63b8a208721a41",
+      "expected": {
+        "bytes": 1236,
+        "mode": 420,
+        "sha256": "54090fd3fd3ab38e0e0c74ef593de561c6ab9774c96465d80d63b8a208721a41"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/PROVENANCE.json"
+    },
+    "sdk/include/gdextension_interface.h": {
+      "actual_sha256": "eab76f80861bdb12ef2130cd4408ce05640ebcf7d0420ed1e03aaf82def42f2d",
+      "expected": {
+        "bytes": 474324,
+        "mode": 420,
+        "sha256": "eab76f80861bdb12ef2130cd4408ce05640ebcf7d0420ed1e03aaf82def42f2d"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/include/gdextension_interface.h"
+    },
+    "sdk/include/godot_cpp/core/gdextension_interface_loader.hpp": {
+      "actual_sha256": "c536d841e791f55552bdc5e046308e23afa22b667336ff3b5047fbdf4f53b828",
+      "expected": {
+        "bytes": 43031,
+        "mode": 420,
+        "sha256": "c536d841e791f55552bdc5e046308e23afa22b667336ff3b5047fbdf4f53b828"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/include/godot_cpp/core/gdextension_interface_loader.hpp"
+    },
+    "sdk/probes/interface_include.c": {
+      "actual_sha256": "3dd854a4fc073af10cf7a80b05e3de41152902aeb5c6348735884c72992d2a93",
+      "expected": {
+        "bytes": 368,
+        "mode": 420,
+        "sha256": "3dd854a4fc073af10cf7a80b05e3de41152902aeb5c6348735884c72992d2a93"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/probes/interface_include.c"
+    },
+    "sdk/probes/interface_include.cpp": {
+      "actual_sha256": "3dd854a4fc073af10cf7a80b05e3de41152902aeb5c6348735884c72992d2a93",
+      "expected": {
+        "bytes": 368,
+        "mode": 420,
+        "sha256": "3dd854a4fc073af10cf7a80b05e3de41152902aeb5c6348735884c72992d2a93"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/probes/interface_include.cpp"
+    },
+    "sdk/replay_sdk.py": {
+      "actual_sha256": "4db71a34f9fc22e854269072cdf3a965d3c951963ab36531278e22d3b577cc0c",
+      "expected": {
+        "bytes": 4011,
+        "mode": 420,
+        "sha256": "4db71a34f9fc22e854269072cdf3a965d3c951963ab36531278e22d3b577cc0c"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/replay_sdk.py"
+    },
+    "sdk/schema/gdextension_interface.json": {
+      "actual_sha256": "1a7a839114b3ec7a79a9d5026fe78214023c6ed2370cd7784a5a6bdf4ffec1ca",
+      "expected": {
+        "bytes": 1037043,
+        "mode": 420,
+        "sha256": "1a7a839114b3ec7a79a9d5026fe78214023c6ed2370cd7784a5a6bdf4ffec1ca"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/schema/gdextension_interface.json"
+    },
+    "sdk/src/gdextension_interface_loader.cpp": {
+      "actual_sha256": "381915de40d91cf045e9eee1159d109c7e2c2869213cc92f29189fb2273136d0",
+      "expected": {
+        "bytes": 102552,
+        "mode": 420,
+        "sha256": "381915de40d91cf045e9eee1159d109c7e2c2869213cc92f29189fb2273136d0"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/src/gdextension_interface_loader.cpp"
+    },
+    "sdk/support/godot-cpp/gen/include/godot_cpp/core/version.hpp": {
+      "actual_sha256": "110d16e0bd57aad026a94a75d9e7689957e853954eca60178c5c4eb20c81fe44",
+      "expected": {
+        "bytes": 2467,
+        "mode": 420,
+        "sha256": "110d16e0bd57aad026a94a75d9e7689957e853954eca60178c5c4eb20c81fe44"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/support/godot-cpp/gen/include/godot_cpp/core/version.hpp"
+    },
+    "sdk/support/godot-cpp/include/godot_cpp/core/defs.hpp": {
+      "actual_sha256": "0ce8ed1e3d749de2a2db42a6ad7dad61452f0e94a9478f6c6a6f9951d4f1acdd",
+      "expected": {
+        "bytes": 14952,
+        "mode": 420,
+        "sha256": "0ce8ed1e3d749de2a2db42a6ad7dad61452f0e94a9478f6c6a6f9951d4f1acdd"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/support/godot-cpp/include/godot_cpp/core/defs.hpp"
+    },
+    "sdk/support/godot-cpp/include/godot_cpp/core/error_macros.hpp": {
+      "actual_sha256": "88661cdc883a17322b36609c025644f1efd2e7e79e2a7bc3358096457d7aaefc",
+      "expected": {
+        "bytes": 28723,
+        "mode": 420,
+        "sha256": "88661cdc883a17322b36609c025644f1efd2e7e79e2a7bc3358096457d7aaefc"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/support/godot-cpp/include/godot_cpp/core/error_macros.hpp"
+    },
+    "sdk/support/godot-cpp/include/godot_cpp/core/load_proc_address.inc": {
+      "actual_sha256": "83a6a378c49d74cff0b651b4b0d4286d61652a9c82ceaa9c3eec8416485371bd",
+      "expected": {
+        "bytes": 2834,
+        "mode": 420,
+        "sha256": "83a6a378c49d74cff0b651b4b0d4286d61652a9c82ceaa9c3eec8416485371bd"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/support/godot-cpp/include/godot_cpp/core/load_proc_address.inc"
+    },
+    "sdk/tools/core/make_interface_header.py": {
+      "actual_sha256": "465353fab2820ad8d9dd40d063da981fe62f6efefc1920629f927339f7e5d2f0",
+      "expected": {
+        "bytes": 12050,
+        "mode": 420,
+        "sha256": "465353fab2820ad8d9dd40d063da981fe62f6efefc1920629f927339f7e5d2f0"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/tools/core/make_interface_header.py"
+    },
+    "sdk/tools/core/methods.py": {
+      "actual_sha256": "5d860ccce735661b778edaf37478317c1b8e763af272d5355de1bc43688da154",
+      "expected": {
+        "bytes": 65515,
+        "mode": 420,
+        "sha256": "5d860ccce735661b778edaf37478317c1b8e763af272d5355de1bc43688da154"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/tools/core/methods.py"
+    },
+    "sdk/tools/core/misc/utility/color.py": {
+      "actual_sha256": "09b4e0a20f676ef47ca83d4a8623b3e1726f62244ec1e13ecf60cbce0bdc2036",
+      "expected": {
+        "bytes": 4979,
+        "mode": 420,
+        "sha256": "09b4e0a20f676ef47ca83d4a8623b3e1726f62244ec1e13ecf60cbce0bdc2036"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/tools/core/misc/utility/color.py"
+    },
+    "sdk/tools/core/platform_methods.py": {
+      "actual_sha256": "193d261360af7d902c5df68ff88d395b9b22cced3d99040f22273b8e03604f4b",
+      "expected": {
+        "bytes": 13684,
+        "mode": 420,
+        "sha256": "193d261360af7d902c5df68ff88d395b9b22cced3d99040f22273b8e03604f4b"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/tools/core/platform_methods.py"
+    },
+    "sdk/tools/godot-cpp/binding_generator.py": {
+      "actual_sha256": "1a5f78f4801c47f1874171535371809e0fd58140f07776870488b6a4f62a46bd",
+      "expected": {
+        "bytes": 128320,
+        "mode": 420,
+        "sha256": "1a5f78f4801c47f1874171535371809e0fd58140f07776870488b6a4f62a46bd"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/tools/godot-cpp/binding_generator.py"
+    },
+    "sdk/tools/godot-cpp/make_interface_header.py": {
+      "actual_sha256": "c99b1aaedb48c3bfbf1f1c6f867c8207d0f97abc104081f276e2410505600beb",
+      "expected": {
+        "bytes": 12466,
+        "mode": 420,
+        "sha256": "c99b1aaedb48c3bfbf1f1c6f867c8207d0f97abc104081f276e2410505600beb"
+      },
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk/tools/godot-cpp/make_interface_header.py"
+    }
+  },
+  "sdk_products": {
+    "include/gdextension_interface.h": "eab76f80861bdb12ef2130cd4408ce05640ebcf7d0420ed1e03aaf82def42f2d",
+    "include/godot_cpp/core/gdextension_interface_loader.hpp": "c536d841e791f55552bdc5e046308e23afa22b667336ff3b5047fbdf4f53b828",
+    "src/gdextension_interface_loader.cpp": "381915de40d91cf045e9eee1159d109c7e2c2869213cc92f29189fb2273136d0"
+  },
+  "selection": {
+    "architecture": "arm64",
+    "compiler_route": "BuiltinGlslangV1",
+    "compiler_stamp": "9e241525f14469db50f4041f814e23afe6d942dc1a4da3893ea3fe56fca04c87",
+    "core_stamp": "db47ed3f40200c0f118c2938fbce5694f415464c4e413016395de8f2f1401a52",
+    "platform": "macos",
+    "schema": 1,
+    "target_kind": "Executable"
+  },
+  "source_manifest": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/typed-renderer-generation-build-20261111/STAGED_CAMERA_CLUSTERED_TRANSPARENT_GREEN_SOURCE_INPUTS.json",
+    "sha256": "2332cdc4353c3ac3275cd789a784d8752a607e3f622241e2125972be85552dbf"
+  }
+}

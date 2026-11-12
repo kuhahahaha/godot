@@ -1223,6 +1223,13 @@ if "c_compiler_launcher" in env:
 if "cpp_compiler_launcher" in env:
     env["CXX"] = " ".join([env["cpp_compiler_launcher"], env["CXX"]])
 
+# Shared test-only declarations must use the same definition in every translation unit.
+if env["tests"]:
+    env.AppendUnique(CPPDEFINES=["TESTS_ENABLED"])
+
+# Original validated option names; canonical per-option policy lives with the generator.
+env["CONTROLLED_BUILD_OPTION_KEYS"] = tuple(option.key for option in opts.options)
+
 # Build subdirs, the build order is dependent on link order.
 Export("env")
 

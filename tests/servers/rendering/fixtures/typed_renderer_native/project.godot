@@ -1,0 +1,5 @@
+[application]
+config/name="Typed renderer producer source candidate"
+[rendering]
+renderer/rendering_method="mobile"
+renderer/rendering_method.mobile="mobile"

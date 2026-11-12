@@ -1,0 +1,30 @@
+[
+  {
+    "label": "RETAIN_OMITTED_BUILD",
+    "command": [
+      "scons",
+      "-Q",
+      "tests=yes",
+      "platform=macos",
+      "target=editor",
+      "debug_symbols=no",
+      "module_particles_runtime_tests_enabled=yes",
+      "-j2"
+    ],
+    "exit_code": 0,
+    "seconds": 48.92
+  },
+  {
+    "label": "RETAIN_OMITTED_GPU",
+    "command": [
+      "python3",
+      "tests/servers/rendering/fixtures/camera_native_propagation/run_native.py",
+      "--binary",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+      "--capture-dir",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/retain_omitted_gpu"
+    ],
+    "exit_code": 1,
+    "seconds": 4.52
+  }
+]

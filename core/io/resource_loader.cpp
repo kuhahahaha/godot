@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "resource_loader.h"
+#include "core/extension/gdextension_library_exit_guard.h"
 
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
@@ -1771,9 +1772,13 @@ Vector<String> ResourceLoader::list_directory(const String &p_directory) {
 	return ret;
 }
 
-void ResourceLoader::initialize() {}
+void ResourceLoader::initialize() {
+	GDExtensionDeviceExit::Registry::get_singleton().service_started(1u << 1);
+}
 
-void ResourceLoader::finalize() {}
+void ResourceLoader::finalize() {
+	GDExtensionDeviceExit::require_close_success(GDExtensionDeviceExit::Registry::get_singleton().service_stopping(1u << 1), GDExtensionDeviceExit::CloseRoute::LAST_REF);
+}
 
 ResourceLoadErrorNotify ResourceLoader::err_notify = nullptr;
 DependencyErrorNotify ResourceLoader::dep_err_notify = nullptr;

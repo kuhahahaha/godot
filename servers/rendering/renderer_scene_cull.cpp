@@ -35,6 +35,8 @@
 #include "core/math/geometry_3d.h"
 #include "core/object/callable_mp.h"
 #include "core/object/worker_thread_pool.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/rendering_light_culler.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_default.h"
@@ -173,6 +175,263 @@ void RendererSceneCull::occluder_set_mesh(RID p_occluder, const PackedVector3Arr
 
 /* SCENARIO API */
 
+Error RendererSceneCull::instance_get_committed_particle_scene_facts(RID p_instance, RID p_expected_particles, NativeParticleSceneFacts &r_facts) const {
+	r_facts = NativeParticleSceneFacts();
+	auto *server = RenderingServer::get_singleton();
+	if (!server || !server->is_on_render_thread()) {
+		return ERR_UNAVAILABLE;
+	}
+	const Instance *instance = instance_owner.get_or_null(p_instance);
+	if (!p_instance.is_valid() || !p_expected_particles.is_valid() || !instance || instance->self != p_instance ||
+			instance->base_type != RSE::INSTANCE_PARTICLES || instance->base != p_expected_particles) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (!instance->native_scene_committed || instance->update_item.in_list() || instance->update_aabb || instance->update_dependencies) {
+		return ERR_BUSY;
+	}
+	if (!instance->scenario || !RSG::particles_storage) {
+		return ERR_UNAVAILABLE;
+	}
+	if (!instance->scenario->self.is_valid() || scenario_owner.get_or_null(instance->scenario->self) != instance->scenario ||
+			!RSG::particles_storage->particles_is_external(p_expected_particles) || !instance->base_data) {
+		return ERR_INVALID_DATA;
+	}
+	const InstanceGeometryData *geometry = static_cast<const InstanceGeometryData *>(instance->base_data);
+	if (!geometry->geometry_instance || geometry->geometry_instance->get_native_scene_instance() != p_instance ||
+			geometry->geometry_instance->get_transform() != instance->transform || geometry->geometry_instance->get_aabb() != instance->aabb) {
+		return ERR_INVALID_DATA;
+	}
+	auto finite_bounds = [](const AABB &bounds) {
+		const Vector3 end = bounds.get_end();
+		return bounds.is_finite() && end.is_finite() && bounds.has_volume() &&
+				end.x > bounds.position.x && end.y > bounds.position.y && end.z > bounds.position.z;
+	};
+	if (!instance->transform.is_finite() ||
+			!finite_bounds(instance->aabb) || !finite_bounds(instance->transformed_aabb)) {
+		return ERR_INVALID_DATA;
+	}
+	// Copy only the committed fields used by native cull. Never reconstruct the
+	// world envelope from declarations or retain Instance/geometry pointers.
+	r_facts.instance = instance->self;
+	r_facts.particles = instance->base;
+	r_facts.scenario = instance->scenario->self;
+	r_facts.version = instance->version;
+	r_facts.transform = instance->transform;
+	r_facts.local_aabb = instance->aabb;
+	r_facts.world_aabb = instance->transformed_aabb;
+	return OK;
+}
+
+Error RendererSceneCull::scene_receiver_commit_query(RID p_receiver, uint64_t p_generation, const RenderingDevice *p_device,
+		const Transform3D &p_transform, const AABB &p_local_envelope, const AABB &p_world_query, uint64_t p_bounds_revision) {
+	if (!RenderingServer::get_singleton()->is_on_render_thread()) {
+		return ERR_UNAVAILABLE;
+	}
+	Instance *receiver = instance_owner.get_or_null(p_receiver);
+	if (!receiver || receiver->base_type != RSE::INSTANCE_PARTICLES || !receiver->scenario) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		return ERR_UNAVAILABLE;
+	}
+	const Error validated = storage->particles_scene_validate_receiver(receiver->base, p_generation, p_device);
+	if (validated != OK) {
+		return validated;
+	}
+	const bool same_generation = receiver->scene_query_base == receiver->base && receiver->scene_query_generation == p_generation;
+	const AABB transformed_envelope = p_transform.xform(p_local_envelope);
+	const real_t determinant = p_transform.basis.determinant();
+	if (!p_bounds_revision || (same_generation && p_bounds_revision <= receiver->scene_bounds_revision) || !p_transform.is_finite() ||
+			!Math::is_finite(determinant) || determinant == 0 || !transformed_envelope.is_finite() || !transformed_envelope.get_end().is_finite() ||
+			!p_local_envelope.is_finite() || !p_local_envelope.get_end().is_finite() || !p_local_envelope.has_volume() ||
+			!p_world_query.is_finite() || !p_world_query.get_end().is_finite() || !p_world_query.has_volume() ||
+			!transformed_envelope.encloses(p_world_query)) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (receiver->scene_pose_revision == UINT64_MAX || receiver->scene_pair_exhausted ||
+			(receiver->scene_query_world != p_world_query && receiver->scene_pair_revision == UINT64_MAX)) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	// All validation precedes mutation. Only this actual scene instance changes;
+	// the original base's render/query configuration remains immutable.
+	if (!receiver->custom_aabb) {
+		receiver->custom_aabb = memnew(AABB);
+	}
+	*receiver->custom_aabb = p_local_envelope;
+	receiver->transform = p_transform;
+	receiver->scene_query_base = receiver->base;
+	receiver->scene_query_generation = p_generation;
+	if (receiver->scene_query_world != p_world_query) {
+		++receiver->scene_pair_revision;
+	}
+	receiver->scene_query_world = p_world_query;
+	receiver->scene_bounds_revision = p_bounds_revision;
+	++receiver->scene_pose_revision;
+	receiver->scene_query_committed = true;
+	_instance_queue_update(receiver, true, false);
+	return OK;
+}
+
+Error RendererSceneCull::scene_sphere_snapshot(RID p_receiver, uint64_t p_generation, const RenderingDevice *p_device,
+		uint32_t p_max_sources, SceneSphereSnapshot &r_snapshot) const {
+	r_snapshot = SceneSphereSnapshot();
+	if (!RenderingServer::get_singleton()->is_on_render_thread()) {
+		return ERR_UNAVAILABLE;
+	}
+	const Instance *receiver = instance_owner.get_or_null(p_receiver);
+	if (!receiver || receiver->base_type != RSE::INSTANCE_PARTICLES || !receiver->scenario) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		return ERR_UNAVAILABLE;
+	}
+	const Error validated = storage->particles_scene_validate_receiver(receiver->base, p_generation, p_device);
+	if (validated != OK) {
+		return validated;
+	}
+	if (_instance_update_list.first() != nullptr || !receiver->scene_query_committed || receiver->scene_query_base != receiver->base ||
+			receiver->scene_query_generation != p_generation || receiver->update_item.in_list()) {
+		return ERR_UNAVAILABLE;
+	}
+	if (!p_max_sources || p_max_sources > 1024 || receiver->scene_pair_exhausted) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	SceneSphereSnapshot value;
+	if (!scene_sphere_snapshot_pairs(p_receiver, p_max_sources, value.sources)) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	value.receiver_transform = receiver->transform;
+	value.query_bounds = receiver->scene_query_world;
+	value.pose_revision = receiver->scene_pose_revision;
+	value.bounds_revision = receiver->scene_bounds_revision;
+	value.pair_revision = receiver->scene_pair_revision;
+	r_snapshot = value;
+	return OK;
+}
+
+bool RendererSceneCull::scene_sphere_snapshot_pairs(RID p_receiver, uint32_t p_max_sources, Vector<SceneSphereSource> &r_sources) const {
+	r_sources.clear();
+	const Instance *receiver = instance_owner.get_or_null(p_receiver);
+	if (!receiver || receiver->base_type != RSE::INSTANCE_PARTICLES || !receiver->scenario || p_max_sources == 0) {
+		return false;
+	}
+	if (!receiver->visible) {
+		return true;
+	}
+	RendererRD::ParticlesStorage *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		return false;
+	}
+	for (const SelfList<InstancePair> *link = receiver->pairs.first(); link; link = link->next()) {
+		const InstancePair *pair = link->self();
+		const Instance *source = pair->a == receiver ? pair->b : pair->a;
+		if (source->base_type != RSE::INSTANCE_PARTICLES_COLLISION || !source->visible || source->scenario != receiver->scenario) {
+			continue;
+		}
+		if (receiver->scene_query_committed && !receiver->scene_query_world.intersects_inclusive(source->transformed_aabb)) {
+			continue;
+		}
+		const InstanceParticlesCollisionData *collision = static_cast<const InstanceParticlesCollisionData *>(source->base_data);
+		if (!(collision->cull_mask & receiver->layer_mask)) {
+			continue;
+		}
+		SceneSphereSource value;
+		if (!storage->particles_collision_instance_get_scene_sphere(collision->instance, value.source_key, value.shape_revision, value.transform, value.radius)) {
+			continue;
+		}
+		if (r_sources.size() >= p_max_sources) {
+			r_sources.clear();
+			return false;
+		}
+		r_sources.push_back(value);
+	}
+	struct SourceKeyLess {
+		bool operator()(const SceneSphereSource &a, const SceneSphereSource &b) const { return a.source_key < b.source_key; }
+	};
+	r_sources.sort_custom<SourceKeyLess>();
+	return true;
+}
+
+Error RendererSceneCull::scene_heightfield_snapshot(RID p_receiver, uint64_t p_generation, const RenderingDevice *p_device,
+		SceneHeightfieldSnapshot &r_snapshot) const {
+	r_snapshot = SceneHeightfieldSnapshot();
+	if (!RenderingServer::get_singleton()->is_on_render_thread()) {
+		return ERR_UNAVAILABLE;
+	}
+	const Instance *receiver = instance_owner.get_or_null(p_receiver);
+	if (!receiver || receiver->base_type != RSE::INSTANCE_PARTICLES || !receiver->scenario) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		return ERR_UNAVAILABLE;
+	}
+	const Error validated = storage->particles_scene_validate_receiver(receiver->base, p_generation, p_device);
+	if (validated != OK) {
+		return validated;
+	}
+	if (_instance_update_list.first() != nullptr || !receiver->scene_query_committed || receiver->scene_query_base != receiver->base ||
+			receiver->scene_query_generation != p_generation || receiver->update_item.in_list()) {
+		return ERR_UNAVAILABLE;
+	}
+	if (receiver->scene_pair_exhausted) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	SceneHeightfieldSnapshot value;
+	if (!scene_heightfield_snapshot_pair(p_receiver, value.source, value.present)) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	value.receiver_transform = receiver->transform;
+	value.query_bounds = receiver->scene_query_world;
+	value.pose_revision = receiver->scene_pose_revision;
+	value.bounds_revision = receiver->scene_bounds_revision;
+	value.pair_revision = receiver->scene_pair_revision;
+	r_snapshot = value;
+	return OK;
+}
+
+bool RendererSceneCull::scene_heightfield_snapshot_pair(RID p_receiver, SceneHeightfieldSource &r_source, bool &r_present) const {
+	r_present = false;
+	const Instance *receiver = instance_owner.get_or_null(p_receiver);
+	if (!receiver || receiver->base_type != RSE::INSTANCE_PARTICLES || !receiver->scenario) {
+		return false;
+	}
+	if (!receiver->visible) {
+		return true;
+	}
+	RendererRD::ParticlesStorage *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		return false;
+	}
+	for (const SelfList<InstancePair> *link = receiver->pairs.first(); link; link = link->next()) {
+		const InstancePair *pair = link->self();
+		const Instance *source = pair->a == receiver ? pair->b : pair->a;
+		if (source->base_type != RSE::INSTANCE_PARTICLES_COLLISION || !source->visible || source->scenario != receiver->scenario) {
+			continue;
+		}
+		if (receiver->scene_query_committed && !receiver->scene_query_world.intersects_inclusive(source->transformed_aabb)) {
+			continue;
+		}
+		const InstanceParticlesCollisionData *collision = static_cast<const InstanceParticlesCollisionData *>(source->base_data);
+		if (!(collision->cull_mask & receiver->layer_mask)) {
+			continue;
+		}
+		SceneHeightfieldSource value;
+		if (!storage->particles_collision_instance_get_scene_heightfield(collision->instance, value.source_key, value.shape_revision, value.transform, value.extents, value.resolution)) {
+			continue;
+		}
+		if (r_present) {
+			r_present = false;
+			return false;
+		}
+		r_source = value;
+		r_present = true;
+	}
+	return true;
+}
+
 void RendererSceneCull::_instance_pair(Instance *p_A, Instance *p_B) {
 	RendererSceneCull *self = (RendererSceneCull *)singleton;
 	Instance *A = p_A;
@@ -291,8 +550,13 @@ void RendererSceneCull::_instance_pair(Instance *p_A, Instance *p_B) {
 		voxel_gi->lights.insert(A);
 	} else if (B->base_type == RSE::INSTANCE_PARTICLES_COLLISION && A->base_type == RSE::INSTANCE_PARTICLES) {
 		InstanceParticlesCollisionData *collision = static_cast<InstanceParticlesCollisionData *>(B->base_data);
+		if (A->scene_pair_revision == UINT64_MAX) {
+			A->scene_pair_exhausted = true;
+		} else {
+			++A->scene_pair_revision;
+		}
 
-		if ((collision->cull_mask & A->layer_mask)) {
+		if ((collision->cull_mask & A->layer_mask) && !RSG::particles_storage->particles_is_external(A->base)) {
 			RSG::particles_storage->particles_add_collision(A->base, collision->instance);
 		}
 	}
@@ -420,8 +684,13 @@ void RendererSceneCull::_instance_unpair(Instance *p_A, Instance *p_B) {
 		voxel_gi->lights.erase(A);
 	} else if (B->base_type == RSE::INSTANCE_PARTICLES_COLLISION && A->base_type == RSE::INSTANCE_PARTICLES) {
 		InstanceParticlesCollisionData *collision = static_cast<InstanceParticlesCollisionData *>(B->base_data);
+		if (A->scene_pair_revision == UINT64_MAX) {
+			A->scene_pair_exhausted = true;
+		} else {
+			++A->scene_pair_revision;
+		}
 
-		if ((collision->cull_mask & A->layer_mask)) {
+		if ((collision->cull_mask & A->layer_mask) && !RSG::particles_storage->particles_is_external(A->base)) {
 			RSG::particles_storage->particles_remove_collision(A->base, collision->instance);
 		}
 	}
@@ -526,6 +795,7 @@ void RendererSceneCull::scenario_add_viewport_visibility_mask(RID p_scenario, RI
 /* INSTANCING API */
 
 void RendererSceneCull::_instance_queue_update(Instance *p_instance, bool p_update_aabb, bool p_update_dependencies) const {
+	p_instance->native_scene_committed = false;
 	if (p_update_aabb) {
 		p_instance->update_aabb = true;
 	}
@@ -581,6 +851,8 @@ void RendererSceneCull::_instance_update_mesh_instance(Instance *p_instance) con
 void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 	Instance *instance = instance_owner.get_or_null(p_instance);
 	ERR_FAIL_NULL(instance);
+	instance->native_scene_committed = false;
+	instance->scene_query_committed = false;
 
 	Scenario *scenario = instance->scenario;
 
@@ -725,6 +997,7 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 
 				ERR_FAIL_NULL(geom->geometry_instance);
 
+				geom->geometry_instance->set_native_scene_instance(instance->self);
 				geom->geometry_instance->set_skeleton(instance->skeleton);
 				geom->geometry_instance->set_material_override(instance->material_override);
 				geom->geometry_instance->set_material_overlay(instance->material_overlay);
@@ -824,6 +1097,8 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 void RendererSceneCull::instance_set_scenario(RID p_instance, RID p_scenario) {
 	Instance *instance = instance_owner.get_or_null(p_instance);
 	ERR_FAIL_NULL(instance);
+	instance->native_scene_committed = false;
+	instance->scene_query_committed = false;
 
 	if (instance->scenario) {
 		instance->scenario->instances.remove(&instance->scenario_item);
@@ -1001,7 +1276,9 @@ void RendererSceneCull::instance_set_transform(RID p_instance, const Transform3D
 	}
 
 #endif
+	instance->scene_query_committed = false;
 	instance->transform = p_transform;
+	instance->scene_source_changed();
 	_instance_queue_update(instance, true);
 }
 
@@ -1098,6 +1375,7 @@ void RendererSceneCull::instance_teleport(RID p_instance) {
 void RendererSceneCull::instance_set_custom_aabb(RID p_instance, AABB p_aabb) {
 	Instance *instance = instance_owner.get_or_null(p_instance);
 	ERR_FAIL_NULL(instance);
+	instance->scene_query_committed = false;
 
 	if (p_aabb != AABB()) {
 		// Set custom AABB
@@ -1664,7 +1942,9 @@ void RendererSceneCull::_update_instance(Instance *p_instance) const {
 
 		scene_render->voxel_gi_instance_set_transform_to_data(voxel_gi->probe_instance, *instance_xform);
 	} else if (p_instance->base_type == RSE::INSTANCE_PARTICLES) {
-		RSG::particles_storage->particles_set_emission_transform(p_instance->base, *instance_xform);
+		if (!RSG::particles_storage->particles_is_external(p_instance->base)) {
+			RSG::particles_storage->particles_set_emission_transform(p_instance->base, *instance_xform);
+		}
 	} else if (p_instance->base_type == RSE::INSTANCE_PARTICLES_COLLISION) {
 		InstanceParticlesCollisionData *collision = static_cast<InstanceParticlesCollisionData *>(p_instance->base_data);
 
@@ -2772,6 +3052,14 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 		}
 #endif // XR_DISABLED
 	}
+	// Freeze the token only after CameraData is fully constructed. This keeps
+	// failed/unsupported camera setup from consuming a source ordinal.
+	if (p_viewport.is_valid() && RSG::viewport) {
+		camera_data.source_viewport = p_viewport;
+		if (!RSG::viewport->viewport_begin_camera_capture(p_viewport, camera_data, p_camera, p_render_buffers).is_valid()) {
+			camera_data.source_viewport = RID();
+		}
+	}
 
 	RID environment = _render_get_environment(p_camera, p_scenario);
 	RID compositor = _render_get_compositor(p_camera, p_scenario);
@@ -2915,6 +3203,10 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 		bool mesh_visible = false;
 
 		InstanceData &idata = cull_data.scenario->instance_data[i];
+		const bool external_particles = (idata.flags & InstanceData::FLAG_BASE_TYPE_MASK) == RSE::INSTANCE_PARTICLES &&
+				RSG::particles_storage->particles_is_external(idata.base_rid);
+		const bool scene_only_particles = external_particles &&
+				RSG::particles_storage->particles_is_external_scene_only(idata.base_rid);
 		uint32_t visibility_flags = idata.flags & (InstanceData::FLAG_VISIBILITY_DEPENDENCY_HIDDEN_CLOSE_RANGE | InstanceData::FLAG_VISIBILITY_DEPENDENCY_HIDDEN | InstanceData::FLAG_VISIBILITY_DEPENDENCY_FADE_CHILDREN);
 		int32_t visibility_check = -1;
 
@@ -2992,7 +3284,12 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 						mesh_visible = true;
 					} else if (base_type == RSE::INSTANCE_PARTICLES) {
 						//particles visible? process them
-						if (RSG::particles_storage->particles_is_inactive(idata.base_rid)) {
+						if (scene_only_particles) {
+							keep = false;
+						} else if (external_particles) {
+							// Native External geometry is consumed by its immutable output
+							// owner. Visibility never drives the ordinary particle simulator.
+						} else if (RSG::particles_storage->particles_is_inactive(idata.base_rid)) {
 							//but if nothing is going on, don't do it.
 							keep = false;
 						} else {
@@ -3245,7 +3542,8 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 					if (IN_FRUSTUM(cull_data.cull->shadows[j].cascades[k].frustum) && VIS_CHECK) {
 						uint32_t base_type = idata.flags & InstanceData::FLAG_BASE_TYPE_MASK;
 
-						if (((1 << base_type) & RSE::INSTANCE_GEOMETRY_MASK) && idata.flags & InstanceData::FLAG_CAST_SHADOWS && (LAYER_CHECK & cull_data.cull->shadows[j].caster_mask)) {
+						if (!scene_only_particles && ((1 << base_type) & RSE::INSTANCE_GEOMETRY_MASK) && idata.flags & InstanceData::FLAG_CAST_SHADOWS &&
+								(!external_particles || static_cast<InstanceGeometryData *>(idata.instance->base_data)->can_cast_shadows) && (LAYER_CHECK & cull_data.cull->shadows[j].caster_mask)) {
 							cull_result.directional_shadows[j].cascade_geometry_instances[k].push_back(idata.instance_geometry);
 							mesh_visible = true;
 						}
@@ -3275,7 +3573,7 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 							cull_result.sdfgi_cascade_lights[sdfgi_last_light_cascade].push_back(instance_light->instance);
 						}
 					}
-				} else if ((1 << base_type) & RSE::INSTANCE_GEOMETRY_MASK) {
+				} else if (!scene_only_particles && ((1 << base_type) & RSE::INSTANCE_GEOMETRY_MASK)) {
 					if ((idata.flags & InstanceData::FLAG_USES_BAKED_LIGHT) && (cull_data.visible_layers & idata.layer_mask)) {
 						cull_result.sdfgi_region_geometry_instances[j].push_back(idata.instance_geometry);
 						mesh_visible = true;
@@ -3291,7 +3589,9 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 }
 
 void RendererSceneCull::_scene_particles_set_view_axis(RID p_particles, const Vector3 &p_axis, const Vector3 &p_up_axis) {
-	RSG::particles_storage->particles_set_view_axis(p_particles, p_axis, p_up_axis);
+	if (!RSG::particles_storage->particles_is_external(p_particles)) {
+		RSG::particles_storage->particles_set_view_axis(p_particles, p_axis, p_up_axis);
+	}
 }
 
 void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_camera_data, const Ref<RenderSceneBuffers> &p_render_buffers, RID p_environment, RID p_force_camera_attributes, RID p_compositor, uint32_t p_visible_layers, RID p_scenario, RID p_viewport, RID p_shadow_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, float p_window_output_max_value, bool p_using_shadows, RenderingServerTypes::RenderInfo *r_render_info) {
@@ -3706,7 +4006,15 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	scene_render->render_scene(p_render_buffers, p_camera_data, prev_camera_data, scene_cull_result.geometry_instances, scene_cull_result.light_instances, scene_cull_result.reflections, scene_cull_result.voxel_gi_instances, scene_cull_result.decals, scene_cull_result.lightmaps, scene_cull_result.fog_volumes, p_environment, camera_attributes, p_compositor, p_shadow_atlas, occluders_tex, p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas, p_reflection_probe, p_reflection_probe_pass, p_screen_mesh_lod_threshold, render_shadow_data, max_shadows_used, render_sdfgi_data, cull.sdfgi.region_count, p_window_output_max_value, &sdfgi_update_data, r_render_info);
 
 	if (p_viewport.is_valid()) {
-		RSG::viewport->viewport_set_prev_camera_data(p_viewport, p_camera_data);
+		RendererViewport::Viewport::CameraSourceToken source_token;
+		source_token.view_id = p_camera_data->source_view_id;
+		source_token.view_epoch = p_camera_data->source_view_epoch;
+		source_token.capture_ordinal = p_camera_data->source_capture_ordinal;
+		if (RSG::viewport->viewport_get_presentation_key(p_viewport).view_id != 0) {
+			RSG::viewport->viewport_stage_camera_data(p_viewport, p_camera_data, source_token);
+		} else {
+			RSG::viewport->viewport_set_prev_camera_data(p_viewport, p_camera_data);
+		}
 	}
 
 	for (uint32_t i = 0; i < max_shadows_used; i++) {
@@ -4103,7 +4411,9 @@ void RendererSceneCull::render_probes() {
 			}
 
 			ERR_FAIL_NULL(geom->geometry_instance);
-			scene_cull_result.geometry_instances.push_back(geom->geometry_instance);
+			if (ins->base_type != RSE::INSTANCE_PARTICLES || !RSG::particles_storage->particles_is_external_scene_only(ins->base)) {
+				scene_cull_result.geometry_instances.push_back(geom->geometry_instance);
+			}
 		}
 
 		scene_render->voxel_gi_update(probe->probe_instance, update_lights, probe->light_instances, scene_cull_result.geometry_instances);
@@ -4151,29 +4461,35 @@ void RendererSceneCull::render_particle_colliders() {
 				scene_cull_result.geometry_instances.push_back(geom->geometry_instance);
 			}
 
-			scene_render->render_particle_collider_heightfield(hfpc->base, hfpc->transform, scene_cull_result.geometry_instances);
+			const InstanceParticlesCollisionData *collision = static_cast<const InstanceParticlesCollisionData *>(hfpc->base_data);
+			scene_render->render_particle_collider_heightfield(collision->instance, hfpc->transform, scene_cull_result.geometry_instances);
 		}
 		heightfield_particle_colliders_update_list.remove(heightfield_particle_colliders_update_list.begin());
 	}
 }
 
 void RendererSceneCull::_update_dirty_instance(Instance *p_instance) const {
+	// The update item is removed before _update_instance; keep reentrant fact
+	// reads unavailable until all native transform/bounds propagation completes.
+	p_instance->native_scene_committed = false;
 	if (p_instance->update_aabb) {
 		_update_instance_aabb(p_instance);
 	}
 
 	if (p_instance->update_dependencies) {
+		const bool external_particles = p_instance->base_type == RSE::INSTANCE_PARTICLES &&
+				RSG::particles_storage->particles_is_external(p_instance->base);
 		p_instance->dependency_tracker.update_begin();
 
 		if (p_instance->base.is_valid()) {
 			RSG::utilities->base_update_dependency(p_instance->base, &p_instance->dependency_tracker);
 		}
 
-		if (p_instance->material_override.is_valid()) {
+		if (!external_particles && p_instance->material_override.is_valid()) {
 			RSG::material_storage->material_update_dependency(p_instance->material_override, &p_instance->dependency_tracker);
 		}
 
-		if (p_instance->material_overlay.is_valid()) {
+		if (!external_particles && p_instance->material_overlay.is_valid()) {
 			RSG::material_storage->material_update_dependency(p_instance->material_overlay, &p_instance->dependency_tracker);
 		}
 
@@ -4186,7 +4502,7 @@ void RendererSceneCull::_update_dirty_instance(Instance *p_instance) const {
 			_instance_update_mesh_instance(p_instance);
 		}
 
-		if (p_instance->base_type == RSE::INSTANCE_PARTICLES) {
+		if (p_instance->base_type == RSE::INSTANCE_PARTICLES && !external_particles) {
 			// update the process material dependency
 
 			RID particle_material = RSG::particles_storage->particles_get_process_material(p_instance->base);
@@ -4198,7 +4514,9 @@ void RendererSceneCull::_update_dirty_instance(Instance *p_instance) const {
 		if ((1 << p_instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) {
 			InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(p_instance->base_data);
 
-			bool can_cast_shadows = true;
+			const bool scene_only_particles = p_instance->base_type == RSE::INSTANCE_PARTICLES &&
+					RSG::particles_storage->particles_is_external_scene_only(p_instance->base);
+			bool can_cast_shadows = !scene_only_particles;
 			bool is_animated = false;
 
 			p_instance->instance_uniforms.materials_start();
@@ -4207,7 +4525,19 @@ void RendererSceneCull::_update_dirty_instance(Instance *p_instance) const {
 				can_cast_shadows = false;
 			}
 
-			if (p_instance->material_override.is_valid()) {
+			if (external_particles) {
+				RendererRD::ParticlesStorage::ExternalSceneMaterialFacts facts;
+				auto *storage = RendererRD::ParticlesStorage::get_singleton();
+				const Error observed = storage && storage == RSG::particles_storage ? storage->particles_external_scene_material_facts(p_instance->base, facts,
+						+[](void *p_context, RID p_mesh, RID p_material) {
+							Instance *instance = static_cast<Instance *>(p_context);
+							RSG::utilities->base_update_dependency(p_mesh, &instance->dependency_tracker);
+							RSG::material_storage->material_update_dependency(p_material, &instance->dependency_tracker);
+							instance->instance_uniforms.materials_append(p_material);
+						}, p_instance) : ERR_UNAVAILABLE;
+				can_cast_shadows = can_cast_shadows && observed == OK && facts.casts_shadows;
+				is_animated = observed == OK && facts.animated;
+			} else if (p_instance->material_override.is_valid()) {
 				if (!RSG::material_storage->material_casts_shadows(p_instance->material_override)) {
 					can_cast_shadows = false;
 				}
@@ -4280,7 +4610,7 @@ void RendererSceneCull::_update_dirty_instance(Instance *p_instance) const {
 				} else if (p_instance->base_type == RSE::INSTANCE_PARTICLES) {
 					bool cast_shadows = false;
 
-					int dp = RSG::particles_storage->particles_get_draw_passes(p_instance->base);
+					int dp = scene_only_particles ? 0 : RSG::particles_storage->particles_get_draw_passes(p_instance->base);
 
 					for (int i = 0; i < dp; i++) {
 						RID mesh = RSG::particles_storage->particles_get_draw_pass_mesh(p_instance->base, i);
@@ -4316,7 +4646,7 @@ void RendererSceneCull::_update_dirty_instance(Instance *p_instance) const {
 				}
 			}
 
-			if (p_instance->material_overlay.is_valid()) {
+			if (!external_particles && p_instance->material_overlay.is_valid()) {
 				can_cast_shadows = can_cast_shadows && RSG::material_storage->material_casts_shadows(p_instance->material_overlay);
 				is_animated = is_animated || RSG::material_storage->material_is_animated(p_instance->material_overlay);
 				p_instance->instance_uniforms.materials_append(p_instance->material_overlay);
@@ -4359,6 +4689,7 @@ void RendererSceneCull::_update_dirty_instance(Instance *p_instance) const {
 	p_instance->teleported = false;
 	p_instance->update_aabb = false;
 	p_instance->update_dependencies = false;
+	p_instance->native_scene_committed = !p_instance->update_item.in_list();
 }
 
 void RendererSceneCull::update_dirty_instances() const {

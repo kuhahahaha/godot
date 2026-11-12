@@ -30,14 +30,20 @@
 
 #include "rendering_server_default.h"
 
+#include "core/extension/gdextension_library_exit_guard.h"
+#include "core/math/math_funcs.h"
 #include "core/object/callable_mp.h"
 #include "core/os/os.h"
 #include "core/profiling/profiling.h"
 #include "servers/display/display_server.h"
+#include "servers/rendering/render_capture_test_hooks.h"
 #include "servers/rendering/renderer_canvas_cull.h"
 #include "servers/rendering/renderer_scene_cull.h"
 #include "servers/rendering/rendering_device.h"
+#include "servers/rendering/renderer_rd/storage_rd/scene_connect_config.h"
 #include "servers/rendering/rendering_server_globals.h"
+
+#include "modules/modules_enabled.gen.h"
 
 #ifndef XR_DISABLED
 #include "servers/xr/xr_server.h"
@@ -46,6 +52,90 @@
 // careful, these may run in different threads than the rendering server
 
 int RenderingServerDefault::changes = 0;
+
+/* EXTERNAL PARTICLE OUTPUT */
+
+namespace {
+Dictionary external_output_wrong_thread() {
+	Dictionary result;
+	result["error"] = ERR_UNAVAILABLE;
+	result["detail"] = StringName("render_thread_required");
+	return result;
+}
+} // namespace
+
+Dictionary RenderingServerDefault::particles_external_create(const Dictionary &p_config) {
+	if (!is_on_render_thread()) {
+		return external_output_wrong_thread();
+	}
+	return RSG::particles_storage->particles_external_create(p_config);
+}
+
+Dictionary RenderingServerDefault::particles_external_acquire(RID p_particles, const Dictionary &p_request) {
+	if (!is_on_render_thread()) {
+		return external_output_wrong_thread();
+	}
+	return RSG::particles_storage->particles_external_acquire(p_particles, p_request);
+}
+
+Dictionary RenderingServerDefault::particles_external_seal(RID p_particles, const PackedByteArray &p_lease_token, const Dictionary &p_seal) {
+	if (!is_on_render_thread()) {
+		return external_output_wrong_thread();
+	}
+	return RSG::particles_storage->particles_external_seal(p_particles, p_lease_token, p_seal);
+}
+
+Error RenderingServerDefault::particles_external_cancel(RID p_particles, const PackedByteArray &p_lease_token) {
+	if (!is_on_render_thread()) {
+		return ERR_UNAVAILABLE;
+	}
+	return RSG::particles_storage->particles_external_cancel(p_particles, p_lease_token);
+}
+
+Error RenderingServerDefault::particles_external_withdraw(RID p_particles, const PackedByteArray &p_generation) {
+	if (!is_on_render_thread()) {
+		return ERR_UNAVAILABLE;
+	}
+	return RSG::particles_storage->particles_external_withdraw(p_particles, p_generation);
+}
+
+Dictionary RenderingServerDefault::particles_scene_connect(RID p_receiver_instance, const Dictionary &p_config) {
+	Dictionary result;
+	result["error"] = ERR_UNAVAILABLE;
+	result["detail"] = StringName("WaitingPhase");
+	if (!is_on_render_thread()) return result;
+	RendererRD::SceneConnectConfig config;
+	StringName detail;
+	if (!RendererRD::SceneConnectConfig::parse(p_config, config, detail)) {
+		result["error"] = ERR_INVALID_PARAMETER;
+		result["detail"] = detail;
+		return result;
+	}
+	GDExtensionSceneOpaque32V1 connection{};
+	uint64_t epoch = 0;
+	const Error error = GDExtensionDeviceExit::Registry::scene_connect_current(p_receiver_instance, config, connection, epoch, detail);
+	result["error"] = error;
+	result["detail"] = detail;
+	if (error != OK) return result;
+	PackedByteArray token, encoded_epoch;
+	token.resize(sizeof(connection.bytes));
+	memcpy(token.ptrw(), connection.bytes, sizeof(connection.bytes));
+	encoded_epoch.resize(8);
+	for (uint32_t i = 0; i < 8; ++i) encoded_epoch.set(i, uint8_t(epoch >> (8 * i)));
+	result["connection"] = token;
+	result["connection_epoch"] = encoded_epoch;
+	result["state"] = StringName("Connected");
+	return result;
+}
+
+
+
+Dictionary RenderingServerDefault::particles_external_poll(RID p_particles, const PackedByteArray &p_generation) {
+	if (!is_on_render_thread()) {
+		return external_output_wrong_thread();
+	}
+	return RSG::particles_storage->particles_external_poll(p_particles, p_generation);
+}
 
 /* FREE */
 
@@ -74,6 +164,35 @@ void RenderingServerDefault::request_frame_drawn_callback(const Callable &p_call
 }
 
 void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
+	if (RenderingDevice *device = RenderingDevice::get_singleton()) {
+		if (device->is_main_instance && device->native_disposal_active.load(std::memory_order_acquire) && device->native_disposal_continuation.production_owner && device->frame_issue_error.load() == OK && device->frame_wait_error.load() == OK && !device->frame_wait_native_code_valid.load()) {
+			// Only the original FIFO owner may spend its bounded continuation.
+			// Keep renderer state and drawn callbacks pending until that owner
+			// returns the frame; a real issue/wait error keeps its existing path.
+			redraw_request();
+			return;
+		}
+		if (device->is_main_instance && device->qualification_frame_advance_pending.load() && !device->native_disposal_active.load(std::memory_order_acquire)) {
+			// Resume this exact recording slot before advancing renderer state.
+			// Existing native failures must not be cleared by a fresh wait attempt.
+			Error resume_error = device->frame_issue_error.load();
+			if (resume_error == OK) {
+				resume_error = device->frame_wait_error.load();
+			}
+			if (resume_error == OK) {
+				resume_error = device->frame_wait_native_code_valid.load() ? FAILED : device->_begin_frame(true);
+			}
+			if (resume_error != OK) {
+				redraw_request();
+				if (resume_error == ERR_BUSY && device->frame_issue_error.load() == OK && device->frame_wait_error.load() == OK && !device->frame_wait_native_code_valid.load()) {
+					return; // Native source contention retains callbacks and redraw demand.
+				}
+				ERR_FAIL_MSG(vformat("Failed to resume pending rendering frame: error=%d issue=%d wait=%d native_code_valid=%d native_code=%d.",
+						int(resume_error), int(device->frame_issue_error.load()), int(device->frame_wait_error.load()),
+						int(device->frame_wait_native_code_valid.load()), device->frame_wait_native_code.load()));
+			}
+		}
+	}
 	GodotProfileZoneGroupedFirst(_profile_zone, "rasterizer->begin_frame");
 	RSG::rasterizer->begin_frame(frame_step);
 
@@ -96,7 +215,13 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 	RSG::scene->update(); //update scenes stuff before updating instances
 	GodotProfileZoneGrouped(_profile_zone, "canvas->update");
 	RSG::canvas->update();
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	RenderCaptureTestHooks::observe_phase(RSG::rasterizer->get_frame_number(), false);
+#endif
 
+	if (RenderingDevice *device = RenderingDevice::get_singleton()) {
+		GDExtensionDeviceExit::Registry::get_singleton().scene_phase_dispatch(*device);
+	}
 	frame_setup_time = double(OS::get_singleton()->get_ticks_usec() - time_usec) / 1000.0;
 
 	GodotProfileZoneGrouped(_profile_zone, "particles_storage->update_particles");
@@ -107,9 +232,17 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 
 	GodotProfileZoneGrouped(_profile_zone, "viewport->draw_viewports");
 	RSG::viewport->draw_viewports(p_swap_buffers);
+	// Deliver retained camera sources only after every viewport render stack has
+	// returned. A protected extension entry may close its original viewport.
+	RSG::viewport->drain_camera_source_observers();
 
 	GodotProfileZoneGrouped(_profile_zone, "canvas_render->update");
 	RSG::canvas_render->update();
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	RenderCaptureTestHooks::observe_phase(RSG::rasterizer->get_frame_number(), true);
+	// Cleanup is independent of evidence admission, poison and event bounds.
+	RenderCaptureTestHooks::retirement_pump();
+#endif
 
 	GodotProfileZoneGrouped(_profile_zone, "rasterizer->end_frame");
 	RSG::rasterizer->end_frame(p_swap_buffers);
@@ -271,6 +404,13 @@ void RenderingServerDefault::_finish() {
 	memdelete(RSG::rasterizer);
 	memdelete(RSG::scene);
 	memdelete(RSG::camera_attributes);
+	if (create_thread) {
+		// Complete native disposal on the assigned rendering thread before main destroys the Object.
+		RenderingDevice *rd = RenderingDevice::get_singleton();
+		if (rd && rd->is_main_instance) {
+			rd->_finalize_on_rendering_server_thread();
+		}
+	}
 }
 
 void RenderingServerDefault::init() {
@@ -286,9 +426,11 @@ void RenderingServerDefault::init() {
 		server_thread = Thread::MAIN_ID;
 		_init();
 	}
+	GDExtensionDeviceExit::Registry::get_singleton().service_started(1u << 5);
 }
 
 void RenderingServerDefault::finish() {
+	GDExtensionDeviceExit::require_close_success(GDExtensionDeviceExit::Registry::get_singleton().service_stopping(1u << 5), GDExtensionDeviceExit::CloseRoute::LAST_REF);
 	if (create_thread) {
 		command_queue.push(this, &RenderingServerDefault::_finish);
 		command_queue.push(this, &RenderingServerDefault::_thread_exit);
@@ -442,6 +584,7 @@ void RenderingServerDefault::sync() {
 
 void RenderingServerDefault::draw(bool p_present, double frame_step) {
 	ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "Manually triggering the draw function from the RenderingServer can only be done on the main thread. Call this function from the main thread or use call_deferred().");
+	_update_particles_screen_refresh_rate();
 	// Needs to be done before changes is reset to 0, to not force the editor to redraw.
 	RS::get_singleton()->emit_signal(SNAME("frame_pre_draw"));
 	changes = 0;
@@ -449,6 +592,34 @@ void RenderingServerDefault::draw(bool p_present, double frame_step) {
 		command_queue.push(this, &RenderingServerDefault::_draw, p_present, frame_step);
 	} else {
 		_draw(p_present, frame_step);
+	}
+}
+
+void RenderingServerDefault::_update_particles_screen_refresh_rate() {
+	const uint64_t now_usec = OS::get_singleton()->get_ticks_usec();
+	if (particles_refresh_rate_initialized && now_usec - particles_refresh_rate_last_update_usec < 1000000) {
+		return;
+	}
+
+	float refresh_rate = 60.0f;
+	if (DisplayServer *display_server = DisplayServer::get_singleton()) {
+		refresh_rate = display_server->screen_get_refresh_rate(DisplayServerEnums::SCREEN_OF_MAIN_WINDOW);
+	}
+	if (!Math::is_finite(refresh_rate) || refresh_rate < 1.0f || refresh_rate > 1000.0f) {
+		refresh_rate = 60.0f;
+	}
+
+	const bool refresh_rate_changed = !particles_refresh_rate_initialized || !Math::is_equal_approx(particles_screen_refresh_rate, refresh_rate);
+	particles_refresh_rate_initialized = true;
+	particles_screen_refresh_rate = refresh_rate;
+	particles_refresh_rate_last_update_usec = now_usec;
+	if (!refresh_rate_changed) {
+		return;
+	}
+	if (create_thread) {
+		command_queue.push(RSG::particles_storage, &RendererParticlesStorage::particles_set_screen_refresh_rate, refresh_rate);
+	} else {
+		RSG::particles_storage->particles_set_screen_refresh_rate(refresh_rate);
 	}
 }
 
@@ -472,4 +643,34 @@ RenderingServerDefault::RenderingServerDefault(bool p_create_thread) {
 }
 
 RenderingServerDefault::~RenderingServerDefault() {
+}
+
+void RenderingServerDefault::_qualification_rt_dispatch(uint64_t bridge, uint64_t serial) {
+	GDExtensionDeviceExit::Registry::get_singleton().qualification_rt_dispatch(bridge, serial);
+}
+bool RenderingServerDefault::_try_qualification_rt_dispatch(uint64_t bridge, uint64_t serial) {
+	if (Thread::get_caller_id() == server_thread) {
+		_qualification_rt_dispatch(bridge, serial);
+		return true;
+	}
+	return command_queue.try_push_bounded(65536, this, &RenderingServerDefault::_qualification_rt_dispatch, bridge, serial);
+}
+void RenderingServerDefault::_qualification_service(uint64_t bridge, uint64_t child, uint32_t kind, uint32_t passes, uint32_t micros) {
+	GDExtensionDeviceExit::Registry::get_singleton().qualification_service(bridge, child, kind, passes, micros);
+}
+bool RenderingServerDefault::_try_qualification_service(uint64_t bridge, uint64_t child, uint32_t kind, uint32_t passes, uint32_t micros) {
+	if (Thread::get_caller_id() == server_thread) {
+		_qualification_service(bridge, child, kind, passes, micros);
+		return true;
+	}
+	return command_queue.try_push_bounded(65536, this, &RenderingServerDefault::_qualification_service, bridge, child, kind, passes, micros);
+}
+
+void RenderingServerDefault::_production_control_dispatch(uint64_t registry, uint64_t attachment, uint64_t request, uint64_t control) {
+	GDExtensionDeviceExit::Registry::get_singleton().production_control_dispatch(registry, attachment, request, control);
+}
+bool RenderingServerDefault::_try_production_control_dispatch(uint64_t registry, uint64_t attachment, uint64_t request, uint64_t control) {
+	// Always join the original FIFO, including a call already on the RT.
+	// A single attempt cannot requeue itself while flush_all is consuming it.
+	return command_queue.try_push_bounded(65536, this, &RenderingServerDefault::_production_control_dispatch, registry, attachment, request, control);
 }

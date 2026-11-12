@@ -87,8 +87,20 @@ struct VersatileResourceTemplate {
 	}
 };
 
+class RenderingDevice;
+class TestRecordSourceAccess;
 class RenderingDeviceDriver : public RenderingDeviceCommons {
 	GDSOFTCLASS(RenderingDeviceDriver, RenderingDeviceCommons);
+	friend class RenderingDevice;
+#ifdef TESTS_ENABLED
+	friend class TestVulkanCompletionAccess;
+#endif
+	RenderingDevice *session_owner = nullptr;
+
+protected:
+	void notify_session_device_lost() const;
+	void session_loss_identity(uint64_t &, uint64_t &) const;
+	static void notify_session_device_lost(uint64_t, uint64_t);
 
 public:
 	struct ID {
@@ -142,6 +154,125 @@ public:
 	DEFINE_ID(Semaphore);
 	DEFINE_ID(AccelerationStructure);
 	DEFINE_ID(RaytracingPipeline);
+
+	// Typed native completion facts. These records deliberately retain the
+	// backend's raw status and serial; an ordinary Error cannot prove GPU
+	// completion or preserve an issued-but-unknown submission.
+	enum class IssueFact : uint8_t {
+		NotIssued,
+		KnownAccepted,
+		IssuedUnknown,
+	};
+
+	enum class CompletionCapability : uint8_t {
+		Disabled,
+		Fence,
+		CommandBuffer,
+	};
+
+	struct NativeCallFact {
+		uint64_t serial = 0;
+		IssueFact issue = IssueFact::NotIssued;
+		int64_t native_code = 0;
+		Error error = OK;
+		CompletionCapability completion = CompletionCapability::Disabled;
+		uint64_t completion_serial = 0;
+		bool present = false;
+		uint32_t queue_index = 0;
+		bool source_owner_returned = false;
+		bool frame_observer_owned = false;
+		// WSI call diagnostics have no GPU-submission completion obligation.
+		bool presentation_only = false;
+	};
+
+	struct QueueCallReport {
+		// Actual new native issue calls in this API invocation; transferred
+		// observations of older wrapper submissions are deliberately excluded.
+		uint32_t native_issue_count = 0;
+		Vector<NativeCallFact> calls;
+		Error error = OK;
+		bool issued = false;
+		bool present_attempted = false;
+		uint64_t submission_serial = 0;
+		int64_t native_code = 0;
+	};
+
+	struct FencePollResult {
+		bool completed = false;
+		bool native_error = false;
+		uint64_t completed_serial = 0;
+		int64_t native_code = 0;
+		// Only an original same-native source may refine an uncertain issue.
+		// A quiet fence or a matching tail serial supplies no such authority.
+		IssueFact resolved_issue = IssueFact::NotIssued;
+		bool matches(uint64_t p_expected_serial) const {
+			return completed && !native_error && p_expected_serial != 0 && completed_serial == p_expected_serial;
+		}
+	};
+
+private:
+	friend class RenderingDevice;
+#ifdef TESTS_ENABLED
+	friend class TestRecordSourceAccess;
+#endif
+	// Range is constructed only by the original admitted core attachment.
+	struct NativeFactWriteRange {
+		NativeCallFact *data = nullptr;
+		uint32_t capacity = 0;
+		uint32_t written = 0;
+		Error error = OK;
+		bool issued = false;
+		bool coverage_lost = false;
+		uint64_t submission_serial = 0;
+		int64_t native_code = 0;
+	};
+	static thread_local NativeFactWriteRange *active_native_fact_range;
+	Error command_queue_execute_recorded(CommandQueueID, VectorView<SemaphoreID>, VectorView<CommandBufferID>, VectorView<SemaphoreID>, FenceID, NativeFactWriteRange &);
+
+protected:
+	// Claims precede the actual call. The backend fills that same index after
+	// its raw return; neither a Vector copy nor a global last report is involved.
+	bool bounded_native_capture_active() const { return active_native_fact_range != nullptr; }
+	bool native_fact_capacity_available() const { return active_native_fact_range && active_native_fact_range->data && active_native_fact_range->written < active_native_fact_range->capacity; }
+	bool claim_native_fact(uint32_t &index) {
+		auto *range = active_native_fact_range;
+		if (!range || !range->data || range->written == range->capacity) {
+			return false;
+		}
+		index = range->written++;
+		return true;
+	}
+	void finish_native_fact(uint32_t index, const NativeCallFact &fact, uint64_t submission_serial = 0) {
+		auto *range = active_native_fact_range;
+		if (!range || index >= range->written) {
+			if (range) {
+				range->coverage_lost = true;
+			}
+			return;
+		}
+		range->data[index] = fact;
+		range->issued = true;
+		range->error = fact.error;
+		range->submission_serial = submission_serial;
+		range->native_code = fact.native_code;
+	}
+	mutable QueueCallReport last_queue_call_report;
+	mutable Mutex queue_call_report_mutex;
+	static thread_local QueueCallReport *active_queue_call_report;
+	void reset_queue_call_report() const {
+		MutexLock lock(queue_call_report_mutex);
+		last_queue_call_report = QueueCallReport();
+	}
+	void record_queue_call_report(const QueueCallReport &p_report) const {
+		{
+			MutexLock lock(queue_call_report_mutex);
+			last_queue_call_report = p_report;
+		}
+		if (active_queue_call_report != nullptr) {
+			*active_queue_call_report = p_report;
+		}
+	}
+	QueueCallReport *get_active_queue_call_report() const { return active_queue_call_report; }
 
 public:
 	/*****************/
@@ -198,6 +329,12 @@ public:
 	virtual void buffer_free(BufferID p_buffer) = 0;
 	virtual uint64_t buffer_get_allocation_size(BufferID p_buffer) = 0;
 	virtual uint8_t *buffer_map(BufferID p_buffer) = 0;
+	// Observe the native outcome of this same map operation when the backend
+	// exposes one. Zero carries no raw failure for pointer-only backends.
+	virtual uint8_t *buffer_map_observed(BufferID p_buffer, int64_t &r_native_code) {
+		r_native_code = 0;
+		return buffer_map(p_buffer);
+	}
 	virtual void buffer_unmap(BufferID p_buffer) = 0;
 	virtual uint8_t *buffer_persistent_map_advance(BufferID p_buffer, uint64_t p_frames_drawn) = 0;
 	virtual uint64_t buffer_get_dynamic_offsets(Span<BufferID> p_buffers) = 0;
@@ -278,6 +415,21 @@ public:
 		uint64_t row_pitch = 0;
 	};
 
+	struct DepthAllocationQuote {
+		enum class Policy : uint8_t { Unavailable,
+			MetalHeapPool,
+			MetalHeapDedicated };
+		Policy policy = Policy::Unavailable;
+		uint64_t native_requirement = 0;
+		uint64_t owner_reservation = 0;
+		uint64_t alignment = 0;
+	};
+	// Optional original backend capability. No native allocation or reservation
+	// is performed here; unsupported paths cannot fabricate a finite bound.
+	virtual Error depth_allocation_quote(uint32_t p_width, uint32_t p_height, DepthAllocationQuote &r_quote) {
+		r_quote = {};
+		return ERR_UNAVAILABLE;
+	}
 	virtual TextureID texture_create(const TextureFormat &p_format, const TextureView &p_view) = 0;
 	virtual TextureID texture_create_from_extension(uint64_t p_native_texture, TextureType p_type, DataFormat p_format, uint32_t p_array_layers, bool p_depth_stencil, uint32_t p_mipmaps) = 0;
 	// texture_create_shared_*() can only use original, non-view textures as original. RenderingDevice is responsible for ensuring that.
@@ -410,6 +562,93 @@ public:
 
 	virtual FenceID fence_create() = 0;
 	virtual Error fence_wait(FenceID p_fence) = 0;
+	// Non-blocking observation and independent recycle. A driver that cannot
+	// expose these facts fails closed instead of laundering completion through
+	// the legacy blocking wait/Error API.
+	virtual FencePollResult fence_poll(FenceID p_fence, uint64_t p_expected_submission_serial);
+	// Exact original native-call observations, independent of a later tail fence.
+	// Backends without this original mapping refuse qualification before append.
+	// Transfer original hidden-copy observation ownership into the current Frame.
+	// No fallback may invoke end_segment's legacy wait on a qualification pass.
+	virtual Error qualification_prepare_segment(QueueCallReport &r_report, bool p_nonblocking = true) {
+		r_report = {};
+		return ERR_UNAVAILABLE;
+	}
+	enum class NativeIssueKind : uint8_t { MAIN_SLOT,
+		TRANSFER_WORKER,
+		PREPARE_SEGMENT };
+	// An atomic call's new native-issue bound, not retained fact capacity. A
+	// supported no-issue preparation returns true with zero, not unsupported.
+	struct NativeSourceAdmission {
+		void *owner = nullptr;
+		Error (*admit)(void *, const uint64_t *, uint32_t, bool) = nullptr;
+		void (*cancel)(void *, const uint64_t *, uint32_t, bool) = nullptr;
+		Error error = OK;
+		bool (*capture_hidden)(void *, const QueueCallReport &) = nullptr;
+		bool (*can_block)(void *) = nullptr;
+	};
+	class NativeSourceAdmissionScope {
+		NativeSourceAdmission *previous;
+
+	public:
+		explicit NativeSourceAdmissionScope(NativeSourceAdmission &p_admission) : previous(active_native_source_admission) { active_native_source_admission = &p_admission; }
+		~NativeSourceAdmissionScope() { active_native_source_admission = previous; }
+	};
+	static thread_local NativeSourceAdmission *active_native_source_admission;
+	static Error admit_native_sources(const uint64_t *p_serials, uint32_t p_count, bool p_copy = false) {
+		if (!active_native_source_admission) {
+			return OK;
+		}
+		auto &admission = *active_native_source_admission;
+		return admission.error = admission.admit(admission.owner, p_serials, p_count, p_copy);
+	}
+	static Error admit_native_source(uint64_t p_serial, bool p_copy = false) { return admit_native_sources(&p_serial, 1, p_copy); }
+	static void cancel_native_sources(const uint64_t *p_serials, uint32_t p_count, bool p_copy = false) {
+		if (active_native_source_admission) {
+			active_native_source_admission->cancel(active_native_source_admission->owner, p_serials, p_count, p_copy);
+		}
+	}
+
+	static bool native_source_can_block() {
+		auto *scope = active_native_source_admission;
+		return !scope || !scope->can_block || scope->can_block(scope->owner);
+	}
+	static bool capture_hidden_native_source(const QueueCallReport &p_report) {
+		auto *scope = active_native_source_admission;
+		return scope && scope->capture_hidden && scope->capture_hidden(scope->owner, p_report);
+	}
+
+	virtual bool native_issue_bound(NativeIssueKind p_kind, uint32_t p_commands, uint32_t &r_bound) const { return false; }
+	// Internal original-owner accounting profile. Unsupported drivers retain
+	// their existing conservative qualification admission, without a fallback.
+	virtual bool qualification_incremental_accounting_supported() const { return false; }
+	virtual bool qualification_incremental_fact_bound(uint64_t p_graphs, uint32_t p_current, uint32_t &r_main, uint32_t &r_copy) const { return false; }
+	virtual Error qualification_worker_source_quote(CommandBufferID p_command, QueueCallReport &r_prefix, uint32_t &r_future) const { return ERR_UNAVAILABLE; }
+	virtual uint32_t qualification_native_call_bound(uint32_t p_slots) const { return 0; }
+	// Original RD profile: main slots may wait and signal; transfer-worker
+	// submissions never wait. Backends without a tighter proof keep their old bound.
+	virtual uint32_t qualification_native_call_bound_for_profile(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames) const {
+		if (!p_frames || p_frames > p_main_slots || p_worker_slots > UINT32_MAX - p_main_slots) {
+			return 0;
+		}
+		return qualification_native_call_bound(p_main_slots + p_worker_slots);
+	}
+
+	virtual bool native_call_observation_supported() const { return false; }
+	virtual FencePollResult native_call_poll(uint64_t p_native_serial) { return {}; }
+	virtual FencePollResult native_call_wait(uint64_t p_native_serial) { return {}; }
+	virtual Error native_call_recycle(uint64_t p_native_serial) { return ERR_UNAVAILABLE; }
+	virtual Error native_call_recycle_wait(uint64_t p_native_serial) { return native_call_recycle(p_native_serial); }
+	virtual Error native_call_retain(uint64_t p_native_serial) { return ERR_UNAVAILABLE; }
+	virtual Error native_call_release(uint64_t p_native_serial) { return ERR_UNAVAILABLE; }
+	// Blocking observation only; recycling remains a separate, checked step.
+	virtual FencePollResult fence_wait_observed(FenceID p_fence, uint64_t p_expected_submission_serial);
+	virtual Error fence_recycle(FenceID p_fence, uint64_t p_completed_serial);
+	// Ordinary blocking transfer retirement may wait for backend bookkeeping;
+	// bounded typed maintenance continues to call fence_recycle().
+	virtual Error fence_recycle_wait(FenceID p_fence, uint64_t p_completed_serial) { return fence_recycle(p_fence, p_completed_serial); }
+	virtual QueueCallReport get_last_queue_call_report() const;
+	Error command_queue_execute_and_present_observed(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<CommandBufferID> p_cmd_buffers, VectorView<SemaphoreID> p_cmd_semaphores, FenceID p_cmd_fence, VectorView<SwapChainID> p_swap_chains, QueueCallReport &r_report);
 	virtual void fence_free(FenceID p_fence) = 0;
 
 	/********************/
@@ -518,6 +757,8 @@ public:
 	virtual ShaderID shader_create_from_container(const Ref<RenderingShaderContainer> &p_shader_container, const Vector<ImmutableSampler> &p_immutable_samplers) = 0;
 	// Only meaningful if API_TRAIT_SHADER_CHANGE_INVALIDATION is SHADER_CHANGE_INVALIDATION_ALL_OR_NONE_ACCORDING_TO_LAYOUT_HASH.
 	virtual uint32_t shader_get_layout_hash(ShaderID p_shader) { return 0; }
+	// Must not wait for any shader-owned callback or destroy the shader.
+	virtual bool shader_retire_ready_nonblocking(ShaderID p_shader) const { return false; }
 	virtual void shader_free(ShaderID p_shader) = 0;
 	virtual void shader_destroy_modules(ShaderID p_shader) = 0;
 
@@ -542,6 +783,16 @@ public:
 	virtual UniformSetID uniform_set_create(VectorView<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index) = 0;
 	virtual void linear_uniform_set_pools_reset(int p_linear_pool_index) {}
 	virtual void uniform_set_free(UniformSetID p_uniform_set) = 0;
+	// An internal owner must retain an unknown descriptor and must not replay
+	// its return. This is not a GPU-completion or external authority receipt.
+	enum class QualificationDescriptorReturnState : uint32_t { Unavailable = 0,
+		Returned = 1,
+		Unknown = 2 };
+	struct QualificationDescriptorReturn {
+		QualificationDescriptorReturnState state = QualificationDescriptorReturnState::Unavailable;
+		int32_t native_code = 0;
+	};
+	virtual QualificationDescriptorReturn qualification_uniform_set_free(UniformSetID) { return {}; }
 	virtual bool uniform_sets_have_linear_pools() const { return false; }
 	virtual uint32_t uniform_sets_get_dynamic_offsets(VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count) const = 0;
 
@@ -860,6 +1111,10 @@ public:
 
 	virtual void begin_segment(uint32_t p_frame_index, uint32_t p_frames_drawn) = 0;
 	virtual void end_segment() = 0;
+	virtual Error end_segment_checked(bool p_nonblocking = false) {
+		end_segment();
+		return OK;
+	}
 
 	/**************/
 	/**** MISC ****/
@@ -967,6 +1222,9 @@ public:
 	/******************/
 
 	virtual ~RenderingDeviceDriver();
+	// Additive internal virtual: full affected backend rebuild is required.
+	// No presentation producer is admitted by this source profile.
+	virtual uint32_t record_native_call_bound(uint32_t p_slots) const { return 0; }
 };
 
 using RDD = RenderingDeviceDriver;

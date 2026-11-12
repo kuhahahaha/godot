@@ -1,0 +1,277 @@
+{
+  "scope": "formal HistoryR3/Method/Height/Scene/capacity + genuine paid Scene executor + preserved current particle fixes + test fixture producer + original mesh transfer settle and selection diagnostics + R3 const getter/original worker error preservation + R4 same original worker pre-enrollment completion and bounded warmup + R5 original metadata/append diagnostic snapshots only + CPU metadata classification in ordinary append RD guard + selectable original prefix withdrawal and physical return fixture + actual qualification child source and second-reader public import + pre-upload reader reserve and original escrow diagnostics + original Mobile opaque pipeline pre-list and Core same-capture staged handoff + fixture-only paid pipeline preparation and material layout observations + fixture-only original material Instance192 readiness before and after warmup + TESTS-only Mobile pre-list pipeline and prospective return phase observations + fixture-only original triangle explicit normals and color attributes + TESTS-only read-only measurement of original prospective geometry/material count + original quote and Acquire funded at measured 106 material resources + TESTS-only original Mobile resource kind and failure observation + original live renderer uniform-set cache observers through material preparation and return + TESTS-only actual Mobile texture transfer readiness observation + completed ordinary texture operation observation in native output material inventory + TESTS-only classification of the original framebuffer/resource preflight refusal + original Instance192 material held dependencies and actual downstream retirement inventory + checked indexed raster accepts exact absent reflected material set + original checked draw list begin preserved through existing subpass state reset + TESTS-only original draw, close and first final batch acknowledgement observations + exact retained vertex-array RID identity for renderer checked draw + compiled ordinary normal and color transfer lifecycle regression test + original position/index-only triangle and TESTS-only ordinary default buffer readiness observations + renderer settles completed original selected default vertex uploads before immutable geometry planning + selected Mobile shader variant prepared through ordinary renderer pre-list and read-only cold fixture observation + fixture-only original serial metadata SelectionV2 facts and reclaim before original staged request + TESTS-only original metadata attachment serial retained after physical return + actual Forward+ Clustered opaque pre-list and same-capture Core backend selection + ordinary cold shader and selected default preparation + check original Instance192 pass intent before charging a preparation tuple + Clustered Instance192 opaque color owns shader depth state without relying on scene depth prepass + isolated CPU legacy continuation SceneCull/Host fixture + CPU fixture checks actual RD same-scope pipeline revalidation",
+  "canonical_snapshot_sha256": "c7491b1320457fedeb97251203d2d274455ff3c5b86341cc82758710834817ea",
+  "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/typed-renderer-generation-build-20261111/source",
+  "schema_sha256": "1a7a839114b3ec7a79a9d5026fe78214023c6ed2370cd7784a5a6bdf4ffec1ca",
+  "types": 399,
+  "interfaces": 388,
+  "formal_inputs": {
+    "core/extension/gdextension_camera_ready.cpp": {
+      "before_sha256": "f65f191cca7ece3765ce724fdd7021689fc8cfef7105c05b44c8cc70dccbc383",
+      "formal_after_sha256": "da63ce63fedab0b0af082a5170274734ed44c8d407a85258181fec8d892037d7",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_camera_ready.cpp"
+    },
+    "core/extension/gdextension_interface.gen.h": {
+      "before_sha256": "bc8cd61552a3902c97dd3d868957a8aee1ea6b3bacf84706a59aad9750cfd49c",
+      "formal_after_sha256": "48b096190719d8d64a5f2d164ce9bd4d107f7cd821d03f9206715930d52453fb",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_interface.gen.h"
+    },
+    "core/extension/gdextension_interface.json": {
+      "before_sha256": "4cb7107a35093e0838cac2d320f374cff5bb3680f2006823b6d54323505e3ce0",
+      "formal_after_sha256": "1a7a839114b3ec7a79a9d5026fe78214023c6ed2370cd7784a5a6bdf4ffec1ca",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_interface.json"
+    },
+    "core/extension/gdextension_library_exit_guard.h": {
+      "before_sha256": "21adb8f18152c7c679c379c78059dfbefd12b0440c0c0cfbf8ca436cd3f05eb8",
+      "formal_after_sha256": "81e64641c3bf838a86318d017865b6e9c2d62db38e2418a56f4e291392c1d444",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_library_exit_guard.h"
+    },
+    "core/extension/gdextension_output_history_fallback.h": {
+      "before_sha256": null,
+      "formal_after_sha256": "340afe9b09471c75ef88676898e95d6c616063078aa5bc9f18c93a0b4e74efb9",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_output_history_fallback.h"
+    },
+    "core/extension/gdextension_output_history_guard_uses.h": {
+      "before_sha256": null,
+      "formal_after_sha256": "1e21161c75379a7fad19e75c2f7c6fccd2914768fd311fb65e0b5694d65b7545",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_output_history_guard_uses.h"
+    },
+    "core/extension/gdextension_production_action.cpp": {
+      "before_sha256": "0fb0883fef04b7f0ca109f509f6eeafc34b67309dbc828e477aa680ba1597619",
+      "formal_after_sha256": "0c7182dab9ffde547cd8d6bd9e232b132e31b871891992dd55e4a6fd73a232ca",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_production_action.cpp"
+    },
+    "core/extension/gdextension_production_interface.cpp": {
+      "before_sha256": "89d6d9f2b89b45bfb822e3873a15065eb1a9d328cd4d37bbf30f5e723a662316",
+      "formal_after_sha256": "a8fc8915f579a70dfef0e52bbe3eb0b32f7483ee9378929816465a11052cf84c",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_production_interface.cpp"
+    },
+    "core/extension/gdextension_production_output.cpp": {
+      "before_sha256": "1303f238170dbe64cbff44da9adc207d8930dac51b45ef501a31d124b22451fc",
+      "formal_after_sha256": "18e4c6e88c8b9bda7fad35ea40add61ef0b7a97e79a8aaa116bffa69c10cccfb",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_production_output.cpp"
+    },
+    "core/extension/gdextension_production_owned.cpp": {
+      "before_sha256": "ca4559ee88d50850f8131c31d554ffef3ade6e06f14d6936f5db10ef2d6078fe",
+      "formal_after_sha256": "25056c66ea418ec14e1a4a0616eb6c84fc8a0502c5b76f42459e583c0bd153c2",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_production_owned.cpp"
+    },
+    "core/extension/gdextension_production_request.cpp": {
+      "before_sha256": "7f2a60ebd73c276f254d596a0af13283582a83616abd133da935aecf27b424ac",
+      "formal_after_sha256": "c305c4a5c87a3bc36bac006cad0e21525225d217dbe2c0168b7f6ef5f5e48c83",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_production_request.cpp"
+    },
+    "core/extension/gdextension_production_request.h": {
+      "before_sha256": "75562b11e5eba6abe0a8faadcea248791055f4e0527a2fbde40913586fee8dd5",
+      "formal_after_sha256": "5235a873f2d51489fd50c2af5628b28cb6198e082194bf71d5c0700bc1e93e15",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_production_request.h"
+    },
+    "core/extension/gdextension_production_resources.cpp": {
+      "before_sha256": "836ca46a47eb384c41118558a60bc354010c107c3e669450797fb7fe5d758291",
+      "formal_after_sha256": "406104997f5a7ee5f18b705cc8ac40aafa6740b0fde40f218ebbf46dd69da6c2",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_production_resources.cpp"
+    },
+    "core/extension/gdextension_production_window.cpp": {
+      "before_sha256": "181e6e3e6e2a8aed436c611735a3a89035e1dfd6f2767f7178dfbe0d7ca297b2",
+      "formal_after_sha256": "376379ffc435133492f0a1b377a5f2360c09445e26d5b3b7bc47efc74394ddf4",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_production_window.cpp"
+    },
+    "core/extension/gdextension_qualification.cpp": {
+      "before_sha256": "3d3ea5d07c4d474c5687c769a4d2a03c6be55f30319baa7f49dec8fb740a0457",
+      "formal_after_sha256": "73a481796e4560b01cd6d417c2696992d19051784ea9e1a5de4a59011c204dc1",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_qualification.cpp"
+    },
+    "core/extension/gdextension_qualification_abi.cpp": {
+      "before_sha256": "0ff7cc815df064e93294451d7fadf9a84e932e0cbd008b51567d2f4046f98fe5",
+      "formal_after_sha256": "997cda469414222f022aa074ec066e51a166998d8d9cc9f47a6633ff0b37ec28",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_qualification_abi.cpp"
+    },
+    "core/extension/gdextension_qualification_internal.h": {
+      "before_sha256": "3d3790380161cdfb03cca5624f98afd355ed7fcfc9db80ee822769889d1204ba",
+      "formal_after_sha256": "abe3f75e968dfbc04aff24984a4bd38044d13c57648a1f0ae1fe179ac991ffe7",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_qualification_internal.h"
+    },
+    "core/extension/gdextension_qualification_paid_service.h": {
+      "before_sha256": null,
+      "formal_after_sha256": "a19f4bd6c842cd60876553605c148f143f356d0fc83779a3123f5f6e9bc80799",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_qualification_paid_service.h"
+    },
+    "core/extension/gdextension_qualification_rt.cpp": {
+      "before_sha256": "97bec7d27cb3e0483dbce681c971f6092ac51d1d27d75afe05dec935463c2bee",
+      "formal_after_sha256": "073fda8990a6ac58db6913260b871be184e7275b630b1ac605b38ff581eee0af",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_qualification_rt.cpp"
+    },
+    "core/extension/gdextension_qualification_scene_depth.cpp": {
+      "before_sha256": "62401aaf10fafa2c0a2cdbd517782fd90548c0c77df22137e0d3d4ed6549ff26",
+      "formal_after_sha256": "78f7df9e96502152640c365936720e5d6ba2a8fad953bb93f39ddc2590de6bb3",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_qualification_scene_depth.cpp"
+    },
+    "core/extension/gdextension_qualification_ticket.cpp": {
+      "before_sha256": "642005e1a345da4111c024ac2205e1fa0262a7b105129a616beec66eacd05e37",
+      "formal_after_sha256": "50c78d62516f21cddf5a90dc4a9a594670f62f80bcd2e2ec4bf27fd0befd4c88",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/core/extension/gdextension_qualification_ticket.cpp"
+    },
+    "servers/rendering/native_height_range.h": {
+      "before_sha256": "9000f7e4722610286b11bd1267c9a13381b9654bff002cfc2de29299faf3c7f4",
+      "formal_after_sha256": "f5e1481ed99cb7952c1ebcf068c1dd11beb55454435c5fbddc70863be7976fc4",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/servers/rendering/native_height_range.h"
+    },
+    "servers/rendering/renderer_rd/height_capture_checked_sink.h": {
+      "before_sha256": "740c5e1a5215672dbdc226f3aefe2ae58a253e8d816a24a3eb884cf40d48101a",
+      "formal_after_sha256": "0a6dfb0501f04ba5c6838e037fc15d9dd781923a01636df12171996bf0729470",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/servers/rendering/renderer_rd/height_capture_checked_sink.h"
+    },
+    "servers/rendering/renderer_rd/storage_rd/external_output_owner.h": {
+      "before_sha256": "8bbd2f4959766f52ab05a17d6caecf8ca83b375eda9d8f97c5fa78afa82d5989",
+      "formal_after_sha256": "5d40a2e2d9619867d6cda0644c0cf3003c9d063e49f3a306cd7c3c17fb4b630b",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
+    },
+    "servers/rendering/renderer_rd/storage_rd/height_frame.cpp": {
+      "before_sha256": "483846e7aa0662b1d77754928c729016b80370785c737efdf2f063c972083fd1",
+      "formal_after_sha256": "17a505cf946c1069d2356a62ab7b2fee08effd31a03646f936fbde73693aee18",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/servers/rendering/renderer_rd/storage_rd/height_frame.cpp"
+    },
+    "servers/rendering/renderer_rd/storage_rd/height_frame.h": {
+      "before_sha256": "4c0af0713f67b606d30bcaee99dbd5f48d59b27bd0575d8c54fb462a604da587",
+      "formal_after_sha256": "cca9f278be7b8e641970101044878e271e4ace2a3aa23d9bdf007695a5884d52",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/servers/rendering/renderer_rd/storage_rd/height_frame.h"
+    },
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp": {
+      "before_sha256": "4d68e17e13bc6f0b25abb37a36f25541ed29518c1e61470377c467551268fc6c",
+      "formal_after_sha256": "f1bd6a84ee9345c00d8c0b1fdb3946433e82deda0a6f72051245b4677b6bda03",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/native-cohort-formal-adoption-20261111/candidate/servers/rendering/renderer_rd/storage_rd/particles_storage.cpp"
+    },
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.h": {
+      "before_sha256": "a175330c86f6b41f10771668933e99486eff6da68939b2843ecc3df10899c11b",
+      "formal_after_sha256": "0dd9c501e464e69a2a31e2011d37ab599a7df3010cabce42ca95450a81748b2c",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/native-cohort-formal-adoption-20261111/candidate/servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+    },
+    "servers/rendering/renderer_scene_cull.h": {
+      "before_sha256": "a0a83181ee5b599fcd60dcacd4d4c4ae7ea6865fe508be8fb8f99ddf7e4dc20f",
+      "formal_after_sha256": "aea2a841bfd5968f75126e2ea69899b0aa7aa312b62a72ca6ec6ff158f8e4874",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/servers/rendering/renderer_scene_cull.h"
+    },
+    "servers/rendering/rendering_device.cpp": {
+      "before_sha256": "071d6af3f5caf2db46d5fbcb6b005d609ba1797c471378ff1add80e0f70237c7",
+      "formal_after_sha256": "29888de3090be6c7cb2f8c757ef36e90d186439941ec65352532a0ceb2b967a4",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/servers/rendering/rendering_device.cpp"
+    },
+    "servers/rendering/rendering_device.h": {
+      "before_sha256": "f9869b24a844a4d42e51b7b27d2359a83c307acf483afa1a034e5ada6138fe8b",
+      "formal_after_sha256": "627bceeff295a216c6e019559d5f2f2b2035b8f5b1b415a6f7e0de2f65882ee8",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/servers/rendering/rendering_device.h"
+    },
+    "servers/rendering/rendering_device_graph.h": {
+      "before_sha256": "6a813937bba46e063ecef15f27b9a652aeb8e65e4958f828e8b5a4d4361c105f",
+      "formal_after_sha256": "568b8bf201d20e8c670a5d4da450ff3b114a8cefb6331762f140b32ffc1ee9d0",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/servers/rendering/rendering_device_graph.h"
+    },
+    "tests/servers/rendering/test_native_height_range.cpp": {
+      "before_sha256": "3f50bb547d028b3694e5d192644d7d51316b4f214155e79a9f9c946a54a7c195",
+      "formal_after_sha256": "2623187236625a9c335751fd1c588c2f913aba88f6bb3884d1f3a12f0fef44ae",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/tests/servers/rendering/test_native_height_range.cpp"
+    },
+    "tests/servers/rendering/test_qualification_rt.cpp": {
+      "before_sha256": "f61e08442829b0025a739a8626071cdb96c8fa02f401e4d6b3a468d26bc3db60",
+      "formal_after_sha256": "a9e5470b6106246e24e0d7384f5d76437097e1a4706ced206f5c82e08603e352",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/tests/servers/rendering/test_qualification_rt.cpp"
+    },
+    "tests/servers/rendering/test_qualification_ticket.cpp": {
+      "before_sha256": "6adae05908947cebe50b68f93339ca70fa4afae69422284c0c33d210608539b8",
+      "formal_after_sha256": "92c4510ae1a143bd917752c8431981d278b4486bc45794b399f0cac01cf26326",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-scene-capacity-context-20261111/candidate/tests/servers/rendering/test_qualification_ticket.cpp"
+    }
+  },
+  "exact_patches": {
+    "work/scene-paid-service-executor-p2fix-context-20261111/SOURCE_FROM35.patch": "f20e25e8ffbb2a5d547cccea909a8f21ac56802f7e7159fe684c046aea2ec212",
+    "work/typed-renderer-fixture-candidate-20261111/candidate.patch": "d0eb841c36994a07c1008ca0bc60ebd85f6aac0bc563fd42ffe2cedefc8dae05",
+    "work/typed-renderer-producer-generation-fix-20261111/candidate.patch": "59439225a0b355c18c3c3cdc810f7de24b8a7d972f28a2052aa9cfa02db6a928",
+    "work/typed-renderer-producer-generation-fix-20261111/r3/candidate.patch": "5d8da3deee7dda9d23fb959a9fc0e4793aeb167df017c46b77418b014004f3cf",
+    "work/typed-renderer-producer-generation-fix-20261111/r4/candidate.patch": "56d0f59c700236abe6d890e84c5b6ccc1cd6b957472105d4b5e68905bda74c58",
+    "work/typed-renderer-producer-generation-fix-20261111/r5/candidate.patch": "afaf24f552b2a8d1df0be763f28492b0ba0763f30e6b31fb09fcc171009d76ff",
+    "work/native-append-metadata-kind-fix-20261111/candidate.patch": "4cc67a074e824b0ed80e440935bc3f28ebee00d39be1f4444b793c37dcc0a64f",
+    "work/typed-renderer-prefix-retirement-20261111/candidate.patch": "bf23d416254f3682299be860c4b4e68df33d18883bb82b737c3f0562e591bd9e",
+    "work/typed-renderer-source-qualification-successor-20261111/candidate.patch": "e8d09a650c475ae124000127ac6e425a8c0500114c54e849e787fb38fca6e3b8",
+    "work/typed-renderer-source-qualification-successor-20261111/r2/candidate.patch": "b8d176f7b64176986e6db3d791c83eccf793d6a44479e90e50d41393bad0ec13",
+    "work/typed-renderer-host-scene-successor-20261111/candidate.patch": "a5792211c6aea9f470573c5e3cbbbc480e9a2a73a1d7410f242899c90411e160",
+    "work/typed-renderer-staged-camera-successor-20261112/candidate.patch": "9d82d2a7eee51fc9dec876d2fe1e11d433bc500351eac0c6e98a9035cf16705c",
+    "work/staged-camera-upload-lifetime-20261112/candidate.patch": "78a6bf1cf0336cbe1968ab948359c2bcdfd8f9e982544720cb2a804713873a04",
+    "work/typed-renderer-staged-camera-observe-r2-20261112/candidate.patch": "d2dd482a40fbede21ca8809fcfe2194f792dccfefd232f7e971a7ecc0dbe145c",
+    "work/typed-renderer-staged-camera-finalize-diagnostic-r3-20261112/candidate.patch": "162ba6d55577870d493b3f8a99211d6b4fe057586f6875a7a5810b338a28778c",
+    "work/typed-renderer-installed-guard-layout-20261112/candidate.patch": "42272252bd81c4a6fa56241b1a2ec9b04b28e70093c711a697bb9c3f3aa33240",
+    "work/typed-renderer-staged-camera-raster-r4-20261112/candidate.patch": "0885e601402019c87f47c1398bb29188c2ea52a3ed6418c59e3c1991a313bd65",
+    "work/core-staged-prelist-preparation-20261112/candidate.patch": "e42f53b33799b70af145c2efdffbde7b0ff718479f9981f27eb5a6e1a1da9509",
+    "work/core-staged-prelist-preparation-20261112/pipeline-member-revalidation.patch": "63e60bf12f432fbe8841403a0073a7b4d613003f7c42c8a6489a902547d9cb9d",
+    "work/mobile-prelist-external-pipeline-20261112/candidate.patch": "2784e588e241ce4a83a409ce512038a6362bf4c365fd6e8985d7b4128c213b7e",
+    "work/typed-renderer-staged-material-layout-diagnostic-20261112/candidate.patch": "2d8a6aa8256c2dae72edf2ea89bee60a6db985bdc3dba908ea38121b7766232b",
+    "work/typed-renderer-staged-material-warmup-20261112/candidate.patch": "f53d0b34677b7ba9d5dbf5dfdc21510e760e3eb40c9874b326e0896aa4802d57",
+    "work/typed-renderer-staged-mobile-pipeline-phase-20261112/candidate.patch": "433496bb2f423ab99a6de1b30dc01a3def1bd82cd99db492570766369fc6599e",
+    "work/typed-renderer-mobile-prospective-phase-20261112/candidate.patch": "ebfbf4434c7fb1fee8572cd421779907e78faf82914b0feb7fb8be9d5f577958",
+    "work/typed-renderer-staged-explicit-mesh-attributes-20261112/candidate.patch": "918ab9d8ff9e0ffa26d29d527c9ff6a8009419610859aa1846da04671a7ac95a",
+    "work/typed-renderer-staged-closure-size-20261112/candidate.patch": "15cc266ca1dc2c7498008d266255a1082c00763e463cfb5081c05118ae576461",
+    "work/typed-renderer-staged-preparation-capacity-106-20261112/candidate.patch": "9bc617a9b87f7a59f023956c3f797d2a6f46499b572a4282e53b03ede117deb8",
+    "work/typed-renderer-staged-resource-preflight-20261112/candidate.patch": "9076e9d9b5865017e035c7360885549abe4df513cdb9f1787d6c41be28a751f8",
+    "work/uniform-set-cache-invalidation-ownership-20261112/candidate.patch": "84a74eba0a3997a4921d9d70e92dadee59b80a6546febd823b6a57e1cfd9102f",
+    "work/native-output-cache-observer-rd-20261112/candidate.patch": "f246a28988845d40abe6c6365a95c8fd6608d170970e720e68715941a8610835",
+    "work/typed-renderer-staged-texture-worker-20261112/candidate.patch": "0501c8301b603ad60e720f2a656a35abd851c33afcb514a92be9c3ffa393bc02",
+    "work/native-output-processed-texture-observer-20261112/candidate.patch": "4d2811f89ef4b9246789ad2ae640bcb2474cc45e90eb5a662ff77bb54bc1e4ba",
+    "work/typed-renderer-staged-resource-identity-20261112/candidate.patch": "79a6b958575d79c135de96286ef7677caea015084da671ff01295b037f5c5425",
+    "work/native-output-material-dependent-closure-20261112/candidate.patch": "12a016933a976591548404daeecc25d4ead4e87dc67ccb5b4793ab8220149504",
+    "work/native-raster-material-empty-set-20261112/candidate.patch": "4222bd913ad4cb52418d954cfe81f2973593d2c6a7e8873ffda7bb7968cc69ea",
+    "work/rd-draw-subpass-begin-identity-20261112/candidate.patch": "a755f6bf7ad4af8e0831c68e269528ed8a73578835a20326c19d0ef0f8922717",
+    "work/typed-renderer-staged-raster-receipt-trace-20261112/candidate.patch": "b05a70e9a62f8ebf49a2f620b99d5a58abb18a5cb13e87fd8abb13258df0b493",
+    "work/typed-renderer-staged-segment-ack-diagnostic-20261112/candidate.patch": "32bb6757621a0195fca98ddcd93d12ab860d06508fac0b133252e85a1fc49d9f",
+    "work/typed-renderer-staged-vertex-array-identity-20261112/candidate.patch": "f37bf41f69881d28790417b5a18819d885ad0e68fc020fea62dc62c45b97a13b",
+    "work/ordinary-vertex-fallback-transfer-coverage-20261112/candidate.patch": "f9020b155946b790a3b73221f9f68f0c113f271783d46e3fc0f4563ae3b529fd",
+    "work/typed-renderer-staged-default-triangle-20261112/candidate.patch": "5cf8182483fc01a594a307aa7387ddd535b70814f9abe5bcd8761d7115fe6d9b",
+    "work/typed-renderer-staged-vertex-readiness-r6-20261112/candidate.patch": "415be63f6ad4d53eac3fab76acccb5e238a4945b787f6085fcf0edb513050ff2",
+    "work/ordinary-mesh-fallback-upload-settle-20261112/candidate.patch": "fbde2ffd212e4a02a93efc2d26c3befb1a2b4eba41a64661c587303fa47e12c5",
+    "work/typed-renderer-staged-material-cold-start-20261112/production.patch": "d46f1928c0f4a207d2446e8dbec6088cbc955af782f845243475d1be49707fa3",
+    "work/typed-renderer-staged-material-cold-start-default-geometry-20261112/fixture.patch": "455f662c47e354bec511ddce85d51bd4da2bb5a8d5f106ba17b4bd1bf3669c5e",
+    "work/typed-renderer-staged-selection-facts-cold-r6-20261112/candidate.patch": "042bc73b5d44245ef039b862f98466f032590f62dbbd5a960660cbacd500dd83",
+    "work/typed-renderer-staged-selection-facts-retained-attachment-20261112/candidate.patch": "7615a355fb1881009272117826019cbc5c88a8187b0f5d08eb73ff3304426f0d",
+    "work/clustered-opaque-prelist-external-pipeline-20261112/candidate.patch": "a0a85f9c01561c16ae7b01c48d798cf68666aa2a47aec318b425129642d7caf3",
+    "work/core-staged-renderer-backend-20261112/candidate.patch": "ca20ae30d0b99e5f3e5eae009ade402604f9a905185f6962bd04475c9360f8f5",
+    "work/clustered-instance192-ready-geometry-20261112/candidate.patch": "4b8daf47567c016e96de7f9b003910f8269421dd99a0675ae5d4ce706511352b",
+    "work/typed-renderer-staged-clustered-cold-r6-20261112/candidate.patch": "3d5df08502f03d03d1f77ef2b30693537d5d9b3a8febbc49e47905f9eef3a34e",
+    "work/instance192-preparation-pass-intent-20261112/candidate.patch": "32a78fc592880dcfe7a97b04a35d40cd08894b544f8c1bff5d458516f361939d",
+    "work/clustered-instance192-opaque-depth-state-20261112/candidate.patch": "fb753c7815a04ede225cee3fc4f339770f0106b76ebabf64cae5d1e4a98e9712",
+    "work/native-preparation-continuation-cpu-scene-20261112/candidate.patch": "eb1bb8ebeed41da7b03f2c84cbe12d10a54283491f461055feb06d553d913e4f",
+    "work/native-preparation-continuation-pipeline-revalidation-20261112/candidate.patch": "c47f2b35c698937ad80fa9ad480967efbf504ce18263ccc53d78e5fc5fed5ea2",
+    "work/native-preparation-continuation-cpu-failure-20261112/candidate.patch": "f0a3b334a26d57dbe78fab5a4051662cb1a6518ef6abe1136898d77cb1999c8f",
+    "work/typed-plan-scene-fixture-cpu-20261112/candidate.patch": "511383b2f9f1ffe70600a35a4e69b97f2443fc55570f0f6e07f48fa3df0409ab",
+    "work/typed-plan-guard-quota-scene-20261112/candidate.patch": "36ba510bf54bf4adb952547138a8e107f958587633007dde71b091d8036cdeec",
+    "work/typed-records-writer-camera-fixture-cpu-20261112/candidate.patch": "8e3ee714d9a278e73821b3092e4c9087cab9a5707aa1fc044c8949bc5a0f7d95",
+    "work/alias-readback-reflection-scene-cpu-20261112/r2/candidate.patch": "2d97078df89e5d70dbe368f495ca6e2683305cbdf5accb799e31808b56549fba",
+    "work/owner-bank-camera-capture-fixture-20261112/candidate.patch": "3e3deec9490ea503c3cdeadbd566d8fd28ec10c091ff90746c4c8161db452b2a",
+    "work/staged-acquire-bank-refusal-20261112/fixture.patch": "04114cff80cfbd8766bdc6fa9efef1eba6741e9dfab8904321a24ed94e379ece",
+    "work/staged-acquire-bank-refusal-20261112/fixture-terminal-controls.patch": "a94a73dfe260cfcef505de99caee2ce6a38f8770bcf690fc81fec24e83eeaf7e",
+    "work/staged-acquire-bank-refusal-20261112/refusal-script-maintenance.patch": "1a5cc89a41a45685505ab4822dcdda41f42dabe7b649e2693d9a8e836014bf14",
+    "work/staged-acquire-bank-refusal-20261112/refusal-script-free.patch": "29ecd4e254291f435e6c241835e1084f9cb8769203a1affebee8ffaea9c0f25f",
+    "work/staged-acquire-bank-refusal-20261112/production.patch": "6489dbb19d5f34ed9b7c2cc2e3a9e635fd05557b0bc6f08f267bd67e442b44fb",
+    "work/typed-renderer-mobile-transparent-profile-20261112/candidate.patch": "284c524ecd253287801e13f4a0174bd49b9352c4a4c3eb571a1d51394633365c",
+    "work/mobile-instance192-transparent-prelist-20261112/candidate.patch": "991f5a3153af16cf5072b6e5ff2f2a0c31777ea3a3a1ab922fa3d42227e009cc",
+    "work/clustered-instance192-transparent-prelist-20261112/candidate.patch": "a9ba2e23b15aff9e4071b872204b098cdb3b3841f14f873fbe659aefca5a59d7"
+  },
+  "build_started": false,
+  "pinned_preimages": {
+    "servers/rendering/renderer_rd/storage_rd/particles_storage_external.cpp": "work/typed-renderer-installed-guard-layout-20261112/baseline_preimage.cpp",
+    "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp": "work/canonical-mobile-visible-retirement-20261112/b-source-preimages/servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp",
+    "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h": "work/canonical-mobile-visible-retirement-20261112/b-source-preimages/servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h",
+    "servers/rendering/renderer_rd/storage_rd/external_output_packet.cpp": "work/canonical-mobile-visible-retirement-20261112/b-source-preimages/servers/rendering/renderer_rd/storage_rd/external_output_packet.cpp",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp": "work/canonical-mobile-visible-retirement-20261112/b-source-preimages/servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp",
+    "servers/rendering/renderer_rd/uniform_set_cache_rd.cpp": "work/canonical-mobile-visible-retirement-20261112/b-source-preimages/servers/rendering/renderer_rd/uniform_set_cache_rd.cpp",
+    "servers/rendering/renderer_rd/uniform_set_cache_rd.h": "work/canonical-mobile-visible-retirement-20261112/b-source-preimages/servers/rendering/renderer_rd/uniform_set_cache_rd.h",
+    "servers/rendering/rendering_device_immutable_hold.cpp": "work/canonical-mobile-visible-retirement-20261112/b-source-preimages/servers/rendering/rendering_device_immutable_hold.cpp",
+    "servers/rendering/rendering_device_output_read.cpp": "work/canonical-mobile-visible-retirement-20261112/b-source-preimages/servers/rendering/rendering_device_output_read.cpp",
+    "tests/servers/rendering/test_mesh_storage_external.cpp": "work/canonical-mobile-visible-retirement-20261112/b-source-preimages/tests/servers/rendering/test_mesh_storage_external.cpp",
+    "servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp": "work/ordinary-mesh-fallback-upload-settle-c-adoption-20261112/preimages/servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp",
+    "servers/rendering/renderer_rd/storage_rd/mesh_storage.h": "work/ordinary-mesh-fallback-upload-settle-c-adoption-20261112/preimages/servers/rendering/renderer_rd/storage_rd/mesh_storage.h",
+    "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp": "work/clustered-forward-plus-pass-intent-c-adoption-20261112/preimages/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp",
+    "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h": "work/clustered-forward-plus-pass-intent-c-adoption-20261112/preimages/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h",
+    "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp": "work/clustered-forward-plus-depth-state-c-adoption-20261112/preimages/servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp",
+    "servers/rendering/renderer_rd/storage_rd/external_output_owner.cpp": "work/clustered-forward-plus-pass-intent-c-adoption-20261112/preimages/servers/rendering/renderer_rd/storage_rd/external_output_owner.cpp",
+    "tests/core/extension/test_production_request.cpp": "work/clustered-forward-plus-pass-intent-c-adoption-20261112/preimages/tests/core/extension/test_production_request.cpp",
+    "tests/servers/rendering/test_external_output_owner_state.cpp": "work/clustered-forward-plus-pass-intent-c-adoption-20261112/preimages/tests/servers/rendering/test_external_output_owner_state.cpp"
+  }
+}

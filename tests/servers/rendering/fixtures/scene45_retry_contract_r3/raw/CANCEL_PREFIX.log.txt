@@ -1,0 +1,91 @@
+Godot Engine v4.7.2.stable.custom_build.776fd86b5 (2026-11-07 04:58:32 UTC) - https://godotengine.org
+Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+ORIGINAL_SCENE_OCCURRENCE_BEGIN ordinal=0
+QRT_NATIVE_RETURN kind=2 operation=1 slot=2 result=72 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=2 operation=1 slot=2 bridge=1:1 state=2 error=0 reason=0 request=75265c9f3bdb2cfec6e34cc95d6c0cae1b25c85c3fad13270916bb894ae332c3 payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=1 operation=2 slot=6 result=48 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=1 operation=2 slot=6 bridge=1:1 state=2 error=0 reason=0 request=61db989588e7c3913ff3f12f8d3f6914b5baa2c7b45befcdba137f728c874144 payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=2 operation=3 slot=7 result=72 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=2 operation=3 slot=7 bridge=1:1 state=2 error=0 reason=0 request=d20f8d879bb0d8264f23344af6ef687f602ed6d3be6fd1f3d96efe79a9d7e5e9 payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=1 operation=4 slot=11 result=48 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=1 operation=4 slot=11 bridge=1:1 state=2 error=0 reason=0 request=feb1e1f961c94dd8aee5e135e1895f8d5846e26d13a8f8718038e15deb888dd9 payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=2 operation=5 slot=12 result=72 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=2 operation=5 slot=12 bridge=1:1 state=2 error=0 reason=0 request=23c28c7fca42b4d31144cc0f26cf99194f8785ec4d70f97080f7708b701997cf payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=1 operation=6 slot=16 result=48 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=1 operation=6 slot=16 bridge=1:1 state=2 error=0 reason=0 request=5230bbf41faf33131037978de89861f16cb3dc622fb9163773ad53f4929d8263 payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=2 operation=7 slot=17 result=72 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=2 operation=7 slot=17 bridge=1:1 state=2 error=0 reason=0 request=e4e372ed063579b13a3fdb8ec30b68b62a6f8d688461b8677b30cbec21a59a23 payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=1 operation=8 slot=21 result=48 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=1 operation=8 slot=21 bridge=1:1 state=2 error=0 reason=0 request=adefb0040b4fd055f5182385542a5e5782c48a643a5dc14bcfbe0e57ba1c874d payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=2 operation=9 slot=22 result=72 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=2 operation=9 slot=22 bridge=1:1 state=2 error=0 reason=0 request=9ddafd65e9a4cb8d71d187339c55b0a79a23b30bb9376bcf8932e8b913d3571a payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=1 operation=10 slot=26 result=48 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=1 operation=10 slot=26 bridge=1:1 state=2 error=0 reason=0 request=5c066fa046a802b07257ef6a15784c0b89feea5a40fb4f4c8431d78ff1298ca1 payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=2 operation=11 slot=27 result=72 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=2 operation=11 slot=27 bridge=1:1 state=2 error=0 reason=0 request=d54ba419c147b86b8a7cc81bcf1e19015e4043a5fdf52581799e5e96985e70de payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=1 operation=12 slot=31 result=48 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=1 operation=12 slot=31 bridge=1:1 state=2 error=0 reason=0 request=4727c8e744cb83243941ee3849c133fcc24811fe6dfe44627bbd3b83219cb844 payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=2 operation=13 slot=32 result=72 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=2 operation=13 slot=32 bridge=1:1 state=2 error=0 reason=0 request=3909d7fb9453b008a0515c4986684ae6e39c99a2941a7f98a97dd3bb7bae5c04 payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=1 operation=14 slot=36 result=48 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=1 operation=14 slot=36 bridge=1:1 state=2 error=0 reason=0 request=4bfea88f680e1e97c5d7768ad24ea193ea30d3816c14b346f0a02d72674ad8cd payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=2 operation=15 slot=37 result=72 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=2 operation=15 slot=37 bridge=1:1 state=2 error=0 reason=0 request=cae111043020b641478fa66bed0b045bf226c46d93d154b47ac1cc0c00eec09c payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=1 operation=16 slot=41 result=48 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=1 operation=16 slot=41 bridge=1:1 state=2 error=0 reason=0 request=df684ab1ec2d1fb9db44043aa61aca865d232643524e67497d5ae4a764ba7914 payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=4 operation=17 slot=42 result=96 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=4 operation=17 slot=42 bridge=1:1 state=2 error=0 reason=0 request=a0c4686b3bf12b3ec1fc8c08adddc9911e1493836323dc8aad8198576de469ec payload=0235db7e7680f853e7a6dcf7a8cfad931a2a8e9409af3aa75770002f7db3f964
+QRT_NATIVE_RETURN kind=4 operation=18 slot=46 result=96 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=4 operation=18 slot=46 bridge=1:1 state=2 error=0 reason=0 request=455eeebab3d4226d71404579763c5200b261651fbfadcef1320613a62276cbea payload=2f1783c61fba3826018cab9f561ca5c48c49a09aff4f659a1651b0f3fba7c45f
+QRT_NATIVE_RETURN kind=7 operation=19 slot=50 result=200 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=7 operation=19 slot=50 bridge=1:1 state=2 error=0 reason=0 request=0118752ccbe82b08945d2aa8dd0fe2055948f3889b160b4ceb23cd1e341e48f8 payload=e9ff7249c8ae6f4e9a83fe719bb58613eb659aec2ad71ce99de8f5075a4d96af
+QRT_NATIVE_RETURN kind=8 operation=20 slot=53 result=120 segments=1 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=8 operation=20 slot=53 bridge=1:1 state=2 error=0 reason=0 request=e9d8e5f36fb1324ac35f0533a49e8283596cddf22f80f270fcf875ac23184122 payload=314e9eea5017c3dce919c0c725bc5dd6a49b7ba1124b7acc986b99fd9ba719fb
+QRT_NATIVE_RETURN kind=5 operation=22 slot=54 result=184 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=5 operation=22 slot=54 bridge=1:1 state=2 error=0 reason=0 request=e947e618776c2d6f31641452ceb89b14788e0e96e836a39b0b6eaefaf6133635 payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=5 operation=23 slot=55 result=184 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=5 operation=23 slot=55 bridge=1:1 state=2 error=0 reason=0 request=ae488784c7b1fd6a5d47b9be7dddf9244f655228e3208d07568a58ea67e8bbe6 payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=3 operation=24 slot=56 result=136 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=3 operation=24 slot=56 bridge=1:1 state=2 error=0 reason=0 request=0bd3e3c6568890e3f1a01a1da61a0cbc6ae79c7c89fcc87269aa1bf164e29d88 payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=3 operation=25 slot=57 result=136 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=3 operation=25 slot=57 bridge=1:1 state=2 error=0 reason=0 request=b1979fef6474d0cad038002e4c8cc08e1e5e560a23390c8e37aac0da1d867e42 payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=3 operation=26 slot=58 result=136 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=3 operation=26 slot=58 bridge=1:1 state=2 error=0 reason=0 request=435c1cb670ed563af632026545870144ba0c4bca485188713305ac73b4d49472 payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=3 operation=27 slot=59 result=136 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=3 operation=27 slot=59 bridge=1:1 state=2 error=0 reason=0 request=dc0fb3bd73321be02f77850c33f2ea3bc3550acbda3432438d5098c1227b333f payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=3 operation=28 slot=60 result=136 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=3 operation=28 slot=60 bridge=1:1 state=2 error=0 reason=0 request=c0c31ce50ad0e24f35307045716e6cb8f71546a43de7b60b17b4b88877a6056a payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=3 operation=29 slot=61 result=136 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=3 operation=29 slot=61 bridge=1:1 state=2 error=0 reason=0 request=a585d9c7734926c3dd3ef47389423621e2dbf9dd8b9cf6eae4611ceea089ef76 payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=3 operation=30 slot=62 result=136 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=3 operation=30 slot=62 bridge=1:1 state=2 error=0 reason=0 request=7ac243c8c6113f46036d0c1c2d18645aaf1ec922d9ef374b2f29fa56d6c36760 payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+QRT_NATIVE_RETURN kind=3 operation=31 slot=63 result=136 segments=0 error=0 reply_ack=1
+QRT_CALL_IDENTITY kind=3 operation=31 slot=63 bridge=1:1 state=2 error=0 reason=0 request=d3e37476b3c7ff774c0aeab5d2e7ff87e91e611a0ee24d0bfa70b70aefdf8e9c payload=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+ORIGINAL_RETAINED_UNIT ordinal=0 unit=809c8577fed2e761c2a2bf0532dea4a3f8e9d4aae714dcb4674954cf9ac056e9 flags=1 same_exported_identity=1
+ORIGINAL_INTERFACE_MATCH physical=0 source_bytes=3144 spv_bytes=6064 flags=1 retained_unit=1 work=618248
+ORIGINAL_INTERFACE_MATCH physical=1 source_bytes=8465 spv_bytes=16004 flags=1 retained_unit=1 work=1648895
+ORIGINAL_CANCEL_REFUSAL error=44 reason=16 no_new_record=1
+ORIGINAL_NATIVE_FACT index=0 semantic=6 graph=1:3:1:0:0 slot=0 queue=1 issue=1 completion=2 error=0 native=14 completion_source=14 backing=13 offset=0 bytes=4
+ORIGINAL_NATIVE_FACT index=1 semantic=4 graph=0:0:0:0:0 slot=4294967295 queue=2 issue=1 completion=2 error=0 native=13 completion_source=13 backing=0 offset=0 bytes=0
+ORIGINAL_NATIVE_FACT index=2 semantic=5 graph=0:0:0:0:0 slot=0 queue=1 issue=1 completion=2 error=0 native=14 completion_source=14 backing=0 offset=0 bytes=0
+ORIGINAL_NATIVE_COMPLETION ticket=51 revision=8 readback_request=0 facts=3 known=3 possible=0 mode=cancel_prefix
+ORIGINAL_UNIT_PHYSICAL_RETURN index=0 shader_event=4 pipeline_event=3
+ORIGINAL_UNIT_PHYSICAL_RETURN index=1 shader_event=6 pipeline_event=5
+ORIGINAL_STORAGE_PHYSICAL_RETURN role=0 backing=13 event=7
+ORIGINAL_STORAGE_PHYSICAL_RETURN role=1 backing=14 event=8
+ORIGINAL_STORAGE_PHYSICAL_RETURN role=2 backing=15 event=9
+ORIGINAL_STORAGE_PHYSICAL_RETURN role=3 backing=16 event=10
+ORIGINAL_STORAGE_PHYSICAL_RETURN role=4 backing=17 event=11
+ORIGINAL_STORAGE_PHYSICAL_RETURN role=5 backing=18 event=12
+ORIGINAL_STORAGE_PHYSICAL_RETURN role=6 backing=19 event=13
+ORIGINAL_STORAGE_PHYSICAL_RETURN role=7 backing=20 event=14
+ORIGINAL_SCENE_OCCURRENCE_END ordinal=0 physical_returns=1
+ORIGINAL_SCENE_PARTIAL completed=1 total=117 first=0 count=1 observed=0 full_qualification=0 mode=cancel_prefix
+ORIGINAL_NATIVE_CONTROL_DONE same_unit=1 same_ticket=1 rt_slots_released=1 physical_returns=1 bridge_closed=1 mode=cancel_prefix
+ORIGINAL_NUMERIC_LOAD=0
+ORIGINAL_SDK_USER_TERMINATOR level=3
+ORIGINAL_SDK_USER_TERMINATOR level=2
+ORIGINAL_CODE_HOLD_BINDING_RETURN stage=2
+ORIGINAL_NUMERIC_DSO_UNLOAD
+ORIGINAL_NUMERIC_UNLOAD=0

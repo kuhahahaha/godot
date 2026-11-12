@@ -37,6 +37,7 @@
 #include "core/templates/local_vector.h"
 #include "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h"
 #include "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h"
+#include "servers/rendering/renderer_rd/shader_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/storage/variant_converters.h"
 
@@ -1152,9 +1153,448 @@ void MaterialStorage::MaterialData::free_parameters_uniform_set(RID p_uniform_se
 	}
 }
 
+Error MaterialStorage::material_selection_acquire(RID p_rid, NativeSelectionLease &r_lease, uint64_t p_expected_generation) {
+	auto *rd = RD::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (r_lease.is_active()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	MaterialData *data = nullptr;
+	const Error ready = material_get_native_preparation_data(p_rid, p_expected_generation, data);
+	if (ready != OK) {
+		return ready;
+	}
+	auto *material = material_owner.get_or_null(p_rid);
+	if (material->selection_holds == UINT32_MAX || material->shader->selection_holds == UINT32_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	++material->selection_holds;
+	++material->shader->selection_holds;
+	r_lease.owner = this;
+	r_lease.device = rd;
+	r_lease.rid = p_rid;
+	r_lease.generation = material->generation;
+	return OK;
+}
+
+Error MaterialStorage::material_selection_release(NativeSelectionLease &r_lease) {
+	if (r_lease.owner != this || !r_lease.device || r_lease.device != RD::get_singleton() || !r_lease.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	auto *material = material_owner.get_or_null(r_lease.rid);
+	if (!material || material->generation != r_lease.generation || !material->selection_holds || !material->shader || !material->shader->selection_holds) {
+		return ERR_INVALID_DATA;
+	}
+	--material->selection_holds;
+	--material->shader->selection_holds;
+	r_lease.owner = nullptr;
+	r_lease.device = nullptr;
+	r_lease.rid = RID();
+	r_lease.generation = 0;
+	return OK;
+}
+
+Error MaterialStorage::material_selection_get_shader_features(const NativeSelectionLease &p_lease, NativeSelectionShaderFeatures &r_features) const {
+	if (p_lease.owner != this || !p_lease.device || p_lease.device != RD::get_singleton() || !p_lease.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	const Material *material = material_owner.get_or_null(p_lease.rid);
+	if (!material || !p_lease.generation || material->generation != p_lease.generation || material->generation == UINT64_MAX ||
+			!material->selection_holds || material->shader_type != SHADER_TYPE_3D || !material->data ||
+			!material->shader || !material->shader->selection_holds || !material->shader->data) {
+		return ERR_INVALID_DATA;
+	}
+	if (material->uniform_dirty || material->texture_dirty) {
+		return ERR_BUSY;
+	}
+	if (material->next_pass.is_valid()) {
+		return ERR_UNAVAILABLE;
+	}
+	ShaderData::NativeInstance192ShaderFeatures compiled;
+	const Error observed = material->shader->data->get_native_instance192_shader_features(compiled);
+	if (observed != OK) {
+		return observed;
+	}
+	const auto original = material->shader->data->get_native_shader_and_version();
+	if (!compiled.shader || compiled.version.is_null() || compiled.shader != original.first || compiled.version != original.second) {
+		return ERR_INVALID_DATA;
+	}
+	NativeSelectionShaderFeatures result;
+	result.material = p_lease.rid;
+	result.material_generation = p_lease.generation;
+	result.compiled = compiled;
+	r_features = result;
+	return OK;
+}
+
+Error MaterialStorage::material_selection_get_shader_observation(const NativeSelectionLease &p_lease, NativeSelectionShaderObservation &r_observation) const {
+	NativeSelectionShaderFeatures features;
+	const Error observed = material_selection_get_shader_features(p_lease, features);
+	if (observed != OK) {
+		return observed;
+	}
+	NativeSelectionShaderObservation observation;
+	observation.material = features.material;
+	observation.material_generation = features.material_generation;
+	observation.shader_version = features.compiled.version;
+	observation.needs_inverse = features.compiled.needs_inverse;
+	observation.zero_displacement = features.compiled.zero_displacement;
+	observation.material_recipe_rejections = features.compiled.material_recipe_rejections;
+	observation.output_pass_mask = features.compiled.output_pass_mask;
+	r_observation = observation;
+	return OK;
+}
+
+bool MaterialStorage::MaterialData::native_immutable_busy() const {
+	auto *rd = RD::get_singleton();
+	if (!rd) {
+		return false;
+	}
+	for (const auto &state : native_uniform_sets) {
+		if (rd->native_immutable_resource_is_held(state.uniform_set) || rd->native_immutable_resource_is_held(state.uniform_buffer)) {
+			return true;
+		}
+	}
+	auto *storage = MaterialStorage::get_singleton();
+	const auto *material = storage ? storage->get_material(self) : nullptr;
+	return material && (material->native_immutable_holds != 0 || material->selection_holds != 0);
+}
+
+bool MaterialStorage::_shader_native_immutable_busy(const Shader *p_shader) {
+	if (p_shader && p_shader->selection_holds) {
+		return true;
+	}
+	if (!p_shader || !p_shader->data) {
+		return false;
+	}
+	const auto native = p_shader->data->get_native_shader_and_version();
+	return native.first && native.first->version_native_is_held(native.second);
+}
+
+Error MaterialStorage::_material_selection_native_hold_plan_ready(const NativeSelectionLease &p_lease) const {
+	if (p_lease.owner != this || !p_lease.device || p_lease.device != RD::get_singleton() || !p_lease.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	const Material *material = material_owner.get_or_null(p_lease.rid);
+	if (!material || !p_lease.generation || material->generation != p_lease.generation || material->generation == UINT64_MAX ||
+			!material->selection_holds || material->shader_type != SHADER_TYPE_3D || !material->data ||
+			!material->shader || !material->shader->selection_holds || !material->shader->data) {
+		return ERR_INVALID_DATA;
+	}
+	return OK;
+}
+
+Error MaterialStorage::material_selection_get_native_hold_plan(const NativeSelectionLease &p_lease, RID p_shader, RID p_pipeline, RID p_uniform_set, NativeMaterialRootPlan &r_plan, uint32_t p_max_resources) const {
+	const Error ready = _material_selection_native_hold_plan_ready(p_lease);
+	if (ready != OK) {
+		return ready;
+	}
+	// Observation-only limit. Actual acquire retains the original RD leaf
+	// validation order, including device escape before its upper limit check.
+	if (p_max_resources > 1024) {
+		return ERR_INVALID_PARAMETER;
+	}
+	return _material_native_hold_plan(p_lease.rid, p_shader, p_pipeline, p_uniform_set, r_plan, p_max_resources, p_lease.generation);
+}
+
+Error MaterialStorage::material_selection_get_future_pipeline_hold_plan(const NativeSelectionLease &p_lease, RID p_shader, RID p_uniform_set, NativeMaterialFuturePipelinePlan &r_plan, uint32_t p_max_resources) const {
+	const Error ready = _material_selection_native_hold_plan_ready(p_lease);
+	if (ready != OK) {
+		return ready;
+	}
+	if (p_max_resources > 1024) {
+		return ERR_INVALID_PARAMETER;
+	}
+	NativeMaterialFuturePipelinePlan plan;
+	const Error planned = _material_native_hold_plan(p_lease.rid, p_shader, RID(), p_uniform_set, plan.material, p_max_resources, p_lease.generation, true);
+	if (planned != OK) {
+		return planned;
+	}
+	if (plan.roots.resize(plan.material.roots.size() + 1) != OK || plan.pipeline.dependencies.resize(1) != OK) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	plan.pipeline.kind = RD::NativeProspectiveSymbol::FUTURE_RENDER_PIPELINE;
+	plan.pipeline.dependencies.write[0] = p_shader;
+	plan.roots.write[0] = { plan.material.roots[0], UINT32_MAX };
+	plan.roots.write[1] = { RID(), 0 }; // Typed symbol key, never an actual resource RID.
+	for (int64_t i = 1; i < plan.material.roots.size(); ++i) {
+		plan.roots.write[i + 1] = { plan.material.roots[i], UINT32_MAX };
+	}
+	r_plan = std::move(plan);
+	return OK;
+}
+
+Error MaterialStorage::_material_native_hold_plan(RID p_material, RID p_shader, RID p_pipeline, RID p_uniform_set, NativeMaterialRootPlan &r_plan, uint32_t p_max_resources, uint64_t p_expected_generation, bool p_future_pipeline) const {
+	auto *rd = RD::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	const Material *material = material_owner.get_or_null(p_material);
+	if (!material || !material->data || !material->shader || !material->shader->data) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (p_expected_generation && (material->generation != p_expected_generation || p_expected_generation == UINT64_MAX)) {
+		return ERR_INVALID_DATA;
+	}
+	if (material->native_immutable_holds == UINT32_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	if (material->uniform_dirty || material->texture_dirty || material->next_pass.is_valid()) {
+		return ERR_UNAVAILABLE;
+	}
+	const auto native = material->shader->data->get_native_shader_and_version();
+	if (!native.first || !native.first->version_native_shader_is_ready(native.second, p_shader) || (!p_future_pipeline && !rd->native_immutable_pipeline_matches_shader(p_pipeline, p_shader))) {
+		return ERR_INVALID_DATA;
+	}
+	const MaterialData::NativeUniformSetState *selected = nullptr;
+	for (const auto &state : material->data->native_uniform_sets) {
+		if (state.supported && state.uniform_set == p_uniform_set && native.first->version_native_shader_is_ready(native.second, state.shader)) {
+			selected = &state;
+			break;
+		}
+	}
+	if (!selected) {
+		return ERR_UNAVAILABLE;
+	}
+	if (selected->uniform_set.is_null() && (selected->uniform_buffer.is_valid() || !selected->uniform_bytes.is_empty() || !selected->textures.is_empty())) {
+		// Only a genuinely empty material profile can omit its native set.
+		return ERR_UNAVAILABLE;
+	}
+	// Same ShaderRD version does not imply compatible native descriptor layout.
+	// Compare the actual original set format with this exact pipeline/set slot.
+	if (p_future_pipeline ? !rd->_native_immutable_uniform_set_matches_future_render_pipeline(selected->uniform_set, p_shader, selected->uniform_set_index) : !rd->native_immutable_uniform_set_matches_pipeline(selected->uniform_set, p_pipeline, selected->uniform_set_index)) {
+		return ERR_INVALID_DATA;
+	}
+	// Count RAW entries before any closure deduplication, including repeated
+	// textures/default samplers. Shader and pipeline always contribute two.
+	uint32_t sampler_count = 0;
+	for (const auto &filters : default_samplers.rids) {
+		for (RID sampler : filters) {
+			sampler_count += sampler.is_valid();
+		}
+	}
+	const uint64_t root_count = 2 + uint64_t(selected->uniform_set.is_valid()) + uint64_t(selected->uniform_buffer.is_valid()) + uint64_t(selected->textures.size()) + sampler_count;
+	if (root_count > p_max_resources) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	NativeMaterialRootPlan plan;
+	if (plan.roots.resize(root_count - uint64_t(p_future_pipeline)) != OK || plan.snapshot.samplers.resize(sampler_count) != OK) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	plan.uniform_state_shader = selected->shader;
+	plan.uniform_state_owner_generation = selected->owner_generation;
+	auto &snapshot = plan.snapshot;
+	snapshot.shader = p_shader;
+	snapshot.pipeline = p_pipeline;
+	snapshot.uniform_set = selected->uniform_set;
+	snapshot.uniform_set_index = selected->uniform_set_index;
+	snapshot.uniform_buffer = selected->uniform_buffer;
+	snapshot.uniform_bytes = selected->uniform_bytes;
+	snapshot.textures = selected->textures;
+	snapshot.material_generation = material->generation;
+	snapshot.priority = material->priority;
+	auto *roots = plan.roots.ptrw();
+	uint32_t root = 0, sampler_index = 0;
+	roots[root++] = p_shader;
+	if (!p_future_pipeline) {
+		roots[root++] = p_pipeline;
+	}
+	if (snapshot.uniform_set.is_valid()) {
+		roots[root++] = snapshot.uniform_set;
+	}
+	if (snapshot.uniform_buffer.is_valid()) {
+		roots[root++] = snapshot.uniform_buffer;
+	}
+	for (RID texture : snapshot.textures) {
+		roots[root++] = texture;
+	}
+	// This leaf supports the original default sampler profile only. A future
+	// packet with viewport/custom samplers must capture its own original owner.
+	for (const auto &filters : default_samplers.rids) {
+		for (RID sampler : filters) {
+			if (sampler.is_valid()) {
+				roots[root++] = sampler;
+				snapshot.samplers.write[sampler_index++] = sampler;
+			}
+		}
+	}
+	r_plan = std::move(plan);
+	return OK;
+}
+
+Error MaterialStorage::material_native_hold_acquire(RID p_material, RID p_shader, RID p_pipeline, RID p_uniform_set, NativeMaterialHold &r_hold, uint32_t p_max_resources, uint64_t p_expected_generation, const NativeMaterialFuturePipelinePlan *p_expected_future) {
+	auto *rd = RD::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (r_hold.is_active()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	NativeMaterialRootPlan plan;
+	const Error planned = _material_native_hold_plan(p_material, p_shader, p_pipeline, p_uniform_set, plan, p_max_resources, p_expected_generation);
+	if (planned != OK) {
+		return planned;
+	}
+	if (p_expected_future) {
+		const auto &expected = p_expected_future->material.snapshot;
+		const auto &actual = plan.snapshot;
+		if (p_expected_future->material.uniform_state_shader != plan.uniform_state_shader ||
+				p_expected_future->material.uniform_state_owner_generation != plan.uniform_state_owner_generation ||
+				uint64_t(p_expected_future->material.roots.size()) + 1 != uint64_t(plan.roots.size())) {
+			return ERR_INVALID_DATA;
+		}
+		// Actual acquisition inserts precisely the original row's newly created
+		// pipeline at raw index1; preserve every other raw entry and duplicate.
+		for (int64_t i = 0; i < plan.roots.size(); ++i) {
+			if (i == 1) {
+				if (plan.roots[i] != p_pipeline) {
+					return ERR_INVALID_DATA;
+				}
+			} else if (plan.roots[i] != p_expected_future->material.roots[i ? i - 1 : 0]) {
+				return ERR_INVALID_DATA;
+			}
+		}
+		// Future pipeline identity is this actual factory output. Everything
+		// else must still be the original preeffect material observation BEFORE
+		// acquiring even one physical share; no snapshot supplies authority.
+		if (expected.pipeline.is_valid() || expected.shader != actual.shader || expected.uniform_set != actual.uniform_set ||
+				expected.uniform_set_index != actual.uniform_set_index || expected.uniform_buffer != actual.uniform_buffer ||
+				expected.uniform_bytes != actual.uniform_bytes || expected.textures != actual.textures || expected.samplers != actual.samplers ||
+				expected.material_generation != actual.material_generation || expected.priority != actual.priority) {
+			return ERR_INVALID_DATA;
+		}
+	}
+	const Error error = rd->native_immutable_hold_acquire(plan.roots, r_hold.native, p_max_resources);
+	if (error != OK) {
+		return error;
+	}
+	auto *material = material_owner.get_or_null(p_material);
+	r_hold.native.material_origin = p_material;
+	r_hold.native.material_origin_generation = material->generation;
+	r_hold.snapshot = std::move(plan.snapshot);
+	r_hold.material = p_material;
+	r_hold.device = rd;
+	++material->native_immutable_holds;
+	return OK;
+}
+
+bool MaterialStorage::_native_hold_callback_is_owned(RID material_rid, uint64_t generation, RD::InvalidationCallback callback, void *userdata, RID uniform_set) {
+	if (callback != _material_uniform_set_erased || !userdata || !uniform_set.is_valid() || !generation) {
+		return false;
+	}
+	MaterialStorage *storage = get_singleton();
+	if (!storage) {
+		return false;
+	}
+	const Material *material = storage->material_owner.get_or_null(material_rid);
+	if (!material || !material->data || userdata != &material->data->self) {
+		return false;
+	}
+	// Never dereference arbitrary userdata or scan unrelated async materials.
+	// A later parameter revision cannot relabel this actual old set's capture.
+	for (const auto &state : material->data->native_uniform_sets) {
+		if (state.uniform_set == uniform_set && state.owner_generation == generation) {
+			return true;
+		}
+	}
+	return false;
+}
+
+RD::NativeImmutableHold *MaterialStorage::_native_hold_transfer_source(NativeMaterialHold &hold) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread() || hold.physical_transferred || hold.metadata_return_active || !hold.native.is_valid()) {
+		return nullptr;
+	}
+	return &hold.native;
+}
+
+Error MaterialStorage::_native_hold_mark_transferred(NativeMaterialHold &hold) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (hold.physical_transferred || hold.native.is_active() || hold.metadata_return_active) {
+		return ERR_INVALID_DATA;
+	}
+	hold.physical_transferred = true;
+	return OK;
+}
+
+Error MaterialStorage::_native_hold_begin_return(NativeMaterialHold &hold) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!hold.physical_transferred || hold.native.is_active() || hold.metadata_return_active) {
+		return ERR_BUSY;
+	}
+	if (hold.metadata_returned) {
+		return OK;
+	}
+	// Material's original ordering differs from Surface: actual Core physical
+	// group drop is complete before the caller returns this logical metadata.
+	hold.metadata_return_active = true;
+	if (auto *storage = MaterialStorage::get_singleton()) {
+		if (auto *material = storage->material_owner.get_or_null(hold.material)) {
+			CRASH_COND(!material->native_immutable_holds);
+			--material->native_immutable_holds;
+		}
+	}
+	hold.metadata_returned = true;
+	hold.metadata_return_active = false;
+	return OK;
+}
+
+Error MaterialStorage::_native_hold_finish_return(NativeMaterialHold &hold) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!hold.physical_transferred || !hold.metadata_returned || hold.metadata_return_active || hold.native.is_active()) {
+		return ERR_BUSY;
+	}
+	hold.snapshot = {};
+	hold.material = RID();
+	hold.device = nullptr;
+	hold.physical_transferred = hold.metadata_returned = false;
+	return OK;
+}
+
+Error MaterialStorage::material_native_hold_release(NativeMaterialHold &r_hold) {
+	if (r_hold.physical_transferred) {
+		return ERR_BUSY; // The original finite Core group owns physical custody.
+	}
+
+	if (!r_hold.device) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const Error error = r_hold.device->native_immutable_hold_release(r_hold.native);
+	if (error != OK) {
+		return error;
+	}
+	// Material free may already have detached its logical RID. No pointer to
+	// the former MaterialData, ShaderData or Texture owner is retained here.
+	if (auto *storage = MaterialStorage::get_singleton()) {
+		if (auto *material = storage->material_owner.get_or_null(r_hold.material)) {
+			CRASH_COND(!material->native_immutable_holds);
+			--material->native_immutable_holds;
+		}
+	}
+	r_hold.snapshot = {};
+	r_hold.material = RID();
+	r_hold.device = nullptr;
+	return OK;
+}
+
 bool MaterialStorage::MaterialData::update_parameters_uniform_set(const HashMap<StringName, Variant> &p_parameters, bool p_uniform_dirty, bool p_textures_dirty, const HashMap<StringName, ShaderLanguage::ShaderNode::Uniform> &p_uniforms, const uint32_t *p_uniform_offsets, const Vector<ShaderCompiler::GeneratedCode::Texture> &p_texture_uniforms, const HashMap<StringName, HashMap<int, RID>> &p_default_texture_params, uint32_t p_ubo_size, RID &uniform_set, RID p_shader, uint32_t p_shader_uniform_set, bool p_use_linear_color, bool p_3d_material) {
-	if ((uint32_t)ubo_data[p_use_linear_color].size() != p_ubo_size) {
+	ERR_FAIL_COND_V_MSG(native_immutable_busy(), false, "Material native inputs are immutable while retained.");
+	if ((uint32_t)ubo_data[p_use_linear_color].size() != p_ubo_size || (p_ubo_size && uniform_buffer[p_use_linear_color].is_null())) {
 		p_uniform_dirty = true;
+		native_uniform_sets[p_use_linear_color] = {};
+		if (uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(uniform_set)) {
+			RD::get_singleton()->uniform_set_set_invalidation_callback(uniform_set, nullptr, nullptr);
+			RD::get_singleton()->free_rid(uniform_set);
+			uniform_set = RID();
+			update_uniform_set_changed = true;
+		}
 		if (uniform_buffer[p_use_linear_color].is_valid()) {
 			RD::get_singleton()->free_rid(uniform_buffer[p_use_linear_color]);
 			uniform_buffer[p_use_linear_color] = RID();
@@ -1163,21 +1603,21 @@ bool MaterialStorage::MaterialData::update_parameters_uniform_set(const HashMap<
 		ubo_data[p_use_linear_color].resize(p_ubo_size);
 		if (ubo_data[p_use_linear_color].size()) {
 			uniform_buffer[p_use_linear_color] = RD::get_singleton()->uniform_buffer_create(ubo_data[p_use_linear_color].size());
+			if (uniform_buffer[p_use_linear_color].is_null()) {
+				update_retry_pending = true;
+				return false;
+			}
 			memset(ubo_data[p_use_linear_color].ptrw(), 0, ubo_data[p_use_linear_color].size()); //clear
-		}
-
-		//clear previous uniform set
-		if (uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(uniform_set)) {
-			RD::get_singleton()->uniform_set_set_invalidation_callback(uniform_set, nullptr, nullptr);
-			RD::get_singleton()->free_rid(uniform_set);
-			uniform_set = RID();
 		}
 	}
 
 	//check whether buffer changed
 	if (p_uniform_dirty && ubo_data[p_use_linear_color].size()) {
 		update_uniform_buffer(p_uniforms, p_uniform_offsets, p_parameters, ubo_data[p_use_linear_color].ptrw(), ubo_data[p_use_linear_color].size(), p_use_linear_color);
-		RD::get_singleton()->buffer_update(uniform_buffer[p_use_linear_color], 0, ubo_data[p_use_linear_color].size(), ubo_data[p_use_linear_color].ptrw());
+		if (RD::get_singleton()->buffer_update(uniform_buffer[p_use_linear_color], 0, ubo_data[p_use_linear_color].size(), ubo_data[p_use_linear_color].ptrw()) != OK) {
+			update_retry_pending = true;
+			return false;
+		}
 	}
 
 	uint32_t tex_uniform_count = 0U;
@@ -1191,10 +1631,12 @@ bool MaterialStorage::MaterialData::update_parameters_uniform_set(const HashMap<
 		p_textures_dirty = true;
 
 		//clear previous uniform set
+		native_uniform_sets[p_use_linear_color] = {};
 		if (uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(uniform_set)) {
 			RD::get_singleton()->uniform_set_set_invalidation_callback(uniform_set, nullptr, nullptr);
 			RD::get_singleton()->free_rid(uniform_set);
 			uniform_set = RID();
+			update_uniform_set_changed = true;
 		}
 	}
 
@@ -1202,13 +1644,42 @@ bool MaterialStorage::MaterialData::update_parameters_uniform_set(const HashMap<
 		update_textures(p_parameters, p_default_texture_params, p_texture_uniforms, texture_cache.ptrw(), p_use_linear_color, p_3d_material);
 	}
 
+	auto capture_native = [&](const Vector<RD::Uniform> *p_sources = nullptr) {
+		auto &state = native_uniform_sets[p_use_linear_color];
+		const RID previous_set = state.uniform_set;
+		Vector<RD::Uniform> previous_sources = std::move(state.uniform_sources);
+		state = {};
+		if (p_sources) { state.uniform_sources = *p_sources; }
+		else if (previous_set == uniform_set) { state.uniform_sources = std::move(previous_sources); }
+		state.owner_generation = generation;
+		state.shader = p_shader;
+		state.uniform_set = uniform_set;
+		state.uniform_set_index = p_shader_uniform_set;
+		state.uniform_buffer = uniform_buffer[p_use_linear_color];
+		state.uniform_bytes = ubo_data[p_use_linear_color];
+		state.textures = texture_cache;
+		state.supported = render_target_cache.is_empty() && !global_buffer_E && !global_texture_E && used_global_textures.is_empty();
+		for (const auto &entry : p_uniforms) {
+			state.supported &= entry.value.scope == ShaderLanguage::ShaderNode::Uniform::SCOPE_LOCAL;
+		}
+		for (const auto &texture : p_texture_uniforms) {
+			state.supported &= !texture.global && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_SCREEN_TEXTURE && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_DEPTH_TEXTURE && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_NORMAL_ROUGHNESS_TEXTURE && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_BLIT_SOURCE0 && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_BLIT_SOURCE1 && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_BLIT_SOURCE2 && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_BLIT_SOURCE3;
+		}
+		if (uniform_set.is_valid()) {
+			// State is initialized before publishing the original factory hint.
+			RD::get_singleton()->_production_output_set_material_origin(uniform_set, self, state.owner_generation);
+		}
+	};
+
 	if (p_ubo_size == 0 && (p_texture_uniforms.is_empty())) {
 		// This material does not require an uniform set, so don't create it.
+		capture_native();
 		return false;
 	}
 
 	if (!p_textures_dirty && uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(uniform_set)) {
 		//no reason to update uniform set, only UBO (or nothing) was needed to update
+		capture_native();
 		return false;
 	}
 
@@ -1242,9 +1713,15 @@ bool MaterialStorage::MaterialData::update_parameters_uniform_set(const HashMap<
 	}
 
 	uniform_set = RD::get_singleton()->uniform_set_create(uniforms, p_shader, p_shader_uniform_set);
+	if (uniform_set.is_null()) {
+		update_retry_pending = true;
+		return false;
+	}
 
 	RD::get_singleton()->uniform_set_set_invalidation_callback(uniform_set, MaterialStorage::_material_uniform_set_erased, &self);
+	update_uniform_set_changed = true;
 
+	capture_native(&uniforms);
 	return true;
 }
 
@@ -1467,6 +1944,17 @@ MaterialStorage *MaterialStorage::get_singleton() {
 	return singleton;
 }
 
+#ifdef TESTS_ENABLED
+MaterialStorage::MaterialStorage(NativeHoldTestTag) {
+	singleton = this;
+	native_hold_test_minimal = true;
+	for (int i = 0; i < SHADER_TYPE_MAX; ++i) {
+		shader_data_request_func[i] = nullptr;
+		material_data_request_func[i] = nullptr;
+	}
+}
+#endif
+
 MaterialStorage::MaterialStorage() {
 	singleton = this;
 
@@ -1508,6 +1996,12 @@ MaterialStorage::MaterialStorage() {
 }
 
 MaterialStorage::~MaterialStorage() {
+#ifdef TESTS_ENABLED
+	if (native_hold_test_minimal) {
+		singleton = nullptr;
+		return;
+	}
+#endif
 	memdelete_arr(global_shader_uniforms.buffer_values);
 	memdelete_arr(global_shader_uniforms.buffer_usage);
 	memdelete_arr(global_shader_uniforms.buffer_dirty_regions);
@@ -2179,13 +2673,14 @@ void MaterialStorage::shader_initialize(RID p_rid, bool p_embedded) {
 void MaterialStorage::shader_free(RID p_rid) {
 	Shader *shader = shader_owner.get_or_null(p_rid);
 	ERR_FAIL_NULL(shader);
+	ERR_FAIL_COND_MSG(shader->selection_holds, "Original selection must return before owner replacement or free.");
 
 	{
 		MutexLock lock(*shader->mutex);
 
 		//make material unreference this
 		while (shader->owners.size()) {
-			material_set_shader((*shader->owners.begin())->self, RID());
+			_material_set_shader((*shader->owners.begin())->self, RID(), true);
 		}
 
 		//clear data if exists
@@ -2208,6 +2703,7 @@ void MaterialStorage::shader_free(RID p_rid) {
 void MaterialStorage::shader_set_code(RID p_shader, const String &p_code) {
 	Shader *shader = shader_owner.get_or_null(p_shader);
 	ERR_FAIL_NULL(shader);
+	ERR_FAIL_COND_MSG(_shader_native_immutable_busy(shader), "Shader native inputs are immutable while retained.");
 
 	MutexLock lock(*shader->mutex);
 
@@ -2281,6 +2777,13 @@ void MaterialStorage::shader_set_code(RID p_shader, const String &p_code) {
 
 	for (Material *E : shader->owners) {
 		Material *material = E;
+		if (material->generation != UINT64_MAX) {
+			++material->generation;
+		}
+		if (material->data) {
+			material->data->generation = material->generation;
+		}
+
 		material->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MATERIAL);
 		_material_queue_update(material, true, true);
 	}
@@ -2313,6 +2816,7 @@ void MaterialStorage::get_shader_parameter_list(RID p_shader, List<PropertyInfo>
 void MaterialStorage::shader_set_default_texture_parameter(RID p_shader, const StringName &p_name, RID p_texture, int p_index) {
 	Shader *shader = shader_owner.get_or_null(p_shader);
 	ERR_FAIL_NULL(shader);
+	ERR_FAIL_COND_MSG(_shader_native_immutable_busy(shader), "Shader native inputs are immutable while retained.");
 
 	if (p_texture.is_valid() && TextureStorage::get_singleton()->owns_texture(p_texture)) {
 		if (!shader->default_texture_parameter.has(p_name)) {
@@ -2337,6 +2841,13 @@ void MaterialStorage::shader_set_default_texture_parameter(RID p_shader, const S
 
 		for (Material *E : shader->owners) {
 			Material *material = E;
+			if (material->generation != UINT64_MAX) {
+				++material->generation;
+			}
+			if (material->data) {
+				material->data->generation = material->generation;
+			}
+
 			_material_queue_update(material, false, true);
 		}
 	}
@@ -2434,15 +2945,29 @@ void MaterialStorage::_update_queued_materials() {
 	while (SelfList<Material> *E = copy.first()) {
 		Material *material = E->self();
 		copy.remove(E);
+		if (material->data && material->data->native_immutable_busy()) {
+			_material_queue_update(material, false, false);
+			continue;
+		}
 		bool uniforms_changed = false;
+		if (material->data) {
+			// Reset once per service turn; linear/sRGB helper calls OR failures.
+			material->data->update_retry_pending = false;
+			material->data->update_uniform_set_changed = false;
+		}
 
 		if (material->data) {
 			uniforms_changed = material->data->update_parameters(material->params, material->uniform_dirty, material->texture_dirty);
 		}
-		material->texture_dirty = false;
-		material->uniform_dirty = false;
+		const bool retry = material->data && material->data->update_retry_pending;
+		material->texture_dirty = retry;
+		material->uniform_dirty = retry;
+		if (retry) {
+			// Requeue exactly one next-turn attempt; _material_queue_update coalesces it.
+			_material_queue_update(material, false, false);
+		}
 
-		if (uniforms_changed) {
+		if (uniforms_changed || (material->data && material->data->update_uniform_set_changed)) {
 			//some implementations such as 3D renderer cache the material uniform set, so update is required
 			material->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MATERIAL);
 		}
@@ -2462,6 +2987,7 @@ void MaterialStorage::material_initialize(RID p_rid) {
 void MaterialStorage::material_free(RID p_rid) {
 	Material *material = material_owner.get_or_null(p_rid);
 	ERR_FAIL_NULL(material);
+	ERR_FAIL_COND_MSG(material->selection_holds, "Original selection must return before owner replacement or free.");
 
 	// Need to clear texture arrays to prevent spin locking of their RID's.
 	// This happens when the app is being closed.
@@ -2472,15 +2998,24 @@ void MaterialStorage::material_free(RID p_rid) {
 		}
 	}
 
-	material_set_shader(p_rid, RID()); //clean up shader
+	_material_set_shader(p_rid, RID(), true); //clean up shader
 	material->dependency.deleted_notify(p_rid);
 
 	material_owner.free(p_rid);
 }
 
 void MaterialStorage::material_set_shader(RID p_material, RID p_shader) {
+	_material_set_shader(p_material, p_shader, false);
+}
+
+void MaterialStorage::_material_set_shader(RID p_material, RID p_shader, bool p_freeing) {
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL(material);
+	ERR_FAIL_COND_MSG(material->selection_holds, "Original selection must return before owner replacement or free.");
+	ERR_FAIL_COND_MSG(!p_freeing && material->data && material->data->native_immutable_busy(), "Material native inputs are immutable while retained.");
+	if (material->generation != UINT64_MAX) {
+		material->generation++;
+	}
 
 	if (material->data) {
 		memdelete(material->data);
@@ -2521,6 +3056,7 @@ void MaterialStorage::material_set_shader(RID p_material, RID p_shader) {
 
 	material->data = material_data_request_func[shader->type](shader->data);
 	material->data->self = p_material;
+	material->data->generation = material->generation;
 	material->data->set_next_pass(material->next_pass);
 	material->data->set_render_priority(material->priority);
 	//updating happens later
@@ -2540,6 +3076,10 @@ MaterialStorage::ShaderData *MaterialStorage::material_get_shader_data(RID p_mat
 void MaterialStorage::material_set_param(RID p_material, const StringName &p_param, const Variant &p_value) {
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL(material);
+	ERR_FAIL_COND_MSG(material->data && material->data->native_immutable_busy(), "Material native inputs are immutable while retained.");
+	if (material->generation != UINT64_MAX) {
+		material->generation++;
+	}
 
 	if (p_value.get_type() == Variant::NIL) {
 		material->params.erase(p_param);
@@ -2553,6 +3093,9 @@ void MaterialStorage::material_set_param(RID p_material, const StringName &p_par
 		_material_queue_update(material, !is_texture, is_texture);
 	} else {
 		_material_queue_update(material, true, true);
+	}
+	if (material->data) {
+		material->data->generation = material->generation;
 	}
 }
 
@@ -2569,14 +3112,19 @@ Variant MaterialStorage::material_get_param(RID p_material, const StringName &p_
 void MaterialStorage::material_set_next_pass(RID p_material, RID p_next_material) {
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL(material);
+	ERR_FAIL_COND_MSG(material->data && material->data->native_immutable_busy(), "Material native inputs are immutable while retained.");
 
 	if (material->next_pass == p_next_material) {
 		return;
 	}
 
 	material->next_pass = p_next_material;
+	if (material->generation != UINT64_MAX) {
+		material->generation++;
+	}
 	if (material->data) {
 		material->data->set_next_pass(p_next_material);
+		material->data->generation = material->generation;
 	}
 
 	material->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MATERIAL);
@@ -2585,11 +3133,40 @@ void MaterialStorage::material_set_next_pass(RID p_material, RID p_next_material
 void MaterialStorage::material_set_render_priority(RID p_material, int priority) {
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL(material);
+	ERR_FAIL_COND_MSG(material->data && material->data->native_immutable_busy(), "Material native inputs are immutable while retained.");
 	material->priority = priority;
+	if (material->generation != UINT64_MAX) {
+		material->generation++;
+	}
 	if (material->data) {
 		material->data->set_render_priority(priority);
+		material->data->generation = material->generation;
 	}
 	material->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MATERIAL);
+}
+
+uint64_t MaterialStorage::material_get_generation(RID p_material) const {
+	const Material *material = material_owner.get_or_null(p_material);
+	ERR_FAIL_NULL_V(material, 0);
+	return material->generation;
+}
+
+Error MaterialStorage::material_get_native_preparation_data(RID p_material, uint64_t p_expected_generation, MaterialData *&r_data) {
+	r_data = nullptr;
+	const Material *material = material_owner.get_or_null(p_material);
+	if (!material || material->shader_type != SHADER_TYPE_3D || !material->data ||
+			!material->shader || !material->shader->data || material->generation != p_expected_generation || material->generation == UINT64_MAX) {
+		return ERR_INVALID_DATA;
+	}
+	// Preparation consumes a serviced original material, never a dirty fallback.
+	if (material->uniform_dirty || material->texture_dirty) {
+		return ERR_BUSY;
+	}
+	if (material->next_pass.is_valid()) {
+		return ERR_UNAVAILABLE;
+	}
+	r_data = material->data;
+	return OK;
 }
 
 bool MaterialStorage::material_is_animated(RID p_material) {
@@ -2760,4 +3337,407 @@ void MaterialStorage::material_set_data_request_function(ShaderType p_shader_typ
 MaterialStorage::MaterialDataRequestFunction MaterialStorage::material_get_data_request_function(ShaderType p_shader_type) {
 	ERR_FAIL_INDEX_V(p_shader_type, SHADER_TYPE_MAX, nullptr);
 	return material_data_request_func[p_shader_type];
+}
+
+Error MaterialStorage::material_recipe_source_acquire(RID p_material, NativeRecipeSource &source, uint32_t limit) {
+	auto *rd = RD::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (source.is_active() || source.selection.is_active() || source.physical.is_active()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	if (!limit || limit > 1024) {
+		return ERR_INVALID_PARAMETER;
+	}
+	// Resolve the generation here under the original RT owner, never accept a
+	// caller-copied revision as selection or a native ready-shader identity.
+	const Error selected = material_selection_acquire(p_material, source.selection, material_get_generation(p_material));
+	if (selected != OK) {
+		return selected;
+	}
+	source.owner = this;
+	auto fail = [&](Error error) {
+		const Error returned = material_recipe_source_release(source);
+		return returned == OK ? error : returned; // A return prefix stays in source.
+	};
+	NativeSelectionShaderFeatures features;
+	Error error = material_selection_get_shader_features(source.selection, features);
+	if (error != OK) {
+		return fail(error);
+	}
+	if (!features.compiled.zero_displacement || features.compiled.material_recipe_rejections) {
+		return fail(ERR_UNAVAILABLE);
+	}
+	auto *material = material_owner.get_or_null(p_material);
+	RID ready_shader, uniform_set;
+	uint64_t mask = 0;
+	error = material->data->get_native_recipe_shader_if_ready(ready_shader, mask, uniform_set);
+	if (error != OK) {
+		return fail(error);
+	}
+	uint64_t actual_mask = 0;
+	error = rd->shader_get_native_vertex_input_mask_if_ready(ready_shader, actual_mask);
+	if (error != OK || ready_shader.is_null() || mask != actual_mask) {
+		return fail(error == OK ? ERR_INVALID_DATA : error);
+	}
+	const uint64_t supported_mask = (1ull << 0) | (1ull << 1) | (1ull << 3) | (1ull << 4) | (1ull << 5);
+	if (!(actual_mask & 1) || (actual_mask & ~supported_mask)) { return fail(ERR_UNAVAILABLE); }
+	RD::ShaderReflection layout;
+	error = rd->shader_get_native_raster_layout_if_ready(ready_shader, layout);
+	if (error != OK) { return fail(error); }
+	if (layout.uniform_sets.size() > 4 || layout.push_constant_size != 16 || !layout.stages_bits.has_flag(RD::SHADER_STAGE_FRAGMENT_BIT)) { return fail(ERR_UNAVAILABLE); }
+	for (const auto &set : layout.uniform_sets) {
+		for (const auto &binding : set) {
+			if (binding.writable || binding.type == RD::UNIFORM_TYPE_IMAGE || binding.type == RD::UNIFORM_TYPE_IMAGE_BUFFER) { return fail(ERR_UNAVAILABLE); }
+		}
+	}
+	NativeMaterialFuturePipelinePlan plan;
+	error = material_selection_get_future_pipeline_hold_plan(source.selection, ready_shader, uniform_set, plan, limit);
+	if (error != OK) {
+		return fail(error);
+	}
+	Vector<RD::NativeProspectiveKey> future_closure;
+	Vector<RD::NativeProspectiveSymbol> symbols;
+	if (symbols.resize(1) != OK) { return fail(ERR_OUT_OF_MEMORY); }
+	symbols.write[0] = plan.pipeline;
+	{
+		MutexLock lock(rd->_thread_safe_);
+		error = rd->_native_prospective_closure_keys_locked(plan.roots, symbols, limit, false, future_closure);
+	}
+	if (error != OK) { return fail(error); }
+	// Retain the exact RAW material roots without the not-yet-created pipeline.
+	// This is the original material future plan, including all default samplers.
+	error = rd->native_immutable_hold_acquire(plan.material.roots, source.physical, limit);
+	if (error != OK) {
+		return fail(error);
+	}
+	if (plan.material.snapshot.uniform_set.is_valid() && plan.material.snapshot.uniform_set_index != 3) { return fail(ERR_UNAVAILABLE); }
+	source.borrowed_closure_nodes = source.physical._resource_span().size();
+	source.material_future_closure_nodes = future_closure.size();
+	source.plan = std::move(plan);
+	for (const auto &state : material->data->native_uniform_sets) {
+		if (state.supported && state.uniform_set == uniform_set && state.owner_generation == source.plan.material.uniform_state_owner_generation && state.shader == source.plan.material.uniform_state_shader) {
+			source.uniform_sources = state.uniform_sources;
+			break;
+		}
+	}
+	source.layout = std::move(layout);
+	source.input_mask = actual_mask;
+	return OK;
+}
+
+Error MaterialStorage::material_recipe_source_release(NativeRecipeSource &source) {
+	auto *rd = RD::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread() || source.owner != this) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (source.physical.is_active()) {
+		const Error released = rd->native_immutable_hold_release(source.physical);
+		if (released != OK) {
+			return released;
+		}
+	}
+	if (source.selection.is_active()) {
+		const Error released = material_selection_release(source.selection);
+		if (released != OK) {
+			return released;
+		}
+	}
+	source.plan = NativeMaterialFuturePipelinePlan();
+	source.input_mask = 0;
+	source.layout = RD::ShaderReflection();
+	source.uniform_sources.clear();
+	source.borrowed_closure_nodes = source.material_future_closure_nodes = 0;
+	source.owner = nullptr;
+	return OK;
+}
+
+
+#include "servers/rendering/renderer_rd/native_material_recipe_roster.h"
+
+Error NativeMaterialRecipeRoster::_begin_material(MaterialStorage &storage, RID selected, uint32_t limit) {
+	if (is_active()) { return ERR_ALREADY_IN_USE; }
+	RD *rd = RD::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread()) { return ERR_UNAUTHORIZED; }
+	if (!limit || limit > 1024) { return ERR_INVALID_PARAMETER; }
+	const Error error = storage.material_recipe_source_acquire(selected, material, limit);
+	if (error != OK) {
+		if (material.is_active()) { material_owner = &storage; device = rd; }
+		return error;
+	}
+	material_owner = &storage;
+	device = rd;
+	return OK;
+}
+
+Error NativeMaterialRecipeRoster::_begin(MaterialStorage &storage, MeshStorage &meshes, RID selected, RID selected_mesh, uint32_t selected_surface, RD::FramebufferFormatID format, uint32_t limit) {
+	Error error = _begin_material(storage, selected, limit);
+	if (error != OK) { return error; }
+	mesh_owner = &meshes;
+	error = meshes.mesh_selection_acquire(selected_mesh, mesh);
+	if (error == OK) { error = meshes.mesh_selection_source_hold_acquire(mesh, selected_surface, surface); }
+	if (error == OK && (surface.is_external() || surface.get_primitive() != RSE::PRIMITIVE_TRIANGLES || surface.get_vertex_count() != 4 || surface.get_index_count() != 6)) { error = ERR_UNAVAILABLE; }
+	if (error == OK && surface.get_material_selection().is_valid() && surface.get_material_selection() != selected) { error = ERR_INVALID_DATA; }
+	if (error == OK) { error = device->framebuffer_format_get_native_layout(format, framebuffer); }
+	if (error == OK) {
+		// Exact finite normal opaque raster target. Keep the complete actual VRS
+		// roster, but explicitly refuse it rather than silently dropping VRS.
+		if (framebuffer.view_count != 1 || framebuffer.vrs_method != RD::VRS_METHOD_NONE || framebuffer.vrs_attachment != RD::ATTACHMENT_UNUSED || framebuffer.attachments.size() != 2 || framebuffer.passes.size() != 1 || framebuffer.passes[0].color_attachments.size() != 1 || framebuffer.passes[0].depth_attachment < 0 || !framebuffer.passes[0].input_attachments.is_empty() || !framebuffer.passes[0].resolve_attachments.is_empty() || framebuffer.passes[0].preserve_attachments.size() || framebuffer.passes[0].depth_resolve_attachment != RD::ATTACHMENT_UNUSED) { error = ERR_UNAVAILABLE; }
+	}
+	if (error == OK) {
+		const uint32_t depth = framebuffer.passes[0].depth_attachment;
+		const int32_t color = framebuffer.passes[0].color_attachments[0];
+		if (depth >= uint32_t(framebuffer.attachments.size()) || color < 0 || color >= framebuffer.attachments.size() || uint32_t(color) == depth || framebuffer.attachments[depth].format != RD::DATA_FORMAT_D32_SFLOAT || !(framebuffer.attachments[depth].usage_flags & RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT) || material.get_layout().fragment_output_mask != 1) { error = ERR_UNAVAILABLE; }
+		for (const auto &attachment : framebuffer.attachments) {
+			if (attachment.samples != RD::TEXTURE_SAMPLES_1 || attachment.usage_flags == RD::AttachmentFormat::UNUSED_ATTACHMENT || (attachment.usage_flags & RD::TEXTURE_USAGE_VRS_ATTACHMENT_BIT)) { error = ERR_UNAVAILABLE; }
+		}
+	}
+	if (error == OK) { framebuffer_format = format; return OK; }
+	const Error returned = release();
+	return returned == OK ? error : returned;
+}
+
+Error NativeMaterialRecipeRoster::_material_data(MaterialStorage::MaterialData *&out) const {
+	if (!device || device != RD::get_singleton() || !device->native_immutable_is_render_thread() || !material_owner || !material.is_valid()) { return ERR_UNAUTHORIZED; }
+	return material_owner->material_get_native_preparation_data(material.selection.rid, material.selection.generation, out);
+}
+
+Error NativeMaterialRecipeRoster::_input_kind(RD::UniformType type, uint32_t index, RD::NativeProspectiveInput::Kind &out) {
+	switch (type) {
+		case RD::UNIFORM_TYPE_UNIFORM_BUFFER: out = RD::NativeProspectiveInput::UNIFORM_BUFFER; return OK;
+		case RD::UNIFORM_TYPE_STORAGE_BUFFER: out = RD::NativeProspectiveInput::STORAGE_BUFFER; return OK;
+		case RD::UNIFORM_TYPE_TEXTURE: out = RD::NativeProspectiveInput::TEXTURE; return OK;
+		case RD::UNIFORM_TYPE_SAMPLER: out = RD::NativeProspectiveInput::SAMPLER; return OK;
+		case RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: out = index % 2 ? RD::NativeProspectiveInput::TEXTURE : RD::NativeProspectiveInput::SAMPLER; return OK;
+		default: return ERR_UNAVAILABLE;
+	}
+}
+
+Error NativeMaterialRecipeRoster::_validate_borrowed(const RD::ShaderUniform &reflected, const RD::Uniform &source) const {
+	if (source.uniform_type != reflected.type || reflected.writable) { return ERR_INVALID_DATA; }
+	const bool buffer = reflected.type == RD::UNIFORM_TYPE_UNIFORM_BUFFER || reflected.type == RD::UNIFORM_TYPE_STORAGE_BUFFER;
+	const uint64_t expected = buffer ? 1 : uint64_t(reflected.length) * (reflected.type == RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE ? 2 : 1);
+	if (!expected || expected != source.get_id_count()) { return ERR_INVALID_DATA; }
+	MutexLock lock(device->_thread_safe_);
+	for (uint32_t i = 0; i < source.get_id_count(); i++) {
+		const RID rid = source.get_id(i);
+		RD::NativeProspectiveInput::Kind kind;
+		const Error typed = _input_kind(reflected.type, i, kind);
+		if (typed != OK || rid.is_null() || device->native_immutable_resource_is_retiring(rid)) { return typed == OK ? ERR_INVALID_DATA : typed; }
+		switch (kind) {
+			case RD::NativeProspectiveInput::UNIFORM_BUFFER: {
+				const auto *actual = device->uniform_buffer_owner.get_or_null(rid);
+				if (!actual || !actual->driver_id || actual->size < reflected.length) { return ERR_INVALID_DATA; }
+			} break;
+			case RD::NativeProspectiveInput::STORAGE_BUFFER: {
+				const auto *actual = device->storage_buffer_owner.get_or_null(rid);
+				if (!actual || !actual->driver_id || (reflected.length && actual->size != reflected.length)) { return ERR_INVALID_DATA; }
+			} break;
+			case RD::NativeProspectiveInput::TEXTURE: {
+				const auto *actual = device->texture_owner.get_or_null(rid);
+				if (!actual || !actual->driver_id || !(actual->usage_flags & RD::TEXTURE_USAGE_SAMPLING_BIT)) { return ERR_INVALID_DATA; }
+			} break;
+			case RD::NativeProspectiveInput::SAMPLER: {
+				const auto *actual = device->sampler_owner.get_or_null(rid);
+				if (!actual || !actual->driver_id) { return ERR_INVALID_DATA; }
+			} break;
+		}
+	}
+	return OK;
+}
+
+Error NativeMaterialRecipeRoster::_add_symbol(const RD::NativeProspectiveSymbol &symbol, Role role, const Vector<uint8_t> &bytes, RD::NativeProspectiveKey &key, uint32_t limit) {
+	if (uint64_t(symbols.size()) >= limit) { return ERR_PARAMETER_RANGE_ERROR; }
+	key = { RID(), uint32_t(symbols.size()) };
+	if (symbols.push_back(symbol)) { return ERR_OUT_OF_MEMORY; }
+	Owned item;
+	item.role = role;
+	item.symbol = key.future;
+	item.bytes = bytes;
+	if (owned.push_back(item)) { return ERR_OUT_OF_MEMORY; }
+	return OK;
+}
+
+Error NativeMaterialRecipeRoster::_join_bindings(Backend backend, const Vector<RD::Uniform> &base, const Vector<RD::Uniform> &pass, const FixedData &fixed, uint32_t limit) {
+	if (!material.is_valid() || !symbols.is_empty() || !borrowed.is_empty() || !bindings.is_empty()) { return ERR_INVALID_DATA; }
+	const auto &reflection = material.get_layout();
+	if (reflection.uniform_sets.size() > 4 || fixed.push.size() != 16) { return ERR_UNAVAILABLE; }
+	for (RID rid : material.get_plan().material.roots) { if (uint64_t(borrowed.size()) >= limit) { return ERR_PARAMETER_RANGE_ERROR; } if (borrowed.push_back(rid)) { return ERR_OUT_OF_MEMORY; } }
+	RD::NativeProspectiveKey pipeline;
+	Error error = _add_symbol(material.get_plan().pipeline, Role::PIPELINE, {}, pipeline, limit);
+	if (error != OK) { return error; }
+	for (uint32_t set = 0; set < uint32_t(reflection.uniform_sets.size()); set++) {
+		const Vector<RD::Uniform> *sources = set == 0 ? &base : (set == 1 ? &pass : (set == 3 ? &material.get_uniform_sources() : nullptr));
+		RD::NativeProspectiveSymbol descriptor;
+		descriptor.kind = RD::NativeProspectiveSymbol::FUTURE_UNIFORM_SET;
+		descriptor.shader = material.get_plan().material.snapshot.shader;
+		for (const auto &reflected : reflection.uniform_sets[set]) {
+			if (reflected.writable) { return ERR_UNAVAILABLE; }
+			Binding binding;
+			binding.set = set;
+			binding.binding = reflected.binding;
+			binding.type = reflected.type;
+			const RD::Uniform *raw = nullptr;
+			if (sources) {
+				for (const auto &entry : *sources) {
+					if (entry.binding == reflected.binding) { if (raw) { return ERR_INVALID_DATA; } raw = &entry; }
+				}
+				if (!raw) { return ERR_INVALID_DATA; }
+				binding.immutable_sampler = raw->immutable_sampler;
+			}
+			const Vector<uint8_t> *replacement = nullptr;
+			Role role = Role::SCENE;
+			RD::NativeProspectiveSymbol::Kind owned_kind = RD::NativeProspectiveSymbol::FUTURE_UNIFORM_BUFFER;
+			if (set == 1 && reflected.binding == 0) { replacement = &fixed.scene; }
+			if (set == 1 && reflected.binding == (backend == Backend::MOBILE ? 1u : 2u)) { replacement = &fixed.instance; role = Role::INSTANCE; owned_kind = RD::NativeProspectiveSymbol::FUTURE_STORAGE_BUFFER; }
+			if (set == 1 && backend == Backend::CLUSTERED && reflected.binding == 1) { replacement = &fixed.implementation; role = Role::IMPLEMENTATION; }
+			if (set == 1 && backend == Backend::CLUSTERED && reflected.binding == 9) { replacement = &fixed.cluster; role = Role::CLUSTER; owned_kind = RD::NativeProspectiveSymbol::FUTURE_STORAGE_BUFFER; }
+			if (set == 2) {
+				if (reflected.binding > 1) { return ERR_UNAVAILABLE; }
+				replacement = reflected.binding ? &fixed.previous : &fixed.current;
+				role = reflected.binding ? Role::PREVIOUS : Role::CURRENT;
+				owned_kind = RD::NativeProspectiveSymbol::FUTURE_STORAGE_BUFFER;
+			}
+			if (replacement) {
+				const bool ubo = owned_kind == RD::NativeProspectiveSymbol::FUTURE_UNIFORM_BUFFER;
+				if (reflected.type != (ubo ? RD::UNIFORM_TYPE_UNIFORM_BUFFER : RD::UNIFORM_TYPE_STORAGE_BUFFER) || replacement->is_empty() || (ubo ? uint32_t(replacement->size()) < reflected.length : (reflected.length && uint32_t(replacement->size()) != reflected.length))) { return ERR_INVALID_DATA; }
+				// The source slot may be original dynamic backing; only owned fixed
+				// substitution converts it to the actual native static reflection.
+				if (raw) {
+					const bool typed_source = ubo ? (raw->uniform_type == RD::UNIFORM_TYPE_UNIFORM_BUFFER || raw->uniform_type == RD::UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC) : (raw->uniform_type == RD::UNIFORM_TYPE_STORAGE_BUFFER || raw->uniform_type == RD::UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC);
+					if (!typed_source || raw->get_id_count() != 1 || raw->get_id(0).is_null()) { return ERR_INVALID_DATA; }
+				}
+				RD::NativeProspectiveSymbol leaf;
+				leaf.kind = owned_kind;
+				RD::NativeProspectiveKey key;
+				error = _add_symbol(leaf, role, *replacement, key, limit);
+				if (error != OK || binding.inputs.push_back(key)) { return error == OK ? ERR_OUT_OF_MEMORY : error; }
+			} else {
+				if (!raw) { return ERR_INVALID_DATA; }
+				error = _validate_borrowed(reflected, *raw);
+				if (error != OK) { return error; }
+				for (uint32_t i = 0; i < raw->get_id_count(); i++) {
+					const RID rid = raw->get_id(i);
+					if (uint64_t(borrowed.size()) >= limit) { return ERR_PARAMETER_RANGE_ERROR; }
+					if (binding.inputs.push_back({ rid, UINT32_MAX }) || borrowed.push_back(rid)) { return ERR_OUT_OF_MEMORY; }
+				}
+			}
+			for (uint32_t i = 0; i < uint32_t(binding.inputs.size()); i++) {
+				RD::NativeProspectiveInput input;
+				input.key = binding.inputs[i];
+				error = _input_kind(reflected.type, i, input.kind);
+				if (error != OK) { return error; }
+				bool present = false;
+				for (const auto &existing : descriptor.inputs) {
+					if (existing.key == input.key) { if (existing.kind != input.kind) { return ERR_INVALID_DATA; } present = true; }
+				}
+				if (!present && descriptor.inputs.push_back(input)) { return ERR_OUT_OF_MEMORY; }
+			}
+			if (uint64_t(bindings.size()) >= limit) { return ERR_PARAMETER_RANGE_ERROR; }
+			if (bindings.push_back(binding)) { return ERR_OUT_OF_MEMORY; }
+		}
+		if (!reflection.uniform_sets[set].is_empty()) {
+			if (set == 3) {
+				if (material.get_plan().material.snapshot.uniform_set.is_null() || material.get_plan().material.snapshot.uniform_set_index != 3) { return ERR_INVALID_DATA; }
+			} else {
+				RD::NativeProspectiveKey key;
+				error = _add_symbol(descriptor, Role::SET, {}, key, limit);
+				if (error != OK) { return error; }
+			}
+		} else if (set == 3 && material.get_plan().material.snapshot.uniform_set.is_valid()) { return ERR_INVALID_DATA; }
+	}
+	return OK;
+}
+
+Error NativeMaterialRecipeRoster::_finish(Backend backend, const MeshStorage::NativeVertexArrayPlan &actual_geometry, const Vector<RD::Uniform> &base, const Vector<RD::Uniform> &pass, const FixedData &fixed, uint32_t limit) {
+	if (!device || device != RD::get_singleton() || !device->native_immutable_is_render_thread() || !surface.is_valid() || roster_complete || borrowed_hold.is_active()) { return ERR_UNAUTHORIZED; }
+	MeshStorage::NativeProspectiveGeometryPlan geometry_roster;
+	Error error = MeshStorage::_native_hold_prospective_geometry(surface, material.get_input_mask(), actual_geometry, limit, geometry_roster);
+	if (error != OK) { return error; }
+	error = _join_bindings(backend, base, pass, fixed, limit);
+	if (error != OK) { return error; }
+	RD::NativeProspectiveKey va;
+	if (geometry_roster.future_vertex_array) {
+		error = _add_symbol(geometry_roster.vertex_array, Role::VERTEX_ARRAY, {}, va, limit);
+		if (error != OK) { return error; }
+	}
+	for (const auto *group : { &geometry_roster.initial, &geometry_roster.directory }) {
+		for (auto key : group->roots) {
+			if (key.actual.is_valid()) { if (uint64_t(borrowed.size()) >= limit) { return ERR_PARAMETER_RANGE_ERROR; } if (borrowed.push_back(key.actual)) { return ERR_OUT_OF_MEMORY; } }
+			else if (geometry_roster.future_vertex_array && key.future == 1) { key = va; }
+			else { return ERR_INVALID_DATA; }
+			if (roots.push_back(key)) { return ERR_OUT_OF_MEMORY; }
+		}
+	}
+	// Every exact borrowed VB referenced by the future VA remains retained even
+	// when that VA has not been instantiated yet.
+	for (RID rid : geometry_roster.vertex_array.dependencies) { if (uint64_t(borrowed.size()) >= limit) { return ERR_PARAMETER_RANGE_ERROR; } if (borrowed.push_back(rid)) { return ERR_OUT_OF_MEMORY; } }
+	RD::NativeProspectiveSymbol fb;
+	fb.kind = RD::NativeProspectiveSymbol::FUTURE_FRAMEBUFFER;
+	for (uint32_t i = 0; i < uint32_t(framebuffer.attachments.size()); i++) {
+		const auto &attachment = framebuffer.attachments[i];
+		RD::NativeProspectiveSymbol texture;
+		texture.kind = RD::NativeProspectiveSymbol::FUTURE_TEXTURE;
+		RD::NativeProspectiveKey key;
+		error = _add_symbol(texture, Role::TARGET, {}, key, limit);
+		if (error != OK) { return error; }
+		auto &description = owned.write[owned.size() - 1].texture;
+		description.format = attachment.format;
+		description.width = description.height = 32;
+		description.depth = description.array_layers = description.mipmaps = 1;
+		description.texture_type = RD::TEXTURE_TYPE_2D;
+		description.samples = attachment.samples;
+		description.usage_bits = attachment.usage_flags;
+		// Preserve exact original format usage; _begin already required depth copy-from.
+		RD::NativeProspectiveInput input;
+		input.kind = RD::NativeProspectiveInput::TEXTURE;
+		input.key = key;
+		if (fb.inputs.push_back(input)) { return ERR_OUT_OF_MEMORY; }
+	}
+	RD::NativeProspectiveKey framebuffer_key;
+	error = _add_symbol(fb, Role::FRAMEBUFFER, {}, framebuffer_key, limit);
+	if (error != OK) { return error; }
+	for (uint32_t i = 0; i < uint32_t(symbols.size()); i++) {
+		if (roots.push_back({ RID(), i })) { return ERR_OUT_OF_MEMORY; }
+		edge_count += symbols[i].dependencies.size() + symbols[i].inputs.size() + uint32_t(symbols[i].shader.is_valid());
+	}
+	for (RID rid : borrowed) { if (roots.push_back({ rid, UINT32_MAX })) { return ERR_OUT_OF_MEMORY; } }
+	{
+		MutexLock lock(device->_thread_safe_);
+		error = device->_native_prospective_closure_keys_locked(roots, symbols, limit, false, closure);
+	}
+	if (error != OK) { return error; }
+	error = device->native_immutable_hold_acquire(borrowed, borrowed_hold, limit);
+	if (error != OK) { return error; }
+	geometry = actual_geometry;
+	push = fixed.push;
+	roster_complete = true;
+	return OK;
+}
+
+Error NativeMaterialRecipeRoster::release() {
+	if (!device || device != RD::get_singleton() || !device->native_immutable_is_render_thread()) { return ERR_UNAUTHORIZED; }
+	roster_complete = false; // A return prefix cannot be reused as a complete roster.
+	if (borrowed_hold.is_active()) {
+		const Error error = device->native_immutable_hold_release(borrowed_hold);
+		if (error != OK) { return error; }
+	}
+	if (surface.is_active()) {
+		const Error error = MeshStorage::mesh_surface_hold_release(surface);
+		if (error != OK) { return error; }
+	}
+	if (material.is_active()) {
+		const Error error = material_owner->material_recipe_source_release(material);
+		if (error != OK) { return error; }
+	}
+	if (mesh.is_active()) {
+		const Error error = mesh_owner->mesh_selection_release(mesh);
+		if (error != OK) { return error; }
+	}
+	symbols.clear(); owned.clear(); borrowed.clear(); bindings.clear(); roots.clear(); closure.clear();
+	geometry = MeshStorage::NativeVertexArrayPlan(); framebuffer = RD::NativeFramebufferLayout(); framebuffer_format = 0;
+	primitive = RD::RENDER_PRIMITIVE_MAX; raster = RD::PipelineRasterizationState(); multisample = RD::PipelineMultisampleState(); depth_stencil = RD::PipelineDepthStencilState(); blend = RD::PipelineColorBlendState(); specialization.clear(); push.clear();
+	edge_count = 0; roster_complete = false; material_owner = nullptr; mesh_owner = nullptr; device = nullptr;
+	return OK;
 }

@@ -1,0 +1,642 @@
+{
+  "base": "a17e74e0d8",
+  "scope": "Explicit available Metal precise floating-point functions and actual runtime library-key separation; not complete Sprite numerical qualification",
+  "sources": [
+    {
+      "path": "drivers/metal/metal_objects_shared.cpp",
+      "sha256": "2298852d7bad2e7cd45706f546d48601e8812e7a85e68d283fc5a3c8f932f247"
+    },
+    {
+      "path": "drivers/metal/rendering_device_driver_metal.cpp",
+      "sha256": "928c5541b7d015ddee7df0cd0c0e2d2b7fe25d105e0c7a4050f37338d9d57c0c"
+    },
+    {
+      "path": "servers/rendering/rendering_shader_container.cpp",
+      "sha256": "e5ab2b9448c087cac680ed5d8ef32a0e3698426dca18b1807ff5dab634baa2ea"
+    },
+    {
+      "path": "servers/rendering/rendering_shader_container.h",
+      "sha256": "5da9dc517bf9930b32f96e9caec0872086a08bf69d4e51bfdf88a72ddcf2d5ee"
+    },
+    {
+      "path": "tests/servers/rendering/test_shader_compile_policy.cpp",
+      "sha256": "b48404dee88d4d74ec1759798a65e5d6de3ae762313613383487bd3bb08c2838"
+    }
+  ],
+  "red_key": {
+    "exit": 1,
+    "counts": {
+      "OverallResultsAsserts": {
+        "successes": "21",
+        "failures": "1"
+      },
+      "OverallResultsTestCases": {
+        "successes": "0",
+        "failures": "1",
+        "skipped": "2084"
+      }
+    },
+    "host_sha256": "8a17eecca6c5007bde0f21c4cba672bd5975e129cffac37abf73b04c8ec8edc9"
+  },
+  "independent_key_encoding": {
+    "old_reference_sha256": "d07836a6da961890cba3d6ec1717a85c8a805987e16476fa35d2d6fb07dcf75a",
+    "new_reference_sha256": "ae84716f381d60c9046fcaa49ab16133dfb39e4281dd8fdf4fb6cafe4eaa0080",
+    "policy_field_position": "u32 after effective_disable and before msl_version",
+    "old_encoded_bytes": 164,
+    "new_encoded_bytes": 168
+  },
+  "red_runtime_compile": [
+    {
+      "actual_options": {
+        "api": "mathMode",
+        "language_version": 262144,
+        "logging": false,
+        "math_floating_point_functions": 0,
+        "math_mode": 0,
+        "preserve_invariance": false
+      },
+      "cache_hit": false,
+      "compile_path": "runtime_source",
+      "effective_disable": true,
+      "library_key": "464020fffd9bc64182822006a2a4144b840a8d43ab4e98dd8028dfab5fb930b7",
+      "phase": "runtime_compile",
+      "required_flags": 1,
+      "schema_version": 1,
+      "seq": 4,
+      "shader_name": "e06:original_whole_sprite_v2_97e4cc4b_sprite",
+      "source_digest": "bd7f9071c94887ed11ffbdb9212f980a65a877b17891d79128391380e0468c60",
+      "stage": 4
+    },
+    {
+      "actual_options": {
+        "api": "mathMode",
+        "language_version": 262144,
+        "logging": false,
+        "math_floating_point_functions": 0,
+        "math_mode": 0,
+        "preserve_invariance": false
+      },
+      "cache_hit": false,
+      "compile_path": "runtime_source",
+      "effective_disable": true,
+      "library_key": "a4a8be34e65c29b4dda5286d41bd854d229e8ba31be531cf1c61322857105df7",
+      "phase": "runtime_compile",
+      "required_flags": 1,
+      "schema_version": 1,
+      "seq": 8,
+      "shader_name": "e06:original_whole_sprite_v2_97e4cc4b_local",
+      "source_digest": "ab2866eb6c7e29cdb9838f3b4d073d553e5ef47c18c3a7325a9099630cd7ed67",
+      "stage": 4
+    },
+    {
+      "actual_options": {
+        "api": "mathMode",
+        "language_version": 262144,
+        "logging": false,
+        "math_floating_point_functions": 0,
+        "math_mode": 0,
+        "preserve_invariance": false
+      },
+      "cache_hit": false,
+      "compile_path": "runtime_source",
+      "effective_disable": true,
+      "library_key": "28c0f9a3acdb2a5eb133cbe0f66afc3aa2238f195a779ddfd0cc37d91c7dfd76",
+      "phase": "runtime_compile",
+      "required_flags": 1,
+      "schema_version": 1,
+      "seq": 12,
+      "shader_name": "e06:original_whole_sprite_v2_97e4cc4b_world",
+      "source_digest": "082fae486b71306834b88ced342c4be987c42b0ca09f561018495d6053d0fb57",
+      "stage": 4
+    }
+  ],
+  "green_runtime_compile": [
+    {
+      "actual_options": {
+        "api": "mathMode",
+        "language_version": 262144,
+        "logging": false,
+        "math_floating_point_functions": 1,
+        "math_mode": 0,
+        "preserve_invariance": false
+      },
+      "cache_hit": false,
+      "compile_path": "runtime_source",
+      "effective_disable": true,
+      "library_key": "1b687fa1862ae9a99d70c6a8afe17b24ec1b8fdc5558bfaf8e81f0a28774a70d",
+      "phase": "runtime_compile",
+      "required_flags": 1,
+      "schema_version": 1,
+      "seq": 4,
+      "shader_name": "e06:original_whole_sprite_v2_97e4cc4b_sprite",
+      "source_digest": "bd7f9071c94887ed11ffbdb9212f980a65a877b17891d79128391380e0468c60",
+      "stage": 4
+    },
+    {
+      "actual_options": {
+        "api": "mathMode",
+        "language_version": 262144,
+        "logging": false,
+        "math_floating_point_functions": 1,
+        "math_mode": 0,
+        "preserve_invariance": false
+      },
+      "cache_hit": false,
+      "compile_path": "runtime_source",
+      "effective_disable": true,
+      "library_key": "de3efc6b746cf5eba56cd952542c47d6291c782f52e464ca0e36e6e014bebc29",
+      "phase": "runtime_compile",
+      "required_flags": 1,
+      "schema_version": 1,
+      "seq": 8,
+      "shader_name": "e06:original_whole_sprite_v2_97e4cc4b_local",
+      "source_digest": "ab2866eb6c7e29cdb9838f3b4d073d553e5ef47c18c3a7325a9099630cd7ed67",
+      "stage": 4
+    },
+    {
+      "actual_options": {
+        "api": "mathMode",
+        "language_version": 262144,
+        "logging": false,
+        "math_floating_point_functions": 1,
+        "math_mode": 0,
+        "preserve_invariance": false
+      },
+      "cache_hit": false,
+      "compile_path": "runtime_source",
+      "effective_disable": true,
+      "library_key": "dc1e868abd10797bcea830b07dd50505852c0b8b87d6b730a609230762381cf4",
+      "phase": "runtime_compile",
+      "required_flags": 1,
+      "schema_version": 1,
+      "seq": 12,
+      "shader_name": "e06:original_whole_sprite_v2_97e4cc4b_world",
+      "source_digest": "082fae486b71306834b88ced342c4be987c42b0ca09f561018495d6053d0fb57",
+      "stage": 4
+    }
+  ],
+  "full": {
+    "exit": 0,
+    "elapsed": 20.06069429195486,
+    "counts": {
+      "OverallResultsAsserts": {
+        "successes": "521424",
+        "failures": "0"
+      },
+      "OverallResultsTestCases": {
+        "successes": "2082",
+        "failures": "0"
+      }
+    },
+    "host_sha256": "1af4e4a7b0a279f23e8c78484238baef3be4a5a17357b20bffa9ac38595110b7",
+    "stdout_bytes": 571,
+    "stderr_bytes": 4017
+  },
+  "red_run": {
+    "rc": 0,
+    "host_sha256": "8a17eecca6c5007bde0f21c4cba672bd5975e129cffac37abf73b04c8ec8edc9"
+  },
+  "green_run": {
+    "rc": 0,
+    "host_sha256": "1af4e4a7b0a279f23e8c78484238baef3be4a5a17357b20bffa9ac38595110b7"
+  },
+  "evidence": [
+    "work/b4-metal-precise-red-20261106",
+    "work/b4-metal-precise-green2-20261106"
+  ],
+  "limitations": [
+    "Original v2 static wrapper compile/load/pipeline only; no new original qualification ticket, numerical-envelope proof or final OutputMapping unit admission.",
+    "Old SDK/OS path remains fastMathEnabled(false); no synthesized Precise property or equivalence claim.",
+    "Precompiled binaries have no CompileOptions getter; their origin/metallib identity remains distinct, without runtime-policy requalification.",
+    "RED observer run compiled three pipelines successfully but independently exposed functionsFast0. Its key regression failed exactly the newly varied function-policy dimension; native process success is not policy acceptance.",
+    "GREEN independently updates the key test golden for its new u32 LE field; older audited keys/hosts retain original encodings and are not relabeled.",
+    "Runtime library actual function choice enters the existing private key after getter observation and before lookup; zero-request default policy remains the platform default.",
+    "Full engine negative-test stdout571/stderr4017 retained. Native runtime observations do not expose offline argv, a metallib or Apple runtime compiler binary hash.",
+    "RED/GREEN containers differ only in two existing alignment padding bytes per variant; decoded meaningful metadata and exact MSL match. Container hashes are retained separately, never equated."
+  ],
+  "native390_neighbor": {
+    "host_sha256": "1af4e4a7b0a279f23e8c78484238baef3be4a5a17357b20bffa9ac38595110b7",
+    "gpu_pass": true,
+    "check_count": 390,
+    "allocation_count": 31,
+    "native_resource_count": 29,
+    "readbacks_completed": 6,
+    "sdf_readbacks_completed": 2,
+    "released": true,
+    "done": true,
+    "outer_checks": {
+      "one_result": true,
+      "not_timeout": true,
+      "no_fatal_or_exit_leaks": true,
+      "exact_expected_engine_errors": true,
+      "actual_metal_startup": true,
+      "native_and_outer_success": true,
+      "host_and_metadata_unchanged": true,
+      "source_unchanged": true
+    }
+  },
+  "independent_final_review": {
+    "source": [
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/drivers/metal/metal_objects_shared.cpp",
+        "sha256": "2298852d7bad2e7cd45706f546d48601e8812e7a85e68d283fc5a3c8f932f247",
+        "bytes": 36195
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/drivers/metal/rendering_device_driver_metal.cpp",
+        "sha256": "928c5541b7d015ddee7df0cd0c0e2d2b7fe25d105e0c7a4050f37338d9d57c0c",
+        "bytes": 146259
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/rendering_shader_container.cpp",
+        "sha256": "e5ab2b9448c087cac680ed5d8ef32a0e3698426dca18b1807ff5dab634baa2ea",
+        "bytes": 51832
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/rendering_shader_container.h",
+        "sha256": "5da9dc517bf9930b32f96e9caec0872086a08bf69d4e51bfdf88a72ddcf2d5ee",
+        "bytes": 15082
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/test_shader_compile_policy.cpp",
+        "sha256": "b48404dee88d4d74ec1759798a65e5d6de3ae762313613383487bd3bb08c2838",
+        "bytes": 72588
+      }
+    ],
+    "pins": [
+      {
+        "path": "/private/tmp/b4-sprite-native-policy-20261106/input/SPRITE_INTEGER_SQRT_SUCCESSOR.zip",
+        "sha256": "97e4cc4b912f38811c820f75bc393d7c93fba87731ab7dd8b687e330d31e852e",
+        "bytes": 213493
+      },
+      {
+        "path": "/private/tmp/b4-sprite-native-policy-20261106/input/E06_CO_MOVER.md",
+        "sha256": "247adaae878cc43bac4200911a4c8660ae779c6c80a55c1ec9c9a4500645da79",
+        "bytes": 5064
+      },
+      {
+        "path": "/private/tmp/b4-sprite-native-policy-20261106/input/SQRT_SUCCESSOR_GRAPH.json",
+        "sha256": "447f16612ea567588d4eb5f9ebccea3b1784feae13a791f06257ec57c904ce5f",
+        "bytes": 4269
+      },
+      {
+        "path": "/private/tmp/b4-sprite-native-policy-20261106/input/sprite-STATIC_SHADER_RESULT.json",
+        "sha256": "438325f5831cbe655bc1304550c0d378cdcadf5ec23f8893a2b8a4579d8607d4",
+        "bytes": 1986
+      },
+      {
+        "path": "/private/tmp/b4-sprite-native-policy-20261106/input/sprite.comp",
+        "sha256": "4de112342bf4b63bb0bd72269aa9b40bd5614ea7df1a70a1124cce5d4609b144",
+        "bytes": 241561
+      },
+      {
+        "path": "/private/tmp/b4-sprite-native-policy-20261106/input/sprite.spv",
+        "sha256": "1668fc2d14f66675efb1c2a88ba9d1e25d116f1fd86bfbcaf8b24dee42fb9732",
+        "bytes": 812692
+      },
+      {
+        "path": "/private/tmp/b4-sprite-native-policy-20261106/input/local-STATIC_SHADER_RESULT.json",
+        "sha256": "1ec8626f8d8f3e944ae13d0f87e29e09478c2bb4174f6f8a5b96226db54f5481",
+        "bytes": 1979
+      },
+      {
+        "path": "/private/tmp/b4-sprite-native-policy-20261106/input/local.comp",
+        "sha256": "7856ece8578614a4c447d47de7286ad05002fa10e7ae88a7d1dbbdce188625dc",
+        "bytes": 239154
+      },
+      {
+        "path": "/private/tmp/b4-sprite-native-policy-20261106/input/local.spv",
+        "sha256": "01e54c09a0a210dda2c6cc2375b7d5e73685c657ef2ef9206d389cdfe1a02a01",
+        "bytes": 805468
+      },
+      {
+        "path": "/private/tmp/b4-sprite-native-policy-20261106/input/world-STATIC_SHADER_RESULT.json",
+        "sha256": "96e84dac9954d7af278f1ac18338311e23aecc5b46475dc664ad2d6e3c40ec1e",
+        "bytes": 1979
+      },
+      {
+        "path": "/private/tmp/b4-sprite-native-policy-20261106/input/world.comp",
+        "sha256": "207e138f1585e78cdb9f83d8aefddc598b79d5f0dc7ea047f4c3094cf3b934a1",
+        "bytes": 185154
+      },
+      {
+        "path": "/private/tmp/b4-sprite-native-policy-20261106/input/world.spv",
+        "sha256": "aaae3fe6d855e5748076b62f90eccb7bd6395172fcb3dcea1d88005257400669",
+        "bytes": 610264
+      },
+      {
+        "path": "/tmp/b4-sprite-native-policy-20261106/input/observe.gd",
+        "sha256": "93d79a48d4cf1b0ade891d6e31cef7d7105d2f188a794392c633db94ccbb416f",
+        "bytes": 3745
+      },
+      {
+        "path": "/tmp/b4-sprite-native-policy-20261106/input/variants.json",
+        "sha256": "874eb3f24f67ce695d5fc4df250cd7272caa58bb9af9821f59023aedc8ba33d2",
+        "bytes": 787
+      },
+      {
+        "path": "/tmp/b4-sprite-native-policy-20261106/input/project.godot",
+        "sha256": "ca7c1f7d59208afc887da85b4bc103b41768b66b0e47c564d640b99bf2bf98d7",
+        "bytes": 173
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-precise-red-20261106/host/editor.arm64",
+        "sha256": "8a17eecca6c5007bde0f21c4cba672bd5975e129cffac37abf73b04c8ec8edc9",
+        "bytes": 154944568
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-precise-red-20261106/host/editor.arm64",
+        "sha256": "8a17eecca6c5007bde0f21c4cba672bd5975e129cffac37abf73b04c8ec8edc9",
+        "bytes": 154944568
+      },
+      {
+        "path": "/private/tmp/b4-sprite-native-policy-20261106/INPUTS.json",
+        "sha256": "182851943f2a13577083d048ba6535da99d10d267345e38f4ec40682614b7fbd",
+        "bytes": 8319
+      },
+      {
+        "path": "/private/tmp/b4-sprite-native-policy-20261106/input/observe.gd",
+        "sha256": "93d79a48d4cf1b0ade891d6e31cef7d7105d2f188a794392c633db94ccbb416f",
+        "bytes": 3745
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-precise-red-20261106/native/OBSERVATION.json",
+        "sha256": "d8fea03343e5b65edddf02afd9d16157cbc95c177998d111cea48e2fc4f23621",
+        "bytes": 1508
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-precise-red-20261106/native/compiler-audit.ndjson",
+        "sha256": "fb0ce2b366d857f42fbaf9f91fcd65706a6a1b839a2ad25d05b9a23c985cda8b",
+        "bytes": 5257
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-precise-red-20261106/native/local.container",
+        "sha256": "3453f3d72c45e840ec028156633ab7479d04e84ea5a664a77cadf5a516429b34",
+        "bytes": 59836
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-precise-red-20261106/native/sprite.container",
+        "sha256": "7e4b307bc08d2f7181006bdb6b5b889809e77a76c5dbae994d9cc4ee6473c2c6",
+        "bytes": 60260
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-precise-red-20261106/native/stderr.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-precise-red-20261106/native/stdout.log",
+        "sha256": "35bb7dc6dd14eb2d31cffc2157ee10f0b263f2c6bcf7db94b9821763982a8d9e",
+        "bytes": 179
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-precise-red-20261106/native/world.container",
+        "sha256": "60c13280dffd24955ea2d5af42e30d8f9062e49caccf0f8b6247827e6246b809",
+        "bytes": 44016
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-precise-green2-20261106/host/editor.arm64",
+        "sha256": "1af4e4a7b0a279f23e8c78484238baef3be4a5a17357b20bffa9ac38595110b7",
+        "bytes": 154944568
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-precise-green2-20261106/host/editor.arm64",
+        "sha256": "1af4e4a7b0a279f23e8c78484238baef3be4a5a17357b20bffa9ac38595110b7",
+        "bytes": 154944568
+      },
+      {
+        "path": "/private/tmp/b4-sprite-native-policy-20261106/INPUTS.json",
+        "sha256": "182851943f2a13577083d048ba6535da99d10d267345e38f4ec40682614b7fbd",
+        "bytes": 8319
+      },
+      {
+        "path": "/private/tmp/b4-sprite-native-policy-20261106/input/observe.gd",
+        "sha256": "93d79a48d4cf1b0ade891d6e31cef7d7105d2f188a794392c633db94ccbb416f",
+        "bytes": 3745
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-precise-green2-20261106/native/OBSERVATION.json",
+        "sha256": "f70ab76aa1ed488cfdacdc3d9f1f50952d452f281547daa195b8579db0a276e3",
+        "bytes": 1508
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-precise-green2-20261106/native/compiler-audit.ndjson",
+        "sha256": "1ec67d70484f85fb594ba028809063d238c7ea4cc9bb30914e2da91d90dc7776",
+        "bytes": 5257
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-precise-green2-20261106/native/local.container",
+        "sha256": "cebbd816b011ba6722acb0e2448a29adca3c7a34f6c82197c1c05095349b6e98",
+        "bytes": 59836
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-precise-green2-20261106/native/sprite.container",
+        "sha256": "6c48834bcb2da2dac72725151fb52afad19212039c2195f286dddb345ab46058",
+        "bytes": 60260
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-precise-green2-20261106/native/stderr.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-precise-green2-20261106/native/stdout.log",
+        "sha256": "35bb7dc6dd14eb2d31cffc2157ee10f0b263f2c6bcf7db94b9821763982a8d9e",
+        "bytes": 179
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-precise-green2-20261106/native/world.container",
+        "sha256": "6ea6eba37276dca20d756567d10bf2fb96be1a717345004b292b764882269cc8",
+        "bytes": 44016
+      },
+      {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+        "sha256": "1af4e4a7b0a279f23e8c78484238baef3be4a5a17357b20bffa9ac38595110b7",
+        "bytes": 154944568
+      }
+    ],
+    "variants": [
+      {
+        "name": "sprite",
+        "msl_bytes": 351446,
+        "msl_sha256": "bd7f9071c94887ed11ffbdb9212f980a65a877b17891d79128391380e0468c60",
+        "same_container": false,
+        "audits": {
+          "b4-metal-precise-red-20261106": {
+            "actual_options": {
+              "api": "mathMode",
+              "language_version": 262144,
+              "logging": false,
+              "math_floating_point_functions": 0,
+              "math_mode": 0,
+              "preserve_invariance": false
+            },
+            "library_key": "464020fffd9bc64182822006a2a4144b840a8d43ab4e98dd8028dfab5fb930b7",
+            "encoded_bytes": 351588
+          },
+          "b4-metal-precise-green2-20261106": {
+            "actual_options": {
+              "api": "mathMode",
+              "language_version": 262144,
+              "logging": false,
+              "math_floating_point_functions": 1,
+              "math_mode": 0,
+              "preserve_invariance": false
+            },
+            "library_key": "1b687fa1862ae9a99d70c6a8afe17b24ec1b8fdc5558bfaf8e81f0a28774a70d",
+            "encoded_bytes": 351592
+          }
+        }
+      },
+      {
+        "name": "local",
+        "msl_bytes": 349041,
+        "msl_sha256": "ab2866eb6c7e29cdb9838f3b4d073d553e5ef47c18c3a7325a9099630cd7ed67",
+        "same_container": false,
+        "audits": {
+          "b4-metal-precise-red-20261106": {
+            "actual_options": {
+              "api": "mathMode",
+              "language_version": 262144,
+              "logging": false,
+              "math_floating_point_functions": 0,
+              "math_mode": 0,
+              "preserve_invariance": false
+            },
+            "library_key": "a4a8be34e65c29b4dda5286d41bd854d229e8ba31be531cf1c61322857105df7",
+            "encoded_bytes": 349183
+          },
+          "b4-metal-precise-green2-20261106": {
+            "actual_options": {
+              "api": "mathMode",
+              "language_version": 262144,
+              "logging": false,
+              "math_floating_point_functions": 1,
+              "math_mode": 0,
+              "preserve_invariance": false
+            },
+            "library_key": "de3efc6b746cf5eba56cd952542c47d6291c782f52e464ca0e36e6e014bebc29",
+            "encoded_bytes": 349187
+          }
+        }
+      },
+      {
+        "name": "world",
+        "msl_bytes": 255558,
+        "msl_sha256": "082fae486b71306834b88ced342c4be987c42b0ca09f561018495d6053d0fb57",
+        "same_container": false,
+        "audits": {
+          "b4-metal-precise-red-20261106": {
+            "actual_options": {
+              "api": "mathMode",
+              "language_version": 262144,
+              "logging": false,
+              "math_floating_point_functions": 0,
+              "math_mode": 0,
+              "preserve_invariance": false
+            },
+            "library_key": "28c0f9a3acdb2a5eb133cbe0f66afc3aa2238f195a779ddfd0cc37d91c7dfd76",
+            "encoded_bytes": 255700
+          },
+          "b4-metal-precise-green2-20261106": {
+            "actual_options": {
+              "api": "mathMode",
+              "language_version": 262144,
+              "logging": false,
+              "math_floating_point_functions": 1,
+              "math_mode": 0,
+              "preserve_invariance": false
+            },
+            "library_key": "dc1e868abd10797bcea830b07dd50505852c0b8b87d6b730a609230762381cf4",
+            "encoded_bytes": 255704
+          }
+        }
+      }
+    ],
+    "format": [
+      {
+        "file": "drivers/metal/metal_objects_shared.cpp",
+        "clean": true,
+        "diff_lines": 0
+      },
+      {
+        "file": "drivers/metal/rendering_device_driver_metal.cpp",
+        "clean": true,
+        "diff_lines": 0
+      },
+      {
+        "file": "servers/rendering/rendering_shader_container.cpp",
+        "clean": true,
+        "diff_lines": 0
+      },
+      {
+        "file": "servers/rendering/rendering_shader_container.h",
+        "clean": true,
+        "diff_lines": 0
+      },
+      {
+        "file": "tests/servers/rendering/test_shader_compile_policy.cpp",
+        "clean": true,
+        "diff_lines": 0
+      }
+    ],
+    "b4-metal-precise-red-20261106": {
+      "host_sha": "8a17eecca6c5007bde0f21c4cba672bd5975e129cffac37abf73b04c8ec8edc9",
+      "manifest_sha": "182851943f2a13577083d048ba6535da99d10d267345e38f4ec40682614b7fbd",
+      "script_sha": "93d79a48d4cf1b0ade891d6e31cef7d7105d2f188a794392c633db94ccbb416f",
+      "key": {
+        "OverallResultsAsserts": {
+          "successes": "21",
+          "failures": "1"
+        },
+        "OverallResultsTestCases": {
+          "successes": "0",
+          "failures": "1",
+          "skipped": "2084"
+        }
+      }
+    },
+    "b4-metal-precise-green2-20261106": {
+      "host_sha": "1af4e4a7b0a279f23e8c78484238baef3be4a5a17357b20bffa9ac38595110b7",
+      "manifest_sha": "182851943f2a13577083d048ba6535da99d10d267345e38f4ec40682614b7fbd",
+      "script_sha": "93d79a48d4cf1b0ade891d6e31cef7d7105d2f188a794392c633db94ccbb416f",
+      "full": {
+        "OverallResultsAsserts": {
+          "successes": "521424",
+          "failures": "0"
+        },
+        "OverallResultsTestCases": {
+          "successes": "2082",
+          "failures": "0"
+        }
+      }
+    },
+    "goldens": {
+      "old": [
+        "d07836a6da961890cba3d6ec1717a85c8a805987e16476fa35d2d6fb07dcf75a",
+        164
+      ],
+      "new": [
+        "ae84716f381d60c9046fcaa49ab16133dfb39e4281dd8fdf4fb6cafe4eaa0080",
+        168
+      ]
+    },
+    "red_failure": "<Expression success=\"false\" type=\"CHECK\" filename=\"tests/servers/rendering/test_shader_compile_policy.cpp\" line=\"1135\">\n        <Original>\n          ShaderCompilePolicy::library_key(changed) != baseline\n        </Original>\n        <Expanded>\n          [208, 120, 54, 166, 218, 150, 24, 144, 203, 163, 214, 236, 23, 23, 168, 92, 138, 128, 89, 135, 225, 100, 118, 250, 53, 210, 214, 251, 7, 220, 247, 90] != [208, 120, 54, 166, 218, 150, 24, 144, 203, 163, 214, 236, 23, 23, 168, 92, 138, 128, 89, 135, 225, 100, 118, 250, 53, 210, 214, 251, 7, 220, 247, 90]\n        </Expanded>\n        <Info>\n          dimension := 19\n        </Info>\n      </Expression>\n      ",
+    "full_raw_bytes": {
+      "stdout.log": 571,
+      "stderr.log": 4017,
+      "doctest.xml": 1093894
+    },
+    "formatter": "clang-format version 21.1.7",
+    "pin_checks": 38,
+    "unique_pin_paths": 34,
+    "review_status": "pass_with_scope_limits",
+    "blockers": [],
+    "observations": [
+      "All six native containers differ only at offsets 106 and 107 in MetalDeviceProfile trailing bool-to-u32 alignment padding; identical meaningful metadata, compressed payload and extracted MSL. Do not claim whole-container byte equality.",
+      "Full suite stderr is 4017 bytes of test diagnostics, not empty; XML has no assertion/case failures.",
+      "Actual supported OS path observed only on Apple M3 Pro / macOS27.0.1 / Xcode27.2. Legacy OS+SDK branch and flag0 native compilation not newly executed; source preserved and safe/fast actual getter assertions both pass in full suite.",
+      "Evidence establishes compile/load/pipeline and actual options/cache-key policy only; no dispatch/readback/math qualification."
+    ]
+  }
+}
