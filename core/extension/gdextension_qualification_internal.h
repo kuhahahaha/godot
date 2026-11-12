@@ -402,16 +402,20 @@ struct Registry::QualificationBridge {
 		--children;
 	}
 	static constexpr uint32_t CHILD_CAPACITY = 128;
-	// Finite legacy Numeric/Method scope: the existing 128 ticket envelope,
-	// at most ten original method roles (numeric has eight), Capture and Body.
-	// This is a component limit, not a World/System/U08 byte grant or permission
-	// for unbounded pre-ticket churn. Every admitted original key uses a credit.
-	static constexpr uint32_t STORAGE_HISTORY_CAPACITY = CHILD_CAPACITY * 10;
+	// Finite engineering Storage table, independent of World/System/U08 grants.
+	// Original private-ref/serial/history gates still limit actual admission.
+	// ACKed-but-pinned metadata keeps its slot until original collection.
+	static constexpr uint32_t STORAGE_CHILD_CAPACITY = 4096;
+	// Origins, including collected cold entries, retain their independent
+	// finite session credit until bridge close; physical refunds do not reset it.
+	static constexpr uint32_t STORAGE_HISTORY_CAPACITY = STORAGE_CHILD_CAPACITY * 10;
+	// Preserve the legacy SceneDepth and Numeric/Method unit envelopes.
+	static constexpr uint32_t SCENE_DEPTH_HISTORY_CAPACITY = CHILD_CAPACITY * 10;
 	static constexpr uint32_t UNIT_HISTORY_CAPACITY = CHILD_CAPACITY * 2;
 	QualificationChildHistory<GDExtensionStorageCreateRequestV1, STORAGE_HISTORY_CAPACITY> storage_origins;
 	QualificationChildHistory<GDExtensionNativeUnitCreateRequestV1, UNIT_HISTORY_CAPACITY> unit_origins;
 	QualificationChildHistory<GDExtensionQualificationRasterCreateV1, UNIT_HISTORY_CAPACITY> raster_origins;
-	QualificationChildHistory<GDExtensionStorageSceneDepthQuoteRequestV1, STORAGE_HISTORY_CAPACITY> scene_depth_origins;
+	QualificationChildHistory<GDExtensionStorageSceneDepthQuoteRequestV1, SCENE_DEPTH_HISTORY_CAPACITY> scene_depth_origins;
 	// Qualification custody of the original K owner. This same Ref is kept
 	// through actual child return; it grants no producer Complete or E05 charge.
 	struct SceneDepth {
@@ -497,7 +501,7 @@ struct Registry::QualificationBridge {
 	};
 	ChildMetadataStats child_metadata_stats() const;
 	QualificationTicket *tickets[CHILD_CAPACITY] = {};
-	Storage *storage[CHILD_CAPACITY] = {};
+	Storage *storage[STORAGE_CHILD_CAPACITY] = {};
 	Texture *textures[CHILD_CAPACITY] = {};
 	Sampler *samplers[CHILD_CAPACITY] = {};
 	UniformSet *sets[CHILD_CAPACITY] = {};

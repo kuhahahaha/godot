@@ -213,27 +213,53 @@ public:
 			device.is_main_instance = false;
 			memdelete(registry);
 		} };
+		if (mode == 6) {
+			// Two original Initial targets retain 13 parts each, while the two
+			// Current targets retain 70 each. All 166 backings must coexist;
+			// no physical return or metadata collection can fund this creation.
+			const uint32_t page_parts[] = { 13, 13, 64, 6, 64, 6 };
+			for (uint32_t page = 0; page < 6; ++page) {
+				for (uint32_t part = 0; part < page_parts[page]; ++part) {
+					const GDExtensionStorageCreateRequestV1 origin{ { 1, 16, 0 }, 128, 5 + page, part, 1, uint64_t(part) * 2 + 1, 0 };
+					GDExtensionStorageBackingV1 backing{};
+					const auto created = registry->qualification_storage_create(ref, &origin, &backing);
+					CHECK(created.native_error == OK);
+					if (created.native_error != OK) {
+						return; // Original cleanup returns every actually created prefix.
+					}
+					CHECK(backing.rid != 0);
+					CHECK(backing.byte_size == 128);
+				}
+			}
+			CHECK(bridge->children == 166);
+			CHECK(bridge->storage_origins.used_count() == 166);
+			return;
+		}
 		if (mode == 5) {
 			// Fill the actual Storage array without ACK, then verify the next
 			// distinct origin refuses before native work and preserves every member.
-			for (uint32_t part = 0; part < 128; ++part) {
-				const GDExtensionStorageCreateRequestV1 origin{ { 1, 16, 0 }, 128, 5, part, 1, uint64_t(part) * 2 + 1, 0 };
+			// Isolate the table boundary from the independent production private-ref
+			// limit: one bridge ref, two original cleanup refs, and one spare child.
+			registry->private_limit = 4100;
+			for (uint32_t part = 0; part < 4096; ++part) {
+				const GDExtensionStorageCreateRequestV1 origin{ { 1, 16, 0 }, 128, 5 + part / 64, part % 64, 1, uint64_t(part) * 2 + 1, 0 };
 				GDExtensionStorageBackingV1 backing{};
 				REQUIRE(registry->qualification_storage_create(ref, &origin, &backing).native_error == OK);
 			}
 			const auto serial_before = registry->qualification_serials.next;
 			const auto refs_before = record.private_refs;
-			const GDExtensionStorageCreateRequestV1 excess{ { 1, 16, 0 }, 128, 5, 128, 1, 257, 0 };
+			const GDExtensionStorageCreateRequestV1 excess{ { 1, 16, 0 }, 128, 69, 0, 1, 8193, 0 };
 			GDExtensionStorageBackingV1 backing{};
 			const auto refused = registry->qualification_storage_create(ref, &excess, &backing);
 			CHECK(refused.native_error == ERR_PARAMETER_RANGE_ERROR);
 			CHECK(refused.reason == 19);
 			CHECK(backing.rid == 0);
-			CHECK(bridge->children == 128);
-			CHECK(bridge->storage_origins.used_count() == 128);
+			CHECK(bridge->children == 4096);
+			CHECK(bridge->storage_origins.used_count() == 4096);
+			CHECK(record.private_refs < registry->private_limit);
 			CHECK(record.private_refs == refs_before);
 			CHECK(registry->qualification_serials.next == serial_before);
-			CHECK((native_creates && *native_creates == 128));
+			CHECK((native_creates && *native_creates == 4096));
 			for (auto *child : bridge->storage) {
 				REQUIRE(child);
 				CHECK_FALSE(child->acknowledged);
@@ -242,7 +268,7 @@ public:
 		}
 		uint64_t previous_serial = 0;
 		GDExtensionStorageCreateRequestV1 first_origin = {};
-		for (uint64_t generation = 1; generation <= (mode == 1 ? 160 : mode >= 2 ? 1
+		for (uint64_t generation = 1; generation <= (mode == 1 ? 5120 : mode >= 2 ? 1
 																				 : 66);
 				++generation) {
 			for (uint32_t part = 0; part < (mode == 4 ? 1u : 8u); ++part) {
@@ -380,7 +406,7 @@ public:
 			const uint64_t serial_before = registry->qualification_serials.next;
 			const uint64_t cleanup_before = registry->qualification_cleanup_serial_reservations;
 			const int creates_before = native_creates ? *native_creates : 0;
-			const GDExtensionStorageCreateRequestV1 excess{ { 1, 16, 0 }, 128, 0, 0, 161, 1, 0 };
+			const GDExtensionStorageCreateRequestV1 excess{ { 1, 16, 0 }, 128, 0, 0, 5121, 1, 0 };
 			GDExtensionStorageBackingV1 rejected = {};
 			const auto full = registry->qualification_storage_create(ref, &excess, &rejected);
 			CHECK(full.native_error == ERR_PARAMETER_RANGE_ERROR);
@@ -389,7 +415,7 @@ public:
 			CHECK(registry->qualification_serials.next == serial_before);
 			CHECK(registry->qualification_cleanup_serial_reservations == cleanup_before);
 			CHECK((!native_creates || *native_creates == creates_before));
-			CHECK(bridge->storage_origins.used_count() == 1280);
+			CHECK(bridge->storage_origins.used_count() == 40960);
 		}
 		GDExtensionStorageBackingV1 replay = {};
 		const auto stale = registry->qualification_storage_create(ref, &first_origin, &replay);
@@ -6268,6 +6294,18 @@ TEST_CASE("[Qualification][Storage4B] exact snapshot storage accepts four bytes 
 	CHECK(driver.creates == 1);
 	CHECK(driver.frees == 1);
 }
+TEST_CASE("[Qualification][ChildCapacity] retained Full Initial and Current targets admit 166 live original Storage backings") {
+	RenderingDevice device;
+	TestQualificationPhysical::Driver driver;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	struct Detach {
+		RenderingDevice &device;
+		~Detach() { TestQualificationPhysicalAccess::detach(device); }
+	} detach{ device };
+	TestQualificationPhysicalAccess::storage_retirement_capacity(device, 6, &driver.creates);
+	CHECK(driver.creates == 166);
+	CHECK(driver.frees == 166);
+}
 TEST_CASE("[Qualification][ChildCapacity] full Storage membership refuses the next distinct origin before native") {
 	RenderingDevice device;
 	TestQualificationPhysical::Driver driver;
@@ -6277,8 +6315,8 @@ TEST_CASE("[Qualification][ChildCapacity] full Storage membership refuses the ne
 		~Detach() { TestQualificationPhysicalAccess::detach(device); }
 	} detach{ device };
 	TestQualificationPhysicalAccess::storage_retirement_capacity(device, 5, &driver.creates);
-	CHECK(driver.creates == 128);
-	CHECK(driver.frees == 128);
+	CHECK(driver.creates == 4096);
+	CHECK(driver.frees == 4096);
 }
 TEST_CASE("[Qualification][ChildCapacity] acknowledged storage does not exhaust the original full numeric cohort") {
 	RenderingDevice device;

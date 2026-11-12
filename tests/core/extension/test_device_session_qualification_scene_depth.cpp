@@ -284,7 +284,7 @@ public:
 	static void finite_children_and_history() {
 		for (bool history : { false, true }) {
 			Fixture f;
-			const uint32_t limit = history ? Registry::QualificationBridge::STORAGE_HISTORY_CAPACITY : Registry::QualificationBridge::CHILD_CAPACITY;
+			const uint32_t limit = history ? Registry::QualificationBridge::SCENE_DEPTH_HISTORY_CAPACITY : Registry::QualificationBridge::CHILD_CAPACITY;
 			GDExtensionStorageSceneDepthRefV1 first{};
 			for (uint32_t i = 0; i < limit; ++i) {
 				auto q = request();

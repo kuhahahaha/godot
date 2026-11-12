@@ -69,7 +69,7 @@ void Registry::QualificationBridge::trace_storage_child(Storage &child, const ch
 		return;
 	}
 	uint32_t slot = 0, forward_edges = 0;
-	for (; slot < CHILD_CAPACITY && storage[slot] != &child; ++slot) {
+	for (; slot < STORAGE_CHILD_CAPACITY && storage[slot] != &child; ++slot) {
 	}
 	for (const auto *ticket : tickets) {
 		if (ticket) {
@@ -428,16 +428,16 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_create(GDExtens
 			// Same-origin scan found no child; this call has not allocated anything.
 			return result(ERR_BUSY, GDEXTENSION_DEVICE_SESSION_REASON_STORAGE_CREATE_DEFERRED_V1);
 		}
-		for (; slot < QualificationBridge::CHILD_CAPACITY && bridge->storage[slot]; ++slot) {
+		for (; slot < QualificationBridge::STORAGE_CHILD_CAPACITY && bridge->storage[slot]; ++slot) {
 		}
 		// A published backing must retain the two original identities needed for
 		// retirement even if unrelated admissions later exhaust the sequence.
 		const uint32_t refs_needed = bridge->cleanup_refs_reserved ? 1 : 3;
-		if (slot == QualificationBridge::CHILD_CAPACITY || private_limit < refs_needed || records[bridge->library].private_refs > private_limit - refs_needed || !qualification_serial_capacity(4)) {
+		if (slot == QualificationBridge::STORAGE_CHILD_CAPACITY || private_limit < refs_needed || records[bridge->library].private_refs > private_limit - refs_needed || !qualification_serial_capacity(4)) {
 			trace_child_metadata(*bridge, "storage", "preflight_refused", ERR_PARAMETER_RANGE_ERROR, 19);
 #ifdef TESTS_ENABLED
 			if (OS::get_singleton() && OS::get_singleton()->has_environment("GODOT_QUALIFICATION_CAPACITY_TRACE")) {
-				print_line(vformat("QCHILD_STORAGE_REFUSED v=1 bridge=%d origin_slot=%d generation=%d part=%d attempt=%d bytes=%d slots_full=%d private_limit=%d private_refs=%d refs_needed=%d serial_capacity=%d", bridge->serial, request->allocation_slot, request->allocation_generation, request->part, request->create_attempt, request->bytes, int(slot == QualificationBridge::CHILD_CAPACITY), private_limit, records[bridge->library].private_refs, refs_needed, int(qualification_serial_capacity(4))));
+				print_line(vformat("QCHILD_STORAGE_REFUSED v=1 bridge=%d origin_slot=%d generation=%d part=%d attempt=%d bytes=%d slots_full=%d private_limit=%d private_refs=%d refs_needed=%d serial_capacity=%d", bridge->serial, request->allocation_slot, request->allocation_generation, request->part, request->create_attempt, request->bytes, int(slot == QualificationBridge::STORAGE_CHILD_CAPACITY), private_limit, records[bridge->library].private_refs, refs_needed, int(qualification_serial_capacity(4))));
 				for (auto *member : bridge->storage) {
 					if (member) {
 						bridge->trace_storage_child(*member, "refusal_member");
