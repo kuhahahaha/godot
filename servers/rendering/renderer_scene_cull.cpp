@@ -32,6 +32,7 @@
 
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
+#include "core/math/affine_f32.h"
 #include "core/math/geometry_3d.h"
 #include "core/object/callable_mp.h"
 #include "core/object/worker_thread_pool.h"
@@ -40,6 +41,8 @@
 #include "servers/rendering/rendering_light_culler.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_default.h"
+
+#include <limits>
 
 #ifndef XR_DISABLED
 #include "servers/xr/xr_interface.h"
@@ -414,7 +417,25 @@ Error RendererSceneCull::scene_receiver_commit_query(RID p_receiver, uint64_t p_
 	}
 	const bool same_generation = receiver->scene_query_base == receiver->base && receiver->scene_query_generation == p_generation;
 	const AABB transformed_envelope = p_transform.xform(p_local_envelope);
-	const real_t determinant = p_transform.basis.determinant();
+	const double determinant = [&]() {
+		// Reuse the original exact Host classifier only for a lossless finite
+		// f32 basis. A genuinely wider basis retains its native real_t policy.
+		float affine[12]{};
+		for (uint32_t row = 0; row < 3; ++row) {
+			for (uint32_t column = 0; column < 3; ++column) {
+				const double value = double(p_transform.basis[row][column]);
+				if (!Math::is_finite(value) || Math::abs(value) > double(std::numeric_limits<float>::max())) {
+					return double(p_transform.basis.determinant());
+				}
+				const float lane = float(value);
+				if (double(lane) != value) {
+					return double(p_transform.basis.determinant());
+				}
+				affine[row * 4 + column] = lane;
+			}
+		}
+		return AffineF32::exact_basis_determinant(affine);
+	}();
 	if (!p_bounds_revision || (same_generation && p_bounds_revision <= receiver->scene_bounds_revision) || !p_transform.is_finite() ||
 			!Math::is_finite(determinant) || determinant == 0 || !transformed_envelope.is_finite() || !transformed_envelope.get_end().is_finite() ||
 			!p_local_envelope.is_finite() || !p_local_envelope.get_end().is_finite() || !p_local_envelope.has_volume() ||
