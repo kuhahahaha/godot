@@ -1,0 +1,324 @@
+{
+  "schema": "ange-native-fixed-source-build-v1",
+  "status": "PUBLISHED_FIXED_SOURCE_BUILD_AND_CURRENT_METAL_COMPONENTS_VERIFIED",
+  "repository": "https://github.com/kuhahahaha/godot",
+  "branch": "codex/ange-native-development",
+  "source_commit": "a3b741cb990dd82102273ba37a00d022a911ec9d",
+  "source_tree": "16e2e8c435adb5565b581b402eee54920dda6347",
+  "source_commit_url": "https://github.com/kuhahahaha/godot/commit/a3b741cb990dd82102273ba37a00d022a911ec9d",
+  "build_command": [
+    "scons",
+    "-Q",
+    "platform=macos",
+    "arch=arm64",
+    "target=template_debug",
+    "tests=yes",
+    "debug_symbols=no",
+    "module_particles_runtime_tests_enabled=yes",
+    "disable_path_overrides=no",
+    "-j2"
+  ],
+  "build_result": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/BUILD_RESULT.json",
+    "bytes": 965,
+    "sha256": "f871bae5bc9f6df7f51828bc8c4afa91810a541748e7a5ea59d38adb65eafff7"
+  },
+  "build_log": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/build.log",
+    "bytes": 1954,
+    "sha256": "dea4fc83072f003f50d9a95145b8bc2b39a7c589968e863e1d8d2b1c8acf97a2"
+  },
+  "binary": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/frozen-published-host/godot.macos.template_debug.arm64",
+    "bytes": 97716096,
+    "sha256": "44693e727fc52732273f745a8035637087943a60d437655c297fcd7321b93116"
+  },
+  "controlled_build_receipt": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/frozen-published-host/godot.macos.template_debug.arm64.controlled_build.json",
+    "bytes": 529,
+    "sha256": "5ce79390540fec945dccb82c331d8ed52bc9afe1a924a4bdf57c7e69058120c6"
+  },
+  "selection": {
+    "schema": 1,
+    "core_stamp": "119bf0056c33c19c1897c979529d04ec0af249d3bee7f9087373b8da6d5b9f17",
+    "compiler_route": "BuiltinGlslangV1",
+    "compiler_stamp": "3fd46871ac9925f7e2056b7656c8f96a70e953c40392d857eb7318047891e62a",
+    "platform": "macos",
+    "architecture": "arm64",
+    "target_kind": "Executable"
+  },
+  "selection_record": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/frozen-published-host/engine_build_selection.gen.json",
+    "bytes": 311,
+    "sha256": "e17076d5012f514c9e636c4296b5b673eeac48c1541dca71d119d6a5b37652e0"
+  },
+  "identity_metadata": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/frozen-published-host/engine_build_identity.gen.json",
+    "bytes": 83230,
+    "sha256": "bff785bc190d3ab7936a5d23364985f1cc9208c37b7f1f4c4906003b6772b92c"
+  },
+  "identity_generated_source": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/frozen-published-host/engine_build_identity.gen.cpp",
+    "bytes": 425,
+    "sha256": "f9f321973c5906e8b7fb7d5838105d62870bb49a0cff505223fa3725dc655b9f"
+  },
+  "frozen_artifact_manifest": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/frozen-published-host/FROZEN_ARTIFACT.json",
+    "bytes": 2498,
+    "sha256": "c923bd3c507feabc68c11d2c274275444605dfd063a33beb4b481ebfb9f2ad07"
+  },
+  "source_inventory": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/PUBLICATION_SOURCE_INPUTS.json",
+    "bytes": 4443728,
+    "sha256": "c1729dfd537e05cbf4a344488427bacc8d27feb5b58c52bba8cab7a98c6fdf63"
+  },
+  "git_checkout_verification": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/publication-audit/ACTUAL_CHECKOUT_VERIFICATION.json",
+    "bytes": 12317073,
+    "sha256": "40e64bee6da93456646b4a5911d4e32461ee0b93fe8f9284b2af6b820ca441c7"
+  },
+  "strong_original_identity_review": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/publication-review/ACTUAL_IDENTITY_REVIEW.json",
+    "bytes": 6693,
+    "sha256": "88752d84ab83d67020a3b4dfab71e18c3fc58c3be4ee7a61070f8b99af365cfd"
+  },
+  "interface_sdk": {
+    "git_directory": "misc/ange_native_sdk",
+    "local_directory": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/typed-renderer-generation-build-20261111/source/misc/ange_native_sdk",
+    "manifest": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/typed-renderer-generation-build-20261111/source/misc/ange_native_sdk/MANIFEST.json",
+      "bytes": 6771,
+      "sha256": "6b7448e119d52bab3b6ab05bc0611d4023d4108bd6e170d2b34f097352ddae0c"
+    },
+    "verification": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/SDK_PUBLICATION_VERIFICATION.json",
+      "bytes": 1439,
+      "sha256": "c29af588cf145644f2083fc3e7514d99ccddf8d8092c313468ed19ac69c16d22"
+    },
+    "schema_sha256": "1a7a839114b3ec7a79a9d5026fe78214023c6ed2370cd7784a5a6bdf4ffec1ca",
+    "types": 399,
+    "interfaces": 388,
+    "products": {
+      "include/gdextension_interface.h": {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/typed-renderer-generation-build-20261111/source/misc/ange_native_sdk/include/gdextension_interface.h",
+        "bytes": 474324,
+        "sha256": "eab76f80861bdb12ef2130cd4408ce05640ebcf7d0420ed1e03aaf82def42f2d"
+      },
+      "include/godot_cpp/core/gdextension_interface_loader.hpp": {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/typed-renderer-generation-build-20261111/source/misc/ange_native_sdk/include/godot_cpp/core/gdextension_interface_loader.hpp",
+        "bytes": 43031,
+        "sha256": "c536d841e791f55552bdc5e046308e23afa22b667336ff3b5047fbdf4f53b828"
+      },
+      "src/gdextension_interface_loader.cpp": {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/typed-renderer-generation-build-20261111/source/misc/ange_native_sdk/src/gdextension_interface_loader.cpp",
+        "bytes": 102552,
+        "sha256": "381915de40d91cf045e9eee1159d109c7e2c2869213cc92f29189fb2273136d0"
+      }
+    },
+    "scope": "Complete three-product custom interface increment and original generators. Full class API export and GodotCPP archive are NOT included. A retains its selected class API, ordinary GodotCPP source/tools, regenerates and links actual archive/extension through original controlled SCons path.",
+    "embedded_cohort_role": "PRESERVED_PRE_PUBLICATION_634A; its db47/9e24 selection does not match this 44693e72 executable."
+  },
+  "evidence_commits_in_c_worktree": [
+    "77b77190f7",
+    "5f2a6b47af",
+    "04b95db1a7"
+  ],
+  "scope_of_materialized_source": {
+    "base": "20a14abb7a0293961f1ba136f3319207c1e20342",
+    "historical_source_input_count": 15743,
+    "fixed_checkout_input_count": 15832,
+    "formal_overlay_paths": 35,
+    "ordered_private_patch_count": 69,
+    "ordered_private_patch_categories": {
+      "production_or_mixed": 24,
+      "diagnostic": 8,
+      "fixture": 37
+    },
+    "inherited_production_paths_without_later_patch": 58,
+    "production_files_with_TESTS_diagnostics": 5,
+    "other_candidate_inventory_git_path": "misc/ange_native_delivery/INDEPENDENT_OTHER_CANDIDATES.json",
+    "other_candidate_inventory": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/typed-renderer-generation-build-20261111/source/misc/ange_native_delivery/INDEPENDENT_OTHER_CANDIDATES.json",
+      "bytes": 57722,
+      "sha256": "e744f07b924d78acb47320e177264768fffa7a85d26f5bbee1a2b2aa2be723b9"
+    },
+    "raw_normalization": {
+      "path": "tests/core/extension/native_output_bridge/alias_readback_map_failure/native-output-alias-readback-map-failure-cursor-r3.log",
+      "reason": "Inert historical log normalized to the declared default Git LF checkout; no compiled source change",
+      "before": {
+        "sha256": "db8ece9b166f83340c8c6d95bd9d4a3d3aa6bd0e62cca420b4126246db520872",
+        "bytes": 1561
+      },
+      "after": {
+        "sha256": "b95e29a1b856f7b8d74d2060842bf2ac31ad73a94610d17532125de61aa909b2",
+        "bytes": 1534
+      },
+      "replacement": "CRLF -> LF"
+    },
+    "note": "Complete source bytes are materialized; the three C evidence commit IDs alone do not reconstruct this source and are not asserted as this branch ancestry. Older superseded patch entries remain provenance; final source bytes govern active implementation."
+  },
+  "current_fixed_host_validation": {
+    "cpu_cases": 28,
+    "cpu_assertions": 14985,
+    "cpu_results": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/FIXED_HOST_CPU_RESULT.json",
+      "bytes": 6883,
+      "sha256": "59ee7623c36483c775f34eb51f64b3169e6ba146293c3957a54b0639dea80ccd"
+    },
+    "cpu_extra_batch": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/runtime-replay/EXTRA_CPU_BATCH.json",
+      "bytes": 3335,
+      "sha256": "84c22648340e2c16f51fb3e45283d12193d5abb25aa0b5f666ab5f156c880642"
+    },
+    "gpu": "Real Metal4.0 Apple M3 Pro, main RD, serial actual processes",
+    "accepted_color_cases": [
+      {
+        "case": "mobile-transparent-merged",
+        "original_raw_exit": 77,
+        "renderer": "Forward Mobile",
+        "result_sha256": "e4781d329bdfba8ffe2f0927b6514332e98ba83e7f685d0288a317f547196348",
+        "scoped_flags": {
+          "native_typed_results_verified": true,
+          "same_capture_verified": true,
+          "native_raster_read_verified": true,
+          "visible_component_pixels_verified": true,
+          "physical_prefix_retirement_verified": true,
+          "raw_guard_status_verified": true,
+          "records_gpu_readback_verified": true
+        },
+        "draw_counter": {
+          "after_retirement": 6,
+          "after_selected": 6,
+          "before_retirement": 6,
+          "before_selected": 5,
+          "counter_source": "RenderingServer.frame_pre_draw",
+          "render_loop_disabled": true,
+          "viewport_updates_disabled": true
+        }
+      },
+      {
+        "case": "mobile-transparent-separate",
+        "original_raw_exit": 77,
+        "renderer": "Forward Mobile",
+        "result_sha256": "50b75201d95b74be7f4d3d6f1502905c472ea2aa0f56981f2b7c24c2f832a05f",
+        "scoped_flags": {
+          "native_typed_results_verified": true,
+          "same_capture_verified": true,
+          "native_raster_read_verified": true,
+          "visible_component_pixels_verified": true,
+          "physical_prefix_retirement_verified": true,
+          "raw_guard_status_verified": true,
+          "records_gpu_readback_verified": true
+        },
+        "draw_counter": {
+          "after_retirement": 6,
+          "after_selected": 6,
+          "before_retirement": 6,
+          "before_selected": 5,
+          "counter_source": "RenderingServer.frame_pre_draw",
+          "render_loop_disabled": true,
+          "viewport_updates_disabled": true
+        }
+      },
+      {
+        "case": "mobile-opaque",
+        "original_raw_exit": 77,
+        "renderer": "Forward Mobile",
+        "result_sha256": "95f5164c6e9096f488770460d68734dd6351e113eb49c2fb984ce9e9e799150f",
+        "scoped_flags": {
+          "native_typed_results_verified": true,
+          "same_capture_verified": true,
+          "native_raster_read_verified": true,
+          "visible_component_pixels_verified": true,
+          "physical_prefix_retirement_verified": true,
+          "raw_guard_status_verified": true,
+          "records_gpu_readback_verified": true
+        },
+        "draw_counter": {
+          "after_retirement": 6,
+          "after_selected": 6,
+          "before_retirement": 6,
+          "before_selected": 5,
+          "counter_source": "RenderingServer.frame_pre_draw",
+          "render_loop_disabled": true,
+          "viewport_updates_disabled": true
+        }
+      },
+      {
+        "case": "clustered-transparent",
+        "original_raw_exit": 77,
+        "renderer": "Forward+",
+        "result_sha256": "12a415118862ad1fdf9fb32bf105ff206586d59507f986768e949e860ffb45fd",
+        "scoped_flags": {
+          "native_typed_results_verified": true,
+          "same_capture_verified": true,
+          "native_raster_read_verified": true,
+          "visible_component_pixels_verified": true,
+          "physical_prefix_retirement_verified": true,
+          "raw_guard_status_verified": true,
+          "records_gpu_readback_verified": true
+        },
+        "draw_counter": {
+          "after_retirement": 6,
+          "after_selected": 6,
+          "before_retirement": 6,
+          "before_selected": 5,
+          "counter_source": "RenderingServer.frame_pre_draw",
+          "render_loop_disabled": true,
+          "viewport_updates_disabled": true
+        }
+      },
+      {
+        "case": "clustered-opaque",
+        "original_raw_exit": 77,
+        "renderer": "Forward+",
+        "result_sha256": "0c5a4ec85516738c248af561a821523c361a9881b5110be960d48ab4af3068fb",
+        "scoped_flags": {
+          "native_typed_results_verified": true,
+          "same_capture_verified": true,
+          "native_raster_read_verified": true,
+          "visible_component_pixels_verified": true,
+          "physical_prefix_retirement_verified": true,
+          "raw_guard_status_verified": true,
+          "records_gpu_readback_verified": true
+        },
+        "draw_counter": {
+          "after_retirement": 6,
+          "after_selected": 6,
+          "before_retirement": 6,
+          "before_selected": 5,
+          "counter_source": "RenderingServer.frame_pre_draw",
+          "render_loop_disabled": true,
+          "viewport_updates_disabled": true
+        }
+      }
+    ],
+    "color_scope": "Actual original 7-action typed record; Guard32 + Records192 GPU byte copies, exact source/view/capture, checked color draw and natural sole close, visible nonuniform pixels and original prefix physical return. No following draw after the accepted selected draw.",
+    "bank_scope": {
+      "sha256": "7ae2b41c286ebd547d6dd959f186ccc34742dce939dfe64398eea704000d2b1c",
+      "original_raw_exit": 0,
+      "scope": "Authenticated bank refusal association, zero custody, unused-slot retirement; maintenance draw(false) used, not a no-following-draw proof"
+    },
+    "runtime_summary": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/FIXED_HOST_RUNTIME_SUMMARY.json",
+      "bytes": 11629,
+      "sha256": "4cc7a0dd1af21390c99428306c838abcadb6bf8b7ae99942995146ad376f1d44"
+    },
+    "independent_runtime_review": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/publication-runtime-review/REVIEW.json",
+      "bytes": 3933,
+      "sha256": "b0134fee23789802f79dc659dee8f03142ec6cfb76551107a5e4c76ed622341d"
+    }
+  },
+  "receiver_instruction": "Use particle_target_build_record=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-development-cohort-delivery-20261112/frozen-published-host/engine_build_selection.gen.json in the next coordinated A controlled native batch. Rebuild actual class archive, extension, identity/signing/final receipt together; verify the actual library selection against this frozen host. Do not edit sidecars or reuse old Core66a33/Guard7787/db47 selections.",
+  "limits": [
+    "No A extension/archive rebuild or runtime acceptance was performed by this delivery.",
+    "Full ANGE product output.presentation.pass_intent and Runtime U05 are still open; full_acceptance=false and whole_native_chain_verified=false.",
+    "Only listed current component regressions were executed; the exhaustive private candidate inventory is not blanket acceptance of all FRs.",
+    "Only macOS arm64 template_debug tests=yes host was built and run; no cross-platform or release-target acceptance.",
+    "Absolute artifact paths refer to this local frozen delivery. Rebuilding elsewhere must derive that build actual Core/compiler/selection through the original build path."
+  ],
+  "full_acceptance": false,
+  "runtime_u05": false,
+  "whole_native_chain_verified": false
+}
