@@ -321,6 +321,7 @@ GDExtensionCameraReadyCloseV1 staged_relay_close{}, staged_relay_first_close{};
 Error staged_relay_first_error = ERR_UNCONFIGURED;
 Array staged_results, staged_segments, staged_readback_rows;
 Dictionary staged_capture_snapshot, staged_raster_snapshot, staged_first_segment_ack_busy;
+Dictionary staged_scene_cull_snapshot;
 Error staged_ack_error = ERR_UNCONFIGURED;
 uint32_t staged_guard_words[8]{}, staged_record_words[48]{};
 
@@ -675,6 +676,104 @@ void staged_check_raster(const GDExtensionDeviceExit::ProductionActionCell &acti
 	}
 	staged_raster_verified = true;
 }
+void snapshot_staged_scene_cull(const GDExtensionDeviceExit::ProductionActionCell &action,
+		const Ref<RendererViewport::Viewport::CameraCapture> &bound_capture) {
+	if (!staged_scene_cull_snapshot.is_empty()) { return; }
+	const auto box = [](const AABB &value) {
+		Dictionary result;
+		Array position, size;
+		for (uint32_t axis = 0; axis < 3; ++axis) {
+			position.push_back(value.position[axis]); size.push_back(value.size[axis]);
+		}
+		result["position"] = position; result["size"] = size;
+		return result;
+	};
+	const auto affine = [](const Transform3D &value) {
+		Array result;
+		for (uint32_t row = 0; row < 3; ++row) {
+			for (uint32_t column = 0; column < 3; ++column) { result.push_back(value.basis[row][column]); }
+			result.push_back(value.origin[row]);
+		}
+		return result;
+	};
+	Dictionary snapshot;
+	snapshot["phase"] = "after_original_record_consume_before_retirement";
+	snapshot["request"] = int64_t(host_original_request->serial);
+	snapshot["control"] = int64_t(staged_record_control);
+	snapshot["action_ordinal"] = int64_t(action.declaration.action_ordinal);
+	snapshot["request_frozen"] = host_original_request->frozen;
+	snapshot["prepared"] = action.scene_cull_prepared;
+	snapshot["error"] = action.scene_cull_error;
+	snapshot["version"] = int64_t(action.scene_cull_version);
+	snapshot["local"] = box(action.scene_cull_local);
+	snapshot["world"] = box(action.scene_cull_world);
+	snapshot["required_world"] = box(action.scene_cull_required_world);
+	snapshot["instance"] = int64_t(action.output_scene.instance);
+	snapshot["particles"] = int64_t(action.output_scene.particles);
+	snapshot["base"] = int64_t(action.output_scene.particles);
+	snapshot["scenario"] = int64_t(action.output_scene.scenario);
+	snapshot["generation"] = int64_t(action.output_scene.generation);
+	snapshot["output_slot"] = action.output_slot;
+	snapshot["source_space"] = action.output_plan.source_space;
+	Array declared_position, declared_size, host_affine;
+	for (uint32_t axis = 0; axis < 3; ++axis) {
+		declared_position.push_back(action.output_input.common.bounds.position[axis]);
+		declared_size.push_back(action.output_input.common.bounds.size[axis]);
+	}
+	for (float value : action.preinput_host_transform.affine) { host_affine.push_back(value); }
+	snapshot["declared_position"] = declared_position; snapshot["declared_size"] = declared_size;
+	snapshot["host_affine"] = host_affine;
+	const auto &capture = action.scene_cull_capture;
+	Dictionary captured;
+	captured["present"] = capture.is_valid();
+	captured["same_bound_ref"] = capture.is_valid() && capture == bound_capture;
+	if (capture.is_valid()) {
+		const auto &token = capture->get_token();
+		captured["viewport"] = int64_t(capture->get_viewport().get_id());
+		captured["camera"] = int64_t(capture->get_invocation().camera.get_id());
+		captured["view_id"] = int64_t(token.view_id); captured["view_epoch"] = int64_t(token.view_epoch);
+		captured["capture_ordinal"] = int64_t(token.capture_ordinal);
+		captured["present_seq"] = int64_t(capture->get_presentation_key().present_seq);
+	}
+	snapshot["capture"] = captured;
+	RendererSceneCull::NativeParticleSceneFacts actual;
+	auto *scene = static_cast<RendererSceneCull *>(RSG::scene);
+	const Error observed = scene ? scene->instance_get_committed_particle_scene_facts(RID::from_uint64(action.output_scene.instance),
+			RID::from_uint64(action.output_scene.particles), actual) : ERR_UNAVAILABLE;
+	snapshot["actual_scene_error"] = observed;
+	Dictionary facts;
+	if (observed == OK) {
+		facts["instance"] = int64_t(actual.instance.get_id()); facts["particles"] = int64_t(actual.particles.get_id());
+		facts["scenario"] = int64_t(actual.scenario.get_id()); facts["version"] = int64_t(actual.version);
+		facts["affine"] = affine(actual.transform); facts["local"] = box(actual.local_aabb); facts["world"] = box(actual.world_aabb);
+		facts["base"] = int64_t(actual.particles.get_id());
+		facts["query_committed"] = actual.query_committed;
+		facts["query_generation"] = int64_t(actual.query_generation); facts["query_world"] = box(actual.query_world);
+	}
+	snapshot["actual_scene"] = facts;
+	RendererRD::ExternalLinkedOwnerTest::SceneCullObservation accepted;
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	const Error slot_error = storage ? RendererRD::ExternalLinkedOwnerTest::read_scene_cull_observation(*storage,
+			action.output_particles, action.output_slot, enrollment.registry, host_request, action.output_generation,
+			action.declaration.action_ordinal, action.output_lease, accepted) : ERR_UNAVAILABLE;
+	snapshot["accepted_slot_error"] = slot_error;
+	Dictionary slot;
+	if (slot_error == OK) {
+		slot["bound"] = accepted.bound; slot["slot"] = accepted.slot;
+		slot["request"] = int64_t(accepted.request.handle_serial); slot["registry_instance"] = int64_t(accepted.request.registry_instance);
+		slot["generation"] = int64_t(accepted.generation); slot["lease"] = int64_t(accepted.lease); slot["action_ordinal"] = int64_t(accepted.ordinal);
+		slot["request_matches"] = accepted.request_matches; slot["generation_matches"] = accepted.generation_matches;
+		slot["lease_matches"] = accepted.lease_matches; slot["ordinal_matches"] = accepted.ordinal_matches;
+		slot["version"] = int64_t(accepted.version); slot["local"] = box(accepted.local); slot["world"] = box(accepted.world);
+		slot["instance"] = int64_t(accepted.instance.get_id()); slot["base"] = int64_t(accepted.base.get_id());
+		slot["scenario"] = int64_t(accepted.scenario.get_id()); slot["viewport"] = int64_t(accepted.viewport.get_id());
+	}
+	// Bound is an original accepted snapshot, not a claim that the exited
+	// pre-cull scope is still live. Reporting never revalidates or renews it.
+	snapshot["accepted_slot"] = slot;
+	staged_scene_cull_snapshot = snapshot;
+}
+
 bool staged_capture_and_raster() {
 	using namespace GDExtensionDeviceExit;
 	const auto read = port<GDExtensionInterfaceDeviceSessionProductionReadStagedOutputInputV2>("device_session_production_read_staged_output_input_v2");
@@ -698,6 +797,9 @@ bool staged_capture_and_raster() {
 	staged_capture_snapshot["core_executor"] = host_original_request->native_prepared_executor;
 	staged_capture_snapshot["static_sealed"] = host_original_request->native_static_sealed;
 	staged_capture_snapshot["frozen"] = host_original_request->frozen;
+	// Freeze original Action/Scene values while the request is still alive.
+	// report_staged only copies this Dictionary after original reclamation.
+	snapshot_staged_scene_cull(action, capture);
 	// A failed raster snapshot cannot certify a draw. The exact capture
 	// and original readbacks still have independent OBSERVE and COPY gates.
 	staged_check_raster(action, capture);
@@ -1088,6 +1190,7 @@ void report_staged(Dictionary &result) const {
 	result["staged_resource_snapshot"] = staged_resource_snapshot.duplicate(true);
 	result["staged_reserve_snapshot"] = staged_reserve_snapshot.duplicate(true);
 	result["staged_capture"] = staged_capture_snapshot.duplicate(true);
+	result["staged_scene_cull"] = staged_scene_cull_snapshot.duplicate(true);
 	result["staged_raster"] = staged_raster_snapshot.duplicate(true);
 	result["staged_raster_error"] = staged_raster_error;
 	result["staged_raster_detail"] = staged_raster_detail;

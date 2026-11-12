@@ -36,6 +36,7 @@
 #include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 
 namespace RendererRD {
 struct ExternalPacketPipelineRequest;
@@ -61,7 +62,50 @@ public:
 		AABB query_bounds;
 		bool slot_empty = false;
 		uint64_t native_color_consumption_serial = 0;
+		bool bound = false, request_matches = false, generation_matches = false, lease_matches = false, ordinal_matches = false;
+		uint32_t slot = UINT32_MAX;
+		uint64_t generation = 0, version = 0, lease = 0, ordinal = UINT64_MAX;
+		GDExtensionProductionRequestRefV1 request{};
+		RID instance, base, scenario, viewport;
+		AABB local, world;
 	};
+	// Original accepted-slot values only. The selected pre-cull window may
+	// already have ended; this observation grants no new permission or custody.
+	static Error read_scene_cull_observation(ParticlesStorage &p_storage, RID p_particles, uint32_t p_slot,
+			GDExtensionDeviceExit::Registry &p_registry, GDExtensionProductionRequestRefV1 p_request,
+			uint64_t p_generation, uint64_t p_ordinal, uint64_t p_lease, SceneCullObservation &r_observation) {
+		r_observation = SceneCullObservation();
+		if (!GDExtensionDeviceExit::Registry::Lock::owns(p_registry)) { return ERR_UNAUTHORIZED; }
+		const auto *particles = p_storage.particles_owner.get_or_null(p_particles);
+		if (!particles || !particles->external) { return ERR_DOES_NOT_EXIST; }
+		const auto &owner = *particles->external;
+		if (!owner.device || owner.device != RenderingDevice::get_singleton() || !owner.device->native_immutable_is_render_thread()) { return ERR_UNAUTHORIZED; }
+		if (p_slot >= owner.slot_count) { return ERR_PARAMETER_RANGE_ERROR; }
+		const auto &slot = owner.slots[p_slot];
+		r_observation.profile = owner.config.profile;
+		r_observation.query_enabled = owner.config.query_enabled;
+		r_observation.query_bounds = owner.config.query_bounds;
+		r_observation.slot_empty = slot.state == ExternalOutputOwner::LeaseState::EMPTY;
+		r_observation.native_color_consumption_serial = slot.native_color_consumption_serial;
+		r_observation.slot = p_slot;
+		r_observation.request = slot.original_request;
+		r_observation.generation = owner.generation;
+		r_observation.lease = slot.lease_serial;
+		r_observation.ordinal = slot.original_action_ordinal;
+		r_observation.request_matches = slot.original_registry == &p_registry && slot.original_request.registry_instance == p_request.registry_instance && slot.original_request.handle_serial == p_request.handle_serial;
+		r_observation.generation_matches = owner.generation == p_generation;
+		r_observation.lease_matches = p_lease && slot.lease_serial == p_lease;
+		r_observation.ordinal_matches = slot.original_action_ordinal == p_ordinal;
+		r_observation.bound = slot.scene_cull_bound;
+		r_observation.version = slot.scene_cull_version;
+		r_observation.instance = slot.scene_cull_instance;
+		r_observation.base = slot.scene_cull_particles;
+		r_observation.scenario = slot.scene_cull_scenario;
+		r_observation.viewport = slot.scene_cull_viewport;
+		r_observation.local = slot.scene_cull_local;
+		r_observation.world = slot.scene_cull_world;
+		return OK;
+	}
 	bool read_scene_cull_observation(uint32_t p_slot, SceneCullObservation &r_observation) const {
 		r_observation = SceneCullObservation();
 		if (!owner || !exists() || p_slot >= ExternalOutputOwner::MAX_SLOTS) {
