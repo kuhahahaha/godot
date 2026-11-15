@@ -203,12 +203,16 @@ TEST_CASE("[TCPServer] When stopped shouldn't accept new connections") {
 	CHECK_FALSE(server->is_connection_available());
 
 	wait_for_condition([&]() {
-		return new_client->poll() != Error::OK || new_client->get_status() == StreamPeerTCP::STATUS_ERROR;
+		const Error result = new_client->poll();
+		const StreamPeerTCP::Status status = new_client->get_status();
+		return result != Error::OK || status == StreamPeerTCP::STATUS_ERROR || status == StreamPeerTCP::STATUS_NONE;
 	});
 
 	CHECK_FALSE(server->is_connection_available());
 
-	CHECK_EQ(new_client->get_status(), StreamPeerTCP::STATUS_ERROR);
+	// A pending connection may briefly complete before the stopped listener's
+	// FIN is observed. Both an error and a clean disconnect are terminal.
+	CHECK((new_client->get_status() == StreamPeerTCP::STATUS_ERROR || new_client->get_status() == StreamPeerTCP::STATUS_NONE));
 	new_client->disconnect_from_host();
 	CHECK_EQ(new_client->get_status(), StreamPeerTCP::STATUS_NONE);
 }

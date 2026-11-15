@@ -1,0 +1,28 @@
+{
+  "binary": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/duplicate.sh",
+  "fixture_sha256": {
+    "run.gd": "cd06d9743adef3441c9985dcb38b05cd43e025c9d8aabf7d475990921c29792a",
+    "project.godot": "825c930eab3b14b751293252fac14d12cf001b8ab22cb3f34e995b3a0c7fa9f7"
+  },
+  "command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/duplicate.sh",
+    "--headless",
+    "--path",
+    "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-one-shot-tail-uo3uqne8",
+    "--script",
+    "res://run.gd"
+  ],
+  "engine_exit": 0,
+  "timed_out": false,
+  "stdout": "CPU_ONESHOT_ENGINE={\"failures\":[]}\nCPU_ONESHOT_ENGINE={\"failures\":[]}\n",
+  "stderr": "",
+  "errors": [
+    "Expected exactly one result marker, found 2"
+  ],
+  "result": null,
+  "acceptance_scope": "headless CPU particle/public-buffer only; not GPU, renderer, or pixel acceptance",
+  "binary_sha256": "d3963c3a4504d9c584046e04eaecfaa0e7794fed2a9fc98e746ddeb3331349e8",
+  "binary_size": 105,
+  "binary_mtime_ns": 1794392071011681557,
+  "passed": false
+}

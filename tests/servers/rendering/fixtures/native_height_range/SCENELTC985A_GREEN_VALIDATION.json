@@ -1,0 +1,325 @@
+{
+  "status": "original full Scene cohort green; stable branch integration remains parent-owned",
+  "receiver_commit": "985a08eb56ded83ea5fc17ac84db5e7cd0df6f54",
+  "zip_bytes": 375975,
+  "zip_sha256": "dd4cfa5a91c79d778ca6f4a5fa5b276fc4d8a8f33e218de9a1558e604611aaa4",
+  "unique_patch_sha256": "aa1d909361a849da3c30992baaddc37a96c811ba0df434c5c4699a8aafc32c57",
+  "binary_sha256": "d82c3f64d957066c18d7869ac6658b3a0dec4431f9b4a131ca25a5007b8705ea",
+  "binary_bytes": 116461984,
+  "build": {
+    "first_attempt_exit_code": 2,
+    "first_attempt_failure": "No space left on device",
+    "retry_exit_code": 0,
+    "retry_jobs": 2,
+    "retry_elapsed_seconds": 33.66,
+    "binary_sha256": "d82c3f64d957066c18d7869ac6658b3a0dec4431f9b4a131ca25a5007b8705ea",
+    "binary_bytes": 116461984
+  },
+  "build_argv": [
+    "scons",
+    "-j4",
+    "verbose=yes",
+    "platform=macos",
+    "target=template_debug",
+    "arch=arm64",
+    "tests=yes",
+    "modules_enabled_by_default=no",
+    "module_gdscript_enabled=yes",
+    "module_particles_runtime_tests_enabled=yes",
+    "module_glslang_enabled=yes",
+    "metal=yes",
+    "vulkan=no",
+    "opengl3=no",
+    "dev_build=no",
+    "debug_symbols=no",
+    "optimize=none",
+    "disable_path_overrides=no"
+  ],
+  "successful_retry_jobs": 2,
+  "four_candidate_and_15_scene_closure_files": {
+    "servers/rendering/renderer_rd/height_capture_checked_sink.cpp": {
+      "bytes": 16058,
+      "sha256": "ec6c717222c2816e7e177d8fce1c75abc0fc8c44a7876f06272561369fb309b5"
+    },
+    "servers/rendering/rendering_device.cpp": {
+      "bytes": 775148,
+      "sha256": "cfb7773509bb07c235d22982ec4c0a9b7e8837067bdfe2d0f9b98973281e4051"
+    },
+    "servers/rendering/rendering_device.h": {
+      "bytes": 137151,
+      "sha256": "d719d9c344d686c551294b0fb62349000cedfb9a93a1446914e23b5a153c18fc"
+    },
+    "tests/servers/rendering/test_checked_draw_bind.cpp": {
+      "bytes": 24489,
+      "sha256": "c3c1fc14e90f51cbc5052d657e7df76e9fb87ab78c7e9441c038a0e3092796ce"
+    },
+    "modules/particles_runtime_tests/particles_heightfield_clear_test_fixture.cpp": {
+      "bytes": 63863,
+      "sha256": "245acc33fc05b1605cd1bd312ed47574fed7166fc4fee22d5c909453893600d0"
+    },
+    "modules/particles_runtime_tests/particles_heightfield_clear_test_fixture.h": {
+      "bytes": 5070,
+      "sha256": "451ed41d45f14d010061db0458676884f9aa029788985ed6f283bc4c3fce1b58"
+    },
+    "modules/particles_runtime_tests/register_types.cpp": {
+      "bytes": 3246,
+      "sha256": "68e765d1ef6327107022b3fe0bf9f45e7bfcb0439705ec29b01f6ae5ad6a50e7"
+    },
+    "servers/rendering/renderer_rd/storage_rd/height_frame.cpp": {
+      "bytes": 6889,
+      "sha256": "e85652ed357fd1e327a9020d6d42f65b8a811ac843e3510c4f9881a13daeb6ee"
+    },
+    "servers/rendering/renderer_rd/storage_rd/height_frame.h": {
+      "bytes": 5422,
+      "sha256": "3e50056e40a5c7af173f6340c889a674f8ded691b117e32e4310b815213f58bf"
+    },
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp": {
+      "bytes": 126788,
+      "sha256": "293986a79729db8939d0a34a96a67eba6aac27b8db884f47a4d8671f52e52bda"
+    },
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.h": {
+      "bytes": 34793,
+      "sha256": "95e48d67f43cff9266b613fdcedc66e7f2ebf82b21183de400cb9d2252682e31"
+    },
+    "servers/rendering/renderer_rd/storage_rd/render_scene_data_rd.cpp": {
+      "bytes": 17518,
+      "sha256": "5146266b495ec987f817a539acba6854f268de970739e373cf28295b9bd46c0f"
+    },
+    "servers/rendering/renderer_rd/storage_rd/render_scene_data_rd.h": {
+      "bytes": 7675,
+      "sha256": "3fdc37d748f8eb64c105c3626343fe95b2b0b6c637a2ad38fdfc1a5baa60f33b"
+    },
+    "servers/rendering/renderer_rd/renderer_scene_render_rd.cpp": {
+      "bytes": 92496,
+      "sha256": "bed7d8bc40a7000a3abc79879340b1b79231b4349f5eae55af4e6eefb53fe2ff"
+    },
+    "servers/rendering/renderer_rd/renderer_scene_render_rd.h": {
+      "bytes": 19578,
+      "sha256": "df50846a958e9af836aab4e5bc33b7e3aa0e33f4ac23b90ee76b1e85033cdc90"
+    },
+    "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp": {
+      "bytes": 187829,
+      "sha256": "ee1e04d8df41987457fdc76332241aa99e36656f8bda52c67c4e0d68ad1e069b"
+    },
+    "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h": {
+      "bytes": 35841,
+      "sha256": "e392365a63506743401c05818b27dca6e88db63774c1cf5353b528116fe5bf84"
+    },
+    "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp": {
+      "bytes": 259594,
+      "sha256": "56281506c83fec1ea6d9a332134c860ccfa4425ed9bd0ff1ef973a1cf25b94c0"
+    },
+    "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h": {
+      "bytes": 40345,
+      "sha256": "3a008c67368a94dc11be3affa86505ce3f8b8fbaeeb736dea35eef13bc55e9a0"
+    }
+  },
+  "original_gpu_cases": {
+    "attempted": 24,
+    "passed": 24,
+    "normal": 2,
+    "geometry_refusal_and_recovery": 2,
+    "source_selection": 8,
+    "legacy_neighbors": 12
+  },
+  "cpu": {
+    "native_height_range": [
+      22,
+      865
+    ],
+    "nativepass": [
+      9,
+      691
+    ],
+    "checked_bind": [
+      5,
+      411
+    ]
+  },
+  "additional_real_gpu": {
+    "worker_cases": 1,
+    "worker_checks": 48,
+    "clear_cases": 2,
+    "clear_checks_each": 34
+  },
+  "cohort": [
+    {
+      "label": "height-range-cpu",
+      "argv": [
+        "/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.template_debug.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*NativeHeightRange*"
+      ],
+      "expected_cases": 22,
+      "exit_code": 0,
+      "pass": true,
+      "elapsed_seconds": 1.1600528749986552,
+      "log": "/tmp/scene-ltc-985a-20261109/height-range-cpu.log",
+      "log_sha256": "3c2d6cdcec3f8ea4c851544bf713cecda11692af3f34aca34afb76f52099b870",
+      "binary_sha256": "d82c3f64d957066c18d7869ac6658b3a0dec4431f9b4a131ca25a5007b8705ea"
+    },
+    {
+      "label": "nativepass-cpu",
+      "argv": [
+        "/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.template_debug.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*MobileNativePassSelection*,*ClusteredNativePassSelection*"
+      ],
+      "expected_cases": 9,
+      "exit_code": 0,
+      "pass": true,
+      "elapsed_seconds": 0.11063587496755645,
+      "log": "/tmp/scene-ltc-985a-20261109/nativepass-cpu.log",
+      "log_sha256": "c772f13a445204b2695c4860f23cf389d95ab3af06a7e2ad433e1c73d42cf2fc",
+      "binary_sha256": "d82c3f64d957066c18d7869ac6658b3a0dec4431f9b4a131ca25a5007b8705ea"
+    },
+    {
+      "label": "checked-bind-cpu",
+      "argv": [
+        "/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.template_debug.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*CheckedBind*"
+      ],
+      "expected_cases": 5,
+      "exit_code": 0,
+      "pass": true,
+      "elapsed_seconds": 0.10472550004487857,
+      "log": "/tmp/scene-ltc-985a-20261109/checked-bind-cpu.log",
+      "log_sha256": "5571aa7ca3009fae49a63a5ffe42d65e190a1efff8badf22c0f117418332f8b0",
+      "binary_sha256": "d82c3f64d957066c18d7869ac6658b3a0dec4431f9b4a131ca25a5007b8705ea"
+    },
+    {
+      "label": "candidate",
+      "argv": [
+        "python3",
+        "/tmp/scene-native-merge-20261109/gpu-template-fixture/run_candidate.py",
+        "--binary",
+        "/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.template_debug.arm64",
+        "--display-driver",
+        "macos",
+        "--rendering-driver",
+        "metal"
+      ],
+      "expected_cases": 2,
+      "exit_code": 0,
+      "pass": true,
+      "elapsed_seconds": 3.9886588340159506,
+      "log": "/tmp/scene-ltc-985a-20261109/candidate.log",
+      "log_sha256": "9dba40d5e70aeff7d2086db6182f19a3cbd2f0d9aac965c75a904fc32848e2b9",
+      "binary_sha256": "d82c3f64d957066c18d7869ac6658b3a0dec4431f9b4a131ca25a5007b8705ea",
+      "attempted_cases": 2
+    },
+    {
+      "label": "geometry-refusal",
+      "argv": [
+        "python3",
+        "/tmp/scene-native-merge-20261109/gpu-template-fixture/run_candidate.py",
+        "--binary",
+        "/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.template_debug.arm64",
+        "--display-driver",
+        "macos",
+        "--rendering-driver",
+        "metal",
+        "--geometry-refusal"
+      ],
+      "expected_cases": 2,
+      "exit_code": 0,
+      "pass": true,
+      "elapsed_seconds": 1.74167691700859,
+      "log": "/tmp/scene-ltc-985a-20261109/geometry-refusal.log",
+      "log_sha256": "46220c91920233ba493a3e8a827e57999f46450b3a2c1a1ceed955e0c43d00f2",
+      "binary_sha256": "d82c3f64d957066c18d7869ac6658b3a0dec4431f9b4a131ca25a5007b8705ea",
+      "attempted_cases": 2
+    },
+    {
+      "label": "source-selection",
+      "argv": [
+        "python3",
+        "/tmp/scene-native-merge-20261109/gpu-template-fixture/run_source_selection.py",
+        "--binary",
+        "/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.template_debug.arm64",
+        "--display-driver",
+        "macos",
+        "--rendering-driver",
+        "metal"
+      ],
+      "expected_cases": 8,
+      "exit_code": 0,
+      "pass": true,
+      "elapsed_seconds": 7.401773042045534,
+      "log": "/tmp/scene-ltc-985a-20261109/source-selection.log",
+      "log_sha256": "c8d9b0a3440cf226b84e982f30a2a86a47fb3e7040b2af5c535beb0d42266c9b",
+      "binary_sha256": "d82c3f64d957066c18d7869ac6658b3a0dec4431f9b4a131ca25a5007b8705ea"
+    },
+    {
+      "label": "legacy-neighbors",
+      "argv": [
+        "python3",
+        "/tmp/scene-native-merge-20261109/gpu-template-fixture/run_legacy_neighbors.py",
+        "--binary",
+        "/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.template_debug.arm64",
+        "--display-driver",
+        "macos"
+      ],
+      "expected_cases": 12,
+      "exit_code": 0,
+      "pass": true,
+      "elapsed_seconds": 8.439541875035502,
+      "log": "/tmp/scene-ltc-985a-20261109/legacy-neighbors.log",
+      "log_sha256": "cba360e911d589f28a28316ad3bc821c8b3c95b4590c0492bd8bbeaec4b3f42f",
+      "binary_sha256": "d82c3f64d957066c18d7869ac6658b3a0dec4431f9b4a131ca25a5007b8705ea"
+    },
+    {
+      "label": "native-worker",
+      "argv": [
+        "python3",
+        "/tmp/scene-worker-join-6a94-20261109/template-fixture/tests/servers/rendering/fixtures/native_height_range/run_worker.py",
+        "--godot",
+        "/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.template_debug.arm64",
+        "--sha256",
+        "d82c3f64d957066c18d7869ac6658b3a0dec4431f9b4a131ca25a5007b8705ea",
+        "--out",
+        "/tmp/scene-ltc-985a-20261109/native-worker-evidence"
+      ],
+      "expected_cases": 1,
+      "exit_code": 0,
+      "pass": true,
+      "elapsed_seconds": 2.381647791946307,
+      "log": "/tmp/scene-ltc-985a-20261109/native-worker.log",
+      "log_sha256": "e7a8c0c181201c7a34b64a1bdd7ad3e21a717bcd6a5e08ca43cdd1dc748e4745",
+      "binary_sha256": "d82c3f64d957066c18d7869ac6658b3a0dec4431f9b4a131ca25a5007b8705ea"
+    },
+    {
+      "label": "native-clear",
+      "argv": [
+        "python3",
+        "/tmp/scene-worker-join-6a94-20261109/template-fixture/tests/servers/rendering/fixtures/native_height_range/run_native.py",
+        "--godot",
+        "/Users/macbookair/Documents/Work/godot_scene_native_20261106/bin/godot.macos.template_debug.arm64",
+        "--sha256",
+        "d82c3f64d957066c18d7869ac6658b3a0dec4431f9b4a131ca25a5007b8705ea",
+        "--out",
+        "/tmp/scene-ltc-985a-20261109/native-clear-evidence"
+      ],
+      "expected_cases": 2,
+      "exit_code": 0,
+      "pass": true,
+      "elapsed_seconds": 1.5538354580057785,
+      "log": "/tmp/scene-ltc-985a-20261109/native-clear.log",
+      "log_sha256": "bb6f89e4b071655c035a05c8bc59b0579d376c368ae379f90a753a90eb1fd4d6",
+      "binary_sha256": "d82c3f64d957066c18d7869ac6658b3a0dec4431f9b4a131ca25a5007b8705ea"
+    }
+  ],
+  "independent_review": {
+    "reviewer": "native_renderer_merge_review",
+    "scope": "4 exact preimages/candidates plus unchanged 15-file Scene closure and original offset",
+    "result": "no blocking source defect; real acceptance provided by this receipt"
+  },
+  "source_stage_manifest_build_run_false_is_external_history": true,
+  "external_cpu_counts_are_not_local_gpu_evidence": true,
+  "diagnostics_or_assertion_modifications": false,
+  "stable_branch_merged": false
+}

@@ -1,0 +1,8 @@
+HEIGHTFIELD_NATIVE_CASE renderer=mobile height=None
+COMMAND ["/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64", "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "mobile", "--path", "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_heightfield_clear_native", "--script", "res://run.gd"]
+Godot Engine v4.7.2.stable.custom_build.5d56fc5de (2026-11-06 08:43:16 UTC) - https://godotengine.org
+Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+HEIGHTFIELD_CLEAR_NATIVE_FAIL {"driver":"Apple M3 Pro (Apple9)","first_raw":0.75,"pass":false,"second_raw":0.75}
+
+Native case exited 1

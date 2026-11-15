@@ -1,0 +1,1021 @@
+{
+  "date": "2026-11-11",
+  "status": "CPU_ONE_SHOT_TAIL_GREEN",
+  "production_sources": {
+    "scene/2d/cpu_particles_2d.cpp": "389133b47dd1e6c4ddb8a91471b41da538938fa3febad991eceaa460e8f651bc",
+    "scene/3d/cpu_particles_3d.cpp": "2dbc57edacc5db28b861a6584d89c2e579905bd445ce4ca777a66b7898dc8841"
+  },
+  "build": {
+    "command": [
+      "scons",
+      "-Q",
+      "platform=macos",
+      "arch=arm64",
+      "target=template_debug",
+      "tests=yes",
+      "debug_symbols=no",
+      "module_particles_runtime_tests_enabled=yes",
+      "disable_path_overrides=no",
+      "-j6"
+    ],
+    "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/particle-current-engine-build-20261111/source",
+    "binary": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/particle-current-engine-build-20261111/source/bin/godot.macos.template_debug.arm64",
+    "binary_sha256": "e5ebc474d43cc6168a4a74664baa70b73f4af268ea9ca77c90f8c38287de3098",
+    "exit": 0
+  },
+  "red": {
+    "binary": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/particle-current-engine-build-20261111/shader-diagnostic/godot.before.arm64",
+    "binary_sha256": "9b9fe0e9583aeb70a06451fa86fe2adf63a56fc33e912b1d2eb59fb3a9093072",
+    "engine_exit": 1,
+    "timed_out": false,
+    "passed": false,
+    "errors": [
+      "Engine reported regression failures"
+    ],
+    "fixture_sha256": {
+      "run.gd": "cd06d9743adef3441c9985dcb38b05cd43e025c9d8aabf7d475990921c29792a",
+      "project.godot": "825c930eab3b14b751293252fac14d12cf001b8ab22cb3f34e995b3a0c7fa9f7"
+    },
+    "result": {
+      "2d_birth_count": "not publicly observable in this fixture",
+      "failures": [
+        "3D missing old-cycle tail birth: {\"active_indices\":[2,3,4,5,6],\"buffer_size\":160,\"dimension\":3,\"emitting\":false,\"finished\":0,\"stage\":\"four_steps\"}",
+        "3D restart missing old-cycle tail birth"
+      ],
+      "rows": [
+        {
+          "dimension": 2,
+          "emitting": false,
+          "finished": 0,
+          "stage": "four_steps"
+        },
+        {
+          "dimension": 2,
+          "emitting": false,
+          "finished": 1,
+          "stage": "drained"
+        },
+        {
+          "dimension": 2,
+          "emitting": false,
+          "finished": 1,
+          "restart_emitting_immediately": true,
+          "stage": "restart_four_steps"
+        },
+        {
+          "dimension": 2,
+          "finished": 2,
+          "stage": "restart_drained"
+        },
+        {
+          "active_indices": [
+            2,
+            3,
+            4,
+            5,
+            6
+          ],
+          "buffer_size": 160,
+          "dimension": 3,
+          "emitting": false,
+          "finished": 0,
+          "stage": "four_steps"
+        },
+        {
+          "active_indices": [],
+          "buffer_size": 160,
+          "dimension": 3,
+          "emitting": false,
+          "finished": 1,
+          "stage": "drained"
+        },
+        {
+          "active_indices": [
+            2,
+            3,
+            4,
+            5,
+            6
+          ],
+          "buffer_size": 160,
+          "dimension": 3,
+          "emitting": false,
+          "finished": 1,
+          "restart_emitting_immediately": true,
+          "stage": "restart_four_steps"
+        },
+        {
+          "active_indices": [],
+          "buffer_size": 160,
+          "dimension": 3,
+          "finished": 2,
+          "stage": "restart_drained"
+        }
+      ]
+    },
+    "restart_activation": {
+      "dimensions": [
+        2,
+        3
+      ],
+      "all_immediately_emitting": true,
+      "observations": [
+        {
+          "dimension": 2,
+          "restart_emitting_immediately": true
+        },
+        {
+          "dimension": 3,
+          "restart_emitting_immediately": true
+        }
+      ]
+    }
+  },
+  "green": {
+    "binary": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/particle-current-engine-build-20261111/source/bin/godot.macos.template_debug.arm64",
+    "binary_sha256": "e5ebc474d43cc6168a4a74664baa70b73f4af268ea9ca77c90f8c38287de3098",
+    "engine_exit": 0,
+    "timed_out": false,
+    "passed": true,
+    "errors": [],
+    "fixture_sha256": {
+      "run.gd": "cd06d9743adef3441c9985dcb38b05cd43e025c9d8aabf7d475990921c29792a",
+      "project.godot": "825c930eab3b14b751293252fac14d12cf001b8ab22cb3f34e995b3a0c7fa9f7"
+    },
+    "result": {
+      "2d_birth_count": "not publicly observable in this fixture",
+      "failures": [],
+      "rows": [
+        {
+          "dimension": 2,
+          "emitting": false,
+          "finished": 0,
+          "stage": "four_steps"
+        },
+        {
+          "dimension": 2,
+          "emitting": false,
+          "finished": 1,
+          "stage": "drained"
+        },
+        {
+          "dimension": 2,
+          "emitting": false,
+          "finished": 1,
+          "restart_emitting_immediately": true,
+          "stage": "restart_four_steps"
+        },
+        {
+          "dimension": 2,
+          "finished": 2,
+          "stage": "restart_drained"
+        },
+        {
+          "active_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "buffer_size": 160,
+          "dimension": 3,
+          "emitting": false,
+          "finished": 0,
+          "stage": "four_steps"
+        },
+        {
+          "active_indices": [],
+          "buffer_size": 160,
+          "dimension": 3,
+          "emitting": false,
+          "finished": 1,
+          "stage": "drained"
+        },
+        {
+          "active_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "buffer_size": 160,
+          "dimension": 3,
+          "emitting": false,
+          "finished": 1,
+          "restart_emitting_immediately": true,
+          "stage": "restart_four_steps"
+        },
+        {
+          "active_indices": [],
+          "buffer_size": 160,
+          "dimension": 3,
+          "finished": 2,
+          "stage": "restart_drained"
+        }
+      ]
+    },
+    "restart_activation": {
+      "dimensions": [
+        2,
+        3
+      ],
+      "all_immediately_emitting": true,
+      "observations": [
+        {
+          "dimension": 2,
+          "restart_emitting_immediately": true
+        },
+        {
+          "dimension": 3,
+          "restart_emitting_immediately": true
+        }
+      ]
+    }
+  },
+  "source_slice": {
+    "baseline_ref": "afafb0968c",
+    "baseline_commit": "afafb0968c9b13568216bbbd5346e393bd22be99",
+    "script_sha256": "ab168d35f82cf5e64aca70113338a6060b1372cedad8d1e44aec6a013db8ac56",
+    "sources": [
+      {
+        "dimension": "2d",
+        "path": "scene/2d/cpu_particles_2d.cpp",
+        "baseline_command": [
+          "git",
+          "show",
+          "afafb0968c9b13568216bbbd5346e393bd22be99:scene/2d/cpu_particles_2d.cpp"
+        ],
+        "baseline_stderr": "",
+        "baseline_sha256": "1675af428be3c66672c5eab2615fba5522767912a9c6f18d2917fe17ed5756c2",
+        "current_sha256": "389133b47dd1e6c4ddb8a91471b41da538938fa3febad991eceaa460e8f651bc"
+      },
+      {
+        "dimension": "3d",
+        "path": "scene/3d/cpu_particles_3d.cpp",
+        "baseline_command": [
+          "git",
+          "show",
+          "afafb0968c9b13568216bbbd5346e393bd22be99:scene/3d/cpu_particles_3d.cpp"
+        ],
+        "baseline_stderr": "",
+        "baseline_sha256": "5e6e6038eeaffbd274eabd2068d51299a1999d637526af0331d08c9374613c37",
+        "current_sha256": "2dbc57edacc5db28b861a6584d89c2e579905bd445ce4ca777a66b7898dc8841"
+      }
+    ],
+    "results": [
+      {
+        "dimension": "2d",
+        "variant": "before-red",
+        "source_path": "scene/2d/cpu_particles_2d.cpp",
+        "source_sha256": "1675af428be3c66672c5eab2615fba5522767912a9c6f18d2917fe17ed5756c2",
+        "expected_exit": 1,
+        "errors": [],
+        "passed": true,
+        "slice_sha256": "f99ec26d230f340c434f4d8b82cb115c9a4aed723f1ac2da32b548dc871bb630",
+        "compile": {
+          "command": [
+            "c++",
+            "-std=c++17",
+            "-O0",
+            "-Wall",
+            "-Wextra",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-before-red.cpp",
+            "-o",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-before-red.bin"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-before-red.cpp:120:13: warning: unused variable '_seed' [-Wunused-variable]\n  120 |                         uint32_t _seed = p.seed;\n      |                                  ^~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-before-red.cpp:102:9: warning: variable 'tv' set but not used [-Wunused-but-set-variable]\n  102 |                 float tv = 0.0;\n      |                       ^\n2 warnings generated.\n",
+          "timed_out": false
+        },
+        "behavior": {
+          "command": [
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-before-red.bin"
+          ],
+          "exit": 1,
+          "stdout": "CPU source interval/seed/age/finished checks=81 failures=18\n",
+          "stderr": "FAIL old-cycle tail born\nFAIL birth initializer uses old cycle seed\nFAIL fractional delta mode\nFAIL drain and one finished signal\nFAIL old-cycle tail born\nFAIL birth initializer uses old cycle seed\nFAIL fractional delta mode\nFAIL drain and one finished signal\nFAIL randomness explosiveness full first-cycle count\nFAIL first-cycle initialization seed\nFAIL old-cycle restart hash selects correct fractional delta\nFAIL randomness explosiveness full first-cycle count\nFAIL first-cycle initialization seed\nFAIL old-cycle restart hash selects correct fractional delta\nFAIL age-forced restart does not gain tail permission\nFAIL nonzero previous cycle initializer seed\nFAIL zero delta does not consume tail\nFAIL speed-zero pause does not consume tail\n",
+          "timed_out": false
+        },
+        "checks": 81,
+        "failures": 18
+      },
+      {
+        "dimension": "2d",
+        "variant": "current-green",
+        "source_path": "scene/2d/cpu_particles_2d.cpp",
+        "source_sha256": "389133b47dd1e6c4ddb8a91471b41da538938fa3febad991eceaa460e8f651bc",
+        "expected_exit": 0,
+        "errors": [],
+        "passed": true,
+        "slice_sha256": "e3881df1edfc4ed1d4749d544b388491bc891cdab648d110e4e62ee8387acdf4",
+        "compile": {
+          "command": [
+            "c++",
+            "-std=c++17",
+            "-O0",
+            "-Wall",
+            "-Wextra",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-current-green.cpp",
+            "-o",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-current-green.bin"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-current-green.cpp:128:13: warning: unused variable '_seed' [-Wunused-variable]\n  128 |                         uint32_t _seed = p.seed;\n      |                                  ^~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-current-green.cpp:110:9: warning: variable 'tv' set but not used [-Wunused-but-set-variable]\n  110 |                 float tv = 0.0;\n      |                       ^\n2 warnings generated.\n",
+          "timed_out": false
+        },
+        "behavior": {
+          "command": [
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-current-green.bin"
+          ],
+          "exit": 0,
+          "stdout": "CPU source interval/seed/age/finished checks=81 failures=0\n",
+          "stderr": "",
+          "timed_out": false
+        },
+        "checks": 81,
+        "failures": 0
+      },
+      {
+        "dimension": "2d",
+        "variant": "wrong-birth-seed",
+        "source_path": "scene/2d/cpu_particles_2d.cpp",
+        "source_sha256": "159e0605d6b9b825275d863cb62440b1d8e698d33fdeda8d75ae8d5c7de293c6",
+        "expected_exit": 1,
+        "errors": [],
+        "passed": true,
+        "slice_sha256": "ac1aedd61634ea9f4202faa30bce40e031444f4b4a15d201c940d35f886657e1",
+        "compile": {
+          "command": [
+            "c++",
+            "-std=c++17",
+            "-O0",
+            "-Wall",
+            "-Wextra",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-wrong-birth-seed.cpp",
+            "-o",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-wrong-birth-seed.bin"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-wrong-birth-seed.cpp:128:13: warning: unused variable '_seed' [-Wunused-variable]\n  128 |                         uint32_t _seed = p.seed;\n      |                                  ^~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-wrong-birth-seed.cpp:110:9: warning: variable 'tv' set but not used [-Wunused-but-set-variable]\n  110 |                 float tv = 0.0;\n      |                       ^\n2 warnings generated.\n",
+          "timed_out": false
+        },
+        "behavior": {
+          "command": [
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-wrong-birth-seed.bin"
+          ],
+          "exit": 1,
+          "stdout": "CPU source interval/seed/age/finished checks=81 failures=5\n",
+          "stderr": "FAIL birth initializer uses old cycle seed\nFAIL birth initializer uses old cycle seed\nFAIL first-cycle initialization seed\nFAIL first-cycle initialization seed\nFAIL nonzero previous cycle initializer seed\n",
+          "timed_out": false
+        },
+        "checks": 81,
+        "failures": 5
+      },
+      {
+        "dimension": "2d",
+        "variant": "wrong-restart-seed",
+        "source_path": "scene/2d/cpu_particles_2d.cpp",
+        "source_sha256": "37a0f7a93290a327deefbf90860edca8c3f113f94f38a032add90face485a036",
+        "expected_exit": 1,
+        "errors": [],
+        "passed": true,
+        "slice_sha256": "a7da0ded24a176a3da176c80d1ed72eeab2fb4a657dbaf564f7bea4f480f5d7d",
+        "compile": {
+          "command": [
+            "c++",
+            "-std=c++17",
+            "-O0",
+            "-Wall",
+            "-Wextra",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-wrong-restart-seed.cpp",
+            "-o",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-wrong-restart-seed.bin"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-wrong-restart-seed.cpp:128:13: warning: unused variable '_seed' [-Wunused-variable]\n  128 |                         uint32_t _seed = p.seed;\n      |                                  ^~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-wrong-restart-seed.cpp:110:9: warning: variable 'tv' set but not used [-Wunused-but-set-variable]\n  110 |                 float tv = 0.0;\n      |                       ^\n2 warnings generated.\n",
+          "timed_out": false
+        },
+        "behavior": {
+          "command": [
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-wrong-restart-seed.bin"
+          ],
+          "exit": 1,
+          "stdout": "CPU source interval/seed/age/finished checks=81 failures=1\n",
+          "stderr": "FAIL old-cycle restart hash selects correct fractional delta\n",
+          "timed_out": false
+        },
+        "checks": 81,
+        "failures": 1
+      },
+      {
+        "dimension": "2d",
+        "variant": "short-fractional-delta",
+        "source_path": "scene/2d/cpu_particles_2d.cpp",
+        "source_sha256": "084bdd18eee91fed4d81bf4601805a064db552d0461fe404e9a7fd99cbb66466",
+        "expected_exit": 1,
+        "errors": [],
+        "passed": true,
+        "slice_sha256": "79b02bb6373b3bae93e31ce986889ab9d10cf09e37eca4450553ebbb155e6a27",
+        "compile": {
+          "command": [
+            "c++",
+            "-std=c++17",
+            "-O0",
+            "-Wall",
+            "-Wextra",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-short-fractional-delta.cpp",
+            "-o",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-short-fractional-delta.bin"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-short-fractional-delta.cpp:128:13: warning: unused variable '_seed' [-Wunused-variable]\n  128 |                         uint32_t _seed = p.seed;\n      |                                  ^~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-short-fractional-delta.cpp:110:9: warning: variable 'tv' set but not used [-Wunused-but-set-variable]\n  110 |                 float tv = 0.0;\n      |                       ^\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-short-fractional-delta.cpp:35:15: warning: unused variable 'advanced_time' [-Wunused-variable]\n   35 |         const double advanced_time = time;\n      |                      ^~~~~~~~~~~~~\n3 warnings generated.\n",
+          "timed_out": false
+        },
+        "behavior": {
+          "command": [
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-short-fractional-delta.bin"
+          ],
+          "exit": 1,
+          "stdout": "CPU source interval/seed/age/finished checks=81 failures=3\n",
+          "stderr": "FAIL fractional delta mode\nFAIL old-cycle restart hash selects correct fractional delta\nFAIL old-cycle restart hash selects correct fractional delta\n",
+          "timed_out": false
+        },
+        "checks": 81,
+        "failures": 3
+      },
+      {
+        "dimension": "2d",
+        "variant": "allow-next-cycle",
+        "source_path": "scene/2d/cpu_particles_2d.cpp",
+        "source_sha256": "000074eae9f61bd2a4e9a86d6eb3456a962c119ba603f57511ce0311a19a6bc8",
+        "expected_exit": 1,
+        "errors": [],
+        "passed": true,
+        "slice_sha256": "a813f2a6762f3370271c458a30971792ccd0a73f63762b9f99948e99bc5ce40b",
+        "compile": {
+          "command": [
+            "c++",
+            "-std=c++17",
+            "-O0",
+            "-Wall",
+            "-Wextra",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-allow-next-cycle.cpp",
+            "-o",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-allow-next-cycle.bin"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-allow-next-cycle.cpp:128:13: warning: unused variable '_seed' [-Wunused-variable]\n  128 |                         uint32_t _seed = p.seed;\n      |                                  ^~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-allow-next-cycle.cpp:110:9: warning: variable 'tv' set but not used [-Wunused-but-set-variable]\n  110 |                 float tv = 0.0;\n      |                       ^\n2 warnings generated.\n",
+          "timed_out": false
+        },
+        "behavior": {
+          "command": [
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-allow-next-cycle.bin"
+          ],
+          "exit": 1,
+          "stdout": "CPU source interval/seed/age/finished checks=81 failures=18\n",
+          "stderr": "FAIL old-cycle tail born\nFAIL birth initializer uses old cycle seed\nFAIL fractional delta mode\nFAIL drain and one finished signal\nFAIL old-cycle tail born\nFAIL birth initializer uses old cycle seed\nFAIL fractional delta mode\nFAIL drain and one finished signal\nFAIL randomness explosiveness full first-cycle count\nFAIL first-cycle initialization seed\nFAIL old-cycle restart hash selects correct fractional delta\nFAIL randomness explosiveness full first-cycle count\nFAIL first-cycle initialization seed\nFAIL old-cycle restart hash selects correct fractional delta\nFAIL age-forced restart does not gain tail permission\nFAIL nonzero previous cycle initializer seed\nFAIL zero delta does not consume tail\nFAIL speed-zero pause does not consume tail\n",
+          "timed_out": false
+        },
+        "checks": 81,
+        "failures": 18
+      },
+      {
+        "dimension": "2d",
+        "variant": "block-tail",
+        "source_path": "scene/2d/cpu_particles_2d.cpp",
+        "source_sha256": "4699a7737635bc1c9c2d10d690151360f3a4d50704935a44a6a7e1076f41ed83",
+        "expected_exit": 1,
+        "errors": [],
+        "passed": true,
+        "slice_sha256": "8ca31606c9d3a11173afe63efa1e6c189c95ad897320c383272b6e13ef34eb21",
+        "compile": {
+          "command": [
+            "c++",
+            "-std=c++17",
+            "-O0",
+            "-Wall",
+            "-Wextra",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-block-tail.cpp",
+            "-o",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-block-tail.bin"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-block-tail.cpp:128:13: warning: unused variable '_seed' [-Wunused-variable]\n  128 |                         uint32_t _seed = p.seed;\n      |                                  ^~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-block-tail.cpp:104:14: warning: unused variable 'tail_birth' [-Wunused-variable]\n  104 |                 const bool tail_birth = final_one_shot_step && restart;\n      |                            ^~~~~~~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-block-tail.cpp:110:9: warning: variable 'tv' set but not used [-Wunused-but-set-variable]\n  110 |                 float tv = 0.0;\n      |                       ^\n3 warnings generated.\n",
+          "timed_out": false
+        },
+        "behavior": {
+          "command": [
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-block-tail.bin"
+          ],
+          "exit": 1,
+          "stdout": "CPU source interval/seed/age/finished checks=81 failures=18\n",
+          "stderr": "FAIL old-cycle tail born\nFAIL birth initializer uses old cycle seed\nFAIL fractional delta mode\nFAIL drain and one finished signal\nFAIL old-cycle tail born\nFAIL birth initializer uses old cycle seed\nFAIL fractional delta mode\nFAIL drain and one finished signal\nFAIL randomness explosiveness full first-cycle count\nFAIL first-cycle initialization seed\nFAIL old-cycle restart hash selects correct fractional delta\nFAIL randomness explosiveness full first-cycle count\nFAIL first-cycle initialization seed\nFAIL old-cycle restart hash selects correct fractional delta\nFAIL age-forced restart does not gain tail permission\nFAIL nonzero previous cycle initializer seed\nFAIL zero delta does not consume tail\nFAIL speed-zero pause does not consume tail\n",
+          "timed_out": false
+        },
+        "checks": 81,
+        "failures": 18
+      },
+      {
+        "dimension": "2d",
+        "variant": "greater-equal",
+        "source_path": "scene/2d/cpu_particles_2d.cpp",
+        "source_sha256": "3ad08b2b53a3fad9fe604b4725670a64fa336ce8074153f37736602707827c87",
+        "expected_exit": 1,
+        "errors": [],
+        "passed": true,
+        "slice_sha256": "bfcb54458f40c59c50b222023c37e1ef184c313e1bedf42e94e62fc93b16ad78",
+        "compile": {
+          "command": [
+            "c++",
+            "-std=c++17",
+            "-O0",
+            "-Wall",
+            "-Wextra",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-greater-equal.cpp",
+            "-o",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-greater-equal.bin"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-greater-equal.cpp:128:13: warning: unused variable '_seed' [-Wunused-variable]\n  128 |                         uint32_t _seed = p.seed;\n      |                                  ^~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-greater-equal.cpp:110:9: warning: variable 'tv' set but not used [-Wunused-but-set-variable]\n  110 |                 float tv = 0.0;\n      |                       ^\n2 warnings generated.\n",
+          "timed_out": false
+        },
+        "behavior": {
+          "command": [
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-greater-equal.bin"
+          ],
+          "exit": 1,
+          "stdout": "CPU source interval/seed/age/finished checks=81 failures=2\n",
+          "stderr": "FAIL exact endpoint keeps tail\nFAIL first whole exact cycle emits\n",
+          "timed_out": false
+        },
+        "checks": 81,
+        "failures": 2
+      },
+      {
+        "dimension": "2d",
+        "variant": "age-gets-tail-permission",
+        "source_path": "scene/2d/cpu_particles_2d.cpp",
+        "source_sha256": "0f1276c78d329696c169b737f6e8564c07a676e212b6a3fd87fef9295b302210",
+        "expected_exit": 1,
+        "errors": [],
+        "passed": true,
+        "slice_sha256": "3ab49f6dd2a100c48ec12ee20087147121559e0a6fa5f925d837321ce334477e",
+        "compile": {
+          "command": [
+            "c++",
+            "-std=c++17",
+            "-O0",
+            "-Wall",
+            "-Wextra",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-age-gets-tail-permission.cpp",
+            "-o",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-age-gets-tail-permission.bin"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-age-gets-tail-permission.cpp:128:13: warning: unused variable '_seed' [-Wunused-variable]\n  128 |                         uint32_t _seed = p.seed;\n      |                                  ^~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-age-gets-tail-permission.cpp:110:9: warning: variable 'tv' set but not used [-Wunused-but-set-variable]\n  110 |                 float tv = 0.0;\n      |                       ^\n2 warnings generated.\n",
+          "timed_out": false
+        },
+        "behavior": {
+          "command": [
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/2d-age-gets-tail-permission.bin"
+          ],
+          "exit": 1,
+          "stdout": "CPU source interval/seed/age/finished checks=81 failures=1\n",
+          "stderr": "FAIL age-forced restart does not gain tail permission\n",
+          "timed_out": false
+        },
+        "checks": 81,
+        "failures": 1
+      },
+      {
+        "dimension": "3d",
+        "variant": "before-red",
+        "source_path": "scene/3d/cpu_particles_3d.cpp",
+        "source_sha256": "5e6e6038eeaffbd274eabd2068d51299a1999d637526af0331d08c9374613c37",
+        "expected_exit": 1,
+        "errors": [],
+        "passed": true,
+        "slice_sha256": "9d53546e31f243f23d57b5ab5f5abe0a4206eb9c5e1b6e8b69589550a6951aa4",
+        "compile": {
+          "command": [
+            "c++",
+            "-std=c++17",
+            "-O0",
+            "-Wall",
+            "-Wextra",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-before-red.cpp",
+            "-o",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-before-red.bin"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-before-red.cpp:120:13: warning: unused variable 'alt_seed' [-Wunused-variable]\n  120 |                         uint32_t alt_seed = p.seed;\n      |                                  ^~~~~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-before-red.cpp:102:9: warning: variable 'tv' set but not used [-Wunused-but-set-variable]\n  102 |                 float tv = 0.0;\n      |                       ^\n2 warnings generated.\n",
+          "timed_out": false
+        },
+        "behavior": {
+          "command": [
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-before-red.bin"
+          ],
+          "exit": 1,
+          "stdout": "CPU source interval/seed/age/finished checks=81 failures=18\n",
+          "stderr": "FAIL old-cycle tail born\nFAIL birth initializer uses old cycle seed\nFAIL fractional delta mode\nFAIL drain and one finished signal\nFAIL old-cycle tail born\nFAIL birth initializer uses old cycle seed\nFAIL fractional delta mode\nFAIL drain and one finished signal\nFAIL randomness explosiveness full first-cycle count\nFAIL first-cycle initialization seed\nFAIL old-cycle restart hash selects correct fractional delta\nFAIL randomness explosiveness full first-cycle count\nFAIL first-cycle initialization seed\nFAIL old-cycle restart hash selects correct fractional delta\nFAIL age-forced restart does not gain tail permission\nFAIL nonzero previous cycle initializer seed\nFAIL zero delta does not consume tail\nFAIL speed-zero pause does not consume tail\n",
+          "timed_out": false
+        },
+        "checks": 81,
+        "failures": 18
+      },
+      {
+        "dimension": "3d",
+        "variant": "current-green",
+        "source_path": "scene/3d/cpu_particles_3d.cpp",
+        "source_sha256": "2dbc57edacc5db28b861a6584d89c2e579905bd445ce4ca777a66b7898dc8841",
+        "expected_exit": 0,
+        "errors": [],
+        "passed": true,
+        "slice_sha256": "1a1a909755755a9341bbd113895e113f181452645cd6a51dde1a7f955a1bd9b4",
+        "compile": {
+          "command": [
+            "c++",
+            "-std=c++17",
+            "-O0",
+            "-Wall",
+            "-Wextra",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-current-green.cpp",
+            "-o",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-current-green.bin"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-current-green.cpp:128:13: warning: unused variable 'alt_seed' [-Wunused-variable]\n  128 |                         uint32_t alt_seed = p.seed;\n      |                                  ^~~~~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-current-green.cpp:110:9: warning: variable 'tv' set but not used [-Wunused-but-set-variable]\n  110 |                 float tv = 0.0;\n      |                       ^\n2 warnings generated.\n",
+          "timed_out": false
+        },
+        "behavior": {
+          "command": [
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-current-green.bin"
+          ],
+          "exit": 0,
+          "stdout": "CPU source interval/seed/age/finished checks=81 failures=0\n",
+          "stderr": "",
+          "timed_out": false
+        },
+        "checks": 81,
+        "failures": 0
+      },
+      {
+        "dimension": "3d",
+        "variant": "wrong-birth-seed",
+        "source_path": "scene/3d/cpu_particles_3d.cpp",
+        "source_sha256": "7ee06d45460da4c1fb182f487bbd87ee5abd1abb4aa401693e1eb692be7e3e83",
+        "expected_exit": 1,
+        "errors": [],
+        "passed": true,
+        "slice_sha256": "ae341f8be67c14874616e78a58c3662364548f3e181071a48ba27a5718ea1ee3",
+        "compile": {
+          "command": [
+            "c++",
+            "-std=c++17",
+            "-O0",
+            "-Wall",
+            "-Wextra",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-wrong-birth-seed.cpp",
+            "-o",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-wrong-birth-seed.bin"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-wrong-birth-seed.cpp:128:13: warning: unused variable 'alt_seed' [-Wunused-variable]\n  128 |                         uint32_t alt_seed = p.seed;\n      |                                  ^~~~~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-wrong-birth-seed.cpp:110:9: warning: variable 'tv' set but not used [-Wunused-but-set-variable]\n  110 |                 float tv = 0.0;\n      |                       ^\n2 warnings generated.\n",
+          "timed_out": false
+        },
+        "behavior": {
+          "command": [
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-wrong-birth-seed.bin"
+          ],
+          "exit": 1,
+          "stdout": "CPU source interval/seed/age/finished checks=81 failures=5\n",
+          "stderr": "FAIL birth initializer uses old cycle seed\nFAIL birth initializer uses old cycle seed\nFAIL first-cycle initialization seed\nFAIL first-cycle initialization seed\nFAIL nonzero previous cycle initializer seed\n",
+          "timed_out": false
+        },
+        "checks": 81,
+        "failures": 5
+      },
+      {
+        "dimension": "3d",
+        "variant": "wrong-restart-seed",
+        "source_path": "scene/3d/cpu_particles_3d.cpp",
+        "source_sha256": "32adc23c02887732eb693638475a116997004314099a8b934417fac45a86cb6f",
+        "expected_exit": 1,
+        "errors": [],
+        "passed": true,
+        "slice_sha256": "189122ce0fdca6f16801b8a256d854cb99d37edaef32c02aba9c559f6af7476e",
+        "compile": {
+          "command": [
+            "c++",
+            "-std=c++17",
+            "-O0",
+            "-Wall",
+            "-Wextra",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-wrong-restart-seed.cpp",
+            "-o",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-wrong-restart-seed.bin"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-wrong-restart-seed.cpp:128:13: warning: unused variable 'alt_seed' [-Wunused-variable]\n  128 |                         uint32_t alt_seed = p.seed;\n      |                                  ^~~~~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-wrong-restart-seed.cpp:110:9: warning: variable 'tv' set but not used [-Wunused-but-set-variable]\n  110 |                 float tv = 0.0;\n      |                       ^\n2 warnings generated.\n",
+          "timed_out": false
+        },
+        "behavior": {
+          "command": [
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-wrong-restart-seed.bin"
+          ],
+          "exit": 1,
+          "stdout": "CPU source interval/seed/age/finished checks=81 failures=1\n",
+          "stderr": "FAIL old-cycle restart hash selects correct fractional delta\n",
+          "timed_out": false
+        },
+        "checks": 81,
+        "failures": 1
+      },
+      {
+        "dimension": "3d",
+        "variant": "short-fractional-delta",
+        "source_path": "scene/3d/cpu_particles_3d.cpp",
+        "source_sha256": "8d6458b7ea162b74bb6fcd63b7576e705d1a49626b35ff3482366471cdbbcdcc",
+        "expected_exit": 1,
+        "errors": [],
+        "passed": true,
+        "slice_sha256": "4b0730621f7c0f438ff64a98c031fe6c731af107cb2a6d00b7b3e8cbe3ecb9e1",
+        "compile": {
+          "command": [
+            "c++",
+            "-std=c++17",
+            "-O0",
+            "-Wall",
+            "-Wextra",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-short-fractional-delta.cpp",
+            "-o",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-short-fractional-delta.bin"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-short-fractional-delta.cpp:128:13: warning: unused variable 'alt_seed' [-Wunused-variable]\n  128 |                         uint32_t alt_seed = p.seed;\n      |                                  ^~~~~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-short-fractional-delta.cpp:110:9: warning: variable 'tv' set but not used [-Wunused-but-set-variable]\n  110 |                 float tv = 0.0;\n      |                       ^\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-short-fractional-delta.cpp:35:15: warning: unused variable 'advanced_time' [-Wunused-variable]\n   35 |         const double advanced_time = time;\n      |                      ^~~~~~~~~~~~~\n3 warnings generated.\n",
+          "timed_out": false
+        },
+        "behavior": {
+          "command": [
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-short-fractional-delta.bin"
+          ],
+          "exit": 1,
+          "stdout": "CPU source interval/seed/age/finished checks=81 failures=3\n",
+          "stderr": "FAIL fractional delta mode\nFAIL old-cycle restart hash selects correct fractional delta\nFAIL old-cycle restart hash selects correct fractional delta\n",
+          "timed_out": false
+        },
+        "checks": 81,
+        "failures": 3
+      },
+      {
+        "dimension": "3d",
+        "variant": "allow-next-cycle",
+        "source_path": "scene/3d/cpu_particles_3d.cpp",
+        "source_sha256": "416b931ec47036ff18e2b5511d840511baeede0f0facd33ba6cff1f45a35dc9d",
+        "expected_exit": 1,
+        "errors": [],
+        "passed": true,
+        "slice_sha256": "774be752986eeb43b8ae429d7c500968a9eca4a7175358fb72d18d038425c558",
+        "compile": {
+          "command": [
+            "c++",
+            "-std=c++17",
+            "-O0",
+            "-Wall",
+            "-Wextra",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-allow-next-cycle.cpp",
+            "-o",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-allow-next-cycle.bin"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-allow-next-cycle.cpp:128:13: warning: unused variable 'alt_seed' [-Wunused-variable]\n  128 |                         uint32_t alt_seed = p.seed;\n      |                                  ^~~~~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-allow-next-cycle.cpp:110:9: warning: variable 'tv' set but not used [-Wunused-but-set-variable]\n  110 |                 float tv = 0.0;\n      |                       ^\n2 warnings generated.\n",
+          "timed_out": false
+        },
+        "behavior": {
+          "command": [
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-allow-next-cycle.bin"
+          ],
+          "exit": 1,
+          "stdout": "CPU source interval/seed/age/finished checks=81 failures=18\n",
+          "stderr": "FAIL old-cycle tail born\nFAIL birth initializer uses old cycle seed\nFAIL fractional delta mode\nFAIL drain and one finished signal\nFAIL old-cycle tail born\nFAIL birth initializer uses old cycle seed\nFAIL fractional delta mode\nFAIL drain and one finished signal\nFAIL randomness explosiveness full first-cycle count\nFAIL first-cycle initialization seed\nFAIL old-cycle restart hash selects correct fractional delta\nFAIL randomness explosiveness full first-cycle count\nFAIL first-cycle initialization seed\nFAIL old-cycle restart hash selects correct fractional delta\nFAIL age-forced restart does not gain tail permission\nFAIL nonzero previous cycle initializer seed\nFAIL zero delta does not consume tail\nFAIL speed-zero pause does not consume tail\n",
+          "timed_out": false
+        },
+        "checks": 81,
+        "failures": 18
+      },
+      {
+        "dimension": "3d",
+        "variant": "block-tail",
+        "source_path": "scene/3d/cpu_particles_3d.cpp",
+        "source_sha256": "37e710f9cd6dda7aafcc2dcf966b9fcfcedce773cc38c2f04926a9d7feeb0b04",
+        "expected_exit": 1,
+        "errors": [],
+        "passed": true,
+        "slice_sha256": "09cd76360964a640eb73a454d0958fd6c7cf65858828594000f70ef68adc4d1e",
+        "compile": {
+          "command": [
+            "c++",
+            "-std=c++17",
+            "-O0",
+            "-Wall",
+            "-Wextra",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-block-tail.cpp",
+            "-o",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-block-tail.bin"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-block-tail.cpp:128:13: warning: unused variable 'alt_seed' [-Wunused-variable]\n  128 |                         uint32_t alt_seed = p.seed;\n      |                                  ^~~~~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-block-tail.cpp:104:14: warning: unused variable 'tail_birth' [-Wunused-variable]\n  104 |                 const bool tail_birth = final_one_shot_step && restart;\n      |                            ^~~~~~~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-block-tail.cpp:110:9: warning: variable 'tv' set but not used [-Wunused-but-set-variable]\n  110 |                 float tv = 0.0;\n      |                       ^\n3 warnings generated.\n",
+          "timed_out": false
+        },
+        "behavior": {
+          "command": [
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-block-tail.bin"
+          ],
+          "exit": 1,
+          "stdout": "CPU source interval/seed/age/finished checks=81 failures=18\n",
+          "stderr": "FAIL old-cycle tail born\nFAIL birth initializer uses old cycle seed\nFAIL fractional delta mode\nFAIL drain and one finished signal\nFAIL old-cycle tail born\nFAIL birth initializer uses old cycle seed\nFAIL fractional delta mode\nFAIL drain and one finished signal\nFAIL randomness explosiveness full first-cycle count\nFAIL first-cycle initialization seed\nFAIL old-cycle restart hash selects correct fractional delta\nFAIL randomness explosiveness full first-cycle count\nFAIL first-cycle initialization seed\nFAIL old-cycle restart hash selects correct fractional delta\nFAIL age-forced restart does not gain tail permission\nFAIL nonzero previous cycle initializer seed\nFAIL zero delta does not consume tail\nFAIL speed-zero pause does not consume tail\n",
+          "timed_out": false
+        },
+        "checks": 81,
+        "failures": 18
+      },
+      {
+        "dimension": "3d",
+        "variant": "greater-equal",
+        "source_path": "scene/3d/cpu_particles_3d.cpp",
+        "source_sha256": "49655e7dbc3a3ca1fdeeceb179bcf87758af4e620030bab35b41a9fcb80871ca",
+        "expected_exit": 1,
+        "errors": [],
+        "passed": true,
+        "slice_sha256": "96f8a6c619ef508e6f4a9b36401681470ffed87ffea7a3084753e14bda8313a3",
+        "compile": {
+          "command": [
+            "c++",
+            "-std=c++17",
+            "-O0",
+            "-Wall",
+            "-Wextra",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-greater-equal.cpp",
+            "-o",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-greater-equal.bin"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-greater-equal.cpp:128:13: warning: unused variable 'alt_seed' [-Wunused-variable]\n  128 |                         uint32_t alt_seed = p.seed;\n      |                                  ^~~~~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-greater-equal.cpp:110:9: warning: variable 'tv' set but not used [-Wunused-but-set-variable]\n  110 |                 float tv = 0.0;\n      |                       ^\n2 warnings generated.\n",
+          "timed_out": false
+        },
+        "behavior": {
+          "command": [
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-greater-equal.bin"
+          ],
+          "exit": 1,
+          "stdout": "CPU source interval/seed/age/finished checks=81 failures=2\n",
+          "stderr": "FAIL exact endpoint keeps tail\nFAIL first whole exact cycle emits\n",
+          "timed_out": false
+        },
+        "checks": 81,
+        "failures": 2
+      },
+      {
+        "dimension": "3d",
+        "variant": "age-gets-tail-permission",
+        "source_path": "scene/3d/cpu_particles_3d.cpp",
+        "source_sha256": "77098f93c60cde31428235c4f4435450c39aa1ac7cfdb2b7469b65fa59cb7e9b",
+        "expected_exit": 1,
+        "errors": [],
+        "passed": true,
+        "slice_sha256": "dfd16e284952a1ab7fd080b1679ece2dd07a8bea9f6254957c2ed8569e7819a5",
+        "compile": {
+          "command": [
+            "c++",
+            "-std=c++17",
+            "-O0",
+            "-Wall",
+            "-Wextra",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-age-gets-tail-permission.cpp",
+            "-o",
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-age-gets-tail-permission.bin"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-age-gets-tail-permission.cpp:128:13: warning: unused variable 'alt_seed' [-Wunused-variable]\n  128 |                         uint32_t alt_seed = p.seed;\n      |                                  ^~~~~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-age-gets-tail-permission.cpp:110:9: warning: variable 'tv' set but not used [-Wunused-but-set-variable]\n  110 |                 float tv = 0.0;\n      |                       ^\n2 warnings generated.\n",
+          "timed_out": false
+        },
+        "behavior": {
+          "command": [
+            "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-tail-source-g0rh4gma/3d-age-gets-tail-permission.bin"
+          ],
+          "exit": 1,
+          "stdout": "CPU source interval/seed/age/finished checks=81 failures=1\n",
+          "stderr": "FAIL age-forced restart does not gain tail permission\n",
+          "timed_out": false
+        },
+        "checks": 81,
+        "failures": 1
+      }
+    ],
+    "passed": true
+  },
+  "neighbor_cpu": {
+    "tests": 41,
+    "assertions": 1315,
+    "failures": 0,
+    "exit": 0,
+    "stderr_bytes": 0,
+    "receipt": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/particle-current-engine-build-20261111/cpu-oneshot-neighbors.stdout"
+  },
+  "runner_controls": [
+    {
+      "case": "missing",
+      "runner_exit": 1,
+      "marker_count": 0,
+      "timed_out": false,
+      "errors": [
+        "Expected exactly one result marker, found 0"
+      ]
+    },
+    {
+      "case": "duplicate",
+      "runner_exit": 1,
+      "marker_count": 2,
+      "timed_out": false,
+      "errors": [
+        "Expected exactly one result marker, found 2"
+      ]
+    },
+    {
+      "case": "exit-mismatch",
+      "runner_exit": 1,
+      "marker_count": 1,
+      "timed_out": false,
+      "errors": [
+        "Engine exit 1 disagrees with failures (expected 0)"
+      ]
+    },
+    {
+      "case": "timeout",
+      "runner_exit": 1,
+      "marker_count": 0,
+      "timed_out": true,
+      "errors": [
+        "Engine timed out",
+        "Expected exactly one result marker, found 0"
+      ]
+    },
+    {
+      "case": "error-diagnostic",
+      "runner_exit": 1,
+      "marker_count": 1,
+      "timed_out": false,
+      "errors": [
+        "Engine reported ERROR or RID/ObjectDB leak diagnostics"
+      ]
+    },
+    {
+      "case": "rid-leak",
+      "runner_exit": 1,
+      "marker_count": 1,
+      "timed_out": false,
+      "errors": [
+        "Engine reported ERROR or RID/ObjectDB leak diagnostics"
+      ]
+    },
+    {
+      "case": "clean-pass",
+      "runner_exit": 0,
+      "marker_count": 1,
+      "timed_out": false,
+      "errors": []
+    }
+  ],
+  "limits": [
+    "2D birth count is not publicly observable in fixture",
+    "3D buffer/lifecycle evidence is headless CPU/public MultiMesh, not GPU/pixel acceptance",
+    "no-next-cycle birth is independently supported by source slices and mutant controls, not uniquely by real public buffer",
+    "restart coverage asserts immediate public emitting activation and a fresh second tail after a cleared buffer; it does not independently prove full restart reset/time/seed semantics"
+  ]
+}

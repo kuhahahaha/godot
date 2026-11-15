@@ -38,7 +38,258 @@ TEST_FORCE_LINK(test_command_queue)
 #include "core/os/thread.h"
 #include "core/templates/command_queue_mt.h"
 
+#include <atomic>
+#include <chrono>
+#include <thread>
+
 namespace TestCommandQueue {
+
+#ifdef THREADS_ENABLED
+class LockAccessor {
+public:
+	static bool snapshot(CommandQueueMT &p_queue, uint32_t &r_head, uint32_t &r_awaiters) {
+		if (!p_queue.mutex.try_lock()) {
+			return false;
+		}
+		r_head = p_queue.sync_head;
+		r_awaiters = p_queue.sync_awaiters;
+		p_queue.mutex.unlock();
+		return true;
+	}
+
+	static bool available(CommandQueueMT &p_queue) {
+		bool available = false;
+		std::thread contender([&]() {
+			for (int attempt = 0; attempt < 64; attempt++) {
+				if (p_queue.mutex.try_lock()) {
+					available = true;
+					p_queue.mutex.unlock();
+					break;
+				}
+				std::this_thread::yield();
+			}
+		});
+		contender.join();
+		return available;
+	}
+};
+
+struct PayloadProbe {
+	CommandQueueMT queue;
+	bool check_copy = false;
+	bool check_destroy = false;
+	bool copy_unlocked = false;
+	bool destroy_unlocked = false;
+	int copies = 0;
+	int releases = 0;
+	int calls = 0;
+	int markers = 0;
+	int first_event = 0;
+
+	void marker() {
+		if (!first_event) {
+			first_event = 1;
+		}
+		markers++;
+	}
+
+	struct Argument {
+		PayloadProbe *probe;
+		bool owned = false;
+		explicit Argument(PayloadProbe *p_probe) : probe(p_probe) {}
+		Argument(const Argument &p_other) : probe(p_other.probe), owned(true) {
+			probe->copies++;
+			if (probe->check_copy) {
+				probe->copy_unlocked = LockAccessor::available(probe->queue);
+				if (probe->copy_unlocked) {
+					probe->queue.push(probe, &PayloadProbe::marker);
+					probe->queue.flush_all();
+				}
+			}
+		}
+		Argument(Argument &&p_other) : probe(p_other.probe), owned(p_other.owned) {
+			p_other.owned = false;
+		}
+		~Argument() {
+			if (!owned) {
+				return;
+			}
+			probe->releases++;
+			if (probe->check_destroy) {
+				probe->destroy_unlocked = LockAccessor::available(probe->queue);
+				if (probe->destroy_unlocked) {
+					// Exercise capacity growth while the active payload lives locally.
+					for (int i = 0; i < 4096; i++) {
+						probe->queue.push(probe, &PayloadProbe::marker);
+					}
+					probe->queue.flush_all();
+				}
+			}
+		}
+	};
+
+	void consume(const Argument &) {
+		if (!first_event) {
+			first_event = 2;
+		}
+		calls++;
+	}
+};
+
+TEST_CASE("[CommandQueue][Lifecycle] argument copy can reenter before publication") {
+	PayloadProbe probe;
+	probe.check_copy = true;
+	PayloadProbe::Argument arg(&probe);
+	probe.queue.push(&probe, &PayloadProbe::consume, arg);
+	probe.queue.flush_all();
+	CHECK(probe.copy_unlocked);
+	CHECK(probe.first_event == 1);
+	CHECK(probe.markers == 1);
+	CHECK(probe.calls == 1);
+	CHECK(probe.copies == 1);
+	CHECK(probe.releases == 1);
+}
+
+TEST_CASE("[CommandQueue][Lifecycle] argument release can append during flush") {
+	PayloadProbe probe;
+	probe.check_destroy = true;
+	PayloadProbe::Argument arg(&probe);
+	probe.queue.push(&probe, &PayloadProbe::consume, arg);
+	probe.queue.flush_all();
+	CHECK(probe.destroy_unlocked);
+	CHECK(probe.first_event == 2);
+	CHECK(probe.markers == 4096);
+	CHECK(probe.calls == 1);
+	CHECK(probe.copies == 1);
+	CHECK(probe.releases == 1);
+	probe.queue.flush_all();
+	CHECK(probe.markers == 4096);
+	CHECK(probe.releases == 1);
+}
+
+struct SyncPayloadProbe {
+	CommandQueueMT queue;
+	std::atomic<bool> cleanup_entered{ false };
+	std::atomic<bool> release_cleanup{ false };
+	std::atomic<bool> cleanup_done{ false };
+	std::atomic<bool> producer_done{ false };
+	std::atomic<bool> second_done{ false };
+	bool cleanup_unlocked = false;
+	bool ticket_incomplete = false;
+	bool producer_saw_cleanup = false;
+	int calls = 0;
+	int releases = 0;
+
+	struct Argument {
+		SyncPayloadProbe *probe;
+		mutable bool queued_owner = false;
+		explicit Argument(SyncPayloadProbe *p_probe) : probe(p_probe) {}
+		Argument(const Argument &p_other) : probe(p_other.probe) {}
+		~Argument() {
+			if (!queued_owner) {
+				return;
+			}
+			probe->releases++;
+			probe->cleanup_unlocked = LockAccessor::available(probe->queue);
+			if (probe->cleanup_unlocked) {
+				uint32_t head = 99;
+				uint32_t awaiters = 0;
+				if (LockAccessor::snapshot(probe->queue, head, awaiters)) {
+					probe->ticket_incomplete = head == 0;
+				}
+			}
+			probe->cleanup_entered.store(true);
+			// A separate controller releases the gate; never join a queue waiter here.
+			while (!probe->release_cleanup.load()) {
+				std::this_thread::yield();
+			}
+			probe->cleanup_done.store(true);
+		}
+	};
+
+	void consume(const Argument &p_arg) {
+		p_arg.queued_owner = true;
+		calls++;
+	}
+	int consume_return(const Argument &p_arg) {
+		consume(p_arg);
+		return 47;
+	}
+};
+
+template <typename Predicate>
+static bool await_probe(Predicate p_predicate) {
+	const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+	while (!p_predicate()) {
+		if (std::chrono::steady_clock::now() >= deadline) {
+			return false;
+		}
+		std::this_thread::yield();
+	}
+	return true;
+}
+
+TEST_CASE("[CommandQueue][Lifecycle] synchronous completion includes payload release") {
+	bool return_value = false;
+	SUBCASE("push_and_sync") {}
+	SUBCASE("push_and_ret") {
+		return_value = true;
+	}
+	SyncPayloadProbe probe;
+	int result = -1;
+	std::thread producer([&]() {
+		SyncPayloadProbe::Argument arg(&probe);
+		if (return_value) {
+			probe.queue.push_and_ret(&probe, &SyncPayloadProbe::consume_return, &result, arg);
+		} else {
+			probe.queue.push_and_sync(&probe, &SyncPayloadProbe::consume, arg);
+		}
+		probe.producer_saw_cleanup = probe.cleanup_done.load();
+		probe.producer_done.store(true);
+	});
+	const bool published = await_probe([&]() {
+		uint32_t head = 0, awaiters = 0;
+		return LockAccessor::snapshot(probe.queue, head, awaiters) && awaiters == 1;
+	});
+	CHECK(published);
+	std::thread first_consumer([&]() { probe.queue.flush_all(); });
+	const bool entered = await_probe([&]() { return probe.cleanup_entered.load(); });
+	CHECK(entered);
+	std::thread second_consumer;
+	bool second_waiting = false;
+	if (entered && probe.cleanup_unlocked) {
+		second_consumer = std::thread([&]() {
+			probe.queue.flush_all();
+			probe.second_done.store(true);
+		});
+		second_waiting = await_probe([&]() {
+			uint32_t head = 0, awaiters = 0;
+			return LockAccessor::snapshot(probe.queue, head, awaiters) && awaiters == 2;
+		});
+		CHECK_FALSE(probe.producer_done.load());
+		CHECK_FALSE(probe.second_done.load());
+	}
+	probe.release_cleanup.store(true);
+	first_consumer.join();
+	if (second_consumer.joinable()) {
+		second_consumer.join();
+	}
+	producer.join();
+	CHECK(probe.cleanup_unlocked);
+	CHECK(probe.ticket_incomplete);
+	CHECK(second_waiting);
+	CHECK(probe.producer_saw_cleanup);
+	CHECK(probe.calls == 1);
+	CHECK(probe.releases == 1);
+	if (return_value) {
+		CHECK(result == 47);
+	}
+	PayloadProbe fresh;
+	probe.queue.push(&fresh, &PayloadProbe::marker);
+	probe.queue.flush_all();
+	CHECK(fresh.markers == 1);
+}
+#endif
 
 class ThreadWork {
 	Semaphore thread_sem;

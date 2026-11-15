@@ -1,0 +1,5 @@
+config_version=5
+[application]
+config/name="Particle alpha curve changed regression"
+[rendering]
+renderer/rendering_method="mobile"
