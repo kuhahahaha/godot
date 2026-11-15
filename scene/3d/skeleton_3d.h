@@ -41,7 +41,22 @@ class Skeleton3D;
 class SkinReference : public RefCounted {
 	GDCLASS(SkinReference, RefCounted)
 	friend class Skeleton3D;
+#ifdef TESTS_ENABLED
+	friend struct PaletteCommitTestAccess;
+#endif
 
+public:
+	enum PaletteCommitStatus : int64_t {
+		PALETTE_COMMIT_READY = 0,
+		PALETTE_COMMIT_NOT_INITIALIZED = 1,
+		PALETTE_COMMIT_SOURCE_CHANGED = 2,
+		PALETTE_COMMIT_INVALID_MAPPING = 3,
+		PALETTE_COMMIT_DETACHED = 4,
+		PALETTE_COMMIT_VERSION_EXHAUSTED = 5,
+		PALETTE_COMMIT_WRONG_THREAD = 6,
+	};
+
+private:
 	Skeleton3D *skeleton_node = nullptr;
 	RID skeleton;
 	Ref<Skin> skin;
@@ -49,6 +64,19 @@ class SkinReference : public RefCounted {
 	uint64_t skeleton_version = 0;
 	Vector<uint32_t> skin_bone_indices;
 	uint32_t *skin_bone_indices_ptrs = nullptr;
+
+	int64_t live_binding_revision = 1;
+	int64_t committed_binding_revision = 0;
+	int64_t committed_mapping_revision = 0;
+	int64_t commit_serial = 0;
+	int64_t committed_source_update_serial = 0;
+	int64_t committed_bind_count = 0;
+	bool skin_dirty = true;
+	bool mapping_resolved_once = false;
+	bool cached_mapping_valid = false;
+	bool committed_mapping_valid = false;
+	bool detached = false;
+	bool version_exhausted = false;
 
 protected:
 	static void _bind_methods();
@@ -59,6 +87,7 @@ public:
 
 	RID get_skeleton() const;
 	Ref<Skin> get_skin() const;
+	Dictionary get_palette_commit_state() const;
 	~SkinReference();
 };
 
@@ -84,6 +113,9 @@ public:
 
 private:
 	friend class SkinReference;
+#ifdef TESTS_ENABLED
+	friend struct PaletteCommitTestAccess;
+#endif
 
 	enum UpdateFlag {
 		UPDATE_FLAG_NONE = 1,
@@ -184,6 +216,10 @@ private:
 	float motion_scale = 1.0;
 
 	uint64_t version = 1;
+	int64_t sampling_mapping_revision = 1;
+	int64_t source_update_serial = 0;
+	bool sampling_version_exhausted = false;
+	bool emitting_palette_commit_notification = false;
 
 	void _update_process_order() const;
 

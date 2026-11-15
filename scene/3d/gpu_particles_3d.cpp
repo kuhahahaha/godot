@@ -38,6 +38,7 @@
 #include "scene/3d/cpu_particles_3d.h"
 #include "scene/resources/curve_texture.h"
 #include "scene/resources/gradient_texture.h"
+#include "scene/resources/image_texture.h"
 #include "scene/resources/mesh.h"
 #include "scene/resources/particle_process_material.h"
 #include "servers/rendering/rendering_server.h"
@@ -84,12 +85,13 @@ void GPUParticles3D::set_amount(int p_amount) {
 }
 
 void GPUParticles3D::set_lifetime(double p_lifetime) {
-	ERR_FAIL_COND_MSG(p_lifetime <= 0, "Particles lifetime must be greater than 0.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_lifetime) || !Math::is_finite((float)p_lifetime) || (float)p_lifetime <= 0.0f, "Particles lifetime must remain finite and greater than 0 when converted to float.");
 	lifetime = p_lifetime;
 	RS::get_singleton()->particles_set_lifetime(particles, lifetime);
 }
 
 void GPUParticles3D::set_interp_to_end(float p_interp) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_interp), "Particles interpolation factor must be finite.");
 	interp_to_end_factor = CLAMP(p_interp, 0.0, 1.0);
 	RS::get_singleton()->particles_set_interp_to_end(particles, interp_to_end_factor);
 }
@@ -127,16 +129,19 @@ uint32_t GPUParticles3D::get_seed() const {
 }
 
 void GPUParticles3D::set_pre_process_time(double p_time) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_time) || !Math::is_finite((float)p_time) || p_time < 0.0, "Particles pre-process time must be finite and non-negative.");
 	pre_process_time = p_time;
 	RS::get_singleton()->particles_set_pre_process_time(particles, pre_process_time);
 }
 
 void GPUParticles3D::set_explosiveness_ratio(real_t p_ratio) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_ratio), "Particles explosiveness ratio must be finite.");
 	explosiveness_ratio = p_ratio;
 	RS::get_singleton()->particles_set_explosiveness_ratio(particles, explosiveness_ratio);
 }
 
 void GPUParticles3D::set_randomness_ratio(real_t p_ratio) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_ratio), "Particles randomness ratio must be finite.");
 	randomness_ratio = p_ratio;
 	RS::get_singleton()->particles_set_randomness_ratio(particles, randomness_ratio);
 }
@@ -174,14 +179,17 @@ void GPUParticles3D::set_process_material(const Ref<Material> &p_material) {
 	RS::get_singleton()->particles_set_process_material(particles, material_rid);
 
 	update_configuration_warnings();
+	update_gizmos();
 }
 
 void GPUParticles3D::set_speed_scale(double p_scale) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_scale) || p_scale < 0.0, "Particles speed scale must be finite and non-negative.");
 	speed_scale = p_scale;
 	RS::get_singleton()->particles_set_speed_scale(particles, p_scale);
 }
 
 void GPUParticles3D::set_collision_base_size(real_t p_size) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_size) || p_size < 0.0, "Particles collision base size must be finite and non-negative.");
 	collision_base_size = p_size;
 	RS::get_singleton()->particles_set_collision_base_size(particles, p_size);
 }
@@ -239,6 +247,7 @@ real_t GPUParticles3D::get_collision_base_size() const {
 }
 
 void GPUParticles3D::set_draw_order(DrawOrder p_order) {
+	ERR_FAIL_INDEX(int(p_order), DRAW_ORDER_VIEW_DEPTH + 1);
 	draw_order = p_order;
 	RS::get_singleton()->particles_set_draw_order(particles, RSE::ParticlesDrawOrder(p_order));
 }
@@ -250,7 +259,8 @@ void GPUParticles3D::set_trail_enabled(bool p_enabled) {
 }
 
 void GPUParticles3D::set_trail_lifetime(double p_seconds) {
-	ERR_FAIL_COND(p_seconds < 0.01 - CMP_EPSILON);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_seconds) || p_seconds < 0.01 - CMP_EPSILON, "Particle trail lifetime must be finite and at least 0.01 seconds.");
+	p_seconds = MIN(10.0, p_seconds);
 	trail_lifetime = p_seconds;
 	RS::get_singleton()->particles_set_trails(particles, trail_enabled, trail_lifetime);
 }
@@ -284,14 +294,20 @@ int GPUParticles3D::get_draw_passes() const {
 void GPUParticles3D::set_draw_pass_mesh(int p_pass, const Ref<Mesh> &p_mesh) {
 	ERR_FAIL_INDEX(p_pass, draw_passes.size());
 
+	if (draw_passes.write[p_pass].is_valid()) {
+		draw_passes.write[p_pass]->disconnect_changed(callable_mp(this, &GPUParticles3D::_skinning_changed));
+	}
 	if (Engine::get_singleton()->is_editor_hint() && draw_passes.write[p_pass].is_valid()) {
 		draw_passes.write[p_pass]->disconnect_changed(callable_mp((Node *)this, &Node::update_configuration_warnings));
 	}
 
 	draw_passes.write[p_pass] = p_mesh;
 
+	if (draw_passes.write[p_pass].is_valid()) {
+		draw_passes.write[p_pass]->connect_changed(callable_mp(this, &GPUParticles3D::_skinning_changed), CONNECT_DEFERRED | CONNECT_REFERENCE_COUNTED);
+	}
 	if (Engine::get_singleton()->is_editor_hint() && draw_passes.write[p_pass].is_valid()) {
-		draw_passes.write[p_pass]->connect_changed(callable_mp((Node *)this, &Node::update_configuration_warnings), CONNECT_DEFERRED);
+		draw_passes.write[p_pass]->connect_changed(callable_mp((Node *)this, &Node::update_configuration_warnings), CONNECT_DEFERRED | CONNECT_REFERENCE_COUNTED);
 	}
 
 	RID mesh_rid;
@@ -312,6 +328,7 @@ Ref<Mesh> GPUParticles3D::get_draw_pass_mesh(int p_pass) const {
 }
 
 void GPUParticles3D::set_fixed_fps(int p_count) {
+	ERR_FAIL_COND_MSG(p_count < 0 || p_count > 1000, "Particles fixed FPS must be between zero and 1000.");
 	fixed_fps = p_count;
 	RS::get_singleton()->particles_set_fixed_fps(particles, p_count);
 }
@@ -348,7 +365,7 @@ PackedStringArray GPUParticles3D::get_configuration_warnings() const {
 		if (draw_passes[i].is_valid()) {
 			meshes_found = true;
 			for (int j = 0; j < draw_passes[i]->get_surface_count(); j++) {
-				anim_material_found = Object::cast_to<ShaderMaterial>(draw_passes[i]->surface_get_material(j).ptr()) != nullptr;
+				anim_material_found = anim_material_found || Object::cast_to<ShaderMaterial>(draw_passes[i]->surface_get_material(j).ptr()) != nullptr;
 				BaseMaterial3D *spat = Object::cast_to<BaseMaterial3D>(draw_passes[i]->surface_get_material(j).ptr());
 				anim_material_found = anim_material_found || (spat && spat->get_billboard_mode() == StandardMaterial3D::BILLBOARD_PARTICLES);
 			}
@@ -358,8 +375,8 @@ PackedStringArray GPUParticles3D::get_configuration_warnings() const {
 		}
 	}
 
-	anim_material_found = anim_material_found || Object::cast_to<ShaderMaterial>(get_material_override().ptr()) != nullptr;
-	{
+	if (get_material_override().is_valid()) {
+		anim_material_found = Object::cast_to<ShaderMaterial>(get_material_override().ptr()) != nullptr;
 		BaseMaterial3D *spat = Object::cast_to<BaseMaterial3D>(get_material_override().ptr());
 		anim_material_found = anim_material_found || (spat && spat->get_billboard_mode() == BaseMaterial3D::BILLBOARD_PARTICLES);
 	}
@@ -450,7 +467,7 @@ void GPUParticles3D::restart(bool p_keep_seed) {
 	active = true;
 	signal_canceled = false;
 	time = 0;
-	emission_time = lifetime * (1 - explosiveness_ratio);
+	emission_time = lifetime;
 	active_time = lifetime * (2 - explosiveness_ratio);
 	set_process_internal(true);
 }
@@ -483,6 +500,7 @@ void GPUParticles3D::_validate_property(PropertyInfo &p_property) const {
 }
 
 void GPUParticles3D::request_particles_process(real_t p_requested_process_time, real_t p_request_process_time_residual) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_requested_process_time) || !Math::is_finite(p_request_process_time_residual) || p_requested_process_time < 0.0 || p_request_process_time_residual < 0.0, "Particle process times must be finite and non-negative.");
 	RS::get_singleton()->particles_request_process_time(particles, p_requested_process_time, p_request_process_time_residual);
 	// Setting emitting independently from set_emitting is important here
 	// we assume to be in a controlled process situation.
@@ -499,17 +517,20 @@ void GPUParticles3D::request_particles_process(real_t p_requested_process_time, 
 }
 
 void GPUParticles3D::emit_particle(const Transform3D &p_transform, const Vector3 &p_velocity, const Color &p_color, const Color &p_custom, uint32_t p_emit_flags) {
+	ERR_FAIL_COND_MSG(!p_transform.is_finite() || !p_velocity.is_finite() || !Math::is_finite(p_color.r) || !Math::is_finite(p_color.g) || !Math::is_finite(p_color.b) || !Math::is_finite(p_color.a) || !Math::is_finite(p_custom.r) || !Math::is_finite(p_custom.g) || !Math::is_finite(p_custom.b) || !Math::is_finite(p_custom.a), "Particle emission inputs must contain only finite values.");
 	RS::get_singleton()->particles_emit(particles, p_transform, p_velocity, p_color, p_custom, p_emit_flags);
 }
 
 void GPUParticles3D::_attach_sub_emitter() {
+	RID sub_emitter_rid;
 	Node *n = get_node_or_null(sub_emitter);
 	if (n) {
 		GPUParticles3D *sen = Object::cast_to<GPUParticles3D>(n);
 		if (sen && sen != this) {
-			RS::get_singleton()->particles_set_subemitter(particles, sen->particles);
+			sub_emitter_rid = sen->particles;
 		}
 	}
+	RS::get_singleton()->particles_set_subemitter(particles, sub_emitter_rid);
 }
 
 void GPUParticles3D::set_sub_emitter(const NodePath &p_path) {
@@ -534,16 +555,10 @@ void GPUParticles3D::_notification(int p_what) {
 		// Use internal process when emitting and one_shot is on so that when
 		// the shot ends the editor can properly update.
 		case NOTIFICATION_INTERNAL_PROCESS: {
-			const Vector3 velocity = (get_global_position() - previous_position) / get_process_delta_time();
-
-			if (velocity != previous_velocity) {
-				RS::get_singleton()->particles_set_emitter_velocity(particles, velocity);
-				previous_velocity = velocity;
-			}
-			previous_position = get_global_position();
-
+			// Emitter velocity is sampled in the physics callback below. Keeping the
+			// position history there avoids render ticks consuming the physics interval.
 			if (one_shot) {
-				time += get_process_delta_time();
+				time += get_process_delta_time() * speed_scale;
 				if (time > emission_time) {
 					emitting = false;
 					if (!active) {
@@ -565,7 +580,8 @@ void GPUParticles3D::_notification(int p_what) {
 		case NOTIFICATION_INTERNAL_PHYSICS_PROCESS: {
 			// Update velocity in physics process, so that velocity calculations remain correct
 			// if the physics tick rate is lower than the rendered framerate (especially without physics interpolation).
-			const Vector3 velocity = (get_global_position() - previous_position) / get_physics_process_delta_time();
+			const double physics_delta = get_physics_process_delta_time();
+			const Vector3 velocity = physics_delta > 0.0 ? (get_global_position() - previous_position) / physics_delta : Vector3();
 
 			if (velocity != previous_velocity) {
 				RS::get_singleton()->particles_set_emitter_velocity(particles, velocity);
@@ -588,6 +604,12 @@ void GPUParticles3D::_notification(int p_what) {
 			previous_position = get_global_transform().origin;
 			set_process_internal(true);
 			set_physics_process_internal(true);
+		} break;
+
+		case NOTIFICATION_POST_ENTER_TREE: {
+			if (sub_emitter != NodePath()) {
+				_attach_sub_emitter();
+			}
 		} break;
 
 		case NOTIFICATION_EXIT_TREE: {
@@ -641,7 +663,13 @@ void GPUParticles3D::_skinning_changed() {
 }
 
 void GPUParticles3D::set_skin(const Ref<Skin> &p_skin) {
+	if (skin.is_valid()) {
+		skin->disconnect_changed(callable_mp(this, &GPUParticles3D::_skinning_changed));
+	}
 	skin = p_skin;
+	if (skin.is_valid()) {
+		skin->connect_changed(callable_mp(this, &GPUParticles3D::_skinning_changed), CONNECT_DEFERRED);
+	}
 	_skinning_changed();
 }
 
@@ -650,6 +678,7 @@ Ref<Skin> GPUParticles3D::get_skin() const {
 }
 
 void GPUParticles3D::set_transform_align(TransformAlign p_align) {
+	ERR_FAIL_INDEX(int(p_align), TRANSFORM_ALIGN_LOCAL_BILLBOARD + 1);
 	if (p_align != transform_align) {
 		notify_property_list_changed();
 	}
@@ -672,6 +701,7 @@ RSE::ParticlesTransformAlignCustomSrc GPUParticles3D::get_transform_align_channe
 }
 
 void GPUParticles3D::set_transform_align_axis(RSE::ParticlesTransformAlignAxis p_axis) {
+	ERR_FAIL_INDEX(uint32_t(p_axis), uint32_t(RSE::ParticlesTransformAlignAxis::PARTICLES_ALIGN_AXIS_MAX));
 	transform_align_axis = p_axis;
 	RS::get_singleton()->particles_set_transform_align_axis(particles, p_axis);
 }
@@ -684,19 +714,44 @@ void GPUParticles3D::convert_from_particles(Node *p_particles) {
 	CPUParticles3D *cpu_particles = Object::cast_to<CPUParticles3D>(p_particles);
 	ERR_FAIL_NULL_MSG(cpu_particles, "Only CPUParticles3D nodes can be converted to GPUParticles3D.");
 
+	set_sub_emitter(NodePath());
+	set_trail_enabled(false);
+	set_transform_align(TRANSFORM_ALIGN_DISABLED);
+	set_use_fixed_seed(cpu_particles->get_use_fixed_seed());
+	set_seed(cpu_particles->get_seed());
 	set_emitting(cpu_particles->is_emitting());
 	set_amount(cpu_particles->get_amount());
+	set_amount_ratio(1.0f);
+	if ((cpu_particles->get_emission_shape() == CPUParticles3D::EMISSION_SHAPE_POINTS || cpu_particles->get_emission_shape() == CPUParticles3D::EMISSION_SHAPE_DIRECTED_POINTS) && cpu_particles->get_emission_points().is_empty()) {
+		set_amount_ratio(0.0f);
+	}
 	set_lifetime(cpu_particles->get_lifetime());
 	set_one_shot(cpu_particles->get_one_shot());
 	set_pre_process_time(cpu_particles->get_pre_process_time());
 	set_explosiveness_ratio(cpu_particles->get_explosiveness_ratio());
 	set_randomness_ratio(cpu_particles->get_randomness_ratio());
+	set_visibility_aabb(cpu_particles->get_visibility_aabb());
 	set_use_local_coordinates(cpu_particles->get_use_local_coordinates());
 	set_fixed_fps(cpu_particles->get_fixed_fps());
 	set_fractional_delta(cpu_particles->get_fractional_delta());
 	set_speed_scale(cpu_particles->get_speed_scale());
-	set_draw_order(DrawOrder(cpu_particles->get_draw_order()));
+	// CPU and GPU draw-order enums are not value-aligned: GPU has an extra
+	// reverse-lifetime mode before view-depth.
+	DrawOrder gpu_draw_order = DRAW_ORDER_INDEX;
+	switch (cpu_particles->get_draw_order()) {
+		case CPUParticles3D::DRAW_ORDER_LIFETIME:
+			gpu_draw_order = DRAW_ORDER_LIFETIME;
+			break;
+		case CPUParticles3D::DRAW_ORDER_VIEW_DEPTH:
+			gpu_draw_order = DRAW_ORDER_VIEW_DEPTH;
+			break;
+		default:
+			break;
+	}
+	set_draw_order(gpu_draw_order);
+	set_draw_passes(1);
 	set_draw_pass_mesh(0, cpu_particles->get_mesh());
+	set_skin(Ref<Skin>());
 
 	Ref<ParticleProcessMaterial> proc_mat = memnew(ParticleProcessMaterial);
 	set_process_material(proc_mat);
@@ -724,12 +779,50 @@ void GPUParticles3D::convert_from_particles(Node *p_particles) {
 	proc_mat->set_particle_flag(ParticleProcessMaterial::PARTICLE_FLAG_ROTATE_Y, cpu_particles->get_particle_flag(CPUParticles3D::PARTICLE_FLAG_ROTATE_Y));
 	proc_mat->set_particle_flag(ParticleProcessMaterial::PARTICLE_FLAG_DISABLE_Z, cpu_particles->get_particle_flag(CPUParticles3D::PARTICLE_FLAG_DISABLE_Z));
 
-	proc_mat->set_emission_shape(ParticleProcessMaterial::EmissionShape(cpu_particles->get_emission_shape()));
+	CPUParticles3D::EmissionShape emission_shape = cpu_particles->get_emission_shape();
+	if (emission_shape == CPUParticles3D::EMISSION_SHAPE_DIRECTED_POINTS && cpu_particles->get_emission_normals().size() != cpu_particles->get_emission_points().size()) {
+		emission_shape = CPUParticles3D::EMISSION_SHAPE_POINTS;
+	}
+	proc_mat->set_emission_shape(ParticleProcessMaterial::EmissionShape(emission_shape));
+	if (cpu_particles->get_emission_shape() == CPUParticles3D::EMISSION_SHAPE_POINTS || cpu_particles->get_emission_shape() == CPUParticles3D::EMISSION_SHAPE_DIRECTED_POINTS) {
+		Vector<Vector3> points = cpu_particles->get_emission_points();
+		if (!points.is_empty()) {
+			const int count = points.size();
+			const int width = MIN(count, 2048);
+			const int height = (count + width - 1) / width;
+			Ref<Image> image = Image::create_empty(width, height, false, Image::FORMAT_RGBF);
+			for (int i = 0; i < count; i++) {
+				image->set_pixel(i % width, i / width, Color(points[i].x, points[i].y, points[i].z));
+			}
+			proc_mat->set_emission_point_texture(ImageTexture::create_from_image(image));
+			proc_mat->set_emission_point_count(count);
+
+			Vector<Vector3> normals = cpu_particles->get_emission_normals();
+			if (cpu_particles->get_emission_shape() == CPUParticles3D::EMISSION_SHAPE_DIRECTED_POINTS && normals.size() == count) {
+				Ref<Image> normal_image = Image::create_empty(width, height, false, Image::FORMAT_RGBF);
+				for (int i = 0; i < count; i++) {
+					normal_image->set_pixel(i % width, i / width, Color(normals[i].x, normals[i].y, normals[i].z));
+				}
+				proc_mat->set_emission_normal_texture(ImageTexture::create_from_image(normal_image));
+			}
+
+			Vector<Color> colors = cpu_particles->get_emission_colors();
+			if (colors.size() == count) {
+				Ref<Image> color_image = Image::create_empty(width, height, false, Image::FORMAT_RGBA8);
+				for (int i = 0; i < count; i++) {
+					color_image->set_pixel(i % width, i / width, colors[i]);
+				}
+				proc_mat->set_emission_color_texture(ImageTexture::create_from_image(color_image));
+			}
+		}
+	}
 	proc_mat->set_emission_sphere_radius(cpu_particles->get_emission_sphere_radius());
 	proc_mat->set_emission_box_extents(cpu_particles->get_emission_box_extents());
 	proc_mat->set_emission_ring_height(cpu_particles->get_emission_ring_height());
+	proc_mat->set_emission_ring_inner_radius(0.0);
 	proc_mat->set_emission_ring_radius(cpu_particles->get_emission_ring_radius());
 	proc_mat->set_emission_ring_inner_radius(cpu_particles->get_emission_ring_inner_radius());
+	proc_mat->set_emission_ring_axis(cpu_particles->get_emission_ring_axis());
 	proc_mat->set_emission_ring_cone_angle(cpu_particles->get_emission_ring_cone_angle());
 
 	if (cpu_particles->get_split_scale()) {
@@ -747,7 +840,7 @@ void GPUParticles3D::convert_from_particles(Node *p_particles) {
 	proc_mat->set_param_min(ParticleProcessMaterial::m_param, cpu_particles->get_param_min(CPUParticles3D::m_param)); \
 	{ \
 		Ref<Curve> curve = cpu_particles->get_param_curve(CPUParticles3D::m_param); \
-		if (curve.is_valid()) { \
+		if (curve.is_valid() && (CPUParticles3D::m_param != CPUParticles3D::PARAM_SCALE || !cpu_particles->get_split_scale())) { \
 			Ref<CurveTexture> tex = memnew(CurveTexture); \
 			tex->set_curve(curve); \
 			proc_mat->set_param_texture(ParticleProcessMaterial::m_param, tex); \
@@ -772,6 +865,7 @@ void GPUParticles3D::convert_from_particles(Node *p_particles) {
 }
 
 void GPUParticles3D::set_amount_ratio(float p_ratio) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_ratio), "Particles amount ratio must be finite.");
 	amount_ratio = p_ratio;
 	RS::get_singleton()->particles_set_amount_ratio(particles, p_ratio);
 }
@@ -898,7 +992,7 @@ void GPUParticles3D::_bind_methods() {
 
 	ADD_GROUP("Trails", "trail_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "trail_enabled", PROPERTY_HINT_GROUP_ENABLE), "set_trail_enabled", "is_trail_enabled");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "trail_lifetime", PROPERTY_HINT_RANGE, "0.01,10,0.01,or_greater,suffix:s"), "set_trail_lifetime", "get_trail_lifetime");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "trail_lifetime", PROPERTY_HINT_RANGE, "0.01,10,0.01,suffix:s"), "set_trail_lifetime", "get_trail_lifetime");
 	ADD_GROUP("Process Material", "");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "process_material", PROPERTY_HINT_RESOURCE_TYPE, "ParticleProcessMaterial,ShaderMaterial"), "set_process_material", "get_process_material");
 	ADD_GROUP("Draw Passes", "draw_");

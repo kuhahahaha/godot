@@ -470,6 +470,8 @@ public:
 
 	SceneTreeFTI &get_scene_tree_fti() { return scene_tree_fti; }
 
+	virtual bool query_scene_ready_root_world(uint64_t &r_tree_id, uint64_t &r_window_id, uint64_t &r_world_id, bool &r_has_singleton_tree) const override;
+
 	SceneTree();
 	~SceneTree();
 };

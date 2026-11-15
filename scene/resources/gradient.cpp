@@ -123,6 +123,7 @@ void Gradient::set_interpolation_mode(Gradient::InterpolationMode p_interp_mode)
 	}
 
 	interpolation_mode = p_interp_mode;
+	_advance_content_revision();
 	emit_changed();
 	notify_property_list_changed();
 }
@@ -137,6 +138,7 @@ void Gradient::set_interpolation_color_space(Gradient::ColorSpace p_color_space)
 	}
 
 	interpolation_color_space = p_color_space;
+	_advance_content_revision();
 	emit_changed();
 }
 
@@ -150,6 +152,7 @@ void Gradient::set_offsets(const Vector<float> &p_offsets) {
 		points[i].offset = p_offsets[i];
 	}
 	is_sorted = false;
+	_advance_content_revision();
 	emit_changed();
 }
 
@@ -161,6 +164,7 @@ void Gradient::set_colors(const Vector<Color> &p_colors) {
 	for (uint32_t i = 0; i < points.size(); i++) {
 		points[i].color = p_colors[i];
 	}
+	_advance_content_revision();
 	emit_changed();
 }
 
@@ -171,6 +175,7 @@ void Gradient::add_point(float p_offset, const Color &p_color) {
 	is_sorted = false;
 	points.push_back(p);
 
+	_advance_content_revision();
 	emit_changed();
 }
 
@@ -178,6 +183,7 @@ void Gradient::remove_point(int p_index) {
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_index, points.size());
 	ERR_FAIL_COND(points.size() <= 1);
 	points.remove_at(p_index);
+	_advance_content_revision();
 	emit_changed();
 }
 
@@ -188,6 +194,7 @@ void Gradient::reverse() {
 
 	is_sorted = false;
 	_update_sorting();
+	_advance_content_revision();
 	emit_changed();
 }
 
@@ -196,6 +203,7 @@ void Gradient::set_offset(int pos, const float offset) {
 	_update_sorting();
 	points[pos].offset = offset;
 	is_sorted = false;
+	_advance_content_revision();
 	emit_changed();
 }
 
@@ -209,6 +217,7 @@ void Gradient::set_color(int pos, const Color &color) {
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)pos, points.size());
 	_update_sorting();
 	points[pos].color = color;
+	_advance_content_revision();
 	emit_changed();
 }
 

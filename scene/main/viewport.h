@@ -373,6 +373,7 @@ private:
 	VRSMode vrs_mode = VRS_DISABLED;
 	VRSUpdateMode vrs_update_mode = VRS_UPDATE_ONCE;
 	Ref<Texture2D> vrs_texture;
+	void _vrs_texture_changed();
 
 	struct GUI {
 		bool mouse_in_viewport = false;
@@ -879,6 +880,7 @@ public:
 
 	void set_world_3d(const Ref<World3D> &p_world_3d);
 	Ref<World3D> get_world_3d() const;
+	ObjectID get_world_3d_instance_id() const;
 	Ref<World3D> find_world_3d() const;
 	void set_use_own_world_3d(bool p_use_own_world_3d);
 	bool is_using_own_world_3d() const;

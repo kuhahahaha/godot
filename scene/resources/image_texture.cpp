@@ -218,6 +218,7 @@ void ImageTexture::set_size_override(const Size2i &p_size) {
 		h = s.y;
 	}
 	RenderingServer::get_singleton()->texture_set_size_override(texture, w, h);
+	emit_changed();
 }
 
 void ImageTexture::set_path(const String &p_path, bool p_take_over) {

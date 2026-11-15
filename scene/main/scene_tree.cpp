@@ -2260,3 +2260,25 @@ SceneTree::~SceneTree() {
 		singleton = nullptr;
 	}
 }
+
+bool SceneTree::query_scene_ready_root_world(uint64_t &r_tree_id, uint64_t &r_window_id, uint64_t &r_world_id, bool &r_has_singleton_tree) const {
+	r_tree_id = 0;
+	r_window_id = 0;
+	r_world_id = 0;
+	r_has_singleton_tree = (this == SceneTree::get_singleton());
+	if (!r_has_singleton_tree) {
+		return false;
+	}
+#ifdef _3D_DISABLED
+	return false;
+#else
+	Window *window = root;
+	if (!window || window->get_world_3d_instance_id().is_null() || !ObjectDB::get_instance(window->get_world_3d_instance_id())) {
+		return false;
+	}
+	r_tree_id = uint64_t(get_instance_id());
+	r_window_id = uint64_t(window->get_instance_id());
+	r_world_id = uint64_t(window->get_world_3d_instance_id());
+	return true;
+#endif
+}

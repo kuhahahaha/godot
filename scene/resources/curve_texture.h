@@ -49,8 +49,18 @@ private:
 	int _current_width = 0;
 	TextureMode texture_mode = TEXTURE_MODE_RGB;
 	TextureMode _current_texture_mode = TEXTURE_MODE_RGB;
+	uint64_t _content_revision = 1;
+	void _advance_content_revision() {
+		if (_content_revision != UINT64_MAX) {
+			++_content_revision;
+		}
+	}
 
 	void _update();
+	void _curve_changed() {
+		_advance_content_revision();
+		_update();
+	}
 
 protected:
 	static void _bind_methods();
@@ -58,10 +68,10 @@ protected:
 public:
 	void set_width(int p_width);
 	int get_width() const override;
+	uint64_t get_content_revision() const { return _content_revision; }
 
 	void set_texture_mode(TextureMode p_mode);
 	TextureMode get_texture_mode() const;
-
 	void ensure_default_setup(float p_min = 0, float p_max = 1);
 
 	void set_curve(Ref<Curve> p_curve);
@@ -81,6 +91,10 @@ class CurveXYZTexture : public Texture2D {
 	GDCLASS(CurveXYZTexture, Texture2D);
 	RES_BASE_EXTENSION("curvetex")
 
+#ifdef TESTS_ENABLED
+	friend class TestResourceSnapshotAccess;
+#endif
+
 private:
 	mutable RID _texture;
 	Ref<Curve> _curve_x;
@@ -88,8 +102,18 @@ private:
 	Ref<Curve> _curve_z;
 	int _width = 256;
 	int _current_width = 0;
+	uint64_t _content_revision = 1;
+	void _advance_content_revision() {
+		if (_content_revision != UINT64_MAX) {
+			++_content_revision;
+		}
+	}
 
 	void _update();
+	void _curve_changed() {
+		_advance_content_revision();
+		_update();
+	}
 
 protected:
 	static void _bind_methods();
@@ -97,6 +121,7 @@ protected:
 public:
 	void set_width(int p_width);
 	int get_width() const override;
+	uint64_t get_content_revision() const { return _content_revision; }
 
 	void ensure_default_setup(float p_min = 0, float p_max = 1);
 

@@ -80,6 +80,9 @@ public:
 
 namespace GDScriptTests {
 class TestGDScriptCacheAccessor;
+#ifdef TESTS_ENABLED
+class ActiveReloadCacheTestAccessor;
+#endif
 }
 
 class GDScriptCache {
@@ -96,6 +99,9 @@ class GDScriptCache {
 	friend class GDScriptParserRef;
 	friend class GDScriptInstance;
 	friend class GDScriptTests::TestGDScriptCacheAccessor;
+#ifdef TESTS_ENABLED
+	friend class GDScriptTests::ActiveReloadCacheTestAccessor;
+#endif
 
 	static GDScriptCache *singleton;
 

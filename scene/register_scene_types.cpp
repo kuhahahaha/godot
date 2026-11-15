@@ -139,6 +139,7 @@
 #include "scene/resources/mesh_data_tool.h"
 #include "scene/resources/mesh_texture.h"
 #include "scene/resources/multimesh.h"
+#include "scene/resources/resource_snapshot_native.h"
 #if !defined(NAVIGATION_2D_DISABLED) || !defined(NAVIGATION_3D_DISABLED)
 #include "scene/resources/navigation_mesh.h"
 #endif // !defined(NAVIGATION_2D_DISABLED) || !defined(NAVIGATION_3D_DISABLED)
@@ -1009,6 +1010,7 @@ void register_scene_types() {
 
 	GDREGISTER_CLASS(BitMap);
 	GDREGISTER_CLASS(Gradient);
+	register_resource_snapshot_bridge();
 
 	GDREGISTER_CLASS(SkeletonProfile);
 	GDREGISTER_CLASS(SkeletonProfileHumanoid);
