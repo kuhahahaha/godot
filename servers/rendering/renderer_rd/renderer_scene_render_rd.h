@@ -31,6 +31,7 @@
 #pragma once
 
 #include "servers/rendering/renderer_compositor.h"
+#include "servers/rendering/renderer_rd/height_capture_checked_sink.h"
 #include "servers/rendering/renderer_rd/effects/bokeh_dof.h"
 #include "servers/rendering/renderer_rd/effects/copy_effects.h"
 #include "servers/rendering/renderer_rd/effects/debug_effects.h"
@@ -53,6 +54,10 @@
 #ifdef METAL_ENABLED
 #include "servers/rendering/renderer_rd/effects/metal_fx.h"
 #endif
+
+namespace RendererRD {
+class NativeMaterialRecipeRoster;
+}
 
 class RendererSceneRenderRD : public RendererSceneRender, public RenderingShaderLibrary {
 	friend RendererRD::SkyRD;
@@ -96,6 +101,7 @@ protected:
 	virtual void _render_uv2(const PagedArray<RenderGeometryInstance *> &p_instances, RID p_framebuffer, const Rect2i &p_region) = 0;
 	virtual void _render_sdfgi(Ref<RenderSceneBuffersRD> p_render_buffers, const Vector3i &p_from, const Vector3i &p_size, const AABB &p_bounds, const PagedArray<RenderGeometryInstance *> &p_instances, const RID &p_albedo_texture, const RID &p_emission_texture, const RID &p_emission_aniso_texture, const RID &p_geom_facing_texture, float p_exposure_normalization) = 0;
 	virtual void _render_particle_collider_heightfield(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances) = 0;
+	virtual Error _render_particle_collider_heightfield_checked(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances, RendererRD::HeightCaptureCheckedSink &p_sink) = 0;
 
 	void _debug_sdfgi_probes(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_framebuffer, uint32_t p_view_count, const Projection *p_camera_with_transforms);
 
@@ -172,6 +178,8 @@ private:
 	bool volumetric_fog_filter_active = true;
 
 public:
+	static Transform3D heightfield_capture_camera(const Transform3D &p_transform, float p_scaled_half_height);
+	static bool heightfield_capture_preflight(const Transform3D &p_transform, const Vector3 &p_extents, Transform3D &r_camera, Projection &r_projection);
 	static RendererSceneRenderRD *get_singleton() { return singleton; }
 
 	/* LIGHTING */
@@ -262,7 +270,14 @@ public:
 
 	virtual void render_material(const Transform3D &p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, const PagedArray<RenderGeometryInstance *> &p_instances, RID p_framebuffer, const Rect2i &p_region) override;
 
-	virtual void render_particle_collider_heightfield(RID p_collider, const Transform3D &p_transform, const PagedArray<RenderGeometryInstance *> &p_instances) override;
+	virtual void render_particle_collider_heightfield(RID p_collision_instance, const Transform3D &p_transform, const PagedArray<RenderGeometryInstance *> &p_instances) override;
+	Error render_particle_collider_heightfield_checked(RID p_framebuffer, const Transform3D &p_transform, const Vector3 &p_extents, const PagedArray<RenderGeometryInstance *> &p_instances, RendererRD::HeightCaptureCheckedSink &p_sink);
+
+	virtual uint32_t get_native_material_recipe_backend() const { return 0; }
+	virtual RID get_native_default_material_3d() const { return RID(); }
+	virtual Error ensure_native_material_recipe_sources_ready() { return ERR_UNAVAILABLE; }
+	virtual Error warm_native_material_instance192_shader(RID p_material, RSE::PrimitiveType p_primitive) { return ERR_UNAVAILABLE; }
+	virtual Error plan_native_material_recipe(RID p_material, RID p_mesh, uint32_t p_surface, RD::FramebufferFormatID p_actual_format, RendererRD::NativeMaterialRecipeRoster &r_plan, uint32_t p_limit = 256) { return ERR_UNAVAILABLE; }
 
 	virtual void set_scene_pass(uint64_t p_pass) override {
 		scene_pass = p_pass;
@@ -366,8 +381,14 @@ public:
 	virtual bool is_volumetric_supported() const;
 	virtual uint32_t get_max_elements() const;
 
+	void dispatch_late_particle_collision_phase(RD *p_rd, const RenderDataRD *p_render_data, bool p_is_reflection_probe);
+	uint64_t get_late_particle_phase_dispatch_count() const { return late_particle_phase_dispatches.get(); }
+
 	void init();
 
 	RendererSceneRenderRD();
 	~RendererSceneRenderRD();
+
+private:
+	SafeNumeric<uint64_t> late_particle_phase_dispatches{ 0 };
 };

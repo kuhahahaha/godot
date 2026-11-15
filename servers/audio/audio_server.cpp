@@ -1177,6 +1177,14 @@ Ref<AudioEffect> AudioServer::get_bus_effect(int p_bus, int p_effect) {
 	return buses[p_bus]->effects[p_effect].effect;
 }
 
+ObjectID AudioServer::get_bus_effect_instance_id(int p_bus, int p_effect) {
+	ERR_FAIL_INDEX_V(p_bus, buses.size(), ObjectID());
+	ERR_FAIL_INDEX_V(p_effect, buses[p_bus]->effects.size(), ObjectID());
+
+	const AudioEffect *effect = buses[p_bus]->effects[p_effect].effect.ptr();
+	return effect ? effect->get_instance_id() : ObjectID();
+}
+
 void AudioServer::swap_bus_effects(int p_bus, int p_effect, int p_by_effect) {
 	ERR_FAIL_INDEX(p_bus, buses.size());
 	ERR_FAIL_INDEX(p_effect, buses[p_bus]->effects.size());
@@ -2068,6 +2076,7 @@ void AudioServer::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("get_bus_effect_count", "bus_idx"), &AudioServer::get_bus_effect_count);
 	ClassDB::bind_method(D_METHOD("get_bus_effect", "bus_idx", "effect_idx"), &AudioServer::get_bus_effect);
+	ClassDB::bind_method(D_METHOD("get_bus_effect_instance_id", "bus_idx", "effect_idx"), &AudioServer::get_bus_effect_instance_id);
 	ClassDB::bind_method(D_METHOD("get_bus_effect_instance", "bus_idx", "effect_idx", "channel"), &AudioServer::get_bus_effect_instance, DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("swap_bus_effects", "bus_idx", "effect_idx", "by_effect_idx"), &AudioServer::swap_bus_effects);
 

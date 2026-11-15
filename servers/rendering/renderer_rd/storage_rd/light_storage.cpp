@@ -35,6 +35,8 @@
 #include "core/os/os.h"
 #include "servers/rendering/renderer_rd/environment/physical_sky_view.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_mesh_light_sort_rd.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/rendering_server_globals.h"
 
@@ -1244,6 +1246,53 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		r_positional_light_count++;
 	}
 
+	frame_particle_omni_lights.clear();
+	if (ParticlesStorage *particles_storage = ParticlesStorage::get_singleton()) {
+		LocalVector<ParticleLightRecord64> particle_lights;
+		if (ParticlesMeshLightSortRD *light_sort = particles_storage->get_mesh_light_sort_rd()) {
+			light_sort->get_active_particle_lights(particle_lights);
+		}
+		if (!particle_lights.is_empty() && omni_lights != nullptr) {
+			float exposure_norm = 1.0f;
+			if (p_render_data->camera_attributes.is_valid()) {
+				exposure_norm = RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes);
+			}
+			for (uint32_t pi = 0; pi < particle_lights.size() && omni_light_count < max_lights; pi++) {
+				const ParticleLightRecord64 &prec = particle_lights[pi];
+				if (!Math::is_finite(prec.position_world[0]) || !Math::is_finite(prec.position_world[1]) || !Math::is_finite(prec.position_world[2]) ||
+						!Math::is_finite(prec.radius) || !(prec.radius > 0.0f) ||
+						!Math::is_finite(prec.color_hdr[0]) || prec.color_hdr[0] < 0.0f ||
+						!Math::is_finite(prec.color_hdr[1]) || prec.color_hdr[1] < 0.0f ||
+						!Math::is_finite(prec.color_hdr[2]) || prec.color_hdr[2] < 0.0f ||
+						!Math::is_finite(prec.attenuation_exp) || prec.attenuation_exp < 0.0f) {
+					continue;
+				}
+				const uint32_t buf_idx = omni_light_count++;
+				LightData &ld = omni_lights[buf_idx];
+				ld = {};
+				const Vector3 world_pos(prec.position_world[0], prec.position_world[1], prec.position_world[2]);
+				const Vector3 view_pos = inverse_transform.xform(world_pos);
+				const float radius = MAX(0.001f, prec.radius);
+				ld.position[0] = view_pos.x;
+				ld.position[1] = view_pos.y;
+				ld.position[2] = view_pos.z;
+				ld.inv_radius = 1.0f / radius;
+				ld.attenuation = prec.attenuation_exp > 0.0f ? prec.attenuation_exp : 1.0f;
+				ld.color[0] = prec.color_hdr[0] * exposure_norm;
+				ld.color[1] = prec.color_hdr[1] * exposure_norm;
+				ld.color[2] = prec.color_hdr[2] * exposure_norm;
+				ld.specular_amount = 1.0f;
+				ld.volumetric_fog_energy = 1.0f;
+				ld.mask = 0xFFFFFFFFu;
+				ld.shadow_opacity = 0.0f;
+
+				frame_particle_omni_lights.push_back({ world_pos, radius, buf_idx });
+				RendererSceneRenderRD::get_singleton()->setup_added_light(RSE::LIGHT_OMNI, Transform3D(Basis(), world_pos), radius, 0.0f, Vector2());
+				r_positional_light_count++;
+			}
+		}
+	}
+
 	//update without barriers
 	if (omni_light_count) {
 		RD::get_singleton()->buffer_update(omni_light_buffer, 0, sizeof(LightData) * omni_light_count, omni_lights);
@@ -1260,6 +1309,29 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 	if (r_directional_light_count) {
 		RD::get_singleton()->buffer_update(directional_light_buffer, 0, sizeof(DirectionalLightData) * r_directional_light_count, directional_lights);
 	}
+}
+
+uint32_t LightStorage::count_intersecting_particle_omni_lights(const AABB &p_world_aabb, uint32_t *r_out_indices, uint32_t p_max_indices) const {
+	if (frame_particle_omni_lights.is_empty() || p_max_indices == 0) {
+		return 0;
+	}
+	const Vector3 aabb_min = p_world_aabb.position;
+	const Vector3 aabb_max = p_world_aabb.position + p_world_aabb.size;
+	uint32_t matched = 0;
+	for (uint32_t i = 0; i < frame_particle_omni_lights.size() && matched < p_max_indices; i++) {
+		const ParticleOmniLightEntry &entry = frame_particle_omni_lights[i];
+		if (entry.buffer_index >= 255u) {
+			continue; // Mobile push-constant omni_lights packs 8-bit indices with 0xFF sentinel.
+		}
+		const Vector3 closest = entry.world_position.clamp(aabb_min, aabb_max);
+		if (entry.world_position.distance_squared_to(closest) <= entry.radius * entry.radius) {
+			if (r_out_indices != nullptr) {
+				r_out_indices[matched] = entry.buffer_index;
+			}
+			matched++;
+		}
+	}
+	return matched;
 }
 
 /* REFLECTION PROBE */

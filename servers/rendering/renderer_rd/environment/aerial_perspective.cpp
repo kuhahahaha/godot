@@ -43,7 +43,7 @@
 namespace RendererRD {
 namespace {
 constexpr uint64_t VOLUME_BYTES = 32 * 32 * 16 * 8;
-#ifdef DEBUG_ENABLED
+#ifdef TESTS_ENABLED
 // Explicit process-local test seam. No public state key, release code path or
 // input-validation exemption: the normal compiler/allocation failure arms run.
 bool ap_test_failure(const char *p_point) {
@@ -392,7 +392,7 @@ bool AerialPerspective::initialize() {
 	RD::ShaderStageSPIRVData stage;
 	stage.shader_stage = RD::SHADER_STAGE_COMPUTE;
 	String compute_source = String(AP_DECLARATIONS) + ATMOSPHERE_SHADER_LIBRARY + AP_MAIN;
-#ifdef DEBUG_ENABLED
+#ifdef TESTS_ENABLED
 	if (ap_test_failure("shader")) {
 		// This is a real compiler rejection, not a fabricated FAILED status.
 		compute_source += "\n#error ANGE_TEST_AP_FAILURE_SHADER\n";
@@ -482,7 +482,7 @@ bool AerialPerspective::render_view(const RenderDataRD *p_data, Ref<View> view, 
 		format.format = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
 		format.usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
 		for (int i = 0; i < 2; i++) {
-#ifdef DEBUG_ENABLED
+#ifdef TESTS_ENABLED
 			if (i == 1 && ap_test_failure("volume")) {
 				// Inject an allocator's invalid return after one real allocation,
 				// so the existing branch must also release partial resources.
@@ -511,7 +511,7 @@ bool AerialPerspective::render_view(const RenderDataRD *p_data, Ref<View> view, 
 		rd->free_rid(view->medium_buffer);
 	}
 	view->uniform_buffer = rd->uniform_buffer_create(sizeof(data), Span<uint8_t>(reinterpret_cast<uint8_t *>(&data), sizeof(data)));
-#ifdef DEBUG_ENABLED
+#ifdef TESTS_ENABLED
 	if (ap_test_failure("uniform")) {
 		// Allocator-return injection, not a claim that the GPU exhausted memory.
 		// Both real volumes and the first real UBO must be cleaned by fail().

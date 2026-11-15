@@ -191,6 +191,13 @@ private:
 	RID spot_light_buffer;
 	RID area_light_buffer;
 
+	struct ParticleOmniLightEntry {
+		Vector3 world_position;
+		float radius = 0.0f;
+		uint32_t buffer_index = 0;
+	};
+	LocalVector<ParticleOmniLightEntry> frame_particle_omni_lights;
+
 	ForwardIDType _light_type_to_forward_id_type(RSE::LightType p_type);
 
 	/* DIRECTIONAL LIGHT DATA */
@@ -1199,6 +1206,11 @@ public:
 
 	bool get_shadow_cubemaps_used() const;
 	bool get_shadow_dual_paraboloid_used() const;
+
+	/* PARTICLE OMNI LIGHTS */
+
+	uint32_t get_frame_particle_omni_light_count() const { return frame_particle_omni_lights.size(); }
+	uint32_t count_intersecting_particle_omni_lights(const AABB &p_world_aabb, uint32_t *r_out_indices = nullptr, uint32_t p_max_indices = 8) const;
 };
 
 } // namespace RendererRD
