@@ -1,0 +1,62 @@
+{
+  "status": "FULL_EXECUTABLE_LINK_AND_IDENTITY_VERIFIED",
+  "schema_sha256": "1a7a839114b3ec7a79a9d5026fe78214023c6ed2370cd7784a5a6bdf4ffec1ca",
+  "types": 399,
+  "interfaces": 388,
+  "selection": {
+    "schema": 1,
+    "core_stamp": "db47ed3f40200c0f118c2938fbce5694f415464c4e413016395de8f2f1401a52",
+    "compiler_route": "BuiltinGlslangV1",
+    "compiler_stamp": "9e241525f14469db50f4041f814e23afe6d942dc1a4da3893ea3fe56fca04c87",
+    "platform": "macos",
+    "architecture": "arm64",
+    "target_kind": "Executable"
+  },
+  "fixture_pins": {
+    "bytes": 6007,
+    "sha256": "b405365c818aa46c427512e55c7556d22bf1410145ffb584eff56fa18139f1ef"
+  },
+  "original_link_input_count": 112,
+  "files": {
+    "godot.macos.template_debug.arm64": {
+      "bytes": 97716096,
+      "sha256": "634a559cbedfbe53b3cd05a76551c36a00fa12e397847df8ee8439f4b6a552b9"
+    },
+    "godot.macos.template_debug.arm64.controlled_build.json": {
+      "bytes": 529,
+      "sha256": "f22a8dc8f3a4bd3ee0202896df538575b60b648d22225f08f3bb6494ae10f796"
+    },
+    "engine_build_identity.gen.json": {
+      "bytes": 83230,
+      "sha256": "eb4b44522208b625c6572974e8a5164ab61cc2070da0544433cee1b5c1d624d1"
+    },
+    "engine_build_selection.gen.json": {
+      "bytes": 311,
+      "sha256": "37d5e9ce4c14e8e057687182476c617889a53e3e57bb1b49748df1537b4342bd"
+    },
+    "engine_build_identity.gen.cpp": {
+      "bytes": 425,
+      "sha256": "cbe1d7f78e2c33772a5e684988e83ae726104f0390582164667e3e30c0bc4106"
+    },
+    "engine_build_identity.py": {
+      "bytes": 30036,
+      "sha256": "4a4da5b4d6abd5076367f84006bbdd000e76de61e7b7bb13b15532aae65f1eb0"
+    },
+    "gdextension_interface.json": {
+      "bytes": 1037043,
+      "sha256": "1a7a839114b3ec7a79a9d5026fe78214023c6ed2370cd7784a5a6bdf4ffec1ca"
+    },
+    "BUILD_RESULT.json": {
+      "bytes": 677,
+      "sha256": "e2b7831decc7761ea6b23a3fa8c46b26ecadae4c90c6dbc031f42b37c0bdb612"
+    },
+    "ADOPTION.json": {
+      "bytes": 34013,
+      "sha256": "e6096724e9531d6f4c47c3517605b201f88e96fc8ad4d94f75d288271a1bb7f6"
+    }
+  },
+  "limits": [
+    "Does not establish extension ABI operation acceptance",
+    "Does not establish visible draw, close, or physical retirement"
+  ]
+}
