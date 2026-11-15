@@ -29,8 +29,12 @@
 /**************************************************************************/
 
 #pragma once
+#ifdef TESTS_ENABLED
+#include <atomic>
+#endif
 
 #include "drivers/metal/metal_allocator.h"
+#include "drivers/metal/metal_buffer_size_table.h"
 #include "drivers/metal/metal_device_properties.h"
 #include "drivers/metal/metal_utils.h"
 #include "drivers/metal/pixel_formats.h"
@@ -774,6 +778,7 @@ struct API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0), visionos(2.0)) UniformS
 	LocalVector<UniformInfo> uniforms;
 	LocalVector<uint32_t> dynamic_uniforms;
 	uint32_t buffer_size = 0;
+	MetalBufferSizeTable buffer_sizes;
 };
 
 class API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0), visionos(2.0)) DynamicOffsetLayout {
@@ -821,6 +826,12 @@ enum class ShaderLoadStrategy {
 	DEFAULT = IMMEDIATE,
 };
 
+NS::SharedPtr<MTL::CompileOptions> make_shader_compile_options(uint32_t p_msl_version, bool p_logging, bool p_invariance, bool p_disable_fast_math);
+
+#ifdef TESTS_ENABLED
+Dictionary observe_shader_compile_options(MTL::CompileOptions *p_options);
+#endif
+
 /// A Metal shader library.
 class MDLibrary : public std::enable_shared_from_this<MDLibrary> {
 protected:
@@ -838,7 +849,11 @@ protected:
 
 public:
 	virtual ~MDLibrary();
+#ifdef TESTS_ENABLED
+	uint64_t audit_creation_seq() const;
+#endif
 
+	virtual bool retire_ready_nonblocking() const { return true; }
 	virtual MTL::Library *get_library() = 0;
 	virtual NS::Error *get_error() = 0;
 	virtual void set_label(NS::String *p_label);
@@ -863,10 +878,14 @@ public:
 /// A cache entry for a Metal shader library.
 struct ShaderCacheEntry {
 	RenderingDeviceDriverMetal &owner;
-	/// A hash of the Metal shader source code.
+	/// A versioned digest of source, compile policy, target and library origin.
 	SHA256Digest key;
 	CharString name;
 	RDC::ShaderStage stage = RDC::SHADER_STAGE_VERTEX;
+#ifdef TESTS_ENABLED
+	Dictionary audit_context;
+	std::atomic<uint64_t> creation_seq{ 0 };
+#endif
 	/// Weak reference to the library; allows cache lookup without preventing cleanup.
 	std::weak_ptr<MDLibrary> library;
 

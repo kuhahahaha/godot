@@ -28,12 +28,44 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
+#include <optional>
+/**************************************************************************/
+/*  rendering_device_driver_vulkan.cpp                                    */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 #include "rendering_device_driver_vulkan.h"
 
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
 #include "core/os/os.h"
 #include "core/templates/fixed_vector.h"
+#include "drivers/vulkan/vulkan_fence_wait.h"
 #include "drivers/vulkan/vulkan_hooks.h"
 
 #include <thirdparty/misc/smolv.h>
@@ -1500,8 +1532,11 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 		ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, ERR_CANT_CREATE, vformat("Couldn't create Vulkan device (VkResult error %d).", err));
 	}
 
+	uint32_t observation_queue = 0;
 	for (uint32_t i = 0; i < queue_families.size(); i++) {
 		for (uint32_t j = 0; j < queue_families[i].size(); j++) {
+			ERR_FAIL_COND_V(observation_queue == UINT32_MAX, ERR_UNAVAILABLE);
+			queue_families[i][j].observation_index = ++observation_queue;
 			vkGetDeviceQueue(vk_device, i, j, &queue_families[i][j].queue);
 		}
 	}
@@ -1944,6 +1979,13 @@ static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR));
 
 RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitField<BufferUsageBits> p_usage, MemoryAllocationType p_allocation_type, uint64_t p_frames_drawn) {
+	bool extra_tracking = Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled();
+#ifdef TESTS_ENABLED
+	extra_tracking = extra_tracking || test_buffer_fault_stage;
+	test_buffer_rollback_mask = 0;
+	test_buffer_prefix = VK_NULL_HANDLE;
+	test_buffer_allocation_prefix = nullptr;
+#endif
 	uint32_t alignment = 16u; // 16 bytes is reasonable.
 	if (p_usage.has_flag(BUFFER_USAGE_UNIFORM_BIT)) {
 		// Some GPUs (e.g. NVIDIA) have absurdly high alignments, like 256 bytes.
@@ -1992,7 +2034,7 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 		} break;
 		case MEMORY_ALLOCATION_TYPE_GPU: {
 			vma_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-			if (!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()) {
+			if (!extra_tracking) {
 				// We must set it right now or else vmaFindMemoryTypeIndexForBufferInfo will use wrong parameters.
 				alloc_create_info.usage = vma_usage;
 			}
@@ -2015,8 +2057,24 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 	VkBuffer vk_buffer = VK_NULL_HANDLE;
 	VmaAllocation allocation = nullptr;
 	VmaAllocationInfo alloc_info = {};
+	auto rollback = [&]() {
+		if (extra_tracking) {
+			vkDestroyBuffer(vk_device, vk_buffer, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER));
+#ifdef TESTS_ENABLED
+			test_buffer_rollback_mask |= 1;
+#endif
+			if (allocation) {
+				vmaFreeMemory(allocator, allocation);
+#ifdef TESTS_ENABLED
+				test_buffer_rollback_mask |= 2;
+#endif
+			}
+		} else {
+			vmaDestroyBuffer(allocator, vk_buffer, allocation);
+		}
+	};
 
-	if (!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()) {
+	if (!extra_tracking) {
 		alloc_create_info.preferredFlags &= ~vma_flags_to_remove;
 		alloc_create_info.usage = vma_usage;
 		VkResult err = vmaCreateBuffer(allocator, &create_info, &alloc_create_info, &vk_buffer, &allocation, &alloc_info);
@@ -2024,10 +2082,26 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 	} else {
 		VkResult err = vkCreateBuffer(vk_device, &create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER), &vk_buffer);
 		ERR_FAIL_COND_V_MSG(err, BufferID(), vformat("Can't create buffer of size: %d (VkResult error %d).", p_size, err));
+#ifdef TESTS_ENABLED
+		test_buffer_prefix = vk_buffer;
+		err = test_buffer_fault_stage == 1 ? VK_ERROR_OUT_OF_DEVICE_MEMORY : vmaAllocateMemoryForBuffer(allocator, vk_buffer, &alloc_create_info, &allocation, &alloc_info);
+		test_buffer_allocation_prefix = allocation;
+#else
 		err = vmaAllocateMemoryForBuffer(allocator, vk_buffer, &alloc_create_info, &allocation, &alloc_info);
-		ERR_FAIL_COND_V_MSG(err, BufferID(), vformat("Can't allocate memory for buffer of size: %d (VkResult error %d).", p_size, err));
+#endif
+		if (err != VK_SUCCESS) {
+			rollback();
+			ERR_FAIL_V_MSG(BufferID(), vformat("Can't allocate memory for buffer of size: %d (VkResult error %d).", p_size, err));
+		}
+#ifdef TESTS_ENABLED
+		err = test_buffer_fault_stage == 2 ? VK_ERROR_OUT_OF_DEVICE_MEMORY : vmaBindBufferMemory2(allocator, allocation, 0, vk_buffer, nullptr);
+#else
 		err = vmaBindBufferMemory2(allocator, allocation, 0, vk_buffer, nullptr);
-		ERR_FAIL_COND_V_MSG(err, BufferID(), vformat("Can't bind memory to buffer of size: %d (VkResult error %d).", p_size, err));
+#endif
+		if (err != VK_SUCCESS) {
+			rollback();
+			ERR_FAIL_V_MSG(BufferID(), vformat("Can't bind memory to buffer of size: %d (VkResult error %d).", p_size, err));
+		}
 	}
 
 	// Bookkeep.
@@ -2035,7 +2109,10 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 	if (p_usage.has_flag(BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT)) {
 		void *persistent_ptr = nullptr;
 		VkResult err = vmaMapMemory(allocator, allocation, &persistent_ptr);
-		ERR_FAIL_COND_V_MSG(err, BufferID(), vformat("Couldn't map Vulkan buffer memory (VkResult error %d).", err));
+		if (err != VK_SUCCESS) {
+			rollback();
+			ERR_FAIL_V_MSG(BufferID(), vformat("Couldn't map Vulkan buffer memory (VkResult error %d).", err));
+		}
 
 		BufferDynamicInfo *dyn_buffer = VersatileResource::allocate<BufferDynamicInfo>(resources_allocator);
 		buf_info = dyn_buffer;
@@ -2056,7 +2133,9 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 }
 
 bool RenderingDeviceDriverVulkan::buffer_set_texel_format(BufferID p_buffer, DataFormat p_format) {
+	ERR_FAIL_INDEX_V(p_format, DATA_FORMAT_MAX, false);
 	BufferInfo *buf_info = (BufferInfo *)p_buffer.id;
+	ERR_FAIL_NULL_V(buf_info, false);
 
 	DEV_ASSERT(!buf_info->vk_view);
 
@@ -2074,6 +2153,7 @@ bool RenderingDeviceDriverVulkan::buffer_set_texel_format(BufferID p_buffer, Dat
 
 void RenderingDeviceDriverVulkan::buffer_free(BufferID p_buffer) {
 	BufferInfo *buf_info = (BufferInfo *)p_buffer.id;
+	ERR_FAIL_NULL(buf_info);
 	if (buf_info->vk_view) {
 		vkDestroyBufferView(vk_device, buf_info->vk_view, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER_VIEW));
 	}
@@ -2098,25 +2178,36 @@ void RenderingDeviceDriverVulkan::buffer_free(BufferID p_buffer) {
 
 uint64_t RenderingDeviceDriverVulkan::buffer_get_allocation_size(BufferID p_buffer) {
 	const BufferInfo *buf_info = (const BufferInfo *)p_buffer.id;
+	ERR_FAIL_NULL_V(buf_info, 0);
 	return buf_info->allocation.size;
 }
 
 uint8_t *RenderingDeviceDriverVulkan::buffer_map(BufferID p_buffer) {
+	int64_t native_code = 0;
+	return buffer_map_observed(p_buffer, native_code);
+}
+
+uint8_t *RenderingDeviceDriverVulkan::buffer_map_observed(BufferID p_buffer, int64_t &r_native_code) {
+	r_native_code = 0;
 	const BufferInfo *buf_info = (const BufferInfo *)p_buffer.id;
+	ERR_FAIL_NULL_V(buf_info, nullptr);
 	ERR_FAIL_COND_V_MSG(buf_info->is_dynamic(), nullptr, "Buffer must NOT have BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT. Use buffer_persistent_map_advance() instead.");
 	void *data_ptr = nullptr;
 	VkResult err = vmaMapMemory(allocator, buf_info->allocation.handle, &data_ptr);
+	r_native_code = static_cast<int64_t>(err);
 	ERR_FAIL_COND_V_MSG(err, nullptr, vformat("Couldn't map buffer memory (VkResult error %d).", err));
 	return (uint8_t *)data_ptr;
 }
 
 void RenderingDeviceDriverVulkan::buffer_unmap(BufferID p_buffer) {
 	const BufferInfo *buf_info = (const BufferInfo *)p_buffer.id;
+	ERR_FAIL_NULL(buf_info);
 	vmaUnmapMemory(allocator, buf_info->allocation.handle);
 }
 
 uint8_t *RenderingDeviceDriverVulkan::buffer_persistent_map_advance(BufferID p_buffer, uint64_t p_frames_drawn) {
 	BufferDynamicInfo *buf_info = (BufferDynamicInfo *)p_buffer.id;
+	ERR_FAIL_NULL_V(buf_info, nullptr);
 	ERR_FAIL_COND_V_MSG(!buf_info->is_dynamic(), nullptr, "Buffer must have BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT. Use buffer_map() instead.");
 #ifdef DEBUG_ENABLED
 	ERR_FAIL_COND_V_MSG(buf_info->last_frame_mapped == p_frames_drawn, nullptr, "Buffers with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT must only be mapped once per frame. Otherwise there could be race conditions with the GPU. Amalgamate all data uploading into one map(), use an extra buffer, or remove the bit.");
@@ -2132,6 +2223,7 @@ uint64_t RenderingDeviceDriverVulkan::buffer_get_dynamic_offsets(Span<BufferID> 
 
 	for (const BufferID &buf : p_buffers) {
 		const BufferInfo *buf_info = (const BufferInfo *)buf.id;
+		ERR_FAIL_NULL_V(buf_info, 0);
 		if (!buf_info->is_dynamic()) {
 			continue;
 		}
@@ -2145,6 +2237,7 @@ uint64_t RenderingDeviceDriverVulkan::buffer_get_dynamic_offsets(Span<BufferID> 
 
 void RenderingDeviceDriverVulkan::buffer_flush(BufferID p_buffer) {
 	BufferDynamicInfo *buf_info = (BufferDynamicInfo *)p_buffer.id;
+	ERR_FAIL_NULL(buf_info);
 
 	VkMemoryPropertyFlags mem_props_flags;
 	vmaGetAllocationMemoryProperties(allocator, buf_info->allocation.handle, &mem_props_flags);
@@ -2166,6 +2259,7 @@ void RenderingDeviceDriverVulkan::buffer_flush(BufferID p_buffer) {
 
 uint64_t RenderingDeviceDriverVulkan::buffer_get_device_address(BufferID p_buffer) {
 	const BufferInfo *buf_info = (const BufferInfo *)p_buffer.id;
+	ERR_FAIL_NULL_V(buf_info, 0);
 	VkBufferDeviceAddressInfo address_info = {};
 	address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
 	address_info.pNext = nullptr;
@@ -2240,6 +2334,17 @@ VkSampleCountFlagBits RenderingDeviceDriverVulkan::_ensure_supported_sample_coun
 }
 
 RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &p_format, const TextureView &p_view) {
+	ERR_FAIL_INDEX_V(p_view.format, DATA_FORMAT_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_r, TEXTURE_SWIZZLE_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_g, TEXTURE_SWIZZLE_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_b, TEXTURE_SWIZZLE_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_a, TEXTURE_SWIZZLE_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_format.format, DATA_FORMAT_MAX, TextureID());
+	for (const DataFormat shareable_format : p_format.shareable_formats) {
+		ERR_FAIL_INDEX_V(shareable_format, DATA_FORMAT_MAX, TextureID());
+	}
+	ERR_FAIL_INDEX_V(p_format.samples, TEXTURE_SAMPLES_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_format.texture_type, TEXTURE_TYPE_MAX, TextureID());
 	VkImageCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 
@@ -2369,17 +2474,59 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 	VmaAllocation allocation = nullptr;
 	VmaAllocationInfo alloc_info = {};
 
-	if (!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()) {
+	bool extra_tracking = Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled();
+#ifdef TESTS_ENABLED
+	extra_tracking = extra_tracking || test_texture_fault_stage;
+	test_texture_rollback_mask = 0;
+	test_texture_prefix = VK_NULL_HANDLE;
+	test_texture_allocation_prefix = nullptr;
+#endif
+	auto rollback = [&]() {
+		if (extra_tracking) {
+			if (vk_image) {
+				vkDestroyImage(vk_device, vk_image, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE));
+#ifdef TESTS_ENABLED
+				test_texture_rollback_mask |= 1;
+#endif
+			}
+			if (allocation) {
+				vmaFreeMemory(allocator, allocation);
+#ifdef TESTS_ENABLED
+				test_texture_rollback_mask |= 2;
+#endif
+			}
+		} else {
+			vmaDestroyImage(allocator, vk_image, allocation);
+		}
+	};
+
+	if (!extra_tracking) {
 		alloc_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
 		VkResult err = vmaCreateImage(allocator, &create_info, &alloc_create_info, &vk_image, &allocation, &alloc_info);
 		ERR_FAIL_COND_V_MSG(err, TextureID(), vformat("Couldn't create Vulkan image in memory for use with extra GPU memory tracking (VkResult error %d).", err));
 	} else {
 		VkResult err = vkCreateImage(vk_device, &create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE), &vk_image);
 		ERR_FAIL_COND_V_MSG(err, TextureID(), vformat("Couldn't create Vulkan image (VkResult error %d).", err));
+#ifdef TESTS_ENABLED
+		test_texture_prefix = vk_image;
+		err = test_texture_fault_stage == 1 ? VK_ERROR_OUT_OF_DEVICE_MEMORY : vmaAllocateMemoryForImage(allocator, vk_image, &alloc_create_info, &allocation, &alloc_info);
+		test_texture_allocation_prefix = allocation;
+#else
 		err = vmaAllocateMemoryForImage(allocator, vk_image, &alloc_create_info, &allocation, &alloc_info);
-		ERR_FAIL_COND_V_MSG(err, TextureID(), vformat("Couldn't allocate memory for Vulkan image (VkResult error %d).", err));
+#endif
+		if (err != VK_SUCCESS) {
+			rollback();
+			ERR_FAIL_V_MSG(TextureID(), vformat("Couldn't allocate memory for Vulkan image (VkResult error %d).", err));
+		}
+#ifdef TESTS_ENABLED
+		err = test_texture_fault_stage == 2 ? VK_ERROR_OUT_OF_DEVICE_MEMORY : vmaBindImageMemory2(allocator, allocation, 0, vk_image, nullptr);
+#else
 		err = vmaBindImageMemory2(allocator, allocation, 0, vk_image, nullptr);
-		ERR_FAIL_COND_V_MSG(err, TextureID(), vformat("Couldn't bind memory to Vulkan image (VkResult error %d).", err));
+#endif
+		if (err != VK_SUCCESS) {
+			rollback();
+			ERR_FAIL_V_MSG(TextureID(), vformat("Couldn't bind memory to Vulkan image (VkResult error %d).", err));
+		}
 	}
 
 	// Create view.
@@ -2412,14 +2559,14 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 	}
 
 	VkImageView vk_image_view = VK_NULL_HANDLE;
-	VkResult err = vkCreateImageView(vk_device, &image_view_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE_VIEW), &vk_image_view);
+	VkResult err;
+#ifdef TESTS_ENABLED
+	err = test_texture_fault_stage == 3 ? VK_ERROR_OUT_OF_DEVICE_MEMORY : vkCreateImageView(vk_device, &image_view_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE_VIEW), &vk_image_view);
+#else
+	err = vkCreateImageView(vk_device, &image_view_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE_VIEW), &vk_image_view);
+#endif
 	if (err) {
-		if (!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()) {
-			vmaDestroyImage(allocator, vk_image, allocation);
-		} else {
-			vkDestroyImage(vk_device, vk_image, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE));
-			vmaFreeMemory(allocator, allocation);
-		}
+		rollback();
 
 		ERR_FAIL_COND_V_MSG(err, TextureID(), vformat("Couldn't create Vulkan image view (VkResult error %d).", err));
 	}
@@ -2447,6 +2594,7 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 }
 
 RDD::TextureID RenderingDeviceDriverVulkan::texture_create_from_extension(uint64_t p_native_texture, TextureType p_type, DataFormat p_format, uint32_t p_array_layers, bool p_depth_stencil, uint32_t p_mipmaps) {
+	ERR_FAIL_INDEX_V(p_format, DATA_FORMAT_MAX, TextureID());
 	VkImage vk_image = (VkImage)p_native_texture;
 
 	// We only need to create a view into the already existing natively-provided texture.
@@ -2484,7 +2632,13 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create_from_extension(uint64
 }
 
 RDD::TextureID RenderingDeviceDriverVulkan::texture_create_shared(TextureID p_original_texture, const TextureView &p_view) {
+	ERR_FAIL_INDEX_V(p_view.format, DATA_FORMAT_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_r, TEXTURE_SWIZZLE_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_g, TEXTURE_SWIZZLE_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_b, TEXTURE_SWIZZLE_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_a, TEXTURE_SWIZZLE_MAX, TextureID());
 	const TextureInfo *owner_tex_info = (const TextureInfo *)p_original_texture.id;
+	ERR_FAIL_NULL_V(owner_tex_info, TextureID());
 #ifdef DEBUG_ENABLED
 	ERR_FAIL_COND_V(!owner_tex_info->allocation.handle && !owner_tex_info->created_from_extension, TextureID());
 #endif
@@ -2541,7 +2695,13 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create_shared(TextureID p_or
 }
 
 RDD::TextureID RenderingDeviceDriverVulkan::texture_create_shared_from_slice(TextureID p_original_texture, const TextureView &p_view, TextureSliceType p_slice_type, uint32_t p_layer, uint32_t p_layers, uint32_t p_mipmap, uint32_t p_mipmaps) {
+	ERR_FAIL_INDEX_V(p_view.format, DATA_FORMAT_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_r, TEXTURE_SWIZZLE_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_g, TEXTURE_SWIZZLE_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_b, TEXTURE_SWIZZLE_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_a, TEXTURE_SWIZZLE_MAX, TextureID());
 	const TextureInfo *owner_tex_info = (const TextureInfo *)p_original_texture.id;
+	ERR_FAIL_NULL_V(owner_tex_info, TextureID());
 #ifdef DEBUG_ENABLED
 	ERR_FAIL_COND_V(!owner_tex_info->allocation.handle && !owner_tex_info->created_from_extension, TextureID());
 #endif
@@ -2595,6 +2755,7 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create_shared_from_slice(Tex
 
 void RenderingDeviceDriverVulkan::texture_free(TextureID p_texture) {
 	TextureInfo *tex_info = (TextureInfo *)p_texture.id;
+	ERR_FAIL_NULL(tex_info);
 	vkDestroyImageView(vk_device, tex_info->vk_view, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE_VIEW));
 	if (tex_info->allocation.handle) {
 		if (!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()) {
@@ -2609,11 +2770,15 @@ void RenderingDeviceDriverVulkan::texture_free(TextureID p_texture) {
 
 uint64_t RenderingDeviceDriverVulkan::texture_get_allocation_size(TextureID p_texture) {
 	const TextureInfo *tex_info = (const TextureInfo *)p_texture.id;
+	ERR_FAIL_NULL_V(tex_info, 0);
 	return tex_info->allocation.info.size;
 }
 
 void RenderingDeviceDriverVulkan::texture_get_copyable_layout(TextureID p_texture, const TextureSubresource &p_subresource, TextureCopyableLayout *r_layout) {
+	ERR_FAIL_COND(!r_layout);
+	*r_layout = {};
 	const TextureInfo *tex_info = (const TextureInfo *)p_texture.id;
+	ERR_FAIL_NULL(tex_info);
 
 	uint32_t w = MAX(1u, tex_info->vk_create_info.extent.width >> p_subresource.mipmap);
 	uint32_t h = MAX(1u, tex_info->vk_create_info.extent.height >> p_subresource.mipmap);
@@ -2623,13 +2788,13 @@ void RenderingDeviceDriverVulkan::texture_get_copyable_layout(TextureID p_textur
 	get_compressed_image_format_block_dimensions(tex_info->rd_format, bw, bh);
 
 	uint32_t sbw = 0, sbh = 0;
-	*r_layout = {};
 	r_layout->size = get_image_format_required_size(tex_info->rd_format, w, h, d, 1, &sbw, &sbh);
 	r_layout->row_pitch = r_layout->size / ((sbh / bh) * d);
 }
 
 Vector<uint8_t> RenderingDeviceDriverVulkan::texture_get_data(TextureID p_texture, uint32_t p_layer) {
 	const TextureInfo *tex = (const TextureInfo *)p_texture.id;
+	ERR_FAIL_NULL_V(tex, Vector<uint8_t>());
 
 	DataFormat tex_format = tex->rd_format;
 	uint32_t tex_width = tex->vk_create_info.extent.width;
@@ -2703,6 +2868,7 @@ Vector<uint8_t> RenderingDeviceDriverVulkan::texture_get_data(TextureID p_textur
 }
 
 BitField<RDD::TextureUsageBits> RenderingDeviceDriverVulkan::texture_get_usages_supported_by_format(DataFormat p_format, bool p_cpu_readable) {
+	ERR_FAIL_INDEX_V(p_format, DATA_FORMAT_MAX, 0);
 	if (p_format >= DATA_FORMAT_ASTC_4x4_SFLOAT_BLOCK && p_format <= DATA_FORMAT_ASTC_12x12_SFLOAT_BLOCK && !enabled_device_extension_names.has(VK_EXT_TEXTURE_COMPRESSION_ASTC_HDR_EXTENSION_NAME)) {
 		// Formats that were introduced later with extensions must not reach vkGetPhysicalDeviceFormatProperties if the extension isn't available. This means it's not supported.
 		return 0;
@@ -2740,6 +2906,7 @@ BitField<RDD::TextureUsageBits> RenderingDeviceDriverVulkan::texture_get_usages_
 
 bool RenderingDeviceDriverVulkan::texture_can_make_shared_with_format(TextureID p_texture, DataFormat p_format, bool &r_raw_reinterpretation) {
 	r_raw_reinterpretation = false;
+	ERR_FAIL_INDEX_V(p_format, DATA_FORMAT_MAX, false);
 	return true;
 }
 
@@ -2762,14 +2929,32 @@ static_assert(ENUM_MEMBERS_EQUAL(RDD::SAMPLER_BORDER_COLOR_INT_OPAQUE_BLACK, VK_
 static_assert(ENUM_MEMBERS_EQUAL(RDD::SAMPLER_BORDER_COLOR_FLOAT_OPAQUE_WHITE, VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::SAMPLER_BORDER_COLOR_INT_OPAQUE_WHITE, VK_BORDER_COLOR_INT_OPAQUE_WHITE));
 
+static uint32_t _sampler_filter_value(const RDD::SamplerFilter *p_filter) {
+	static_assert(sizeof(RDD::SamplerFilter) == sizeof(uint32_t));
+	uint32_t value = 0;
+	memcpy(&value, p_filter, sizeof(value));
+	return value;
+}
+
 RDD::SamplerID RenderingDeviceDriverVulkan::sampler_create(const SamplerState &p_state) {
+	const uint32_t mag_filter = _sampler_filter_value(&p_state.mag_filter);
+	const uint32_t min_filter = _sampler_filter_value(&p_state.min_filter);
+	const uint32_t mip_filter = _sampler_filter_value(&p_state.mip_filter);
+	ERR_FAIL_COND_V(mag_filter > SAMPLER_FILTER_LINEAR, SamplerID());
+	ERR_FAIL_COND_V(min_filter > SAMPLER_FILTER_LINEAR, SamplerID());
+	ERR_FAIL_COND_V(mip_filter > SAMPLER_FILTER_LINEAR, SamplerID());
+	ERR_FAIL_INDEX_V(p_state.repeat_u, SAMPLER_REPEAT_MODE_MAX, SamplerID());
+	ERR_FAIL_INDEX_V(p_state.repeat_v, SAMPLER_REPEAT_MODE_MAX, SamplerID());
+	ERR_FAIL_INDEX_V(p_state.repeat_w, SAMPLER_REPEAT_MODE_MAX, SamplerID());
+	ERR_FAIL_INDEX_V(p_state.compare_op, COMPARE_OP_MAX, SamplerID());
+	ERR_FAIL_INDEX_V(p_state.border_color, SAMPLER_BORDER_COLOR_MAX, SamplerID());
 	VkSamplerCreateInfo sampler_create_info = {};
 	sampler_create_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 	sampler_create_info.pNext = nullptr;
 	sampler_create_info.flags = 0;
-	sampler_create_info.magFilter = p_state.mag_filter == SAMPLER_FILTER_LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
-	sampler_create_info.minFilter = p_state.min_filter == SAMPLER_FILTER_LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
-	sampler_create_info.mipmapMode = p_state.mip_filter == SAMPLER_FILTER_LINEAR ? VK_SAMPLER_MIPMAP_MODE_LINEAR : VK_SAMPLER_MIPMAP_MODE_NEAREST;
+	sampler_create_info.magFilter = mag_filter == SAMPLER_FILTER_LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+	sampler_create_info.minFilter = min_filter == SAMPLER_FILTER_LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+	sampler_create_info.mipmapMode = mip_filter == SAMPLER_FILTER_LINEAR ? VK_SAMPLER_MIPMAP_MODE_LINEAR : VK_SAMPLER_MIPMAP_MODE_NEAREST;
 	sampler_create_info.addressModeU = (VkSamplerAddressMode)p_state.repeat_u;
 	sampler_create_info.addressModeV = (VkSamplerAddressMode)p_state.repeat_v;
 	sampler_create_info.addressModeW = (VkSamplerAddressMode)p_state.repeat_w;
@@ -2795,6 +2980,7 @@ void RenderingDeviceDriverVulkan::sampler_free(SamplerID p_sampler) {
 }
 
 bool RenderingDeviceDriverVulkan::sampler_is_format_supported_for_filter(DataFormat p_format, SamplerFilter p_filter) {
+	ERR_FAIL_INDEX_V(p_format, DATA_FORMAT_MAX, false);
 	switch (p_filter) {
 		case SAMPLER_FILTER_NEAREST: {
 			return true;
@@ -2813,6 +2999,9 @@ bool RenderingDeviceDriverVulkan::sampler_is_format_supported_for_filter(DataFor
 /**********************/
 
 RDD::VertexFormatID RenderingDeviceDriverVulkan::vertex_format_create(Span<VertexAttribute> p_vertex_attribs, const VertexAttributeBindingsMap &p_vertex_bindings) {
+	for (const VertexAttribute &attribute : p_vertex_attribs) {
+		ERR_FAIL_INDEX_V(attribute.format, DATA_FORMAT_MAX, VertexFormatID());
+	}
 	// Pre-bookkeep.
 	VertexFormatInfo *vf_info = VersatileResource::allocate<VertexFormatInfo>(resources_allocator);
 
@@ -2913,6 +3102,12 @@ void RenderingDeviceDriverVulkan::command_pipeline_barrier(
 		VectorView<BufferBarrier> p_buffer_barriers,
 		VectorView<TextureBarrier> p_texture_barriers,
 		VectorView<AccelerationStructureBarrier> p_acceleration_structure_barriers) {
+	ERR_FAIL_COND((p_memory_barriers.size() > 0 && !p_memory_barriers.ptr()) || (p_buffer_barriers.size() > 0 && !p_buffer_barriers.ptr()) || (p_texture_barriers.size() > 0 && !p_texture_barriers.ptr()) || (p_acceleration_structure_barriers.size() > 0 && !p_acceleration_structure_barriers.ptr()));
+	for (uint32_t i = 0; i < p_texture_barriers.size(); i++) {
+		ERR_FAIL_INDEX(p_texture_barriers[i].prev_layout, TEXTURE_LAYOUT_MAX);
+		ERR_FAIL_INDEX(p_texture_barriers[i].next_layout, TEXTURE_LAYOUT_MAX);
+	}
+
 	VkMemoryBarrier *vk_memory_barriers = ALLOCA_ARRAY(VkMemoryBarrier, p_memory_barriers.size());
 	for (uint32_t i = 0; i < p_memory_barriers.size(); i++) {
 		vk_memory_barriers[i] = {};
@@ -3038,6 +3233,333 @@ void RenderingDeviceDriverVulkan::command_pipeline_barrier(
 /**** FENCES ****/
 /****************/
 
+Error RenderingDeviceDriverVulkan::_native_call_prepare(Fence *fence, uint32_t queue, NativeCall *&out) {
+	out = nullptr;
+	uint64_t registry = 0, epoch = 0;
+	session_loss_identity(registry, epoch);
+	uint64_t serial = next_native_call_serial.load();
+	while (serial) {
+		if (next_native_call_serial.compare_exchange_weak(serial, serial + 1)) {
+			break;
+		}
+	}
+	if (!serial) {
+		return ERR_UNAVAILABLE;
+	}
+	auto *call = memnew(NativeCall);
+	call->serial = serial;
+	call->queue = queue;
+	call->registry = registry;
+	call->epoch = epoch;
+	call->fence_owned = fence != nullptr;
+	call->owns_fence = fence == nullptr;
+	if (fence) {
+		call->fence = fence->vk_fence;
+	} else {
+		VkFenceCreateInfo info{};
+		info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+		const auto result = vkCreateFence(vk_device, &info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_FENCE), &call->fence);
+		if (result != VK_SUCCESS) {
+			memdelete(call);
+			if (result == VK_ERROR_DEVICE_LOST) {
+				if (epoch) {
+					notify_session_device_lost(registry, epoch);
+				} else {
+					// Synchronous Vulkan observation still has the stored original
+					// owner. Registration may have occurred after source creation.
+					notify_session_device_lost();
+				}
+			}
+			return ERR_CANT_CREATE;
+		}
+	}
+	// Ordinary submit callers cannot retry a bookkeeping-lock refusal: they
+	// poison the worker or frame. Serialize this reservation only; native
+	// observation and typed maintenance retain their bounded try-lock behavior.
+	native_call_mutex.lock();
+	if (fence && (fence->armed || fence->native_call)) {
+		native_call_mutex.unlock();
+		memdelete(call);
+		return ERR_BUSY;
+	}
+	native_calls.push_back(call);
+	if (fence) {
+		fence->native_call = call;
+	}
+	native_call_mutex.unlock();
+	out = call;
+	return OK;
+}
+void RenderingDeviceDriverVulkan::_native_call_abort(NativeCall *call) {
+	MutexLock lock(native_call_mutex);
+	CRASH_COND(!call->submitting || call->observers || call->waiters);
+	// No native submit occurred and no call fact was published. Dispose only
+	// the unpublished reservation; never manufacture a completion for it.
+	if (call->owns_fence && call->fence) {
+		vkDestroyFence(vk_device, call->fence, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_FENCE));
+	}
+	for (uint32_t i = 0; i < native_calls.size(); ++i) {
+		if (native_calls[i] == call) {
+			native_calls.remove_at(i);
+			memdelete(call);
+			return;
+		}
+	}
+	CRASH_NOW();
+}
+void RenderingDeviceDriverVulkan::_native_call_collect_locked(NativeCall *call) {
+	if (!call->source_returned || call->observers || call->waiters) {
+		return;
+	}
+	CRASH_COND(!call->completed.load());
+	if (call->owns_fence && call->fence) {
+		vkDestroyFence(vk_device, call->fence, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_FENCE));
+	}
+	for (uint32_t i = 0; i < native_calls.size(); ++i) {
+		if (native_calls[i] == call) {
+			native_calls.remove_at(i);
+			memdelete(call);
+			return;
+		}
+	}
+	CRASH_NOW();
+}
+void RenderingDeviceDriverVulkan::_native_fence_return_locked(Fence *fence) {
+	auto *call = fence->native_call;
+	if (!call) {
+		return;
+	}
+	CRASH_COND(!call->completed.load() || call->waiters || call->submitting || call->submit_result != VK_SUCCESS);
+	call->fence = VK_NULL_HANDLE;
+	call->fence_owned = false;
+	call->source_returned = true;
+	fence->native_call = nullptr;
+	_native_call_collect_locked(call);
+}
+RenderingDeviceDriver::FencePollResult RenderingDeviceDriverVulkan::native_call_poll(uint64_t serial) {
+	FencePollResult out;
+	if (!serial || !native_call_mutex.try_lock()) {
+		return out;
+	}
+	uint64_t registry = 0, epoch = 0;
+	bool lost = false;
+	for (auto *call : native_calls) {
+		if (call->serial == serial) {
+			out.completed_serial = serial;
+			if (call->submitting) {
+				break;
+			}
+			if (call->submit_result != VK_SUCCESS) {
+				out.native_error = true;
+				out.native_code = call->submit_result;
+				break;
+			}
+			VkResult result = VK_SUCCESS;
+			if (!call->completed.load()) {
+#ifdef TESTS_ENABLED
+				if (test_fence_fault_phase == 1) {
+					result = test_fence_fault_result;
+				} else
+#endif
+					result = vkGetFenceStatus(vk_device, call->fence);
+			}
+			if (result == VK_SUCCESS) {
+				call->completed.store(true);
+				out.completed = true;
+			} else if (result != VK_NOT_READY) {
+				out.native_error = true;
+			}
+			out.native_code = result;
+			lost = result == VK_ERROR_DEVICE_LOST;
+			registry = call->registry;
+			epoch = call->epoch;
+			break;
+		}
+	}
+	native_call_mutex.unlock();
+	if (lost) {
+		if (epoch) {
+			notify_session_device_lost(registry, epoch);
+		} else {
+			// Synchronous Vulkan observation still has the stored original
+			// owner. Registration may have occurred after source creation.
+			notify_session_device_lost();
+		}
+	}
+	return out;
+}
+RenderingDeviceDriver::FencePollResult RenderingDeviceDriverVulkan::native_call_wait(uint64_t serial) {
+	FencePollResult out;
+	NativeCall *selected = nullptr;
+	VkFence source = VK_NULL_HANDLE;
+	uint64_t registry = 0, epoch = 0;
+	{
+		MutexLock lock(native_call_mutex);
+		for (auto *call : native_calls) {
+			if (call->serial == serial) {
+				out.completed_serial = serial;
+				if (call->submitting) {
+					return out;
+				}
+				if (call->submit_result != VK_SUCCESS) {
+					out.native_error = true;
+					out.native_code = call->submit_result;
+					return out;
+				}
+				if (call->completed.load()) {
+					out.completed = true;
+					return out;
+				}
+				if (call->waiters == UINT32_MAX) {
+					return out;
+				}
+				++call->waiters;
+				selected = call;
+				source = call->fence;
+				registry = call->registry;
+				epoch = call->epoch;
+				break;
+			}
+		}
+	}
+	if (!selected) {
+		return out;
+	}
+	VkResult result;
+#ifdef TESTS_ENABLED
+	if (test_fence_fault_phase == 2) {
+		result = test_fence_fault_result;
+	} else
+#endif
+		result = vkWaitForFences(vk_device, 1, &source, VK_TRUE, UINT64_MAX);
+	{
+		MutexLock lock(native_call_mutex);
+		CRASH_COND(!selected->waiters);
+		--selected->waiters;
+		if (result == VK_SUCCESS) {
+			selected->completed.store(true);
+		}
+		out.completed = result == VK_SUCCESS;
+		out.native_error = result != VK_SUCCESS;
+		out.native_code = result;
+		native_call_returned.notify_all();
+		_native_call_collect_locked(selected);
+	}
+	if (result == VK_ERROR_DEVICE_LOST) {
+		if (epoch) {
+			notify_session_device_lost(registry, epoch);
+		} else {
+			// Synchronous Vulkan observation still has the stored original
+			// owner. Registration may have occurred after source creation.
+			notify_session_device_lost();
+		}
+	}
+	return out;
+}
+Error RenderingDeviceDriverVulkan::native_call_retain(uint64_t serial) {
+	if (!native_call_mutex.try_lock()) {
+		return ERR_BUSY;
+	}
+	for (auto *call : native_calls) {
+		if (call->serial == serial) {
+			if (call->submitting) {
+				native_call_mutex.unlock();
+				return ERR_BUSY;
+			}
+			if (call->observers == UINT32_MAX) {
+				native_call_mutex.unlock();
+				return ERR_PARAMETER_RANGE_ERROR;
+			}
+			++call->observers;
+			native_call_mutex.unlock();
+			return OK;
+		}
+	}
+	native_call_mutex.unlock();
+	return ERR_DOES_NOT_EXIST;
+}
+Error RenderingDeviceDriverVulkan::native_call_release(uint64_t serial) {
+	if (!native_call_mutex.try_lock()) {
+		return ERR_BUSY;
+	}
+	for (auto *call : native_calls) {
+		if (call->serial == serial) {
+			if (!call->observers) {
+				native_call_mutex.unlock();
+				return ERR_DOES_NOT_EXIST;
+			}
+			--call->observers;
+			_native_call_collect_locked(call);
+			native_call_mutex.unlock();
+			return OK;
+		}
+	}
+	native_call_mutex.unlock();
+	return ERR_DOES_NOT_EXIST;
+}
+Error RenderingDeviceDriverVulkan::native_call_recycle(uint64_t serial) {
+	return _native_call_recycle(serial, false);
+}
+Error RenderingDeviceDriverVulkan::native_call_recycle_wait(uint64_t serial) {
+	return _native_call_recycle(serial, true);
+}
+Error RenderingDeviceDriverVulkan::_native_call_recycle(uint64_t serial, bool p_blocking) {
+	std::optional<MutexLock<BinaryMutex>> blocking_lock;
+	if (p_blocking) {
+		blocking_lock.emplace(native_call_mutex);
+	} else if (!native_call_mutex.try_lock()) {
+		return ERR_BUSY;
+	}
+	auto unlock = [&] {
+		if (blocking_lock) {
+			blocking_lock.reset();
+		} else {
+			native_call_mutex.unlock();
+		}
+	};
+	for (auto *call : native_calls) {
+		if (call->serial == serial) {
+			if (p_blocking) {
+				while (call->waiters) {
+#ifdef TESTS_ENABLED
+					test_native_recycle_cv_waiting.store(serial);
+#endif
+					native_call_returned.wait(*blocking_lock);
+#ifdef TESTS_ENABLED
+					test_native_recycle_cv_waiting.store(0);
+#endif
+					// Original source ownership can return while the CV releases
+					// the lock. No observer is implied by this maintenance call.
+					// Revalidate identity before touching the cell again.
+					call = nullptr;
+					for (auto *candidate : native_calls) {
+						if (candidate->serial == serial) {
+							call = candidate;
+							break;
+						}
+					}
+					if (!call) {
+						unlock();
+						return ERR_DOES_NOT_EXIST;
+					}
+				}
+			}
+			if (call->submitting || call->submit_result != VK_SUCCESS || !call->completed.load() || call->waiters) {
+				unlock();
+				return ERR_BUSY;
+			}
+			if (!call->fence_owned) {
+				call->source_returned = true;
+				_native_call_collect_locked(call);
+			}
+			unlock();
+			return OK;
+		}
+	}
+	unlock();
+	return ERR_DOES_NOT_EXIST;
+}
+
 RDD::FenceID RenderingDeviceDriverVulkan::fence_create() {
 	VkFence vk_fence = VK_NULL_HANDLE;
 	VkFenceCreateInfo create_info = {};
@@ -3053,14 +3575,53 @@ RDD::FenceID RenderingDeviceDriverVulkan::fence_create() {
 
 Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 	Fence *fence = (Fence *)(p_fence.id);
-	VkResult fence_status = vkGetFenceStatus(vk_device, fence->vk_fence);
-	if (fence_status == VK_NOT_READY) {
-		VkResult err = vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, UINT64_MAX);
-		ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, FAILED, vformat("Couldn't wait for Vulkan fence (VkResult error %d).", err));
+	if (fence->native_call && fence->native_call->submit_result != VK_SUCCESS) {
+		return FAILED;
 	}
-
-	VkResult err = vkResetFences(vk_device, 1, &fence->vk_fence);
-	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, FAILED, vformat("Couldn't reset Vulkan fence (VkResult error %d).", err));
+	std::optional<MutexLock<BinaryMutex>> reset_lock;
+	const auto observed = vulkan_fence_wait_and_reset(
+			[&] {
+#ifdef TESTS_ENABLED
+				if (test_fence_fault_phase == 1)
+					return test_fence_fault_result;
+#endif
+				return vkGetFenceStatus(vk_device, fence->vk_fence);
+			},
+			[&] {
+#ifdef TESTS_ENABLED
+				if (test_fence_fault_phase == 2)
+					return test_fence_fault_result;
+#endif
+				return vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, UINT64_MAX);
+			},
+			[&] {
+				if (fence->native_call) {
+					fence->native_call->completed.store(true);
+					reset_lock.emplace(native_call_mutex);
+					while (fence->native_call->waiters)
+						native_call_returned.wait(*reset_lock);
+				}
+#ifdef TESTS_ENABLED
+				if (test_fence_fault_phase == 3)
+					return test_fence_fault_result;
+#endif
+				return vkResetFences(vk_device, 1, &fence->vk_fence);
+			});
+	if (reset_lock) {
+		if (observed.result == VK_SUCCESS) {
+			_native_fence_return_locked(fence);
+		}
+		reset_lock.reset();
+	}
+	if (observed.result == VK_SUCCESS) {
+		fence->completed_serial = fence->submission_serial;
+		fence->armed = false;
+		fence->observed = false;
+	}
+	if (observed.result == VK_ERROR_DEVICE_LOST) {
+		notify_session_device_lost();
+	}
+	ERR_FAIL_COND_V_MSG(observed.result != VK_SUCCESS, FAILED, vformat("Vulkan fence phase %d failed (VkResult error %d).", observed.phase, observed.result));
 
 	if (fence->queue_signaled_from != nullptr) {
 		// Release all semaphores that the command queue associated to the fence waited on the last time it was submitted.
@@ -3082,9 +3643,167 @@ Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 	return OK;
 }
 
-void RenderingDeviceDriverVulkan::fence_free(FenceID p_fence) {
+RenderingDeviceDriver::FencePollResult RenderingDeviceDriverVulkan::fence_poll(FenceID p_fence, uint64_t p_expected_submission_serial) {
 	Fence *fence = (Fence *)(p_fence.id);
-	vkDestroyFence(vk_device, fence->vk_fence, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_FENCE));
+	if (fence->native_call && fence->native_call->submit_result != VK_SUCCESS) {
+		FencePollResult failed;
+		failed.completed_serial = fence->submission_serial;
+		failed.native_error = true;
+		failed.native_code = fence->native_call->submit_result;
+		return failed;
+	}
+	VkResult result;
+#ifdef TESTS_ENABLED
+	if (test_fence_fault_phase == 1) {
+		result = test_fence_fault_result;
+	} else
+#endif
+		result = vkGetFenceStatus(vk_device, fence->vk_fence);
+	if (result == VK_ERROR_DEVICE_LOST) {
+		notify_session_device_lost();
+	}
+	FencePollResult out;
+	out.completed_serial = fence->submission_serial;
+	out.native_code = static_cast<int64_t>(result);
+	if (result == VK_SUCCESS) {
+		if (fence->native_call) {
+			fence->native_call->completed.store(true);
+		}
+		if (fence->armed && p_expected_submission_serial != 0 && p_expected_submission_serial == fence->submission_serial) {
+			out.completed = true;
+			out.completed_serial = fence->submission_serial;
+			fence->observed = true;
+		}
+	} else if (result != VK_NOT_READY) {
+		// Preserve device-lost and other raw errors for the typed owner.
+		out.completed = false;
+		out.native_error = true;
+	}
+	return out;
+}
+
+RenderingDeviceDriver::FencePollResult RenderingDeviceDriverVulkan::fence_wait_observed(FenceID p_fence, uint64_t p_expected_submission_serial) {
+	Fence *fence = (Fence *)(p_fence.id);
+	FencePollResult out;
+	out.completed_serial = fence->submission_serial;
+	if (!fence->armed || p_expected_submission_serial == 0 || p_expected_submission_serial != fence->submission_serial) {
+		out.native_error = true;
+		out.native_code = ERR_INVALID_PARAMETER;
+		return out;
+	}
+	if (fence->native_call && fence->native_call->submit_result != VK_SUCCESS) {
+		out.native_error = true;
+		out.native_code = fence->native_call->submit_result;
+		return out;
+	}
+	VkResult result;
+#ifdef TESTS_ENABLED
+	if (test_fence_fault_phase == 2) {
+		result = test_fence_fault_result;
+	} else
+#endif
+		result = vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, UINT64_MAX);
+	if (result == VK_ERROR_DEVICE_LOST) {
+		notify_session_device_lost();
+	}
+	if (result != VK_SUCCESS) {
+		out.native_error = true;
+		out.native_code = static_cast<int64_t>(result);
+		return out;
+	}
+	if (fence->native_call) {
+		fence->native_call->completed.store(true);
+	}
+	return fence_poll(p_fence, p_expected_submission_serial);
+}
+
+Error RenderingDeviceDriverVulkan::fence_recycle(FenceID p_fence, uint64_t p_completed_serial) {
+	return _fence_recycle(p_fence, p_completed_serial, false);
+}
+Error RenderingDeviceDriverVulkan::fence_recycle_wait(FenceID p_fence, uint64_t p_completed_serial) {
+	return _fence_recycle(p_fence, p_completed_serial, true);
+}
+Error RenderingDeviceDriverVulkan::_fence_recycle(FenceID p_fence, uint64_t p_completed_serial, bool p_blocking) {
+	Fence *fence = (Fence *)(p_fence.id);
+	if (p_completed_serial == 0 || p_completed_serial != fence->submission_serial || p_completed_serial <= fence->completed_serial || !fence->armed || !fence->observed) {
+		return ERR_INVALID_PARAMETER;
+	}
+	std::optional<MutexLock<BinaryMutex>> blocking_lock;
+	if (p_blocking) {
+		blocking_lock.emplace(native_call_mutex);
+	} else if (!native_call_mutex.try_lock()) {
+		return ERR_BUSY;
+	}
+	auto unlock = [&] {
+		if (blocking_lock) {
+			blocking_lock.reset();
+		} else {
+			native_call_mutex.unlock();
+		}
+	};
+	if (fence->native_call) {
+		auto *call = fence->native_call;
+		if (p_blocking) {
+			while (call->waiters) {
+				native_call_returned.wait(*blocking_lock);
+			}
+		}
+		if (call->submitting || call->submit_result != VK_SUCCESS || call->waiters) {
+			unlock();
+			return ERR_BUSY;
+		}
+		call->completed.store(true);
+	}
+	VkResult result;
+#ifdef TESTS_ENABLED
+	if (test_fence_fault_phase == 3) {
+		result = test_fence_fault_result;
+	} else
+#endif
+		result = vkResetFences(vk_device, 1, &fence->vk_fence);
+	if (result == VK_SUCCESS) {
+		_native_fence_return_locked(fence);
+	}
+	unlock();
+	if (result == VK_ERROR_DEVICE_LOST) {
+		notify_session_device_lost();
+	}
+	if (result != VK_SUCCESS) {
+		return ERR_CANT_CREATE;
+	}
+	if (fence->queue_signaled_from != nullptr) {
+		LocalVector<Pair<Fence *, uint32_t>> &pairs = fence->queue_signaled_from->image_semaphores_for_fences;
+		for (uint32_t i = 0; i < pairs.size();) {
+			if (pairs[i].first == fence) {
+				_release_image_semaphore(fence->queue_signaled_from, pairs[i].second, true);
+				fence->queue_signaled_from->free_image_semaphores.push_back(pairs[i].second);
+				pairs.remove_at(i);
+			} else {
+				i++;
+			}
+		}
+		fence->queue_signaled_from = nullptr;
+	}
+	fence->completed_serial = p_completed_serial;
+	fence->armed = false;
+	fence->observed = false;
+	return OK;
+}
+
+void RenderingDeviceDriverVulkan::fence_free(FenceID p_fence) {
+	auto *fence = (Fence *)p_fence.id;
+	{
+		MutexLock lock(native_call_mutex);
+		if (fence->native_call) {
+			auto *call = fence->native_call;
+			ERR_FAIL_COND_MSG(call->submitting || call->submit_result != VK_SUCCESS || !call->completed.load(), "Vulkan fence still owns an unresolved native submission.");
+			while (call->waiters) {
+				native_call_returned.wait(lock);
+			}
+		}
+		vkDestroyFence(vk_device, fence->vk_fence, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_FENCE));
+		_native_fence_return_locked(fence);
+	}
 	memdelete(fence);
 }
 
@@ -3188,13 +3907,56 @@ RDD::CommandQueueID RenderingDeviceDriverVulkan::command_queue_create(CommandQue
 }
 
 Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<CommandBufferID> p_cmd_buffers, VectorView<SemaphoreID> p_cmd_semaphores, FenceID p_cmd_fence, VectorView<SwapChainID> p_swap_chains) {
+	ERR_FAIL_COND_V((p_wait_semaphores.size() > 0 && !p_wait_semaphores.ptr()) || (p_cmd_buffers.size() > 0 && !p_cmd_buffers.ptr()) || (p_cmd_semaphores.size() > 0 && !p_cmd_semaphores.ptr()) || (p_swap_chains.size() > 0 && !p_swap_chains.ptr()), ERR_INVALID_PARAMETER);
+	const bool bounded_capture = bounded_native_capture_active();
+	uint32_t native_fact_index = UINT32_MAX;
+	if (bounded_capture) {
+		// The fixed production profile never imports WSI calls. Refuse before
+		// semaphore mutations, native-source creation or any actual queue call.
+		if (p_swap_chains.size() || (p_cmd_buffers.size() && !native_fact_capacity_available())) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+	} else {
+		reset_queue_call_report();
+	}
 	DEV_ASSERT(p_cmd_queue.id != 0);
 
 	VkResult err;
 	CommandQueue *command_queue = (CommandQueue *)(p_cmd_queue.id);
 	Queue &device_queue = queue_families[command_queue->queue_family][command_queue->queue_index];
 	Fence *fence = (Fence *)(p_cmd_fence.id);
-	VkFence vk_fence = (fence != nullptr) ? fence->vk_fence : VK_NULL_HANDLE;
+	if (fence != nullptr && fence->submission_serial == UINT64_MAX) {
+		QueueCallReport report;
+		report.error = ERR_UNAVAILABLE;
+		if (!bounded_capture) {
+			record_queue_call_report(report);
+		}
+		return ERR_UNAVAILABLE;
+	}
+	NativeCall *native = nullptr;
+	if (p_cmd_buffers.size() > 0) {
+		const Error prepared = _native_call_prepare(fence, device_queue.observation_index, native);
+		if (prepared != OK) {
+			QueueCallReport report;
+			report.error = prepared;
+			if (!bounded_capture) {
+				record_queue_call_report(report);
+			}
+			return prepared;
+		}
+	}
+	// The reservation precedes queue/semaphore mutations and VMA flushes. Any
+	// pre-submit return disposes its unpublished source and keeps the serial burned.
+	auto abort_unissued = [&](NativeCall *call) {
+		if (call && call->submitting) {
+			if (fence) {
+				fence->native_call = nullptr;
+			}
+			_native_call_abort(call);
+		}
+	};
+	std::unique_ptr<NativeCall, decltype(abort_unissued)> reservation(native, abort_unissued);
+	VkFence vk_fence = native ? native->fence : VK_NULL_HANDLE;
 
 	thread_local LocalVector<VkSemaphore> wait_semaphores;
 	thread_local LocalVector<VkPipelineStageFlags> wait_semaphores_stages;
@@ -3230,6 +3992,12 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 	}
 
 	if (p_cmd_buffers.size() > 0) {
+		QueueCallReport report;
+		if (!bounded_capture) {
+			report.calls.reserve(1 + p_swap_chains.size());
+		}
+		report.issued = true;
+		report.present_attempted = p_swap_chains.size() > 0;
 		thread_local LocalVector<VkCommandBuffer> command_buffers;
 		thread_local LocalVector<VkSemaphore> present_semaphores;
 		thread_local LocalVector<VkSemaphore> signal_semaphores;
@@ -3263,9 +4031,53 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 		submit_info.signalSemaphoreCount = signal_semaphores.size();
 		submit_info.pSignalSemaphores = signal_semaphores.ptr();
 
+		if (bounded_capture && !claim_native_fact(native_fact_index)) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
 		device_queue.submit_mutex.lock();
+		reservation.release(); // From this actual call onward a failed prefix is retained.
+		report.native_issue_count = 1;
 		err = vkQueueSubmit(device_queue.queue, 1, &submit_info, vk_fence);
 		device_queue.submit_mutex.unlock();
+#ifdef TESTS_ENABLED
+		// Fault-injection control only: real work was submitted successfully,
+		// then report an uncertain outcome to exercise conservative retention.
+		// This does not simulate physical device loss or grant completion.
+		if (err == VK_SUCCESS && test_fence_fault_phase == 4) {
+			test_submit_fault_applied = true;
+			err = test_fence_fault_result;
+		}
+#endif
+		{
+			MutexLock lock(native_call_mutex);
+			native->submit_result = err;
+			native->submitting = false;
+		}
+		report.native_code = static_cast<int64_t>(err);
+		report.error = err == VK_SUCCESS ? OK : FAILED;
+		if (fence != nullptr && err == VK_SUCCESS) {
+			fence->submission_serial++;
+			fence->armed = true;
+			fence->observed = false;
+			report.submission_serial = fence->submission_serial;
+		}
+		NativeCallFact fact;
+		fact.serial = native->serial;
+		fact.queue_index = native->queue;
+		fact.issue = err == VK_SUCCESS ? IssueFact::KnownAccepted : IssueFact::IssuedUnknown;
+		fact.native_code = static_cast<int64_t>(err);
+		fact.error = err == VK_SUCCESS ? OK : FAILED;
+		fact.completion = CompletionCapability::Fence;
+		fact.completion_serial = native->serial;
+		fact.present = p_swap_chains.size() > 0;
+		if (bounded_capture) {
+			finish_native_fact(native_fact_index, fact, report.submission_serial);
+		} else {
+			report.calls.push_back(fact);
+		}
+		if (!bounded_capture) {
+			record_queue_call_report(report);
+		}
 
 		if (err == VK_ERROR_DEVICE_LOST) {
 			print_lost_device_info();
@@ -3337,11 +4149,25 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 				context_driver->surface_set_needs_resize(swap_chain->surface, true);
 				any_result_is_out_of_date = true;
 			}
+			NativeCallFact present_fact;
+			present_fact.issue = (results[i] == VK_SUCCESS || results[i] == VK_SUBOPTIMAL_KHR) ? IssueFact::KnownAccepted : IssueFact::NotIssued;
+			present_fact.native_code = static_cast<int64_t>(results[i]);
+			present_fact.error = (results[i] == VK_SUCCESS || results[i] == VK_SUBOPTIMAL_KHR) ? OK : FAILED;
+			present_fact.present = true;
+			present_fact.presentation_only = true;
+			if (QueueCallReport *active_report = get_active_queue_call_report()) {
+				active_report->calls.push_back(present_fact);
+			}
 		}
 
 		if (any_result_is_out_of_date || err == VK_ERROR_OUT_OF_DATE_KHR) {
 			// It is possible for presentation to fail with out of date while acquire might've succeeded previously. This case
 			// will be considered a silent failure as it can be triggered easily by resizing a window in the OS natively.
+			QueueCallReport *report = active_queue_call_report;
+			if (report != nullptr) {
+				report->error = FAILED;
+				report->native_code = static_cast<int64_t>(err);
+			}
 			return FAILED;
 		}
 
@@ -3503,6 +4329,7 @@ void RenderingDeviceDriverVulkan::command_buffer_end(CommandBufferID p_cmd_buffe
 }
 
 void RenderingDeviceDriverVulkan::command_buffer_execute_secondary(CommandBufferID p_cmd_buffer, VectorView<CommandBufferID> p_secondary_cmd_buffers) {
+	ERR_FAIL_COND(p_secondary_cmd_buffers.size() > 0 && !p_secondary_cmd_buffers.ptr());
 	thread_local LocalVector<VkCommandBuffer> secondary_command_buffers;
 	CommandBufferInfo *command_buffer = (CommandBufferInfo *)(p_cmd_buffer.id);
 	secondary_command_buffers.resize(p_secondary_cmd_buffers.size());
@@ -4181,6 +5008,7 @@ void RenderingDeviceDriverVulkan::swap_chain_free(SwapChainID p_swap_chain) {
 /*********************/
 
 RDD::FramebufferID RenderingDeviceDriverVulkan::framebuffer_create(RenderPassID p_render_pass, VectorView<TextureID> p_attachments, uint32_t p_width, uint32_t p_height) {
+	ERR_FAIL_COND_V(p_attachments.size() > 0 && !p_attachments.ptr(), FramebufferID());
 	RenderPassInfo *render_pass = (RenderPassInfo *)(p_render_pass.id);
 
 	uint32_t fragment_density_map_offsets_layers = 0;
@@ -4666,6 +5494,8 @@ void RenderingDeviceDriverVulkan::_descriptor_set_pool_unreference(DescriptorSet
 }
 
 RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index) {
+	MutexLock descriptor_lock(descriptor_set_mutex);
+	ERR_FAIL_COND_V(p_uniforms.size() > 0 && !p_uniforms.ptr(), UniformSetID());
 	if (!linear_descriptor_pools_enabled) {
 		p_linear_pool_index = -1;
 	}
@@ -4977,7 +5807,9 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 }
 
 void RenderingDeviceDriverVulkan::uniform_set_free(UniformSetID p_uniform_set) {
+	MutexLock descriptor_lock(descriptor_set_mutex);
 	UniformSetInfo *usi = (UniformSetInfo *)p_uniform_set.id;
+	ERR_FAIL_COND_MSG(usi->qualification_return_unknown, "Descriptor return is unknown and cannot be replayed.");
 
 	if (usi->vk_linear_descriptor_pool) {
 		// Nothing to do. All sets are freed at once using vkResetDescriptorPool.
@@ -4994,11 +5826,43 @@ void RenderingDeviceDriverVulkan::uniform_set_free(UniformSetID p_uniform_set) {
 	VersatileResource::free(resources_allocator, usi);
 }
 
+RenderingDeviceDriver::QualificationDescriptorReturn RenderingDeviceDriverVulkan::qualification_uniform_set_free(UniformSetID p_uniform_set) {
+	MutexLock descriptor_lock(descriptor_set_mutex);
+	UniformSetInfo *usi = (UniformSetInfo *)p_uniform_set.id;
+	if (!usi || usi->vk_linear_descriptor_pool || !usi->vk_descriptor_pool || !usi->vk_descriptor_set) {
+		return {};
+	}
+	if (usi->qualification_return_unknown) {
+		return { QualificationDescriptorReturnState::Unknown, int32_t(usi->qualification_return_error) };
+	}
+	if (qualification_unknown_descriptors == UINT64_MAX) {
+		return {};
+	}
+	VkResult result;
+#ifdef TESTS_ENABLED
+	++test_descriptor_free_calls;
+	if (test_descriptor_free_error != VK_SUCCESS) {
+		result = test_descriptor_free_error;
+	} else
+#endif
+		result = vkFreeDescriptorSets(vk_device, usi->vk_descriptor_pool, 1, &usi->vk_descriptor_set);
+	if (result != VK_SUCCESS) {
+		usi->qualification_return_unknown = true;
+		usi->qualification_return_error = result;
+		++qualification_unknown_descriptors;
+		return { QualificationDescriptorReturnState::Unknown, int32_t(result) };
+	}
+	_descriptor_set_pool_unreference(usi->pool_sets_it, usi->vk_descriptor_pool, -1);
+	VersatileResource::free(resources_allocator, usi);
+	return { QualificationDescriptorReturnState::Returned, int32_t(result) };
+}
+
 bool RenderingDeviceDriverVulkan::uniform_sets_have_linear_pools() const {
 	return true;
 }
 
 uint32_t RenderingDeviceDriverVulkan::uniform_sets_get_dynamic_offsets(VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count) const {
+	ERR_FAIL_COND_V(p_set_count > 0 && (!p_uniform_sets.ptr() || p_uniform_sets.size() < p_set_count), 0);
 	uint32_t mask = 0u;
 	uint32_t shift = 0u;
 #ifdef DEV_ENABLED
@@ -5024,6 +5888,7 @@ uint32_t RenderingDeviceDriverVulkan::uniform_sets_get_dynamic_offsets(VectorVie
 }
 
 void RenderingDeviceDriverVulkan::linear_uniform_set_pools_reset(int p_linear_pool_index) {
+	MutexLock descriptor_lock(descriptor_set_mutex);
 	if (linear_descriptor_pools_enabled) {
 		DescriptorSetPools &pools_to_reset = linear_descriptor_set_pools[p_linear_pool_index];
 		DescriptorSetPools::Iterator curr_pool = pools_to_reset.begin();
@@ -5106,6 +5971,7 @@ void RenderingDeviceDriverVulkan::command_clear_buffer(CommandBufferID p_cmd_buf
 }
 
 void RenderingDeviceDriverVulkan::command_copy_buffer(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, BufferID p_dst_buffer, VectorView<BufferCopyRegion> p_regions) {
+	ERR_FAIL_COND(p_regions.size() > 0 && !p_regions.ptr());
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 	const BufferInfo *src_buf_info = (const BufferInfo *)p_src_buffer.id;
 	const BufferInfo *dst_buf_info = (const BufferInfo *)p_dst_buffer.id;
@@ -5113,6 +5979,10 @@ void RenderingDeviceDriverVulkan::command_copy_buffer(CommandBufferID p_cmd_buff
 }
 
 void RenderingDeviceDriverVulkan::command_copy_texture(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, VectorView<TextureCopyRegion> p_regions) {
+	ERR_FAIL_COND(p_regions.size() > 0 && !p_regions.ptr());
+	ERR_FAIL_INDEX(p_src_texture_layout, TEXTURE_LAYOUT_MAX);
+	ERR_FAIL_INDEX(p_dst_texture_layout, TEXTURE_LAYOUT_MAX);
+
 	VkImageCopy *vk_copy_regions = ALLOCA_ARRAY(VkImageCopy, p_regions.size());
 	for (uint32_t i = 0; i < p_regions.size(); i++) {
 		_texture_copy_region_to_vk(p_regions[i], &vk_copy_regions[i]);
@@ -5135,6 +6005,9 @@ void RenderingDeviceDriverVulkan::command_copy_texture(CommandBufferID p_cmd_buf
 }
 
 void RenderingDeviceDriverVulkan::command_resolve_texture(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, uint32_t p_src_layer, uint32_t p_src_mipmap, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, uint32_t p_dst_layer, uint32_t p_dst_mipmap) {
+	ERR_FAIL_INDEX(p_src_texture_layout, TEXTURE_LAYOUT_MAX);
+	ERR_FAIL_INDEX(p_dst_texture_layout, TEXTURE_LAYOUT_MAX);
+
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 	const TextureInfo *src_tex_info = (const TextureInfo *)p_src_texture.id;
 	const TextureInfo *dst_tex_info = (const TextureInfo *)p_dst_texture.id;
@@ -5165,6 +6038,8 @@ void RenderingDeviceDriverVulkan::command_resolve_texture(CommandBufferID p_cmd_
 }
 
 void RenderingDeviceDriverVulkan::command_clear_color_texture(CommandBufferID p_cmd_buffer, TextureID p_texture, TextureLayout p_texture_layout, const Color &p_color, const TextureSubresourceRange &p_subresources) {
+	ERR_FAIL_INDEX(p_texture_layout, TEXTURE_LAYOUT_MAX);
+
 	VkClearColorValue vk_color = {};
 	memcpy(&vk_color.float32, p_color.components, sizeof(VkClearColorValue::float32));
 
@@ -5182,6 +6057,8 @@ void RenderingDeviceDriverVulkan::command_clear_color_texture(CommandBufferID p_
 }
 
 void RenderingDeviceDriverVulkan::command_clear_depth_stencil_texture(CommandBufferID p_cmd_buffer, TextureID p_texture, TextureLayout p_texture_layout, float p_depth, uint8_t p_stencil, const TextureSubresourceRange &p_subresources) {
+	ERR_FAIL_INDEX(p_texture_layout, TEXTURE_LAYOUT_MAX);
+
 	VkClearDepthStencilValue vk_depth_stencil = {};
 	vk_depth_stencil.depth = p_depth;
 	vk_depth_stencil.stencil = p_stencil;
@@ -5200,6 +6077,9 @@ void RenderingDeviceDriverVulkan::command_clear_depth_stencil_texture(CommandBuf
 }
 
 void RenderingDeviceDriverVulkan::command_copy_buffer_to_texture(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, VectorView<BufferTextureCopyRegion> p_regions) {
+	ERR_FAIL_COND(p_regions.size() > 0 && !p_regions.ptr());
+	ERR_FAIL_INDEX(p_dst_texture_layout, TEXTURE_LAYOUT_MAX);
+
 	const TextureInfo *tex_info = (const TextureInfo *)p_dst_texture.id;
 
 	if (tex_info->is_subsampled) {
@@ -5228,6 +6108,9 @@ void RenderingDeviceDriverVulkan::command_copy_buffer_to_texture(CommandBufferID
 }
 
 void RenderingDeviceDriverVulkan::command_copy_texture_to_buffer(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, BufferID p_dst_buffer, VectorView<BufferTextureCopyRegion> p_regions) {
+	ERR_FAIL_COND(p_regions.size() > 0 && !p_regions.ptr());
+	ERR_FAIL_INDEX(p_src_texture_layout, TEXTURE_LAYOUT_MAX);
+
 	const TextureInfo *tex_info = (const TextureInfo *)p_src_texture.id;
 
 	uint32_t pixel_size = get_image_format_pixel_size(tex_info->rd_format);
@@ -5261,6 +6144,7 @@ void RenderingDeviceDriverVulkan::pipeline_free(PipelineID p_pipeline) {
 // ----- BINDING -----
 
 void RenderingDeviceDriverVulkan::command_bind_push_constants(CommandBufferID p_cmd_buffer, ShaderID p_shader, uint32_t p_dst_first_index, VectorView<uint32_t> p_data) {
+	ERR_FAIL_COND(p_data.size() > 0 && !p_data.ptr());
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 	const ShaderInfo *shader_info = (const ShaderInfo *)p_shader.id;
 	vkCmdPushConstants(command_buffer->vk_command_buffer, shader_info->vk_pipeline_layout, shader_info->vk_push_constant_stages, p_dst_first_index * sizeof(uint32_t), p_data.size() * sizeof(uint32_t), p_data.ptr());
@@ -5396,6 +6280,33 @@ static void _attachment_reference_to_vk(const RDD::AttachmentReference &p_attach
 }
 
 RDD::RenderPassID RenderingDeviceDriverVulkan::render_pass_create(VectorView<Attachment> p_attachments, VectorView<Subpass> p_subpasses, VectorView<SubpassDependency> p_subpass_dependencies, uint32_t p_view_count, AttachmentReference p_fragment_density_map_attachment) {
+	ERR_FAIL_COND_V((p_attachments.size() > 0 && !p_attachments.ptr()) || (p_subpasses.size() > 0 && !p_subpasses.ptr()) || (p_subpass_dependencies.size() > 0 && !p_subpass_dependencies.ptr()), RenderPassID());
+	ERR_FAIL_COND_V(p_view_count == 0 || p_view_count > 31, RenderPassID());
+
+	for (uint32_t i = 0; i < p_attachments.size(); i++) {
+		ERR_FAIL_INDEX_V(p_attachments[i].format, DATA_FORMAT_MAX, RenderPassID());
+		ERR_FAIL_INDEX_V(p_attachments[i].samples, TEXTURE_SAMPLES_MAX, RenderPassID());
+		ERR_FAIL_INDEX_V(p_attachments[i].initial_layout, TEXTURE_LAYOUT_MAX, RenderPassID());
+		ERR_FAIL_INDEX_V(p_attachments[i].final_layout, TEXTURE_LAYOUT_MAX, RenderPassID());
+	}
+	for (uint32_t i = 0; i < p_subpasses.size(); i++) {
+		for (uint32_t j = 0; j < p_subpasses[i].input_references.size(); j++) {
+			ERR_FAIL_INDEX_V(p_subpasses[i].input_references[j].layout, TEXTURE_LAYOUT_MAX, RenderPassID());
+		}
+		for (uint32_t j = 0; j < p_subpasses[i].color_references.size(); j++) {
+			ERR_FAIL_INDEX_V(p_subpasses[i].color_references[j].layout, TEXTURE_LAYOUT_MAX, RenderPassID());
+		}
+		for (uint32_t j = 0; j < p_subpasses[i].resolve_references.size(); j++) {
+			ERR_FAIL_INDEX_V(p_subpasses[i].resolve_references[j].layout, TEXTURE_LAYOUT_MAX, RenderPassID());
+		}
+		if (p_subpasses[i].depth_stencil_reference.attachment != AttachmentReference::UNUSED) {
+			ERR_FAIL_INDEX_V(p_subpasses[i].depth_stencil_reference.layout, TEXTURE_LAYOUT_MAX, RenderPassID());
+		}
+	}
+	if (p_fragment_density_map_attachment.attachment != AttachmentReference::UNUSED) {
+		ERR_FAIL_INDEX_V(p_fragment_density_map_attachment.layout, TEXTURE_LAYOUT_MAX, RenderPassID());
+	}
+
 	// These are only used if we use multiview but we need to define them in scope.
 	const uint32_t view_mask = (1 << p_view_count) - 1;
 	const uint32_t correlation_mask = (1 << p_view_count) - 1;
@@ -5566,6 +6477,7 @@ void RenderingDeviceDriverVulkan::render_pass_free(RenderPassID p_render_pass) {
 static_assert(ARRAYS_COMPATIBLE_FIELDWISE(RDD::RenderPassClearValue, VkClearValue));
 
 void RenderingDeviceDriverVulkan::command_begin_render_pass(CommandBufferID p_cmd_buffer, RenderPassID p_render_pass, FramebufferID p_framebuffer, CommandBufferType p_cmd_buffer_type, const Rect2i &p_rect, VectorView<RenderPassClearValue> p_clear_values) {
+	ERR_FAIL_COND(p_clear_values.size() > 0 && !p_clear_values.ptr());
 	CommandBufferInfo *command_buffer = (CommandBufferInfo *)(p_cmd_buffer.id);
 	RenderPassInfo *render_pass = (RenderPassInfo *)(p_render_pass.id);
 	Framebuffer *framebuffer = (Framebuffer *)(p_framebuffer.id);
@@ -5651,6 +6563,7 @@ void RenderingDeviceDriverVulkan::command_next_render_subpass(CommandBufferID p_
 }
 
 void RenderingDeviceDriverVulkan::command_render_set_viewport(CommandBufferID p_cmd_buffer, VectorView<Rect2i> p_viewports) {
+	ERR_FAIL_COND(p_viewports.size() > 0 && !p_viewports.ptr());
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 	VkViewport *vk_viewports = ALLOCA_ARRAY(VkViewport, p_viewports.size());
 	for (uint32_t i = 0; i < p_viewports.size(); i++) {
@@ -5666,11 +6579,14 @@ void RenderingDeviceDriverVulkan::command_render_set_viewport(CommandBufferID p_
 }
 
 void RenderingDeviceDriverVulkan::command_render_set_scissor(CommandBufferID p_cmd_buffer, VectorView<Rect2i> p_scissors) {
+	ERR_FAIL_COND(p_scissors.size() > 0 && !p_scissors.ptr());
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 	vkCmdSetScissor(command_buffer->vk_command_buffer, 0, p_scissors.size(), (VkRect2D *)p_scissors.ptr());
 }
 
 void RenderingDeviceDriverVulkan::command_render_clear_attachments(CommandBufferID p_cmd_buffer, VectorView<AttachmentClear> p_attachment_clears, VectorView<Rect2i> p_rects) {
+	ERR_FAIL_COND(p_attachment_clears.size() > 0 && !p_attachment_clears.ptr());
+	ERR_FAIL_COND(p_rects.size() > 0 && !p_rects.ptr());
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 
 	VkClearAttachment *vk_clears = ALLOCA_ARRAY(VkClearAttachment, p_attachment_clears.size());
@@ -5701,6 +6617,7 @@ void RenderingDeviceDriverVulkan::command_bind_render_pipeline(CommandBufferID p
 }
 
 void RenderingDeviceDriverVulkan::command_bind_render_uniform_sets(CommandBufferID p_cmd_buffer, VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) {
+	ERR_FAIL_COND(p_set_count > 0 && (!p_uniform_sets.ptr() || p_uniform_sets.size() < p_set_count));
 	if (p_set_count == 0) {
 		return;
 	}
@@ -5771,6 +6688,7 @@ void RenderingDeviceDriverVulkan::command_render_draw_indirect_count(CommandBuff
 }
 
 void RenderingDeviceDriverVulkan::command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID *p_buffers, const uint64_t *p_offsets, uint64_t p_dynamic_offsets) {
+	ERR_FAIL_COND(p_binding_count > 0 && (!p_buffers || !p_offsets));
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 	VkBuffer *vk_buffers = ALLOCA_ARRAY(VkBuffer, p_binding_count);
 	uint64_t *vk_offsets = ALLOCA_ARRAY(uint64_t, p_binding_count);
@@ -5788,10 +6706,19 @@ void RenderingDeviceDriverVulkan::command_render_bind_vertex_buffers(CommandBuff
 	vkCmdBindVertexBuffers(command_buffer->vk_command_buffer, 0, p_binding_count, vk_buffers, vk_offsets);
 }
 
+static uint32_t _index_buffer_format_value(const RDD::IndexBufferFormat *p_format) {
+	static_assert(sizeof(RDD::IndexBufferFormat) == sizeof(uint32_t));
+	uint32_t value = 0;
+	memcpy(&value, p_format, sizeof(value));
+	return value;
+}
+
 void RenderingDeviceDriverVulkan::command_render_bind_index_buffer(CommandBufferID p_cmd_buffer, BufferID p_buffer, IndexBufferFormat p_format, uint64_t p_offset) {
+	const uint32_t format = _index_buffer_format_value(&p_format);
+	ERR_FAIL_COND(format > INDEX_BUFFER_FORMAT_UINT32);
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 	const BufferInfo *buf_info = (const BufferInfo *)p_buffer.id;
-	vkCmdBindIndexBuffer(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, p_format == INDEX_BUFFER_FORMAT_UINT16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+	vkCmdBindIndexBuffer(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, format == INDEX_BUFFER_FORMAT_UINT16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
 }
 
 void RenderingDeviceDriverVulkan::command_render_set_blend_constants(CommandBufferID p_cmd_buffer, const Color &p_constants) {
@@ -5894,6 +6821,10 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 		RenderPassID p_render_pass,
 		uint32_t p_render_subpass,
 		VectorView<PipelineSpecializationConstant> p_specialization_constants) {
+	ERR_FAIL_COND_V((p_color_attachments.size() > 0 && !p_color_attachments.ptr()) || (p_specialization_constants.size() > 0 && !p_specialization_constants.ptr()), PipelineID());
+	ERR_FAIL_INDEX_V(p_render_primitive, RENDER_PRIMITIVE_MAX, PipelineID());
+	ERR_FAIL_INDEX_V(p_multisample_state.sample_count, TEXTURE_SAMPLES_MAX, PipelineID());
+
 	// Vertex.
 	const VkPipelineVertexInputStateCreateInfo *vertex_input_state_create_info = nullptr;
 	if (p_vertex_format.id) {
@@ -6286,6 +7217,11 @@ static_assert(ENUM_MEMBERS_EQUAL(RDD::ACCELERATION_STRUCTURE_GEOMETRY_OPAQUE_BIT
 static_assert(ENUM_MEMBERS_EQUAL(RDD::ACCELERATION_STRUCTURE_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT, VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR));
 
 RDD::AccelerationStructureID RenderingDeviceDriverVulkan::blas_create(VectorView<AccelerationStructureGeometry> p_geometries, BitField<AccelerationStructureFlagBits> p_flags) {
+	ERR_FAIL_COND_V(p_geometries.size() > 0 && !p_geometries.ptr(), AccelerationStructureID());
+	for (uint32_t i = 0; i < p_geometries.size(); i++) {
+		ERR_FAIL_INDEX_V(p_geometries[i].vertex_format, DATA_FORMAT_MAX, AccelerationStructureID());
+	}
+
 #if VULKAN_RAYTRACING_ENABLED
 	AccelerationStructureInfo *accel_info = VersatileResource::allocate<AccelerationStructureInfo>(resources_allocator);
 
@@ -6668,6 +7604,7 @@ void RenderingDeviceDriverVulkan::command_bind_compute_pipeline(CommandBufferID 
 }
 
 void RenderingDeviceDriverVulkan::command_bind_compute_uniform_sets(CommandBufferID p_cmd_buffer, VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) {
+	ERR_FAIL_COND(p_set_count > 0 && (!p_uniform_sets.ptr() || p_uniform_sets.size() < p_set_count));
 	if (p_set_count == 0) {
 		return;
 	}
@@ -6715,6 +7652,7 @@ void RenderingDeviceDriverVulkan::command_compute_dispatch_indirect(CommandBuffe
 // ----- PIPELINE -----
 
 RDD::PipelineID RenderingDeviceDriverVulkan::compute_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) {
+	ERR_FAIL_COND_V(p_specialization_constants.size() > 0 && !p_specialization_constants.ptr(), PipelineID());
 	const ShaderInfo *shader_info = (const ShaderInfo *)p_shader.id;
 
 	VkComputePipelineCreateInfo pipeline_create_info = {};
@@ -6770,6 +7708,7 @@ void RenderingDeviceDriverVulkan::timestamp_query_pool_free(QueryPoolID p_pool_i
 }
 
 void RenderingDeviceDriverVulkan::timestamp_query_pool_get_results(QueryPoolID p_pool_id, uint32_t p_query_count, uint64_t *r_results) {
+	ERR_FAIL_COND(p_query_count > 0 && !r_results);
 	vkGetQueryPoolResults(vk_device, (VkQueryPool)p_pool_id.id, 0, p_query_count, sizeof(uint64_t) * p_query_count, r_results, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
 }
 
@@ -6930,6 +7869,7 @@ void RenderingDeviceDriverVulkan::command_insert_breadcrumb(CommandBufferID p_cm
 }
 
 void RenderingDeviceDriverVulkan::on_device_lost() const {
+	notify_session_device_lost();
 	if (device_functions.GetDeviceFaultInfoEXT == nullptr) {
 		_err_print_error(FUNCTION_STR, __FILE__, __LINE__, "VK_EXT_device_fault not available.");
 		return;
@@ -7484,6 +8424,11 @@ RenderingDeviceDriverVulkan::RenderingDeviceDriverVulkan(RenderingContextDriverV
 }
 
 RenderingDeviceDriverVulkan::~RenderingDeviceDriverVulkan() {
+	{
+		MutexLock descriptor_lock(descriptor_set_mutex);
+		CRASH_COND_MSG(qualification_unknown_descriptors != 0, "Vulkan descriptor returns remain unknown at driver destruction.");
+	}
+	CRASH_COND_MSG(!native_calls.is_empty(), "Vulkan native completion sources or observers remain at driver destruction.");
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 	if (breadcrumb_buffer != BufferID()) {
 		buffer_free(breadcrumb_buffer);

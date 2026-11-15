@@ -30,6 +30,7 @@
 
 #include "rendering_context_driver_metal.h"
 
+#include "core/io/native_drain_diagnostic.h"
 #include "core/os/os.h"
 #include "core/templates/sort_array.h"
 #include "drivers/metal/metal3_objects.h"
@@ -136,7 +137,9 @@ public:
 
 	CA::MetalDrawable *get_drawable() const {
 		if (drawable == nullptr) {
+			NativeDrainDiagnostic::Span drawable_trace("metal.next_drawable", uintptr_t(layer), uintptr_t(this), 0);
 			drawable = layer->nextDrawable();
+			drawable_trace.state(uintptr_t(layer), uintptr_t(this), uintptr_t(drawable), 0, 0, 0);
 		}
 		return drawable;
 	}
@@ -227,6 +230,7 @@ public:
 	}
 
 	RDD::FramebufferID acquire_next_frame_buffer() override {
+		NativeDrainDiagnostic::Span drain_trace("metal.acquire", uintptr_t(this), uintptr_t(layer), count, front, rear, frame_buffers.size());
 		if (count == frame_buffers.size()) {
 			return RDD::FramebufferID();
 		}
@@ -238,10 +242,12 @@ public:
 		frame_buffer.size = Size2i(width, height);
 		frame_buffer.reset();
 
+		drain_trace.state(uintptr_t(this), uintptr_t(layer), count, front, rear, uintptr_t(&frame_buffer));
 		return RDD::FramebufferID(&frame_buffer);
 	}
 
 	void present(MTL3::MDCommandBuffer *p_cmd_buffer) override {
+		NativeDrainDiagnostic::Span drain_trace("metal.present", uintptr_t(this), uintptr_t(layer), count, front, rear, uintptr_t(p_cmd_buffer));
 		if (count == 0) {
 			return;
 		}
@@ -252,6 +258,7 @@ public:
 
 		count--;
 		front = (front + 1) % frame_buffers.size();
+		drain_trace.state(uintptr_t(this), uintptr_t(layer), count, front, rear, uintptr_t(drawable));
 
 		if (drawable != nullptr) {
 			if (vsync_mode != DisplayServerEnums::VSYNC_DISABLED) {
@@ -388,7 +395,9 @@ public:
 		uint64_t now = OS::get_singleton()->get_ticks_usec();
 		if (now >= target_time) {
 			target_time = now + 1'000'000; // 1 second into the future.
+			NativeDrainDiagnostic::Span drawable_trace("metal.offscreen_next_drawable", uintptr_t(this), uintptr_t(layer), rear, count.load(std::memory_order_relaxed));
 			CA::MetalDrawable *drawable = layer->nextDrawable();
+			drawable_trace.state(uintptr_t(this), uintptr_t(layer), rear, count.load(std::memory_order_relaxed), uintptr_t(drawable), 0);
 			ERR_FAIL_NULL_V_MSG(drawable, RDD::FramebufferID(), "no drawable available");
 			drawables[rear] = drawable;
 			frame_buffer.set_texture(0, drawable->texture());

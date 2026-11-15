@@ -42,16 +42,38 @@
 #define _DEBUG
 #endif
 #endif
+#include "core/os/condition_variable.h"
+
 #include <thirdparty/re-spirv/re-spirv.h>
 #include <thirdparty/vulkan/vk_mem_alloc.h>
 
 #include <drivers/vulkan/godot_vulkan.h>
+
+#include <atomic>
 
 class FileAccess;
 
 // Design principles:
 // - Vulkan structs are zero-initialized and fields not requiring a non-zero value are omitted (except in cases where expresivity reasons apply).
 class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
+#ifdef TESTS_ENABLED
+	friend class TestVulkanCompletionAccess;
+	uint32_t test_fence_fault_phase = 0;
+	VkResult test_fence_fault_result = VK_SUCCESS;
+	bool test_submit_fault_applied = false;
+	std::atomic<uint64_t> test_native_recycle_cv_waiting{ 0 };
+	friend class TestQualificationVulkanAllocationAccess;
+	uint32_t test_buffer_fault_stage = 0;
+	uint32_t test_buffer_rollback_mask = 0;
+	VkBuffer test_buffer_prefix = VK_NULL_HANDLE;
+	VmaAllocation test_buffer_allocation_prefix = nullptr;
+	uint32_t test_texture_fault_stage = 0;
+	VkResult test_descriptor_free_error = VK_SUCCESS;
+	uint32_t test_descriptor_free_calls = 0;
+	uint32_t test_texture_rollback_mask = 0;
+	VkImage test_texture_prefix = VK_NULL_HANDLE;
+	VmaAllocation test_texture_allocation_prefix = nullptr;
+#endif
 	/*****************/
 	/**** GENERIC ****/
 	/*****************/
@@ -65,6 +87,7 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 	struct Queue {
 		VkQueue queue = VK_NULL_HANDLE;
 		uint32_t virtual_count = 0;
+		uint32_t observation_index = 0;
 		BinaryMutex submit_mutex;
 	};
 
@@ -263,6 +286,7 @@ public:
 	virtual void buffer_free(BufferID p_buffer) override final;
 	virtual uint64_t buffer_get_allocation_size(BufferID p_buffer) override final;
 	virtual uint8_t *buffer_map(BufferID p_buffer) override final;
+	virtual uint8_t *buffer_map_observed(BufferID p_buffer, int64_t &r_native_code) override final;
 	virtual void buffer_unmap(BufferID p_buffer) override final;
 	virtual uint8_t *buffer_persistent_map_advance(BufferID p_buffer, uint64_t p_frames_drawn) override final;
 	virtual uint64_t buffer_get_dynamic_offsets(Span<BufferID> p_buffers) override final;
@@ -344,14 +368,67 @@ public:
 	/****************/
 
 private:
+	struct NativeCall {
+		VkFence fence = VK_NULL_HANDLE;
+		uint64_t serial = 0, registry = 0, epoch = 0;
+		uint32_t queue = 0, observers = 0, waiters = 0;
+		bool submitting = true, fence_owned = false, owns_fence = false, source_returned = false;
+		VkResult submit_result = VK_NOT_READY;
+		std::atomic<bool> completed{ false };
+	};
+	BinaryMutex native_call_mutex;
+	ConditionVariable native_call_returned;
+	LocalVector<NativeCall *> native_calls;
+	std::atomic<uint64_t> next_native_call_serial{ 1 };
 	struct Fence {
+		NativeCall *native_call = nullptr;
 		VkFence vk_fence = VK_NULL_HANDLE;
 		CommandQueue *queue_signaled_from = nullptr;
+		uint64_t submission_serial = 0;
+		uint64_t completed_serial = 0;
+		bool armed = false;
+		bool observed = false;
 	};
 
+	Error _native_call_prepare(Fence *, uint32_t, NativeCall *&);
+	void _native_call_abort(NativeCall *);
+	void _native_call_collect_locked(NativeCall *);
+	void _native_fence_return_locked(Fence *);
+	Error _fence_recycle(FenceID, uint64_t, bool);
+	Error _native_call_recycle(uint64_t, bool);
+
 public:
+	Error qualification_prepare_segment(QueueCallReport &out, bool p_nonblocking = true) override {
+		out = {};
+		return OK;
+	}
+	bool native_issue_bound(NativeIssueKind p_kind, uint32_t p_commands, uint32_t &r_bound) const override {
+		r_bound = p_kind == NativeIssueKind::PREPARE_SEGMENT ? 0 : uint32_t(p_commands != 0);
+		return true;
+	}
+	bool native_call_observation_supported() const override { return true; }
+	uint32_t qualification_native_call_bound(uint32_t p_slots) const override {
+		// Each nonempty main or transfer-worker slot makes one vkQueueSubmit;
+		// waits/signals share that VkSubmitInfo. Segment preparation adds none.
+		// The inherited profile checks frame validity and main+worker overflow.
+		// This bounds retained submission sources, not WSI presentation facts.
+		return p_slots <= 4096 ? p_slots : 0;
+	}
+	FencePollResult native_call_poll(uint64_t) override;
+	FencePollResult native_call_wait(uint64_t) override;
+	Error native_call_recycle(uint64_t) override;
+	Error native_call_recycle_wait(uint64_t) override;
+	Error native_call_retain(uint64_t) override;
+	Error native_call_release(uint64_t) override;
+	// This profile admits no presentation and executes at most one vkQueueSubmit
+	// per command slot. Qualification separately charges graph facts above.
+	uint32_t record_native_call_bound(uint32_t slots) const override { return slots; }
 	virtual FenceID fence_create() override final;
 	virtual Error fence_wait(FenceID p_fence) override final;
+	virtual FencePollResult fence_poll(FenceID p_fence, uint64_t p_expected_submission_serial) override final;
+	FencePollResult fence_wait_observed(FenceID p_fence, uint64_t p_expected_submission_serial) override;
+	virtual Error fence_recycle(FenceID p_fence, uint64_t p_completed_serial) override final;
+	Error fence_recycle_wait(FenceID p_fence, uint64_t p_completed_serial) override;
 	virtual void fence_free(FenceID p_fence) override final;
 
 	/********************/
@@ -495,6 +572,7 @@ private:
 
 public:
 	virtual ShaderID shader_create_from_container(const Ref<RenderingShaderContainer> &p_shader_container, const Vector<ImmutableSampler> &p_immutable_samplers) override final;
+	bool shader_retire_ready_nonblocking(ShaderID p_shader) const override { return bool(p_shader); }
 	virtual void shader_free(ShaderID p_shader) override final;
 
 	virtual void shader_destroy_modules(ShaderID p_shader) override final;
@@ -530,6 +608,8 @@ private:
 
 	using DescriptorSetPools = RBMap<DescriptorSetPoolKey, HashMap<VkDescriptorPool, uint32_t>>;
 	DescriptorSetPools descriptor_set_pools;
+	Mutex descriptor_set_mutex;
+	uint64_t qualification_unknown_descriptors = 0;
 	uint32_t max_descriptor_sets_per_pool = 0;
 
 	HashMap<int, DescriptorSetPools> linear_descriptor_set_pools;
@@ -545,6 +625,8 @@ private:
 		VkDescriptorSet vk_descriptor_set = VK_NULL_HANDLE;
 		VkDescriptorPool vk_descriptor_pool = VK_NULL_HANDLE;
 		VkDescriptorPool vk_linear_descriptor_pool = VK_NULL_HANDLE;
+		bool qualification_return_unknown = false;
+		VkResult qualification_return_error = VK_SUCCESS;
 		DescriptorSetPools::Iterator pool_sets_it;
 		TightLocalVector<BufferInfo const *, uint32_t> dynamic_buffers;
 	};
@@ -555,6 +637,7 @@ public:
 	virtual UniformSetID uniform_set_create(VectorView<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index) override final;
 	virtual void linear_uniform_set_pools_reset(int p_linear_pool_index) override final;
 	virtual void uniform_set_free(UniformSetID p_uniform_set) override final;
+	QualificationDescriptorReturn qualification_uniform_set_free(UniformSetID p_uniform_set) override;
 	virtual bool uniform_sets_have_linear_pools() const override final;
 	virtual uint32_t uniform_sets_get_dynamic_offsets(VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count) const override final;
 

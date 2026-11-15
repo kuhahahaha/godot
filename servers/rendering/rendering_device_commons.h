@@ -586,6 +586,10 @@ public:
 	/**** SHADER ****/
 	/****************/
 
+	enum ShaderCompileFlags {
+		SHADER_COMPILE_FLAG_DISABLE_FAST_MATH = 1,
+	};
+
 	enum ShaderStage {
 		SHADER_STAGE_VERTEX,
 		SHADER_STAGE_FRAGMENT,

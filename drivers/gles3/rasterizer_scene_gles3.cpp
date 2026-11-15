@@ -4031,8 +4031,9 @@ void RasterizerSceneGLES3::_render_list_template(RenderListParameters *p_params,
 void RasterizerSceneGLES3::render_material(const Transform3D &p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, const PagedArray<RenderGeometryInstance *> &p_instances, RID p_framebuffer, const Rect2i &p_region) {
 }
 
-void RasterizerSceneGLES3::render_particle_collider_heightfield(RID p_collider, const Transform3D &p_transform, const PagedArray<RenderGeometryInstance *> &p_instances) {
+void RasterizerSceneGLES3::render_particle_collider_heightfield(RID p_collision_instance, const Transform3D &p_transform, const PagedArray<RenderGeometryInstance *> &p_instances) {
 	GLES3::ParticlesStorage *particles_storage = GLES3::ParticlesStorage::get_singleton();
+	const RID p_collider = particles_storage->particles_collision_instance_get_collision(p_collision_instance);
 
 	ERR_FAIL_COND(!particles_storage->particles_collision_is_heightfield(p_collider));
 	Vector3 extents = particles_storage->particles_collision_get_extents(p_collider) * p_transform.basis.get_scale();

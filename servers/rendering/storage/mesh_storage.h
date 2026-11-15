@@ -40,6 +40,7 @@
 class RendererMeshStorage {
 public:
 	virtual ~RendererMeshStorage() {}
+	static Error _multimesh_buffer_size(int p_instances, RSE::MultimeshTransformFormat p_format, bool p_colors, bool p_custom, bool p_motion, uint32_t &r_bytes);
 
 	/* MESH API */
 
