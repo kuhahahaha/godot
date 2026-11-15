@@ -1,0 +1,236 @@
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <iostream>
+#include <limits>
+#include <vector>
+using uint = uint32_t;
+using std::min; using std::max; using std::isnan; using std::isinf;
+struct vec2 { float x,y; vec2(float v=0):x(v),y(v){} vec2(float a,float b):x(a),y(b){} };
+struct vec3 { float x,y,z; vec3(float v=0):x(v),y(v),z(v){} vec3(float a,float b,float c):x(a),y(b),z(c){} };
+struct vec4 { float x,y,z,w; vec4(float v=0):x(v),y(v),z(v),w(v){} vec4(float a,float b,float c,float d):x(a),y(b),z(c),w(d){} vec3 xyz()const{return vec3(x,y,z);} };
+struct uvec2 { uint x,y; uvec2(uint v=0):x(v),y(v){} uvec2(uint a,uint b):x(a),y(b){} };
+struct uvec3 { uint x,y,z; uvec3(uint v=0):x(v),y(v),z(v){} uvec3(uint a,uint b,uint c):x(a),y(b),z(c){} };
+struct uvec4 { uint x,y,z,w; uvec4(uint v=0):x(v),y(v),z(v),w(v){} uvec4(uint a,uint b,uint c,uint d):x(a),y(b),z(c),w(d){} uvec3 yzw()const{return uvec3(y,z,w);} uvec2 zw()const{return uvec2(z,w);} };
+uint floatBitsToUint(float v){uint r; std::memcpy(&r,&v,4);return r;}
+float uintBitsToFloat(uint v){float r;std::memcpy(&r,&v,4);return r;}
+vec4 uintBitsToFloat(uvec4 v){return vec4(uintBitsToFloat(v.x),uintBitsToFloat(v.y),uintBitsToFloat(v.z),uintBitsToFloat(v.w));}
+struct Bool2 {bool x,y;};struct Bool3 {bool x,y,z;};
+bool any(Bool2 v){return v.x||v.y;} bool any(Bool3 v){return v.x||v.y||v.z;} bool all(Bool3 v){return v.x&&v.y&&v.z;}
+Bool2 isnan(vec2 v){return {std::isnan(v.x),std::isnan(v.y)};} Bool2 isinf(vec2 v){return {std::isinf(v.x),std::isinf(v.y)};}
+Bool3 lessThan(vec3 a,vec3 b){return {a.x<b.x,a.y<b.y,a.z<b.z};}
+Bool3 lessThanEqual(vec3 a,vec3 b){return {a.x<=b.x,a.y<=b.y,a.z<=b.z};}
+Bool2 notEqual(uvec2 a,uvec2 b){return {a.x!=b.x,a.y!=b.y};} Bool3 notEqual(uvec3 a,uvec3 b){return {a.x!=b.x,a.y!=b.y,a.z!=b.z};}
+void atomicOr(uint &target,uint value){target|=value;} void atomicMin(uint &target,uint value){target=min(target,value);}
+template<class T>struct Array:std::vector<T>{using std::vector<T>::operator=;int length()const{return int(this->size());}};
+struct Buffer{Array<uint>words;}current_records,previous_records,output_meta,scratch,status,commands;
+// Distinct descriptors can deliberately refer to one actual source allocation.
+struct SourceWords {
+ Array<uint> owned; Array<uint> *backing=&owned;
+ uint &operator[](uint i){return (*backing)[i];}
+ int length()const{return backing->length();}
+ void reset(uint size,uint fill){backing=&owned;owned.assign(size,fill);}
+ void share(SourceWords &other){backing=other.backing;}
+ void truncate(uint size){backing->resize(size);}
+};
+struct SourceBuffer{SourceWords words;}source_count,source_count_validity,source_attributes_validity,source_dense_ids_validity,source_instance_gate;
+// PRODUCTION_SURFACE
+struct Proof {
+ vec4 current_decl_min,current_decl_max,previous_decl_min,previous_decl_max,cull_min,cull_max;
+ vec4 current_host_inverse_rows[3],previous_host_inverse_rows[3];
+ uvec4 source_accessor,source_gate_words,options;Array<SurfaceProof>surfaces;
+}proof;
+struct Params{uint capacity,sequence_low,sequence_high,surface_count,record_base,record_count,reserved0,reserved1;}params;
+struct {uint x;}gl_GlobalInvocationID;
+// PRODUCTION_FUNCTIONS
+void healthy(uint actual=1,uint capacity=2){
+ params={capacity,55,0,1,0,capacity,0,0};
+ current_records.words.assign(capacity*48,0);previous_records.words.assign(capacity*48,0);
+ for(uint i=0;i<capacity;i++){
+  auto &w=current_records.words;uint b=i*48;
+  for(uint o:{0u,5u,10u,12u,17u,22u,24u,29u,34u})w[b+o]=floatBitsToUint(1);
+  w[b+44]=i;w[b+45]=23;w[b+46]=17;
+ }
+ previous_records.words=current_records.words;
+ output_meta.words={actual,0,0,0,capacity,1,55,0};
+ source_count.words.reset(8,0xa5a5a5a5);source_count.words[2]=actual;
+ for(uint i=3;i<6;i++)source_count.words[i]=0; // Real Count16 trailing words are never gates.
+ SourceBuffer *gates[]={&source_count_validity,&source_attributes_validity,&source_dense_ids_validity,&source_instance_gate};
+ for(uint i=0;i<4;i++){gates[i]->words.reset(5+i,0xa5a5a5a5);gates[i]->words[i+1]=0;}
+ scratch.words.assign(16,0xdeadbeef);status.words.assign(8,0xdeadbeef);commands.words.assign(5,0xdeadbeef);
+ proof={};proof.current_decl_min=proof.previous_decl_min=proof.cull_min=vec4(-1,-1,-1,0);
+ proof.current_decl_max=proof.previous_decl_max=proof.cull_max=vec4(1,1,1,0);
+ for(uint i=0;i<3;i++){proof.current_host_inverse_rows[i]=vec4(i==0,i==1,i==2,0);proof.previous_host_inverse_rows[i]=proof.current_host_inverse_rows[i];}
+ proof.source_accessor=uvec4(2,0,0,1);proof.source_gate_words=uvec4(1,2,3,4);proof.options=uvec4(1,0,0,0);
+ SurfaceProof s{};s.current_mesh_min=s.previous_mesh_min=vec4(-.25,-.25,0,0);
+ s.current_mesh_max=s.previous_mesh_max=vec4(.25,.25,0,0);s.command=uvec4(1,6,0,0);proof.surfaces={s};
+}
+void execute(bool capture=true){
+ gl_GlobalInvocationID.x=0;if(capture)shader_INIT();
+ for(uint i=0;i<params.record_count;i++){gl_GlobalInvocationID.x=i;shader_VALIDATE();}
+ gl_GlobalInvocationID.x=0;shader_FINALIZE();
+}
+void dispatch_chunk(uint base,uint count,bool reverse=false){
+ params.record_base=base;params.record_count=count;
+ // Exercise rounded-up workgroups, including every out-of-chunk lane.
+ uint padded=(count+63u)/64u*64u;
+ for(uint lane=0;lane<padded;lane++){
+  gl_GlobalInvocationID.x=reverse?padded-1u-lane:lane;shader_VALIDATE();
+ }
+}
+void execute_chunks(bool reverse=false){
+ gl_GlobalInvocationID.x=0;shader_INIT();
+ uint capacity=params.capacity;
+ uint chunks=(capacity+63u)/64u;
+ for(uint i=0;i<chunks;i++){
+  uint chunk=reverse?chunks-1u-i:i;
+  uint base=chunk*64u;dispatch_chunk(base,min(64u,capacity-base),reverse);
+ }
+ gl_GlobalInvocationID.x=0;shader_FINALIZE();
+}
+void add_nonindexed_surface(){
+ SurfaceProof second=proof.surfaces[0];second.command=uvec4(0,4,0,0);
+ proof.surfaces.push_back(second);params.surface_count=2;commands.words.assign(10,0xdeadbeef);
+}
+uint checks=0;
+void expect(uint bits,uint count,const char *name){
+ checks++;if(status.words[0]!=bits||status.words[1]!=count){std::cerr<<name<<" expected "<<bits<<","<<count<<" got "<<status.words[0]<<","<<status.words[1]<<"\n";std::abort();}
+ if(bits||count==0)for(uint w:commands.words)assert(w==0);
+ else{
+  assert(commands.words.size()==params.surface_count*5u);
+  for(uint surface=0;surface<params.surface_count;surface++){
+   assert(commands.words[surface*5u]==proof.surfaces[surface].command.y);
+   assert(commands.words[surface*5u+1u]==count);
+   for(uint i=2;i<5;i++)assert(commands.words[surface*5u+i]==0);
+  }
+ }
+}
+
+void add_surfaces(uint count){
+ SurfaceProof item=proof.surfaces[0];proof.surfaces.assign(count,item);params.surface_count=count;commands.words.assign(count*5u,0xdeadbeef);
+}
+void flattened_surfaces(){
+ healthy(0);add_surfaces(9);execute();
+ if(commands.words[40]!=0){std::cerr<<"ninth initialized command expected zero\n";std::abort();}
+ expect(0,0,"nine source zero");
+
+ for(uint surfaces:{9u,uint(EXTERNAL_MAX_SURFACES)}){
+  healthy();add_surfaces(surfaces);execute();expect(0,1,"flattened surface table");
+  healthy(0,0);add_surfaces(surfaces);execute();expect(0,0,"flattened capacity zero");
+ }
+ healthy();add_surfaces(9);proof.surfaces[8].command.y=0;execute();expect(4,0,"invalid ninth surface");
+ healthy();add_surfaces(9);proof.surfaces[8].current_displacement_min.x=2;proof.surfaces[8].current_displacement_max.x=2;execute();expect(64,0,"ninth surface bounds escape");
+ assert(scratch.words[9]==8u);
+ healthy();add_surfaces(9);current_records.words[46]|=2;previous_records.words[3]=floatBitsToUint(2);execute();expect(64,0,"nine surfaces previous failure disjoint");assert(scratch.words[9]==9u);
+ healthy(2);add_surfaces(9);current_records.words[48]=0x7fc00000;execute();expect(16,0,"nine surfaces next ordinal disjoint");assert(scratch.words[9]==18u);
+ params.surface_count=EXTERNAL_MAX_SURFACES;assert(failure_ordinal((1u<<20u)-1u,true)+(EXTERNAL_MAX_SURFACES-1u)==0xffffffffu); // Max owner-admitted encoding, no arithmetic wrap.
+
+ healthy();add_surfaces(9);proof.surfaces.resize(8);execute();expect(4,0,"truncated ninth proof clears all commands");
+ healthy();add_surfaces(9);commands.words.resize(44);execute();expect(4,0,"truncated ninth command");
+ for(uint count:{0u,uint(EXTERNAL_MAX_SURFACES)+1u,0xffffffffu/5u+1u,0xffffffffu}){
+  healthy();add_surfaces(9);params.surface_count=count;execute();expect(4,0,"malformed surface count bounded clear");
+ }
+ // Even another in-bounds table shape cannot reuse an earlier INIT.
+ for(uint initial:{1u,9u}){
+  healthy();add_surfaces(9);params.surface_count=initial;gl_GlobalInvocationID.x=0;shader_INIT();
+  params.surface_count=initial==1u?9u:1u;shader_VALIDATE();shader_FINALIZE();expect(4,0,"changed valid later-mode count");
+ }
+ // A differently shaped later mode cannot reuse healthy INIT metadata.
+ healthy();add_surfaces(9);gl_GlobalInvocationID.x=0;shader_INIT();params.surface_count=0xffffffffu;shader_VALIDATE();shader_FINALIZE();expect(4,0,"changed later-mode count");
+}
+
+int main(){
+ healthy();execute();expect(0,1,"healthy");
+ healthy(0);execute();expect(0,0,"source zero");
+ healthy(0,0);execute();expect(0,0,"capacity zero component guard");
+ healthy();output_meta.words[0]=3;execute();expect(2,0,"count exceeds envelope and source");
+ healthy();source_count.words[2]=2;execute();expect(2,0,"source count mismatch");
+ healthy();source_count_validity.words[1]=1;execute();expect(1,0,"invalid source");
+ healthy();output_meta.words[3]=1;execute();expect(1,0,"producer fault");
+ healthy();output_meta.words[5]=2;execute();expect(4,0,"metadata version");
+ healthy();output_meta.words[7]=1;execute();expect(4,0,"metadata sequence");
+ healthy();current_records.words[0]=0x7f800000;execute();expect(16,0,"infinite transform");
+ healthy();current_records.words[40]=1;execute();expect(16,0,"subnormal custom");
+ healthy();current_records.words[46]|=32;execute();expect(16,0,"reserved flags");
+ healthy();current_records.words[47]=1;execute();expect(16,0,"reserved word");
+ healthy();current_records.words[3]=floatBitsToUint(2);execute();expect(64,0,"current bounds escape");
+ healthy();current_records.words[7]=floatBitsToUint(2);execute();expect(64,0,"y bounds escape");
+ healthy();current_records.words[46]|=2;previous_records.words[3]=floatBitsToUint(2);execute();expect(64,0,"valid previous escape");assert(scratch.words[9]==8);
+ healthy();previous_records.words.clear();execute();expect(0,1,"reset never reads poisoned previous");
+ healthy();proof.options.x=0;previous_records.words.clear();
+ proof.previous_decl_min=proof.previous_decl_max=vec4(0);
+ for(uint row=0;row<3;row++)proof.previous_host_inverse_rows[row]=vec4(uintBitsToFloat(0x7fc00000u));
+ proof.surfaces[0].previous_mesh_min=proof.surfaces[0].previous_displacement_max=vec4(uintBitsToFloat(0x7fc00000u));
+ execute();expect(0,1,"inactive previous proof is not a fabricated source");
+ healthy();proof.previous_decl_min=proof.previous_decl_max=vec4(0);execute();expect(4,0,"active previous still requires strict declaration");
+ healthy();proof.options.x=0;proof.current_host_inverse_rows[0].x=uintBitsToFloat(0x7fc00000u);
+ execute();expect(16,0,"inactive previous never skips current numeric proof");
+ healthy();current_records.words[46]|=2;previous_records.words[45]++;execute();expect(32,0,"previous identity mismatch");
+ healthy();current_records.words[46]|=2;proof.options.x=0;execute();expect(32,0,"history not permitted");
+ healthy();gl_GlobalInvocationID.x=0;shader_INIT();output_meta.words[0]=999;execute(false);expect(0,1,"metadata captured immutable");
+ healthy();proof.source_accessor.w=2; // Local shear C=Host, matching inverse.
+ current_records.words[1]=floatBitsToUint(1);proof.current_host_inverse_rows[0]=vec4(1,-1,0,0);
+ execute();expect(0,1,"local shear per corner inverse");
+ healthy();proof.source_accessor.w=2;current_records.words[0]=floatBitsToUint(-2);proof.current_host_inverse_rows[0]=vec4(-.5,0,0,0);
+ current_records.words[46]|=4;execute();expect(0,1,"local mirror");
+ healthy();params.record_base=2;params.record_count=1;execute();expect(2,0,"chunk overflow");
+ healthy(2);current_records.words[0]=0x7fc00000;current_records.words[48+3]=floatBitsToUint(2);execute();expect(80,0,"all lanes accumulate faults");assert(scratch.words[9]==0);
+ // Distinct pinned indexed/nonindexed native constants share padded slots.
+ healthy();add_nonindexed_surface();execute();expect(0,1,"indexed and nonindexed surfaces");
+ assert(commands.words[0]==6&&commands.words[5]==4);assert(proof.surfaces[0].command.x==1&&proof.surfaces[1].command.x==0);
+ healthy(0);add_nonindexed_surface();execute();expect(0,0,"multiple surfaces source zero");
+ healthy();add_nonindexed_surface();proof.surfaces[1].current_displacement_min.x=2;proof.surfaces[1].current_displacement_max.x=2;
+ execute();expect(64,0,"second surface fault zeroes every command");assert(scratch.words[9]==1);
+ healthy(64,64);execute_chunks();expect(0,64,"exact one-workgroup capacity");
+ healthy(65,65);execute_chunks();expect(0,65,"last partial chunk capacity");
+ healthy(129,129);execute_chunks();expect(0,129,"three chunks include last record");
+ healthy(65,129);for(uint i=65;i<129;i++)current_records.words[i*48]=0x7fc00000;
+ execute_chunks();expect(0,65,"chunked validation never fetches inactive tails");
+ healthy(129,129);current_records.words[64*48]=0x7fc00000;current_records.words[128*48+3]=floatBitsToUint(2);
+ execute_chunks();expect(80,0,"cross-chunk faults forward order");uint forward_first=scratch.words[9];assert(forward_first==64*16);
+ healthy(129,129);current_records.words[64*48]=0x7fc00000;current_records.words[128*48+3]=floatBitsToUint(2);
+ execute_chunks(true);expect(80,0,"cross-chunk faults reverse lanes and chunks");assert(scratch.words[9]==forward_first);
+ healthy(2);current_records.words[0]=0x7fc00000;current_records.words[48+3]=floatBitsToUint(2);
+ gl_GlobalInvocationID.x=0;shader_INIT();dispatch_chunk(0,2,true);gl_GlobalInvocationID.x=0;shader_FINALIZE();
+ expect(80,0,"same chunk reverse lanes preserve OR and lowest failure");assert(scratch.words[9]==0);
+ // All original gates use fixed zero==healthy; each fault is independent.
+ for(uint gate=0;gate<4;gate++)for(uint value:{1u,42u,0xffffffffu}){
+  healthy();SourceBuffer *gates[]={&source_count_validity,&source_attributes_validity,&source_dense_ids_validity,&source_instance_gate};
+  gates[gate]->words[gate+1]=value;execute();expect(1,0,"each independent source gate");
+ }
+ healthy();source_count.words[2]=2;source_attributes_validity.words[2]=1;execute();expect(3,0,"independent count and attribute gate faults");
+ healthy();proof.source_accessor.y=1;execute();expect(4,0,"reserved source accessor y");
+ healthy();proof.source_accessor.z=2;execute();expect(4,0,"reserved source accessor z no rule selection");
+ for(uint role=0;role<5;role++){
+  healthy();SourceBuffer *sources[]={&source_count,&source_count_validity,&source_attributes_validity,&source_dense_ids_validity,&source_instance_gate};
+  sources[role]->words.truncate(role==0?2:role);execute();expect(1,0,"scalar outside its own source buffer");
+ }
+ for(uint gate=0;gate<4;gate++){
+  healthy(0,0);SourceBuffer *gates[]={&source_count_validity,&source_attributes_validity,&source_dense_ids_validity,&source_instance_gate};
+  gates[gate]->words[gate+1]=1;execute();expect(1,0,"N0 real source gate fault");
+ }
+ healthy(0,0);source_count.words[2]=1;execute();expect(2,0,"N0 real selected count mismatch");
+ // Repeated descriptors retain distinct semantics and nonzero offsets.
+ for(uint capacity:{0u,2u}){
+  uint actual=capacity==0?0u:1u;
+  healthy(actual,capacity);source_count.words.reset(12,0xa5a5a5a5);source_count.words[2]=actual;
+  for(uint i=3;i<6;i++)source_count.words[i]=0;
+  source_count_validity.words.share(source_count.words);source_attributes_validity.words.share(source_count.words);
+  source_dense_ids_validity.words.share(source_count.words);source_instance_gate.words.share(source_count.words);
+  proof.source_gate_words=uvec4(7,8,9,10);
+  for(uint i=7;i<=10;i++)source_count.words[i]=0;
+  execute();expect(0,actual,"shared source backing distinct nonzero offsets");
+  source_dense_ids_validity.words[9]=1;execute();expect(1,0,"shared source backing independent gate fault");
+  // Initial may use one real generation persistent scalar for all gate roles.
+  source_count.words[9]=0;proof.source_gate_words=uvec4(7,7,7,7);
+  execute();expect(0,actual,"Initial shared persistent gate scalar");
+  source_instance_gate.words[7]=0xffffffffu;execute();expect(1,0,"Initial shared persistent gate fault");
+ }
+ // The exact production interval routines must include exact-real products.
+ bool valid=true;vec2 p=multiply_interval(vec2(.25),vec2(2),valid);assert(valid&&p.x<=.5&&p.y>=.5);checks++;
+ valid=true;multiply_interval(vec2(std::numeric_limits<float>::max()),vec2(2),valid);assert(!valid);checks++;
+ flattened_surfaces();
+ std::cout<<checks<<" CPU production-control/interval cases PASS (sequential, no GPU claim)\n";
+}

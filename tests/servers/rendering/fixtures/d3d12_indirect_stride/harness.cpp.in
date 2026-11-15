@@ -1,0 +1,191 @@
+/**************************************************************************/
+/*  harness.cpp.in                                                        */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
+// Extracted production methods execute against a bounded mock command list.
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <vector>
+
+struct D3D12_DRAW_ARGUMENTS {
+	uint32_t VertexCountPerInstance, InstanceCount, StartVertexLocation, StartInstanceLocation;
+};
+struct D3D12_DRAW_INDEXED_ARGUMENTS {
+	uint32_t IndexCountPerInstance, InstanceCount, StartIndexLocation;
+	int32_t BaseVertexLocation;
+	uint32_t StartInstanceLocation;
+};
+static_assert(sizeof(D3D12_DRAW_ARGUMENTS) == 16);
+static_assert(sizeof(D3D12_DRAW_INDEXED_ARGUMENTS) == 20);
+constexpr uint32_t D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT = 512;
+struct Signature {
+	uint32_t ByteStride;
+	Signature *Get() { return this; }
+};
+struct Resource {
+	uint64_t origin;
+	std::vector<uint8_t> bytes;
+};
+struct Call {
+	Signature *signature;
+	uint32_t count;
+	Resource *resource;
+	uint64_t offset;
+	bool no_count_buffer;
+};
+struct CommandList {
+	std::vector<Call> calls;
+	std::vector<uint64_t> starts;
+	std::vector<std::vector<uint32_t>> decoded;
+	bool readable = true;
+	void ExecuteIndirect(Signature *p_signature, uint32_t p_count, Resource *p_resource, uint64_t p_offset, void *p_count_buffer, uint64_t p_count_offset) {
+		calls.push_back({ p_signature, p_count, p_resource, p_offset, !p_count_buffer && p_count_offset == 0 });
+		for (uint32_t i = 0; i < p_count; ++i) {
+			const uint64_t address = p_offset + uint64_t(i) * p_signature->ByteStride;
+			starts.push_back(address);
+			std::vector<uint32_t> words(p_signature->ByteStride / 4);
+			if (address < p_resource->origin || address - p_resource->origin > p_resource->bytes.size() || p_signature->ByteStride > p_resource->bytes.size() - (address - p_resource->origin)) {
+				readable = false;
+			} else {
+				std::memcpy(words.data(), p_resource->bytes.data() + (address - p_resource->origin), p_signature->ByteStride);
+			}
+			decoded.push_back(words);
+		}
+	}
+};
+struct CommandBufferID {
+	uintptr_t id;
+};
+struct BufferID {
+	uintptr_t id;
+};
+struct CommandBufferInfo {
+	CommandList *cmd_list;
+};
+struct BufferInfo {
+	Resource *resource;
+};
+struct RenderingDeviceDriverD3D12 {
+	struct {
+		bool enhanced_barriers_supported = false;
+	} barrier_capabilities;
+	struct {
+		Signature draw{ 16 }, draw_indexed{ 20 };
+	} indirect_cmd_signatures;
+	uint32_t binds = 0, transitions = 0, flushes = 0;
+	bool transition_arguments = true;
+	void _bind_vertex_buffers(CommandBufferInfo *) { ++binds; }
+	void _resource_transition_batch(CommandBufferInfo *, BufferInfo *, uint32_t p_first, uint32_t p_count, uint32_t p_state) {
+		++transitions;
+		transition_arguments = transition_arguments && p_first == 0 && p_count == 1 && p_state == D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
+	}
+	void _resource_transitions_flush(CommandBufferInfo *) { ++flushes; }
+	void command_render_draw_indirect(CommandBufferID, BufferID, uint64_t, uint32_t, uint32_t);
+	void command_render_draw_indexed_indirect(CommandBufferID, BufferID, uint64_t, uint32_t, uint32_t);
+};
+
+PRODUCTION_METHODS
+
+struct Case {
+	const char *name;
+	bool indexed;
+	uint64_t offset;
+	uint32_t count, stride, bytes;
+	std::vector<uint64_t> expected_starts;
+	std::vector<uint64_t> expected_call_offsets;
+	std::vector<uint32_t> expected_call_counts;
+};
+int main() {
+	// Expected starts and call counts are literals, independent of p_stride math.
+	const std::vector<Case> cases = {
+		{ "draw-packed", false, 0, 2, 16, 32, { 0, 16 }, { 0 }, { 2 } },
+		{ "indexed-packed", true, 0, 2, 20, 40, { 0, 20 }, { 0 }, { 2 } },
+		{ "draw-padded36", false, 0, 2, 20, 36, { 0, 20 }, { 0, 20 }, { 1, 1 } },
+		{ "indexed-padded44", true, 0, 2, 24, 44, { 0, 24 }, { 0, 24 }, { 1, 1 } },
+		{ "draw-padded-offset", false, 4, 2, 20, 36, { 4, 24 }, { 4, 24 }, { 1, 1 } },
+		{ "indexed-padded-offset", true, 8, 2, 24, 44, { 8, 32 }, { 8, 32 }, { 1, 1 } },
+		{ "draw-high-u64", false, 4294967312ULL, 2, 20, 36, { 4294967312ULL, 4294967332ULL }, { 4294967312ULL, 4294967332ULL }, { 1, 1 } },
+		{ "indexed-high-u64", true, 4294967320ULL, 2, 24, 44, { 4294967320ULL, 4294967344ULL }, { 4294967320ULL, 4294967344ULL }, { 1, 1 } },
+		{ "draw-three-padded", false, 0, 3, 32, 80, { 0, 32, 64 }, { 0, 32, 64 }, { 1, 1, 1 } },
+		{ "indexed-three-padded", true, 0, 3, 36, 92, { 0, 36, 72 }, { 0, 36, 72 }, { 1, 1, 1 } },
+		{ "draw-zero", false, 4, 0, 20, 16, {}, { 4 }, { 0 } },
+		{ "indexed-zero", true, 8, 0, 24, 20, {}, { 8 }, { 0 } },
+		{ "draw-one", false, 4, 1, 20, 16, { 4 }, { 4 }, { 1 } },
+		{ "indexed-one", true, 8, 1, 24, 20, { 8 }, { 8 }, { 1 } },
+	};
+	uint32_t failures = 0;
+	for (bool enhanced : { false, true }) {
+		for (const Case &c : cases) {
+			RenderingDeviceDriverD3D12 driver;
+			driver.barrier_capabilities.enhanced_barriers_supported = enhanced;
+			Resource resource{ c.offset, std::vector<uint8_t>(c.bytes, 0xcd) };
+			std::vector<std::vector<uint32_t>> expected_words;
+			for (size_t i = 0; i < c.expected_starts.size(); ++i) {
+				// Four/five independent words distinguish each complete command,
+				// including signed BaseVertexLocation bits on indexed commands.
+				std::vector<uint32_t> words{ 11U + uint32_t(i) * 100U, 2, 3, 0xfffffff9U };
+				if (c.indexed) {
+					words.push_back(5);
+				}
+				expected_words.push_back(words);
+				std::memcpy(resource.bytes.data() + (c.expected_starts[i] - resource.origin), words.data(), words.size() * 4);
+			}
+			CommandList list;
+			CommandBufferInfo cb{ &list };
+			BufferInfo buffer{ &resource };
+			const CommandBufferID cbid{ reinterpret_cast<uintptr_t>(&cb) };
+			const BufferID bid{ reinterpret_cast<uintptr_t>(&buffer) };
+			if (c.indexed) {
+				driver.command_render_draw_indexed_indirect(cbid, bid, c.offset, c.count, c.stride);
+			} else {
+				driver.command_render_draw_indirect(cbid, bid, c.offset, c.count, c.stride);
+			}
+			bool call_args = list.calls.size() == c.expected_call_offsets.size();
+			for (size_t i = 0; i < list.calls.size(); ++i) {
+				const Call &call = list.calls[i];
+				call_args = call_args && i < c.expected_call_offsets.size() && call.offset == c.expected_call_offsets[i] && call.count == c.expected_call_counts[i] && call.resource == &resource && call.no_count_buffer && call.signature == (c.indexed ? &driver.indirect_cmd_signatures.draw_indexed : &driver.indirect_cmd_signatures.draw);
+			}
+			const bool addresses = list.starts == c.expected_starts;
+			const bool decoded = list.readable && list.decoded == expected_words;
+			const bool prefix = driver.binds == 1 && driver.transitions == (enhanced ? 0U : 1U) && driver.flushes == (enhanced ? 0U : 1U) && driver.transition_arguments;
+			const bool pass = addresses && decoded && call_args && prefix;
+			if (!pass) {
+				++failures;
+			}
+			std::printf("CASE %s enhanced=%d addresses=%d decoded=%d calls=%d prefix=%d %s actual=", c.name, int(enhanced), int(addresses), int(decoded), int(call_args), int(prefix), pass ? "PASS" : "FAIL");
+			for (uint64_t address : list.starts) {
+				std::printf("%llu,", static_cast<unsigned long long>(address));
+			}
+			std::printf("\n");
+		}
+	}
+	std::printf("CASES=28 FAILURES=%u\n", failures);
+	return failures ? 1 : 0;
+}

@@ -1,0 +1,5 @@
+config_version=5
+[application]
+config/name="Particle color initial ramp changed regression"
+[rendering]
+renderer/rendering_method="mobile"

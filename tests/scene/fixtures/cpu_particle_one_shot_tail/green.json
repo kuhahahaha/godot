@@ -1,0 +1,125 @@
+{
+  "binary": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/particle-current-engine-build-20261111/source/bin/godot.macos.template_debug.arm64",
+  "fixture_sha256": {
+    "run.gd": "8cf1fd80971152eea6241211ca3a952e44b3b8eafbbfc8fdf3f9aa3c7b7574d1",
+    "project.godot": "825c930eab3b14b751293252fac14d12cf001b8ab22cb3f34e995b3a0c7fa9f7"
+  },
+  "command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/particle-current-engine-build-20261111/source/bin/godot.macos.template_debug.arm64",
+    "--headless",
+    "--path",
+    "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-one-shot-tail-n3f0hsn5",
+    "--script",
+    "res://run.gd"
+  ],
+  "engine_exit": 1,
+  "timed_out": false,
+  "stdout": "Godot Engine v4.7.2.stable.custom_build - https://godotengine.org\n\nCPU_ONESHOT_ENGINE={\"2d_birth_count\":\"not publicly observable in this fixture\",\"failures\":[\"3D drain retained active slots or lost buffer: {\\\"active_indices\\\":[0,1,2,3,4,5,6,7],\\\"buffer_size\\\":160,\\\"dimension\\\":3,\\\"emitting\\\":false,\\\"finished\\\":1,\\\"stage\\\":\\\"drained\\\"}\",\"3D restart drain retained active slots or lost buffer: {\\\"active_indices\\\":[0,1,2,3,4,5,6,7],\\\"buffer_size\\\":160,\\\"dimension\\\":3,\\\"finished\\\":2,\\\"stage\\\":\\\"restart_drained\\\"}\"],\"rows\":[{\"dimension\":2,\"emitting\":false,\"finished\":0,\"stage\":\"four_steps\"},{\"dimension\":2,\"emitting\":false,\"finished\":1,\"stage\":\"drained\"},{\"dimension\":2,\"emitting\":false,\"finished\":1,\"stage\":\"restart_four_steps\"},{\"dimension\":2,\"finished\":2,\"stage\":\"restart_drained\"},{\"active_indices\":[0,1,2,3,4,5,6,7],\"buffer_size\":160,\"dimension\":3,\"emitting\":false,\"finished\":0,\"stage\":\"four_steps\"},{\"active_indices\":[0,1,2,3,4,5,6,7],\"buffer_size\":160,\"dimension\":3,\"emitting\":false,\"finished\":1,\"stage\":\"drained\"},{\"active_indices\":[0,1,2,3,4,5,6,7],\"buffer_size\":160,\"dimension\":3,\"emitting\":false,\"finished\":1,\"stage\":\"restart_four_steps\"},{\"active_indices\":[0,1,2,3,4,5,6,7],\"buffer_size\":160,\"dimension\":3,\"finished\":2,\"stage\":\"restart_drained\"}]}\n",
+  "stderr": "",
+  "errors": [
+    "Engine reported regression failures"
+  ],
+  "result": {
+    "2d_birth_count": "not publicly observable in this fixture",
+    "failures": [
+      "3D drain retained active slots or lost buffer: {\"active_indices\":[0,1,2,3,4,5,6,7],\"buffer_size\":160,\"dimension\":3,\"emitting\":false,\"finished\":1,\"stage\":\"drained\"}",
+      "3D restart drain retained active slots or lost buffer: {\"active_indices\":[0,1,2,3,4,5,6,7],\"buffer_size\":160,\"dimension\":3,\"finished\":2,\"stage\":\"restart_drained\"}"
+    ],
+    "rows": [
+      {
+        "dimension": 2,
+        "emitting": false,
+        "finished": 0,
+        "stage": "four_steps"
+      },
+      {
+        "dimension": 2,
+        "emitting": false,
+        "finished": 1,
+        "stage": "drained"
+      },
+      {
+        "dimension": 2,
+        "emitting": false,
+        "finished": 1,
+        "stage": "restart_four_steps"
+      },
+      {
+        "dimension": 2,
+        "finished": 2,
+        "stage": "restart_drained"
+      },
+      {
+        "active_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "buffer_size": 160,
+        "dimension": 3,
+        "emitting": false,
+        "finished": 0,
+        "stage": "four_steps"
+      },
+      {
+        "active_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "buffer_size": 160,
+        "dimension": 3,
+        "emitting": false,
+        "finished": 1,
+        "stage": "drained"
+      },
+      {
+        "active_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "buffer_size": 160,
+        "dimension": 3,
+        "emitting": false,
+        "finished": 1,
+        "stage": "restart_four_steps"
+      },
+      {
+        "active_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "buffer_size": 160,
+        "dimension": 3,
+        "finished": 2,
+        "stage": "restart_drained"
+      }
+    ]
+  },
+  "binary_sha256": "e5ebc474d43cc6168a4a74664baa70b73f4af268ea9ca77c90f8c38287de3098",
+  "binary_size": 97319184,
+  "binary_mtime_ns": 1794379435326592013,
+  "passed": false
+}

@@ -1,0 +1,331 @@
+[
+  {
+    "case": "missing",
+    "fake_script": "#!/bin/sh\nprintf '%s\\n' 'no marker'\nexit 0\n",
+    "runner_command": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/run.py",
+      "--godot",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/missing.sh",
+      "--output",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/missing.json",
+      "--timeout",
+      "5"
+    ],
+    "runner_exit": 1,
+    "runner_stdout": "CPU one-shot tail: FAIL; engine_exit=0; receipt=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/missing.json\n",
+    "runner_stderr": "",
+    "marker_count": 0,
+    "receipt": {
+      "binary": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/missing.sh",
+      "fixture_sha256": {
+        "run.gd": "cd06d9743adef3441c9985dcb38b05cd43e025c9d8aabf7d475990921c29792a",
+        "project.godot": "825c930eab3b14b751293252fac14d12cf001b8ab22cb3f34e995b3a0c7fa9f7"
+      },
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/missing.sh",
+        "--headless",
+        "--path",
+        "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-one-shot-tail-1p5jkply",
+        "--script",
+        "res://run.gd"
+      ],
+      "engine_exit": 0,
+      "timed_out": false,
+      "stdout": "no marker\n",
+      "stderr": "",
+      "errors": [
+        "Expected exactly one result marker, found 0"
+      ],
+      "result": null,
+      "acceptance_scope": "headless CPU particle/public-buffer only; not GPU, renderer, or pixel acceptance",
+      "binary_sha256": "aca222407ac49ad5a909086e372e1a7e09732f8ada3107941bb5bd8ed92a41dd",
+      "binary_size": 43,
+      "binary_mtime_ns": 1794392070943823394,
+      "passed": false
+    }
+  },
+  {
+    "case": "duplicate",
+    "fake_script": "#!/bin/sh\nprintf '%s\\n' 'CPU_ONESHOT_ENGINE={\"failures\":[]}' 'CPU_ONESHOT_ENGINE={\"failures\":[]}'\nexit 0\n",
+    "runner_command": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/run.py",
+      "--godot",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/duplicate.sh",
+      "--output",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/duplicate.json",
+      "--timeout",
+      "5"
+    ],
+    "runner_exit": 1,
+    "runner_stdout": "CPU one-shot tail: FAIL; engine_exit=0; receipt=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/duplicate.json\n",
+    "runner_stderr": "",
+    "marker_count": 2,
+    "receipt": {
+      "binary": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/duplicate.sh",
+      "fixture_sha256": {
+        "run.gd": "cd06d9743adef3441c9985dcb38b05cd43e025c9d8aabf7d475990921c29792a",
+        "project.godot": "825c930eab3b14b751293252fac14d12cf001b8ab22cb3f34e995b3a0c7fa9f7"
+      },
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/duplicate.sh",
+        "--headless",
+        "--path",
+        "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-one-shot-tail-uo3uqne8",
+        "--script",
+        "res://run.gd"
+      ],
+      "engine_exit": 0,
+      "timed_out": false,
+      "stdout": "CPU_ONESHOT_ENGINE={\"failures\":[]}\nCPU_ONESHOT_ENGINE={\"failures\":[]}\n",
+      "stderr": "",
+      "errors": [
+        "Expected exactly one result marker, found 2"
+      ],
+      "result": null,
+      "acceptance_scope": "headless CPU particle/public-buffer only; not GPU, renderer, or pixel acceptance",
+      "binary_sha256": "d3963c3a4504d9c584046e04eaecfaa0e7794fed2a9fc98e746ddeb3331349e8",
+      "binary_size": 105,
+      "binary_mtime_ns": 1794392071011681557,
+      "passed": false
+    }
+  },
+  {
+    "case": "exit-mismatch",
+    "fake_script": "#!/bin/sh\nprintf '%s\\n' 'CPU_ONESHOT_ENGINE={\"failures\":[]}'\nexit 1\n",
+    "runner_command": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/run.py",
+      "--godot",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/exit-mismatch.sh",
+      "--output",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/exit-mismatch.json",
+      "--timeout",
+      "5"
+    ],
+    "runner_exit": 1,
+    "runner_stdout": "CPU one-shot tail: FAIL; engine_exit=1; receipt=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/exit-mismatch.json\n",
+    "runner_stderr": "",
+    "marker_count": 1,
+    "receipt": {
+      "binary": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/exit-mismatch.sh",
+      "fixture_sha256": {
+        "run.gd": "cd06d9743adef3441c9985dcb38b05cd43e025c9d8aabf7d475990921c29792a",
+        "project.godot": "825c930eab3b14b751293252fac14d12cf001b8ab22cb3f34e995b3a0c7fa9f7"
+      },
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/exit-mismatch.sh",
+        "--headless",
+        "--path",
+        "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-one-shot-tail-cu93uza7",
+        "--script",
+        "res://run.gd"
+      ],
+      "engine_exit": 1,
+      "timed_out": false,
+      "stdout": "CPU_ONESHOT_ENGINE={\"failures\":[]}\n",
+      "stderr": "",
+      "errors": [
+        "Engine exit 1 disagrees with failures (expected 0)"
+      ],
+      "result": {
+        "failures": []
+      },
+      "acceptance_scope": "headless CPU particle/public-buffer only; not GPU, renderer, or pixel acceptance",
+      "binary_sha256": "1270b5bba0c66c915d9e117fecbfc9bcd2b802ee6fbe676b7b756cdc040919ad",
+      "binary_size": 68,
+      "binary_mtime_ns": 1794392071080496688,
+      "passed": false
+    }
+  },
+  {
+    "case": "timeout",
+    "fake_script": "#!/bin/sh\nexec /bin/sleep 10\n",
+    "runner_command": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/run.py",
+      "--godot",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/timeout.sh",
+      "--output",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/timeout.json",
+      "--timeout",
+      "0.2"
+    ],
+    "runner_exit": 1,
+    "runner_stdout": "CPU one-shot tail: FAIL; engine_exit=None; receipt=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/timeout.json\n",
+    "runner_stderr": "",
+    "marker_count": 0,
+    "receipt": {
+      "binary": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/timeout.sh",
+      "fixture_sha256": {
+        "run.gd": "cd06d9743adef3441c9985dcb38b05cd43e025c9d8aabf7d475990921c29792a",
+        "project.godot": "825c930eab3b14b751293252fac14d12cf001b8ab22cb3f34e995b3a0c7fa9f7"
+      },
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/timeout.sh",
+        "--headless",
+        "--path",
+        "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-one-shot-tail-eroapntl",
+        "--script",
+        "res://run.gd"
+      ],
+      "engine_exit": null,
+      "timed_out": true,
+      "stdout": "",
+      "stderr": "",
+      "errors": [
+        "Engine timed out",
+        "Expected exactly one result marker, found 0"
+      ],
+      "result": null,
+      "acceptance_scope": "headless CPU particle/public-buffer only; not GPU, renderer, or pixel acceptance",
+      "binary_sha256": "9197bc4e130f12b8c7a5495c6b8b5c79b1c83ae3e1f2dea82e834b028cfcec2d",
+      "binary_size": 29,
+      "binary_mtime_ns": 1794392071148754355,
+      "passed": false
+    }
+  },
+  {
+    "case": "error-diagnostic",
+    "fake_script": "#!/bin/sh\nprintf '%s\\n' 'CPU_ONESHOT_ENGINE={\"failures\":[]}'\nprintf '%s\\n' 'ERROR: rejected diagnostic' >&2\nexit 0\n",
+    "runner_command": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/run.py",
+      "--godot",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/error-diagnostic.sh",
+      "--output",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/error-diagnostic.json",
+      "--timeout",
+      "5"
+    ],
+    "runner_exit": 1,
+    "runner_stdout": "CPU one-shot tail: FAIL; engine_exit=0; receipt=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/error-diagnostic.json\n",
+    "runner_stderr": "",
+    "marker_count": 1,
+    "receipt": {
+      "binary": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/error-diagnostic.sh",
+      "fixture_sha256": {
+        "run.gd": "cd06d9743adef3441c9985dcb38b05cd43e025c9d8aabf7d475990921c29792a",
+        "project.godot": "825c930eab3b14b751293252fac14d12cf001b8ab22cb3f34e995b3a0c7fa9f7"
+      },
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/error-diagnostic.sh",
+        "--headless",
+        "--path",
+        "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-one-shot-tail-byu0p4is",
+        "--script",
+        "res://run.gd"
+      ],
+      "engine_exit": 0,
+      "timed_out": false,
+      "stdout": "CPU_ONESHOT_ENGINE={\"failures\":[]}\n",
+      "stderr": "ERROR: rejected diagnostic\n",
+      "errors": [
+        "Engine reported ERROR or RID/ObjectDB leak diagnostics"
+      ],
+      "result": {
+        "failures": []
+      },
+      "acceptance_scope": "headless CPU particle/public-buffer only; not GPU, renderer, or pixel acceptance",
+      "binary_sha256": "17f51c20d14b6096f11f3b3812102f8518d6f16637afda24109a632f2b13e36b",
+      "binary_size": 115,
+      "binary_mtime_ns": 1794392071404743535,
+      "passed": false
+    }
+  },
+  {
+    "case": "rid-leak",
+    "fake_script": "#!/bin/sh\nprintf '%s\\n' 'CPU_ONESHOT_ENGINE={\"failures\":[]}'\nprintf '%s\\n' 'WARNING: 1 RID of type CanvasItem was leaked.' >&2\nexit 0\n",
+    "runner_command": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/run.py",
+      "--godot",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/rid-leak.sh",
+      "--output",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/rid-leak.json",
+      "--timeout",
+      "5"
+    ],
+    "runner_exit": 1,
+    "runner_stdout": "CPU one-shot tail: FAIL; engine_exit=0; receipt=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/rid-leak.json\n",
+    "runner_stderr": "",
+    "marker_count": 1,
+    "receipt": {
+      "binary": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/rid-leak.sh",
+      "fixture_sha256": {
+        "run.gd": "cd06d9743adef3441c9985dcb38b05cd43e025c9d8aabf7d475990921c29792a",
+        "project.godot": "825c930eab3b14b751293252fac14d12cf001b8ab22cb3f34e995b3a0c7fa9f7"
+      },
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/rid-leak.sh",
+        "--headless",
+        "--path",
+        "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-one-shot-tail-bijr6uhr",
+        "--script",
+        "res://run.gd"
+      ],
+      "engine_exit": 0,
+      "timed_out": false,
+      "stdout": "CPU_ONESHOT_ENGINE={\"failures\":[]}\n",
+      "stderr": "WARNING: 1 RID of type CanvasItem was leaked.\n",
+      "errors": [
+        "Engine reported ERROR or RID/ObjectDB leak diagnostics"
+      ],
+      "result": {
+        "failures": []
+      },
+      "acceptance_scope": "headless CPU particle/public-buffer only; not GPU, renderer, or pixel acceptance",
+      "binary_sha256": "fc3be8db9f18d7e7c7e346e6ed05b19f4051a7142c0df0af7ea0bebb1ff5aa0d",
+      "binary_size": 134,
+      "binary_mtime_ns": 1794392071471537106,
+      "passed": false
+    }
+  },
+  {
+    "case": "clean-pass",
+    "fake_script": "#!/bin/sh\nprintf '%s\\n' 'CPU_ONESHOT_ENGINE={\"failures\":[]}'\nexit 0\n",
+    "runner_command": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/run.py",
+      "--godot",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/clean-pass.sh",
+      "--output",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/clean-pass.json",
+      "--timeout",
+      "5"
+    ],
+    "runner_exit": 0,
+    "runner_stdout": "CPU one-shot tail: PASS; engine_exit=0; receipt=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/clean-pass.json\n",
+    "runner_stderr": "",
+    "marker_count": 1,
+    "receipt": {
+      "binary": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/clean-pass.sh",
+      "fixture_sha256": {
+        "run.gd": "cd06d9743adef3441c9985dcb38b05cd43e025c9d8aabf7d475990921c29792a",
+        "project.godot": "825c930eab3b14b751293252fac14d12cf001b8ab22cb3f34e995b3a0c7fa9f7"
+      },
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/scene/fixtures/cpu_particle_one_shot_tail/runner-controls/clean-pass.sh",
+        "--headless",
+        "--path",
+        "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/godot-cpu-one-shot-tail-c06tava_",
+        "--script",
+        "res://run.gd"
+      ],
+      "engine_exit": 0,
+      "timed_out": false,
+      "stdout": "CPU_ONESHOT_ENGINE={\"failures\":[]}\n",
+      "stderr": "",
+      "errors": [],
+      "result": {
+        "failures": []
+      },
+      "acceptance_scope": "headless CPU particle/public-buffer only; not GPU, renderer, or pixel acceptance",
+      "binary_sha256": "16c04e577f0686aa51da762bf3e78570284b2e96b3df80a71cc8febb79cac8f5",
+      "binary_size": 68,
+      "binary_mtime_ns": 1794392071535622860,
+      "passed": true
+    }
+  }
+]

@@ -1,0 +1,25 @@
+Independent read-only native heightfield fixture review — 2026-11-06
+Worktree: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104
+Reviewed modules/particles_runtime_tests/particles_heightfield_clear_test_fixture.{cpp,h}, register_types.cpp, guarded particles_storage.h friend and fixtures/particle_heightfield_clear_native/*. No build/GPU execution or source edits performed.
+
+Finding [P2]: explicitly drive frames while awaiting asynchronous readback.
+File: tests/servers/rendering/fixtures/particle_heightfield_clear_native/run.gd, _start (set_render_loop_enabled(false)).
+The fixture disables ordinary rendering before queuing capture and readback but never requests subsequent draws. main/main.cpp around 5267 invokes RenderingServer::draw only when wants_present or RD::has_pending_resources_for_processing is true. The latter tests frames_pending_resources_for_processing, which is maintained for deferred resource frees; buffer_get_data_async merely queues a graph copy/readback request and does not set this counter. The async callback is delivered when the normal frame path revisits its submitted frame after fence completion. Therefore success depends on incidental startup pending frees providing enough frame advances. With no pending disposal work, the capture/readback can remain unsubmitted or unretired and the test times out despite correct rendering. Keep the render loop enabled for this empty project, or explicitly pump ordinary nonpresenting draws until result. Do not use main-RD local-only submit/sync. Runtime success on one startup sequence would not eliminate this source-level dependency.
+
+Other reviewed behavior is appropriate for the stated legacy numeric regression:
+- Actual scene->render_particle_collider_heightfield(second base collider, identity, geometry) invokes the production renderer. No fake renderer result or resource-identity-only assertion substitutes for output.
+- Both independent base collision targets are seeded to raw .75. Empty second capture must measure zero while first remains .75, so an omitted clear is numerically observable. Base target storage is accessed only through the narrow test/module-guarded friend; no per-instance API is introduced.
+- Geometry uses real mesh/RenderGeometryInstance and normal surface-cache update during render-list fill. Independent height formula (y+1)/2 gives .25/.5/.75; .25 and .5 cases detect missing geometry. The +.5 result equals the seed and cannot alone detect a skipped draw, but the full matrix addresses this ambiguity.
+- Compute shader samples the production D32 textures into its own SSBO, then main-RD buffer_get_data_async performs legal staging readback. It does not attempt forbidden texture download usage or call local RD submit/sync. Existing callback delivery follows fence wait and full-size successful map/copy, so success observes completed sampled data.
+- Callback preserves resources until readback and calls cleanup before publishing pass. Cleanup frees uniform set before sampled textures, then fixture resources/geometry/mesh and base collisions; synchronous run_capture failure also cleans up. Readback failure/timeout exits the test process, with no success claim; there is no explicit timeout cancellation cleanup path, so failure teardown is not a resource-lifetime qualification.
+- result dictionary lock separates render-thread publication from main-thread polling. The retained script fixture remains alive through normal completion. NaN/incorrect byte lengths fail numeric assertions.
+- Test-only module configuration and registration are consistent. Python runner rejects nonzero exit, missing renderer evidence, errors/warnings, missing/invalid numeric samples and renderer disagreement. Missing module returns 77 and is rejected, not admitted as a successful skip.
+
+Evidence limits: this review executes nothing; /tmp/b4-height-clear-native-status.txt also explicitly leaves build/GPU execution to parent. The fixture is direct legacy raster regression only. It does not verify checked capture receipts/native failure unwind, per-instance ownership, SceneBeforeParticles admission, immutable HeightFrame snapshots, retained production uses, or E34 qualification. Do not describe its eventual successful matrix as E34 acceptance.
+
+Precise frame-pump evidence:
+- main/main.cpp:5268-5273 computes wants_present with is_render_loop_enabled(), then gates draw on wants_present || has_pending_resources_for_processing; draw calls at 5277/5281.
+- rendering_device.h:2473 comment explains pending flag is for deferred resource freeing; initial value 0 at 2477 and accessor at 2480.
+- rendering_device.cpp:1696 queues asynchronous SSBO readback; function returns OK at 1771 without setting that flag. Flag is set by resource free at 10584 (and disposal continuation at 11156).
+- rendering_device.cpp:11871 waits frame fence before mapping/copying readback; 11987 invokes callback only on completed full delivery.
+Parent acknowledged finding and intends to remove the disabling call; this report describes the reviewed pre-correction source.

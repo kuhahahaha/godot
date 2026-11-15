@@ -1,0 +1,58 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/core/extension/test_production_request.cpp:7345:
+TEST CASE:  [SceneTree][ProductionRequest] fresh accepted metadata frame rejects ordinary ClassDB record and deferred escape
+
+tests/core/extension/test_production_request.cpp:3387: ERROR: CHECK_FALSE( GDExtensionDeviceExit::Registry::is_production_metadata_entry() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/core/extension/test_production_request.cpp:3455: ERROR: CHECK( fixture.registry.call_normal_relay(probe.relay, nullptr, 0, relay_returned, relay_error) == ERR_UNAUTHORIZED ) is NOT correct!
+  values: CHECK( 0 == 4 )
+
+tests/core/extension/test_production_request.cpp:3456: ERROR: CHECK( probe.relay_calls == relay_calls_before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/core/extension/test_production_request.cpp:3457: ERROR: CHECK( relay_returned == Variant("metadata relay output sentinel") ) is NOT correct!
+  values: CHECK( 42 == metadata relay output sentinel )
+
+tests/core/extension/test_production_request.cpp:3458: ERROR: CHECK( relay_error.error == Callable::CallError::CALL_ERROR_INVALID_ARGUMENT ) is NOT correct!
+  values: CHECK( 0 == 2 )
+
+tests/core/extension/test_production_request.cpp:3459: ERROR: CHECK( relay_error.argument == 17 ) is NOT correct!
+  values: CHECK( 0 == 17 )
+
+tests/core/extension/test_production_request.cpp:3460: ERROR: CHECK( relay_error.expected == 23 ) is NOT correct!
+  values: CHECK( 0 == 23 )
+
+tests/core/extension/test_production_request.cpp:3387: ERROR: CHECK_FALSE( GDExtensionDeviceExit::Registry::is_production_metadata_entry() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/core/extension/test_production_request.cpp:3455: ERROR: CHECK( fixture.registry.call_normal_relay(probe.relay, nullptr, 0, relay_returned, relay_error) == ERR_UNAUTHORIZED ) is NOT correct!
+  values: CHECK( 0 == 4 )
+
+tests/core/extension/test_production_request.cpp:3456: ERROR: CHECK( probe.relay_calls == relay_calls_before ) is NOT correct!
+  values: CHECK( 2 == 1 )
+
+tests/core/extension/test_production_request.cpp:3457: ERROR: CHECK( relay_returned == Variant("metadata relay output sentinel") ) is NOT correct!
+  values: CHECK( 42 == metadata relay output sentinel )
+
+tests/core/extension/test_production_request.cpp:3458: ERROR: CHECK( relay_error.error == Callable::CallError::CALL_ERROR_INVALID_ARGUMENT ) is NOT correct!
+  values: CHECK( 0 == 2 )
+
+tests/core/extension/test_production_request.cpp:3459: ERROR: CHECK( relay_error.argument == 17 ) is NOT correct!
+  values: CHECK( 0 == 17 )
+
+tests/core/extension/test_production_request.cpp:3460: ERROR: CHECK( relay_error.expected == 23 ) is NOT correct!
+  values: CHECK( 0 == 23 )
+
+tests/core/extension/test_production_request.cpp:3628: ERROR: CHECK( probe.relay_calls == 0 ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/core/extension/test_production_request.cpp:3634: ERROR: CHECK( probe.relay_calls == 1 ) is NOT correct!
+  values: CHECK( 3 == 1 )
+
+===============================================================================
+[doctest] test cases:    1 |    0 passed |  1 failed | 2132 skipped
+[doctest] assertions: 8358 | 8342 passed | 16 failed |
+[doctest] Status: FAILURE!

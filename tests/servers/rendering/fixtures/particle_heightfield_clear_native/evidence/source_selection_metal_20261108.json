@@ -1,0 +1,26 @@
+{
+  "source_base": "fdcbb4cbc7e716a9a79ac46b0145e233966aae5c",
+  "fixture_source_commit": "f9ab5fcec21883f1d25b4899abc3e8031754bc1f",
+  "build_state": "built on source base with the subsequently committed fixture delta; version banner retains source base",
+  "binary_sha256": "0fbe7fb9ad050a8ead4508737720755c383919375075656d4ad8e0bc10adc630",
+  "log_file": "source_selection_metal_20261108.log",
+  "log_sha256": "0759477937b609e318e111380b1c4868d9163469068507241fe2dd66b94a309d",
+  "command": "python3 tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_source_selection.py --binary bin/godot.macos.editor.arm64 --display-driver macos --rendering-driver metal",
+  "build_exit_code": 0,
+  "runner_exit_code": 0,
+  "device": "Apple M5 (Apple9)",
+  "driver": "Metal 4.0",
+  "renderers": [
+    "Forward Mobile",
+    "Forward+"
+  ],
+  "cases": 8,
+  "direct_controls": 0.5,
+  "scene_results": {
+    "cast_shadow_off": 0.5,
+    "alpha_discard": 0.0,
+    "hidden": 0.0,
+    "particles_excluded": 0.0
+  },
+  "scope": "H12 native source-selection only; no Current/COW, D geometry custody, U05 or K01 completion"
+}

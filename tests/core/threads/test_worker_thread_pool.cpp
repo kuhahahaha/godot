@@ -48,6 +48,37 @@ static void static_test(void *p_arg) {
 static void static_callable_test() {
 	counter[0].sub(2);
 }
+
+#ifdef THREADS_ENABLED
+static void static_returning_pump() {
+	counter[0].increment();
+}
+
+TEST_CASE("[WorkerThreadPool] completed pump tasks release their worker capacity") {
+	WorkerThreadPool pool(false);
+	pool.init(2);
+	counter.clear();
+	counter.resize(1);
+
+	for (int i = 0; i < 16; i++) {
+		const WorkerThreadPool::TaskID task = pool.add_task(callable_mp_static(static_returning_pump), true, "Returning pump", true);
+		const Error joined = pool.wait_for_task_completion(task);
+		REQUIRE(joined == OK);
+		if (joined != OK) {
+			pool.finish();
+			return;
+		}
+		const int thread_count = pool.get_thread_count();
+		REQUIRE(thread_count == 2);
+		if (thread_count != 2) {
+			pool.finish();
+			return;
+		}
+		CHECK(counter[0].get() == i + 1);
+	}
+}
+#endif
+
 TEST_CASE("[WorkerThreadPool] Process threads using individual tasks") {
 	for (int iterations = 0; iterations < 500; iterations++) {
 		const int count = Math::pow(2.0f, Math::random(0.0f, 5.0f));

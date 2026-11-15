@@ -1,0 +1,151 @@
+{
+  "schema": 1,
+  "status": "red_green_verified_by_root",
+  "baseline_revision": "60d14b9c63195c96137d714ff41e681ffbb1a247",
+  "build_command": "scons -Q platform=macos target=editor tests=yes debug_symbols=no module_particles_runtime_tests_enabled=yes -j3",
+  "run_command": "bin/godot.macos.editor.arm64 --display-driver macos --rendering-method mobile --rendering-driver metal --audio-driver Dummy --path tests/scene/fixtures/particle_collision_texture_changed --script run.gd",
+  "runtime": {
+    "driver": "Metal 4.0",
+    "renderer": "Forward Mobile",
+    "device": "Apple M3 Pro (Apple9)"
+  },
+  "results": {
+    "red": {
+      "checks": 98,
+      "failures": [
+        "GPUParticlesCollisionSDF3D shared clear 0: latest resource RS RID",
+        "GPUParticlesAttractorVectorField3D shared clear 0: latest resource RS RID",
+        "GPUParticlesCollisionSDF3D render-thread rebind 0: latest resource RS RID",
+        "GPUParticlesCollisionSDF3D render-thread rebind 0: actual 3D binding availability",
+        "GPUParticlesAttractorVectorField3D render-thread rebind 0: latest resource RS RID",
+        "GPUParticlesAttractorVectorField3D render-thread rebind 0: actual 3D binding availability",
+        "GPUParticlesCollisionSDF3D shared clear 1: latest resource RS RID",
+        "GPUParticlesAttractorVectorField3D shared clear 1: latest resource RS RID",
+        "GPUParticlesCollisionSDF3D render-thread rebind 1: latest resource RS RID",
+        "GPUParticlesCollisionSDF3D render-thread rebind 1: actual 3D binding availability",
+        "GPUParticlesAttractorVectorField3D render-thread rebind 1: latest resource RS RID",
+        "GPUParticlesAttractorVectorField3D render-thread rebind 1: actual 3D binding availability",
+        "GPUParticlesCollisionSDF3D repeated same-ref has one subscription",
+        "GPUParticlesCollisionSDF3D replacement subscribed",
+        "GPUParticlesAttractorVectorField3D repeated same-ref has one subscription",
+        "GPUParticlesAttractorVectorField3D replacement subscribed"
+      ],
+      "observation_count": 20,
+      "all_observations_main_rd_and_collision_valid": true,
+      "runtime_error_diagnostics": [],
+      "exit_code_reported_by_root": 1
+    },
+    "green": {
+      "checks": 98,
+      "failures": [],
+      "observation_count": 20,
+      "all_observations_main_rd_and_collision_valid": true,
+      "runtime_error_diagnostics": [],
+      "exit_code_reported_by_root": 0
+    }
+  },
+  "red_identity": {
+    "binary": "not_retained",
+    "binary_sha256": null,
+    "scope": "Baseline two-node implementation, with the frozen observer and fixture; camera tests had not yet been included. Full RED tree snapshot not retained."
+  },
+  "green_identity": {
+    "artifact": {
+      "bytes": 156531640,
+      "sha256": "2dde15a04a877b1c93e5cbe92147b0a985dce61a1805232efef75c1df4c313e6"
+    },
+    "selection": {
+      "schema": 1,
+      "core_stamp": "793925c97f5034ce32181d59879eb86e95608f9354132047adb63eb379a9063c",
+      "compiler_route": "BuiltinGlslangV1",
+      "compiler_stamp": "e61daf5348fdc4a6baee8a9ae235025c722c7101b04c9edfd8156b49f329b584",
+      "platform": "macos",
+      "architecture": "arm64",
+      "target_kind": "Executable"
+    },
+    "source_files": [
+      {
+        "path": "scene/3d/gpu_particles_collision_3d.cpp",
+        "baseline_sha256": "6e7e6afe06e72770af0562addc89cf4505b4530d46c746292309527b7ea5401f",
+        "green_sha256": "7a2d02641bb8b13105366be84c782bcbe5b5e0c17cb8ad0d768e369bbf9c4a21",
+        "diff_sha256": "0f27654605afcf1063fbf19f576f2721896038429f2c73311f6c86872537d8a1"
+      },
+      {
+        "path": "scene/3d/gpu_particles_collision_3d.h",
+        "baseline_sha256": "2593d30b7cd3ba214b378a398cfa85e8241590d9106cf084a8e13fa8a78225ac",
+        "green_sha256": "dc265ff65540bc87e855b4dbe97870cc5313b0ba3eebecf2be92731ccdfe0bd2",
+        "diff_sha256": "bb75560217dfe71a5738270fac6545e97ce52308e68078ab148709c41fba9433"
+      },
+      {
+        "path": "modules/particles_runtime_tests/particles_external_guard_test_fixture.cpp",
+        "baseline_sha256": "73789852489637d39a0299dc3bb7637cc944c53196d3a748c38fe2d175ed3d79",
+        "green_sha256": "8dd0b1e674bd5d3a9ecaf1216409128b43911e2eb0820aecdfc4a55c5f747f91",
+        "diff_sha256": "2d4379192ef5aaa93344a49130e9e3016b4bf1db43c156114033529a9bacb388"
+      },
+      {
+        "path": "modules/particles_runtime_tests/particles_external_guard_test_fixture.h",
+        "baseline_sha256": "c5039daf935baa6ca53d76269dc2d240dcc14122525f5ccebbd294dfde0f2a5a",
+        "green_sha256": "7470f4171b3621ce68556d7ed1b5ee0cd03d3c569592f4cb3d392c3ea18ffa76",
+        "diff_sha256": "bc8f83225d25a627e642893ac838e87e2255faf591614472e1df92e929de0c11"
+      },
+      {
+        "path": "servers/rendering/renderer_rd/storage_rd/particles_storage.h",
+        "baseline_sha256": "0134ba1be818bb6d6321775f66f983471101f9bde967ff880b68a07b81633ec6",
+        "green_sha256": "c66d22a0b5cc07d9871bb25d7a90c8027d6847f0a6f2a28aa14d3f99653baeab",
+        "diff_sha256": "74885c8b9c0306d12d042a5fba3ffc000ab609560a146cc26c53efa37aef4c62"
+      }
+    ],
+    "particle_scope_diff_sha256": "70313f980ad03d37ec53c30ba6bbe2478ba7189e387c22d3326ba8484f5ea442",
+    "combined_tracked_diff_sha256": "136b457a64b5246efdef9c4b99daa9c94e0e830fa10de2a27d241346108e2814",
+    "combined_scope_note": "SHA256 of git diff baseline_revision -- combined_source_paths; includes exactly the five particle and two camera source/test files. Documentation/log changes excluded.",
+    "root_compile_repair": "Root added core/object/callable_mp.h to gpu_particles_collision_3d.cpp after initial GREEN compile found callable_mp undeclared.",
+    "combined_source_paths": [
+      "scene/3d/gpu_particles_collision_3d.cpp",
+      "scene/3d/gpu_particles_collision_3d.h",
+      "modules/particles_runtime_tests/particles_external_guard_test_fixture.cpp",
+      "modules/particles_runtime_tests/particles_external_guard_test_fixture.h",
+      "servers/rendering/renderer_rd/storage_rd/particles_storage.h",
+      "servers/rendering/renderer_viewport.cpp",
+      "tests/servers/rendering/test_viewport_camera_source.cpp"
+    ]
+  },
+  "fixture_files": {
+    "run.gd": "2b8af70a28c4fb9b496e29310dde8fe921373e5025ad11dd75bdcaad5f3f1ad3",
+    "project.godot": "0b11289fe4c4a4828db9f7f47fd5eb00899bf127cadb7146d7b9d5a03cae5d60",
+    "README.md": "f7c6e2da520152ee1eacee3b47d76f67100fa0ac28b1e91965d53cc505bb46e4"
+  },
+  "logs": {
+    "red_run.log": {
+      "bytes": 5853,
+      "sha256": "bc9082edf4e6d59eefd95f891bb2c6ba62193cfd36b896ef94ba4c825fc7b737",
+      "original_path": "/tmp/b4-particle-texture-red-run.log"
+    },
+    "green_run.log": {
+      "bytes": 4686,
+      "sha256": "765361f33bcf55490d5774c0e21cd2f32e58c00171ecfc6e8ab7540bb028b61e",
+      "original_path": "/tmp/b4-particle-texture-green-run.log"
+    },
+    "red_build.log": {
+      "bytes": 4250,
+      "sha256": "78103fde13f770c3d7d928e734728a6c5185722d31729bbf06ce3ba8d97f93cb",
+      "original_path": "/tmp/b4-particle-texture-red-build.log"
+    },
+    "green_build.log": {
+      "bytes": 2041,
+      "sha256": "17ddb0550bdab206db17a7ff6d3f7508a506c362f0cb81be4765608f7906eaa7",
+      "original_path": "/tmp/b4-camera-particle-green-build.log"
+    }
+  },
+  "proof_scope": [
+    "Actual original main RenderingDevice and render-thread observations.",
+    "Actual collision owner field RID matches current Texture3DRD RS RID, or empty member after detach.",
+    "Resolved 3D RID is nonzero for a populated wrapper and zero for cleared/detached fields.",
+    "Two node classes, shared resources, two clear/rebind cycles, render-thread changed emission, duplicate subscription prevention, replacement/detach, queued old signals, receiver destruction, caller-owned source survival."
+  ],
+  "limits": [
+    "No shader sampling or particle motion/physical effect claim.",
+    "The observer tests resolved RID nonzero; it does not call rd.texture_is_valid on that resolved RID.",
+    "RED executable bytes/hash and complete RED source tree snapshot were not retained.",
+    "Runtime return codes supplied by root; raw run logs contain result records, not process return-code trailers."
+  ]
+}
