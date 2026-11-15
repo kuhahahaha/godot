@@ -529,7 +529,9 @@ float DisplayServerMacOSBase::screen_get_refresh_rate(int p_screen) const {
 	if ((NSUInteger)p_screen < [screenArray count]) {
 		NSScreen *screen = [screenArray objectAtIndex:p_screen];
 		const CGDisplayModeRef displayMode = CGDisplayCopyDisplayMode(_get_display_id_for_screen(screen));
+		ERR_FAIL_NULL_V(displayMode, SCREEN_REFRESH_RATE_FALLBACK);
 		const double displayRefreshRate = CGDisplayModeGetRefreshRate(displayMode);
+		CGDisplayModeRelease(displayMode);
 		return (float)displayRefreshRate;
 	}
 	ERR_PRINT("An error occurred while trying to get the screen refresh rate.");

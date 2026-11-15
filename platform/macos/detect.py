@@ -319,6 +319,33 @@ def configure(env: "SConsEnvironment"):
 
     if env["vulkan"]:
         env.AppendUnique(CPPDEFINES=["VULKAN_ENABLED", "RD_ENABLED"])
+        if not env["builtin_glslang"]:
+            # Keep the external compiler route explicit on macOS.  The Linux
+            # backend obtains these paths from pkg-config; macOS commonly has
+            # the same package in a Vulkan SDK or a Homebrew prefix, but has no
+            # portable pkg-config requirement.  Refuse the route when the
+            # complete header+library pair cannot be found rather than
+            # silently falling back to the vendored compiler.
+            glslang_roots = []
+            if env["vulkan_sdk_path"]:
+                glslang_roots.append(os.path.expanduser(env["vulkan_sdk_path"]))
+            glslang_roots.extend(["/opt/homebrew/opt/glslang", "/usr/local/opt/glslang"])
+            glslang_root = ""
+            for candidate in glslang_roots:
+                include = os.path.join(candidate, "include")
+                lib = os.path.join(candidate, "lib")
+                if os.path.isfile(os.path.join(include, "glslang", "Public", "ShaderLang.h")) and os.path.isdir(lib):
+                    glslang_root = candidate
+                    break
+            if not glslang_root:
+                print_error(
+                    "External glslang requested, but no complete include/lib installation was found. "
+                    "Set vulkan_sdk_path or install glslang; builtin_glslang remains disabled."
+                )
+                sys.exit(255)
+            env.Prepend(CPPPATH=[os.path.join(glslang_root, "include")])
+            env.Append(LIBPATH=[os.path.join(glslang_root, "lib")])
+            env.Append(LIBS=["glslang", "SPIRV", "glslang-default-resource-limits"])
         extra_frameworks.add("Metal")
         if not env["use_volk"]:
             env.Append(LINKFLAGS=["-lMoltenVK"])

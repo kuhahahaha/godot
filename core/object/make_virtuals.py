@@ -20,8 +20,16 @@ proto = """#define GDVIRTUAL$VER($ALIAS $RET m_name $ARG)\\
 		static const StringName _gdvirtual_##$VARNAME##_sn = StringName(#m_name, true);\\
 		$SCRIPTCALL\\
 		if (_get_extension()) {\\
+			GDExtensionDeviceExit::CallbackScope _entry_frame(_get_extension()->callback_record.get_reference());\\
+			if (_entry_frame.get_error() != OK) {\\
+				$ENTRYREFUSAL\\
+				return false;\\
+			}\\
 			if (unlikely(!_gdvirtual_##$VARNAME)) {\\
-			    _gdvirtual_init_method_ptr(_gdvirtual_##$VARNAME##_get_method_info().get_compatibility_hash(), _gdvirtual_##$VARNAME, _gdvirtual_##$VARNAME##_sn, $COMPAT);\\
+				if (!_gdvirtual_init_method_ptr(_gdvirtual_##$VARNAME##_get_method_info().get_compatibility_hash(), _gdvirtual_##$VARNAME, _gdvirtual_##$VARNAME##_sn, $COMPAT)) {\\
+					$ENTRYREFUSAL\\
+					return false;\\
+				}\\
 			}\\
 			if (_gdvirtual_##$VARNAME != reinterpret_cast<void*>(_INVALID_GDVIRTUAL_FUNC_ADDR)) {\\
 				$CALLPTRARGS\\
@@ -44,8 +52,10 @@ proto = """#define GDVIRTUAL$VER($ALIAS $RET m_name $ARG)\\
 		static const StringName _gdvirtual_##$VARNAME##_sn = StringName(#m_name, true);\\
 		$SCRIPTHASMETHOD\\
 		if (_get_extension()) {\\
+			GDExtensionDeviceExit::CallbackScope _entry_frame(_get_extension()->callback_record.get_reference());\\
+			if (_entry_frame.get_error() != OK) { return false; }\\
 			if (unlikely(!_gdvirtual_##$VARNAME)) {\\
-			    _gdvirtual_init_method_ptr(_gdvirtual_##$VARNAME##_get_method_info().get_compatibility_hash(), _gdvirtual_##$VARNAME, _gdvirtual_##$VARNAME##_sn, $COMPAT);\\
+				if (!_gdvirtual_init_method_ptr(_gdvirtual_##$VARNAME##_get_method_info().get_compatibility_hash(), _gdvirtual_##$VARNAME, _gdvirtual_##$VARNAME##_sn, $COMPAT)) { return false; }\\
 			}\\
 			if (_gdvirtual_##$VARNAME != reinterpret_cast<void*>(_INVALID_GDVIRTUAL_FUNC_ADDR)) {\\
 				return true;\\
@@ -79,12 +89,14 @@ def generate_version(argcount, const=False, returns=False, required=False, compa
     if returns:
         sproto += "R"
         s = s.replace("$RET", "m_ret,")
+        s = s.replace("$ENTRYREFUSAL", "r_ret = std::remove_reference_t<decltype(r_ret)>{};")
         s = s.replace("$RVOID", "(void)r_ret;")  # If required, may lead to uninitialized errors
         s = s.replace("$CALLPTRRETDEF", "PtrToArg<m_ret>::EncodeT ret;")
         method_info += "method_info.return_val = GetTypeInfo<m_ret>::get_class_info();\\\n"
         method_info += "\t\tmethod_info.return_val_metadata = GetTypeInfo<m_ret>::METADATA;"
     else:
         s = s.replace("$RET ", "")
+        s = s.replace("$ENTRYREFUSAL", "")
         s = s.replace("\t\t$RVOID\\\n", "")
         s = s.replace("\t\t\t$CALLPTRRETDEF\\\n", "")
 

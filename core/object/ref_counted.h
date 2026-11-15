@@ -35,9 +35,52 @@
 
 class RefCounted : public Object {
 	GDCLASS(RefCounted, Object);
+#ifdef TESTS_ENABLED
+	friend struct TestDeviceExitEntry::Access;
+#endif
 	SafeRefCount refcount;
 	SafeRefCount refcount_init;
-	SafeNumeric<uint32_t> dereference_count;
+	// Keep active completions and reserved capacity in one atomic word. An
+	// init fence reserves its possible borrowed compensation before mutation;
+	// other releases cannot consume that capacity while callbacks are running.
+	class CompletionCounter {
+		std::atomic<uint64_t> state{ 0 };
+
+	public:
+		bool try_increment(uint32_t p_capacity) {
+			uint64_t before = state.load(std::memory_order_acquire);
+			while (true) {
+				const uint32_t reserved = before >> 32;
+				if (reserved > UINT32_MAX - p_capacity) {
+					return false;
+				}
+				const uint64_t after = before + (uint64_t(p_capacity) << 32) + 1;
+				if (state.compare_exchange_weak(before, after, std::memory_order_acq_rel)) {
+					return true;
+				}
+			}
+		}
+		bool increment_borrowed() {
+			uint64_t before = state.load(std::memory_order_acquire);
+			while (true) {
+				if (uint32_t(before) >= (before >> 32)) {
+					return false;
+				}
+				if (state.compare_exchange_weak(before, before + 1, std::memory_order_acq_rel)) {
+					return true;
+				}
+			}
+		}
+		uint32_t decrement(uint32_t p_capacity) {
+			return uint32_t(state.fetch_sub((uint64_t(p_capacity) << 32) + 1, std::memory_order_acq_rel)) - 1;
+		}
+		uint32_t get() const { return uint32_t(state.load(std::memory_order_acquire)); }
+		void set(uint32_t p_count) { state.store((uint64_t(p_count) << 32) | p_count, std::memory_order_release); }
+	};
+	CompletionCounter dereference_count;
+	bool _init_ref(ReferenceCohort &p_cohort);
+	bool _reference(ReferenceCohort &p_cohort);
+	bool _unreference(ReferenceCohort &p_cohort, bool p_borrowed);
 
 protected:
 	static void _bind_methods();

@@ -32,6 +32,10 @@
 
 #include "core/authors.gen.h"
 #include "core/config/project_settings.h"
+
+#ifdef MACOS_ENABLED
+#include "core/config/engine_build_identity.h"
+#endif
 #include "core/donors.gen.h"
 #include "core/license.gen.h"
 #include "core/object/object.h"
@@ -170,6 +174,22 @@ Dictionary Engine::get_version_info() const {
 	}
 	stringver += "-" + String(dict["status"]) + " (" + String(dict["build"]) + ")";
 	dict["string"] = stringver;
+
+#ifdef MACOS_ENABLED
+	const EngineBuildIdentity &identity = get_engine_build_identity();
+	if (identity.schema == 1) {
+		Dictionary controlled;
+		controlled["schema"] = identity.schema;
+		controlled["core_stamp"] = identity.core_stamp;
+		controlled["compiler_route"] = identity.compiler_route;
+		controlled["compiler_stamp"] = identity.compiler_stamp;
+		controlled["platform"] = identity.platform;
+		controlled["architecture"] = identity.architecture;
+		controlled["target_kind"] = identity.target_kind;
+		controlled.make_read_only();
+		dict["controlled_build_identity"] = controlled;
+	}
+#endif
 
 	return dict;
 }

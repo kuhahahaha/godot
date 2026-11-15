@@ -3,6 +3,8 @@ from misc.utility.scons_hints import *
 
 import platform_macos_builders
 
+Import("engine_build_identity")
+
 Import("env")
 
 files = [
@@ -48,14 +50,19 @@ else:
     files += ["libgodot_macos.mm"]
 
 if env["library_type"] == "static_library":
-    prog = env.add_library("#bin/godot", files)
+    prog = env.add_library("#bin/godot.platform" + env["LIBSUFFIX"], files)
 elif env["library_type"] == "shared_library":
     prog = env.add_shared_library("#bin/godot", files)
 else:
     prog = env.add_program("#bin/godot", files)
+
+controlled_identity_record = engine_build_identity.install_macos(env, prog)
 
 if env["debug_symbols"] and env["separate_debug_symbols"]:
     env.AddPostAction(prog, env.Run(platform_macos_builders.make_debug_macos))
 
 if env["generate_bundle"]:
     env.AlwaysBuild(env.CommandNoCache("generate_bundle", prog, env.Run(platform_macos_builders.generate_bundle)))
+
+# Final artifact receipt follows the existing final-target post-actions.
+engine_build_identity.attach_final_receipt(env, env.get("_CONTROLLED_FINAL_PROGRAM", prog), controlled_identity_record)

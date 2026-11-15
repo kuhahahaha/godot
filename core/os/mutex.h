@@ -32,6 +32,10 @@
 
 #include "core/typedefs.h"
 
+#ifdef TSAN_ENABLED
+#include <sanitizer/tsan_interface.h>
+#endif
+
 #ifdef MINGW_ENABLED
 #define MINGW_STDTHREAD_REDUNDANCY_WARNING
 #include <thirdparty/mingw-std-threads/mingw.mutex.h>
@@ -55,6 +59,14 @@ class MutexImpl {
 	mutable StdMutexT mutex;
 
 public:
+#ifdef TSAN_ENABLED
+	~MutexImpl() {
+		// A static native initializer can leave the standard mutex destructor
+		// trivial. Retire this lifetime before its storage can be reused.
+		__tsan_mutex_destroy(mutex.native_handle(), 0);
+	}
+#endif
+
 	_ALWAYS_INLINE_ void lock() const {
 		mutex.lock();
 	}
@@ -94,6 +106,83 @@ public:
 	// TODO: Implement a `try_temp_relock` if needed (will also need a dummy method below).
 };
 
+template <typename MutexT>
+class [[nodiscard]] MutexTryLock {
+	const MutexT *mutex = nullptr;
+	bool locked = false;
+
+public:
+	explicit MutexTryLock(const MutexT &p_mutex) :
+			mutex(&p_mutex), locked(p_mutex.try_lock()) {}
+
+	~MutexTryLock() {
+		if (locked && mutex) {
+			mutex->unlock();
+		}
+	}
+
+	MutexTryLock(const MutexTryLock &) = delete;
+	MutexTryLock &operator=(const MutexTryLock &) = delete;
+
+	_ALWAYS_INLINE_ bool owns_lock() const {
+		return locked;
+	}
+
+	_ALWAYS_INLINE_ void unlock() {
+		if (locked && mutex) {
+			mutex->unlock();
+			locked = false;
+		}
+	}
+};
+
+template <typename MutexT>
+class [[nodiscard]] MutexTemporaryUnlock {
+	const MutexT &mutex;
+
+public:
+	explicit MutexTemporaryUnlock(const MutexT &p_mutex) :
+			mutex(p_mutex) {
+		mutex.unlock();
+	}
+
+	~MutexTemporaryUnlock() {
+		mutex.lock();
+	}
+
+	MutexTemporaryUnlock(const MutexTemporaryUnlock &) = delete;
+	MutexTemporaryUnlock &operator=(const MutexTemporaryUnlock &) = delete;
+};
+
+template <typename MutexT>
+class [[nodiscard]] MutexScopeUnlock {
+	const MutexT *mutex = nullptr;
+
+public:
+	MutexScopeUnlock() = default;
+	explicit MutexScopeUnlock(const MutexT &p_mutex) :
+			mutex(&p_mutex) {}
+	explicit MutexScopeUnlock(const MutexT *p_mutex) :
+			mutex(p_mutex) {}
+
+	~MutexScopeUnlock() {
+		if (mutex) {
+			mutex->unlock();
+		}
+	}
+
+	MutexScopeUnlock(const MutexScopeUnlock &) = delete;
+	MutexScopeUnlock &operator=(const MutexScopeUnlock &) = delete;
+
+	_ALWAYS_INLINE_ void arm(const MutexT *p_mutex) {
+		mutex = p_mutex;
+	}
+
+	_ALWAYS_INLINE_ void disarm() {
+		mutex = nullptr;
+	}
+};
+
 using Mutex = MutexImpl<THREADING_NAMESPACE::recursive_mutex>; // Recursive, for general use
 using BinaryMutex = MutexImpl<THREADING_NAMESPACE::mutex>; // Non-recursive, handle with care
 
@@ -120,6 +209,30 @@ public:
 
 	void temp_relock() const {}
 	void temp_unlock() const {}
+};
+
+template <typename MutexT>
+class [[nodiscard]] MutexTryLock {
+public:
+	explicit MutexTryLock(const MutexT &) {}
+	bool owns_lock() const { return true; }
+	void unlock() {}
+};
+
+template <typename MutexT>
+class [[nodiscard]] MutexTemporaryUnlock {
+public:
+	explicit MutexTemporaryUnlock(const MutexT &) {}
+};
+
+template <typename MutexT>
+class [[nodiscard]] MutexScopeUnlock {
+public:
+	MutexScopeUnlock() = default;
+	explicit MutexScopeUnlock(const MutexT &) {}
+	explicit MutexScopeUnlock(const MutexT *) {}
+	void arm(const MutexT *) {}
+	void disarm() {}
 };
 
 using Mutex = MutexImpl;

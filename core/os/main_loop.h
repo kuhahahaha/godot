@@ -68,5 +68,13 @@ public:
 	virtual bool process(double p_time);
 	virtual void finalize();
 
+	virtual bool query_scene_ready_root_world(uint64_t &r_tree_id, uint64_t &r_window_id, uint64_t &r_world_id, bool &r_has_singleton_tree) const {
+		r_tree_id = 0;
+		r_window_id = 0;
+		r_world_id = 0;
+		r_has_singleton_tree = false;
+		return false;
+	}
+
 	virtual ~MainLoop() {}
 };
