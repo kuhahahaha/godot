@@ -1,0 +1,22 @@
+{
+  "source_schema": "/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/core/extension/gdextension_interface.json",
+  "source_schema_sha256": "5ea33775426b83e9fce42ce05a42fbf3ef5b277d5cab0890ba556eac99874e89",
+  "formal_generator_directory": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-context-20261111/final-source-package/tools",
+  "formal_generator_receipt": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/history-method-height-context-20261111/GENERATED.json",
+  "support_source_root": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-numeric-frozen-source-20261107/godot-cpp",
+  "support_files": [
+    "include/godot_cpp/core/error_macros.hpp",
+    "include/godot_cpp/core/defs.hpp",
+    "include/godot_cpp/core/load_proc_address.inc",
+    "gen/include/godot_cpp/core/version.hpp"
+  ],
+  "scope": "Complete custom native interface SDK increment: 1 interface header and 2 loader products. No ANGE/RmlUi libraries; no engine/DSO binaries or runtime acceptance.",
+  "historical_source_schema": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/typed-renderer-fixture-native-build-20261111/source/core/extension/gdextension_interface.json",
+    "sha256": "1a7a839114b3ec7a79a9d5026fe78214023c6ed2370cd7784a5a6bdf4ffec1ca"
+  },
+  "source_commit": "541649866ce31e816d822a6dbbdd7ae60c6d1a7d",
+  "historical_cohort": "634a559cbedfbe53b3cd05a76551c36a00fa12e397847df8ee8439f4b6a552b9; preserved, not the successor host",
+  "successor_products_origin": "Unchanged original binding_generator.py on exact reviewed source_schema; INPUT_PINS successor expected products bootstrapped from actual original generation, then original replay double-generation and C11/C++17 probes executed locally.",
+  "successor_runtime_scope": "Original guarded/legacy headless fixture against pre-publication Task1 executable; final controlled Core/compiler selection supplied externally after final SDK source commit."
+}

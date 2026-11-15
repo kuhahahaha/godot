@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "host_source_root": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/typed-renderer-generation-build-20261111/frozen-staged-camera-clustered-transparent",
+  "host_manifest": {
+    "sha256": "704c059187816c957fe310d6a3f8494b15cf28a9f882581439f04d97e7febb02",
+    "bytes": 2206
+  },
+  "host": {
+    "bytes": 97716096,
+    "sha256": "634a559cbedfbe53b3cd05a76551c36a00fa12e397847df8ee8439f4b6a552b9"
+  },
+  "interface_schema": {
+    "types": 399,
+    "interfaces": 388,
+    "sha256": "1a7a839114b3ec7a79a9d5026fe78214023c6ed2370cd7784a5a6bdf4ffec1ca",
+    "bytes": 1037043
+  },
+  "selection": {
+    "schema": 1,
+    "core_stamp": "db47ed3f40200c0f118c2938fbce5694f415464c4e413016395de8f2f1401a52",
+    "compiler_route": "BuiltinGlslangV1",
+    "compiler_stamp": "9e241525f14469db50f4041f814e23afe6d942dc1a4da3893ea3fe56fca04c87",
+    "platform": "macos",
+    "architecture": "arm64",
+    "target_kind": "Executable"
+  },
+  "original_link_input_count": 112,
+  "formal_sdk_source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-cohort-formal-adoption-20261111/sdk",
+  "formal_sdk_source_manifest": {
+    "sha256": "9267ef442fe5ddda4d4f6e213b75c2a6eef6873a2668b7da4a6018a8e0f0cbbc",
+    "bytes": 5317
+  },
+  "formal_sdk_source_input_pins": {
+    "sha256": "9719db2312d10728fcca20ebc26bbda5c9f0fc518b0abcc1304a53b73b57e1da",
+    "bytes": 2093
+  },
+  "omitted_previous_verification_and_manifest": true,
+  "full_class_api_export_and_archive_included": false,
+  "native_runtime_validation_claimed": false,
+  "cohort_role": "PRESERVED_PRE_PUBLICATION_634A_VALIDATION_HOST_NOT_NEW_BRANCH_SELECTION"
+}

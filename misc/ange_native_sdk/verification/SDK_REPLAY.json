@@ -1,0 +1,122 @@
+{
+  "schema_sha256": "5ea33775426b83e9fce42ce05a42fbf3ef5b277d5cab0890ba556eac99874e89",
+  "products": {
+    "include/gdextension_interface.h": {
+      "sha256": "0b9caa1389269fb731b6c32d680f9f352c31145e6defa636a44d3f7f05fbcbcb",
+      "bytes": 489441
+    },
+    "include/godot_cpp/core/gdextension_interface_loader.hpp": {
+      "sha256": "51753ba3ea3f5a5f00199a53ddf68684b72c0c31f78938d377f488cad0872a69",
+      "bytes": 44007
+    },
+    "src/gdextension_interface_loader.cpp": {
+      "sha256": "d33d688ac28d30e56f958d699a06105b9231107717b30c29e7e8ee4a0ea9b715",
+      "bytes": 103521
+    }
+  },
+  "results": [
+    {
+      "command": [
+        "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+        "-B",
+        "-c",
+        "import sys;from pathlib import Path;sys.path.insert(0,sys.argv[1]);import binding_generator as g;g.generate_gdextension_interface_header(sys.argv[3]+\"/include/gdextension_interface.h\",sys.argv[2]);g.generate_gdextension_interface_loader(sys.argv[2],Path(sys.argv[3]))",
+        "/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/misc/ange_native_sdk/tools/godot-cpp",
+        "/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/misc/ange_native_sdk/schema/gdextension_interface.json",
+        "/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/misc/ange_native_sdk"
+      ],
+      "cwd": "/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/misc/ange_native_sdk",
+      "exit": 0,
+      "seconds": 0.155936666,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+        "-B",
+        "-c",
+        "import sys;from pathlib import Path;sys.path.insert(0,sys.argv[1]);import binding_generator as g;g.generate_gdextension_interface_header(sys.argv[3]+\"/include/gdextension_interface.h\",sys.argv[2]);g.generate_gdextension_interface_loader(sys.argv[2],Path(sys.argv[3]))",
+        "/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/misc/ange_native_sdk/tools/godot-cpp",
+        "/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/misc/ange_native_sdk/schema/gdextension_interface.json",
+        "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/native-interface-sdk-replay-y1lsnsdm"
+      ],
+      "cwd": "/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/misc/ange_native_sdk",
+      "exit": 0,
+      "seconds": 0.15521487500000003,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "clang",
+        "-std=c11",
+        "-I/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/misc/ange_native_sdk/include",
+        "/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/misc/ange_native_sdk/probes/interface_include.c",
+        "-fsyntax-only"
+      ],
+      "cwd": "/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/misc/ange_native_sdk",
+      "exit": 0,
+      "seconds": 0.078580084,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "-I/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/misc/ange_native_sdk/include",
+        "/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/misc/ange_native_sdk/probes/interface_include.cpp",
+        "-fsyntax-only"
+      ],
+      "cwd": "/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/misc/ange_native_sdk",
+      "exit": 0,
+      "seconds": 0.04851195899999999,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "-I/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/misc/ange_native_sdk/include",
+        "-I/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/misc/ange_native_sdk/support/godot-cpp/include",
+        "-I/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/misc/ange_native_sdk/support/godot-cpp/gen/include",
+        "/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/misc/ange_native_sdk/src/gdextension_interface_loader.cpp",
+        "-fsyntax-only"
+      ],
+      "cwd": "/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/misc/ange_native_sdk",
+      "exit": 0,
+      "seconds": 0.11727637499999993,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "clang++",
+        "--version"
+      ],
+      "cwd": "/Users/macbookair/Documents/Work/ag-particle-lanes/godot-k02-r03/misc/ange_native_sdk",
+      "exit": 0,
+      "seconds": 0.014105667000000044,
+      "stdout_bytes": 200,
+      "stderr_bytes": 0,
+      "stdout_sha256": "b8a2569d699eec50baaf1719096d0801d16fb28fbcb2df7ffd0a07cd26d9fd47",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "double_generation_exact": true,
+  "formal_products_exact": true,
+  "inputs_unchanged": true,
+  "scope": "Custom native interface header plus loader declaration/implementation. Include and loader syntax only; no ANGE/RmlUi libraries, executable link or runtime validation."
+}

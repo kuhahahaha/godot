@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "selection": {
+    "schema": 1,
+    "core_stamp": "db47ed3f40200c0f118c2938fbce5694f415464c4e413016395de8f2f1401a52",
+    "compiler_route": "BuiltinGlslangV1",
+    "compiler_stamp": "9e241525f14469db50f4041f814e23afe6d942dc1a4da3893ea3fe56fca04c87",
+    "platform": "macos",
+    "architecture": "arm64",
+    "target_kind": "Executable"
+  },
+  "status": "available",
+  "reason": null,
+  "artifact": {
+    "bytes": 97716096,
+    "sha256": "634a559cbedfbe53b3cd05a76551c36a00fa12e397847df8ee8439f4b6a552b9"
+  }
+}

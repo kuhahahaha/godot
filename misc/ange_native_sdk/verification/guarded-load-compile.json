@@ -1,0 +1,20 @@
+{
+  "command": [
+    "clang++",
+    "-std=c++17",
+    "-dynamiclib",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/native-storage-generation-finality-20261112/misc/ange_native_sdk/include",
+    "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/native-storage-generation-finality-20261112/misc/ange_native_sdk/support/godot-cpp/include",
+    "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/native-storage-generation-finality-20261112/misc/ange_native_sdk/support/godot-cpp/gen/include",
+    "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-numeric-frozen-source-20261107/godot-cpp/gen/include",
+    "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-numeric-frozen-source-20261107/godot-cpp/include",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/native-storage-generation-finality-20261112/tests/core/object/fixtures/device_exit_sdk_load/probe.cc",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/native-storage-generation-finality-20261112/misc/ange_native_sdk/src/gdextension_interface_loader.cpp",
+    "-o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/native-storage-generation-finality-20261112/.superpowers/sdd/IMPLEMENTATION_PLAN/task2/guarded-load-03/libprobe.dylib"
+  ],
+  "exit": 0
+}
