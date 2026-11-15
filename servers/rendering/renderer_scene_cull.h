@@ -42,15 +42,101 @@
 #include "servers/rendering/instance_uniforms.h"
 #include "servers/rendering/renderer_scene_occlusion_cull.h"
 #include "servers/rendering/renderer_scene_render.h"
+#include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/rendering_method.h"
 #include "servers/rendering/rendering_server_globals.h"
 #include "servers/rendering/rendering_server_types.h"
 #include "servers/rendering/storage/utilities.h"
 
+#include "modules/modules_enabled.gen.h"
+
 class RenderingLightCuller;
+class ParticlesScenePairsTestFixture;
+class ParticlesHeightfieldClearTestFixture;
+class RenderingDevice;
+
+namespace GDExtensionDeviceExit { class Registry; }
+#ifdef TESTS_ENABLED
+namespace TestProductionRequest { struct Access; }
+#endif
 
 class RendererSceneCull : public RenderingMethod {
+	class NativeOutputCullScope;
+	NativeOutputCullScope *native_output_cull_scope = nullptr;
+	friend class GDExtensionDeviceExit::Registry;
+#ifdef TESTS_ENABLED
+	friend struct TestProductionRequest::Access;
+#endif
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	friend class RenderCaptureTestAccess;
+#endif
+#if defined(TESTS_ENABLED) && defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+	friend class ParticlesScenePairsTestFixture;
+	friend class ParticlesHeightfieldClearTestFixture;
+#endif
 public:
+	// Values from one exact, already committed native instance. These facts do
+	// not authenticate an output action, generation, source phase or slot.
+	struct NativeParticleSceneFacts {
+		RID instance;
+		RID particles;
+		RID scenario;
+		uint64_t version = 0;
+		Transform3D transform;
+		AABB local_aabb;
+		AABB world_aabb;
+		// Actual instance-owned query association, never a query/RECORD grant.
+		bool query_committed = false;
+		uint64_t query_generation = 0;
+		AABB query_world;
+	};
+	// RT-only, no dirty flush or mutation. Original source binding is a separate owner duty.
+	Error instance_get_committed_particle_scene_facts(RID p_instance, RID p_expected_particles, NativeParticleSceneFacts &r_facts) const;
+	// Core-only original selected-view transaction. The live pre-cull scope,
+	// retained source owners and original RECORD context remain separate gates.
+	Error instance_commit_particle_output_cull(RID p_instance, RID p_particles, RID p_scenario, uint64_t p_generation,
+			const Transform3D &p_host, const AABB &p_native_local, const AABB &p_required_world, NativeParticleSceneFacts &r_facts);
+	bool instance_particle_output_cull_window_matches(RID p_instance, RID p_viewport, uint64_t p_view_id,
+			uint64_t p_view_epoch, uint64_t p_capture_ordinal) const;
+
+
+	struct SceneSphereSource {
+		uint64_t source_key = 0;
+		uint64_t shape_revision = 0;
+		Transform3D transform;
+		float radius = 0;
+	};
+	struct SceneSphereSnapshot {
+		Transform3D receiver_transform;
+		AABB query_bounds;
+		uint64_t pose_revision = 0, bounds_revision = 0, pair_revision = 0;
+		Vector<SceneSphereSource> sources;
+	};
+	// RT-only original owner entry; no phase or record permission is issued.
+	Error scene_receiver_commit_query(RID p_receiver, uint64_t p_generation, const RenderingDevice *p_device,
+			const Transform3D &p_transform, const AABB &p_local_envelope, const AABB &p_world_query, uint64_t p_bounds_revision);
+	Error scene_sphere_snapshot(RID p_receiver, uint64_t p_generation, const RenderingDevice *p_device,
+			uint32_t p_max_sources, SceneSphereSnapshot &r_snapshot) const;
+	bool scene_sphere_snapshot_pairs(RID p_receiver, uint32_t p_max_sources, Vector<SceneSphereSource> &r_sources) const;
+	struct SceneHeightfieldSource {
+		uint64_t source_key = 0;
+		uint64_t shape_revision = 0;
+		Transform3D transform;
+		Vector3 extents;
+		RSE::ParticlesCollisionHeightfieldResolution resolution = RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_1024;
+	};
+	struct SceneHeightfieldSnapshot {
+		Transform3D receiver_transform;
+		AABB query_bounds;
+		uint64_t pose_revision = 0, bounds_revision = 0, pair_revision = 0;
+		bool present = false;
+		SceneHeightfieldSource source;
+	};
+	// RT-only receiver/source metadata. No depth frame, content or phase grant.
+	Error scene_heightfield_snapshot(RID p_receiver, uint64_t p_generation, const RenderingDevice *p_device,
+			SceneHeightfieldSnapshot &r_snapshot) const;
+	bool scene_heightfield_snapshot_pair(RID p_receiver, SceneHeightfieldSource &r_source, bool &r_present) const;
+
 	RendererSceneRender *scene_render = nullptr;
 
 	enum {
@@ -410,6 +496,10 @@ public:
 		RID mesh_instance; //only used for meshes and when skeleton/blendshapes exist
 
 		Transform3D transform;
+		RID scene_query_base;
+		AABB scene_query_world;
+		uint64_t scene_query_generation = 0, scene_pose_revision = 0, scene_bounds_revision = 0, scene_pair_revision = 1;
+		bool scene_query_committed = false, scene_pair_exhausted = false;
 		bool teleported = false;
 
 		float lod_bias;
@@ -464,6 +554,13 @@ public:
 		//aabb stuff
 		bool update_aabb;
 		bool update_dependencies;
+		bool native_scene_committed = false; // Set only after the original dirty update completes.
+		// Intrusive membership in the actual synchronous render_camera call.
+		// No candidate cache, new queue or GPU-completion ownership is created.
+		NativeOutputCullScope *native_output_cull_window = nullptr;
+		uint64_t native_output_cull_generation = 0, native_output_cull_version = 0;
+		SelfList<Instance> native_output_cull_item;
+
 
 		SelfList<Instance> update_item;
 
@@ -488,12 +585,26 @@ public:
 
 		DependencyTracker dependency_tracker;
 
+		// A kept physical BVH pair can change eligible kind/shape/pose. Revision
+		// follows the original source mutation, never a later snapshot hash.
+		void scene_source_changed() {
+			if (base_type != RSE::INSTANCE_PARTICLES_COLLISION) return;
+			for (const SelfList<InstancePair> *link = pairs.first(); link; link = link->next()) {
+				InstancePair *pair = link->self();
+				Instance *receiver = pair->a == this ? pair->b : pair->a;
+				if (receiver->base_type != RSE::INSTANCE_PARTICLES) continue;
+				if (receiver->scene_pair_revision == UINT64_MAX) receiver->scene_pair_exhausted = true;
+				else ++receiver->scene_pair_revision;
+			}
+		}
+
 		static void dependency_changed(Dependency::DependencyChangedNotification p_notification, DependencyTracker *tracker) {
 			Instance *instance = (Instance *)tracker->userdata;
 			switch (p_notification) {
 				case Dependency::DEPENDENCY_CHANGED_SKELETON_DATA:
 				case Dependency::DEPENDENCY_CHANGED_SKELETON_BONES:
 				case Dependency::DEPENDENCY_CHANGED_AABB: {
+					instance->scene_source_changed();
 					singleton->_instance_queue_update(instance, true, false);
 
 				} break;
@@ -545,7 +656,7 @@ public:
 						singleton->instance_set_surface_override_material(instance->self, i, RID());
 					}
 				}
-				if (instance->base_type == RSE::INSTANCE_PARTICLES) {
+				if (instance->base_type == RSE::INSTANCE_PARTICLES && !RSG::particles_storage->particles_is_external(instance->base)) {
 					RID particle_material = RSG::particles_storage->particles_get_process_material(instance->base);
 					if (p_dependency == particle_material) {
 						RSG::particles_storage->particles_set_process_material(instance->base, RID());
@@ -561,6 +672,7 @@ public:
 
 		Instance() :
 				scenario_item(this),
+				native_output_cull_item(this),
 				update_item(this) {
 			base_type = RSE::INSTANCE_NONE;
 			cast_shadows = RSE::SHADOW_CASTING_SETTING_ON;
@@ -616,6 +728,24 @@ public:
 		}
 	};
 
+private:
+	class NativeOutputCullScope {
+		friend class RendererSceneCull;
+#ifdef TESTS_ENABLED
+		friend struct TestProductionRequest::Access;
+#endif
+		RendererSceneCull &scene;
+		NativeOutputCullScope *previous = nullptr;
+		Ref<RendererViewport::Viewport::CameraCapture> capture;
+		SelfList<Instance>::List instances;
+		bool active = false, preparing = false;
+		NativeOutputCullScope(RendererSceneCull &, const Ref<RendererViewport::Viewport::CameraCapture> &);
+		~NativeOutputCullScope();
+		NativeOutputCullScope(const NativeOutputCullScope &) = delete;
+		NativeOutputCullScope &operator=(const NativeOutputCullScope &) = delete;
+	};
+
+public:
 	mutable SelfList<Instance>::List _instance_update_list;
 	void _instance_queue_update(Instance *p_instance, bool p_update_aabb, bool p_update_dependencies = false) const;
 

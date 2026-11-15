@@ -385,11 +385,16 @@ private:
 		Microsoft::WRL::ComPtr<ID3D12Fence> d3d_fence = nullptr;
 		HANDLE event_handle = nullptr;
 		UINT64 fence_value = 0;
+		bool armed = false;
+		bool observed = false;
 	};
 
 public:
 	virtual FenceID fence_create() override;
 	virtual Error fence_wait(FenceID p_fence) override;
+	virtual FencePollResult fence_poll(FenceID p_fence, uint64_t p_expected_submission_serial) override;
+	FencePollResult fence_wait_observed(FenceID p_fence, uint64_t p_expected_submission_serial) override;
+	virtual Error fence_recycle(FenceID p_fence, uint64_t p_completed_serial) override;
 	virtual void fence_free(FenceID p_fence) override;
 
 private:
@@ -652,6 +657,7 @@ private:
 public:
 	virtual ShaderID shader_create_from_container(const Ref<RenderingShaderContainer> &p_shader_container, const Vector<ImmutableSampler> &p_immutable_samplers) override final;
 	virtual uint32_t shader_get_layout_hash(ShaderID p_shader) override final;
+	bool shader_retire_ready_nonblocking(ShaderID p_shader) const override { return bool(p_shader); }
 	virtual void shader_free(ShaderID p_shader) override final;
 	virtual void shader_destroy_modules(ShaderID p_shader) override final;
 

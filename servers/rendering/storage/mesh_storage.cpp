@@ -45,7 +45,22 @@ void RendererMeshStorage::multimesh_free(RID p_rid) {
 	_multimesh_free(p_rid);
 }
 
+Error RendererMeshStorage::_multimesh_buffer_size(int p_instances, RSE::MultimeshTransformFormat p_format, bool p_colors, bool p_custom, bool p_motion, uint32_t &r_bytes) {
+	if (p_instances < 0 || (p_format != RSE::MULTIMESH_TRANSFORM_2D && p_format != RSE::MULTIMESH_TRANSFORM_3D)) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const uint64_t stride = (p_format == RSE::MULTIMESH_TRANSFORM_2D ? 8u : 12u) + (p_colors ? 4u : 0u) + (p_custom ? 4u : 0u);
+	const uint64_t bytes = uint64_t(p_instances) * stride * sizeof(float) * (p_motion ? 2u : 1u);
+	if (bytes > UINT32_MAX) {
+		return ERR_INVALID_PARAMETER;
+	}
+	r_bytes = uint32_t(bytes);
+	return OK;
+}
+
 void RendererMeshStorage::multimesh_allocate_data(RID p_multimesh, int p_instances, RSE::MultimeshTransformFormat p_transform_format, bool p_use_colors, bool p_use_custom_data, bool p_use_indirect) {
+	uint32_t byte_size;
+	ERR_FAIL_COND_MSG(_multimesh_buffer_size(p_instances, p_transform_format, p_use_colors, p_use_custom_data, false, byte_size) != OK, "Invalid MultiMesh allocation dimensions or transform format.");
 	MultiMeshInterpolator *mmi = _multimesh_get_interpolator(p_multimesh);
 	if (mmi) {
 		mmi->_transform_format = p_transform_format;
@@ -59,7 +74,7 @@ void RendererMeshStorage::multimesh_allocate_data(RID p_multimesh, int p_instanc
 
 		mmi->_stride = mmi->_vf_size_xform + mmi->_vf_size_color + mmi->_vf_size_data;
 
-		int size_in_floats = p_instances * mmi->_stride;
+		int size_in_floats = byte_size / sizeof(float);
 		mmi->_data_curr.resize_initialized(size_in_floats);
 		mmi->_data_prev.resize_initialized(size_in_floats);
 		mmi->_data_interpolated.resize_initialized(size_in_floats);

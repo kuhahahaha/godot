@@ -100,6 +100,7 @@ void ParticlesStorage::particles_initialize(RID p_rid) {
 
 void ParticlesStorage::particles_free(RID p_rid) {
 	Particles *particles = particles_owner.get_or_null(p_rid);
+	ERR_FAIL_NULL(particles);
 
 	particles->dependency.deleted_notify(p_rid);
 	particles->update_list.remove_from_list();
@@ -220,12 +221,14 @@ void ParticlesStorage::particles_set_one_shot(RID p_particles, bool p_one_shot) 
 void ParticlesStorage::particles_set_pre_process_time(RID p_particles, double p_time) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_time) || !Math::is_finite((float)p_time) || p_time < 0.0, "Particle pre-process time must be finite and non-negative.");
 	particles->pre_process_time = p_time;
 }
 
 void ParticlesStorage::particles_request_process_time(RID p_particles, real_t p_request_process_time, real_t p_request_process_time_residual) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_request_process_time) || !Math::is_finite(p_request_process_time_residual) || p_request_process_time < 0.0 || p_request_process_time_residual < 0.0, "Particle process times must be finite and non-negative.");
 	particles->request_process_time = p_request_process_time;
 	particles->request_process_time_residual = p_request_process_time_residual;
 }
@@ -257,6 +260,7 @@ void ParticlesStorage::particles_set_custom_aabb(RID p_particles, const AABB &p_
 void ParticlesStorage::particles_set_speed_scale(RID p_particles, double p_scale) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_scale) || p_scale < 0.0, "Particle speed scale must be finite and non-negative.");
 
 	particles->speed_scale = p_scale;
 }
@@ -271,6 +275,7 @@ void ParticlesStorage::particles_set_use_local_coordinates(RID p_particles, bool
 void ParticlesStorage::particles_set_fixed_fps(RID p_particles, int p_fps) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(p_fps < 0 || p_fps > 1000, "Particle fixed FPS must be between zero and 1000.");
 
 	particles->fixed_fps = p_fps;
 
@@ -313,6 +318,7 @@ void ParticlesStorage::particles_set_trail_bind_poses(RID p_particles, const Vec
 void ParticlesStorage::particles_set_collision_base_size(RID p_particles, real_t p_size) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_size) || p_size < 0.0, "Particle collision base size must be finite and non-negative.");
 
 	particles->collision_base_size = p_size;
 }
@@ -363,8 +369,10 @@ void ParticlesStorage::particles_set_draw_order(RID p_particles, RSE::ParticlesD
 void ParticlesStorage::particles_set_draw_passes(RID p_particles, int p_passes) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(p_passes < 1 || p_passes > 4, "Particle draw passes must be between 1 and 4.");
 
 	particles->draw_passes.resize(p_passes);
+	particles->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_PARTICLES);
 }
 
 void ParticlesStorage::particles_set_draw_pass_mesh(RID p_particles, int p_pass, RID p_mesh) {
@@ -389,6 +397,7 @@ void ParticlesStorage::particles_set_subemitter(RID p_particles, RID p_subemitte
 }
 
 void ParticlesStorage::particles_emit(RID p_particles, const Transform3D &p_transform, const Vector3 &p_velocity, const Color &p_color, const Color &p_custom, uint32_t p_emit_flags) {
+	ERR_FAIL_COND_MSG(!p_transform.is_finite() || !p_velocity.is_finite() || !Math::is_finite(p_color.r) || !Math::is_finite(p_color.g) || !Math::is_finite(p_color.b) || !Math::is_finite(p_color.a) || !Math::is_finite(p_custom.r) || !Math::is_finite(p_custom.g) || !Math::is_finite(p_custom.b) || !Math::is_finite(p_custom.a), "Particle emission inputs must contain only finite values.");
 	WARN_PRINT_ONCE_ED("The Compatibility renderer does not support manually emitting particles.");
 }
 
@@ -410,13 +419,21 @@ AABB ParticlesStorage::particles_get_current_aabb(RID p_particles) {
 	ERR_FAIL_NULL_V(particles, AABB());
 
 	int total_amount = particles->amount;
+	if (particles->back_instance_buffer == 0 && particles->sort_buffer == 0) {
+		return AABB();
+	}
 
 	// If available, read from the sort buffer which should be 2 frames out of date.
 	// This will help alleviate GPU stalls.
 	GLuint read_buffer = particles->sort_buffer_filled ? particles->sort_buffer : particles->back_instance_buffer;
+	if (read_buffer == 0) {
+		return AABB();
+	}
+	const bool is_2d = particles->mode == RSE::PARTICLES_MODE_2D;
+	const uint32_t particle_data_size = is_2d ? sizeof(ParticleInstanceData2D) : sizeof(ParticleInstanceData3D);
 
-	Vector<uint8_t> buffer = Utilities::buffer_get_data(GL_ARRAY_BUFFER, read_buffer, total_amount * sizeof(ParticleInstanceData3D));
-	ERR_FAIL_COND_V(buffer.size() != (int)(total_amount * sizeof(ParticleInstanceData3D)), AABB());
+	Vector<uint8_t> buffer = Utilities::buffer_get_data(GL_ARRAY_BUFFER, read_buffer, total_amount * particle_data_size);
+	ERR_FAIL_COND_V(buffer.size() != (int)(total_amount * particle_data_size), AABB());
 
 	Transform3D inv = particles->emission_transform.affine_inverse();
 
@@ -425,13 +442,27 @@ AABB ParticlesStorage::particles_get_current_aabb(RID p_particles) {
 		bool first = true;
 
 		const uint8_t *data_ptr = (const uint8_t *)buffer.ptr();
-		uint32_t particle_data_size = sizeof(ParticleInstanceData3D);
 
 		for (int i = 0; i < total_amount; i++) {
-			const ParticleInstanceData3D &particle_data = *(const ParticleInstanceData3D *)&data_ptr[particle_data_size * i];
-			// If scale is 0.0, we assume the particle is inactive.
-			if (particle_data.xform[0] > 0.0) {
-				Vector3 pos = Vector3(particle_data.xform[3], particle_data.xform[7], particle_data.xform[11]);
+			Vector3 pos;
+			bool particle_active = false;
+			if (is_2d) {
+				const ParticleInstanceData2D &particle_data = *(const ParticleInstanceData2D *)&data_ptr[particle_data_size * i];
+				// If scale is 0.0, we assume the particle is inactive.
+				if (particle_data.xform[0] > 0.0) {
+					pos = Vector3(particle_data.xform[3], particle_data.xform[7], 0.0);
+					particle_active = true;
+				}
+			} else {
+				const ParticleInstanceData3D &particle_data = *(const ParticleInstanceData3D *)&data_ptr[particle_data_size * i];
+				// If scale is 0.0, we assume the particle is inactive.
+				if (particle_data.xform[0] > 0.0) {
+					pos = Vector3(particle_data.xform[3], particle_data.xform[7], particle_data.xform[11]);
+					particle_active = true;
+				}
+			}
+
+			if (particle_active) {
 				if (!particles->use_local_coords) {
 					pos = inv.xform(pos);
 				}
@@ -456,6 +487,21 @@ AABB ParticlesStorage::particles_get_current_aabb(RID p_particles) {
 	aabb.grow_by(longest_axis_size);
 
 	return aabb;
+}
+
+Vector<uint8_t> ParticlesStorage::particles_get_current_data(RID p_particles) const {
+	const Particles *particles = particles_owner.get_or_null(p_particles);
+	ERR_FAIL_NULL_V(particles, Vector<uint8_t>());
+	if (particles->amount <= 0) {
+		return Vector<uint8_t>();
+	}
+
+	const GLuint read_buffer = particles->sort_buffer_filled ? particles->sort_buffer : particles->back_instance_buffer;
+	if (read_buffer == 0) {
+		return Vector<uint8_t>();
+	}
+	const uint32_t stride = particles->mode == RSE::PARTICLES_MODE_2D ? sizeof(ParticleInstanceData2D) : sizeof(ParticleInstanceData3D);
+	return Utilities::buffer_get_data(GL_ARRAY_BUFFER, read_buffer, uint32_t(particles->amount) * stride);
 }
 
 AABB ParticlesStorage::particles_get_aabb(RID p_particles) const {
@@ -979,12 +1025,17 @@ void ParticlesStorage::_particles_update_instance_buffer(Particles *particles, c
 	particles_shader.copy_shader.version_set_uniform(ParticlesCopyShaderGLES3::ALIGN_AXIS, uint32_t(particles->transform_align_axis), particles_shader.copy_shader_version, variant, specialization);
 	particles_shader.copy_shader.version_set_uniform(ParticlesCopyShaderGLES3::ALIGN_CHANNEL_FILTER, uint32_t(particles->transform_align_channel_filter), particles_shader.copy_shader_version, variant, specialization);
 
+	uint32_t lifetime_split = 0;
+	if (particles->draw_order == RSE::PARTICLES_DRAW_ORDER_LIFETIME && !_particles_get_lifetime_split(uint64_t(particles->amount), particles->phase, lifetime_split)) {
+		ERR_PRINT("Particle lifetime split exceeds the supported range.");
+		return;
+	}
+
 	glBindVertexArray(particles->back_vertex_array);
 	glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER, 0, particles->front_instance_buffer, 0, particles->instance_buffer_size_cache);
 	glBeginTransformFeedback(GL_POINTS);
 
 	if (particles->draw_order == RSE::PARTICLES_DRAW_ORDER_LIFETIME) {
-		uint32_t lifetime_split = (MIN(int(particles->amount * particles->phase), particles->amount - 1) + 1) % particles->amount;
 		uint32_t stride = particles->process_buffer_stride_cache;
 
 		glBindBuffer(GL_ARRAY_BUFFER, particles->back_process_buffer);
@@ -1230,6 +1281,12 @@ void ParticlesStorage::update_particles() {
 
 template <typename ParticleInstanceData>
 void ParticlesStorage::_particles_reverse_lifetime_sort(Particles *particles) {
+	uint32_t lifetime_split = 0;
+	if (!_particles_get_lifetime_split(uint64_t(particles->amount), particles->sort_buffer_phase, lifetime_split)) {
+		ERR_PRINT("Particle lifetime split exceeds the supported range.");
+		return;
+	}
+
 	glBindBuffer(GL_ARRAY_BUFFER, particles->sort_buffer);
 
 	ParticleInstanceData *particle_array;
@@ -1245,7 +1302,6 @@ void ParticlesStorage::_particles_reverse_lifetime_sort(Particles *particles) {
 	godot_webgl2_glGetBufferSubData(GL_ARRAY_BUFFER, 0, buffer_size, particle_array);
 #endif
 
-	uint32_t lifetime_split = (MIN(int(particles->amount * particles->sort_buffer_phase), particles->amount - 1) + 1) % particles->amount;
 	for (uint32_t i = 0; i < lifetime_split / 2; i++) {
 		SWAP(particle_array[i], particle_array[lifetime_split - i - 1]);
 	}
@@ -1260,6 +1316,22 @@ void ParticlesStorage::_particles_reverse_lifetime_sort(Particles *particles) {
 	glBufferSubData(GL_ARRAY_BUFFER, 0, buffer_size, particle_vector.ptr());
 #endif
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+bool ParticlesStorage::_particles_get_lifetime_split(uint64_t p_amount, double p_phase, uint32_t &r_split) {
+	r_split = 0;
+	if (p_amount == 0 || p_amount > UINT32_MAX || !Math::is_finite(p_phase) || p_phase < 0.0) {
+		return false;
+	}
+
+	const double scaled_phase = double(p_amount) * p_phase;
+	if (!Math::is_finite(scaled_phase)) {
+		return false;
+	}
+
+	const uint64_t phase_index = scaled_phase >= double(p_amount - 1) ? p_amount - 1 : uint64_t(scaled_phase);
+	r_split = uint32_t((phase_index + 1) % p_amount);
+	return true;
 }
 
 Dependency *ParticlesStorage::particles_get_dependency(RID p_particles) const {
@@ -1286,6 +1358,7 @@ void ParticlesStorage::particles_collision_initialize(RID p_rid) {
 
 void ParticlesStorage::particles_collision_free(RID p_rid) {
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_rid);
+	ERR_FAIL_NULL(particles_collision);
 
 	if (particles_collision->heightfield_texture != 0) {
 		GLES3::Utilities::get_singleton()->texture_free_data(particles_collision->heightfield_texture);
@@ -1306,12 +1379,15 @@ GLuint ParticlesStorage::particles_collision_get_heightfield_framebuffer(RID p_p
 		//create
 		const int resolutions[RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_MAX] = { 256, 512, 1024, 2048, 4096, 8192 };
 		Size2i size;
-		if (particles_collision->extents.x > particles_collision->extents.z) {
+		if (!Math::is_finite(particles_collision->extents.x) || !Math::is_finite(particles_collision->extents.z) || particles_collision->extents.x <= 0.0 || particles_collision->extents.z <= 0.0) {
 			size.x = resolutions[particles_collision->heightfield_resolution];
-			size.y = int32_t(particles_collision->extents.z / particles_collision->extents.x * size.x);
+			size.y = size.x;
+		} else if (particles_collision->extents.x > particles_collision->extents.z) {
+			size.x = resolutions[particles_collision->heightfield_resolution];
+			size.y = MAX(1, int32_t(particles_collision->extents.z / particles_collision->extents.x * size.x));
 		} else {
 			size.y = resolutions[particles_collision->heightfield_resolution];
-			size.x = int32_t(particles_collision->extents.x / particles_collision->extents.z * size.y);
+			size.x = MAX(1, int32_t(particles_collision->extents.x / particles_collision->extents.z * size.y));
 		}
 
 		glGenTextures(1, &particles_collision->heightfield_texture);
@@ -1349,6 +1425,7 @@ GLuint ParticlesStorage::particles_collision_get_heightfield_framebuffer(RID p_p
 void ParticlesStorage::particles_collision_set_collision_type(RID p_particles_collision, RSE::ParticlesCollisionType p_type) {
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_particles_collision);
 	ERR_FAIL_NULL(particles_collision);
+	ERR_FAIL_INDEX(int(p_type), RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE + 1);
 
 	if (p_type == particles_collision->type) {
 		return;
@@ -1381,6 +1458,7 @@ uint32_t ParticlesStorage::particles_collision_get_cull_mask(RID p_particles_col
 void ParticlesStorage::particles_collision_set_sphere_radius(RID p_particles_collision, real_t p_radius) {
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_particles_collision);
 	ERR_FAIL_NULL(particles_collision);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || p_radius < 0.0, "Particle collision sphere radius must be finite and non-negative.");
 
 	particles_collision->radius = p_radius;
 	particles_collision->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_AABB);
@@ -1389,6 +1467,16 @@ void ParticlesStorage::particles_collision_set_sphere_radius(RID p_particles_col
 void ParticlesStorage::particles_collision_set_box_extents(RID p_particles_collision, const Vector3 &p_extents) {
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_particles_collision);
 	ERR_FAIL_NULL(particles_collision);
+	ERR_FAIL_COND_MSG(!p_extents.is_finite() || p_extents.x < 0.0 || p_extents.y < 0.0 || p_extents.z < 0.0, "Particle collision box extents must be finite and non-negative.");
+
+	if (particles_collision->type == RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE &&
+			(particles_collision->extents.x != p_extents.x || particles_collision->extents.z != p_extents.z) &&
+			particles_collision->heightfield_texture != 0) {
+		GLES3::Utilities::get_singleton()->texture_free_data(particles_collision->heightfield_texture);
+		particles_collision->heightfield_texture = 0;
+		glDeleteFramebuffers(1, &particles_collision->heightfield_fb);
+		particles_collision->heightfield_fb = 0;
+	}
 
 	particles_collision->extents = p_extents;
 	particles_collision->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_AABB);
@@ -1397,6 +1485,7 @@ void ParticlesStorage::particles_collision_set_box_extents(RID p_particles_colli
 void ParticlesStorage::particles_collision_set_attractor_strength(RID p_particles_collision, real_t p_strength) {
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_particles_collision);
 	ERR_FAIL_NULL(particles_collision);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_strength), "Particle attractor strength must be finite.");
 
 	particles_collision->attractor_strength = p_strength;
 }
@@ -1404,6 +1493,7 @@ void ParticlesStorage::particles_collision_set_attractor_strength(RID p_particle
 void ParticlesStorage::particles_collision_set_attractor_directionality(RID p_particles_collision, real_t p_directionality) {
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_particles_collision);
 	ERR_FAIL_NULL(particles_collision);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_directionality) || p_directionality < 0.0 || p_directionality > 1.0, "Particle attractor directionality must be finite and between zero and one.");
 
 	particles_collision->attractor_directionality = p_directionality;
 }
@@ -1411,6 +1501,7 @@ void ParticlesStorage::particles_collision_set_attractor_directionality(RID p_pa
 void ParticlesStorage::particles_collision_set_attractor_attenuation(RID p_particles_collision, real_t p_curve) {
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_particles_collision);
 	ERR_FAIL_NULL(particles_collision);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_curve) || p_curve < 0.0 || p_curve > 8.0, "Particle attractor attenuation must be finite and between zero and eight.");
 
 	particles_collision->attractor_attenuation = p_curve;
 }
@@ -1508,9 +1599,15 @@ void ParticlesStorage::particles_collision_instance_free(RID p_rid) {
 	particles_collision_instance_owner.free(p_rid);
 }
 
+RID ParticlesStorage::particles_collision_instance_get_collision(RID p_collision_instance) const {
+	const ParticlesCollisionInstance *instance = particles_collision_instance_owner.get_or_null(p_collision_instance);
+	return instance ? instance->collision : RID();
+}
+
 void ParticlesStorage::particles_collision_instance_set_transform(RID p_collision_instance, const Transform3D &p_transform) {
 	ParticlesCollisionInstance *pci = particles_collision_instance_owner.get_or_null(p_collision_instance);
 	ERR_FAIL_NULL(pci);
+	ERR_FAIL_COND_MSG(!p_transform.is_finite(), "Particle collision instance transform must contain only finite values.");
 	pci->transform = p_transform;
 }
 
