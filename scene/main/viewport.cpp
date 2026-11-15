@@ -4249,13 +4249,25 @@ Viewport::VRSUpdateMode Viewport::get_vrs_update_mode() const {
 	return vrs_update_mode;
 }
 
+void Viewport::_vrs_texture_changed() {
+	ERR_MAIN_THREAD_GUARD;
+	const RID tex = vrs_texture.is_valid() ? vrs_texture->get_rid() : RID();
+	RS::get_singleton()->viewport_set_vrs_texture(viewport, tex);
+}
+
 void Viewport::set_vrs_texture(Ref<Texture2D> p_texture) {
 	ERR_MAIN_THREAD_GUARD;
-	vrs_texture = p_texture;
-
-	// TODO need to add something here in case the RID changes
-	RID tex = p_texture.is_valid() ? p_texture->get_rid() : RID();
-	RS::get_singleton()->viewport_set_vrs_texture(viewport, tex);
+	if (vrs_texture != p_texture) {
+		if (vrs_texture.is_valid()) {
+			vrs_texture->disconnect_changed(callable_mp(this, &Viewport::_vrs_texture_changed));
+		}
+		vrs_texture = p_texture;
+		if (vrs_texture.is_valid()) {
+			// TextureRD resources can emit changed from the render thread.
+			vrs_texture->connect_changed(callable_mp(this, &Viewport::_vrs_texture_changed), CONNECT_DEFERRED);
+		}
+	}
+	_vrs_texture_changed();
 }
 
 Ref<Texture2D> Viewport::get_vrs_texture() const {
@@ -4852,6 +4864,11 @@ Ref<World3D> Viewport::get_world_3d() const {
 	return world_3d;
 }
 
+ObjectID Viewport::get_world_3d_instance_id() const {
+	ERR_READ_THREAD_GUARD_V(ObjectID());
+	return world_3d.is_valid() ? world_3d.ptr()->get_instance_id() : ObjectID();
+}
+
 Ref<World3D> Viewport::find_world_3d() const {
 	ERR_READ_THREAD_GUARD_V(Ref<World3D>());
 	if (own_world_3d.is_valid()) {
@@ -5302,6 +5319,7 @@ void Viewport::_bind_methods() {
 #ifndef _3D_DISABLED
 	ClassDB::bind_method(D_METHOD("set_world_3d", "world_3d"), &Viewport::set_world_3d);
 	ClassDB::bind_method(D_METHOD("get_world_3d"), &Viewport::get_world_3d);
+	ClassDB::bind_method(D_METHOD("get_world_3d_instance_id"), &Viewport::get_world_3d_instance_id);
 	ClassDB::bind_method(D_METHOD("find_world_3d"), &Viewport::find_world_3d);
 
 	ClassDB::bind_method(D_METHOD("set_use_own_world_3d", "enable"), &Viewport::set_use_own_world_3d);

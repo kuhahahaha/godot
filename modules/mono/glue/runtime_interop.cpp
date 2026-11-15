@@ -145,8 +145,11 @@ void godotsharp_internal_object_disposed(Object *p_ptr, GCHandleIntPtr p_gchandl
 		CSharpInstance *cs_instance = CAST_CSHARP_INSTANCE(p_ptr->get_script_instance());
 		if (cs_instance) {
 			if (!cs_instance->is_destructing_script_instance()) {
+				const bool owner_predelete_cleanup = cs_instance->is_owner_predelete_cleanup();
 				cs_instance->mono_object_disposed(p_gchandle_to_free);
-				p_ptr->set_script_instance(nullptr);
+				if (!owner_predelete_cleanup) {
+					p_ptr->set_script_instance(nullptr);
+				} // Object::_predelete deletes the original instance after its callback returns.
 			}
 			return;
 		}

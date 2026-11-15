@@ -289,6 +289,7 @@ Curve::Point Curve::get_point(int p_index) const {
 }
 
 void Curve::update_auto_tangents(int p_index) {
+	_advance_content_revision();
 	Point &p = _points[p_index];
 
 	if (p_index > 0) {
@@ -330,12 +331,14 @@ Array Curve::get_limits() const {
 }
 
 void Curve::set_limits(const Array &p_input) {
+	_advance_content_revision();
 	if (p_input.size() != 4) {
 		WARN_PRINT_ED(vformat(R"(Could not find Curve limit values when deserializing "%s". Resetting limits to default values.)", this->get_path()));
 		_min_value = 0;
 		_max_value = 1;
 		_min_domain = 0;
 		_max_domain = 1;
+		_baked_cache_dirty = true;
 		return;
 	}
 
@@ -344,9 +347,14 @@ void Curve::set_limits(const Array &p_input) {
 	_max_value = p_input[1];
 	_min_domain = p_input[2];
 	_max_domain = p_input[3];
+	// This setter is used by resource deserialization and intentionally bypasses
+	// the public range/domain setters. Keep the baked cache coherent without
+	// emitting editor notifications during load.
+	_baked_cache_dirty = true;
 }
 
 void Curve::set_min_value(real_t p_min) {
+	_advance_content_revision();
 	_min_value = MIN(p_min, _max_value - MIN_Y_RANGE);
 
 	for (const Point &p : _points) {
@@ -357,6 +365,7 @@ void Curve::set_min_value(real_t p_min) {
 }
 
 void Curve::set_max_value(real_t p_max) {
+	_advance_content_revision();
 	_max_value = MAX(p_max, _min_value + MIN_Y_RANGE);
 
 	for (const Point &p : _points) {
@@ -455,6 +464,7 @@ bool Curve::_filter_property(const String &p_name, int p_index) const {
 }
 
 void Curve::mark_dirty() {
+	_advance_content_revision();
 	_baked_cache_dirty = true;
 	emit_changed();
 }
@@ -529,6 +539,12 @@ void Curve::_bake() const {
 	_baked_cache.clear();
 
 	_baked_cache.resize(_bake_resolution);
+
+	if (_points.is_empty()) {
+		_baked_cache.fill(0.0);
+		_baked_cache_dirty = false;
+		return;
+	}
 
 	for (int i = 1; i < _bake_resolution - 1; ++i) {
 		real_t x = get_domain_range() * i / static_cast<real_t>(_bake_resolution - 1) + _min_domain;

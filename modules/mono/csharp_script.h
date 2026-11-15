@@ -334,6 +334,7 @@ class CSharpInstance : public ScriptInstance {
 
 public:
 	_FORCE_INLINE_ bool is_destructing_script_instance() { return destructing_script_instance; }
+	bool is_owner_predelete_cleanup() const;
 
 	_FORCE_INLINE_ GCHandleIntPtr get_gchandle_intptr() { return gchandle.get_intptr(); }
 

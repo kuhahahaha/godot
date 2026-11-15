@@ -36,6 +36,8 @@
 #include "scene/resources/curve_texture.h"
 #include "scene/resources/material.h"
 
+#include <type_traits>
+
 /*
  TODO:
 -Path following
@@ -111,8 +113,7 @@ public:
 
 private:
 	struct MaterialKey {
-		// The bit size of the struct must be kept below or equal to 64 bits.
-		// Consider this when extending ParticleFlags, EmissionShape, or SubEmitterMode.
+		// Fill exactly 64 bits; adjust reserved when adding fields or extending enums.
 		uint64_t texture_mask : PARAM_MAX;
 		uint64_t texture_color : 1;
 		uint64_t particle_flags : PARTICLE_FLAG_MAX;
@@ -133,6 +134,9 @@ private:
 		uint64_t use_rotation_3d : 1;
 		uint64_t use_rotation_velocity_3d : 1;
 		uint64_t use_rotation_velocity_3d_curve : 1;
+		// Keep every bit explicit: MaterialKey is copied and hashed as a 64-bit value.
+		// Unnamed padding would retain stale bits across assignment and split equal keys.
+		uint64_t reserved : 18;
 
 		MaterialKey() {
 			memset(this, 0, sizeof(MaterialKey));
@@ -148,6 +152,8 @@ private:
 			return memcmp(this, &p_key, sizeof(MaterialKey)) < 0;
 		}
 	};
+	static_assert(sizeof(MaterialKey) == sizeof(uint64_t));
+	static_assert(std::has_unique_object_representations_v<MaterialKey>, "MaterialKey must not contain padding.");
 
 	struct ShaderData {
 		RID shader;
@@ -327,12 +333,21 @@ private:
 	float params[PARAM_MAX] = {};
 
 	Ref<Texture2D> tex_parameters[PARAM_MAX];
+	void _param_texture_changed(Parameter p_param);
+	template <Parameter P>
+	void _param_texture_changed_slot() { _param_texture_changed(P); }
+	Callable _get_param_texture_changed(Parameter p_param);
 	Color color;
 	Ref<Texture2D> color_ramp;
+	void _color_ramp_changed();
 	Ref<Texture2D> alpha_curve;
+	void _alpha_curve_changed();
 	Ref<Texture2D> emission_curve;
+	void _emission_curve_changed();
 	Ref<Texture2D> color_initial_ramp;
+	void _color_initial_ramp_changed();
 	Ref<Texture2D> velocity_limit_curve;
+	void _velocity_limit_curve_changed();
 
 	bool directional_velocity_global = false;
 	Vector3 velocity_pivot;
@@ -345,6 +360,10 @@ private:
 	Ref<Texture2D> emission_point_texture;
 	Ref<Texture2D> emission_normal_texture;
 	Ref<Texture2D> emission_color_texture;
+
+	void _emission_point_texture_changed();
+	void _emission_normal_texture_changed();
+	void _emission_color_texture_changed();
 	Vector3 emission_ring_axis;
 	real_t emission_ring_height = 0.0f;
 	real_t emission_ring_radius = 0.0f;
@@ -376,6 +395,7 @@ private:
 	Vector3 rotation_velocity_3d_min;
 	Vector3 rotation_velocity_3d_max;
 	Ref<Texture2D> rotation_velocity_3d_curve;
+	void _rotation_velocity_3d_curve_changed();
 
 	SubEmitterMode sub_emitter_mode;
 	double sub_emitter_frequency = 0.0;
