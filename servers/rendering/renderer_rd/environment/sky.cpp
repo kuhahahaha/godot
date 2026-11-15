@@ -1988,7 +1988,7 @@ void SkyRD::_allocate_capture_radiance(Sky *sky) {
 			tf.usage_bits |= RD::TEXTURE_USAGE_STORAGE_BIT;
 		}
 
-#ifdef DEBUG_ENABLED
+#ifdef TESTS_ENABLED
 		if (OS::get_singleton()->get_environment("ANGE_TEST_SKY_READBACK") == "1") {
 			tf.usage_bits |= RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
 		}
@@ -2021,7 +2021,7 @@ void SkyRD::_allocate_capture_radiance(Sky *sky) {
 			tf.usage_bits |= RD::TEXTURE_USAGE_STORAGE_BIT;
 		}
 
-#ifdef DEBUG_ENABLED
+#ifdef TESTS_ENABLED
 		if (OS::get_singleton()->get_environment("ANGE_TEST_SKY_READBACK") == "1") {
 			tf.usage_bits |= RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
 		}
@@ -2303,6 +2303,7 @@ Dictionary SkyRD::sky_get_capture_status(RID p_sky) const {
 	result["debug_last_accept"] = sky->last_accept;
 	result["debug_blend_started"] = sky->blend_started;
 	result["debug_snapshot_resources"] = int(sky->capture_scene_buffer.is_valid()) + int(sky->capture_light_buffer.is_valid()) + int(sky->capture_scene_set.is_valid());
+#ifdef TESTS_ENABLED
 	// Opt-in raw complete-map inspection for independent GPU test oracles.
 	// No readback or extra resource is created by this metadata query.
 	if (OS::get_singleton()->get_environment("ANGE_TEST_SKY_READBACK") == "1" && sky->published_complete && sky->radiance.is_valid()) {
@@ -2315,6 +2316,7 @@ Dictionary SkyRD::sky_get_capture_status(RID p_sky) const {
 		result["debug_radiance_border"] = sky->uv_border_size;
 		result["debug_roughness_layers"] = sky_use_octmap_array ? format.array_layers : format.mipmaps;
 	}
+#endif
 #endif
 	return result;
 }

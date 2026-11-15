@@ -2777,6 +2777,9 @@ void RendererCanvasRenderRD::_record_item_commands(const Item *p_item, RenderTar
 					if (mesh_storage->multimesh_get_transform_format(multimesh) != RSE::MULTIMESH_TRANSFORM_2D) {
 						break;
 					}
+					if (!mesh_storage->_multimesh_get_buffer_rd_rid(multimesh).is_valid()) {
+						break;
+					}
 
 					r_current_batch->mesh_instance_count = mesh_storage->multimesh_get_instances_to_draw(multimesh);
 					if (r_current_batch->mesh_instance_count == 0) {
@@ -3158,6 +3161,9 @@ void RendererCanvasRenderRD::_render_batch(RD::DrawListID p_draw_list, CanvasSha
 				mesh = mesh_storage->multimesh_get_mesh(multimesh);
 
 				RID uniform_set = mesh_storage->multimesh_get_2d_uniform_set(multimesh, shader.default_version_rd_shader, TRANSFORMS_UNIFORM_SET);
+				if (!uniform_set.is_valid()) {
+					break;
+				}
 				RD::get_singleton()->draw_list_bind_uniform_set(p_draw_list, uniform_set, TRANSFORMS_UNIFORM_SET);
 			} else if (p_batch->command_type == Item::Command::TYPE_PARTICLES) {
 				const Item::CommandParticles *pt = static_cast<const Item::CommandParticles *>(p_batch->command);

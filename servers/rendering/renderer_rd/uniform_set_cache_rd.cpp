@@ -53,7 +53,26 @@ RID UniformSetCacheRD::get_cache_array(RID p_shader, uint32_t p_set, const Typed
 	return UniformSetCacheRD::get_singleton()->get_cache_vec(p_shader, p_set, uniforms);
 }
 
+bool UniformSetCacheRD::owns_invalidation_callback(RID p_uniform_set, RD::InvalidationCallback p_callback, const void *p_userdata) {
+	if (p_callback != _uniform_set_invalidation_callback || !p_uniform_set.is_valid() || !p_userdata) {
+		return false;
+	}
+	const RD *rd = RD::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread() || !singleton) {
+		return false;
+	}
+
+	MutexLock lock(singleton->live_entries_mutex);
+	return singleton->live_entries.has(p_userdata) && static_cast<const Cache *>(p_userdata)->cache == p_uniform_set;
+}
+
 void UniformSetCacheRD::_invalidate(Cache *p_cache) {
+	{
+		MutexLock lock(live_entries_mutex);
+		if (!live_entries.erase(p_cache)) {
+			return;
+		}
+	}
 	if (p_cache->prev) {
 		p_cache->prev->next = p_cache->next;
 	} else {
@@ -67,10 +86,11 @@ void UniformSetCacheRD::_invalidate(Cache *p_cache) {
 	}
 
 	cache_allocator.free(p_cache);
-	cache_instances_used--;
 }
 void UniformSetCacheRD::_uniform_set_invalidation_callback(void *p_userdata) {
-	singleton->_invalidate(reinterpret_cast<Cache *>(p_userdata));
+	if (singleton) {
+		singleton->_invalidate(static_cast<Cache *>(p_userdata));
+	}
 }
 
 UniformSetCacheRD::UniformSetCacheRD() {
@@ -79,7 +99,10 @@ UniformSetCacheRD::UniformSetCacheRD() {
 }
 
 UniformSetCacheRD::~UniformSetCacheRD() {
-	if (cache_instances_used > 0) {
-		ERR_PRINT("At exit: " + itos(cache_instances_used) + " uniform set cache instance(s) still in use.");
+	if (singleton == this) {
+		singleton = nullptr;
+	}
+	if (!live_entries.is_empty()) {
+		ERR_PRINT("At exit: " + itos(live_entries.size()) + " uniform set cache instance(s) still in use.");
 	}
 }

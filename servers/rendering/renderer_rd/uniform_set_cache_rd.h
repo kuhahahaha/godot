@@ -30,6 +30,8 @@
 
 #pragma once
 
+#include "core/os/mutex.h"
+#include "core/templates/hash_set.h"
 #include "core/templates/local_vector.h"
 #include "core/templates/paged_allocator.h"
 #include "servers/rendering/rendering_device.h"
@@ -108,7 +110,10 @@ class UniformSetCacheRD : public Object {
 
 	static UniformSetCacheRD *singleton;
 
-	uint32_t cache_instances_used = 0;
+	// The script-bound cache lookup can create an entry off the render thread.
+	// This lock covers only the live identity index, never an RD call.
+	Mutex live_entries_mutex;
+	HashSet<const void *> live_entries;
 
 	void _invalidate(Cache *p_cache);
 	static void _uniform_set_invalidation_callback(void *p_userdata);
@@ -134,9 +139,11 @@ class UniformSetCacheRD : public Object {
 		}
 		hash_table[p_table_idx] = c;
 
+		{
+			MutexLock lock(live_entries_mutex);
+			live_entries.insert(c);
+		}
 		RD::get_singleton()->uniform_set_set_invalidation_callback(rid, _uniform_set_invalidation_callback, c);
-
-		cache_instances_used++;
 
 		return rid;
 	}
@@ -205,6 +212,9 @@ public:
 	}
 
 	static RID get_cache_array(RID p_shader, uint32_t p_set, const TypedArray<RDUniform> &p_uniforms);
+
+	// For the current RD's locked live callback pair on its render thread.
+	static bool owns_invalidation_callback(RID p_uniform_set, RD::InvalidationCallback p_callback, const void *p_userdata);
 
 	static UniformSetCacheRD *get_singleton() { return singleton; }
 

@@ -52,9 +52,22 @@ SortEffects::~SortEffects() {
 	shader.version_free(shader_version);
 }
 
-void SortEffects::sort_buffer(RID p_uniform_set, int p_size) {
-	PushConstant push_constant;
+bool SortEffects::sort_buffer(RID p_uniform_set, int p_size) {
+	if (p_size <= 0) {
+		return false;
+	}
+	if (!RD::get_singleton()->uniform_set_is_valid(p_uniform_set)) {
+		ERR_PRINT("Particle sort uniform set is invalid.");
+		return false;
+	}
+	if (!RD::get_singleton()->compute_pipeline_is_valid(pipelines[SORT_MODE_BLOCK])) {
+		ERR_PRINT("Particle sort block pipeline is invalid.");
+		return false;
+	}
+	PushConstant push_constant{};
 	push_constant.total_elements = p_size;
+	// pad[0] carries the logical X-group offset for chunked dispatches.
+	push_constant.pad[0] = 0;
 
 	bool done = true;
 
@@ -62,14 +75,34 @@ void SortEffects::sort_buffer(RID p_uniform_set, int p_size) {
 
 	if (numThreadGroups > 1) {
 		done = false;
+		if (!RD::get_singleton()->compute_pipeline_is_valid(pipelines[SORT_MODE_STEP]) || !RD::get_singleton()->compute_pipeline_is_valid(pipelines[SORT_MODE_INNER])) {
+			ERR_PRINT("Particle sort merge pipeline is invalid.");
+			return false;
+		}
 	}
 
-	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+	const uint64_t max_compute_groups_x = RD::get_singleton()->limit_get(RD::LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_X);
+	ERR_FAIL_COND_V_MSG(max_compute_groups_x == 0, false, "Particle sort compute X-group limit is zero.");
 
+	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+	if (compute_list == RD::INVALID_ID) {
+		ERR_PRINT("Particle sort compute list could not be opened.");
+		return false;
+	}
+
+	auto dispatch_groups = [&](uint32_t p_groups) {
+		for (uint32_t group_offset = 0; group_offset < p_groups;) {
+			const uint32_t chunk_groups = (uint32_t)MIN(max_compute_groups_x, uint64_t(p_groups - group_offset));
+			push_constant.pad[0] = group_offset;
+			RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
+			RD::get_singleton()->compute_list_dispatch(compute_list, chunk_groups, 1, 1);
+			group_offset += chunk_groups;
+		}
+	};
+	// Chunks in one stage touch disjoint data; the existing barriers separate stages.
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[SORT_MODE_BLOCK]);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, p_uniform_set, 1);
-	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
-	RD::get_singleton()->compute_list_dispatch(compute_list, numThreadGroups, 1, 1);
+	dispatch_groups((uint32_t)numThreadGroups);
 
 	int presorted = 512;
 
@@ -106,17 +139,16 @@ void SortEffects::sort_buffer(RID p_uniform_set, int p_size) {
 			}
 			push_constant.job_params[3] = 0;
 
-			RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
-			RD::get_singleton()->compute_list_dispatch(compute_list, numThreadGroups, 1, 1);
+			dispatch_groups((uint32_t)numThreadGroups);
 			RD::get_singleton()->compute_list_add_barrier(compute_list);
 		}
 
 		RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[SORT_MODE_INNER]);
-		RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
-		RD::get_singleton()->compute_list_dispatch(compute_list, numThreadGroups, 1, 1);
+		dispatch_groups((uint32_t)numThreadGroups);
 
 		presorted *= 2;
 	}
 
 	RD::get_singleton()->compute_list_end();
+	return true;
 }

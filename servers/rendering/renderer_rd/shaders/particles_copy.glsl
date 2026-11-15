@@ -69,7 +69,7 @@ layout(push_constant, std430) uniform Params {
 
 	uint align_channel_filter;
 	uint align_axis;
-	uint pad1;
+	uint invocation_offset;
 	uint pad2;
 }
 params;
@@ -93,7 +93,7 @@ params;
 void main() {
 #ifdef MODE_FILL_SORT_BUFFER
 
-	uint particle = gl_GlobalInvocationID.x;
+	uint particle = gl_GlobalInvocationID.x + params.invocation_offset;
 	if (particle >= params.total_particles) {
 		return; //discard
 	}
@@ -108,7 +108,7 @@ void main() {
 
 #ifdef MODE_FILL_INSTANCES
 
-	uint particle = gl_GlobalInvocationID.x;
+	uint particle = gl_GlobalInvocationID.x + params.invocation_offset;
 
 	if (particle >= params.total_particles) {
 		return; //discard
@@ -328,7 +328,7 @@ void main() {
 	}
 	txform = transpose(txform);
 
-	uint instance_index = gl_GlobalInvocationID.x + params.motion_vectors_current_offset;
+	uint instance_index = gl_GlobalInvocationID.x + params.invocation_offset + params.motion_vectors_current_offset;
 	if (bool(params.flags & PARAMS_FLAG_COPY_MODE_2D)) {
 		uint write_offset = instance_index * (2 + 1 + 1); //xform + color + custom
 

@@ -43,7 +43,7 @@
 namespace RendererRD {
 namespace {
 constexpr uint64_t VIEW_BYTES = 192 * 104 * 8;
-#ifdef DEBUG_ENABLED
+#ifdef TESTS_ENABLED
 // Explicit process-local failure seams enter the real allocation failure arms.
 // No production API, validation exemption, or release-build behavior change.
 bool physical_sky_test_failure(const char *p_point) {
@@ -234,7 +234,7 @@ void PhysicalSkyView::set_source(RID p_sky, const Dictionary &p_source) {
 			}
 			f.mipmaps = 1;
 			f.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT;
-#ifdef DEBUG_ENABLED
+#ifdef TESTS_ENABLED
 			source->textures[i] = physical_sky_test_failure("source") ? RID() : rd->texture_create(f, RD::TextureView());
 #else
 			source->textures[i] = rd->texture_create(f, RD::TextureView());
@@ -305,7 +305,7 @@ bool PhysicalSkyView::initialize() {
 	s.min_filter = RD::SAMPLER_FILTER_LINEAR;
 	s.repeat_u = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
 	s.repeat_v = s.repeat_u;
-#ifdef DEBUG_ENABLED
+#ifdef TESTS_ENABLED
 	sampler = physical_sky_test_failure("sampler") ? RID() : rd->sampler_create(s);
 #else
 	sampler = rd->sampler_create(s);
@@ -360,7 +360,7 @@ bool PhysicalSkyView::prepare(RID p_sky, RID p_probe, const Vector3 &p_origin) {
 		f.height = 104;
 		f.format = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
 		f.usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
-#ifdef DEBUG_ENABLED
+#ifdef TESTS_ENABLED
 		view->texture = physical_sky_test_failure("view") ? RID() : rd->texture_create(f, RD::TextureView());
 #else
 		view->texture = rd->texture_create(f, RD::TextureView());
@@ -380,7 +380,7 @@ bool PhysicalSkyView::prepare(RID p_sky, RID p_probe, const Vector3 &p_origin) {
 		u[2].uniform_type = RD::UNIFORM_TYPE_IMAGE;
 		u[2].append_id(view->texture);
 		RID set;
-#ifdef DEBUG_ENABLED
+#ifdef TESTS_ENABLED
 		if (!physical_sky_test_failure("uniform"))
 #endif
 		{

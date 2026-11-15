@@ -58,30 +58,15 @@ private:
 	Mutex local_mutex;
 
 	bool _add_new_pipelines_to_map() {
-		thread_local Vector<uint32_t> hashes_added;
-		hashes_added.clear();
-
-		{
-			MutexLock lock(compiled_queue_mutex);
-			for (const Pair<uint32_t, RID> &pair : compiled_queue) {
-				hash_map[pair.first] = pair.second;
-				hashes_added.push_back(pair.first);
-			}
-
-			compiled_queue.clear();
+		MutexLock lock(compiled_queue_mutex);
+		const bool added = !compiled_queue.is_empty();
+		for (const Pair<uint32_t, RID> &pair : compiled_queue) {
+			hash_map[pair.first] = pair.second;
 		}
-
-		{
-			MutexLock local_lock(local_mutex);
-			for (uint32_t hash : hashes_added) {
-				HashMap<uint32_t, WorkerThreadPool::TaskID>::Iterator task_it = compilation_tasks.find(hash);
-				if (task_it != compilation_tasks.end()) {
-					compilation_tasks.remove(task_it);
-				}
-			}
-		}
-
-		return !hashes_added.is_empty();
+		compiled_queue.clear();
+		// Publication may precede the original worker return. Adoption does not
+		// wait, but the cache keeps each TaskID until an actual wait reclaims it.
+		return added;
 	}
 
 	void _wait_for_all_pipelines() {
@@ -92,6 +77,9 @@ private:
 			for (KeyValue<uint32_t, WorkerThreadPool::TaskID> key_value : compilation_tasks) {
 				tasks_to_wait.push_back(key_value.value);
 			}
+			// This snapshot now owns every original task return, including a
+			// worker that failed without publishing a pipeline. Never wait twice.
+			compilation_tasks.clear();
 		}
 
 		for (WorkerThreadPool::TaskID task_id : tasks_to_wait) {
@@ -216,7 +204,9 @@ public:
 		_add_new_pipelines_to_map();
 
 		for (KeyValue<uint32_t, RID> entry : hash_map) {
-			RD::get_singleton()->free_rid(entry.value);
+			if (entry.value.is_valid()) {
+				RD::get_singleton()->free_rid(entry.value);
+			}
 		}
 
 		hash_map.clear();
