@@ -10334,8 +10334,8 @@ Error RenderingDevice::_check_transfer_worker_buffer(Buffer *buffer) {
 	}
 	return error;
 }
-void RenderingDevice::_settle_completed_vertex_buffer_upload_locked(RID rid) {
-	auto *buffer = vertex_buffer_owner.owns(rid) ? vertex_buffer_owner.get_or_null(rid) : nullptr;
+void RenderingDevice::_settle_completed_mesh_buffer_upload_locked(RID rid) {
+	Buffer *buffer = vertex_buffer_owner.owns(rid) ? vertex_buffer_owner.get_or_null(rid) : static_cast<Buffer *>(index_buffer_owner.get_or_null(rid));
 	if (!buffer || buffer->transfer_worker_index < 0 || !buffer->driver_id || buffer->native_external_access ||
 			buffer->native_immutable_retire_requested || buffer->qualification_return || buffer->native_disposal.cell.is_valid() ||
 			buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT) || buffer->usage.has_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT)) {
