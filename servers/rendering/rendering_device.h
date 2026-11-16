@@ -714,9 +714,9 @@ public:
 	bool native_immutable_is_render_thread() const;
 	// A necessary native condition, never a grant by itself. The caller must
 	// retain its original invocation, selected registration and lifetime guard.
-	bool native_renderer_recording_window_available() const {
+	bool native_renderer_recording_window_available(bool p_original_compute_list_open = false) const {
 		return native_immutable_is_render_thread() && driver && !native_immutable_device_escaped &&
-				!draw_list.active && !compute_list.active && !raytracing_list.active &&
+				!draw_list.active && compute_list.active == p_original_compute_list_open && !raytracing_list.active &&
 				!draw_graph.has_driver_callbacks() && !production_finalization_started.load(std::memory_order_acquire);
 	}
 

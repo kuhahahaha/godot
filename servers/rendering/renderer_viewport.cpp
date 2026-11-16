@@ -2430,8 +2430,14 @@ bool RendererViewport::CameraInvocationScope::is_current(const Viewport::CameraS
 }
 
 bool RendererViewport::CameraInvocationScope::is_recordable(const Viewport::CameraSourceSubscriber *p_selected, const Ref<Viewport::CameraCapture> &p_capture) const {
+	return is_recordable_with_original_compute_list(p_selected, p_capture, false);
+}
+
+bool RendererViewport::CameraInvocationScope::is_recordable_with_original_compute_list(
+		const Viewport::CameraSourceSubscriber *p_selected, const Ref<Viewport::CameraCapture> &p_capture,
+		bool p_original_compute_list_open) const {
 	if (pre_cull || !is_current(p_selected, p_capture) || !device || device != RenderingDevice::get_singleton() ||
-			!device->native_renderer_recording_window_available()) {
+			!device->native_renderer_recording_window_available(p_original_compute_list_open)) {
 		return false;
 	}
 	// Only the original Core-native executor facet can enter. Legacy retained

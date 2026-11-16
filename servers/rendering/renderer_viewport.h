@@ -41,6 +41,9 @@
 class TestRendererInvocationAccess;
 class RendererSceneRenderRD;
 class RenderingDevice;
+namespace GDExtensionDeviceExit {
+class Registry;
+}
 
 class RendererViewport {
 public:
@@ -340,6 +343,7 @@ public:
 		friend class RendererSceneRenderRD;
 		friend class RendererViewport;
 		friend class TestRendererInvocationAccess;
+		friend class GDExtensionDeviceExit::Registry;
 		RendererViewport &owner;
 		Ref<Viewport::CameraCapture> capture;
 		Viewport::CameraSourceSubscriber *selected = nullptr;
@@ -348,6 +352,8 @@ public:
 		bool active = false, pre_cull = false;
 		CameraInvocationScope(RendererViewport &, const Ref<Viewport::CameraCapture> &, bool p_pre_cull = false);
 		bool select(Viewport::CameraSourceSubscriber *);
+		bool is_recordable_with_original_compute_list(const Viewport::CameraSourceSubscriber *,
+				const Ref<Viewport::CameraCapture> &, bool p_original_compute_list_open) const;
 
 	public:
 		CameraInvocationScope(const CameraInvocationScope &) = delete;
