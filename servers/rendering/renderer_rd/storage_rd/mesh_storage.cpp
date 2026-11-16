@@ -837,6 +837,16 @@ Error MeshStorage::mesh_surface_source_hold_acquire(RID mesh_rid, uint32_t index
 			roots[root_count++] = root;
 		}
 	}
+	// Initial uploads can be complete while the original buffers still name
+	// their worker. Settle only those completed associations before retention.
+	{
+		MutexLock rd_lock(device->_thread_safe_);
+		if (device->native_renderer_recording_window_available()) {
+			for (uint32_t i = 0; i < root_count; ++i) {
+				device->_settle_completed_mesh_buffer_upload_locked(roots[i]);
+			}
+		}
+	}
 	const Error error = device->native_immutable_hold_acquire(VectorView<RID>(roots, root_count), out.physical, root_count);
 	if (error != OK) {
 		return error;
@@ -908,7 +918,7 @@ void MeshStorage::mesh_surface_settle_completed_fallback_uploads(const NativeSur
 	for (int i = 0; i < attributes.size(); ++i) {
 		const uint32_t location = attributes[i].location;
 		if (location < DEFAULT_RD_BUFFER_MAX && buffers[i] == storage->mesh_default_rd_buffers[location]) {
-			device->_settle_completed_vertex_buffer_upload_locked(buffers[i]);
+			device->_settle_completed_mesh_buffer_upload_locked(buffers[i]);
 		}
 	}
 }

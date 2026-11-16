@@ -210,8 +210,8 @@ public:
 		worker->command_pool = RenderingDeviceDriver::CommandPoolID(61);
 		worker->command_buffer = RenderingDeviceDriver::CommandBufferID(62);
 		worker->command_fence = RenderingDeviceDriver::FenceID(91);
-		worker->staging_buffer_size_allocated = 128;
-		worker->staging_buffer = driver.buffer_create(128, RenderingDeviceDriver::BUFFER_USAGE_TRANSFER_FROM_BIT, RenderingDeviceDriver::MEMORY_ALLOCATION_TYPE_CPU, 0);
+		worker->staging_buffer_size_allocated = 256;
+		worker->staging_buffer = driver.buffer_create(worker->staging_buffer_size_allocated, RenderingDeviceDriver::BUFFER_USAGE_TRANSFER_FROM_BIT, RenderingDeviceDriver::MEMORY_ALLOCATION_TYPE_CPU, 0);
 		device.transfer_worker_pool.push_back(worker);
 		device.transfer_worker_pool_available_list.push_back(0);
 		device.transfer_worker_operation_used_by_draw.push_back(0);
@@ -230,7 +230,7 @@ public:
 	}
 	static TransferState fallback_transfer_state(RenderingDevice &device, RID rid) {
 		MutexLock rd_lock(device._thread_safe_);
-		const auto *buffer = device.vertex_buffer_owner.get_or_null(rid);
+		const auto *buffer = device._get_buffer_from_owner(rid);
 		REQUIRE(buffer != nullptr);
 		if (buffer->transfer_worker_index < 0) {
 			return TransferState::DETACHED;
@@ -1437,6 +1437,75 @@ public:
 		memfree(mesh.surfaces);
 		TestIndexed144DeviceAccess::end_native(device);
 	}
+	static void ordinary_source_transfer() {
+		using Access = TestIndexed144DeviceAccess;
+		using State = Access::TransferState;
+		RenderingDevice device;
+		FallbackTransferDriver driver;
+		Access::begin_fallback_transfers(device, driver);
+		auto *previous_storage = MeshStorage::get_singleton();
+		auto *storage = memnew(MeshStorage(MeshStorage::NativeHoldTestTag{}));
+		const RID rid = storage->mesh_allocate();
+		storage->mesh_initialize(rid);
+		auto *mesh = storage->mesh_owner.get_or_null(rid);
+		auto *selected = memnew(MeshStorage::Mesh::Surface);
+		mesh->surfaces = static_cast<MeshStorage::Mesh::Surface **>(memalloc(sizeof(MeshStorage::Mesh::Surface *)));
+		mesh->surfaces[0] = selected;
+		mesh->surface_count = 1;
+		selected->vertex_count = selected->index_count = 3;
+		selected->format = RSE::ARRAY_FORMAT_VERTEX | RSE::ARRAY_FORMAT_COLOR | RSE::ARRAY_FORMAT_INDEX;
+		selected->primitive = RSE::PRIMITIVE_TRIANGLES;
+		uint8_t vertices[36] = {};
+		uint8_t attributes[12] = {};
+		uint8_t indices[6] = { 0, 0, 1, 0, 2, 0 };
+		selected->vertex_buffer = device.vertex_buffer_create(sizeof(vertices), Span<uint8_t>(vertices, sizeof(vertices)));
+		selected->attribute_buffer = device.vertex_buffer_create(sizeof(attributes), Span<uint8_t>(attributes, sizeof(attributes)));
+		selected->index_buffer = device.index_buffer_create(3, RD::INDEX_BUFFER_FORMAT_UINT16, Span<uint8_t>(indices, sizeof(indices)));
+		const RID neighbor = device.vertex_buffer_create(sizeof(attributes), Span<uint8_t>(attributes, sizeof(attributes)));
+		const RID roots[] = { selected->vertex_buffer, selected->attribute_buffer, selected->index_buffer };
+		MeshStorage::NativeSelectionLease selection;
+		CHECK(storage->mesh_selection_acquire(rid, selection) == OK);
+		Hold retained;
+		CHECK_FALSE(Access::poll_fallback_transfers(device));
+		CHECK(storage->mesh_selection_source_hold_acquire(selection, 0, retained) == ERR_UNAVAILABLE);
+		CHECK_FALSE(retained.is_valid());
+		for (RID root : roots) {
+			CHECK(Access::fallback_transfer_state(device, root) == State::PENDING);
+		}
+		driver.completed = true;
+		CHECK(Access::poll_fallback_transfers(device));
+		for (RID root : roots) {
+			CHECK(Access::fallback_transfer_state(device, root) == State::PROCESSED);
+		}
+#ifdef THREADS_ENABLED
+		Access::with_fallback_worker_locked(device, [&]() {
+			CHECK(storage->mesh_selection_source_hold_acquire(selection, 0, retained) == ERR_UNAVAILABLE);
+		});
+		CHECK_FALSE(retained.is_valid());
+#endif
+		CHECK(storage->mesh_selection_source_hold_acquire(selection, 0, retained) == OK);
+		CHECK(retained.is_valid());
+		CHECK(selected->immutable_holds == 1);
+		for (RID root : roots) {
+			CHECK(Access::fallback_transfer_state(device, root) == State::DETACHED);
+			CHECK(device.native_immutable_resource_is_held(root));
+		}
+		CHECK(Access::fallback_transfer_state(device, neighbor) == State::PROCESSED);
+		CHECK(Access::fallback_worker_draw_use(device) == 0);
+		CHECK(driver.polls == 2);
+		CHECK(driver.recycles == 1);
+		CHECK(selected->version_count == 0);
+		if (retained.is_valid()) {
+			CHECK(MeshStorage::mesh_surface_hold_release(retained) == OK);
+		}
+		CHECK(storage->mesh_selection_release(selection) == OK);
+		storage->mesh_free(rid);
+		device.free_rid(neighbor);
+		memdelete(storage);
+		MeshStorage::singleton = previous_storage;
+		Access::end_fallback_transfers(device);
+		CHECK(driver.frees == driver.allocations);
+	}
 	static void ordinary_fallback_transfer() {
 		using Access = TestIndexed144DeviceAccess;
 		using State = Access::TransferState;
@@ -1754,6 +1823,10 @@ TEST_CASE("[B4][MaterialPreparation] Mobile color preparation preserves transpar
 
 TEST_CASE("[B4][NativeVertexArrayPlan] retained ordinary source plans without factories") {
 	RendererRD::TestMeshStorageExternalAccess::prospective_plan(false);
+}
+
+TEST_CASE("[B4][NativeVertexArrayPlan] ordinary source retains buffers after completed uploads") {
+	RendererRD::TestMeshStorageExternalAccess::ordinary_source_transfer();
 }
 
 TEST_CASE("[B4][NativeVertexArrayPlan] ordinary fallback buffers retain completed transfer associations") {
