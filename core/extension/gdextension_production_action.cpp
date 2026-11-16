@@ -685,11 +685,10 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 	++request.capture_inflight;
 	rd.production_recording_request = &request;
 	const uint64_t anchor = request.native_staged_anchor;
-	const uint32_t payload_kind = action.camera_payload_kind;
-	const bool camera_upload_before_acquire = request.contract_version == 2 && request.native_prepared_executor && request.native_static_sealed &&
-			action.declaration.action_kind == GDEXTENSION_PRODUCTION_UPLOAD_V1 && payload_kind >= 1 && payload_kind <= 3 &&
-			request.native_camera_uploads[payload_kind - 1] == index && index < anchor && anchor < request.action_count &&
-			request.actions[anchor].output_plan_prepared && request.actions[anchor].output_state == ProductionActionCell::OutputState::UNBOUND;
+	const bool prepared_upload_before_acquire = request.contract_version == 2 && request.native_prepared_executor && request.native_static_sealed &&
+			action.prepared && action.declaration.action_kind == GDEXTENSION_PRODUCTION_UPLOAD_V1 &&
+			index < anchor && anchor < request.action_count && request.actions[anchor].output_plan_prepared &&
+			request.actions[anchor].output_state == ProductionActionCell::OutputState::UNBOUND;
 	auto has_no_backing = [&](const ProductionResourceSlot &slot) {
 		return slot.request == &request && slot.request_serial == serial && !slot.imported &&
 				slot.primary.is_null() && slot.secondary.is_null() && !slot.backing_serial && !slot.use_count &&
@@ -732,9 +731,10 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 		// An unbound current guard is not a resource of earlier actions. Its
 		// sole declared READBACK row resolves and admits it after Finalize.
 		if (resource.output_guard_readonly && (resource.output_guard_history ? !production_output_history_guard_uses_locked(request, resource, index) : resource.output_guard_consumer != index)) { continue; }
-		// The sealed camera upload runs before Acquire materializes the output
-		// roles and dependent sets. Check physical resources once they exist.
-		if (camera_upload_before_acquire && (awaits_output(resource) || awaits_output_set(resource))) {
+		// A sealed output prefix can upload camera, control and reset data
+		// before Acquire provides output aliases and their dependent sets.
+		// Each upload's actual destination and declared uses still require permission.
+		if (prepared_upload_before_acquire && (awaits_output(resource) || awaits_output_set(resource))) {
 			bool used = action.upload.destination_slot == i;
 			for (uint32_t u = 0; u < action.declaration.use_count; ++u) {
 				used |= request.uses[action.declaration.first_use + u].declaration.resource_slot == i;
