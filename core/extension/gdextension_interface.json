@@ -13036,6 +13036,10 @@
                     "value": 1
                 },
                 {
+                    "name": "GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_TRANSPARENT_V1",
+                    "value": 2
+                },
+                {
                     "name": "GDEXTENSION_MATERIAL_QUALIFICATION_PENDING_V1",
                     "value": 1
                 },

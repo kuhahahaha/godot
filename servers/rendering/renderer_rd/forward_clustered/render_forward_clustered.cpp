@@ -6211,12 +6211,12 @@ Error RenderForwardClustered::build_native_material_fixed_pass_data(Vector<uint8
 #endif
 }
 
-Error RenderForwardClustered::_plan_native_material_recipe(RID selected_material, RID selected_mesh, uint32_t selected_surface, RD::FramebufferFormatID actual_format, RendererRD::NativeMaterialRecipeRoster &plan, uint32_t limit) {
+Error RenderForwardClustered::_plan_native_material_recipe(RID selected_material, RID selected_mesh, uint32_t selected_surface, RD::FramebufferFormatID actual_format, RendererRD::NativeMaterialRecipeRoster &plan, uint32_t limit, bool transparent) {
 	using namespace RendererRD;
 	auto *storage = MaterialStorage::get_singleton();
 	auto *meshes = MeshStorage::get_singleton();
 	if (!storage || !meshes || get_singleton() != this) { return ERR_UNCONFIGURED; }
-	Error error = plan._begin(*storage, *meshes, selected_material, selected_mesh, selected_surface, actual_format, limit);
+	Error error = plan._begin(*storage, *meshes, selected_material, selected_mesh, selected_surface, actual_format, limit, transparent);
 	if (error != OK) { return error; }
 	auto fail = [&](Error error) { const Error returned = plan.release(); return returned == OK ? error : returned; };
 	MaterialStorage::MaterialData *original = nullptr;
@@ -6227,7 +6227,8 @@ Error RenderForwardClustered::_plan_native_material_recipe(RID selected_material
 	if (!material->shader_data) { return fail(ERR_UNAVAILABLE); }
 	ExternalPacketPipelineRequest request;
 	request.backend = ExternalPacketPipelineRequest::Backend::CLUSTERED;
-	request.pass = ExternalPacketPass::OPAQUE;
+	request.pass = transparent ? ExternalPacketPass::TRANSPARENT : ExternalPacketPass::OPAQUE;
+	if (transparent) { request.color_flags = SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_TRANSPARENT; }
 	request.framebuffer_format = actual_format;
 	request.version = SceneShaderForwardClustered::PIPELINE_VERSION_COLOR_PASS;
 	request.view_count = 1;
@@ -6241,6 +6242,7 @@ Error RenderForwardClustered::_plan_native_material_recipe(RID selected_material
 	plan.depth_stencil = pipeline.state.depth_stencil;
 	plan.blend = pipeline.state.blend;
 	plan.specialization = pipeline.state.specialization;
+	plan.transparent_pass = request.pass == ExternalPacketPass::TRANSPARENT;
 	Vector<RD::Uniform> base, pass;
 	_update_render_base_uniform_set(&error, &base);
 	if (error != OK) { return fail(error); }
@@ -6338,7 +6340,7 @@ Error RenderForwardClustered::ensure_native_material_recipe_sources_ready() {
 	return OK;
 }
 
-Error RenderForwardClustered::warm_native_material_instance192_shader(RID p_material, RSE::PrimitiveType p_primitive) {
+Error RenderForwardClustered::warm_native_material_instance192_shader(RID p_material, RSE::PrimitiveType p_primitive, bool transparent) {
 	auto *rd = RD::get_singleton();
 	auto *storage = RendererRD::MaterialStorage::get_singleton();
 	if (!rd || !rd->native_immutable_is_render_thread() || !storage || get_singleton() != this) {
@@ -6358,7 +6360,8 @@ Error RenderForwardClustered::warm_native_material_instance192_shader(RID p_mate
 	}
 	RendererRD::MaterialStorage::ShaderData::NativeInstance192ShaderFeatures features;
 	const Error classified = material->shader_data->get_native_instance192_shader_features(features);
-	if (classified != OK || !features.zero_displacement || features.material_recipe_rejections) {
+	const auto rejections = transparent ? features.transparent_recipe_rejections : features.material_recipe_rejections;
+	if (classified != OK || !features.zero_displacement || rejections) {
 		return classified == OK ? ERR_UNAVAILABLE : classified;
 	}
 	RID native_shader;
@@ -6380,8 +6383,8 @@ Error RenderForwardClustered::warm_native_material_instance192_shader(RID p_mate
 	return ready;
 }
 
-Error RenderForwardClustered::plan_native_material_recipe(RID p_material, RID p_mesh, uint32_t p_surface, RD::FramebufferFormatID p_actual_format, RendererRD::NativeMaterialRecipeRoster &r_plan, uint32_t p_limit) {
-	return _plan_native_material_recipe(p_material, p_mesh, p_surface, p_actual_format, r_plan, p_limit);
+Error RenderForwardClustered::plan_native_material_recipe(RID p_material, RID p_mesh, uint32_t p_surface, RD::FramebufferFormatID p_actual_format, RendererRD::NativeMaterialRecipeRoster &r_plan, uint32_t p_limit, bool p_transparent) {
+	return _plan_native_material_recipe(p_material, p_mesh, p_surface, p_actual_format, r_plan, p_limit, p_transparent);
 }
 
 RendererRD::ParticlesMeshLightSortRD *RenderForwardClustered::get_particles_mesh_light_sort_rd() const {

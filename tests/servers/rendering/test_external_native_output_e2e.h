@@ -1112,9 +1112,14 @@ struct LiveMetalWaveGNativeOutputHarness {
 
 	Error create_qualified_source_buffer(uint32_t p_alloc_slot, uint32_t p_active_count, GDExtensionStorageBackingV1 &r_backing, GDExtensionStorageCreateRequestV1 &r_origin) {
 		const uint32_t source_words[8] = { p_active_count, 0, 0, 0, 0, 0, 0, 0 };
+		return create_qualified_source_words(p_alloc_slot, source_words, sizeof(source_words), r_backing, r_origin);
+	}
+
+	Error create_qualified_source_words(uint32_t p_alloc_slot, const uint32_t *p_words, uint64_t p_bytes,
+			GDExtensionStorageBackingV1 &r_backing, GDExtensionStorageCreateRequestV1 &r_origin) {
 		r_origin = {};
 		r_origin.abi = Enrollment::ABI;
-		r_origin.bytes = sizeof(source_words);
+		r_origin.bytes = p_bytes;
 		r_origin.allocation_slot = p_alloc_slot;
 		r_origin.part = 0;
 		r_origin.allocation_generation = 1;
@@ -1137,15 +1142,15 @@ struct LiveMetalWaveGNativeOutputHarness {
 
 		// Upload source_words into r_backing via a tiny 1-action UPLOAD_V1 request on enrollment.attachment.
 		const GDExtensionProductionResourceV1 res = {
-			GDEXTENSION_PRODUCTION_STORAGE_V1, p_alloc_slot, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, sizeof(source_words), 0
+			GDEXTENSION_PRODUCTION_STORAGE_V1, p_alloc_slot, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, p_bytes, 0
 		};
-		const GDExtensionProductionUseV1 use = { 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, sizeof(source_words), 0 };
+		const GDExtensionProductionUseV1 use = { 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, p_bytes, 0 };
 		const GDExtensionProductionActionV2 act = {
 			0, 10, 1, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX
 		};
-		const GDExtensionProductionUploadV2 up_dto = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionUploadV2>(), 0, 10, 1, 0, 0, 0, 0, sizeof(source_words) };
+		const GDExtensionProductionUploadV2 up_dto = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionUploadV2>(), 0, 10, 1, 0, 0, 0, 0, p_bytes };
 		GDExtensionProductionMetadataQuoteV1 quote = {};
-		Error err = Error(ports.req_quote_v1(enrollment.attachment, &act, 1, &res, 1, &use, 1, &up_dto, 1, nullptr, 0, 0, sizeof(source_words), &quote).native_error);
+		Error err = Error(ports.req_quote_v1(enrollment.attachment, &act, 1, &res, 1, &use, 1, &up_dto, 1, nullptr, 0, 0, p_bytes, &quote).native_error);
 		if (err != OK) {
 			diagnostics["src_quote_err"] = int(err);
 			retire_qualified_source_buffer(r_backing, r_origin);
@@ -1166,7 +1171,7 @@ struct LiveMetalWaveGNativeOutputHarness {
 			retire_qualified_source_buffer(r_backing, r_origin);
 			return err;
 		}
-		err = Error(ports.prepare_upload_v2(up_req, &up_dto, source_words, sizeof(source_words)).native_error);
+		err = Error(ports.prepare_upload_v2(up_req, &up_dto, p_words, p_bytes).native_error);
 		if (err != OK) {
 			diagnostics["src_prep_upload_err"] = int(err);
 			release_request_cleanly(up_req);
@@ -1293,10 +1298,107 @@ void main() {
 	}
 }
 )GLSL";
+		return create_qualified_output_compute(p_record_slot, "indexed144_history_align_writer", kHistoryAlignShader, r_unit);
+	}
+
+	// K05 transport witness. Three raw planar nodes enter in scrambled dense order.
+	// The fixed three-node input keeps this fixture independent of renderer C04 production.
+	Error create_qualified_indexed144_node_unit(uint32_t p_record_slot, GDExtensionNativeUnitBackingV1 &r_unit) {
+		static constexpr const char *shader = R"GLSL(#version 450
+layout(local_size_x = 1) in;
+layout(set = 0, binding = 0, std430) readonly buffer Nodes { uint words[]; } source_nodes;
+layout(set = 0, binding = 1, std430) buffer Current { uint words[]; } current_vertices;
+layout(set = 0, binding = 2, std430) buffer Indices { uint words[]; } index_staging;
+layout(set = 0, binding = 3, std430) buffer Meta { uint words[]; } output_meta;
+layout(set = 0, binding = 4, std430) writeonly buffer SealedCount { uint words[]; } sealed_count;
+
+uint node_word(uint node, uint field) {
+	return source_nodes.words[2u + node * 4u + field];
+}
+
+void order_nodes(inout uint a, inout uint b) {
+	if (node_word(a, 2u) > node_word(b, 2u)) {
+		uint swap = a;
+		a = b;
+		b = swap;
+	}
+}
+
+void main() {
+	uint capacity = uint(current_vertices.words.length()) / 144u;
+	bool admitted = source_nodes.words[0] == 3u && capacity == 2u;
+	uint active_segments = admitted ? source_nodes.words[0] - 1u : 0u;
+	output_meta.words[0] = active_segments;
+	output_meta.words[1] = 0u;
+	output_meta.words[2] = 0u;
+	output_meta.words[3] = admitted ? 0u : 1u;
+	output_meta.words[4] = capacity;
+	output_meta.words[5] = 2u;
+	// This one-frame owner is required to return native present sequence 1.
+	output_meta.words[6] = 1u;
+	output_meta.words[7] = 0u;
+	if (!admitted) {
+		sealed_count.words[0] = 0u;
+		return;
+	}
+
+	uint first = 0u, middle = 1u, last = 2u;
+	order_nodes(first, middle);
+	order_nodes(middle, last);
+	order_nodes(first, middle);
+	uint ordered[3] = uint[3](first, middle, last);
+	float x0 = uintBitsToFloat(node_word(first, 0u));
+	float length = uintBitsToFloat(node_word(last, 0u)) - x0;
+	const uint winding[6] = uint[6](0u, 2u, 1u, 1u, 2u, 3u);
+	for (uint segment = 0u; segment < 2u; ++segment) {
+		uint start_node = ordered[segment];
+		uint end_node = ordered[segment + 1u];
+		for (uint i = 0u; i < 4u; ++i) {
+			uint node = i < 2u ? start_node : end_node;
+			float x = uintBitsToFloat(node_word(node, 0u));
+			float half_width = uintBitsToFloat(node_word(node, 1u));
+			uint base = (segment * 4u + i) * 36u;
+			for (uint word = 0u; word < 36u; ++word) {
+				current_vertices.words[base + word] = 0u;
+			}
+			current_vertices.words[base] = floatBitsToUint(x);
+			current_vertices.words[base + 1u] = floatBitsToUint((i & 1u) == 0u ? -half_width : half_width);
+			current_vertices.words[base + 6u] = floatBitsToUint(1.0);
+			current_vertices.words[base + 8u] = floatBitsToUint(1.0);
+			current_vertices.words[base + 11u] = floatBitsToUint(1.0);
+			current_vertices.words[base + 12u] = floatBitsToUint(0.8);
+			current_vertices.words[base + 13u] = floatBitsToUint(0.4);
+			current_vertices.words[base + 14u] = floatBitsToUint(0.2);
+			current_vertices.words[base + 15u] = floatBitsToUint(1.0);
+			uint u = floatBitsToUint((x - x0) / length);
+			uint v = floatBitsToUint(float(i & 1u));
+			current_vertices.words[base + 16u] = u;
+			current_vertices.words[base + 17u] = v;
+			current_vertices.words[base + 18u] = u;
+			current_vertices.words[base + 19u] = v;
+			current_vertices.words[base + 28u] = node_word(start_node, 3u);
+			current_vertices.words[base + 29u] = 1u;
+			current_vertices.words[base + 30u] = node_word(end_node, 3u);
+			current_vertices.words[base + 31u] = 1u;
+			current_vertices.words[base + 32u] = source_nodes.words[1];
+			current_vertices.words[base + 35u] = 1u;
+		}
+		for (uint i = 0u; i < 6u; ++i) {
+			index_staging.words[segment * 6u + i] = segment * 4u + winding[i];
+		}
+	}
+	sealed_count.words[0] = active_segments;
+}
+)GLSL";
+		return create_qualified_output_compute(p_record_slot, "indexed144_three_raw_nodes", shader, r_unit);
+	}
+
+	Error create_qualified_output_compute(uint32_t p_record_slot, const char *p_name, const char *p_shader,
+			GDExtensionNativeUnitBackingV1 &r_unit) {
 		String diagnostic;
 		const Vector<uint8_t> spirv = device->shader_compile_spirv_from_source(
 				RenderingDevice::SHADER_STAGE_COMPUTE,
-				String::utf8(kHistoryAlignShader),
+				String::utf8(p_shader),
 				RenderingDevice::SHADER_LANGUAGE_GLSL,
 				&diagnostic,
 				false);
@@ -1309,7 +1411,7 @@ void main() {
 		code.spirv = spirv;
 		stages.push_back(code);
 		const Vector<uint8_t> container = device->shader_compile_binary_from_spirv_with_options(
-				stages, "indexed144_history_align_writer", RenderingDevice::SHADER_COMPILE_FLAG_DISABLE_FAST_MATH);
+				stages, p_name, RenderingDevice::SHADER_COMPILE_FLAG_DISABLE_FAST_MATH);
 		if (container.is_empty()) {
 			return ERR_COMPILATION_FAILED;
 		}
@@ -2081,6 +2183,15 @@ void main() {
 	}
 
 	// Single-frame end-to-end runner for INSTANCE_192 (no-motion), PARTICLE_LIGHT_64, and INDEXED_144 (no-motion).
+	// The raw header and the three four-word nodes precede the original
+	// Count, Attributes, DenseIds and Instance validity words.
+	static constexpr uint32_t INDEXED_NODE_VALIDITY_WORD = 2u + 3u * 4u;
+	struct Indexed144NodeFixture {
+		GDExtensionNativeUnitBackingV1 unit;
+		GDExtensionStorageBackingV1 sealed_count;
+		GDExtensionStorageCreateRequestV1 sealed_count_origin;
+	};
+
 	bool run_single_frame_profile(
 			const String &p_label,
 			uint32_t p_profile,
@@ -2091,8 +2202,12 @@ void main() {
 			RID p_mesh,
 			RID p_material,
 			const GDExtensionStorageBackingV1 &p_source,
-			uint32_t p_source_slot) {
+			uint32_t p_source_slot,
+			const Indexed144NodeFixture *p_node_fixture = nullptr) {
 		using namespace GDExtensionDeviceExit;
+		const bool gpu_nodes = p_node_fixture != nullptr;
+		const uint64_t source_bytes = p_source.byte_size;
+		constexpr uint32_t node_unit_record_slot = 79;
 		OutputOwnerSession sess;
 		Error err = setup_owner_session(p_profile, p_capacity, p_motion, 1, p_mesh, p_material, sess);
 		record_check(p_label + ".create_v3", err == OK && sess.created.particles != 0 && sess.created.generation != 0);
@@ -2104,28 +2219,36 @@ void main() {
 
 		// Build resources, uses, actions, and readback for GUARD_STATUS.
 		Vector<GDExtensionProductionResourceV1> res_vec;
-		res_vec.push_back({ GDEXTENSION_PRODUCTION_STORAGE_V1, p_source_slot, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 32, 0 });
+		res_vec.push_back({ GDEXTENSION_PRODUCTION_STORAGE_V1, p_source_slot, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, source_bytes, 0 });
 
 		struct RoleUploadSpec {
 			uint32_t role;
 			Vector<uint8_t> payload;
+			uint64_t bytes;
 		};
 		Vector<RoleUploadSpec> uploads;
 
 		const uint32_t meta_words[8] = { p_capacity, 0, 0, 0, p_capacity, p_profile, 1u, 0u };
 		Vector<uint8_t> meta_bytes;
-		meta_bytes.resize(32);
-		memcpy(meta_bytes.ptrw(), meta_words, 32);
+		if (!gpu_nodes) {
+			meta_bytes.resize(32);
+			memcpy(meta_bytes.ptrw(), meta_words, 32);
+		}
 
-		if (p_profile == 1) {
+		if (gpu_nodes) {
+			// These are extents only. The three native aliases have no host payload.
+			uploads.push_back({ 3u, {}, uint64_t(p_capacity) * 576u });
+			uploads.push_back({ 6u, {}, uint64_t(p_capacity) * 24u });
+			uploads.push_back({ 7u, {}, 32u });
+		} else if (p_profile == 1) {
 			// INSTANCE_192 (motion == DISABLED, capacity = 2 -> 384B current + 32B meta)
 			Vector<uint8_t> curr_bytes;
 			curr_bytes.resize(p_capacity * 192u);
 			for (uint32_t i = 0; i < p_capacity; ++i) {
 				wave_g_fill_instance192_record(reinterpret_cast<uint32_t *>(curr_bytes.ptrw() + i * 192u), float(i) * 0.25f, 0.0f, 0.0f, i + 1u);
 			}
-			uploads.push_back({ 1u, curr_bytes });
-			uploads.push_back({ 7u, meta_bytes });
+			uploads.push_back({ 1u, curr_bytes, uint64_t(curr_bytes.size()) });
+			uploads.push_back({ 7u, meta_bytes, 32u });
 		} else if (p_profile == 4) {
 			// PARTICLE_LIGHT_64 (capacity = 4 -> 256B lights + 32B meta)
 			Vector<uint8_t> light_bytes;
@@ -2133,8 +2256,8 @@ void main() {
 			for (uint32_t i = 0; i < p_capacity; ++i) {
 				wave_g_fill_light64_record(reinterpret_cast<uint32_t *>(light_bytes.ptrw() + i * 64u), float(i) * 0.2f, 0.1f, 0.0f, 2.5f);
 			}
-			uploads.push_back({ 8u, light_bytes });
-			uploads.push_back({ 7u, meta_bytes });
+			uploads.push_back({ 8u, light_bytes, uint64_t(light_bytes.size()) });
+			uploads.push_back({ 7u, meta_bytes, 32u });
 		} else {
 			// INDEXED_144 (motion == DISABLED, capacity = 2 -> 1152B curr + 48B idx + 32B meta)
 			Vector<uint8_t> curr_bytes;
@@ -2153,9 +2276,9 @@ void main() {
 				iw[s * 6 + 4] = s * 4 + 1;
 				iw[s * 6 + 5] = s * 4 + 3;
 			}
-			uploads.push_back({ 3u, curr_bytes });
-			uploads.push_back({ 6u, idx_bytes });
-			uploads.push_back({ 7u, meta_bytes });
+			uploads.push_back({ 3u, curr_bytes, uint64_t(curr_bytes.size()) });
+			uploads.push_back({ 6u, idx_bytes, uint64_t(idx_bytes.size()) });
+			uploads.push_back({ 7u, meta_bytes, 32u });
 		}
 
 		for (int i = 0; i < uploads.size(); ++i) {
@@ -2165,7 +2288,7 @@ void main() {
 				0,
 				GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1,
 				gen,
-				uint64_t(uploads[i].payload.size()),
+				uploads[i].bytes,
 				0
 			});
 		}
@@ -2181,10 +2304,30 @@ void main() {
 			0
 		});
 
+		const uint32_t sealed_count_slot = uint32_t(res_vec.size());
+		if (gpu_nodes) {
+			const auto &origin = p_node_fixture->sealed_count_origin;
+			res_vec.push_back({ GDEXTENSION_PRODUCTION_STORAGE_V1, origin.allocation_slot, origin.part,
+				GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, origin.allocation_generation,
+				p_node_fixture->sealed_count.byte_size, 0 });
+		}
+		const uint32_t unit_slot = uint32_t(res_vec.size());
+		const uint32_t set_slot = unit_slot + 1;
+		if (gpu_nodes) {
+			res_vec.push_back({ GDEXTENSION_PRODUCTION_UNIT_V1, node_unit_record_slot, 0,
+				GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 0, 0 });
+			res_vec.push_back({ GDEXTENSION_PRODUCTION_SET_V1, node_unit_record_slot + 1, 0,
+				GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 0, 0 });
+		}
 		Vector<GDExtensionProductionUseV1> use_vec;
-		use_vec.push_back({ 0, GDEXTENSION_PRODUCTION_READ_V1, 0, 32, 0 });
+		use_vec.push_back({ 0, GDEXTENSION_PRODUCTION_READ_V1, 0, source_bytes, 0 });
+		const uint32_t sealed_count_use = uint32_t(use_vec.size());
+		if (gpu_nodes) {
+			use_vec.push_back({ sealed_count_slot, GDEXTENSION_PRODUCTION_READ_V1, 0, sizeof(uint32_t), 0 });
+		}
+		const uint32_t acq_source_uses = uint32_t(use_vec.size());
 		for (int i = 0; i < uploads.size(); ++i) {
-			use_vec.push_back({ uint32_t(1 + i), GDEXTENSION_PRODUCTION_WRITE_V1, 0, uint64_t(uploads[i].payload.size()), 0 });
+			use_vec.push_back({ uint32_t(1 + i), GDEXTENSION_PRODUCTION_WRITE_V1, 0, uploads[i].bytes, 0 });
 		}
 		const uint32_t acq_use_count = uint32_t(use_vec.size());
 
@@ -2196,14 +2339,27 @@ void main() {
 		PacketRecordPlan pkt;
 		pkt.acquire_ordinal = 0;
 
-		for (int i = 0; i < uploads.size(); ++i) {
+		if (gpu_nodes) {
+			const uint32_t first_use = uint32_t(use_vec.size());
+			const GDExtensionProductionUseV1 raw_nodes_read = use_vec[0];
+			use_vec.push_back(raw_nodes_read);
+			for (uint32_t i = acq_source_uses; i < acq_use_count; ++i) {
+				const GDExtensionProductionUseV1 use = use_vec[i];
+				use_vec.push_back(use);
+			}
+			use_vec.push_back({ sealed_count_slot, GDEXTENSION_PRODUCTION_WRITE_V1, 0, sizeof(uint32_t), 0 });
+			act_vec.push_back({ 1, 10, 2, 0, GDEXTENSION_PRODUCTION_DISPATCH_V1, unit_slot,
+				first_use, uint32_t(use_vec.size()) - first_use, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX });
+			pkt.upload_ordinals.push_back(1);
+		}
+		for (int i = 0; !gpu_nodes && i < uploads.size(); ++i) {
 			const uint32_t u_idx = uint32_t(use_vec.size());
 			const uint32_t a_ord = uint32_t(act_vec.size());
-			use_vec.push_back({ uint32_t(1 + i), GDEXTENSION_PRODUCTION_WRITE_V1, 0, uint64_t(uploads[i].payload.size()), 0 });
+			use_vec.push_back({ uint32_t(1 + i), GDEXTENSION_PRODUCTION_WRITE_V1, 0, uploads[i].bytes, 0 });
 			act_vec.push_back({ a_ord, 10, uint32_t(2 + i), 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, u_idx, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX });
-			upload_dtos.push_back({ production_dto_abi<GDExtensionProductionUploadV2>(), a_ord, 10, uint32_t(2 + i), 0, uint32_t(1 + i), 0, 0, uint64_t(uploads[i].payload.size()) });
+			upload_dtos.push_back({ production_dto_abi<GDExtensionProductionUploadV2>(), a_ord, 10, uint32_t(2 + i), 0, uint32_t(1 + i), 0, 0, uploads[i].bytes });
 			pkt.upload_ordinals.push_back(a_ord);
-			total_payload_bytes += uint64_t(uploads[i].payload.size());
+			total_payload_bytes += uploads[i].bytes;
 		}
 
 		pkt.finalize_ordinal = uint64_t(act_vec.size());
@@ -2217,15 +2373,32 @@ void main() {
 		act_vec.push_back({ rb_ord, 10, 22, 0, GDEXTENSION_PRODUCTION_READBACK_V1, UINT32_MAX, rb_use_idx, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, 0 });
 		pkt.readback_ordinals.push_back(rb_ord);
 
-		const GDExtensionProductionReadbackSourceV1 rb_src = {
-			guard_alias_res_slot,
-			GDEXTENSION_PRODUCTION_READBACK_NATIVE_OUTPUT_GUARD_V1,
-			rb_ord,
-			0,
-			32,
-			{ pkt.finalize_ordinal },
-			{}
-		};
+		Vector<GDExtensionProductionReadbackSourceV1> readbacks;
+		readbacks.push_back({ guard_alias_res_slot, GDEXTENSION_PRODUCTION_READBACK_NATIVE_OUTPUT_GUARD_V1,
+			rb_ord, 0, 32, { pkt.finalize_ordinal }, {} });
+		if (gpu_nodes) {
+			// The registry binds REQUEST_WRITER alias reads to the native Acquire ordinal.
+			for (const uint32_t slot : { 1u, 2u }) {
+				const uint32_t use = uint32_t(use_vec.size());
+				const uint32_t action = uint32_t(act_vec.size());
+				const uint64_t bytes = res_vec[slot].physical_bytes;
+				use_vec.push_back({ slot, GDEXTENSION_PRODUCTION_READ_V1, 0, bytes, 0 });
+				act_vec.push_back({ action, 10, 22u + slot, 0, GDEXTENSION_PRODUCTION_READBACK_V1,
+					UINT32_MAX, use, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, slot });
+				readbacks.push_back({ slot, GDEXTENSION_PRODUCTION_READBACK_REQUEST_WRITER_V1,
+					action, 0, bytes, { pkt.acquire_ordinal }, {} });
+				pkt.readback_ordinals.push_back(action);
+			}
+			const uint32_t use = uint32_t(use_vec.size());
+			const uint32_t action = uint32_t(act_vec.size());
+			const uint32_t readback = uint32_t(readbacks.size());
+			use_vec.push_back({ sealed_count_slot, GDEXTENSION_PRODUCTION_READ_V1, 0, sizeof(uint32_t), 0 });
+			act_vec.push_back({ action, 10, 25, 0, GDEXTENSION_PRODUCTION_READBACK_V1,
+				UINT32_MAX, use, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, readback });
+			readbacks.push_back({ sealed_count_slot, GDEXTENSION_PRODUCTION_READBACK_REQUEST_WRITER_V1,
+				action, 0, sizeof(uint32_t), { 1 }, {} });
+			pkt.readback_ordinals.push_back(action);
+		}
 
 		const uint32_t read_cap = p_do_color_draw ? 1u : 0u;
 		const uint32_t read_graph_cap = p_do_color_draw ? 112u : 0u;
@@ -2249,8 +2422,8 @@ void main() {
 				res_vec.ptr(), uint32_t(res_vec.size()),
 				use_vec.ptr(), uint32_t(use_vec.size()),
 				upload_dtos.ptr(), uint32_t(upload_dtos.size()),
-				&rb_src, 1,
-				5, total_payload_bytes,
+				readbacks.ptr(), uint32_t(readbacks.size()),
+				gpu_nodes ? 10u : 5u, total_payload_bytes,
 				&demand_in, 1, &guard_demand, 1, &req_quote).native_error);
 		record_check(p_label + ".req_quote_v2", err == OK);
 		if (err != OK) {
@@ -2265,7 +2438,7 @@ void main() {
 				act_vec.ptr(), uint32_t(act_vec.size()),
 				res_vec.ptr(), uint32_t(res_vec.size()),
 				use_vec.ptr(), uint32_t(use_vec.size()),
-				&rb_src, 1, &pkt.req).native_error);
+				readbacks.ptr(), uint32_t(readbacks.size()), &pkt.req).native_error);
 		record_check(p_label + ".reserve_readbacks", err == OK);
 		if (err != OK) {
 			teardown_owner_session(sess);
@@ -2273,18 +2446,30 @@ void main() {
 		}
 
 		err = Error(ports.import_storage(pkt.req, 0, &p_source).native_error);
-		for (int i = 0; i < uploads.size() && err == OK; ++i) {
+		if (gpu_nodes && err == OK) {
+			err = Error(ports.import_storage(pkt.req, sealed_count_slot, &p_node_fixture->sealed_count).native_error);
+			if (err == OK) {
+				err = Error(ports.import_unit(pkt.req, unit_slot, &p_node_fixture->unit).native_error);
+			}
+		}
+		for (int i = 0; i < upload_dtos.size() && err == OK; ++i) {
 			err = Error(ports.prepare_upload_v2(pkt.req, &upload_dtos[i], uploads[i].payload.ptr(), uploads[i].payload.size()).native_error);
 		}
-		if (err == OK) {
-			err = Error(ports.prepare_readback_v2(pkt.req, rb_ord, 0).native_error);
+		for (int i = 0; i < readbacks.size() && err == OK; ++i) {
+			err = Error(ports.prepare_readback_v2(pkt.req, pkt.readback_ordinals[i], i).native_error);
 		}
 		record_check(p_label + ".prepare_uploads_and_readback", err == OK);
+
+		if (err != OK) {
+			release_request_cleanly(pkt.req);
+			teardown_owner_session(sess);
+			return false;
+		}
 
 		GDExtensionProductionCameraSampleV1 cam_sample = {};
 		err = prepare_host_and_capture_camera(sess, pkt.req, 0, 0x41, cam_sample);
 		record_check(p_label + ".camera_capture", err == OK && cam_sample.present_seq == 1);
-		if (err != OK) {
+		if (err != OK || (gpu_nodes && cam_sample.present_seq != 1u)) {
 			release_request_cleanly(pkt.req);
 			teardown_owner_session(sess);
 			return false;
@@ -2316,7 +2501,7 @@ void main() {
 		prep_v3.source_resource_slot = 0;
 		prep_v3.source_use_index = 0;
 		prep_v3.first_source_use = 0;
-		prep_v3.source_use_count = 1;
+		prep_v3.source_use_count = acq_source_uses;
 		prep_v3.read_capacity = read_cap;
 		prep_v3.read_graph_capacity = read_graph_cap;
 		prep_v3.source_generation = 1;
@@ -2325,7 +2510,7 @@ void main() {
 			prep_v3.roles[r] = { 0, UINT32_MAX, UINT32_MAX, 0, 0, 0 };
 		}
 		for (int i = 0; i < uploads.size(); ++i) {
-			prep_v3.roles[i] = { uploads[i].role, uint32_t(1 + i), uint32_t(1 + i), 0, gen, uint64_t(uploads[i].payload.size()) };
+			prep_v3.roles[i] = { uploads[i].role, uint32_t(1 + i), acq_source_uses + uint32_t(i), 0, gen, uploads[i].bytes };
 		}
 
 		GDExtensionProductionOutputPlanV1 plan_v1 = {};
@@ -2337,7 +2522,7 @@ void main() {
 		plan_v1.acquire.source_resource_slot = 0;
 		plan_v1.acquire.source_use_index = 0;
 		plan_v1.acquire.first_source_use = 0;
-		plan_v1.acquire.source_use_count = 1;
+		plan_v1.acquire.source_use_count = acq_source_uses;
 		plan_v1.acquire.read_capacity = read_cap;
 		plan_v1.acquire.read_graph_capacity = read_graph_cap;
 		plan_v1.acquire.source_generation = 1;
@@ -2349,8 +2534,18 @@ void main() {
 		plan_v1.finalize_source_recipe_substep = 20;
 		plan_v1.seal_source_recipe_substep = 21;
 		plan_v1.source_space = 2;
-		for (uint32_t s = 0; s < 5; ++s) {
-			plan_v1.reads[s] = { 0, 0, 1, s == 0 ? 0u : 1u };
+		if (gpu_nodes) {
+			// Acquire stays anchored to the original raw node source. The
+			// Guard's count is produced by this request's qualified dispatch.
+			plan_v1.reads[0] = { sealed_count_slot, sealed_count_use,
+				p_node_fixture->sealed_count_origin.allocation_generation, 0 };
+			for (uint32_t s = 1; s < 5; ++s) {
+				plan_v1.reads[s] = { 0, 0, 1, INDEXED_NODE_VALIDITY_WORD + s - 1 };
+			}
+		} else {
+			for (uint32_t s = 0; s < 5; ++s) {
+				plan_v1.reads[s] = { 0, 0, 1, s == 0 ? 0u : 1u };
+			}
 		}
 		plan_v1.guard_work_limit = guard_demand.guard_work;
 		plan_v1.guard_dispatch_limit = guard_demand.guard_dispatches;
@@ -2376,6 +2571,30 @@ void main() {
 			return false;
 		}
 
+		if (gpu_nodes) {
+			GDExtensionProductionSetBindingV1 bindings[5] = {};
+			for (uint32_t slot = 0; slot < 4; ++slot) {
+				bindings[slot] = { production_dto_abi<GDExtensionProductionSetBindingV1>(),
+					0, slot, 0, slot, 0, res_vec[slot].physical_bytes };
+			}
+			bindings[4] = { production_dto_abi<GDExtensionProductionSetBindingV1>(),
+				0, 4, 0, sealed_count_slot, 0, sizeof(uint32_t) };
+			err = Error(ports.set_create(pkt.req, set_slot, unit_slot, 0, bindings, 5).native_error);
+			const GDExtensionProductionDispatchV2 dispatch = {
+				production_dto_abi<GDExtensionProductionDispatchV2>(),
+				1, 10, 2, 0, unit_slot, set_slot, 1, 1, 1, 1, 0, 0
+			};
+			if (err == OK) {
+				err = Error(ports.prepare_dispatch_v2(pkt.req, &dispatch, nullptr, 0).native_error);
+			}
+			record_check(p_label + ".qualified_node_dispatch_prepared", err == OK);
+			if (err != OK) {
+				release_request_cleanly(pkt.req);
+				teardown_owner_session(sess);
+				return false;
+			}
+		}
+
 		Indexed144ExternalSurfaceHold idx_hold;
 		if (p_do_color_draw && p_profile == 2 && p_capacity > 0) {
 			(void)prepare_indexed144_surface_hold(p_capacity, p_material, idx_hold);
@@ -2391,6 +2610,7 @@ void main() {
 				pkt.upload_error == OK &&
 				pkt.finalize_out.status.error == OK &&
 				pkt.seal_out.status.error == OK &&
+				pkt.seal_out.state == GDEXTENSION_OUTPUT_SEAL_RECORDED_ORDERED_V1 &&
 				pkt.readback_append_error == OK;
 		record_check(p_label + ".acquire_upload_finalize_seal", record_ok);
 		if (!record_ok) {
@@ -2442,19 +2662,31 @@ void main() {
 		// Submit RD frame to Metal, pump paid OBSERVE, and read back GPU GUARD_STATUS (32 bytes = 8 uint32 words)!
 		rt_advance_rd_frame();
 		uint32_t guard_words[8] = { 0xffffffffu, 0, 0, 0, 0, 0, 0, 0 };
+		uint32_t vertices[8 * 36] = {};
+		uint32_t indices[12] = {};
+		uint32_t gpu_sealed_count = UINT32_MAX;
 		bool rb_complete = false;
 		for (uint32_t turn = 0; turn < 256; ++turn) {
 			GDExtensionProductionObserveResultV3 obs = {};
 			if (pump_observe_once(pkt.req, obs) != OK) {
 				break;
 			}
-			if (obs.report.ready_readbacks >= 1 &&
+			if (obs.report.ready_readbacks >= uint32_t(readbacks.size()) &&
 					obs.report.known_obligations > 0 &&
 					obs.report.complete_obligations == obs.report.known_obligations &&
 					obs.report.possible_obligations == 0) {
 				uint64_t copied = 0;
 				if (ports.copy_v1(pkt.req, obs.report.revision, 0, guard_words, sizeof(guard_words), &copied).native_error == OK && copied == 32) {
-					rb_complete = true;
+					if (gpu_nodes) {
+						rb_complete = ports.copy_v1(pkt.req, obs.report.revision, 1, vertices, sizeof(vertices), &copied).native_error == OK &&
+								copied == sizeof(vertices) &&
+								ports.copy_v1(pkt.req, obs.report.revision, 2, indices, sizeof(indices), &copied).native_error == OK &&
+								copied == sizeof(indices) &&
+								ports.copy_v1(pkt.req, obs.report.revision, 3, &gpu_sealed_count, sizeof(gpu_sealed_count), &copied).native_error == OK &&
+								copied == sizeof(gpu_sealed_count);
+					} else {
+						rb_complete = true;
+					}
 					break;
 				}
 			}
@@ -2462,6 +2694,27 @@ void main() {
 			OS::get_singleton()->delay_usec(300);
 		}
 		record_check(p_label + ".guard_readback_complete", rb_complete);
+		if (gpu_nodes) {
+			record_check(p_label + ".gpu_segment_seal_original_writer", rb_complete && gpu_sealed_count == p_capacity);
+			const uint32_t expected_indices[12] = { 0, 2, 1, 1, 2, 3, 4, 6, 5, 5, 6, 7 };
+			const uint32_t expected_endpoint_keys[2][8] = {
+				{ 10, 1, 11, 1, 7, 0, 0, 1 }, { 11, 1, 12, 1, 7, 0, 0, 1 }
+			};
+			const float expected_x[8] = { -0.75f, -0.75f, -0.25f, -0.25f, -0.25f, -0.25f, 0.75f, 0.75f };
+			const float expected_y[8] = { -0.125f, 0.125f, -0.0625f, 0.0625f, -0.0625f, 0.0625f, -0.25f, 0.25f };
+			const float expected_u[8] = { 0, 0, 1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f, 1, 1 };
+			bool geometry_ok = rb_complete && memcmp(indices, expected_indices, sizeof(indices)) == 0;
+			for (uint32_t vertex = 0; vertex < 8; ++vertex) {
+				const uint32_t *words = vertices + vertex * 36u;
+				geometry_ok = geometry_ok && words[0] == wave_g_f2u(expected_x[vertex]) &&
+						words[1] == wave_g_f2u(expected_y[vertex]) &&
+						words[3] == 0u && words[7] == 0u &&
+						words[16] == wave_g_f2u(expected_u[vertex]) && words[17] == wave_g_f2u(float(vertex & 1u)) &&
+						words[18] == words[16] && words[19] == words[17] &&
+						memcmp(words + 28, expected_endpoint_keys[vertex / 4u], sizeof(expected_endpoint_keys[0])) == 0;
+			}
+			record_check(p_label + ".gpu_geometry_indices_uv_and_keys", geometry_ok);
+		}
 		if (rb_complete) {
 			bool status_valid = false;
 			if (p_profile == 4) {
@@ -2745,7 +2998,8 @@ void main() {
 				f1_pkt.acquire_out.status.error == OK &&
 				f1_pkt.acquire_out.writable_count == 5 &&
 				f1_pkt.finalize_out.status.error == OK &&
-				f1_pkt.seal_out.status.error == OK;
+				f1_pkt.seal_out.status.error == OK &&
+				f1_pkt.seal_out.state == GDEXTENSION_OUTPUT_SEAL_RECORDED_ORDERED_V1;
 		record_check(p_label + ".f1_acquire_finalize_seal", f1_rec_ok);
 		auto abort_f1_session = [&]() {
 			server->call_on_render_thread(callable_mp_static((+[](uint64_t p_h_addr, uint64_t p_part) {
@@ -3125,6 +3379,7 @@ void main() {
 				f2_pkt.upload_error == OK &&
 				f2_pkt.finalize_out.status.error == OK &&
 				f2_pkt.seal_out.status.error == OK &&
+				f2_pkt.seal_out.state == GDEXTENSION_OUTPUT_SEAL_RECORDED_ORDERED_V1 &&
 				f2_pkt.readback_append_error == OK;
 		record_check(p_label + ".f2_acquire_finalize_seal_with_history", f2_rec_ok);
 		if (!f2_rec_ok) {
@@ -3422,6 +3677,39 @@ void main() {
 
 				// 5. NATIVE-002 + NATIVE-S01: INDEXED_144 Two-Frame Non-Reset Motion History End-to-End on Live Metal!
 				run_indexed144_two_frame_motion_history("indexed144_two_frame_motion_history", material_rid, src_cap2);
+
+				const uint32_t raw_nodes[INDEXED_NODE_VALIDITY_WORD + 4] = {
+					3u, 7u,
+					wave_g_f2u(0.75f), wave_g_f2u(0.25f), 2u, 12u,
+					wave_g_f2u(-0.75f), wave_g_f2u(0.125f), 0u, 10u,
+					wave_g_f2u(-0.25f), wave_g_f2u(0.0625f), 1u, 11u,
+					0u, 0u, 0u, 0u
+				};
+				GDExtensionStorageBackingV1 node_source = {};
+				GDExtensionStorageCreateRequestV1 node_origin = {};
+				const Error node_error = create_qualified_source_words(2, raw_nodes, sizeof(raw_nodes), node_source, node_origin);
+				record_check("indexed144_node_source_qualified", node_error == OK);
+				if (node_error == OK) {
+					Indexed144NodeFixture fixture = {};
+					// Poison makes a missing GPU write fail independently of the
+					// old raw count (3) and the old gate/group word (7).
+					const uint32_t unwritten = UINT32_MAX;
+					const Error sealed_error = create_qualified_source_words(3, &unwritten, sizeof(unwritten),
+							fixture.sealed_count, fixture.sealed_count_origin);
+					record_check("indexed144_node_seal_storage_qualified", sealed_error == OK);
+					if (sealed_error == OK) {
+						const Error unit_error = create_qualified_indexed144_node_unit(79, fixture.unit);
+						record_check("indexed144_node_unit_qualified", unit_error == OK);
+						if (unit_error == OK) {
+							run_single_frame_profile("indexed144_gpu_three_raw_nodes", 2u, 2u, 0u, false, true,
+									RID(), material_rid, node_source, 2u, &fixture);
+							record_check("retire_indexed144_node_unit", retire_qualified_history_align_unit(fixture.unit) == OK);
+						}
+						record_check("retire_indexed144_node_seal", retire_qualified_source_buffer(
+								fixture.sealed_count, fixture.sealed_count_origin) == OK);
+					}
+					record_check("retire_indexed144_node_source", retire_qualified_source_buffer(node_source, node_origin) == OK);
+				}
 
 				record_check("retire_src_cap4", retire_qualified_source_buffer(src_cap4, src_cap4_origin) == OK);
 				record_check("retire_src_cap2", retire_qualified_source_buffer(src_cap2, src_cap2_origin) == OK);

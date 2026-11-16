@@ -308,6 +308,7 @@ public:
 		RID native_features_version;
 		bool native_features_need_inverse = false;
 		uint32_t native_material_recipe_rejections = UINT32_MAX;
+		uint32_t native_transparent_recipe_rejections = UINT32_MAX;
 		bool native_writes_depth = false;
 		bool native_writes_clip_scale = false;
 
@@ -423,7 +424,7 @@ public:
 
 	struct MaterialData : public RendererRD::MaterialStorage::MaterialData {
 		uint32_t get_native_recipe_backend() const override { return 1; }
-		Error get_native_recipe_shader_if_ready(RID &r_shader, uint64_t &r_mask, RID &r_set) const override;
+		Error get_native_recipe_shader_if_ready(RID &r_shader, uint64_t &r_mask, RID &r_set, bool p_transparent = false) const override;
 		ShaderData *shader_data = nullptr;
 		RID uniform_set;
 		uint64_t last_pass = 0;

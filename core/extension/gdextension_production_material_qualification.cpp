@@ -126,7 +126,7 @@ GDExtensionMaterialQualificationDigestV1 mq_sha256_domain(const char *p_domain, 
 	return out;
 }
 
-void mq_populate_fixed_oracle(GDExtensionMaterialQualificationFixedOracleV1 &r_oracle) {
+void mq_populate_fixed_oracle(GDExtensionMaterialQualificationFixedOracleV1 &r_oracle, bool transparent) {
 	r_oracle = {};
 	r_oracle.abi = { 1, sizeof(r_oracle), 0 };
 	r_oracle.recipe_version = 1;
@@ -142,8 +142,8 @@ void mq_populate_fixed_oracle(GDExtensionMaterialQualificationFixedOracleV1 &r_o
 	r_oracle.width = GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_WIDTH_V1;
 	r_oracle.height = GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_HEIGHT_V1;
 	for (uint32_t y = 0; y < 32; ++y) {
-		r_oracle.interior_mask[y] = (y >= 9 && y <= 22) ? 0x007ffe00u : 0x00000000u;
-		r_oracle.exterior_mask[y] = (y <= 7 || y >= 24) ? 0xffffffffu : 0xff0000ffu;
+		r_oracle.interior_mask[y] = (!transparent && y >= 9 && y <= 22) ? 0x007ffe00u : 0x00000000u;
+		r_oracle.exterior_mask[y] = (transparent || y <= 7 || y >= 24) ? 0xffffffffu : 0xff0000ffu;
 	}
 
 	const float fixture_quad_desc[18] = {
@@ -182,7 +182,30 @@ void mq_populate_fixed_oracle(GDExtensionMaterialQualificationFixedOracleV1 &r_o
 	uint8_t recipe_bytes[128] = {};
 	std::memcpy(&recipe_bytes[0], vec_bytes, 96);
 	std::memcpy(&recipe_bytes[96], r_oracle.verifier.bytes, 32);
-	r_oracle.recipe = mq_sha256_domain("ange.mq.recipe_current_reset_f32_world_opaque.v1", recipe_bytes, sizeof(recipe_bytes));
+	const auto recipe_domain = transparent ? "ange.mq.recipe_current_reset_f32_world_transparent.v1" :
+			"ange.mq.recipe_current_reset_f32_world_opaque.v1";
+	r_oracle.recipe = mq_sha256_domain(recipe_domain, recipe_bytes, sizeof(recipe_bytes));
+}
+
+bool mq_valid_transparent_pipeline(const RenderingDevice::PipelineColorBlendState &blend,
+		const RenderingDevice::PipelineDepthStencilState &depth) {
+	using RD = RenderingDevice;
+	if (blend.enable_logic_op || blend.attachments.size() != 1 || !depth.enable_depth_test || depth.enable_depth_write ||
+			depth.enable_depth_range || depth.enable_stencil || depth.depth_compare_operator != RD::COMPARE_OP_GREATER_OR_EQUAL) {
+		return false;
+	}
+	const auto &attachment = blend.attachments[0];
+	if (!attachment.enable_blend || !attachment.write_r || !attachment.write_g || !attachment.write_b || !attachment.write_a ||
+			attachment.src_color_blend_factor != RD::BLEND_FACTOR_SRC_ALPHA ||
+			attachment.color_blend_op != RD::BLEND_OP_ADD || attachment.alpha_blend_op != RD::BLEND_OP_ADD) {
+		return false;
+	}
+	if (attachment.dst_color_blend_factor == RD::BLEND_FACTOR_ONE) {
+		return attachment.src_alpha_blend_factor == RD::BLEND_FACTOR_SRC_ALPHA && attachment.dst_alpha_blend_factor == RD::BLEND_FACTOR_ONE;
+	}
+	return attachment.dst_color_blend_factor == RD::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA &&
+			attachment.src_alpha_blend_factor == RD::BLEND_FACTOR_ONE &&
+			attachment.dst_alpha_blend_factor == RD::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 }
 
 bool mq_budget_has_step(const GDExtensionProductionServiceBudgetV1 &p_budget, const ProductionServiceUsage &p_usage) {
@@ -438,7 +461,8 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_material_qualifica
 		}
 	}
 	if (prepare->candidate_mesh_present != 1 || prepare->candidate_mesh_rid == 0 || prepare->material_rid == 0 ||
-			prepare->recipe != GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_OPAQUE_V1) {
+			(prepare->recipe != GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_OPAQUE_V1 &&
+					prepare->recipe != GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_TRANSPARENT_V1)) {
 		return mq_result(ERR_INVALID_DATA, 3);
 	}
 	if (prepare->generation_mode == GDEXTENSION_MATERIAL_QUALIFICATION_READ_CURRENT_V1) {
@@ -510,7 +534,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_material_qualifica
 	mq->selection.surface_index = prepare->surface_index;
 	mq->selection.state = GDEXTENSION_MATERIAL_QUALIFICATION_PENDING_V1;
 
-	mq_populate_fixed_oracle(mq->oracle);
+	mq_populate_fixed_oracle(mq->oracle, prepare->recipe == GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_TRANSPARENT_V1);
 
 	mq->framebuffer_physical.bridge = r->attachment->serial;
 	production_serials.take(mq->framebuffer_physical.serial);
@@ -618,6 +642,7 @@ Error Registry::production_material_qualification_observe_locked(ProductionReque
 			continue;
 		}
 
+        const bool transparent = mq->prepare.recipe == GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_TRANSPARENT_V1;
 		// Phase A: RT Selection Acquisition & Shader Feature Observation.
 		if (!mq->selection_done) {
 			if (!mq_budget_has_step(budget, usage)) {
@@ -693,7 +718,7 @@ Error Registry::production_material_qualification_observe_locked(ProductionReque
 							? GDEXTENSION_MATERIAL_QUALIFICATION_GEOMETRY_STATIC_FINITE_SURFACE_V1
 							: GDEXTENSION_MATERIAL_QUALIFICATION_GEOMETRY_UNKNOWN_V1;
 
-					const Error warm_err = scene_render->warm_native_material_instance192_shader(mat_rid, mesh_obs.primitive);
+					const Error warm_err = scene_render->warm_native_material_instance192_shader(mat_rid, mesh_obs.primitive, transparent);
 					if (warm_err == ERR_BUSY) {
 						step_err = ERR_BUSY;
 					} else {
@@ -705,15 +730,16 @@ Error Registry::production_material_qualification_observe_locked(ProductionReque
 							observed.compiler_known = GDEXTENSION_MATERIAL_QUALIFICATION_NEEDS_INVERSE_V1 | GDEXTENSION_MATERIAL_QUALIFICATION_ZERO_DISPLACEMENT_V1;
 							observed.compiler_values = (shader_obs.needs_inverse ? GDEXTENSION_MATERIAL_QUALIFICATION_NEEDS_INVERSE_V1 : 0u) |
 									(shader_obs.zero_displacement ? GDEXTENSION_MATERIAL_QUALIFICATION_ZERO_DISPLACEMENT_V1 : 0u);
-							if (shader_obs.material_recipe_rejections != UINT32_MAX) {
+							const auto rejections = transparent ? shader_obs.transparent_recipe_rejections : shader_obs.material_recipe_rejections;
+							if (rejections != UINT32_MAX) {
 								observed.source_gate_known = GDEXTENSION_MATERIAL_QUALIFICATION_SOURCE_GATE_KNOWN_MASK_V1;
-								observed.source_gate_rejections = shader_obs.material_recipe_rejections & GDEXTENSION_MATERIAL_QUALIFICATION_SOURCE_GATE_KNOWN_MASK_V1;
+								observed.source_gate_rejections = rejections & GDEXTENSION_MATERIAL_QUALIFICATION_SOURCE_GATE_KNOWN_MASK_V1;
 							}
 							RendererRD::MaterialStorage::MaterialData *mat_data = nullptr;
 							if (materials->material_get_native_preparation_data(mat_rid, shader_obs.material_generation, mat_data) == OK && mat_data) {
 								RID ready_shader, ready_set;
 								uint64_t mask = 0;
-								if (mat_data->get_native_recipe_shader_if_ready(ready_shader, mask, ready_set) == OK) {
+								if (mat_data->get_native_recipe_shader_if_ready(ready_shader, mask, ready_set, transparent) == OK) {
 									observed.candidate_input_mask = mask;
 									uint32_t pos_stride = 0;
 									observed.candidate_vertex_format = uint64_t(meshes->_mesh_surface_generate_vertex_format(mesh_obs.format, mask, false, false, false, pos_stride));
@@ -879,6 +905,7 @@ Error Registry::production_material_qualification_observe_locked(ProductionReque
 					color_fmt.texture_type = RD::TEXTURE_TYPE_2D;
 					color_fmt.samples = RD::TEXTURE_SAMPLES_1;
 					color_fmt.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
+					if (transparent) { color_fmt.usage_bits |= RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT; }
 
 					RD::TextureFormat depth_fmt;
 					depth_fmt.format = RD::DATA_FORMAT_D32_SFLOAT;
@@ -921,7 +948,7 @@ Error Registry::production_material_qualification_observe_locked(ProductionReque
 
 			// 3. Plan native material recipe via active backend (Mobile / Forward+).
 			if (recipe_err == OK && !mq->roster.is_active()) {
-				recipe_err = scene_render->plan_native_material_recipe(selected_mat_rid, mq->fixture_mesh_rid, 0, fb_format, mq->roster, 256);
+				recipe_err = scene_render->plan_native_material_recipe(selected_mat_rid, mq->fixture_mesh_rid, 0, fb_format, mq->roster, 256, transparent);
 			}
 
 			// 4. Derive vertex/index arrays from retained fixture surface and verify exact candidate VF match.
@@ -1074,6 +1101,10 @@ Error Registry::production_material_qualification_observe_locked(ProductionReque
 					}
 				}
 
+				if (recipe_err == OK && (mq->roster.transparent_pass != transparent ||
+						(transparent && !mq_valid_transparent_pipeline(mq->roster.blend, mq->roster.depth_stencil)))) {
+					recipe_err = ERR_UNAVAILABLE;
+				}
 				if (recipe_err == OK) {
 					if (mq->pipeline_rid.is_null()) {
 						mq->pipeline_rid = rd.render_pipeline_create(
@@ -1152,7 +1183,17 @@ Error Registry::production_material_qualification_observe_locked(ProductionReque
 							uint32_t(mq->roster.depth_stencil.depth_compare_operator),
 							mq->roster.depth_stencil.enable_depth_write ? 1u : 0u,
 						};
-						meta.pipeline_key_state = mq_sha256_domain("ange.mq.pipeline_key_state.v1", &pkey, sizeof(pkey));
+						if (transparent) {
+							const auto &a = mq->roster.blend.attachments[0];
+							const uint64_t state[] = {pkey.fb_format, pkey.vertex_format, pkey.primitive, pkey.cull_mode, pkey.depth_compare,
+								pkey.depth_write, uint64_t(mq->roster.depth_stencil.enable_depth_test), uint64_t(a.enable_blend),
+								uint64_t(a.color_blend_op), uint64_t(a.alpha_blend_op), uint64_t(a.src_color_blend_factor),
+								uint64_t(a.dst_color_blend_factor), uint64_t(a.src_alpha_blend_factor), uint64_t(a.dst_alpha_blend_factor),
+								uint64_t(a.write_r) | (uint64_t(a.write_g) << 1) | (uint64_t(a.write_b) << 2) | (uint64_t(a.write_a) << 3), uint64_t(mq->roster.transparent_pass)};
+							meta.pipeline_key_state = mq_sha256_domain("ange.mq.pipeline_key_transparent_state.v1", state, sizeof(state));
+						} else {
+							meta.pipeline_key_state = mq_sha256_domain("ange.mq.pipeline_key_state.v1", &pkey, sizeof(pkey));
+						}
 
 						uint64_t dep_ids[MAX_BORROWED_DEPS] = {};
 						const uint32_t dep_count = uint32_t(mq->roster.borrowed.size());
@@ -1164,7 +1205,7 @@ Error Registry::production_material_qualification_observe_locked(ProductionReque
 						meta.native_shader_rid = mq->native_shader_rid.get_id();
 						meta.pipeline_rid = mq->pipeline_rid.get_id();
 						meta.render_target_rid = mq->framebuffer_rid.get_id();
-						meta.actual_pass = 0;
+						meta.actual_pass = mq->roster.transparent_pass ? 1 : 0;
 						meta.actual_samples = 1;
 						{
 							MutexLock rd_lock(rd._thread_safe_);
@@ -1307,7 +1348,8 @@ GDExtensionDeviceSessionResultV1 Registry::production_record_material_qualificat
 
 	unlock_mutex_for_call();
 
-	Color clear_colors[1] = { Color(0.0f, 0.0f, 0.0f, 1.0f) };
+    const bool transparent = mq->prepare.recipe == GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_TRANSPARENT_V1;
+	Color clear_colors[1] = { transparent ? Color(0.125f, 0.25f, 0.5f, 0.5f) : Color(0.0f, 0.0f, 0.0f, 1.0f) };
 	const auto begun = rd->_draw_list_begin_recorded(
 			mq->framebuffer_rid,
 			RenderingDevice::DRAW_CLEAR_COLOR_0 | RenderingDevice::DRAW_CLEAR_DEPTH,

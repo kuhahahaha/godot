@@ -140,7 +140,7 @@ static bool mq_digest_equal(const GDExtensionMaterialQualificationDigestV1 &p_a,
 	return std::memcmp(p_a.bytes, p_b.bytes, 32) == 0;
 }
 
-static bool verify_mq_fixed_oracle_shape(const GDExtensionMaterialQualificationFixedOracleV1 &p_oracle) {
+static bool verify_mq_fixed_oracle_shape(const GDExtensionMaterialQualificationFixedOracleV1 &p_oracle, bool p_transparent = false) {
 	if (p_oracle.abi.abi_version != 1 || p_oracle.abi.struct_size != 512 || p_oracle.abi.reserved != 0) {
 		return false;
 	}
@@ -153,8 +153,8 @@ static bool verify_mq_fixed_oracle_shape(const GDExtensionMaterialQualificationF
 		return false;
 	}
 	for (uint32_t y = 0; y < 32; ++y) {
-		const uint32_t expected_int = (y >= 9 && y <= 22) ? 0x007ffe00u : 0x00000000u;
-		const uint32_t expected_ext = (y < 8 || y > 23) ? 0xffffffffu : 0xff0000ffu;
+		const uint32_t expected_int = (!p_transparent && y >= 9 && y <= 22) ? 0x007ffe00u : 0x00000000u;
+		const uint32_t expected_ext = (p_transparent || y < 8 || y > 23) ? 0xffffffffu : 0xff0000ffu;
 		if (p_oracle.interior_mask[y] != expected_int || p_oracle.exterior_mask[y] != expected_ext) {
 			return false;
 		}
@@ -367,7 +367,7 @@ static void run_material_qualification_action7_cpu() {
 			CHECK(ports.prepare_mq(req, &bad, payload, 16).native_error == ERR_INVALID_DATA);
 
 			bad = valid_prep;
-			bad.recipe = 2;
+			bad.recipe = UINT32_MAX;
 			CHECK(ports.prepare_mq(req, &bad, payload, 16).native_error == ERR_INVALID_DATA);
 
 			bad = valid_prep;
@@ -647,7 +647,7 @@ struct LiveMetalMaterialQualificationHarness {
 		};
 	}
 
-	bool verify_depth_oracle_words(const String &p_label, const GDExtensionMaterialQualificationFixedOracleV1 &p_oracle, const uint32_t *p_raw_words) {
+	bool verify_depth_oracle_words(const String &p_label, const GDExtensionMaterialQualificationFixedOracleV1 &p_oracle, const uint32_t *p_raw_words, bool p_transparent = false) {
 		uint32_t interior_checked = 0;
 		uint32_t exterior_checked = 0;
 		uint32_t mismatches = 0;
@@ -686,7 +686,7 @@ struct LiveMetalMaterialQualificationHarness {
 			d["first_ext_bad"] = first_ext_bad;
 			diagnostics[p_label + ".depth_mismatch"] = d;
 		}
-		const bool exact = (interior_checked == 196 && exterior_checked == 768 && mismatches == 0);
+		const bool exact = (interior_checked == (p_transparent ? 0u : 196u) && exterior_checked == (p_transparent ? 1024u : 768u) && mismatches == 0);
 		record_check(p_label + ".depth_oracle_exact_bits", exact);
 		return exact;
 	}
@@ -744,7 +744,7 @@ struct LiveMetalMaterialQualificationHarness {
 		return OK;
 	}
 
-	bool cancel_and_release_no_draw(const String &p_label, GDExtensionProductionRequestRefV1 p_req, bool p_already_cancelled = false) {
+	bool cancel_and_release_no_draw(const String &p_label, GDExtensionProductionRequestRefV1 p_req, bool p_already_cancelled = false, bool p_color_readback = false) {
 		const uint64_t draws_before = Engine::get_singleton()->get_frames_drawn();
 		const uint64_t rd_draws_before = device ? device->get_frames_drawn() : 0;
 		if (!p_already_cancelled) {
@@ -785,7 +785,7 @@ struct LiveMetalMaterialQualificationHarness {
 		const uint64_t rd_draws_after = device ? device->get_frames_drawn() : 0;
 		record_check(p_label + ".reclaimed", reclaimed && report.service_pending == 0 && report.physical_returns_pending == 0);
 		record_check(p_label + ".zero_following_draws", draws_before == 0 && draws_after == 0);
-		record_check(p_label + ".rd_frames_drawn_unchanged_on_release", rd_draws_before == initial_rd_draws && rd_draws_after == rd_draws_before);
+		record_check(p_label + ".rd_frames_drawn_unchanged_on_release", (p_color_readback || rd_draws_before == initial_rd_draws) && rd_draws_after == rd_draws_before);
 		return reclaimed && draws_after == 0 && rd_draws_after == rd_draws_before;
 	}
 
@@ -795,7 +795,9 @@ struct LiveMetalMaterialQualificationHarness {
 			RID p_material,
 			RID p_mesh,
 			uint32_t p_generation_mode,
-			uint64_t p_expected_generation) {
+			uint64_t p_expected_generation,
+			bool p_transparent = false,
+			bool p_additive = false) {
 		const uint64_t rd_draws_before = device ? device->get_frames_drawn() : 0;
 		GDExtensionProductionRequestRefV1 req = {};
 		const uint8_t payload[16] = { 'c', 'a', 'n', 'o', 'n', '0', '0', '1', 'm', 'e', 't', 'a', 'l', 'm', 'q', '7' };
@@ -805,7 +807,8 @@ struct LiveMetalMaterialQualificationHarness {
 			return false;
 		}
 
-		const auto prep = make_valid_mq_prepare(0, p_material.get_id(), p_mesh.get_id(), p_generation_mode, p_expected_generation, sizeof(payload));
+		auto prep = make_valid_mq_prepare(0, p_material.get_id(), p_mesh.get_id(), p_generation_mode, p_expected_generation, sizeof(payload));
+		if (p_transparent) { prep.recipe = GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_TRANSPARENT_V1; }
 		const Error prep_err = Error(ports.prepare_mq(req, &prep, payload, sizeof(payload)).native_error);
 		record_check(p_label + ".prepare_mq", prep_err == OK);
 		if (prep_err != OK) {
@@ -853,7 +856,7 @@ struct LiveMetalMaterialQualificationHarness {
 		// Drive Phase B (RT Recipe Preparation + Fixed Oracle V1).
 		GDExtensionMaterialQualificationFixedOracleV1 oracle = {};
 		const Error first_recipe = Error(ports.prepare_recipe(req, 0, &oracle).native_error);
-		record_check(p_label + ".recipe_first_busy_and_oracle_valid", first_recipe == ERR_BUSY && verify_mq_fixed_oracle_shape(oracle));
+		record_check(p_label + ".recipe_first_busy_and_oracle_valid", first_recipe == ERR_BUSY && verify_mq_fixed_oracle_shape(oracle, p_transparent));
 
 		bool recipe_ready = false;
 		Error last_rec_err = first_recipe;
@@ -863,7 +866,7 @@ struct LiveMetalMaterialQualificationHarness {
 			const Error rec_err = Error(ports.prepare_recipe(req, 0, &oracle).native_error);
 			last_rec_err = rec_err;
 			if (rec_err == OK) {
-				recipe_ready = verify_mq_fixed_oracle_shape(oracle);
+				recipe_ready = verify_mq_fixed_oracle_shape(oracle, p_transparent);
 				break;
 			}
 			if (rec_err != ERR_BUSY || pump_err != OK) {
@@ -1008,12 +1011,57 @@ struct LiveMetalMaterialQualificationHarness {
 							mq_digest_equal(meta.fixed_camera, oracle.camera) &&
 							mq_digest_equal(meta.fixed_instance_records, oracle.instances));
 
-			verify_depth_oracle_words(p_label, oracle, raw_words);
+			verify_depth_oracle_words(p_label, oracle, raw_words, p_transparent);
 		}
 
 		record_check(p_label + ".zero_scene_draws_before_release", Engine::get_singleton()->get_frames_drawn() == 0);
 		record_check(p_label + ".rd_frames_drawn_unchanged_before_release", device->get_frames_drawn() == rd_draws_before);
-		return cancel_and_release_no_draw(p_label, req) && gpu_complete;
+		if (p_transparent && gpu_complete) {
+			record_check(p_label + ".transparent_pass", meta.actual_pass == 1 && meta.actual_samples == 1);
+			check_transparent_color(p_label, req, p_additive);
+		}
+		return cancel_and_release_no_draw(p_label, req, false, p_transparent) && gpu_complete;
+	}
+
+	void check_transparent_color(const String &p_label, GDExtensionProductionRequestRefV1 p_req, bool p_additive) {
+		RID color;
+		{
+			Registry::Lock lock(enrollment.registry);
+			GDExtensionDeviceExit::ProductionRequest *request = nullptr;
+			RenderingDevice *rd = nullptr;
+			if (enrollment.registry.production_request_locked(p_req, false, request, rd) == OK &&
+					request && request->actions[0].material_qualification) {
+				color = request->actions[0].material_qualification->color_tex;
+			}
+		}
+		record_check(p_label + ".color_held", color.is_valid());
+		if (color.is_null()) { return; }
+		// Only this dedicated test reads the color attachment. It can advance
+		// an RD frame after the original Action 7 D32 facts have been checked.
+		static Vector<uint8_t> color_bytes;
+		color_bytes.clear();
+		server->call_on_render_thread(callable_mp_static(+[](RID attachment) {
+			if (auto *rd = RenderingDevice::get_singleton()) {
+				color_bytes = rd->texture_get_data(attachment, 0);
+			}
+		}).bind(color));
+		server->sync();
+		record_check(p_label + ".rgba16f_extent", color_bytes.size() == 8192);
+		if (color_bytes.size() != 8192) { return; }
+		const float background[] = {0.125f, 0.25f, 0.5f, 0.5f};
+		const float mixed[] = {0.21875f, 0.25f, 0.40625f, 0.625f};
+		const float added[] = {0.25f, 0.3125f, 0.53125f, 0.5625f};
+		const auto *expected = p_additive ? added : mixed;
+		bool center_ok = true, corner_ok = true;
+		for (uint32_t channel = 0; channel < 4; ++channel) {
+			const uint32_t center_offset = (16 * 32 + 16) * 8 + channel * 2;
+			const float center = decode_half(color_bytes.ptr() + center_offset);
+			const float corner = decode_half(color_bytes.ptr() + channel * 2);
+			center_ok &= Math::is_equal_approx(center, expected[channel], 0.001953125f);
+			corner_ok &= Math::is_equal_approx(corner, background[channel], 0.001953125f);
+		}
+		record_check(p_label + ".rgba_center_blend", center_ok);
+		record_check(p_label + ".rgba_corner_clear", corner_ok);
 	}
 
 	bool run_source_gate_rejection(
@@ -1058,6 +1106,9 @@ struct LiveMetalMaterialQualificationHarness {
 	}
 
 	Dictionary run_all() {
+		const auto &args = OS::get_singleton()->get_cmdline_user_args();
+		const bool blend_add = args.find("--transparent-add") != nullptr;
+		const bool blend_mix = args.find("--transparent-mix") != nullptr;
 		using namespace GDExtensionDeviceExit;
 		Dictionary out;
 
@@ -1117,7 +1168,20 @@ struct LiveMetalMaterialQualificationHarness {
 		enrollment.frame.leave();
 		record_check("enrollment_initialized", init_err == OK);
 
-		if (init_err == OK) {
+		if (init_err == OK && (blend_add || blend_mix)) {
+			Ref<QuadMesh> quad;
+			quad.instantiate();
+			Ref<Shader> shader;
+			shader.instantiate();
+			shader->set_code(String("shader_type spatial; render_mode unshaded, cull_disabled, depth_draw_never, ") +
+					(blend_add ? "blend_add" : "blend_mix") +
+					"; void fragment() { ALBEDO = vec3(0.5, 0.25, 0.125); ALPHA = 0.25; }");
+			Ref<ShaderMaterial> material;
+			material.instantiate();
+			material->set_shader(shader);
+			run_positive_qualification(blend_add ? "transparent_add" : "transparent_mix", 2101,
+					material->get_rid(), quad->get_rid(), GDEXTENSION_MATERIAL_QUALIFICATION_READ_CURRENT_V1, 0, true, blend_add);
+		} else if (init_err == OK) {
 			// Scenario 1: Cold-start ReadCurrent StandardMaterial3D (Opaque CULL_BACK) + BoxMesh before ANY scene draw or server->sync()!
 			{
 				Ref<BoxMesh> box;
@@ -1944,7 +2008,9 @@ struct LiveMetalMaterialQualificationHarness {
 						final_counts.private_refs == baseline_counts.private_refs &&
 						final_counts.external_refs == baseline_counts.external_refs);
 		record_check("total_scene_draws_remained_zero", Engine::get_singleton()->get_frames_drawn() == 0);
-		record_check("total_rd_frames_drawn_unchanged", device->get_frames_drawn() == initial_rd_draws);
+		if (!blend_add && !blend_mix) {
+			record_check("total_rd_frames_drawn_unchanged", device->get_frames_drawn() == initial_rd_draws);
+		}
 
 		out["pass"] = failures.is_empty();
 		out["check_count"] = checks.size();

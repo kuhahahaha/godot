@@ -42,7 +42,7 @@ void run_material_qualification_action7_cpu();
 namespace TestMaterialQualificationAction7 {
 
 #if defined(MACOS_ENABLED) && defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
-static void run_live_metal_subprocess(const char *p_rendering_method, bool p_prime_ordinary_frame = false) {
+static void run_live_metal_subprocess(const char *p_rendering_method, bool p_prime_ordinary_frame = false, const char *p_transparent = nullptr) {
 	if (OS::get_singleton()->get_environment("GODOT_SKIP_LIVE_METAL_SUBPROCESS") == "1") {
 		return;
 	}
@@ -69,9 +69,9 @@ static void run_live_metal_subprocess(const char *p_rendering_method, bool p_pri
 	args.push_back(fixture_dir);
 	args.push_back("--script");
 	args.push_back("res://run.gd");
-	if (p_prime_ordinary_frame) {
+	if (p_prime_ordinary_frame || p_transparent) {
 		args.push_back("--");
-		args.push_back("--prime-ordinary-frame");
+		args.push_back(p_transparent ? p_transparent : "--prime-ordinary-frame");
 	}
 
 	String pipe_out;
@@ -82,6 +82,10 @@ static void run_live_metal_subprocess(const char *p_rendering_method, bool p_pri
 	CHECK(exit_code == 0);
 	CHECK(pipe_out.contains("MATERIAL_QUALIFICATION_ACTION7_PASS"));
 	CHECK(pipe_out.contains("frames_drawn=0"));
+	if (p_transparent) {
+		const bool additive = String(p_transparent) == "--transparent-add";
+		CHECK(pipe_out.contains(additive ? "transparent_add.rgba_center_blend" : "transparent_mix.rgba_center_blend"));
+	}
 }
 #endif
 
@@ -104,6 +108,14 @@ TEST_CASE("[MaterialQualificationAction7][LiveMetal][Mobile] qualifies after one
 
 TEST_CASE("[MaterialQualificationAction7][LiveMetal][ForwardPlus] qualifies after one ordinary frame updates scene atlases") {
 	run_live_metal_subprocess("forward_plus", true);
+}
+TEST_CASE("[MaterialQualificationAction7][LiveMetal][Mobile] transparent MIX and ADD preserve depth and blend qualified color") {
+	run_live_metal_subprocess("mobile", false, "--transparent-mix");
+	run_live_metal_subprocess("mobile", false, "--transparent-add");
+}
+TEST_CASE("[MaterialQualificationAction7][LiveMetal][ForwardPlus] transparent MIX and ADD preserve depth and blend qualified color") {
+	run_live_metal_subprocess("forward_plus", false, "--transparent-mix");
+	run_live_metal_subprocess("forward_plus", false, "--transparent-add");
 }
 #endif
 

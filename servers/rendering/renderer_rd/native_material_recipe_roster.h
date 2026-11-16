@@ -66,9 +66,10 @@ class NativeMaterialRecipeRoster {
 	Vector<RD::NativeProspectiveKey> roots, closure;
 	uint32_t edge_count = 0;
 	bool roster_complete = false;
+	bool transparent_pass = false;
 
-	Error _begin_material(MaterialStorage &, RID, uint32_t);
-	Error _begin(MaterialStorage &, MeshStorage &, RID, RID, uint32_t, RD::FramebufferFormatID, uint32_t);
+	Error _begin_material(MaterialStorage &, RID, uint32_t, bool transparent = false);
+	Error _begin(MaterialStorage &, MeshStorage &, RID, RID, uint32_t, RD::FramebufferFormatID, uint32_t, bool transparent = false);
 	Error _material_data(MaterialStorage::MaterialData *&) const;
 	Error _join_bindings(Backend, const Vector<RD::Uniform> &, const Vector<RD::Uniform> &, const FixedData &, uint32_t);
 	Error _finish(Backend, const MeshStorage::NativeVertexArrayPlan &, const Vector<RD::Uniform> &, const Vector<RD::Uniform> &, const FixedData &, uint32_t);

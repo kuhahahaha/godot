@@ -95,6 +95,7 @@ public:
 			// Exact compiler no-VERTEX/POSITION displacement fact under this Version.
 			bool zero_displacement = false;
 			uint32_t material_recipe_rejections = UINT32_MAX;
+		uint32_t transparent_recipe_rejections = UINT32_MAX;
 			uint32_t output_pass_mask = 0; // ExternalOutputConfig wire domain, CPU eligibility only.
 		};
 
@@ -174,6 +175,7 @@ public:
 		bool needs_inverse = false;
 		bool zero_displacement = false;
 		uint32_t material_recipe_rejections = UINT32_MAX;
+		uint32_t transparent_recipe_rejections = UINT32_MAX;
 		uint32_t output_pass_mask = 0;
 	};
 	// Pointer-free compiler observation under the same original held selection.
@@ -234,7 +236,7 @@ public:
 		uint32_t get_borrowed_closure_nodes() const { return is_valid() ? borrowed_closure_nodes : 0; }
 		uint32_t get_material_future_closure_nodes() const { return is_valid() ? material_future_closure_nodes : 0; }
 	};
-	Error material_recipe_source_acquire(RID p_material, NativeRecipeSource &r_source, uint32_t p_max_resources = 256);
+	Error material_recipe_source_acquire(RID p_material, NativeRecipeSource &r_source, uint32_t p_max_resources = 256, bool p_transparent = false);
 	Error material_recipe_source_release(NativeRecipeSource &r_source);
 	Error material_prepare_native_qualification(RID p_material);
 	Error material_settle_native_uploads(RID p_material);
@@ -260,7 +262,7 @@ public:
 		// Original backend chooses its actual normal opaque Instance192 variant.
 		// Refusal leaves all outputs unchanged; no compilation is requested.
 		virtual uint32_t get_native_recipe_backend() const { return 0; }
-		virtual Error get_native_recipe_shader_if_ready(RID &r_shader, uint64_t &r_mask, RID &r_set) const { return ERR_UNAVAILABLE; }
+		virtual Error get_native_recipe_shader_if_ready(RID &r_shader, uint64_t &r_mask, RID &r_set, bool p_transparent = false) const { return ERR_UNAVAILABLE; }
 		uint64_t generation = 0;
 		Vector<RendererRD::TextureStorage::RenderTarget *> render_target_cache;
 		void update_uniform_buffer(const HashMap<StringName, ShaderLanguage::ShaderNode::Uniform> &p_uniforms, const uint32_t *p_uniform_offsets, const HashMap<StringName, Variant> &p_parameters, uint8_t *p_buffer, uint32_t p_buffer_size, bool p_use_linear_color);

@@ -47,6 +47,7 @@ void SceneShaderForwardMobile::ShaderData::set_code(const String &p_code) {
 	native_features_version = RID();
 	native_features_need_inverse = false;
 	native_material_recipe_rejections = UINT32_MAX;
+	native_transparent_recipe_rejections = UINT32_MAX;
 	native_writes_depth = false;
 	native_writes_clip_scale = false;
 	// Accepted original workers read this ShaderData until their task returns.
@@ -297,6 +298,16 @@ void SceneShaderForwardMobile::ShaderData::set_code(const String &p_code) {
 		reject(stencil_enabled, MATERIAL_RECIPE_STENCIL);
 		reject(wireframe, MATERIAL_RECIPE_WIREFRAME);
 		reject(cull_mode != RSE::CULL_MODE_BACK && cull_mode != RSE::CULL_MODE_DISABLED, MATERIAL_RECIPE_CULL_SCOPE);
+		native_transparent_recipe_rejections = native_material_recipe_rejections &
+				~(MATERIAL_RECIPE_ALPHA | MATERIAL_RECIPE_DEPTH_MODE);
+		if (!uses_alpha || (blend_mode != BLEND_MODE_MIX && blend_mode != BLEND_MODE_ADD) ||
+				uses_alpha_clip || uses_alpha_hash || uses_alpha_antialiasing || uses_depth_prepass_alpha ||
+				alpha_antialiasing_mode != ALPHA_ANTIALIASING_OFF) {
+			native_transparent_recipe_rejections |= MATERIAL_RECIPE_ALPHA;
+		}
+		if (depth_draw != DEPTH_DRAW_DISABLED || depth_test != DEPTH_TEST_ENABLED) {
+			native_transparent_recipe_rejections |= MATERIAL_RECIPE_DEPTH_MODE;
+		}
 		native_features_version = version;
 	}
 }
@@ -311,6 +322,7 @@ Error SceneShaderForwardMobile::ShaderData::get_native_instance192_shader_featur
 	features.needs_inverse = native_features_need_inverse;
 	features.zero_displacement = instance192_shader_supported() && !uses_vertex;
 	features.material_recipe_rejections = native_material_recipe_rejections;
+	features.transparent_recipe_rejections = native_transparent_recipe_rejections;
 	// Exact same native classifier as external packet selection. Explicit wire
 	// constants, never renderer pass-enum casts or Early/Late phase guesses.
 	using Output = RendererRD::ExternalOutputConfig;
@@ -1433,13 +1445,14 @@ SceneShaderForwardMobile::~SceneShaderForwardMobile() {
 	material_storage->material_free(debug_shadow_splits_material);
 }
 
-Error SceneShaderForwardMobile::MaterialData::get_native_recipe_shader_if_ready(RID &r_shader, uint64_t &r_mask, RID &r_set) const {
+Error SceneShaderForwardMobile::MaterialData::get_native_recipe_shader_if_ready(RID &r_shader, uint64_t &r_mask, RID &r_set, bool transparent) const {
 	if (!shader_data || !shader_data->instance192_shader_supported()) {
 		return ERR_UNAVAILABLE;
 	}
 	RendererRD::MaterialStorage::ShaderData::NativeInstance192ShaderFeatures features;
 	const Error classified = shader_data->get_native_instance192_shader_features(features);
-	if (classified != OK || !features.zero_displacement || features.material_recipe_rejections) { return classified == OK ? ERR_UNAVAILABLE : classified; }
+	const auto rejections = transparent ? features.transparent_recipe_rejections : features.material_recipe_rejections;
+	if (classified != OK || !features.zero_displacement || rejections) { return classified == OK ? ERR_UNAVAILABLE : classified; }
 	RID shader;
 	uint64_t mask = 0;
 	const Error ready = shader_data->get_native_recipe_shader_variant_if_ready(shader, mask);

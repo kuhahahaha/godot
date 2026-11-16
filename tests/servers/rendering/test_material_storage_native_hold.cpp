@@ -1093,7 +1093,7 @@ public:
 		bool recipe_test = false;
 		mutable uint32_t recipe_queries = 0;
 		Error recipe_ready_error = OK;
-		Error get_native_recipe_shader_if_ready(RID &shader, uint64_t &mask, RID &uniform_set) const override {
+		Error get_native_recipe_shader_if_ready(RID &shader, uint64_t &mask, RID &uniform_set, bool) const override {
 			++recipe_queries;
 			if (!recipe_test) { return ERR_UNAVAILABLE; }
 			if (recipe_ready_error != OK) { return recipe_ready_error; }

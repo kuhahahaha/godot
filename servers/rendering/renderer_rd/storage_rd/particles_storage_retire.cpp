@@ -637,6 +637,13 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		r_usage.controls = 1;
 		return OK;
 	}
+	// The sealed packet remains live. Its exact preflight and read-cell
+	// settlement above complete OBSERVE while the original pin stays held.
+	if (slot.state == ExternalOutputOwner::LeaseState::SEALED_RECORDED ||
+			slot.state == ExternalOutputOwner::LeaseState::ADOPTED ||
+			slot.state == ExternalOutputOwner::LeaseState::EMPTY_OR_FAULT_PACKET) {
+		return OK;
+	}
 	if (slot.state != ExternalOutputOwner::LeaseState::RETIRING || !slot.publication_closed ||
 			!slot.pass_uses_closed || owner.slot_has_custody(p_slot)) {
 		return ERR_BUSY;

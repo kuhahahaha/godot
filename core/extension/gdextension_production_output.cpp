@@ -4828,7 +4828,7 @@ void Registry::production_output_seal(ProductionPhysicalContextRef context, GDEx
 			out->status = output_status(ERR_INVALID_DATA, "output_seal_duplicate_mismatch");
 			return;
 		}
-		out->state = uint32_t(slot.state) + 1;
+		out->state = GDEXTENSION_OUTPUT_SEAL_RECORDED_ORDERED_V1;
 		out->packet_token = action.output_packet_token;
 		out->status = output_status(OK, "");
 		return;
@@ -4893,7 +4893,7 @@ void Registry::production_output_seal(ProductionPhysicalContextRef context, GDEx
 	++request->next_action;
 	++request->revision;
 	CRASH_COND(production_output_native_append_enter_locked() != OK);
-	out->state = uint32_t(slot.state) + 1;
+	out->state = GDEXTENSION_OUTPUT_SEAL_RECORDED_ORDERED_V1;
 	out->packet_token = action.output_packet_token;
 	out->status = output_status(OK, "");
 }
