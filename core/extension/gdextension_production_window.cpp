@@ -1694,8 +1694,10 @@ bool Registry::production_native_batch_frame_locked(const ProductionRequest &req
 	const auto &anchor = request.actions[request.native_staged_anchor];
 	const auto &scope = frame->native_invocation->get_scope();
 	const auto &capture = request.frozen ? anchor.preinput_camera_source : scope.get_capture();
+	// This protected frame and request already own any open compute list.
+	// Joining its action batches must preserve the same camera and device.
 	return scope.get_device() == frame->device && !anchor.preinput_camera_returned &&
-			scope.is_recordable(&anchor.camera_ready_subscriber, capture);
+			scope.is_recordable_with_original_compute_list(&anchor.camera_ready_subscriber, capture, request.compute_list_open);
 }
 
 ProductionNativeBatchCell *Registry::production_native_batch_cell_locked(ProductionRequest &request, uint64_t cursor) {
