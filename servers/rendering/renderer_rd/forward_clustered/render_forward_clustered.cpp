@@ -3702,6 +3702,12 @@ void RenderForwardClustered::_update_render_base_uniform_set(Error *p_error, Vec
 
 		if (!p_native_sources) { lightmap_texture_array_version = light_storage->lightmap_array_get_version(); }
 
+		auto *texture_storage = RendererRD::TextureStorage::get_singleton();
+		// The fixed qualification scene has no decals or area lights. Its shader
+		// still declares the atlas samplers in the shared layout.
+		const RID fixed_atlas = p_native_sources
+				? texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK)
+				: RID();
 		Vector<RD::Uniform> uniforms;
 
 		{
@@ -3766,7 +3772,7 @@ void RenderForwardClustered::_update_render_base_uniform_set(Error *p_error, Vec
 			RD::Uniform u;
 			u.binding = 10;
 			u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
-			RID decal_atlas = RendererRD::TextureStorage::get_singleton()->decal_atlas_get_texture();
+			RID decal_atlas = p_native_sources ? fixed_atlas : texture_storage->decal_atlas_get_texture();
 			u.append_id(decal_atlas);
 			uniforms.push_back(u);
 		}
@@ -3774,7 +3780,7 @@ void RenderForwardClustered::_update_render_base_uniform_set(Error *p_error, Vec
 			RD::Uniform u;
 			u.binding = 11;
 			u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
-			RID decal_atlas = RendererRD::TextureStorage::get_singleton()->decal_atlas_get_texture_srgb();
+			RID decal_atlas = p_native_sources ? fixed_atlas : texture_storage->decal_atlas_get_texture_srgb();
 			u.append_id(decal_atlas);
 			uniforms.push_back(u);
 		}
@@ -3928,7 +3934,7 @@ void RenderForwardClustered::_update_render_base_uniform_set(Error *p_error, Vec
 			RD::Uniform u;
 			u.binding = 20;
 			u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
-			RID area_light_atlas = RendererRD::TextureStorage::get_singleton()->area_light_atlas_get_texture();
+			RID area_light_atlas = p_native_sources ? fixed_atlas : texture_storage->area_light_atlas_get_texture();
 			u.append_id(area_light_atlas);
 			uniforms.push_back(u);
 		}

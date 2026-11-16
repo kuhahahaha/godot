@@ -13,6 +13,9 @@ func _process(_delta: float) -> bool:
 		printerr("MATERIAL_QUALIFICATION_ACTION7_MISSING_FIXTURE")
 		quit(77)
 		return true
+	if "--prime-ordinary-frame" in OS.get_cmdline_user_args():
+		RenderingServer.force_draw(false, 0.0)
+		RenderingServer.force_sync()
 	var fixture: RefCounted = ClassDB.instantiate("ParticlesScenePairsTestFixture")
 	var result: Dictionary = fixture.call("run_material_qualification_action7")
 	print("MATERIAL_QUALIFICATION_ACTION7_RESULT=", JSON.stringify(result))
