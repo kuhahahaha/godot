@@ -303,6 +303,9 @@ bool ParticlesStorage::is_external_guard_indexed144_prepared() const {
 
 bool ParticlesStorage::free(RID p_rid) {
 	if (owns_particles(p_rid)) {
+		if (mesh_light_sort_rd) {
+			mesh_light_sort_rd->unregister_external_light_owner(p_rid.get_id());
+		}
 		particles_free(p_rid);
 		return true;
 	} else if (owns_particles_collision(p_rid)) {

@@ -1250,6 +1250,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 	if (ParticlesStorage *particles_storage = ParticlesStorage::get_singleton()) {
 		LocalVector<ParticleLightRecord64> particle_lights;
 		if (ParticlesMeshLightSortRD *light_sort = particles_storage->get_mesh_light_sort_rd()) {
+			light_sort->harvest_registered_external_lights(RD::get_singleton());
 			light_sort->get_active_particle_lights(particle_lights);
 		}
 		if (!particle_lights.is_empty() && omni_lights != nullptr) {
@@ -1264,9 +1265,14 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 						!Math::is_finite(prec.color_hdr[0]) || prec.color_hdr[0] < 0.0f ||
 						!Math::is_finite(prec.color_hdr[1]) || prec.color_hdr[1] < 0.0f ||
 						!Math::is_finite(prec.color_hdr[2]) || prec.color_hdr[2] < 0.0f ||
-						!Math::is_finite(prec.attenuation_exp) || prec.attenuation_exp < 0.0f) {
+						!Math::is_finite(prec.attenuation_exp) || prec.attenuation_exp < 0.0f ||
+						prec.reserved0 != 0u || (prec.flags & ~ParticleLightRecord64::FLAG_KNOWN_MASK) != 0u ||
+						(prec.flags & ParticleLightRecord64::FLAG_ACTIVE) == 0u) {
 					continue;
 				}
+				const float diff_scale = Math::is_finite(prec.diffuse_scale) ? MAX(0.0f, prec.diffuse_scale) : 1.0f;
+				const float spec_scale = Math::is_finite(prec.specular_scale) ? MAX(0.0f, prec.specular_scale) : 1.0f;
+				const float vol_fog = Math::is_finite(prec.volumetric_scattering) ? MAX(0.0f, prec.volumetric_scattering) : 1.0f;
 				const uint32_t buf_idx = omni_light_count++;
 				LightData &ld = omni_lights[buf_idx];
 				ld = {};
@@ -1278,11 +1284,11 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 				ld.position[2] = view_pos.z;
 				ld.inv_radius = 1.0f / radius;
 				ld.attenuation = prec.attenuation_exp > 0.0f ? prec.attenuation_exp : 1.0f;
-				ld.color[0] = prec.color_hdr[0] * exposure_norm;
-				ld.color[1] = prec.color_hdr[1] * exposure_norm;
-				ld.color[2] = prec.color_hdr[2] * exposure_norm;
-				ld.specular_amount = 1.0f;
-				ld.volumetric_fog_energy = 1.0f;
+				ld.color[0] = prec.color_hdr[0] * diff_scale * exposure_norm;
+				ld.color[1] = prec.color_hdr[1] * diff_scale * exposure_norm;
+				ld.color[2] = prec.color_hdr[2] * diff_scale * exposure_norm;
+				ld.specular_amount = spec_scale;
+				ld.volumetric_fog_energy = vol_fog;
 				ld.mask = 0xFFFFFFFFu;
 				ld.shadow_opacity = 0.0f;
 

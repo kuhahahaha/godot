@@ -82,15 +82,22 @@ struct Instance192Record {
 };
 
 struct ParticleLightRecord64 {
-	float position_world[3] = {};
-	float radius = 0.0f;
-	float color_hdr[3] = {};
-	float attenuation_exp = 1.0f;
-	uint32_t id_index = 0;
-	uint32_t id_acquire_tag = 0;
-	uint32_t flags = 0;
-	uint32_t screen_importance_q16 = 0;
-	uint32_t reserved[4] = {};
+	static constexpr uint32_t FLAG_ACTIVE = 1u;
+	static constexpr uint32_t FLAG_AFFECTS_TRANSLUCENCY = 2u;
+	static constexpr uint32_t FLAG_KNOWN_MASK = 3u;
+
+	float position_world[3] = {}; // words 0..2  (0..11B, world-space)
+	float radius = 0.0f; // word  3     (12..15B, world-space > 0)
+	float color_hdr[3] = {}; // words 4..6  (16..27B, linear RGB HDR energy)
+	float attenuation_exp = 1.0f; // word  7     (28..31B, +2.0f when inverse_squared else >= 0)
+	uint32_t id_index = 0; // word  8     (32..35B)
+	uint32_t id_acquire_tag = 0; // word  9     (36..39B)
+	uint32_t flags = FLAG_ACTIVE; // word  10    (40..43B, bit0=active, bit1=affects_translucency)
+	uint32_t screen_importance_q16 = 0; // word  11    (44..47B, [1..65535] for active lights)
+	float specular_scale = 1.0f; // word  12    (48..51B)
+	float diffuse_scale = 1.0f; // word  13    (52..55B)
+	float volumetric_scattering = 1.0f; // word  14    (56..59B)
+	uint32_t reserved0 = 0; // word  15    (60..63B, must be 0u)
 };
 
 struct MeshSurfaceIndirectCommand20 {
@@ -103,6 +110,14 @@ struct MeshSurfaceIndirectCommand20 {
 
 static_assert(std::is_standard_layout_v<Instance192Record> && sizeof(Instance192Record) == 192);
 static_assert(std::is_standard_layout_v<ParticleLightRecord64> && sizeof(ParticleLightRecord64) == 64);
+static_assert(offsetof(ParticleLightRecord64, id_index) == 32);
+static_assert(offsetof(ParticleLightRecord64, id_acquire_tag) == 36);
+static_assert(offsetof(ParticleLightRecord64, flags) == 40);
+static_assert(offsetof(ParticleLightRecord64, screen_importance_q16) == 44);
+static_assert(offsetof(ParticleLightRecord64, specular_scale) == 48);
+static_assert(offsetof(ParticleLightRecord64, diffuse_scale) == 52);
+static_assert(offsetof(ParticleLightRecord64, volumetric_scattering) == 56);
+static_assert(offsetof(ParticleLightRecord64, reserved0) == 60);
 static_assert(std::is_standard_layout_v<MeshSurfaceIndirectCommand20> && sizeof(MeshSurfaceIndirectCommand20) == 20);
 
 enum class SubUVBlendMode : uint32_t {
@@ -158,11 +173,26 @@ public:
 		uint32_t active_count = 0;
 	};
 
+	struct ExternalLightSlotRegistration {
+		uint64_t owner_key = 0;
+		RID records_rid;
+		RID meta_rid;
+		uint32_t capacity = 0;
+		uint64_t present_seq = 0;
+	};
+
 private:
 	struct SortKey {
 		float view_depth = 0.0f;
 		uint64_t particle_id = 0;
 		uint32_t index = 0;
+	};
+
+	struct ExternalOwnerLightState {
+		ExternalLightSlotRegistration pending_slot;
+		uint64_t harvested_present_seq = 0;
+		bool has_pending_rd_slot = false;
+		LocalVector<ParticleLightRecord64> compacted_lights;
 	};
 
 	mutable Mutex view_slots_mutex;
@@ -172,6 +202,7 @@ private:
 	LocalVector<SortKey> scratch_sort_keys;
 	mutable Mutex active_lights_mutex;
 	LocalVector<ParticleLightRecord64> active_particle_lights;
+	HashMap<uint64_t, ExternalOwnerLightState> external_owner_lights;
 	ParticlesTranslucentSeedUnlitShaderRD *translucent_shader = nullptr;
 	RID translucent_shader_version;
 	bool translucent_shader_initialized = false;
@@ -268,6 +299,17 @@ public:
 	Error publish_active_particle_lights(
 			const LocalVector<ParticleLightRecord64> &p_candidates,
 			uint32_t p_max_lights = MAX_PARTICLE_LIGHTS);
+	void register_sealed_external_light_slot(const ExternalLightSlotRegistration &p_slot);
+	void unregister_external_light_owner(uint64_t p_owner_key);
+	Error upsert_external_role8_packet(
+			uint64_t p_owner_key,
+			const uint8_t *p_meta32,
+			size_t p_meta_bytes,
+			const uint8_t *p_role8,
+			size_t p_role8_bytes,
+			uint32_t p_capacity,
+			uint64_t p_present_seq = 1u);
+	void harvest_registered_external_lights(RenderingDevice *p_rd);
 	void clear_active_particle_lights();
 	void get_active_particle_lights(LocalVector<ParticleLightRecord64> &r_out) const;
 	uint32_t get_active_particle_light_count() const;

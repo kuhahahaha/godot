@@ -343,6 +343,39 @@ TEST_CASE("[particle_mesh_subuv_light] D3-P0-4/D3-P0-5/D3-P1-4a ParticleLight64 
 	CHECK(pub_out[0].id_index == 54u);
 	manager.clear_active_particle_lights();
 	CHECK(manager.get_active_particle_light_count() == 0u);
+
+	// 4. Role-8 16-word ABI + External Output consumption bridge (meta32 + role8):
+	RendererRD::ParticleLightRecord64 r8[2] = {};
+	r8[0].position_world[0] = 1.0f;
+	r8[0].radius = 5.0f;
+	r8[0].color_hdr[0] = 4.0f;
+	r8[0].attenuation_exp = 2.0f;
+	r8[0].id_index = 7u;
+	r8[0].id_acquire_tag = 2u;
+	r8[0].flags = RendererRD::ParticleLightRecord64::FLAG_ACTIVE | RendererRD::ParticleLightRecord64::FLAG_AFFECTS_TRANSLUCENCY;
+	r8[0].screen_importance_q16 = 32000u;
+	r8[0].specular_scale = 0.75f;
+	r8[0].diffuse_scale = 1.25f;
+	r8[0].volumetric_scattering = 0.5f;
+	r8[0].reserved0 = 0u;
+
+	r8[1] = r8[0];
+	r8[1].id_index = 8u;
+	r8[1].reserved0 = 1u; // non-zero reserved0 must be filtered out!
+
+	const uint32_t meta_ok[8] = { 2u, 0u, 0u, 0u, 4u, uint32_t(RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64), 10u, 0u };
+	REQUIRE(manager.upsert_external_role8_packet(0xABCDu, reinterpret_cast<const uint8_t *>(meta_ok), 32u, reinterpret_cast<const uint8_t *>(r8), sizeof(r8), 4u, 10u) == OK);
+	manager.get_active_particle_lights(pub_out);
+	REQUIRE(pub_out.size() == 1u);
+	CHECK(pub_out[0].id_index == 7u);
+	CHECK(pub_out[0].specular_scale == 0.75f);
+	CHECK(pub_out[0].diffuse_scale == 1.25f);
+	CHECK(pub_out[0].volumetric_scattering == 0.5f);
+
+	const uint32_t meta_fault[8] = { 2u, 0u, 0u, 16u, 4u, uint32_t(RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64), 11u, 0u };
+	REQUIRE(manager.upsert_external_role8_packet(0xABCDu, reinterpret_cast<const uint8_t *>(meta_fault), 32u, reinterpret_cast<const uint8_t *>(r8), sizeof(r8), 4u, 11u) == OK);
+	CHECK(manager.get_active_particle_light_count() == 0u);
+	manager.unregister_external_light_owner(0xABCDu);
 }
 
 TEST_CASE("[particle_mesh_subuv_light] O-01 mixed zero-size batch bit-exact encoding and live Metal ParticlesExternalGuard") {

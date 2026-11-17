@@ -5075,6 +5075,19 @@ void Registry::production_output_seal(ProductionPhysicalContextRef context, GDEx
 		out->status = output_status(error, "output_packet_commit");
 		return;
 	}
+	if (owner.config.profile == RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64) {
+		if (RendererRD::ParticlesMeshLightSortRD *light_sort = storage->get_mesh_light_sort_rd()) {
+			using Storage = RendererRD::ExternalOutputStorage;
+			RendererRD::ParticlesMeshLightSortRD::ExternalLightSlotRegistration reg;
+			reg.owner_key = input->particles;
+			reg.records_rid = slot.storage ? slot.storage->resources[Storage::CURRENT_RECORDS].rid : RID();
+			reg.meta_rid = slot.storage ? slot.storage->resources[Storage::OUTPUT_META].rid : RID();
+			reg.capacity = owner.config.capacity;
+			reg.present_seq = slot.request.common.present_seq;
+			light_sort->register_sealed_external_light_slot(reg);
+		}
+		slot.state = Owner::LeaseState::ADOPTED;
+	}
 	OriginalOperationIdentity identity{ request->operation.owner_request_nonce, request->attachment->library_generation, device_records[request->attachment->device].session, request->operation.record_generation, request->operation.canonical_begin, request->operation.canonical_end };
 	CRASH_COND(bind_checked_record_append(seal.original_append, identity) != OK);
 	seal.original_append.state = CheckedRecordAppend::State::Appended;

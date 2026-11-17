@@ -722,6 +722,11 @@ Error ParticlesMeshLightSortRD::compact_particle_lights_deterministic(
 				!Math::is_finite(c.color_hdr[2]) || c.color_hdr[2] < 0.0f ||
 				(c.color_hdr[0] <= 0.0f && c.color_hdr[1] <= 0.0f && c.color_hdr[2] <= 0.0f) ||
 				!Math::is_finite(c.attenuation_exp) || c.attenuation_exp < 0.0f ||
+				!Math::is_finite(c.specular_scale) || c.specular_scale < 0.0f ||
+				!Math::is_finite(c.diffuse_scale) || c.diffuse_scale < 0.0f ||
+				!Math::is_finite(c.volumetric_scattering) || c.volumetric_scattering < 0.0f ||
+				c.reserved0 != 0u || (c.flags & ~ParticleLightRecord64::FLAG_KNOWN_MASK) != 0u ||
+				(c.flags & ParticleLightRecord64::FLAG_ACTIVE) == 0u ||
 				c.screen_importance_q16 == 0) {
 			continue;
 		}
@@ -817,19 +822,164 @@ Error ParticlesMeshLightSortRD::publish_active_particle_lights(
 	return OK;
 }
 
+void ParticlesMeshLightSortRD::register_sealed_external_light_slot(const ExternalLightSlotRegistration &p_slot) {
+	if (p_slot.owner_key == 0 || p_slot.capacity > MAX_PARTICLE_LIGHTS) {
+		return;
+	}
+	MutexLock lock(active_lights_mutex);
+	ExternalOwnerLightState &st = external_owner_lights[p_slot.owner_key];
+	if (p_slot.present_seq >= st.pending_slot.present_seq) {
+		st.pending_slot = p_slot;
+		st.has_pending_rd_slot = true;
+	}
+}
+
+void ParticlesMeshLightSortRD::unregister_external_light_owner(uint64_t p_owner_key) {
+	if (p_owner_key == 0) {
+		return;
+	}
+	MutexLock lock(active_lights_mutex);
+	external_owner_lights.erase(p_owner_key);
+}
+
+Error ParticlesMeshLightSortRD::upsert_external_role8_packet(
+		uint64_t p_owner_key,
+		const uint8_t *p_meta32,
+		size_t p_meta_bytes,
+		const uint8_t *p_role8,
+		size_t p_role8_bytes,
+		uint32_t p_capacity,
+		uint64_t p_present_seq) {
+	if (p_owner_key == 0 || p_capacity > MAX_PARTICLE_LIGHTS || p_meta32 == nullptr || p_meta_bytes != 32u) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (p_capacity == 0) {
+		MutexLock lock(active_lights_mutex);
+		ExternalOwnerLightState &st = external_owner_lights[p_owner_key];
+		st.harvested_present_seq = p_present_seq;
+		st.has_pending_rd_slot = false;
+		st.compacted_lights.clear();
+		return OK;
+	}
+	uint32_t meta_words[8] = {};
+	memcpy(meta_words, p_meta32, 32u);
+	const uint32_t active_count = meta_words[0];
+	const uint32_t fault_bits = meta_words[3];
+	const uint32_t meta_cap = meta_words[4];
+	const uint32_t schema_id = meta_words[5];
+	if (schema_id != uint32_t(ExternalOutputConfig::PARTICLE_LIGHT_64) || meta_cap != p_capacity || active_count > p_capacity) {
+		return ERR_INVALID_DATA;
+	}
+	LocalVector<ParticleLightRecord64> compacted;
+	if (fault_bits == 0u && active_count > 0u) {
+		if (p_role8 == nullptr || p_role8_bytes < size_t(active_count) * sizeof(ParticleLightRecord64)) {
+			return ERR_INVALID_DATA;
+		}
+		LocalVector<ParticleLightRecord64> raw_candidates;
+		raw_candidates.resize(active_count);
+		memcpy(raw_candidates.ptr(), p_role8, size_t(active_count) * sizeof(ParticleLightRecord64));
+		const Error err = compact_particle_lights_deterministic(raw_candidates, p_capacity, compacted);
+		if (err != OK) {
+			return err;
+		}
+	}
+	MutexLock lock(active_lights_mutex);
+	ExternalOwnerLightState &st = external_owner_lights[p_owner_key];
+	st.harvested_present_seq = p_present_seq;
+	st.has_pending_rd_slot = false;
+	st.compacted_lights = compacted;
+	return OK;
+}
+
+void ParticlesMeshLightSortRD::harvest_registered_external_lights(RenderingDevice *p_rd) {
+	if (!p_rd) {
+		return;
+	}
+	LocalVector<ExternalLightSlotRegistration> to_read;
+	LocalVector<uint64_t> stale_owners;
+	{
+		MutexLock lock(active_lights_mutex);
+		for (KeyValue<uint64_t, ExternalOwnerLightState> &E : external_owner_lights) {
+			ExternalOwnerLightState &st = E.value;
+			if (!st.has_pending_rd_slot) {
+				continue;
+			}
+			if (st.pending_slot.capacity == 0) {
+				st.compacted_lights.clear();
+				st.harvested_present_seq = st.pending_slot.present_seq;
+				st.has_pending_rd_slot = false;
+				continue;
+			}
+			if (!st.pending_slot.meta_rid.is_valid() || !st.pending_slot.records_rid.is_valid()) {
+				stale_owners.push_back(E.key);
+				continue;
+			}
+			if (st.pending_slot.present_seq != st.harvested_present_seq) {
+				to_read.push_back(st.pending_slot);
+			} else {
+				st.has_pending_rd_slot = false;
+			}
+		}
+		for (uint32_t i = 0; i < stale_owners.size(); ++i) {
+			external_owner_lights.erase(stale_owners[i]);
+		}
+	}
+
+	for (uint32_t i = 0; i < to_read.size(); ++i) {
+		const ExternalLightSlotRegistration &slot = to_read[i];
+		const Vector<uint8_t> meta_bytes = p_rd->buffer_get_data(slot.meta_rid, 0, 32u);
+		if (meta_bytes.size() != 32) {
+			unregister_external_light_owner(slot.owner_key);
+			continue;
+		}
+		uint32_t active_count = 0;
+		memcpy(&active_count, meta_bytes.ptr(), sizeof(uint32_t));
+		const uint32_t read_count = MIN(active_count, slot.capacity);
+		Vector<uint8_t> rec_bytes;
+		if (read_count > 0u) {
+			rec_bytes = p_rd->buffer_get_data(slot.records_rid, 0, read_count * uint32_t(sizeof(ParticleLightRecord64)));
+		}
+		(void)upsert_external_role8_packet(
+				slot.owner_key,
+				meta_bytes.ptr(),
+				size_t(meta_bytes.size()),
+				rec_bytes.is_empty() ? nullptr : rec_bytes.ptr(),
+				size_t(rec_bytes.size()),
+				slot.capacity,
+				slot.present_seq);
+	}
+}
+
 void ParticlesMeshLightSortRD::clear_active_particle_lights() {
 	MutexLock lock(active_lights_mutex);
 	active_particle_lights.clear();
+	external_owner_lights.clear();
 }
 
 void ParticlesMeshLightSortRD::get_active_particle_lights(LocalVector<ParticleLightRecord64> &r_out) const {
 	MutexLock lock(active_lights_mutex);
-	r_out = active_particle_lights;
+	if (external_owner_lights.is_empty()) {
+		r_out = active_particle_lights;
+		return;
+	}
+	LocalVector<ParticleLightRecord64> merged(active_particle_lights);
+	for (const KeyValue<uint64_t, ExternalOwnerLightState> &E : external_owner_lights) {
+		const LocalVector<ParticleLightRecord64> &sub = E.value.compacted_lights;
+		for (uint32_t i = 0; i < sub.size(); ++i) {
+			merged.push_back(sub[i]);
+		}
+	}
+	if (merged.is_empty()) {
+		r_out.clear();
+		return;
+	}
+	(void)compact_particle_lights_deterministic(merged, MAX_PARTICLE_LIGHTS, r_out);
 }
 
 uint32_t ParticlesMeshLightSortRD::get_active_particle_light_count() const {
-	MutexLock lock(active_lights_mutex);
-	return active_particle_lights.size();
+	LocalVector<ParticleLightRecord64> out;
+	get_active_particle_lights(out);
+	return out.size();
 }
 
 } // namespace RendererRD
