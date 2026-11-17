@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/error/error_list.h"
+#include "core/math/aabb.h"
 #include "core/math/transform_3d.h"
 #include "core/math/vector2.h"
 #include "core/math/vector3.h"
@@ -43,9 +44,12 @@
 #include <cstdint>
 #include <type_traits>
 
+class ClusterBuilderRD;
 class RenderingDevice;
 
 namespace RendererRD {
+
+class ExternalOutputOwner;
 
 struct Instance192Record {
 	static constexpr uint32_t FLAG_VALID_RECORD = 1u;
@@ -174,14 +178,34 @@ public:
 	};
 
 	struct ExternalLightSlotRegistration {
+		using SlotLiveCheckFn = bool (*)(const ExternalOutputOwner *p_owner, uint64_t p_generation, uint32_t p_slot_index, uint64_t p_lease_serial);
 		uint64_t owner_key = 0;
+		const ExternalOutputOwner *owner_ptr = nullptr;
+		SlotLiveCheckFn is_slot_live_fn = nullptr;
+		uint64_t generation = 0;
+		uint32_t slot_index = UINT32_MAX;
+		uint64_t lease_serial = 0;
+		RID scenario_rid;
+		RID viewport_rid;
+		AABB world_bounds;
 		RID records_rid;
 		RID meta_rid;
 		uint32_t capacity = 0;
 		uint64_t present_seq = 0;
 	};
 
+	struct ReservedGpuLightBounds {
+		AABB world_bounds;
+		uint32_t first_buffer_index = 0;
+		uint32_t count = 0;
+	};
+
 private:
+	static constexpr uint32_t MAX_STAGED_LIGHT_CANDIDATES = 2048u;
+	static constexpr uint32_t LIGHT_DATA_WORD_STRIDE = 56u; // sizeof(LightStorage::LightData) == 224B
+	static constexpr uint32_t CLUSTER_ELEMENT_WORD_STRIDE = 20u; // sizeof(ClusterBuilderRD::RenderElementData) == 80B
+	static constexpr uint32_t UNIFORM_SET_CACHE_CAPACITY = 32u;
+
 	struct SortKey {
 		float view_depth = 0.0f;
 		uint64_t particle_id = 0;
@@ -190,9 +214,27 @@ private:
 
 	struct ExternalOwnerLightState {
 		ExternalLightSlotRegistration pending_slot;
-		uint64_t harvested_present_seq = 0;
 		bool has_pending_rd_slot = false;
 		LocalVector<ParticleLightRecord64> compacted_lights;
+	};
+
+	struct CachedLightUniformSet {
+		RID shader;
+		RID rids[4];
+		RID uniform_set;
+		uint64_t last_used_tick = 0;
+	};
+
+	struct ClusterFrameContext {
+		const ClusterBuilderRD *builder = nullptr;
+		Transform3D view_xform;
+		float z_near = 0.05f;
+		float z_far = 4000.0f;
+		float sphere_overfit = 1.05f;
+		uint32_t max_elements_by_type = 0;
+		uint32_t pending_gpu_omni_count = 0;
+		bool camera_orthogonal = false;
+		bool active = false;
 	};
 
 	mutable Mutex view_slots_mutex;
@@ -203,6 +245,19 @@ private:
 	mutable Mutex active_lights_mutex;
 	LocalVector<ParticleLightRecord64> active_particle_lights;
 	HashMap<uint64_t, ExternalOwnerLightState> external_owner_lights;
+	RenderingDevice *light_gpu_bridge_rd = nullptr;
+	RID light_harvest_shader;
+	RID light_harvest_pipeline;
+	RID light_topk_emit_shader;
+	RID light_topk_emit_pipeline;
+	RID light_cluster_blit_shader;
+	RID light_cluster_blit_pipeline;
+	RID light_candidate_staging_buffer;
+	RID light_cluster_elements_buffer;
+	RID light_emit_params_ubo;
+	CachedLightUniformSet light_uniform_set_cache[UNIFORM_SET_CACHE_CAPACITY];
+	uint64_t light_uniform_set_tick = 0;
+	ClusterFrameContext active_cluster_context;
 	ParticlesTranslucentSeedUnlitShaderRD *translucent_shader = nullptr;
 	RID translucent_shader_version;
 	bool translucent_shader_initialized = false;
@@ -210,6 +265,9 @@ private:
 	bool standalone_rd_test_owner = false;
 #endif
 	Error _prepare_translucent_seed_shader_impl();
+	Error _ensure_light_gpu_bridge(RenderingDevice *p_rd);
+	void _release_light_gpu_bridge(RenderingDevice *p_rd);
+	RID _acquire_cached_uniform_set(RenderingDevice *p_rd, RID p_shader, const RD::Uniform *p_uniforms, uint32_t p_count);
 
 public:
 	ParticlesMeshLightSortRD() = default;
@@ -300,6 +358,7 @@ public:
 			const LocalVector<ParticleLightRecord64> &p_candidates,
 			uint32_t p_max_lights = MAX_PARTICLE_LIGHTS);
 	void register_sealed_external_light_slot(const ExternalLightSlotRegistration &p_slot);
+	void unregister_external_light_slot(uint64_t p_owner_key, uint64_t p_generation, uint32_t p_slot_index);
 	void unregister_external_light_owner(uint64_t p_owner_key);
 	Error upsert_external_role8_packet(
 			uint64_t p_owner_key,
@@ -309,7 +368,34 @@ public:
 			size_t p_role8_bytes,
 			uint32_t p_capacity,
 			uint64_t p_present_seq = 1u);
-	void harvest_registered_external_lights(RenderingDevice *p_rd);
+	uint32_t dispatch_registered_external_lights_gpu(
+			RenderingDevice *p_rd,
+			RID p_source_viewport,
+			RID p_source_scenario,
+			bool p_is_reflection_probe,
+			const Transform3D &p_view_inv_transform,
+			float p_exposure_norm,
+			RID p_omni_light_buffer,
+			uint32_t p_base_omni_index,
+			uint32_t p_max_omni_lights,
+			LocalVector<ReservedGpuLightBounds> &r_mobile_bounds_out);
+	void begin_cluster_builder_frame(
+			const ClusterBuilderRD *p_builder,
+			const Transform3D &p_view_xform,
+			float p_z_near,
+			float p_z_far,
+			bool p_camera_orthogonal,
+			float p_sphere_overfit,
+			uint32_t p_max_elements_by_type);
+	uint32_t get_pending_cluster_gpu_omni_count(const ClusterBuilderRD *p_builder) const;
+	void blit_cluster_gpu_omni_elements(
+			RenderingDevice *p_rd,
+			const ClusterBuilderRD *p_builder,
+			RID p_dst_element_buffer,
+			uint32_t p_dst_element_offset,
+			uint32_t p_count);
+	void clear_cluster_builder_frame(const ClusterBuilderRD *p_builder);
+	void release_light_gpu_bridge(RenderingDevice *p_rd) { _release_light_gpu_bridge(p_rd); }
 	void clear_active_particle_lights();
 	void get_active_particle_lights(LocalVector<ParticleLightRecord64> &r_out) const;
 	uint32_t get_active_particle_light_count() const;

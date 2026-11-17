@@ -77,6 +77,9 @@ Vector2 subuv_cell_uv(const Vector2 &p_base_uv, uint32_t p_frame, uint32_t p_col
 } // namespace
 
 ParticlesMeshLightSortRD::~ParticlesMeshLightSortRD() {
+	if (light_gpu_bridge_rd != nullptr && light_gpu_bridge_rd == RD::get_singleton()) {
+		_release_light_gpu_bridge(light_gpu_bridge_rd);
+	}
 	release_translucent_seed_shader();
 }
 
@@ -136,6 +139,9 @@ RID ParticlesMeshLightSortRD::get_translucent_seed_shader_variant(SubUVBlendMode
 }
 
 void ParticlesMeshLightSortRD::release_translucent_seed_shader() {
+	if (light_gpu_bridge_rd != nullptr && light_gpu_bridge_rd == RD::get_singleton()) {
+		_release_light_gpu_bridge(light_gpu_bridge_rd);
+	}
 	if (translucent_shader) {
 		RenderingServer *rs = RenderingServer::get_singleton();
 		bool allowed = (rs && rs->is_on_render_thread() && RD::get_singleton() && rs->get_rendering_device() == RD::get_singleton());
@@ -828,9 +834,29 @@ void ParticlesMeshLightSortRD::register_sealed_external_light_slot(const Externa
 	}
 	MutexLock lock(active_lights_mutex);
 	ExternalOwnerLightState &st = external_owner_lights[p_slot.owner_key];
-	if (p_slot.present_seq >= st.pending_slot.present_seq) {
+	if (!st.has_pending_rd_slot || p_slot.generation != st.pending_slot.generation || p_slot.present_seq >= st.pending_slot.present_seq) {
 		st.pending_slot = p_slot;
 		st.has_pending_rd_slot = true;
+	}
+}
+
+void ParticlesMeshLightSortRD::unregister_external_light_slot(uint64_t p_owner_key, uint64_t p_generation, uint32_t p_slot_index) {
+	if (p_owner_key == 0) {
+		return;
+	}
+	MutexLock lock(active_lights_mutex);
+	HashMap<uint64_t, ExternalOwnerLightState>::Iterator it = external_owner_lights.find(p_owner_key);
+	if (!it) {
+		return;
+	}
+	if (it->value.has_pending_rd_slot &&
+			(p_generation == 0 || it->value.pending_slot.generation == p_generation) &&
+			(p_slot_index == UINT32_MAX || it->value.pending_slot.slot_index == p_slot_index)) {
+		it->value.pending_slot = ExternalLightSlotRegistration{};
+		it->value.has_pending_rd_slot = false;
+		if (it->value.compacted_lights.is_empty()) {
+			external_owner_lights.remove(it);
+		}
 	}
 }
 
@@ -850,13 +876,13 @@ Error ParticlesMeshLightSortRD::upsert_external_role8_packet(
 		size_t p_role8_bytes,
 		uint32_t p_capacity,
 		uint64_t p_present_seq) {
+	(void)p_present_seq;
 	if (p_owner_key == 0 || p_capacity > MAX_PARTICLE_LIGHTS || p_meta32 == nullptr || p_meta_bytes != 32u) {
 		return ERR_INVALID_PARAMETER;
 	}
 	if (p_capacity == 0) {
 		MutexLock lock(active_lights_mutex);
 		ExternalOwnerLightState &st = external_owner_lights[p_owner_key];
-		st.harvested_present_seq = p_present_seq;
 		st.has_pending_rd_slot = false;
 		st.compacted_lights.clear();
 		return OK;
@@ -885,69 +911,791 @@ Error ParticlesMeshLightSortRD::upsert_external_role8_packet(
 	}
 	MutexLock lock(active_lights_mutex);
 	ExternalOwnerLightState &st = external_owner_lights[p_owner_key];
-	st.harvested_present_seq = p_present_seq;
 	st.has_pending_rd_slot = false;
 	st.compacted_lights = compacted;
 	return OK;
 }
 
-void ParticlesMeshLightSortRD::harvest_registered_external_lights(RenderingDevice *p_rd) {
-	if (!p_rd) {
+namespace {
+
+static const char *kLightHarvestComputeGLSL = R"GLSL(#version 450
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer SlotMeta {
+	uint words[];
+} slot_meta;
+
+layout(set = 0, binding = 1, std430) readonly buffer SlotRecords {
+	uint words[];
+} slot_records;
+
+layout(set = 0, binding = 2, std430) buffer CandidateStaging {
+	uint words[];
+} staging;
+
+layout(push_constant, std430) uniform PushParams {
+	uint slot_capacity;
+	uint max_staged;
+	uint pad0;
+	uint pad1;
+} push_params;
+
+shared uint s_active_count;
+shared uint s_prefix[256];
+shared uint s_base;
+
+bool is_finite_u32(uint u) {
+	return (u & 0x7F800000u) != 0x7F800000u;
+}
+
+uint flush_subnormal_u32(uint u) {
+	uint mag = u & 0x7FFFFFFFu;
+	return (mag < 0x00800000u) ? 0u : u;
+}
+
+float clean_f32(uint u) {
+	return uintBitsToFloat(flush_subnormal_u32(u));
+}
+
+void main() {
+	uint tid = gl_LocalInvocationID.x;
+	if (tid == 0u) {
+		uint active_count = slot_meta.words[0];
+		uint fault_bits = slot_meta.words[3];
+		uint meta_cap = slot_meta.words[4];
+		uint schema_id = slot_meta.words[5];
+		if (fault_bits == 0u && schema_id == 4u && meta_cap == push_params.slot_capacity && active_count <= push_params.slot_capacity) {
+			s_active_count = active_count;
+		} else {
+			s_active_count = 0u;
+		}
+	}
+	barrier();
+
+	uint w[16];
+	bool valid = false;
+	if (tid < s_active_count) {
+		uint src_base = tid * 16u;
+		for (uint i = 0u; i < 16u; ++i) {
+			w[i] = slot_records.words[src_base + i];
+		}
+		bool finite_pos = is_finite_u32(w[0]) && is_finite_u32(w[1]) && is_finite_u32(w[2]);
+		float radius = clean_f32(w[3]);
+		float cr = clean_f32(w[4]);
+		float cg = clean_f32(w[5]);
+		float cb = clean_f32(w[6]);
+		float atten = clean_f32(w[7]);
+		uint flags = w[10];
+		uint importance = w[11];
+		float spec_s = clean_f32(w[12]);
+		float diff_s = clean_f32(w[13]);
+		float fog_s = clean_f32(w[14]);
+		uint res0 = w[15];
+
+		if (finite_pos &&
+				is_finite_u32(w[3]) && radius > 0.0 &&
+				is_finite_u32(w[4]) && cr >= 0.0 &&
+				is_finite_u32(w[5]) && cg >= 0.0 &&
+				is_finite_u32(w[6]) && cb >= 0.0 &&
+				(cr > 0.0 || cg > 0.0 || cb > 0.0) &&
+				is_finite_u32(w[7]) && atten >= 0.0 &&
+				is_finite_u32(w[12]) && spec_s >= 0.0 &&
+				is_finite_u32(w[13]) && diff_s >= 0.0 &&
+				is_finite_u32(w[14]) && fog_s >= 0.0 &&
+				res0 == 0u && (flags & ~7u) == 0u && (flags & 4u) != 0u &&
+				importance != 0u) {
+			w[0] = flush_subnormal_u32(w[0]);
+			w[1] = flush_subnormal_u32(w[1]);
+			w[2] = flush_subnormal_u32(w[2]);
+			w[3] = flush_subnormal_u32(w[3]);
+			w[4] = flush_subnormal_u32(w[4]);
+			w[5] = flush_subnormal_u32(w[5]);
+			w[6] = flush_subnormal_u32(w[6]);
+			w[7] = flush_subnormal_u32(w[7]);
+			w[12] = flush_subnormal_u32(w[12]);
+			w[13] = flush_subnormal_u32(w[13]);
+			w[14] = flush_subnormal_u32(w[14]);
+			valid = true;
+		}
+	}
+
+	s_prefix[tid] = valid ? 1u : 0u;
+	barrier();
+
+	if (tid == 0u) {
+		uint sum = 0u;
+		for (uint i = 0u; i < 256u; ++i) {
+			uint v = (i < s_active_count) ? s_prefix[i] : 0u;
+			s_prefix[i] = sum;
+			sum += v;
+		}
+		s_base = (sum > 0u) ? atomicAdd(staging.words[0], sum) : 0u;
+	}
+	barrier();
+
+	if (valid) {
+		uint dst = s_base + s_prefix[tid];
+		if (dst < push_params.max_staged) {
+			uint dst_base = 4u + dst * 16u;
+			for (uint i = 0u; i < 16u; ++i) {
+				staging.words[dst_base + i] = w[i];
+			}
+		}
+	}
+}
+)GLSL";
+
+static const char *kLightTopKEmitComputeGLSL = R"GLSL(#version 450
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer CandidateStaging {
+	uint words[];
+} staging;
+
+layout(set = 0, binding = 1, std430) buffer OmniLights {
+	uint words[];
+} omni_lights;
+
+layout(set = 0, binding = 2, std430) buffer ClusterElements {
+	uint words[];
+} cluster_elements;
+
+layout(set = 0, binding = 3, std140) uniform EmitParams {
+	vec4 light_view_row0;
+	vec4 light_view_row1;
+	vec4 light_view_row2;
+	vec4 cluster_view_row0;
+	vec4 cluster_view_row1;
+	vec4 cluster_view_row2;
+	vec4 misc_floats; // x=exposure_norm, y=z_near, z=z_far, w=sphere_overfit
+	uvec4 counts;     // x=base_omni_index, y=reserved_count, z=max_staged, w=camera_orthogonal
+} params;
+
+shared uint s_total_candidates;
+shared uvec4 s_keys[256];
+
+bool beats(uvec4 b, uvec4 a) {
+	if (b.x != a.x) {
+		return b.x > a.x;
+	}
+	if (b.y != a.y) {
+		return b.y < a.y;
+	}
+	if (b.z != a.z) {
+		return b.z < a.z;
+	}
+	return b.w < a.w;
+}
+
+void main() {
+	uint tid = gl_LocalInvocationID.x;
+	uint base_omni = params.counts.x;
+	uint reserved = params.counts.y;
+
+	if (tid == 0u) {
+		s_total_candidates = min(staging.words[0], params.counts.z);
+	}
+
+	if (tid < reserved) {
+		uint omni_base = (base_omni + tid) * 56u;
+		for (uint i = 0u; i < 56u; ++i) {
+			omni_lights.words[omni_base + i] = 0u;
+		}
+		uint elem_base = tid * 20u;
+		for (uint i = 0u; i < 20u; ++i) {
+			cluster_elements.words[elem_base + i] = 0u;
+		}
+		cluster_elements.words[elem_base + 3u] = base_omni + tid;
+		cluster_elements.words[elem_base + 4u] = floatBitsToUint(1.0);
+		cluster_elements.words[elem_base + 9u] = floatBitsToUint(1.0);
+		cluster_elements.words[elem_base + 14u] = floatBitsToUint(1.0);
+		cluster_elements.words[elem_base + 15u] = floatBitsToUint(params.misc_floats.y + 16.0);
+	}
+	memoryBarrierBuffer();
+	barrier();
+
+	uint N = s_total_candidates;
+	if (N == 0u || reserved == 0u) {
 		return;
 	}
-	LocalVector<ExternalLightSlotRegistration> to_read;
+
+	for (uint outer_base = 0u; outer_base < N; outer_base += 256u) {
+		uint my_idx = outer_base + tid;
+		uvec4 my_key = uvec4(0u, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu);
+		if (my_idx < N) {
+			uint cbase = 4u + my_idx * 16u;
+			my_key = uvec4(staging.words[cbase + 11u], staging.words[cbase + 9u], staging.words[cbase + 8u], my_idx);
+		}
+		uint rank = 0u;
+		for (uint tile_base = 0u; tile_base < N; tile_base += 256u) {
+			uint load_idx = tile_base + tid;
+			if (load_idx < N) {
+				uint lbase = 4u + load_idx * 16u;
+				s_keys[tid] = uvec4(staging.words[lbase + 11u], staging.words[lbase + 9u], staging.words[lbase + 8u], load_idx);
+			} else {
+				s_keys[tid] = uvec4(0u, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu);
+			}
+			barrier();
+
+			if (my_idx < N) {
+				uint tile_cnt = min(256u, N - tile_base);
+				for (uint j = 0u; j < tile_cnt; ++j) {
+					if (beats(s_keys[j], my_key)) {
+						rank++;
+					}
+				}
+			}
+			barrier();
+		}
+
+		if (my_idx < N && rank < reserved) {
+			uint cbase = 4u + my_idx * 16u;
+			vec3 world_pos = vec3(
+					uintBitsToFloat(staging.words[cbase + 0u]),
+					uintBitsToFloat(staging.words[cbase + 1u]),
+					uintBitsToFloat(staging.words[cbase + 2u]));
+			float radius = max(0.001, uintBitsToFloat(staging.words[cbase + 3u]));
+			vec3 color_hdr = vec3(
+					uintBitsToFloat(staging.words[cbase + 4u]),
+					uintBitsToFloat(staging.words[cbase + 5u]),
+					uintBitsToFloat(staging.words[cbase + 6u]));
+			float raw_atten = uintBitsToFloat(staging.words[cbase + 7u]);
+			float atten = (raw_atten > 0.0) ? raw_atten : 1.0;
+			float spec_scale = uintBitsToFloat(staging.words[cbase + 12u]);
+			float diff_scale = uintBitsToFloat(staging.words[cbase + 13u]);
+			float vol_fog = uintBitsToFloat(staging.words[cbase + 14u]);
+			float exposure = params.misc_floats.x;
+
+			vec3 light_view_pos = vec3(
+					dot(params.light_view_row0.xyz, world_pos) + params.light_view_row0.w,
+					dot(params.light_view_row1.xyz, world_pos) + params.light_view_row1.w,
+					dot(params.light_view_row2.xyz, world_pos) + params.light_view_row2.w);
+			vec3 final_col = color_hdr * (diff_scale * exposure);
+
+			uint omni_idx = base_omni + rank;
+			uint obase = omni_idx * 56u;
+			omni_lights.words[obase + 0u] = floatBitsToUint(light_view_pos.x);
+			omni_lights.words[obase + 1u] = floatBitsToUint(light_view_pos.y);
+			omni_lights.words[obase + 2u] = floatBitsToUint(light_view_pos.z);
+			omni_lights.words[obase + 3u] = floatBitsToUint(1.0 / radius);
+			omni_lights.words[obase + 8u] = floatBitsToUint(final_col.r);
+			omni_lights.words[obase + 9u] = floatBitsToUint(final_col.g);
+			omni_lights.words[obase + 10u] = floatBitsToUint(final_col.b);
+			omni_lights.words[obase + 11u] = floatBitsToUint(atten);
+			omni_lights.words[obase + 20u] = floatBitsToUint(spec_scale);
+			omni_lights.words[obase + 49u] = 0xFFFFFFFFu;
+			omni_lights.words[obase + 50u] = floatBitsToUint(vol_fog);
+
+			vec3 cluster_pos = vec3(
+					dot(params.cluster_view_row0.xyz, world_pos) + params.cluster_view_row0.w,
+					dot(params.cluster_view_row1.xyz, world_pos) + params.cluster_view_row1.w,
+					dot(params.cluster_view_row2.xyz, world_pos) + params.cluster_view_row2.w);
+			float overfit = params.misc_floats.w;
+			float r_elem = radius * overfit;
+			float depth = -cluster_pos.z;
+			bool touches_near = false;
+			if (params.counts.w != 0u) {
+				touches_near = (depth - r_elem) < params.misc_floats.y;
+			} else {
+				float r2 = r_elem * overfit;
+				touches_near = dot(cluster_pos, cluster_pos) < (r2 * r2);
+			}
+			bool touches_far = (depth + r_elem) > params.misc_floats.z;
+
+			uint ebase = rank * 20u;
+			cluster_elements.words[ebase + 0u] = 0u;
+			cluster_elements.words[ebase + 1u] = touches_near ? 1u : 0u;
+			cluster_elements.words[ebase + 2u] = touches_far ? 1u : 0u;
+			cluster_elements.words[ebase + 3u] = omni_idx;
+			cluster_elements.words[ebase + 4u] = floatBitsToUint(params.cluster_view_row0.x);
+			cluster_elements.words[ebase + 5u] = floatBitsToUint(params.cluster_view_row0.y);
+			cluster_elements.words[ebase + 6u] = floatBitsToUint(params.cluster_view_row0.z);
+			cluster_elements.words[ebase + 7u] = floatBitsToUint(cluster_pos.x);
+			cluster_elements.words[ebase + 8u] = floatBitsToUint(params.cluster_view_row1.x);
+			cluster_elements.words[ebase + 9u] = floatBitsToUint(params.cluster_view_row1.y);
+			cluster_elements.words[ebase + 10u] = floatBitsToUint(params.cluster_view_row1.z);
+			cluster_elements.words[ebase + 11u] = floatBitsToUint(cluster_pos.y);
+			cluster_elements.words[ebase + 12u] = floatBitsToUint(params.cluster_view_row2.x);
+			cluster_elements.words[ebase + 13u] = floatBitsToUint(params.cluster_view_row2.y);
+			cluster_elements.words[ebase + 14u] = floatBitsToUint(params.cluster_view_row2.z);
+			cluster_elements.words[ebase + 15u] = floatBitsToUint(cluster_pos.z);
+			cluster_elements.words[ebase + 16u] = floatBitsToUint(r_elem);
+			cluster_elements.words[ebase + 17u] = floatBitsToUint(r_elem);
+			cluster_elements.words[ebase + 18u] = floatBitsToUint(r_elem);
+			cluster_elements.words[ebase + 19u] = 0u;
+		}
+	}
+}
+)GLSL";
+
+static const char *kLightClusterBlitComputeGLSL = R"GLSL(#version 450
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer SrcElements {
+	uint words[];
+} src_elements;
+
+layout(set = 0, binding = 1, std430) buffer DstElements {
+	uint words[];
+} dst_elements;
+
+layout(push_constant, std430) uniform BlitPush {
+	uint dst_element_offset;
+	uint element_count;
+	uint pad0;
+	uint pad1;
+} push_params;
+
+void main() {
+	uint tid = gl_LocalInvocationID.x;
+	if (tid >= push_params.element_count) {
+		return;
+	}
+	uint src_base = tid * 20u;
+	uint dst_base = (push_params.dst_element_offset + tid) * 20u;
+	for (uint i = 0u; i < 20u; ++i) {
+		dst_elements.words[dst_base + i] = src_elements.words[src_base + i];
+	}
+}
+)GLSL";
+
+static Error compile_light_bridge_compute_pipeline(RenderingDevice &p_rd, const char *p_glsl, const char *p_name, RID &r_shader, RID &r_pipeline) {
+	String err;
+	RD::ShaderStageSPIRVData stage;
+	stage.shader_stage = RD::SHADER_STAGE_COMPUTE;
+	stage.spirv = p_rd.shader_compile_spirv_from_source(RD::SHADER_STAGE_COMPUTE, p_glsl, RD::SHADER_LANGUAGE_GLSL, &err);
+	ERR_FAIL_COND_V_MSG(stage.spirv.is_empty(), ERR_COMPILATION_FAILED, String("ParticleLight64 GPU bridge shader compile failed: ") + err);
+	Vector<RD::ShaderStageSPIRVData> stages;
+	stages.push_back(stage);
+	r_shader = p_rd.shader_create_from_spirv(stages, p_name);
+	ERR_FAIL_COND_V(r_shader.is_null(), ERR_CANT_CREATE);
+	r_pipeline = p_rd.compute_pipeline_create(r_shader);
+	if (r_pipeline.is_null()) {
+		p_rd.free_rid(r_shader);
+		r_shader = RID();
+		return ERR_CANT_CREATE;
+	}
+	return OK;
+}
+
+struct LightEmitParamsStd140 {
+	float light_view_row0[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+	float light_view_row1[4] = { 0.0f, 1.0f, 0.0f, 0.0f };
+	float light_view_row2[4] = { 0.0f, 0.0f, 1.0f, 0.0f };
+	float cluster_view_row0[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+	float cluster_view_row1[4] = { 0.0f, 1.0f, 0.0f, 0.0f };
+	float cluster_view_row2[4] = { 0.0f, 0.0f, 1.0f, 0.0f };
+	float misc_floats[4] = { 1.0f, 0.05f, 4000.0f, 1.05f };
+	uint32_t counts[4] = { 0u, 0u, 0u, 0u };
+};
+static_assert(sizeof(LightEmitParamsStd140) == 128, "LightEmitParamsStd140 ABI");
+
+} // namespace
+
+Error ParticlesMeshLightSortRD::_ensure_light_gpu_bridge(RenderingDevice *p_rd) {
+	if (!p_rd) {
+		return ERR_UNAVAILABLE;
+	}
+	if (light_gpu_bridge_rd == p_rd && light_harvest_pipeline.is_valid() && light_topk_emit_pipeline.is_valid() && light_cluster_blit_pipeline.is_valid()) {
+		return OK;
+	}
+	if (light_gpu_bridge_rd != nullptr && light_gpu_bridge_rd != p_rd) {
+		for (uint32_t i = 0; i < UNIFORM_SET_CACHE_CAPACITY; ++i) {
+			light_uniform_set_cache[i] = CachedLightUniformSet{};
+		}
+		light_harvest_shader = light_harvest_pipeline = RID();
+		light_topk_emit_shader = light_topk_emit_pipeline = RID();
+		light_cluster_blit_shader = light_cluster_blit_pipeline = RID();
+		light_candidate_staging_buffer = light_cluster_elements_buffer = light_emit_params_ubo = RID();
+		light_gpu_bridge_rd = nullptr;
+	}
+
+	Error err = compile_light_bridge_compute_pipeline(*p_rd, kLightHarvestComputeGLSL, "particle_light64_harvest", light_harvest_shader, light_harvest_pipeline);
+	if (err == OK) {
+		err = compile_light_bridge_compute_pipeline(*p_rd, kLightTopKEmitComputeGLSL, "particle_light64_topk_emit", light_topk_emit_shader, light_topk_emit_pipeline);
+	}
+	if (err == OK) {
+		err = compile_light_bridge_compute_pipeline(*p_rd, kLightClusterBlitComputeGLSL, "particle_light64_cluster_blit", light_cluster_blit_shader, light_cluster_blit_pipeline);
+	}
+	if (err == OK) {
+		const uint32_t staging_bytes = 16u + MAX_STAGED_LIGHT_CANDIDATES * uint32_t(sizeof(ParticleLightRecord64));
+		light_candidate_staging_buffer = p_rd->storage_buffer_create(staging_bytes);
+		light_cluster_elements_buffer = p_rd->storage_buffer_create(MAX_PARTICLE_LIGHTS * CLUSTER_ELEMENT_WORD_STRIDE * uint32_t(sizeof(uint32_t)));
+		light_emit_params_ubo = p_rd->uniform_buffer_create(sizeof(LightEmitParamsStd140));
+		if (light_candidate_staging_buffer.is_null() || light_cluster_elements_buffer.is_null() || light_emit_params_ubo.is_null()) {
+			err = ERR_CANT_CREATE;
+		}
+	}
+	light_gpu_bridge_rd = p_rd;
+	if (err != OK) {
+		_release_light_gpu_bridge(p_rd);
+		return err;
+	}
+	return OK;
+}
+
+void ParticlesMeshLightSortRD::_release_light_gpu_bridge(RenderingDevice *p_rd) {
+	if (!p_rd || light_gpu_bridge_rd != p_rd) {
+		return;
+	}
+	for (uint32_t i = 0; i < UNIFORM_SET_CACHE_CAPACITY; ++i) {
+		if (light_uniform_set_cache[i].uniform_set.is_valid() && p_rd->uniform_set_is_valid(light_uniform_set_cache[i].uniform_set)) {
+			p_rd->free_rid(light_uniform_set_cache[i].uniform_set);
+		}
+		light_uniform_set_cache[i] = CachedLightUniformSet{};
+	}
+	const RID to_free[] = {
+		light_harvest_pipeline,
+		light_harvest_shader,
+		light_topk_emit_pipeline,
+		light_topk_emit_shader,
+		light_cluster_blit_pipeline,
+		light_cluster_blit_shader,
+		light_candidate_staging_buffer,
+		light_cluster_elements_buffer,
+		light_emit_params_ubo,
+	};
+	for (uint32_t i = 0; i < sizeof(to_free) / sizeof(to_free[0]); ++i) {
+		if (to_free[i].is_valid()) {
+			p_rd->free_rid(to_free[i]);
+		}
+	}
+	light_harvest_pipeline = light_harvest_shader = RID();
+	light_topk_emit_pipeline = light_topk_emit_shader = RID();
+	light_cluster_blit_pipeline = light_cluster_blit_shader = RID();
+	light_candidate_staging_buffer = light_cluster_elements_buffer = light_emit_params_ubo = RID();
+	light_gpu_bridge_rd = nullptr;
+}
+
+RID ParticlesMeshLightSortRD::_acquire_cached_uniform_set(RenderingDevice *p_rd, RID p_shader, const RD::Uniform *p_uniforms, uint32_t p_count) {
+	if (!p_rd || p_shader.is_null() || !p_uniforms || p_count == 0 || p_count > 4u) {
+		return RID();
+	}
+	RID key_rids[4] = {};
+	for (uint32_t i = 0; i < p_count; ++i) {
+		key_rids[i] = p_uniforms[i].get_id_count() > 0 ? p_uniforms[i].get_id(0) : RID();
+	}
+	++light_uniform_set_tick;
+	uint32_t free_idx = UINT32_MAX;
+	uint32_t oldest_idx = 0;
+	uint64_t oldest_tick = UINT64_MAX;
+	for (uint32_t i = 0; i < UNIFORM_SET_CACHE_CAPACITY; ++i) {
+		CachedLightUniformSet &entry = light_uniform_set_cache[i];
+		if (entry.uniform_set.is_valid() && !p_rd->uniform_set_is_valid(entry.uniform_set)) {
+			entry = CachedLightUniformSet{};
+		}
+		if (entry.uniform_set.is_null()) {
+			if (free_idx == UINT32_MAX) {
+				free_idx = i;
+			}
+			continue;
+		}
+		if (entry.shader == p_shader && entry.rids[0] == key_rids[0] && entry.rids[1] == key_rids[1] &&
+				entry.rids[2] == key_rids[2] && entry.rids[3] == key_rids[3]) {
+			entry.last_used_tick = light_uniform_set_tick;
+			return entry.uniform_set;
+		}
+		if (entry.last_used_tick < oldest_tick) {
+			oldest_tick = entry.last_used_tick;
+			oldest_idx = i;
+		}
+	}
+
+	Vector<RD::Uniform> uvec;
+	uvec.resize(p_count);
+	for (uint32_t i = 0; i < p_count; ++i) {
+		uvec.write[i] = p_uniforms[i];
+	}
+	const RID created = p_rd->uniform_set_create(uvec, p_shader, 0);
+	if (created.is_null()) {
+		return RID();
+	}
+	const uint32_t slot = (free_idx != UINT32_MAX) ? free_idx : oldest_idx;
+	if (light_uniform_set_cache[slot].uniform_set.is_valid() && p_rd->uniform_set_is_valid(light_uniform_set_cache[slot].uniform_set)) {
+		p_rd->free_rid(light_uniform_set_cache[slot].uniform_set);
+	}
+	light_uniform_set_cache[slot].shader = p_shader;
+	for (uint32_t i = 0; i < 4u; ++i) {
+		light_uniform_set_cache[slot].rids[i] = key_rids[i];
+	}
+	light_uniform_set_cache[slot].uniform_set = created;
+	light_uniform_set_cache[slot].last_used_tick = light_uniform_set_tick;
+	return created;
+}
+
+void ParticlesMeshLightSortRD::begin_cluster_builder_frame(
+		const ClusterBuilderRD *p_builder,
+		const Transform3D &p_view_xform,
+		float p_z_near,
+		float p_z_far,
+		bool p_camera_orthogonal,
+		float p_sphere_overfit,
+		uint32_t p_max_elements_by_type) {
+	active_cluster_context.builder = p_builder;
+	active_cluster_context.view_xform = p_view_xform;
+	active_cluster_context.z_near = p_z_near;
+	active_cluster_context.z_far = p_z_far;
+	active_cluster_context.camera_orthogonal = p_camera_orthogonal;
+	active_cluster_context.sphere_overfit = p_sphere_overfit;
+	active_cluster_context.max_elements_by_type = p_max_elements_by_type;
+	active_cluster_context.pending_gpu_omni_count = 0;
+	active_cluster_context.active = (p_builder != nullptr);
+}
+
+uint32_t ParticlesMeshLightSortRD::get_pending_cluster_gpu_omni_count(const ClusterBuilderRD *p_builder) const {
+	if (!active_cluster_context.active || active_cluster_context.builder != p_builder) {
+		return 0u;
+	}
+	return active_cluster_context.pending_gpu_omni_count;
+}
+
+void ParticlesMeshLightSortRD::clear_cluster_builder_frame(const ClusterBuilderRD *p_builder) {
+	if (p_builder == nullptr || active_cluster_context.builder == p_builder) {
+		active_cluster_context = ClusterFrameContext{};
+	}
+}
+
+void ParticlesMeshLightSortRD::blit_cluster_gpu_omni_elements(
+		RenderingDevice *p_rd,
+		const ClusterBuilderRD *p_builder,
+		RID p_dst_element_buffer,
+		uint32_t p_dst_element_offset,
+		uint32_t p_count) {
+	if (!p_rd || !active_cluster_context.active || active_cluster_context.builder != p_builder || p_count == 0u || p_dst_element_buffer.is_null() || light_cluster_elements_buffer.is_null() || light_cluster_blit_pipeline.is_null()) {
+		active_cluster_context.pending_gpu_omni_count = 0u;
+		return;
+	}
+	RD::Uniform uniforms[2];
+	uniforms[0].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+	uniforms[0].binding = 0;
+	uniforms[0].append_id(light_cluster_elements_buffer);
+	uniforms[1].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+	uniforms[1].binding = 1;
+	uniforms[1].append_id(p_dst_element_buffer);
+	const RID uset = _acquire_cached_uniform_set(p_rd, light_cluster_blit_shader, uniforms, 2u);
+	if (uset.is_valid()) {
+		const uint32_t push[4] = { p_dst_element_offset, MIN(p_count, MAX_PARTICLE_LIGHTS), 0u, 0u };
+		RD::ComputeListID cl = p_rd->compute_list_begin();
+		p_rd->compute_list_bind_compute_pipeline(cl, light_cluster_blit_pipeline);
+		p_rd->compute_list_bind_uniform_set(cl, uset, 0);
+		p_rd->compute_list_set_push_constant(cl, push, sizeof(push));
+		p_rd->compute_list_dispatch(cl, 1u, 1u, 1u);
+		p_rd->compute_list_end();
+	}
+	active_cluster_context.pending_gpu_omni_count = 0u;
+}
+
+uint32_t ParticlesMeshLightSortRD::dispatch_registered_external_lights_gpu(
+		RenderingDevice *p_rd,
+		RID p_source_viewport,
+		RID p_source_scenario,
+		bool p_is_reflection_probe,
+		const Transform3D &p_view_inv_transform,
+		float p_exposure_norm,
+		RID p_omni_light_buffer,
+		uint32_t p_base_omni_index,
+		uint32_t p_max_omni_lights,
+		LocalVector<ReservedGpuLightBounds> &r_mobile_bounds_out) {
+	r_mobile_bounds_out.clear();
+	if (active_cluster_context.active) {
+		active_cluster_context.pending_gpu_omni_count = 0u;
+	}
+	if (!p_rd || p_omni_light_buffer.is_null() || p_base_omni_index >= p_max_omni_lights) {
+		return 0u;
+	}
+
+	LocalVector<ExternalLightSlotRegistration> matched_slots;
 	LocalVector<uint64_t> stale_owners;
 	{
 		MutexLock lock(active_lights_mutex);
 		for (KeyValue<uint64_t, ExternalOwnerLightState> &E : external_owner_lights) {
-			ExternalOwnerLightState &st = E.value;
+			const ExternalOwnerLightState &st = E.value;
 			if (!st.has_pending_rd_slot) {
 				continue;
 			}
-			if (st.pending_slot.capacity == 0) {
-				st.compacted_lights.clear();
-				st.harvested_present_seq = st.pending_slot.present_seq;
-				st.has_pending_rd_slot = false;
+			const ExternalLightSlotRegistration &reg = st.pending_slot;
+			if (reg.capacity == 0u) {
 				continue;
 			}
-			if (!st.pending_slot.meta_rid.is_valid() || !st.pending_slot.records_rid.is_valid()) {
+			if (reg.meta_rid.is_null() || reg.records_rid.is_null() || reg.capacity > MAX_PARTICLE_LIGHTS) {
 				stale_owners.push_back(E.key);
 				continue;
 			}
-			if (st.pending_slot.present_seq != st.harvested_present_seq) {
-				to_read.push_back(st.pending_slot);
-			} else {
-				st.has_pending_rd_slot = false;
+			if (reg.owner_ptr != nullptr && reg.is_slot_live_fn != nullptr) {
+				if (!reg.is_slot_live_fn(reg.owner_ptr, reg.generation, reg.slot_index, reg.lease_serial)) {
+					stale_owners.push_back(E.key);
+					continue;
+				}
 			}
+			// Strict Cross-World & Cross-Viewport isolation:
+			if (reg.viewport_rid.is_valid()) {
+				if (p_is_reflection_probe || p_source_viewport != reg.viewport_rid) {
+					continue;
+				}
+			}
+			if (reg.scenario_rid.is_valid() && p_source_scenario.is_valid() && p_source_scenario != reg.scenario_rid) {
+				continue;
+			}
+			matched_slots.push_back(reg);
 		}
 		for (uint32_t i = 0; i < stale_owners.size(); ++i) {
 			external_owner_lights.erase(stale_owners[i]);
 		}
 	}
 
-	for (uint32_t i = 0; i < to_read.size(); ++i) {
-		const ExternalLightSlotRegistration &slot = to_read[i];
-		const Vector<uint8_t> meta_bytes = p_rd->buffer_get_data(slot.meta_rid, 0, 32u);
-		if (meta_bytes.size() != 32) {
-			unregister_external_light_owner(slot.owner_key);
-			continue;
-		}
-		uint32_t active_count = 0;
-		memcpy(&active_count, meta_bytes.ptr(), sizeof(uint32_t));
-		const uint32_t read_count = MIN(active_count, slot.capacity);
-		Vector<uint8_t> rec_bytes;
-		if (read_count > 0u) {
-			rec_bytes = p_rd->buffer_get_data(slot.records_rid, 0, read_count * uint32_t(sizeof(ParticleLightRecord64)));
-		}
-		(void)upsert_external_role8_packet(
-				slot.owner_key,
-				meta_bytes.ptr(),
-				size_t(meta_bytes.size()),
-				rec_bytes.is_empty() ? nullptr : rec_bytes.ptr(),
-				size_t(rec_bytes.size()),
-				slot.capacity,
-				slot.present_seq);
+	if (matched_slots.is_empty()) {
+		return 0u;
 	}
+
+	std::sort(matched_slots.ptr(), matched_slots.ptr() + matched_slots.size(),
+			[](const ExternalLightSlotRegistration &a, const ExternalLightSlotRegistration &b) {
+				return a.owner_key < b.owner_key;
+			});
+
+	uint32_t total_requested_cap = 0u;
+	for (uint32_t i = 0; i < matched_slots.size(); ++i) {
+		total_requested_cap = MIN(MAX_PARTICLE_LIGHTS, total_requested_cap + matched_slots[i].capacity);
+	}
+	uint32_t avail_omni = p_max_omni_lights - p_base_omni_index;
+	if (active_cluster_context.active && active_cluster_context.max_elements_by_type > p_base_omni_index) {
+		avail_omni = MIN(avail_omni, active_cluster_context.max_elements_by_type - p_base_omni_index);
+	} else if (active_cluster_context.active) {
+		return 0u;
+	}
+	const uint32_t reserved_lights = MIN(total_requested_cap, MIN(MAX_PARTICLE_LIGHTS, avail_omni));
+	if (reserved_lights == 0u) {
+		return 0u;
+	}
+
+	if (_ensure_light_gpu_bridge(p_rd) != OK) {
+		return 0u;
+	}
+
+	p_rd->buffer_clear(light_candidate_staging_buffer, 0, 16u);
+
+	uint32_t harvested_slots = 0u;
+	AABB union_world_bounds;
+	bool has_bounds = false;
+	{
+		RD::ComputeListID cl = p_rd->compute_list_begin();
+		p_rd->compute_list_bind_compute_pipeline(cl, light_harvest_pipeline);
+		for (uint32_t i = 0; i < matched_slots.size(); ++i) {
+			const ExternalLightSlotRegistration &reg = matched_slots[i];
+			RD::Uniform u[3];
+			u[0].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+			u[0].binding = 0;
+			u[0].append_id(reg.meta_rid);
+			u[1].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+			u[1].binding = 1;
+			u[1].append_id(reg.records_rid);
+			u[2].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+			u[2].binding = 2;
+			u[2].append_id(light_candidate_staging_buffer);
+			const RID uset = _acquire_cached_uniform_set(p_rd, light_harvest_shader, u, 3u);
+			if (uset.is_null()) {
+				continue;
+			}
+			if (harvested_slots > 0u) {
+				p_rd->compute_list_add_barrier(cl);
+			}
+			const uint32_t push[4] = { reg.capacity, MAX_STAGED_LIGHT_CANDIDATES, 0u, 0u };
+			p_rd->compute_list_bind_uniform_set(cl, uset, 0);
+			p_rd->compute_list_set_push_constant(cl, push, sizeof(push));
+			p_rd->compute_list_dispatch(cl, 1u, 1u, 1u);
+			if (reg.world_bounds.size != Vector3()) {
+				union_world_bounds = has_bounds ? union_world_bounds.merge(reg.world_bounds) : reg.world_bounds;
+				has_bounds = true;
+			}
+			++harvested_slots;
+		}
+		p_rd->compute_list_end();
+	}
+
+	if (harvested_slots == 0u) {
+		return 0u;
+	}
+
+	LightEmitParamsStd140 emit_params;
+	for (int r = 0; r < 3; ++r) {
+		emit_params.light_view_row0[r] = (r == 0) ? p_view_inv_transform.basis.rows[0][0] : emit_params.light_view_row0[r];
+	}
+	emit_params.light_view_row0[0] = p_view_inv_transform.basis.rows[0][0];
+	emit_params.light_view_row0[1] = p_view_inv_transform.basis.rows[0][1];
+	emit_params.light_view_row0[2] = p_view_inv_transform.basis.rows[0][2];
+	emit_params.light_view_row0[3] = p_view_inv_transform.origin.x;
+	emit_params.light_view_row1[0] = p_view_inv_transform.basis.rows[1][0];
+	emit_params.light_view_row1[1] = p_view_inv_transform.basis.rows[1][1];
+	emit_params.light_view_row1[2] = p_view_inv_transform.basis.rows[1][2];
+	emit_params.light_view_row1[3] = p_view_inv_transform.origin.y;
+	emit_params.light_view_row2[0] = p_view_inv_transform.basis.rows[2][0];
+	emit_params.light_view_row2[1] = p_view_inv_transform.basis.rows[2][1];
+	emit_params.light_view_row2[2] = p_view_inv_transform.basis.rows[2][2];
+	emit_params.light_view_row2[3] = p_view_inv_transform.origin.z;
+
+	Transform3D cluster_view = active_cluster_context.active ? active_cluster_context.view_xform : p_view_inv_transform;
+	float cluster_scale = cluster_view.basis.get_uniform_scale();
+	Transform3D cluster_ortho = cluster_view;
+	if (cluster_scale < 0.98f || cluster_scale > 1.02f) {
+		cluster_ortho.basis.orthonormalize();
+	}
+	emit_params.cluster_view_row0[0] = cluster_ortho.basis.rows[0][0];
+	emit_params.cluster_view_row0[1] = cluster_ortho.basis.rows[0][1];
+	emit_params.cluster_view_row0[2] = cluster_ortho.basis.rows[0][2];
+	emit_params.cluster_view_row0[3] = cluster_view.origin.x;
+	emit_params.cluster_view_row1[0] = cluster_ortho.basis.rows[1][0];
+	emit_params.cluster_view_row1[1] = cluster_ortho.basis.rows[1][1];
+	emit_params.cluster_view_row1[2] = cluster_ortho.basis.rows[1][2];
+	emit_params.cluster_view_row1[3] = cluster_view.origin.y;
+	emit_params.cluster_view_row2[0] = cluster_ortho.basis.rows[2][0];
+	emit_params.cluster_view_row2[1] = cluster_ortho.basis.rows[2][1];
+	emit_params.cluster_view_row2[2] = cluster_ortho.basis.rows[2][2];
+	emit_params.cluster_view_row2[3] = cluster_view.origin.z;
+
+	const float overfit = (active_cluster_context.active ? active_cluster_context.sphere_overfit : 1.05f) * cluster_scale;
+	emit_params.misc_floats[0] = p_exposure_norm;
+	emit_params.misc_floats[1] = active_cluster_context.active ? active_cluster_context.z_near : 0.05f;
+	emit_params.misc_floats[2] = active_cluster_context.active ? active_cluster_context.z_far : 4000.0f;
+	emit_params.misc_floats[3] = overfit;
+	emit_params.counts[0] = p_base_omni_index;
+	emit_params.counts[1] = reserved_lights;
+	emit_params.counts[2] = MAX_STAGED_LIGHT_CANDIDATES;
+	emit_params.counts[3] = (active_cluster_context.active && active_cluster_context.camera_orthogonal) ? 1u : 0u;
+
+	p_rd->buffer_update(light_emit_params_ubo, 0, sizeof(emit_params), &emit_params);
+
+	RD::Uniform emit_u[4];
+	emit_u[0].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+	emit_u[0].binding = 0;
+	emit_u[0].append_id(light_candidate_staging_buffer);
+	emit_u[1].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+	emit_u[1].binding = 1;
+	emit_u[1].append_id(p_omni_light_buffer);
+	emit_u[2].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+	emit_u[2].binding = 2;
+	emit_u[2].append_id(light_cluster_elements_buffer);
+	emit_u[3].uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
+	emit_u[3].binding = 3;
+	emit_u[3].append_id(light_emit_params_ubo);
+	const RID emit_uset = _acquire_cached_uniform_set(p_rd, light_topk_emit_shader, emit_u, 4u);
+	if (emit_uset.is_null()) {
+		return 0u;
+	}
+
+	{
+		RD::ComputeListID cl = p_rd->compute_list_begin();
+		p_rd->compute_list_bind_compute_pipeline(cl, light_topk_emit_pipeline);
+		p_rd->compute_list_bind_uniform_set(cl, emit_uset, 0);
+		p_rd->compute_list_dispatch(cl, 1u, 1u, 1u);
+		p_rd->compute_list_end();
+	}
+
+	if (active_cluster_context.active) {
+		active_cluster_context.pending_gpu_omni_count = reserved_lights;
+	}
+	if (has_bounds) {
+		r_mobile_bounds_out.push_back({ union_world_bounds, p_base_omni_index, reserved_lights });
+	}
+	return reserved_lights;
 }
 
 void ParticlesMeshLightSortRD::clear_active_particle_lights() {

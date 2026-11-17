@@ -31,6 +31,7 @@
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_mesh_light_sort_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_data_rd.h"
 #include "servers/rendering/rendering_server.h"
@@ -821,7 +822,11 @@ Error ParticlesStorage::_external_cancel_body(RID p_particles, const uint8_t *p_
 	auto &owner = *particles->external;
 	for (uint32_t i = 0; i < owner.slot_count; ++i) {
 		if (token_matches(owner.slots[i].lease_token, p_lease)) {
-			return owner.cancel_slot(i);
+			const Error err = owner.cancel_slot(i);
+			if (err == OK && mesh_light_sort_rd) {
+				mesh_light_sort_rd->unregister_external_light_slot(p_particles.get_id(), owner.generation, i);
+			}
+			return err;
 		}
 	}
 	return ERR_INVALID_PARAMETER;
@@ -842,6 +847,9 @@ Error ParticlesStorage::_external_withdraw_body(RID p_particles, uint64_t p_gene
 		return ERR_INVALID_PARAMETER;
 	}
 	particles->external->withdraw();
+	if (mesh_light_sort_rd) {
+		mesh_light_sort_rd->unregister_external_light_owner(p_particles.get_id());
+	}
 	// Explicit withdrawal runs outside Registry service locks. Return renderer
 	// cache source pins synchronously, even when no later draw or free occurs.
 	particles->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_PARTICLES);

@@ -5076,17 +5076,34 @@ void Registry::production_output_seal(ProductionPhysicalContextRef context, GDEx
 		return;
 	}
 	if (owner.config.profile == RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64) {
+		slot.state = Owner::LeaseState::ADOPTED;
 		if (RendererRD::ParticlesMeshLightSortRD *light_sort = storage->get_mesh_light_sort_rd()) {
 			using Storage = RendererRD::ExternalOutputStorage;
 			RendererRD::ParticlesMeshLightSortRD::ExternalLightSlotRegistration reg;
 			reg.owner_key = input->particles;
+			reg.owner_ptr = &owner;
+			reg.is_slot_live_fn = [](const RendererRD::ExternalOutputOwner *p_owner, uint64_t p_gen, uint32_t p_slot, uint64_t p_lease) -> bool {
+				if (!p_owner || !p_owner->admits_work() || p_owner->generation != p_gen || p_slot >= p_owner->slot_count) {
+					return false;
+				}
+				const auto &live_slot = p_owner->slots[p_slot];
+				return !live_slot.publication_closed && !live_slot.pass_uses_closed && live_slot.lease_serial == p_lease &&
+						live_slot.storage != nullptr &&
+						(live_slot.state == RendererRD::ExternalOutputOwner::LeaseState::ADOPTED ||
+								live_slot.state == RendererRD::ExternalOutputOwner::LeaseState::SEALED_RECORDED);
+			};
+			reg.generation = owner.generation;
+			reg.slot_index = slot_index;
+			reg.lease_serial = slot.lease_serial;
+			reg.scenario_rid = slot.scene_cull_bound ? slot.scene_cull_scenario : RID();
+			reg.viewport_rid = slot.scene_cull_bound ? slot.scene_cull_viewport : RID();
+			reg.world_bounds = slot.scene_cull_bound ? slot.scene_cull_world : owner.config.bounds;
 			reg.records_rid = slot.storage ? slot.storage->resources[Storage::CURRENT_RECORDS].rid : RID();
 			reg.meta_rid = slot.storage ? slot.storage->resources[Storage::OUTPUT_META].rid : RID();
 			reg.capacity = owner.config.capacity;
 			reg.present_seq = slot.request.common.present_seq;
 			light_sort->register_sealed_external_light_slot(reg);
 		}
-		slot.state = Owner::LeaseState::ADOPTED;
 	}
 	OriginalOperationIdentity identity{ request->operation.owner_request_nonce, request->attachment->library_generation, device_records[request->attachment->device].session, request->operation.record_generation, request->operation.canonical_begin, request->operation.canonical_end };
 	CRASH_COND(bind_checked_record_append(seal.original_append, identity) != OK);

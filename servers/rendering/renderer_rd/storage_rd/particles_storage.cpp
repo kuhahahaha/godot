@@ -334,6 +334,9 @@ void ParticlesStorage::particles_free(RID p_rid) {
 	ERR_FAIL_NULL(particles);
 
 	if (particles->external) {
+		if (mesh_light_sort_rd) {
+			mesh_light_sort_rd->unregister_external_light_owner(p_rid.get_id());
+		}
 		ExternalOutputOwner *external = particles->external;
 		if (external->state != ExternalOutputOwner::GenerationState::RELEASED) {
 			external->withdraw();

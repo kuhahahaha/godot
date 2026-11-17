@@ -1246,18 +1246,24 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		r_positional_light_count++;
 	}
 
+	static_assert(sizeof(LightData) == 224u, "LightData must match 56-word GPU ABI");
+	static_assert(offsetof(LightData, specular_amount) == 20u * 4u, "LightData specular_amount offset");
+	static_assert(offsetof(LightData, mask) == 49u * 4u, "LightData mask offset");
+	static_assert(offsetof(LightData, volumetric_fog_energy) == 50u * 4u, "LightData volumetric_fog_energy offset");
+
 	frame_particle_omni_lights.clear();
+	ParticlesMeshLightSortRD *particle_light_sort = nullptr;
+	float particle_exposure_norm = 1.0f;
+	if (p_render_data->camera_attributes.is_valid()) {
+		particle_exposure_norm = RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes);
+	}
 	if (ParticlesStorage *particles_storage = ParticlesStorage::get_singleton()) {
+		particle_light_sort = particles_storage->get_mesh_light_sort_rd();
 		LocalVector<ParticleLightRecord64> particle_lights;
-		if (ParticlesMeshLightSortRD *light_sort = particles_storage->get_mesh_light_sort_rd()) {
-			light_sort->harvest_registered_external_lights(RD::get_singleton());
-			light_sort->get_active_particle_lights(particle_lights);
+		if (particle_light_sort) {
+			particle_light_sort->get_active_particle_lights(particle_lights);
 		}
 		if (!particle_lights.is_empty() && omni_lights != nullptr) {
-			float exposure_norm = 1.0f;
-			if (p_render_data->camera_attributes.is_valid()) {
-				exposure_norm = RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes);
-			}
 			for (uint32_t pi = 0; pi < particle_lights.size() && omni_light_count < max_lights; pi++) {
 				const ParticleLightRecord64 &prec = particle_lights[pi];
 				if (!Math::is_finite(prec.position_world[0]) || !Math::is_finite(prec.position_world[1]) || !Math::is_finite(prec.position_world[2]) ||
@@ -1284,9 +1290,9 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 				ld.position[2] = view_pos.z;
 				ld.inv_radius = 1.0f / radius;
 				ld.attenuation = prec.attenuation_exp > 0.0f ? prec.attenuation_exp : 1.0f;
-				ld.color[0] = prec.color_hdr[0] * diff_scale * exposure_norm;
-				ld.color[1] = prec.color_hdr[1] * diff_scale * exposure_norm;
-				ld.color[2] = prec.color_hdr[2] * diff_scale * exposure_norm;
+				ld.color[0] = prec.color_hdr[0] * diff_scale * particle_exposure_norm;
+				ld.color[1] = prec.color_hdr[1] * diff_scale * particle_exposure_norm;
+				ld.color[2] = prec.color_hdr[2] * diff_scale * particle_exposure_norm;
 				ld.specular_amount = spec_scale;
 				ld.volumetric_fog_energy = vol_fog;
 				ld.mask = 0xFFFFFFFFu;
@@ -1302,6 +1308,34 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 	//update without barriers
 	if (omni_light_count) {
 		RD::get_singleton()->buffer_update(omni_light_buffer, 0, sizeof(LightData) * omni_light_count, omni_lights);
+	}
+
+	// Zero-CPU-readback GPU consumption of sealed PARTICLE_LIGHT_64 (role 7 + role 8) slots:
+	if (particle_light_sort && omni_light_buffer.is_valid() && omni_light_count < max_lights) {
+		LocalVector<ParticlesMeshLightSortRD::ReservedGpuLightBounds> gpu_bounds;
+		const uint32_t gpu_reserved = particle_light_sort->dispatch_registered_external_lights_gpu(
+				RD::get_singleton(),
+				p_render_data->source_viewport,
+				RID(),
+				p_render_data->reflection_probe.is_valid(),
+				inverse_transform,
+				particle_exposure_norm,
+				omni_light_buffer,
+				omni_light_count,
+				max_lights,
+				gpu_bounds);
+		if (gpu_reserved > 0u) {
+			omni_light_count += gpu_reserved;
+			r_positional_light_count += gpu_reserved;
+			for (uint32_t bi = 0; bi < gpu_bounds.size(); ++bi) {
+				const ParticlesMeshLightSortRD::ReservedGpuLightBounds &gb = gpu_bounds[bi];
+				const Vector3 center = gb.world_bounds.get_center();
+				const float bound_radius = MAX(0.001f, gb.world_bounds.size.length() * 0.5f);
+				for (uint32_t k = 0; k < gb.count; ++k) {
+					frame_particle_omni_lights.push_back({ center, bound_radius, gb.first_buffer_index + k });
+				}
+			}
+		}
 	}
 
 	if (spot_light_count) {

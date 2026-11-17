@@ -241,6 +241,150 @@ TEST_CASE("[particle_mesh_subuv_light] Deterministic top-K particle light compac
 	Lane::free_particle_lights_rd(rd, gpu_lights);
 	CHECK(gpu_lights.header_buffer.is_null());
 	CHECK(gpu_lights.records_buffer.is_null());
+
+	// Zero-CPU-readback GPU Compute consumption bridge (role 7 + role 8 -> omni_light_buffer + ClusterBuilderRD element_buffer),
+	// Cross-World/Viewport isolation, fault silencing, and withdrawal lifecycle on real Metal RD:
+	{
+		RendererRD::ParticleLightRecord64 gpu_recs[4] = {};
+		// Candidate 0: lower importance (20000), valid
+		gpu_recs[0].position_world[0] = 2.0f;
+		gpu_recs[0].position_world[1] = 3.0f;
+		gpu_recs[0].position_world[2] = -4.0f;
+		gpu_recs[0].radius = 5.0f;
+		gpu_recs[0].color_hdr[0] = 2.0f;
+		gpu_recs[0].attenuation_exp = 2.0f;
+		gpu_recs[0].id_index = 10u;
+		gpu_recs[0].id_acquire_tag = 1u;
+		gpu_recs[0].flags = RendererRD::ParticleLightRecord64::FLAG_ACTIVE;
+		gpu_recs[0].screen_importance_q16 = 20000u;
+		gpu_recs[0].specular_scale = 0.5f;
+		gpu_recs[0].diffuse_scale = 2.0f;
+		gpu_recs[0].volumetric_scattering = 0.25f;
+
+		// Candidate 1: non-zero reserved0 -> must be rejected on GPU
+		gpu_recs[1] = gpu_recs[0];
+		gpu_recs[1].id_index = 11u;
+		gpu_recs[1].screen_importance_q16 = 60000u;
+		gpu_recs[1].reserved0 = 99u;
+
+		// Candidate 2: highest valid importance (45000) -> must win rank 0!
+		gpu_recs[2] = gpu_recs[0];
+		gpu_recs[2].position_world[0] = -6.0f;
+		gpu_recs[2].radius = 10.0f;
+		gpu_recs[2].color_hdr[0] = 4.0f;
+		gpu_recs[2].id_index = 12u;
+		gpu_recs[2].screen_importance_q16 = 45000u;
+		gpu_recs[2].specular_scale = 1.5f;
+		gpu_recs[2].diffuse_scale = 0.5f;
+		gpu_recs[2].volumetric_scattering = 3.0f;
+
+		const uint32_t meta_words_ok[8] = { 3u, 0u, 0u, 0u, 4u, uint32_t(RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64), 1u, 0u };
+		Vector<uint8_t> meta_init;
+		meta_init.resize(32);
+		std::memcpy(meta_init.ptrw(), meta_words_ok, 32);
+		Vector<uint8_t> recs_init;
+		recs_init.resize(sizeof(gpu_recs));
+		std::memcpy(recs_init.ptrw(), gpu_recs, sizeof(gpu_recs));
+
+		RID meta_rid = rd.storage_buffer_create(32, meta_init);
+		RID recs_rid = rd.storage_buffer_create(sizeof(gpu_recs), recs_init);
+		RID omni_buf = rd.storage_buffer_create(8u * 224u);
+		RID elem_buf = rd.storage_buffer_create(8u * 80u);
+		rd.buffer_clear(omni_buf, 0, 8u * 224u);
+		rd.buffer_clear(elem_buf, 0, 8u * 80u);
+
+		const RID vp_world_a = RID::from_uint64(0x1111u);
+		const RID vp_world_b = RID::from_uint64(0x2222u);
+		const RID scen_world_a = RID::from_uint64(0xAAAAu);
+		const RID scen_world_b = RID::from_uint64(0xBBBBu);
+
+		Lane::ExternalLightSlotRegistration reg;
+		reg.owner_key = 0x9001u;
+		reg.generation = 7u;
+		reg.slot_index = 1u;
+		reg.viewport_rid = vp_world_a;
+		reg.scenario_rid = scen_world_a;
+		reg.world_bounds = AABB(Vector3(-10, -10, -10), Vector3(20, 20, 20));
+		reg.meta_rid = meta_rid;
+		reg.records_rid = recs_rid;
+		reg.capacity = 4u;
+		reg.present_seq = 1u;
+		lane.register_sealed_external_light_slot(reg);
+
+		LocalVector<Lane::ReservedGpuLightBounds> mob_bounds;
+		// Cross-World / Cross-Viewport isolation: World B must harvest 0 lights from World A!
+		CHECK(lane.dispatch_registered_external_lights_gpu(&rd, vp_world_b, scen_world_a, false, Transform3D(), 1.0f, omni_buf, 1u, 8u, mob_bounds) == 0u);
+		CHECK(lane.dispatch_registered_external_lights_gpu(&rd, vp_world_a, scen_world_b, false, Transform3D(), 1.0f, omni_buf, 1u, 8u, mob_bounds) == 0u);
+		CHECK(lane.dispatch_registered_external_lights_gpu(&rd, vp_world_a, scen_world_a, true, Transform3D(), 1.0f, omni_buf, 1u, 8u, mob_bounds) == 0u);
+
+		// Matching World A + cluster frame context: reserves 4 GPU slots at base_omni_index = 1
+		const ClusterBuilderRD *dummy_builder = reinterpret_cast<const ClusterBuilderRD *>(uintptr_t(0x1000));
+		lane.begin_cluster_builder_frame(dummy_builder, Transform3D(), 0.05f, 4000.0f, false, 1.1f, 32u);
+		const uint32_t reserved = lane.dispatch_registered_external_lights_gpu(&rd, vp_world_a, scen_world_a, false, Transform3D(), 2.0f, omni_buf, 1u, 8u, mob_bounds);
+		REQUIRE(reserved == 4u);
+		REQUIRE(mob_bounds.size() == 1u);
+		CHECK(mob_bounds[0].first_buffer_index == 1u);
+		CHECK(mob_bounds[0].count == 4u);
+		CHECK(lane.get_pending_cluster_gpu_omni_count(dummy_builder) == 4u);
+		lane.blit_cluster_gpu_omni_elements(&rd, dummy_builder, elem_buf, 2u, 4u);
+		lane.clear_cluster_builder_frame(dummy_builder);
+
+		// Verify GPU-written omni_light_buffer & element_buffer in test harness:
+		const Vector<uint8_t> omni_rb = rd.buffer_get_data(omni_buf);
+		REQUIRE(omni_rb.size() == 8 * 224);
+		const float *omni_f = reinterpret_cast<const float *>(omni_rb.ptr());
+		const uint32_t *omni_u = reinterpret_cast<const uint32_t *>(omni_rb.ptr());
+		// Rank 0 -> omni_buf[1] (Candidate 2: pos.x=-6, radius=10 -> inv_radius=0.1, color.r=4*0.5*2=4, spec=1.5, fog=3.0)
+		CHECK(Math::is_equal_approx(omni_f[1 * 56 + 0], -6.0f));
+		CHECK(Math::is_equal_approx(omni_f[1 * 56 + 3], 0.1f));
+		CHECK(Math::is_equal_approx(omni_f[1 * 56 + 8], 4.0f));
+		CHECK(Math::is_equal_approx(omni_f[1 * 56 + 20], 1.5f));
+		CHECK(omni_u[1 * 56 + 49] == 0xFFFFFFFFu);
+		CHECK(Math::is_equal_approx(omni_f[1 * 56 + 50], 3.0f));
+		// Rank 1 -> omni_buf[2] (Candidate 0: pos.x=2, radius=5 -> inv_radius=0.2, color.r=2*2*2=8, spec=0.5, fog=0.25)
+		CHECK(Math::is_equal_approx(omni_f[2 * 56 + 0], 2.0f));
+		CHECK(Math::is_equal_approx(omni_f[2 * 56 + 3], 0.2f));
+		CHECK(Math::is_equal_approx(omni_f[2 * 56 + 8], 8.0f));
+		CHECK(Math::is_equal_approx(omni_f[2 * 56 + 20], 0.5f));
+		CHECK(omni_u[2 * 56 + 49] == 0xFFFFFFFFu);
+		CHECK(Math::is_equal_approx(omni_f[2 * 56 + 50], 0.25f));
+		// Unused reserved slots [3] and [4] must be zeroed degenerate lights:
+		CHECK(omni_f[3 * 56 + 3] == 0.0f);
+		CHECK(omni_u[3 * 56 + 49] == 0u);
+		CHECK(omni_f[4 * 56 + 3] == 0.0f);
+		CHECK(omni_u[4 * 56 + 49] == 0u);
+
+		const Vector<uint8_t> elem_rb = rd.buffer_get_data(elem_buf);
+		REQUIRE(elem_rb.size() == 8 * 80);
+		const float *elem_f = reinterpret_cast<const float *>(elem_rb.ptr());
+		const uint32_t *elem_u = reinterpret_cast<const uint32_t *>(elem_rb.ptr());
+		// Blitted at dst_element_offset = 2: elem[2] -> omni 1 (scale = 10 * 1.1 = 11), elem[4] -> unused zero-scale
+		CHECK(elem_u[2 * 20 + 3] == 1u);
+		CHECK(Math::is_equal_approx(elem_f[2 * 20 + 16], 11.0f));
+		CHECK(elem_u[3 * 20 + 3] == 2u);
+		CHECK(Math::is_equal_approx(elem_f[3 * 20 + 16], 5.5f));
+		CHECK(elem_f[4 * 20 + 16] == 0.0f);
+
+		// Producer fault bit in role 7 must silence all lights on GPU:
+		const uint32_t meta_words_fault[8] = { 3u, 0u, 0u, 8u, 4u, uint32_t(RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64), 2u, 0u };
+		rd.buffer_update(meta_rid, 0, 32, meta_words_fault);
+		REQUIRE(lane.dispatch_registered_external_lights_gpu(&rd, vp_world_a, scen_world_a, false, Transform3D(), 1.0f, omni_buf, 1u, 8u, mob_bounds) == 4u);
+		const Vector<uint8_t> omni_fault_rb = rd.buffer_get_data(omni_buf);
+		const uint32_t *omni_fault_u = reinterpret_cast<const uint32_t *>(omni_fault_rb.ptr());
+		CHECK(omni_fault_u[1 * 56 + 49] == 0u);
+		CHECK(omni_fault_u[2 * 56 + 49] == 0u);
+
+		// Cancel / withdraw slot lifecycle immediately unregisters emission:
+		lane.unregister_external_light_slot(0x9001u, 7u, 1u);
+		CHECK(lane.dispatch_registered_external_lights_gpu(&rd, vp_world_a, scen_world_a, false, Transform3D(), 1.0f, omni_buf, 1u, 8u, mob_bounds) == 0u);
+
+		lane.release_light_gpu_bridge(&rd);
+		rd.free_rid(elem_buf);
+		rd.free_rid(omni_buf);
+		rd.free_rid(recs_rid);
+		rd.free_rid(meta_rid);
+	}
+
 	lane.release_translucent_seed_shader();
 #endif
 }

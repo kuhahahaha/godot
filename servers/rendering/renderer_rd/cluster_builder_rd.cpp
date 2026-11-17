@@ -30,8 +30,12 @@
 
 #include "cluster_builder_rd.h"
 
+#include "servers/rendering/renderer_rd/storage_rd/particles_mesh_light_sort_rd.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_globals.h" // IWYU pragma: keep. RENDER_TIMESTAMP macro uses RSG.
+
+#include <cstddef>
 
 ClusterBuilderSharedDataRD::ClusterBuilderSharedDataRD() {
 	RD::VertexFormatID vertex_format;
@@ -254,6 +258,11 @@ ClusterBuilderSharedDataRD::~ClusterBuilderSharedDataRD() {
 /////////////////////////////
 
 void ClusterBuilderRD::_clear() {
+	if (RendererRD::ParticlesStorage *ps = RendererRD::ParticlesStorage::get_singleton()) {
+		if (RendererRD::ParticlesMeshLightSortRD *ls = ps->get_mesh_light_sort_rd()) {
+			ls->clear_cluster_builder_frame(this);
+		}
+	}
 	if (cluster_buffer.is_null()) {
 		return;
 	}
@@ -433,9 +442,18 @@ void ClusterBuilderRD::begin(const Transform3D &p_view_transform, const Projecti
 	for (uint32_t i = 0; i < ELEMENT_TYPE_MAX; i++) {
 		cluster_count_by_type[i] = 0;
 	}
+	if (RendererRD::ParticlesStorage *ps = RendererRD::ParticlesStorage::get_singleton()) {
+		if (RendererRD::ParticlesMeshLightSortRD *ls = ps->get_mesh_light_sort_rd()) {
+			ls->begin_cluster_builder_frame(this, view_xform, z_near, z_far, camera_orthogonal, shared ? shared->sphere_overfit : 1.05f, max_elements_by_type);
+		}
+	}
 }
 
 void ClusterBuilderRD::bake_cluster() {
+	static_assert(sizeof(RenderElementData) == 80u, "RenderElementData must match 20-word GPU ABI");
+	static_assert(offsetof(RenderElementData, transform_inv) == 16u, "RenderElementData transform_inv offset");
+	static_assert(offsetof(RenderElementData, scale) == 64u, "RenderElementData scale offset");
+
 	RENDER_TIMESTAMP("> Bake 3D Cluster");
 
 	RD::get_singleton()->draw_command_begin_label("Bake Light Cluster");
@@ -443,7 +461,24 @@ void ClusterBuilderRD::bake_cluster() {
 	// Clear cluster buffer.
 	RD::get_singleton()->buffer_clear(cluster_buffer, 0, cluster_buffer_size);
 
-	if (render_element_count > 0) {
+	RendererRD::ParticlesMeshLightSortRD *light_sort = nullptr;
+	if (RendererRD::ParticlesStorage *ps = RendererRD::ParticlesStorage::get_singleton()) {
+		light_sort = ps->get_mesh_light_sort_rd();
+	}
+	uint32_t gpu_omni_count = light_sort ? light_sort->get_pending_cluster_gpu_omni_count(this) : 0u;
+	if (gpu_omni_count > 0u) {
+		const uint32_t rem_omni = (cluster_count_by_type[ELEMENT_TYPE_OMNI_LIGHT] < max_elements_by_type)
+				? (max_elements_by_type - cluster_count_by_type[ELEMENT_TYPE_OMNI_LIGHT])
+				: 0u;
+		const uint32_t rem_elem = (render_element_count < render_element_max)
+				? (render_element_max - render_element_count)
+				: 0u;
+		gpu_omni_count = MIN(gpu_omni_count, MIN(rem_omni, rem_elem));
+	}
+	const uint32_t cpu_element_count = render_element_count;
+	const uint32_t total_element_count = cpu_element_count + gpu_omni_count;
+
+	if (total_element_count > 0) {
 		// Clear render buffer.
 		RD::get_singleton()->buffer_clear(cluster_render_buffer, 0, cluster_render_buffer_size);
 
@@ -463,9 +498,13 @@ void ClusterBuilderRD::bake_cluster() {
 			RD::get_singleton()->buffer_update(state_uniform, 0, sizeof(StateUniform), &state);
 		}
 
-		// Update instances.
-
-		RD::get_singleton()->buffer_update(element_buffer, 0, sizeof(RenderElementData) * render_element_count, render_elements);
+		// Update CPU instances.
+		if (cpu_element_count > 0) {
+			RD::get_singleton()->buffer_update(element_buffer, 0, sizeof(RenderElementData) * cpu_element_count, render_elements);
+		}
+		if (gpu_omni_count > 0 && light_sort) {
+			light_sort->blit_cluster_gpu_omni_elements(RD::get_singleton(), this, element_buffer, cpu_element_count, gpu_omni_count);
+		}
 
 		RENDER_TIMESTAMP("Render 3D Cluster Elements");
 
@@ -477,7 +516,7 @@ void ClusterBuilderRD::bake_cluster() {
 			RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, shared->cluster_render.shader_pipelines[use_msaa ? ClusterBuilderSharedDataRD::ClusterRender::PIPELINE_MSAA : ClusterBuilderSharedDataRD::ClusterRender::PIPELINE_NORMAL]);
 			RD::get_singleton()->draw_list_bind_uniform_set(draw_list, cluster_render_uniform_set, 0);
 
-			for (uint32_t i = 0; i < render_element_count;) {
+			for (uint32_t i = 0; i < cpu_element_count;) {
 				push_constant.base_index = i;
 				switch (render_elements[i].type) {
 					case ELEMENT_TYPE_OMNI_LIGHT: {
@@ -513,6 +552,16 @@ void ClusterBuilderRD::bake_cluster() {
 				RD::get_singleton()->draw_list_draw(draw_list, true, instances);
 				i += instances;
 			}
+
+			if (gpu_omni_count > 0) {
+				push_constant.base_index = cpu_element_count;
+				RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->sphere_vertex_array);
+				RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->sphere_index_array);
+				RD::get_singleton()->draw_list_set_push_constant(draw_list, &push_constant, sizeof(ClusterBuilderSharedDataRD::ClusterRender::PushConstant));
+				RD::get_singleton()->draw_list_draw(draw_list, true, gpu_omni_count);
+				cluster_count_by_type[ELEMENT_TYPE_OMNI_LIGHT] += gpu_omni_count;
+				render_element_count = total_element_count;
+			}
 			RD::get_singleton()->draw_list_end();
 		}
 		// Store elements.
@@ -529,7 +578,7 @@ void ClusterBuilderRD::bake_cluster() {
 			push_constant.cluster_screen_size[0] = cluster_screen_size.x;
 			push_constant.cluster_screen_size[1] = cluster_screen_size.y;
 
-			push_constant.render_element_count_div_32 = Math::division_round_up(render_element_count, 32U);
+			push_constant.render_element_count_div_32 = Math::division_round_up(total_element_count, 32U);
 			push_constant.max_cluster_element_count_div_32 = max_elements_by_type / 32;
 			push_constant.pad1 = 0;
 			push_constant.pad2 = 0;
@@ -540,6 +589,9 @@ void ClusterBuilderRD::bake_cluster() {
 
 			RD::get_singleton()->compute_list_end();
 		}
+	}
+	if (light_sort) {
+		light_sort->clear_cluster_builder_frame(this);
 	}
 	RENDER_TIMESTAMP("< Bake 3D Cluster");
 	RD::get_singleton()->draw_command_end_label();
