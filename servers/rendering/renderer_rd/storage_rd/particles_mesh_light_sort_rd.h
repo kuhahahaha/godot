@@ -194,6 +194,20 @@ public:
 
 	// Subnormal-free float canonicalization & Instance192 builder:
 	static float canonicalize_finite_float(float p_value);
+	static bool flush_subnormal_and_neg_zero(float p_value, float &r_out);
+	static Instance192Record make_canonical_degenerate_instance192(
+			const Vector3 &p_translation_world,
+			const Color &p_uv_rect,
+			uint64_t p_particle_id,
+			bool p_has_previous);
+	static Error build_instance192_record_checked(
+			const Transform3D &p_transform,
+			const Color &p_color,
+			const Color &p_custom_uv_rect,
+			uint64_t p_particle_id,
+			bool p_has_previous,
+			bool p_allow_zero_scale_degenerate,
+			Instance192Record &r_record);
 	static Instance192Record make_instance192_record(
 			const Transform3D &p_transform,
 			const Vector3 &p_velocity,

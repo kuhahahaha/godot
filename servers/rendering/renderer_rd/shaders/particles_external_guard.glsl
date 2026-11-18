@@ -216,6 +216,17 @@ vec2 multiply_interval(vec2 left, vec2 right, inout bool numeric_valid) {
 }
 
 vec2 affine_interval(vec4 row, vec2 x, vec2 y, vec2 z, inout bool numeric_valid) {
+	if (any(isnan(x)) || any(isinf(x)) || any(isnan(y)) || any(isinf(y)) ||
+			any(isnan(z)) || any(isinf(z)) || isnan(row.w) || isinf(row.w)) {
+		numeric_valid = false;
+		return vec2(0.0);
+	}
+	bool zero_basis = (floatBitsToUint(row.x) & 0x7fffffffu) == 0u &&
+			(floatBitsToUint(row.y) & 0x7fffffffu) == 0u &&
+			(floatBitsToUint(row.z) & 0x7fffffffu) == 0u;
+	if (zero_basis) {
+		return vec2(row.w, row.w);
+	}
 	vec2 result = multiply_interval(vec2(row.x), x, numeric_valid);
 	result = add_interval(result, multiply_interval(vec2(row.y), y, numeric_valid), numeric_valid);
 	result = add_interval(result, multiply_interval(vec2(row.z), z, numeric_valid), numeric_valid);

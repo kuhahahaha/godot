@@ -163,9 +163,264 @@ float ParticlesMeshLightSortRD::canonicalize_finite_float(float p_value) {
 	memcpy(&bits, &p_value, sizeof(uint32_t));
 	const uint32_t mag = bits & 0x7fffffffu;
 	if (mag >= 0x7f800000u || mag < 0x00800000u) {
-		return 0.0f;
+		uint32_t zero_bits = 0u;
+		float zero_f = 0.0f;
+		memcpy(&zero_f, &zero_bits, sizeof(float));
+		return zero_f;
 	}
 	return p_value;
+}
+
+bool ParticlesMeshLightSortRD::flush_subnormal_and_neg_zero(float p_value, float &r_out) {
+	uint32_t bits = 0;
+	memcpy(&bits, &p_value, sizeof(uint32_t));
+	const uint32_t exp_bits = bits & 0x7f800000u;
+	if (exp_bits == 0x7f800000u) {
+		uint32_t zero_bits = 0u;
+		memcpy(&r_out, &zero_bits, sizeof(float));
+		return false;
+	}
+	if (exp_bits == 0u) {
+		uint32_t zero_bits = 0u;
+		memcpy(&r_out, &zero_bits, sizeof(float));
+		return true;
+	}
+	r_out = p_value;
+	return true;
+}
+
+Instance192Record ParticlesMeshLightSortRD::make_canonical_degenerate_instance192(
+		const Vector3 &p_translation_world,
+		const Color &p_uv_rect,
+		uint64_t p_particle_id,
+		bool p_has_previous) {
+	Instance192Record rec;
+	memset(&rec, 0, sizeof(Instance192Record));
+
+	float tx = 0.0f;
+	float ty = 0.0f;
+	float tz = 0.0f;
+	float neg_tx = 0.0f;
+	float neg_ty = 0.0f;
+	float neg_tz = 0.0f;
+	float uv0 = 0.0f;
+	float uv1 = 0.0f;
+	float uv2 = 0.0f;
+	float uv3 = 0.0f;
+	if (!flush_subnormal_and_neg_zero(p_translation_world.x, tx) ||
+			!flush_subnormal_and_neg_zero(p_translation_world.y, ty) ||
+			!flush_subnormal_and_neg_zero(p_translation_world.z, tz) ||
+			!flush_subnormal_and_neg_zero(-tx, neg_tx) ||
+			!flush_subnormal_and_neg_zero(-ty, neg_ty) ||
+			!flush_subnormal_and_neg_zero(-tz, neg_tz) ||
+			!flush_subnormal_and_neg_zero(p_uv_rect.r, uv0) ||
+			!flush_subnormal_and_neg_zero(p_uv_rect.g, uv1) ||
+			!flush_subnormal_and_neg_zero(p_uv_rect.b, uv2) ||
+			!flush_subnormal_and_neg_zero(p_uv_rect.a, uv3)) {
+		memset(&rec, 0, sizeof(Instance192Record));
+		return rec;
+	}
+
+	rec.transform_rows[0][3] = tx;
+	rec.transform_rows[1][3] = ty;
+	rec.transform_rows[2][3] = tz;
+
+	rec.normal_row0[0] = 1.0f;
+	rec.normal_row1[1] = 1.0f;
+	rec.normal_row2[2] = 1.0f;
+
+	rec.inverse_transform_rows[0][0] = 1.0f;
+	rec.inverse_transform_rows[0][3] = neg_tx;
+	rec.inverse_transform_rows[1][1] = 1.0f;
+	rec.inverse_transform_rows[1][3] = neg_ty;
+	rec.inverse_transform_rows[2][2] = 1.0f;
+	rec.inverse_transform_rows[2][3] = neg_tz;
+
+	rec.custom0[0] = uv0;
+	rec.custom0[1] = uv1;
+	rec.custom0[2] = uv2;
+	rec.custom0[3] = uv3;
+	rec.set_particle_id(p_particle_id);
+	rec.flags = Instance192Record::FLAG_VALID_RECORD |
+			Instance192Record::FLAG_INVERSE_AVAILABLE |
+			(p_has_previous ? Instance192Record::FLAG_HAS_PREVIOUS_RECORD : 0u);
+	rec.reserved_zero = 0u;
+	return rec;
+}
+
+Error ParticlesMeshLightSortRD::build_instance192_record_checked(
+		const Transform3D &p_transform,
+		const Color &p_color,
+		const Color &p_custom_uv_rect,
+		uint64_t p_particle_id,
+		bool p_has_previous,
+		bool p_allow_zero_scale_degenerate,
+		Instance192Record &r_record) {
+	memset(&r_record, 0, sizeof(Instance192Record));
+
+	float flushed_basis[3][3] = {};
+	float flushed_origin[3] = {};
+	for (int r = 0; r < 3; ++r) {
+		for (int c = 0; c < 3; ++c) {
+			if (!flush_subnormal_and_neg_zero(p_transform.basis.rows[r][c], flushed_basis[r][c])) {
+				return ERR_INVALID_PARAMETER;
+			}
+		}
+		if (!flush_subnormal_and_neg_zero(p_transform.origin[r], flushed_origin[r])) {
+			return ERR_INVALID_PARAMETER;
+		}
+	}
+
+	float flushed_color[4] = {};
+	float flushed_custom[4] = {};
+	if (!flush_subnormal_and_neg_zero(p_color.r, flushed_color[0]) ||
+			!flush_subnormal_and_neg_zero(p_color.g, flushed_color[1]) ||
+			!flush_subnormal_and_neg_zero(p_color.b, flushed_color[2]) ||
+			!flush_subnormal_and_neg_zero(p_color.a, flushed_color[3]) ||
+			!flush_subnormal_and_neg_zero(p_custom_uv_rect.r, flushed_custom[0]) ||
+			!flush_subnormal_and_neg_zero(p_custom_uv_rect.g, flushed_custom[1]) ||
+			!flush_subnormal_and_neg_zero(p_custom_uv_rect.b, flushed_custom[2]) ||
+			!flush_subnormal_and_neg_zero(p_custom_uv_rect.a, flushed_custom[3])) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	double col_len_sq[3] = {};
+	double col_len[3] = {};
+	for (int c = 0; c < 3; ++c) {
+		const double x = double(flushed_basis[0][c]);
+		const double y = double(flushed_basis[1][c]);
+		const double z = double(flushed_basis[2][c]);
+		col_len_sq[c] = x * x + y * y + z * z;
+		if (!std::isfinite(col_len_sq[c])) {
+			return ERR_INVALID_PARAMETER;
+		}
+		col_len[c] = std::sqrt(col_len_sq[c]);
+	}
+
+	const double min_col_len = MIN(col_len[0], MIN(col_len[1], col_len[2]));
+	if (min_col_len <= 1.0e-6) {
+		if (!p_allow_zero_scale_degenerate) {
+			return ERR_INVALID_PARAMETER;
+		}
+		r_record = make_canonical_degenerate_instance192(
+				Vector3(flushed_origin[0], flushed_origin[1], flushed_origin[2]),
+				p_custom_uv_rect,
+				p_particle_id,
+				p_has_previous);
+		return r_record.flags != 0u ? OK : ERR_INVALID_PARAMETER;
+	}
+
+	const double m00 = double(flushed_basis[0][0]);
+	const double m01 = double(flushed_basis[0][1]);
+	const double m02 = double(flushed_basis[0][2]);
+	const double m10 = double(flushed_basis[1][0]);
+	const double m11 = double(flushed_basis[1][1]);
+	const double m12 = double(flushed_basis[1][2]);
+	const double m20 = double(flushed_basis[2][0]);
+	const double m21 = double(flushed_basis[2][1]);
+	const double m22 = double(flushed_basis[2][2]);
+
+	const double co00 = m11 * m22 - m12 * m21;
+	const double co01 = m12 * m20 - m10 * m22;
+	const double co02 = m10 * m21 - m11 * m20;
+	const double det = m00 * co00 + m01 * co01 + m02 * co02;
+	const double vol_scale = col_len[0] * col_len[1] * col_len[2];
+	if (!std::isfinite(det) || !std::isfinite(vol_scale) || std::abs(det) <= 1.0e-12 * vol_scale) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	const double inv_det = 1.0 / det;
+	if (!std::isfinite(inv_det)) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	const double inv_b[3][3] = {
+		{ co00 * inv_det, (m02 * m21 - m01 * m22) * inv_det, (m01 * m12 - m02 * m11) * inv_det },
+		{ co01 * inv_det, (m00 * m22 - m02 * m20) * inv_det, (m02 * m10 - m00 * m12) * inv_det },
+		{ co02 * inv_det, (m01 * m20 - m00 * m21) * inv_det, (m00 * m11 - m01 * m10) * inv_det },
+	};
+	const double tx = double(flushed_origin[0]);
+	const double ty = double(flushed_origin[1]);
+	const double tz = double(flushed_origin[2]);
+	const double inv_t[3] = {
+		-(inv_b[0][0] * tx + inv_b[0][1] * ty + inv_b[0][2] * tz),
+		-(inv_b[1][0] * tx + inv_b[1][1] * ty + inv_b[1][2] * tz),
+		-(inv_b[2][0] * tx + inv_b[2][1] * ty + inv_b[2][2] * tz),
+	};
+
+	Instance192Record rec;
+	memset(&rec, 0, sizeof(Instance192Record));
+	for (int r = 0; r < 3; ++r) {
+		rec.transform_rows[r][0] = flushed_basis[r][0];
+		rec.transform_rows[r][1] = flushed_basis[r][1];
+		rec.transform_rows[r][2] = flushed_basis[r][2];
+		rec.transform_rows[r][3] = flushed_origin[r];
+		for (int c = 0; c < 3; ++c) {
+			if (!flush_subnormal_and_neg_zero(float(inv_b[r][c]), rec.inverse_transform_rows[r][c])) {
+				return ERR_INVALID_PARAMETER;
+			}
+		}
+		if (!flush_subnormal_and_neg_zero(float(inv_t[r]), rec.inverse_transform_rows[r][3])) {
+			return ERR_INVALID_PARAMETER;
+		}
+	}
+	for (int c = 0; c < 3; ++c) {
+		if (!flush_subnormal_and_neg_zero(float(inv_b[c][0]), rec.normal_row0[c]) ||
+				!flush_subnormal_and_neg_zero(float(inv_b[c][1]), rec.normal_row1[c]) ||
+				!flush_subnormal_and_neg_zero(float(inv_b[c][2]), rec.normal_row2[c])) {
+			return ERR_INVALID_PARAMETER;
+		}
+	}
+
+	const double origin_norm = std::sqrt(tx * tx + ty * ty + tz * tz);
+	const double trans_tol = 1.0e-3 * MAX(1.0, origin_norm);
+	for (int r = 0; r < 3; ++r) {
+		for (int c = 0; c < 3; ++c) {
+			const double prod = double(rec.transform_rows[r][0]) * double(rec.inverse_transform_rows[0][c]) +
+					double(rec.transform_rows[r][1]) * double(rec.inverse_transform_rows[1][c]) +
+					double(rec.transform_rows[r][2]) * double(rec.inverse_transform_rows[2][c]);
+			const double expected = (r == c) ? 1.0 : 0.0;
+			if (!std::isfinite(prod) || std::abs(prod - expected) > 1.0e-3) {
+				return ERR_INVALID_PARAMETER;
+			}
+		}
+		const double t_res = double(rec.transform_rows[r][0]) * double(rec.inverse_transform_rows[0][3]) +
+				double(rec.transform_rows[r][1]) * double(rec.inverse_transform_rows[1][3]) +
+				double(rec.transform_rows[r][2]) * double(rec.inverse_transform_rows[2][3]) +
+				double(rec.transform_rows[r][3]);
+		if (!std::isfinite(t_res) || std::abs(t_res) > trans_tol) {
+			return ERR_INVALID_PARAMETER;
+		}
+	}
+
+	uint32_t extra_flags = Instance192Record::FLAG_INVERSE_AVAILABLE;
+	if (det < 0.0) {
+		extra_flags |= Instance192Record::FLAG_NEGATIVE_DETERMINANT;
+	}
+	const double scale_ref = MAX(MAX(col_len_sq[0], col_len_sq[1]), MAX(col_len_sq[2], 1.0e-12));
+	const double eps = 1.0e-5 * scale_ref;
+	const double dot01 = m00 * m01 + m10 * m11 + m20 * m21;
+	const double dot02 = m00 * m02 + m10 * m12 + m20 * m22;
+	const double dot12 = m01 * m02 + m11 * m12 + m21 * m22;
+	if (std::abs(col_len_sq[0] - col_len_sq[1]) > eps ||
+			std::abs(col_len_sq[0] - col_len_sq[2]) > eps ||
+			std::abs(dot01) > eps ||
+			std::abs(dot02) > eps ||
+			std::abs(dot12) > eps) {
+		extra_flags |= Instance192Record::FLAG_NON_UNIFORM_SCALE;
+	}
+
+	for (int k = 0; k < 4; ++k) {
+		rec.color[k] = flushed_color[k];
+		rec.custom0[k] = flushed_custom[k];
+	}
+	rec.set_particle_id(p_particle_id);
+	rec.flags = Instance192Record::FLAG_VALID_RECORD |
+			(p_has_previous ? Instance192Record::FLAG_HAS_PREVIOUS_RECORD : 0u) |
+			extra_flags;
+	rec.reserved_zero = 0u;
+	r_record = rec;
+	return OK;
 }
 
 Instance192Record ParticlesMeshLightSortRD::make_instance192_record(
@@ -176,53 +431,19 @@ Instance192Record ParticlesMeshLightSortRD::make_instance192_record(
 		uint64_t p_particle_id,
 		bool p_has_previous) {
 	(void)p_velocity;
-	Instance192Record rec{};
-	for (int r = 0; r < 3; ++r) {
-		rec.transform_rows[r][0] = canonicalize_finite_float(p_transform.basis.rows[r][0]);
-		rec.transform_rows[r][1] = canonicalize_finite_float(p_transform.basis.rows[r][1]);
-		rec.transform_rows[r][2] = canonicalize_finite_float(p_transform.basis.rows[r][2]);
-		rec.transform_rows[r][3] = canonicalize_finite_float(p_transform.origin[r]);
+	Instance192Record rec;
+	memset(&rec, 0, sizeof(Instance192Record));
+	const Error err = build_instance192_record_checked(
+			p_transform,
+			p_color,
+			Color(0.0f, p_subuv_frame, 0.0f, 0.0f),
+			p_particle_id,
+			p_has_previous,
+			true,
+			rec);
+	if (err != OK) {
+		memset(&rec, 0, sizeof(Instance192Record));
 	}
-	const float det = p_transform.basis.determinant();
-	uint32_t extra_flags = 0u;
-	if (Math::is_finite(det) && std::abs(det) > 1e-12f) {
-		const Transform3D inv_xf = p_transform.affine_inverse();
-		const Basis nrm_basis = inv_xf.basis.transposed();
-		for (int c = 0; c < 3; ++c) {
-			rec.normal_row0[c] = canonicalize_finite_float(nrm_basis.rows[0][c]);
-			rec.normal_row1[c] = canonicalize_finite_float(nrm_basis.rows[1][c]);
-			rec.normal_row2[c] = canonicalize_finite_float(nrm_basis.rows[2][c]);
-		}
-		for (int r = 0; r < 3; ++r) {
-			rec.inverse_transform_rows[r][0] = canonicalize_finite_float(inv_xf.basis.rows[r][0]);
-			rec.inverse_transform_rows[r][1] = canonicalize_finite_float(inv_xf.basis.rows[r][1]);
-			rec.inverse_transform_rows[r][2] = canonicalize_finite_float(inv_xf.basis.rows[r][2]);
-			rec.inverse_transform_rows[r][3] = canonicalize_finite_float(inv_xf.origin[r]);
-		}
-		extra_flags |= Instance192Record::FLAG_INVERSE_AVAILABLE;
-		if (det < 0.0f) {
-			extra_flags |= Instance192Record::FLAG_NEGATIVE_DETERMINANT;
-		}
-		const Vector3 col0 = p_transform.basis.get_column(0);
-		const Vector3 col1 = p_transform.basis.get_column(1);
-		const Vector3 col2 = p_transform.basis.get_column(2);
-		const float l0 = col0.length_squared();
-		const float l1 = col1.length_squared();
-		const float l2 = col2.length_squared();
-		const float scale_ref = MAX(MAX(l0, l1), MAX(l2, 1e-12f));
-		const float eps = 1e-5f * scale_ref;
-		if (std::abs(l0 - l1) > eps || std::abs(l0 - l2) > eps ||
-				std::abs(col0.dot(col1)) > eps || std::abs(col0.dot(col2)) > eps || std::abs(col1.dot(col2)) > eps) {
-			extra_flags |= Instance192Record::FLAG_NON_UNIFORM_SCALE;
-		}
-	}
-	rec.color[0] = canonicalize_finite_float(p_color.r);
-	rec.color[1] = canonicalize_finite_float(p_color.g);
-	rec.color[2] = canonicalize_finite_float(p_color.b);
-	rec.color[3] = canonicalize_finite_float(p_color.a);
-	rec.custom0[1] = canonicalize_finite_float(p_subuv_frame);
-	rec.set_particle_id(p_particle_id);
-	rec.flags = Instance192Record::FLAG_VALID_RECORD | (p_has_previous ? Instance192Record::FLAG_HAS_PREVIOUS_RECORD : 0u) | extra_flags;
 	return rec;
 }
 

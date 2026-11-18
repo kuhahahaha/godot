@@ -39,6 +39,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <limits>
 
 #if defined(METAL_ENABLED) && defined(MACOS_ENABLED)
 #include "drivers/metal/rendering_context_driver_metal.h"
@@ -120,7 +121,7 @@ TEST_CASE("[particle_ribbon_k05] K05 INDEXED_144 V2 8-role prepare & acquire pro
 TEST_CASE("[particle_ribbon_k05] RIB-04 camera pullback normal under non-uniform scale & A05 history alignment") {
 	using RibbonRD = RendererRD::ParticlesRibbonRD;
 	const Basis host_non_uniform = Basis::from_scale(Vector3(4.0f, 0.5f, 2.0f));
-	const RendererRD::RibbonSegmentEndpointKey32 key0 = { 7, 1, 102, 101 };
+	const RendererRD::RibbonSegmentEndpointKey32 key0 = RendererRD::RibbonSegmentEndpointKey32::from_legacy_ids(7, 1, 102, 101);
 
 	RendererRD::Float144Vertex quad[4];
 	uint32_t indices[6] = {};
@@ -179,7 +180,7 @@ TEST_CASE("[particle_ribbon_k05] RIB-04 camera pullback normal under non-uniform
 	}
 	// Current frame has 2 segments: segment 0 is a newly spawned head (no predecessor),
 	// segment 1 is exact successor of previous segment 0 (`key0`).
-	const RendererRD::RibbonSegmentEndpointKey32 key_new_head = { 7, 1, 103, 102 };
+	const RendererRD::RibbonSegmentEndpointKey32 key_new_head = RendererRD::RibbonSegmentEndpointKey32::from_legacy_ids(7, 1, 103, 102);
 	RendererRD::Float144Vertex new_quad[4];
 	uint32_t new_idx[6] = {};
 	RibbonRD::build_ribbon_segment_quad(
@@ -272,7 +273,7 @@ TEST_CASE("[particle_ribbon_k05] Live Metal GPU ParticlesExternalGuardIndexed144
 	Vector<uint8_t> index_bytes;
 	index_bytes.resize(12 * sizeof(uint32_t));
 	for (uint32_t s = 0; s < 2; s++) {
-		const RendererRD::RibbonSegmentEndpointKey32 key = { 1, 1, uint64_t(10 + s + 1), uint64_t(10 + s) };
+		const RendererRD::RibbonSegmentEndpointKey32 key = RendererRD::RibbonSegmentEndpointKey32::from_legacy_ids(1, 1, uint64_t(10 + s + 1), uint64_t(10 + s));
 		uint32_t seg_idx[6] = {};
 		RibbonRD::build_ribbon_segment_quad(
 				s,
@@ -489,7 +490,7 @@ TEST_CASE("[particle_ribbon_k05] D3-P0-3 Live Metal GPU ParticlesExternalGuardIn
 	Vector<uint8_t> index_bytes;
 	index_bytes.resize(12 * sizeof(uint32_t));
 	for (uint32_t s = 0; s < 2; s++) {
-		const RendererRD::RibbonSegmentEndpointKey32 key = { 2, 1, uint64_t(20 + s + 1), uint64_t(20 + s) };
+		const RendererRD::RibbonSegmentEndpointKey32 key = RendererRD::RibbonSegmentEndpointKey32::from_legacy_ids(2, 1, uint64_t(20 + s + 1), uint64_t(20 + s));
 		uint32_t seg_idx[6] = {};
 		RibbonRD::build_ribbon_segment_quad(
 				s,
@@ -568,6 +569,355 @@ TEST_CASE("[particle_ribbon_k05] D3-P0-3 Live Metal GPU ParticlesExternalGuardIn
 	CHECK(decode_uint32(status_rb.ptr() + 0) == 0u);
 	CHECK(decode_uint32(cmd_rb.ptr() + 0) == 12u);
 	CHECK(decode_uint32(cmd_rb.ptr() + 4) == 1u);
+
+	rd.free_rid(uniform_set);
+	rd.free_rid(source_rid);
+	RibbonRD::free_buffers_rd(rd, bufs);
+	CHECK(bufs.live_count == 0);
+	REQUIRE(guard.release_pipelines_standalone_rd() == OK);
+}
+
+TEST_CASE("[particle_ribbon_k05] O-01 degenerate ribbon quad admission, NaN/pad0/pad1 fail-closed faults, and word34 subsegment endpoint key history") {
+	using Guard = RendererRD::ParticlesExternalGuardIndexed144;
+	using RibbonRD = RendererRD::ParticlesRibbonRD;
+
+	// T05 (CPU): coincident endpoints (head == tail), negative half_width = -0.25f, and collinear camera ray:
+	const Vector3 p0(1.5f, -2.0f, 0.5f);
+	const RendererRD::RibbonSegmentEndpointKey32 deg_key(10u, 0xABCD0001u, 11u, 0xABCD0002u, 7u, 0u, 0u, 1u);
+	RendererRD::Float144Vertex deg_quad[4] = {};
+	uint32_t deg_idx[6] = {};
+	REQUIRE(RibbonRD::build_ribbon_segment_quad_checked(
+					0u,
+					p0,
+					p0,
+					Vector3(1.5f, -2.0f, 5.0f), // collinear along +Z fallback tangent
+					-0.25f,
+					0.0f,
+					0.5f,
+					Color(1.0f, 0.5f, 0.25f, 1.0f),
+					Basis(),
+					deg_key,
+					deg_quad,
+					deg_idx) == OK);
+	for (int v = 0; v < 4; v++) {
+		CHECK(Math::is_equal_approx(deg_quad[v].position[0], p0.x));
+		CHECK(Math::is_equal_approx(deg_quad[v].position[1], p0.y));
+		CHECK(Math::is_equal_approx(deg_quad[v].position[2], p0.z));
+		CHECK(deg_quad[v].pad0 == 0u);
+		CHECK(deg_quad[v].pad1 == 0u);
+		CHECK(Math::is_finite(deg_quad[v].normal[0]));
+		CHECK(Math::is_finite(deg_quad[v].normal[1]));
+		CHECK(Math::is_finite(deg_quad[v].normal[2]));
+		CHECK(deg_quad[v].get_endpoint_key() == deg_key);
+	}
+
+	// T06 (CPU): NaN/Inf in p_half_width (-NAN) or p_head_world MUST fail closed BEFORE p_half_width <= 0.0f branch!
+	const float neg_nan = -std::numeric_limits<float>::quiet_NaN();
+	RendererRD::Float144Vertex nan_quad[4];
+	std::memcpy(nan_quad, deg_quad, sizeof(nan_quad));
+	uint32_t nan_idx[6] = { 1, 2, 3, 4, 5, 6 };
+	CHECK(RibbonRD::build_ribbon_segment_quad_checked(
+				  0u,
+				  p0,
+				  Vector3(2.0f, 0.0f, 0.0f),
+				  Vector3(0.0f, 0.0f, 5.0f),
+				  neg_nan,
+				  0.0f,
+				  1.0f,
+				  Color(1, 1, 1, 1),
+				  Basis(),
+				  deg_key,
+				  nan_quad,
+				  nan_idx) == ERR_INVALID_PARAMETER);
+	for (int v = 0; v < 4; v++) {
+		uint32_t words[36] = {};
+		std::memcpy(words, &nan_quad[v], sizeof(words));
+		for (int w = 0; w < 36; w++) {
+			CHECK(words[w] == 0u);
+		}
+	}
+	for (int i = 0; i < 6; i++) {
+		CHECK(nan_idx[i] == 0u);
+	}
+
+	// Also verify unchecked build_ribbon_segment_quad zeroes outputs on -NAN half_width and NaN head_world:
+	std::memcpy(nan_quad, deg_quad, sizeof(nan_quad));
+	RibbonRD::build_ribbon_segment_quad(
+			0u,
+			Vector3(neg_nan, 0.0f, 0.0f),
+			Vector3(2.0f, 0.0f, 0.0f),
+			Vector3(0.0f, 0.0f, 5.0f),
+			0.25f,
+			0.0f,
+			1.0f,
+			Color(1, 1, 1, 1),
+			Basis(),
+			deg_key,
+			nan_quad,
+			nan_idx);
+	CHECK(nan_quad[0].endpoint_key_words[7] == 0u);
+	CHECK(nan_quad[0].tangent[3] == 0.0f);
+
+	// T07 (CPU + Metal): 2-frame ribbon chain with tessellation_factor = 4 (subsegment_index 0..3 in word[34],
+	// end_id_tag = 0xCAFE1234u intact in word[31], valid_mask = 1u in word[35]) + 1 newborn head group (4 sub-segments)
+	// + 1 degenerate zero-width/coincident segment group (total 9 segments on Metal RD):
+	const RendererRD::RibbonSegmentEndpointKey32 surviving_base(
+			20u, 0xBEEF0001u, 19u, 0xCAFE1234u, 0x11112222u, 0x33334444u, 0u, 1u);
+	const RendererRD::RibbonSegmentEndpointKey32 newborn_base(
+			21u, 0xBEEF0002u, 20u, 0xBEEF0001u, 0x11112222u, 0x33334444u, 0u, 1u);
+
+	LocalVector<RendererRD::Float144Vertex> prev_frame_verts;
+	prev_frame_verts.resize(16); // 4 sub-segments in previous frame
+	for (uint32_t sub = 0; sub < 4u; sub++) {
+		const RendererRD::RibbonSegmentEndpointKey32 sub_key = surviving_base.with_subsegment(sub);
+		CHECK(sub_key.get_subsegment() == sub);
+		uint32_t tmp_idx[6] = {};
+		REQUIRE(RibbonRD::build_ribbon_segment_quad_checked(
+						sub,
+						Vector3(0.0f, float(sub + 1) * 0.25f, 0.0f),
+						Vector3(0.0f, float(sub) * 0.25f, 0.0f),
+						Vector3(0.0f, 0.5f, 5.0f),
+						0.15f,
+						float(sub) * 0.25f,
+						float(sub + 1) * 0.25f,
+						Color(1, 1, 1, 1),
+						Basis(),
+						sub_key,
+						&prev_frame_verts[sub * 4u],
+						tmp_idx) == OK);
+	}
+
+	// Current frame: segments 0..3 = newborn head (4 sub-segments, 16 verts),
+	// segments 4..7 = surviving group (4 sub-segments, 16 verts),
+	// segment 8 = coincident + negative-width degenerate segment (4 verts) -> 9 segments = 36 verts, 54 indices:
+	const uint32_t active_segs = 9u;
+	LocalVector<RendererRD::Float144Vertex> curr_frame_verts;
+	curr_frame_verts.resize(active_segs * 4u);
+	Vector<uint8_t> idx_bytes;
+	idx_bytes.resize(active_segs * 6u * sizeof(uint32_t));
+
+	for (uint32_t sub = 0; sub < 4u; sub++) {
+		uint32_t seg_idx[6] = {};
+		REQUIRE(RibbonRD::build_ribbon_segment_quad_checked(
+						sub,
+						Vector3(0.0f, 1.0f + float(sub + 1) * 0.25f, 0.0f),
+						Vector3(0.0f, 1.0f + float(sub) * 0.25f, 0.0f),
+						Vector3(0.0f, 1.0f, 5.0f),
+						0.15f,
+						0.0f,
+						0.25f,
+						Color(1, 1, 1, 1),
+						Basis(),
+						newborn_base.with_subsegment(sub),
+						&curr_frame_verts[sub * 4u],
+						seg_idx) == OK);
+		for (uint32_t j = 0; j < 6u; j++) {
+			encode_uint32(seg_idx[j], idx_bytes.ptrw() + (sub * 6u + j) * 4u);
+		}
+	}
+	for (uint32_t sub = 0; sub < 4u; sub++) {
+		const uint32_t seg = 4u + sub;
+		uint32_t seg_idx[6] = {};
+		REQUIRE(RibbonRD::build_ribbon_segment_quad_checked(
+						seg,
+						Vector3(0.1f, float(sub + 1) * 0.25f, 0.0f),
+						Vector3(0.1f, float(sub) * 0.25f, 0.0f),
+						Vector3(0.0f, 0.5f, 5.0f),
+						0.15f,
+						float(sub) * 0.25f,
+						float(sub + 1) * 0.25f,
+						Color(1, 1, 1, 1),
+						Basis(),
+						surviving_base.with_subsegment(sub),
+						&curr_frame_verts[seg * 4u],
+						seg_idx) == OK);
+		for (uint32_t j = 0; j < 6u; j++) {
+			encode_uint32(seg_idx[j], idx_bytes.ptrw() + (seg * 6u + j) * 4u);
+		}
+		// Verify exact Float144Vertex wire word offsets: word[31] == end_id_tag, word[34] == subsegment_index, word[35] == valid_mask(1u)
+		uint32_t raw_v[36] = {};
+		std::memcpy(raw_v, &curr_frame_verts[seg * 4u], sizeof(raw_v));
+		CHECK(raw_v[3] == 0u);
+		CHECK(raw_v[7] == 0u);
+		CHECK(raw_v[31] == 0xCAFE1234u);
+		CHECK(raw_v[34] == sub);
+		CHECK(raw_v[35] == 1u);
+	}
+	{
+		uint32_t seg_idx[6] = {};
+		REQUIRE(RibbonRD::build_ribbon_segment_quad_checked(
+						8u,
+						p0,
+						p0,
+						Vector3(1.5f, -2.0f, 5.0f),
+						-0.25f,
+						0.0f,
+						1.0f,
+						Color(1, 1, 1, 1),
+						Basis(),
+						deg_key,
+						&curr_frame_verts[8u * 4u],
+						seg_idx) == OK);
+		for (uint32_t j = 0; j < 6u; j++) {
+			encode_uint32(seg_idx[j], idx_bytes.ptrw() + (8u * 6u + j) * 4u);
+		}
+	}
+
+	LocalVector<RendererRD::Float144Vertex> aligned_prev;
+	LocalVector<uint32_t> hist_valid;
+	RibbonRD::align_previous_ribbon_vertices(curr_frame_verts, prev_frame_verts, aligned_prev, hist_valid);
+	REQUIRE(hist_valid.size() == active_segs * 4u);
+	for (uint32_t v = 0; v < 16u; v++) {
+		CHECK(hist_valid[v] == 0u); // Newborn head group (4 sub-segments)
+	}
+	for (uint32_t v = 16u; v < 32u; v++) {
+		CHECK(hist_valid[v] == 1u); // Surviving K=4 sub-segments matched distinctly via word[34]
+		uint32_t raw_prev[36] = {};
+		std::memcpy(raw_prev, &aligned_prev[v], sizeof(raw_prev));
+		CHECK(raw_prev[31] == 0xCAFE1234u);
+		CHECK(raw_prev[34] == ((v - 16u) / 4u));
+		CHECK(raw_prev[35] == 1u);
+	}
+	for (uint32_t v = 32u; v < 36u; v++) {
+		CHECK(hist_valid[v] == 0u); // Newborn degenerate segment
+	}
+
+	// Execute live Metal ParticlesExternalGuardIndexed144 on the 9-segment packet + negative pad0/pad1/word34 faults:
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDevice rd;
+	REQUIRE(rd.initialize(&context) == OK);
+
+	Guard guard;
+	REQUIRE(guard.prepare_pipelines_standalone_rd() == OK);
+
+	RibbonRD::Indexed144Layout layout;
+	REQUIRE(RibbonRD::plan_indexed144(active_segs, true, 1, layout) == OK);
+	RibbonRD::AllocatedBuffers bufs;
+	REQUIRE(RibbonRD::allocate_buffers_rd(rd, layout, bufs) == OK);
+
+	Vector<uint8_t> source_bytes;
+	source_bytes.resize(32);
+	std::memset(source_bytes.ptrw(), 0, 32);
+	encode_uint32(active_segs, source_bytes.ptrw() + 0);
+	const RID source_rid = rd.storage_buffer_create(32, source_bytes);
+	REQUIRE(source_rid.is_valid());
+
+	Guard::GeometryProofHeader proof = {};
+	for (int k = 0; k < 3; k++) {
+		proof.current_decl_min[k] = -10.0f;
+		proof.current_decl_max[k] = 10.0f;
+		proof.previous_decl_min[k] = -10.0f;
+		proof.previous_decl_max[k] = 10.0f;
+		proof.cull_min[k] = -20.0f;
+		proof.cull_max[k] = 20.0f;
+	}
+	proof.source_accessor[0] = 0u;
+	proof.source_accessor[3] = 1u;
+	proof.source_gate_words[0] = 1u;
+	proof.source_gate_words[1] = 2u;
+	proof.source_gate_words[2] = 3u;
+	proof.source_gate_words[3] = 4u;
+	proof.options[0] = 1u;
+
+	Guard::RibbonSurfaceProof surf = {};
+	surf.command[0] = 1u;
+	surf.command[1] = 6u;
+
+	Vector<uint8_t> proof_bytes;
+	proof_bytes.resize(sizeof(proof) + sizeof(surf));
+	std::memcpy(proof_bytes.ptrw(), &proof, sizeof(proof));
+	std::memcpy(proof_bytes.ptrw() + sizeof(proof), &surf, sizeof(surf));
+	REQUIRE(rd.buffer_update(bufs.rids[RibbonRD::GEOMETRY_PROOF], 0, proof_bytes.size(), proof_bytes.ptr()) == OK);
+
+	Vector<uint8_t> meta_bytes;
+	meta_bytes.resize(32);
+	std::memset(meta_bytes.ptrw(), 0, 32);
+	encode_uint32(active_segs, meta_bytes.ptrw() + 0);
+	encode_uint32(active_segs, meta_bytes.ptrw() + 16);
+	encode_uint32(2u, meta_bytes.ptrw() + 20);
+	encode_uint32(0x77778888u, meta_bytes.ptrw() + 24);
+	encode_uint32(0x9999aaaau, meta_bytes.ptrw() + 28);
+
+	Guard::Bindings bindings;
+	bindings.buffers[Guard::CURRENT_VERTICES] = { bufs.rids[RibbonRD::CURRENT_VERTICES], bufs.bytes[RibbonRD::CURRENT_VERTICES] };
+	bindings.buffers[Guard::ALIGNED_PREVIOUS_VERTICES] = { bufs.rids[RibbonRD::ALIGNED_PREVIOUS_VERTICES], bufs.bytes[RibbonRD::ALIGNED_PREVIOUS_VERTICES] };
+	bindings.buffers[Guard::VERTEX_HISTORY_VALIDITY] = { bufs.rids[RibbonRD::VERTEX_HISTORY_VALIDITY], bufs.bytes[RibbonRD::VERTEX_HISTORY_VALIDITY] };
+	bindings.buffers[Guard::INDEX_STAGING] = { bufs.rids[RibbonRD::INDEX_STAGING], bufs.bytes[RibbonRD::INDEX_STAGING] };
+	bindings.buffers[Guard::OUTPUT_META] = { bufs.rids[RibbonRD::OUTPUT_META], bufs.bytes[RibbonRD::OUTPUT_META] };
+	bindings.buffers[Guard::SOURCE_COUNT] = { source_rid, 32 };
+	bindings.buffers[Guard::GUARD_SCRATCH] = { bufs.rids[RibbonRD::GUARD_SCRATCH], bufs.bytes[RibbonRD::GUARD_SCRATCH] };
+	bindings.buffers[Guard::GUARD_STATUS] = { bufs.rids[RibbonRD::GUARD_STATUS], bufs.bytes[RibbonRD::GUARD_STATUS] };
+	bindings.buffers[Guard::PROTECTED_COMMANDS] = { bufs.rids[RibbonRD::PROTECTED_COMMANDS], bufs.bytes[RibbonRD::PROTECTED_COMMANDS] };
+	bindings.buffers[Guard::GEOMETRY_PROOF] = { bufs.rids[RibbonRD::GEOMETRY_PROOF], bufs.bytes[RibbonRD::GEOMETRY_PROOF] };
+	bindings.buffers[Guard::SOURCE_COUNT_VALIDITY] = { source_rid, 32 };
+	bindings.buffers[Guard::SOURCE_ATTRIBUTES_VALIDITY] = { source_rid, 32 };
+	bindings.buffers[Guard::SOURCE_DENSE_IDS_VALIDITY] = { source_rid, 32 };
+	bindings.buffers[Guard::SOURCE_INSTANCE_GATE] = { source_rid, 32 };
+
+	Guard::PushConstant req;
+	req.capacity = active_segs;
+	req.sequence_low = 0x77778888u;
+	req.sequence_high = 0x9999aaaau;
+	req.surface_count = 1u;
+	req.segment_base = 0u;
+	req.segment_count = active_segs;
+
+	Guard::LayoutPlan plan;
+	REQUIRE(Guard::plan_layout(req, bindings, proof, 8u, plan) == OK);
+	const RID uniform_set = rd.uniform_set_create(plan.uniforms, guard.get_shader(plan.initialize_mode), 0);
+	REQUIRE(uniform_set.is_valid());
+
+	const auto dispatch_indexed144 = [&](const LocalVector<RendererRD::Float144Vertex> &p_curr,
+											 const LocalVector<RendererRD::Float144Vertex> &p_prev,
+											 uint32_t &r_fault,
+											 uint32_t &r_idx_count) {
+		REQUIRE(rd.buffer_update(bufs.rids[RibbonRD::CURRENT_VERTICES], 0, p_curr.size() * sizeof(RendererRD::Float144Vertex), p_curr.ptr()) == OK);
+		REQUIRE(rd.buffer_update(bufs.rids[RibbonRD::ALIGNED_PREVIOUS_VERTICES], 0, p_prev.size() * sizeof(RendererRD::Float144Vertex), p_prev.ptr()) == OK);
+		REQUIRE(rd.buffer_update(bufs.rids[RibbonRD::VERTEX_HISTORY_VALIDITY], 0, hist_valid.size() * sizeof(uint32_t), hist_valid.ptr()) == OK);
+		REQUIRE(rd.buffer_update(bufs.rids[RibbonRD::INDEX_STAGING], 0, idx_bytes.size(), idx_bytes.ptr()) == OK);
+		REQUIRE(rd.buffer_update(bufs.rids[RibbonRD::OUTPUT_META], 0, meta_bytes.size(), meta_bytes.ptr()) == OK);
+
+		RD::ComputeListID cl = rd.compute_list_begin();
+		REQUIRE(guard.record(cl, plan, uniform_set, uniform_set, uniform_set) == OK);
+		rd.compute_list_end();
+		rd.submit();
+		rd.sync();
+
+		const Vector<uint8_t> status_rb = rd.buffer_get_data(bufs.rids[RibbonRD::GUARD_STATUS]);
+		const Vector<uint8_t> cmd_rb = rd.buffer_get_data(bufs.rids[RibbonRD::PROTECTED_COMMANDS]);
+		r_fault = decode_uint32(status_rb.ptr() + 0);
+		r_idx_count = decode_uint32(cmd_rb.ptr() + 0);
+	};
+
+	uint32_t fault = UINT32_MAX;
+	uint32_t idx_count = 0;
+
+	// Healthy mixed K=4 subsegment + degenerate ribbon packet -> 0 faults, indexCount = 54u:
+	dispatch_indexed144(curr_frame_verts, aligned_prev, fault, idx_count);
+	CHECK(fault == 0u);
+	CHECK(idx_count == active_segs * 6u);
+
+	// T06 (Metal): pad0 = 1u (word[3]) -> NUMERIC_FAULT (16u), commands[0] == 0u:
+	LocalVector<RendererRD::Float144Vertex> dirty_pad0(curr_frame_verts);
+	dirty_pad0[32].pad0 = 1u;
+	dispatch_indexed144(dirty_pad0, aligned_prev, fault, idx_count);
+	CHECK(fault == 16u);
+	CHECK(idx_count == 0u);
+
+	// T06 (Metal): pad1 = 1u (word[7]) -> NUMERIC_FAULT (16u), commands[0] == 0u:
+	LocalVector<RendererRD::Float144Vertex> dirty_pad1(curr_frame_verts);
+	dirty_pad1[32].pad1 = 1u;
+	dispatch_indexed144(dirty_pad1, aligned_prev, fault, idx_count);
+	CHECK(fault == 16u);
+	CHECK(idx_count == 0u);
+
+	// T07 (Metal): mutating word[34] (subsegment_index) in previous vertex raises HISTORY_FAULT (32u):
+	LocalVector<RendererRD::Float144Vertex> bad_subseg_prev(aligned_prev);
+	bad_subseg_prev[20].endpoint_key_words[6] ^= 1u;
+	dispatch_indexed144(curr_frame_verts, bad_subseg_prev, fault, idx_count);
+	CHECK(fault == 32u);
+	CHECK(idx_count == 0u);
 
 	rd.free_rid(uniform_set);
 	rd.free_rid(source_rid);

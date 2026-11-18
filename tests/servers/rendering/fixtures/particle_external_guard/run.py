@@ -112,14 +112,19 @@ def main():
             return text
 
         functions = "#define EXTERNAL_MAX_SURFACES " + str(surface_limit) + "u\n" + translate(body)
+        translated_main = translate(main_body)
         for mode in ("INIT", "VALIDATE", "FINALIZE"):
-            selected = re.sub(
-                r"#ifdef MODE_(INIT|VALIDATE|FINALIZE)\n(.*?)#endif",
-                lambda m: m[2] if m[1] == mode else "",
-                main_body,
-                flags=re.S,
+            functions += (
+                "\nvoid shader_"
+                + mode
+                + "() {\n#define MODE_"
+                + mode
+                + "\n"
+                + translated_main
+                + "\n#undef MODE_"
+                + mode
+                + "\n}\n"
             )
-            functions += "\nvoid shader_" + mode + "() {" + translate(selected) + "}\n"
         harness = Path(__file__).with_name("harness.cpp.in").read_text()
         surface = source[source.index("struct SurfaceProof {") : source.index("\nlayout(set = 0, binding = 7")]
         cpp = temp / "guard.cpp"

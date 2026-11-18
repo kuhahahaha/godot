@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/io/marshalls.h"
+#include "servers/rendering/renderer_rd/effects/particles_external_guard.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_config.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_mesh_light_sort_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/light_storage.h"
@@ -342,6 +343,481 @@ TEST_CASE("[particle_mesh_subuv_light] D3-P0-4/D3-P0-5/D3-P1-4a ParticleLight64 
 	CHECK(pub_out[0].id_index == 54u);
 	manager.clear_active_particle_lights();
 	CHECK(manager.get_active_particle_light_count() == 0u);
+}
+
+TEST_CASE("[particle_mesh_subuv_light] O-01 mixed zero-size batch bit-exact encoding and live Metal ParticlesExternalGuard") {
+	using Lane = RendererRD::ParticlesMeshLightSortRD;
+	using Guard = RendererRD::ParticlesExternalGuard;
+
+	// Verify flush_subnormal_and_neg_zero & bit-exact canonical degenerate Instance192Record (words 0..47):
+	float out_f = -1.0f;
+	uint32_t out_bits = 0xffffffffu;
+	CHECK(Lane::flush_subnormal_and_neg_zero(-0.0f, out_f));
+	std::memcpy(&out_bits, &out_f, sizeof(uint32_t));
+	CHECK(out_bits == 0u);
+
+	uint32_t sub_bits = 1u;
+	float sub_f = 0.0f;
+	std::memcpy(&sub_f, &sub_bits, sizeof(float));
+	CHECK(Lane::flush_subnormal_and_neg_zero(sub_f, out_f));
+	std::memcpy(&out_bits, &out_f, sizeof(uint32_t));
+	CHECK(out_bits == 0u);
+
+	const RendererRD::Instance192Record deg = Lane::make_canonical_degenerate_instance192(
+			Vector3(1.25f, -10.0f, -0.0f),
+			Color(-0.0f, 0.25f, 0.5f, 1.0f),
+			0x000000070000002Aull,
+			true);
+	uint32_t words[48] = {};
+	std::memcpy(words, &deg, sizeof(words));
+	// words 0..11: zero basis + translation (1.25, -10.0, +0.0)
+	CHECK(words[0] == 0u);
+	CHECK(words[1] == 0u);
+	CHECK(words[2] == 0u);
+	CHECK(Math::is_equal_approx(deg.transform_rows[0][3], 1.25f));
+	CHECK(words[4] == 0u);
+	CHECK(words[5] == 0u);
+	CHECK(words[6] == 0u);
+	CHECK(Math::is_equal_approx(deg.transform_rows[1][3], -10.0f));
+	CHECK(words[8] == 0u);
+	CHECK(words[9] == 0u);
+	CHECK(words[10] == 0u);
+	CHECK(words[11] == 0u); // -0.0f flushed to +0.0f
+	// words 12..23: identity normal rows + zero pads
+	CHECK(Math::is_equal_approx(deg.normal_row0[0], 1.0f));
+	CHECK(words[13] == 0u);
+	CHECK(words[14] == 0u);
+	CHECK(words[15] == 0u);
+	CHECK(words[16] == 0u);
+	CHECK(Math::is_equal_approx(deg.normal_row1[1], 1.0f));
+	CHECK(words[18] == 0u);
+	CHECK(words[19] == 0u);
+	CHECK(words[20] == 0u);
+	CHECK(words[21] == 0u);
+	CHECK(Math::is_equal_approx(deg.normal_row2[2], 1.0f));
+	CHECK(words[23] == 0u);
+	// words 24..35: {I, -t}
+	CHECK(Math::is_equal_approx(deg.inverse_transform_rows[0][0], 1.0f));
+	CHECK(Math::is_equal_approx(deg.inverse_transform_rows[0][3], -1.25f));
+	CHECK(Math::is_equal_approx(deg.inverse_transform_rows[1][1], 1.0f));
+	CHECK(Math::is_equal_approx(deg.inverse_transform_rows[1][3], 10.0f));
+	CHECK(Math::is_equal_approx(deg.inverse_transform_rows[2][2], 1.0f));
+	CHECK(words[35] == 0u); // -0.0f flushed to +0.0f
+	// words 36..39: zero color
+	for (int w = 36; w <= 39; w++) {
+		CHECK(words[w] == 0u);
+	}
+	// words 40..43: flushed uv_rect
+	CHECK(words[40] == 0u);
+	CHECK(Math::is_equal_approx(deg.custom0[1], 0.25f));
+	CHECK(Math::is_equal_approx(deg.custom0[2], 0.5f));
+	CHECK(Math::is_equal_approx(deg.custom0[3], 1.0f));
+	CHECK(words[44] == 0x0000002Au);
+	CHECK(words[45] == 0x00000007u);
+	CHECK(words[46] == 19u);
+	CHECK(words[47] == 0u);
+
+	// Zero scale rejected when p_allow_zero_scale_degenerate == false:
+	RendererRD::Instance192Record rejected_zero = {};
+	CHECK(Lane::build_instance192_record_checked(
+				  Transform3D(Basis::from_scale(Vector3(0.0f, 0.0f, 0.0f)), Vector3(0.0f, -10.0f, 0.0f)),
+				  Color(1, 1, 1, 1),
+				  Color(0, 0, 1, 1),
+				  1ull,
+				  false,
+				  false,
+				  rejected_zero) == ERR_INVALID_PARAMETER);
+	CHECK(rejected_zero.flags == 0u);
+
+	// Build 64-instance mixed batch: 32 visible, 16 size=0 (seated on exact y=-10.0f lower bound),
+	// 8 negative-scale collapsed, 8 subnormal 1e-40f scale:
+	const float subnormal_1e40 = std::ldexp(1.0f, -133); // IEEE-754 subnormal (~9.18e-41f)
+	LocalVector<RendererRD::Instance192Record> batch_curr;
+	LocalVector<RendererRD::Instance192Record> batch_prev;
+	batch_curr.resize(64);
+	batch_prev.resize(64);
+
+	for (uint32_t i = 0; i < 64u; i++) {
+		Transform3D xf;
+		if (i < 32u) {
+			xf = Transform3D(Basis::from_scale(Vector3(0.5f, 0.75f, 0.5f)), Vector3(float(int(i) - 16) * 0.25f, 0.0f, -2.0f));
+		} else if (i < 48u) {
+			// Seated directly on exact WORLD lower bound y == -10.0f!
+			xf = Transform3D(Basis::from_scale(Vector3(0.0f, 0.0f, 0.0f)), Vector3(0.25f, -10.0f, -1.0f));
+		} else if (i < 56u) {
+			// Negative-scale collapsed on one axis:
+			xf = Transform3D(Basis::from_scale(Vector3(-1.5f, 0.0f, 2.0f)), Vector3(-0.5f, -10.0f, 0.5f));
+		} else {
+			// Subnormal ~1e-40f scale:
+			xf = Transform3D(Basis::from_scale(Vector3(subnormal_1e40, -subnormal_1e40, subnormal_1e40)), Vector3(0.0f, -10.0f, 0.0f));
+		}
+		REQUIRE(Lane::build_instance192_record_checked(
+						xf,
+						Color(0.8f, 0.6f, 0.4f, 1.0f),
+						Color(0.0f, 0.0f, 1.0f, 1.0f),
+						uint64_t(1000u + i) | (1ull << 32u),
+						true,
+						true,
+						batch_curr[i]) == OK);
+		batch_prev[i] = batch_curr[i];
+		batch_prev[i].flags &= ~RendererRD::Instance192Record::FLAG_HAS_PREVIOUS_RECORD;
+	}
+
+#if defined(METAL_ENABLED) && defined(MACOS_ENABLED)
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDevice rd;
+	REQUIRE(rd.initialize(&context) == OK);
+
+	Guard guard;
+	REQUIRE(guard.prepare_pipelines_standalone_rd() == OK);
+	REQUIRE(guard.is_prepared());
+
+	const uint32_t rec_bytes_len = 64u * uint32_t(sizeof(RendererRD::Instance192Record));
+	Vector<uint8_t> curr_bytes;
+	curr_bytes.resize(rec_bytes_len);
+	std::memcpy(curr_bytes.ptrw(), batch_curr.ptr(), rec_bytes_len);
+	Vector<uint8_t> prev_bytes;
+	prev_bytes.resize(rec_bytes_len);
+	std::memcpy(prev_bytes.ptrw(), batch_prev.ptr(), rec_bytes_len);
+
+	Vector<uint8_t> meta_bytes;
+	meta_bytes.resize(32);
+	std::memset(meta_bytes.ptrw(), 0, 32);
+	encode_uint32(64u, meta_bytes.ptrw() + 0); // active_count
+	encode_uint32(64u, meta_bytes.ptrw() + 16); // capacity
+	encode_uint32(1u, meta_bytes.ptrw() + 20); // profile = 1 (INSTANCE_192)
+	encode_uint32(0x13572468u, meta_bytes.ptrw() + 24);
+	encode_uint32(0x00000001u, meta_bytes.ptrw() + 28);
+
+	Vector<uint8_t> source_bytes;
+	source_bytes.resize(32);
+	std::memset(source_bytes.ptrw(), 0, 32);
+	encode_uint32(64u, source_bytes.ptrw() + 0);
+
+	Guard::GeometryProofHeader proof = {};
+	for (int k = 0; k < 3; k++) {
+		proof.current_decl_min[k] = -10.0f;
+		proof.current_decl_max[k] = 10.0f;
+		proof.previous_decl_min[k] = -10.0f;
+		proof.previous_decl_max[k] = 10.0f;
+		proof.cull_min[k] = -10.0f;
+		proof.cull_max[k] = 10.0f;
+		proof.current_host_inverse_rows[k][k] = 1.0f;
+		proof.previous_host_inverse_rows[k][k] = 1.0f;
+	}
+	proof.source_accessor[0] = 0u;
+	proof.source_accessor[3] = 1u; // WORLD
+	proof.source_gate_words[0] = 1u;
+	proof.source_gate_words[1] = 2u;
+	proof.source_gate_words[2] = 3u;
+	proof.source_gate_words[3] = 4u;
+	proof.options[0] = 1u;
+
+	Guard::SurfaceProof surf = {};
+	surf.current_mesh_min[0] = -0.5f;
+	surf.current_mesh_min[1] = -0.5f;
+	surf.current_mesh_min[2] = -0.5f;
+	surf.current_mesh_max[0] = 0.5f;
+	surf.current_mesh_max[1] = 0.5f;
+	surf.current_mesh_max[2] = 0.5f;
+	std::memcpy(surf.previous_mesh_min, surf.current_mesh_min, sizeof(surf.current_mesh_min));
+	std::memcpy(surf.previous_mesh_max, surf.current_mesh_max, sizeof(surf.current_mesh_max));
+	surf.command[0] = 1u;
+	surf.command[1] = 36u;
+
+	Vector<uint8_t> proof_bytes;
+	proof_bytes.resize(sizeof(proof) + sizeof(surf));
+	std::memcpy(proof_bytes.ptrw(), &proof, sizeof(proof));
+	std::memcpy(proof_bytes.ptrw() + sizeof(proof), &surf, sizeof(surf));
+
+	const RID curr_rid = rd.storage_buffer_create(rec_bytes_len, curr_bytes);
+	const RID prev_rid = rd.storage_buffer_create(rec_bytes_len, prev_bytes);
+	const RID meta_rid = rd.storage_buffer_create(32, meta_bytes);
+	const RID source_rid = rd.storage_buffer_create(32, source_bytes);
+	const RID scratch_rid = rd.storage_buffer_create(64);
+	const RID status_rid = rd.storage_buffer_create(32);
+	const RID cmd_rid = rd.storage_buffer_create(20, Vector<uint8_t>(), RenderingDevice::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT);
+	const RID proof_rid = rd.storage_buffer_create(proof_bytes.size(), proof_bytes);
+
+	Guard::Bindings bindings;
+	bindings.buffers[Guard::CURRENT_RECORDS] = { curr_rid, rec_bytes_len };
+	bindings.buffers[Guard::PREVIOUS_RECORDS] = { prev_rid, rec_bytes_len };
+	bindings.buffers[Guard::OUTPUT_META] = { meta_rid, 32 };
+	bindings.buffers[Guard::SOURCE_COUNT] = { source_rid, 32 };
+	bindings.buffers[Guard::GUARD_SCRATCH] = { scratch_rid, 64 };
+	bindings.buffers[Guard::GUARD_STATUS] = { status_rid, 32 };
+	bindings.buffers[Guard::PROTECTED_COMMANDS] = { cmd_rid, 20 };
+	bindings.buffers[Guard::GEOMETRY_PROOF] = { proof_rid, uint64_t(proof_bytes.size()) };
+	bindings.buffers[Guard::SOURCE_COUNT_VALIDITY] = { source_rid, 32 };
+	bindings.buffers[Guard::SOURCE_ATTRIBUTES_VALIDITY] = { source_rid, 32 };
+	bindings.buffers[Guard::SOURCE_DENSE_IDS_VALIDITY] = { source_rid, 32 };
+	bindings.buffers[Guard::SOURCE_INSTANCE_GATE] = { source_rid, 32 };
+
+	Guard::PushConstant req;
+	req.capacity = 64u;
+	req.sequence_low = 0x13572468u;
+	req.sequence_high = 0x00000001u;
+	req.surface_count = 1u;
+	req.record_base = 0u;
+	req.record_count = 64u;
+
+	Guard::LayoutPlan plan;
+	REQUIRE(Guard::plan_layout(req, bindings, proof, 8u, plan) == OK);
+	const RID uniform_set = rd.uniform_set_create(plan.uniforms, guard.get_shader(plan.initialize_mode), 0);
+	REQUIRE(uniform_set.is_valid());
+
+	RD::ComputeListID cl = rd.compute_list_begin();
+	rd.compute_list_bind_compute_pipeline(cl, guard.get_pipeline(plan.initialize_mode));
+	rd.compute_list_bind_uniform_set(cl, uniform_set, 0);
+	rd.compute_list_set_push_constant(cl, &plan.initialize, sizeof(Guard::PushConstant));
+	rd.compute_list_dispatch(cl, 1, 1, 1);
+	rd.compute_list_add_barrier(cl);
+	for (int c = 0; c < plan.validation_chunks.size(); c++) {
+		rd.compute_list_bind_compute_pipeline(cl, guard.get_pipeline(plan.validate_mode));
+		rd.compute_list_bind_uniform_set(cl, uniform_set, 0);
+		rd.compute_list_set_push_constant(cl, &plan.validation_chunks[c], sizeof(Guard::PushConstant));
+		rd.compute_list_dispatch(cl, plan.validation_groups_x[c], 1, 1);
+	}
+	rd.compute_list_add_barrier(cl);
+	rd.compute_list_bind_compute_pipeline(cl, guard.get_pipeline(plan.finalize_mode));
+	rd.compute_list_bind_uniform_set(cl, uniform_set, 0);
+	rd.compute_list_set_push_constant(cl, &plan.finalize, sizeof(Guard::PushConstant));
+	rd.compute_list_dispatch(cl, 1, 1, 1);
+	rd.compute_list_end();
+	rd.submit();
+	rd.sync();
+
+	const Vector<uint8_t> status_rb = rd.buffer_get_data(status_rid);
+	const Vector<uint8_t> cmd_rb = rd.buffer_get_data(cmd_rid);
+	REQUIRE(status_rb.size() >= 32);
+	REQUIRE(cmd_rb.size() >= 20);
+	CHECK(decode_uint32(status_rb.ptr() + 0) == 0u);
+	CHECK(decode_uint32(cmd_rb.ptr() + 0) == 36u);
+	CHECK(decode_uint32(cmd_rb.ptr() + 4) == 64u);
+
+	rd.free_rid(uniform_set);
+	rd.free_rid(curr_rid);
+	rd.free_rid(prev_rid);
+	rd.free_rid(meta_rid);
+	rd.free_rid(source_rid);
+	rd.free_rid(scratch_rid);
+	rd.free_rid(status_rid);
+	rd.free_rid(cmd_rid);
+	rd.free_rid(proof_rid);
+	REQUIRE(guard.release_pipelines_standalone_rd() == OK);
+#endif
+}
+
+TEST_CASE("[particle_mesh_subuv_light] O-01 singular and non-finite rejection on CPU and Metal ParticlesExternalGuard") {
+	using Lane = RendererRD::ParticlesMeshLightSortRD;
+	using Guard = RendererRD::ParticlesExternalGuard;
+
+	const float qnan = std::numeric_limits<float>::quiet_NaN();
+	const float pinf = std::numeric_limits<float>::infinity();
+
+	// 1. NaN in transform / color / custom0 rejected and output record zeroed:
+	RendererRD::Instance192Record rec = {};
+	rec.flags = 17u;
+	CHECK(Lane::build_instance192_record_checked(
+				  Transform3D(Basis(), Vector3(qnan, 0.0f, 0.0f)),
+				  Color(1, 1, 1, 1),
+				  Color(0, 0, 1, 1),
+				  1ull,
+				  false,
+				  true,
+				  rec) == ERR_INVALID_PARAMETER);
+	CHECK(rec.flags == 0u);
+
+	// 2. +Inf in transform rejected:
+	rec.flags = 17u;
+	CHECK(Lane::build_instance192_record_checked(
+				  Transform3D(Basis::from_scale(Vector3(pinf, 1.0f, 1.0f)), Vector3()),
+				  Color(1, 1, 1, 1),
+				  Color(0, 0, 1, 1),
+				  1ull,
+				  false,
+				  true,
+				  rec) == ERR_INVALID_PARAMETER);
+	CHECK(rec.flags == 0u);
+
+	// 3. Non-zero collinear singular basis ([1,0,0], [2,0,0], [0,1,0]) MUST fail closed even when allow_zero_scale_degenerate == true!
+	Basis collinear;
+	collinear.set_columns(Vector3(1.0f, 0.0f, 0.0f), Vector3(2.0f, 0.0f, 0.0f), Vector3(0.0f, 1.0f, 0.0f));
+	rec.flags = 17u;
+	CHECK(Lane::build_instance192_record_checked(
+				  Transform3D(collinear, Vector3(0.0f, 0.0f, 0.0f)),
+				  Color(1, 1, 1, 1),
+				  Color(0, 0, 1, 1),
+				  1ull,
+				  false,
+				  true,
+				  rec) == ERR_INVALID_PARAMETER);
+	CHECK(rec.flags == 0u);
+
+#if defined(METAL_ENABLED) && defined(MACOS_ENABLED)
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDevice rd;
+	REQUIRE(rd.initialize(&context) == OK);
+
+	Guard guard;
+	REQUIRE(guard.prepare_pipelines_standalone_rd() == OK);
+
+	RendererRD::Instance192Record base_rec = Lane::make_canonical_degenerate_instance192(
+			Vector3(0.0f, 0.0f, 0.0f),
+			Color(0.0f, 0.0f, 1.0f, 1.0f),
+			10ull,
+			false);
+
+	Vector<uint8_t> meta_bytes;
+	meta_bytes.resize(32);
+	std::memset(meta_bytes.ptrw(), 0, 32);
+	encode_uint32(1u, meta_bytes.ptrw() + 0);
+	encode_uint32(1u, meta_bytes.ptrw() + 16);
+	encode_uint32(1u, meta_bytes.ptrw() + 20);
+	encode_uint32(0x22223333u, meta_bytes.ptrw() + 24);
+	encode_uint32(0x44445555u, meta_bytes.ptrw() + 28);
+
+	Vector<uint8_t> source_bytes;
+	source_bytes.resize(32);
+	std::memset(source_bytes.ptrw(), 0, 32);
+	encode_uint32(1u, source_bytes.ptrw() + 0);
+
+	Guard::GeometryProofHeader proof = {};
+	for (int k = 0; k < 3; k++) {
+		proof.current_decl_min[k] = -10.0f;
+		proof.current_decl_max[k] = 10.0f;
+		proof.cull_min[k] = -10.0f;
+		proof.cull_max[k] = 10.0f;
+		proof.current_host_inverse_rows[k][k] = 1.0f;
+	}
+	proof.source_accessor[0] = 0u;
+	proof.source_accessor[3] = 1u;
+	proof.source_gate_words[0] = 1u;
+	proof.source_gate_words[1] = 2u;
+	proof.source_gate_words[2] = 3u;
+	proof.source_gate_words[3] = 4u;
+	proof.options[0] = 0u; // MOTION_DISABLED
+
+	Guard::SurfaceProof surf = {};
+	surf.current_mesh_min[0] = -0.5f;
+	surf.current_mesh_min[1] = -0.5f;
+	surf.current_mesh_min[2] = -0.5f;
+	surf.current_mesh_max[0] = 0.5f;
+	surf.current_mesh_max[1] = 0.5f;
+	surf.current_mesh_max[2] = 0.5f;
+	surf.command[0] = 1u;
+	surf.command[1] = 6u;
+
+	Vector<uint8_t> proof_bytes;
+	proof_bytes.resize(sizeof(proof) + sizeof(surf));
+	std::memcpy(proof_bytes.ptrw(), &proof, sizeof(proof));
+	std::memcpy(proof_bytes.ptrw() + sizeof(proof), &surf, sizeof(surf));
+
+	const RID curr_rid = rd.storage_buffer_create(sizeof(base_rec));
+	const RID meta_rid = rd.storage_buffer_create(32, meta_bytes);
+	const RID source_rid = rd.storage_buffer_create(32, source_bytes);
+	const RID scratch_rid = rd.storage_buffer_create(64);
+	const RID status_rid = rd.storage_buffer_create(32);
+	const RID cmd_rid = rd.storage_buffer_create(20, Vector<uint8_t>(), RenderingDevice::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT);
+	const RID proof_rid = rd.storage_buffer_create(proof_bytes.size(), proof_bytes);
+
+	Guard::Bindings bindings;
+	bindings.buffers[Guard::CURRENT_RECORDS] = { curr_rid, sizeof(base_rec) };
+	bindings.buffers[Guard::PREVIOUS_RECORDS] = { RID(), 0 };
+	bindings.buffers[Guard::OUTPUT_META] = { meta_rid, 32 };
+	bindings.buffers[Guard::SOURCE_COUNT] = { source_rid, 32 };
+	bindings.buffers[Guard::GUARD_SCRATCH] = { scratch_rid, 64 };
+	bindings.buffers[Guard::GUARD_STATUS] = { status_rid, 32 };
+	bindings.buffers[Guard::PROTECTED_COMMANDS] = { cmd_rid, 20 };
+	bindings.buffers[Guard::GEOMETRY_PROOF] = { proof_rid, uint64_t(proof_bytes.size()) };
+	bindings.buffers[Guard::SOURCE_COUNT_VALIDITY] = { source_rid, 32 };
+	bindings.buffers[Guard::SOURCE_ATTRIBUTES_VALIDITY] = { source_rid, 32 };
+	bindings.buffers[Guard::SOURCE_DENSE_IDS_VALIDITY] = { source_rid, 32 };
+	bindings.buffers[Guard::SOURCE_INSTANCE_GATE] = { source_rid, 32 };
+
+	Guard::PushConstant req;
+	req.capacity = 1u;
+	req.sequence_low = 0x22223333u;
+	req.sequence_high = 0x44445555u;
+	req.surface_count = 1u;
+	req.record_base = 0u;
+	req.record_count = 1u;
+
+	Guard::LayoutPlan plan;
+	REQUIRE(Guard::plan_layout(req, bindings, proof, 8u, plan) == OK);
+	const RID uniform_set = rd.uniform_set_create(plan.uniforms, guard.get_shader(plan.initialize_mode), 0);
+	REQUIRE(uniform_set.is_valid());
+
+	const auto run_single = [&](const uint32_t p_raw_words[48], uint32_t &r_fault, uint32_t &r_inst_count) {
+		REQUIRE(rd.buffer_update(curr_rid, 0, 192, p_raw_words) == OK);
+		RD::ComputeListID cl = rd.compute_list_begin();
+		rd.compute_list_bind_compute_pipeline(cl, guard.get_pipeline(plan.initialize_mode));
+		rd.compute_list_bind_uniform_set(cl, uniform_set, 0);
+		rd.compute_list_set_push_constant(cl, &plan.initialize, sizeof(Guard::PushConstant));
+		rd.compute_list_dispatch(cl, 1, 1, 1);
+		rd.compute_list_add_barrier(cl);
+		rd.compute_list_bind_compute_pipeline(cl, guard.get_pipeline(plan.validate_mode));
+		rd.compute_list_bind_uniform_set(cl, uniform_set, 0);
+		rd.compute_list_set_push_constant(cl, &plan.validation_chunks[0], sizeof(Guard::PushConstant));
+		rd.compute_list_dispatch(cl, plan.validation_groups_x[0], 1, 1);
+		rd.compute_list_add_barrier(cl);
+		rd.compute_list_bind_compute_pipeline(cl, guard.get_pipeline(plan.finalize_mode));
+		rd.compute_list_bind_uniform_set(cl, uniform_set, 0);
+		rd.compute_list_set_push_constant(cl, &plan.finalize, sizeof(Guard::PushConstant));
+		rd.compute_list_dispatch(cl, 1, 1, 1);
+		rd.compute_list_end();
+		rd.submit();
+		rd.sync();
+		const Vector<uint8_t> status_rb = rd.buffer_get_data(status_rid);
+		const Vector<uint8_t> cmd_rb = rd.buffer_get_data(cmd_rid);
+		r_fault = decode_uint32(status_rb.ptr() + 0);
+		r_inst_count = decode_uint32(cmd_rb.ptr() + 4);
+	};
+
+	uint32_t raw_words[48] = {};
+	uint32_t fault = 0;
+	uint32_t inst_count = 99;
+
+	// Inject raw NaN (0x7fc00000u) -> NUMERIC_FAULT (16u):
+	std::memcpy(raw_words, &base_rec, sizeof(raw_words));
+	raw_words[3] = 0x7fc00000u;
+	run_single(raw_words, fault, inst_count);
+	CHECK(fault == 16u);
+	CHECK(inst_count == 0u);
+
+	// Inject raw subnormal (1u) -> NUMERIC_FAULT (16u):
+	std::memcpy(raw_words, &base_rec, sizeof(raw_words));
+	raw_words[40] = 1u;
+	run_single(raw_words, fault, inst_count);
+	CHECK(fault == 16u);
+	CHECK(inst_count == 0u);
+
+	// Inject reserved flag bit (flags = 33u) -> NUMERIC_FAULT (16u):
+	std::memcpy(raw_words, &base_rec, sizeof(raw_words));
+	raw_words[46] = 33u;
+	run_single(raw_words, fault, inst_count);
+	CHECK(fault == 16u);
+	CHECK(inst_count == 0u);
+
+	// Inject non-zero w47 -> NUMERIC_FAULT (16u):
+	std::memcpy(raw_words, &base_rec, sizeof(raw_words));
+	raw_words[47] = 1u;
+	run_single(raw_words, fault, inst_count);
+	CHECK(fault == 16u);
+	CHECK(inst_count == 0u);
+
+	rd.free_rid(uniform_set);
+	rd.free_rid(curr_rid);
+	rd.free_rid(meta_rid);
+	rd.free_rid(source_rid);
+	rd.free_rid(scratch_rid);
+	rd.free_rid(status_rid);
+	rd.free_rid(cmd_rid);
+	rd.free_rid(proof_rid);
+	REQUIRE(guard.release_pipelines_standalone_rd() == OK);
+#endif
 }
 
 } // namespace TestParticleMeshSubuvLight

@@ -66,6 +66,8 @@
 #include "tests/servers/rendering/test_external_output_custody_bridge.h"
 #include "tests/test_macros.h"
 
+#include <array>
+
 Error RendererRD::ExternalLinkedOwnerTest::staged_instance192_resource_count(uint32_t capacity, uint32_t surfaces, uint32_t &count) {
 	ExternalOutputStorage::Instance192Layout layout;
 	const Error sized = ExternalOutputStorage::plan_instance192(capacity, surfaces, layout);

@@ -37,6 +37,7 @@
 #include "core/templates/local_vector.h"
 #include "core/templates/rid.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 
@@ -45,18 +46,82 @@ class RenderingDevice;
 namespace RendererRD {
 
 struct RibbonSegmentEndpointKey32 {
-	uint64_t emitter_id = 0;
-	uint64_t trail_id = 0;
-	uint64_t head_particle_id = 0;
-	uint64_t tail_particle_id = 0;
+	uint32_t start_id_index = 0;
+	uint32_t start_id_tag = 0;
+	uint32_t end_id_index = 0;
+	uint32_t end_id_tag = 0;
+	uint32_t group_lo = 0;
+	uint32_t group_hi = 0;
+	uint32_t subsegment_index = 0;
+	uint32_t valid_mask = 0;
 
-	bool operator==(const RibbonSegmentEndpointKey32 &p_other) const {
-		return emitter_id == p_other.emitter_id &&
-				trail_id == p_other.trail_id &&
-				head_particle_id == p_other.head_particle_id &&
-				tail_particle_id == p_other.tail_particle_id;
+	constexpr RibbonSegmentEndpointKey32() = default;
+	constexpr RibbonSegmentEndpointKey32(
+			uint32_t p_start_id_index,
+			uint32_t p_start_id_tag,
+			uint32_t p_end_id_index,
+			uint32_t p_end_id_tag,
+			uint32_t p_group_lo,
+			uint32_t p_group_hi,
+			uint32_t p_subsegment_index,
+			uint32_t p_valid_mask) :
+			start_id_index(p_start_id_index),
+			start_id_tag(p_start_id_tag),
+			end_id_index(p_end_id_index),
+			end_id_tag(p_end_id_tag),
+			group_lo(p_group_lo),
+			group_hi(p_group_hi),
+			subsegment_index(p_subsegment_index & 3u),
+			valid_mask(p_valid_mask != 0u ? 1u : 0u) {}
+
+	constexpr RibbonSegmentEndpointKey32(
+			uint64_t p_emitter_id,
+			uint64_t p_trail_id,
+			uint64_t p_head_id,
+			uint64_t p_tail_id,
+			uint32_t p_subsegment = 0u) :
+			RibbonSegmentEndpointKey32(from_legacy_ids(p_emitter_id, p_trail_id, p_head_id, p_tail_id, p_subsegment)) {}
+
+	static constexpr RibbonSegmentEndpointKey32 from_legacy_ids(
+			uint64_t p_emitter_id,
+			uint64_t p_trail_id,
+			uint64_t p_head_id,
+			uint64_t p_tail_id,
+			uint32_t p_subsegment = 0u) {
+		const uint64_t group = p_emitter_id ^ (p_trail_id << 1u);
+		return RibbonSegmentEndpointKey32(
+				uint32_t(p_head_id & 0xffffffffu),
+				uint32_t(p_head_id >> 32u),
+				uint32_t(p_tail_id & 0xffffffffu),
+				uint32_t(p_tail_id >> 32u),
+				uint32_t(group & 0xffffffffu),
+				uint32_t(group >> 32u),
+				p_subsegment & 3u,
+				(p_emitter_id != 0 || p_trail_id != 0 || p_head_id != 0 || p_tail_id != 0) ? 1u : 0u);
 	}
-	bool operator!=(const RibbonSegmentEndpointKey32 &p_other) const {
+
+	constexpr RibbonSegmentEndpointKey32 with_subsegment(uint32_t p_subsegment_ordinal) const {
+		RibbonSegmentEndpointKey32 copy = *this;
+		copy.subsegment_index = p_subsegment_ordinal & 3u;
+		copy.valid_mask = 1u;
+		return copy;
+	}
+
+	constexpr uint32_t get_subsegment() const {
+		return subsegment_index;
+	}
+
+	constexpr bool operator==(const RibbonSegmentEndpointKey32 &p_other) const {
+		return start_id_index == p_other.start_id_index &&
+				start_id_tag == p_other.start_id_tag &&
+				end_id_index == p_other.end_id_index &&
+				end_id_tag == p_other.end_id_tag &&
+				group_lo == p_other.group_lo &&
+				group_hi == p_other.group_hi &&
+				subsegment_index == p_other.subsegment_index &&
+				valid_mask == p_other.valid_mask;
+	}
+	constexpr bool operator!=(const RibbonSegmentEndpointKey32 &p_other) const {
 		return !(*this == p_other);
 	}
 };
@@ -78,7 +143,12 @@ struct Float144Vertex {
 };
 
 static_assert(std::is_standard_layout_v<RibbonSegmentEndpointKey32> && sizeof(RibbonSegmentEndpointKey32) == 32);
+static_assert(offsetof(RibbonSegmentEndpointKey32, subsegment_index) == 24);
+static_assert(offsetof(RibbonSegmentEndpointKey32, valid_mask) == 28);
 static_assert(std::is_standard_layout_v<Float144Vertex> && sizeof(Float144Vertex) == 144);
+static_assert(offsetof(Float144Vertex, pad0) == 12);
+static_assert(offsetof(Float144Vertex, pad1) == 28);
+static_assert(offsetof(Float144Vertex, endpoint_key_words) == 112);
 
 class ParticlesRibbonRD {
 public:
@@ -141,6 +211,20 @@ public:
 
 	// RIB-04 camera-facing quad tessellation + non-uniform scale pullback normal:
 	static void build_ribbon_segment_quad(
+			uint32_t p_segment_ordinal,
+			const Vector3 &p_head_world,
+			const Vector3 &p_tail_world,
+			const Vector3 &p_camera_world,
+			float p_half_width,
+			float p_u_head,
+			float p_u_tail,
+			const Color &p_color,
+			const Basis &p_host_local_to_world,
+			const RibbonSegmentEndpointKey32 &p_endpoint_key,
+			Float144Vertex r_vertices[4],
+			uint32_t r_indices[6]);
+
+	static Error build_ribbon_segment_quad_checked(
 			uint32_t p_segment_ordinal,
 			const Vector3 &p_head_world,
 			const Vector3 &p_tail_world,

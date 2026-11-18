@@ -141,6 +141,70 @@ void flattened_surfaces(){
  healthy();add_surfaces(9);gl_GlobalInvocationID.x=0;shader_INIT();params.surface_count=0xffffffffu;shader_VALIDATE();shader_FINALIZE();expect(4,0,"changed later-mode count");
 }
 
+void write_zero_area_record(Array<uint> &words,uint ordinal,vec3 t,uint flags,uint id_lo=0,uint id_hi=23){
+ uint b=ordinal*48u;
+ for(uint i=0;i<48u;i++)words[b+i]=0u;
+ auto pos_zero=[](float v){return (floatBitsToUint(v)&0x7fffffffu)==0u?0u:floatBitsToUint(v);};
+ words[b+3]=pos_zero(t.x);words[b+7]=pos_zero(t.y);words[b+11]=pos_zero(t.z);
+ words[b+12]=floatBitsToUint(1.0f);words[b+17]=floatBitsToUint(1.0f);words[b+22]=floatBitsToUint(1.0f);
+ words[b+24]=floatBitsToUint(1.0f);words[b+27]=pos_zero(-t.x);
+ words[b+29]=floatBitsToUint(1.0f);words[b+31]=pos_zero(-t.y);
+ words[b+34]=floatBitsToUint(1.0f);words[b+35]=pos_zero(-t.z);
+ words[b+42]=floatBitsToUint(1.0f);words[b+43]=floatBitsToUint(1.0f);
+ words[b+44]=id_lo;words[b+45]=id_hi;words[b+46]=flags;words[b+47]=0u;
+}
+
+void zero_area_degenerate_cases(){
+ // WORLD exact lower boundary (ty == current_decl_min.y == cull_min.y == -1.0f):
+ healthy(1,2);
+ write_zero_area_record(current_records.words,0,vec3(0.0f,-1.0f,0.0f),17u);
+ execute();expect(0,1,"world zero-area exact boundary flags=17");
+
+ healthy(1,2);
+ write_zero_area_record(current_records.words,0,vec3(0.0f,-1.0f,0.0f),19u);
+ write_zero_area_record(previous_records.words,0,vec3(0.0f,-1.0f,0.0f),17u);
+ execute();expect(0,1,"world zero-area exact boundary flags=19");
+
+ // LOCAL (source_accessor.w == 2u) under translated + 35-deg rotated Host / Host^-1:
+ const float angle=35.0f*3.14159265358979323846f/180.0f;
+ const float c=std::cos(angle),s=std::sin(angle);
+ const vec3 host_t(1.25f,2.5f,-0.75f);
+ const vec3 local_p(0.25f,-1.0f,0.5f);
+ const vec3 world_t(c*local_p.x-s*local_p.y+host_t.x,s*local_p.x+c*local_p.y+host_t.y,local_p.z+host_t.z);
+ const vec4 inv_row0(c,s,0.0f,-(c*host_t.x+s*host_t.y));
+ const vec4 inv_row1(-s,c,0.0f,-(-s*host_t.x+c*host_t.y));
+ const vec4 inv_row2(0.0f,0.0f,1.0f,-host_t.z);
+
+ healthy(1,2);
+ proof.source_accessor.w=2u;
+ proof.cull_min=vec4(-10.0f,-10.0f,-10.0f,0.0f);proof.cull_max=vec4(10.0f,10.0f,10.0f,0.0f);
+ proof.current_decl_min=proof.previous_decl_min=vec4(-1.0001f,-1.0001f,-1.0001f,0.0f);
+ proof.current_decl_max=proof.previous_decl_max=vec4(1.0001f,1.0001f,1.0001f,0.0f);
+ proof.current_host_inverse_rows[0]=proof.previous_host_inverse_rows[0]=inv_row0;
+ proof.current_host_inverse_rows[1]=proof.previous_host_inverse_rows[1]=inv_row1;
+ proof.current_host_inverse_rows[2]=proof.previous_host_inverse_rows[2]=inv_row2;
+ write_zero_area_record(current_records.words,0,world_t,19u);
+ write_zero_area_record(previous_records.words,0,world_t,17u);
+ execute();expect(0,1,"local zero-area 1e-4 padded pass");
+
+ // Unpadded exact LOCAL boundary (-1.0f) faults due to non-zero Host^-1 interval rounding:
+ healthy(1,2);
+ proof.source_accessor.w=2u;
+ proof.cull_min=vec4(-10.0f,-10.0f,-10.0f,0.0f);proof.cull_max=vec4(10.0f,10.0f,10.0f,0.0f);
+ proof.current_decl_min=proof.previous_decl_min=vec4(-1.0f,-1.0f,-1.0f,0.0f);
+ proof.current_decl_max=proof.previous_decl_max=vec4(1.0f,1.0f,1.0f,0.0f);
+ proof.current_host_inverse_rows[0]=proof.previous_host_inverse_rows[0]=inv_row0;
+ proof.current_host_inverse_rows[1]=proof.previous_host_inverse_rows[1]=inv_row1;
+ proof.current_host_inverse_rows[2]=proof.previous_host_inverse_rows[2]=inv_row2;
+ write_zero_area_record(current_records.words,0,world_t,17u);
+ execute();expect(64,0,"local zero-area unpadded bounds fault");
+
+ // WORLD zero-area seated outside cull_min (ty = -1.001f < cull_min.y = -1.0f):
+ healthy(1,2);
+ write_zero_area_record(current_records.words,0,vec3(0.0f,-1.001f,0.0f),17u);
+ execute();expect(64,0,"world zero-area outside cull_min");
+}
+
 int main(){
  healthy();execute();expect(0,1,"healthy");
  healthy(0);execute();expect(0,0,"source zero");
@@ -232,5 +296,6 @@ int main(){
  bool valid=true;vec2 p=multiply_interval(vec2(.25),vec2(2),valid);assert(valid&&p.x<=.5&&p.y>=.5);checks++;
  valid=true;multiply_interval(vec2(std::numeric_limits<float>::max()),vec2(2),valid);assert(!valid);checks++;
  flattened_surfaces();
+ zero_area_degenerate_cases();
  std::cout<<checks<<" CPU production-control/interval cases PASS (sequential, no GPU claim)\n";
 }

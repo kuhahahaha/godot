@@ -41,22 +41,26 @@
 namespace RendererRD {
 
 void Float144Vertex::set_endpoint_key(const RibbonSegmentEndpointKey32 &p_key) {
-	endpoint_key_words[0] = uint32_t(p_key.emitter_id & 0xffffffffu);
-	endpoint_key_words[1] = uint32_t(p_key.emitter_id >> 32u);
-	endpoint_key_words[2] = uint32_t(p_key.trail_id & 0xffffffffu);
-	endpoint_key_words[3] = uint32_t(p_key.trail_id >> 32u);
-	endpoint_key_words[4] = uint32_t(p_key.head_particle_id & 0xffffffffu);
-	endpoint_key_words[5] = uint32_t(p_key.head_particle_id >> 32u);
-	endpoint_key_words[6] = uint32_t(p_key.tail_particle_id & 0xffffffffu);
-	endpoint_key_words[7] = uint32_t(p_key.tail_particle_id >> 32u);
+	endpoint_key_words[0] = p_key.start_id_index;
+	endpoint_key_words[1] = p_key.start_id_tag;
+	endpoint_key_words[2] = p_key.end_id_index;
+	endpoint_key_words[3] = p_key.end_id_tag;
+	endpoint_key_words[4] = p_key.group_lo;
+	endpoint_key_words[5] = p_key.group_hi;
+	endpoint_key_words[6] = p_key.subsegment_index;
+	endpoint_key_words[7] = p_key.valid_mask;
 }
 
 RibbonSegmentEndpointKey32 Float144Vertex::get_endpoint_key() const {
 	RibbonSegmentEndpointKey32 out;
-	out.emitter_id = (uint64_t(endpoint_key_words[1]) << 32u) | uint64_t(endpoint_key_words[0]);
-	out.trail_id = (uint64_t(endpoint_key_words[3]) << 32u) | uint64_t(endpoint_key_words[2]);
-	out.head_particle_id = (uint64_t(endpoint_key_words[5]) << 32u) | uint64_t(endpoint_key_words[4]);
-	out.tail_particle_id = (uint64_t(endpoint_key_words[7]) << 32u) | uint64_t(endpoint_key_words[6]);
+	out.start_id_index = endpoint_key_words[0];
+	out.start_id_tag = endpoint_key_words[1];
+	out.end_id_index = endpoint_key_words[2];
+	out.end_id_tag = endpoint_key_words[3];
+	out.group_lo = endpoint_key_words[4];
+	out.group_hi = endpoint_key_words[5];
+	out.subsegment_index = endpoint_key_words[6];
+	out.valid_mask = endpoint_key_words[7];
 	return out;
 }
 
@@ -160,7 +164,10 @@ float ParticlesRibbonRD::canonicalize_finite_float(float p_value) {
 	memcpy(&bits, &p_value, sizeof(uint32_t));
 	const uint32_t mag = bits & 0x7fffffffu;
 	if (mag >= 0x7f800000u || mag < 0x00800000u) {
-		return 0.0f;
+		uint32_t zero_bits = 0u;
+		float zero_f = 0.0f;
+		memcpy(&zero_f, &zero_bits, sizeof(float));
+		return zero_f;
 	}
 	return p_value;
 }
@@ -178,6 +185,12 @@ void ParticlesRibbonRD::build_ribbon_segment_quad(
 		const RibbonSegmentEndpointKey32 &p_endpoint_key,
 		Float144Vertex r_vertices[4],
 		uint32_t r_indices[6]) {
+	if (!Math::is_finite(p_half_width) || !p_head_world.is_finite() || !p_tail_world.is_finite() || !p_camera_world.is_finite()) {
+		memset(r_vertices, 0, sizeof(Float144Vertex) * 4u);
+		memset(r_indices, 0, sizeof(uint32_t) * 6u);
+		return;
+	}
+
 	const Vector3 head_world(
 			canonicalize_finite_float(p_head_world.x),
 			canonicalize_finite_float(p_head_world.y),
@@ -241,7 +254,7 @@ void ParticlesRibbonRD::build_ribbon_segment_quad(
 		pullback_normal = world_normal;
 	}
 
-	const float w = MAX(0.0f, canonicalize_finite_float(p_half_width));
+	const float w = (p_half_width <= 0.0f) ? 0.0f : canonicalize_finite_float(p_half_width);
 	const Vector3 positions[4] = {
 		head_world - side * w,
 		head_world + side * w,
@@ -258,9 +271,11 @@ void ParticlesRibbonRD::build_ribbon_segment_quad(
 		vtx.position[0] = canonicalize_finite_float(positions[k].x);
 		vtx.position[1] = canonicalize_finite_float(positions[k].y);
 		vtx.position[2] = canonicalize_finite_float(positions[k].z);
+		vtx.pad0 = 0u;
 		vtx.normal[0] = canonicalize_finite_float(pullback_normal.x);
 		vtx.normal[1] = canonicalize_finite_float(pullback_normal.y);
 		vtx.normal[2] = canonicalize_finite_float(pullback_normal.z);
+		vtx.pad1 = 0u;
 		vtx.tangent[0] = canonicalize_finite_float(tangent.x);
 		vtx.tangent[1] = canonicalize_finite_float(tangent.y);
 		vtx.tangent[2] = canonicalize_finite_float(tangent.z);
@@ -284,6 +299,56 @@ void ParticlesRibbonRD::build_ribbon_segment_quad(
 	r_indices[3] = v_base + 2u;
 	r_indices[4] = v_base + 1u;
 	r_indices[5] = v_base + 3u;
+}
+
+Error ParticlesRibbonRD::build_ribbon_segment_quad_checked(
+		uint32_t p_segment_ordinal,
+		const Vector3 &p_head_world,
+		const Vector3 &p_tail_world,
+		const Vector3 &p_camera_world,
+		float p_half_width,
+		float p_u_head,
+		float p_u_tail,
+		const Color &p_color,
+		const Basis &p_host_local_to_world,
+		const RibbonSegmentEndpointKey32 &p_endpoint_key,
+		Float144Vertex r_vertices[4],
+		uint32_t r_indices[6]) {
+	bool basis_finite = true;
+	for (int r = 0; r < 3; ++r) {
+		for (int c = 0; c < 3; ++c) {
+			basis_finite = basis_finite && Math::is_finite(p_host_local_to_world.rows[r][c]);
+		}
+	}
+	if (!Math::is_finite(p_half_width) ||
+			!p_head_world.is_finite() ||
+			!p_tail_world.is_finite() ||
+			!p_camera_world.is_finite() ||
+			!Math::is_finite(p_u_head) ||
+			!Math::is_finite(p_u_tail) ||
+			!Math::is_finite(p_color.r) ||
+			!Math::is_finite(p_color.g) ||
+			!Math::is_finite(p_color.b) ||
+			!Math::is_finite(p_color.a) ||
+			!basis_finite) {
+		memset(r_vertices, 0, sizeof(Float144Vertex) * 4u);
+		memset(r_indices, 0, sizeof(uint32_t) * 6u);
+		return ERR_INVALID_PARAMETER;
+	}
+	build_ribbon_segment_quad(
+			p_segment_ordinal,
+			p_head_world,
+			p_tail_world,
+			p_camera_world,
+			p_half_width,
+			p_u_head,
+			p_u_tail,
+			p_color,
+			p_host_local_to_world,
+			p_endpoint_key,
+			r_vertices,
+			r_indices);
+	return OK;
 }
 
 Error ParticlesRibbonRD::build_ribbon_chain_segments(
@@ -311,11 +376,12 @@ Error ParticlesRibbonRD::build_ribbon_chain_segments(
 	}
 	const float inv_segs = 1.0f / float(seg_count);
 	for (uint32_t s = 0; s < seg_count; ++s) {
-		RibbonSegmentEndpointKey32 key{};
-		key.emitter_id = p_emitter_id;
-		key.trail_id = p_trail_id;
-		key.head_particle_id = p_particle_ids[s];
-		key.tail_particle_id = p_particle_ids[s + 1u];
+		const RibbonSegmentEndpointKey32 key = RibbonSegmentEndpointKey32::from_legacy_ids(
+				p_emitter_id,
+				p_trail_id,
+				p_particle_ids[s],
+				p_particle_ids[s + 1u],
+				0u);
 		build_ribbon_segment_quad(
 				s,
 				p_particle_positions_world[s],
@@ -356,10 +422,14 @@ void ParticlesRibbonRD::align_previous_ribbon_vertices(
 
 	struct EndpointKeyHasher {
 		static _FORCE_INLINE_ uint32_t hash(const RibbonSegmentEndpointKey32 &p_key) {
-			uint32_t h = hash_murmur3_one_64(p_key.emitter_id);
-			h = hash_murmur3_one_64(p_key.trail_id, h);
-			h = hash_murmur3_one_64(p_key.head_particle_id, h);
-			h = hash_murmur3_one_64(p_key.tail_particle_id, h);
+			uint32_t h = hash_murmur3_one_32(p_key.start_id_index);
+			h = hash_murmur3_one_32(p_key.start_id_tag, h);
+			h = hash_murmur3_one_32(p_key.end_id_index, h);
+			h = hash_murmur3_one_32(p_key.end_id_tag, h);
+			h = hash_murmur3_one_32(p_key.group_lo, h);
+			h = hash_murmur3_one_32(p_key.group_hi, h);
+			h = hash_murmur3_one_32(p_key.subsegment_index, h);
+			h = hash_murmur3_one_32(p_key.valid_mask, h);
 			return hash_fmix32(h);
 		}
 	};
@@ -369,7 +439,7 @@ void ParticlesRibbonRD::align_previous_ribbon_vertices(
 	prev_seg_by_key.reserve(prev_seg_count);
 	for (uint32_t pseg = 0; pseg < prev_seg_count; ++pseg) {
 		const RibbonSegmentEndpointKey32 prev_key = p_previous_frame_vertices[pseg * VERTICES_PER_SEGMENT].get_endpoint_key();
-		if (prev_key.emitter_id == 0 && prev_key.trail_id == 0 && prev_key.head_particle_id == 0 && prev_key.tail_particle_id == 0) {
+		if (prev_key.valid_mask == 0u) {
 			continue;
 		}
 		if (!prev_seg_by_key.has(prev_key)) {
@@ -379,7 +449,7 @@ void ParticlesRibbonRD::align_previous_ribbon_vertices(
 
 	for (uint32_t seg = 0; seg < cur_seg_count; ++seg) {
 		const RibbonSegmentEndpointKey32 cur_key = p_current_vertices[seg * VERTICES_PER_SEGMENT].get_endpoint_key();
-		if (cur_key.emitter_id == 0 && cur_key.trail_id == 0 && cur_key.head_particle_id == 0 && cur_key.tail_particle_id == 0) {
+		if (cur_key.valid_mask == 0u) {
 			continue;
 		}
 		const uint32_t *matched_prev_seg = prev_seg_by_key.getptr(cur_key);
