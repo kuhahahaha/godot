@@ -42,7 +42,7 @@ void run_material_qualification_action7_cpu();
 namespace TestMaterialQualificationAction7 {
 
 #if defined(MACOS_ENABLED) && defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
-static void run_live_metal_subprocess(const char *p_rendering_method) {
+static void run_live_metal_subprocess(const char *p_rendering_method, bool p_prime_ordinary_frame = false) {
 	if (OS::get_singleton()->get_environment("GODOT_SKIP_LIVE_METAL_SUBPROCESS") == "1") {
 		return;
 	}
@@ -69,6 +69,10 @@ static void run_live_metal_subprocess(const char *p_rendering_method) {
 	args.push_back(fixture_dir);
 	args.push_back("--script");
 	args.push_back("res://run.gd");
+	if (p_prime_ordinary_frame) {
+		args.push_back("--");
+		args.push_back("--prime-ordinary-frame");
+	}
 
 	String pipe_out;
 	int exit_code = -1;
@@ -92,6 +96,14 @@ TEST_CASE("[MaterialQualificationAction7][LiveMetal][Mobile] pre-first-draw end-
 
 TEST_CASE("[MaterialQualificationAction7][LiveMetal][ForwardPlus] pre-first-draw end-to-end qualification, 5 source gates, wrong generation, and 4-stage K03 release") {
 	run_live_metal_subprocess("forward_plus");
+}
+
+TEST_CASE("[MaterialQualificationAction7][LiveMetal][Mobile] qualifies after one ordinary frame updates scene atlases") {
+	run_live_metal_subprocess("mobile", true);
+}
+
+TEST_CASE("[MaterialQualificationAction7][LiveMetal][ForwardPlus] qualifies after one ordinary frame updates scene atlases") {
+	run_live_metal_subprocess("forward_plus", true);
 }
 #endif
 
