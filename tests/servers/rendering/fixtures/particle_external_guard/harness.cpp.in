@@ -25,7 +25,7 @@ Bool3 lessThanEqual(vec3 a,vec3 b){return {a.x<=b.x,a.y<=b.y,a.z<=b.z};}
 Bool2 notEqual(uvec2 a,uvec2 b){return {a.x!=b.x,a.y!=b.y};} Bool3 notEqual(uvec3 a,uvec3 b){return {a.x!=b.x,a.y!=b.y,a.z!=b.z};}
 void atomicOr(uint &target,uint value){target|=value;} void atomicMin(uint &target,uint value){target=min(target,value);}
 template<class T>struct Array:std::vector<T>{using std::vector<T>::operator=;int length()const{return int(this->size());}};
-struct Buffer{Array<uint>words;}current_records,previous_records,output_meta,scratch,status,commands;
+struct Buffer{Array<uint>words;}current_records,previous_records,output_meta,scratch,status,commands,instance_aux_params;
 // Distinct descriptors can deliberately refer to one actual source allocation.
 struct SourceWords {
  Array<uint> owned; Array<uint> *backing=&owned;
@@ -297,5 +297,61 @@ int main(){
  valid=true;multiply_interval(vec2(std::numeric_limits<float>::max()),vec2(2),valid);assert(!valid);checks++;
  flattened_surfaces();
  zero_area_degenerate_cases();
+ // AUX_PARAMS_ENABLED (role 9 / binding 12) validation cases:
+ {
+  healthy(4,4);
+  proof.options.y=1u;
+  instance_aux_params.words.assign(4*8,0u);
+  for(uint i=0;i<4;i++){
+   instance_aux_params.words[i*8+0]=floatBitsToUint(0.25f);
+   instance_aux_params.words[i*8+1]=floatBitsToUint(-0.5f);
+   instance_aux_params.words[i*8+4]=floatBitsToUint(1.0f);
+   instance_aux_params.words[i*8+7]=0x80000000u; // -0.0f is magnitude 0 -> valid
+  }
+  gl_GlobalInvocationID.x=0;aux_guard_ns::shader_INIT_AUX();
+  for(uint i=0;i<params.record_count;i++){gl_GlobalInvocationID.x=i;aux_guard_ns::shader_VALIDATE_AUX();}
+  gl_GlobalInvocationID.x=0;aux_guard_ns::shader_FINALIZE_AUX();
+  expect(0,4,"aux params finite normal or zero pass");
+
+  // NaN in aux word -> NUMERIC_FAULT (16u), instanceCount == 0u
+  healthy(4,4);
+  proof.options.y=1u;
+  instance_aux_params.words.assign(4*8,floatBitsToUint(0.5f));
+  instance_aux_params.words[2*8+5]=0x7fc00000u;
+  gl_GlobalInvocationID.x=0;aux_guard_ns::shader_INIT_AUX();
+  for(uint i=0;i<params.record_count;i++){gl_GlobalInvocationID.x=i;aux_guard_ns::shader_VALIDATE_AUX();}
+  gl_GlobalInvocationID.x=0;aux_guard_ns::shader_FINALIZE_AUX();
+  expect(16,0,"aux params NaN numeric fault");
+
+  // Subnormal in aux word -> NUMERIC_FAULT (16u), instanceCount == 0u
+  healthy(4,4);
+  proof.options.y=1u;
+  instance_aux_params.words.assign(4*8,floatBitsToUint(0.5f));
+  instance_aux_params.words[1*8+3]=0x00000001u;
+  gl_GlobalInvocationID.x=0;aux_guard_ns::shader_INIT_AUX();
+  for(uint i=0;i<params.record_count;i++){gl_GlobalInvocationID.x=i;aux_guard_ns::shader_VALIDATE_AUX();}
+  gl_GlobalInvocationID.x=0;aux_guard_ns::shader_FINALIZE_AUX();
+  expect(16,0,"aux params subnormal numeric fault");
+
+  // Inactive tail NaN (>= actual count) must NOT fault
+  healthy(2,4);
+  proof.options.y=1u;
+  instance_aux_params.words.assign(4*8,floatBitsToUint(0.5f));
+  instance_aux_params.words[2*8+0]=0x7fc00000u;
+  instance_aux_params.words[3*8+7]=0x00000001u;
+  gl_GlobalInvocationID.x=0;aux_guard_ns::shader_INIT_AUX();
+  for(uint i=0;i<params.record_count;i++){gl_GlobalInvocationID.x=i;aux_guard_ns::shader_VALIDATE_AUX();}
+  gl_GlobalInvocationID.x=0;aux_guard_ns::shader_FINALIZE_AUX();
+  expect(0,2,"aux params inactive tail ignored");
+
+  // options.y == 0 under AUX_PARAMS_ENABLED -> META_FAULT (4u)
+  healthy(4,4);
+  proof.options.y=0u;
+  instance_aux_params.words.assign(4*8,0u);
+  gl_GlobalInvocationID.x=0;aux_guard_ns::shader_INIT_AUX();
+  for(uint i=0;i<params.record_count;i++){gl_GlobalInvocationID.x=i;aux_guard_ns::shader_VALIDATE_AUX();}
+  gl_GlobalInvocationID.x=0;aux_guard_ns::shader_FINALIZE_AUX();
+  expect(4,0,"aux params mode requires options.y == 1");
+ }
  std::cout<<checks<<" CPU production-control/interval cases PASS (sequential, no GPU claim)\n";
 }

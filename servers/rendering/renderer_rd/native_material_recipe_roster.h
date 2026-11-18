@@ -25,9 +25,9 @@ class NativeMaterialRecipeRoster {
 #endif
 	using RD = RenderingDevice;
 	enum class Backend { MOBILE, CLUSTERED };
-	enum class Role { PIPELINE, VERTEX_ARRAY, SCENE, INSTANCE, IMPLEMENTATION, CLUSTER, CURRENT, PREVIOUS, SET, TARGET, FRAMEBUFFER };
+	enum class Role { PIPELINE, VERTEX_ARRAY, SCENE, INSTANCE, IMPLEMENTATION, CLUSTER, CURRENT, PREVIOUS, AUX_PARAMS, SET, TARGET, FRAMEBUFFER };
 	struct FixedData {
-		Vector<uint8_t> scene, instance, implementation, cluster, current, previous, push;
+		Vector<uint8_t> scene, instance, implementation, cluster, current, previous, aux, push;
 	};
 	struct Owned {
 		Role role = Role::PIPELINE;
@@ -67,8 +67,8 @@ class NativeMaterialRecipeRoster {
 	uint32_t edge_count = 0;
 	bool roster_complete = false;
 
-	Error _begin_material(MaterialStorage &, RID, uint32_t);
-	Error _begin(MaterialStorage &, MeshStorage &, RID, RID, uint32_t, RD::FramebufferFormatID, uint32_t);
+	Error _begin_material(MaterialStorage &, RID, uint32_t, uint32_t = 0);
+	Error _begin(MaterialStorage &, MeshStorage &, RID, RID, uint32_t, RD::FramebufferFormatID, uint32_t, uint32_t = 0);
 	Error _material_data(MaterialStorage::MaterialData *&) const;
 	Error _join_bindings(Backend, const Vector<RD::Uniform> &, const Vector<RD::Uniform> &, const FixedData &, uint32_t);
 	Error _finish(Backend, const MeshStorage::NativeVertexArrayPlan &, const Vector<RD::Uniform> &, const Vector<RD::Uniform> &, const FixedData &, uint32_t);
@@ -86,6 +86,13 @@ public:
 	uint32_t get_raster_owned_factory_count() const { return roster_complete ? symbols.size() : 0; }
 	uint32_t get_raw_borrowed_count() const { return roster_complete ? borrowed.size() : 0; }
 	uint32_t get_owned_dependency_edge_count() const { return roster_complete ? edge_count : 0; }
+	bool has_binding(uint32_t p_set, uint32_t p_binding, RD::UniformType p_type) const {
+		if (!roster_complete) { return false; }
+		for (const auto &entry : bindings) {
+			if (entry.set == p_set && entry.binding == p_binding && entry.type == p_type) { return true; }
+		}
+		return false;
+	}
 	// The actual payer/caller and operation/worker plan do not exist here.
 	Error get_operation_bounds() const { return ERR_UNCONFIGURED; }
 	Error release(); // Original RT only; failed return prefix remains owned here.

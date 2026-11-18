@@ -36,7 +36,7 @@
 
 namespace RendererRD {
 
-Error ExternalOutputStorage::plan_instance192(uint32_t p_capacity, uint32_t p_surface_count, Instance192Layout &r_layout, bool p_motion_required) {
+Error ExternalOutputStorage::plan_instance192(uint32_t p_capacity, uint32_t p_surface_count, Instance192Layout &r_layout, bool p_motion_required, bool p_aux_params_enabled) {
 	if (p_capacity > (1u << 20) || p_surface_count == 0 || p_surface_count > ExternalOutputConfig::MAX_FLATTENED_SURFACES) {
 		return ERR_INVALID_PARAMETER;
 	}
@@ -53,15 +53,22 @@ Error ExternalOutputStorage::plan_instance192(uint32_t p_capacity, uint32_t p_su
 		if (size_error != OK) {
 			return size_error;
 		}
-		// Seven u32 extents sum safely in u64; no narrowing of total occurs.
 		layout.total_bytes += layout.bytes[i];
 		layout.resource_count += layout.bytes[i] != 0;
+	}
+	if (p_aux_params_enabled && p_capacity > 0) {
+		const Error aux_error = ExternalOutputConfig::checked_buffer_bytes(p_capacity, 32u, UINT32_MAX, layout.bytes[INSTANCE_AUX_PARAMS]);
+		if (aux_error != OK) {
+			return aux_error;
+		}
+		layout.total_bytes += layout.bytes[INSTANCE_AUX_PARAMS];
+		layout.resource_count += layout.bytes[INSTANCE_AUX_PARAMS] != 0;
 	}
 	r_layout = layout;
 	return OK;
 }
 
-Error ExternalOutputStorage::allocate_instance192(uint32_t p_capacity, uint32_t p_surface_count, bool p_motion_required) {
+Error ExternalOutputStorage::allocate_instance192(uint32_t p_capacity, uint32_t p_surface_count, bool p_motion_required, bool p_aux_params_enabled) {
 	if (attempted || retirement_requested) {
 		return ERR_ALREADY_IN_USE;
 	}
@@ -73,7 +80,7 @@ Error ExternalOutputStorage::allocate_instance192(uint32_t p_capacity, uint32_t 
 		return ready;
 	}
 	Instance192Layout layout;
-	const Error planned = plan_instance192(p_capacity, p_surface_count, layout, p_motion_required);
+	const Error planned = plan_instance192(p_capacity, p_surface_count, layout, p_motion_required, p_aux_params_enabled);
 	if (planned != OK) {
 		return planned;
 	}
@@ -99,12 +106,12 @@ Error ExternalOutputStorage::allocate_instance192(uint32_t p_capacity, uint32_t 
 }
 
 Error ExternalOutputStorage::allocate_instance192_owned(GDExtensionProductionPhysicalContextRefV1 context,
-		GDExtensionDeviceExit::ProductionOutputPin &pin, uint64_t &group, uint32_t capacity, uint32_t surface_count, bool p_motion_required) {
+		GDExtensionDeviceExit::ProductionOutputPin &pin, uint64_t &group, uint32_t capacity, uint32_t surface_count, bool p_motion_required, bool p_aux_params_enabled) {
 	if (attempted || retirement_requested || group) {
 		return ERR_ALREADY_IN_USE;
 	}
 	Instance192Layout layout;
-	Error error = plan_instance192(capacity, surface_count, layout, p_motion_required);
+	Error error = plan_instance192(capacity, surface_count, layout, p_motion_required, p_aux_params_enabled);
 	if (error != OK) {
 		return error;
 	}

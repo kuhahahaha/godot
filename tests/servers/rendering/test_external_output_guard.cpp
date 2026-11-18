@@ -39,9 +39,23 @@ namespace TestExternalOutputGuard {
 using Guard = RendererRD::ParticlesExternalGuard;
 
 // Test-local RIDs exercise pure layout rejection, never real native backing.
-static Guard::Bindings bindings_for(uint32_t p_capacity, uint32_t p_surfaces) {
+static Guard::Bindings bindings_for(uint32_t p_capacity, uint32_t p_surfaces, bool p_aux = false) {
 	Guard::Bindings bindings;
-	const uint64_t bytes[Guard::BINDING_COUNT] = { uint64_t(p_capacity) * 192, uint64_t(p_capacity) * 192, 32, 16, 64, 32, uint64_t(p_surfaces) * 20, 240 + uint64_t(p_surfaces) * 144, 16, 20, 24, 28 };
+	const uint64_t bytes[Guard::BINDING_COUNT] = {
+		uint64_t(p_capacity) * 192,
+		uint64_t(p_capacity) * 192,
+		32,
+		16,
+		64,
+		32,
+		uint64_t(p_surfaces) * 20,
+		240 + uint64_t(p_surfaces) * 144,
+		16,
+		20,
+		24,
+		28,
+		p_aux ? uint64_t(p_capacity) * 32 : 0,
+	};
 	for (uint32_t i = 0; i < Guard::BINDING_COUNT; i++) {
 		bindings.buffers[i].byte_length = bytes[i];
 		if (bytes[i] != 0) {
@@ -139,6 +153,13 @@ TEST_CASE("[ExternalOutputGuard] protected bindings remain exclusive while sourc
 	const auto request = request_for(4, 2);
 	const auto bindings = bindings_for(4, 2);
 	for (uint32_t i = 0; i < Guard::BINDING_COUNT; i++) {
+		if (i == Guard::INSTANCE_AUX_PARAMS) {
+			auto unexpected_aux = bindings;
+			unexpected_aux.buffers[i].rid = RID::from_uint64(777);
+			unexpected_aux.buffers[i].byte_length = 4 * 32;
+			rejects_unchanged(request, unexpected_aux, source_header());
+			continue;
+		}
 		auto malformed = bindings;
 		malformed.buffers[i].rid = RID();
 		rejects_unchanged(request, malformed, source_header());
@@ -148,7 +169,8 @@ TEST_CASE("[ExternalOutputGuard] protected bindings remain exclusive while sourc
 		malformed = bindings;
 		malformed.buffers[i].byte_length--;
 		rejects_unchanged(request, malformed, source_header());
-		if (i != Guard::SOURCE_COUNT && i < Guard::SOURCE_COUNT_VALIDITY) {
+		const bool is_source_binding = i == Guard::SOURCE_COUNT || (i >= Guard::SOURCE_COUNT_VALIDITY && i <= Guard::SOURCE_INSTANCE_GATE);
+		if (!is_source_binding) {
 			malformed = bindings;
 			malformed.buffers[i].byte_length += 4;
 			rejects_unchanged(request, malformed, source_header());
@@ -156,8 +178,8 @@ TEST_CASE("[ExternalOutputGuard] protected bindings remain exclusive while sourc
 		for (uint32_t j = 0; j < i; j++) {
 			malformed = bindings;
 			malformed.buffers[i].rid = malformed.buffers[j].rid;
-			const bool source_i = i == Guard::SOURCE_COUNT || i >= Guard::SOURCE_COUNT_VALIDITY;
-			const bool source_j = j == Guard::SOURCE_COUNT || j >= Guard::SOURCE_COUNT_VALIDITY;
+			const bool source_i = is_source_binding;
+			const bool source_j = j == Guard::SOURCE_COUNT || (j >= Guard::SOURCE_COUNT_VALIDITY && j <= Guard::SOURCE_INSTANCE_GATE);
 			if (source_i && source_j) {
 				// A shared backing has one physical byte length even for different scalar offsets.
 				malformed.buffers[i].byte_length = malformed.buffers[j].byte_length = 32;
@@ -200,7 +222,7 @@ TEST_CASE("[ExternalOutputGuard] source accessor and reserved header fields reje
 	}
 	for (int index = 0; index < 4; index++) {
 		malformed = proof;
-		malformed.options[index] = index == 0 ? 2 : 1;
+		malformed.options[index] = index <= 1 ? 2 : 1;
 		rejects_unchanged(request, bindings, malformed);
 	}
 	for (uint32_t space : { 1u, 2u }) {
@@ -295,6 +317,49 @@ TEST_CASE("[ExternalOutputGuard] flattened native surfaces exceed mesh RID count
 		// Correct u64 sizes cannot admit a table beyond the native owner bound.
 		rejects_unchanged(request_for(0, count), bindings_for(0, count), source_header());
 	}
+}
+
+TEST_CASE("[ExternalOutputGuard] role 9 INSTANCE_AUX_PARAMS binding 12 plans AUX and NO_MOTION_AUX modes exclusively") {
+	const auto request = request_for(4, 2);
+	auto proof_aux = source_header();
+	proof_aux.options[0] = 1;
+	proof_aux.options[1] = 1;
+	const auto bindings_aux = bindings_for(4, 2, true);
+
+	Guard::LayoutPlan plan;
+	REQUIRE(Guard::plan_layout(request, bindings_aux, proof_aux, 8, plan) == OK);
+	CHECK(plan.uniforms.size() == 13);
+	CHECK(plan.uniforms[12].binding == Guard::INSTANCE_AUX_PARAMS);
+	CHECK(plan.initialize_mode == Guard::INIT_AUX);
+	CHECK(plan.validate_mode == Guard::VALIDATE_AUX);
+	CHECK(plan.finalize_mode == Guard::FINALIZE_AUX);
+
+	// No-motion + aux selects *_NO_MOTION_AUX and 12 uniforms (omits binding 1, includes binding 12).
+	auto bindings_no_motion_aux = bindings_aux;
+	bindings_no_motion_aux.buffers[Guard::PREVIOUS_RECORDS] = Guard::BufferBinding();
+	auto proof_no_motion_aux = proof_aux;
+	proof_no_motion_aux.options[0] = 0;
+	REQUIRE(Guard::plan_layout(request, bindings_no_motion_aux, proof_no_motion_aux, 8, plan) == OK);
+	CHECK(plan.uniforms.size() == 12);
+	CHECK(plan.initialize_mode == Guard::INIT_NO_MOTION_AUX);
+	CHECK(plan.validate_mode == Guard::VALIDATE_NO_MOTION_AUX);
+	CHECK(plan.finalize_mode == Guard::FINALIZE_NO_MOTION_AUX);
+
+	// Sharing binding 12 with a source buffer or wrong extent must fail closed.
+	auto shared_with_source = bindings_aux;
+	shared_with_source.buffers[Guard::INSTANCE_AUX_PARAMS].rid = shared_with_source.buffers[Guard::SOURCE_COUNT].rid;
+	shared_with_source.buffers[Guard::INSTANCE_AUX_PARAMS].byte_length = 4 * 32;
+	shared_with_source.buffers[Guard::SOURCE_COUNT].byte_length = 4 * 32;
+	rejects_unchanged(request, shared_with_source, proof_aux);
+
+	auto wrong_aux_bytes = bindings_aux;
+	wrong_aux_bytes.buffers[Guard::INSTANCE_AUX_PARAMS].byte_length = 96;
+	rejects_unchanged(request, wrong_aux_bytes, proof_aux);
+
+	// Empty capacity == 0 cannot enable options[1] == 1.
+	auto empty_proof = source_header();
+	empty_proof.options[1] = 1;
+	rejects_unchanged(request_for(0, 1), bindings_for(0, 1, false), empty_proof);
 }
 
 } // namespace TestExternalOutputGuard

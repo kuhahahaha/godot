@@ -276,8 +276,8 @@ public:
 	virtual uint32_t get_native_material_recipe_backend() const { return 0; }
 	virtual RID get_native_default_material_3d() const { return RID(); }
 	virtual Error ensure_native_material_recipe_sources_ready() { return ERR_UNAVAILABLE; }
-	virtual Error warm_native_material_instance192_shader(RID p_material, RSE::PrimitiveType p_primitive) { return ERR_UNAVAILABLE; }
-	virtual Error plan_native_material_recipe(RID p_material, RID p_mesh, uint32_t p_surface, RD::FramebufferFormatID p_actual_format, RendererRD::NativeMaterialRecipeRoster &r_plan, uint32_t p_limit = 256) { return ERR_UNAVAILABLE; }
+	virtual Error warm_native_material_instance192_shader(RID p_material, RSE::PrimitiveType p_primitive, uint32_t p_allowed_rejections = 0) { return ERR_UNAVAILABLE; }
+	virtual Error plan_native_material_recipe(RID p_material, RID p_mesh, uint32_t p_surface, RD::FramebufferFormatID p_actual_format, RendererRD::NativeMaterialRecipeRoster &r_plan, uint32_t p_limit = 256, uint32_t p_allowed_rejections = 0) { return ERR_UNAVAILABLE; }
 
 	virtual void set_scene_pass(uint64_t p_pass) override {
 		scene_pass = p_pass;

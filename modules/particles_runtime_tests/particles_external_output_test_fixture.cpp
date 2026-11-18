@@ -90,7 +90,7 @@ Error ParticlesExternalOutputTestFixture::run() {
 	}
 	using Storage = RendererRD::ExternalOutputStorage;
 	using State = NativeDisposalWitness::State;
-	static_assert(Storage::INSTANCE192_RESOURCE_COUNT == 7 && Storage::RESOURCE_COUNT == 9);
+	static_assert(Storage::INSTANCE192_RESOURCE_COUNT == 7 && Storage::RESOURCE_COUNT == 10);
 	storage = new Storage(*rd);
 	Storage *const original_storage = storage;
 	const auto observe = [&](Storage::Report &r_report) {

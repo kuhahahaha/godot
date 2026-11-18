@@ -15,6 +15,24 @@ layout(set = 2, binding = 1, std430) restrict readonly buffer Instance192Previou
 }
 instance192_previous;
 
+#if defined(CUSTOM0_USED) || defined(CUSTOM1_USED)
+layout(set = 2, binding = 2, std430) restrict readonly buffer Instance192AuxParams {
+	vec4 data[];
+}
+instance192_aux_params;
+
+void instance192_read_aux(uint index, out vec4 r_custom0, out vec4 r_custom1) {
+	uint pair_count = uint(instance192_aux_params.data.length()) >> 1u;
+	if (index < pair_count) {
+		r_custom0 = instance192_aux_params.data[index * 2u + 0u];
+		r_custom1 = instance192_aux_params.data[index * 2u + 1u];
+	} else {
+		r_custom0 = vec4(0.0);
+		r_custom1 = vec4(0.0);
+	}
+}
+#endif
+
 // Match RD PolygonCullMode (disabled=0/front=1/back=2). Pipeline hardware cull
 // is disabled; this is the original material/pass cull request, never a bucket.
 layout(constant_id = 4) const uint instance192_cull_mode = 0u;

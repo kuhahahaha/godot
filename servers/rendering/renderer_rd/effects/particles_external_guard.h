@@ -24,6 +24,12 @@ public:
 		INIT_NO_MOTION,
 		VALIDATE_NO_MOTION,
 		FINALIZE_NO_MOTION,
+		INIT_AUX,
+		VALIDATE_AUX,
+		FINALIZE_AUX,
+		INIT_NO_MOTION_AUX,
+		VALIDATE_NO_MOTION_AUX,
+		FINALIZE_NO_MOTION_AUX,
 		MODE_COUNT,
 	};
 	enum Binding {
@@ -39,6 +45,7 @@ public:
 		SOURCE_ATTRIBUTES_VALIDITY,
 		SOURCE_DENSE_IDS_VALIDITY,
 		SOURCE_INSTANCE_GATE,
+		INSTANCE_AUX_PARAMS,
 		BINDING_COUNT,
 	};
 	struct PushConstant {
@@ -62,7 +69,7 @@ public:
 		float previous_host_inverse_rows[3][4] = {};
 		uint32_t source_accessor[4] = {}; // count word, reserved zero, reserved zero, space
 		uint32_t source_gate_words[4] = {}; // CountValidity, AttributesValidity, DenseIdsValidity, InstanceGate; fault==0
-		uint32_t options[4] = {}; // history permitted, reserved zero
+		uint32_t options[4] = {}; // history permitted, aux params enabled, reserved zero
 	};
 	struct SurfaceProof {
 		float current_mesh_min[4] = {};
@@ -137,7 +144,9 @@ public:
 static_assert(ParticlesExternalGuard::SOURCE_COUNT == 3);
 static_assert(ParticlesExternalGuard::GUARD_SCRATCH == 4 && ParticlesExternalGuard::GEOMETRY_PROOF == 7);
 static_assert(ParticlesExternalGuard::SOURCE_COUNT_VALIDITY == 8 && ParticlesExternalGuard::SOURCE_INSTANCE_GATE == 11);
-static_assert(ParticlesExternalGuard::BINDING_COUNT == 12);
+static_assert(ParticlesExternalGuard::INSTANCE_AUX_PARAMS == 12);
+static_assert(ParticlesExternalGuard::BINDING_COUNT == 13);
+static_assert(ParticlesExternalGuard::MODE_COUNT == 14);
 static_assert(sizeof(ParticlesExternalGuard::PushConstant) == 32);
 static_assert(sizeof(ParticlesExternalGuard::GeometryProofHeader) == 240);
 static_assert(offsetof(ParticlesExternalGuard::GeometryProofHeader, source_accessor) == 192);

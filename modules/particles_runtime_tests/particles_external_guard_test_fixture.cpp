@@ -305,13 +305,15 @@ Error ParticlesExternalGuardTestFixture::run() {
 	}
 
 	using Guard = RendererRD::ParticlesExternalGuard;
-	static_assert(Guard::MODE_COUNT == 8);
-	static_assert(Guard::BINDING_COUNT == 12);
+	static_assert(Guard::MODE_COUNT == 14);
+	static_assert(Guard::BINDING_COUNT == 13);
 	auto source_layout_matches = [](const auto *p_shader, Guard::Mode p_mode) {
 		const bool empty = p_mode == Guard::INIT_EMPTY || p_mode == Guard::FINALIZE_EMPTY;
-		const bool no_motion = p_mode == Guard::INIT_NO_MOTION || p_mode == Guard::VALIDATE_NO_MOTION || p_mode == Guard::FINALIZE_NO_MOTION;
-		const int expected_size = empty ? 10 : (no_motion ? 11 : 12);
-		const uint32_t expected_mask = empty ? 0xffcu : (no_motion ? 0xffdu : 0xfffu);
+		const bool no_motion = p_mode == Guard::INIT_NO_MOTION || p_mode == Guard::VALIDATE_NO_MOTION || p_mode == Guard::FINALIZE_NO_MOTION ||
+				p_mode == Guard::INIT_NO_MOTION_AUX || p_mode == Guard::VALIDATE_NO_MOTION_AUX || p_mode == Guard::FINALIZE_NO_MOTION_AUX;
+		const bool aux = p_mode >= Guard::INIT_AUX && p_mode <= Guard::FINALIZE_NO_MOTION_AUX;
+		const int expected_size = (empty ? 10 : (no_motion ? 11 : 12)) + (aux ? 1 : 0);
+		const uint32_t expected_mask = (empty ? 0xffcu : (no_motion ? 0xffdu : 0xfffu)) | (aux ? (1u << Guard::INSTANCE_AUX_PARAMS) : 0u);
 		if (!p_shader || p_shader->uniform_sets.size() != 1 || p_shader->uniform_sets[0].size() != expected_size) {
 			return false;
 		}
@@ -326,7 +328,13 @@ Error ParticlesExternalGuardTestFixture::run() {
 		}
 		return seen == expected_mask;
 	};
-	const char *names[Guard::MODE_COUNT] = { "INIT", "VALIDATE", "FINALIZE", "INIT_EMPTY", "FINALIZE_EMPTY", "INIT_NO_MOTION", "VALIDATE_NO_MOTION", "FINALIZE_NO_MOTION" };
+	const char *names[Guard::MODE_COUNT] = {
+		"INIT", "VALIDATE", "FINALIZE",
+		"INIT_EMPTY", "FINALIZE_EMPTY",
+		"INIT_NO_MOTION", "VALIDATE_NO_MOTION", "FINALIZE_NO_MOTION",
+		"INIT_AUX", "VALIDATE_AUX", "FINALIZE_AUX",
+		"INIT_NO_MOTION_AUX", "VALIDATE_NO_MOTION_AUX", "FINALIZE_NO_MOTION_AUX"
+	};
 	const auto *storage = RendererRD::ParticlesStorage::get_singleton();
 	const auto *engine_guard = storage ? storage->get_external_guard() : nullptr;
 	check(storage && engine_guard && storage->get_external_guard_preparation_error() == OK && storage->is_external_guard_prepared(), "engine.actual_prepared_owner");

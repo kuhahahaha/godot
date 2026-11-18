@@ -423,7 +423,7 @@ public:
 
 	struct MaterialData : public RendererRD::MaterialStorage::MaterialData {
 		uint32_t get_native_recipe_backend() const override { return 1; }
-		Error get_native_recipe_shader_if_ready(RID &r_shader, uint64_t &r_mask, RID &r_set) const override;
+		Error get_native_recipe_shader_if_ready(RID &r_shader, uint64_t &r_mask, RID &r_set, uint32_t p_allowed_rejections = 0) const override;
 		ShaderData *shader_data = nullptr;
 		RID uniform_set;
 		uint64_t last_pass = 0;

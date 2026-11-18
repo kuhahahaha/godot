@@ -30,6 +30,7 @@
 
 #include "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/render_scene_data_rd.h"
 #include "tests/test_macros.h"
 
 TEST_FORCE_LINK(test_clustered_native_pass_selection)
@@ -185,7 +186,8 @@ public:
 			bool p_has_capacity,
 			RD::FramebufferFormatID p_fb_format,
 			RID p_fb,
-			String &r_step) {
+			String &r_step,
+			bool p_motion_vectors = false) {
 		using namespace RendererRD;
 		auto *clu = RenderForwardClustered::get_singleton();
 		auto *ps = ParticlesStorage::get_singleton();
@@ -200,13 +202,17 @@ public:
 			r_step = "clustered_ensure_recipe_sources";
 			return err;
 		}
+		if (p_motion_vectors) {
+			clu->scene_shader.enable_advanced_shader_group(false);
+		}
 		mats->_update_queued_materials();
 		auto *mat_data = static_cast<SceneShaderForwardClustered::MaterialData *>(mats->material_get_data(p_material, MaterialStorage::SHADER_TYPE_3D));
 		if (!mat_data || !mat_data->shader_data) {
 			r_step = "clustered_material_data";
 			return ERR_UNAVAILABLE;
 		}
-		const RID shader_var = mat_data->shader_data->get_shader_variant(SceneShaderForwardClustered::PIPELINE_VERSION_COLOR_PASS, 0, false, p_profile == 2, p_profile == 1);
+		const uint32_t color_flags = p_motion_vectors ? uint32_t(SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_MOTION_VECTORS) : 0u;
+		const RID shader_var = mat_data->shader_data->get_shader_variant(SceneShaderForwardClustered::PIPELINE_VERSION_COLOR_PASS, color_flags, false, p_profile == 2, p_profile == 1);
 		if (shader_var.is_null() || !mat_data->shader_data->is_valid()) {
 			r_step = "clustered_get_shader_variant";
 			return ERR_UNAVAILABLE;
@@ -219,7 +225,8 @@ public:
 
 		ExternalPacketPipelineRequest pipe_req;
 		pipe_req.backend = ExternalPacketPipelineRequest::Backend::CLUSTERED;
-		pipe_req.pass = ExternalPacketPass::OPAQUE;
+		pipe_req.pass = p_motion_vectors ? ExternalPacketPass::MOTION : ExternalPacketPass::OPAQUE;
+		pipe_req.color_flags = color_flags;
 		pipe_req.version = SceneShaderForwardClustered::PIPELINE_VERSION_COLOR_PASS;
 		pipe_req.framebuffer_format = p_fb_format;
 		pipe_req.view_count = 1;
@@ -232,6 +239,42 @@ public:
 		}
 		const RID base_set = clu->render_base_uniform_set;
 		const auto &samplers = mats->samplers_rd_get_default();
+		Vector<RD::Uniform> pass_uniforms;
+		(void)clu->_setup_render_pass_uniform_set(RenderForwardClustered::RENDER_LIST_OPAQUE, nullptr, RID(), samplers, 0u, false, &set_err, &pass_uniforms);
+		if (set_err != OK) {
+			r_step = "clustered_pass_uniform_sources";
+			return set_err;
+		}
+		{
+			static uint64_t s_uploaded_frame[3] = { UINT64_MAX, UINT64_MAX, UINT64_MAX };
+			static RID s_uploaded_rid[3];
+			const uint64_t cur_frame = rd->get_frames_drawn();
+			Vector<uint8_t> fixed_scene, fixed_instance, fixed_impl, fixed_cluster, fixed_push;
+			if (RenderSceneDataRD::build_native_material_fixed_scene_data(fixed_scene) == OK &&
+					clu->build_native_material_fixed_pass_data(fixed_instance, fixed_impl, fixed_cluster, fixed_push) == OK) {
+				for (const RD::Uniform &u : pass_uniforms) {
+					if (u.get_id_count() == 1 && u.get_id(0).is_valid() && u.binding < 3) {
+						const RID buf_rid = u.get_id(0);
+						if (s_uploaded_frame[u.binding] == cur_frame && s_uploaded_rid[u.binding] == buf_rid) {
+							continue;
+						}
+						if (u.binding == 0 && !fixed_scene.is_empty()) {
+							(void)rd->buffer_update(buf_rid, 0, fixed_scene.size(), fixed_scene.ptr());
+							s_uploaded_frame[0] = cur_frame;
+							s_uploaded_rid[0] = buf_rid;
+						} else if (u.binding == 1 && !fixed_impl.is_empty()) {
+							(void)rd->buffer_update(buf_rid, 0, fixed_impl.size(), fixed_impl.ptr());
+							s_uploaded_frame[1] = cur_frame;
+							s_uploaded_rid[1] = buf_rid;
+						} else if (u.binding == 2 && !fixed_instance.is_empty()) {
+							(void)rd->buffer_update(buf_rid, 0, fixed_instance.size(), fixed_instance.ptr());
+							s_uploaded_frame[2] = cur_frame;
+							s_uploaded_rid[2] = buf_rid;
+						}
+					}
+				}
+			}
+		}
 		const RID pass_set = clu->_setup_render_pass_uniform_set(RenderForwardClustered::RENDER_LIST_OPAQUE, nullptr, RID(), samplers, 0u, false, &set_err, nullptr);
 		if (set_err != OK) {
 			r_step = "clustered_pass_uniform_set";
@@ -258,7 +301,10 @@ public:
 
 		const uint32_t push_words[4] = {};
 		Vector<Color> clear_colors;
-		clear_colors.push_back(Color(0, 0, 0, 1));
+		const uint32_t color_count = p_motion_vectors ? 3u : 1u;
+		for (uint32_t c = 0; c < color_count; ++c) {
+			clear_colors.push_back(Color(0, 0, 0, 1));
+		}
 		RD::DrawListID draw_list = rd->draw_list_begin(p_fb, RD::DRAW_CLEAR_ALL, clear_colors, 0.0f, 0);
 		if (base_set.is_valid()) {
 			rd->draw_list_bind_uniform_set(draw_list, base_set, 0);
@@ -303,9 +349,10 @@ Error wave_g_clustered_draw_external(
 		bool p_has_capacity,
 		RD::FramebufferFormatID p_fb_format,
 		RID p_fb,
-		String &r_step) {
+		String &r_step,
+		bool p_motion_vectors) {
 	return RendererSceneRenderImplementation::TestClusteredNativePassSelection::wave_g_draw_external(
-			p_sel, p_render_data, p_material, p_profile, p_has_capacity, p_fb_format, p_fb, r_step);
+			p_sel, p_render_data, p_material, p_profile, p_has_capacity, p_fb_format, p_fb, r_step, p_motion_vectors);
 }
 } // namespace TestProductionRequest
 

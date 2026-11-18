@@ -106,6 +106,12 @@ Error ParticlesExternalGuard::_prepare_pipelines_impl() {
 		modes.push_back("\n#define MODE_INIT\n#define MOTION_DISABLED\n");
 		modes.push_back("\n#define MODE_VALIDATE\n#define MOTION_DISABLED\n");
 		modes.push_back("\n#define MODE_FINALIZE\n#define MOTION_DISABLED\n");
+		modes.push_back("\n#define MODE_INIT\n#define AUX_PARAMS_ENABLED\n");
+		modes.push_back("\n#define MODE_VALIDATE\n#define AUX_PARAMS_ENABLED\n");
+		modes.push_back("\n#define MODE_FINALIZE\n#define AUX_PARAMS_ENABLED\n");
+		modes.push_back("\n#define MODE_INIT\n#define MOTION_DISABLED\n#define AUX_PARAMS_ENABLED\n");
+		modes.push_back("\n#define MODE_VALIDATE\n#define MOTION_DISABLED\n#define AUX_PARAMS_ENABLED\n");
+		modes.push_back("\n#define MODE_FINALIZE\n#define MOTION_DISABLED\n#define AUX_PARAMS_ENABLED\n");
 		shader = memnew(ParticlesExternalGuardShaderRD);
 		shader->initialize(modes, "\n#define EXTERNAL_MAX_SURFACES " + uitos(ExternalOutputConfig::MAX_FLATTENED_SURFACES) + "u\n");
 		initialized = true;
@@ -196,11 +202,17 @@ Error ParticlesExternalGuard::plan_layout(const PushConstant &p_request, const B
 			p_request.record_base != 0 || p_request.record_count != p_request.capacity || p_request.reserved0 != 0 || p_request.reserved1 != 0 || p_max_groups_x == 0) {
 		return ERR_INVALID_PARAMETER;
 	}
+	if (p_proof.options[0] > 1 || p_proof.options[1] > 1 || (p_request.capacity == 0 && p_proof.options[1] != 0) ||
+			p_proof.options[2] != 0 || p_proof.options[3] != 0) {
+		return ERR_INVALID_PARAMETER;
+	}
 	const uint64_t records_bytes = uint64_t(p_request.capacity) * 192;
 	const bool no_previous_records = p_request.capacity != 0 && p_proof.options[0] == 0 &&
 			p_bindings.buffers[PREVIOUS_RECORDS].rid.is_null() && p_bindings.buffers[PREVIOUS_RECORDS].byte_length == 0;
 	const uint64_t previous_bytes = no_previous_records ? 0 : records_bytes;
-	const uint64_t expected[BINDING_COUNT] = { records_bytes, previous_bytes, 32, 0, 64, 32, uint64_t(p_request.surface_count) * 20, 240 + uint64_t(p_request.surface_count) * 144, 0, 0, 0, 0 };
+	const bool aux_enabled = p_request.capacity != 0 && p_proof.options[1] == 1;
+	const uint64_t aux_bytes = aux_enabled ? uint64_t(p_request.capacity) * 32 : 0;
+	const uint64_t expected[BINDING_COUNT] = { records_bytes, previous_bytes, 32, 0, 64, 32, uint64_t(p_request.surface_count) * 20, 240 + uint64_t(p_request.surface_count) * 144, 0, 0, 0, 0, aux_bytes };
 	auto is_source = [](uint32_t p_binding) { return p_binding == SOURCE_COUNT || (p_binding >= SOURCE_COUNT_VALIDITY && p_binding <= SOURCE_INSTANCE_GATE); };
 	for (uint32_t i = 0; i < BINDING_COUNT; i++) {
 		const BufferBinding &buffer = p_bindings.buffers[i];
@@ -209,7 +221,8 @@ Error ParticlesExternalGuard::plan_layout(const PushConstant &p_request, const B
 			return ERR_INVALID_PARAMETER;
 		}
 		const bool absent_records = (p_request.capacity == 0 && (i == CURRENT_RECORDS || i == PREVIOUS_RECORDS)) ||
-				(no_previous_records && i == PREVIOUS_RECORDS);
+				(no_previous_records && i == PREVIOUS_RECORDS) ||
+				(!aux_enabled && i == INSTANCE_AUX_PARAMS);
 		if (absent_records ? buffer.rid.is_valid() : buffer.rid.is_null()) {
 			return ERR_INVALID_PARAMETER;
 		}
@@ -225,8 +238,7 @@ Error ParticlesExternalGuard::plan_layout(const PushConstant &p_request, const B
 	}
 	if (p_proof.source_accessor[0] >= p_bindings.buffers[SOURCE_COUNT].byte_length / 4 ||
 			p_proof.source_accessor[1] != 0 || p_proof.source_accessor[2] != 0 ||
-			(p_proof.source_accessor[3] != 1 && p_proof.source_accessor[3] != 2) ||
-			p_proof.options[0] > 1 || p_proof.options[1] != 0 || p_proof.options[2] != 0 || p_proof.options[3] != 0) {
+			(p_proof.source_accessor[3] != 1 && p_proof.source_accessor[3] != 2)) {
 		return ERR_INVALID_PARAMETER;
 	}
 	for (uint32_t gate = 0; gate < 4; gate++) {
@@ -241,9 +253,13 @@ Error ParticlesExternalGuard::plan_layout(const PushConstant &p_request, const B
 		plan.initialize_mode = INIT_EMPTY;
 		plan.finalize_mode = FINALIZE_EMPTY;
 	} else if (no_previous_records) {
-		plan.initialize_mode = INIT_NO_MOTION;
-		plan.validate_mode = VALIDATE_NO_MOTION;
-		plan.finalize_mode = FINALIZE_NO_MOTION;
+		plan.initialize_mode = aux_enabled ? INIT_NO_MOTION_AUX : INIT_NO_MOTION;
+		plan.validate_mode = aux_enabled ? VALIDATE_NO_MOTION_AUX : VALIDATE_NO_MOTION;
+		plan.finalize_mode = aux_enabled ? FINALIZE_NO_MOTION_AUX : FINALIZE_NO_MOTION;
+	} else if (aux_enabled) {
+		plan.initialize_mode = INIT_AUX;
+		plan.validate_mode = VALIDATE_AUX;
+		plan.finalize_mode = FINALIZE_AUX;
 	}
 	plan.initialize = p_request;
 	plan.initialize.record_count = 0;

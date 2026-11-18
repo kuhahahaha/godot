@@ -59,6 +59,12 @@ layout(set = 0, binding = 1, std430) restrict readonly buffer PreviousRecords {
 }
 previous_records;
 #endif
+#ifdef AUX_PARAMS_ENABLED
+layout(set = 0, binding = 12, std430) restrict readonly buffer InstanceAuxParams {
+	uint words[];
+}
+instance_aux_params;
+#endif
 #endif
 layout(set = 0, binding = 2, std430) restrict readonly buffer OutputMetadata {
 	uint words[];
@@ -122,7 +128,7 @@ layout(set = 0, binding = 7, std430) restrict readonly buffer GeometryProof {
 	uvec4 source_accessor;
 	// CountValidity, AttributesValidity, DenseIdsValidity, InstanceGate; fault==0
 	uvec4 source_gate_words;
-	uvec4 options; // history permitted (0/1), three reserved zero words
+	uvec4 options; // history permitted (0/1), aux params enabled (0/1), two reserved zero words
 	SurfaceProof surfaces[];
 }
 proof;
@@ -422,7 +428,16 @@ void initialize_guard() {
 		initial_fault |= META_FAULT;
 	}
 #endif
-	if (proof.source_accessor.y != 0u || proof.source_accessor.z != 0u || proof.source_accessor.w < 1u || proof.source_accessor.w > 2u || proof.options.x > 1u || any(notEqual(proof.options.yzw, uvec3(0u))) ||
+#ifdef AUX_PARAMS_ENABLED
+	if (proof.options.y != 1u) {
+		initial_fault |= META_FAULT;
+	}
+#else
+	if (proof.options.y != 0u) {
+		initial_fault |= META_FAULT;
+	}
+#endif
+	if (proof.source_accessor.y != 0u || proof.source_accessor.z != 0u || proof.source_accessor.w < 1u || proof.source_accessor.w > 2u || proof.options.x > 1u || proof.options.y > 1u || any(notEqual(proof.options.zw, uvec2(0u))) ||
 			!bounds_shape(proof.current_decl_min, proof.current_decl_max, true) ||
 			(proof.options.x != 0u && !bounds_shape(proof.previous_decl_min, proof.previous_decl_max, true)) || !bounds_shape(proof.cull_min, proof.cull_max, true)) {
 		initial_fault |= META_FAULT;
@@ -496,6 +511,20 @@ void main() {
 	}
 	uint first_failure;
 	uint bits = validate_record(ordinal, false, first_failure);
+#ifdef AUX_PARAMS_ENABLED
+	if (ordinal >= uint(instance_aux_params.words.length()) / 8u) {
+		bits |= COUNT_FAULT;
+		first_failure = min(first_failure, failure_ordinal(ordinal, false));
+	} else {
+		uint aux_base = ordinal * 8u;
+		for (uint k = 0u; k < 8u; k++) {
+			if (!finite_normal_or_zero(uintBitsToFloat(instance_aux_params.words[aux_base + k]))) {
+				bits |= NUMERIC_FAULT;
+				first_failure = min(first_failure, failure_ordinal(ordinal, false));
+			}
+		}
+	}
+#endif
 	uint flags = current_records.words[ordinal * RECORD_WORDS + 46u];
 	if ((flags & 2u) != 0u) {
 #ifdef MOTION_DISABLED

@@ -145,6 +145,7 @@ private:
 	Error external_guard_indexed144_preparation_error = ERR_UNCONFIGURED;
 	ParticlesMeshLightSortRD *mesh_light_sort_rd = nullptr;
 	ParticlesCollisionSceneRD *collision_scene_rd = nullptr;
+	RID external_aux_zero_sentinel_buffer;
 
 	/* PARTICLES */
 
@@ -593,6 +594,7 @@ public:
 	const ParticlesMeshLightSortRD *get_mesh_light_sort_rd() const { return mesh_light_sort_rd; }
 	ParticlesCollisionSceneRD *get_collision_scene_rd() { return collision_scene_rd; }
 	const ParticlesCollisionSceneRD *get_collision_scene_rd() const { return collision_scene_rd; }
+	RID get_external_aux_zero_sentinel_buffer() const { return external_aux_zero_sentinel_buffer; }
 
 	bool free(RID p_rid);
 

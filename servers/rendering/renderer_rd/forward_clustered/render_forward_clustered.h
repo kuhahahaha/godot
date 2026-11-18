@@ -193,7 +193,7 @@ private:
 	uint64_t lightmap_texture_array_version = 0xFFFFFFFF;
 
 	// Internal retained requirements only; no request/action, factory or numeric F.
-	Error _plan_native_material_recipe(RID p_material, RID p_mesh, uint32_t p_surface, RD::FramebufferFormatID p_actual_format, RendererRD::NativeMaterialRecipeRoster &r_plan, uint32_t p_limit = 256);
+	Error _plan_native_material_recipe(RID p_material, RID p_mesh, uint32_t p_surface, RD::FramebufferFormatID p_actual_format, RendererRD::NativeMaterialRecipeRoster &r_plan, uint32_t p_limit = 256, uint32_t p_allowed_rejections = 0);
 	static Error build_native_material_fixed_pass_data(Vector<uint8_t> &r_instance, Vector<uint8_t> &r_implementation, Vector<uint8_t> &r_cluster, Vector<uint8_t> &r_push);
 
 	// Private source-only mode: original raw bindings, no native/cache effects.
@@ -931,8 +931,8 @@ public:
 	virtual uint32_t get_native_material_recipe_backend() const override { return 2; }
 	virtual RID get_native_default_material_3d() const override { return scene_shader.default_material; }
 	virtual Error ensure_native_material_recipe_sources_ready() override;
-	virtual Error warm_native_material_instance192_shader(RID p_material, RSE::PrimitiveType p_primitive) override;
-	virtual Error plan_native_material_recipe(RID p_material, RID p_mesh, uint32_t p_surface, RD::FramebufferFormatID p_actual_format, RendererRD::NativeMaterialRecipeRoster &r_plan, uint32_t p_limit = 256) override;
+	virtual Error warm_native_material_instance192_shader(RID p_material, RSE::PrimitiveType p_primitive, uint32_t p_allowed_rejections = 0) override;
+	virtual Error plan_native_material_recipe(RID p_material, RID p_mesh, uint32_t p_surface, RD::FramebufferFormatID p_actual_format, RendererRD::NativeMaterialRecipeRoster &r_plan, uint32_t p_limit = 256, uint32_t p_allowed_rejections = 0) override;
 
 	RenderForwardClustered();
 	~RenderForwardClustered();

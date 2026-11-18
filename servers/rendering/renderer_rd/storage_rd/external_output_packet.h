@@ -328,7 +328,7 @@ class ExternalPipelinePreparation {
 	bool bank_groups_reserved = false;
 	RID *pipeline_original_root = nullptr;
 	// Scratch observation only. Original owner keeps its retained lease private.
-	Error _transforms_sources(RD::ProductionOutputUniformSource (&)[2], uint32_t &) const;
+	Error _transforms_sources(RD::ProductionOutputUniformSource (&)[3], uint32_t &, RID p_shader = RID()) const;
 	Error _material_pass_observers_locked(RenderingDevice &, Vector<RID> &) const;
 	Error _prospective_execution_geometry_matches(const MeshStorage::NativeVertexArrayPlan &);
 	Error _prospective_admission(RID, uint64_t, const MeshStorage::NativeVertexArrayPlan &, RID, RD::FramebufferFormatID, RD::RenderPrimitive, const RD::PipelineRasterizationState &, const RD::PipelineMultisampleState &, const RD::PipelineDepthStencilState &, const RD::PipelineColorBlendState &, uint32_t, const Vector<RD::PipelineSpecializationConstant> &, MaterialStorage::NativeMaterialFuturePipelinePlan &);

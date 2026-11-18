@@ -47,17 +47,20 @@ def main():
         raise SystemExit("required component tools missing: " + str(tools))
     with tempfile.TemporaryDirectory(prefix="particle-external-guard-") as directory:
         temp = Path(directory)
-        for mode in ("INIT", "VALIDATE", "FINALIZE", "INIT_EMPTY", "FINALIZE_EMPTY"):
+        for mode in ("INIT", "VALIDATE", "FINALIZE", "INIT_EMPTY", "FINALIZE_EMPTY", "INIT_AUX", "VALIDATE_AUX", "FINALIZE_AUX"):
             shader = temp / (mode + ".comp")
+            base_mode = mode.removesuffix("_EMPTY").removesuffix("_AUX")
             defines = (
                 "#define EXTERNAL_MAX_SURFACES "
                 + str(surface_limit)
                 + "u\n#define MODE_"
-                + mode.removesuffix("_EMPTY")
+                + base_mode
                 + "\n"
             )
             if mode.endswith("_EMPTY"):
                 defines += "#define MODE_EMPTY\n"
+            if mode.endswith("_AUX"):
+                defines += "#define AUX_PARAMS_ENABLED\n"
             shader.write_text(glsl.replace("#version 450", "#version 450\n" + defines))
             spv = temp / (mode + ".spv")
             run([tools["glslangValidator"], "-V", str(shader), "-o", str(spv)])
@@ -88,11 +91,17 @@ def main():
                 else:
                     assert f"OpDecorate %{name} Binding {index}" in assembly
                     assert f"OpDecorate %{name} DescriptorSet 0" in assembly
+            if mode.endswith("_AUX"):
+                assert "OpDecorate %instance_aux_params Binding 12" in assembly
+                assert "OpDecorate %instance_aux_params DescriptorSet 0" in assembly
+                assert "OpMemberDecorate %InstanceAuxParams 0 NonWritable" in assembly
+            else:
+                assert "OpDecorate %instance_aux_params Binding 12" not in assembly
             for name in ("SourceCount", "SourceCountValidity", "SourceAttributesValidity", "SourceDenseIdsValidity", "SourceInstanceGate"):
                 assert f"OpMemberDecorate %{name} 0 Restrict" not in assembly, "source READ aliases must remain legal"
                 assert f"OpMemberDecorate %{name} 0 NonWritable" in assembly
             assert "ArrayStride 144" in assembly
-            if mode == "VALIDATE":
+            if base_mode == "VALIDATE":
                 assert assembly.count("NoContraction") >= 8
             assert "OpExecutionMode %main LocalSize 64 1 1" in assembly
             print(mode + ": SPIR-V compile/validate/layout PASS")
@@ -111,7 +120,9 @@ def main():
                 text = re.sub(r"\." + swizzle + r"\b", "." + swizzle + "()", text)
             return text
 
-        functions = "#define EXTERNAL_MAX_SURFACES " + str(surface_limit) + "u\n" + translate(body)
+        translated_body = translate(body)
+        translated_init_only = translate(source[source.index("void initialize_guard()") : source.index("\nvoid main()")])
+        functions = "#define EXTERNAL_MAX_SURFACES " + str(surface_limit) + "u\n" + translated_body
         translated_main = translate(main_body)
         for mode in ("INIT", "VALIDATE", "FINALIZE"):
             functions += (
@@ -125,6 +136,20 @@ def main():
                 + mode
                 + "\n}\n"
             )
+        functions += "\nnamespace aux_guard_ns {\n#define AUX_PARAMS_ENABLED\n" + translated_init_only
+        for mode in ("INIT", "VALIDATE", "FINALIZE"):
+            functions += (
+                "\nvoid shader_"
+                + mode
+                + "_AUX() {\n#define MODE_"
+                + mode
+                + "\n"
+                + translated_main
+                + "\n#undef MODE_"
+                + mode
+                + "\n}\n"
+            )
+        functions += "#undef AUX_PARAMS_ENABLED\n}\n"
         harness = Path(__file__).with_name("harness.cpp.in").read_text()
         surface = source[source.index("struct SurfaceProof {") : source.index("\nlayout(set = 0, binding = 7")]
         cpp = temp / "guard.cpp"

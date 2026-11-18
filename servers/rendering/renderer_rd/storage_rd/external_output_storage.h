@@ -73,6 +73,7 @@ class ExternalOutputStorage {
 		INSTANCE192_RESOURCE_COUNT,
 		INDEXED_VERTEX_HISTORY_VALIDITY = INSTANCE192_RESOURCE_COUNT,
 		INDEXED_STAGING,
+		INSTANCE_AUX_PARAMS,
 		RESOURCE_COUNT,
 	};
 	struct Resource {
@@ -118,11 +119,11 @@ class ExternalOutputStorage {
 		uint64_t total_bytes = 0;
 		uint32_t resource_count = 0;
 	};
-	static Error plan_instance192(uint32_t p_capacity, uint32_t p_surface_count, Instance192Layout &r_layout, bool p_motion_required = true);
-	Error allocate_instance192(uint32_t p_capacity, uint32_t p_surface_count, bool p_motion_required = true);
+	static Error plan_instance192(uint32_t p_capacity, uint32_t p_surface_count, Instance192Layout &r_layout, bool p_motion_required = true, bool p_aux_params_enabled = false);
+	Error allocate_instance192(uint32_t p_capacity, uint32_t p_surface_count, bool p_motion_required = true, bool p_aux_params_enabled = false);
 	// Internal stable-slot path only. The caller installs storage and the exact
 	// original pin before entry; this is neither charge nor source admission.
-	Error allocate_instance192_owned(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t &, uint32_t, uint32_t, bool = true);
+	Error allocate_instance192_owned(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t &, uint32_t, uint32_t, bool = true, bool = false);
 	Error allocate_indexed144_owned(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t &, uint32_t, bool, uint32_t, bool p_generated_geometry = false);
 	Error allocate_light64_owned(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t &, uint32_t);
 	Error request_retirement();

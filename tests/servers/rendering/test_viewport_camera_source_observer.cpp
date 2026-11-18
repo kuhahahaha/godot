@@ -765,7 +765,29 @@ public:
   body();
   CHECK_FALSE(scope.is_current(selected, capture));
  }
+
+ static void deliver_native_invocation(
+   RendererViewport &owner,
+   const Ref<Capture> &capture,
+   RendererViewport::Viewport::CameraSourceSubscriber *subscriber) {
+  if (!subscriber) {
+   return;
+  }
+  RendererViewport::CameraInvocationScope invocation(owner, capture);
+  if (invocation.select(subscriber) && invocation.is_recordable(subscriber, capture)) {
+   subscriber->camera_source_native_invocation(invocation);
+  }
+ }
 };
+
+namespace TestProductionRequest {
+void wave_g_deliver_native_invocation(
+		RendererViewport &p_owner,
+		const Ref<RendererViewport::Viewport::CameraCapture> &p_capture,
+		RendererViewport::Viewport::CameraSourceSubscriber *p_subscriber) {
+	TestRendererInvocationAccess::deliver_native_invocation(p_owner, p_capture, p_subscriber);
+}
+} // namespace TestProductionRequest
 
 TEST_CASE("[B4][RendererInvocation] selected registration closes after scope and never grants Dummy") {
  ObserverState state, foreign_state;

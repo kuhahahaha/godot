@@ -44,10 +44,10 @@ public:
 	using Report = Storage::Report;
 	using State = NativeDisposalWitness::State;
 	using Layout = Storage::Instance192Layout;
-	static Error plan(uint32_t p_capacity, uint32_t p_surfaces, Layout &r_layout) { return Storage::plan_instance192(p_capacity, p_surfaces, r_layout); }
+	static Error plan(uint32_t p_capacity, uint32_t p_surfaces, Layout &r_layout, bool p_motion = true, bool p_aux = false) { return Storage::plan_instance192(p_capacity, p_surfaces, r_layout, p_motion, p_aux); }
 	static Storage *make(RenderingDevice &p_rd) { return new Storage(p_rd); }
 	static Error destroy(Storage *&p_storage) { return Storage::destroy_if_returned(p_storage); }
-	static Error allocate(Storage &p_storage, uint32_t p_capacity, uint32_t p_surfaces = 1) { return p_storage.allocate_instance192(p_capacity, p_surfaces); }
+	static Error allocate(Storage &p_storage, uint32_t p_capacity, uint32_t p_surfaces = 1, bool p_motion = true, bool p_aux = false) { return p_storage.allocate_instance192(p_capacity, p_surfaces, p_motion, p_aux); }
 	static Error retire(Storage &p_storage) { return p_storage.request_retirement(); }
 	static Error observe(Storage &p_storage, Report &r_report) { return p_storage.observe(r_report); }
 	static Error maintain(Storage &p_storage) { return p_storage.maintenance(); }
@@ -426,6 +426,42 @@ TEST_CASE("[RenderingDevice][ExternalOutputPrefix] flattened surface table alloc
 			Access::detach(rd);
 		}
 	}
+}
+
+TEST_CASE("[RenderingDevice][ExternalOutputPrefix] role 9 INSTANCE_AUX_PARAMS plans and retires exact 32B/instance extent and omits at capacity zero") {
+	Access::Layout layout_with_aux;
+	REQUIRE(Access::plan(4, 1, layout_with_aux, true, true) == OK);
+	CHECK(layout_with_aux.bytes[9] == 128);
+	CHECK(layout_with_aux.resource_count == 8);
+
+	Access::Layout layout_no_motion_aux;
+	REQUIRE(Access::plan(4, 1, layout_no_motion_aux, false, true) == OK);
+	CHECK(layout_no_motion_aux.bytes[1] == 0);
+	CHECK(layout_no_motion_aux.bytes[9] == 128);
+	CHECK(layout_no_motion_aux.resource_count == 7);
+
+	Access::Layout layout_empty_aux;
+	REQUIRE(Access::plan(0, 1, layout_empty_aux, false, true) == OK);
+	CHECK(layout_empty_aux.bytes[9] == 0);
+	CHECK(layout_empty_aux.resource_count == 5);
+
+	RenderingDevice rd;
+	Driver driver;
+	Access::attach(rd, driver);
+	Storage *storage = Access::make(rd);
+	driver.storage = storage;
+	REQUIRE(Access::allocate(*storage, 4, 1, true, true) == OK);
+	CHECK(driver.creates == 8);
+	CHECK(driver.bytes[7] == 128);
+	Access::Report report;
+	REQUIRE(Access::observe(*storage, report) == OK);
+	CHECK(report.resources[9].bytes == 128);
+	CHECK(report.resources[9].native.state == Access::State::LIVE);
+	CHECK(Access::retire(*storage) == OK);
+	Access::dispose(rd);
+	CHECK(driver.returned.size() == 8);
+	CHECK(Access::destroy(storage) == OK);
+	Access::detach(rd);
 }
 
 } // namespace TestExternalOutputPrefix

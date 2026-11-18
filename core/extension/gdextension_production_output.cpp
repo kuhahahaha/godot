@@ -1651,7 +1651,7 @@ Error Registry::production_output_demand_locked(ProductionAttachment &attachment
 		}
 	} else {
 		RendererRD::ExternalOutputStorage::Instance192Layout layout;
-		error = RendererRD::ExternalOutputStorage::plan_instance192(facts.capacity, surfaces, layout, true);
+		error = RendererRD::ExternalOutputStorage::plan_instance192(facts.capacity, surfaces, layout, true, true);
 		if (error != OK) {
 			return error;
 		}
@@ -2203,9 +2203,16 @@ Error Registry::production_history_fallback_validate_locked(ProductionRequest &r
 				act.first_use > request.use_count || act.use_count > request.use_count - act.first_use || !p.acquire.source_use_count ||
 				p.acquire.first_source_use < act.first_use || p.acquire.first_source_use - act.first_use > act.use_count ||
 				p.acquire.source_use_count > act.use_count - (p.acquire.first_source_use - act.first_use)) { return ERR_INVALID_DATA; }
+		const bool omit_previous_history = p.acquire.input.common.history_reset != 0 && !p.acquire.input.common.has_previous_consumed_tuple;
+		auto is_previous_history_role = [](uint32_t p_role) -> bool {
+			return p_role == GDEXTENSION_OUTPUT_ROLE_ALIGNED_PREVIOUS_RECORDS_V1 ||
+					p_role == GDEXTENSION_OUTPUT_ROLE_ALIGNED_PREVIOUS_VERTICES_V1 ||
+					p_role == GDEXTENSION_OUTPUT_ROLE_VERTEX_HISTORY_VALIDITY_V1;
+		};
 		uint32_t active_roles = 0, matched_roles = 0;
 		for (uint32_t r_idx = 0; r_idx < anchor.output_role_count; ++r_idx) {
-			if (anchor.output_roles[r_idx].bytes) { ++active_roles; }
+			const auto &role = anchor.output_roles[r_idx];
+			if (role.bytes && !(omit_previous_history && is_previous_history_role(role.role))) { ++active_roles; }
 		}
 		for (uint32_t i = 0; i < act.use_count; ++i) {
 			const uint32_t index = act.first_use + i;
@@ -2218,6 +2225,9 @@ Error Registry::production_history_fallback_validate_locked(ProductionRequest &r
 			bool found_role = false;
 			for (uint32_t r_idx = 0; r_idx < anchor.output_role_count; ++r_idx) {
 				const auto &role = anchor.output_roles[r_idx];
+				if (omit_previous_history && is_previous_history_role(role.role)) {
+					continue;
+				}
 				if (role.bytes && role.resource_slot == use.resource_slot && use.access == GDEXTENSION_PRODUCTION_WRITE_V1 && !use.byte_offset && use.byte_size == role.bytes) {
 					found_role = true;
 					++matched_roles;
@@ -2330,8 +2340,19 @@ Error Registry::production_history_choose_locked(ProductionRequest &request, Pro
 		action.output_plan = fallback; action.output_source = &request.resources[fallback.acquire.source_resource_slot];
 		if (action.output_prepare_version == 3) {
 			const auto &act = action.declaration;
+			const bool clear_previous_history = !fallback.acquire.input.common.has_previous_consumed_tuple && fallback.acquire.input.common.history_reset != 0;
 			for (uint32_t r_idx = 0; r_idx < action.output_role_count; ++r_idx) {
 				auto &role = action.output_roles[r_idx];
+				if (clear_previous_history &&
+						(role.role == GDEXTENSION_OUTPUT_ROLE_ALIGNED_PREVIOUS_RECORDS_V1 ||
+								role.role == GDEXTENSION_OUTPUT_ROLE_ALIGNED_PREVIOUS_VERTICES_V1 ||
+								role.role == GDEXTENSION_OUTPUT_ROLE_VERTEX_HISTORY_VALIDITY_V1)) {
+					role.resource_slot = UINT32_MAX;
+					role.use_index = UINT32_MAX;
+					role.generation = 0;
+					role.bytes = 0;
+					continue;
+				}
 				if (!role.bytes) { continue; }
 				for (uint32_t i = 0; i < act.use_count; ++i) {
 					const uint32_t u_idx = act.first_use + i;
@@ -2665,6 +2686,12 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_output_v3(GDExtens
 		GDEXTENSION_OUTPUT_ROLE_ALIGNED_PREVIOUS_RECORDS_V1,
 		GDEXTENSION_OUTPUT_ROLE_OUTPUT_META_V1,
 	};
+	const uint32_t instance_aux_roles[4] = {
+		GDEXTENSION_OUTPUT_ROLE_CURRENT_RECORDS_V1,
+		GDEXTENSION_OUTPUT_ROLE_ALIGNED_PREVIOUS_RECORDS_V1,
+		GDEXTENSION_OUTPUT_ROLE_OUTPUT_META_V1,
+		GDEXTENSION_OUTPUT_ROLE_AUX_PARAMS_V1,
+	};
 	const uint32_t indexed_roles[5] = {
 		GDEXTENSION_OUTPUT_ROLE_CURRENT_VERTICES_V1,
 		GDEXTENSION_OUTPUT_ROLE_ALIGNED_PREVIOUS_VERTICES_V1,
@@ -2705,14 +2732,33 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_output_v3(GDExtens
 		canonical_roles[0] = input->roles[0];
 		canonical_roles[1] = input->roles[1];
 	} else if (input->roles[0].role == GDEXTENSION_OUTPUT_ROLE_CURRENT_RECORDS_V1) {
-		role_count = 3u;
-		expected_roles = instance_roles;
 		if (input->roles[1].role == GDEXTENSION_OUTPUT_ROLE_OUTPUT_META_V1) {
-			input_unused_start = 2u;
-			canonical_roles[0] = input->roles[0];
-			canonical_roles[1] = { GDEXTENSION_OUTPUT_ROLE_ALIGNED_PREVIOUS_RECORDS_V1, UINT32_MAX, UINT32_MAX, 0, 0, 0 };
-			canonical_roles[2] = input->roles[1];
+			if (input->roles[2].role == GDEXTENSION_OUTPUT_ROLE_AUX_PARAMS_V1) {
+				role_count = 4u;
+				expected_roles = instance_aux_roles;
+				input_unused_start = 3u;
+				canonical_roles[0] = input->roles[0];
+				canonical_roles[1] = { GDEXTENSION_OUTPUT_ROLE_ALIGNED_PREVIOUS_RECORDS_V1, UINT32_MAX, UINT32_MAX, 0, 0, 0 };
+				canonical_roles[2] = input->roles[1];
+				canonical_roles[3] = input->roles[2];
+			} else {
+				role_count = 3u;
+				expected_roles = instance_roles;
+				input_unused_start = 2u;
+				canonical_roles[0] = input->roles[0];
+				canonical_roles[1] = { GDEXTENSION_OUTPUT_ROLE_ALIGNED_PREVIOUS_RECORDS_V1, UINT32_MAX, UINT32_MAX, 0, 0, 0 };
+				canonical_roles[2] = input->roles[1];
+			}
+		} else if (input->roles[3].role == GDEXTENSION_OUTPUT_ROLE_AUX_PARAMS_V1) {
+			role_count = 4u;
+			expected_roles = instance_aux_roles;
+			input_unused_start = 4u;
+			for (uint32_t i = 0; i < 4u; ++i) {
+				canonical_roles[i] = input->roles[i];
+			}
 		} else {
+			role_count = 3u;
+			expected_roles = instance_roles;
 			input_unused_start = 3u;
 			for (uint32_t i = 0; i < 3u; ++i) {
 				canonical_roles[i] = input->roles[i];
@@ -2799,19 +2845,21 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_output_v3(GDExtens
 			}
 		}
 	} else {
-		// INSTANCE_192: 192B/instance (max 2^20 instances), optional matching aligned-previous, 32B meta when non-empty.
+		// INSTANCE_192: 192B/instance (max 2^20 instances), optional matching aligned-previous, 32B meta when non-empty, optional 32B/instance aux.
 		const uint64_t curr_bytes = canonical_roles[0].bytes;
 		const uint64_t prev_bytes = canonical_roles[1].bytes;
 		const uint64_t meta_bytes = canonical_roles[2].bytes;
-		if (curr_bytes % 192ull != 0 || (curr_bytes / 192ull) > (1ull << 20u)) {
+		const uint64_t aux_bytes = role_count == 4u ? canonical_roles[3].bytes : 0ull;
+		if (curr_bytes % 192ull != 0 || (curr_bytes / 192ull) > (1ull << 20u) || aux_bytes % 32ull != 0) {
 			return result(ERR_INVALID_DATA);
 		}
 		if (curr_bytes == 0) {
-			if (prev_bytes != 0 || (meta_bytes != 0 && meta_bytes != 32ull)) {
+			if (prev_bytes != 0 || aux_bytes != 0 || (meta_bytes != 0 && meta_bytes != 32ull)) {
 				return result(ERR_INVALID_DATA);
 			}
 		} else {
-			if ((prev_bytes != 0 && prev_bytes != curr_bytes) || meta_bytes != 32ull) {
+			if ((prev_bytes != 0 && prev_bytes != curr_bytes) || meta_bytes != 32ull ||
+					(aux_bytes != 0 && aux_bytes != (curr_bytes / 192ull) * 32ull)) {
 				return result(ERR_INVALID_DATA);
 			}
 		}
@@ -3661,7 +3709,7 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 		}
 		return;
 	}
-	if (role_count != 5 && role_count != 2) {
+	if (role_count != 5 && role_count != 4 && role_count != 2) {
 		out->status = output_status(ERR_INVALID_DATA, "output_role_count");
 		return;
 	}
@@ -3693,8 +3741,11 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 	using Owner = RendererRD::ExternalOutputOwner;
 	using Storage = RendererRD::ExternalOutputStorage;
 	const bool is_light64 = (role_count == 2);
+	const bool is_instance192_v2 = (role_count == 4);
 	const bool motion_required = !is_light64 && (owner.config.motion == RendererRD::ExternalOutputConfig::REQUIRED);
-	const bool generated_geometry = !is_light64 && !motion_required && owner.config.capacity && request->native_static_sealed;
+	const bool allocate_previous = is_instance192_v2 ? ((motion_required && !parsed.common.history_reset) || (action.output_roles[1].bytes != 0)) : motion_required;
+	const bool allocate_aux = is_instance192_v2 && (action.output_roles[3].bytes != 0);
+	const bool generated_geometry = !is_light64 && !is_instance192_v2 && !motion_required && owner.config.capacity && request->native_static_sealed;
 	if (generated_geometry && (action.output_prepare_version != 3 || !action.output_plan_prepared ||
 			!action.scene_cull_prepared || action.scene_cull_capture.is_null() || action.scene_cull_capture != action.preinput_camera_source)) {
 		out->status = output_status(ERR_UNAUTHORIZED, "output_original_indexed_geometry_source");
@@ -3723,6 +3774,22 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 			out->writable_count = 0;
 			const uint32_t strides[2] = { 64u, 4u };
 			for (uint32_t i = 0; i < 2; ++i) {
+				const auto &role = action.output_roles[i];
+				if (!role.bytes || role.resource_slot >= request->resource_count) {
+					continue;
+				}
+				const auto &resource = request->resources[role.resource_slot];
+				const uint32_t idx = out->writable_count++;
+				out->writables[idx] = { role.role, GDEXTENSION_OUTPUT_ACCESS_WRITE_ONLY_V1, resource.primary.get_id(), role.generation, uint32_t(role.bytes), strides[i] };
+				out->resource_slots[idx] = role.resource_slot;
+				out->use_indices[idx] = role.use_index;
+			}
+			return;
+		}
+		if (is_instance192_v2) {
+			out->writable_count = 0;
+			const uint32_t strides[4] = { 192u, 192u, 4u, 32u };
+			for (uint32_t i = 0; i < 4; ++i) {
 				const auto &role = action.output_roles[i];
 				if (!role.bytes || role.resource_slot >= request->resource_count) {
 					continue;
@@ -3785,14 +3852,15 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 		return;
 	}
 
-	if (action.output_scene_prepared) {
+	if (is_instance192_v2 || action.output_scene_prepared) {
 		error = production_output_scene_validate_locked(action, *input);
 		if (error != OK) {
 			out->status = output_status(error, "output_original_committed_scene");
 			return;
 		}
 	}
-	const auto expected_profile = is_light64 ? RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64 : RendererRD::ExternalOutputConfig::INDEXED_144;
+	const auto expected_profile = is_light64 ? RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64
+			: (is_instance192_v2 ? RendererRD::ExternalOutputConfig::INSTANCE_192 : RendererRD::ExternalOutputConfig::INDEXED_144);
 	if (request->next_action != ordinal || owner.generation_pin.is_empty() || owner.generation_pin.request->attachment != request->attachment || !owner.metadata_directory_installed || owner.metadata_lease.is_empty() || owner.config.profile != expected_profile) {
 		out->status = output_status(ERR_UNAVAILABLE, "output_prepared_owner_required");
 		return;
@@ -3838,6 +3906,28 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 			}
 		}
 		owned_resource_count = owner.config.capacity ? 3u : 2u; // CURRENT_RECORDS(optional) + OUTPUT_META + GUARD_STATUS
+	} else if (is_instance192_v2) {
+		surfaces = owner.generation_config_inline ? owner.generation_material_count : uint32_t(owner.config.surface_materials.size());
+		Storage::Instance192Layout layout;
+		error = Storage::plan_instance192(owner.config.capacity, surfaces, layout, allocate_previous, allocate_aux);
+		if (error != OK || !surfaces || uint64_t(owner.slot_count) * surfaces > (owner.generation_config_inline ? owner.binding_capacity : owner.surface_capacity)) {
+			out->status = output_status(error == OK ? ERR_OUT_OF_MEMORY : error, "output_surface_capacity");
+			return;
+		}
+		const uint64_t expected_instance192_bytes[4] = {
+			uint64_t(layout.bytes[Storage::CURRENT_RECORDS]),
+			uint64_t(layout.bytes[Storage::PREVIOUS_RECORDS]),
+			uint64_t(layout.bytes[Storage::OUTPUT_META]),
+			uint64_t(layout.bytes[Storage::INSTANCE_AUX_PARAMS]),
+		};
+		for (uint32_t i = 0; i < 4; ++i) {
+			const bool allow_empty_omitted_meta = (owner.config.capacity == 0 && i == 2 && action.output_roles[i].bytes == 0);
+			if (!allow_empty_omitted_meta && action.output_roles[i].bytes != expected_instance192_bytes[i]) {
+				out->status = output_status(ERR_INVALID_DATA, "output_role_extent");
+				return;
+			}
+		}
+		owned_resource_count = layout.resource_count;
 	} else {
 		surfaces = owner.generation_config_inline ? owner.generation_material_count : uint32_t(owner.config.surface_materials.size());
 		RendererRD::ParticlesRibbonRD::Indexed144Layout layout;
@@ -3950,7 +4040,7 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 	slot.consumed_borrow_serial = 0;
 	slot.state = Owner::LeaseState::RESERVED;
 	slot.publication_closed = slot.pass_uses_closed = false;
-	slot.allocate_previous_records = motion_required;
+	slot.allocate_previous_records = allocate_previous;
 	slot.lease_token.resize(32);
 	const uint64_t locator[] = { instance, request->serial, ordinal, slot.lease_serial };
 	for (uint32_t word = 0; word < 4; ++word) {
@@ -3998,19 +4088,35 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 			unlock_mutex_for_call();
 			if (is_light64) {
 				error = slot.storage->allocate_light64_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity);
+			} else if (is_instance192_v2) {
+				error = slot.storage->allocate_instance192_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity, surfaces, allocate_previous, allocate_aux);
 			} else {
 				error = slot.storage->allocate_indexed144_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity, motion_required, surfaces, generated_geometry);
 			}
 			relock_mutex_after_call();
 		}
 		if (error == OK) {
-			auto storage_role_to_v2_index = [is_light64](uint32_t s_role) -> uint32_t {
+			auto storage_role_to_v2_index = [is_light64, is_instance192_v2](uint32_t s_role) -> uint32_t {
 				if (is_light64) {
 					switch (s_role) {
 						case Storage::CURRENT_RECORDS:
 							return 0u;
 						case Storage::OUTPUT_META:
 							return 1u;
+						default:
+							return UINT32_MAX;
+					}
+				}
+				if (is_instance192_v2) {
+					switch (s_role) {
+						case Storage::CURRENT_RECORDS:
+							return 0u;
+						case Storage::PREVIOUS_RECORDS:
+							return 1u;
+						case Storage::OUTPUT_META:
+							return 2u;
+						case Storage::INSTANCE_AUX_PARAMS:
+							return 3u;
 						default:
 							return UINT32_MAX;
 					}
@@ -5042,7 +5148,7 @@ Error Registry::production_output_read_begin_locked(RendererRD::ExternalOutputOw
 				!action.output_guard_append.operation_bound || !same_original_operation_identity(action.output_guard_append.operation, expected) ||
 				read.raster_bound || read.draw_accepted || read.transfer_count || read.graph_count ||
 				!owner.generation_surfaces_complete || read.surface >= owner.generation_material_count) { return ERR_UNAUTHORIZED; }
-		for (uint32_t role : { uint32_t(RendererRD::ExternalOutputStorage::CURRENT_RECORDS), uint32_t(RendererRD::ExternalOutputStorage::PREVIOUS_RECORDS) }) {
+		for (uint32_t role : { uint32_t(RendererRD::ExternalOutputStorage::CURRENT_RECORDS), uint32_t(RendererRD::ExternalOutputStorage::PREVIOUS_RECORDS), uint32_t(RendererRD::ExternalOutputStorage::INSTANCE_AUX_PARAMS) }) {
 			const auto &records = slot.storage->resources[role];
 			if (records.bytes || records.rid.is_valid() || records.witness.cell.is_valid()) { return ERR_UNAUTHORIZED; }
 		}

@@ -32,6 +32,7 @@
 #include "core/os/os.h"
 #include "core/os/thread.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 #include "servers/rendering/rendering_device.h"
@@ -2643,6 +2644,13 @@ Error RenderingDevice::_production_output_owned_uniform_set_create_locked(GDExte
 			if (!readonly_binding) {
 				return ERR_UNAUTHORIZED;
 			}
+			const RID aux_sentinel = RendererRD::ParticlesStorage::get_singleton() ? RendererRD::ParticlesStorage::get_singleton()->get_external_aux_zero_sentinel_buffer() : RID();
+			if (index == 2 && uniform.binding == 2 && aux_sentinel.is_valid() && source.buffer == aux_sentinel &&
+					source.resource_slot == UINT32_MAX && source.use_index == UINT32_MAX && source.owned_ordinal == UINT32_MAX &&
+					source.byte_offset == 0 && source.byte_size == 32 && buffer->size == 32 && !buffer->qualification_return &&
+					buffer->draw_tracker != nullptr && buffer->transfer_worker_index < 0 && buffer->native_disposal.cell.is_null()) {
+				continue;
+			}
 			if (source.owned_ordinal != UINT32_MAX || !acquire || !registry.production_output_source_matches_locked(*request, *acquire, *this) ||
 					source.resource_slot >= request->resource_count || source.use_index >= request->use_count ||
 					source.use_index < acquire->output_first_source_use || source.use_index - acquire->output_first_source_use >= acquire->output_source_use_count) {
@@ -3188,6 +3196,45 @@ Error RenderingDevice::_production_mq_prepare_readback_buffer(RID p_buffer) {
 	}
 	_buffer_make_mutable(buf, p_buffer);
 	return buf->draw_tracker ? OK : ERR_CANT_CREATE;
+}
+
+Error RenderingDevice::_production_prepare_static_sentinel_buffer(RID p_buffer, uint32_t p_expected_bytes) {
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	if (!p_expected_bytes) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const Error worker_settled = _native_settle_transfer_worker(p_buffer);
+	if (worker_settled != OK) {
+		return worker_settled;
+	}
+	_THREAD_SAFE_METHOD_
+	Buffer *buf = storage_buffer_owner.owns(p_buffer) ? storage_buffer_owner.get_or_null(p_buffer) : nullptr;
+	if (!buf || buf->size != p_expected_bytes) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const Error settled = _check_transfer_worker_buffer(buf);
+	if (settled != OK) {
+		return settled;
+	}
+	_buffer_make_mutable(buf, p_buffer);
+	return (buf->draw_tracker != nullptr && buf->transfer_worker_index < 0) ? OK : ERR_CANT_CREATE;
+}
+
+bool RenderingDevice::_shader_reflects_readonly_storage_binding(RID p_shader, uint32_t p_set, uint32_t p_binding) {
+	_THREAD_SAFE_METHOD_
+	const Shader *shader = shader_owner.owns(p_shader) ? shader_owner.get_or_null(p_shader) : nullptr;
+	if (!shader || p_set >= uint32_t(shader->uniform_sets.size())) {
+		return false;
+	}
+	for (const ShaderUniform &uniform : shader->uniform_sets[p_set]) {
+		if (uniform.binding == p_binding) {
+			return uniform.type == UNIFORM_TYPE_STORAGE_BUFFER && !uniform.writable;
+		}
+	}
+	return false;
 }
 
 Error RenderingDevice::_production_mq_create_targets_and_framebuffer(const TextureFormat &p_color_fmt, const TextureFormat &p_depth_fmt, FramebufferFormatID p_expected_format, GDExtensionDeviceExit::QualificationPhysicalReturn &r_fb_physical, RID &r_color_tex, RID &r_depth_tex, RID &r_framebuffer) {

@@ -417,7 +417,8 @@ Error wave_g_mobile_draw_external(
 		bool p_has_capacity,
 		RD::FramebufferFormatID p_fb_format,
 		RID p_fb,
-		String &r_step);
+		String &r_step,
+		bool p_check_motion_shader = false);
 Error wave_g_clustered_draw_external(
 		const RendererRD::ExternalSurfaceSelection &p_sel,
 		const RenderDataRD *p_render_data,
@@ -426,8 +427,13 @@ Error wave_g_clustered_draw_external(
 		bool p_has_capacity,
 		RD::FramebufferFormatID p_fb_format,
 		RID p_fb,
-		String &r_step);
+		String &r_step,
+		bool p_motion_vectors = false);
 void wave_g_settle_transfer_workers(RenderingDevice *p_rd);
+void wave_g_deliver_native_invocation(
+		RendererViewport &p_owner,
+		const Ref<RendererViewport::Viewport::CameraCapture> &p_capture,
+		RendererViewport::Viewport::CameraSourceSubscriber *p_subscriber);
 
 struct Access {
 	static void settle_transfer_workers(RenderingDevice *p_rd) {

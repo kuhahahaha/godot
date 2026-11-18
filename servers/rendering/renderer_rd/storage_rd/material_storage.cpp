@@ -3350,7 +3350,7 @@ MaterialStorage::MaterialDataRequestFunction MaterialStorage::material_get_data_
 	return material_data_request_func[p_shader_type];
 }
 
-Error MaterialStorage::material_recipe_source_acquire(RID p_material, NativeRecipeSource &source, uint32_t limit) {
+Error MaterialStorage::material_recipe_source_acquire(RID p_material, NativeRecipeSource &source, uint32_t limit, uint32_t p_allowed_rejections) {
 	auto *rd = RD::get_singleton();
 	if (!rd || !rd->native_immutable_is_render_thread()) {
 		return ERR_UNAUTHORIZED;
@@ -3377,13 +3377,13 @@ Error MaterialStorage::material_recipe_source_acquire(RID p_material, NativeReci
 	if (error != OK) {
 		return fail(error);
 	}
-	if (!features.compiled.zero_displacement || features.compiled.material_recipe_rejections) {
+	if (!features.compiled.zero_displacement || (features.compiled.material_recipe_rejections & ~p_allowed_rejections) != 0) {
 		return fail(ERR_UNAVAILABLE);
 	}
 	auto *material = material_owner.get_or_null(p_material);
 	RID ready_shader, uniform_set;
 	uint64_t mask = 0;
-	error = material->data->get_native_recipe_shader_if_ready(ready_shader, mask, uniform_set);
+	error = material->data->get_native_recipe_shader_if_ready(ready_shader, mask, uniform_set, p_allowed_rejections);
 	if (error != OK) {
 		return fail(error);
 	}
@@ -3467,12 +3467,12 @@ Error MaterialStorage::material_recipe_source_release(NativeRecipeSource &source
 
 #include "servers/rendering/renderer_rd/native_material_recipe_roster.h"
 
-Error NativeMaterialRecipeRoster::_begin_material(MaterialStorage &storage, RID selected, uint32_t limit) {
+Error NativeMaterialRecipeRoster::_begin_material(MaterialStorage &storage, RID selected, uint32_t limit, uint32_t p_allowed_rejections) {
 	if (is_active()) { return ERR_ALREADY_IN_USE; }
 	RD *rd = RD::get_singleton();
 	if (!rd || !rd->native_immutable_is_render_thread()) { return ERR_UNAUTHORIZED; }
 	if (!limit || limit > 1024) { return ERR_INVALID_PARAMETER; }
-	const Error error = storage.material_recipe_source_acquire(selected, material, limit);
+	const Error error = storage.material_recipe_source_acquire(selected, material, limit, p_allowed_rejections);
 	if (error != OK) {
 		if (material.is_active()) { material_owner = &storage; device = rd; }
 		return error;
@@ -3482,8 +3482,8 @@ Error NativeMaterialRecipeRoster::_begin_material(MaterialStorage &storage, RID 
 	return OK;
 }
 
-Error NativeMaterialRecipeRoster::_begin(MaterialStorage &storage, MeshStorage &meshes, RID selected, RID selected_mesh, uint32_t selected_surface, RD::FramebufferFormatID format, uint32_t limit) {
-	Error error = _begin_material(storage, selected, limit);
+Error NativeMaterialRecipeRoster::_begin(MaterialStorage &storage, MeshStorage &meshes, RID selected, RID selected_mesh, uint32_t selected_surface, RD::FramebufferFormatID format, uint32_t limit, uint32_t p_allowed_rejections) {
+	Error error = _begin_material(storage, selected, limit, p_allowed_rejections);
 	if (error != OK) { return error; }
 	mesh_owner = &meshes;
 	error = meshes.mesh_selection_acquire(selected_mesh, mesh);
@@ -3605,9 +3605,9 @@ Error NativeMaterialRecipeRoster::_join_bindings(Backend backend, const Vector<R
 			if (set == 1 && backend == Backend::CLUSTERED && reflected.binding == 1) { replacement = &fixed.implementation; role = Role::IMPLEMENTATION; }
 			if (set == 1 && backend == Backend::CLUSTERED && reflected.binding == 9) { replacement = &fixed.cluster; role = Role::CLUSTER; owned_kind = RD::NativeProspectiveSymbol::FUTURE_STORAGE_BUFFER; }
 			if (set == 2) {
-				if (reflected.binding > 1) { return ERR_UNAVAILABLE; }
-				replacement = reflected.binding ? &fixed.previous : &fixed.current;
-				role = reflected.binding ? Role::PREVIOUS : Role::CURRENT;
+				if (reflected.binding > 2) { return ERR_UNAVAILABLE; }
+				replacement = reflected.binding == 0 ? &fixed.current : (reflected.binding == 1 ? &fixed.previous : &fixed.aux);
+				role = reflected.binding == 0 ? Role::CURRENT : (reflected.binding == 1 ? Role::PREVIOUS : Role::AUX_PARAMS);
 				owned_kind = RD::NativeProspectiveSymbol::FUTURE_STORAGE_BUFFER;
 			}
 			if (replacement) {

@@ -44,7 +44,7 @@
 #endif
 
 namespace RendererRD {
-Error ExternalPipelinePreparation::_transforms_sources(RD::ProductionOutputUniformSource (&sources)[2], uint32_t &count) const {
+Error ExternalPipelinePreparation::_transforms_sources(RD::ProductionOutputUniformSource (&sources)[3], uint32_t &count, RID p_shader) const {
 	const auto &slot = owner->slots[owner_slot];
 	if (!slot.storage || !slot.owned_group) {
 		return ERR_UNAUTHORIZED;
@@ -72,13 +72,35 @@ Error ExternalPipelinePreparation::_transforms_sources(RD::ProductionOutputUnifo
 		sources[0] = source_for_role(ExternalOutputStorage::CURRENT_RECORDS);
 		sources[1] = source_for_role(ExternalOutputStorage::PREVIOUS_RECORDS);
 		if (sources[1].buffer.is_null() && !sources[1].byte_size &&
-				owner->config.motion == ExternalOutputConfig::DISABLED && selection.pass != ExternalPacketPass::MOTION) {
+				((owner->config.motion == ExternalOutputConfig::DISABLED && selection.pass != ExternalPacketPass::MOTION) ||
+						(!slot.allocate_previous_records && slot.request.common.history_reset != 0))) {
 			sources[1] = sources[0];
 		}
 		if (sources[0].byte_size != sources[1].byte_size) {
 			return ERR_UNAVAILABLE;
 		}
 		count = 2;
+		if (p_shader.is_valid() && owner->device && owner->device->_shader_reflects_readonly_storage_binding(p_shader, 2, 2)) {
+			const auto &aux_resource = slot.storage->resources[ExternalOutputStorage::INSTANCE_AUX_PARAMS];
+			if (aux_resource.bytes != 0) {
+				sources[2] = source_for_role(ExternalOutputStorage::INSTANCE_AUX_PARAMS);
+			} else {
+				const RID sentinel = ParticlesStorage::get_singleton() ? ParticlesStorage::get_singleton()->get_external_aux_zero_sentinel_buffer() : RID();
+				if (sentinel.is_null()) {
+					return ERR_UNAVAILABLE;
+				}
+				RD::ProductionOutputUniformSource sentinel_source;
+				sentinel_source.buffer = sentinel;
+				sentinel_source.owned_group = 0;
+				sentinel_source.resource_slot = UINT32_MAX;
+				sentinel_source.use_index = UINT32_MAX;
+				sentinel_source.owned_ordinal = UINT32_MAX;
+				sentinel_source.byte_offset = 0;
+				sentinel_source.byte_size = 32;
+				sources[2] = sentinel_source;
+			}
+			count = 3;
+		}
 	}
 	for (uint32_t i = 0; i < count; ++i) {
 		if (sources[i].buffer.is_null() || !sources[i].byte_size) {
@@ -99,18 +121,20 @@ Error ParticlesStorage::_external_transforms_prepare_owned_prefix(ExternalPipeli
 			row.pipeline_pin != &slot.original_pin || slot.publication_closed || slot.pass_uses_closed) {
 		return ERR_UNAUTHORIZED;
 	}
-	RD::ProductionOutputUniformSource sources[2];
+	RD::ProductionOutputUniformSource sources[3];
 	uint32_t count = 0;
-	const Error planned = row._transforms_sources(sources, count);
+	const RID shader_rid = row.material.get_snapshot().shader;
+	const Error planned = row._transforms_sources(sources, count, shader_rid);
 	if (planned != OK) {
 		return planned;
 	}
-	RD::Uniform uniforms[2] = {
+	RD::Uniform uniforms[3] = {
 		RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 0, sources[0].buffer),
 		RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 1, sources[1].buffer),
+		RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 2, sources[2].buffer),
 	};
 	return owner.device->_production_output_owned_uniform_set_create(*row.pipeline_scope, row.transforms_owned_group, 0,
-			VectorView<RD::Uniform>(uniforms, count), row.material.get_snapshot().shader, 2, row.transforms_uniform_set,
+			VectorView<RD::Uniform>(uniforms, count), shader_rid, 2, row.transforms_uniform_set,
 			row.transforms_uniform_witness, VectorView<RD::ProductionOutputUniformSource>(sources, count));
 }
 
@@ -300,6 +324,7 @@ Error ParticlesStorage::particles_external_resolve(const ExternalPacketViewLease
 				pipeline_request.pass == ExternalPacketPass::TRANSPARENT ? ExternalOutputConfig::PASS_TRANSPARENT : 0;
 		const auto &current = slot.storage->resources[ExternalOutputStorage::CURRENT_RECORDS];
 		const auto &previous = slot.storage->resources[ExternalOutputStorage::PREVIOUS_RECORDS];
+		const auto &aux = slot.storage->resources[ExternalOutputStorage::INSTANCE_AUX_PARAMS];
 		const auto &validity = slot.storage->resources[ExternalOutputStorage::INDEXED_VERTEX_HISTORY_VALIDITY];
 		const auto &staging = slot.storage->resources[ExternalOutputStorage::INDEXED_STAGING];
 		const auto &surface = slot.surfaces[view.flattened_surface];
@@ -307,7 +332,8 @@ Error ParticlesStorage::particles_external_resolve(const ExternalPacketViewLease
 		const bool indexed_empty_ok = owner.config.profile != ExternalOutputConfig::INDEXED_144 ||
 				(!validity.rid.is_valid() && !validity.bytes && !staging.rid.is_valid() && !staging.bytes);
 		if (!pass || !(owner.config.pass_mask & pass) || !(slot.request.pass_mask & pass) ||
-				current.rid.is_valid() || current.bytes || previous.rid.is_valid() || previous.bytes || !indexed_empty_ok ||
+				current.rid.is_valid() || current.bytes || previous.rid.is_valid() || previous.bytes ||
+				aux.rid.is_valid() || aux.bytes || !indexed_empty_ok ||
 				command.rid.is_null() || surface.command_extent != 20 || surface.command_offset != uint64_t(view.flattened_surface) * 20 ||
 				surface.command_offset > command.bytes || surface.command_extent > command.bytes - surface.command_offset) {
 			return ERR_UNAUTHORIZED;
@@ -560,9 +586,9 @@ Error ExternalPipelinePreparation::_prospective_admission(RID p_shader, uint64_t
 	// The row's own transforms set is created after the backend pipeline and
 	// before adoption. Model its exact dependency edges before any factory.
 	if (owner->generation_config_inline) {
-		RD::ProductionOutputUniformSource sources[2];
+		RD::ProductionOutputUniformSource sources[3];
 		uint32_t count = 0;
-		error = _transforms_sources(sources, count);
+		error = _transforms_sources(sources, count, p_shader);
 		if (error != OK) {
 			return traced("transforms_sources", error);
 		}
@@ -570,7 +596,11 @@ Error ExternalPipelinePreparation::_prospective_admission(RID p_shader, uint64_t
 		transforms.kind = RD::NativeProspectiveSymbol::FUTURE_UNIFORM_SET;
 		transforms.shader = p_shader;
 		for (uint32_t i = 0; i < count; ++i) {
-			if (i && sources[i].buffer == sources[0].buffer) {
+			bool duplicate = false;
+			for (uint32_t prior = 0; prior < i; ++prior) {
+				duplicate |= sources[i].buffer == sources[prior].buffer;
+			}
+			if (duplicate) {
 				continue;
 			}
 			if (transforms.inputs.push_back({ { sources[i].buffer, UINT32_MAX }, RD::NativeProspectiveInput::STORAGE_BUFFER }) != OK) {

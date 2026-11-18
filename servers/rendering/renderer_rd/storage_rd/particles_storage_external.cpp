@@ -110,7 +110,7 @@ Error ParticlesStorage::_external_guard_copy_history_locked(const GDExtensionDev
 	}
 	const auto &records = previous.storage->resources[borrow.previous_no_records ? ExternalOutputStorage::GUARD_STATUS : ExternalOutputStorage::CURRENT_RECORDS];
 	if (borrow.previous_no_records) {
-		for (uint32_t r : { uint32_t(ExternalOutputStorage::CURRENT_RECORDS), uint32_t(ExternalOutputStorage::PREVIOUS_RECORDS) }) {
+		for (uint32_t r : { uint32_t(ExternalOutputStorage::CURRENT_RECORDS), uint32_t(ExternalOutputStorage::PREVIOUS_RECORDS), uint32_t(ExternalOutputStorage::INSTANCE_AUX_PARAMS) }) {
 			const auto &absent = previous.storage->resources[r];
 			if (absent.bytes || absent.rid.is_valid()) { return ERR_INVALID_DATA; }
 		}
@@ -279,11 +279,12 @@ Error ParticlesStorage::_external_guard_prepare_owned_prefix(GDExtensionProducti
 	}
 	proof.source_accessor[0] = p_source_words[0];
 	proof.source_accessor[3] = p_source_space;
+	proof.options[1] = slot.storage->resources[ExternalOutputStorage::INSTANCE_AUX_PARAMS].bytes != 0 ? 1u : 0u;
 	Guard::Bindings bindings;
 	Vector<RD::ProductionOutputUniformSource> sources;
 	uint32_t owned_ordinal = 0;
 	for (uint32_t binding = 0; binding < Guard::BINDING_COUNT; ++binding) {
-		const bool imported = binding == Guard::SOURCE_COUNT || binding >= Guard::SOURCE_COUNT_VALIDITY;
+		const bool imported = binding == Guard::SOURCE_COUNT || (binding >= Guard::SOURCE_COUNT_VALIDITY && binding <= Guard::SOURCE_INSTANCE_GATE);
 		RD::ProductionOutputUniformSource source;
 		if (imported) {
 			const uint32_t index = binding == Guard::SOURCE_COUNT ? 0 : binding - Guard::SOURCE_COUNT_VALIDITY + 1;
@@ -299,7 +300,9 @@ Error ParticlesStorage::_external_guard_prepare_owned_prefix(GDExtensionProducti
 				proof.source_gate_words[index - 1] = p_source_words[index];
 			}
 		} else {
-			const uint32_t role = binding <= Guard::OUTPUT_META ? binding : binding - 1;
+			const uint32_t role = binding == Guard::INSTANCE_AUX_PARAMS
+					? uint32_t(ExternalOutputStorage::INSTANCE_AUX_PARAMS)
+					: (binding <= Guard::OUTPUT_META ? binding : binding - 1);
 			const ExternalOutputStorage::Resource &resource = slot.storage->resources[role];
 			bindings.buffers[binding] = { resource.rid, resource.bytes };
 			if (!resource.bytes) {

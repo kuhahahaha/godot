@@ -70,7 +70,14 @@ struct WaveGNativeOutputPorts {
 	GDExtensionInterfaceDeviceSessionProductionPrepareOutputPlanV1 prepare_plan_v1 = nullptr;
 	GDExtensionInterfaceDeviceSessionProductionPrepareOutputPlanV2 prepare_plan_v2 = nullptr;
 	GDExtensionInterfaceDeviceSessionProductionStageOutputPlanV2 stage_plan_v2 = nullptr;
+	GDExtensionInterfaceDeviceSessionProductionStageOutputPlanWithHistoryGuardV2 stage_plan_with_history_guard_v2 = nullptr;
+	GDExtensionInterfaceDeviceSessionProductionStageOutputHistoryFallbackV2 stage_history_fallback_v2 = nullptr;
+	GDExtensionInterfaceDeviceSessionProductionStageOutputHistoryStaticV2 stage_history_static_v2 = nullptr;
+	GDExtensionInterfaceDeviceSessionProductionPrepareHistoryFallbackUploadV2 prepare_history_fallback_upload_v2 = nullptr;
+	GDExtensionInterfaceDeviceSessionProductionReadStagedOutputInputV2 read_staged_output_input_v2 = nullptr;
 	GDExtensionInterfaceDeviceSessionProductionPrepareNativeRecordV2 prepare_native_record_v2 = nullptr;
+	GDExtensionInterfaceDeviceSessionProductionPrepareNativeBatchV2 prepare_native_batch_v2 = nullptr;
+	GDExtensionInterfaceDeviceSessionProductionNativeBatchReadV2 native_batch_read_v2 = nullptr;
 
 	GDExtensionInterfaceDeviceSessionOutputConsumedPrepareV2 consumed_prepare_v2 = nullptr;
 	GDExtensionInterfaceDeviceSessionOutputConsumedReadV2 consumed_read_v2 = nullptr;
@@ -83,6 +90,7 @@ struct WaveGNativeOutputPorts {
 	GDExtensionInterfaceDeviceSessionProductionReadRevisionV1 read_revision = nullptr;
 	GDExtensionInterfaceDeviceSessionProductionAppendV2 append_v2 = nullptr;
 
+	GDExtensionInterfaceDeviceSessionOutputAcquireV1 output_acquire_v1 = nullptr;
 	GDExtensionInterfaceDeviceSessionOutputAcquireV2 output_acquire_v2 = nullptr;
 	GDExtensionInterfaceDeviceSessionProductionFinalizeOutputV1 output_finalize_v1 = nullptr;
 	GDExtensionInterfaceDeviceSessionOutputSealV1 output_seal_v1 = nullptr;
@@ -147,7 +155,14 @@ struct WaveGNativeOutputPorts {
 		prepare_plan_v1 = get_fn<GDExtensionInterfaceDeviceSessionProductionPrepareOutputPlanV1>("device_session_production_prepare_output_plan_v1");
 		prepare_plan_v2 = get_fn<GDExtensionInterfaceDeviceSessionProductionPrepareOutputPlanV2>("device_session_production_prepare_output_plan_v2");
 		stage_plan_v2 = get_fn<GDExtensionInterfaceDeviceSessionProductionStageOutputPlanV2>("device_session_production_stage_output_plan_v2");
+		stage_plan_with_history_guard_v2 = get_fn<GDExtensionInterfaceDeviceSessionProductionStageOutputPlanWithHistoryGuardV2>("device_session_production_stage_output_plan_with_history_guard_v2");
+		stage_history_fallback_v2 = get_fn<GDExtensionInterfaceDeviceSessionProductionStageOutputHistoryFallbackV2>("device_session_production_stage_output_history_fallback_v2");
+		stage_history_static_v2 = get_fn<GDExtensionInterfaceDeviceSessionProductionStageOutputHistoryStaticV2>("device_session_production_stage_output_history_static_v2");
+		prepare_history_fallback_upload_v2 = get_fn<GDExtensionInterfaceDeviceSessionProductionPrepareHistoryFallbackUploadV2>("device_session_production_prepare_history_fallback_upload_v2");
+		read_staged_output_input_v2 = get_fn<GDExtensionInterfaceDeviceSessionProductionReadStagedOutputInputV2>("device_session_production_read_staged_output_input_v2");
 		prepare_native_record_v2 = get_fn<GDExtensionInterfaceDeviceSessionProductionPrepareNativeRecordV2>("device_session_production_prepare_native_record_v2");
+		prepare_native_batch_v2 = get_fn<GDExtensionInterfaceDeviceSessionProductionPrepareNativeBatchV2>("device_session_production_prepare_native_batch_v2");
+		native_batch_read_v2 = get_fn<GDExtensionInterfaceDeviceSessionProductionNativeBatchReadV2>("device_session_production_native_batch_read_v2");
 
 		consumed_prepare_v2 = get_fn<GDExtensionInterfaceDeviceSessionOutputConsumedPrepareV2>("device_session_output_consumed_prepare_v2");
 		consumed_read_v2 = get_fn<GDExtensionInterfaceDeviceSessionOutputConsumedReadV2>("device_session_output_consumed_read_v2");
@@ -160,6 +175,7 @@ struct WaveGNativeOutputPorts {
 		read_revision = get_fn<GDExtensionInterfaceDeviceSessionProductionReadRevisionV1>("device_session_production_read_revision_v1");
 		append_v2 = get_fn<GDExtensionInterfaceDeviceSessionProductionAppendV2>("device_session_production_append_v2");
 
+		output_acquire_v1 = get_fn<GDExtensionInterfaceDeviceSessionOutputAcquireV1>("device_session_output_acquire_v1");
 		output_acquire_v2 = get_fn<GDExtensionInterfaceDeviceSessionOutputAcquireV2>("device_session_output_acquire_v2");
 		output_finalize_v1 = get_fn<GDExtensionInterfaceDeviceSessionProductionFinalizeOutputV1>("device_session_production_finalize_output_v1");
 		output_seal_v1 = get_fn<GDExtensionInterfaceDeviceSessionOutputSealV1>("device_session_output_seal_v1");
@@ -189,10 +205,13 @@ struct WaveGNativeOutputPorts {
 				metadata_query && output_create_v3 && output_withdraw &&
 				req_quote_v1 && req_quote_v2 && reserve_v2 && reserve_readbacks && import_storage && import_unit && set_create &&
 				prepare_upload_v2 && prepare_dispatch_v2 && prepare_readback_v2 && prepare_host_transform && prepare_output_scene && prepare_host_view && read_camera_ready &&
-				prepare_output_v3 && prepare_plan_v1 && prepare_plan_v2 && stage_plan_v2 && prepare_native_record_v2 &&
+				prepare_output_v3 && prepare_plan_v1 && prepare_plan_v2 && stage_plan_v2 &&
+				stage_plan_with_history_guard_v2 && stage_history_fallback_v2 && stage_history_static_v2 &&
+				prepare_history_fallback_upload_v2 && read_staged_output_input_v2 && prepare_native_record_v2 &&
+				prepare_native_batch_v2 && native_batch_read_v2 &&
 				consumed_prepare_v2 && consumed_read_v2 && consumed_borrow_v2 && consumed_return_v2 &&
 				record_schedule && record_consume_v2 && ack_segment && read_revision && append_v2 &&
-				output_acquire_v2 && output_finalize_v1 && output_seal_v1 && output_cancel_v1 && output_cancel_schedule && output_return_consume &&
+				output_acquire_v1 && output_acquire_v2 && output_finalize_v1 && output_seal_v1 && output_cancel_v1 && output_cancel_schedule && output_return_consume &&
 				observe_v3 && copy_v1 && cancel_v1 && release_v2 && close_v1 &&
 				callable_create && camera_relay && camera_bind_relay && camera_bind_request && camera_close &&
 				scene_capability && scene_relay && scene_register && scene_unregister;
@@ -207,17 +226,30 @@ static inline uint32_t wave_g_f2u(float p_val) {
 
 static inline void wave_g_fill_instance192_record(uint32_t *r_words, float p_tx, float p_ty, float p_tz, uint32_t p_dense_id) {
 	memset(r_words, 0, 192);
-	// 3x4 affine row-major transform: identity basis + translation (tx, ty, tz)
+	// Rows 0..2: 3x4 affine row-major model transform: identity basis + translation (tx, ty, tz)
 	r_words[0] = wave_g_f2u(1.0f);
 	r_words[3] = wave_g_f2u(p_tx);
 	r_words[5] = wave_g_f2u(1.0f);
 	r_words[7] = wave_g_f2u(p_ty);
 	r_words[10] = wave_g_f2u(1.0f);
 	r_words[11] = wave_g_f2u(p_tz);
-	// Color / custom finite attributes (pad words 15, 19, 23, 47 must be zero!)
-	r_words[12] = wave_g_f2u(0.9f);
-	r_words[13] = wave_g_f2u(0.3f);
-	r_words[14] = wave_g_f2u(0.1f);
+	// Rows 3..5: 3x3 normal matrix (pad words 15, 19, 23 must be zero!)
+	r_words[12] = wave_g_f2u(1.0f);
+	r_words[17] = wave_g_f2u(1.0f);
+	r_words[22] = wave_g_f2u(1.0f);
+	// Rows 6..8: 3x4 inverse_model transform: identity basis + translation (-tx, -ty, -tz)
+	r_words[24] = wave_g_f2u(1.0f);
+	r_words[27] = wave_g_f2u(-p_tx);
+	r_words[29] = wave_g_f2u(1.0f);
+	r_words[31] = wave_g_f2u(-p_ty);
+	r_words[34] = wave_g_f2u(1.0f);
+	r_words[35] = wave_g_f2u(-p_tz);
+	// Row 9: RGBA color (1, 1, 1, 1)
+	r_words[36] = wave_g_f2u(1.0f);
+	r_words[37] = wave_g_f2u(1.0f);
+	r_words[38] = wave_g_f2u(1.0f);
+	r_words[39] = wave_g_f2u(1.0f);
+	// Row 11: dense ID + flags (pad word 47 must be zero!)
 	r_words[44] = p_dense_id;
 	r_words[45] = 0u;
 	r_words[46] = 1u; // flags bit 0 active, upper bits zero
@@ -721,6 +753,171 @@ static void run_wave_g_native_output_cpu() {
 			cancel_and_reclaim(req);
 		}
 
+		// =========================================================================
+		// 3. Role 9 (GDEXTENSION_OUTPUT_ROLE_AUX_PARAMS_V1 = 9):
+		//    4-role PrepareV3 ({1,7,9} & {1,2,7,9} at capacity = 4) + malformed rejections
+		// =========================================================================
+		CHECK(GDEXTENSION_OUTPUT_ROLE_AUX_PARAMS_V1 == 9);
+		for (uint32_t aux_case = 0; aux_case < 4; ++aux_case) {
+			// 0: {1, 7, 9} no-motion + aux (capacity=4, aux_bytes=128) -> OK
+			// 1: {1, 2, 7, 9} motion + aux (capacity=4, aux_bytes=128) -> OK
+			// 2: malformed aux_bytes = 96 (!= 4 * 32) -> ERR_INVALID_DATA
+			// 3: malformed capacity == 0 with aux_bytes = 32 -> ERR_INVALID_DATA
+			const bool with_prev = (aux_case == 1);
+			const uint64_t aux_bytes = (aux_case == 2) ? 96u : 128u;
+			const bool is_cap0 = (aux_case == 3);
+			const uint64_t gen = 700 + aux_case;
+
+			Vector<GDExtensionProductionResourceV1> res_vec;
+			res_vec.push_back({ GDEXTENSION_PRODUCTION_STORAGE_V1, 0, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 32, 0 });
+			if (is_cap0) {
+				res_vec.push_back({ GDEXTENSION_PRODUCTION_STORAGE_V1, 9, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, 32, 0 });
+			} else {
+				res_vec.push_back({ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, 768, 0 });
+				if (with_prev) {
+					res_vec.push_back({ GDEXTENSION_PRODUCTION_STORAGE_V1, 2, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, 768, 0 });
+				}
+				res_vec.push_back({ GDEXTENSION_PRODUCTION_STORAGE_V1, 7, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, 32, 0 });
+				res_vec.push_back({ GDEXTENSION_PRODUCTION_STORAGE_V1, 9, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, aux_bytes, 0 });
+			}
+
+			Vector<GDExtensionProductionUseV1> use_vec;
+			use_vec.push_back({ 0, GDEXTENSION_PRODUCTION_READ_V1, 0, 32, 0 });
+			for (int i = 1; i < res_vec.size(); ++i) {
+				use_vec.push_back({ uint32_t(i), GDEXTENSION_PRODUCTION_WRITE_V1, 0, res_vec[i].physical_bytes, 0 });
+			}
+			const uint32_t acq_use_count = uint32_t(use_vec.size());
+			Vector<GDExtensionProductionActionV2> act_vec;
+			act_vec.push_back({ 0, 10, 1, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, acq_use_count, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX });
+			for (int i = 1; i < res_vec.size(); ++i) {
+				const uint32_t u_idx = uint32_t(use_vec.size());
+				use_vec.push_back({ uint32_t(i), GDEXTENSION_PRODUCTION_WRITE_V1, 0, res_vec[i].physical_bytes, 0 });
+				act_vec.push_back({ uint32_t(act_vec.size()), 10, uint32_t(1 + i), 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, u_idx, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX });
+			}
+			const uint32_t fin_ord = uint32_t(act_vec.size());
+			act_vec.push_back({ fin_ord, 10, 20, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX });
+			const uint32_t seal_ord = uint32_t(act_vec.size());
+			act_vec.push_back({ seal_ord, 10, 21, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX });
+
+			const GDExtensionProductionOperationV1 op = { production_dto_abi<GDExtensionProductionOperationV1>(), 2300 + aux_case, 1, 10, 25 };
+			GDExtensionProductionCapacityV1 cap = {};
+			cap.abi = production_dto_abi<GDExtensionProductionCapacityV1>();
+			cap.requests = 1;
+			cap.suboperations = uint32_t(act_vec.size());
+			cap.resources = uint32_t(res_vec.size());
+			cap.resource_uses = uint32_t(use_vec.size()) + 16;
+			cap.graph_memberships = 32;
+			cap.native_memberships = 64;
+			cap.return_cells = 8;
+			cap.retained_payload_bytes = 4096;
+
+			GDExtensionProductionRequestRefV1 req = {};
+			REQUIRE(ports.reserve_v2(fixture.attachment, &op, &cap, act_vec.ptr(), uint32_t(act_vec.size()), res_vec.ptr(), uint32_t(res_vec.size()), use_vec.ptr(), uint32_t(use_vec.size()), nullptr, 0, &req).native_error == OK);
+			REQUIRE(ports.import_storage(req, 0, &src_backing).native_error == OK);
+			for (int i = 1; i < res_vec.size(); ++i) {
+				Vector<uint8_t> zeros;
+				zeros.resize_initialized(res_vec[i].physical_bytes);
+				const GDExtensionProductionUploadV2 up = {
+					production_dto_abi<GDExtensionProductionUploadV2>(),
+					uint32_t(i), 10, uint32_t(1 + i), 0,
+					uint32_t(i), 0, 0, res_vec[i].physical_bytes
+				};
+				REQUIRE(ports.prepare_upload_v2(req, &up, zeros.ptr(), zeros.size()).native_error == OK);
+			}
+
+			const auto acq_in = make_common_acquire_input(9300 + aux_case, gen);
+			{
+				MutexLock lock(fixture.registry.mutex);
+				ProductionRequest *internal_req = nullptr;
+				RenderingDevice *actual_rd = nullptr;
+				REQUIRE(fixture.registry.production_request_locked(req, false, internal_req, actual_rd) == OK);
+				internal_req->actions[0].output_scene_prepared = true;
+				internal_req->actions[0].output_scene.particles = acq_in.particles;
+				internal_req->actions[0].output_scene.generation = gen;
+			}
+			GDExtensionProductionOutputPrepareV3 prep_v3 = {};
+			prep_v3.abi = production_dto_abi<GDExtensionProductionOutputPrepareV3>();
+			prep_v3.action_ordinal = 0;
+			prep_v3.canonical_suboperation = 10;
+			prep_v3.source_recipe_substep = 1;
+			prep_v3.source_resource_slot = 0;
+			prep_v3.source_use_index = 0;
+			prep_v3.first_source_use = 0;
+			prep_v3.source_use_count = 1;
+			prep_v3.read_capacity = 2;
+			prep_v3.read_graph_capacity = 8;
+			prep_v3.source_generation = 1;
+			prep_v3.input = acq_in;
+			for (uint32_t i = 0; i < 8; ++i) {
+				prep_v3.roles[i] = { 0, UINT32_MAX, UINT32_MAX, 0, 0, 0 };
+			}
+			if (is_cap0) {
+				prep_v3.roles[0] = { 1, UINT32_MAX, UINT32_MAX, 0, 0, 0 };
+				prep_v3.roles[1] = { 7, UINT32_MAX, UINT32_MAX, 0, 0, 0 };
+				prep_v3.roles[2] = { 9, 1, 1, 0, gen, 32 };
+			} else if (with_prev) {
+				prep_v3.roles[0] = { 1, 1, 1, 0, gen, 768 };
+				prep_v3.roles[1] = { 2, 2, 2, 0, gen, 768 };
+				prep_v3.roles[2] = { 7, 3, 3, 0, gen, 32 };
+				prep_v3.roles[3] = { 9, 4, 4, 0, gen, aux_bytes };
+			} else {
+				prep_v3.roles[0] = { 1, 1, 1, 0, gen, 768 };
+				prep_v3.roles[1] = { 7, 2, 2, 0, gen, 32 };
+				prep_v3.roles[2] = { 9, 3, 3, 0, gen, aux_bytes };
+			}
+
+			const Error v3_err = Error(ports.prepare_output_v3(req, &prep_v3).native_error);
+			if (aux_case >= 2) {
+				CHECK(v3_err == ERR_INVALID_DATA);
+			} else {
+				REQUIRE(v3_err == OK);
+				GDExtensionProductionOutputPlanV1 plan_v1 = {};
+				plan_v1.abi = production_dto_abi<GDExtensionProductionOutputPlanV1>();
+				plan_v1.acquire.abi = production_dto_abi<GDExtensionProductionOutputPrepareV1>();
+				plan_v1.acquire.action_ordinal = 0;
+				plan_v1.acquire.canonical_suboperation = 10;
+				plan_v1.acquire.source_recipe_substep = 1;
+				plan_v1.acquire.source_resource_slot = 0;
+				plan_v1.acquire.source_use_index = 0;
+				plan_v1.acquire.first_source_use = 0;
+				plan_v1.acquire.source_use_count = 1;
+				plan_v1.acquire.read_capacity = 2;
+				plan_v1.acquire.read_graph_capacity = 8;
+				plan_v1.acquire.source_generation = 1;
+				plan_v1.acquire.input = acq_in;
+				plan_v1.finalize_action_ordinal = fin_ord;
+				plan_v1.seal_action_ordinal = seal_ord;
+				plan_v1.finalize_canonical_suboperation = 10;
+				plan_v1.seal_canonical_suboperation = 10;
+				plan_v1.finalize_source_recipe_substep = 20;
+				plan_v1.seal_source_recipe_substep = 21;
+				plan_v1.source_space = 2;
+				for (uint32_t s = 0; s < 5; ++s) {
+					plan_v1.reads[s] = { 0, 0, 1, 0 };
+				}
+				plan_v1.guard_work_limit = 8;
+				plan_v1.guard_dispatch_limit = 4;
+				plan_v1.guard_graph_limit = 8;
+				plan_v1.guard_native_limit = 16;
+				plan_v1.guard_owned_resource_limit = 4;
+				REQUIRE(ports.prepare_plan_v1(req, &plan_v1).native_error == OK);
+				REQUIRE(ports.prepare_native_record_v2(req).native_error == OK);
+				{
+					MutexLock lock(fixture.registry.mutex);
+					ProductionRequest *internal_req = nullptr;
+					RenderingDevice *actual_rd = nullptr;
+					REQUIRE(fixture.registry.production_request_locked(req, false, internal_req, actual_rd) == OK);
+					CHECK(internal_req->actions[0].output_role_count == 4);
+					CHECK(internal_req->actions[0].output_roles[0].bytes == 768);
+					CHECK(internal_req->actions[0].output_roles[1].bytes == (with_prev ? 768u : 0u));
+					CHECK(internal_req->actions[0].output_roles[2].bytes == 32);
+					CHECK(internal_req->actions[0].output_roles[3].role == 9);
+					CHECK(internal_req->actions[0].output_roles[3].bytes == 128);
+				}
+			}
+			cancel_and_reclaim(req);
+		}
+
 		{
 			QuoteDriver::QualificationCleanupScope cleanup_scope(fixture.driver);
 			const GDExtensionStorageRetireRequestV1 ret_in = { Enrollment::ABI, src_backing.backing, src_backing.rid, src_backing.backing_serial, 0, 0, 1, 1, 0 };
@@ -777,11 +974,17 @@ struct LiveMetalWaveGNativeOutputHarness {
 		GDExtensionProductionRequestRefV1 req = {};
 		GDExtensionOutputAcquireInputV1 acquire_input = {};
 		uint64_t acquire_ordinal = 0;
+		Vector<uint64_t> pre_acquire_upload_ordinals;
 		Vector<uint64_t> upload_ordinals;
 		uint64_t finalize_ordinal = 0;
 		uint64_t seal_ordinal = 0;
 		Vector<uint64_t> readback_ordinals;
+		bool read_staged_input_before_acquire = false;
+		bool probe_v1_acquire_first = false;
+		bool probe_premature_seal_before_last_upload = false;
 
+		GDExtensionOutputAcquireResultV1 acquire_v1_probe_out = {};
+		GDExtensionOutputSealResultV1 premature_seal_out = {};
 		GDExtensionOutputAcquireResultV2 acquire_out = {};
 		GDExtensionProductionOutputFinalizeResultV1 finalize_out = {};
 		GDExtensionOutputSealResultV1 seal_out = {};
@@ -905,11 +1108,42 @@ struct LiveMetalWaveGNativeOutputHarness {
 		}
 		if (self.active_kind == ActiveRecordKind::EXECUTE_PACKET && self.active_packet) {
 			auto &pkt = *self.active_packet;
+			for (int i = 0; i < pkt.pre_acquire_upload_ordinals.size(); ++i) {
+				uint64_t rev = 0;
+				Error e = Error(self.ports.read_revision(p_ctx, p_req, &rev).native_error);
+				if (e != OK) {
+					pkt.upload_error = e;
+					return;
+				}
+				GDExtensionProductionAppendV2 app = {};
+				e = Error(self.ports.append_v2(p_ctx, p_req, pkt.pre_acquire_upload_ordinals[i], rev, &app).native_error);
+				if (e != OK) {
+					pkt.upload_error = e;
+					return;
+				}
+			}
+			if (pkt.read_staged_input_before_acquire) {
+				GDExtensionProductionOutputPrepareV1 staged_prep = {};
+				if (self.ports.read_staged_output_input_v2(p_req, pkt.acquire_ordinal, &staged_prep).native_error == OK) {
+					pkt.acquire_input = staged_prep.input;
+				}
+			}
+			if (pkt.probe_v1_acquire_first) {
+				self.ports.output_acquire_v1(p_ctx, p_req, pkt.acquire_ordinal, &pkt.acquire_input, &pkt.acquire_v1_probe_out);
+			}
 			self.ports.output_acquire_v2(p_ctx, p_req, pkt.acquire_ordinal, &pkt.acquire_input, &pkt.acquire_out);
 			if (pkt.acquire_out.status.error != OK) {
 				return;
 			}
 			for (int i = 0; i < pkt.upload_ordinals.size(); ++i) {
+				if (pkt.probe_premature_seal_before_last_upload && i + 1 == pkt.upload_ordinals.size()) {
+					GDExtensionOutputSealInputV1 bad_seal = {};
+					bad_seal.abi = GDExtensionDeviceExit::production_dto_abi<GDExtensionOutputSealInputV1>();
+					bad_seal.particles = pkt.acquire_input.particles;
+					bad_seal.lease_token = pkt.acquire_out.lease_token;
+					bad_seal.common = pkt.acquire_input.common;
+					self.ports.output_seal_v1(p_ctx, p_req, &bad_seal, &pkt.premature_seal_out);
+				}
 				uint64_t rev = 0;
 				Error e = Error(self.ports.read_revision(p_ctx, p_req, &rev).native_error);
 				if (e != OK) {
@@ -1110,11 +1344,15 @@ struct LiveMetalWaveGNativeOutputHarness {
 		return rel_err;
 	}
 
-	Error create_qualified_source_buffer(uint32_t p_alloc_slot, uint32_t p_active_count, GDExtensionStorageBackingV1 &r_backing, GDExtensionStorageCreateRequestV1 &r_origin) {
-		const uint32_t source_words[8] = { p_active_count, 0, 0, 0, 0, 0, 0, 0 };
+	Error create_qualified_source_buffer(uint32_t p_alloc_slot, uint32_t p_active_count, GDExtensionStorageBackingV1 &r_backing, GDExtensionStorageCreateRequestV1 &r_origin, uint64_t p_bytes = 32) {
+		const uint64_t buf_bytes = MAX(uint64_t(32), p_bytes);
+		Vector<uint8_t> init_bytes;
+		init_bytes.resize(int(buf_bytes));
+		memset(init_bytes.ptrw(), 0, size_t(buf_bytes));
+		memcpy(init_bytes.ptrw(), &p_active_count, sizeof(uint32_t));
 		r_origin = {};
 		r_origin.abi = Enrollment::ABI;
-		r_origin.bytes = sizeof(source_words);
+		r_origin.bytes = buf_bytes;
 		r_origin.allocation_slot = p_alloc_slot;
 		r_origin.part = 0;
 		r_origin.allocation_generation = 1;
@@ -1135,17 +1373,17 @@ struct LiveMetalWaveGNativeOutputHarness {
 		}
 		rt_advance_rd_frame();
 
-		// Upload source_words into r_backing via a tiny 1-action UPLOAD_V1 request on enrollment.attachment.
+		// Upload init_bytes into r_backing via a tiny 1-action UPLOAD_V1 request on enrollment.attachment.
 		const GDExtensionProductionResourceV1 res = {
-			GDEXTENSION_PRODUCTION_STORAGE_V1, p_alloc_slot, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, sizeof(source_words), 0
+			GDEXTENSION_PRODUCTION_STORAGE_V1, p_alloc_slot, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, buf_bytes, 0
 		};
-		const GDExtensionProductionUseV1 use = { 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, sizeof(source_words), 0 };
+		const GDExtensionProductionUseV1 use = { 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, buf_bytes, 0 };
 		const GDExtensionProductionActionV2 act = {
 			0, 10, 1, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX
 		};
-		const GDExtensionProductionUploadV2 up_dto = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionUploadV2>(), 0, 10, 1, 0, 0, 0, 0, sizeof(source_words) };
+		const GDExtensionProductionUploadV2 up_dto = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionUploadV2>(), 0, 10, 1, 0, 0, 0, 0, buf_bytes };
 		GDExtensionProductionMetadataQuoteV1 quote = {};
-		Error err = Error(ports.req_quote_v1(enrollment.attachment, &act, 1, &res, 1, &use, 1, &up_dto, 1, nullptr, 0, 0, sizeof(source_words), &quote).native_error);
+		Error err = Error(ports.req_quote_v1(enrollment.attachment, &act, 1, &res, 1, &use, 1, &up_dto, 1, nullptr, 0, 0, buf_bytes, &quote).native_error);
 		if (err != OK) {
 			diagnostics["src_quote_err"] = int(err);
 			retire_qualified_source_buffer(r_backing, r_origin);
@@ -1166,7 +1404,7 @@ struct LiveMetalWaveGNativeOutputHarness {
 			retire_qualified_source_buffer(r_backing, r_origin);
 			return err;
 		}
-		err = Error(ports.prepare_upload_v2(up_req, &up_dto, source_words, sizeof(source_words)).native_error);
+		err = Error(ports.prepare_upload_v2(up_req, &up_dto, init_bytes.ptr(), buf_bytes).native_error);
 		if (err != OK) {
 			diagnostics["src_prep_upload_err"] = int(err);
 			release_request_cleanly(up_req);
@@ -1402,7 +1640,8 @@ void main() {
 			uint32_t p_max_inflight,
 			RID p_mesh,
 			RID p_material,
-			OutputOwnerSession &r_sess) {
+			OutputOwnerSession &r_sess,
+			uint32_t p_extra_pass_mask = 0) {
 		using namespace GDExtensionDeviceExit;
 		uint64_t mesh_ids[1] = { p_mesh.get_id() };
 		uint64_t mat_ids[1] = { p_material.get_id() };
@@ -1417,7 +1656,7 @@ void main() {
 		cfg.max_views = 2;
 		cfg.space = 2; // WORLD
 		cfg.motion = p_motion;
-		cfg.pass_mask = (p_profile == 4) ? 0u : uint32_t(RendererRD::ExternalOutputConfig::PASS_OPAQUE);
+		cfg.pass_mask = (p_profile == 4) ? 0u : (uint32_t(RendererRD::ExternalOutputConfig::PASS_OPAQUE) | p_extra_pass_mask);
 		if (p_profile == 1) {
 			cfg.surfaces = { mesh_ids, 1, 0 };
 			cfg.surface_materials = { mat_ids, 1, 0 };
@@ -1766,6 +2005,9 @@ void main() {
 	RID shared_depth_tex;
 	RID shared_fb;
 	RD::FramebufferFormatID shared_fb_format = RD::INVALID_FORMAT_ID;
+	RID role9_extra_motion_fb;
+	RD::FramebufferFormatID role9_extra_motion_fb_format = RD::INVALID_FORMAT_ID;
+	bool role9_check_motion_pass = false;
 	Vector<Indexed144ExternalSurfaceHold> deferred_idx144_holds;
 
 	void defer_idx144_cleanup(Indexed144ExternalSurfaceHold &p_hold) {
@@ -1921,9 +2163,15 @@ void main() {
 		String sub_step;
 		for (uint32_t draw_try = 0; draw_try < 64; ++draw_try) {
 			if (backend == 1) {
-				err = TestProductionRequest::wave_g_mobile_draw_external(sel, &render_data, p_material, p_profile, owner_capacity > 0, fb_format, fb, sub_step);
+				err = TestProductionRequest::wave_g_mobile_draw_external(sel, &render_data, p_material, p_profile, owner_capacity > 0, fb_format, fb, sub_step, p_self.role9_check_motion_pass);
 			} else {
-				err = TestProductionRequest::wave_g_clustered_draw_external(sel, &render_data, p_material, p_profile, owner_capacity > 0, fb_format, fb, sub_step);
+				err = OK;
+				if (p_self.role9_check_motion_pass && p_self.role9_extra_motion_fb.is_valid()) {
+					err = TestProductionRequest::wave_g_clustered_draw_external(sel, &render_data, p_material, p_profile, owner_capacity > 0, p_self.role9_extra_motion_fb_format, p_self.role9_extra_motion_fb, sub_step, true);
+				}
+				if (err == OK) {
+					err = TestProductionRequest::wave_g_clustered_draw_external(sel, &render_data, p_material, p_profile, owner_capacity > 0, fb_format, fb, sub_step, false);
+				}
 			}
 			if (err != ERR_BUSY) {
 				break;
@@ -3205,6 +3453,1198 @@ void main() {
 		return f2_rec_ok && f2_guard_ok && f2_history_exact && ret_borrow_err == OK && rel2 == OK && rel1 == OK && tear == OK && unit_ret == OK;
 	}
 
+	static inline float wave_g_h2f(uint16_t p_bits) {
+		return Math::half_to_float(p_bits);
+	}
+
+	void run_role9_aux_params_suite(const GDExtensionStorageBackingV1 &p_src_cap4, uint32_t p_src_slot) {
+		using namespace GDExtensionDeviceExit;
+		static constexpr uint32_t kCap = 4u;
+		static constexpr uint32_t kRecBytes = kCap * 192u;
+		static constexpr uint32_t kAuxBytes = kCap * 32u;
+		static constexpr uint32_t kMetaBytes = 32u;
+
+		// Create static quad mesh [-0.5, 0.5]^2 at z=0 with compressed attributes (matching fixed_instance.compressed_aabb) and WITHOUT ARRAY_FORMAT_CUSTOM0 / ARRAY_FORMAT_CUSTOM1.
+		RID quad_mesh = server->mesh_create();
+		{
+			Array arr;
+			arr.resize(RSE::ARRAY_MAX);
+			PackedVector3Array vtx;
+			vtx.push_back(Vector3(-0.5f, -0.5f, 0.0f));
+			vtx.push_back(Vector3(-0.5f, 0.5f, 0.0f));
+			vtx.push_back(Vector3(0.5f, 0.5f, 0.0f));
+			vtx.push_back(Vector3(0.5f, -0.5f, 0.0f));
+			PackedInt32Array idx;
+			idx.push_back(0);
+			idx.push_back(2);
+			idx.push_back(1);
+			idx.push_back(0);
+			idx.push_back(3);
+			idx.push_back(2);
+			PackedVector3Array nrm;
+			for (int i = 0; i < 4; ++i) {
+				nrm.push_back(Vector3(0.0f, 0.0f, 1.0f));
+			}
+			PackedFloat32Array tan_arr;
+			for (int i = 0; i < 4; ++i) {
+				tan_arr.push_back(1.0f);
+				tan_arr.push_back(0.0f);
+				tan_arr.push_back(0.0f);
+				tan_arr.push_back(1.0f);
+			}
+			PackedVector2Array uvs;
+			uvs.push_back(Vector2(0.0f, 1.0f));
+			uvs.push_back(Vector2(0.0f, 0.0f));
+			uvs.push_back(Vector2(1.0f, 0.0f));
+			uvs.push_back(Vector2(1.0f, 1.0f));
+			arr[RSE::ARRAY_VERTEX] = vtx;
+			arr[RSE::ARRAY_INDEX] = idx;
+			arr[RSE::ARRAY_NORMAL] = nrm;
+			arr[RSE::ARRAY_TANGENT] = tan_arr;
+			arr[RSE::ARRAY_TEX_UV] = uvs;
+			server->mesh_add_surface_from_arrays(quad_mesh, RSE::PRIMITIVE_TRIANGLES, arr, Array(), Dictionary(), RSE::ARRAY_FLAG_COMPRESS_ATTRIBUTES);
+		}
+		RID aux_shader = server->shader_create_from_code(
+				"shader_type spatial;\n"
+				"render_mode unshaded, cull_disabled;\n"
+				"varying vec4 v_c0;\n"
+				"varying vec4 v_c1;\n"
+				"void vertex() { v_c0 = CUSTOM0; v_c1 = CUSTOM1; }\n"
+				"void fragment() { ALBEDO = vec3(0.25) + v_c0.rgb + v_c1.rgb; }\n");
+		RID aux_mat = server->material_create();
+		server->material_set_shader(aux_mat, aux_shader);
+
+		struct AuxRtTargets {
+			RID fp16_color;
+			RID fp16_depth;
+			RID fp16_fb;
+			RD::FramebufferFormatID fp16_fb_format = 0;
+			RID mv_spec;
+			RID mv_motion;
+			RID mv_fb;
+			RD::FramebufferFormatID mv_fb_format = 0;
+		} rt_targets;
+
+		server->call_on_render_thread(callable_mp_static((+[](RID p_mesh, RID p_mat, uint64_t p_rd_addr, uint64_t p_tgt_addr) {
+			auto *p_rd = reinterpret_cast<RenderingDevice *>(uintptr_t(p_rd_addr));
+			auto *ms = RendererRD::MeshStorage::get_singleton();
+			auto *mats = RendererRD::MaterialStorage::get_singleton();
+			auto *t = reinterpret_cast<AuxRtTargets *>(uintptr_t(p_tgt_addr));
+			if (p_rd) {
+				for (uint32_t f = 0; f < 4; ++f) {
+					p_rd->_submit_transfer_workers();
+					p_rd->_wait_for_transfer_workers();
+					p_rd->swap_buffers(false);
+				}
+			}
+			if (ms && p_rd) {
+				const auto *const_ms = ms;
+				if (auto *m = ms->mesh_owner.get_or_null(p_mesh)) {
+					if (m->surface_count > 0 && m->surfaces[0]) {
+						if (auto *vbo = p_rd->vertex_buffer_owner.get_or_null(m->surfaces[0]->vertex_buffer)) {
+							p_rd->_check_transfer_worker_buffer(vbo);
+						}
+						if (auto *ibo = p_rd->index_buffer_owner.get_or_null(m->surfaces[0]->index_buffer)) {
+							p_rd->_check_transfer_worker_buffer(ibo);
+						}
+						if (auto *iao = p_rd->index_array_owner.get_or_null(m->surfaces[0]->index_array)) {
+							p_rd->_check_transfer_worker_index_array(iao);
+						}
+					}
+				}
+				(void)const_ms->mesh_get_surface(p_mesh, 0);
+				(void)const_ms->mesh_get_surface(p_mesh, 0);
+				if (auto *m = ms->mesh_owner.get_or_null(p_mesh)) {
+					if (m->surface_count > 0 && m->surfaces[0]) {
+						if (auto *vbo = p_rd->vertex_buffer_owner.get_or_null(m->surfaces[0]->vertex_buffer)) {
+							p_rd->_check_transfer_worker_buffer(vbo);
+						}
+						if (auto *ibo = p_rd->index_buffer_owner.get_or_null(m->surfaces[0]->index_buffer)) {
+							p_rd->_check_transfer_worker_buffer(ibo);
+						}
+						if (auto *iao = p_rd->index_array_owner.get_or_null(m->surfaces[0]->index_array)) {
+							p_rd->_check_transfer_worker_index_array(iao);
+						}
+					}
+				}
+				RendererRD::MeshStorage::NativeSelectionLease sel;
+				RendererRD::MeshStorage::NativeSurfaceHold hold;
+				if (ms->mesh_selection_acquire(p_mesh, sel) == OK) {
+					if (ms->mesh_surface_source_hold_acquire(p_mesh, 0, hold) == OK) {
+						(void)ms->mesh_surface_hold_release(hold);
+					}
+					(void)ms->mesh_selection_release(sel);
+				}
+			}
+			if (mats) {
+				mats->_update_queued_materials();
+				mats->material_prepare_native_qualification(p_mat);
+			}
+			if (p_rd && t) {
+				RD::TextureFormat c_tf;
+				c_tf.format = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
+				c_tf.width = 32;
+				c_tf.height = 32;
+				c_tf.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
+				t->fp16_color = p_rd->texture_create(c_tf, RD::TextureView());
+
+				RD::TextureFormat mv_tf;
+				mv_tf.format = RD::DATA_FORMAT_R16G16_SFLOAT;
+				mv_tf.width = 32;
+				mv_tf.height = 32;
+				mv_tf.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
+				t->mv_motion = p_rd->texture_create(mv_tf, RD::TextureView());
+
+				RD::TextureFormat d_tf;
+				d_tf.format = RD::DATA_FORMAT_D32_SFLOAT;
+				d_tf.width = 32;
+				d_tf.height = 32;
+				d_tf.usage_bits = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
+				t->fp16_depth = p_rd->texture_create(d_tf, RD::TextureView());
+
+				Vector<RID> fb1 = { t->fp16_color, t->fp16_depth };
+				t->fp16_fb = p_rd->framebuffer_create(fb1);
+				t->fp16_fb_format = p_rd->framebuffer_get_format(t->fp16_fb);
+
+				RD::FramebufferPass mv_pass;
+				mv_pass.color_attachments = { 0, RD::ATTACHMENT_UNUSED, 2 };
+				mv_pass.depth_attachment = 3;
+				Vector<RD::FramebufferPass> mv_passes = { mv_pass };
+				Vector<RID> fb_mv_tex = { t->fp16_color, RID(), t->mv_motion, t->fp16_depth };
+				t->mv_fb = p_rd->framebuffer_create_multipass(fb_mv_tex, mv_passes);
+				t->mv_fb_format = p_rd->framebuffer_get_format(t->mv_fb);
+
+				for (uint32_t f = 0; f < 2; ++f) {
+					p_rd->_submit_transfer_workers();
+					p_rd->_wait_for_transfer_workers();
+					p_rd->swap_buffers(false);
+				}
+			}
+		})).bind(quad_mesh, aux_mat, uint64_t(uintptr_t(device)), uint64_t(uintptr_t(&rt_targets))));
+		server->sync();
+
+		auto read_center_fp16 = [&](float &r_r, float &r_g, float &r_b) -> bool {
+			Vector<uint8_t> bytes;
+			server->call_on_render_thread(callable_mp_static((+[](uint64_t p_rd_addr, RID p_tex, uint64_t p_out_addr) {
+				auto *p_rd = reinterpret_cast<RenderingDevice *>(uintptr_t(p_rd_addr));
+				auto *out_vec = reinterpret_cast<Vector<uint8_t> *>(uintptr_t(p_out_addr));
+				if (p_rd && p_tex.is_valid()) {
+					p_rd->_submit_transfer_workers();
+					p_rd->_wait_for_transfer_workers();
+					*out_vec = p_rd->texture_get_data(p_tex, 0);
+				}
+			})).bind(uint64_t(uintptr_t(device)), rt_targets.fp16_color, uint64_t(uintptr_t(&bytes))));
+			server->sync();
+			if (bytes.size() != 32 * 32 * 8) {
+				return false;
+			}
+			const uint16_t *px = reinterpret_cast<const uint16_t *>(bytes.ptr() + (16 * 32 + 16) * 8);
+			r_r = wave_g_h2f(px[0]);
+			r_g = wave_g_h2f(px[1]);
+			r_b = wave_g_h2f(px[2]);
+			return true;
+		};
+
+		// Build canonical 4-instance current records (instance 0 centered at (0,0,-1.5) inside ortho frustum, instances 1..3 off-center) and role 9 aux payload.
+		Vector<uint8_t> curr_bytes;
+		curr_bytes.resize(kRecBytes);
+		for (uint32_t i = 0; i < kCap; ++i) {
+			wave_g_fill_instance192_record(reinterpret_cast<uint32_t *>(curr_bytes.ptrw() + i * 192u), i == 0 ? 0.0f : 1.2f, i == 0 ? 0.0f : 1.2f, -1.5f, i + 1u);
+		}
+		Vector<uint8_t> aux_good;
+		aux_good.resize(kAuxBytes);
+		for (uint32_t i = 0; i < kCap; ++i) {
+			uint32_t *aw = reinterpret_cast<uint32_t *>(aux_good.ptrw() + i * 32u);
+			// CUSTOM0 = (0.25, 0.5, 0.75, 1.0), CUSTOM1 = (0.1, 0.2, 0.3, 0.4)
+			aw[0] = wave_g_f2u(0.25f);
+			aw[1] = wave_g_f2u(0.50f);
+			aw[2] = wave_g_f2u(0.75f);
+			aw[3] = wave_g_f2u(1.00f);
+			aw[4] = wave_g_f2u(0.10f);
+			aw[5] = wave_g_f2u(0.20f);
+			aw[6] = wave_g_f2u(0.30f);
+			aw[7] = wave_g_f2u(0.40f);
+		}
+		const uint32_t meta_words[8] = { kCap, 0, 0, 0, kCap, 1u, 1u, 0u };
+		Vector<uint8_t> meta_bytes;
+		meta_bytes.resize(kMetaBytes);
+		memcpy(meta_bytes.ptrw(), meta_words, kMetaBytes);
+
+		// Helper for single-frame INSTANCE_192 execution with configurable roles ({1,7}, {1,7,9}, or {1,2,7,9}).
+		auto run_aux_case = [&](const String &p_label, bool p_with_prev, bool p_with_aux, const Vector<uint8_t> &p_aux_payload, uint32_t p_expected_fault, bool p_probe_v1_and_seal, bool p_do_draw, bool p_motion_draw) {
+			OutputOwnerSession sess;
+			Error err = setup_owner_session(1u, kCap, p_with_prev ? 1u : 0u, 1u, quad_mesh, aux_mat, sess);
+			record_check(p_label + ".create_v3", err == OK);
+			if (err != OK) {
+				return;
+			}
+			const uint64_t gen = sess.created.generation;
+			struct UpSpec {
+				uint32_t role;
+				Vector<uint8_t> bytes;
+			};
+			Vector<UpSpec> ups;
+			ups.push_back({ 1u, curr_bytes });
+			if (p_with_prev) {
+				ups.push_back({ 2u, curr_bytes });
+			}
+			ups.push_back({ 7u, meta_bytes });
+			if (p_with_aux) {
+				ups.push_back({ 9u, p_aux_payload });
+			}
+
+			Vector<GDExtensionProductionResourceV1> res_vec;
+			res_vec.push_back({ GDEXTENSION_PRODUCTION_STORAGE_V1, p_src_slot, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 32, 0 });
+			for (int i = 0; i < ups.size(); ++i) {
+				res_vec.push_back({ GDEXTENSION_PRODUCTION_STORAGE_V1, ups[i].role, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, uint64_t(ups[i].bytes.size()), 0 });
+			}
+			const uint32_t guard_slot = uint32_t(res_vec.size());
+			res_vec.push_back({ GDEXTENSION_PRODUCTION_STORAGE_V1, 1u, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, 32, 0 });
+
+			Vector<GDExtensionProductionUseV1> use_vec;
+			use_vec.push_back({ 0, GDEXTENSION_PRODUCTION_READ_V1, 0, 32, 0 });
+			for (int i = 0; i < ups.size(); ++i) {
+				use_vec.push_back({ uint32_t(1 + i), GDEXTENSION_PRODUCTION_WRITE_V1, 0, uint64_t(ups[i].bytes.size()), 0 });
+			}
+			const uint32_t acq_use_count = uint32_t(use_vec.size());
+			Vector<GDExtensionProductionActionV2> act_vec;
+			act_vec.push_back({ 0, 10, 1, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, acq_use_count, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX });
+
+			PacketRecordPlan pkt;
+			pkt.acquire_ordinal = 0;
+			pkt.probe_v1_acquire_first = p_probe_v1_and_seal;
+			pkt.probe_premature_seal_before_last_upload = p_probe_v1_and_seal;
+			Vector<GDExtensionProductionUploadV2> up_dtos;
+			uint64_t payload_total = 0;
+			for (int i = 0; i < ups.size(); ++i) {
+				const uint32_t u_idx = uint32_t(use_vec.size());
+				const uint32_t a_ord = uint32_t(act_vec.size());
+				use_vec.push_back({ uint32_t(1 + i), GDEXTENSION_PRODUCTION_WRITE_V1, 0, uint64_t(ups[i].bytes.size()), 0 });
+				act_vec.push_back({ a_ord, 10, uint32_t(2 + i), 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, u_idx, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX });
+				up_dtos.push_back({ production_dto_abi<GDExtensionProductionUploadV2>(), a_ord, 10, uint32_t(2 + i), 0, uint32_t(1 + i), 0, 0, uint64_t(ups[i].bytes.size()) });
+				pkt.upload_ordinals.push_back(a_ord);
+				payload_total += uint64_t(ups[i].bytes.size());
+			}
+			pkt.finalize_ordinal = uint64_t(act_vec.size());
+			act_vec.push_back({ uint32_t(pkt.finalize_ordinal), 10, 20, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX });
+			pkt.seal_ordinal = uint64_t(act_vec.size());
+			act_vec.push_back({ uint32_t(pkt.seal_ordinal), 10, 21, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX });
+
+			const uint32_t rb_use = uint32_t(use_vec.size());
+			use_vec.push_back({ guard_slot, GDEXTENSION_PRODUCTION_READ_V1, 0, 32, 0 });
+			const uint32_t rb_ord = uint32_t(act_vec.size());
+			act_vec.push_back({ rb_ord, 10, 22, 0, GDEXTENSION_PRODUCTION_READBACK_V1, UINT32_MAX, rb_use, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, 0 });
+			pkt.readback_ordinals.push_back(rb_ord);
+			const GDExtensionProductionReadbackSourceV1 rb_src = { guard_slot, GDEXTENSION_PRODUCTION_READBACK_NATIVE_OUTPUT_GUARD_V1, rb_ord, 0, 32, { pkt.finalize_ordinal }, {} };
+
+			const uint32_t read_cap = p_do_draw ? 2u : 0u;
+			const uint32_t read_graph_cap = p_do_draw ? 112u : 0u;
+			const GDExtensionProductionOutputDemandInputV1 demand_in = {
+				production_dto_abi<GDExtensionProductionOutputDemandInputV1>(),
+				sess.create_req, sess.created.particles, gen,
+				0, 10, pkt.finalize_ordinal, 10, pkt.seal_ordinal, 10, 1, 20, 21,
+				read_cap, read_graph_cap, 2, 0
+			};
+			GDExtensionProductionOutputGuardDemandV1 guard_demand = {};
+			GDExtensionProductionMetadataQuoteV1 req_quote = {};
+			err = Error(ports.req_quote_v2(
+					enrollment.attachment, act_vec.ptr(), uint32_t(act_vec.size()), res_vec.ptr(), uint32_t(res_vec.size()),
+					use_vec.ptr(), uint32_t(use_vec.size()), up_dtos.ptr(), uint32_t(up_dtos.size()), &rb_src, 1,
+					6, payload_total, &demand_in, 1, &guard_demand, 1, &req_quote).native_error);
+			record_check(p_label + ".req_quote_v2", err == OK);
+			if (err != OK) {
+				teardown_owner_session(sess);
+				return;
+			}
+			const GDExtensionProductionOperationV1 op = { production_dto_abi<GDExtensionProductionOperationV1>(), ++next_nonce, 1, 10, 25 };
+			err = Error(ports.reserve_readbacks(
+					enrollment.attachment, &op, &req_quote.capacity, act_vec.ptr(), uint32_t(act_vec.size()),
+					res_vec.ptr(), uint32_t(res_vec.size()), use_vec.ptr(), uint32_t(use_vec.size()), &rb_src, 1, &pkt.req).native_error);
+			record_check(p_label + ".reserve", err == OK);
+			if (err != OK) {
+				teardown_owner_session(sess);
+				return;
+			}
+			err = Error(ports.import_storage(pkt.req, 0, &p_src_cap4).native_error);
+			for (int i = 0; i < ups.size() && err == OK; ++i) {
+				err = Error(ports.prepare_upload_v2(pkt.req, &up_dtos[i], ups[i].bytes.ptr(), ups[i].bytes.size()).native_error);
+			}
+			if (err == OK) {
+				err = Error(ports.prepare_readback_v2(pkt.req, rb_ord, 0).native_error);
+			}
+			GDExtensionProductionCameraSampleV1 cam_sample = {};
+			if (err == OK) {
+				err = prepare_host_and_capture_camera(sess, pkt.req, 0, 0x45, cam_sample);
+			}
+			record_check(p_label + ".prep_and_cam", err == OK);
+			if (err != OK) {
+				release_request_cleanly(pkt.req);
+				teardown_owner_session(sess);
+				return;
+			}
+
+			pkt.acquire_input.abi = production_dto_abi<GDExtensionOutputAcquireInputV1>();
+			pkt.acquire_input.particles = sess.created.particles;
+			pkt.acquire_input.view_epoch = cam_sample.camera.view_epoch;
+			pkt.acquire_input.pass_mask = uint32_t(RendererRD::ExternalOutputConfig::PASS_OPAQUE);
+			pkt.acquire_input.layout_digest.bytes[0] = 3;
+			pkt.acquire_input.mapping_digest.bytes[0] = 4;
+			pkt.acquire_input.common.generation = gen;
+			pkt.acquire_input.common.present_seq = cam_sample.present_seq;
+			pkt.acquire_input.common.output_tag.bytes[0] = 0x55;
+			pkt.acquire_input.common.view_tag.bytes[0] = 0x65;
+			memset(pkt.acquire_input.common.current_host_token.bytes, 0x45, 32);
+			for (uint32_t a = 0; a < 3; ++a) {
+				pkt.acquire_input.common.bounds.position[a] = -3.0;
+				pkt.acquire_input.common.bounds.size[a] = 6.0;
+			}
+			pkt.acquire_input.common.history_reset = 1;
+			pkt.acquire_input.common.current_camera = cam_sample.camera;
+
+			GDExtensionProductionOutputPrepareV3 prep_v3 = {};
+			prep_v3.abi = { 3, sizeof(prep_v3), 0 };
+			prep_v3.action_ordinal = 0;
+			prep_v3.canonical_suboperation = 10;
+			prep_v3.source_recipe_substep = 1;
+			prep_v3.source_resource_slot = 0;
+			prep_v3.source_use_index = 0;
+			prep_v3.first_source_use = 0;
+			prep_v3.source_use_count = 1;
+			prep_v3.read_capacity = read_cap;
+			prep_v3.read_graph_capacity = read_graph_cap;
+			prep_v3.source_generation = 1;
+			prep_v3.input = pkt.acquire_input;
+			for (uint32_t r = 0; r < 8; ++r) {
+				prep_v3.roles[r] = { 0, UINT32_MAX, UINT32_MAX, 0, 0, 0 };
+			}
+			for (int i = 0; i < ups.size(); ++i) {
+				prep_v3.roles[i] = { ups[i].role, uint32_t(1 + i), uint32_t(1 + i), 0, gen, uint64_t(ups[i].bytes.size()) };
+			}
+			GDExtensionProductionOutputPlanV1 plan_v1 = {};
+			plan_v1.abi = production_dto_abi<GDExtensionProductionOutputPlanV1>();
+			plan_v1.acquire.abi = production_dto_abi<GDExtensionProductionOutputPrepareV1>();
+			plan_v1.acquire.action_ordinal = 0;
+			plan_v1.acquire.canonical_suboperation = 10;
+			plan_v1.acquire.source_recipe_substep = 1;
+			plan_v1.acquire.source_resource_slot = 0;
+			plan_v1.acquire.source_use_index = 0;
+			plan_v1.acquire.first_source_use = 0;
+			plan_v1.acquire.source_use_count = 1;
+			plan_v1.acquire.read_capacity = read_cap;
+			plan_v1.acquire.read_graph_capacity = read_graph_cap;
+			plan_v1.acquire.source_generation = 1;
+			plan_v1.acquire.input = pkt.acquire_input;
+			plan_v1.finalize_action_ordinal = pkt.finalize_ordinal;
+			plan_v1.seal_action_ordinal = pkt.seal_ordinal;
+			plan_v1.finalize_canonical_suboperation = 10;
+			plan_v1.seal_canonical_suboperation = 10;
+			plan_v1.finalize_source_recipe_substep = 20;
+			plan_v1.seal_source_recipe_substep = 21;
+			plan_v1.source_space = 2;
+			for (uint32_t s = 0; s < 5; ++s) {
+				plan_v1.reads[s] = { 0, 0, 1, s == 0 ? 0u : 1u };
+			}
+			plan_v1.guard_work_limit = guard_demand.guard_work;
+			plan_v1.guard_dispatch_limit = guard_demand.guard_dispatches;
+			plan_v1.guard_graph_limit = guard_demand.guard_graphs;
+			plan_v1.guard_native_limit = guard_demand.guard_native_memberships;
+			plan_v1.guard_owned_resource_limit = guard_demand.guard_owned_resources;
+
+			const Error pv3_err = Error(ports.prepare_output_v3(pkt.req, &prep_v3).native_error);
+			const Error pl1_err = Error(ports.prepare_plan_v1(pkt.req, &plan_v1).native_error);
+			record_check(p_label + ".prepare_v3_and_plan", pv3_err == OK && pl1_err == OK);
+
+			Error fp16_draw_err = OK;
+			GDExtensionProductionRecordReportV2 rec = {};
+			const RID saved_fb = shared_fb;
+			const RD::FramebufferFormatID saved_fb_fmt = shared_fb_format;
+			shared_fb = rt_targets.fp16_fb;
+			shared_fb_format = rt_targets.fp16_fb_format;
+			role9_extra_motion_fb = rt_targets.mv_fb;
+			role9_extra_motion_fb_format = rt_targets.mv_fb_format;
+			role9_check_motion_pass = p_do_draw && p_motion_draw;
+			err = execute_packet_and_color_draw_in_cull_scope(sess, pkt, cam_sample, p_do_draw, 1u, 0u, aux_mat, nullptr, fp16_draw_err, rec);
+			shared_fb = saved_fb;
+			shared_fb_format = saved_fb_fmt;
+			role9_extra_motion_fb = RID();
+			role9_extra_motion_fb_format = RD::INVALID_FORMAT_ID;
+			role9_check_motion_pass = false;
+
+			const bool rec_ok = err == OK &&
+					pkt.acquire_out.status.error == OK &&
+					pkt.acquire_out.writable_count == uint32_t(ups.size()) &&
+					pkt.finalize_out.status.error == OK &&
+					pkt.seal_out.status.error == OK;
+			record_check(p_label + ".record_seal_ok", rec_ok);
+			if (p_with_aux && rec_ok) {
+				const auto &last_w = pkt.acquire_out.writables[pkt.acquire_out.writable_count - 1];
+				record_check(p_label + ".role9_writable_meta", last_w.role == 9u && last_w.stride == 32u && last_w.byte_length == kAuxBytes);
+			}
+			if (p_probe_v1_and_seal) {
+				record_check(p_label + ".acquire_v1_rejected_on_4role", pkt.acquire_v1_probe_out.status.error == ERR_INVALID_DATA);
+				record_check(p_label + ".seal_before_role9_rejected", pkt.premature_seal_out.status.error == ERR_UNAUTHORIZED);
+			}
+			if (p_do_draw && rec_ok) {
+				record_check(p_label + ".fp16_and_motion_draw", fp16_draw_err == OK);
+			}
+
+			rt_advance_rd_frame();
+			uint32_t guard_words[8] = { 0xffffffffu };
+			bool rb_ok = false;
+			for (uint32_t turn = 0; turn < 256 && rec_ok; ++turn) {
+				GDExtensionProductionObserveResultV3 obs = {};
+				if (pump_observe_once(pkt.req, obs) != OK) {
+					break;
+				}
+				if (obs.report.ready_readbacks >= 1 && obs.report.known_obligations > 0 &&
+						obs.report.complete_obligations == obs.report.known_obligations && obs.report.possible_obligations == 0) {
+					uint64_t copied = 0;
+					if (ports.copy_v1(pkt.req, obs.report.revision, 0, guard_words, 32, &copied).native_error == OK && copied == 32) {
+						rb_ok = true;
+						break;
+					}
+				}
+				rt_advance_rd_frame();
+				OS::get_singleton()->delay_usec(300);
+			}
+			const uint32_t expected_instances = (p_expected_fault == 0u) ? kCap : 0u;
+			record_check(p_label + ".guard_status_exact", rb_ok && guard_words[0] == p_expected_fault && guard_words[1] == expected_instances);
+
+			if (p_do_draw && rec_ok && fp16_draw_err == OK) {
+				float pr = -1.0f, pg = -1.0f, pb = -1.0f;
+				const bool px_read = read_center_fp16(pr, pg, pb);
+				if (p_with_aux) {
+					// 0.25 + CUSTOM0(0.25, 0.50, 0.75) + CUSTOM1(0.10, 0.20, 0.30) = (0.60, 0.95, 1.30)
+					const bool match = px_read && Math::abs(pr - 0.60f) <= 2e-3f && Math::abs(pg - 0.95f) <= 2e-3f && Math::abs(pb - 1.30f) <= 2e-3f;
+					if (!match) {
+						Array px_arr;
+						px_arr.push_back(pr);
+						px_arr.push_back(pg);
+						px_arr.push_back(pb);
+						diagnostics[p_label + ".px"] = px_arr;
+					}
+					record_check(p_label + ".pixel_matches_custom0_plus_custom1", match);
+				} else {
+					// Legacy {1, 7} without role 9 binds settled 32B zero sentinel -> CUSTOM0 == CUSTOM1 == vec4(0.0) -> ALBEDO = 0.25
+					const bool match = px_read && Math::abs(pr - 0.25f) <= 2e-3f && Math::abs(pg - 0.25f) <= 2e-3f && Math::abs(pb - 0.25f) <= 2e-3f;
+					if (!match) {
+						Array px_arr;
+						px_arr.push_back(pr);
+						px_arr.push_back(pg);
+						px_arr.push_back(pb);
+						diagnostics[p_label + ".px"] = px_arr;
+					}
+					record_check(p_label + ".sentinel_pixel_zero_custom01", match);
+				}
+			}
+
+			const Error rel = cancel_slot_and_release_request(p_label, pkt.req, sess.created.particles, pkt.acquire_out.lease_token);
+			const Error tear = teardown_owner_session(sess);
+			record_check(p_label + ".clean_retirement", rel == OK && tear == OK);
+		};
+
+		// T01 + T02 + T06: {1, 7, 9} no-motion + aux + AcquireV1/premature-Seal probes + FP16 pixel verification!
+		run_aux_case("role9_no_motion_aux_draw_and_probes", false, true, aux_good, 0u, true, true, false);
+
+		// T01 + T06: {1, 2, 7, 9} motion + aux + Clustered MOTION_VECTORS draw & Mobile MOTION_VECTORS shader compile + FP16 pixel verification!
+		run_aux_case("role9_motion_aux_color_and_motion_draw", true, true, aux_good, 0u, false, true, true);
+
+		// T07: Legacy 2-role {1, 7} (role 9 omitted) drawing CUSTOM0/1-reading shader via settled 32B external_aux_zero_sentinel_buffer!
+		run_aux_case("role9_omitted_legacy_2role_sentinel_draw", false, false, Vector<uint8_t>(), 0u, false, true, false);
+
+		// T05: Live Metal compute guard faults NaN (0x7fc00000u) and subnormal (0x00000001u) in role 9 -> NUMERIC_FAULT = 16u, instanceCount = 0!
+		{
+			Vector<uint8_t> aux_nan = aux_good;
+			reinterpret_cast<uint32_t *>(aux_nan.ptrw())[13] = 0x7fc00000u;
+			run_aux_case("role9_guard_fault_nan", false, true, aux_nan, 16u, false, false, false);
+
+			Vector<uint8_t> aux_sub = aux_good;
+			reinterpret_cast<uint32_t *>(aux_sub.ptrw())[31] = 0x00000001u;
+			run_aux_case("role9_guard_fault_subnormal", false, true, aux_sub, 16u, false, false, false);
+		}
+
+		// T03: 4-role {1, 2, 7, 9} WithoutPrevious dynamic fallback (stage_output_plan_with_history_guard_v2 + prepare_output_v3 + stage_output_history_fallback_v2 -> {1, 7, 9} NO_MOTION_AUX)!
+		{
+			const String lbl = "role9_without_previous_fallback";
+			OutputOwnerSession sess;
+			Error err = setup_owner_session(1u, kCap, 1u, 2u, quad_mesh, aux_mat, sess);
+			record_check(lbl + ".create_v3", err == OK);
+			if (err == OK) {
+				const uint64_t gen = sess.created.generation;
+				// Frame 1: seal {1, 2, 7, 9} + color draw + consumed_prepare_v2 / consumed_read_v2 / consumed_borrow_v2!
+				const GDExtensionProductionResourceV1 f1_res[6] = {
+					{ GDEXTENSION_PRODUCTION_STORAGE_V1, p_src_slot, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 32, 0 },
+					{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, kRecBytes, 0 },
+					{ GDEXTENSION_PRODUCTION_STORAGE_V1, 2, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, kRecBytes, 0 },
+					{ GDEXTENSION_PRODUCTION_STORAGE_V1, 7, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, kMetaBytes, 0 },
+					{ GDEXTENSION_PRODUCTION_STORAGE_V1, 9, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, kAuxBytes, 0 },
+					{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, 32, 0 },
+				};
+				const GDExtensionProductionUseV1 f1_uses[10] = {
+					{ 0, GDEXTENSION_PRODUCTION_READ_V1, 0, 32, 0 },
+					{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 0, kRecBytes, 0 },
+					{ 2, GDEXTENSION_PRODUCTION_WRITE_V1, 0, kRecBytes, 0 },
+					{ 3, GDEXTENSION_PRODUCTION_WRITE_V1, 0, kMetaBytes, 0 },
+					{ 4, GDEXTENSION_PRODUCTION_WRITE_V1, 0, kAuxBytes, 0 },
+					{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 0, kRecBytes, 0 },
+					{ 2, GDEXTENSION_PRODUCTION_WRITE_V1, 0, kRecBytes, 0 },
+					{ 3, GDEXTENSION_PRODUCTION_WRITE_V1, 0, kMetaBytes, 0 },
+					{ 4, GDEXTENSION_PRODUCTION_WRITE_V1, 0, kAuxBytes, 0 },
+					{ 5, GDEXTENSION_PRODUCTION_READ_V1, 0, 32, 0 },
+				};
+				const GDExtensionProductionActionV2 f1_acts[8] = {
+					{ 0, 10, 1, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, 5, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX },
+					{ 1, 10, 2, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 5, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+					{ 2, 10, 3, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 6, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+					{ 3, 10, 4, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 7, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+					{ 4, 10, 5, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 8, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+					{ 5, 10, 6, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX },
+					{ 6, 10, 7, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX },
+					{ 7, 10, 8, 0, GDEXTENSION_PRODUCTION_READBACK_V1, UINT32_MAX, 9, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, 0 },
+				};
+				const GDExtensionProductionUploadV2 f1_ups[4] = {
+					{ production_dto_abi<GDExtensionProductionUploadV2>(), 1, 10, 2, 0, 1, 0, 0, kRecBytes },
+					{ production_dto_abi<GDExtensionProductionUploadV2>(), 2, 10, 3, 0, 2, 0, 0, kRecBytes },
+					{ production_dto_abi<GDExtensionProductionUploadV2>(), 3, 10, 4, 0, 3, 0, 0, kMetaBytes },
+					{ production_dto_abi<GDExtensionProductionUploadV2>(), 4, 10, 5, 0, 4, 0, 0, kAuxBytes },
+				};
+				const GDExtensionProductionReadbackSourceV1 f1_rb = { 5, GDEXTENSION_PRODUCTION_READBACK_NATIVE_OUTPUT_GUARD_V1, 7, 0, 32, { 5 }, {} };
+				const GDExtensionProductionOutputDemandInputV1 f1_dem_in = {
+					production_dto_abi<GDExtensionProductionOutputDemandInputV1>(),
+					sess.create_req, sess.created.particles, gen, 0, 10, 5, 10, 6, 10, 1, 6, 7, 1, 112, 2, 0
+				};
+				GDExtensionProductionOutputGuardDemandV1 f1_dem = {};
+				GDExtensionProductionMetadataQuoteV1 f1_quote = {};
+				err = Error(ports.req_quote_v2(enrollment.attachment, f1_acts, 8, f1_res, 6, f1_uses, 10, f1_ups, 4, &f1_rb, 1, 6, 2u * kRecBytes + kMetaBytes + kAuxBytes, &f1_dem_in, 1, &f1_dem, 1, &f1_quote).native_error);
+				PacketRecordPlan f1_pkt;
+				f1_pkt.acquire_ordinal = 0;
+				f1_pkt.upload_ordinals = { 1, 2, 3, 4 };
+				f1_pkt.finalize_ordinal = 5;
+				f1_pkt.seal_ordinal = 6;
+				f1_pkt.readback_ordinals = { 7 };
+				const GDExtensionProductionOperationV1 f1_op = { production_dto_abi<GDExtensionProductionOperationV1>(), ++next_nonce, 1, 10, 15 };
+				if (err == OK) {
+					err = Error(ports.reserve_readbacks(enrollment.attachment, &f1_op, &f1_quote.capacity, f1_acts, 8, f1_res, 6, f1_uses, 10, &f1_rb, 1, &f1_pkt.req).native_error);
+				}
+				if (err == OK) {
+					err = Error(ports.import_storage(f1_pkt.req, 0, &p_src_cap4).native_error);
+				}
+				if (err == OK) {
+					err = Error(ports.prepare_upload_v2(f1_pkt.req, &f1_ups[0], curr_bytes.ptr(), kRecBytes).native_error);
+				}
+				if (err == OK) {
+					err = Error(ports.prepare_upload_v2(f1_pkt.req, &f1_ups[1], curr_bytes.ptr(), kRecBytes).native_error);
+				}
+				if (err == OK) {
+					err = Error(ports.prepare_upload_v2(f1_pkt.req, &f1_ups[2], meta_bytes.ptr(), kMetaBytes).native_error);
+				}
+				if (err == OK) {
+					err = Error(ports.prepare_upload_v2(f1_pkt.req, &f1_ups[3], aux_good.ptr(), kAuxBytes).native_error);
+				}
+				if (err == OK) {
+					err = Error(ports.prepare_readback_v2(f1_pkt.req, 7, 0).native_error);
+				}
+				GDExtensionProductionCameraSampleV1 cam1 = {};
+				if (err == OK) {
+					err = prepare_host_and_capture_camera(sess, f1_pkt.req, 0, 0x75, cam1);
+				}
+				const GDExtensionOutputConsumedSelectorV2 f1_sel = { production_dto_abi<GDExtensionOutputConsumedSelectorV2>(), 0 };
+				f1_pkt.acquire_input.abi = production_dto_abi<GDExtensionOutputAcquireInputV1>();
+				f1_pkt.acquire_input.particles = sess.created.particles;
+				f1_pkt.acquire_input.view_epoch = cam1.camera.view_epoch;
+				f1_pkt.acquire_input.pass_mask = uint32_t(RendererRD::ExternalOutputConfig::PASS_OPAQUE);
+				f1_pkt.acquire_input.layout_digest.bytes[0] = 3;
+				f1_pkt.acquire_input.mapping_digest.bytes[0] = 4;
+				f1_pkt.acquire_input.common.generation = gen;
+				f1_pkt.acquire_input.common.present_seq = cam1.present_seq;
+				f1_pkt.acquire_input.common.output_tag.bytes[0] = 0x85;
+				f1_pkt.acquire_input.common.view_tag.bytes[0] = 0x95;
+				memset(f1_pkt.acquire_input.common.current_host_token.bytes, 0x75, 32);
+				for (uint32_t a = 0; a < 3; ++a) {
+					f1_pkt.acquire_input.common.bounds.position[a] = -3.0;
+					f1_pkt.acquire_input.common.bounds.size[a] = 6.0;
+				}
+				f1_pkt.acquire_input.common.history_reset = 1;
+				f1_pkt.acquire_input.common.current_camera = cam1.camera;
+
+				GDExtensionProductionOutputPrepareV3 f1_v3 = {};
+				f1_v3.abi = { 3, sizeof(f1_v3), 0 };
+				f1_v3.action_ordinal = 0;
+				f1_v3.canonical_suboperation = 10;
+				f1_v3.source_recipe_substep = 1;
+				f1_v3.source_resource_slot = 0;
+				f1_v3.source_use_index = 0;
+				f1_v3.first_source_use = 0;
+				f1_v3.source_use_count = 1;
+				f1_v3.read_capacity = 1;
+				f1_v3.read_graph_capacity = 112;
+				f1_v3.source_generation = 1;
+				f1_v3.input = f1_pkt.acquire_input;
+				for (uint32_t r = 0; r < 8; ++r) {
+					f1_v3.roles[r] = { 0, UINT32_MAX, UINT32_MAX, 0, 0, 0 };
+				}
+				f1_v3.roles[0] = { 1, 1, 1, 0, gen, kRecBytes };
+				f1_v3.roles[1] = { 2, 2, 2, 0, gen, kRecBytes };
+				f1_v3.roles[2] = { 7, 3, 3, 0, gen, kMetaBytes };
+				f1_v3.roles[3] = { 9, 4, 4, 0, gen, kAuxBytes };
+
+				GDExtensionProductionOutputPlanV1 f1_plan = {};
+				f1_plan.abi = production_dto_abi<GDExtensionProductionOutputPlanV1>();
+				f1_plan.acquire.abi = production_dto_abi<GDExtensionProductionOutputPrepareV1>();
+				f1_plan.acquire.action_ordinal = 0;
+				f1_plan.acquire.canonical_suboperation = 10;
+				f1_plan.acquire.source_recipe_substep = 1;
+				f1_plan.acquire.source_resource_slot = 0;
+				f1_plan.acquire.source_use_index = 0;
+				f1_plan.acquire.first_source_use = 0;
+				f1_plan.acquire.source_use_count = 1;
+				f1_plan.acquire.read_capacity = 1;
+				f1_plan.acquire.read_graph_capacity = 112;
+				f1_plan.acquire.source_generation = 1;
+				f1_plan.acquire.input = f1_pkt.acquire_input;
+				f1_plan.finalize_action_ordinal = 5;
+				f1_plan.seal_action_ordinal = 6;
+				f1_plan.finalize_canonical_suboperation = 10;
+				f1_plan.seal_canonical_suboperation = 10;
+				f1_plan.finalize_source_recipe_substep = 6;
+				f1_plan.seal_source_recipe_substep = 7;
+				f1_plan.source_space = 2;
+				for (uint32_t s = 0; s < 5; ++s) {
+					f1_plan.reads[s] = { 0, 0, 1, s == 0 ? 0u : 1u };
+				}
+				f1_plan.guard_work_limit = f1_dem.guard_work;
+				f1_plan.guard_dispatch_limit = f1_dem.guard_dispatches;
+				f1_plan.guard_graph_limit = f1_dem.guard_graphs;
+				f1_plan.guard_native_limit = f1_dem.guard_native_memberships;
+				f1_plan.guard_owned_resource_limit = f1_dem.guard_owned_resources;
+
+				if (err == OK) {
+					err = Error(ports.prepare_output_v3(f1_pkt.req, &f1_v3).native_error);
+				}
+				if (err == OK) {
+					err = Error(ports.prepare_plan_v1(f1_pkt.req, &f1_plan).native_error);
+				}
+				if (err == OK) {
+					err = Error(ports.consumed_prepare_v2(f1_pkt.req, &f1_sel).native_error);
+				}
+				Error f1_draw_err = ERR_UNCONFIGURED;
+				GDExtensionProductionRecordReportV2 f1_rec = {};
+				if (err == OK) {
+					err = execute_packet_and_color_draw_in_cull_scope(sess, f1_pkt, cam1, true, 1u, 0u, aux_mat, nullptr, f1_draw_err, f1_rec);
+				}
+				rt_advance_rd_frame();
+				GDExtensionOutputConsumedProofV2 f1_consumed = {};
+				bool f1_borrowed = false;
+				for (uint32_t turn = 0; turn < 256 && err == OK && f1_draw_err == OK; ++turn) {
+					GDExtensionProductionObserveResultV3 obs = {};
+					pump_observe_once(f1_pkt.req, obs);
+					server->sync();
+					const auto b_budget = make_budget();
+					GDExtensionOutputConsumedBorrowResultV2 borrow_res = {};
+					const Error cb_err = Error(ports.consumed_borrow_v2(f1_pkt.req, &f1_sel, &b_budget, &borrow_res).native_error);
+					if (cb_err == OK && borrow_res.result.native_error == OK) {
+						if (ports.consumed_read_v2(f1_pkt.req, &borrow_res.proof.ref, &f1_consumed).native_error == OK) {
+							f1_borrowed = true;
+							break;
+						}
+					}
+					rt_advance_rd_frame();
+					OS::get_singleton()->delay_usec(300);
+				}
+				record_check(lbl + ".f1_consumed_borrowed", f1_borrowed);
+
+				if (f1_borrowed) {
+					// Frame 2: dynamic WithoutPrevious fallback ({1,2,7,9} primary -> {1,7,9} fallback)!
+					// Create a 32 + kRecBytes scratch buffer for action 0 reset upload (4B) and fallback action 3 upload (kRecBytes, matching exact 32B-chunk staging graph bound).
+					static constexpr uint64_t kResetScratchBytes = 32u + kRecBytes;
+					GDExtensionStorageBackingV1 reset_buf = {};
+					GDExtensionStorageCreateRequestV1 reset_orig = {};
+					const Error rb_create = create_qualified_source_buffer(5u, 0u, reset_buf, reset_orig, kResetScratchBytes);
+					record_check(lbl + ".f2_reset_buf_created", rb_create == OK);
+					if (rb_create == OK) {
+						const GDExtensionProductionResourceV1 f2_res[8] = {
+							{ GDEXTENSION_PRODUCTION_STORAGE_V1, p_src_slot, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 32, 0 },
+							{ GDEXTENSION_PRODUCTION_STORAGE_V1, 5, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, kResetScratchBytes, 0 },
+							{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, gen, kRecBytes, 0 },
+							{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, kRecBytes, 0 },
+							{ GDEXTENSION_PRODUCTION_STORAGE_V1, 2, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, kRecBytes, 0 },
+							{ GDEXTENSION_PRODUCTION_STORAGE_V1, 7, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, kMetaBytes, 0 },
+							{ GDEXTENSION_PRODUCTION_STORAGE_V1, 9, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, kAuxBytes, 0 },
+							{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, 32, 0 },
+						};
+						// Uses:
+						// [0]: reset_buf WRITE 4B (action 0)
+						// [1..6]: primary acquire uses {source READ, pred READ, role1 W, role2 W, role7 W, role9 W}
+						// [7..10]: primary uploads {role1 W, role2 W, role7 W, role9 W}
+						// [11]: guard status readback READ 32B
+						// [12..15]: fallback acquire uses {source READ, role1 W, role7 W, role9 W} (omits pred & role2!)
+						// [16]: fallback action 3 scratch upload {reset_buf offset 32, WRITE kRecBytes} (exact kRecBytes/32 staging graph bound!)
+						const GDExtensionProductionUseV1 f2_uses[17] = {
+							{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 4, 0 },
+							{ 0, GDEXTENSION_PRODUCTION_READ_V1, 0, 32, 0 },
+							{ 2, GDEXTENSION_PRODUCTION_READ_V1, 0, kRecBytes, 0 },
+							{ 3, GDEXTENSION_PRODUCTION_WRITE_V1, 0, kRecBytes, 0 },
+							{ 4, GDEXTENSION_PRODUCTION_WRITE_V1, 0, kRecBytes, 0 },
+							{ 5, GDEXTENSION_PRODUCTION_WRITE_V1, 0, kMetaBytes, 0 },
+							{ 6, GDEXTENSION_PRODUCTION_WRITE_V1, 0, kAuxBytes, 0 },
+							{ 3, GDEXTENSION_PRODUCTION_WRITE_V1, 0, kRecBytes, 0 },
+							{ 4, GDEXTENSION_PRODUCTION_WRITE_V1, 0, kRecBytes, 0 },
+							{ 5, GDEXTENSION_PRODUCTION_WRITE_V1, 0, kMetaBytes, 0 },
+							{ 6, GDEXTENSION_PRODUCTION_WRITE_V1, 0, kAuxBytes, 0 },
+							{ 7, GDEXTENSION_PRODUCTION_READ_V1, 0, 32, 0 },
+							{ 0, GDEXTENSION_PRODUCTION_READ_V1, 0, 32, 0 },
+							{ 3, GDEXTENSION_PRODUCTION_WRITE_V1, 0, kRecBytes, 0 },
+							{ 5, GDEXTENSION_PRODUCTION_WRITE_V1, 0, kMetaBytes, 0 },
+							{ 6, GDEXTENSION_PRODUCTION_WRITE_V1, 0, kAuxBytes, 0 },
+							{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 32, kRecBytes, 0 },
+						};
+						const GDExtensionProductionActionV2 f2_acts[9] = {
+							{ 0, 10, 1, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+							{ 1, 10, 2, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 1, 6, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX },
+							{ 2, 10, 3, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 7, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+							{ 3, 10, 4, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 8, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+							{ 4, 10, 5, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 9, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+							{ 5, 10, 6, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 10, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+							{ 6, 10, 7, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX },
+							{ 7, 10, 8, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX },
+							{ 8, 10, 9, 0, GDEXTENSION_PRODUCTION_READBACK_V1, UINT32_MAX, 11, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, 0 },
+						};
+						const GDExtensionProductionActionV2 f2_fb_acts[9] = {
+							f2_acts[0],
+							{ 1, 10, 2, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 12, 4, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX },
+							f2_acts[2],
+							{ 3, 10, 4, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 16, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+							f2_acts[4],
+							f2_acts[5],
+							f2_acts[6],
+							f2_acts[7],
+							f2_acts[8],
+						};
+						const GDExtensionProductionUploadV2 f2_ups[5] = {
+							{ production_dto_abi<GDExtensionProductionUploadV2>(), 0, 10, 1, 0, 1, 0, 0, 4 },
+							{ production_dto_abi<GDExtensionProductionUploadV2>(), 2, 10, 3, 0, 3, 0, 0, kRecBytes },
+							{ production_dto_abi<GDExtensionProductionUploadV2>(), 3, 10, 4, 0, 4, 0, 0, kRecBytes },
+							{ production_dto_abi<GDExtensionProductionUploadV2>(), 4, 10, 5, 0, 5, 0, 0, kMetaBytes },
+							{ production_dto_abi<GDExtensionProductionUploadV2>(), 5, 10, 6, 0, 6, 0, 0, kAuxBytes },
+						};
+						const GDExtensionProductionUploadV2 f2_fb_ups[5] = {
+							f2_ups[0],
+							f2_ups[1],
+							{ production_dto_abi<GDExtensionProductionUploadV2>(), 3, 10, 4, 0, 1, 0, 32, kRecBytes },
+							f2_ups[3],
+							f2_ups[4],
+						};
+						const GDExtensionProductionReadbackSourceV1 f2_rb = { 7, GDEXTENSION_PRODUCTION_READBACK_NATIVE_OUTPUT_GUARD_V1, 8, 0, 32, { 6 }, {} };
+						const GDExtensionProductionOutputDemandInputV1 f2_dem_in = {
+							production_dto_abi<GDExtensionProductionOutputDemandInputV1>(),
+							sess.create_req, sess.created.particles, gen, 1, 10, 6, 10, 7, 10, 2, 7, 8, 0, 0, 2, 0
+						};
+						GDExtensionProductionOutputGuardDemandV1 f2_dem = {};
+						GDExtensionProductionMetadataQuoteV1 f2_quote = {};
+						const uint64_t f2_payload_bytes = 2u * (4u + 2u * kRecBytes + kMetaBytes + kAuxBytes);
+						err = Error(ports.req_quote_v2(enrollment.attachment, f2_acts, 9, f2_res, 8, f2_uses, 17, f2_ups, 5, &f2_rb, 1, 6, f2_payload_bytes, &f2_dem_in, 1, &f2_dem, 1, &f2_quote).native_error);
+						f2_quote.capacity.suboperations = 18; // 2 * action_count for WithoutPrevious fallback bank!
+						f2_quote.capacity.resource_uses += 16;
+						f2_quote.capacity.graph_memberships += 4;
+						{
+							MutexLock reg_lock(enrollment.registry.mutex);
+							MutexLock rd_lock(device->_thread_safe_);
+							enrollment.registry.production_membership_bound_locked(*device, f2_quote.capacity.graph_memberships, device->transfer_worker_pool_max_size, f2_quote.capacity.native_memberships);
+						}
+
+						PacketRecordPlan f2_pkt;
+						f2_pkt.pre_acquire_upload_ordinals = { 0 };
+						f2_pkt.acquire_ordinal = 1;
+						f2_pkt.upload_ordinals = { 2, 3, 4, 5 };
+						f2_pkt.finalize_ordinal = 6;
+						f2_pkt.seal_ordinal = 7;
+						f2_pkt.readback_ordinals = { 8 };
+						f2_pkt.read_staged_input_before_acquire = true;
+
+						const GDExtensionProductionOperationV1 f2_op = { production_dto_abi<GDExtensionProductionOperationV1>(), ++next_nonce, 1, 10, 20 };
+						if (err == OK) {
+							err = Error(ports.reserve_readbacks(enrollment.attachment, &f2_op, &f2_quote.capacity, f2_acts, 9, f2_res, 8, f2_uses, 17, &f2_rb, 1, &f2_pkt.req).native_error);
+						}
+						const uint32_t zero_u32 = 0;
+						const uint32_t f2_meta_words[8] = { kCap, 0, 0, 0, kCap, 1u, 2u, 0u };
+						if (err == OK) {
+							err = Error(ports.import_storage(f2_pkt.req, 0, &p_src_cap4).native_error);
+						}
+						if (err == OK) {
+							err = Error(ports.import_storage(f2_pkt.req, 1, &reset_buf).native_error);
+						}
+						if (err == OK) {
+							err = Error(ports.prepare_upload_v2(f2_pkt.req, &f2_ups[0], &zero_u32, 4).native_error);
+						}
+						if (err == OK) {
+							err = Error(ports.prepare_upload_v2(f2_pkt.req, &f2_ups[1], curr_bytes.ptr(), kRecBytes).native_error);
+						}
+						if (err == OK) {
+							err = Error(ports.prepare_upload_v2(f2_pkt.req, &f2_ups[2], curr_bytes.ptr(), kRecBytes).native_error);
+						}
+						if (err == OK) {
+							err = Error(ports.prepare_upload_v2(f2_pkt.req, &f2_ups[3], f2_meta_words, kMetaBytes).native_error);
+						}
+						if (err == OK) {
+							err = Error(ports.prepare_upload_v2(f2_pkt.req, &f2_ups[4], aux_good.ptr(), kAuxBytes).native_error);
+						}
+						if (err == OK) {
+							err = Error(ports.prepare_readback_v2(f2_pkt.req, 8, 0).native_error);
+						}
+						record_check(lbl + ".f2_primary_uploads_prepared", err == OK);
+
+						// Prepare host/scene/view on action 1 BEFORE camera capture (staged mode).
+						NormalHostPrepContext prep_ctx;
+						prep_ctx.self = this;
+						prep_ctx.req = f2_pkt.req;
+						prep_ctx.ordinal = 1;
+						prep_ctx.host_in.abi = production_dto_abi<GDExtensionProductionHostTransformInputV1>();
+						prep_ctx.host_in.affine[0] = prep_ctx.host_in.affine[5] = prep_ctx.host_in.affine[10] = 1.0f;
+						memset(prep_ctx.host_in.host_token.bytes, 0x76, 32);
+						prep_ctx.scene_in = { production_dto_abi<GDExtensionProductionOutputSceneInputV1>(), sess.instance.get_id(), sess.created.particles, gen, sess.scenario.get_id(), prep_ctx.host_in };
+						prep_ctx.view_in = { production_dto_abi<GDExtensionProductionHostViewInputV1>(), sess.viewport.get_id(), sess.camera.get_id() };
+						active_normal_prep = &prep_ctx;
+						Variant ret_v;
+						Callable::CallError ce;
+						normal_callable.callp(nullptr, 0, ret_v, ce);
+						active_normal_prep = nullptr;
+						server->call_on_render_thread(callable_mp_static(+[]() {
+							if (auto *scene = static_cast<RendererSceneCull *>(RSG::scene)) {
+								scene->update_dirty_instances();
+							}
+						}));
+						server->sync();
+						record_check(lbl + ".f2_host_view_prepared", prep_ctx.err == OK);
+
+						// Staged WithPrevious input (zeroed camera/present/view_epoch per output_decode staged contract).
+						GDExtensionOutputAcquireInputV1 staged_in = {};
+						staged_in.abi = production_dto_abi<GDExtensionOutputAcquireInputV1>();
+						staged_in.particles = sess.created.particles;
+						staged_in.pass_mask = uint32_t(RendererRD::ExternalOutputConfig::PASS_OPAQUE);
+						staged_in.layout_digest.bytes[0] = 3;
+						staged_in.mapping_digest.bytes[0] = 4;
+						staged_in.common.generation = gen;
+						staged_in.common.output_tag.bytes[0] = 0x86;
+						staged_in.common.view_tag.bytes[0] = 0x95;
+						memset(staged_in.common.current_host_token.bytes, 0x76, 32);
+						for (uint32_t a = 0; a < 3; ++a) {
+							staged_in.common.bounds.position[a] = -3.0;
+							staged_in.common.bounds.size[a] = 6.0;
+						}
+						staged_in.common.history_reset = 0;
+						staged_in.common.has_previous_consumed_tuple = 1;
+						staged_in.common.previous_consumed_tuple_token = f1_consumed.ref.original_color_token;
+
+						GDExtensionProductionOutputPlanV2 f2_plan_v2 = {};
+						f2_plan_v2.abi = { 2, sizeof(f2_plan_v2), 0 };
+						f2_plan_v2.plan.abi = production_dto_abi<GDExtensionProductionOutputPlanV1>();
+						f2_plan_v2.plan.acquire.abi = production_dto_abi<GDExtensionProductionOutputPrepareV1>();
+						f2_plan_v2.plan.acquire.action_ordinal = 1;
+						f2_plan_v2.plan.acquire.canonical_suboperation = 10;
+						f2_plan_v2.plan.acquire.source_recipe_substep = 2;
+						f2_plan_v2.plan.acquire.source_resource_slot = 0;
+						f2_plan_v2.plan.acquire.source_use_index = 1;
+						f2_plan_v2.plan.acquire.first_source_use = 1;
+						f2_plan_v2.plan.acquire.source_use_count = 2; // source + predecessor!
+						f2_plan_v2.plan.acquire.source_generation = 1;
+						f2_plan_v2.plan.acquire.input = staged_in;
+						f2_plan_v2.plan.finalize_action_ordinal = 6;
+						f2_plan_v2.plan.seal_action_ordinal = 7;
+						f2_plan_v2.plan.finalize_canonical_suboperation = 10;
+						f2_plan_v2.plan.seal_canonical_suboperation = 10;
+						f2_plan_v2.plan.finalize_source_recipe_substep = 7;
+						f2_plan_v2.plan.seal_source_recipe_substep = 8;
+						f2_plan_v2.plan.source_space = 2;
+						for (uint32_t s = 0; s < 5; ++s) {
+							f2_plan_v2.plan.reads[s] = { 0, 1, 1, s == 0 ? 0u : 1u };
+						}
+						f2_plan_v2.plan.guard_work_limit = f2_dem.guard_work;
+						f2_plan_v2.plan.guard_dispatch_limit = f2_dem.guard_dispatches;
+						f2_plan_v2.plan.guard_graph_limit = f2_dem.guard_graphs;
+						f2_plan_v2.plan.guard_native_limit = f2_quote.capacity.native_memberships;
+						f2_plan_v2.plan.guard_owned_resource_limit = f2_dem.guard_owned_resources;
+						f2_plan_v2.predecessor = { production_dto_abi<GDExtensionProductionOutputPredecessorV2>(), f1_consumed.ref, 2, 2 };
+
+						const GDExtensionProductionServiceBudgetV1 fixed_stage_budget = make_budget();
+						Error st_err = ERR_TIMEOUT;
+						for (uint32_t turn = 0; turn < 256; ++turn) {
+							server->sync();
+							const auto turn_budget = make_budget();
+							st_err = Error(ports.stage_plan_with_history_guard_v2(f2_pkt.req, &f2_plan_v2, UINT32_MAX, &fixed_stage_budget, &turn_budget).native_error);
+							if (st_err != ERR_BUSY) {
+								break;
+							}
+							OS::get_singleton()->delay_usec(400);
+						}
+						record_check(lbl + ".f2_stage_plan_with_history_guard_v2", st_err == OK);
+
+						GDExtensionProductionOutputPrepareV3 f2_v3 = {};
+						f2_v3.abi = { 3, sizeof(f2_v3), 0 };
+						f2_v3.action_ordinal = 1;
+						f2_v3.canonical_suboperation = 10;
+						f2_v3.source_recipe_substep = 2;
+						f2_v3.source_resource_slot = 0;
+						f2_v3.source_use_index = 1;
+						f2_v3.first_source_use = 1;
+						f2_v3.source_use_count = 2;
+						f2_v3.source_generation = 1;
+						f2_v3.input = staged_in;
+						for (uint32_t r = 0; r < 8; ++r) {
+							f2_v3.roles[r] = { 0, UINT32_MAX, UINT32_MAX, 0, 0, 0 };
+						}
+						f2_v3.roles[0] = { 1, 3, 3, 0, gen, kRecBytes };
+						f2_v3.roles[1] = { 2, 4, 4, 0, gen, kRecBytes };
+						f2_v3.roles[2] = { 7, 5, 5, 0, gen, kMetaBytes };
+						f2_v3.roles[3] = { 9, 6, 6, 0, gen, kAuxBytes };
+						const Error v3_e = Error(ports.prepare_output_v3(f2_pkt.req, &f2_v3).native_error);
+						record_check(lbl + ".f2_prepare_output_v3_4role", v3_e == OK);
+
+						// Stage WithoutPrevious fallback plan (roles = {}, has_previous_consumed_tuple = 0, history_reset = 7, source_use_count = 1 at use 12).
+						GDExtensionProductionOutputPlanV1 fb_plan = f2_plan_v2.plan;
+						fb_plan.acquire.source_use_index = 12;
+						fb_plan.acquire.first_source_use = 12;
+						fb_plan.acquire.source_use_count = 1;
+						fb_plan.acquire.input.common.has_previous_consumed_tuple = 0;
+						memset(fb_plan.acquire.input.common.previous_consumed_tuple_token.bytes, 0, 32);
+						fb_plan.acquire.input.common.history_reset = 7;
+						for (uint32_t s = 0; s < 5; ++s) {
+							fb_plan.reads[s] = { 0, 12, 1, s == 0 ? 0u : 1u };
+						}
+						const Error fb_stage_e = Error(ports.stage_history_fallback_v2(f2_pkt.req, &fb_plan, f2_fb_acts, 9).native_error);
+						record_check(lbl + ".f2_stage_history_fallback_v2", fb_stage_e == OK);
+
+						const bool fb_ups_ok =
+								ports.prepare_history_fallback_upload_v2(f2_pkt.req, &f2_fb_ups[0], &zero_u32, 4).native_error == OK &&
+								ports.prepare_history_fallback_upload_v2(f2_pkt.req, &f2_fb_ups[1], curr_bytes.ptr(), kRecBytes).native_error == OK &&
+								ports.prepare_history_fallback_upload_v2(f2_pkt.req, &f2_fb_ups[2], curr_bytes.ptr(), kRecBytes).native_error == OK &&
+								ports.prepare_history_fallback_upload_v2(f2_pkt.req, &f2_fb_ups[3], f2_meta_words, kMetaBytes).native_error == OK &&
+								ports.prepare_history_fallback_upload_v2(f2_pkt.req, &f2_fb_ups[4], aux_good.ptr(), kAuxBytes).native_error == OK;
+						record_check(lbl + ".f2_fallback_uploads_prepared", fb_ups_ok);
+
+						GDExtensionProductionOutputHistoryStaticV2 hist_static = {};
+						hist_static.abi = production_dto_abi<GDExtensionProductionOutputHistoryStaticV2>();
+						hist_static.kind = 2; // Dynamic WithoutPrevious fallback!
+						hist_static.static_mask = 0;
+						hist_static.previous_color_token = f1_consumed.ref.original_color_token;
+						hist_static.reset_upload_action = 0;
+						hist_static.fallback_reset_upload_action = 0;
+						GDExtensionProductionOutputHistoryStateV2 hist_state = {};
+						const Error hs_e = Error(ports.stage_history_static_v2(f2_pkt.req, 1, &hist_static, &hist_state).native_error);
+						record_check(lbl + ".f2_stage_history_static_v2", hs_e == OK);
+
+						// Bind camera observer & seal static staged executor + batch (validates 4-role WithoutPrevious fallback!).
+						const Error cb_e = Error(ports.camera_bind_request(f2_pkt.req, 1, camera_relay_ref, sess.viewport.get_id()).native_error);
+						Error pnr_e = ERR_UNCONFIGURED;
+						for (uint32_t turn = 0; turn < 32 && cb_e == OK; ++turn) {
+							GDExtensionProductionObserveResultV3 tmp_obs = {};
+							(void)pump_observe_once(f2_pkt.req, tmp_obs);
+							server->sync();
+							pnr_e = Error(ports.prepare_native_record_v2(f2_pkt.req).native_error);
+							if (pnr_e == OK || (pnr_e != ERR_BUSY && pnr_e != ERR_UNCONFIGURED)) {
+								break;
+							}
+							OS::get_singleton()->delay_usec(300);
+						}
+						const Error pnb_e = (pnr_e == OK) ? Error(ports.prepare_native_batch_v2(f2_pkt.req).native_error) : pnr_e;
+						record_check(lbl + ".f2_prepare_native_record_v2_validated", cb_e == OK && pnr_e == OK && pnb_e == OK);
+						if (pnr_e != OK || pnb_e != OK) {
+							diagnostics[lbl + ".pnr_err"] = int(pnr_e);
+							diagnostics[lbl + ".pnb_err"] = int(pnb_e);
+						}
+
+						uint64_t f2_ctrl = 0;
+						const Error f2_sched = (cb_e == OK && pnb_e == OK) ? Error(ports.record_schedule(f2_pkt.req, &f2_ctrl)) : ERR_UNCONFIGURED;
+						if (f2_sched == OK) {
+							server->sync();
+							// Capture camera WITHOUT previous camera & deliver native pre-cull + native invocation -> triggers WithoutPrevious fallback!
+							struct StagedExecRt {
+								LiveMetalWaveGNativeOutputHarness *self = nullptr;
+								OutputOwnerSession *sess = nullptr;
+								GDExtensionProductionRequestRefV1 req = {};
+								uint64_t ctrl = 0;
+								GDExtensionProductionRecordReportV2 rec = {};
+								Error consume_err = ERR_UNCONFIGURED;
+							} srt = { this, &sess, f2_pkt.req, f2_ctrl, {}, ERR_UNCONFIGURED };
+							server->call_on_render_thread(callable_mp_static((+[](uint64_t p_addr) {
+								auto *s = reinterpret_cast<StagedExecRt *>(uintptr_t(p_addr));
+								auto *scene = static_cast<RendererSceneCull *>(RSG::scene);
+								if (!scene || !RSG::viewport || !s->self->device) {
+									s->consume_err = ERR_UNAVAILABLE;
+									return;
+								}
+								RendererViewport::Viewport::CameraSourceSubscriber *sub = nullptr;
+								{
+									MutexLock reg_lock(s->self->enrollment.registry.mutex);
+									GDExtensionDeviceExit::ProductionRequest *internal_req = nullptr;
+									RenderingDevice *actual_rd = nullptr;
+									if (s->self->enrollment.registry.production_request_locked(s->req, false, internal_req, actual_rd) == OK && internal_req && internal_req->action_count > 1) {
+										sub = &internal_req->actions[1].camera_ready_subscriber;
+									}
+								}
+								if (!sub) {
+									s->consume_err = ERR_UNAVAILABLE;
+									return;
+								}
+								RendererSceneRender::CameraData cam_data;
+								Projection proj;
+								proj.set_orthogonal(-2.0f, 2.0f, -2.0f, 2.0f, 0.1f, 20.0f);
+								cam_data.set_camera(Transform3D(Basis(), Vector3(0, 0, 5)), proj, true, false, Vector2(), 0, 1);
+								cam_data.source_viewport = s->sess->viewport;
+								const auto tok = RSG::viewport->viewport_begin_camera_capture(s->sess->viewport, cam_data, s->sess->camera, s->sess->camera_buffers);
+								s->sess->view_id = tok.view_id;
+								s->sess->view_epoch = tok.view_epoch;
+
+								Ref<RendererViewport::Viewport::CameraCapture> capture;
+								if (!RSG::viewport->viewport_get_camera_capture_ref(s->sess->viewport, tok, capture) || capture.is_null()) {
+									s->consume_err = ERR_UNAVAILABLE;
+									return;
+								}
+								RendererSceneCull::NativeOutputCullScope cull_scope(*scene, capture);
+								TestProductionRequest::wave_g_deliver_native_invocation(*RSG::viewport, capture, sub);
+								s->consume_err = OK;
+							})).bind(uint64_t(uintptr_t(&srt))));
+							server->sync();
+							if (srt.consume_err == OK) {
+								srt.consume_err = Error(ports.record_consume_v2(f2_pkt.req, f2_ctrl, &srt.rec).native_error);
+							}
+
+							// Drain all 9 prepared batch action results (acknowledging segments) and read bound staged output input!
+							GDExtensionOutputAcquireResultV1 f2_acq = {};
+							GDExtensionProductionOutputFinalizeResultV1 f2_fin = {};
+							GDExtensionOutputSealResultV1 f2_seal = {};
+							uint32_t f2_batch_items = 0;
+							uint64_t f2_cursor = 0;
+							Error f2_batch_err = srt.consume_err == OK ? Error(srt.rec.result.native_error) : srt.consume_err;
+							while (f2_batch_err == OK && f2_batch_items < 16) {
+								GDExtensionProductionNativeBatchItemV1 item = {};
+								f2_batch_err = Error(ports.native_batch_read_v2(f2_pkt.req, f2_ctrl, f2_cursor, &item).native_error);
+								if (f2_batch_err != OK || !(item.flags & 1u)) {
+									if (f2_batch_err == OK) {
+										f2_batch_err = ERR_INVALID_DATA;
+									}
+									break;
+								}
+								if (item.result.output_kind == 1) {
+									f2_acq = item.result.acquire;
+								} else if (item.result.output_kind == 2) {
+									f2_fin = item.result.finalize;
+								} else if (item.result.output_kind == 3) {
+									f2_seal = item.result.seal;
+								}
+								if (item.flags & 2u) {
+									GDExtensionDeviceExit::CallbackScope owner_entry(enrollment.reference);
+									if (owner_entry.get_error() == OK) {
+										f2_batch_err = Error(ports.ack_segment(f2_pkt.req, item.segment.segment, item.segment.segment_revision).native_error);
+									} else {
+										f2_batch_err = owner_entry.get_error();
+									}
+								}
+								++f2_batch_items;
+								f2_cursor = item.next_cursor;
+								if (f2_cursor == 0) {
+									break;
+								}
+							}
+							GDExtensionProductionOutputPrepareV1 f2_bound_in = {};
+							const Error f2_rsi = Error(ports.read_staged_output_input_v2(f2_pkt.req, 1, &f2_bound_in).native_error);
+
+							const bool f2_fallback_ok = f2_batch_err == OK &&
+									f2_batch_items == 9u &&
+									f2_rsi == OK &&
+									f2_bound_in.input.common.history_reset == 7u &&
+									f2_bound_in.input.common.has_previous_consumed_tuple == 0u &&
+									f2_acq.status.error == OK &&
+									f2_acq.writable_count == 3u &&
+									f2_acq.writables[0].role == 1u &&
+									f2_acq.writables[1].role == 7u &&
+									f2_acq.writables[2].role == 9u &&
+									f2_acq.writables[2].byte_length == kAuxBytes &&
+									f2_fin.status.error == OK &&
+									f2_seal.status.error == OK;
+							record_check(lbl + ".f2_fallback_acquired_3writables_and_sealed", f2_fallback_ok);
+							if (!f2_fallback_ok) {
+								Dictionary d;
+								d["batch_err"] = int(f2_batch_err);
+								d["batch_items"] = f2_batch_items;
+								d["rsi_err"] = int(f2_rsi);
+								d["reset"] = f2_bound_in.input.common.history_reset;
+								d["acq_err"] = f2_acq.status.error;
+								d["writables"] = f2_acq.writable_count;
+								d["fin_err"] = f2_fin.status.error;
+								d["seal_err"] = f2_seal.status.error;
+								diagnostics[lbl + ".f2_fail"] = d;
+							}
+
+							uint32_t f2_gw[8] = { 0xffffffffu };
+							bool f2_rb_ok = false;
+							if (f2_fallback_ok) {
+								rt_advance_rd_frame();
+								for (uint32_t turn = 0; turn < 256; ++turn) {
+									GDExtensionProductionObserveResultV3 obs = {};
+									if (pump_observe_once(f2_pkt.req, obs) != OK) {
+										break;
+									}
+									if (obs.report.ready_readbacks >= 1 && obs.report.known_obligations > 0 &&
+											obs.report.complete_obligations == obs.report.known_obligations && obs.report.possible_obligations == 0) {
+										uint64_t copied = 0;
+										if (ports.copy_v1(f2_pkt.req, obs.report.revision, 0, f2_gw, 32, &copied).native_error == OK && copied == 32) {
+											f2_rb_ok = true;
+											break;
+										}
+									}
+									rt_advance_rd_frame();
+									OS::get_singleton()->delay_usec(300);
+								}
+							}
+							record_check(lbl + ".f2_no_motion_aux_guard_zero_faults", f2_rb_ok && f2_gw[0] == 0u && f2_gw[1] == kCap);
+							const Error r2 = cancel_slot_and_release_request(lbl + ".f2", f2_pkt.req, sess.created.particles, f2_acq.lease_token);
+							record_check(lbl + ".f2_released", r2 == OK);
+						} else {
+							release_request_cleanly(f2_pkt.req);
+						}
+						record_check(lbl + ".retire_reset_buf", retire_qualified_source_buffer(reset_buf, reset_orig) == OK);
+					}
+					for (uint32_t turn = 0; turn < 256; ++turn) {
+						server->sync();
+						const auto rb_b = make_budget();
+						GDExtensionProductionReportV2 rb_r = {};
+						if (ports.consumed_return_v2(f1_pkt.req, &f1_consumed.ref, &rb_b, &rb_r).native_error != ERR_BUSY) {
+							break;
+						}
+						OS::get_singleton()->delay_usec(300);
+					}
+				}
+				const Error r1 = cancel_slot_and_release_request(lbl + ".f1", f1_pkt.req, sess.created.particles, f1_pkt.acquire_out.lease_token);
+				const Error tear = teardown_owner_session(sess);
+				record_check(lbl + ".clean_retirement", r1 == OK && tear == OK);
+			}
+		}
+
+		// Clean up FP16/motion targets and quad mesh/material.
+		server->call_on_render_thread(callable_mp_static((+[](uint64_t p_rd_addr, uint64_t p_tgt_addr) {
+			auto *p_rd = reinterpret_cast<RenderingDevice *>(uintptr_t(p_rd_addr));
+			auto *t = reinterpret_cast<AuxRtTargets *>(uintptr_t(p_tgt_addr));
+			if (p_rd && t) {
+				for (RID *fb : { &t->mv_fb, &t->fp16_fb }) {
+					if (fb->is_valid()) {
+						p_rd->free_rid(*fb);
+						*fb = RID();
+					}
+				}
+				for (RID *tx : { &t->mv_motion, &t->mv_spec, &t->fp16_depth, &t->fp16_color }) {
+					if (tx->is_valid()) {
+						p_rd->free_rid(*tx);
+						*tx = RID();
+					}
+				}
+			}
+		})).bind(uint64_t(uintptr_t(device)), uint64_t(uintptr_t(&rt_targets))));
+		server->free_rid(aux_mat);
+		server->free_rid(aux_shader);
+		server->free_rid(quad_mesh);
+		server->sync();
+	}
+
 	Dictionary run_all() {
 		using namespace GDExtensionDeviceExit;
 		Dictionary out;
@@ -3422,6 +4862,9 @@ void main() {
 
 				// 5. NATIVE-002 + NATIVE-S01: INDEXED_144 Two-Frame Non-Reset Motion History End-to-End on Live Metal!
 				run_indexed144_two_frame_motion_history("indexed144_two_frame_motion_history", material_rid, src_cap2);
+
+				// 6. Role 9 (GDEXTENSION_OUTPUT_ROLE_AUX_PARAMS_V1 = 9): 4-role PrepareV3/AcquireV2, WithoutPrevious fallback, Guard NaN/subnormal, Color+Motion draw, & 32B zero sentinel!
+				run_role9_aux_params_suite(src_cap4, 1u);
 
 				record_check("retire_src_cap4", retire_qualified_source_buffer(src_cap4, src_cap4_origin) == OK);
 				record_check("retire_src_cap2", retire_qualified_source_buffer(src_cap2, src_cap2_origin) == OK);

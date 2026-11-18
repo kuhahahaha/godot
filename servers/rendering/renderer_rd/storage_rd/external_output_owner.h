@@ -59,7 +59,7 @@ class ExternalOutputOwner {
 	static constexpr uint32_t MAX_VIEWS = 8;
 	static constexpr uint32_t MAX_INFLIGHT = 4;
 	static constexpr uint32_t MAX_SLOTS = MAX_VIEWS * MAX_INFLIGHT;
-	static constexpr uint32_t GUARD_MODE_CAPACITY = 8;
+	static constexpr uint32_t GUARD_MODE_CAPACITY = 14;
 
 	enum class GenerationState : uint8_t {
 		CONFIGURED,

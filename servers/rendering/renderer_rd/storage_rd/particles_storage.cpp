@@ -84,6 +84,15 @@ ParticlesStorage::ParticlesStorage() {
 				dev_epoch ? dev_epoch : 1ull,
 				reinterpret_cast<uintptr_t>(rd));
 		collision_scene_rd->initialize(rd, dev_cap);
+		if (rd->is_main_instance) {
+			Vector<uint8_t> zero_aux;
+			zero_aux.resize_initialized(32);
+			external_aux_zero_sentinel_buffer = rd->storage_buffer_create(32, zero_aux);
+			const Error sentinel_ready = external_aux_zero_sentinel_buffer.is_valid()
+					? rd->_production_prepare_static_sentinel_buffer(external_aux_zero_sentinel_buffer, 32)
+					: ERR_CANT_CREATE;
+			CRASH_COND_MSG(sentinel_ready != OK, "Engine external aux zero sentinel buffer must be created and settled on main RD.");
+		}
 	}
 
 	/* Particles */
@@ -240,6 +249,13 @@ ParticlesStorage::~ParticlesStorage() {
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
 	material_storage->material_free(particles_shader.default_material);
 	material_storage->shader_free(particles_shader.default_shader);
+
+	if (external_aux_zero_sentinel_buffer.is_valid()) {
+		if (RenderingDevice *rd = RD::get_singleton()) {
+			rd->free_rid(external_aux_zero_sentinel_buffer);
+		}
+		external_aux_zero_sentinel_buffer = RID();
+	}
 
 	if (collision_scene_rd) {
 		collision_scene_rd->shutdown();

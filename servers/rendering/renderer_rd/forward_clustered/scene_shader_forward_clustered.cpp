@@ -275,7 +275,7 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 		reject(uses_alpha || uses_blend_alpha || uses_alpha_clip || uses_alpha_hash || uses_alpha_antialiasing || uses_depth_prepass_alpha || alpha_antialiasing_mode != ALPHA_ANTIALIASING_OFF, MATERIAL_RECIPE_ALPHA);
 		reject(uses_discard, MATERIAL_RECIPE_DISCARD);
 		reject(uses_time || uses_vertex_time || uses_fragment_time, MATERIAL_RECIPE_TIME);
-		reject(native_writes_depth, MATERIAL_RECIPE_DEPTH_WRITE);
+		reject(native_writes_depth || depth_test == DEPTH_TEST_ENABLED_INVERTED, MATERIAL_RECIPE_DEPTH_WRITE);
 		reject(uses_z_clip_scale, MATERIAL_RECIPE_CLIP_WRITE);
 		reject(depth_draw != DEPTH_DRAW_OPAQUE || depth_test != DEPTH_TEST_ENABLED, MATERIAL_RECIPE_DEPTH_MODE);
 		reject(uses_screen_texture || uses_depth_texture || uses_normal_texture, MATERIAL_RECIPE_FRAMEBUFFER_READ);
@@ -647,7 +647,7 @@ Error SceneShaderForwardClustered::ShaderData::get_external_pipeline_value_plan(
 	uint64_t mask = 0;
 	Error observed = OK;
 	if (p_recipe_static_set1) {
-		if (key.version != PIPELINE_VERSION_COLOR_PASS || key.color_pass_flags != 0 || p_indexed144 || !p_instance192) {
+		if (key.version != PIPELINE_VERSION_COLOR_PASS || (key.color_pass_flags & ~uint32_t(PIPELINE_COLOR_PASS_FLAG_TRANSPARENT)) != 0 || p_indexed144 || !p_instance192) {
 			return ERR_UNAVAILABLE;
 		}
 		observed = get_native_recipe_shader_variant_if_ready(ready, mask);
@@ -1180,8 +1180,8 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 		actions.renames["IRRADIANCE"] = "custom_irradiance";
 		actions.renames["BONE_INDICES"] = "bone_attrib";
 		actions.renames["BONE_WEIGHTS"] = "weight_attrib";
-		actions.renames["CUSTOM0"] = "custom0_attrib";
-		actions.renames["CUSTOM1"] = "custom1_attrib";
+		actions.renames["CUSTOM0"] = "read_custom0";
+		actions.renames["CUSTOM1"] = "read_custom1";
 		actions.renames["CUSTOM2"] = "custom2_attrib";
 		actions.renames["CUSTOM3"] = "custom3_attrib";
 		actions.renames["LIGHT_VERTEX"] = "light_vertex";
@@ -1452,13 +1452,15 @@ uint32_t SceneShaderForwardClustered::get_pipeline_compilations(RSE::PipelineSou
 	return pipeline_compilations[p_source];
 }
 
-Error SceneShaderForwardClustered::MaterialData::get_native_recipe_shader_if_ready(RID &r_shader, uint64_t &r_mask, RID &r_set) const {
+Error SceneShaderForwardClustered::MaterialData::get_native_recipe_shader_if_ready(RID &r_shader, uint64_t &r_mask, RID &r_set, uint32_t p_allowed_rejections) const {
 	if (!shader_data || !shader_data->instance192_shader_supported()) {
 		return ERR_UNAVAILABLE;
 	}
 	RendererRD::MaterialStorage::ShaderData::NativeInstance192ShaderFeatures features;
 	const Error classified = shader_data->get_native_instance192_shader_features(features);
-	if (classified != OK || !features.zero_displacement || features.material_recipe_rejections) { return classified == OK ? ERR_UNAVAILABLE : classified; }
+	if (classified != OK || !features.zero_displacement || (features.material_recipe_rejections & ~p_allowed_rejections) != 0 || shader_data->depth_test == ShaderData::DEPTH_TEST_ENABLED_INVERTED) {
+		return classified == OK ? ERR_UNAVAILABLE : classified;
+	}
 	RID shader;
 	uint64_t mask = 0;
 	const Error ready = shader_data->get_native_recipe_shader_variant_if_ready(shader, mask);

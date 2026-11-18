@@ -570,6 +570,32 @@ static void run_material_qualification_action7_cpu() {
 				}
 				CHECK(rel_report.service_pending == 0);
 			}
+
+			// Non-RD / Dummy backend refusal check: when RendererSceneRenderRD::get_singleton() is absent or backend == 0,
+			// selection and recipe preparation fail closed deterministically with ERR_UNAVAILABLE without crash.
+			if (RendererSceneRenderRD::get_singleton() == nullptr || RendererSceneRenderRD::get_singleton()->get_native_material_recipe_backend() == 0) {
+				GDExtensionProductionRequestRefV1 non_rd_req = {};
+				const GDExtensionProductionOperationV1 non_rd_op = { production_dto_abi<GDExtensionProductionOperationV1>(), 188, 1, 10, 11 };
+				REQUIRE(ports.reserve(fixture.attachment, &non_rd_op, &req_quote.capacity, &valid_action, 1, nullptr, 0, nullptr, 0, nullptr, 0, &non_rd_req).native_error == OK);
+				REQUIRE(ports.prepare_mq(non_rd_req, &valid_prep, payload, 16).native_error == OK);
+				GDExtensionProductionObserveResultV3 obs = {};
+				ports.observe(non_rd_req, &budget, &obs);
+				server->sync();
+				ports.observe(non_rd_req, &budget, &obs);
+				GDExtensionMaterialQualificationSelectionFactsV1 non_rd_sel = {};
+				REQUIRE(ports.read_selection(non_rd_req, 0, &non_rd_sel).native_error == OK);
+				CHECK(non_rd_sel.state == GDEXTENSION_MATERIAL_QUALIFICATION_FAILED_V1);
+				CHECK(non_rd_sel.native_error == ERR_UNAVAILABLE);
+				GDExtensionMaterialQualificationFixedOracleV1 non_rd_oracle = {};
+				CHECK(ports.prepare_recipe(non_rd_req, 0, &non_rd_oracle).native_error == ERR_UNAVAILABLE);
+				REQUIRE(ports.cancel(non_rd_req).native_error == OK);
+				const Error r_non_rd = Error(ports.release(non_rd_req, &budget, &rem, &rel_report).native_error);
+				CHECK((r_non_rd == OK || r_non_rd == ERR_BUSY));
+				if (rel_report.service_pending) {
+					server->sync();
+					REQUIRE(ports.release(non_rd_req, &budget, &rem, &rel_report).native_error == OK);
+				}
+			}
 		}
 
 		fixture.cleanup_owner();
@@ -1928,6 +1954,81 @@ struct LiveMetalMaterialQualificationHarness {
 									s_foreign_tex_disposals_after.load(std::memory_order_acquire) >= foreign_texs_before);
 				}
 			}
+
+			// Scenario 8: CUSTOM0/CUSTOM1 Set 2 binding 2 roster planning (allowed_mask = 412) + depth_test_disabled pass vs depth_test_inverted & VERTEX write rejection!
+			{
+				static constexpr uint32_t kAllowedTransparentAuxMask = 412u; // ALPHA(4) | DISCARD(8) | TIME(16) | DEPTH_MODE(128) | FRAMEBUFFER_READ(256)
+				Array q_arr;
+				q_arr.resize(RSE::ARRAY_MAX);
+				PackedVector3Array q_vtx;
+				q_vtx.push_back(Vector3(-0.5f, -0.5f, 0.0f));
+				q_vtx.push_back(Vector3(0.5f, -0.5f, 0.0f));
+				q_vtx.push_back(Vector3(-0.5f, 0.5f, 0.0f));
+				q_vtx.push_back(Vector3(0.5f, 0.5f, 0.0f));
+				PackedInt32Array q_idx;
+				q_idx.push_back(0);
+				q_idx.push_back(1);
+				q_idx.push_back(2);
+				q_idx.push_back(2);
+				q_idx.push_back(1);
+				q_idx.push_back(3);
+				q_arr[RSE::ARRAY_VERTEX] = q_vtx;
+				q_arr[RSE::ARRAY_INDEX] = q_idx;
+				Ref<ArrayMesh> fixture_quad;
+				fixture_quad.instantiate();
+				fixture_quad->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, q_arr);
+
+				auto make_shader_mat = [](const String &p_code) -> Ref<ShaderMaterial> {
+					Ref<Shader> sh;
+					sh.instantiate();
+					sh->set_code(p_code);
+					Ref<ShaderMaterial> mat;
+					mat.instantiate();
+					mat->set_shader(sh);
+					return mat;
+				};
+
+				Ref<ShaderMaterial> mat_soft_smoke = make_shader_mat(
+						"shader_type spatial;\n"
+						"render_mode unshaded, blend_mix, depth_draw_never, cull_disabled;\n"
+						"uniform sampler2D depth_tex : hint_depth_texture;\n"
+						"varying vec4 v_c0; varying vec4 v_c1;\n"
+						"void vertex() { v_c0 = CUSTOM0; v_c1 = CUSTOM1; }\n"
+						"void fragment() { float d = texture(depth_tex, SCREEN_UV).r; ALBEDO = v_c0.rgb + v_c1.rgb * d; ALPHA = v_c0.a; }\n");
+
+				Ref<ShaderMaterial> mat_refract = make_shader_mat(
+						"shader_type spatial;\n"
+						"render_mode unshaded, blend_mix, depth_draw_never, cull_disabled;\n"
+						"uniform sampler2D screen_tex : hint_screen_texture;\n"
+						"uniform sampler2D depth_tex : hint_depth_texture;\n"
+						"varying vec4 v_c0; varying vec4 v_c1;\n"
+						"void vertex() { v_c0 = CUSTOM0; v_c1 = CUSTOM1; }\n"
+						"void fragment() { ALBEDO = texture(screen_tex, SCREEN_UV + v_c0.xy * 0.01).rgb * v_c1.rgb; ALPHA = texture(depth_tex, SCREEN_UV).r * 0.5 + 0.25; }\n");
+
+				Ref<ShaderMaterial> mat_icon_no_depth_test = make_shader_mat(
+						"shader_type spatial;\n"
+						"render_mode unshaded, blend_mix, depth_test_disabled, cull_disabled;\n"
+						"varying vec4 v_c0; varying vec4 v_c1;\n"
+						"void vertex() { v_c0 = CUSTOM0; v_c1 = CUSTOM1; }\n"
+						"void fragment() { ALBEDO = v_c0.rgb + v_c1.rgb; ALPHA = v_c0.a; }\n");
+
+				Ref<ShaderMaterial> mat_depth_inverted = make_shader_mat(
+						"shader_type spatial;\n"
+						"render_mode unshaded, blend_mix, depth_test_inverted, cull_disabled;\n"
+						"varying vec4 v_c0;\n"
+						"void vertex() { v_c0 = CUSTOM0; }\n"
+						"void fragment() { ALBEDO = v_c0.rgb; ALPHA = 0.5; }\n");
+
+				Ref<ShaderMaterial> mat_vtx_aux = make_shader_mat(
+						"shader_type spatial;\n"
+						"render_mode unshaded, blend_mix, cull_disabled;\n"
+						"void vertex() { VERTEX.x += CUSTOM0.x; }\n"
+						"void fragment() { ALBEDO = vec3(1.0); ALPHA = 0.5; }\n");
+
+				// Negative Action-7 source-gate checks on depth_test_inverted (DEPTH_WRITE = 32) & VERTEX.x += CUSTOM0.x (VERTEX_WRITE = 1).
+				run_source_gate_rejection("gate_shader_depth_test_inverted", 6001, mat_depth_inverted->get_rid(), fixture_quad->get_rid(), 1u << 5);
+				run_source_gate_rejection("gate_shader_vertex_write_custom0", 6002, mat_vtx_aux->get_rid(), fixture_quad->get_rid(), 1u << 0);
+			}
 		}
 
 		server->sync();
@@ -1945,6 +2046,198 @@ struct LiveMetalMaterialQualificationHarness {
 						final_counts.external_refs == baseline_counts.external_refs);
 		record_check("total_scene_draws_remained_zero", Engine::get_singleton()->get_frames_drawn() == 0);
 		record_check("total_rd_frames_drawn_unchanged", device->get_frames_drawn() == initial_rd_draws);
+
+		// Post-Action7 renderer roster verification: CUSTOM0/CUSTOM1 Set 2 binding 2 roster planning (allowed_mask = 412)
+		// + depth_test_disabled pass vs depth_test_inverted (32) & VERTEX write (1) rejection.
+		{
+			static constexpr uint32_t kAllowedTransparentAuxMask = 412u; // ALPHA(4) | DISCARD(8) | TIME(16) | DEPTH_MODE(128) | FRAMEBUFFER_READ(256)
+			{
+				Array q_arr;
+				q_arr.resize(RSE::ARRAY_MAX);
+				PackedVector3Array q_vtx;
+				q_vtx.push_back(Vector3(-0.5f, -0.5f, 0.0f));
+				q_vtx.push_back(Vector3(0.5f, -0.5f, 0.0f));
+				q_vtx.push_back(Vector3(-0.5f, 0.5f, 0.0f));
+				q_vtx.push_back(Vector3(0.5f, 0.5f, 0.0f));
+				PackedInt32Array q_idx;
+				q_idx.push_back(0);
+				q_idx.push_back(1);
+				q_idx.push_back(2);
+				q_idx.push_back(2);
+				q_idx.push_back(1);
+				q_idx.push_back(3);
+				q_arr[RSE::ARRAY_VERTEX] = q_vtx;
+				q_arr[RSE::ARRAY_INDEX] = q_idx;
+				Ref<ArrayMesh> fixture_quad;
+				fixture_quad.instantiate();
+				fixture_quad->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, q_arr);
+
+				auto make_shader_mat = [](const String &p_code) -> Ref<ShaderMaterial> {
+					Ref<Shader> sh;
+					sh.instantiate();
+					sh->set_code(p_code);
+					Ref<ShaderMaterial> mat;
+					mat.instantiate();
+					mat->set_shader(sh);
+					return mat;
+				};
+
+				Ref<ShaderMaterial> mat_soft_smoke = make_shader_mat(
+						"shader_type spatial;\n"
+						"render_mode unshaded, blend_mix, depth_draw_never, cull_disabled;\n"
+						"uniform sampler2D depth_tex : hint_depth_texture;\n"
+						"varying vec4 v_c0; varying vec4 v_c1;\n"
+						"void vertex() { v_c0 = CUSTOM0; v_c1 = CUSTOM1; }\n"
+						"void fragment() { float d = texture(depth_tex, SCREEN_UV).r; ALBEDO = v_c0.rgb + v_c1.rgb * d; ALPHA = v_c0.a; }\n");
+
+				Ref<ShaderMaterial> mat_refract = make_shader_mat(
+						"shader_type spatial;\n"
+						"render_mode unshaded, blend_mix, depth_draw_never, cull_disabled;\n"
+						"uniform sampler2D screen_tex : hint_screen_texture;\n"
+						"uniform sampler2D depth_tex : hint_depth_texture;\n"
+						"varying vec4 v_c0; varying vec4 v_c1;\n"
+						"void vertex() { v_c0 = CUSTOM0; v_c1 = CUSTOM1; }\n"
+						"void fragment() { ALBEDO = texture(screen_tex, SCREEN_UV + v_c0.xy * 0.01).rgb * v_c1.rgb; ALPHA = texture(depth_tex, SCREEN_UV).r * 0.5 + 0.25; }\n");
+
+				Ref<ShaderMaterial> mat_icon_no_depth_test = make_shader_mat(
+						"shader_type spatial;\n"
+						"render_mode unshaded, blend_mix, depth_test_disabled, cull_disabled;\n"
+						"varying vec4 v_c0; varying vec4 v_c1;\n"
+						"void vertex() { v_c0 = CUSTOM0; v_c1 = CUSTOM1; }\n"
+						"void fragment() { ALBEDO = v_c0.rgb + v_c1.rgb; ALPHA = v_c0.a; }\n");
+
+				Ref<ShaderMaterial> mat_depth_inverted = make_shader_mat(
+						"shader_type spatial;\n"
+						"render_mode unshaded, blend_mix, depth_test_inverted, cull_disabled;\n"
+						"varying vec4 v_c0;\n"
+						"void vertex() { v_c0 = CUSTOM0; }\n"
+						"void fragment() { ALBEDO = v_c0.rgb; ALPHA = 0.5; }\n");
+
+				Ref<ShaderMaterial> mat_vtx_aux = make_shader_mat(
+						"shader_type spatial;\n"
+						"render_mode unshaded, blend_mix, cull_disabled;\n"
+						"void vertex() { VERTEX.x += CUSTOM0.x; }\n"
+						"void fragment() { ALBEDO = vec3(1.0); ALPHA = 0.5; }\n");
+
+				struct RtRosterProbe {
+					RID mesh;
+					RID soft_smoke;
+					RID refract;
+					RID icon_disabled;
+					RID depth_inverted;
+					RID vtx_aux;
+					bool smoke_ok = false;
+					bool refract_ok = false;
+					bool icon_ok = false;
+					bool icon_gate_exact = false;
+					bool aux_set2_binding2_found = false;
+					bool inverted_rejected = false;
+					bool vtx_rejected = false;
+				} rp;
+				rp.mesh = fixture_quad->get_rid();
+				rp.soft_smoke = mat_soft_smoke->get_rid();
+				rp.refract = mat_refract->get_rid();
+				rp.icon_disabled = mat_icon_no_depth_test->get_rid();
+				rp.depth_inverted = mat_depth_inverted->get_rid();
+				rp.vtx_aux = mat_vtx_aux->get_rid();
+
+				server->call_on_render_thread(callable_mp_static((+[](uint64_t p_rp_addr) {
+					auto *p = reinterpret_cast<RtRosterProbe *>(uintptr_t(p_rp_addr));
+					auto *rd = RenderingDevice::get_singleton();
+					auto *ms = RendererRD::MeshStorage::get_singleton();
+					auto *mats = RendererRD::MaterialStorage::get_singleton();
+					auto *sr = RendererSceneRenderRD::get_singleton();
+					if (!rd || !ms || !mats || !sr) {
+						return;
+					}
+					mats->_update_queued_materials();
+					const auto *const_ms = ms;
+					(void)const_ms->mesh_get_surface(p->mesh, 0);
+					if (auto *m = ms->mesh_owner.get_or_null(p->mesh)) {
+						if (m->surface_count > 0 && m->surfaces[0]) {
+							rd->_native_settle_transfer_worker(m->surfaces[0]->vertex_buffer);
+							rd->_native_settle_transfer_worker(m->surfaces[0]->index_buffer);
+							rd->_native_settle_transfer_worker(m->surfaces[0]->index_array);
+						}
+					}
+					if (sr->ensure_native_material_recipe_sources_ready() != OK) {
+						return;
+					}
+
+					Vector<RD::AttachmentFormat> atts;
+					RD::AttachmentFormat c_af;
+					c_af.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
+					c_af.usage_flags = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
+					RD::AttachmentFormat d_af;
+					d_af.format = RD::DATA_FORMAT_D32_SFLOAT;
+					d_af.usage_flags = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
+					atts.push_back(c_af);
+					atts.push_back(d_af);
+					const RD::FramebufferFormatID fb_fmt = rd->framebuffer_format_create(atts);
+
+					auto plan_one = [&](RID p_mat, bool &r_has_set2_b2, uint32_t &r_rej) -> Error {
+						r_has_set2_b2 = false;
+						r_rej = UINT32_MAX;
+						if (auto *sd = mats->material_get_shader_data(p_mat)) {
+							RendererRD::MaterialStorage::ShaderData::NativeInstance192ShaderFeatures feat;
+							if (sd->get_native_instance192_shader_features(feat) == OK) {
+								r_rej = feat.material_recipe_rejections;
+							}
+						}
+						Error we = sr->warm_native_material_instance192_shader(p_mat, RSE::PRIMITIVE_TRIANGLES, kAllowedTransparentAuxMask);
+						if (we != OK) {
+							return we;
+						}
+						RendererRD::NativeMaterialRecipeRoster roster;
+						Error pe = sr->plan_native_material_recipe(p_mat, p->mesh, 0, fb_fmt, roster, 256, kAllowedTransparentAuxMask);
+						if (pe == OK) {
+							r_has_set2_b2 = roster.has_binding(2u, 2u, RD::UNIFORM_TYPE_STORAGE_BUFFER);
+							(void)roster.release();
+						}
+						return pe;
+					};
+
+					bool b2_smoke = false, b2_refract = false, b2_icon = false, b2_unused = false;
+					uint32_t rej_smoke = 0, rej_refract = 0, rej_icon = 0, rej_inv = 0, rej_vtx = 0;
+					p->smoke_ok = (plan_one(p->soft_smoke, b2_smoke, rej_smoke) == OK) && ((rej_smoke & ~kAllowedTransparentAuxMask) == 0u);
+					p->refract_ok = (plan_one(p->refract, b2_refract, rej_refract) == OK) && ((rej_refract & ~kAllowedTransparentAuxMask) == 0u);
+					p->icon_ok = (plan_one(p->icon_disabled, b2_icon, rej_icon) == OK);
+					p->icon_gate_exact = ((rej_icon & 128u) == 128u) && ((rej_icon & 32u) == 0u) && ((rej_icon & ~kAllowedTransparentAuxMask) == 0u);
+					p->aux_set2_binding2_found = b2_smoke && b2_refract && b2_icon;
+					p->inverted_rejected = (plan_one(p->depth_inverted, b2_unused, rej_inv) == ERR_UNAVAILABLE) && ((rej_inv & 32u) == 32u);
+					p->vtx_rejected = (plan_one(p->vtx_aux, b2_unused, rej_vtx) == ERR_UNAVAILABLE) && ((rej_vtx & 1u) == 1u);
+				})).bind(uint64_t(uintptr_t(&rp))));
+				server->sync();
+
+				record_check("role9_soft_smoke_roster_ok", rp.smoke_ok);
+				record_check("role9_refract_roster_ok", rp.refract_ok);
+				record_check("role9_depth_test_disabled_icon_roster_ok", rp.icon_ok && rp.icon_gate_exact);
+				record_check("role9_set2_binding2_reflected_in_roster", rp.aux_set2_binding2_found);
+				record_check("role9_depth_test_inverted_rejected_32", rp.inverted_rejected);
+				record_check("role9_vertex_write_custom0_rejected_1", rp.vtx_rejected);
+			}
+
+			server->call_on_render_thread(callable_mp_static(+[]() {
+				if (RenderingDevice *rd = RenderingDevice::get_singleton()) {
+					for (uint32_t f = 0; f < 4; ++f) {
+						rd->_submit_transfer_workers();
+						rd->_wait_for_transfer_workers();
+						rd->swap_buffers(false);
+					}
+				}
+			}));
+			server->sync();
+			const auto post_roster_counts = singleton_counts();
+			record_check("zero_singleton_leaks_after_roster_probe",
+					post_roster_counts.records == baseline_counts.records &&
+							post_roster_counts.views == baseline_counts.views &&
+							post_roster_counts.devices == baseline_counts.devices &&
+							post_roster_counts.device_refs == baseline_counts.device_refs &&
+							post_roster_counts.attachments == baseline_counts.attachments &&
+							post_roster_counts.private_refs == baseline_counts.private_refs &&
+							post_roster_counts.external_refs == baseline_counts.external_refs);
+			record_check("post_roster_scene_draws_remained_zero", Engine::get_singleton()->get_frames_drawn() == 0);
+		}
 
 		out["pass"] = failures.is_empty();
 		out["check_count"] = checks.size();

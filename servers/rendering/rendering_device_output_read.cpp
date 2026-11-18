@@ -92,7 +92,8 @@ bool RenderingDevice::_production_output_raster_permitted(RID rid) {
 		if (!group) {
 			continue;
 		}
-		if (use->group == scope.groups[4] && rid != scope.storage_reads[0] && rid != scope.storage_reads[1] && rid != scope.storage_reads[2] && rid != scope.storage_reads[3]) {
+		if (use->group == scope.groups[4] && rid != scope.storage_reads[0] && rid != scope.storage_reads[1] &&
+				rid != scope.storage_reads[2] && rid != scope.storage_reads[3] && rid != scope.storage_reads[4]) {
 			return false;
 		}
 		// The exact original slot pin owns this group, including borrowed
@@ -290,6 +291,7 @@ Error RenderingDevice::_production_output_read_record(RendererRD::ExternalPacket
 			? slot.storage->resources[RendererRD::ExternalOutputStorage::INDEXED_VERTEX_HISTORY_VALIDITY].rid
 			: slot.storage->resources[RendererRD::ExternalOutputStorage::PREVIOUS_RECORDS].rid;
 	scope.storage_reads[3] = slot.storage->resources[RendererRD::ExternalOutputStorage::OUTPUT_META].rid;
+	scope.storage_reads[4] = slot.storage->resources[RendererRD::ExternalOutputStorage::INSTANCE_AUX_PARAMS].rid;
 	++request.capture_inflight;
 	struct ScopeReturn {
 		RenderingDevice &device;

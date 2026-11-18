@@ -30,6 +30,7 @@
 
 #include "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/render_scene_data_rd.h"
 #include "tests/test_macros.h"
 
 TEST_FORCE_LINK(test_mobile_native_pass_selection)
@@ -267,7 +268,8 @@ public:
 			bool p_has_capacity,
 			RD::FramebufferFormatID p_fb_format,
 			RID p_fb,
-			String &r_step) {
+			String &r_step,
+			bool p_check_motion_shader = false) {
 		using namespace RendererRD;
 		auto *mob = RenderForwardMobile::get_singleton();
 		auto *ps = ParticlesStorage::get_singleton();
@@ -292,6 +294,14 @@ public:
 		if (shader_var.is_null() || !mat_data->shader_data->is_valid()) {
 			r_step = "mobile_get_shader_variant";
 			return ERR_UNAVAILABLE;
+		}
+		if (p_check_motion_shader) {
+			mob->scene_shader.enable_multiview_shader_group();
+			const RID mv_var = mat_data->shader_data->get_shader_variant(SceneShaderForwardMobile::SHADER_VERSION_MOTION_VECTORS_MULTIVIEW, false, p_profile == 2, p_profile == 1);
+			if (mv_var.is_null() || !mat_data->shader_data->is_valid()) {
+				r_step = "mobile_get_motion_shader_variant";
+				return ERR_UNAVAILABLE;
+			}
 		}
 		err = mats->material_settle_native_uploads(p_material);
 		if (err != OK) {
@@ -326,6 +336,38 @@ public:
 		}
 		const RID base_set = mob->render_base_uniform_set;
 		const auto &samplers = mats->samplers_rd_get_default();
+		Vector<RD::Uniform> pass_uniforms;
+		(void)mob->_setup_render_pass_uniform_set(RenderForwardMobile::RENDER_LIST_OPAQUE, nullptr, false, RID(), samplers, false, 0u, &set_err, &pass_uniforms);
+		if (set_err != OK) {
+			r_step = "mobile_pass_uniform_sources";
+			return set_err;
+		}
+		{
+			static uint64_t s_uploaded_frame[2] = { UINT64_MAX, UINT64_MAX };
+			static RID s_uploaded_rid[2];
+			const uint64_t cur_frame = rd->get_frames_drawn();
+			Vector<uint8_t> fixed_scene, fixed_instance, fixed_impl, fixed_cluster, fixed_push;
+			if (RenderSceneDataRD::build_native_material_fixed_scene_data(fixed_scene) == OK &&
+					mob->build_native_material_fixed_pass_data(fixed_instance, fixed_impl, fixed_cluster, fixed_push) == OK) {
+				for (const RD::Uniform &u : pass_uniforms) {
+					if (u.get_id_count() == 1 && u.get_id(0).is_valid() && u.binding < 2) {
+						const RID buf_rid = u.get_id(0);
+						if (s_uploaded_frame[u.binding] == cur_frame && s_uploaded_rid[u.binding] == buf_rid) {
+							continue;
+						}
+						if (u.binding == 0 && !fixed_scene.is_empty()) {
+							(void)rd->buffer_update(buf_rid, 0, fixed_scene.size(), fixed_scene.ptr());
+							s_uploaded_frame[0] = cur_frame;
+							s_uploaded_rid[0] = buf_rid;
+						} else if (u.binding == 1 && !fixed_instance.is_empty()) {
+							(void)rd->buffer_update(buf_rid, 0, fixed_instance.size(), fixed_instance.ptr());
+							s_uploaded_frame[1] = cur_frame;
+							s_uploaded_rid[1] = buf_rid;
+						}
+					}
+				}
+			}
+		}
 		const RID pass_set = mob->_setup_render_pass_uniform_set(RenderForwardMobile::RENDER_LIST_OPAQUE, nullptr, false, RID(), samplers, false, 0u, &set_err, nullptr);
 		if (set_err != OK) {
 			r_step = "mobile_pass_uniform_set";
@@ -410,9 +452,10 @@ Error wave_g_mobile_draw_external(
 		bool p_has_capacity,
 		RD::FramebufferFormatID p_fb_format,
 		RID p_fb,
-		String &r_step) {
+		String &r_step,
+		bool p_check_motion_shader) {
 	return RendererSceneRenderImplementation::TestMobileNativePassSelection::wave_g_draw_external(
-			p_sel, p_render_data, p_material, p_profile, p_has_capacity, p_fb_format, p_fb, r_step);
+			p_sel, p_render_data, p_material, p_profile, p_has_capacity, p_fb_format, p_fb, r_step, p_check_motion_shader);
 }
 } // namespace TestProductionRequest
 

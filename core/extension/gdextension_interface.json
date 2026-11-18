@@ -9852,6 +9852,10 @@
                     "value": 8
                 },
                 {
+                    "name": "GDEXTENSION_OUTPUT_ROLE_AUX_PARAMS_V1",
+                    "value": 9
+                },
+                {
                     "name": "GDEXTENSION_OUTPUT_ACCESS_INVALID_V1",
                     "value": 0
                 },

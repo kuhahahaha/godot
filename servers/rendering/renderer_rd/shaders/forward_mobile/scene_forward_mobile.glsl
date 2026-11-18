@@ -57,11 +57,11 @@ layout(location = 4) in vec2 uv_attrib;
 layout(location = 5) in vec2 uv2_attrib;
 #endif // MODE_RENDER_MATERIAL
 
-#if defined(CUSTOM0_USED)
+#if defined(CUSTOM0_USED) && !defined(USE_INSTANCE192_OUTPUT)
 layout(location = 6) in vec4 custom0_attrib;
 #endif
 
-#if defined(CUSTOM1_USED)
+#if defined(CUSTOM1_USED) && !defined(USE_INSTANCE192_OUTPUT)
 layout(location = 7) in vec4 custom1_attrib;
 #endif
 
@@ -524,6 +524,21 @@ void vertex_shader(in vec3 vertex,
 
 #ifdef POINT_SIZE_USED
 	float point_size = 1.0;
+#endif
+
+#if defined(CUSTOM0_USED) || defined(CUSTOM1_USED)
+	vec4 read_custom0 = vec4(0.0);
+	vec4 read_custom1 = vec4(0.0);
+#ifdef USE_INSTANCE192_OUTPUT
+	instance192_read_aux(uint(gl_InstanceIndex), read_custom0, read_custom1);
+#else
+#ifdef CUSTOM0_USED
+	read_custom0 = custom0_attrib;
+#endif
+#ifdef CUSTOM1_USED
+	read_custom1 = custom1_attrib;
+#endif
+#endif
 #endif
 
 	{

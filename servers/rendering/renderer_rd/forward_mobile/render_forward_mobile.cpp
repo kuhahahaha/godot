@@ -4700,12 +4700,12 @@ Error RenderForwardMobile::build_native_material_fixed_pass_data(Vector<uint8_t>
 #endif
 }
 
-Error RenderForwardMobile::_plan_native_material_recipe(RID selected_material, RID selected_mesh, uint32_t selected_surface, RD::FramebufferFormatID actual_format, RendererRD::NativeMaterialRecipeRoster &plan, uint32_t limit) {
+Error RenderForwardMobile::_plan_native_material_recipe(RID selected_material, RID selected_mesh, uint32_t selected_surface, RD::FramebufferFormatID actual_format, RendererRD::NativeMaterialRecipeRoster &plan, uint32_t limit, uint32_t p_allowed_rejections) {
 	using namespace RendererRD;
 	auto *storage = MaterialStorage::get_singleton();
 	auto *meshes = MeshStorage::get_singleton();
 	if (!storage || !meshes || get_singleton() != this) { return ERR_UNCONFIGURED; }
-	Error error = plan._begin(*storage, *meshes, selected_material, selected_mesh, selected_surface, actual_format, limit);
+	Error error = plan._begin(*storage, *meshes, selected_material, selected_mesh, selected_surface, actual_format, limit, p_allowed_rejections);
 	if (error != OK) { return error; }
 	auto fail = [&](Error error) { const Error returned = plan.release(); return returned == OK ? error : returned; };
 	MaterialStorage::MaterialData *original = nullptr;
@@ -4713,10 +4713,10 @@ Error RenderForwardMobile::_plan_native_material_recipe(RID selected_material, R
 	if (error != OK) { return fail(error); }
 	if (!original || original->get_native_recipe_backend() != 1) { return fail(ERR_UNAVAILABLE); }
 	auto *material = static_cast<SceneShaderForwardMobile::MaterialData *>(original);
-	if (!material->shader_data) { return fail(ERR_UNAVAILABLE); }
+	if (!material->shader_data || material->shader_data->depth_test == SceneShaderForwardMobile::ShaderData::DEPTH_TEST_ENABLED_INVERTED) { return fail(ERR_UNAVAILABLE); }
 	ExternalPacketPipelineRequest request;
 	request.backend = ExternalPacketPipelineRequest::Backend::MOBILE;
-	request.pass = ExternalPacketPass::OPAQUE;
+	request.pass = (p_allowed_rejections != 0 && material->shader_data->uses_alpha_pass()) ? ExternalPacketPass::TRANSPARENT : ExternalPacketPass::OPAQUE;
 	request.framebuffer_format = actual_format;
 	request.version = SceneShaderForwardMobile::SHADER_VERSION_COLOR_PASS;
 	request.view_count = 1;
@@ -4770,6 +4770,7 @@ Error RenderForwardMobile::_plan_native_material_recipe(RID selected_material, R
 	if (fixed.current.resize(sizeof(instance)) != OK) { return fail(ERR_OUT_OF_MEMORY); }
 	memcpy(fixed.current.ptrw(), instance, sizeof(instance));
 	fixed.previous = fixed.current;
+	if (fixed.aux.resize_initialized(32) != OK) { return fail(ERR_OUT_OF_MEMORY); }
 	error = plan._finish(NativeMaterialRecipeRoster::Backend::MOBILE, pipeline.geometry, base, pass, fixed, limit);
 	return error == OK ? OK : fail(error);
 }
@@ -4827,7 +4828,7 @@ Error RenderForwardMobile::ensure_native_material_recipe_sources_ready() {
 	return OK;
 }
 
-Error RenderForwardMobile::warm_native_material_instance192_shader(RID p_material, RSE::PrimitiveType p_primitive) {
+Error RenderForwardMobile::warm_native_material_instance192_shader(RID p_material, RSE::PrimitiveType p_primitive, uint32_t p_allowed_rejections) {
 	auto *rd = RD::get_singleton();
 	auto *storage = RendererRD::MaterialStorage::get_singleton();
 	if (!rd || !rd->native_immutable_is_render_thread() || !storage || get_singleton() != this) {
@@ -4847,7 +4848,7 @@ Error RenderForwardMobile::warm_native_material_instance192_shader(RID p_materia
 	}
 	RendererRD::MaterialStorage::ShaderData::NativeInstance192ShaderFeatures features;
 	const Error classified = material->shader_data->get_native_instance192_shader_features(features);
-	if (classified != OK || !features.zero_displacement || features.material_recipe_rejections) {
+	if (classified != OK || !features.zero_displacement || (features.material_recipe_rejections & ~p_allowed_rejections) != 0 || material->shader_data->depth_test == SceneShaderForwardMobile::ShaderData::DEPTH_TEST_ENABLED_INVERTED) {
 		return classified == OK ? ERR_UNAVAILABLE : classified;
 	}
 	RID native_shader;
@@ -4869,8 +4870,8 @@ Error RenderForwardMobile::warm_native_material_instance192_shader(RID p_materia
 	return ready;
 }
 
-Error RenderForwardMobile::plan_native_material_recipe(RID p_material, RID p_mesh, uint32_t p_surface, RD::FramebufferFormatID p_actual_format, RendererRD::NativeMaterialRecipeRoster &r_plan, uint32_t p_limit) {
-	return _plan_native_material_recipe(p_material, p_mesh, p_surface, p_actual_format, r_plan, p_limit);
+Error RenderForwardMobile::plan_native_material_recipe(RID p_material, RID p_mesh, uint32_t p_surface, RD::FramebufferFormatID p_actual_format, RendererRD::NativeMaterialRecipeRoster &r_plan, uint32_t p_limit, uint32_t p_allowed_rejections) {
+	return _plan_native_material_recipe(p_material, p_mesh, p_surface, p_actual_format, r_plan, p_limit, p_allowed_rejections);
 }
 
 RendererRD::ParticlesMeshLightSortRD *RenderForwardMobile::get_particles_mesh_light_sort_rd() const {
