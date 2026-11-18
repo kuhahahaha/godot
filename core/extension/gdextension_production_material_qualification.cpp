@@ -73,6 +73,9 @@ static_assert(uint32_t(NativeRejection::MATERIAL_RECIPE_STENCIL) == GDEXTENSION_
 static_assert(uint32_t(NativeRejection::MATERIAL_RECIPE_WIREFRAME) == GDEXTENSION_MATERIAL_QUALIFICATION_SOURCE_GATE_WIREFRAME_V1);
 static_assert(uint32_t(NativeRejection::MATERIAL_RECIPE_CULL_SCOPE) == GDEXTENSION_MATERIAL_QUALIFICATION_SOURCE_GATE_CULL_SCOPE_V1);
 static_assert(GDEXTENSION_MATERIAL_QUALIFICATION_SOURCE_GATE_KNOWN_MASK_V1 == 0x00000fffu);
+static_assert(GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_SOURCE_GATE_ALLOWED_MASK_V1 == 0x0000019cu);
+static_assert(GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_RAW_WORDS_V1 == GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_RAW_WORDS_V1);
+static_assert(GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_RAW_BYTES_V1 == GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_RAW_BYTES_V1);
 
 namespace {
 
@@ -183,6 +186,76 @@ void mq_populate_fixed_oracle(GDExtensionMaterialQualificationFixedOracleV1 &r_o
 	std::memcpy(&recipe_bytes[0], vec_bytes, 96);
 	std::memcpy(&recipe_bytes[96], r_oracle.verifier.bytes, 32);
 	r_oracle.recipe = mq_sha256_domain("ange.mq.recipe_current_reset_f32_world_opaque.v1", recipe_bytes, sizeof(recipe_bytes));
+}
+
+constexpr uint32_t mq_allowed_rejections_for_recipe(uint32_t p_recipe) {
+	return p_recipe == GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_PARTICLE_SURFACE_V1
+			? uint32_t(GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_SOURCE_GATE_ALLOWED_MASK_V1)
+			: 0u;
+}
+
+void fill_particle_surface_oracle_descriptor(GDExtensionMaterialQualificationFixedOracleV1 &r_oracle) {
+	r_oracle = {};
+	r_oracle.abi = { 1, sizeof(r_oracle), 0 };
+	r_oracle.recipe_version = 1;
+	r_oracle.verifier_version = 1;
+	r_oracle.vector_count = 1;
+	r_oracle.obligation_count = 1;
+	r_oracle.raw_words = GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_RAW_WORDS_V1;
+	r_oracle.raw_bytes = GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_RAW_BYTES_V1;
+	r_oracle.metadata_bytes = sizeof(GDExtensionMaterialQualificationResultMetadataV1);
+	r_oracle.raw_word_offset = sizeof(GDExtensionMaterialQualificationResultMetadataV1);
+	r_oracle.clear_bits = 0u;
+	r_oracle.middle_bits = 0u;
+	r_oracle.width = GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_WIDTH_V1;
+	r_oracle.height = GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_HEIGHT_V1;
+	for (uint32_t row = 0; row < 32; ++row) {
+		if (row < 16) {
+			r_oracle.interior_mask[row] = (row >= 5 && row <= 10) ? 0x007ffe00u : 0x00000000u;
+			r_oracle.exterior_mask[row] = (row <= 3 || row >= 12) ? 0xffffffffu : 0xff0000ffu;
+		} else {
+			r_oracle.interior_mask[row] = 0u;
+			r_oracle.exterior_mask[row] = 0u;
+		}
+	}
+
+	const float fixture_quad_desc[18] = {
+		-0.5f, -0.5f, 0.0f,
+		-0.5f, 0.5f, 0.0f,
+		0.5f, 0.5f, 0.0f,
+		0.5f, -0.5f, 0.0f,
+		0.0f, 2.0f, 1.0f, 0.0f, 3.0f, 2.0f
+	};
+	const float fixed_camera_desc[8] = {
+		2.0f, 1.0f, 3.0f, 0.0f, 0.0f, 0.0f, 32.0f, 16.0f
+	};
+	float fixed_instance192[48] = {};
+	fixed_instance192[0] = fixed_instance192[5] = fixed_instance192[10] = 1.0f;
+	fixed_instance192[11] = -2.0f;
+	fixed_instance192[12] = fixed_instance192[17] = fixed_instance192[22] = 1.0f;
+	fixed_instance192[24] = fixed_instance192[29] = fixed_instance192[34] = 1.0f;
+	fixed_instance192[35] = 2.0f;
+	fixed_instance192[36] = fixed_instance192[37] = fixed_instance192[38] = fixed_instance192[39] = 1.0f;
+
+	r_oracle.fixture_geometry = mq_sha256_domain("ange.mq.fixture_geometry.v1", fixture_quad_desc, sizeof(fixture_quad_desc));
+	r_oracle.camera = mq_sha256_domain("ange.mq.fixed_camera.v1", fixed_camera_desc, sizeof(fixed_camera_desc));
+	r_oracle.instances = mq_sha256_domain("ange.mq.fixed_instance192.v1", fixed_instance192, sizeof(fixed_instance192));
+
+	uint32_t masks[64] = {};
+	std::memcpy(&masks[0], r_oracle.interior_mask, sizeof(r_oracle.interior_mask));
+	std::memcpy(&masks[32], r_oracle.exterior_mask, sizeof(r_oracle.exterior_mask));
+	r_oracle.verifier = mq_sha256_domain("godot.material_qualification.verifier.color_exterior_zero_finite_f16.v1", masks, sizeof(masks));
+
+	uint8_t vec_bytes[96] = {};
+	std::memcpy(&vec_bytes[0], r_oracle.fixture_geometry.bytes, 32);
+	std::memcpy(&vec_bytes[32], r_oracle.camera.bytes, 32);
+	std::memcpy(&vec_bytes[64], r_oracle.instances.bytes, 32);
+	r_oracle.vector_table = mq_sha256_domain("godot.material_qualification.vectors.single_static_quad_color_f16_32x16.v1", vec_bytes, sizeof(vec_bytes));
+
+	uint8_t recipe_bytes[128] = {};
+	std::memcpy(&recipe_bytes[0], vec_bytes, 96);
+	std::memcpy(&recipe_bytes[96], r_oracle.verifier.bytes, 32);
+	r_oracle.recipe = mq_sha256_domain("godot.material_qualification.recipe.current_reset_f32_world_particle_surface.v1", recipe_bytes, sizeof(recipe_bytes));
 }
 
 bool mq_budget_has_step(const GDExtensionProductionServiceBudgetV1 &p_budget, const ProductionServiceUsage &p_usage) {
@@ -438,7 +511,8 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_material_qualifica
 		}
 	}
 	if (prepare->candidate_mesh_present != 1 || prepare->candidate_mesh_rid == 0 || prepare->material_rid == 0 ||
-			prepare->recipe != GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_OPAQUE_V1) {
+			(prepare->recipe != GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_OPAQUE_V1 &&
+					prepare->recipe != GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_PARTICLE_SURFACE_V1)) {
 		return mq_result(ERR_INVALID_DATA, 3);
 	}
 	if (prepare->generation_mode == GDEXTENSION_MATERIAL_QUALIFICATION_READ_CURRENT_V1) {
@@ -510,7 +584,11 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_material_qualifica
 	mq->selection.surface_index = prepare->surface_index;
 	mq->selection.state = GDEXTENSION_MATERIAL_QUALIFICATION_PENDING_V1;
 
-	mq_populate_fixed_oracle(mq->oracle);
+	if (prepare->recipe == GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_PARTICLE_SURFACE_V1) {
+		fill_particle_surface_oracle_descriptor(mq->oracle);
+	} else {
+		mq_populate_fixed_oracle(mq->oracle);
+	}
 
 	mq->framebuffer_physical.bridge = r->attachment->serial;
 	production_serials.take(mq->framebuffer_physical.serial);
@@ -579,8 +657,9 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_material_recipe(GD
 		const Error sel_err = mq.selection.native_error != 0 ? Error(mq.selection.native_error) : ERR_UNAVAILABLE;
 		return mq_result(sel_err, mq.selection.reason ? mq.selection.reason : 8);
 	}
+	const uint32_t allowed_gate_mask = mq_allowed_rejections_for_recipe(mq.prepare.recipe);
 	if (mq.selection.source_gate_known != GDEXTENSION_MATERIAL_QUALIFICATION_SOURCE_GATE_KNOWN_MASK_V1 ||
-			mq.selection.source_gate_rejections != 0 ||
+			(mq.selection.source_gate_rejections & ~allowed_gate_mask) != 0 ||
 			(mq.selection.compiler_known & GDEXTENSION_MATERIAL_QUALIFICATION_ZERO_DISPLACEMENT_V1) == 0 ||
 			(mq.selection.compiler_values & GDEXTENSION_MATERIAL_QUALIFICATION_ZERO_DISPLACEMENT_V1) == 0 ||
 			mq.selection.candidate_geometry_profile != GDEXTENSION_MATERIAL_QUALIFICATION_GEOMETRY_STATIC_FINITE_SURFACE_V1) {
@@ -693,7 +772,8 @@ Error Registry::production_material_qualification_observe_locked(ProductionReque
 							? GDEXTENSION_MATERIAL_QUALIFICATION_GEOMETRY_STATIC_FINITE_SURFACE_V1
 							: GDEXTENSION_MATERIAL_QUALIFICATION_GEOMETRY_UNKNOWN_V1;
 
-					const Error warm_err = scene_render->warm_native_material_instance192_shader(mat_rid, mesh_obs.primitive);
+					const uint32_t allowed_gate_mask = mq_allowed_rejections_for_recipe(prep.recipe);
+					const Error warm_err = scene_render->warm_native_material_instance192_shader(mat_rid, mesh_obs.primitive, allowed_gate_mask);
 					if (warm_err == ERR_BUSY) {
 						step_err = ERR_BUSY;
 					} else {
@@ -713,7 +793,7 @@ Error Registry::production_material_qualification_observe_locked(ProductionReque
 							if (materials->material_get_native_preparation_data(mat_rid, shader_obs.material_generation, mat_data) == OK && mat_data) {
 								RID ready_shader, ready_set;
 								uint64_t mask = 0;
-								if (mat_data->get_native_recipe_shader_if_ready(ready_shader, mask, ready_set) == OK) {
+								if (mat_data->get_native_recipe_shader_if_ready(ready_shader, mask, ready_set, allowed_gate_mask) == OK) {
 									observed.candidate_input_mask = mask;
 									uint32_t pos_stride = 0;
 									observed.candidate_vertex_format = uint64_t(meshes->_mesh_surface_generate_vertex_format(mesh_obs.format, mask, false, false, false, pos_stride));
@@ -776,6 +856,9 @@ Error Registry::production_material_qualification_observe_locked(ProductionReque
 			const uint64_t candidate_raw_format = mq->candidate_surface_raw_format;
 			const uint64_t candidate_vf = mq->selection.candidate_vertex_format;
 			const RID selected_mat_rid = RID::from_uint64(mq->selection.material_rid);
+			const uint32_t prep_recipe = mq->prepare.recipe;
+			const bool is_particle_surface = prep_recipe == GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_PARTICLE_SURFACE_V1;
+			const uint32_t allowed_gate_mask = mq_allowed_rejections_for_recipe(prep_recipe);
 
 			++request.capture_inflight;
 			rd._thread_safe_.unlock();
@@ -865,31 +948,36 @@ Error Registry::production_material_qualification_observe_locked(ProductionReque
 				}
 			}
 
-			// 2. Create 32x32 single-sample R16G16B16A16_SFLOAT + D32_SFLOAT targets and framebuffer atomically.
+			// 2. Create single-sample R16G16B16A16_SFLOAT + D32_SFLOAT targets (32x32 for Recipe 1, 32x16 for Recipe 2) and framebuffer atomically.
 			RD::FramebufferFormatID fb_format = RD::INVALID_ID;
 			if (recipe_err == OK) {
 				if (mq->framebuffer_rid.is_null()) {
+					const uint32_t target_h = is_particle_surface ? GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_HEIGHT_V1 : GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_HEIGHT_V1;
 					RD::TextureFormat color_fmt;
 					color_fmt.format = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
 					color_fmt.width = 32;
-					color_fmt.height = 32;
+					color_fmt.height = target_h;
 					color_fmt.depth = 1;
 					color_fmt.array_layers = 1;
 					color_fmt.mipmaps = 1;
 					color_fmt.texture_type = RD::TEXTURE_TYPE_2D;
 					color_fmt.samples = RD::TEXTURE_SAMPLES_1;
-					color_fmt.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
+					color_fmt.usage_bits = is_particle_surface
+							? (RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT)
+							: (RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT);
 
 					RD::TextureFormat depth_fmt;
 					depth_fmt.format = RD::DATA_FORMAT_D32_SFLOAT;
 					depth_fmt.width = 32;
-					depth_fmt.height = 32;
+					depth_fmt.height = target_h;
 					depth_fmt.depth = 1;
 					depth_fmt.array_layers = 1;
 					depth_fmt.mipmaps = 1;
 					depth_fmt.texture_type = RD::TEXTURE_TYPE_2D;
 					depth_fmt.samples = RD::TEXTURE_SAMPLES_1;
-					depth_fmt.usage_bits = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
+					depth_fmt.usage_bits = is_particle_surface
+							? RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+							: (RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT);
 
 					recipe_err = rd._production_mq_create_targets_and_framebuffer(color_fmt, depth_fmt, RD::INVALID_ID, mq->framebuffer_physical, mq->color_tex, mq->depth_tex, mq->framebuffer_rid);
 				}
@@ -911,9 +999,10 @@ Error Registry::production_material_qualification_observe_locked(ProductionReque
 				}
 				if (recipe_err == OK) {
 					fb_format = rd.framebuffer_get_format(mq->framebuffer_rid);
+					const RID rb_tex = is_particle_surface ? mq->color_tex : mq->depth_tex;
 					MutexLock rd_lock(rd._thread_safe_);
-					if (const auto *tex_ptr = rd.texture_owner.get_or_null(mq->depth_tex)) {
-						mq->depth_backing_serial = tex_ptr->native_disposal_serial ? tex_ptr->native_disposal_serial : mq->depth_tex.get_id();
+					if (const auto *tex_ptr = rd.texture_owner.get_or_null(rb_tex)) {
+						mq->depth_backing_serial = tex_ptr->native_disposal_serial ? tex_ptr->native_disposal_serial : rb_tex.get_id();
 						mq->depth_allocation_generation = tex_ptr->driver_id.id ? tex_ptr->driver_id.id : 1;
 					}
 				}
@@ -921,7 +1010,7 @@ Error Registry::production_material_qualification_observe_locked(ProductionReque
 
 			// 3. Plan native material recipe via active backend (Mobile / Forward+).
 			if (recipe_err == OK && !mq->roster.is_active()) {
-				recipe_err = scene_render->plan_native_material_recipe(selected_mat_rid, mq->fixture_mesh_rid, 0, fb_format, mq->roster, 256);
+				recipe_err = scene_render->plan_native_material_recipe(selected_mat_rid, mq->fixture_mesh_rid, 0, fb_format, mq->roster, 256, allowed_gate_mask);
 			}
 
 			// 4. Derive vertex/index arrays from retained fixture surface and verify exact candidate VF match.
@@ -1305,9 +1394,10 @@ GDExtensionDeviceSessionResultV1 Registry::production_record_material_qualificat
 	rd->production_mq_permitted_framebuffer = mq->framebuffer_rid;
 	rd->production_mq_permitted_readback_ssbo = mq->depth_readback_ssbo;
 
+	const bool is_particle_surface = mq->prepare.recipe == GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_PARTICLE_SURFACE_V1;
 	unlock_mutex_for_call();
 
-	Color clear_colors[1] = { Color(0.0f, 0.0f, 0.0f, 1.0f) };
+	Color clear_colors[1] = { is_particle_surface ? Color(0.0f, 0.0f, 0.0f, 0.0f) : Color(0.0f, 0.0f, 0.0f, 1.0f) };
 	const auto begun = rd->_draw_list_begin_recorded(
 			mq->framebuffer_rid,
 			RenderingDevice::DRAW_CLEAR_COLOR_0 | RenderingDevice::DRAW_CLEAR_DEPTH,
@@ -1333,43 +1423,49 @@ GDExtensionDeviceSessionResultV1 Registry::production_record_material_qualificat
 		if (rd->draw_list.active || rd->compute_list.active || rd->raytracing_list.active) {
 			return ERR_BUSY;
 		}
-		RenderingDevice::Texture *tex = rd->texture_owner.owns(mq->depth_tex) ? rd->texture_owner.get_or_null(mq->depth_tex) : nullptr;
+		const RID src_tex_rid = is_particle_surface ? mq->color_tex : mq->depth_tex;
+		const uint32_t expected_w = is_particle_surface ? GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_WIDTH_V1 : GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_WIDTH_V1;
+		const uint32_t expected_h = is_particle_surface ? GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_HEIGHT_V1 : GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_HEIGHT_V1;
+		const uint32_t expected_row_bytes = is_particle_surface ? GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_ROW_BYTES_V1 : GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_ROW_BYTES_V1;
+		const uint32_t raw_bytes = is_particle_surface ? GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_RAW_BYTES_V1 : GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_RAW_BYTES_V1;
+		const RenderingDevice::DataFormat expected_fmt = is_particle_surface ? RenderingDevice::DATA_FORMAT_R16G16B16A16_SFLOAT : RenderingDevice::DATA_FORMAT_D32_SFLOAT;
+		RenderingDevice::Texture *tex = rd->texture_owner.owns(src_tex_rid) ? rd->texture_owner.get_or_null(src_tex_rid) : nullptr;
 		RenderingDevice::Buffer *staging_ref = rd->storage_buffer_owner.owns(mq->depth_readback_ssbo) ? rd->storage_buffer_owner.get_or_null(mq->depth_readback_ssbo) : nullptr;
-		if (!tex || tex->width != GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_WIDTH_V1 || tex->height != GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_HEIGHT_V1 || tex->format != RenderingDevice::DATA_FORMAT_D32_SFLOAT || !(tex->usage_flags & RenderingDevice::TEXTURE_USAGE_CAN_COPY_FROM_BIT) || !tex->draw_tracker) {
+		if (!tex || tex->width != expected_w || tex->height != expected_h || tex->format != expected_fmt || !(tex->usage_flags & RenderingDevice::TEXTURE_USAGE_CAN_COPY_FROM_BIT) || !tex->draw_tracker) {
 			return ERR_INVALID_PARAMETER;
 		}
 		RDD::TextureSubresource subres;
-		subres.aspect = RDD::TEXTURE_ASPECT_DEPTH;
+		subres.aspect = is_particle_surface ? RDD::TEXTURE_ASPECT_COLOR : RDD::TEXTURE_ASPECT_DEPTH;
 		subres.layer = 0;
 		subres.mipmap = 0;
 		RDD::TextureCopyableLayout mip_layout = {};
 		rd->driver->texture_get_copyable_layout(tex->driver_id, subres, &mip_layout);
-		if (mip_layout.row_pitch != GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_ROW_BYTES_V1 || mip_layout.size < GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_RAW_BYTES_V1) {
+		if (mip_layout.row_pitch != expected_row_bytes || mip_layout.size < raw_bytes) {
 			return ERR_UNAVAILABLE;
 		}
 		const uint32_t align = MAX(32u, uint32_t(rd->driver->api_trait_get(RDD::API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT)));
 		uint32_t staging_offset = 0;
 		uint32_t staging_amount = 0;
 		RenderingDevice::StagingRequiredAction staging_action = RenderingDevice::STAGING_REQUIRED_ACTION_NONE;
-		const Error alloc_err = rd->_staging_buffer_allocate(rd->download_staging_buffers, GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_RAW_BYTES_V1, align, staging_offset, staging_amount, staging_action, false);
+		const Error alloc_err = rd->_staging_buffer_allocate(rd->download_staging_buffers, raw_bytes, align, staging_offset, staging_amount, staging_action, false);
 		if (alloc_err != OK) {
 			mq->readback_state.error = alloc_err;
 			return alloc_err;
 		}
-		if (staging_action != RenderingDevice::STAGING_REQUIRED_ACTION_NONE || staging_amount != GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_RAW_BYTES_V1) {
+		if (staging_action != RenderingDevice::STAGING_REQUIRED_ACTION_NONE || staging_amount != raw_bytes) {
 			return ERR_BUSY;
 		}
-		if (rd->_texture_make_mutable(tex, mq->depth_tex)) {
+		if (rd->_texture_make_mutable(tex, src_tex_rid)) {
 			mq->readback_capture.became_mutable = true;
 			rd->draw_graph.add_synchronization();
 		}
 		const RDD::BufferID dst_staging = rd->download_staging_buffers.blocks[rd->download_staging_buffers.current].driver_id;
 		RDD::BufferTextureCopyRegion tex_region;
 		tex_region.buffer_offset = staging_offset;
-		tex_region.row_pitch = GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_ROW_BYTES_V1;
+		tex_region.row_pitch = expected_row_bytes;
 		tex_region.texture_subresource = subres;
 		tex_region.texture_offset = Vector3i(0, 0, 0);
-		tex_region.texture_region_size = Vector3i(GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_WIDTH_V1, GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_HEIGHT_V1, 1);
+		tex_region.texture_region_size = Vector3i(int32_t(expected_w), int32_t(expected_h), 1);
 		const RDG::RecordHandle dl_handle = rd->draw_graph.add_texture_get_data(tex->driver_id, tex->draw_tracker, dst_staging, VectorView<RDD::BufferTextureCopyRegion>(&tex_region, 1));
 		if (!dl_handle.is_valid()) {
 			return ERR_BUG;
@@ -1377,26 +1473,26 @@ GDExtensionDeviceSessionResultV1 Registry::production_record_material_qualificat
 		const uint64_t staging_serial = (staging_ref && staging_ref->backing_serial) ? staging_ref->backing_serial : mq->depth_backing_serial;
 		mq->readback_state.backing_serial = staging_serial;
 		mq->readback_state.offset = staging_offset;
-		mq->readback_state.size = GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_RAW_BYTES_V1;
-		mq->readback_state.owned_bytes = GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_RAW_BYTES_V1;
-		mq->readback_state.issued = GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_RAW_BYTES_V1;
+		mq->readback_state.size = raw_bytes;
+		mq->readback_state.owned_bytes = raw_bytes;
+		mq->readback_state.issued = raw_bytes;
 
 		RenderingDevice::BufferGetDataRequest dl_req;
 		dl_req.buffer = mq->depth_readback_ssbo;
 		dl_req.frame_local_index = rd->frames[rd->frame].download_buffer_copy_regions.size();
 		dl_req.frame_local_count = 1;
 		dl_req.result_offset = 0;
-		dl_req.size = GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_RAW_BYTES_V1;
+		dl_req.size = raw_bytes;
 		dl_req.final_segment = true;
 		dl_req.capture = &mq->readback_capture;
 
-		const RDD::BufferCopyRegion buf_region{ 0, staging_offset, GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_RAW_BYTES_V1 };
+		const RDD::BufferCopyRegion buf_region{ 0, staging_offset, raw_bytes };
 		rd->frames[rd->frame].download_buffer_staging_buffers.push_back(dst_staging);
 		rd->frames[rd->frame].download_buffer_copy_regions.push_back(buf_region);
-		rd->download_staging_buffers.blocks.write[rd->download_staging_buffers.current].fill_amount = staging_offset + GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_RAW_BYTES_V1;
+		rd->download_staging_buffers.blocks.write[rd->download_staging_buffers.current].fill_amount = staging_offset + raw_bytes;
 		rd->frames[rd->frame].download_buffer_get_data_requests.push_back(dl_req);
 
-		mq->readback_capture.segment(mq->readback_capture.count++) = { dl_handle, 0, GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_RAW_BYTES_V1 };
+		mq->readback_capture.segment(mq->readback_capture.count++) = { dl_handle, 0, raw_bytes };
 		return OK;
 	};
 
@@ -1550,30 +1646,32 @@ GDExtensionDeviceSessionResultV1 Registry::production_read_material_qualificatio
 	final_meta.native_error = int32_t(OK);
 	final_meta.reason = 0;
 
-	final_meta.depth.attachment_rid = mq->depth_tex.get_id();
+	const bool is_particle_surface = mq->prepare.recipe == GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_PARTICLE_SURFACE_V1;
+	const uint32_t raw_bytes = is_particle_surface ? GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_RAW_BYTES_V1 : GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_RAW_BYTES_V1;
+	final_meta.depth.attachment_rid = (is_particle_surface ? mq->color_tex : mq->depth_tex).get_id();
 	final_meta.depth.backing_registry_instance = instance;
 	final_meta.depth.backing_serial = mq->depth_backing_serial;
 	final_meta.depth.allocation_generation = mq->depth_allocation_generation;
 	final_meta.depth.readback_request = r->serial;
 	final_meta.depth.staging_backing_serial = mq->readback_state.backing_serial;
 	final_meta.depth.source_offset = 0;
-	final_meta.depth.source_bytes = GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_RAW_BYTES_V1;
+	final_meta.depth.source_bytes = raw_bytes;
 	final_meta.depth.staging_offset = mq->readback_state.offset;
 	final_meta.depth.staging_bytes = mq->readback_state.size;
 	final_meta.depth.layer = 0;
 	final_meta.depth.mip = 0;
 	final_meta.depth.samples = 1;
-	final_meta.depth.format = GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_D32_SFLOAT_LE_V1;
-	final_meta.depth.width = GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_WIDTH_V1;
-	final_meta.depth.height = GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_HEIGHT_V1;
-	final_meta.depth.row_bytes = GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_ROW_BYTES_V1;
+	final_meta.depth.format = is_particle_surface ? GDEXTENSION_MATERIAL_QUALIFICATION_COLOR_R16G16B16A16_SFLOAT_LE_V1 : GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_D32_SFLOAT_LE_V1;
+	final_meta.depth.width = is_particle_surface ? GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_WIDTH_V1 : GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_WIDTH_V1;
+	final_meta.depth.height = is_particle_surface ? GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_HEIGHT_V1 : GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_HEIGHT_V1;
+	final_meta.depth.row_bytes = is_particle_surface ? GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_ROW_BYTES_V1 : GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_ROW_BYTES_V1;
 	final_meta.depth.raw_offset = sizeof(GDExtensionMaterialQualificationResultMetadataV1);
-	final_meta.depth.raw_bytes = GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_RAW_BYTES_V1;
+	final_meta.depth.raw_bytes = raw_bytes;
 	final_meta.depth.issued_bytes = uint32_t(mq->readback_state.issued);
 	final_meta.depth.completed_bytes = uint32_t(mq->readback_state.completed);
 	final_meta.depth.owned_bytes = uint32_t(mq->readback_state.owned_bytes);
 	final_meta.depth.delivered = mq->readback_state.delivered ? 1u : 0u;
-	final_meta.depth.source_returned = (mq->readback_state.returned == GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_RAW_BYTES_V1) ? 1u : 0u;
+	final_meta.depth.source_returned = (mq->readback_state.returned == raw_bytes) ? 1u : 0u;
 	final_meta.depth.reserved0 = 0;
 	final_meta.depth.reserved1 = 0;
 

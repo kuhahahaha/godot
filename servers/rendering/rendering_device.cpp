@@ -12482,6 +12482,14 @@ Error RenderingDevice::_native_disposal_uniform_set_create(const VectorView<Unif
 				uniform.get_id(0) == RendererRD::ParticlesStorage::get_singleton()->get_external_aux_zero_sentinel_buffer()) {
 			continue;
 		}
+		if (buffer && !buffer->qualification_return && buffer->native_disposal.cell.is_null() && buffer->draw_tracker &&
+				buffer->transfer_worker_index < 0 && !native_immutable_resource_is_retiring(uniform.get_id(0)) &&
+				p_owner && p_sources && uniform_index < p_sources->size() &&
+				(*p_sources)[uniform_index].buffer == uniform.get_id(0) && !(*p_sources)[uniform_index].owned_group &&
+				(*p_sources)[uniform_index].resource_slot == UINT32_MAX && (*p_sources)[uniform_index].use_index == UINT32_MAX &&
+				(*p_sources)[uniform_index].owned_ordinal == UINT32_MAX) {
+			continue;
+		}
 		if (!buffer || buffer->qualification_return || !buffer->draw_tracker || buffer->transfer_worker_index >= 0 || buffer->native_disposal.cell.is_null()) {
 			return ERR_UNAVAILABLE;
 		}

@@ -3499,12 +3499,15 @@ Error NativeMaterialRecipeRoster::_begin(MaterialStorage &storage, MeshStorage &
 	if (error == OK) {
 		const uint32_t depth = framebuffer.passes[0].depth_attachment;
 		const int32_t color = framebuffer.passes[0].color_attachments[0];
-		if (depth >= uint32_t(framebuffer.attachments.size()) || color < 0 || color >= framebuffer.attachments.size() || uint32_t(color) == depth || framebuffer.attachments[depth].format != RD::DATA_FORMAT_D32_SFLOAT || !(framebuffer.attachments[depth].usage_flags & RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT) || material.get_layout().fragment_output_mask != 1) { error = ERR_UNAVAILABLE; }
+		const bool copy_ok = p_allowed_rejections != 0
+				? ((framebuffer.attachments[color].usage_flags & RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT) != 0)
+				: ((framebuffer.attachments[depth].usage_flags & RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT) != 0);
+		if (depth >= uint32_t(framebuffer.attachments.size()) || color < 0 || color >= framebuffer.attachments.size() || uint32_t(color) == depth || framebuffer.attachments[depth].format != RD::DATA_FORMAT_D32_SFLOAT || !copy_ok || material.get_layout().fragment_output_mask != 1) { error = ERR_UNAVAILABLE; }
 		for (const auto &attachment : framebuffer.attachments) {
 			if (attachment.samples != RD::TEXTURE_SAMPLES_1 || attachment.usage_flags == RD::AttachmentFormat::UNUSED_ATTACHMENT || (attachment.usage_flags & RD::TEXTURE_USAGE_VRS_ATTACHMENT_BIT)) { error = ERR_UNAVAILABLE; }
 		}
 	}
-	if (error == OK) { framebuffer_format = format; return OK; }
+	if (error == OK) { target_height = p_allowed_rejections ? 16u : 32u; framebuffer_format = format; return OK; }
 	const Error returned = release();
 	return returned == OK ? error : returned;
 }
@@ -3695,7 +3698,8 @@ Error NativeMaterialRecipeRoster::_finish(Backend backend, const MeshStorage::Na
 		if (error != OK) { return error; }
 		auto &description = owned.write[owned.size() - 1].texture;
 		description.format = attachment.format;
-		description.width = description.height = 32;
+		description.width = 32;
+		description.height = target_height;
 		description.depth = description.array_layers = description.mipmaps = 1;
 		description.texture_type = RD::TEXTURE_TYPE_2D;
 		description.samples = attachment.samples;
@@ -3749,7 +3753,7 @@ Error NativeMaterialRecipeRoster::release() {
 	symbols.clear(); owned.clear(); borrowed.clear(); bindings.clear(); roots.clear(); closure.clear();
 	geometry = MeshStorage::NativeVertexArrayPlan(); framebuffer = RD::NativeFramebufferLayout(); framebuffer_format = 0;
 	primitive = RD::RENDER_PRIMITIVE_MAX; raster = RD::PipelineRasterizationState(); multisample = RD::PipelineMultisampleState(); depth_stencil = RD::PipelineDepthStencilState(); blend = RD::PipelineColorBlendState(); specialization.clear(); push.clear();
-	edge_count = 0; roster_complete = false; material_owner = nullptr; mesh_owner = nullptr; device = nullptr;
+	edge_count = 0; target_height = 32; roster_complete = false; material_owner = nullptr; mesh_owner = nullptr; device = nullptr;
 	return OK;
 }
 

@@ -40,7 +40,7 @@ class RenderSceneDataRD : public RenderSceneData {
 	GDCLASS(RenderSceneDataRD, RenderSceneData);
 
 public:
-	static Error build_native_material_fixed_scene_data(Vector<uint8_t> &r_bytes);
+	static Error build_native_material_fixed_scene_data(Vector<uint8_t> &r_bytes, uint32_t p_width = 32, uint32_t p_height = 32);
 	bool calculate_motion_vectors = false;
 
 	Transform3D cam_transform;

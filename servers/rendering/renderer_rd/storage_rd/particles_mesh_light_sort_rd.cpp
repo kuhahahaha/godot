@@ -733,7 +733,7 @@ Error ParticlesMeshLightSortRD::compact_particle_lights_deterministic(
 				!Math::is_finite(c.volumetric_scattering) || c.volumetric_scattering < 0.0f ||
 				c.reserved0 != 0u || (c.flags & ~ParticleLightRecord64::FLAG_KNOWN_MASK) != 0u ||
 				(c.flags & ParticleLightRecord64::FLAG_ACTIVE) == 0u ||
-				c.screen_importance_q16 == 0) {
+				c.id_acquire_tag == 0u || c.screen_importance_q16 == 0u || c.screen_importance_q16 > 65535u) {
 			continue;
 		}
 		valid.push_back(c);
@@ -876,7 +876,6 @@ Error ParticlesMeshLightSortRD::upsert_external_role8_packet(
 		size_t p_role8_bytes,
 		uint32_t p_capacity,
 		uint64_t p_present_seq) {
-	(void)p_present_seq;
 	if (p_owner_key == 0 || p_capacity > MAX_PARTICLE_LIGHTS || p_meta32 == nullptr || p_meta_bytes != 32u) {
 		return ERR_INVALID_PARAMETER;
 	}
@@ -893,7 +892,11 @@ Error ParticlesMeshLightSortRD::upsert_external_role8_packet(
 	const uint32_t fault_bits = meta_words[3];
 	const uint32_t meta_cap = meta_words[4];
 	const uint32_t schema_id = meta_words[5];
-	if (schema_id != uint32_t(ExternalOutputConfig::PARTICLE_LIGHT_64) || meta_cap != p_capacity || active_count > p_capacity) {
+	const uint32_t expected_seq_lo = uint32_t(p_present_seq & 0xFFFFFFFFull);
+	const uint32_t expected_seq_hi = uint32_t(p_present_seq >> 32u);
+	if (meta_words[1] != 0u || meta_words[2] != 0u ||
+			meta_words[6] != expected_seq_lo || meta_words[7] != expected_seq_hi ||
+			schema_id != uint32_t(ExternalOutputConfig::PARTICLE_LIGHT_64) || meta_cap != p_capacity || active_count > p_capacity) {
 		return ERR_INVALID_DATA;
 	}
 	LocalVector<ParticleLightRecord64> compacted;
@@ -936,13 +939,16 @@ layout(set = 0, binding = 2, std430) buffer CandidateStaging {
 layout(push_constant, std430) uniform PushParams {
 	uint slot_capacity;
 	uint max_staged;
-	uint pad0;
-	uint pad1;
+	uint seq_lo;
+	uint seq_hi;
 } push_params;
 
 shared uint s_active_count;
+shared uint s_prev_count;
+shared uint s_slot_valid;
 shared uint s_prefix[256];
-shared uint s_base;
+shared uint s_winner_src[256];
+shared uvec4 s_keys[512];
 
 bool is_finite_u32(uint u) {
 	return (u & 0x7F800000u) != 0x7F800000u;
@@ -957,18 +963,38 @@ float clean_f32(uint u) {
 	return uintBitsToFloat(flush_subnormal_u32(u));
 }
 
+bool beats(uvec4 b, uvec4 a) {
+	if (b.x != a.x) {
+		return b.x > a.x;
+	}
+	if (b.y != a.y) {
+		return b.y < a.y;
+	}
+	if (b.z != a.z) {
+		return b.z < a.z;
+	}
+	return b.w < a.w;
+}
+
 void main() {
 	uint tid = gl_LocalInvocationID.x;
 	if (tid == 0u) {
 		uint active_count = slot_meta.words[0];
+		uint res1 = slot_meta.words[1];
+		uint res2 = slot_meta.words[2];
 		uint fault_bits = slot_meta.words[3];
 		uint meta_cap = slot_meta.words[4];
 		uint schema_id = slot_meta.words[5];
-		if (fault_bits == 0u && schema_id == 4u && meta_cap == push_params.slot_capacity && active_count <= push_params.slot_capacity) {
+		uint meta_seq_lo = slot_meta.words[6];
+		uint meta_seq_hi = slot_meta.words[7];
+		if (res1 == 0u && res2 == 0u && fault_bits == 0u && schema_id == 4u &&
+				meta_cap == push_params.slot_capacity && active_count <= push_params.slot_capacity &&
+				meta_seq_lo == push_params.seq_lo && meta_seq_hi == push_params.seq_hi) {
 			s_active_count = active_count;
 		} else {
 			s_active_count = 0u;
 		}
+		s_prev_count = min(staging.words[0], 256u);
 	}
 	barrier();
 
@@ -985,6 +1011,7 @@ void main() {
 		float cg = clean_f32(w[5]);
 		float cb = clean_f32(w[6]);
 		float atten = clean_f32(w[7]);
+		uint acquire_tag = w[9];
 		uint flags = w[10];
 		uint importance = w[11];
 		float spec_s = clean_f32(w[12]);
@@ -1002,8 +1029,8 @@ void main() {
 				is_finite_u32(w[12]) && spec_s >= 0.0 &&
 				is_finite_u32(w[13]) && diff_s >= 0.0 &&
 				is_finite_u32(w[14]) && fog_s >= 0.0 &&
-				res0 == 0u && (flags & ~7u) == 0u && (flags & 4u) != 0u &&
-				importance != 0u) {
+				res0 == 0u && (flags & ~3u) == 0u && (flags & 1u) != 0u &&
+				acquire_tag != 0u && importance > 0u && importance <= 65535u) {
 			w[0] = flush_subnormal_u32(w[0]);
 			w[1] = flush_subnormal_u32(w[1]);
 			w[2] = flush_subnormal_u32(w[2]);
@@ -1029,18 +1056,87 @@ void main() {
 			s_prefix[i] = sum;
 			sum += v;
 		}
-		s_base = (sum > 0u) ? atomicAdd(staging.words[0], sum) : 0u;
+		s_slot_valid = sum;
 	}
 	barrier();
 
+	if (s_slot_valid == 0u) {
+		return;
+	}
+
 	if (valid) {
-		uint dst = s_base + s_prefix[tid];
+		uint dst = s_prev_count + s_prefix[tid];
 		if (dst < push_params.max_staged) {
 			uint dst_base = 4u + dst * 16u;
 			for (uint i = 0u; i < 16u; ++i) {
 				staging.words[dst_base + i] = w[i];
 			}
 		}
+	}
+	memoryBarrierBuffer();
+	barrier();
+
+	uint total = min(s_prev_count + s_slot_valid, push_params.max_staged);
+	uint new_count = min(total, 256u);
+
+	if (tid < total) {
+		uint b0 = 4u + tid * 16u;
+		s_keys[tid] = uvec4(staging.words[b0 + 11u], staging.words[b0 + 9u], staging.words[b0 + 8u], tid);
+	} else {
+		s_keys[tid] = uvec4(0u, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu);
+	}
+	uint idx1 = 256u + tid;
+	if (idx1 < total) {
+		uint b1 = 4u + idx1 * 16u;
+		s_keys[idx1] = uvec4(staging.words[b1 + 11u], staging.words[b1 + 9u], staging.words[b1 + 8u], idx1);
+	} else {
+		s_keys[idx1] = uvec4(0u, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu);
+	}
+	barrier();
+
+	if (tid < total) {
+		uvec4 k0 = s_keys[tid];
+		uint r0 = 0u;
+		for (uint j = 0u; j < total; ++j) {
+			if (beats(s_keys[j], k0)) {
+				r0++;
+			}
+		}
+		if (r0 < new_count) {
+			s_winner_src[r0] = tid;
+		}
+	}
+	if (idx1 < total) {
+		uvec4 k1 = s_keys[idx1];
+		uint r1 = 0u;
+		for (uint j = 0u; j < total; ++j) {
+			if (beats(s_keys[j], k1)) {
+				r1++;
+			}
+		}
+		if (r1 < new_count) {
+			s_winner_src[r1] = idx1;
+		}
+	}
+	barrier();
+
+	uint win_w[16];
+	if (tid < new_count) {
+		uint win_base = 4u + s_winner_src[tid] * 16u;
+		for (uint i = 0u; i < 16u; ++i) {
+			win_w[i] = staging.words[win_base + i];
+		}
+	}
+	barrier();
+
+	if (tid < new_count) {
+		uint out_base = 4u + tid * 16u;
+		for (uint i = 0u; i < 16u; ++i) {
+			staging.words[out_base + i] = win_w[i];
+		}
+	}
+	if (tid == 0u) {
+		staging.words[0] = new_count;
 	}
 }
 )GLSL";
@@ -1581,24 +1677,36 @@ uint32_t ParticlesMeshLightSortRD::dispatch_registered_external_lights_gpu(
 		p_rd->compute_list_bind_compute_pipeline(cl, light_harvest_pipeline);
 		for (uint32_t i = 0; i < matched_slots.size(); ++i) {
 			const ExternalLightSlotRegistration &reg = matched_slots[i];
-			RD::Uniform u[3];
-			u[0].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-			u[0].binding = 0;
-			u[0].append_id(reg.meta_rid);
-			u[1].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-			u[1].binding = 1;
-			u[1].append_id(reg.records_rid);
-			u[2].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-			u[2].binding = 2;
-			u[2].append_id(light_candidate_staging_buffer);
-			const RID uset = _acquire_cached_uniform_set(p_rd, light_harvest_shader, u, 3u);
+			RID uset;
+			if (reg.harvest_uniform_set.is_valid()) {
+				if (p_rd->uniform_set_is_valid(reg.harvest_uniform_set)) {
+					uset = reg.harvest_uniform_set;
+				}
+			} else {
+				RD::Uniform u[3];
+				u[0].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+				u[0].binding = 0;
+				u[0].append_id(reg.meta_rid);
+				u[1].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+				u[1].binding = 1;
+				u[1].append_id(reg.records_rid);
+				u[2].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+				u[2].binding = 2;
+				u[2].append_id(light_candidate_staging_buffer);
+				uset = _acquire_cached_uniform_set(p_rd, light_harvest_shader, u, 3u);
+			}
 			if (uset.is_null()) {
 				continue;
 			}
 			if (harvested_slots > 0u) {
 				p_rd->compute_list_add_barrier(cl);
 			}
-			const uint32_t push[4] = { reg.capacity, MAX_STAGED_LIGHT_CANDIDATES, 0u, 0u };
+			const uint32_t push[4] = {
+				reg.capacity,
+				MAX_STAGED_LIGHT_CANDIDATES,
+				uint32_t(reg.present_seq & 0xFFFFFFFFull),
+				uint32_t(reg.present_seq >> 32u),
+			};
 			p_rd->compute_list_bind_uniform_set(cl, uset, 0);
 			p_rd->compute_list_set_push_constant(cl, push, sizeof(push));
 			p_rd->compute_list_dispatch(cl, 1u, 1u, 1u);
@@ -1658,7 +1766,7 @@ uint32_t ParticlesMeshLightSortRD::dispatch_registered_external_lights_gpu(
 	emit_params.misc_floats[3] = overfit;
 	emit_params.counts[0] = p_base_omni_index;
 	emit_params.counts[1] = reserved_lights;
-	emit_params.counts[2] = MAX_STAGED_LIGHT_CANDIDATES;
+	emit_params.counts[2] = MAX_PARTICLE_LIGHTS;
 	emit_params.counts[3] = (active_cluster_context.active && active_cluster_context.camera_orthogonal) ? 1u : 0u;
 
 	p_rd->buffer_update(light_emit_params_ubo, 0, sizeof(emit_params), &emit_params);

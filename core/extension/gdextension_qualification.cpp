@@ -719,8 +719,17 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_create(GDEx
 		if (bridge->unit_origins.used_count() + bridge->raster_origins.used_count() >= QualificationBridge::UNIT_HISTORY_CAPACITY || slot == QualificationBridge::UNIT_CHILD_CAPACITY || private_limit < refs_needed || records[bridge->library].private_refs > private_limit - refs_needed || !qualification_serial_capacity(4) || !rd->_qualification_free_event_available(false) || !rd->next_qualification_object_serial || rd->next_qualification_object_serial == UINT64_MAX) {
 			return result(ERR_PARAMETER_RANGE_ERROR, 19);
 		}
-		if (rd->_recording_error() != OK) {
-			return result(rd->_recording_error(), 16);
+		const Error issue_error = rd->frame_issue_error.load();
+		if (issue_error != OK) {
+			return result(issue_error, 16);
+		}
+		const Error wait_error = rd->frame_wait_error.load();
+		if (wait_error != OK) {
+			return result(wait_error, 16);
+		}
+		const bool graph_closed = !rd->frames.is_empty() && uint32_t(rd->frame) < rd->frames.size() && rd->frames[rd->frame].qualification_graph_closed;
+		if (graph_closed || rd->frame_wait_draining.load() || rd->qualification_frame_advance_pending.load() || rd->native_disposal_active.load()) {
+			return result(ERR_BUSY, GDEXTENSION_DEVICE_SESSION_REASON_NATIVE_UNIT_CREATE_DEFERRED_V1);
 		}
 		uint32_t history_index = UINT32_MAX;
 		Error history_error = bridge->unit_origins.prepare(history_index);

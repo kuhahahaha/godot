@@ -2628,6 +2628,24 @@ Error RenderingDevice::_production_output_owned_uniform_set_create_locked(GDExte
 			if (!retained) {
 				return ERR_UNAUTHORIZED;
 			}
+		} else if (!source.owned_group && source.resource_slot == UINT32_MAX && source.use_index == UINT32_MAX && source.owned_ordinal == UINT32_MAX &&
+				!buffer->qualification_return && buffer->native_disposal.cell.is_null()) {
+			if (!buffer->draw_tracker || buffer->transfer_worker_index >= 0 || native_immutable_resource_is_retiring(source.buffer) ||
+					source.byte_offset != 0 || source.byte_size != buffer->size) {
+				return ERR_UNAUTHORIZED;
+			}
+			bool valid_storage_binding = false;
+			for (const ShaderUniform &binding : source_shader->uniform_sets[index]) {
+				if (binding.binding == uniform.binding) {
+					if (binding.type != UNIFORM_TYPE_STORAGE_BUFFER) {
+						return ERR_UNAUTHORIZED;
+					}
+					valid_storage_binding = true;
+				}
+			}
+			if (!valid_storage_binding) {
+				return ERR_UNAUTHORIZED;
+			}
 		} else {
 			// An original READ use cannot authorize a writable shader binding.
 			// Reflection comes from the actual selected native shader, not the
@@ -3246,7 +3264,7 @@ Error RenderingDevice::_production_mq_create_targets_and_framebuffer(const Textu
 	if (r_color_tex.is_valid() || r_depth_tex.is_valid() || r_framebuffer.is_valid() || r_fb_physical.rid || r_fb_physical.free_event || r_fb_physical.enqueued || r_fb_physical.use_closed.load()) {
 		return ERR_INVALID_PARAMETER;
 	}
-	if (p_color_fmt.width != 32 || p_color_fmt.height != 32 || p_depth_fmt.width != 32 || p_depth_fmt.height != 32 || p_depth_fmt.format != DATA_FORMAT_D32_SFLOAT) {
+	if (p_color_fmt.width != 32 || (p_color_fmt.height != 32 && p_color_fmt.height != 16) || p_depth_fmt.width != 32 || p_depth_fmt.height != p_color_fmt.height || p_depth_fmt.format != DATA_FORMAT_D32_SFLOAT) {
 		return ERR_INVALID_PARAMETER;
 	}
 	if (!_qualification_reserve_free_event(&r_fb_physical)) {

@@ -3961,7 +3961,7 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 		spare += cell.request == request && cell.output_role == ProductionUseCell::OutputRole::UNUSED && !cell.output_consumer && !cell.dependency.physical && !cell.output_pin_serial && !cell.disposal_group_serial;
 	}
 	const uint64_t borrower_headroom = reserve_pipelines ? uint64_t(owner.view_capacity) + owner.surface_capacity + owner.read_capacity : 0;
-	const uint32_t guard_members = !is_light64 && action.output_plan_prepared && owned_resource_count ? (owner.config.capacity ? 3u : 2u) : 0u;
+	const uint32_t guard_members = action.output_plan_prepared && owned_resource_count ? (is_light64 ? (owner.config.capacity ? 1u : 0u) : (owner.config.capacity ? 3u : 2u)) : 0u;
 	if (guard_members && action.output_plan.guard_owned_resource_limit < guard_members) {
 		out->status = output_status(ERR_PARAMETER_RANGE_ERROR, "output_guard_owned_capacity");
 		return;
@@ -4092,6 +4092,53 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 				error = slot.storage->allocate_instance192_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity, surfaces, allocate_previous, allocate_aux);
 			} else {
 				error = slot.storage->allocate_indexed144_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity, motion_required, surfaces, generated_geometry);
+			}
+			relock_mutex_after_call();
+		}
+		if (error == OK && is_light64 && guard_members) {
+			unlock_mutex_for_call();
+			RendererRD::ParticlesMeshLightSortRD *light_sort = storage->get_mesh_light_sort_rd();
+			error = light_sort ? light_sort->ensure_light_gpu_bridge(rd) : ERR_UNAVAILABLE;
+			if (error == OK) {
+				const RID harvest_shader = light_sort->get_light_harvest_shader();
+				const RID staging_buf = light_sort->get_light_candidate_staging_buffer();
+				const auto &meta_res = slot.storage->resources[Storage::OUTPUT_META];
+				const auto &recs_res = slot.storage->resources[Storage::CURRENT_RECORDS];
+				const uint64_t staging_bytes = 16ull + uint64_t(RendererRD::ParticlesMeshLightSortRD::MAX_STAGED_LIGHT_CANDIDATES) * sizeof(RendererRD::ParticleLightRecord64);
+				RD::Uniform harvest_uniforms[3];
+				harvest_uniforms[0].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+				harvest_uniforms[0].binding = 0;
+				harvest_uniforms[0].append_id(meta_res.rid);
+				harvest_uniforms[1].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+				harvest_uniforms[1].binding = 1;
+				harvest_uniforms[1].append_id(recs_res.rid);
+				harvest_uniforms[2].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+				harvest_uniforms[2].binding = 2;
+				harvest_uniforms[2].append_id(staging_buf);
+
+				RD::ProductionOutputUniformSource harvest_sources[3];
+				harvest_sources[0].buffer = meta_res.rid;
+				harvest_sources[0].owned_group = slot.owned_group;
+				harvest_sources[0].owned_ordinal = 1u;
+				harvest_sources[0].byte_size = meta_res.bytes;
+				harvest_sources[1].buffer = recs_res.rid;
+				harvest_sources[1].owned_group = slot.owned_group;
+				harvest_sources[1].owned_ordinal = 0u;
+				harvest_sources[1].byte_size = recs_res.bytes;
+				harvest_sources[2].buffer = staging_buf;
+				harvest_sources[2].byte_size = staging_bytes;
+
+				error = rd->_production_output_owned_uniform_set_create(
+						context,
+						slot.original_pin,
+						slot.guard_owned_group,
+						0u,
+						VectorView<RD::Uniform>(harvest_uniforms, 3u),
+						harvest_shader,
+						0u,
+						slot.guard_uniform_sets[0],
+						slot.guard_uniform_witnesses[0],
+						VectorView<RD::ProductionOutputUniformSource>(harvest_sources, 3u));
 			}
 			relock_mutex_after_call();
 		}
@@ -4627,7 +4674,7 @@ void Registry::production_finalize_output(ProductionPhysicalContextRef context, 
 	const uint32_t guard_graphs_used = acquire.output_guard_entered ? request->graph_count - acquire.output_guard_graph_begin : 0;
 	const uint32_t guard_remaining = guard_graphs_used <= plan.guard_graph_limit ? plan.guard_graph_limit - guard_graphs_used : 0;
 	const uint64_t remaining_dispatches = acquire.output_guard_dispatch_cursor <= dispatches ? dispatches - acquire.output_guard_dispatch_cursor : dispatches;
-	const uint32_t min_guard_owned = is_light64 ? 0u : (owner.config.capacity ? 3u : 2u);
+	const uint32_t min_guard_owned = is_light64 ? (owner.config.capacity ? 1u : 0u) : (owner.config.capacity ? 3u : 2u);
 	const uint32_t expected_upload_bytes = is_light64 ? 32u : slot.guard_proof_bytes;
 
 	const Error schedule = production_schedule_locked(*request, *rd, false);
@@ -5087,10 +5134,29 @@ void Registry::production_output_seal(ProductionPhysicalContextRef context, GDEx
 					return false;
 				}
 				const auto &live_slot = p_owner->slots[p_slot];
-				return !live_slot.publication_closed && !live_slot.pass_uses_closed && live_slot.lease_serial == p_lease &&
-						live_slot.storage != nullptr &&
-						(live_slot.state == RendererRD::ExternalOutputOwner::LeaseState::ADOPTED ||
-								live_slot.state == RendererRD::ExternalOutputOwner::LeaseState::SEALED_RECORDED);
+				if (live_slot.publication_closed || live_slot.pass_uses_closed || live_slot.lease_serial != p_lease ||
+						live_slot.storage == nullptr ||
+						(live_slot.state != RendererRD::ExternalOutputOwner::LeaseState::ADOPTED &&
+								live_slot.state != RendererRD::ExternalOutputOwner::LeaseState::SEALED_RECORDED)) {
+					return false;
+				}
+				if (live_slot.scene_cull_bound) {
+					RendererSceneCull *scene = static_cast<RendererSceneCull *>(RSG::scene);
+					RendererSceneCull::NativeParticleSceneFacts actual;
+					if (!scene || scene->instance_get_committed_particle_scene_facts(live_slot.scene_cull_instance, live_slot.scene_cull_particles, actual) != OK) {
+						return false;
+					}
+					if (actual.scenario != live_slot.scene_cull_scenario) {
+						return false;
+					}
+					const RendererViewport::Viewport *vp = (RSG::viewport && live_slot.scene_cull_viewport.is_valid())
+							? RSG::viewport->viewport_owner.get_or_null(live_slot.scene_cull_viewport)
+							: nullptr;
+					if (!vp || vp->scenario != live_slot.scene_cull_scenario) {
+						return false;
+					}
+				}
+				return true;
 			};
 			reg.generation = owner.generation;
 			reg.slot_index = slot_index;
@@ -5100,6 +5166,7 @@ void Registry::production_output_seal(ProductionPhysicalContextRef context, GDEx
 			reg.world_bounds = slot.scene_cull_bound ? slot.scene_cull_world : owner.config.bounds;
 			reg.records_rid = slot.storage ? slot.storage->resources[Storage::CURRENT_RECORDS].rid : RID();
 			reg.meta_rid = slot.storage ? slot.storage->resources[Storage::OUTPUT_META].rid : RID();
+			reg.harvest_uniform_set = slot.guard_uniform_sets[0];
 			reg.capacity = owner.config.capacity;
 			reg.present_seq = slot.request.common.present_seq;
 			light_sort->register_sealed_external_light_slot(reg);

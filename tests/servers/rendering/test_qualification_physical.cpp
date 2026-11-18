@@ -644,6 +644,33 @@ public:
 				origin.physical_unit = unit;
 				REQUIRE(CryptoCore::sha256(bytes.ptr(), bytes.size(), origin.container_digest) == OK);
 				GDExtensionNativeUnitBackingV1 backing = {};
+				if (mode == 0 && !record_slot && !unit) {
+					const auto serial_before_defer = registry->qualification_serials.next;
+					device.qualification_frame_advance_pending = true;
+					const auto deferred = registry->qualification_native_unit_create(ref, &origin, bytes.ptr(), bytes.size(), &backing);
+					CHECK(deferred.native_error == ERR_BUSY);
+					CHECK(deferred.reason == GDEXTENSION_DEVICE_SESSION_REASON_NATIVE_UNIT_CREATE_DEFERRED_V1);
+					CHECK(backing.unit.handle_serial == 0);
+					CHECK(bridge->unit_origins.used_count() == 0);
+					CHECK(bridge->children == 0);
+					CHECK(record.private_refs == 1);
+					CHECK(registry->qualification_serials.next == serial_before_defer);
+					device.qualification_frame_advance_pending = false;
+
+					device.frame_issue_error = FAILED;
+					const auto issue_fail = registry->qualification_native_unit_create(ref, &origin, bytes.ptr(), bytes.size(), &backing);
+					CHECK(issue_fail.native_error == FAILED);
+					CHECK(issue_fail.reason == GDEXTENSION_DEVICE_SESSION_REASON_NOT_ADMITTED_V1);
+					CHECK(bridge->unit_origins.used_count() == 0);
+					device.frame_issue_error = OK;
+
+					device.frame_wait_error = FAILED;
+					const auto wait_fail = registry->qualification_native_unit_create(ref, &origin, bytes.ptr(), bytes.size(), &backing);
+					CHECK(wait_fail.native_error == FAILED);
+					CHECK(wait_fail.reason == GDEXTENSION_DEVICE_SESSION_REASON_NOT_ADMITTED_V1);
+					CHECK(bridge->unit_origins.used_count() == 0);
+					device.frame_wait_error = OK;
+				}
 				if (mode == 3 && !record_slot && !unit) {
 					const auto failed = registry->qualification_native_unit_create(ref, &origin, bytes.ptr(), bytes.size(), &backing);
 					CHECK(failed.native_error == FAILED);

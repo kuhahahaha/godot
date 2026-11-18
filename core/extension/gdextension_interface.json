@@ -5870,6 +5870,10 @@
                         "StorageCreate only: ERR_BUSY after the exact original-origin scan found no existing child, before this call allocated a child, serial or cleanup credit or entered native allocation. Backing and expected/actual remain zero.",
                         "Does not certify future admission, absence of later concurrent calls, GPU completion, original account refund or permission to create after close. Existing creating prefixes, bridge-level refusal and non-Busy errors retain their existing reasons."
                     ]
+                },
+                {
+                    "name": "GDEXTENSION_DEVICE_SESSION_REASON_NATIVE_UNIT_CREATE_DEFERRED_V1",
+                    "value": 21
                 }
             ]
         },
@@ -13040,6 +13044,10 @@
                     "value": 1
                 },
                 {
+                    "name": "GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_PARTICLE_SURFACE_V1",
+                    "value": 2
+                },
+                {
                     "name": "GDEXTENSION_MATERIAL_QUALIFICATION_PENDING_V1",
                     "value": 1
                 },
@@ -13158,6 +13166,34 @@
                 {
                     "name": "GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_D32_SFLOAT_LE_V1",
                     "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_MATERIAL_QUALIFICATION_COLOR_R16G16B16A16_SFLOAT_LE_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_WIDTH_V1",
+                    "value": 32
+                },
+                {
+                    "name": "GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_HEIGHT_V1",
+                    "value": 16
+                },
+                {
+                    "name": "GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_ROW_BYTES_V1",
+                    "value": 256
+                },
+                {
+                    "name": "GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_RAW_WORDS_V1",
+                    "value": 1024
+                },
+                {
+                    "name": "GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_RAW_BYTES_V1",
+                    "value": 4096
+                },
+                {
+                    "name": "GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_SOURCE_GATE_ALLOWED_MASK_V1",
+                    "value": 412
                 },
                 {
                     "name": "GDEXTENSION_MATERIAL_QUALIFICATION_MAX_FACTS_V1",

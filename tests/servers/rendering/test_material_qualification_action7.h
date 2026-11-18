@@ -189,6 +189,14 @@ static void run_material_qualification_action7_cpu() {
 	CHECK(GDEXTENSION_MATERIAL_QUALIFICATION_READ_CURRENT_V1 == 1);
 	CHECK(GDEXTENSION_MATERIAL_QUALIFICATION_EXACT_V1 == 2);
 	CHECK(GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_OPAQUE_V1 == 1);
+	CHECK(GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_PARTICLE_SURFACE_V1 == 2);
+	CHECK(GDEXTENSION_MATERIAL_QUALIFICATION_COLOR_R16G16B16A16_SFLOAT_LE_V1 == 2);
+	CHECK(GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_WIDTH_V1 == 32);
+	CHECK(GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_HEIGHT_V1 == 16);
+	CHECK(GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_ROW_BYTES_V1 == 256);
+	CHECK(GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_RAW_WORDS_V1 == 1024);
+	CHECK(GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_RAW_BYTES_V1 == 4096);
+	CHECK(GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_SOURCE_GATE_ALLOWED_MASK_V1 == 0x19cu);
 	CHECK(GDEXTENSION_MATERIAL_QUALIFICATION_PENDING_V1 == 1);
 	CHECK(GDEXTENSION_MATERIAL_QUALIFICATION_COMPLETE_V1 == 2);
 	CHECK(GDEXTENSION_MATERIAL_QUALIFICATION_FAILED_V1 == 3);
@@ -367,7 +375,11 @@ static void run_material_qualification_action7_cpu() {
 			CHECK(ports.prepare_mq(req, &bad, payload, 16).native_error == ERR_INVALID_DATA);
 
 			bad = valid_prep;
-			bad.recipe = 2;
+			bad.recipe = 0;
+			CHECK(ports.prepare_mq(req, &bad, payload, 16).native_error == ERR_INVALID_DATA);
+
+			bad = valid_prep;
+			bad.recipe = 3;
 			CHECK(ports.prepare_mq(req, &bad, payload, 16).native_error == ERR_INVALID_DATA);
 
 			bad = valid_prep;
@@ -715,6 +727,40 @@ struct LiveMetalMaterialQualificationHarness {
 		const bool exact = (interior_checked == 196 && exterior_checked == 768 && mismatches == 0);
 		record_check(p_label + ".depth_oracle_exact_bits", exact);
 		return exact;
+	}
+
+	bool verify_particle_color_oracle_words(const String &p_label, const GDExtensionMaterialQualificationFixedOracleV1 &p_oracle, const uint32_t *p_raw_words) {
+		const uint16_t *half_words = reinterpret_cast<const uint16_t *>(p_raw_words);
+		bool all_finite = true;
+		for (uint32_t i = 0; i < 32u * 16u * 4u; ++i) {
+			if ((half_words[i] & 0x7c00u) == 0x7c00u) {
+				all_finite = false;
+				break;
+			}
+		}
+		bool exterior_zero = true;
+		bool interior_nonzero = false;
+		for (uint32_t row = 0; row < 16u; ++row) {
+			const uint32_t ext_mask = p_oracle.exterior_mask[row];
+			const uint32_t int_mask = p_oracle.interior_mask[row];
+			for (uint32_t col = 0; col < 32u; ++col) {
+				const uint32_t px_base = (row * 32u + col) * 4u;
+				if ((ext_mask >> col) & 1u) {
+					if (half_words[px_base + 0] != 0u || half_words[px_base + 1] != 0u ||
+							half_words[px_base + 2] != 0u || half_words[px_base + 3] != 0u) {
+						exterior_zero = false;
+					}
+				} else if ((int_mask >> col) & 1u) {
+					if (half_words[px_base + 0] != 0u || half_words[px_base + 1] != 0u ||
+							half_words[px_base + 2] != 0u || half_words[px_base + 3] != 0u) {
+						interior_nonzero = true;
+					}
+				}
+			}
+		}
+		const bool ok = all_finite && exterior_zero && interior_nonzero;
+		record_check(p_label + ".particle_color_oracle_valid", ok);
+		return ok;
 	}
 
 	Error reserve_action7_request(uint64_t p_nonce, uint32_t p_payload_bytes, GDExtensionProductionRequestRefV1 &r_req) {
@@ -1284,6 +1330,90 @@ struct LiveMetalMaterialQualificationHarness {
 				mat_depth.instantiate();
 				mat_depth->set_shader(sh_depth);
 				run_source_gate_rejection("gate_shader_depth_write", 2005, mat_depth->get_rid(), mesh_rid, 1u << 5);
+
+				// 3f. Spatial shader with depth_test_inverted -> DEPTH_WRITE (1u << 5) so Recipe 2 also rejects it!
+				Ref<Shader> sh_inv_depth;
+				sh_inv_depth.instantiate();
+				sh_inv_depth->set_code("shader_type spatial;\nrender_mode depth_test_inverted;\nvoid fragment() { ALBEDO = vec3(1.0); }\n");
+				Ref<ShaderMaterial> mat_inv_depth;
+				mat_inv_depth.instantiate();
+				mat_inv_depth->set_shader(sh_inv_depth);
+				run_source_gate_rejection("gate_shader_depth_test_inverted", 2006, mat_inv_depth->get_rid(), mesh_rid, 1u << 5);
+
+				// 3g. Recipe 2 (PARTICLE_SURFACE_V1 = 2) positive qualification with ALPHA + DISCARD + TIME + DEPTH_MODE!
+				{
+					Ref<Shader> sh_part;
+					sh_part.instantiate();
+					sh_part->set_code("shader_type spatial;\nrender_mode unshaded, blend_add, depth_draw_never, cull_disabled;\nvoid fragment() { if (UV.x < -1.0) { discard; } ALBEDO = vec3(0.5, 0.25, 0.75) + 0.0 * TIME; ALPHA = 0.8; }\n");
+					Ref<ShaderMaterial> mat_part;
+					mat_part.instantiate();
+					mat_part->set_shader(sh_part);
+					GDExtensionProductionRequestRefV1 p_req = {};
+					if (reserve_action7_request(2007, 16, p_req) == OK) {
+						const uint8_t payload[16] = { 'p', 'a', 'r', 't', 's', 'u', 'r', 'f', 'm', 'e', 't', 'a', 'l', 'm', 'q', '2' };
+						auto prep = make_valid_mq_prepare(0, mat_part->get_rid().get_id(), mesh_rid.get_id(), GDEXTENSION_MATERIAL_QUALIFICATION_READ_CURRENT_V1, 0, 16);
+						prep.recipe = GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_PARTICLE_SURFACE_V1;
+						record_check("recipe2_particle_surface.prepare", ports.prepare_mq(p_req, &prep, payload, 16).native_error == OK);
+						GDExtensionMaterialQualificationSelectionFactsV1 sel = {};
+						for (uint32_t turn = 0; turn < 128; ++turn) {
+							GDExtensionProductionObserveResultV3 obs = {};
+							pump_single_observe(p_req, obs);
+							if (ports.read_selection(p_req, 0, &sel).native_error == OK && sel.state != GDEXTENSION_MATERIAL_QUALIFICATION_PENDING_V1) {
+								break;
+							}
+						}
+						record_check("recipe2_particle_surface.selection_ok",
+								sel.state == GDEXTENSION_MATERIAL_QUALIFICATION_COMPLETE_V1 &&
+										sel.source_gate_rejections != 0 &&
+										(sel.source_gate_rejections & ~uint32_t(GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_SOURCE_GATE_ALLOWED_MASK_V1)) == 0);
+						GDExtensionMaterialQualificationFixedOracleV1 p_oracle = {};
+						ports.prepare_recipe(p_req, 0, &p_oracle);
+						bool p_ready = false;
+						for (uint32_t turn = 0; turn < 128; ++turn) {
+							GDExtensionProductionObserveResultV3 obs = {};
+							pump_single_observe(p_req, obs);
+							if (ports.prepare_recipe(p_req, 0, &p_oracle).native_error == OK) {
+								p_ready = true;
+								break;
+							}
+						}
+						record_check("recipe2_particle_surface.recipe_ready",
+								p_ready && p_oracle.width == 32 && p_oracle.height == 16 && p_oracle.raw_bytes == 4096);
+						if (p_ready) {
+							active_record_req = p_req;
+							record_call_result = { ERR_UNCONFIGURED, 0, 0, 0 };
+							uint64_t ctrl = 0;
+							record_check("recipe2_particle_surface.schedule", ports.record_schedule(p_req, &ctrl) == OK);
+							server->sync();
+							GDExtensionProductionRecordReportV2 rec = {};
+							record_check("recipe2_particle_surface.consume", ports.record_consume(p_req, ctrl, &rec).native_error == OK && record_call_result.native_error == OK);
+							if (rec.flags & GDEXTENSION_PRODUCTION_RECORD_HAS_SEGMENT_V1) {
+								GDExtensionDeviceExit::CallbackScope owner_entry(enrollment.reference);
+								ports.ack_segment(p_req, rec.segment.segment, rec.segment.segment_revision);
+							}
+							GDExtensionMaterialQualificationResultMetadataV1 p_meta = {};
+							uint32_t p_words[1024] = {};
+							bool p_done = false;
+							for (uint32_t turn = 0; turn < 256; ++turn) {
+								GDExtensionProductionObserveResultV3 obs = {};
+								pump_single_observe(p_req, obs);
+								if (ports.read_mq(p_req, 0, &p_meta, 1000, p_words, 1024).native_error == OK) {
+									p_done = true;
+									break;
+								}
+							}
+							record_check("recipe2_particle_surface.read_ok",
+									p_done && p_meta.depth.width == 32 && p_meta.depth.height == 16 &&
+											p_meta.depth.row_bytes == 256 &&
+											p_meta.depth.format == GDEXTENSION_MATERIAL_QUALIFICATION_COLOR_R16G16B16A16_SFLOAT_LE_V1 &&
+											p_meta.depth.raw_bytes == 4096);
+							if (p_done) {
+								verify_particle_color_oracle_words("recipe2_particle_surface", p_oracle, p_words);
+							}
+						}
+						cancel_and_release_no_draw("recipe2_particle_surface", p_req);
+					}
+				}
 			}
 
 			// Scenario 5: Cancel & paid RELEASE with no following draw at all 4 lifecycle stages.

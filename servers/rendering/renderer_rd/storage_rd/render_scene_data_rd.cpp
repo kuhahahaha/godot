@@ -332,10 +332,13 @@ RID RenderSceneDataRD::get_uniform_buffer() const {
 	return uniform_buffer;
 }
 
-Error RenderSceneDataRD::build_native_material_fixed_scene_data(Vector<uint8_t> &r_bytes) {
+Error RenderSceneDataRD::build_native_material_fixed_scene_data(Vector<uint8_t> &r_bytes, uint32_t p_width, uint32_t p_height) {
 #ifdef REAL_T_IS_DOUBLE
 	return ERR_UNAVAILABLE; // Instance192 original shader explicitly refuses this path.
 #else
+	if (!p_width || !p_height) {
+		return ERR_INVALID_PARAMETER;
+	}
 	UBODATA data{};
 	Projection camera;
 	camera.set_orthogonal(-1.0, 1.0, -1.0, 1.0, 1.0, 3.0);
@@ -352,8 +355,10 @@ Error RenderSceneDataRD::build_native_material_fixed_scene_data(Vector<uint8_t> 
 	RendererRD::MaterialStorage::store_camera(projection.inverse(), ubo.inv_projection_matrix_view[0]);
 	RendererRD::MaterialStorage::store_transform(identity, ubo.main_cam_inv_view_matrix);
 	RendererRD::MaterialStorage::store_transform_transposed_3x4(identity, ubo.radiance_inverse_xform);
-	ubo.viewport_size[0] = ubo.viewport_size[1] = 32.0f;
-	ubo.screen_pixel_size[0] = ubo.screen_pixel_size[1] = 1.0f / 32.0f;
+	ubo.viewport_size[0] = float(p_width);
+	ubo.viewport_size[1] = float(p_height);
+	ubo.screen_pixel_size[0] = 1.0f / float(p_width);
+	ubo.screen_pixel_size[1] = 1.0f / float(p_height);
 	ubo.z_near = 1.0f;
 	ubo.z_far = 3.0f;
 	ubo.camera_visible_layers = 1;

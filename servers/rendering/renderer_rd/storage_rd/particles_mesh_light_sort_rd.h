@@ -154,6 +154,7 @@ class ParticlesMeshLightSortRD {
 public:
 	static constexpr uint32_t MAX_VIEWS = 8u;
 	static constexpr uint32_t MAX_PARTICLE_LIGHTS = 256u;
+	static constexpr uint32_t MAX_STAGED_LIGHT_CANDIDATES = 512u;
 	static constexpr uint32_t MAX_SUBUV_AXIS = 64u;
 	static constexpr uint32_t MAX_SUBUV_FRAMES = 4096u;
 
@@ -190,8 +191,9 @@ public:
 		AABB world_bounds;
 		RID records_rid;
 		RID meta_rid;
+		RID harvest_uniform_set;
 		uint32_t capacity = 0;
-		uint64_t present_seq = 0;
+		uint64_t present_seq = 1u;
 	};
 
 	struct ReservedGpuLightBounds {
@@ -201,7 +203,6 @@ public:
 	};
 
 private:
-	static constexpr uint32_t MAX_STAGED_LIGHT_CANDIDATES = 2048u;
 	static constexpr uint32_t LIGHT_DATA_WORD_STRIDE = 56u; // sizeof(LightStorage::LightData) == 224B
 	static constexpr uint32_t CLUSTER_ELEMENT_WORD_STRIDE = 20u; // sizeof(ClusterBuilderRD::RenderElementData) == 80B
 	static constexpr uint32_t UNIFORM_SET_CACHE_CAPACITY = 32u;
@@ -395,6 +396,9 @@ public:
 			uint32_t p_dst_element_offset,
 			uint32_t p_count);
 	void clear_cluster_builder_frame(const ClusterBuilderRD *p_builder);
+	Error ensure_light_gpu_bridge(RenderingDevice *p_rd) { return _ensure_light_gpu_bridge(p_rd); }
+	RID get_light_harvest_shader() const { return light_harvest_shader; }
+	RID get_light_candidate_staging_buffer() const { return light_candidate_staging_buffer; }
 	void release_light_gpu_bridge(RenderingDevice *p_rd) { _release_light_gpu_bridge(p_rd); }
 	void clear_active_particle_lights();
 	void get_active_particle_lights(LocalVector<ParticleLightRecord64> &r_out) const;

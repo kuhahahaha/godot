@@ -1312,11 +1312,13 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 
 	// Zero-CPU-readback GPU consumption of sealed PARTICLE_LIGHT_64 (role 7 + role 8) slots:
 	if (particle_light_sort && omni_light_buffer.is_valid() && omni_light_count < max_lights) {
+		const RendererViewport::Viewport *src_vp = (RSG::viewport && p_render_data->source_viewport.is_valid()) ? RSG::viewport->viewport_owner.get_or_null(p_render_data->source_viewport) : nullptr;
+		const RID src_scenario = src_vp ? src_vp->scenario : RID();
 		LocalVector<ParticlesMeshLightSortRD::ReservedGpuLightBounds> gpu_bounds;
 		const uint32_t gpu_reserved = particle_light_sort->dispatch_registered_external_lights_gpu(
 				RD::get_singleton(),
 				p_render_data->source_viewport,
-				RID(),
+				src_scenario,
 				p_render_data->reflection_probe.is_valid(),
 				inverse_transform,
 				particle_exposure_norm,

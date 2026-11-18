@@ -378,6 +378,105 @@ TEST_CASE("[particle_mesh_subuv_light] Deterministic top-K particle light compac
 		lane.unregister_external_light_slot(0x9001u, 7u, 1u);
 		CHECK(lane.dispatch_registered_external_lights_gpu(&rd, vp_world_a, scen_world_a, false, Transform3D(), 1.0f, omni_buf, 1u, 8u, mob_bounds) == 0u);
 
+		// Strict meta reserved/present_seq & record acquire_tag/q16 validation + 9-owner (>2048 candidates) streaming global Top-256 merge on Metal:
+		{
+			// 1. Malformed acquire_tag == 0, q16 > 65535, and meta sequence mismatch are rejected on GPU:
+			RendererRD::ParticleLightRecord64 bad_recs[3] = {};
+			bad_recs[0] = gpu_recs[0];
+			bad_recs[0].id_acquire_tag = 0u; // must be rejected
+			bad_recs[1] = gpu_recs[0];
+			bad_recs[1].screen_importance_q16 = 65536u; // > 65535 -> must be rejected
+			bad_recs[2] = gpu_recs[0];
+			bad_recs[2].position_world[0] = 9.0f;
+			bad_recs[2].id_index = 77u;
+			bad_recs[2].id_acquire_tag = 3u;
+			bad_recs[2].screen_importance_q16 = 65535u; // valid
+
+			const uint32_t meta_seq42[8] = { 3u, 0u, 0u, 0u, 4u, uint32_t(RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64), 42u, 7u };
+			rd.buffer_update(meta_rid, 0, 32, meta_seq42);
+			rd.buffer_update(recs_rid, 0, sizeof(bad_recs), bad_recs);
+
+			Lane::ExternalLightSlotRegistration seq_reg = reg;
+			seq_reg.owner_key = 0x9010u;
+			seq_reg.present_seq = (uint64_t(7u) << 32u) | 41u; // wrong sequence -> 0 candidates admitted
+			lane.register_sealed_external_light_slot(seq_reg);
+			REQUIRE(lane.dispatch_registered_external_lights_gpu(&rd, vp_world_a, scen_world_a, false, Transform3D(), 1.0f, omni_buf, 0u, 8u, mob_bounds) == 4u);
+			const Vector<uint8_t> seq_bad_rb = rd.buffer_get_data(omni_buf);
+			CHECK(reinterpret_cast<const uint32_t *>(seq_bad_rb.ptr())[0 * 56 + 49] == 0u);
+
+			// Exact matching sequence admits ONLY bad_recs[2] (pos.x = 9.0):
+			seq_reg.present_seq = (uint64_t(7u) << 32u) | 42u;
+			lane.register_sealed_external_light_slot(seq_reg);
+			REQUIRE(lane.dispatch_registered_external_lights_gpu(&rd, vp_world_a, scen_world_a, false, Transform3D(), 1.0f, omni_buf, 0u, 8u, mob_bounds) == 4u);
+			const Vector<uint8_t> seq_ok_rb = rd.buffer_get_data(omni_buf);
+			CHECK(Math::is_equal_approx(reinterpret_cast<const float *>(seq_ok_rb.ptr())[0 * 56 + 0], 9.0f));
+			CHECK(reinterpret_cast<const uint32_t *>(seq_ok_rb.ptr())[0 * 56 + 49] == 0xFFFFFFFFu);
+			CHECK(reinterpret_cast<const uint32_t *>(seq_ok_rb.ptr())[1 * 56 + 49] == 0u);
+			lane.unregister_external_light_owner(0x9010u);
+
+			// 2. 9 matching owners x 256 valid lights = 2,304 candidates (> 2,048): owner 9 (importance 65535, pos.x = 99.0) must win all 256 Top-K slots!
+			RID nine_meta[9];
+			RID nine_recs[9];
+			RID omni_256 = rd.storage_buffer_create(256u * 224u);
+			rd.buffer_clear(omni_256, 0, 256u * 224u);
+			for (uint32_t oi = 0; oi < 9u; ++oi) {
+				const uint32_t m9[8] = { 256u, 0u, 0u, 0u, 256u, uint32_t(RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64), 100u + oi, 0u };
+				Vector<uint8_t> mb;
+				mb.resize(32);
+				std::memcpy(mb.ptrw(), m9, 32);
+				nine_meta[oi] = rd.storage_buffer_create(32, mb);
+
+				LocalVector<RendererRD::ParticleLightRecord64> r256;
+				r256.resize(256);
+				for (uint32_t k = 0; k < 256u; ++k) {
+					RendererRD::ParticleLightRecord64 lr = {};
+					lr.position_world[0] = (oi == 8u) ? 99.0f : 1.0f;
+					lr.radius = 4.0f;
+					lr.color_hdr[0] = 1.0f;
+					lr.attenuation_exp = 1.0f;
+					lr.id_index = k;
+					lr.id_acquire_tag = 1u;
+					lr.flags = RendererRD::ParticleLightRecord64::FLAG_ACTIVE;
+					lr.screen_importance_q16 = (oi == 8u) ? 65535u : 1u;
+					r256[k] = lr;
+				}
+				Vector<uint8_t> rb;
+				rb.resize(256 * sizeof(RendererRD::ParticleLightRecord64));
+				std::memcpy(rb.ptrw(), r256.ptr(), rb.size());
+				nine_recs[oi] = rd.storage_buffer_create(rb.size(), rb);
+
+				Lane::ExternalLightSlotRegistration r9;
+				r9.owner_key = 0xA000u + oi;
+				r9.generation = 1u;
+				r9.slot_index = 0u;
+				r9.viewport_rid = vp_world_a;
+				r9.scenario_rid = scen_world_a;
+				r9.world_bounds = AABB(Vector3(-10, -10, -10), Vector3(120, 20, 20));
+				r9.meta_rid = nine_meta[oi];
+				r9.records_rid = nine_recs[oi];
+				r9.capacity = 256u;
+				r9.present_seq = 100u + oi;
+				lane.register_sealed_external_light_slot(r9);
+			}
+			REQUIRE(lane.dispatch_registered_external_lights_gpu(&rd, vp_world_a, scen_world_a, false, Transform3D(), 1.0f, omni_256, 0u, 256u, mob_bounds) == 256u);
+			const Vector<uint8_t> top256_rb = rd.buffer_get_data(omni_256);
+			const float *top256_f = reinterpret_cast<const float *>(top256_rb.ptr());
+			bool all_owner9 = true;
+			for (uint32_t k = 0; k < 256u; ++k) {
+				if (!Math::is_equal_approx(top256_f[k * 56 + 0], 99.0f)) {
+					all_owner9 = false;
+					break;
+				}
+			}
+			CHECK(all_owner9);
+			for (uint32_t oi = 0; oi < 9u; ++oi) {
+				lane.unregister_external_light_owner(0xA000u + oi);
+				rd.free_rid(nine_recs[oi]);
+				rd.free_rid(nine_meta[oi]);
+			}
+			rd.free_rid(omni_256);
+		}
+
 		lane.release_light_gpu_bridge(&rd);
 		rd.free_rid(elem_buf);
 		rd.free_rid(omni_buf);
@@ -515,6 +614,10 @@ TEST_CASE("[particle_mesh_subuv_light] D3-P0-4/D3-P0-5/D3-P1-4a ParticleLight64 
 	CHECK(pub_out[0].specular_scale == 0.75f);
 	CHECK(pub_out[0].diffuse_scale == 1.25f);
 	CHECK(pub_out[0].volumetric_scattering == 0.5f);
+
+	const uint32_t meta_bad_res[8] = { 2u, 1u, 0u, 0u, 4u, uint32_t(RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64), 10u, 0u };
+	CHECK(manager.upsert_external_role8_packet(0xABCDu, reinterpret_cast<const uint8_t *>(meta_bad_res), 32u, reinterpret_cast<const uint8_t *>(r8), sizeof(r8), 4u, 10u) == ERR_INVALID_DATA);
+	CHECK(manager.upsert_external_role8_packet(0xABCDu, reinterpret_cast<const uint8_t *>(meta_ok), 32u, reinterpret_cast<const uint8_t *>(r8), sizeof(r8), 4u, 99u) == ERR_INVALID_DATA);
 
 	const uint32_t meta_fault[8] = { 2u, 0u, 0u, 16u, 4u, uint32_t(RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64), 11u, 0u };
 	REQUIRE(manager.upsert_external_role8_packet(0xABCDu, reinterpret_cast<const uint8_t *>(meta_fault), 32u, reinterpret_cast<const uint8_t *>(r8), sizeof(r8), 4u, 11u) == OK);

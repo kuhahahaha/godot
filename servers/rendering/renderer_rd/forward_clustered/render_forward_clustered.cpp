@@ -6290,12 +6290,15 @@ Error RenderForwardClustered::_plan_native_material_recipe(RID selected_material
 	if (!original || original->get_native_recipe_backend() != 2) { return fail(ERR_UNAVAILABLE); }
 	auto *material = static_cast<SceneShaderForwardClustered::MaterialData *>(original);
 	if (!material->shader_data || material->shader_data->depth_test == SceneShaderForwardClustered::ShaderData::DEPTH_TEST_ENABLED_INVERTED) { return fail(ERR_UNAVAILABLE); }
+	const bool alpha_pass = material->shader_data->uses_alpha_pass();
+	const uint32_t alpha_pass_gate_bits = uint32_t(MaterialStorage::ShaderData::MATERIAL_RECIPE_ALPHA) |
+			uint32_t(MaterialStorage::ShaderData::MATERIAL_RECIPE_DEPTH_MODE) |
+			uint32_t(MaterialStorage::ShaderData::MATERIAL_RECIPE_FRAMEBUFFER_READ);
+	if (alpha_pass && (p_allowed_rejections & alpha_pass_gate_bits) != alpha_pass_gate_bits) { return fail(ERR_UNAVAILABLE); }
 	ExternalPacketPipelineRequest request;
 	request.backend = ExternalPacketPipelineRequest::Backend::CLUSTERED;
-	request.pass = (p_allowed_rejections != 0 && material->shader_data->uses_alpha_pass()) ? ExternalPacketPass::TRANSPARENT : ExternalPacketPass::OPAQUE;
-	if (request.pass == ExternalPacketPass::TRANSPARENT) {
-		request.color_flags = SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_TRANSPARENT;
-	}
+	request.pass = alpha_pass ? ExternalPacketPass::TRANSPARENT : ExternalPacketPass::OPAQUE;
+	request.color_flags = alpha_pass ? SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_TRANSPARENT : 0;
 	request.framebuffer_format = actual_format;
 	request.version = SceneShaderForwardClustered::PIPELINE_VERSION_COLOR_PASS;
 	request.view_count = 1;
@@ -6313,10 +6316,10 @@ Error RenderForwardClustered::_plan_native_material_recipe(RID selected_material
 	_update_render_base_uniform_set(&error, &base);
 	if (error != OK) { return fail(error); }
 	const auto &samplers = storage->samplers_rd_get_default();
-	_setup_render_pass_uniform_set(RENDER_LIST_OPAQUE, nullptr, RID(), samplers, 0u, false, &error, &pass);
+	_setup_render_pass_uniform_set(alpha_pass ? RENDER_LIST_ALPHA : RENDER_LIST_OPAQUE, nullptr, RID(), samplers, 0u, false, &error, &pass);
 	if (error != OK) { return fail(error); }
 	NativeMaterialRecipeRoster::FixedData fixed;
-	error = RenderSceneDataRD::build_native_material_fixed_scene_data(fixed.scene);
+	error = RenderSceneDataRD::build_native_material_fixed_scene_data(fixed.scene, 32u, p_allowed_rejections ? 16u : 32u);
 	if (error == OK) { error = build_native_material_fixed_pass_data(fixed.instance, fixed.implementation, fixed.cluster, fixed.push); }
 	if (error == OK && fixed.instance.size() == sizeof(SceneState::InstanceData)) {
 		auto *inst_data = reinterpret_cast<SceneState::InstanceData *>(fixed.instance.ptrw());
@@ -6358,6 +6361,12 @@ Error RenderForwardClustered::ensure_native_material_recipe_sources_ready() {
 		}
 		scene_state.instance_buffer[RENDER_LIST_OPAQUE].prepare_for_upload();
 	}
+	if (scene_state.instance_buffer[RENDER_LIST_ALPHA]._get_if_ready(0u).is_null()) {
+		if (scene_state.instance_buffer[RENDER_LIST_ALPHA].get_size(0u) == 0u) {
+			scene_state.instance_buffer[RENDER_LIST_ALPHA].set_storage_size(0u, INSTANCE_DATA_BUFFER_MIN_SIZE * sizeof(SceneState::InstanceData));
+		}
+		scene_state.instance_buffer[RENDER_LIST_ALPHA].prepare_for_upload();
+	}
 	if (scene_state.uniform_buffers.is_empty() || scene_state.uniform_buffers[0].is_null()) {
 		if (scene_state.uniform_buffers.is_empty()) {
 			scene_state.uniform_buffers.resize(1);
@@ -6378,13 +6387,17 @@ Error RenderForwardClustered::ensure_native_material_recipe_sources_ready() {
 		}
 	}
 	Error error = OK;
-	Vector<RD::Uniform> base, pass;
+	Vector<RD::Uniform> base, pass, alpha_pass;
 	_update_render_base_uniform_set(&error, &base);
 	if (error != OK) {
 		return error;
 	}
 	const auto &samplers = storage->samplers_rd_get_default();
 	_setup_render_pass_uniform_set(RENDER_LIST_OPAQUE, nullptr, RID(), samplers, 0u, false, &error, &pass);
+	if (error != OK) {
+		return error;
+	}
+	_setup_render_pass_uniform_set(RENDER_LIST_ALPHA, nullptr, RID(), samplers, 0u, false, &error, &alpha_pass);
 	if (error != OK) {
 		return error;
 	}
@@ -6397,6 +6410,14 @@ Error RenderForwardClustered::ensure_native_material_recipe_sources_ready() {
 		}
 	}
 	for (const RD::Uniform &u : pass) {
+		for (uint32_t i = 0; i < u.get_id_count(); ++i) {
+			const Error settled = rd->_native_settle_transfer_worker(u.get_id(i));
+			if (settled != OK) {
+				return settled;
+			}
+		}
+	}
+	for (const RD::Uniform &u : alpha_pass) {
 		for (uint32_t i = 0; i < u.get_id_count(); ++i) {
 			const Error settled = rd->_native_settle_transfer_worker(u.get_id(i));
 			if (settled != OK) {
@@ -6422,7 +6443,7 @@ Error RenderForwardClustered::warm_native_material_instance192_shader(RID p_mate
 		return ERR_UNAVAILABLE;
 	}
 	auto *material = static_cast<SceneShaderForwardClustered::MaterialData *>(raw);
-	if (!material->shader_data || !material->shader_data->instance192_shader_supported()) {
+	if (!material->shader_data || !material->shader_data->instance192_shader_supported() || material->shader_data->depth_test == SceneShaderForwardClustered::ShaderData::DEPTH_TEST_ENABLED_INVERTED) {
 		return ERR_UNAVAILABLE;
 	}
 	RendererRD::MaterialStorage::ShaderData::NativeInstance192ShaderFeatures features;
