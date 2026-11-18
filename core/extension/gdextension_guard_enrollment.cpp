@@ -38,12 +38,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <utility>
-#ifdef TESTS_ENABLED
 #ifdef WINDOWS_ENABLED
 #include <io.h>
 #else
 #include <unistd.h>
-#endif
 #endif
 
 namespace GDExtensionDeviceExit {
