@@ -245,7 +245,7 @@ private:
 	void _update_render_base_uniform_set(Error *p_error = nullptr, Vector<RD::Uniform> *p_native_sources = nullptr);
 
 	void _fill_instance_data(RenderListType p_render_list, uint32_t p_offset = 0, int32_t p_max_elements = -1, bool p_update_buffer = true, Error *p_error = nullptr);
-	void _fill_render_list(RenderListType p_render_list, const RenderDataRD *p_render_data, PassMode p_pass_mode, bool p_append = false);
+	void _fill_render_list(RenderListType p_render_list, const RenderDataRD *p_render_data, PassMode p_pass_mode, bool p_append = false, LocalVector<GeometryInstanceSurfaceDataCache *> *p_generated_surfaces = nullptr);
 
 	void _setup_environment(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, bool p_opaque_render_buffers = false, bool p_pancake_shadows = false, Error *p_error = nullptr);
 	void _setup_lightmaps(const RenderDataRD *p_render_data, const PagedArray<RID> &p_lightmaps, const Transform3D &p_cam_transform);
@@ -797,6 +797,7 @@ public:
 	void _geometry_instance_add_surface_with_material(GeometryInstanceForwardMobile *ginstance, uint32_t p_surface, SceneShaderForwardMobile::MaterialData *p_material, uint32_t p_material_id, uint32_t p_shader_id, RID p_mesh, RendererRD::ExternalSurfaceSelection *p_external = nullptr);
 	void _geometry_instance_add_surface_with_material_chain(GeometryInstanceForwardMobile *ginstance, uint32_t p_surface, SceneShaderForwardMobile::MaterialData *p_material, RID p_mat_src, RID p_mesh);
 	void _geometry_instance_add_surface(GeometryInstanceForwardMobile *ginstance, uint32_t p_surface, RID p_material, RID p_mesh);
+	GeometryInstanceSurfaceDataCache *_collect_generated_slot_surfaces(GeometryInstanceForwardMobile *, const RenderDataRD &, LocalVector<GeometryInstanceSurfaceDataCache *> &);
 	void _geometry_instance_update(RenderGeometryInstance *p_geometry_instance);
 	void _mesh_compile_pipeline_for_surface(SceneShaderForwardMobile::ShaderData *p_shader, void *p_mesh_surface, bool p_instanced_surface, RSE::PipelineSource p_source, SceneShaderForwardMobile::ShaderData::PipelineKey &r_pipeline_key, Vector<ShaderPipelinePair> *r_pipeline_pairs = nullptr);
 	void _mesh_compile_pipelines_for_surface(const SurfacePipelineData &p_surface, const GlobalPipelineData &p_global, RSE::PipelineSource p_source, Vector<ShaderPipelinePair> *r_pipeline_pairs = nullptr);

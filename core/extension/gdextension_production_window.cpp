@@ -756,7 +756,8 @@ Error Registry::production_record_receive_locked(ProductionRequest &request, Ren
 			}
 			if (error == OK && request.graph_count != request.segment_graph_begin && (request.segment.segment == request.acknowledged_segment || production_native_batch_frame_locked(request))) {
 				error = production_close_segment_locked(request, request.control.output.segment, true);
-			} else {
+			} else if (!cleanup) {
+				// Cancel starts with the original segment already acknowledged.
 				request.control.output.segment = request.segment;
 			}
 			if (!deferred_close_lock && (error != OK || (request.compute_list_open || request.draw_list_open) || device.compute_list.active || device.draw_list.active)) {

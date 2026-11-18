@@ -57,6 +57,7 @@ class ExternalPipelinePreparation;
 
 class MeshStorage : public RendererMeshStorage {
 	friend class ParticlesStorage;
+	friend class ExternalOutputOwner;
 	friend class NativeMaterialRecipeRoster;
 	friend class ExternalPipelinePreparation;
 	friend class ::GDExtensionDeviceExit::Registry;
@@ -765,6 +766,11 @@ private:
 	static Error _native_hold_prospective_geometry(const NativeSurfaceHold &, uint64_t, const NativeVertexArrayPlan &, uint32_t, NativeProspectiveGeometryPlan &);
 
 	static Error _mesh_surface_hold_acquire(Mesh::Surface *p_surface, uint64_t p_input_mask, bool p_motion, bool p_point_size_emulated, uint32_t p_lod, NativeSurfaceHold &r_hold, bool p_retained_surface = false);
+
+	Error _mesh_add_external_surface(RID, const ExternalSurfaceDescriptor &, uint32_t &, uint64_t &, bool p_no_motion);
+	Error _mesh_add_generated_indexed144_surface(RID, ExternalSurfaceDescriptor, const NativeDisposalWitness &, const NativeDisposalWitness &, uint32_t &);
+	Error _mesh_surface_source_hold_acquire(RID, uint32_t, NativeSurfaceHold &, bool p_no_motion);
+	bool _mesh_generated_source_matches(RID, uint32_t, const NativeSurfaceHold &) const;
 
 public:
 	Error mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDescriptor &p_surface, uint32_t &r_surface_index, uint64_t &r_generation);

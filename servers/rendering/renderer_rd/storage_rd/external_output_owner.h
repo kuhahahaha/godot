@@ -121,6 +121,8 @@ class ExternalOutputOwner {
 		uint32_t native_color_read_cell = UINT32_MAX;
 		uint32_t native_color_close_graph = UINT32_MAX;
 		ExternalOutputStorage *storage = nullptr;
+		RID generated_indexed_mesh;
+		RID generated_index_array; // RD dependency of the original role-6 typed index buffer.
 		bool storage_placement = false, surfaces_placement = false;
 		uint32_t physical_returned = 0;
 		SurfaceBinding *surfaces = nullptr;
@@ -290,6 +292,7 @@ class ExternalOutputOwner {
 	Error bind_preparation_rows(uint32_t, uint32_t p_count = 0);
 	Error return_preparation_bank_row(uint32_t, uint32_t);
 	bool preparation_source_matches(const ExternalPipelinePreparation &) const;
+	const MeshStorage::NativeSurfaceHold *preparation_geometry_source(uint32_t p_slot, uint32_t p_surface) const;
 	Error material_future_pipeline_plan(const ExternalPipelinePreparation &, RID, RID, MaterialStorage::NativeMaterialFuturePipelinePlan &) const;
 	GDExtensionDeviceExit::Registry *preparation_registry(const ExternalPipelinePreparation &p_row) const {
 		if (p_row.owner != this || p_row.owner_slot >= slot_count) {
@@ -320,6 +323,19 @@ class ExternalOutputOwner {
 	};
 	static Error plan_metadata_layout(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, MetadataLayout &r_layout, uint32_t p_mesh_selections = 0, uint32_t p_material_selections = 0, uint32_t p_bindings = UINT32_MAX, uint32_t p_storage = UINT32_MAX, uint32_t p_preparations = UINT32_MAX);
 	static Error plan_generation_selection_layout(const ExternalOutputConfig &, uint32_t, uint32_t, uint32_t, MetadataLayout &);
+	// One pipeline and one transforms set per other original preparation row.
+	// Their disposal observers do not expand the ordinary/held resource limit.
+	static Error plan_material_disposal_capacity(uint32_t p_graph_limit, uint32_t p_bank_rows, uint32_t &r_capacity) {
+		if (!p_graph_limit || !p_bank_rows) {
+			return ERR_INVALID_PARAMETER;
+		}
+		const uint64_t capacity = uint64_t(p_graph_limit) + 2 * (uint64_t(p_bank_rows) - 1);
+		if (capacity > UINT32_MAX) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+		r_capacity = uint32_t(capacity);
+		return OK;
+	}
 	Error install_metadata_directory(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1,
 			GDExtensionDeviceExit::Registry &, const GDExtensionDeviceExit::ProductionOutputMetadataLease &,
 			uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, bool p_generation_selection = false);
@@ -375,7 +391,7 @@ public:
 		// No destructor fabricates native/source return or drops accepted uses.
 		CRASH_COND(state != GenerationState::RELEASED);
 		for (uint32_t i = 0; i < slot_count; ++i) {
-			CRASH_COND(slots[i].storage || slots[i].surfaces || slots[i].guard_owned_group || slots[i].guard_resources_ready || slots[i].guard_proof_payload || !slots[i].original_pin.is_empty());
+			CRASH_COND(slots[i].storage || slots[i].surfaces || slots[i].generated_indexed_mesh.is_valid() || slots[i].generated_index_array.is_valid() || slots[i].guard_owned_group || slots[i].guard_resources_ready || slots[i].guard_proof_payload || !slots[i].original_pin.is_empty());
 		}
 	}
 
@@ -409,6 +425,7 @@ private:
 	Error install_reserved_surface_cells(uint32_t p_surfaces);
 	Error surface_acquire(uint32_t, ExternalSurfaceSelection &);
 	Error slot_surface_acquire(uint32_t, uint32_t, ExternalSurfaceSelection &);
+	Error find_generated_slot_for_capture(const Ref<RendererViewport::Viewport::CameraCapture> &, uint32_t &) const;
 	bool generation_surface_has_custody() const;
 	Error surface_return(ExternalSurfaceSelection &);
 	void surface_move(ExternalSurfaceSelection &, ExternalSurfaceSelection &);
@@ -421,7 +438,8 @@ private:
 	// Correlation check on retained original slot facts only. Caller still owes
 	// original Registry/source authority; this cannot grant a previous read.
 	bool native_color_consumption_matches(uint32_t, const GDExtensionOutputTokenV1 &) const;
-	// Registry calls this only after original action/guard/record authentication.
+	// Registry calls these only after original action/guard/record authentication.
+	Error prepare_generated_indexed144_surfaces(uint32_t);
 	Error seal_recorded_slot(uint32_t, const Ref<RendererViewport::Viewport::CameraCapture> &, const GDExtensionOutputTokenV1 &, const GDExtensionOutputTokenV1 &);
 	Error view_acquire(uint32_t, ExternalPacketViewLease &);
 	Error view_acquire(uint32_t, RendererViewport &, const Ref<RendererViewport::Viewport::CameraCapture> &, ExternalPacketViewLease &);

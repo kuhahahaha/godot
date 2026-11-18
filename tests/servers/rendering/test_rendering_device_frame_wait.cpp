@@ -137,6 +137,8 @@ public:
 		CHECK(device.frame == 1);
 		CHECK(device.frame_wait_error == OK); // Early native Busy has no fence error.
 		CHECK(device.qualification_frame_advance_pending);
+		CHECK(device.has_pending_ordinary_frame_advance() == p_server_draw);
+		CHECK_FALSE(device.has_pending_production_frame_maintenance());
 		CHECK(device.buffer_clear(RID(), 0, 4) == ERR_BUSY);
 		const uint64_t compositor_frame = compositor ? compositor->get_frame_number() : 0;
 		if (p_server_draw) {
@@ -182,6 +184,7 @@ public:
 				CHECK(device.frame_wait_native_code_valid);
 				CHECK(device.frame_wait_native_code == 77);
 			}
+			CHECK_FALSE(device.has_pending_ordinary_frame_advance());
 			// Restore only the controlled driver failure to drain the registered
 			// callback normally before this fixture's RD singleton is destroyed.
 			device.frame_issue_error = device.frame_wait_error = OK;
@@ -210,6 +213,7 @@ public:
 		CHECK(device.frame == 1);
 		CHECK_FALSE(device.qualification_frame_advance_pending);
 		CHECK(device._recording_error() == OK);
+		CHECK_FALSE(device.has_pending_ordinary_frame_advance());
 		CHECK(device.frames[1].chain_reports[0].calls[0].source_owner_returned);
 		CHECK(device.get_frames_drawn() == 1);
 		CHECK(driver.begins == 1);

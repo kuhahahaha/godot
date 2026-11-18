@@ -32,6 +32,7 @@
 #include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/render_data_rd.h"
 #include "servers/rendering/rendering_server.h"
 
 #include <limits>
@@ -1382,6 +1383,32 @@ Error ParticlesStorage::particles_external_surface_acquire(RID p_particles, uint
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	return particles && particles->external ? particles->external->surface_acquire(p_surface, r_selection) : ERR_DOES_NOT_EXIST;
 }
+Error ParticlesStorage::particles_external_generated_surfaces_for_view(RID p_particles, const ::RenderDataRD &p_render_data,
+		uint32_t &r_slot, uint32_t &r_count) const {
+	auto *rd = RenderingDevice::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread() || p_render_data.reflection_probe.is_valid() ||
+			!::RenderDataRD::admission_succeeded(p_render_data.admit_camera_status())) {
+		return ERR_UNAUTHORIZED;
+	}
+	const auto *particles = particles_owner.get_or_null(p_particles);
+	if (!particles || !particles->external || particles->external->device != rd) {
+		return ERR_UNAVAILABLE;
+	}
+	const auto &owner = *particles->external;
+	uint32_t slot = UINT32_MAX;
+	const Error selected = owner.find_generated_slot_for_capture(p_render_data.get_native_camera_source(), slot);
+	if (selected != OK) {
+		return selected;
+	}
+	const Error scene = owner.validate_scene_cull(slot);
+	if (scene != OK) {
+		return scene;
+	}
+	r_slot = slot;
+	r_count = owner.slots[slot].surface_count;
+	return OK;
+}
+
 Error ParticlesStorage::particles_external_slot_surface_acquire(RID p_particles, uint32_t p_slot, uint32_t p_surface, ExternalSurfaceSelection &r_selection) {
 	auto *rd = RenderingDevice::get_singleton();
 	if (!rd || !rd->native_immutable_is_render_thread()) {

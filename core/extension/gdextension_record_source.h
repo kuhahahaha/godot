@@ -111,6 +111,8 @@ Error release_native_source(RDD &, NativeSourceMember &);
 // Checked admission arithmetic only. Actual driver bound remains independent.
 // A finite bound from the original 32-byte staging allocation contract.
 Error production_staging_graph_bound(uint64_t p_bytes, uint32_t p_block_size, uint32_t &r_graphs);
+// Owned production readback captures only whole staging chunks and the final suffix.
+Error production_readback_graph_bound(uint64_t p_bytes, uint32_t p_block_size, uint32_t &r_graphs);
 // Work-only candidate arithmetic: caller authenticates original output owner.
 // These values are demand, not admission; native membership stays driver-owned.
 struct ProductionOutputGuardBound {

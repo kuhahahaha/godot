@@ -44,6 +44,50 @@
 #endif
 
 namespace RendererRD {
+Error ExternalPipelinePreparation::_transforms_sources(RD::ProductionOutputUniformSource (&sources)[2], uint32_t &count) const {
+	const auto &slot = owner->slots[owner_slot];
+	if (!slot.storage || !slot.owned_group) {
+		return ERR_UNAUTHORIZED;
+	}
+	auto source_for_role = [&](uint32_t role) {
+		const auto &resource = slot.storage->resources[role];
+		RD::ProductionOutputUniformSource source;
+		source.buffer = resource.rid;
+		source.owned_group = slot.owned_group;
+		source.owned_ordinal = 0;
+		source.byte_size = resource.bytes;
+		for (uint32_t prior = 0; prior < role; ++prior) {
+			source.owned_ordinal += slot.storage->resources[prior].bytes != 0;
+		}
+		return source;
+	};
+	if (owner->config.profile == ExternalOutputConfig::INDEXED_144) {
+		sources[0] = source_for_role(ExternalOutputStorage::OUTPUT_META);
+		const bool motion_pass = selection.pass == ExternalPacketPass::MOTION;
+		if (motion_pass) {
+			sources[1] = source_for_role(ExternalOutputStorage::INDEXED_VERTEX_HISTORY_VALIDITY);
+		}
+		count = motion_pass ? 2u : 1u;
+	} else {
+		sources[0] = source_for_role(ExternalOutputStorage::CURRENT_RECORDS);
+		sources[1] = source_for_role(ExternalOutputStorage::PREVIOUS_RECORDS);
+		if (sources[1].buffer.is_null() && !sources[1].byte_size &&
+				owner->config.motion == ExternalOutputConfig::DISABLED && selection.pass != ExternalPacketPass::MOTION) {
+			sources[1] = sources[0];
+		}
+		if (sources[0].byte_size != sources[1].byte_size) {
+			return ERR_UNAVAILABLE;
+		}
+		count = 2;
+	}
+	for (uint32_t i = 0; i < count; ++i) {
+		if (sources[i].buffer.is_null() || !sources[i].byte_size) {
+			return ERR_UNAVAILABLE;
+		}
+	}
+	return OK;
+}
+
 Error ParticlesStorage::_external_transforms_prepare_owned_prefix(ExternalPipelinePreparation &row) {
 	if (!row.owner || !row.pipeline_scope || !row.pipeline_pin || !row.transforms_owned_group || row.backend_error != OK ||
 			row.finish_complete || row.transforms_uniform_set.is_valid() || !row.material.is_valid() || row.owner_slot >= row.owner->slot_count) {
@@ -52,69 +96,51 @@ Error ParticlesStorage::_external_transforms_prepare_owned_prefix(ExternalPipeli
 	auto &owner = *row.owner;
 	auto &slot = owner.slots[row.owner_slot];
 	if (!owner.device || owner.device != RD::get_singleton() || !owner.device->native_immutable_is_render_thread() ||
-			!slot.storage || !slot.owned_group || row.pipeline_pin != &slot.original_pin || slot.publication_closed || slot.pass_uses_closed) {
+			row.pipeline_pin != &slot.original_pin || slot.publication_closed || slot.pass_uses_closed) {
 		return ERR_UNAUTHORIZED;
 	}
-	auto ordinal_for_role = [&](uint32_t p_role) -> uint32_t {
-		uint32_t ord = 0;
-		for (uint32_t r = 0; r < p_role; ++r) {
-			ord += slot.storage->resources[r].bytes != 0;
-		}
-		return ord;
-	};
-	if (owner.config.profile == ExternalOutputConfig::INDEXED_144) {
-		const auto &meta = slot.storage->resources[ExternalOutputStorage::OUTPUT_META];
-		if (meta.rid.is_null() || !meta.bytes) {
-			return ERR_UNAVAILABLE;
-		}
-		const bool motion_pass = row.selection.pass == ExternalPacketPass::MOTION;
-		const auto &history = slot.storage->resources[ExternalOutputStorage::INDEXED_VERTEX_HISTORY_VALIDITY];
-		if (motion_pass && (history.rid.is_null() || !history.bytes)) {
-			return ERR_UNAVAILABLE;
-		}
-		RD::Uniform uniforms[2] = {
-			RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 0, meta.rid),
-			RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 1, motion_pass ? history.rid : RID()),
-		};
-		RD::ProductionOutputUniformSource sources[2];
-		sources[0].buffer = meta.rid;
-		sources[0].owned_group = slot.owned_group;
-		sources[0].owned_ordinal = ordinal_for_role(ExternalOutputStorage::OUTPUT_META);
-		sources[0].byte_size = meta.bytes;
-		if (motion_pass) {
-			sources[1].buffer = history.rid;
-			sources[1].owned_group = slot.owned_group;
-			sources[1].owned_ordinal = ordinal_for_role(ExternalOutputStorage::INDEXED_VERTEX_HISTORY_VALIDITY);
-			sources[1].byte_size = history.bytes;
-		}
-		const uint32_t count = motion_pass ? 2u : 1u;
-		return owner.device->_production_output_owned_uniform_set_create(*row.pipeline_scope, row.transforms_owned_group, 0,
-				VectorView<RD::Uniform>(uniforms, count), row.material.get_snapshot().shader, 2, row.transforms_uniform_set,
-				row.transforms_uniform_witness, VectorView<RD::ProductionOutputUniformSource>(sources, count));
-	}
-	const auto &current = slot.storage->resources[ExternalOutputStorage::CURRENT_RECORDS];
-	const auto &previous = slot.storage->resources[ExternalOutputStorage::PREVIOUS_RECORDS];
-	const bool no_motion_previous = previous.rid.is_null() && previous.bytes == 0 &&
-			owner.config.motion == ExternalOutputConfig::DISABLED && row.selection.pass != ExternalPacketPass::MOTION;
-	// No ordinary-particle buffer/set can substitute for a missing slot record.
-	if (current.rid.is_null() || !current.bytes || (!no_motion_previous && (previous.rid.is_null() || current.bytes != previous.bytes))) {
-		return ERR_UNAVAILABLE;
-	}
-	const RID prev_rid = no_motion_previous ? current.rid : previous.rid;
-	RD::Uniform uniforms[2] = {
-		RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 0, current.rid),
-		RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 1, prev_rid),
-	};
 	RD::ProductionOutputUniformSource sources[2];
-	for (uint32_t i = 0; i < 2; ++i) {
-		sources[i].buffer = i ? prev_rid : current.rid;
-		sources[i].owned_group = slot.owned_group;
-		sources[i].owned_ordinal = (i && !no_motion_previous) ? 1u : 0u;
-		sources[i].byte_size = current.bytes;
+	uint32_t count = 0;
+	const Error planned = row._transforms_sources(sources, count);
+	if (planned != OK) {
+		return planned;
 	}
+	RD::Uniform uniforms[2] = {
+		RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 0, sources[0].buffer),
+		RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 1, sources[1].buffer),
+	};
 	return owner.device->_production_output_owned_uniform_set_create(*row.pipeline_scope, row.transforms_owned_group, 0,
-			VectorView<RD::Uniform>(uniforms, 2), row.material.get_snapshot().shader, 2, row.transforms_uniform_set,
-			row.transforms_uniform_witness, VectorView<RD::ProductionOutputUniformSource>(sources, 2));
+			VectorView<RD::Uniform>(uniforms, count), row.material.get_snapshot().shader, 2, row.transforms_uniform_set,
+			row.transforms_uniform_witness, VectorView<RD::ProductionOutputUniformSource>(sources, count));
+}
+
+Error ExternalPipelinePreparation::_material_pass_observers_locked(RenderingDevice &rd, Vector<RID> &out) const {
+	const auto *registry = owner->preparation_registry(*this);
+	if (!registry || owner->device != &rd || !owner->generation_config_inline) {
+		return ERR_UNAUTHORIZED;
+	}
+	for (uint32_t i = 0; i < owner->preparation_capacity; ++i) {
+		const auto &candidate = owner->preparation_rows[i];
+		if (&candidate == this || !owner->preparation_bank_row_matches(candidate.owner_slot, i, candidate) ||
+				!candidate.finish_complete || candidate.finish_error != OK || candidate.backend_error != OK ||
+				!candidate.pipeline_sealed || owner->preparation_registry(candidate) != registry) {
+			continue;
+		}
+		const auto *request = owner->preparation_request(candidate.owner_slot);
+		const uint64_t pin = owner->preparation_pin_serial(candidate.owner_slot);
+		if (!request) {
+			continue;
+		}
+		for (bool pipeline : { true, false }) {
+			const RID rid = pipeline ? candidate.owned_pipeline_root : candidate.transforms_uniform_set;
+			const uint64_t group = pipeline ? candidate.pipeline_owned_group : candidate.transforms_owned_group;
+			if (rid.is_valid() && rd._production_output_pass_observer_locked(rid, *request, pin, group, pipeline) &&
+					out.push_back(rid) != OK) {
+				return ERR_OUT_OF_MEMORY;
+			}
+		}
+	}
+	return OK;
 }
 
 Error ParticlesStorage::particles_external_view_acquire(const ExternalSurfaceSelection &surface, const ::RenderDataRD *render_data, ExternalPacketViewLease &view) {
@@ -132,21 +158,79 @@ Error ParticlesStorage::particles_external_view_acquire(const ExternalSurfaceSel
 			!owner.admits_work() || surface.generation != owner.generation || surface.cell >= owner.surface_capacity) {
 		return ERR_UNAUTHORIZED;
 	}
+	// Temporary passive observation after the original native-owner/thread gate.
+	auto trace_failure = [&](Error error, [[maybe_unused]] uint32_t site) {
+#ifdef TESTS_ENABLED
+		const auto *os = OS::get_singleton();
+		if (error != OK && os && os->get_environment("ANGE_TRACE_OUTPUT_CURRENT_CAMERA") == "1") {
+			const auto &source = render_data->get_native_camera_source();
+			const RendererViewport::Viewport::CameraSourceToken token = source.is_valid() ? source->get_token() : RendererViewport::Viewport::CameraSourceToken{};
+			uint32_t active = 0, sealed = 0, adopted = 0, open = 0, closed = 0, same_source = 0, direct_eligible = 0, key_eligible = 0;
+			uint64_t saved_min = 0, saved_max = 0, native_min = 0, native_max = 0, request_min = 0, request_max = 0;
+			uint64_t request_registry = 0, direct_request = 0, key_request = 0;
+			for (uint32_t i = 0; i < owner.slot_count; ++i) {
+				const auto &slot = owner.slots[i];
+				if (slot.state == ExternalOutputOwner::LeaseState::EMPTY || slot.state == ExternalOutputOwner::LeaseState::RELEASED) {
+					continue;
+				}
+				++active;
+				sealed += slot.state == ExternalOutputOwner::LeaseState::SEALED_RECORDED;
+				adopted += slot.state == ExternalOutputOwner::LeaseState::ADOPTED;
+				const bool is_open = !slot.publication_closed && !slot.pass_uses_closed;
+				open += is_open;
+				closed += !is_open;
+				const auto &saved = slot.request.common;
+				const uint64_t request = slot.original_request.handle_serial;
+				request_registry = slot.original_request.registry_instance;
+				if (request && (!request_min || request < request_min)) request_min = request;
+				if (request > request_max) request_max = request;
+				if (saved.present_seq && (!saved_min || saved.present_seq < saved_min)) saved_min = saved.present_seq;
+				if (saved.present_seq > saved_max) saved_max = saved.present_seq;
+				if (slot.native_camera_source.is_valid()) {
+					const uint64_t present = slot.native_camera_source->get_presentation_key().present_seq;
+					if (present && (!native_min || present < native_min)) native_min = present;
+					if (present > native_max) native_max = present;
+				}
+				const bool same = source.is_valid() && slot.native_camera_source == source;
+				same_source += same;
+				const bool ready = is_open && (slot.state == ExternalOutputOwner::LeaseState::SEALED_RECORDED || slot.state == ExternalOutputOwner::LeaseState::ADOPTED);
+				if (ready && same) { ++direct_eligible; direct_request = request; }
+				const uint32_t view_index = i / owner.config.max_inflight;
+				// Key candidate only: original previous-camera/pin/cell gates remain in acquire_camera_view.
+				if (ready && source.is_valid() && view_index < owner.config.max_views &&
+						owner.views[view_index].occupied && !owner.views[view_index].closed &&
+						saved.generation == owner.generation && owner.views[view_index].epoch == slot.request.view_epoch &&
+						slot.request.view_epoch == token.view_epoch && saved.current_camera_token == token) {
+					++key_eligible; key_request = request;
+				}
+			}
+			std::fprintf(stderr, "[OUTPUT-CURRENT-CAMERA] site=%u error=%d generation=%llu surface=%u source=%p camera=%llu:%llu:%llu present=%llu slots=%u active=%u sealed=%u adopted=%u open=%u closed=%u same_source=%u direct_eligible=%u direct_request=%llu key_eligible=%u key_request=%llu saved_present=%llu:%llu native_present=%llu:%llu requests=%llu:%llu:%llu\n",
+					site, int(error), (unsigned long long)owner.generation, surface.flattened_surface, static_cast<const void *>(source.ptr()),
+					(unsigned long long)token.view_id, (unsigned long long)token.view_epoch, (unsigned long long)token.capture_ordinal,
+					(unsigned long long)(source.is_valid() ? source->get_presentation_key().present_seq : 0), owner.slot_count,
+					active, sealed, adopted, open, closed, same_source, direct_eligible, (unsigned long long)direct_request, key_eligible, (unsigned long long)key_request,
+					(unsigned long long)saved_min, (unsigned long long)saved_max, (unsigned long long)native_min, (unsigned long long)native_max,
+					(unsigned long long)request_registry, (unsigned long long)request_min, (unsigned long long)request_max);
+			std::fflush(stderr);
+		}
+#endif
+		return error;
+	};
 	const auto &surface_cell = owner.surface_cells[surface.cell];
 	if (surface_cell.consumer != &surface || surface_cell.serial != surface.serial || surface_cell.pin.is_empty()) {
-		return ERR_UNAUTHORIZED;
+		return trace_failure(ERR_UNAUTHORIZED, 1);
 	}
 	if (!::RenderDataRD::admission_succeeded(render_data->admit_camera_status()) ||
 			!::RenderDataRD::admission_succeeded(render_data->admit_surface_status(surface.get_material_generation()))) {
-		return ERR_UNAUTHORIZED;
+		return trace_failure(ERR_UNAUTHORIZED, 2);
 	}
 	if (render_data->packet_identity.external && !render_data->previous_camera_source_admitted()) {
 		render_data->retire_packet();
-		return ERR_UNAUTHORIZED;
+		return trace_failure(ERR_UNAUTHORIZED, 3);
 	}
 	const auto &source = render_data->get_native_camera_source();
 	if (source.is_null()) {
-		return ERR_UNAVAILABLE;
+		return trace_failure(ERR_UNAVAILABLE, 4);
 	}
 	uint32_t selected = UINT32_MAX;
 	for (uint32_t i = 0; i < owner.slot_count; ++i) {
@@ -154,22 +238,33 @@ Error ParticlesStorage::particles_external_view_acquire(const ExternalSurfaceSel
 		if ((slot.state == ExternalOutputOwner::LeaseState::SEALED_RECORDED || slot.state == ExternalOutputOwner::LeaseState::ADOPTED) &&
 				!slot.publication_closed && !slot.pass_uses_closed && slot.native_camera_source == source) {
 			if (selected != UINT32_MAX) {
-				return ERR_INVALID_DATA;
+				return trace_failure(ERR_INVALID_DATA, 5);
 			}
 			selected = i;
 		}
 	}
+	if (owner.config.profile == ExternalOutputConfig::INDEXED_144 && surface_cell.slot < owner.slot_count &&
+			owner.slots[surface_cell.slot].generated_indexed_mesh.is_valid()) {
+		if (selected != surface_cell.slot) {
+			return trace_failure(ERR_UNAUTHORIZED, 6); // The original slot Surface cannot follow a different live view.
+		}
+		const auto &slot = owner.slots[selected];
+		if (!slot.surfaces || surface.flattened_surface >= slot.surface_count ||
+				surface.geometry_source != &slot.surfaces[surface.flattened_surface].geometry) {
+			return trace_failure(ERR_UNAUTHORIZED, 7);
+		}
+	}
 	if (selected != UINT32_MAX) {
 		if (surface.flattened_surface >= owner.slots[selected].surface_count) {
-			return ERR_UNAVAILABLE;
+			return trace_failure(ERR_UNAVAILABLE, 8);
 		}
 		const Error error = owner.view_acquire(selected, *RSG::viewport, source, view);
 		if (error == OK) {
 			view.flattened_surface = surface.flattened_surface;
 		}
-		return error;
+		return trace_failure(error, 9);
 	}
-	return owner.acquire_camera_view(surface, *render_data, view);
+	return trace_failure(owner.acquire_camera_view(surface, *render_data, view), 10);
 }
 
 Error ParticlesStorage::particles_external_resolve(const ExternalPacketViewLease &view, const ExternalPacketPipelineRequest &pipeline_request, RD::DrawListID, ExternalPacketBinding &binding) {
@@ -444,22 +539,44 @@ Error ExternalPipelinePreparation::_prospective_admission(RID p_shader, uint64_t
 		return traced("geometry_prospective", error);
 	}
 	// Consume the actual factory/cache identities returned by the retained
-	// source observation. There is one derive in this Instance192 invocation;
+	// source observation. There is one derive in this original invocation;
 	// directory and selected roots share ordinal1 for that exact Version.
 	RD::VertexDescriptionKey raw_key{ geometry_plan.raw_vertex_description };
 	RD::VertexDescriptionKey observed_key{ p_geometry.attributes };
 	if (!geometry_plan.surface || geometry_plan.version_key.input_mask != p_input_mask ||
 			geometry_plan.version_key.input_motion_vectors || geometry_plan.version_key.point_size_emulated ||
-			geometry_plan.version_key.current_allocation_generation || geometry_plan.version_key.previous_allocation_generation ||
+			(bool(geometry_plan.version_key.current_allocation_generation) != source_geometry->is_external()) ||
+			geometry_plan.version_key.previous_allocation_generation ||
 			!(raw_key == observed_key)) {
 		return traced("geometry_plan_identity", ERR_INVALID_DATA);
 	}
-	RD::NativeProspectiveSymbol symbols[2];
+	RD::NativeProspectiveSymbol symbols[3];
 	symbols[0] = material_plan.pipeline; // This row's one actual owned pipeline destination.
 	uint32_t symbol_count = 1;
 	if (geometry_plan.future_vertex_array) {
 		symbols[1] = geometry_plan.vertex_array; // This retained Surface+Version factory, not descriptor equality.
 		symbol_count = 2;
+	}
+	// The row's own transforms set is created after the backend pipeline and
+	// before adoption. Model its exact dependency edges before any factory.
+	if (owner->generation_config_inline) {
+		RD::ProductionOutputUniformSource sources[2];
+		uint32_t count = 0;
+		error = _transforms_sources(sources, count);
+		if (error != OK) {
+			return traced("transforms_sources", error);
+		}
+		auto &transforms = symbols[symbol_count++];
+		transforms.kind = RD::NativeProspectiveSymbol::FUTURE_UNIFORM_SET;
+		transforms.shader = p_shader;
+		for (uint32_t i = 0; i < count; ++i) {
+			if (i && sources[i].buffer == sources[0].buffer) {
+				continue;
+			}
+			if (transforms.inputs.push_back({ { sources[i].buffer, UINT32_MAX }, RD::NativeProspectiveInput::STORAGE_BUFFER }) != OK) {
+				return traced("transforms_sources", ERR_OUT_OF_MEMORY);
+			}
+		}
 	}
 	RD::NativeProspectiveHoldRoots holds[3];
 	holds[0] = geometry_plan.initial;
@@ -506,6 +623,21 @@ Error ExternalPipelinePreparation::_prospective_admission(RID p_shader, uint64_t
 	if (rd->native_immutable_device_escaped || rd->draw_graph.has_driver_callbacks() || rd->production_finalization_started.load(std::memory_order_acquire)) {
 		return traced("recording_source_state", ERR_BUSY);
 	}
+	uint32_t material_capacity = max_resources;
+	Vector<RID> pass_observers;
+	if (owner->generation_config_inline) {
+		error = ExternalOutputOwner::plan_material_disposal_capacity(max_resources, owner->preparation_capacity, material_capacity);
+		if (error == OK) {
+			error = _material_pass_observers_locked(*rd, pass_observers);
+		}
+		if (error != OK) {
+			return traced("material_disposal_budget", error);
+		}
+		if (!transforms_owned_group || transforms_owned_group == pipeline_owned_group ||
+				transforms_owned_group == geometry_reserved_group || transforms_owned_group == material_reserved_group) {
+			return traced("owned_group_identity", ERR_INVALID_DATA);
+		}
+	}
 	if (pipeline_owned_group == geometry_reserved_group || pipeline_owned_group == material_reserved_group || geometry_reserved_group == material_reserved_group) {
 		return traced("owned_group_identity", ERR_INVALID_DATA);
 	}
@@ -514,7 +646,7 @@ Error ExternalPipelinePreparation::_prospective_admission(RID p_shader, uint64_t
 	uint32_t group_index = UINT32_MAX;
 	for (uint64_t group : { pipeline_owned_group, geometry_reserved_group, material_reserved_group }) {
 		error = rd->_production_output_hold_reservation_locked(*request, owner->preparation_pin_serial(owner_slot), group,
-				group == pipeline_owned_group ? 1 : max_resources, group_index);
+				group == pipeline_owned_group ? 1 : (group == material_reserved_group ? material_capacity : max_resources), group_index);
 		if (error != OK) {
 			return traced("owned_hold_reservation", error);
 		}
@@ -523,6 +655,16 @@ Error ExternalPipelinePreparation::_prospective_admission(RID p_shader, uint64_t
 	error = rd->_production_output_owned_destination_locked(*request, pipeline_owned_group, 0, pipeline_destination);
 	if (error != OK) {
 		return traced("pipeline_destination", error);
+	}
+	if (owner->generation_config_inline) {
+		error = rd->_production_output_hold_reservation_locked(*request, owner->preparation_pin_serial(owner_slot), transforms_owned_group, 1, group_index);
+		if (error == OK) {
+			GDExtensionDeviceExit::ProductionUseCell *transforms_destination = nullptr;
+			error = rd->_production_output_owned_destination_locked(*request, transforms_owned_group, 0, transforms_destination);
+		}
+		if (error != OK) {
+			return traced("transforms_destination", error);
+		}
 	}
 	// The original factory uses these SAME predicates. Prospective attributes
 	// are real VF-key values; INVALID_ID is never replaced with an invented ID.
@@ -569,19 +711,35 @@ Error ExternalPipelinePreparation::_prospective_admission(RID p_shader, uint64_t
 	};
 #endif
 	Vector<RD::NativeProspectiveKey> geometry_nodes, material_nodes;
-	error = rd->_native_prospective_closure_keys_locked(geometry_roots, { symbols, symbol_count }, max_resources, true, geometry_nodes);
+	const auto geometry_mode = source_geometry->is_external() ? RD::NativeClosureMode::DEPENDENCIES : RD::NativeClosureMode::BIDIRECTIONAL;
+	error = rd->_native_prospective_closure_keys_locked(geometry_roots, { symbols, symbol_count }, max_resources, geometry_mode, geometry_nodes);
 	if (error != OK) {
 #ifdef TESTS_ENABLED
-		trace_closure_size("geometry", error, geometry_roots, RD::NativeClosureMode::BIDIRECTIONAL);
+		trace_closure_size("geometry", error, geometry_roots, geometry_mode);
 #endif
 		return traced("closure_keys", error);
 	}
-	error = rd->_native_prospective_closure_keys_locked(material_plan.roots, { symbols, symbol_count }, max_resources, RD::NativeClosureMode::MATERIAL_DISPOSAL, material_nodes);
+	error = rd->_native_prospective_closure_keys_locked(material_plan.roots, { symbols, symbol_count }, material_capacity, RD::NativeClosureMode::MATERIAL_DISPOSAL, material_nodes);
 	if (error != OK) {
 #ifdef TESTS_ENABLED
 		trace_closure_size("material", error, material_plan.roots, RD::NativeClosureMode::MATERIAL_DISPOSAL);
 #endif
 		return traced("closure_keys", error);
+	}
+	if (owner->generation_config_inline) {
+		Vector<RD::NativeProspectiveKey> material_held;
+		error = rd->_native_prospective_closure_keys_locked(material_plan.roots, { symbols, symbol_count }, max_resources, RD::NativeClosureMode::DEPENDENCIES, material_held);
+		if (error != OK) {
+			return traced("material_held_keys", error);
+		}
+		const RD::NativeMaterialDisposalBudget budget{ max_resources, { pass_observers.ptr(), uint32_t(pass_observers.size()) } };
+		uint32_t ordinary = 0;
+		for (const auto &key : material_nodes) {
+			ordinary += key.actual.is_null() || budget.uses_ordinary_cell(key.actual, uint32_t(material_held.has(key)));
+		}
+		if (ordinary > budget.ordinary_limit) {
+			return traced("material_ordinary_disposal_budget", ERR_OUT_OF_MEMORY);
+		}
 	}
 	if (geometry_plan.detached) {
 		// Actual expansion requires the new complete hold to contain every old
@@ -636,6 +794,9 @@ Error ExternalPipelinePreparation::_prospective_execution_geometry_matches(const
 		return ERR_BUSY;
 	}
 	MutexScopeUnlock<Mutex> unlock(rd->_thread_safe_);
+	if (!source_geometry || source_geometry->get_index_array() != geometry[0].get_index_array()) {
+		return ERR_INVALID_DATA;
+	}
 	const auto *array = rd->vertex_array_owner.get_or_null(geometry[0].get_vertex_array());
 	RD::VertexDescriptionKey raw_key{ plan.attributes };
 	const auto *format = rd->vertex_format_cache.getptr(raw_key);

@@ -180,6 +180,9 @@ public:
 		}
 	}
 
+	static uint64_t generated_backing_serial(RenderingDevice &p_device, RID p_rid, bool p_index) {
+		return p_device._generated_indexed144_backing_serial(p_rid, NativeDisposalWitness(), p_index);
+	}
 	static uint32_t arrays(RenderingDevice &p_device) { return p_device.vertex_array_owner.get_owned_list().size(); }
 	static bool owns(RenderingDevice &p_device, RID p_buffer) { return p_device.vertex_buffer_owner.owns(p_buffer); }
 	static void begin_native(RenderingDevice &device, Indexed144FormatDriver &driver) {
@@ -1260,6 +1263,92 @@ public:
 		memfree(mesh.surfaces);
 		TestIndexed144DeviceAccess::end_native(device);
 	}
+	static void no_motion_indexed_source() {
+		RenderingDevice device;
+		Indexed144FormatDriver driver;
+		TestIndexed144DeviceAccess::begin_native(device, driver);
+		auto *previous = MeshStorage::get_singleton();
+		auto *meshes = memnew(MeshStorage(MeshStorage::NativeHoldTestTag{}));
+
+		const RID mesh = meshes->mesh_allocate();
+		meshes->mesh_initialize(mesh);
+		const RID other_mesh = meshes->mesh_allocate();
+		meshes->mesh_initialize(other_mesh);
+		const RID vertices = device.vertex_buffer_create(3 * 144, {}, RD::BUFFER_CREATION_AS_STORAGE_BIT);
+		const RID unrelated_vertices = device.vertex_buffer_create(3 * 144, {}, RD::BUFFER_CREATION_AS_STORAGE_BIT);
+		const RID indices = device.index_buffer_create(3, RD::INDEX_BUFFER_FORMAT_UINT32, {}, false, RD::BUFFER_CREATION_AS_STORAGE_BIT);
+		const RID unrelated_indices = device.index_buffer_create(3, RD::INDEX_BUFFER_FORMAT_UINT32, {}, false, RD::BUFFER_CREATION_AS_STORAGE_BIT);
+		const RID array = device.index_array_create(indices, 0, 3);
+		const RID unrelated_array = device.index_array_create(unrelated_indices, 0, 3);
+		MeshStorage::ExternalSurfaceDescriptor descriptor;
+		descriptor.current_vertex_buffer = vertices;
+		descriptor.vertex_buffer_size = 3 * 144;
+		descriptor.vertex_count = 3;
+		descriptor.index_buffer = indices;
+		descriptor.index_buffer_size = 3 * sizeof(uint32_t);
+		descriptor.index_count = 3;
+		descriptor.index_array = array;
+		descriptor.material = RID::from_uint64(1024);
+		descriptor.generation = 1;
+		descriptor.current_allocation_generation = 1;
+		uint32_t surface = UINT32_MAX;
+		uint64_t generation = 0;
+		// Actual typed owners alone cannot substitute for the slot's witness.
+		CHECK(TestIndexed144DeviceAccess::generated_backing_serial(device, vertices, false) == 0);
+		CHECK(TestIndexed144DeviceAccess::generated_backing_serial(device, indices, true) == 0);
+		CHECK(meshes->_mesh_add_generated_indexed144_surface(mesh, descriptor, NativeDisposalWitness(), NativeDisposalWitness(), surface) == ERR_INVALID_DATA);
+		descriptor.index_array = unrelated_array;
+		CHECK(meshes->_mesh_add_external_surface(mesh, descriptor, surface, generation, true) == ERR_INVALID_PARAMETER);
+		CHECK(meshes->mesh_get_surface_count(mesh) == 0);
+
+		// The authorized leaf still uses the exact typed array and omits history.
+		descriptor.index_array = array;
+		CHECK(meshes->_mesh_add_external_surface(mesh, descriptor, surface, generation, true) == OK);
+		Hold hold;
+		const Error retained = meshes->_mesh_surface_source_hold_acquire(mesh, surface, hold, true);
+		CHECK(retained == OK);
+		if (retained == OK) {
+			CHECK(hold.get_index_array() == array);
+			CHECK(meshes->_mesh_generated_source_matches(mesh, surface, hold));
+			CHECK_FALSE(meshes->_mesh_generated_source_matches(other_mesh, surface, hold));
+			CHECK_FALSE(meshes->_mesh_generated_source_matches(mesh, surface + 1, hold));
+			MeshStorage::NativeVertexArrayPlan plan;
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(hold, 1, true, false, 0, plan) == ERR_UNAVAILABLE);
+			CHECK(MeshStorage::mesh_surface_hold_plan_vertex_array(hold, 1, false, false, 0, plan) == OK);
+			CHECK(plan.buffers.size() == 1);
+			if (plan.buffers.size() == 1) {
+				CHECK(plan.buffers[0] == vertices);
+			}
+			CHECK(plan.existing_vertex_array.is_null());
+			MeshStorage::NativeProspectiveGeometryPlan checked;
+			CHECK(MeshStorage::_native_hold_prospective_geometry(hold, 1, plan, 256, checked) == OK);
+			CHECK(checked.version_key.current_allocation_generation == descriptor.current_allocation_generation);
+			CHECK(checked.version_key.previous_allocation_generation == 0);
+			CHECK(checked.future_vertex_array);
+			CHECK(checked.initial.roots.size() == 2);
+			if (checked.initial.roots.size() == 2) {
+				CHECK(checked.initial.roots[1].actual == array);
+			}
+			if (plan.buffers.size() == 1) {
+				auto unrelated = plan;
+				unrelated.buffers.write[0] = unrelated_vertices;
+				CHECK(MeshStorage::_native_hold_prospective_geometry(hold, 1, unrelated, 256, checked) == ERR_INVALID_DATA);
+				CHECK(checked.initial.roots.is_empty());
+			}
+			CHECK(MeshStorage::mesh_surface_hold_release(hold) == OK);
+			CHECK_FALSE(meshes->_mesh_generated_source_matches(mesh, surface, hold));
+			CHECK(MeshStorage::_native_hold_prospective_geometry(hold, 1, plan, 256, checked) == ERR_UNAUTHORIZED);
+		}
+		meshes->mesh_free(mesh);
+		meshes->mesh_free(other_mesh);
+		device.free_rid(vertices);
+		device.free_rid(unrelated_vertices);
+		device.free_rid(unrelated_indices);
+		device.free_rid(indices); // Same RD parent owns the dependent array.
+		memdelete(meshes);
+		MeshStorage::singleton = previous;
+		TestIndexed144DeviceAccess::end_native(device);
+	}
 	static void prospective_plan(bool external) {
 		RenderingDevice device;
 		Indexed144FormatDriver driver;
@@ -1769,6 +1858,10 @@ TEST_CASE("[B4][K05] actual Indexed144 cache retains exact mask generations and 
 	TestIndexed144DeviceAccess::attach(device, &driver);
 	RendererRD::TestMeshStorageExternalAccess::run(device, driver, false);
 	TestIndexed144DeviceAccess::detach(device);
+}
+
+TEST_CASE("[B4][K05] NoMotion Indexed144 source rejects unrelated array and returned hold") {
+	RendererRD::TestMeshStorageExternalAccess::no_motion_indexed_source();
 }
 
 TEST_CASE("[B4][K05] failed original VA construction publishes no cached version") {

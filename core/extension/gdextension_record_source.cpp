@@ -145,6 +145,17 @@ Error production_staging_graph_bound(uint64_t bytes, uint32_t block_size, uint32
 	graphs = uint32_t(bytes / 32 + (bytes % 32 != 0));
 	return OK;
 }
+Error production_readback_graph_bound(uint64_t bytes, uint32_t block_size, uint32_t &graphs) {
+	graphs = 0;
+	if (!bytes || bytes > UINT32_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	if (block_size < 32) {
+		return ERR_UNAVAILABLE;
+	}
+	graphs = uint32_t(bytes / block_size + (bytes % block_size != 0));
+	return OK;
+}
 Error production_output_guard_bound(uint32_t capacity, uint32_t surfaces,
 		uint32_t max_groups_x, uint64_t actual_proof_bytes,
 		uint32_t upload_block_size, ProductionOutputGuardBound &out) {

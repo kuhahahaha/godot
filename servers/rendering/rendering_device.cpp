@@ -927,6 +927,21 @@ RenderingDevice::Buffer *RenderingDevice::_get_buffer_from_owner(RID p_buffer) {
 	return buffer;
 }
 
+RenderingDevice::Buffer *RenderingDevice::_production_output_storage_buffer(RID p_buffer) {
+	if (storage_buffer_owner.owns(p_buffer)) {
+		return storage_buffer_owner.get_or_null(p_buffer);
+	}
+	if (!vertex_buffer_owner.owns(p_buffer) && !index_buffer_owner.owns(p_buffer)) {
+		return nullptr;
+	}
+	auto *buffer = _native_immutable_buffer(p_buffer);
+	if (!buffer || !buffer->usage.has_flag(RDD::BUFFER_USAGE_STORAGE_BIT) ||
+			buffer->native_disposal.cell.is_null() || !buffer->native_disposal.cell->production_request) {
+		return nullptr;
+	}
+	return buffer;
+}
+
 Error RenderingDevice::_buffer_initialize(Buffer *p_buffer, Span<uint8_t> p_data, uint32_t p_required_align) {
 	uint32_t transfer_worker_offset;
 	TransferWorker *transfer_worker = _acquire_transfer_worker(p_data.size(), p_required_align, transfer_worker_offset);
@@ -1015,7 +1030,7 @@ Error RenderingDevice::_staging_buffer_allocate(StagingBuffers &p_staging_buffer
 
 			int32_t available_bytes = int32_t(p_staging_buffers.block_size) - int32_t(write_from);
 
-			if ((int32_t)p_amount < available_bytes) {
+			if ((int32_t)p_amount < available_bytes || (!p_can_segment && (int32_t)p_amount == available_bytes)) {
 				// All is good, we should be ok, all will fit.
 				r_alloc_offset = write_from;
 			} else if (p_can_segment && available_bytes >= (int32_t)p_required_align) {
@@ -1758,7 +1773,9 @@ Error RenderingDevice::_buffer_get_data_async(RID p_buffer, const Callable &p_ca
 		}
 		uint32_t offset = 0, amount = 0;
 		StagingRequiredAction action;
-		Error error = _staging_buffer_allocate(download_staging_buffers, MIN(to_submit, download_staging_buffers.block_size), 32, offset, amount, action);
+		// The paid production graph bound includes full staging blocks and the
+		// final suffix. Skip a short staging tail before recording any copy.
+		Error error = _staging_buffer_allocate(download_staging_buffers, MIN(to_submit, download_staging_buffers.block_size), 32, offset, amount, action, !p_capture);
 		if (error != OK) {
 			if (core) {
 				publish(false);
@@ -5239,6 +5256,11 @@ Error RenderingDevice::_native_vertex_array_preflight(uint32_t p_vertex_count, c
 }
 
 bool RenderingDevice::validate_external_indexed_surface_buffers(RID p_current_vertex_buffer, RID p_previous_vertex_buffer, RID p_index_buffer, RID p_index_array, uint32_t p_vertex_capacity, uint32_t p_index_capacity) {
+	return _validate_external_indexed_surface_buffers(p_current_vertex_buffer, p_previous_vertex_buffer, p_index_buffer, p_index_array, p_vertex_capacity, p_index_capacity, false);
+}
+
+bool RenderingDevice::_validate_external_indexed_surface_buffers(RID p_current_vertex_buffer, RID p_previous_vertex_buffer, RID p_index_buffer, RID p_index_array,
+		uint32_t p_vertex_capacity, uint32_t p_index_capacity, bool p_no_motion) {
 	// Indexed144 uses one tightly packed Float144 record (9 vec4 values) per vertex
 	// and a separate tightly packed UINT32 index allocation. Keep this check CPU-only;
 	// it is an admission guard for MeshStorage and does not authorize public RID use.
@@ -5252,24 +5274,44 @@ bool RenderingDevice::validate_external_indexed_surface_buffers(RID p_current_ve
 	}
 
 	const Buffer *current = vertex_buffer_owner.get_or_null(p_current_vertex_buffer);
-	const Buffer *previous = vertex_buffer_owner.get_or_null(p_previous_vertex_buffer);
 	const IndexBuffer *index = index_buffer_owner.get_or_null(p_index_buffer);
 	const IndexArray *array = index_array_owner.get_or_null(p_index_array);
-	if (current == nullptr || previous == nullptr || index == nullptr || array == nullptr) {
+	if (!current || !index || !array || current->size != vertex_bytes ||
+			!current->usage.has_flag(RDD::BUFFER_USAGE_VERTEX_BIT) || !current->usage.has_flag(RDD::BUFFER_USAGE_STORAGE_BIT)) {
 		return false;
 	}
-	if (p_current_vertex_buffer == p_previous_vertex_buffer || current->size != vertex_bytes || previous->size != vertex_bytes) {
-		return false;
-	}
-	if (!current->usage.has_flag(RDD::BUFFER_USAGE_VERTEX_BIT) || !previous->usage.has_flag(RDD::BUFFER_USAGE_VERTEX_BIT) ||
-			!current->usage.has_flag(RDD::BUFFER_USAGE_STORAGE_BIT) || !previous->usage.has_flag(RDD::BUFFER_USAGE_STORAGE_BIT)) {
-		return false;
+	if (p_no_motion) {
+		if (p_previous_vertex_buffer.is_valid() || !index->usage.has_flag(RDD::BUFFER_USAGE_STORAGE_BIT) ||
+				array->draw_tracker != index->draw_tracker || index->supports_restart_indices) {
+			return false;
+		}
+	} else {
+		const Buffer *previous = vertex_buffer_owner.get_or_null(p_previous_vertex_buffer);
+		if (!previous || p_current_vertex_buffer == p_previous_vertex_buffer || previous->size != vertex_bytes ||
+				!previous->usage.has_flag(RDD::BUFFER_USAGE_VERTEX_BIT) || !previous->usage.has_flag(RDD::BUFFER_USAGE_STORAGE_BIT)) {
+			return false;
+		}
 	}
 	if (index->format != INDEX_BUFFER_FORMAT_UINT32 || index->index_count != p_index_capacity || index->size != index_bytes ||
 			array->format != INDEX_BUFFER_FORMAT_UINT32 || array->offset != 0 || array->indices != p_index_capacity || array->driver_id != index->driver_id) {
 		return false;
 	}
 	return true;
+}
+
+uint64_t RenderingDevice::_generated_indexed144_backing_serial(RID p_rid, const NativeDisposalWitness &p_witness, bool p_index) {
+	_THREAD_SAFE_METHOD_
+	const Buffer *buffer = p_index
+			? static_cast<const Buffer *>(index_buffer_owner.owns(p_rid) ? index_buffer_owner.get_or_null(p_rid) : nullptr)
+			: (vertex_buffer_owner.owns(p_rid) ? vertex_buffer_owner.get_or_null(p_rid) : nullptr);
+	if (!buffer || !buffer->draw_tracker || p_witness.cell.is_null() || buffer->native_disposal.cell != p_witness.cell) {
+		return 0;
+	}
+	const auto &actual = **p_witness.cell;
+	return actual.state == NativeDisposalWitness::State::LIVE && actual.production_request &&
+					actual.matches(p_rid.get_id(), buffer->backing_serial, buffer->driver_id.id)
+			? buffer->backing_serial
+			: 0;
 }
 
 RID RenderingDevice::index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, Span<uint8_t> p_data, bool p_use_restart_indices, BitField<BufferCreationBits> p_creation_bits) {
@@ -5775,7 +5817,7 @@ RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Unif
 			if (sampler && sampler->qualification_return && !qualification_dependencies.has(sampler->qualification_return)) {
 				qualification_dependencies.push_back(sampler->qualification_return);
 			}
-			auto *buffer = storage_buffer_owner.owns(uniform.get_id(i)) ? storage_buffer_owner.get_or_null(uniform.get_id(i)) : nullptr;
+			auto *buffer = _production_output_storage_buffer(uniform.get_id(i));
 			if (buffer && buffer->qualification_return && !qualification_dependencies.has(buffer->qualification_return)) {
 				qualification_dependencies.push_back(buffer->qualification_return);
 			}
@@ -6187,6 +6229,8 @@ RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Unif
 					buffer = vertex_buffer_owner.get_or_null(buffer_id);
 
 					ERR_FAIL_COND_V_MSG(!(buffer->usage.has_flag(RDD::BUFFER_USAGE_STORAGE_BIT)), RID(), "Vertex buffer supplied (binding: " + itos(uniform.binding) + ") was not created with storage flag.");
+				} else if (p_production && index_buffer_owner.owns(buffer_id)) {
+					buffer = _production_output_storage_buffer(buffer_id);
 				}
 				ERR_FAIL_NULL_V_MSG(buffer, RID(), "Storage buffer supplied (binding: " + itos(uniform.binding) + ") is invalid.");
 
@@ -10334,6 +10378,26 @@ Error RenderingDevice::_check_transfer_worker_buffer(Buffer *buffer) {
 	}
 	return error;
 }
+bool RenderingDevice::_transfer_worker_operation_completed_locked(uint32_t p_index, uint64_t p_operation) {
+	MutexTryLock<BinaryMutex> pool_lock(transfer_worker_pool_mutex);
+	if (!pool_lock.owns_lock() || p_index >= transfer_worker_pool_size || p_index >= transfer_worker_pool.size()) {
+		return false;
+	}
+	auto *worker = transfer_worker_pool[p_index];
+	if (!worker || worker->index != p_index) {
+		return false;
+	}
+	MutexTryLock<BinaryMutex> thread_lock(worker->thread_mutex);
+	if (!thread_lock.owns_lock()) {
+		return false;
+	}
+	MutexTryLock<BinaryMutex> operations_lock(worker->operations_mutex);
+	// Observe only the original worker's processed cursor. This does not
+	// submit, wait for, quote or register any new dependency.
+	return operations_lock.owns_lock() && !worker->poisoned && p_operation &&
+			p_operation <= worker->operations_counter && p_operation <= worker->operations_processed;
+}
+
 void RenderingDevice::_settle_completed_mesh_buffer_upload_locked(RID rid) {
 	Buffer *buffer = vertex_buffer_owner.owns(rid) ? vertex_buffer_owner.get_or_null(rid) : static_cast<Buffer *>(index_buffer_owner.get_or_null(rid));
 	if (!buffer || buffer->transfer_worker_index < 0 || !buffer->driver_id || buffer->native_external_access ||
@@ -10341,24 +10405,7 @@ void RenderingDevice::_settle_completed_mesh_buffer_upload_locked(RID rid) {
 			buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT) || buffer->usage.has_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT)) {
 		return;
 	}
-	const uint32_t index = uint32_t(buffer->transfer_worker_index);
-	MutexTryLock<BinaryMutex> pool_lock(transfer_worker_pool_mutex);
-	if (!pool_lock.owns_lock() || index >= transfer_worker_pool_size || index >= transfer_worker_pool.size()) {
-		return;
-	}
-	auto *worker = transfer_worker_pool[index];
-	if (!worker || worker->index != index) {
-		return;
-	}
-	MutexTryLock<BinaryMutex> thread_lock(worker->thread_mutex);
-	if (!thread_lock.owns_lock()) {
-		return;
-	}
-	MutexTryLock<BinaryMutex> operations_lock(worker->operations_mutex);
-	const uint64_t operation = buffer->transfer_worker_operation;
-	// Only the original worker's processed cursor can settle this association.
-	// Unlike draw-use admission, this never quotes or registers a dependency.
-	if (operations_lock.owns_lock() && !worker->poisoned && operation && operation <= worker->operations_counter && operation <= worker->operations_processed) {
+	if (_transfer_worker_operation_completed_locked(uint32_t(buffer->transfer_worker_index), buffer->transfer_worker_operation)) {
 		buffer->transfer_worker_index = -1;
 	}
 }
@@ -12418,7 +12465,7 @@ Error RenderingDevice::_native_disposal_uniform_set_create(const VectorView<Unif
 		if (uniform.uniform_type != UNIFORM_TYPE_STORAGE_BUFFER || uniform.get_id_count() != 1) {
 			return ERR_UNAVAILABLE;
 		}
-		const Buffer *buffer = storage_buffer_owner.get_or_null(uniform.get_id(0));
+		const Buffer *buffer = _production_output_storage_buffer(uniform.get_id(0));
 		// The strict original-source overload already checked the live imported
 		// READ edge under the same Registry and RD locks. Preserve its dependency.
 		if (buffer && buffer->qualification_return && p_owner && p_sources && uniform_index < p_sources->size() &&
@@ -12638,7 +12685,7 @@ Error RenderingDevice::_native_disposal_free(const NativeDisposalWitness &p_witn
 		return OK; // Idempotent request; OK does not mean driver-free returned.
 	}
 	const RID rid = RID::from_uint64(report.rid);
-	const Buffer *buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr;
+	const Buffer *buffer = _production_output_storage_buffer(rid);
 	const UniformSet *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr;
 	const Texture *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr;
 	const Framebuffer *framebuffer = framebuffer_owner.owns(rid) ? framebuffer_owner.get_or_null(rid) : nullptr;
@@ -14009,6 +14056,7 @@ void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
 			}
 		}
 
+		ERR_FAIL_COND(!_native_disposal_enqueue(vertex_buffer->native_disposal, p_id.get_id(), vertex_buffer->backing_serial, vertex_buffer->driver_id.id));
 		RDG::resource_tracker_free(vertex_buffer->draw_tracker);
 		_production_disposal_enqueued(vertex_buffer->production_disposal_uses);
 		frames[frame].buffers_to_dispose_of.push_back(*vertex_buffer);
@@ -14039,6 +14087,7 @@ void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
 			}
 		}
 
+		ERR_FAIL_COND(!_native_disposal_enqueue(index_buffer->native_disposal, p_id.get_id(), index_buffer->backing_serial, index_buffer->driver_id.id));
 		RDG::resource_tracker_free(index_buffer->draw_tracker);
 		_production_disposal_enqueued(index_buffer->production_disposal_uses);
 		frames[frame].buffers_to_dispose_of.push_back(*index_buffer);
@@ -14303,6 +14352,19 @@ String RenderingDevice::get_device_pipeline_cache_uuid() const {
 
 RenderingDevice::DriverWorkarounds RenderingDevice::get_driver_workarounds() const {
 	return driver->get_driver_workarounds();
+}
+
+bool RenderingDevice::has_pending_production_frame_maintenance() const {
+	return is_main_instance && render_thread_id == Thread::get_caller_id() &&
+			native_disposal_active.load(std::memory_order_acquire) && native_disposal_continuation.production_owner &&
+			frame_issue_error.load() == OK && frame_wait_error.load() == OK && !frame_wait_native_code_valid.load();
+}
+
+bool RenderingDevice::has_pending_ordinary_frame_advance() const {
+	return is_main_instance && render_thread_id == Thread::get_caller_id() &&
+			qualification_frame_advance_pending.load() && !native_disposal_active.load(std::memory_order_acquire) &&
+			!frame_wait_draining.load() && frame_issue_error.load() == OK && frame_wait_error.load() == OK &&
+			!frame_wait_native_code_valid.load();
 }
 
 void RenderingDevice::swap_buffers(bool p_present) {
@@ -16661,6 +16723,9 @@ bool RenderingDevice::has_feature(const Features p_feature) const {
 }
 
 void RenderingDevice::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("has_pending_production_frame_maintenance"), &RenderingDevice::has_pending_production_frame_maintenance);
+	ClassDB::bind_method(D_METHOD("has_pending_ordinary_frame_advance"), &RenderingDevice::has_pending_ordinary_frame_advance);
+
 	ClassDB::bind_method(D_METHOD("texture_create", "format", "view", "data"), &RenderingDevice::_texture_create, DEFVAL(Array()));
 	ClassDB::bind_method(D_METHOD("texture_create_shared", "view", "with_texture"), &RenderingDevice::_texture_create_shared);
 	ClassDB::bind_method(D_METHOD("texture_create_shared_from_slice", "view", "with_texture", "layer", "mipmap", "mipmaps", "slice_type"), &RenderingDevice::_texture_create_shared_from_slice, DEFVAL(1), DEFVAL(TEXTURE_SLICE_2D));
@@ -18103,7 +18168,7 @@ bool RenderingDevice::_production_resource_permitted(RID rid) {
 			if (guard.resources[i] != rid || guard.witnesses[i].cell.is_null()) {
 				continue;
 			}
-			const auto *buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr;
+			const auto *buffer = _production_output_storage_buffer(rid);
 			const auto *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr;
 			const auto &physical = **guard.witnesses[i].cell;
 			if (physical.production_request == request && physical.production_request_serial == request->serial && physical.production_pin_serial == guard.pin_serial &&

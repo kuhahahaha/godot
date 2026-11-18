@@ -105,6 +105,8 @@ struct Access {
 			++native_recycles;
 			return OK;
 		}
+		Physical *second_set_cell = nullptr;
+		bool allow_second_set = false, second_set_live = false;
 		Physical *buffer_cells[32] = {}, *set_cell = nullptr;
 		uint32_t buffer_frees = 0, set_creates = 0, set_frees = 0, set_prepares = 0, set_binds = 0;
 		uint32_t expected_set_bindings = 1;
@@ -114,9 +116,9 @@ struct Access {
 			CHECK(shader == ShaderID(80));
 			CHECK(set == 0);
 			CHECK(pool == -1);
-			CHECK_FALSE(set_live);
+			CHECK_FALSE((set_live && (!allow_second_set || second_set_live)));
 			CHECK(uniforms.size() == expected_set_bindings);
-			if (uniforms.size() != expected_set_bindings || set_live) {
+			if (uniforms.size() != expected_set_bindings || (set_live && (!allow_second_set || second_set_live))) {
 				return {};
 			}
 			for (uint32_t i = 0; i < uniforms.size(); ++i) {
@@ -134,10 +136,27 @@ struct Access {
 				}
 			}
 			++set_creates;
+			if (set_live) {
+				second_set_live = true;
+				return UniformSetID(83);
+			}
 			set_live = true;
 			return UniformSetID(82);
 		}
+		void (*set_free_observer)(void *, UniformSetID) = nullptr;
+		void *set_free_observer_context = nullptr;
 		void uniform_set_free(UniformSetID id) override {
+			if (set_free_observer) {
+				set_free_observer(set_free_observer_context, id);
+			}
+			if (id == UniformSetID(83)) {
+				CHECK(allow_second_set);
+				CHECK(second_set_live);
+				Access::before_free(second_set_cell);
+				second_set_live = false;
+				++set_frees;
+				return;
+			}
 			CHECK(id == UniformSetID(82));
 			CHECK(set_live);
 			Access::before_free(set_cell);
@@ -235,8 +254,13 @@ struct Access {
 		void set_object_name(ObjectType type, ID id, const String &name) override {
 			CHECK(name.begins_with("RID:"));
 			if (type == OBJECT_TYPE_UNIFORM_SET) {
-				CHECK(id.id == 82);
-				CHECK(set_live);
+				if (id.id == 83) {
+					CHECK(allow_second_set);
+					CHECK(second_set_live);
+				} else {
+					CHECK(id.id == 82);
+					CHECK(set_live);
+				}
 				set_name = name;
 			} else {
 				CHECK(type == OBJECT_TYPE_BUFFER);
@@ -282,20 +306,26 @@ struct Access {
 			CHECK(id == CommandPoolID(97));
 			++worker_pool_frees;
 		}
+		uint32_t expected_begin_frame = 0;
 		CommandBufferID command_buffer_create(CommandPoolID pool) override { return CommandBufferID(worker_mode && pool == CommandPoolID(97) ? 96 : 91); }
 		bool command_buffer_begin(CommandBufferID id) override {
-			CHECK((id == CommandBufferID(90) || id == CommandBufferID(91) || (worker_mode && id == CommandBufferID(96))));
+			if (expected_begin_frame == 1) {
+				CHECK(id == CommandBufferID(92));
+			} else {
+				CHECK((id == CommandBufferID(90) || id == CommandBufferID(91) || (worker_mode && id == CommandBufferID(96))));
+			}
 			return true;
 		}
 		void command_buffer_end(CommandBufferID id) override { CHECK((id == CommandBufferID(90) || id == CommandBufferID(91) || (worker_mode && id == CommandBufferID(96)))); }
 		bool command_pool_reset(CommandPoolID id) override {
-			CHECK((id == CommandPoolID(94) || (worker_mode && id == CommandPoolID(97))));
+			const auto expected_pool = CommandPoolID(expected_begin_frame == 1 ? 96 : 94);
+			CHECK((id == expected_pool || (worker_mode && id == CommandPoolID(97))));
 			if (id == CommandPoolID(97)) {
 				++worker_resets;
 			}
 			return true;
 		}
-		void begin_segment(uint32_t frame, uint32_t) override { CHECK(frame == 0); }
+		void begin_segment(uint32_t frame, uint32_t) override { CHECK(frame == expected_begin_frame); }
 		void end_segment() override {
 			++legacy_end_segments;
 			CHECK_FALSE(budget_call_active);
@@ -1225,7 +1255,7 @@ struct Access {
 		CHECK(error == OK);
 		return error == OK;
 	}
-	static Request *owned_setup(Enrollment &e, bool dispatch, uint32_t mismatch = 0) {
+	static Request *owned_setup(Enrollment &e, bool dispatch, uint32_t mismatch = 0, bool prepare_dispatch = true) {
 		using namespace GDExtensionDeviceExit;
 		auto c = capacity(8);
 		c.retained_payload_bytes = 16;
@@ -1332,6 +1362,9 @@ struct Access {
 				{ GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionSetBindingV1>(), 0, 1, 0, 1, 0, 128 }
 			};
 			e.driver.expected_set_bindings = aliases ? 2 : 1;
+			if (!prepare_dispatch) {
+				return r;
+			}
 			const auto set_error = create_set(e, ref, 2, 0, 0, bindings, e.driver.expected_set_bindings).native_error;
 			CHECK(set_error == OK);
 			if (set_error != OK) {
@@ -1524,6 +1557,416 @@ struct Access {
 		CHECK(r->serial == 0);
 		CHECK(e.registry->production_close(attachment).native_error == OK);
 		CHECK(e.rd.production_entity_holds == nullptr);
+	}
+	static void original_set_create_frame_gate(uint32_t revoke) {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		auto *r = owned_setup(e, true, 0, false);
+		REQUIRE(r != nullptr);
+		e.driver.complete = true;
+		const GDExtensionProductionRequestRefV1 ref{ Enrollment::INSTANCE, r->serial };
+		const GDExtensionProductionAttachmentRefV1 attachment{ Enrollment::INSTANCE, r->attachment->serial };
+		const GDExtensionProductionSetBindingV1 binding{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 0, 0, 0, 1, 0, 128 };
+		const auto accepted = e.registry->production_set_create(ref, 2, 0, 0, &binding, 1);
+		REQUIRE(accepted.native_error == ERR_UNAVAILABLE); // The local fixture has no singleton FIFO.
+		auto &slot = r->resources[2];
+		const uint64_t owner = slot.owned_serial;
+		const uint64_t retirement = slot.retire_serial;
+		const uint64_t physical = slot.owned_physical.serial;
+		const uint64_t first_control = r->control.serial;
+		const uint32_t bound_rows = r->binding_used;
+		REQUIRE(first_control != 0);
+		REQUIRE(slot.creating);
+		CHECK(e.driver.set_creates == 0);
+
+		// Existing controlled pending-advance input. No completion/return fact
+		// is fabricated; public SET_CREATE accepted the exact original slot.
+		struct EndGate {
+			RenderingDevice &rd;
+			~EndGate() { rd.qualification_frame_advance_pending = false; }
+		} end_gate{ e.rd };
+		e.rd.qualification_frame_advance_pending = true;
+		REQUIRE(e.rd._recording_error() == ERR_BUSY);
+		const auto blocked = execute_public_control(e, ref, ProductionControlKind::SET_CREATE, 2);
+		REQUIRE(blocked.result.native_error == ERR_BUSY);
+		CHECK(r->control.state == ProductionControlState::OWNER_CONSUMED);
+		CHECK(r->control.serial == first_control);
+		CHECK(e.driver.set_creates == 0);
+		CHECK(slot.primary.is_null());
+		REQUIRE(slot.creating);
+		CHECK(r->returns[2].pending);
+
+		// A changed origin cannot reuse the accepted control/resource.
+		auto different = binding;
+		different.bytes = 64;
+		CHECK(e.registry->production_set_create(ref, 2, 0, 0, &different, 1).native_error == ERR_INVALID_DATA);
+		CHECK(r->control.serial == first_control);
+		CHECK(e.driver.set_creates == 0);
+		e.rd.qualification_frame_advance_pending = false;
+		REQUIRE(e.rd._recording_error() == OK);
+		if (revoke == 1) {
+			REQUIRE(e.registry->production_cancel(ref).native_error == OK);
+		} else if (revoke == 2) {
+			const auto closed = e.registry->begin_quiesce(e.reference);
+			REQUIRE((closed == OK || closed == ERR_BUSY));
+			REQUIRE(e.registry->records[0].quiescing);
+		}
+		const auto next = e.registry->production_set_create(ref, 2, 0, 0, &binding, 1);
+		CHECK(slot.owned_serial == owner);
+		CHECK(slot.retire_serial == retirement);
+		CHECK(slot.owned_physical.serial == physical);
+		CHECK(r->binding_used == bound_rows);
+		if (revoke) {
+			REQUIRE(next.native_error == ERR_BUSY);
+			CHECK_FALSE(slot.creating);
+			CHECK_FALSE(r->returns[2].pending);
+			CHECK(r->control.state == ProductionControlState::OWNER_CONSUMED);
+			CHECK(r->control.serial == first_control);
+			CHECK(e.driver.set_creates == 0);
+			CHECK(e.registry->production_set_create(ref, 2, 0, 0, &binding, 1).native_error == ERR_BUSY);
+			CHECK(r->control.serial == first_control);
+		} else {
+			REQUIRE(next.native_error == ERR_UNAVAILABLE);
+			REQUIRE(r->control.state == ProductionControlState::PENDING);
+			CHECK(r->control.serial > first_control);
+			CHECK(e.driver.set_creates == 0);
+			const auto completed = execute_public_control(e, ref, ProductionControlKind::SET_CREATE, 2);
+			REQUIRE(completed.result.native_error == OK);
+			REQUIRE(e.driver.set_creates == 1);
+			REQUIRE(slot.primary.is_valid());
+			CHECK_FALSE(slot.creating);
+			CHECK(slot.owned_serial == owner);
+			CHECK(slot.retire_serial == retirement);
+			CHECK(slot.owned_physical.serial == physical);
+			CHECK(r->binding_used == bound_rows);
+			const uint64_t created_control = r->control.serial;
+			CHECK(e.registry->production_set_create(ref, 2, 0, 0, &binding, 1).native_error == OK);
+			CHECK(r->control.serial == created_control);
+			CHECK(e.driver.set_creates == 1);
+			e.driver.set_cell = &slot.owned_physical;
+		}
+		REQUIRE(e.registry->production_cancel(ref).native_error == OK);
+		REQUIRE(return_owned_storage(e, *r, 1));
+		CHECK(e.driver.set_frees == (revoke ? 0u : 1u));
+		REQUIRE(finish_owned_maintenance(e, *r, budget(1, 1)));
+		const auto released = turn(e, *r, ProductionControlKind::RELEASE, budget());
+		REQUIRE(released.owner_return.native_error == OK);
+		CHECK(r->serial == 0);
+		REQUIRE(e.registry->production_close(attachment).native_error == OK);
+	}
+
+	static void owned_set_retirement_batch(uint32_t receipts) {
+		using namespace GDExtensionDeviceExit;
+		// Measure both enqueue and physical FREE prices in the original MQ
+		// source. Its retained loop charges one FREE per returned SET, and this
+		// original no-issue fixture owns no signaled fence or extra native work.
+		const auto mq_source = own_set_with_ordinary_disposal(true);
+		REQUIRE(mq_source.native_frees > 0);
+		REQUIRE(mq_source.logical_receipts > 0);
+		REQUIRE(mq_source.logical_passes > 0);
+		REQUIRE(mq_source.receipts % mq_source.native_frees == 0);
+		REQUIRE(mq_source.passes % mq_source.native_frees == 0);
+		const auto receipt_price = mq_source.receipts / mq_source.native_frees;
+		const auto pass_price = mq_source.passes / mq_source.native_frees;
+		REQUIRE(receipt_price > 0);
+		REQUIRE(pass_price > 0);
+		CHECK(mq_source.native_calls == mq_source.native_frees);
+		Enrollment e;
+		e.driver.allow_second_set = true;
+		const auto c = capacity(8);
+		const auto attachment_ref = e.accept(c);
+		REQUIRE(attachment_ref.handle_serial != 0);
+		ProductionAttachment *attachment = nullptr;
+		RenderingDevice *rd = nullptr;
+		Request *r = nullptr;
+		const GDExtensionProductionOperationV1 operation = { production_dto_abi<GDExtensionProductionOperationV1>(), 571, 1, 10, 11 };
+		const GDExtensionProductionActionV1 action = { 10, GDEXTENSION_PRODUCTION_DISPATCH_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
+		const GDExtensionProductionResourceV1 resources[] = {
+			{ GDEXTENSION_PRODUCTION_UNIT_V1, 4, 5, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 6, 0, 0 },
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 128, 0 },
+			{ GDEXTENSION_PRODUCTION_SET_V1, 2, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 0, 0 },
+			{ GDEXTENSION_PRODUCTION_SET_V1, 3, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 0, 0 }
+		};
+		const GDExtensionProductionUseV1 use = { 1, GDEXTENSION_PRODUCTION_READ_WRITE_V1, 0, 128, 0 };
+		{
+			MutexLock lock(e.registry->mutex);
+			REQUIRE(e.registry->production_attachment_locked(attachment_ref, true, attachment, rd) == OK);
+			REQUIRE(e.registry->production_reserve_metadata_locked(*attachment, operation, c, &action, 1, resources, 4, &use, 1, nullptr, 0, r) == OK);
+		}
+		REQUIRE(r != nullptr);
+		graph_initialize(e);
+		const GDExtensionProductionRequestRefV1 ref = { Enrollment::INSTANCE, r->serial };
+		const GDExtensionStorageCreateRequestV1 origin = { Enrollment::ABI, 128, 1, 0, 1, 1, 0 };
+		GDExtensionStorageBackingV1 backing = {};
+		REQUIRE(create_storage(e, ref, 1, &origin, &backing).native_error == OK);
+		const auto *buffer = e.rd.storage_buffer_owner.get_or_null(r->resources[1].primary);
+		REQUIRE(buffer != nullptr);
+		REQUIRE(buffer->driver_id.id < 32);
+		e.driver.buffer_cells[buffer->driver_id.id] = &r->resources[1].owned_physical;
+		REQUIRE(import_original_unit(e, *r));
+		const GDExtensionProductionSetBindingV1 binding = { production_dto_abi<GDExtensionProductionSetBindingV1>(), 0, 0, 0, 1, 0, 128 };
+		REQUIRE(create_set(e, ref, 2, 0, 0, &binding, 1).native_error == OK);
+		e.driver.set_cell = &r->resources[2].owned_physical;
+		REQUIRE(create_set(e, ref, 3, 0, 0, &binding, 1).native_error == OK);
+		e.driver.second_set_cell = &r->resources[3].owned_physical;
+		REQUIRE(e.driver.set_creates == 2);
+		REQUIRE(e.registry->production_cancel(ref).native_error == OK);
+		const uint64_t cursor_before = e.rd.next_native_disposal_serial;
+		// The foreign-prefix MQ oracle measures FREE prices, but this batch
+		// may also use the original general cursor. Witness that real source
+		// at its native FREE and after each original turn; do not guess a count.
+		struct CursorWitness {
+			RenderingDevice &rd;
+			Request &request;
+			QuoteDriver &driver;
+			uint64_t first_serial;
+			Vector<uint64_t> serials;
+			CursorWitness(RenderingDevice &p_rd, Request &p_request, QuoteDriver &p_driver, uint64_t p_first) : rd(p_rd), request(p_request), driver(p_driver), first_serial(p_first) {}
+			~CursorWitness() {
+				driver.set_free_observer = nullptr;
+				driver.set_free_observer_context = nullptr;
+			}
+			void observe() {
+				if (!rd.native_disposal_active) {
+					return; // Selective MQ return does not allocate an RD cursor.
+				}
+				const auto &cursor = rd.native_disposal_continuation;
+				CHECK(cursor.production_owner == &request);
+				CHECK(cursor.height_selection.is_null());
+				CHECK_FALSE(cursor.in_place_no_disposal);
+				if (!serials.has(cursor.serial)) {
+					CHECK(cursor.serial == first_serial + uint64_t(serials.size()));
+					serials.push_back(cursor.serial);
+				}
+			}
+			static void before_set_free(void *context, RDD::UniformSetID id) {
+				auto &self = *static_cast<CursorWitness *>(context);
+				self.observe();
+				if (self.rd.native_disposal_active) {
+					const auto &cursor = self.rd.native_disposal_continuation;
+					const auto &physical = self.request.resources[id == RDD::UniformSetID(83) ? 3 : 2].owned_physical;
+					CHECK(cursor.phase == 4);
+					CHECK(cursor.target == physical.frame_slot);
+					REQUIRE(cursor.target < self.rd.frames.size());
+					CHECK(self.rd.frames[cursor.target].qualification_epoch == physical.frame_epoch);
+					CHECK(self.rd.frames[cursor.target].disposal.active);
+				}
+			}
+			void after_turn() {
+				observe();
+				CHECK(rd.next_native_disposal_serial == first_serial + uint64_t(serials.size()));
+				if (rd.native_disposal_active) {
+					CHECK(request.maintenance_serial == rd.native_disposal_continuation.serial);
+				} else {
+					CHECK(request.maintenance_serial == 0);
+				}
+			}
+		} cursor_witness(e.rd, *r, e.driver, cursor_before);
+		e.driver.set_free_observer = &CursorWitness::before_set_free;
+		e.driver.set_free_observer_context = &cursor_witness;
+		REQUIRE_FALSE(e.rd.frames[0].fence_signaled);
+		const auto offered = budget(receipts, 16);
+		const auto native_before = e.driver.receipt_calls();
+		const auto batch = turn(e, *r, ProductionControlKind::OBSERVE, offered);
+		cursor_witness.after_turn();
+		CHECK(e.driver.receipt_calls() - native_before <= offered.receipts);
+		CHECK(batch.service_usage.receipts <= receipts);
+		CHECK(batch.service_usage.passes <= 16);
+		CHECK(r->resources[2].owned_physical.enqueued);
+		CHECK(r->resources[3].owned_physical.enqueued == (receipts >= 2));
+		const uint32_t enqueued = uint32_t(r->resources[2].owned_physical.enqueued) +
+				uint32_t(r->resources[3].owned_physical.enqueued);
+		const uint32_t logical_receipts = enqueued * mq_source.logical_receipts;
+		const uint32_t logical_passes = enqueued * mq_source.logical_passes;
+		REQUIRE(logical_receipts <= offered.receipts);
+		REQUIRE(logical_passes <= offered.passes);
+		const uint32_t receipt_paid = (offered.receipts - logical_receipts) / receipt_price;
+		const uint32_t pass_paid = (offered.passes - logical_passes) / pass_price;
+		const uint32_t source_paid_returns = MIN(enqueued, MIN(receipt_paid, pass_paid));
+		CHECK(e.driver.set_frees == source_paid_returns);
+		CHECK_FALSE(r->resources[2].returned);
+		CHECK_FALSE(r->resources[3].returned);
+		CHECK(r->returns[2].pending);
+		CHECK(r->returns[3].pending);
+		CHECK(e.registry->production_release(ref).native_error == ERR_BUSY);
+		if (receipts >= 2) {
+			CHECK(r->resources[2].owned_physical.frame_slot == r->resources[3].owned_physical.frame_slot);
+			CHECK(r->resources[2].owned_physical.frame_epoch == r->resources[3].owned_physical.frame_epoch);
+		}
+		e.driver.complete = true;
+		for (uint32_t pass = 0; pass < 64 && (!r->resources[2].returned || !r->resources[3].returned); ++pass) {
+			const auto before = e.driver.receipt_calls();
+			const auto observed = turn(e, *r, ProductionControlKind::OBSERVE, budget(3, 16));
+			cursor_witness.after_turn();
+			CHECK(observed.service_usage.receipts <= 3);
+			CHECK(observed.service_usage.passes <= 16);
+			CHECK(e.driver.receipt_calls() - before <= 3);
+		}
+		REQUIRE(r->resources[2].returned);
+		REQUIRE(r->resources[3].returned);
+		CHECK(e.driver.set_frees == e.driver.set_creates);
+		CHECK_FALSE(r->returns[2].pending);
+		CHECK_FALSE(r->returns[3].pending);
+		CHECK(r->resources[2].owned_physical.free_event != 0);
+		CHECK(r->resources[3].owned_physical.free_event != 0);
+		CHECK(r->resources[2].owned_physical.free_event != r->resources[3].owned_physical.free_event);
+		cursor_witness.after_turn();
+		e.driver.set_free_observer = nullptr;
+		e.driver.set_free_observer_context = nullptr;
+		CHECK(e.original_unit->shader.dependent_children.load() == 0);
+		CHECK(r->resources[1].owned_physical.dependent_children.load() == 0);
+		GDExtensionStorageRetireRefV1 retire = {};
+		REQUIRE(retire_storage(e, *r, 1, retire));
+		GDExtensionStorageRetireReportV1 report = {};
+		const auto limit = budget(3, 16);
+		for (uint32_t pass = 0; pass < 128 && report.state != 1; ++pass) {
+			const auto observed = observe_storage(e, ref, retire, &limit, &report).native_error;
+			CHECK((observed == OK || observed == ERR_BUSY));
+		}
+		REQUIRE(report.state == 1);
+		REQUIRE(e.registry->production_storage_release(ref, retire).native_error == OK);
+		REQUIRE(finish_owned_maintenance(e, *r, limit));
+		REQUIRE(turn(e, *r, ProductionControlKind::RELEASE, budget()).owner_return.native_error == OK);
+		CHECK(r->serial == 0);
+		CHECK(e.registry->production_close(attachment_ref).native_error == OK);
+	}
+	struct SetReturnOracle {
+		uint32_t native_frees, receipts, passes, native_calls, foreign_count, logical_receipts, logical_passes;
+		bool returned, free_event, foreign_live, same_foreign, cursor_unchanged;
+		bool operator==(const SetReturnOracle &other) const {
+			return native_frees == other.native_frees && receipts == other.receipts &&
+					passes == other.passes && native_calls == other.native_calls &&
+					foreign_count == other.foreign_count && logical_receipts == other.logical_receipts &&
+					logical_passes == other.logical_passes && returned == other.returned &&
+					free_event == other.free_event && foreign_live == other.foreign_live &&
+					same_foreign == other.same_foreign && cursor_unchanged == other.cursor_unchanged;
+		}
+	};
+	// The expected row is returned by the existing MQ source implementation.
+	// Both arms use the real public owned SET create/cancel and logical free.
+	// This is a controlled CPU-driver ownership fixture, not a native certificate.
+	static SetReturnOracle own_set_with_ordinary_disposal(bool source_reference) {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		e.driver.complete = true; // Existing finite driver's ready input; no native report is written.
+		e.driver.allow_second_set = true;
+		auto *r = owned_setup(e, true);
+		REQUIRE(r != nullptr);
+		const GDExtensionProductionRequestRefV1 ref{ Enrollment::INSTANCE, r->serial };
+		const GDExtensionProductionAttachmentRefV1 attachment{ Enrollment::INSTANCE, r->attachment->serial };
+		const RID own_set = r->resources[2].primary;
+		// Use the existing finite driver shader shape with a distinct ordinary RD
+		// owner. No qualification or output-source field is supplied to this set.
+		auto ordinary_shader = *e.rd.shader_owner.get_or_null(r->resources[0].secondary);
+		ordinary_shader.qualification_return = nullptr;
+		const RID ordinary_shader_rid = e.rd.shader_owner.make_rid(ordinary_shader);
+		const auto *original_buffer = e.rd.storage_buffer_owner.get_or_null(r->resources[1].primary);
+		REQUIRE(original_buffer != nullptr);
+		const RID ordinary_buffer = e.rd.storage_buffer_create(original_buffer->size);
+		REQUIRE(ordinary_buffer.is_valid());
+		RenderingDevice::Uniform uniform;
+		uniform.uniform_type = RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER;
+		uniform.binding = 0;
+		uniform.append_id(ordinary_buffer);
+		const RID foreign = e.rd.uniform_set_create(VectorView<RenderingDevice::Uniform>(&uniform, 1), ordinary_shader_rid, 0);
+		REQUIRE(foreign.is_valid());
+		const auto *foreign_live = e.rd.uniform_set_owner.get_or_null(foreign);
+		REQUIRE(foreign_live != nullptr);
+		const auto driver_id = foreign_live->driver_id;
+		const auto shader = foreign_live->shader_id;
+		const auto format = foreign_live->format;
+		REQUIRE(foreign_live->qualification_return == nullptr);
+		REQUIRE(foreign_live->qualification_dependencies.is_empty());
+		REQUIRE(foreign_live->production_output_dependencies.is_empty());
+		REQUIRE(foreign_live->production_disposal_uses == nullptr);
+		e.rd.free_rid(foreign);
+		REQUIRE_FALSE(e.rd.uniform_set_is_valid(foreign));
+		REQUIRE(e.rd.frames[0].uniform_sets_to_dispose_of.size() == 1);
+		const auto *foreign_element = e.rd.frames[0].uniform_sets_to_dispose_of.front();
+		ProductionDisposalUse source_member;
+		if (source_reference) {
+			// The SOURCE's original public/internal owner attachment checks the
+			// actual live RID/driver identity; never inject a completed member.
+			REQUIRE(e.rd._production_disposal_attach_owned(source_member, *r, own_set) == OK);
+		}
+		REQUIRE(e.registry->production_cancel(ref).native_error == OK);
+		const auto cursor_before = e.rd.next_native_disposal_serial;
+		const auto free_before_enqueue = e.driver.set_frees;
+		// One original receipt admits only the logical free, never also its
+		// physical return. This is the one-short control for both source arms.
+		const auto enqueued = turn(e, *r, ProductionControlKind::OBSERVE, budget(1, 1));
+		CHECK(enqueued.service_usage.receipts <= 1);
+		CHECK(enqueued.service_usage.passes <= 1);
+		REQUIRE(r->resources[2].owned_physical.enqueued);
+		CHECK(r->resources[2].owned_physical.free_event == 0);
+		CHECK(e.driver.set_frees == free_before_enqueue);
+		CHECK_FALSE(r->resources[2].returned);
+		if (!source_reference) {
+			const auto calls = e.driver.receipt_calls();
+			// Preserve the pre-existing whole-frame foreign callback/readback
+			// veto even though the selective resource itself is this owner's.
+			e.rd.frames[0].download_buffer_get_data_requests.push_back(RenderingDevice::BufferGetDataRequest{});
+			const auto foreign_readback = turn(e, *r, ProductionControlKind::OBSERVE, budget(1, 1));
+			CHECK(foreign_readback.result.native_error == ERR_BUSY);
+			CHECK(e.driver.receipt_calls() == calls);
+			CHECK(e.driver.set_frees == free_before_enqueue);
+			CHECK(r->resources[2].owned_physical.free_event == 0);
+			e.rd.frames[0].download_buffer_get_data_requests.clear();
+		}
+		const auto physical_before = e.driver.set_frees;
+		const auto calls_before = e.driver.receipt_calls();
+		uint32_t receipts, passes;
+		if (source_reference) {
+			const auto allowance = budget(1, 1);
+			RenderingDevice::NativeDisposalBudget native{ allowance.receipts, allowance.passes, allowance.deadline_micros };
+			RenderingDevice::NativeDisposalUsage used;
+			BudgetDriverGuard guard(e.driver);
+			REQUIRE(e.rd._production_mq_drain_owned_disposals_step(*r, nullptr, 0, native, used) == OK);
+			receipts = used.polls + used.frees + used.issues + used.retains + used.releases + used.recycles;
+			passes = used.passes;
+		} else {
+			// Generic maintenance still refuses the genuine foreign prefix. The
+			// exact own-SET cleanup runs afterwards under this same original turn.
+			const auto actual = turn(e, *r, ProductionControlKind::OBSERVE, budget(1, 1));
+			receipts = actual.service_usage.receipts;
+			passes = actual.service_usage.passes;
+		}
+		SetReturnOracle observed{
+			e.driver.set_frees - physical_before, receipts, passes,
+			e.driver.receipt_calls() - calls_before,
+			uint32_t(e.rd.frames[0].uniform_sets_to_dispose_of.size()),
+			enqueued.service_usage.receipts, enqueued.service_usage.passes,
+			false, r->resources[2].owned_physical.free_event != 0,
+			e.driver.second_set_live,
+			e.rd.frames[0].uniform_sets_to_dispose_of.front() == foreign_element &&
+					foreign_element->get().driver_id == driver_id && foreign_element->get().shader_id == shader &&
+					foreign_element->get().format == format && foreign_element->get().qualification_return == nullptr &&
+					foreign_element->get().production_disposal_uses == nullptr,
+			e.rd.next_native_disposal_serial == cursor_before
+		};
+		CHECK(receipts <= 1);
+		CHECK(passes <= 1);
+		CHECK(observed.native_calls <= receipts);
+		turn(e, *r, ProductionControlKind::OBSERVE, budget(1, 1));
+		observed.returned = r->resources[2].returned && !r->returns[2].pending;
+		CHECK(e.original_unit->shader.dependent_children.load() == 0);
+		CHECK(r->resources[1].owned_physical.dependent_children.load() == 0);
+		// Let the original ordinary RD owner, not production, return its set.
+		const auto own_free_event = r->resources[2].owned_physical.free_event;
+		e.rd._free_pending_resources(0);
+		CHECK_FALSE(e.driver.second_set_live);
+		CHECK(r->resources[2].owned_physical.free_event == own_free_event);
+		CHECK(e.rd.frames[0].uniform_sets_to_dispose_of.is_empty());
+		e.rd.free_rid(ordinary_buffer);
+		e.rd._free_pending_resources(0);
+		// The ordinary fixture shader borrows the finite driver's original shape,
+		// so only its independent RID owner is released, not that shared driver.
+		e.rd.shader_owner.free(ordinary_shader_rid);
+		REQUIRE(return_owned_storage(e, *r, 1));
+		REQUIRE(finish_owned_maintenance(e, *r, budget()));
+		REQUIRE(turn(e, *r, ProductionControlKind::RELEASE, budget()).owner_return.native_error == OK);
+		REQUIRE(e.registry->production_close(attachment).native_error == OK);
+		return observed;
 	}
 	static void owned_set_dispatch(uint32_t logical_use = 0, bool honors_barriers = false) {
 		using namespace GDExtensionDeviceExit;
@@ -3588,6 +4031,74 @@ struct Access {
 		CHECK(e.registry->production_close(attachment).native_error == OK);
 	}
 
+	static void fresh_buffer_target(bool pending_advance, bool buffer_on_target, bool foreign_readback) {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		e.driver.complete = true;
+		const auto c = capacity(3);
+		const auto attachment = e.accept(c);
+		REQUIRE(attachment.handle_serial);
+		Request *request = nullptr;
+		REQUIRE(e.reserve(attachment, c, 31, request) == OK);
+		REQUIRE(request);
+		e.rd.frames.resize(2);
+		graph_initialize(e);
+		e.rd.frames[1].qualification_epoch = 2;
+		e.rd.frames[1].fence = RDD::FenceID(95);
+		e.rd.frames[1].command_buffer = RDD::CommandBufferID(92);
+		e.rd.frames[1].command_pool = RDD::CommandPoolID(96);
+		e.rd.next_qualification_frame_epoch = 3;
+		const uint32_t target = pending_advance ? 0 : 1;
+		e.driver.expected_begin_frame = target;
+		const uint32_t queued = buffer_on_target ? target : 1 - target;
+		RenderingDevice::Buffer buffer;
+		buffer.driver_id = e.driver.buffer_create(16, {}, RDD::MEMORY_ALLOCATION_TYPE_GPU, 0);
+		buffer.size = 16;
+		REQUIRE(buffer.driver_id.id);
+		const RID rid = e.rd.storage_buffer_owner.make_rid(buffer);
+		e.rd.frame = queued;
+		e.rd.free_rid(rid);
+		e.rd.frame = 0;
+		REQUIRE(e.rd.frames[queued].buffers_to_dispose_of.size() == 1);
+		e.rd.qualification_frame_advance_pending = pending_advance;
+		if (foreign_readback) {
+			// This unrelated readback has no Registry capture and remains global.
+			e.rd.frames[1 - target].download_buffer_get_data_requests.push_back(RenderingDevice::BufferGetDataRequest{});
+		}
+		const auto allowance = budget(1, 1);
+		ProductionServiceUsage used = {};
+		const auto frees_before = e.driver.buffer_frees;
+		const auto cursor_before = e.rd.next_native_disposal_serial;
+		{
+			MutexLock registry_lock(e.registry->mutex);
+			MutexLock device_lock(e.rd._thread_safe_);
+			BudgetDriverGuard guard(e.driver);
+			CHECK(e.registry->production_maintenance_locked(*request, e.rd, allowance, used) == ERR_BUSY);
+		}
+		if (foreign_readback) {
+			e.rd.frames[1 - target].download_buffer_get_data_requests.clear();
+		}
+		if (buffer_on_target || foreign_readback) {
+			CHECK_FALSE(e.rd.native_disposal_active);
+			CHECK(e.rd.next_native_disposal_serial == cursor_before);
+			CHECK(request->maintenance_serial == 0);
+			CHECK((used.controls == 0 && used.receipts == 0 && used.passes == 0));
+			e.rd.qualification_frame_advance_pending = false; // End this fixture's unstarted advance.
+		} else {
+			CHECK(e.rd.native_disposal_active);
+			CHECK(e.rd.native_disposal_continuation.target == target);
+			CHECK(request->maintenance_serial == cursor_before);
+			CHECK((used.passes <= 1 && used.receipts <= 1));
+			CHECK(finish_owned_maintenance(e, *request, allowance));
+		}
+		CHECK(e.driver.buffer_frees == frees_before);
+		CHECK(e.rd.frames[queued].buffers_to_dispose_of.size() == 1);
+		// Dispose the test-owned buffer through the ordinary owner after the check.
+		e.rd._free_pending_resources(queued);
+		CHECK(e.driver.buffer_frees == frees_before + 1);
+		CHECK(e.registry->production_release({ Enrollment::INSTANCE, request->serial }).native_error == OK);
+		CHECK(e.registry->production_close(attachment).native_error == OK);
+	}
 	static void maintenance_cursor_owner() {
 		using namespace GDExtensionDeviceExit;
 		Enrollment e;
@@ -4266,6 +4777,23 @@ TEST_CASE("[ProductionNativeObserve][ProductionActions] staged upload prefix clo
 TEST_CASE("[ProductionNativeObserve][ProductionActions] owned storage returns through actual driver free with one receipt per turn then closes") {
 	Access::storage_retirement_turns();
 }
+TEST_CASE("[ProductionNativeObserve][ProductionActions] accepted set creation resumes its original slot after transient recording Busy") {
+	SUBCASE("same original slot creates once after its returned control is consumed") {
+		Access::original_set_create_frame_gate(0);
+	}
+	SUBCASE("cancelled original request never creates after the gate clears") {
+		Access::original_set_create_frame_gate(1);
+	}
+	SUBCASE("sealed original NewWork never creates after the gate clears") {
+		Access::original_set_create_frame_gate(2);
+	}
+}
+TEST_CASE("[ProductionNativeObserve][OwnedSetBatch] dependency-clear original SETs share native return without exceeding their quote") {
+	SUBCASE("one receipt queues one original SET") { Access::owned_set_retirement_batch(1); }
+	SUBCASE("two receipts queue both originals before maintenance") { Access::owned_set_retirement_batch(2); }
+	SUBCASE("ordinary three-receipt quote queues both originals") { Access::owned_set_retirement_batch(3); }
+	SUBCASE("sixteen receipts can pay both original physical returns") { Access::owned_set_retirement_batch(16); }
+}
 TEST_CASE("[ProductionNativeObserve][ProductionActions] original unit import and request owned set execute dispatch then return dependencies") {
 	SUBCASE("descriptor preparation without pipeline barriers") {
 		Access::owned_set_dispatch();
@@ -4322,6 +4850,25 @@ TEST_CASE("[ProductionNativeObserve] accepted maintenance cursor resumes only it
 	TestProductionNativeObserve::Access::maintenance_cursor_owner();
 }
 
+TEST_CASE("[ProductionNativeObserve] fresh maintenance scopes only its actual buffer disposal target") {
+	using Access = TestProductionNativeObserve::Access;
+	SUBCASE("fresh ignores a buffer on the current non-target frame") {
+		Access::fresh_buffer_target(false, false, false);
+	}
+	SUBCASE("fresh refuses the same buffer on the actual next target") {
+		Access::fresh_buffer_target(false, true, false);
+	}
+	SUBCASE("partial ordinary advance still refuses the current target buffer") {
+		Access::fresh_buffer_target(true, true, false);
+	}
+	SUBCASE("partial ordinary advance ignores the other buffer") {
+		Access::fresh_buffer_target(true, false, false);
+	}
+	SUBCASE("a non-target foreign readback still prevents the entire turn") {
+		Access::fresh_buffer_target(false, false, true);
+	}
+}
+
 TEST_CASE("[ProductionNativeObserve][NativeHeightRange] original captured issue retains before frame advance without replay") {
 	TestProductionNativeObserve::Access::height_retain_before_original_frame_advance();
 }
@@ -4331,4 +4878,11 @@ TEST_CASE("[ProductionNativeObserve][ConsumedTransportV2] non-output source and 
 }
 TEST_CASE("[ProductionNativeObserve][ConsumedTransportV2] V1 request rejects opt-in without capacity or control mutation") {
 	TestProductionNativeObserve::Access::consumed_transport_preserves_v1();
+}
+
+TEST_CASE("[ProductionNativeObserve][OwnSetSelective] original SET return preserves a same-frame ordinary disposal") {
+	using Access = TestProductionNativeObserve::Access;
+	const auto expected = Access::own_set_with_ordinary_disposal(true);
+	const auto actual = Access::own_set_with_ordinary_disposal(false);
+	CHECK(actual == expected);
 }

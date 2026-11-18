@@ -504,7 +504,7 @@ struct TypedRendererProducer {
 		query.abi = production_dto_abi<GDExtensionOutputMetadataQueryInputV1>(); query.config = config;
 		query.limits = { production_dto_abi<GDExtensionOutputMetadataLimitsV1>(),
 			staged_genuine_prior() ? 3u : 1u,
-			staged_genuine_prior() ? 2u : staged_read_capacity(),
+			staged_generation_read_capacity(),
 			1, 0 };
 		GDExtensionOutputMetadataQueryResultV1 quote{};
 		const auto metadata = port<GDExtensionInterfaceDeviceSessionOutputMetadataQueryV1>("device_session_output_metadata_query_v1");

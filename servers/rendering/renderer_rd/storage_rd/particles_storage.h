@@ -653,6 +653,7 @@ public:
 	Error particles_external_scene_material_facts(RID p_particles, ExternalSceneMaterialFacts &r_facts, ExternalSceneMaterialVisit p_visit, void *p_context) const;
 	uint32_t particles_external_surface_count(RID p_particles) const;
 	Error particles_external_surface_acquire(RID p_particles, uint32_t p_ordinal, ExternalSurfaceSelection &r_selection);
+	Error particles_external_generated_surfaces_for_view(RID p_particles, const ::RenderDataRD &, uint32_t &r_slot, uint32_t &r_count) const;
 	Error particles_external_slot_surface_acquire(RID p_particles, uint32_t p_slot, uint32_t p_ordinal, ExternalSurfaceSelection &r_selection);
 	Error particles_external_surface_release(ExternalSurfaceSelection &p_selection);
 	Error particles_external_view_acquire(const ExternalSurfaceSelection &p_selection, const ::RenderDataRD *p_render_data, ExternalPacketViewLease &r_view);

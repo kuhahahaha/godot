@@ -435,7 +435,8 @@ void RenderForwardClustered::_prepare_external_color(const RenderListParameters 
 	for (int i = 0; i < p_params.element_count; i++) {
 		const auto &element = *p_params.elements[i];
 		const auto &surface = element.external_surface;
-		if (element.external_surface_index == UINT32_MAX || surface.is_empty() || !element.owner->instance_count ||
+		if (element.external_surface_index == UINT32_MAX || surface.is_empty() ||
+				(!element.owner->instance_count && surface.get_profile() != RendererRD::ExternalOutputConfig::INDEXED_144) ||
 				!element.surface || !element.shader || !p_params.native_pass.includes_surface(element.color_pass_inclusion_mask) ||
 				!(surface.get_pass_mask() & pass)) {
 			continue;
@@ -449,11 +450,13 @@ void RenderForwardClustered::_prepare_external_color(const RenderListParameters 
 			continue;
 		}
 		auto *shader = element.shader;
-		if (view.get_profile() == RendererRD::ExternalOutputConfig::INSTANCE_192 &&
+		const bool indexed144 = view.get_profile() == RendererRD::ExternalOutputConfig::INDEXED_144;
+		const bool instance192 = view.get_profile() == RendererRD::ExternalOutputConfig::INSTANCE_192;
+		if ((indexed144 || (instance192 && shader->instance192_shader_supported())) &&
 				(request.pass == RendererRD::ExternalPacketPass::OPAQUE || request.pass == RendererRD::ExternalPacketPass::TRANSPARENT || request.pass == RendererRD::ExternalPacketPass::MOTION) &&
-				shader->instance192_shader_supported() && particles_storage->particles_external_view_can_prepare_shader(view)) {
+				particles_storage->particles_external_view_can_prepare_shader(view)) {
 			SceneShaderForwardClustered::ShaderData::PipelineKey key = {};
-			if (shader->get_external_pipeline_key(request, surface.get_primitive(), true, false, shader->uses_alpha_pass(), key) == OK) {
+			if (shader->get_external_pipeline_key(request, surface.get_primitive(), instance192, indexed144, shader->uses_alpha_pass(), key) == OK) {
 				RID native_shader;
 				uint64_t input_mask = 0;
 				const Error ready = shader->get_native_shader_if_ready(key.version, key.color_pass_flags, key.ubershader, key.indexed144, key.instance192, native_shader, input_mask);
@@ -522,7 +525,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 			continue;
 		}
 
-		if (surf->owner->instance_count == 0) {
+		if (surf->owner->instance_count == 0 && surf->external_surface.get_profile() != RendererRD::ExternalOutputConfig::INDEXED_144) {
 			continue;
 		}
 
@@ -1314,7 +1317,7 @@ _FORCE_INLINE_ static uint32_t _indices_to_primitives(RSE::PrimitiveType p_primi
 	static const uint32_t subtractor[RSE::PRIMITIVE_MAX] = { 0, 0, 1, 0, 2 };
 	return (p_indices - subtractor[p_primitive]) / divisor[p_primitive];
 }
-void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, const RenderDataRD *p_render_data, PassMode p_pass_mode, bool p_using_sdfgi, bool p_using_opaque_gi, bool p_using_motion_pass, bool p_append) {
+void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, const RenderDataRD *p_render_data, PassMode p_pass_mode, bool p_using_sdfgi, bool p_using_opaque_gi, bool p_using_motion_pass, bool p_append, LocalVector<GeometryInstanceSurfaceDataCache *> *p_generated_surfaces) {
 	active_render_data = (p_render_list == RENDER_LIST_OPAQUE) ? p_render_data : nullptr;
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	uint64_t frame = RSG::rasterizer->get_frame_number();
@@ -1476,6 +1479,9 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 		inst->flags_cache = flags;
 
 		GeometryInstanceSurfaceDataCache *surf = inst->surface_caches;
+		if (p_generated_surfaces && !surf && inst->data->base_type == RSE::INSTANCE_PARTICLES) {
+			surf = _collect_generated_slot_surfaces(inst, *p_render_data, *p_generated_surfaces);
+		}
 
 		float lod_distance = 0.0;
 
@@ -1552,7 +1558,8 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 					if (uses_gi) {
 						surf->sort.uses_forward_gi = 1;
 					}
-				} else if (p_using_motion_pass && (uses_motion || (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_MOTION_VECTOR))) {
+				} else if (p_using_motion_pass && (uses_motion || (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_MOTION_VECTOR)) &&
+						surf->external_surface.get_profile() != RendererRD::ExternalOutputConfig::INDEXED_144) {
 					surf->color_pass_inclusion_mask = COLOR_PASS_FLAG_MOTION_VECTORS;
 					render_list[RENDER_LIST_MOTION].add_element(surf);
 				} else {
@@ -2108,6 +2115,25 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		~ActiveRenderDataReset() { slot = nullptr; }
 	} active_render_data_reset{ active_render_data };
 
+	// The render lists may refer to these Surface nodes until the last color
+	// list closes. They never survive the original RenderData invocation.
+	LocalVector<GeometryInstanceSurfaceDataCache *> generated_surfaces;
+	struct GeneratedSurfaceReturn {
+		RenderForwardClustered &renderer;
+		LocalVector<GeometryInstanceSurfaceDataCache *> &surfaces;
+		~GeneratedSurfaceReturn() {
+			if (!surfaces.is_empty()) {
+				renderer.render_list[RENDER_LIST_OPAQUE].clear();
+				renderer.render_list[RENDER_LIST_ALPHA].clear();
+			}
+			for (auto *surface : surfaces) {
+				const Error returned = RendererRD::ParticlesStorage::get_singleton()->particles_external_surface_release(surface->external_surface);
+				CRASH_COND(returned != OK);
+				renderer.geometry_instance_surface_alloc.free(surface);
+			}
+		}
+	} generated_surface_return{ *this, generated_surfaces };
+
 #ifdef TESTS_ENABLED
 	++test_viewport_scene_entries;
 #endif
@@ -2331,7 +2357,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// May have changed due to the above (light buffer enlarged, as an example).
 	_update_render_base_uniform_set();
 
-	_fill_render_list(RENDER_LIST_OPAQUE, p_render_data, PASS_MODE_COLOR, using_sdfgi, using_sdfgi || using_voxelgi, using_motion_pass);
+	_fill_render_list(RENDER_LIST_OPAQUE, p_render_data, PASS_MODE_COLOR, using_sdfgi, using_sdfgi || using_voxelgi, using_motion_pass, false, &generated_surfaces);
 	render_list[RENDER_LIST_OPAQUE].sort_by_key();
 	render_list[RENDER_LIST_MOTION].sort_by_key();
 	render_list[RENDER_LIST_ALPHA].sort_by_reverse_depth_and_priority();
@@ -4991,6 +5017,37 @@ void RenderForwardClustered::_geometry_instance_add_surface(GeometryInstanceForw
 	}
 }
 
+RenderForwardClustered::GeometryInstanceSurfaceDataCache *RenderForwardClustered::_collect_generated_slot_surfaces(GeometryInstanceForwardClustered *p_instance, const RenderDataRD &p_render_data,
+		LocalVector<GeometryInstanceSurfaceDataCache *> &r_surfaces) {
+	auto *particles = RendererRD::ParticlesStorage::get_singleton();
+	uint32_t slot = UINT32_MAX, count = 0;
+	if (particles->particles_external_generated_surfaces_for_view(p_instance->data->base, p_render_data, slot, count) != OK) {
+		return nullptr;
+	}
+	auto *materials = RendererRD::MaterialStorage::get_singleton();
+	for (uint32_t i = 0; i < count; ++i) {
+		RendererRD::ExternalSurfaceSelection selected;
+		if (particles->particles_external_slot_surface_acquire(p_instance->data->base, slot, i, selected) != OK) {
+			continue;
+		}
+		RendererRD::MaterialStorage::MaterialData *data = nullptr;
+		const Error observed = materials->material_get_native_preparation_data(selected.material_selection, selected.material_generation, data);
+		auto *material = static_cast<SceneShaderForwardClustered::MaterialData *>(data);
+		if (observed != OK || !data || data->get_native_recipe_backend() != 2 || !material->shader_data ||
+				!material->shader_data->is_valid() || !selected.geometry_source || !selected.geometry_source->get_retained_surface()) {
+			const Error returned = particles->particles_external_surface_release(selected);
+			CRASH_COND(returned != OK);
+			continue;
+		}
+		_geometry_instance_add_surface_with_material(p_instance, i, material, selected.material_selection.get_local_index(), 0, RID(), &selected);
+		r_surfaces.push_back(p_instance->surface_caches);
+	}
+	// Publish the temporary chain only to this invocation's list fill.
+	auto *surfaces = p_instance->surface_caches;
+	p_instance->surface_caches = nullptr;
+	return surfaces;
+}
+
 void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p_geometry_instance) {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	RendererRD::ParticlesStorage *particles_storage = RendererRD::ParticlesStorage::get_singleton();
@@ -6048,12 +6105,12 @@ Error RenderForwardClustered::external_pipeline_prepare(const RendererRD::Extern
 	auto *shader = material->shader_data;
 	const bool instance192 = p_surface.profile == ExternalOutputConfig::INSTANCE_192;
 	const bool indexed144 = p_surface.profile == ExternalOutputConfig::INDEXED_144;
-	// Instance192 derives from its original generation's flattened source.
-	// Indexed144 keeps the original slot-owned source/backing association.
-	if (instance192 && (!r_preparation.source_geometry || p_surface.geometry_source != r_preparation.source_geometry || p_surface.material_selection != r_preparation.source_material || p_surface.material_generation != r_preparation.source_material_generation || !r_preparation.source_geometry->metadata_matches(p_surface.primitive, p_surface.surface_format, p_surface.surface_aabb, p_surface.surface_uv_scale))) {
+	// The checked source is the original flattened mesh or generated slot Surface.
+	const bool checked_geometry = instance192 || (indexed144 && r_preparation.source_geometry);
+	if (checked_geometry && (!r_preparation.source_geometry || p_surface.geometry_source != r_preparation.source_geometry || p_surface.material_selection != r_preparation.source_material || p_surface.material_generation != r_preparation.source_material_generation || !r_preparation.source_geometry->metadata_matches(p_surface.primitive, p_surface.surface_format, p_surface.surface_aabb, p_surface.surface_uv_scale))) {
 		return fail(ERR_INVALID_DATA);
 	}
-	const auto *geometry_source = instance192 ? r_preparation.source_geometry : p_surface.geometry_source;
+	const auto *geometry_source = checked_geometry ? r_preparation.source_geometry : p_surface.geometry_source;
 	if ((!instance192 && !indexed144) || indexed144 != p_surface.geometry_source->is_external() || !shader ||
 			(instance192 && !shader->instance192_shader_supported()) || shader->uses_point_size || shader->uses_particle_trails) {
 		return fail(ERR_UNAVAILABLE);
@@ -6109,7 +6166,7 @@ Error RenderForwardClustered::external_pipeline_prepare(const RendererRD::Extern
 	}
 	SceneShaderForwardClustered::ShaderData::NativePipelineValuePlan observed;
 	MaterialStorage::NativeMaterialFuturePipelinePlan material_observed;
-	if (instance192) {
+	if (checked_geometry) {
 		// Consume this exact ready key/state and retained source in the original
 		// row's aggregate closure/capacity/origin validator before factories.
 		// Native execution revalidates actual derived VA/VF and ready Shader;
@@ -6141,7 +6198,7 @@ Error RenderForwardClustered::external_pipeline_prepare(const RendererRD::Extern
 	if (error != OK) {
 		return fail(error);
 	}
-	if (instance192) {
+	if (checked_geometry) {
 		error = r_preparation._prospective_execution_geometry_matches(observed.geometry);
 		if (error != OK) {
 			return fail(error);
@@ -6149,14 +6206,14 @@ Error RenderForwardClustered::external_pipeline_prepare(const RendererRD::Extern
 	}
 	key.vertex_format_id = r_preparation.geometry[0].get_vertex_format();
 	r_preparation.last_error = ERR_CANT_CREATE;
-	r_preparation.created_pipeline = shader->create_native_pipeline(key, &r_preparation, instance192 ? &observed : nullptr);
+	r_preparation.created_pipeline = shader->create_native_pipeline(key, &r_preparation, checked_geometry ? &observed : nullptr);
 	if (r_preparation.created_pipeline.is_null()) {
 		return fail(r_preparation.last_error);
 	}
 	// Keep both prefixes in the admitted row on every failure. Its original
 	// service path, not this stack frame, owns retirement and resource charges.
 	error = storage->material_native_hold_acquire(p_surface.material_selection, native_shader,
-			r_preparation.created_pipeline, material->uniform_set, r_preparation.material, r_preparation.max_resources, p_surface.material_generation, instance192 ? &material_observed : nullptr);
+			r_preparation.created_pipeline, material->uniform_set, r_preparation.material, r_preparation.max_resources, p_surface.material_generation, checked_geometry ? &material_observed : nullptr);
 	if (error != OK) {
 		return fail(error);
 	}

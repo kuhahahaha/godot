@@ -451,6 +451,7 @@ private:
 	};
 
 	Buffer *_get_buffer_from_owner(RID p_buffer);
+	Buffer *_production_output_storage_buffer(RID p_buffer);
 	Error _buffer_initialize(Buffer *p_buffer, Span<uint8_t> p_data, uint32_t p_required_align = 32);
 
 	void update_perf_report();
@@ -1440,6 +1441,8 @@ private:
 	};
 
 	RID_Owner<IndexArray, true> index_array_owner;
+	bool _validate_external_indexed_surface_buffers(RID, RID, RID, RID, uint32_t, uint32_t, bool);
+	uint64_t _generated_indexed144_backing_serial(RID, const NativeDisposalWitness &, bool);
 
 public:
 	enum BufferCreationBits {
@@ -1813,6 +1816,7 @@ private:
 	Error _production_output_owned_reserve(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint32_t, uint64_t &);
 	Error _production_output_owned_rollback(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t &);
 	Error _production_output_owned_storage_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, uint32_t, BitField<StorageBufferUsage>, RID &, NativeDisposalWitness &);
+	Error _production_output_owned_indexed144_buffer_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t group, uint32_t ordinal, uint32_t role, uint32_t bytes, RID &, NativeDisposalWitness &);
 	Error _production_output_owned_uniform_set_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, const VectorView<Uniform> &, RID, uint32_t, RID &, NativeDisposalWitness &);
 	// One exact buffer source per binding. Owned resources retain their original
 	// slot group; imported sources name the accepted action's actual READ row.
@@ -1857,7 +1861,22 @@ private:
 		BIDIRECTIONAL,
 		MATERIAL_DISPOSAL,
 	};
-	Error _production_output_hold_inventory_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_reserved_group, const VectorView<NativeImmutableHold *> &, uint32_t p_limit, uint32_t &r_count, NativeClosureMode p_mode = NativeClosureMode::BIDIRECTIONAL);
+	struct NativeMaterialDisposalBudget {
+		uint32_t ordinary_limit;
+		VectorView<RID> pass_observers;
+		bool uses_ordinary_cell(RID p_rid, uint32_t p_pins) const {
+			if (!p_pins) {
+				for (uint32_t i = 0; i < pass_observers.size(); ++i) {
+					if (pass_observers[i] == p_rid) {
+						return false;
+					}
+				}
+			}
+			return true;
+		}
+	};
+	bool _production_output_pass_observer_locked(RID, const GDExtensionDeviceExit::ProductionRequest &, uint64_t p_pin, uint64_t p_group, bool p_pipeline);
+	Error _production_output_hold_inventory_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_reserved_group, const VectorView<NativeImmutableHold *> &, uint32_t p_limit, uint32_t &r_count, NativeClosureMode p_mode = NativeClosureMode::BIDIRECTIONAL, const NativeMaterialDisposalBudget *p_material_budget = nullptr);
 	template <typename Visitor>
 	Error _native_immutable_visit_related_locked(RID p_rid, NativeClosureMode p_mode, Visitor &&p_visit);
 	struct NativeProspectiveKey {
@@ -1915,9 +1934,9 @@ private:
 	// semantics; authenticated admission/adoption must supply the original pin.
 	Error _production_output_owned_destination_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t, uint32_t, GDExtensionDeviceExit::ProductionUseCell *&);
 	Error _production_output_hold_reservation_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_pin_serial, uint64_t p_reserved_group, uint32_t p_limit, uint32_t &r_group_index, bool p_require_unstaged = true);
-	Error _production_output_hold_stage_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_reserved_group, const VectorView<NativeImmutableHold *> &, uint32_t p_limit, uint32_t &r_count, NativeClosureMode p_mode = NativeClosureMode::BIDIRECTIONAL);
+	Error _production_output_hold_stage_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_reserved_group, const VectorView<NativeImmutableHold *> &, uint32_t p_limit, uint32_t &r_count, NativeClosureMode p_mode = NativeClosureMode::BIDIRECTIONAL, const NativeMaterialDisposalBudget *p_material_budget = nullptr);
 	void _production_output_hold_inventory_clear_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_reserved_group);
-	Error _production_output_hold_adopt_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_pin_serial, uint64_t p_reserved_group, const VectorView<NativeImmutableHold *> &, uint32_t p_limit, uint64_t &r_group, NativeClosureMode p_mode = NativeClosureMode::BIDIRECTIONAL);
+	Error _production_output_hold_adopt_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t p_pin_serial, uint64_t p_reserved_group, const VectorView<NativeImmutableHold *> &, uint32_t p_limit, uint64_t &r_group, NativeClosureMode p_mode = NativeClosureMode::BIDIRECTIONAL, const NativeMaterialDisposalBudget *p_material_budget = nullptr);
 	Error _production_output_hold_capture_locked(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, NativeImmutableHold &, uint64_t &);
 	Error _production_output_hold_returned_locked(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, GDExtensionDeviceExit::ProductionDisposalObservation &);
 	Error _production_output_hold_capture(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, NativeImmutableHold &, uint64_t &);
@@ -2662,6 +2681,7 @@ private:
 	void _flush_barriers_for_transfer_worker(TransferWorker *p_transfer_worker, bool p_barriers_locked = false);
 	Error _check_transfer_worker_operation(uint32_t p_transfer_worker_index, uint64_t p_transfer_worker_operation, bool *r_processed = nullptr);
 	Error _check_transfer_worker_buffer(Buffer *p_buffer);
+	bool _transfer_worker_operation_completed_locked(uint32_t p_index, uint64_t p_operation);
 	void _settle_completed_mesh_buffer_upload_locked(RID p_buffer);
 	Error _check_transfer_worker_texture(Texture *p_texture);
 	Error _check_transfer_worker_vertex_array(VertexArray *p_vertex_array);
@@ -2928,6 +2948,8 @@ public:
 
 	uint64_t limit_get(Limit p_limit) const;
 
+	bool has_pending_production_frame_maintenance() const;
+	bool has_pending_ordinary_frame_advance() const;
 	void swap_buffers(bool p_present);
 
 	uint32_t get_frame_delay() const;

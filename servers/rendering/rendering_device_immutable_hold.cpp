@@ -36,6 +36,12 @@
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 #include "servers/rendering/rendering_device.h"
 
+#include "modules/modules_enabled.gen.h"
+
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+#include "servers/rendering/render_capture_test_hooks.h"
+#endif
+
 #ifdef TESTS_ENABLED
 #include <cstdio>
 #endif
@@ -122,6 +128,39 @@ bool RenderingDevice::_production_disposal_belongs(RID rid, const GDExtensionDev
 	}
 	for (auto *n = *head; n; n = n->next) {
 		if (n->request == owner && n->request_serial == owner->serial && n->rid == rid.get_id() && n->kind == kind && n->serial == serial && n->native_driver_id == driver_id && n->state.load(std::memory_order_acquire) == 1) {
+			return true;
+		}
+	}
+	return false;
+}
+bool RenderingDevice::_production_output_pass_observer_locked(RID rid, const GDExtensionDeviceExit::ProductionRequest &request, uint64_t pin, uint64_t group, bool pipeline) {
+	using namespace GDExtensionDeviceExit;
+	uint32_t kind;
+	uint64_t serial, driver_id;
+	auto **head = _production_disposal_head(rid, kind, serial, driver_id);
+	bool *retiring = nullptr;
+	const auto *counter = _native_immutable_counter(rid, &retiring);
+	if (!head || kind != (pipeline ? 0u : 4u) || !pin || !group || !counter || !*counter || !retiring || *retiring) {
+		return false;
+	}
+	bool original_member = false;
+	for (auto *node = *head; node; node = node->next) {
+		if (node->request == &request && node->request_serial == request.serial && node->group == group && node->owned &&
+				node->rid == rid.get_id() && node->kind == kind && node->serial == serial && node->native_driver_id == driver_id &&
+				node->state.load(std::memory_order_acquire) == 1 && node->counter_pins_remaining && !node->counter_dropped) {
+			original_member = true;
+			break;
+		}
+	}
+	const uint64_t begin = uint64_t(request.use_count) + request.binding_used;
+	if (!original_member || begin > request.capacity.resource_uses || !request.uses) {
+		return false;
+	}
+	for (uint64_t i = begin; i < request.capacity.resource_uses; ++i) {
+		const auto &cell = request.uses[i];
+		if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_serial == group &&
+				cell.disposal_group_pin_serial == pin && cell.disposal_group_count == 1 &&
+				cell.disposal_group_native_hold && cell.disposal_group_native_hold_count == 1 && !cell.disposal_group_release && !cell.disposal_group_dropped) {
 			return true;
 		}
 	}
@@ -1116,9 +1155,9 @@ void RenderingDevice::_production_output_hold_inventory_clear_locked(GDExtension
 	}
 }
 
-Error RenderingDevice::_production_output_hold_inventory_locked(GDExtensionDeviceExit::ProductionRequest &request, uint64_t reserved_group, const VectorView<NativeImmutableHold *> &holds, uint32_t limit, uint32_t &out_count, NativeClosureMode mode) {
+Error RenderingDevice::_production_output_hold_inventory_locked(GDExtensionDeviceExit::ProductionRequest &request, uint64_t reserved_group, const VectorView<NativeImmutableHold *> &holds, uint32_t limit, uint32_t &out_count, NativeClosureMode mode, const NativeMaterialDisposalBudget *material_budget) {
 	uint32_t count = 0;
-	const Error inventoried = _production_output_hold_stage_locked(request, reserved_group, holds, limit, count, mode);
+	const Error inventoried = _production_output_hold_stage_locked(request, reserved_group, holds, limit, count, mode, material_budget);
 	if (inventoried != OK) {
 		return inventoried;
 	}
@@ -1286,10 +1325,19 @@ Error RenderingDevice::_production_output_resource_preflight_locked(GDExtensionD
 		}
 	}
 	if (auto *buffer = _native_immutable_buffer(rid); buffer && buffer->transfer_worker_index >= 0) {
+		// The already-admitted hold dependencies have their own strictly settled
+		// worker gate. A wider disposal-only entry acquires zero physical pins
+		// and may observe this original ordinary buffer's completed transfer.
+		const bool ordinary_observer = !pins && !qualified && !buffer->native_external_access &&
+				!buffer->native_immutable_retire_requested && buffer->native_disposal.cell.is_null() &&
+				!buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT) &&
+				!buffer->usage.has_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
+		if (!ordinary_observer || !_transfer_worker_operation_completed_locked(uint32_t(buffer->transfer_worker_index), buffer->transfer_worker_operation)) {
 #ifdef TESTS_ENABLED
-		trace_refusal("buffer_worker", ERR_BUSY, kind);
+			trace_refusal("buffer_worker", ERR_BUSY, kind);
 #endif
-		return ERR_BUSY;
+			return ERR_BUSY;
+		}
 	}
 	if (const auto *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr; texture && texture->transfer_worker_index >= 0) {
 		const bool texture_observer = material_observer && !texture->native_external_access;
@@ -1423,12 +1471,14 @@ Error RenderingDevice::_production_output_hold_reservation_locked(GDExtensionDev
 	return OK;
 }
 
-Error RenderingDevice::_production_output_hold_stage_locked(GDExtensionDeviceExit::ProductionRequest &request, uint64_t reserved_group, const VectorView<NativeImmutableHold *> &holds, uint32_t limit, uint32_t &out_count, NativeClosureMode mode) {
+Error RenderingDevice::_production_output_hold_stage_locked(GDExtensionDeviceExit::ProductionRequest &request, uint64_t reserved_group, const VectorView<NativeImmutableHold *> &holds, uint32_t limit, uint32_t &out_count, NativeClosureMode mode, const NativeMaterialDisposalBudget *material_budget) {
 	using namespace GDExtensionDeviceExit;
 	// This bounded scratch belongs to the already admitted request. Every
 	// public dry inventory return restores it, on success as well as refusal.
 	if (holds.size() > 2 || (!limit && holds.size()) ||
-			(mode == NativeClosureMode::MATERIAL_DISPOSAL && (!reserved_group || holds.size() > 1))) {
+			(mode == NativeClosureMode::MATERIAL_DISPOSAL && (!reserved_group || holds.size() > 1)) ||
+			(material_budget && (mode != NativeClosureMode::MATERIAL_DISPOSAL ||
+					!material_budget->ordinary_limit || material_budget->ordinary_limit > limit))) {
 		return ERR_INVALID_PARAMETER;
 	}
 	for (uint32_t h = 0; h < holds.size(); ++h) {
@@ -1466,7 +1516,7 @@ Error RenderingDevice::_production_output_hold_stage_locked(GDExtensionDeviceExi
 	if (reservation != OK) {
 		return reservation;
 	}
-	uint32_t count = 0;
+	uint32_t count = 0, ordinary = 0;
 	auto rollback = [&]() { _production_output_hold_inventory_clear_locked(request, reserved_group); };
 	auto stage = [&](RID rid, uint32_t pins) -> Error {
 		for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
@@ -1486,7 +1536,8 @@ Error RenderingDevice::_production_output_hold_stage_locked(GDExtensionDeviceExi
 		if (checked != OK) {
 			return checked;
 		}
-		if (count == limit) {
+		const bool ordinary_cell = !material_budget || material_budget->uses_ordinary_cell(rid, pins);
+		if (count == limit || (material_budget && ordinary_cell && ordinary == material_budget->ordinary_limit)) {
 			return ERR_OUT_OF_MEMORY;
 		}
 		for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
@@ -1502,6 +1553,7 @@ Error RenderingDevice::_production_output_hold_stage_locked(GDExtensionDeviceExi
 				c.disposal.counter_dropped = pins == 0;
 				c.disposal.qualified_borrow = metadata.qualified_borrow;
 				++count;
+				ordinary += ordinary_cell;
 				return OK;
 			}
 		}
@@ -1539,7 +1591,7 @@ Error RenderingDevice::_production_output_hold_stage_locked(GDExtensionDeviceExi
 	return OK;
 }
 
-Error RenderingDevice::_production_output_hold_adopt_locked(GDExtensionDeviceExit::ProductionRequest &request, uint64_t pin_serial, uint64_t reserved_group, const VectorView<NativeImmutableHold *> &holds, uint32_t limit, uint64_t &out_group, NativeClosureMode mode) {
+Error RenderingDevice::_production_output_hold_adopt_locked(GDExtensionDeviceExit::ProductionRequest &request, uint64_t pin_serial, uint64_t reserved_group, const VectorView<NativeImmutableHold *> &holds, uint32_t limit, uint64_t &out_group, NativeClosureMode mode, const NativeMaterialDisposalBudget *material_budget) {
 	using namespace GDExtensionDeviceExit;
 	// Caller authentication is deliberately outside this shared primitive.
 	// It neither installs a scope nor tests numeric DTOs as source authority.
@@ -1554,7 +1606,7 @@ Error RenderingDevice::_production_output_hold_adopt_locked(GDExtensionDeviceExi
 	const uint32_t begin = uint32_t(uint64_t(request.use_count) + request.binding_used);
 	ProductionUseCell *group = reserved_group ? &request.uses[group_index] : nullptr;
 	uint32_t count = 0;
-	const Error inventoried = _production_output_hold_stage_locked(request, reserved_group, holds, limit, count, mode);
+	const Error inventoried = _production_output_hold_stage_locked(request, reserved_group, holds, limit, count, mode, material_budget);
 	if (inventoried != OK) {
 		return inventoried;
 	}
@@ -1900,7 +1952,7 @@ Error RenderingDevice::_production_output_drop_step(GDExtensionDeviceExit::Produ
 		// descriptor still pins its buffers until actual descriptor free.
 		// Skip this known blocked parent BEFORE spending a one-pass budget;
 		// otherwise it starves the very pending free that removes the pin.
-		const auto *output_buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr;
+		const auto *output_buffer = _production_output_storage_buffer(rid);
 		if (output_buffer && output_buffer->native_disposal.cell.is_valid() && output_buffer->native_disposal.cell->production_dependent_sets) {
 			continue;
 		}
@@ -1909,7 +1961,7 @@ Error RenderingDevice::_production_output_drop_step(GDExtensionDeviceExit::Produ
 		}
 		if (node.owned && node.kind != 0) {
 			NativeDisposalWitness witness;
-			if (auto *buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr) {
+			if (auto *buffer = _production_output_storage_buffer(rid)) {
 				witness = buffer->native_disposal;
 			} else if (auto *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr) {
 				witness = set->native_disposal;
@@ -2095,7 +2147,7 @@ Error RenderingDevice::_production_output_owned_bind_locked(GDExtensionDeviceExi
 	uint32_t kind;
 	uint64_t generation, driver_id;
 	auto **head = _production_disposal_head(rid, kind, generation, driver_id);
-	const auto *buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr;
+	const auto *buffer = _production_output_storage_buffer(rid);
 	const auto *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr;
 	if (!head || (kind != 9 && kind != 4) || driver_id != physical->backing || (buffer ? buffer->native_disposal.cell != witness.cell || buffer->backing_serial != physical->serial : set ? set->native_disposal.cell != witness.cell || set->native_disposal_serial != physical->serial
 																																														  : true)) {
@@ -2264,7 +2316,7 @@ bool RenderingDevice::_production_output_owned_storage_contains(GDExtensionDevic
 		return false;
 	}
 	Registry &registry = *pin.registry;
-	GDExtensionDeviceExit::Registry::Lock lock(registry);
+	GDExtensionDeviceExit::Registry::Lock lock(registry, Registry::Lock::BLOCK_OR_BORROW);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return false;
 	}
@@ -2278,7 +2330,7 @@ bool RenderingDevice::_production_output_owned_storage_contains(GDExtensionDevic
 		return false;
 	}
 	MutexScopeUnlock<Mutex> unlock(_thread_safe_);
-	const auto *buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr;
+	const auto *buffer = _production_output_storage_buffer(rid);
 	if (!buffer || buffer->native_disposal.cell.is_null()) {
 		return false;
 	}
@@ -2360,6 +2412,75 @@ Error RenderingDevice::_production_output_owned_storage_create(GDExtensionProduc
 	physical.production_group_serial = group;
 	physical.production_pin_serial = pin.serial;
 	physical.production_ordinal = ordinal;
+	return _production_output_owned_bind_locked(*request, pin.serial, group, ordinal, witness);
+}
+
+Error RenderingDevice::_production_output_owned_indexed144_buffer_create(GDExtensionProductionPhysicalContextRefV1 physical_context,
+		GDExtensionDeviceExit::ProductionOutputPin &pin, uint64_t group, uint32_t ordinal, uint32_t role,
+		uint32_t bytes, RID &rid, NativeDisposalWitness &witness) {
+	using namespace GDExtensionDeviceExit;
+	const bool vertices = role == GDEXTENSION_OUTPUT_ROLE_CURRENT_VERTICES_V1;
+	const bool indices = role == GDEXTENSION_OUTPUT_ROLE_INDEX_STAGING_V1;
+	if (!pin.registry || !group || rid.is_valid() || witness.cell.is_valid() ||
+			(!vertices && !indices) || !bytes || bytes % (vertices ? 576u : 24u)) {
+		return ERR_INVALID_PARAMETER;
+	}
+	Registry &registry = *pin.registry;
+	Registry::Lock lock(registry);
+	ProductionRequest *request = nullptr;
+	const Error ready = _production_output_owned_create_preflight_locked(physical_context, pin, group, ordinal, request);
+	if (ready != OK) {
+		return ready;
+	}
+	if (!registry.production_output_factory_pin_matches_locked(*request, pin, *this) || request->next_action >= request->action_count) {
+		return ERR_UNAUTHORIZED;
+	}
+	const auto &action = request->actions[request->next_action];
+	if (action.output_prepare_version != 3 || action.output_role_count != 5 ||
+			action.output_roles[0].role != GDEXTENSION_OUTPUT_ROLE_CURRENT_VERTICES_V1 ||
+			action.output_roles[1].bytes || action.output_roles[2].bytes ||
+			action.output_roles[3].role != GDEXTENSION_OUTPUT_ROLE_INDEX_STAGING_V1 ||
+			action.output_roles[vertices ? 0 : 3].bytes != bytes) {
+		return ERR_INVALID_DATA;
+	}
+	if (!_thread_safe_.try_lock()) {
+		return ERR_BUSY;
+	}
+	MutexScopeUnlock<Mutex> unlock(_thread_safe_);
+	const Error disposal_ready = _native_disposal_preflight();
+	if (disposal_ready != OK) {
+		return disposal_ready;
+	}
+	const uint64_t serial = _reserve_backing_serial();
+	if (!serial) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	NativeDisposalWitness reserved;
+	reserved.cell.instantiate();
+	auto &physical = **reserved.cell;
+	physical.device = uint64_t(get_instance_id());
+	physical.serial = serial;
+	physical.production_request = request;
+	physical.production_request_serial = request->serial;
+	physical.production_group_serial = group;
+	physical.production_pin_serial = pin.serial;
+	physical.production_ordinal = ordinal;
+
+	registry.production_native_effect_enter_locked(*request);
+	const RID created = vertices ? vertex_buffer_create(bytes, {}, BUFFER_CREATION_AS_STORAGE_BIT) :
+			index_buffer_create(bytes / sizeof(uint32_t), INDEX_BUFFER_FORMAT_UINT32, {}, false, BUFFER_CREATION_AS_STORAGE_BIT);
+	if (created.is_null()) {
+		return ERR_CANT_CREATE;
+	}
+	Buffer *buffer = _native_immutable_buffer(created);
+	CRASH_COND(!buffer || !buffer->draw_tracker || buffer->backing_serial || buffer->native_disposal.cell.is_valid());
+	physical.rid = created.get_id();
+	physical.backing = buffer->driver_id.id;
+	buffer->backing_serial = serial;
+	buffer->native_disposal_rid = created.get_id();
+	buffer->native_disposal = reserved;
+	rid = created;
+	witness = reserved;
 	return _production_output_owned_bind_locked(*request, pin.serial, group, ordinal, witness);
 }
 
@@ -2479,7 +2600,7 @@ Error RenderingDevice::_production_output_owned_uniform_set_create_locked(GDExte
 	for (uint32_t i = 0; i < uniforms.size(); ++i) {
 		const auto &uniform = uniforms[i];
 		const auto &source = sources[i];
-		const auto *buffer = storage_buffer_owner.get_or_null(source.buffer);
+		const auto *buffer = _production_output_storage_buffer(source.buffer);
 		if (uniform.uniform_type != UNIFORM_TYPE_STORAGE_BUFFER || uniform.get_id_count() != 1 || uniform.get_id(0) != source.buffer ||
 				!buffer || !source.byte_size || source.byte_offset > buffer->size || source.byte_size > buffer->size - source.byte_offset) {
 			return ERR_INVALID_DATA;
@@ -2570,7 +2691,7 @@ Error RenderingDevice::_production_output_guard_begin_locked(GDExtensionDeviceEx
 				return ERR_INVALID_DATA;
 			}
 		}
-		const auto *buffer = storage_buffer_owner.owns(resources[i]) ? storage_buffer_owner.get_or_null(resources[i]) : nullptr;
+		const auto *buffer = _production_output_storage_buffer(resources[i]);
 		const auto *set = uniform_set_owner.owns(resources[i]) ? uniform_set_owner.get_or_null(resources[i]) : nullptr;
 		if (!buffer && (!set || !guard_group)) {
 			return set ? ERR_UNAUTHORIZED : ERR_INVALID_DATA;
@@ -3452,6 +3573,28 @@ Error RenderingDevice::_production_mq_drain_owned_disposals_step(const GDExtensi
 		return false;
 	};
 
+	// The same accepted request may own qualified SET children as well as MQ
+	// disposal witnesses. Logical free already closed their original use edges;
+	// only that exact still-pending physical cell can authorize its return.
+	auto owns_set = [&](const UniformSet &set) -> bool {
+		if (owns_disposal(set.production_disposal_uses, 4, set.driver_id.id)) {
+			return true;
+		}
+		if (set.qualification_return) {
+			for (uint32_t i = 0; i < p_request.resource_count; ++i) {
+				const auto &slot = p_request.resources[i];
+				if (slot.declaration.resource_kind == GDEXTENSION_PRODUCTION_SET_V1 &&
+						slot.declaration.ownership == GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 &&
+						slot.request == &p_request && slot.request_serial == p_request.serial &&
+						&slot.owned_physical == set.qualification_return && slot.retiring &&
+						slot.owned_physical.enqueued && !slot.returned) {
+					return true;
+				}
+			}
+		}
+		return false;
+	};
+
 	auto owns_fb = [&](const GDExtensionDeviceExit::QualificationPhysicalReturn *p_phys) -> bool {
 		if (!p_phys) {
 			return false;
@@ -3473,7 +3616,7 @@ Error RenderingDevice::_production_mq_drain_owned_disposals_step(const GDExtensi
 		}
 		for (auto *elem = f.uniform_sets_to_dispose_of.front(); elem; elem = elem->next()) {
 			const UniformSet &uniform_set = elem->get();
-			if (owns_disposal(uniform_set.production_disposal_uses, 4, uniform_set.driver_id.id)) {
+			if (owns_set(uniform_set)) {
 				return true;
 			}
 		}
@@ -3555,7 +3698,7 @@ Error RenderingDevice::_production_mq_drain_owned_disposals_step(const GDExtensi
 		for (auto *elem = f.uniform_sets_to_dispose_of.front(); elem;) {
 			auto *next = elem->next();
 			UniformSet &uniform_set = elem->get();
-			if (!owns_disposal(uniform_set.production_disposal_uses, 4, uniform_set.driver_id.id)) {
+			if (!owns_set(uniform_set)) {
 				elem = next;
 				continue;
 			}

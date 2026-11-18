@@ -37,7 +37,9 @@ static void host_callable_free(void *opaque) { auto &self = *static_cast<TypedRe
 static void host_callable_call(void *opaque, const GDExtensionConstVariantPtr *, GDExtensionInt,
 		GDExtensionVariantPtr returned, GDExtensionCallError *call_error) {
 	auto &self = *static_cast<TypedRendererProducer *>(opaque);
-	if (self.staged_enabled && self.staged_successor_ack_active) {
+	if (self.staged_enabled && self.staged_cancel_ack) {
+		self.staged_ack_cancel_in_normal();
+	} else if (self.staged_enabled && self.staged_successor_ack_active) {
 		self.staged_successor_ack_error = self.staged_ack_successor_in_normal();
 	} else if (self.staged_enabled && self.staged_successor_normal_prepare_active) {
 		self.prepare_successor_host_normal();

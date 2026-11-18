@@ -79,7 +79,7 @@ struct SelectionLayout {
 	uint64_t meshes = 0, materials = 0, bytes = 0;
 };
 Error selection_layout(uint32_t meshes, uint32_t materials, SelectionLayout &out) {
-	if (!meshes || meshes > RendererRD::ExternalOutputConfig::MAX_MESH_RIDS || !materials || materials > RendererRD::ExternalOutputConfig::MAX_FLATTENED_SURFACES) {
+	if (meshes > RendererRD::ExternalOutputConfig::MAX_MESH_RIDS || !materials || materials > RendererRD::ExternalOutputConfig::MAX_FLATTENED_SURFACES) {
 		return ERR_INVALID_PARAMETER;
 	}
 	auto align = [](uint64_t bytes, size_t alignment) { return (bytes + alignment - 1) & ~(uint64_t(alignment) - 1); };
@@ -103,7 +103,8 @@ template <class T> bool range(const T *data, Range &out) { return range(data, si
 bool overlaps(const Range &a, const Range &b) { return a.begin < b.end && b.begin < a.end; }
 bool rid_span(const GDExtensionOutputRidSpanV1 &span, const Range &input, const Range &output) {
 	Range values;
-	return !span.reserved && span.count && range(span.data, uint64_t(span.count) * sizeof(uint64_t), alignof(uint64_t), values) && !overlaps(values, input) && !overlaps(values, output);
+	return !span.reserved && (!span.count ? span.data == nullptr :
+			range(span.data, uint64_t(span.count) * sizeof(uint64_t), alignof(uint64_t), values) && !overlaps(values, input) && !overlaps(values, output));
 }
 void bounds_dto(const AABB &bounds, GDExtensionOutputBoundsV1 &out) {
 	for (uint32_t i = 0; i < 3; ++i) { out.position[i] = bounds.position[i]; out.size[i] = bounds.size[i]; }
@@ -181,7 +182,7 @@ Error Registry::output_metadata_selection_prepare(ProductionPhysicalContextRef c
 		if (count <= 0 || uint32_t(count) > owner->material_count - flattened) { return finish(ERR_INVALID_DATA); }
 		row.surfaces = uint32_t(count); flattened += row.surfaces;
 	}
-	if (flattened != owner->material_count) { return finish(ERR_INVALID_DATA); }
+	if (owner->mesh_count && flattened != owner->material_count) { return finish(ERR_INVALID_DATA); }
 	for (uint32_t i = 0; i < owner->material_count; ++i) {
 		auto &row = owner->material_rows[i]; row.material = RID::from_uint64(input.materials.data[i]);
 		if (row.material.is_null() || !materials->owns_material(row.material)) { return finish(ERR_INVALID_DATA); }
@@ -206,19 +207,29 @@ Error Registry::output_metadata_selection_read(GDExtensionProductionAttachmentRe
 	const auto &owner = *static_cast<const SelectionOwner *>(resource->metadata_data);
 	if (!owner.complete || owner.closing || owner.device != rd || owner.meshes != Meshes::get_singleton() || owner.materials != Materials::get_singleton() ||
 			owner.held_meshes != owner.mesh_count || owner.held_materials != owner.material_count || surface >= owner.material_count || resource->metadata_consumer != &owner.lease) { return ERR_UNAVAILABLE; }
-	uint32_t local_surface = surface, mesh_index = 0;
-	while (mesh_index < owner.mesh_count && local_surface >= owner.mesh_rows[mesh_index].surfaces) { local_surface -= owner.mesh_rows[mesh_index++].surfaces; }
-	if (mesh_index == owner.mesh_count) { return ERR_INVALID_DATA; }
-	Meshes::NativeSelectionSurfaceObservation mesh;
-	error = owner.meshes->mesh_selection_get_surface_observation(owner.mesh_rows[mesh_index].lease, local_surface, mesh);
-	if (error != OK) { return error; }
-	const auto &material = owner.material_rows[surface];
-	if (!material.lease.is_active() || owner.materials->material_get_generation(material.material) != material.generation) { return ERR_INVALID_DATA; }
 	GDExtensionOutputMetadataSelectionObservationV2 observed{};
 	observed.abi = { 2, sizeof(observed), 0 };
-	observed.mesh = mesh.mesh.get_id(); observed.mesh_revision = mesh.mesh_revision;
-	observed.native_surface = mesh.native_surface; observed.vertex_count = mesh.vertex_count; observed.index_count = mesh.index_count;
-	observed.primitive = mesh.primitive; observed.format = mesh.format; bounds_dto(mesh.bounds, observed.mesh_bounds);
+	observed.native_surface = UINT32_MAX;
+	if (owner.mesh_count) {
+		uint32_t local_surface = surface, mesh_index = 0;
+		while (mesh_index < owner.mesh_count && local_surface >= owner.mesh_rows[mesh_index].surfaces) {
+			local_surface -= owner.mesh_rows[mesh_index++].surfaces;
+		}
+		if (mesh_index == owner.mesh_count) { return ERR_INVALID_DATA; }
+		Meshes::NativeSelectionSurfaceObservation mesh;
+		error = owner.meshes->mesh_selection_get_surface_observation(owner.mesh_rows[mesh_index].lease, local_surface, mesh);
+		if (error != OK) { return error; }
+		observed.mesh = mesh.mesh.get_id();
+		observed.mesh_revision = mesh.mesh_revision;
+		observed.native_surface = mesh.native_surface;
+		observed.vertex_count = mesh.vertex_count;
+		observed.index_count = mesh.index_count;
+		observed.primitive = mesh.primitive;
+		observed.format = mesh.format;
+		bounds_dto(mesh.bounds, observed.mesh_bounds);
+	}
+	const auto &material = owner.material_rows[surface];
+	if (!material.lease.is_active() || owner.materials->material_get_generation(material.material) != material.generation) { return ERR_INVALID_DATA; }
 	observed.material = material.material.get_id(); observed.material_generation = material.generation;
 	Materials::NativeSelectionShaderObservation compiled;
 	const Error compiled_error = owner.materials->material_selection_get_shader_observation(material.lease, compiled);
@@ -327,6 +338,8 @@ Error Registry::output_metadata_selection_matches(GDExtensionProductionAttachmen
 	const auto &owner = *static_cast<const SelectionOwner *>(resource->metadata_data);
 	if (!owner.complete || owner.closing || resource->metadata_consumer != &owner.lease || owner.device != rd ||
 			uint32_t(config.surfaces.size()) != owner.mesh_count || uint32_t(config.surface_materials.size()) != owner.material_count) { return ERR_INVALID_DATA; }
+	const bool indexed = config.profile == RendererRD::ExternalOutputConfig::INDEXED_144;
+	if (indexed != (owner.mesh_count == 0)) { return ERR_INVALID_DATA; }
 	if (late && (late->device != rd || late->generation_registry != this || late->generation_mesh_count != owner.mesh_count ||
 			late->generation_material_count != owner.material_count || !late->generation_selection_complete || !late->generation_surfaces_complete)) { return ERR_INVALID_DATA; }
 	for (uint32_t i = 0; i < owner.mesh_count; ++i) {
@@ -380,6 +393,8 @@ Error Registry::output_create_v4(ProductionPhysicalContextRef context, GDExtensi
 	if (input.abi.abi_version != 4 || input.abi.struct_size != sizeof(input) || input.abi.reserved) { return ERR_INVALID_PARAMETER; }
 	GDExtensionProductionAttachmentRefV1 attachment{};
 	RendererRD::ExternalOutputConfig config;
+	ProductionResourceSlot *same_request_selection = nullptr;
+	const ProductionResourceSlot *new_placement = nullptr;
 	{
 		Lock lock(*this, Lock::BLOCK_OR_BORROW);
 		ProductionRequest *request = nullptr; RenderingDevice *rd = nullptr;
@@ -389,21 +404,43 @@ Error Registry::output_create_v4(ProductionPhysicalContextRef context, GDExtensi
 		uint32_t surfaces = 0;
 		GDExtensionOutputCreateResultV1 decoded{};
 		if (!RendererRD::ParticlesStorage::_external_decode_create(input.create.config, config, surfaces, decoded)) { return Error(decoded.status.error); }
-		if (config.profile != RendererRD::ExternalOutputConfig::INSTANCE_192) { return ERR_INVALID_PARAMETER; }
+		if (config.profile != RendererRD::ExternalOutputConfig::INSTANCE_192 &&
+				config.profile != RendererRD::ExternalOutputConfig::INDEXED_144) { return ERR_INVALID_PARAMETER; }
+		const Error matched = output_metadata_selection_matches(attachment, input.selection, config);
+		if (matched != OK) { return matched; }
+		if (input.selection.request.registry_instance == ref.registry_instance &&
+				input.selection.request.handle_serial == ref.handle_serial &&
+				input.create.metadata_resource_slot < request->resource_count &&
+				input.create.metadata_resource_slot != input.selection.resource_slot) {
+			const auto &placement = request->resources[input.create.metadata_resource_slot];
+			if (!placement.metadata_created) {
+				// The match above resolved this exact original slot under the
+				// same lock. A borrowed selection keeps its own request owner.
+				same_request_selection = &request->resources[input.selection.resource_slot];
+				new_placement = &placement;
+			}
+		}
 	}
-	Error matched = output_metadata_selection_matches(attachment, input.selection, config);
-	if (matched != OK) { return matched; }
 	auto *storage = RendererRD::ParticlesStorage::get_singleton();
 	if (!storage) { return ERR_UNAVAILABLE; }
 	// No RT task can interleave the original native selection return with this
 	// synchronous Create. Main can only seal reads; it cannot return the holds.
 	storage->particles_external_create_typed_v3(context, ref, input.create, out);
-	if (out.status.error != OK) { return Error(out.status.error); }
 	Lock lock(*this, Lock::BLOCK_OR_BORROW);
+	if (same_request_selection && new_placement->metadata_data && new_placement->metadata_generation_bound &&
+			!same_request_selection->metadata_generation_bound) {
+		// Only the original generation owner bind can install this root on
+		// the placement created by this protected callback. Preserve both
+		// exact paid allocations through OBSERVE, including a real generation
+		// installed before a later Create failure. RELEASE still frees them.
+		same_request_selection->metadata_root_serial = new_placement->metadata_root_serial;
+		same_request_selection->metadata_generation_bound = true;
+	}
+	if (out.status.error != OK) { return Error(out.status.error); }
 	auto *particles = storage->particles_owner.get_or_null(RID::from_uint64(out.particles));
 	if (!particles || !particles->external) { return ERR_INVALID_DATA; }
 	auto &owner = *particles->external;
-	matched = output_metadata_selection_matches(attachment, input.selection, config, &owner);
+	const Error matched = output_metadata_selection_matches(attachment, input.selection, config, &owner);
 	if (matched != OK) {
 		// Preserve the returned real generation/RID and its original close debt.
 		// No failed post-check may drop an actually created native owner.

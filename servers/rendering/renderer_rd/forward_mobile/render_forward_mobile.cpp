@@ -924,6 +924,25 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 		~ActiveRenderDataReset() { slot = nullptr; }
 	} active_render_data_reset{ active_render_data };
 
+	// The render lists may refer to these Surface nodes until the last color
+	// list closes. They never survive the original RenderData invocation.
+	LocalVector<GeometryInstanceSurfaceDataCache *> generated_surfaces;
+	struct GeneratedSurfaceReturn {
+		RenderForwardMobile &renderer;
+		LocalVector<GeometryInstanceSurfaceDataCache *> &surfaces;
+		~GeneratedSurfaceReturn() {
+			if (!surfaces.is_empty()) {
+				renderer.render_list[RENDER_LIST_OPAQUE].clear();
+				renderer.render_list[RENDER_LIST_ALPHA].clear();
+			}
+			for (auto *surface : surfaces) {
+				const Error returned = RendererRD::ParticlesStorage::get_singleton()->particles_external_surface_release(surface->external_surface);
+				CRASH_COND(returned != OK);
+				renderer.geometry_instance_surface_alloc.free(surface);
+			}
+		}
+	} generated_surface_return{ *this, generated_surfaces };
+
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 
@@ -1044,7 +1063,7 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 	_setup_lightmaps(p_render_data, *p_render_data->lightmaps, p_render_data->scene_data->cam_transform);
 
 	// fill our render lists early so we can find out if we use various features
-	_fill_render_list(RENDER_LIST_OPAQUE, p_render_data, PASS_MODE_COLOR);
+	_fill_render_list(RENDER_LIST_OPAQUE, p_render_data, PASS_MODE_COLOR, false, &generated_surfaces);
 	if (scene_state.used_opaque_stencil) {
 		render_list[RENDER_LIST_OPAQUE].sort_by_key_and_stencil();
 	} else {
@@ -2474,7 +2493,7 @@ _FORCE_INLINE_ static uint32_t _indices_to_primitives(RSE::PrimitiveType p_primi
 	return (p_indices - subtractor[p_primitive]) / divisor[p_primitive];
 }
 
-void RenderForwardMobile::_fill_render_list(RenderListType p_render_list, const RenderDataRD *p_render_data, PassMode p_pass_mode, bool p_append) {
+void RenderForwardMobile::_fill_render_list(RenderListType p_render_list, const RenderDataRD *p_render_data, PassMode p_pass_mode, bool p_append, LocalVector<GeometryInstanceSurfaceDataCache *> *p_generated_surfaces) {
 	active_render_data = (p_render_list == RENDER_LIST_OPAQUE) ? p_render_data : nullptr;
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 
@@ -2570,6 +2589,9 @@ void RenderForwardMobile::_fill_render_list(RenderListType p_render_list, const 
 		inst->flags_cache = flags;
 
 		GeometryInstanceSurfaceDataCache *surf = inst->surface_caches;
+		if (p_generated_surfaces && !surf && inst->data->base_type == RSE::INSTANCE_PARTICLES) {
+			surf = _collect_generated_slot_surfaces(inst, *p_render_data, *p_generated_surfaces);
+		}
 
 		float lod_distance = 0.0;
 
@@ -2913,7 +2935,7 @@ bool RenderForwardMobile::_select_native_surface_pipeline(const RenderListParame
 		const NativeSurfacePipelineOverride &p_override, NativeSurfacePipelineSelection &r_selection) {
 	const GeometryInstanceSurfaceDataCache *surf = p_params.elements[p_element];
 	const GeometryInstanceForwardMobile *inst = surf->owner;
-	if (inst->instance_count == 0) {
+	if (inst->instance_count == 0 && surf->external_surface.get_profile() != RendererRD::ExternalOutputConfig::INDEXED_144) {
 		return false;
 	}
 	const bool allow_override = surf->external_surface_index == UINT32_MAX && p_override.shader;
@@ -3022,16 +3044,18 @@ void RenderForwardMobile::_prepare_external_color(const RenderListParameters &p_
 		if (particles_storage->particles_external_view_acquire(surface, p_params.external_prepared_render_data, view) != OK) {
 			continue;
 		}
-		if (view.get_profile() == RendererRD::ExternalOutputConfig::INSTANCE_192 && selected.shader->instance192_shader_supported()) {
+		const bool indexed144 = view.get_profile() == RendererRD::ExternalOutputConfig::INDEXED_144;
+		const bool instance192 = view.get_profile() == RendererRD::ExternalOutputConfig::INSTANCE_192;
+		if (indexed144 || (instance192 && selected.shader->instance192_shader_supported())) {
 			const auto version = selected.base_key.version;
 			RID native_shader;
 			uint64_t input_mask = 0;
-			const Error ready = selected.shader->get_native_shader_if_ready(version, false, false, true, native_shader, input_mask);
+			const Error ready = selected.shader->get_native_shader_if_ready(version, false, indexed144, instance192, native_shader, input_mask);
 			if ((ready == ERR_UNAVAILABLE || ready == ERR_BUSY) && particles_storage->particles_external_view_can_prepare_shader(view)) {
 				// Enable the real renderer's exact precision group before the paid
 				// preparation begins. Its backend still observes shader readiness.
-				const RID variant = selected.shader->get_shader_variant(version, false, false, true);
-				if (variant.is_valid() && selected.shader->get_native_shader_if_ready(version, false, false, true, native_shader, input_mask) == ERR_BUSY) {
+				const RID variant = selected.shader->get_shader_variant(version, false, indexed144, instance192);
+				if (variant.is_valid() && selected.shader->get_native_shader_if_ready(version, false, indexed144, instance192, native_shader, input_mask) == ERR_BUSY) {
 					selected.shader->is_valid(); // Join any other outstanding groups of this version.
 				}
 			}
@@ -3785,6 +3809,37 @@ void RenderForwardMobile::_geometry_instance_add_surface(GeometryInstanceForward
 	}
 }
 
+RenderForwardMobile::GeometryInstanceSurfaceDataCache *RenderForwardMobile::_collect_generated_slot_surfaces(GeometryInstanceForwardMobile *p_instance, const RenderDataRD &p_render_data,
+		LocalVector<GeometryInstanceSurfaceDataCache *> &r_surfaces) {
+	auto *particles = RendererRD::ParticlesStorage::get_singleton();
+	uint32_t slot = UINT32_MAX, count = 0;
+	if (particles->particles_external_generated_surfaces_for_view(p_instance->data->base, p_render_data, slot, count) != OK) {
+		return nullptr;
+	}
+	auto *materials = RendererRD::MaterialStorage::get_singleton();
+	for (uint32_t i = 0; i < count; ++i) {
+		RendererRD::ExternalSurfaceSelection selected;
+		if (particles->particles_external_slot_surface_acquire(p_instance->data->base, slot, i, selected) != OK) {
+			continue;
+		}
+		RendererRD::MaterialStorage::MaterialData *data = nullptr;
+		const Error observed = materials->material_get_native_preparation_data(selected.material_selection, selected.material_generation, data);
+		auto *material = static_cast<SceneShaderForwardMobile::MaterialData *>(data);
+		if (observed != OK || !data || data->get_native_recipe_backend() != 1 || !material->shader_data ||
+				!material->shader_data->is_valid() || !selected.geometry_source || !selected.geometry_source->get_retained_surface()) {
+			const Error returned = particles->particles_external_surface_release(selected);
+			CRASH_COND(returned != OK);
+			continue;
+		}
+		_geometry_instance_add_surface_with_material(p_instance, i, material, selected.material_selection.get_local_index(), 0, RID(), &selected);
+		r_surfaces.push_back(p_instance->surface_caches);
+	}
+	// Publish the temporary chain only to this invocation's list fill.
+	auto *surfaces = p_instance->surface_caches;
+	p_instance->surface_caches = nullptr;
+	return surfaces;
+}
+
 void RenderForwardMobile::_geometry_instance_update(RenderGeometryInstance *p_geometry_instance) {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	RendererRD::ParticlesStorage *particles_storage = RendererRD::ParticlesStorage::get_singleton();
@@ -4486,12 +4541,12 @@ Error RenderForwardMobile::external_pipeline_prepare(const RendererRD::ExternalS
 	auto *shader = material->shader_data;
 	const bool instance192 = p_surface.profile == ExternalOutputConfig::INSTANCE_192;
 	const bool indexed144 = p_surface.profile == ExternalOutputConfig::INDEXED_144;
-	// Instance192 derives from its original generation's flattened source.
-	// Indexed144 keeps the original slot-owned source/backing association.
-	if (instance192 && (!r_preparation.source_geometry || p_surface.geometry_source != r_preparation.source_geometry || p_surface.material_selection != r_preparation.source_material || p_surface.material_generation != r_preparation.source_material_generation || !r_preparation.source_geometry->metadata_matches(p_surface.primitive, p_surface.surface_format, p_surface.surface_aabb, p_surface.surface_uv_scale))) {
+	// The checked source is the original flattened mesh or generated slot Surface.
+	const bool checked_geometry = instance192 || (indexed144 && r_preparation.source_geometry);
+	if (checked_geometry && (!r_preparation.source_geometry || p_surface.geometry_source != r_preparation.source_geometry || p_surface.material_selection != r_preparation.source_material || p_surface.material_generation != r_preparation.source_material_generation || !r_preparation.source_geometry->metadata_matches(p_surface.primitive, p_surface.surface_format, p_surface.surface_aabb, p_surface.surface_uv_scale))) {
 		return fail("geometry_source_match", ERR_INVALID_DATA);
 	}
-	const auto *geometry_source = instance192 ? r_preparation.source_geometry : p_surface.geometry_source;
+	const auto *geometry_source = checked_geometry ? r_preparation.source_geometry : p_surface.geometry_source;
 	if ((!instance192 && !indexed144) || indexed144 != p_surface.geometry_source->is_external() || !shader ||
 			(instance192 && !shader->instance192_shader_supported()) || shader->uses_point_size || shader->uses_particle_trails) {
 		return fail("shader_profile", ERR_UNAVAILABLE);
@@ -4547,7 +4602,7 @@ Error RenderForwardMobile::external_pipeline_prepare(const RendererRD::ExternalS
 	}
 	SceneShaderForwardMobile::ShaderData::NativePipelineValuePlan observed;
 	MaterialStorage::NativeMaterialFuturePipelinePlan material_observed;
-	if (instance192) {
+	if (checked_geometry) {
 		// Consume this exact ready key/state and retained source in the original
 		// row's aggregate closure/capacity/origin validator before factories.
 		// Native execution revalidates actual derived VA/VF and ready Shader;
@@ -4579,7 +4634,7 @@ Error RenderForwardMobile::external_pipeline_prepare(const RendererRD::ExternalS
 	if (error != OK) {
 		return fail("geometry_derive", error);
 	}
-	if (instance192) {
+	if (checked_geometry) {
 		error = r_preparation._prospective_execution_geometry_matches(observed.geometry);
 		if (error != OK) {
 			return fail("prospective_geometry_match", error);
@@ -4587,14 +4642,14 @@ Error RenderForwardMobile::external_pipeline_prepare(const RendererRD::ExternalS
 	}
 	key.vertex_format_id = r_preparation.geometry[0].get_vertex_format();
 	r_preparation.last_error = ERR_CANT_CREATE;
-	r_preparation.created_pipeline = shader->create_native_pipeline(key, &r_preparation, instance192 ? &observed : nullptr);
+	r_preparation.created_pipeline = shader->create_native_pipeline(key, &r_preparation, checked_geometry ? &observed : nullptr);
 	if (r_preparation.created_pipeline.is_null()) {
 		return fail("pipeline_factory", r_preparation.last_error);
 	}
 	// Keep both prefixes in the admitted row on every failure. Its original
 	// service path, not this stack frame, owns retirement and resource charges.
 	error = storage->material_native_hold_acquire(p_surface.material_selection, native_shader,
-			r_preparation.created_pipeline, material->uniform_set, r_preparation.material, r_preparation.max_resources, p_surface.material_generation, instance192 ? &material_observed : nullptr);
+			r_preparation.created_pipeline, material->uniform_set, r_preparation.material, r_preparation.max_resources, p_surface.material_generation, checked_geometry ? &material_observed : nullptr);
 	if (error != OK) {
 		return fail("material_hold", error);
 	}

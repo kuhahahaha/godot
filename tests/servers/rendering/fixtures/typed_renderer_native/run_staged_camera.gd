@@ -269,6 +269,10 @@ func _drive_genuine_prior_and_retire() -> bool:
             return _refuse(observed)
         if post_draw_turns >= 4 and not bool(observed.get("staged_genuine_prior", {}).get("successor_record_consumed", false)):
             return _refuse(observed, "successor_record_not_consumed_after_second_draw")
+    var prior: Dictionary = observed.get("staged_genuine_prior", {})
+    if not bool(prior.get("predecessor_live_before_ack", false)) or not bool(prior.get("predecessor_returned_live", false)) \
+        or int(prior.get("successor_physical_returns_pending", -1)) != 1:
+        return _refuse(observed, "successor_original_predecessor_lifetime")
     return _retire_in_selected_turn(observed)
 
 

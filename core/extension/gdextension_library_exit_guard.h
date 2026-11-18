@@ -37,6 +37,10 @@
 #include "core/templates/rid.h"
 #include "core/variant/callable.h"
 
+namespace NativeDrainDiagnostic {
+class Span;
+}
+
 namespace RendererRD {
 struct SceneConnectConfig;
 struct ExternalOutputConfig;
@@ -1124,6 +1128,9 @@ private:
 	GDExtensionDeviceSessionResultV1 production_prepare_output_plan_internal(GDExtensionProductionRequestRefV1, const GDExtensionProductionOutputPlanV1 *, bool);
 	bool production_has_incoming_readbacks_locked(const ProductionRequest &) const;
 	Error production_incoming_readbacks_validate_locked(const ProductionRequest &, RenderingDevice &, uint64_t) const;
+	bool production_maintenance_budget_ready_locked(const ProductionRequest &, const GDExtensionProductionServiceBudgetV1 &, const ProductionServiceUsage &) const;
+	Error production_maintenance_frame_admission_locked(ProductionRequest &, RenderingDevice &, NativeDrainDiagnostic::Span &);
+	Error production_maintenance_foreign_frame_admission_locked(const ProductionRequest &, RenderingDevice &, uint32_t, bool, NativeDrainDiagnostic::Span &);
 	Error production_maintenance_locked(ProductionRequest &, RenderingDevice &, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
 	Error production_create_service(GDExtensionProductionRequestRefV1, ProductionControlKind, uint32_t);
 	Error production_create_accept_locked(ProductionRequest &, ProductionControlKind, uint32_t);
@@ -1166,7 +1173,7 @@ private:
 	Error production_native_owner_locked(const ProductionRequest &, uint32_t, const ProductionNativeCell *&) const;
 	Error production_poll_native_locked(ProductionRequest &, RenderingDeviceDriver &, const GDExtensionProductionServiceBudgetV1 &, bool, ProductionServiceUsage &);
 	Error production_native_fact_locked(const ProductionRequest &, uint32_t, GDExtensionProductionFactV2 &) const;
-	Error production_report_contents_locked(const ProductionRequest &, GDExtensionProductionReportV2 &) const;
+	Error production_report_contents_locked(const ProductionRequest &, GDExtensionProductionReportV2 &, Error *r_native_cause = nullptr) const;
 	Error production_report_contents_locked(const ProductionRequest &, GDExtensionProductionReportV1 &) const;
 	void production_report_locked(const ProductionRequest &, GDExtensionProductionReportV2 &) const;
 	void production_report_locked(const ProductionRequest &, GDExtensionProductionReportV1 &) const;
@@ -1271,6 +1278,7 @@ public:
 	GDExtensionDeviceSessionResultV1 production_prepare_output_plan_v2(GDExtensionProductionRequestRefV1, const GDExtensionProductionOutputPlanV2 *, const GDExtensionProductionServiceBudgetV1 *);
 	Error production_output_predecessor_control(GDExtensionProductionRequestRefV1, const GDExtensionProductionOutputPrepareV1 &, const GDExtensionProductionOutputPredecessorV2 &, const GDExtensionProductionServiceBudgetV1 &, bool = false);
 	Error production_output_predecessor_service_locked(ProductionRequest &, RenderingDevice &);
+	Error production_output_predecessor_return_after_reads_locked(ProductionRequest &, RenderingDevice &, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
 	void production_finalize_output(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint64_t, GDExtensionProductionOutputFinalizeResultV1 *);
 	GDExtensionDeviceSessionResultV1 production_prepare_host_view(GDExtensionProductionRequestRefV1, uint64_t, const GDExtensionProductionHostViewInputV1 *);
 	GDExtensionDeviceSessionResultV1 production_read_host_view(GDExtensionProductionRequestRefV1, uint64_t, GDExtensionProductionHostViewAssociationV1 *);

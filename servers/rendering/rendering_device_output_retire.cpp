@@ -58,9 +58,12 @@ Error RenderingDevice::_production_output_retire_service(GDExtensionDeviceExit::
 			&usage != &control.output.service_usage) {
 		return ERR_UNAUTHORIZED;
 	}
-	if (!budget.controls || !budget.passes || !budget.receipts || usage.passes >= MIN(budget.passes, 64u) ||
-			usage.receipts >= MIN(budget.receipts, 128u) || !budget.deadline_micros ||
-			OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros || request.source_device_lost) {
+	const auto allowance_spent = [&]() {
+		return !budget.controls || !budget.passes || !budget.receipts || usage.passes >= MIN(budget.passes, 64u) ||
+				usage.receipts >= MIN(budget.receipts, 128u) || !budget.deadline_micros ||
+				OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros || request.source_device_lost;
+	};
+	if (allowance_spent()) {
 		return ERR_BUSY;
 	}
 	GDExtensionProductionReportV2 source = {};
@@ -93,14 +96,19 @@ Error RenderingDevice::_production_output_retire_service(GDExtensionDeviceExit::
 	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
 		auto &cell = request.uses[i];
 		if (cell.disposal_group_serial == serial && cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED) {
+			if (allowance_spent()) {
+				return ERR_BUSY;
+			}
 			cell.disposal.state.store(6, std::memory_order_release);
 			cell.output_role = ProductionUseCell::OutputRole::DISPOSAL_MEMBER;
 			++usage.passes;
 			usage.controls = 1;
-			return ERR_BUSY;
 		}
 	}
 	if (!group->disposal_group_release) {
+		if (allowance_spent()) {
+			return ERR_BUSY;
+		}
 		if (!_thread_safe_.try_lock()) {
 			return ERR_BUSY;
 		}
@@ -112,7 +120,7 @@ Error RenderingDevice::_production_output_retire_service(GDExtensionDeviceExit::
 			}
 			covered &= captured;
 		}
-		if (!covered || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) {
+		if (!covered || allowance_spent()) {
 			_thread_safe_.unlock();
 			return ERR_BUSY;
 		}
@@ -120,7 +128,11 @@ Error RenderingDevice::_production_output_retire_service(GDExtensionDeviceExit::
 		usage.controls = 1;
 		group->disposal_group_release = true;
 		_thread_safe_.unlock();
-		return ERR_BUSY; // Original Registry executor performs actual drop/fence work.
+	}
+	// Only known metadata mutations above may consume additional passes in
+	// this original control. Native drop/fence work remains with its executor.
+	if (allowance_spent()) {
+		return ERR_BUSY;
 	}
 	const Error error = _production_output_hold_returned_locked(pin, serial, observation);
 	if (error != OK) {

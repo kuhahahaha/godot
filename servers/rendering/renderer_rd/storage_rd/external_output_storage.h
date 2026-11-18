@@ -52,6 +52,8 @@ class ExternalOutputStorage {
 	friend class GDExtensionDeviceExit::Registry;
 	friend class ::RenderingDevice;
 	friend class ParticlesStorage;
+	friend class ExternalOutputOwner;
+	friend class ExternalPipelinePreparation;
 #if defined(TESTS_ENABLED) && defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
 	friend class ::ParticlesExternalOutputTestFixture;
 #endif
@@ -121,7 +123,7 @@ class ExternalOutputStorage {
 	// Internal stable-slot path only. The caller installs storage and the exact
 	// original pin before entry; this is neither charge nor source admission.
 	Error allocate_instance192_owned(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t &, uint32_t, uint32_t, bool = true);
-	Error allocate_indexed144_owned(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t &, uint32_t, bool, uint32_t);
+	Error allocate_indexed144_owned(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t &, uint32_t, bool, uint32_t, bool p_generated_geometry = false);
 	Error allocate_light64_owned(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t &, uint32_t);
 	Error request_retirement();
 	Error observe(Report &r_report);

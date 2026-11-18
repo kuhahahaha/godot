@@ -913,9 +913,21 @@ Error Registry::production_ack_segment_locked(ProductionRequest &request, uint64
 	if (request.native_batch_enabled) {
 		if (!segment || request.capture_inflight || request.effects_pending || request.source_device_lost || request.control.state != ProductionControlState::OWNER_CONSUMED) { return ERR_BUSY; }
 		if (segment == request.acknowledged_segment && revision == request.native_batch_last_ack_revision) { return OK; }
-		auto *cell = production_native_batch_cell_locked(request, request.native_batch_pending_ack);
-		if (!cell || !cell->live || !cell->read || !cell->has_segment || cell->control != request.native_batch_control ||
-				cell->segment.segment != segment || cell->segment.segment_revision != revision) { return ERR_DOES_NOT_EXIST; }
+		const auto &control = request.control;
+		// Slot Cancel executes on the original FIFO outside a camera batch.
+		// Its consumed control is the source of any new physical cutoff.
+		const bool cancel_segment = control.input.kind == ProductionControlKind::RECORD && control.input.output_cancel &&
+				control.output.result.native_error == OK && control.output.request_serial == request.serial &&
+				control.output.control_serial == control.serial && control.output.segment.segment == segment &&
+				control.output.segment.segment_revision == revision && request.segment.segment == segment &&
+				request.segment.segment_revision == revision;
+		if (cancel_segment) {
+			if (request.native_batch_pending_ack || request.native_prepared_unread) { return ERR_INVALID_DATA; }
+		} else {
+			const auto *cell = production_native_batch_cell_locked(request, request.native_batch_pending_ack);
+			if (!cell || !cell->live || !cell->read || !cell->has_segment || cell->control != request.native_batch_control ||
+					cell->segment.segment != segment || cell->segment.segment_revision != revision) { return ERR_DOES_NOT_EXIST; }
+		}
 		if (segment != request.acknowledged_segment + 1 || request.revision == UINT64_MAX) { return ERR_INVALID_DATA; }
 		request.acknowledged_segment = segment; request.native_batch_last_ack_revision = revision;
 		request.native_batch_pending_ack = 0; ++request.revision; return OK;

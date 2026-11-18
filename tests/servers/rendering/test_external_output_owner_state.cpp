@@ -1186,6 +1186,19 @@ public:
 		CHECK(o.slots[0].read_settle_cursor == 63);
 		CHECK(o.slots[1].read_settle_cursor == 127);
 	}
+	static void material_disposal_capacity() {
+		using Owner = ExternalOutputOwner;
+		uint32_t result = 0;
+		REQUIRE(Owner::plan_material_disposal_capacity(32, 1, result) == OK);
+		CHECK(result == 32);
+		REQUIRE(Owner::plan_material_disposal_capacity(32, 8, result) == OK);
+		CHECK(result == 46);
+		CHECK((uint64_t(4) * (32 + result + 6)) - (uint64_t(4) * (32 + 32 + 6)) == 56);
+		CHECK(Owner::plan_material_disposal_capacity(32, 0, result) == ERR_INVALID_PARAMETER);
+		CHECK(Owner::plan_material_disposal_capacity(0, 8, result) == ERR_INVALID_PARAMETER);
+		CHECK(Owner::plan_material_disposal_capacity(UINT32_MAX, 2, result) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(result == 46);
+	}
 	static void preparation_bank_layout() {
 		using Owner = ExternalOutputOwner;
 		Owner::MetadataLayout bank;
@@ -2012,6 +2025,10 @@ TEST_CASE("[B4][EngineGuardLifecycle] CPU component storage keeps engine prepara
 		CHECK_FALSE(storage->is_external_guard_prepared());
 	}
 	CHECK(RendererRD::ParticlesStorage::get_singleton() == nullptr);
+}
+
+TEST_CASE("[B4][MaterialPassObserverBudget] preparation bank credit leaves G and graphs unchanged") {
+	RendererRD::TestExternalOutputOwnerStateAccess::material_disposal_capacity();
 }
 
 TEST_CASE("[B4][PreparationBankLayout] tuple metadata count is independent and bounded before placement") {

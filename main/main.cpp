@@ -5285,6 +5285,9 @@ bool Main::iteration() {
 	NavigationServer3D::get_singleton()->process(process_step * time_scale);
 #endif // NAVIGATION_3D_DISABLED
 
+	GodotProfileZoneGrouped(_profile_zone, "GDExtensionManager::frame");
+	GDExtensionManager::get_singleton()->frame();
+
 	GodotProfileZoneGrouped(_profile_zone, "RenderingServer::sync");
 	RenderingServer::get_singleton()->sync(); //sync if still drawing from previous frames.
 
@@ -5311,9 +5314,6 @@ bool Main::iteration() {
 	process_ticks = OS::get_singleton()->get_ticks_usec() - process_begin;
 	process_max = MAX(process_ticks, process_max);
 	uint64_t frame_time = OS::get_singleton()->get_ticks_usec() - ticks;
-
-	GodotProfileZoneGrouped(_profile_zone, "GDExtensionManager::frame");
-	GDExtensionManager::get_singleton()->frame();
 
 	GodotProfileZoneGrouped(_profile_zone, "ScriptServer::frame");
 	for (int i = 0; i < ScriptServer::get_language_count(); i++) {

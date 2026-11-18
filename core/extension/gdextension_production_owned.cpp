@@ -692,7 +692,9 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 	}
 	RdUnlock unlock{ rd._thread_safe_ };
 	if (const Error error = rd._recording_error(); error != OK) {
-		return finish(error);
+		// No native creation has begun. Keep this same resource eligible after
+		// its original returned control is consumed and the frame gate clears.
+		return error == ERR_BUSY ? error : finish(error);
 	}
 	RID rid;
 	if (kind == ProductionControlKind::STORAGE_CREATE) {
@@ -775,6 +777,62 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 																   : OK);
 }
 
+bool Registry::production_maintenance_budget_ready_locked(const ProductionRequest &request, const GDExtensionProductionServiceBudgetV1 &budget, const ProductionServiceUsage &usage) const {
+	return !(!budget.controls || usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u) || !budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros || request.capture_inflight || request.continuation_inflight || request.source_device_lost || request.revision > UINT64_MAX - uint64_t(request.capacity.graph_memberships) * 2 - uint64_t(request.capacity.native_memberships) * 2 - request.capacity.readbacks - request.capacity.resources - 8);
+}
+
+Error Registry::production_maintenance_frame_admission_locked(ProductionRequest &request, RenderingDevice &rd, NativeDrainDiagnostic::Span &drain_trace) {
+	if (!rd.driver || rd.frames.is_empty() || rd.draw_list.active || rd.compute_list.active || rd.raytracing_list.active || rd.frame_wait_draining || rd.draw_graph.has_driver_callbacks()) {
+		return drain_trace.result(ERR_BUSY, "active_list_or_driver_callback");
+	}
+	if (request.maintenance_serial && (!rd.native_disposal_active || request.maintenance_serial != rd.native_disposal_continuation.serial)) {
+		request.maintenance_serial = 0;
+	}
+	if (rd.native_disposal_active && !request.maintenance_serial) {
+		return drain_trace.result(ERR_BUSY, "foreign_cursor"); // Never adopt another request's or qualification lane's cursor.
+	}
+	// Every graph command must be covered by an actual original production
+	// capture. Other renderer/qualification work waits for its original lane;
+	// this owner service cannot turn that work into a production receipt.
+	for (uint32_t command = 0; command < rd.draw_graph.qualification_command_count(); ++command) {
+		bool captured = false;
+		for (auto *attachment : production_attachments) {
+			if (!attachment || attachment->held_device != &rd) {
+				continue;
+			}
+			for (uint32_t r = 0; r < attachment->quote.capacity.requests && !captured; ++r) {
+				const auto &owner = attachment->requests[r];
+				if (!owner.serial || (owner.compute_list_open || owner.draw_list_open) || owner.capture_inflight) {
+					continue;
+				}
+				for (uint32_t g = 0; g < owner.graph_count && !captured; ++g) {
+					uint32_t actual = UINT32_MAX;
+					captured = rd.draw_graph._resolve_record_command_index(owner.graphs[g].handle, actual) && actual == command;
+				}
+			}
+		}
+		if (!captured) {
+			drain_trace.state(request.serial, request.control.serial, rd.frame, command, rd.draw_graph.qualification_command_count(), 0);
+			return drain_trace.result(ERR_BUSY, "uncaptured_graph");
+		}
+	}
+	return OK;
+}
+
+Error Registry::production_maintenance_foreign_frame_admission_locked(const ProductionRequest &request, RenderingDevice &rd, uint32_t frame_index, bool resuming, NativeDrainDiagnostic::Span &drain_trace) {
+	const auto &frame = rd.frames[frame_index];
+	if (!frame.qualification_tickets.is_empty() || !frame.download_texture_get_data_requests.is_empty() || !frame.swap_chains_to_present.is_empty() || (!resuming && (!frame.acceleration_structures_to_dispose_of.is_empty() || !frame.raytracing_pipelines_to_dispose_of.is_empty()))) {
+		drain_trace.state(request.serial, request.control.serial, frame_index, frame.swap_chains_to_present.size(), frame.qualification_tickets.size(), frame.download_texture_get_data_requests.size());
+		return drain_trace.result(ERR_BUSY, "foreign_frame_work");
+	}
+	for (const auto &readback : frame.download_buffer_get_data_requests) {
+		if (!readback.capture || readback.capture->registry != this) {
+			return drain_trace.result(ERR_BUSY, "foreign_readback");
+		}
+	}
+	return OK;
+}
+
 Error Registry::production_sets_step_locked(ProductionRequest &request, RenderingDevice &rd, const GDExtensionProductionServiceBudgetV1 &budget, ProductionServiceUsage &usage) {
 	if (request.capture_inflight || !budget.controls || !budget.receipts || !budget.passes || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) {
 		return OK;
@@ -784,6 +842,7 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 	if (report.possible_obligations || report.known_obligations != report.complete_obligations || request.compute_list_open || request.draw_list_open) {
 		return ERR_BUSY;
 	}
+	bool pending_set_returns = false;
 	const uint32_t visits = MIN(request.resource_count, 64u);
 	for (uint32_t n = 0; n < visits; ++n) {
 		const uint32_t i = request.retire_cursor % request.resource_count;
@@ -797,18 +856,32 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 				(!set && !storage && !raster) || (raster && !raster_retire) || (storage && !slot.retiring) || (set && !request.cancelled && request.next_action != request.action_count)) {
 			continue;
 		}
-		{
+		// An ordinary frame or another authenticated owner may have returned
+		// this exact physical object since this request's last service turn.
+		const auto publish_physical_return = [&](Error maintenance) {
 			MutexLock physical(slot.owned_physical.mutex);
+			const uint64_t event = slot.owned_physical.free_event;
 			if (storage) {
 				auto &state = slot.retire_report;
 				state.frame_slot = slot.owned_physical.frame_slot;
 				state.frame_epoch = slot.owned_physical.frame_epoch;
-				state.event_seq = slot.owned_physical.free_event;
-				if (slot.owned_physical.free_event) {
+				state.event_seq = event;
+				if (event) {
+					// STORAGE still requires the original consumer's explicit ACK.
 					state.state = state.return_status = 1;
-					continue;
 				}
+				if (maintenance != OK && maintenance != ERR_BUSY) {
+					state.native_error = maintenance;
+				}
+			} else if (event) {
+				slot.returned = true;
+				slot.imported = false;
+				request.returns[i].pending = false;
 			}
+			return event != 0;
+		};
+		if (publish_physical_return(OK)) {
+			continue;
 		}
 		if (usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u) || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) {
 			return ERR_BUSY;
@@ -866,36 +939,71 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 			--request.capture_inflight;
 			++request.revision;
 		}
-		const Error maintenance = production_maintenance_locked(request, rd, budget, usage);
-		{
-			MutexLock physical(slot.owned_physical.mutex);
-			if (storage) {
-				auto &state = slot.retire_report;
-				state.frame_slot = slot.owned_physical.frame_slot;
-				state.frame_epoch = slot.owned_physical.frame_epoch;
-				state.event_seq = slot.owned_physical.free_event;
-				if (slot.owned_physical.free_event) {
-					state.state = state.return_status = 1;
-				}
-				if (maintenance != OK && maintenance != ERR_BUSY) {
-					state.native_error = maintenance;
-				}
-			} else if (slot.owned_physical.free_event) {
-				slot.returned = true;
-				slot.imported = false;
-				request.returns[i].pending = false;
-			}
+		if (set) {
+			// Each original free above retains its own pass, receipt and physical
+			// identity. Share maintenance after the eligible SET prefix is queued.
+			pending_set_returns = true;
+			continue;
 		}
+		const Error maintenance = production_maintenance_locked(request, rd, budget, usage);
+		publish_physical_return(maintenance);
 		if (maintenance != OK) {
 			return maintenance;
 		}
 	}
-	return OK;
+
+	if (!pending_set_returns) {
+		return OK;
+	}
+	// An accepted whole-frame cursor keeps its exact captured prefix. Otherwise
+	// retire only this original request's enqueued SETs, preserving unrelated
+	// ordinary disposals rather than adopting them into a production receipt.
+	NativeDrainDiagnostic::Span admission_trace("maintenance.set_return.preflight", request.serial, request.control.serial, request.maintenance_serial, rd.frame, uint64_t(rd.native_disposal_active.load()), rd.draw_graph.qualification_command_count());
+	if (!production_maintenance_budget_ready_locked(request, budget, usage)) {
+		return admission_trace.result(ERR_BUSY, "budget_or_inflight_or_loss");
+	}
+	if (rd.native_disposal_active.load()) {
+		return production_maintenance_locked(request, rd, budget, usage);
+	}
+	const Error frame_admission = production_maintenance_frame_admission_locked(request, rd, admission_trace);
+	if (frame_admission != OK) {
+		return frame_admission;
+	}
+	for (uint32_t frame_index = 0; frame_index < rd.frames.size(); ++frame_index) {
+		const Error foreign_frame = production_maintenance_foreign_frame_admission_locked(request, rd, frame_index, false, admission_trace);
+		if (foreign_frame != OK) {
+			return foreign_frame;
+		}
+	}
+	RenderingDevice::NativeDisposalBudget drain_budget;
+	drain_budget.receipts = MIN(budget.receipts, 128u) - usage.receipts;
+	drain_budget.passes = MIN(budget.passes, 64u) - usage.passes;
+	drain_budget.deadline_usec = budget.deadline_micros;
+	RenderingDevice::NativeDisposalUsage drain_usage;
+	const uint64_t request_serial = request.serial, control_serial = request.control.serial;
+	auto *const attachment = request.attachment;
+	const uint64_t epoch = attachment->epoch;
+	production_native_effect_enter_locked(request);
+	++request.capture_inflight;
+	rd._thread_safe_.unlock();
+	unlock_mutex_for_call();
+	const Error drained = rd._production_mq_drain_owned_disposals_step(request, nullptr, 0, drain_budget, drain_usage);
+	rd._thread_safe_.lock();
+	relock_mutex_after_call();
+	CRASH_COND(!request.capture_inflight);
+	--request.capture_inflight;
+	usage.controls = 1;
+	usage.receipts += drain_usage.polls + drain_usage.frees + drain_usage.issues + drain_usage.retains + drain_usage.releases + drain_usage.recycles;
+	usage.passes += drain_usage.passes;
+	if (request.serial != request_serial || request.control.serial != control_serial || request.control.state != ProductionControlState::EXECUTING || request.attachment != attachment || attachment->held_device != &rd || attachment->epoch != epoch || device_records[attachment->device].epoch != epoch || device_records[attachment->device].object != &rd) {
+		return ERR_INVALID_DATA;
+	}
+	return drained;
 }
 
 Error Registry::production_maintenance_locked(ProductionRequest &request, RenderingDevice &rd, const GDExtensionProductionServiceBudgetV1 &budget, ProductionServiceUsage &usage) {
 	NativeDrainDiagnostic::Span drain_trace("maintenance.preflight", request.serial, request.control.serial, request.maintenance_serial, rd.frame, uint64_t(rd.native_disposal_active.load()), rd.draw_graph.qualification_command_count());
-	if (!budget.controls || usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u) || !budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros || request.capture_inflight || request.continuation_inflight || request.source_device_lost || request.revision > UINT64_MAX - uint64_t(request.capacity.graph_memberships) * 2 - uint64_t(request.capacity.native_memberships) * 2 - request.capacity.readbacks - request.capacity.resources - 8) {
+	if (!production_maintenance_budget_ready_locked(request, budget, usage)) {
 		return drain_trace.result(ERR_BUSY, "budget_or_inflight_or_loss");
 	}
 	bool closure_drop = false;
@@ -940,39 +1048,9 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 			return drain_trace.result(ERR_BUSY, "drop_budget_exhausted");
 		}
 	}
-	if (!rd.driver || rd.frames.is_empty() || rd.draw_list.active || rd.compute_list.active || rd.raytracing_list.active || rd.frame_wait_draining || rd.draw_graph.has_driver_callbacks()) {
-		return drain_trace.result(ERR_BUSY, "active_list_or_driver_callback");
-	}
-	if (request.maintenance_serial && (!rd.native_disposal_active || request.maintenance_serial != rd.native_disposal_continuation.serial)) {
-		request.maintenance_serial = 0;
-	}
-	if (rd.native_disposal_active && !request.maintenance_serial) {
-		return drain_trace.result(ERR_BUSY, "foreign_cursor"); // Never adopt another request's or qualification lane's cursor.
-	}
-	// Every graph command must be covered by an actual original production
-	// capture. Other renderer/qualification work waits for its original lane;
-	// this owner service cannot turn that work into a production receipt.
-	for (uint32_t command = 0; command < rd.draw_graph.qualification_command_count(); ++command) {
-		bool captured = false;
-		for (auto *attachment : production_attachments) {
-			if (!attachment || attachment->held_device != &rd) {
-				continue;
-			}
-			for (uint32_t r = 0; r < attachment->quote.capacity.requests && !captured; ++r) {
-				const auto &owner = attachment->requests[r];
-				if (!owner.serial || (owner.compute_list_open || owner.draw_list_open) || owner.capture_inflight) {
-					continue;
-				}
-				for (uint32_t g = 0; g < owner.graph_count && !captured; ++g) {
-					uint32_t actual = UINT32_MAX;
-					captured = rd.draw_graph._resolve_record_command_index(owner.graphs[g].handle, actual) && actual == command;
-				}
-			}
-		}
-		if (!captured) {
-			drain_trace.state(request.serial, request.control.serial, rd.frame, command, rd.draw_graph.qualification_command_count(), 0);
-			return drain_trace.result(ERR_BUSY, "uncaptured_graph");
-		}
+	const Error frame_admission = production_maintenance_frame_admission_locked(request, rd, drain_trace);
+	if (frame_admission != OK) {
+		return frame_admission;
 	}
 	auto owned_physical = [&](const QualificationPhysicalReturn *physical) {
 		if (!physical) {
@@ -1027,13 +1105,17 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 			}
 		}
 	} else {
+		// A fresh RD cursor captures only this frame's buffer-disposal prefix.
+		// An interrupted ordinary advance has already selected the current frame.
+		const uint32_t fresh_buffer_target = rd.qualification_frame_advance_pending ?
+				uint32_t(rd.frame) : (rd.frame + 1) % rd.frames.size();
 		for (uint32_t frame_index = 0; frame_index < rd.frames.size(); ++frame_index) {
 			const auto &frame = rd.frames[frame_index];
-			if (!frame.qualification_tickets.is_empty() || !frame.download_texture_get_data_requests.is_empty() || !frame.swap_chains_to_present.is_empty() || (!resuming && (!frame.acceleration_structures_to_dispose_of.is_empty() || !frame.raytracing_pipelines_to_dispose_of.is_empty()))) {
-				drain_trace.state(request.serial, request.control.serial, frame_index, frame.swap_chains_to_present.size(), frame.qualification_tickets.size(), frame.download_texture_get_data_requests.size());
-				return drain_trace.result(ERR_BUSY, "foreign_frame_work");
+			const Error foreign_frame = production_maintenance_foreign_frame_admission_locked(request, rd, frame_index, resuming, drain_trace);
+			if (foreign_frame != OK) {
+				return foreign_frame;
 			}
-			uint32_t buffers = frame.buffers_to_dispose_of.size();
+			uint32_t buffers = frame_index == fresh_buffer_target ? frame.buffers_to_dispose_of.size() : 0;
 			uint32_t sets = frame.uniform_sets_to_dispose_of.size();
 			if (resuming) {
 				buffers = sets = 0;
@@ -1094,11 +1176,7 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 			if (!closure_prefix(frame.render_pipelines_to_dispose_of, 0) || !closure_prefix(frame.compute_pipelines_to_dispose_of, 1) || !closure_prefix(frame.shaders_to_dispose_of, 5) || !closure_prefix(frame.samplers_to_dispose_of, 6) || !closure_prefix(frame.textures_to_dispose_of, 8)) {
 				return drain_trace.result(ERR_BUSY, "foreign_closure_prefix");
 			}
-			for (const auto &readback : frame.download_buffer_get_data_requests) {
-				if (!readback.capture || readback.capture->registry != this) {
-					return drain_trace.result(ERR_BUSY, "foreign_readback");
-				}
-			}
+
 		}
 	}
 	RenderingDevice::NativeDisposalBudget service;

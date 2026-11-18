@@ -29,6 +29,10 @@
 /**************************************************************************/
 
 #include "core/os/os.h"
+#include <atomic>
+#include <cerrno>
+#include <cstdio>
+#include <cstdlib>
 #include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
@@ -132,6 +136,13 @@ Error ParticlesStorage::_external_preparation_bank_reserve_owned_prefix(GDExtens
 	if (!owner.admits_work() || !owner.device || owner.device != RenderingDevice::get_singleton() || slot_index >= owner.slot_count) {
 		return ERR_UNCONFIGURED;
 	}
+	uint32_t material_capacity = max_resources;
+	if (owner.generation_config_inline) {
+		const Error capacity_error = ExternalOutputOwner::plan_material_disposal_capacity(max_resources, owner.preparation_capacity, material_capacity);
+		if (capacity_error != OK) {
+			return capacity_error;
+		}
+	}
 	auto &slot = owner.slots[slot_index];
 	if (slot.state != ExternalOutputOwner::LeaseState::RESERVED || slot.publication_closed || slot.pass_uses_closed || !slot.preparation_reserved_count ||
 			!_production_output_owner_matches(GDExtensionDeviceExit::ProductionOutputOwnerKind::SLOT, particle_rid, owner.generation, slot_index, slot.lease_serial, slot.original_pin, *owner.device, slot.original_request)) {
@@ -177,7 +188,7 @@ Error ParticlesStorage::_external_preparation_bank_reserve_owned_prefix(GDExtens
 			error = owner.device->_production_output_owned_reserve(context, slot.original_pin, max_resources, row.geometry_reserved_group);
 		}
 		if (error == OK) {
-			error = owner.device->_production_output_owned_reserve(context, slot.original_pin, max_resources, row.material_reserved_group);
+			error = owner.device->_production_output_owned_reserve(context, slot.original_pin, material_capacity, row.material_reserved_group);
 		}
 		if (error == OK) {
 			error = owner.device->_production_output_owned_reserve(context, slot.original_pin, 1, row.transforms_owned_group);
@@ -327,27 +338,45 @@ Error ParticlesStorage::_production_output_preparation_finish_row_locked(Externa
 		}
 		material[material_count++] = physical;
 	}
+	// The generated geometry roots share slot-owned allocations with the
+	// writer's SSBO sets. The draw group borrows only its VA/IA dependencies.
+	const auto geometry_disposal_mode = row.owner->slots[row.owner_slot].generated_indexed_mesh.is_valid() ?
+			RD::NativeClosureMode::DEPENDENCIES : RD::NativeClosureMode::BIDIRECTIONAL;
 	const auto material_disposal_mode = (row.owner->config.profile == ExternalOutputConfig::INSTANCE_192 || row.owner->config.profile == ExternalOutputConfig::INDEXED_144) ?
 			RD::NativeClosureMode::MATERIAL_DISPOSAL :
 			RD::NativeClosureMode::BIDIRECTIONAL;
+	uint32_t material_capacity = row.max_resources;
+	Vector<RID> pass_observers;
+	const bool bounded_material_observers = row.owner->generation_config_inline && material_disposal_mode == RD::NativeClosureMode::MATERIAL_DISPOSAL;
+	if (!row.material_adopted && bounded_material_observers) {
+		Error budget_error = ExternalOutputOwner::plan_material_disposal_capacity(row.max_resources, row.owner->preparation_capacity, material_capacity);
+		if (budget_error == OK) {
+			budget_error = row._material_pass_observers_locked(device, pass_observers);
+		}
+		if (budget_error != OK) {
+			return budget_error;
+		}
+	}
+	const RD::NativeMaterialDisposalBudget budget{ row.max_resources, { pass_observers.ptr(), uint32_t(pass_observers.size()) } };
+	const auto *material_budget = bounded_material_observers ? &budget : nullptr;
 	uint32_t count = 0;
 	// Inventory both complete batches before moving even one physical counter.
 	// Each dry inventory restores all its original DISPOSAL_RESERVED cells.
 	if (!row.geometry_adopted) {
-		const Error inventory = device._production_output_hold_inventory_locked(request, row.geometry_reserved_group, VectorView<RD::NativeImmutableHold *>(geometry, geometry_count), row.max_resources, count);
+		const Error inventory = device._production_output_hold_inventory_locked(request, row.geometry_reserved_group, VectorView<RD::NativeImmutableHold *>(geometry, geometry_count), row.max_resources, count, geometry_disposal_mode);
 		if (inventory != OK) {
 			return inventory;
 		}
 	}
 	if (!row.material_adopted) {
-		const Error inventory = device._production_output_hold_inventory_locked(request, row.material_reserved_group, VectorView<RD::NativeImmutableHold *>(material, material_count), row.max_resources, count, material_disposal_mode);
+		const Error inventory = device._production_output_hold_inventory_locked(request, row.material_reserved_group, VectorView<RD::NativeImmutableHold *>(material, material_count), material_capacity, count, material_disposal_mode, material_budget);
 		if (inventory != OK) {
 			return inventory;
 		}
 	}
 	if (!row.geometry_adopted) {
 		uint64_t adopted = 0;
-		const Error moved = device._production_output_hold_adopt_locked(request, pin_serial, row.geometry_reserved_group, VectorView<RD::NativeImmutableHold *>(geometry, geometry_count), row.max_resources, adopted);
+		const Error moved = device._production_output_hold_adopt_locked(request, pin_serial, row.geometry_reserved_group, VectorView<RD::NativeImmutableHold *>(geometry, geometry_count), row.max_resources, adopted, geometry_disposal_mode);
 		if (moved != OK) {
 			return moved;
 		}
@@ -355,7 +384,7 @@ Error ParticlesStorage::_production_output_preparation_finish_row_locked(Externa
 	}
 	if (!row.material_adopted) {
 		uint64_t adopted = 0;
-		const Error moved = device._production_output_hold_adopt_locked(request, pin_serial, row.material_reserved_group, VectorView<RD::NativeImmutableHold *>(material, material_count), row.max_resources, adopted, material_disposal_mode);
+		const Error moved = device._production_output_hold_adopt_locked(request, pin_serial, row.material_reserved_group, VectorView<RD::NativeImmutableHold *>(material, material_count), material_capacity, adopted, material_disposal_mode, material_budget);
 		if (moved != OK) {
 			return moved;
 		}
@@ -611,17 +640,92 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		return ERR_UNAUTHORIZED;
 	}
 	GDExtensionDeviceExit::ProductionDisposalObservation observation;
+	// Temporary first failed return per authenticated SLOT phase. The selector
+	// is only a diagnostic lease, independently joined to original Registry logs.
+	auto trace_failure = [&](uint32_t phase, const char *site, Error outcome, uint64_t group = 0,
+			const GDExtensionDeviceExit::ProductionDisposalObservation *native = nullptr, uint32_t witness = UINT32_MAX) {
+		if (outcome == OK) { return outcome; }
+		const char *enabled = std::getenv("ANGE_TRACE_OUTPUT_RELEASE_BUSY");
+		const char *target = std::getenv("ANGE_TRACE_OUTPUT_RETIRE_LEASE");
+		if (!enabled || enabled[0] != '1' || !target || target[0] < '0' || target[0] > '9') { return outcome; }
+		const int saved_errno = errno; errno = 0;
+		char *end = nullptr; const auto wanted = std::strtoull(target, &end, 10);
+		const bool exact = errno == 0 && *end == '\0'; errno = saved_errno;
+		if (!exact || wanted != slot.lease_serial) { return outcome; }
+		static std::atomic<uint32_t> emitted{ 0 };
+		const uint32_t bit = uint32_t(1) << phase;
+		if (emitted.fetch_or(bit, std::memory_order_relaxed) & bit) { return outcome; }
+		const auto *preparation = slot.preparation_reserved_count && owner.preparation_rows && slot.retire_preparation_index < owner.preparation_capacity ? &owner.preparation_rows[slot.retire_preparation_index] : nullptr;
+		const auto *surface = slot.surfaces && slot.retire_surface < slot.surface_count ? &slot.surfaces[slot.retire_surface] : nullptr;
+		const unsigned preparation_flags = preparation ? unsigned(preparation->finish_complete) | (unsigned(preparation->geometry_adopted) << 1) | (unsigned(preparation->material_adopted) << 2) | (unsigned(preparation->material_transferred) << 3) | (unsigned(preparation->geometry_transferred[0]) << 4) | (unsigned(preparation->geometry_transferred[1]) << 5) : 0;
+		const unsigned surface_flags = surface ? unsigned(surface->geometry_transferred) | (unsigned(surface->material_transferred) << 1) | (unsigned(surface->geometry_directory_returned) << 2) | (unsigned(surface->geometry_metadata_returned) << 3) | (unsigned(surface->material_metadata_returned) << 4) | (unsigned(surface->geometry_group_returned) << 5) | (unsigned(surface->material_group_returned) << 6) : 0;
+		std::fprintf(stderr, "[OUTPUT-SLOT-RETIRE-RETURN] site=%s error=%d registry=%llu request=%llu generation=%llu slot=%u lease=%llu state=%u publication_closed=%u pass_uses_closed=%u cached_original_revision=%llu read_cursor=%u preparation_cursor=%u preparation_reserved=%u preparation_selected=%u surface_cursor=%u surface_count=%u resource_cursor=%u consumed_borrow=%llu proof_requested=%u color_read=%llu color_cell=%u current_group=%llu guard_group=%llu storage_group=%llu storage=%u preparation=%u tuple_state=%u preparation_flags=%u transforms_group=%llu pipeline_group=%llu geometry_group=%llu material_group=%llu surface=%u surface_flags=%u witness=%u usage_controls=%u usage_receipts=%u usage_passes=%u budget_controls=%u budget_receipts=%u budget_passes=%u native_local=%u native_held=%u native_queued=%u native_physical_returned=%u native_borrowed_detached=%u native_uncreated=%u native_owner_returned=%u native_unknown=%u native_dropped=%u native_settled=%u\n",
+				site,
+				int(outcome),
+				(unsigned long long)slot.original_request.registry_instance,
+				(unsigned long long)slot.original_request.handle_serial,
+				(unsigned long long)p_generation,
+				p_slot,
+				(unsigned long long)slot.lease_serial,
+				unsigned(slot.state),
+				unsigned(slot.publication_closed),
+				unsigned(slot.pass_uses_closed),
+				(unsigned long long)slot.original_revision,
+				slot.read_settle_cursor,
+				slot.retire_preparation_index,
+				slot.preparation_reserved_count,
+				slot.preparation_selected_count,
+				slot.retire_surface,
+				slot.surface_count,
+				slot.retire_resource,
+				(unsigned long long)slot.consumed_borrow_serial,
+				unsigned(slot.consumed_proof_requested),
+				(unsigned long long)slot.native_color_read_serial,
+				slot.native_color_read_cell,
+				(unsigned long long)group,
+				(unsigned long long)slot.guard_owned_group,
+				(unsigned long long)slot.owned_group,
+				unsigned(slot.storage != nullptr),
+				unsigned(preparation != nullptr),
+				preparation ? unsigned(preparation->tuple_state) : UINT32_MAX,
+				preparation_flags,
+				(unsigned long long)(preparation ? preparation->transforms_owned_group : 0),
+				(unsigned long long)(preparation ? preparation->pipeline_owned_group : 0),
+				(unsigned long long)(preparation ? preparation->geometry_reserved_group : 0),
+				(unsigned long long)(preparation ? preparation->material_reserved_group : 0),
+				unsigned(surface != nullptr),
+				surface_flags,
+				witness,
+				r_usage.controls,
+				r_usage.receipts,
+				r_usage.passes,
+				p_budget.controls,
+				p_budget.receipts,
+				p_budget.passes,
+				unsigned(native != nullptr),
+				native ? native->held : 0,
+				native ? native->queued : 0,
+				native ? native->physical_returned : 0,
+				native ? native->borrowed_detached : 0,
+				native ? native->uncreated : 0,
+				native ? native->owner_returned : 0,
+				native ? native->unknown : 0,
+				unsigned(native && native->dropped),
+				unsigned(native && native->settled));
+		std::fflush(stderr);
+		return outcome;
+	};
 	// Exact original control/budget/usage identity and original complete-source
 	// facts are authenticated before logical history or physical metadata changes.
 	Error error = owner.device->_production_output_retire_service(p_pin, 0, p_budget, r_usage, observation);
 	if (error != OK) {
-		return error;
+		return trace_failure(0, "group0.L643", error, 0, &observation);
 	}
 	// Polling already ran in this original OBSERVE. Settle paid read cells
 	// before their own custody edge can block physical slot retirement.
 	error = slot.original_registry->production_output_reads_settle(owner, p_slot, p_budget, r_usage);
 	if (error != OK) {
-		return error;
+		return trace_failure(1, "read_settle.L649", error);
 	}
 	// A V2 proof reservation with no exported borrow belongs to original
 	// cancel/release cleanup. Settle it before its own ViewCell can block the
@@ -630,16 +734,23 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			!slot.consumed_borrow_serial && !slot.consumed_proof_view.is_empty()) {
 		if (!p_budget.controls || r_usage.passes >= MIN(p_budget.passes, 64u) ||
 				r_usage.receipts >= MIN(p_budget.receipts, 128u) || !p_budget.deadline_micros ||
-				OS::get_singleton()->get_ticks_usec() >= p_budget.deadline_micros) { return ERR_BUSY; }
+				OS::get_singleton()->get_ticks_usec() >= p_budget.deadline_micros) { return trace_failure(2, "proof.L658", ERR_BUSY); }
 		error = owner.view_return(slot.consumed_proof_view);
-		if (error != OK) { return error; }
+		if (error != OK) { return trace_failure(2, "proof.L660", error); }
 		++r_usage.passes;
 		r_usage.controls = 1;
 		return OK;
 	}
+	// The sealed packet remains live. Its exact preflight and read-cell
+	// settlement above complete OBSERVE while the original pin stays held.
+	if (slot.state == ExternalOutputOwner::LeaseState::SEALED_RECORDED ||
+			slot.state == ExternalOutputOwner::LeaseState::ADOPTED ||
+			slot.state == ExternalOutputOwner::LeaseState::EMPTY_OR_FAULT_PACKET) {
+		return OK;
+	}
 	if (slot.state != ExternalOutputOwner::LeaseState::RETIRING || !slot.publication_closed ||
 			!slot.pass_uses_closed || owner.slot_has_custody(p_slot)) {
-		return ERR_BUSY;
+		return trace_failure(3, "custody.L674", ERR_BUSY);
 	}
 	auto spend = [&]() {
 		if (r_usage.passes >= MIN(p_budget.passes, 64u) || r_usage.receipts >= MIN(p_budget.receipts, 128u) ||
@@ -653,7 +764,7 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 	for (uint32_t i = 0; i < owner.config.max_views; ++i) {
 		if (owner.views[i].history_slot == p_slot) {
 			if ((!owner.views[i].closed && (!slot.publication_closed || !slot.pass_uses_closed)) || !spend()) {
-				return ERR_BUSY;
+				return trace_failure(4, "history.L688", ERR_BUSY);
 			}
 			// Closing the view removes a future logical reference only. Native
 			// groups and old payload storage remain pinned below until returned.
@@ -670,25 +781,25 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			++slot.retire_preparation_index;
 		}
 		if (slot.retire_preparation_index >= owner.preparation_capacity) {
-			return ERR_INVALID_DATA;
+			return trace_failure(5, "preparation.L705", ERR_INVALID_DATA);
 		}
 		auto &row = owner.preparation_rows[slot.retire_preparation_index];
 		if (!owner.preparation_bank_row_matches(p_slot, slot.retire_preparation_index, row) || row.pipeline_scope || !row.source_sealed) {
-			return ERR_INVALID_DATA;
+			return trace_failure(5, "preparation.L709", ERR_INVALID_DATA);
 		}
 		// Retry retained mandatory capture before groups or wrappers can return.
 		if (!row.finish_complete && (row.tuple_state != ExternalPipelinePreparation::TupleState::UNSELECTED || row.owned_pipeline_root.is_valid() || row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active())) {
 			auto *original = owner.preparation_request(p_slot);
 			if (!original || !spend()) {
-				return ERR_BUSY;
+				return trace_failure(5, "preparation.L715", ERR_BUSY);
 			}
 			row.finish_error = _production_output_preparation_prepare_finish_row(row);
 			if (row.finish_error != OK) {
-				return row.finish_error;
+				return trace_failure(5, "preparation.L719", row.finish_error);
 			}
 			GDExtensionDeviceExit::Registry::Lock lock(*slot.original_registry);
 			row.finish_error = _production_output_preparation_finish_row_locked(row, *owner.device, *original, owner.preparation_pin_serial(p_slot));
-			return row.finish_error;
+			return trace_failure(5, "preparation.L723", row.finish_error);
 		}
 		if (row.transforms_owned_group) {
 			error = owner.device->_production_output_retire_service(p_pin, row.transforms_owned_group, p_budget, r_usage, observation);
@@ -697,7 +808,7 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 				row.transforms_uniform_set = RID();
 				row.transforms_uniform_witness = NativeDisposalWitness();
 			}
-			return error;
+			return trace_failure(5, "preparation.L732", error, row.transforms_owned_group, &observation);
 		}
 		if (row.pipeline_owned_group) {
 			const uint32_t before = r_usage.passes;
@@ -709,7 +820,7 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 				return OK;
 			}
 			if (error != ERR_BUSY || r_usage.passes != before) {
-				return error;
+				return trace_failure(5, "preparation.L744", error, row.pipeline_owned_group, &observation);
 			}
 			// A waiting owned pipeline allows its original borrowed groups to
 			// progress below without a second budget or a hidden owner sweep.
@@ -721,7 +832,7 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			if (geometry.is_active()) {
 				error = MeshStorage::_native_hold_prepare_tuple_directory_return(p_pin, geometry, p_budget, r_usage);
 				if (error != OK) {
-					return error;
+					return trace_failure(5, "preparation.L756", error);
 				}
 			}
 		}
@@ -731,49 +842,49 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 				if (error == OK) {
 					*group = 0;
 				}
-				return error;
+				return trace_failure(5, "preparation.L766", error, *group, &observation);
 			}
 		}
 		for (uint32_t i = 0; i < 2; ++i) {
 			if (row.geometry[i].is_active()) {
 				if (!row.geometry_adopted || !row.geometry_transferred[i]) {
-					return ERR_BUSY;
+					return trace_failure(5, "preparation.L772", ERR_BUSY);
 				}
 				if (!row.geometry_metadata_returned[i] && row.geometry[i].has_retirement_directory()) {
 					// The original directory service charges its own bounded pass.
-					return MeshStorage::_native_hold_return_directory(p_pin, row.geometry[i], p_budget, r_usage);
+					return trace_failure(5, "preparation.L776", MeshStorage::_native_hold_return_directory(p_pin, row.geometry[i], p_budget, r_usage));
 				}
 				if (!spend()) {
-					return ERR_BUSY;
+					return trace_failure(5, "preparation.L779", ERR_BUSY);
 				}
 				if (!row.geometry_metadata_returned[i]) {
 					error = MeshStorage::_native_hold_begin_return(row.geometry[i]);
 					if (error == OK) {
 						row.geometry_metadata_returned[i] = true;
 					}
-					return error;
+					return trace_failure(5, "preparation.L786", error);
 				}
-				return MeshStorage::_native_hold_finish_return(row.geometry[i]);
+				return trace_failure(5, "preparation.L788", MeshStorage::_native_hold_finish_return(row.geometry[i]));
 			}
 		}
 		if (row.material.is_active()) {
 			if (!row.material_adopted || !row.material_transferred || !spend()) {
-				return ERR_BUSY;
+				return trace_failure(5, "preparation.L793", ERR_BUSY);
 			}
 			if (!row.material_metadata_returned) {
 				error = MaterialStorage::_native_hold_begin_return(row.material);
 				if (error == OK) {
 					row.material_metadata_returned = true;
 				}
-				return error;
+				return trace_failure(5, "preparation.L800", error);
 			}
-			return MaterialStorage::_native_hold_finish_return(row.material);
+			return trace_failure(5, "preparation.L802", MaterialStorage::_native_hold_finish_return(row.material));
 		}
 		if (row.pipeline_owned_group || !spend()) {
-			return ERR_BUSY;
+			return trace_failure(5, "preparation.L805", ERR_BUSY);
 		}
 		if (row.owned_pipeline_root.is_valid()) {
-			return ERR_INVALID_DATA;
+			return trace_failure(5, "preparation.L808", ERR_INVALID_DATA);
 		}
 		row.pipeline_pin = nullptr;
 		row.pipeline_original_root = nullptr;
@@ -785,11 +896,11 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		if (error == OK) {
 			++slot.retire_preparation_index;
 		}
-		return error;
+		return trace_failure(5, "preparation.L820", error);
 	}
 	if (slot.retire_surface < slot.surface_count) {
 		if (!slot.surfaces) {
-			return ERR_INVALID_DATA;
+			return trace_failure(6, "surface.L824", ERR_INVALID_DATA);
 		}
 		auto &surface = slot.surfaces[slot.retire_surface];
 		if (surface.pipeline_owned_group) {
@@ -802,23 +913,33 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 				return OK;
 			}
 			if (error != ERR_BUSY || r_usage.passes != before) {
-				return error;
+				return trace_failure(6, "surface.L837", error, surface.pipeline_owned_group, &observation);
 			}
 			// The owned group must start release before its material borrow.
 			// Once waiting, allow the original borrow group below to release;
 			// neither gets an extra budget or a hidden maintenance sweep.
 		}
 		if (surface.created_pipeline.is_valid() && !surface.pipeline_owned_group) {
-			return ERR_INVALID_DATA;
+			return trace_failure(6, "surface.L844", ERR_INVALID_DATA);
 		}
 		if (!surface.geometry.is_active() && (surface.geometry_group || surface.geometry.has_retirement_directory())) {
-			return ERR_INVALID_DATA;
+			return trace_failure(6, "surface.L847", ERR_INVALID_DATA);
 		}
 		if (surface.geometry.is_active()) {
 			if (!surface.geometry_transferred) {
+				if (slot.generated_indexed_mesh.is_valid()) {
+					auto *meshes = MeshStorage::get_singleton();
+					if (!meshes || !meshes->_mesh_generated_source_matches(slot.generated_indexed_mesh, slot.retire_surface, surface.geometry)) {
+						return trace_failure(6, "surface.L854", ERR_INVALID_DATA);
+					}
+					if (!spend()) {
+						return trace_failure(6, "surface.L857", ERR_BUSY);
+					}
+					return trace_failure(6, "surface.L859", MeshStorage::mesh_surface_hold_release(surface.geometry));
+				}
 				// Missing original capture/transfer prefix cannot be inferred
 				// from a live wrapper. Retain it for original prefix recovery.
-				return ERR_BUSY;
+				return trace_failure(6, "surface.L863", ERR_BUSY);
 			}
 			if (surface.geometry_group) {
 				error = owner.device->_production_output_retire_service(p_pin, surface.geometry_group, p_budget, r_usage, observation);
@@ -826,10 +947,10 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 					surface.geometry_group = 0;
 					surface.geometry_group_returned = true;
 				}
-				return error;
+				return trace_failure(6, "surface.L871", error, surface.geometry_group, &observation);
 			}
 			if (!surface.geometry_group_returned) {
-				return ERR_INVALID_DATA;
+				return trace_failure(6, "surface.L874", ERR_INVALID_DATA);
 			}
 			if (surface.geometry.is_transferred_live_snapshot()) {
 				// The original group has observed actual use closure and returned
@@ -837,16 +958,16 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 				// borrowed_detached; they remain owned by MeshStorage. No complete
 				// Surface retirement directory was captured or is being claimed.
 				if (surface.geometry.has_retirement_directory()) {
-					return ERR_INVALID_DATA;
+					return trace_failure(6, "surface.L882", ERR_INVALID_DATA);
 				}
 				if (!spend()) {
-					return ERR_BUSY;
+					return trace_failure(6, "surface.L885", ERR_BUSY);
 				}
-				return MeshStorage::_native_hold_finish_return(surface.geometry);
+				return trace_failure(6, "surface.L887", MeshStorage::_native_hold_finish_return(surface.geometry));
 			}
 			if (!surface.geometry_directory_returned) {
 				if (!surface.geometry.has_retirement_directory()) {
-					return ERR_INVALID_DATA;
+					return trace_failure(6, "surface.L891", ERR_INVALID_DATA);
 				}
 				const uint32_t before = r_usage.passes;
 				error = MeshStorage::_native_hold_return_directory(p_pin, surface.geometry, p_budget, r_usage);
@@ -855,29 +976,29 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 					return OK;
 				}
 				if (error != ERR_BUSY || r_usage.passes != before) {
-					return error;
+					return trace_failure(6, "surface.L900", error);
 				}
 				bool marked = false;
-				return MeshStorage::_native_hold_mark_next_retirement_root(p_pin, surface.geometry, p_budget, r_usage, marked);
+				return trace_failure(6, "surface.L903", MeshStorage::_native_hold_mark_next_retirement_root(p_pin, surface.geometry, p_budget, r_usage, marked));
 			}
 			if (!spend()) {
-				return ERR_BUSY;
+				return trace_failure(6, "surface.L906", ERR_BUSY);
 			}
 			if (!surface.geometry_metadata_returned) {
 				error = MeshStorage::_native_hold_begin_return(surface.geometry);
 				if (error == OK) {
 					surface.geometry_metadata_returned = true;
 				}
-				return error;
+				return trace_failure(6, "surface.L913", error);
 			}
-			return MeshStorage::_native_hold_finish_return(surface.geometry);
+			return trace_failure(6, "surface.L915", MeshStorage::_native_hold_finish_return(surface.geometry));
 		}
 		if (!surface.material.is_active() && surface.material_group) {
-			return ERR_INVALID_DATA;
+			return trace_failure(6, "surface.L918", ERR_INVALID_DATA);
 		}
 		if (surface.material.is_active()) {
 			if (!surface.material_transferred) {
-				return ERR_BUSY;
+				return trace_failure(6, "surface.L922", ERR_BUSY);
 			}
 			if (surface.material_group) {
 				error = owner.device->_production_output_retire_service(p_pin, surface.material_group, p_budget, r_usage, observation);
@@ -885,37 +1006,37 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 					surface.material_group = 0;
 					surface.material_group_returned = true;
 				}
-				return error;
+				return trace_failure(6, "surface.L930", error, surface.material_group, &observation);
 			}
 			if (!surface.material_group_returned) {
-				return ERR_INVALID_DATA;
+				return trace_failure(6, "surface.L933", ERR_INVALID_DATA);
 			}
 			if (!spend()) {
-				return ERR_BUSY;
+				return trace_failure(6, "surface.L936", ERR_BUSY);
 			}
 			if (!surface.material_metadata_returned) {
 				error = MaterialStorage::_native_hold_begin_return(surface.material);
 				if (error == OK) {
 					surface.material_metadata_returned = true;
 				}
-				return error;
+				return trace_failure(6, "surface.L943", error);
 			}
-			return MaterialStorage::_native_hold_finish_return(surface.material);
+			return trace_failure(6, "surface.L945", MaterialStorage::_native_hold_finish_return(surface.material));
 		}
 		if (surface.pipeline_owned_group) {
-			return ERR_BUSY; // Preserve this pass for original native progress.
+			return trace_failure(6, "surface.L948", ERR_BUSY); // Preserve this pass for original native progress.
 		}
 		if (surface.preparation) {
 			const auto &row = *surface.preparation;
 			if (row.owner != &owner || row.generation != owner.generation || row.pipeline_pin != &slot.original_pin || row.pipeline_original_root != &surface.created_pipeline) {
-				return ERR_INVALID_DATA;
+				return trace_failure(6, "surface.L953", ERR_INVALID_DATA);
 			}
 			if (row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
-				return ERR_BUSY; // Original capture/return of the row's other prefixes is still required.
+				return trace_failure(6, "surface.L956", ERR_BUSY); // Original capture/return of the row's other prefixes is still required.
 			}
 		}
 		if (!spend()) {
-			return ERR_BUSY;
+			return trace_failure(6, "surface.L960", ERR_BUSY);
 		}
 		if (surface.preparation) {
 			auto &row = *surface.preparation;
@@ -929,14 +1050,14 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		}
 		error = owner.return_preparation_row(p_slot, slot.retire_surface);
 		if (error != OK) {
-			return error;
+			return trace_failure(6, "surface.L974", error);
 		}
 		++slot.retire_surface;
 		return OK;
 	}
 	if (slot.surfaces) {
 		if (!spend()) {
-			return ERR_BUSY;
+			return trace_failure(6, "surface.L981", ERR_BUSY);
 		}
 		if (slot.surfaces_placement) {
 			for (uint32_t i = 0; i < slot.surface_count; ++i) {
@@ -949,9 +1070,21 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		slot.surface_count = slot.retire_surface = 0;
 		return OK;
 	}
+	if (slot.generated_indexed_mesh.is_valid()) {
+		auto *meshes = MeshStorage::get_singleton();
+		if (!meshes) {
+			return trace_failure(6, "surface.L997", ERR_UNCONFIGURED);
+		}
+		if (!spend()) {
+			return trace_failure(6, "surface.L1000", ERR_BUSY);
+		}
+		meshes->mesh_free(slot.generated_indexed_mesh);
+		slot.generated_indexed_mesh = RID();
+		return OK;
+	}
 	if (slot.guard_owned_group) {
 		if (slot.original_pin.is_empty()) {
-			return ERR_INVALID_DATA;
+			return trace_failure(7, "guard_SET.L1008", ERR_INVALID_DATA);
 		}
 		// Guard uniform sets retain the exact original disposal group;
 		// the storage group follows after all dependent sets have returned.
@@ -959,7 +1092,7 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		// the native prefix and provenance.
 		error = owner.device->_production_output_retire_service(p_pin, slot.guard_owned_group, p_budget, r_usage, observation);
 		if (error != OK) {
-			return error;
+			return trace_failure(7, "guard_SET.L1016", error, slot.guard_owned_group, &observation);
 		}
 		slot.guard_owned_group = 0;
 		for (uint32_t mode = 0; mode < ExternalOutputOwner::GUARD_MODE_CAPACITY; ++mode) {
@@ -975,17 +1108,17 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		// Before dropping an owned group, every real storage RID must belong
 		// to that exact original group. Primitive RID equality is insufficient.
 		if (slot.output_membership_group && slot.output_membership_group != slot.owned_group) {
-			return ERR_INVALID_DATA;
+			return trace_failure(8, "storage.L1032", ERR_INVALID_DATA);
 		}
 		if (slot.storage && !slot.output_membership_group) {
 			for (uint32_t i = 0; i < ExternalOutputStorage::RESOURCE_COUNT; ++i) {
 				const RID rid = slot.storage->resources[i].rid;
 				if (rid.is_valid() && !owner.device->_production_output_owned_storage_contains(p_pin, slot.owned_group, rid)) {
-					return ERR_INVALID_DATA;
+					return trace_failure(8, "storage.L1038", ERR_INVALID_DATA);
 				}
 			}
 			if (!spend()) {
-				return ERR_BUSY;
+				return trace_failure(8, "storage.L1042", ERR_BUSY);
 			}
 			slot.output_membership_group = slot.owned_group;
 			return OK;
@@ -993,41 +1126,43 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		error = owner.device->_production_output_retire_service(p_pin, slot.owned_group, p_budget, r_usage, observation);
 		if (error == OK) {
 			slot.owned_group = 0;
+			// The returning typed role-6 owner frees its dependent index array.
+			slot.generated_index_array = RID();
 			slot.output_group_returned = true;
 			if (slot.storage) {
 				slot.storage->retirement_requested = true;
 			}
 		}
-		return error;
+		return trace_failure(8, "storage.L1057", error, slot.owned_group, &observation);
 	}
 	if (slot.storage) {
 		if (!slot.output_group_returned || !slot.storage->retirement_requested || slot.storage->unknown) {
-			return ERR_INVALID_DATA;
+			return trace_failure(9, "witness.L1061", ERR_INVALID_DATA);
 		}
 		if (slot.retire_resource < ExternalOutputStorage::RESOURCE_COUNT) {
 			const auto &resource = slot.storage->resources[slot.retire_resource];
 			if (resource.rid.is_valid()) {
 				if (OS::get_singleton()->get_ticks_usec() >= p_budget.deadline_micros) {
-					return ERR_BUSY;
+					return trace_failure(9, "witness.L1067", ERR_BUSY);
 				}
 				NativeDisposalWitness::Report report;
 				error = owner.device->_native_disposal_observe(resource.witness, report);
 				if (report.state == NativeDisposalWitness::State::UNKNOWN) {
 					if (!spend()) {
-						return ERR_BUSY;
+						return trace_failure(9, "witness.L1073", ERR_BUSY, 0, nullptr, uint32_t(report.state));
 					}
 					slot.storage->unknown = true;
-					return error == OK ? ERR_INVALID_DATA : error;
+					return trace_failure(9, "witness.L1076", error == OK ? ERR_INVALID_DATA : error, 0, nullptr, uint32_t(report.state));
 				}
 				if (error != OK) {
-					return error;
+					return trace_failure(9, "witness.L1079", error, 0, nullptr, uint32_t(report.state));
 				}
 				if (report.state != NativeDisposalWitness::State::RETURNED) {
-					return ERR_BUSY; // Preserve budget for original native cursor.
+					return trace_failure(9, "witness.L1082", ERR_BUSY, 0, nullptr, uint32_t(report.state)); // Preserve budget for original native cursor.
 				}
 			}
 			if (!spend()) {
-				return ERR_BUSY;
+				return trace_failure(9, "witness.L1086", ERR_BUSY);
 			}
 			if (resource.rid.is_valid()) {
 				++r_usage.receipts;
@@ -1037,7 +1172,7 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			return OK;
 		}
 		if (!spend()) {
-			return ERR_BUSY;
+			return trace_failure(8, "storage.L1096", ERR_BUSY);
 		}
 		// Each exact original witness was observed physically returned above.
 		// No ordinary disposal cursor or speculative free is used here.
@@ -1050,13 +1185,13 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		return OK;
 	}
 	if (!spend()) {
-		return ERR_BUSY;
+		return trace_failure(10, "final_unpin.L1109", ERR_BUSY);
 	}
 	// Registry independently blocks any original groups still pending. E05
 	// source/result acknowledgment remains its original owner responsibility.
 	error = owner.return_slot_pin(p_slot);
 	if (error != OK) {
-		return error;
+		return trace_failure(10, "final_unpin.L1115", error);
 	}
 	// The older slot-only component path has no installed generation root and
 	// never emits a terminal generation result/public Poll grant. A real root

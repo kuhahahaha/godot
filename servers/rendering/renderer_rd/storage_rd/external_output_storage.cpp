@@ -152,7 +152,10 @@ Error ExternalOutputStorage::allocate_instance192_owned(GDExtensionProductionPhy
 }
 
 Error ExternalOutputStorage::allocate_indexed144_owned(GDExtensionProductionPhysicalContextRefV1 context,
-		GDExtensionDeviceExit::ProductionOutputPin &pin, uint64_t &group, uint32_t capacity, bool motion_required, uint32_t surface_count) {
+		GDExtensionDeviceExit::ProductionOutputPin &pin, uint64_t &group, uint32_t capacity, bool motion_required, uint32_t surface_count, bool p_generated_geometry) {
+	if (p_generated_geometry && (!capacity || motion_required)) {
+		return ERR_INVALID_PARAMETER;
+	}
 	if (attempted || retirement_requested || group) {
 		return ERR_ALREADY_IN_USE;
 	}
@@ -187,7 +190,14 @@ Error ExternalOutputStorage::allocate_indexed144_owned(GDExtensionProductionPhys
 			continue;
 		}
 		const BitField<RenderingDevice::StorageBufferUsage> usage = i == PROTECTED_COMMANDS ? BitField<RenderingDevice::StorageBufferUsage>(RenderingDevice::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT) : BitField<RenderingDevice::StorageBufferUsage>();
-		creation_error = device._production_output_owned_storage_create(context, pin, group, ordinal++, resources[i].bytes, usage, resources[i].rid, resources[i].witness);
+		auto &resource = resources[i];
+		if (p_generated_geometry && (i == CURRENT_RECORDS || i == INDEXED_STAGING)) {
+			const uint32_t role = i == CURRENT_RECORDS ? GDEXTENSION_OUTPUT_ROLE_CURRENT_VERTICES_V1 : GDEXTENSION_OUTPUT_ROLE_INDEX_STAGING_V1;
+			creation_error = device._production_output_owned_indexed144_buffer_create(context, pin, group, ordinal, role, resource.bytes, resource.rid, resource.witness);
+		} else {
+			creation_error = device._production_output_owned_storage_create(context, pin, group, ordinal, resource.bytes, usage, resource.rid, resource.witness);
+		}
+		++ordinal;
 		if (creation_error != OK) {
 			if (creation_error == ERR_BUSY && ordinal == 1 && resources[i].rid.is_null()) {
 				const Error rolled_back = device._production_output_owned_rollback(context, pin, group);

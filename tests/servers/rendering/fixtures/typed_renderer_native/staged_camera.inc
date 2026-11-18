@@ -29,6 +29,7 @@ GDExtensionNormalRelayRefV1 staged_relay{};
 uint32_t staged_compat_calls = 0;
 static constexpr uint32_t STAGED_READ_CAPACITY = 1;
 uint32_t staged_read_capacity() const { return staged_bank_probe() ? 0 : STAGED_READ_CAPACITY; }
+uint32_t staged_generation_read_capacity() const { return staged_genuine_prior() ? 2u : staged_read_capacity(); }
 static constexpr uint32_t STAGED_MAX_DRAW_GRAPHS = 2 * RenderingDevice::MAX_UNIFORM_SETS + 6;
 // The original Acquire also uses its read-graph allowance to fund each preparation hold.
 // The selected Mobile material closure measured 106 resources.
@@ -77,7 +78,10 @@ Error fund_staged_pool(OrdinalPlan &pool, const OrdinalPlan &producer) {
 	uint32_t instance192_resources = 0;
 	if ((e = RendererRD::ExternalLinkedOwnerTest::staged_instance192_resource_count(create_input.config.capacity, 1, instance192_resources)) != OK) { return staged_fail(e, "staged_pool_instance192_layout"); }
 	const uint64_t borrower_cells = staged_genuine_prior() ? 6 : 3;
-	const uint64_t demand_use_cells = 1 + uint64_t(instance192_resources) + 1 + borrower_cells + guard.guard_owned_resources + 1 + 2 * uint64_t(STAGED_PREPARATION_RESOURCE_CAPACITY) + 6;
+	const uint32_t bank_rows = staged_generation_read_capacity();
+	const uint64_t other_pass_observers = bank_rows ? 2 * (uint64_t(bank_rows) - 1) : 0;
+	const uint64_t demand_use_cells = 1 + uint64_t(instance192_resources) + 1 + borrower_cells + guard.guard_owned_resources + 1 +
+			2 * uint64_t(STAGED_PREPARATION_RESOURCE_CAPACITY) + other_pass_observers + 6;
 	const uint64_t output_graphs = uint64_t(upload_graphs) + 1 + guard.guard_graphs + STAGED_PREPARATION_RESOURCE_CAPACITY + guard_read_graphs + record_read_graphs;
 	// Original demand formula: slot + resources/group + actual quoted borrower
 	// headroom(view/surface/read) + guard group, then per-read graph/use rows.
@@ -963,6 +967,8 @@ uint32_t staged_successor_batch_count = 0, staged_successor_unread_after = UINT3
 uint64_t staged_successor_pending_ack_after = UINT64_MAX;
 bool staged_successor_native_ready = false, staged_successor_record_consumed = false, staged_successor_readbacks_verified = false;
 bool staged_successor_raster_verified = false, staged_successor_cancel_entered = false;
+bool staged_successor_predecessor_live_before_ack = false;
+bool staged_successor_predecessor_returned_live = false;
 Error staged_successor_raster_error = OK;
 String staged_successor_raster_detail;
 GDExtensionProductionRecordReportV3 staged_successor_record{};
@@ -1705,6 +1711,17 @@ void advance_staged_execution() {
 		return;
 	}
 	if (staged_execution_step == 34) {
+		if (!staged_successor_predecessor_live_before_ack) {
+			Registry::Lock lock(enrollment.registry);
+			const uint32_t anchor = staged_successor_plan2.predecessor.resource_slot;
+			if (!staged_successor_original_request || anchor >= staged_successor_original_request->resource_count ||
+					staged_successor_original_request->resources[anchor].output_predecessor_view.is_empty() ||
+					staged_successor_original_request->segment.segment == staged_successor_original_request->acknowledged_segment) {
+				staged_fail(ERR_INVALID_DATA, "staged_successor_predecessor_before_ack");
+				return;
+			}
+			staged_successor_predecessor_live_before_ack = true;
+		}
 		if (staged_read_successor_batch_turn()) { ++staged_execution_step; }
 		return;
 	}
@@ -1739,7 +1756,25 @@ void advance_staged_execution() {
 				staged_successor_observe_report.complete_obligations == staged_successor_observe_report.known_obligations &&
 				!staged_successor_original_request->maintenance_serial &&
 				!RenderingDevice::get_singleton()->native_disposal_active.load(std::memory_order_acquire) &&
-				(staged_successor_observe_report.cause.native_error == OK || staged_successor_observe_report.physical_returns_pending)) {
+				staged_successor_observe_report.cause.native_error == ERR_BUSY && staged_successor_observe_report.physical_returns_pending == 1) {
+			const uint32_t anchor = staged_successor_plan2.predecessor.resource_slot;
+			constexpr uint32_t control_slot = 1;
+			auto &request = *staged_successor_original_request;
+			if (anchor >= request.resource_count || control_slot >= request.resource_count ||
+					control_slot >= request.capacity.return_cells ||
+					request.resources[control_slot].primary.get_id() != staged_successor_control.rid ||
+					request.resources[control_slot].backing_serial != staged_successor_control.backing_serial ||
+					!request.resources[control_slot].imported || request.resources[control_slot].retiring ||
+					!request.returns[control_slot].pending || !request.returns[control_slot].serial ||
+					request.returns[control_slot].serial != request.resources[control_slot].retire_serial ||
+					!staged_successor_original_request->resources[anchor].output_predecessor_view.is_empty() ||
+					staged_successor_original_request->cancelled || staged_successor_original_request->release_started ||
+					!host_original_request || host_original_request->actions[1].consumed_proof_returned ||
+					!staged_exported_proof.ref.borrow_control_serial) {
+				staged_fail(ERR_INVALID_DATA, "staged_successor_predecessor_live_return");
+				return;
+			}
+			staged_successor_predecessor_returned_live = true;
 			++staged_execution_step;
 		}
 		return;
@@ -1804,6 +1839,88 @@ void staged_receive_cancel(GDExtensionDeviceExit::ProductionPhysicalContextRef c
 	staged_cancel_status = cancel(context, ref, &input);
 }
 
+struct StagedCancelAck {
+	GDExtensionProductionRequestRefV1 ref;
+	const GDExtensionProductionRecordReportV2 &receipt;
+	GDExtensionDeviceExit::ProductionRequest &request;
+	uint64_t prior_ack;
+	Error result = ERR_UNCONFIGURED;
+};
+StagedCancelAck *staged_cancel_ack = nullptr;
+
+void staged_ack_cancel_in_normal() {
+	auto &attempt = *staged_cancel_ack;
+	const auto ack = port<GDExtensionInterfaceDeviceSessionProductionAckSegmentV1>("device_session_production_ack_segment_v1");
+	if (!ack) { attempt.result = ERR_UNAVAILABLE; return; }
+	const auto &segment = attempt.receipt.segment;
+	const Error wrong = Error(ack(attempt.ref, segment.segment, segment.segment_revision + 1).native_error);
+	if (wrong != ERR_DOES_NOT_EXIST) {
+		attempt.result = wrong == OK ? ERR_INVALID_DATA : wrong;
+		return;
+	}
+	{
+		GDExtensionDeviceExit::Registry::Lock lock(enrollment.registry);
+		if (attempt.request.serial != attempt.ref.handle_serial ||
+				attempt.request.acknowledged_segment != attempt.prior_ack) {
+			attempt.result = ERR_INVALID_DATA; return;
+		}
+	}
+	attempt.result = Error(ack(attempt.ref, segment.segment, segment.segment_revision).native_error);
+}
+
+Error staged_finish_cancel_segment(GDExtensionProductionRequestRefV1 ref,
+		GDExtensionDeviceExit::ProductionRequest *request,
+		const GDExtensionProductionRecordReportV2 &cancel,
+		const GDExtensionProductionReportV2 &before_cancel) {
+	using namespace GDExtensionDeviceExit;
+	const uint64_t prior = before_cancel.acknowledged_segment;
+	const bool has_segment = cancel.flags & GDEXTENSION_PRODUCTION_RECORD_HAS_SEGMENT_V1;
+	{
+		Registry::Lock lock(enrollment.registry);
+		if (!request || request->serial != ref.handle_serial) { return ERR_DOES_NOT_EXIST; }
+		print_line(vformat("STAGED-CANCEL-SEGMENT request=%d control=%d old_capture=%d old_ack=%d report_capture=%d report_ack=%d flags=%d segment=%d revision=%d current=%d current_revision=%d current_ack=%d batch_pending=%d last_batch_ack_revision=%d graphs=%d segment_graph_begin=%d",
+				ref.handle_serial, cancel.control_serial, before_cancel.captured_segment, prior,
+				cancel.report.captured_segment, cancel.report.acknowledged_segment, cancel.flags,
+				cancel.segment.segment, cancel.segment.segment_revision, request->segment.segment,
+				request->segment.segment_revision, request->acknowledged_segment,
+				request->native_batch_pending_ack, request->native_batch_last_ack_revision,
+				request->graph_count, request->segment_graph_begin));
+		if (!prior || before_cancel.captured_segment != prior ||
+				!(cancel.flags & GDEXTENSION_PRODUCTION_RECORD_HAS_REPORT_V1) ||
+				cancel.report.acknowledged_segment != prior || request->acknowledged_segment != prior ||
+				request->segment.segment != cancel.report.captured_segment ||
+				request->control.serial != cancel.control_serial || !request->control.input.output_cancel ||
+				request->control.state != ProductionControlState::OWNER_CONSUMED || request->native_batch_pending_ack) {
+			return ERR_INVALID_DATA;
+		}
+		if (cancel.report.captured_segment == prior) {
+			return !has_segment && !cancel.segment.segment && !cancel.segment.segment_revision ? OK : ERR_INVALID_DATA;
+		}
+		if (!has_segment || prior == UINT64_MAX || cancel.segment.segment != prior + 1 ||
+				cancel.segment.segment != request->segment.segment || !cancel.segment.segment_revision ||
+				cancel.segment.segment_revision == UINT64_MAX ||
+				cancel.segment.segment_revision != request->segment.segment_revision) {
+			return ERR_INVALID_DATA;
+		}
+	}
+	// Use the original admitted callable, just like the batch ACK. A wrong
+	// revision must leave the genuine cleanup segment available for its ACK.
+	StagedCancelAck attempt{ ref, cancel, *request, prior };
+	staged_cancel_ack = &attempt;
+	Variant returned;
+	Callable::CallError call_error;
+	host_normal_callable.callp(nullptr, 0, returned, call_error);
+	staged_cancel_ack = nullptr;
+	if (call_error.error != Callable::CallError::CALL_OK) { return ERR_UNAUTHORIZED; }
+	if (attempt.result != OK) { return attempt.result; }
+	Registry::Lock lock(enrollment.registry);
+	if (request->serial != ref.handle_serial || request->acknowledged_segment != cancel.segment.segment ||
+			request->native_batch_pending_ack) { return ERR_INVALID_DATA; }
+	print_line(vformat("STAGED-CANCEL-SEGMENT-ACK request=%d control=%d prior=%d accepted=%d revision=%d",
+			ref.handle_serial, cancel.control_serial, prior, request->acknowledged_segment, cancel.segment.segment_revision));
+	return OK;
+}
+
 void advance_staged_close() {
 	using namespace GDExtensionDeviceExit;
 	const GDExtensionProductionServiceBudgetV1 budget{ production_dto_abi<GDExtensionProductionServiceBudgetV1>(), host_scene_deadline, 1, 16, 16, 0 };
@@ -1831,9 +1948,13 @@ void advance_staged_close() {
 			return;
 		}
 		if (staged_successor_close_step == 2) {
-			const auto consume = port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
+			const auto consume = port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV3>("device_session_production_record_consume_v3");
 			if (!consume) { staged_fail(ERR_UNAVAILABLE, "staged_successor_slot_cancel_consume_port"); return; }
-			if (staged_fail(Error(consume(staged_successor_request, staged_successor_cancel_control, &staged_successor_cancel_receipt).native_error), "staged_successor_slot_cancel_consume") != OK) { return; }
+			if (!staged_successor_cancel_receipt.control_serial) {
+				GDExtensionProductionRecordReportV3 returned{};
+				if (staged_fail(Error(consume(staged_successor_request, staged_successor_cancel_control, &returned).native_error), "staged_successor_slot_cancel_consume") != OK) { return; }
+				staged_successor_cancel_receipt = returned.record;
+			}
 			if (!staged_successor_cancel_entered || !staged_successor_cancel_frame || staged_successor_cancel_receipt.request_serial != staged_successor_request.handle_serial ||
 				staged_successor_cancel_receipt.control_serial != staged_successor_cancel_control) {
 				staged_fail(ERR_INVALID_DATA, "staged_successor_cancel_receipt_identity"); return;
@@ -1843,6 +1964,9 @@ void advance_staged_close() {
 				staged_detail = "staged_successor_slot_cancel_return";
 				return;
 			}
+			const Error segment = staged_finish_cancel_segment(staged_successor_request, staged_successor_original_request,
+					staged_successor_cancel_receipt, staged_successor_observe_report);
+			if (staged_fail(segment, "staged_successor_cancel_segment_receipt") != OK) { return; }
 			++staged_successor_close_step;
 			return;
 		}
@@ -1916,7 +2040,8 @@ void advance_staged_close() {
 	if (staged_close_step == 1) {
 		const auto consume = port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
 		if (!consume) { staged_fail(ERR_UNAVAILABLE, "staged_slot_cancel_consume_port"); return; }
-		if (staged_fail(Error(consume(host_request, staged_cancel_control, &staged_cancel_receipt).native_error), "staged_original_slot_cancel_consume") != OK) { return; }
+		if (!staged_cancel_receipt.control_serial &&
+				staged_fail(Error(consume(host_request, staged_cancel_control, &staged_cancel_receipt).native_error), "staged_original_slot_cancel_consume") != OK) { return; }
 		if (!staged_cancel_entered || !staged_cancel_frame || staged_cancel_receipt.request_serial != host_request.handle_serial || staged_cancel_receipt.control_serial != staged_cancel_control) {
 			staged_fail(ERR_INVALID_DATA, "staged_cancel_receipt_identity"); return;
 		}
@@ -1925,6 +2050,9 @@ void advance_staged_close() {
 			staged_detail = "staged_original_slot_cancel_return";
 			return;
 		}
+		const Error segment = staged_finish_cancel_segment(host_request, host_original_request,
+				staged_cancel_receipt, staged_observe_report);
+		if (staged_fail(segment, "staged_original_cancel_segment_receipt") != OK) { return; }
 		++staged_close_step;
 		return;
 	}
@@ -2232,10 +2360,20 @@ void report_staged(Dictionary &result) const {
 		prior["successor_request"] = int64_t(staged_successor_request.handle_serial);
 		prior["successor_record_control"] = int64_t(staged_successor_record_control);
 		prior["successor_record_consumed"] = staged_successor_record_consumed;
+		prior["predecessor_live_before_ack"] = staged_successor_predecessor_live_before_ack;
+		prior["predecessor_returned_live"] = staged_successor_predecessor_returned_live;
 		prior["successor_record_error"] = staged_successor_record.record.result.native_error;
 		if (staged_successor_original_request) {
 			Registry::Lock lock(enrollment.registry);
 			prior["successor_control_state"] = int64_t(uint32_t(staged_successor_original_request->control.state));
+			prior["successor_observe_api_error"] = staged_successor_observe_api_result.native_error;
+			prior["successor_observe_cause"] = staged_successor_observe_report.cause.native_error;
+			prior["successor_observe_revision"] = int64_t(staged_successor_observe_report.revision);
+			prior["successor_observe_owner_control"] = int64_t(staged_successor_observe_receipt.control_serial);
+			prior["successor_physical_returns_pending"] = staged_successor_observe_report.physical_returns_pending;
+			prior["successor_observe_readbacks_ready"] = staged_successor_observe_report.ready_readbacks;
+			prior["successor_observe_acknowledged_segment"] = int64_t(staged_successor_observe_report.acknowledged_segment);
+			prior["successor_observe_captured_segment"] = int64_t(staged_successor_observe_report.captured_segment);
 			prior["successor_scene_waiting"] = staged_successor_original_request->control.scene_waiting;
 			prior["successor_subscriber_last_error"] = int64_t(staged_successor_original_request->actions[1].camera_ready_subscriber.get_last_error());
 			prior["successor_scene_cull_error"] = int64_t(staged_successor_original_request->actions[1].scene_cull_error);

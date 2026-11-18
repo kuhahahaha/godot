@@ -34,10 +34,14 @@
 #include "servers/rendering/renderer_rd/effects/particles_external_guard.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_ribbon_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_data_rd.h"
 #include "servers/rendering/renderer_scene_cull.h"
 
+#include <atomic>
 #include <cstddef>
+#include <cstdio>
+#include <cstdlib>
 
 namespace RendererRD {
 Error ExternalOutputOwner::validate_scene_cull(uint32_t p_slot) const {
@@ -213,6 +217,49 @@ Error ExternalOutputOwner::install_generation_root(GDExtensionDeviceExit::Produc
 }
 
 Error ExternalOutputOwner::select_slot(const ExternalOutputRequest &request, uint32_t &out_view, uint32_t &out_slot) const {
+	// Temporary passive observer: no admission, state, custody or reply changes.
+	auto trace_invalid = [&](const char *reason, uint32_t selected, uint32_t available) {
+		const char *enabled = std::getenv("ANGE_TRACE_OUTPUT_SLOT_PREFLIGHT");
+		if (!enabled || enabled[0] != '1') {
+			return;
+		}
+		static std::atomic_flag emitted = ATOMIC_FLAG_INIT;
+		if (emitted.test_and_set(std::memory_order_relaxed)) {
+			return;
+		}
+		const uint8_t *layout = config_tags_inline ? frozen_config_tags[2] : config.layout_digest.ptr();
+		const uint8_t *mapping = config_tags_inline ? frozen_config_tags[3] : config.mapping_digest.ptr();
+		const int64_t layout_size = config_tags_inline ? 32 : config.layout_digest.size();
+		const int64_t mapping_size = config_tags_inline ? 32 : config.mapping_digest.size();
+		auto hex32 = [](const uint8_t *bytes, int64_t size, char (&text)[65]) {
+			static const char digits[] = "0123456789abcdef";
+			if (size != 32) {
+				text[0] = '-'; text[1] = '\0';
+				return;
+			}
+			for (uint32_t i = 0; i < 32; ++i) {
+				text[i * 2] = digits[bytes[i] >> 4];
+				text[i * 2 + 1] = digits[bytes[i] & 15];
+			}
+			text[64] = '\0';
+		};
+		char actual_layout[65], frozen_layout[65], actual_mapping[65], frozen_mapping[65];
+		hex32(request.layout_digest.ptr(), request.layout_digest.size(), actual_layout);
+		hex32(layout, layout_size, frozen_layout);
+		hex32(request.mapping_digest.ptr(), request.mapping_digest.size(), actual_mapping);
+		hex32(mapping, mapping_size, frozen_mapping);
+		const bool layout_match = request.layout_digest.size() == layout_size && (layout_size == 0 || memcmp(request.layout_digest.ptr(), layout, layout_size) == 0);
+		const bool mapping_match = request.mapping_digest.size() == mapping_size && (mapping_size == 0 || memcmp(request.mapping_digest.ptr(), mapping, mapping_size) == 0);
+		const Slot *slot = available < slot_count ? &slots[available] : nullptr;
+		std::fprintf(stderr, "[OUTPUT-SLOT-PREFLIGHT] reason=%s generation=%llu generation_request=%llu present=%llu camera=%llu:%llu:%llu inline=%u layout_match=%u mapping_match=%u pass=%u config_pass=%u layout_size=%lld:%lld mapping_size=%lld:%lld actual_layout=%s frozen_layout=%s actual_mapping=%s frozen_mapping=%s view=%u slot=%u state=%u storage=%u surfaces=%u original_pin=%u original_request=%llu original_action=%llu lease=%llu\n",
+				reason, (unsigned long long)generation, (unsigned long long)generation_request.handle_serial, (unsigned long long)request.common.present_seq,
+				(unsigned long long)request.common.current_camera_token.view_id, (unsigned long long)request.common.current_camera_token.view_epoch, (unsigned long long)request.common.current_camera_token.capture_ordinal,
+				unsigned(config_tags_inline), unsigned(layout_match), unsigned(mapping_match), request.pass_mask, config.pass_mask,
+				(long long)request.layout_digest.size(), (long long)layout_size, (long long)request.mapping_digest.size(), (long long)mapping_size,
+				actual_layout, frozen_layout, actual_mapping, frozen_mapping, selected, available,
+				slot ? unsigned(slot->state) : UINT32_MAX, unsigned(slot && slot->storage), unsigned(slot && slot->surfaces), unsigned(slot && !slot->original_pin.is_empty()),
+				(unsigned long long)(slot ? slot->original_request.handle_serial : 0), (unsigned long long)(slot ? slot->original_action_ordinal : UINT64_MAX), (unsigned long long)(slot ? slot->lease_serial : 0));
+	};
 	if (!admits_work()) {
 		return ERR_UNAVAILABLE;
 	}
@@ -223,6 +270,7 @@ Error ExternalOutputOwner::select_slot(const ExternalOutputRequest &request, uin
 															memcmp(request.layout_digest.ptr(), frozen_config_tags[2], 32) == 0 && memcmp(request.mapping_digest.ptr(), frozen_config_tags[3], 32) == 0)
 												  : (request.layout_digest == config.layout_digest && request.mapping_digest == config.mapping_digest);
 	if (!digests_match || (request.pass_mask & ~config.pass_mask)) {
+		trace_invalid("tags_or_pass", UINT32_MAX, UINT32_MAX);
 		return ERR_INVALID_DATA;
 	}
 	if (!next_lease_serial) {
@@ -284,6 +332,7 @@ Error ExternalOutputOwner::select_slot(const ExternalOutputRequest &request, uin
 		return ERR_BUSY;
 	}
 	if (slots[available].storage || slots[available].surfaces || !slots[available].original_pin.is_empty()) {
+		trace_invalid("dirty_available", selected, available);
 		return ERR_INVALID_DATA;
 	}
 	out_view = selected;
@@ -459,6 +508,23 @@ Error ExternalOutputOwner::install_metadata_directory(GDExtensionDeviceExit::Pro
 	return OK;
 }
 
+const MeshStorage::NativeSurfaceHold *ExternalOutputOwner::preparation_geometry_source(uint32_t p_slot, uint32_t p_surface) const {
+	if (!generation_surfaces_complete || p_surface >= generation_material_count || p_slot >= slot_count) {
+		return nullptr;
+	}
+	if (config.profile == ExternalOutputConfig::INSTANCE_192) {
+		return &generation_materials[p_surface].geometry_source;
+	}
+	const auto &slot = slots[p_slot];
+	const auto *meshes = MeshStorage::get_singleton();
+	if (config.profile != ExternalOutputConfig::INDEXED_144 || !slot.generated_indexed_mesh.is_valid() ||
+			!slot.surfaces || p_surface >= slot.surface_count || !meshes ||
+			!meshes->_mesh_generated_source_matches(slot.generated_indexed_mesh, p_surface, slot.surfaces[p_surface].geometry)) {
+		return nullptr;
+	}
+	return &slot.surfaces[p_surface].geometry;
+}
+
 bool ExternalOutputOwner::preparation_source_matches(const ExternalPipelinePreparation &row) const {
 	const bool selected = row.tuple_state != ExternalPipelinePreparation::TupleState::UNSELECTED;
 	const uint32_t source_index = selected ? row.tuple_surface : row.owner_surface;
@@ -471,8 +537,12 @@ bool ExternalOutputOwner::preparation_source_matches(const ExternalPipelinePrepa
 			return false;
 		}
 		const auto &source = generation_materials[source_index];
+		const auto *geometry = preparation_geometry_source(row.owner_slot, source_index);
+		if (row.owner_slot >= slot_count || (slots[row.owner_slot].generated_indexed_mesh.is_valid() && !geometry)) {
+			return false;
+		}
 		return row.tuple_mesh == source.mesh && row.tuple_native_surface == source.native_surface && row.source_material == source.material && row.source_material_generation == source.generation &&
-				row.source_geometry == (instance192 && generation_surfaces_complete ? &source.geometry_source : nullptr);
+				row.source_geometry == geometry;
 	}
 	if (generation_surfaces_complete) {
 		if (instance192 ? (source_index >= retained_surface_count || retained_surface_count != generation_material_count) : (source_index >= generation_material_count)) {
@@ -514,14 +584,16 @@ Error ExternalOutputOwner::material_future_pipeline_plan(const ExternalPipelineP
 	if (admitted != OK) {
 		return admitted;
 	}
-	if (config.profile != ExternalOutputConfig::INSTANCE_192 ||
+	const bool indexed = config.profile == ExternalOutputConfig::INDEXED_144 && slot.generated_indexed_mesh.is_valid();
+	if ((!indexed && config.profile != ExternalOutputConfig::INSTANCE_192) ||
 			!generation_selection_complete || !generation_surfaces_complete ||
-			retained_mesh_count != generation_mesh_count || retained_material_count != generation_material_count || retained_surface_count != generation_material_count || !generation_materials ||
+			retained_mesh_count != generation_mesh_count || retained_material_count != generation_material_count ||
+			retained_surface_count != (indexed ? 0 : generation_material_count) || !generation_materials ||
 			row.tuple_state != ExternalPipelinePreparation::TupleState::SELECTED || row.tuple_surface >= generation_material_count || !preparation_source_matches(row)) {
 		return ERR_UNAVAILABLE;
 	}
 	const auto &source = generation_materials[row.tuple_surface];
-	if (!source.lease.is_active() || !source.geometry_source.is_valid() || row.source_geometry != &source.geometry_source) {
+	if (!source.lease.is_active() || !row.source_geometry || !row.source_geometry->is_valid()) {
 		return ERR_UNAVAILABLE;
 	}
 	auto *materials = MaterialStorage::get_singleton();
@@ -537,7 +609,7 @@ Error ExternalOutputOwner::material_future_pipeline_plan(const ExternalPipelineP
 	if (current != OK) {
 		return current;
 	}
-	if (!preparation_source_matches(row) || row.source_geometry != &source.geometry_source || !source.lease.is_active() || !source.geometry_source.is_valid()) {
+	if (!preparation_source_matches(row) || !row.source_geometry || !row.source_geometry->is_valid() || !source.lease.is_active()) {
 		return ERR_UNAUTHORIZED;
 	}
 	r_plan = std::move(plan);
@@ -607,6 +679,10 @@ Error ExternalOutputOwner::select_preparation_tuple(uint32_t p_slot, uint32_t p_
 		}
 	}
 	const auto &source = generation_materials[p_surface];
+	const auto *geometry = preparation_geometry_source(p_slot, p_surface);
+	if (slot.generated_indexed_mesh.is_valid() && !geometry) {
+		return ERR_UNAUTHORIZED;
+	}
 	uint32_t available = UINT32_MAX;
 	for (uint32_t i = 0; i < preparation_capacity; ++i) {
 		auto &row = preparation_rows[i];
@@ -633,7 +709,7 @@ Error ExternalOutputOwner::select_preparation_tuple(uint32_t p_slot, uint32_t p_
 	row.tuple_surface = p_surface;
 	row.tuple_native_surface = source.native_surface;
 	row.tuple_mesh = source.mesh;
-	row.source_geometry = (config.profile == ExternalOutputConfig::INSTANCE_192 && generation_surfaces_complete) ? &source.geometry_source : nullptr;
+	row.source_geometry = geometry;
 	row.source_material = source.material;
 	row.source_material_generation = source.generation;
 	row.tuple_state = ExternalPipelinePreparation::TupleState::SELECTED;
@@ -925,6 +1001,83 @@ Error ExternalOutputOwner::return_reserved_cells() {
 	return OK;
 }
 
+Error ExternalOutputOwner::prepare_generated_indexed144_surfaces(uint32_t p_slot) {
+	auto *meshes = MeshStorage::get_singleton();
+	if (!device || device != RenderingDevice::get_singleton() || !device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!meshes || p_slot >= slot_count || config.profile != ExternalOutputConfig::INDEXED_144 || config.motion != ExternalOutputConfig::DISABLED ||
+			!config.capacity || !generation_selection_complete || !generation_surfaces_complete || !generation_materials) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto &slot = slots[p_slot];
+	if ((slot.state != LeaseState::RESERVED && slot.state != LeaseState::WRITING) ||
+			slot.publication_closed || slot.pass_uses_closed || !slot.storage || !slot.owned_group || !slot.surfaces ||
+			slot.surface_count != generation_material_count || !slot.original_registry ||
+			!slot.original_registry->production_output_pin_matches(slot.original_pin, slot.original_request, *device)) {
+		return ERR_UNAUTHORIZED;
+	}
+	using Storage = ExternalOutputStorage;
+	const auto &vertices = slot.storage->resources[Storage::CURRENT_RECORDS];
+	const auto &indices = slot.storage->resources[Storage::INDEXED_STAGING];
+	const auto &previous = slot.storage->resources[Storage::PREVIOUS_RECORDS];
+	const auto &history = slot.storage->resources[Storage::INDEXED_VERTEX_HISTORY_VALIDITY];
+	ParticlesRibbonRD::Indexed144Layout layout;
+	const Error planned = ParticlesRibbonRD::plan_indexed144(config.capacity, false, slot.surface_count, layout);
+	if (planned != OK) {
+		return planned;
+	}
+	if (previous.rid.is_valid() || previous.bytes || history.rid.is_valid() || history.bytes ||
+			vertices.bytes != layout.bytes[ParticlesRibbonRD::CURRENT_VERTICES] ||
+			indices.bytes != layout.bytes[ParticlesRibbonRD::INDEX_STAGING] ||
+			!device->_production_output_owned_storage_contains(slot.original_pin, slot.owned_group, vertices.rid) ||
+			!device->_production_output_owned_storage_contains(slot.original_pin, slot.owned_group, indices.rid)) {
+		return ERR_INVALID_DATA;
+	}
+	if (slot.generated_index_array.is_null()) {
+		slot.generated_index_array = device->index_array_create(indices.rid, 0, layout.index_capacity);
+		if (slot.generated_index_array.is_null()) {
+			return ERR_CANT_CREATE;
+		}
+	}
+	if (slot.generated_indexed_mesh.is_null()) {
+		slot.generated_indexed_mesh = meshes->mesh_allocate();
+		meshes->mesh_initialize(slot.generated_indexed_mesh);
+	}
+	for (uint32_t i = 0; i < slot.surface_count; ++i) {
+		auto &binding = slot.surfaces[i];
+		if (binding.geometry.is_active()) {
+			if (binding.geometry_transferred || !meshes->_mesh_generated_source_matches(slot.generated_indexed_mesh, i, binding.geometry)) {
+				return ERR_INVALID_DATA;
+			}
+			continue; // A successful source hold from this same unsealed prefix.
+		}
+		if (uint32_t(meshes->mesh_get_surface_count(slot.generated_indexed_mesh)) == i) {
+			MeshStorage::ExternalSurfaceDescriptor descriptor;
+			descriptor.vertex_count = layout.vertex_capacity;
+			descriptor.index_count = layout.index_capacity;
+			descriptor.current_vertex_buffer = vertices.rid;
+			descriptor.vertex_buffer_size = vertices.bytes;
+			descriptor.index_buffer = indices.rid;
+			descriptor.index_array = slot.generated_index_array;
+			descriptor.index_buffer_size = indices.bytes;
+			descriptor.material = generation_materials[i].material;
+			descriptor.aabb = config.geometry_bounds;
+			descriptor.generation = slot.lease_serial;
+			uint32_t surface = UINT32_MAX;
+			const Error added = meshes->_mesh_add_generated_indexed144_surface(slot.generated_indexed_mesh, descriptor, vertices.witness, indices.witness, surface);
+			if (added != OK || surface != i) {
+				return added == OK ? ERR_INVALID_DATA : added;
+			}
+		}
+		const Error retained = meshes->_mesh_surface_source_hold_acquire(slot.generated_indexed_mesh, i, binding.geometry, true);
+		if (retained != OK) {
+			return retained;
+		}
+	}
+	return OK;
+}
+
 // Private commit only. Registry reaches this after authenticating the original
 // Records/Meta writes and actual guard append; tokens and pins alone cannot
 // call this from the public/facade path or stand in for that record proof.
@@ -1063,7 +1216,8 @@ Error ExternalOutputOwner::return_slot_pin(uint32_t p_slot) {
 	}
 	auto &cell = slots[p_slot];
 	if (cell.state != LeaseState::RETIRING || !cell.publication_closed || !cell.pass_uses_closed ||
-			cell.guard_owned_group || cell.storage || cell.surfaces || cell.surface_count || cell.preparation_reserved_count || cell.preparation_selected_count || cell.owned_group || slot_has_custody(p_slot)) {
+			cell.guard_owned_group || cell.storage || cell.surfaces || cell.surface_count ||
+			cell.generated_indexed_mesh.is_valid() || cell.generated_index_array.is_valid() || cell.preparation_reserved_count || cell.preparation_selected_count || cell.owned_group || slot_has_custody(p_slot)) {
 		return ERR_BUSY;
 	}
 	for (uint32_t i = 0; i < config.max_views; ++i) {
@@ -1894,6 +2048,31 @@ Error ExternalOutputOwner::surface_acquire(uint32_t p_surface, ExternalSurfaceSe
 	return OK;
 }
 
+Error ExternalOutputOwner::find_generated_slot_for_capture(const Ref<RendererViewport::Viewport::CameraCapture> &p_capture, uint32_t &r_slot) const {
+	if (!admits_work() || config.profile != ExternalOutputConfig::INDEXED_144 ||
+			config.motion != ExternalOutputConfig::DISABLED || !config.capacity || p_capture.is_null()) {
+		return ERR_UNAVAILABLE;
+	}
+	uint32_t matched = UINT32_MAX;
+	for (uint32_t i = 0; i < slot_count; ++i) {
+		const auto &slot = slots[i];
+		if ((slot.state != LeaseState::SEALED_RECORDED && slot.state != LeaseState::ADOPTED) ||
+				slot.publication_closed || slot.pass_uses_closed || slot.generated_indexed_mesh.is_null() ||
+				!slot.scene_cull_bound || !slot.guard_resources_ready || slot.native_camera_source != p_capture) {
+			continue;
+		}
+		if (matched != UINT32_MAX) {
+			return ERR_INVALID_DATA;
+		}
+		matched = i;
+	}
+	if (matched == UINT32_MAX) {
+		return ERR_UNAVAILABLE;
+	}
+	r_slot = matched;
+	return OK;
+}
+
 Error ExternalOutputOwner::slot_surface_acquire(uint32_t p_slot, uint32_t p_surface, ExternalSurfaceSelection &r_surface) {
 	auto *rd = RenderingDevice::get_singleton();
 	if (!rd || !rd->native_immutable_is_render_thread()) {
@@ -1921,6 +2100,12 @@ Error ExternalOutputOwner::slot_surface_acquire(uint32_t p_slot, uint32_t p_surf
 	}
 	const auto &source = generation_materials[p_surface];
 	auto &slot_geom = slot.surfaces[p_surface].geometry;
+	if (slot.generated_indexed_mesh.is_valid()) {
+		const auto *meshes = MeshStorage::get_singleton();
+		if (!meshes || !meshes->_mesh_generated_source_matches(slot.generated_indexed_mesh, p_surface, slot_geom)) {
+			return ERR_INVALID_DATA;
+		}
+	}
 	if ((config.capacity && (!slot_geom.is_valid() || !slot_geom.is_external())) ||
 			(!config.capacity && slot_geom.is_active()) || source.material.is_null() || !source.generation) {
 		return ERR_INVALID_DATA;

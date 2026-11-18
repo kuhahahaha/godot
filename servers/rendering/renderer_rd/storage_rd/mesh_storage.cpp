@@ -642,6 +642,24 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 }
 
 Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDescriptor &p_surface, uint32_t &r_surface_index, uint64_t &r_generation) {
+	return _mesh_add_external_surface(p_mesh, p_surface, r_surface_index, r_generation, false);
+}
+
+Error MeshStorage::_mesh_add_generated_indexed144_surface(RID p_mesh, ExternalSurfaceDescriptor p_surface,
+		const NativeDisposalWitness &p_vertices, const NativeDisposalWitness &p_indices, uint32_t &r_surface_index) {
+	auto *device = RD::get_singleton();
+	if (!device || !device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	p_surface.current_allocation_generation = device->_generated_indexed144_backing_serial(p_surface.current_vertex_buffer, p_vertices, false);
+	if (!p_surface.current_allocation_generation || !device->_generated_indexed144_backing_serial(p_surface.index_buffer, p_indices, true)) {
+		return ERR_INVALID_DATA;
+	}
+	uint64_t generation = 0;
+	return _mesh_add_external_surface(p_mesh, p_surface, r_surface_index, generation, true);
+}
+
+Error MeshStorage::_mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDescriptor &p_surface, uint32_t &r_surface_index, uint64_t &r_generation, bool p_no_motion) {
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL_V(mesh, ERR_DOES_NOT_EXIST);
 	if (mesh->selection_holds) {
@@ -650,13 +668,18 @@ Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDe
 	ERR_FAIL_COND_V(mesh->surface_count == RSE::MAX_MESH_SURFACES, ERR_OUT_OF_MEMORY);
 	ERR_FAIL_COND_V(p_surface.vertex_count == 0 || p_surface.index_count == 0, ERR_INVALID_PARAMETER);
 	ERR_FAIL_COND_V(p_surface.primitive != RSE::PRIMITIVE_TRIANGLES || mesh->blend_shape_count != 0 || !mesh->instances.is_empty(), ERR_INVALID_PARAMETER);
-	ERR_FAIL_COND_V(p_surface.current_vertex_buffer.is_null() || p_surface.previous_vertex_buffer.is_null() || p_surface.index_buffer.is_null() || p_surface.index_array.is_null(), ERR_INVALID_PARAMETER);
-	ERR_FAIL_COND_V(p_surface.material.is_null(), ERR_INVALID_PARAMETER);
-	ERR_FAIL_COND_V(p_surface.generation == 0 || p_surface.current_allocation_generation == 0 || p_surface.previous_allocation_generation == 0, ERR_INVALID_PARAMETER);
-	ERR_FAIL_COND_V(p_surface.current_allocation_generation == p_surface.previous_allocation_generation, ERR_INVALID_PARAMETER);
-	ERR_FAIL_COND_V(p_surface.vertex_buffer_size < uint64_t(p_surface.vertex_count) * 144 || p_surface.previous_vertex_buffer_size < uint64_t(p_surface.vertex_count) * 144, ERR_INVALID_PARAMETER);
-	ERR_FAIL_COND_V(p_surface.index_buffer_size < uint64_t(p_surface.index_count) * sizeof(uint32_t), ERR_INVALID_PARAMETER);
-	ERR_FAIL_COND_V(!RD::get_singleton()->validate_external_indexed_surface_buffers(p_surface.current_vertex_buffer, p_surface.previous_vertex_buffer, p_surface.index_buffer, p_surface.index_array, p_surface.vertex_count, p_surface.index_count), ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(p_surface.current_vertex_buffer.is_null() || p_surface.index_buffer.is_null() || p_surface.index_array.is_null(), ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(p_surface.material.is_null() || !p_surface.generation || !p_surface.current_allocation_generation, ERR_INVALID_PARAMETER);
+	const uint64_t vertex_bytes = uint64_t(p_surface.vertex_count) * 144;
+	if (p_no_motion) {
+		ERR_FAIL_COND_V(p_surface.previous_allocation_generation || p_surface.previous_vertex_buffer_size, ERR_INVALID_PARAMETER);
+	} else {
+		ERR_FAIL_COND_V(!p_surface.previous_allocation_generation || p_surface.current_allocation_generation == p_surface.previous_allocation_generation ||
+				p_surface.previous_vertex_buffer_size < vertex_bytes, ERR_INVALID_PARAMETER);
+	}
+	ERR_FAIL_COND_V(p_surface.vertex_buffer_size < vertex_bytes || p_surface.index_buffer_size < uint64_t(p_surface.index_count) * sizeof(uint32_t), ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(!RD::get_singleton()->_validate_external_indexed_surface_buffers(p_surface.current_vertex_buffer, p_surface.previous_vertex_buffer,
+			p_surface.index_buffer, p_surface.index_array, p_surface.vertex_count, p_surface.index_count, p_no_motion), ERR_INVALID_PARAMETER);
 
 	Mesh::Surface *surface = memnew(Mesh::Surface);
 	surface->external = true;
@@ -706,6 +729,9 @@ Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDe
 void MeshStorage::_mesh_surface_get_external_arrays(Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, RID &r_vertex_array_rd, RD::VertexFormatID &r_vertex_format) {
 	r_vertex_array_rd = RID();
 	r_vertex_format = 0;
+	if (p_input_motion_vectors && s->previous_vertex_buffer.is_null()) {
+		return;
+	}
 	s->version_lock.lock();
 	for (uint32_t i = 0; i < s->version_count; i++) {
 		const Mesh::Surface::Version &version = s->versions[i];
@@ -807,6 +833,10 @@ void MeshStorage::_mesh_surface_generate_external_version(Mesh::Surface::Version
 }
 
 Error MeshStorage::mesh_surface_source_hold_acquire(RID mesh_rid, uint32_t index, NativeSurfaceHold &out) {
+	return _mesh_surface_source_hold_acquire(mesh_rid, index, out, false);
+}
+
+Error MeshStorage::_mesh_surface_source_hold_acquire(RID mesh_rid, uint32_t index, NativeSurfaceHold &out, bool p_no_motion) {
 	auto *device = RD::get_singleton();
 	if (!device || !device->native_immutable_is_render_thread()) {
 		return ERR_UNAUTHORIZED;
@@ -822,7 +852,8 @@ Error MeshStorage::mesh_surface_source_hold_acquire(RID mesh_rid, uint32_t index
 	if (out.device || surface->immutable_retired || surface->immutable_holds == UINT32_MAX) {
 		return ERR_INVALID_PARAMETER;
 	}
-	if (surface->external || mesh->blend_shape_count || !mesh->instances.is_empty() || surface->skin_buffer.is_valid()) {
+	if (surface->external != p_no_motion || (p_no_motion && (surface->previous_vertex_buffer.is_valid() || surface->index_array.is_null())) ||
+			mesh->blend_shape_count || !mesh->instances.is_empty() || surface->skin_buffer.is_valid()) {
 		return ERR_UNAVAILABLE;
 	}
 	if (!surface->vertex_count || surface->vertex_buffer.is_null() || (surface->index_count && surface->index_buffer.is_null())) {
@@ -832,7 +863,7 @@ Error MeshStorage::mesh_surface_source_hold_acquire(RID mesh_rid, uint32_t index
 	// native preparation derives that Version from this same retained Surface.
 	RID roots[3];
 	uint32_t root_count = 0;
-	for (RID root : { surface->vertex_buffer, surface->attribute_buffer, surface->index_buffer }) {
+	for (RID root : { surface->vertex_buffer, p_no_motion ? surface->index_array : surface->attribute_buffer, surface->index_buffer }) {
 		if (root.is_valid()) {
 			roots[root_count++] = root;
 		}
@@ -854,6 +885,8 @@ Error MeshStorage::mesh_surface_source_hold_acquire(RID mesh_rid, uint32_t index
 	++surface->immutable_holds;
 	out.surface = surface;
 	out.device = device;
+	out.index_array = surface->index_array;
+	out.current_generation = surface->current_allocation_generation;
 	out.vertex_count = surface->vertex_count;
 	out.index_count = surface->index_count;
 	out.surface_format = surface->format;
@@ -862,6 +895,12 @@ Error MeshStorage::mesh_surface_source_hold_acquire(RID mesh_rid, uint32_t index
 	out.primitive = surface->primitive;
 	out.material = surface->material;
 	return OK;
+}
+
+bool MeshStorage::_mesh_generated_source_matches(RID p_mesh, uint32_t p_surface, const NativeSurfaceHold &p_hold) const {
+	const Mesh *mesh = mesh_owner.get_or_null(p_mesh);
+	return mesh && p_surface < mesh->surface_count && p_hold.is_external() && !p_hold.physical_transferred &&
+			p_hold.surface == mesh->surfaces[p_surface] && p_hold.surface->previous_vertex_buffer.is_null();
 }
 
 Error MeshStorage::mesh_surface_hold_acquire(RID mesh_rid, uint32_t index, uint64_t mask, bool motion, bool point_size, uint32_t lod, NativeSurfaceHold &out) {
@@ -942,7 +981,7 @@ Error MeshStorage::mesh_surface_hold_plan_vertex_array(const NativeSurfaceHold &
 	if (!source.surface || !source.is_valid() || source.physical_transferred || source.metadata_returned || source.metadata_return_active || !source.surface->immutable_holds || source.surface->immutable_holds == UINT32_MAX) {
 		return ERR_INVALID_PARAMETER;
 	}
-	if ((motion && !source.surface->external) || point_size || lod || source.surface->skin_buffer.is_valid()) {
+	if ((motion && (!source.surface->external || source.surface->previous_vertex_buffer.is_null())) || point_size || lod || source.surface->skin_buffer.is_valid()) {
 #ifdef TESTS_ENABLED
 		trace_unavailable("mesh_unsupported_layout");
 #endif
@@ -1060,13 +1099,17 @@ Error MeshStorage::_native_hold_prospective_geometry(const NativeSurfaceHold &so
 			return ERR_INVALID_DATA;
 		}
 	}
-	// This admission invocation is Instance192; external history is a separate shape.
-	if (source.surface->external) {
+	if (source.surface->external && (source.surface->previous_vertex_buffer.is_valid() ||
+			source.surface->previous_allocation_generation || !source.current_generation ||
+			source.current_generation != source.surface->current_allocation_generation ||
+			source.index_array.is_null() || source.index_array != source.surface->index_array)) {
 		return ERR_UNAVAILABLE;
 	}
 	NativeProspectiveGeometryPlan plan;
 	plan.surface = source.surface;
 	plan.version_key.input_mask = mask;
+	plan.version_key.current_allocation_generation = source.surface->current_allocation_generation;
+	plan.version_key.previous_allocation_generation = source.surface->previous_allocation_generation;
 	plan.raw_vertex_description = actual.attributes; // Raw VertexDescriptionKey inputs, never normalized equality.
 	plan.future_vertex_array = actual.existing_vertex_array.is_null();
 	plan.detached = source.surface->immutable_retired;
@@ -1200,7 +1243,9 @@ Error MeshStorage::_mesh_surface_hold_acquire(Mesh::Surface *surface, uint64_t m
 	// even if this selected material's input mask reads only current positions.
 	if (surface->external) {
 		roots.push_back(surface->vertex_buffer);
-		roots.push_back(surface->previous_vertex_buffer);
+		if (surface->previous_vertex_buffer.is_valid()) {
+			roots.push_back(surface->previous_vertex_buffer);
+		}
 		roots.push_back(surface->index_buffer);
 	}
 	const Error error = device->native_immutable_hold_acquire(VectorView<RID>(roots.ptr(), roots.size()), out.physical);

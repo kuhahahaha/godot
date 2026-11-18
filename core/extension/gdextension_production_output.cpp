@@ -48,7 +48,19 @@
 #include "servers/rendering/rendering_server_globals.h"
 #include "servers/rendering/renderer_scene_cull.h"
 
+#include <atomic>
+#include <cstdio>
+#include <cstdlib>
+
 namespace GDExtensionDeviceExit {
+namespace {
+bool output_history_invalid_trace_once() {
+	const char *enabled = std::getenv("ANGE_TRACE_OUTPUT_HISTORY_INVALID");
+	if (!enabled || enabled[0] != '1') { return false; }
+	static std::atomic_flag emitted = ATOMIC_FLAG_INIT;
+	return !emitted.test_and_set(std::memory_order_relaxed);
+}
+} // namespace
 thread_local ProductionOutputPreparationScope *Registry::production_output_preparation_scope = nullptr;
 thread_local ProductionCameraReadySourceScope *ProductionCameraReadySourceScope::current = nullptr;
 
@@ -921,7 +933,7 @@ bool Registry::production_output_predecessor_matches_locked(const ProductionRequ
 	}
 	const auto &original = cell.pin.request->resources[role.resource_slot];
 	const auto &storage = slot.storage->resources[RendererRD::ExternalOutputStorage::CURRENT_RECORDS];
-	const auto *buffer = rd.storage_buffer_owner.get_or_null(resource.primary);
+	const auto *buffer = rd._production_output_storage_buffer(resource.primary);
 	if (resource.output_predecessor_witness.cell.is_null() || resource.output_predecessor_witness.cell != storage.witness.cell ||
 			!buffer || buffer->native_disposal.cell != storage.witness.cell || resource.primary != storage.rid || resource.backing_serial != buffer->backing_serial ||
 			buffer->size != storage.bytes || buffer->size != resource.declaration.physical_bytes ||
@@ -963,11 +975,12 @@ Error Registry::production_output_predecessor_accept_locked(ProductionRequest &r
 	if (staged) {
 		RendererRD::ExternalOutputRequest parsed;
 		if (!request.actions[action_index].staged_predecessor_intent || !request.actions[action_index].host_view_prepared ||
-				output_decode(*current, parsed, true) != OK || current->common.history_reset || !current->common.has_previous_consumed_tuple) { return ERR_INVALID_DATA; }
+				output_decode(*current, parsed, true) != OK || current->common.history_reset || !current->common.has_previous_consumed_tuple) { if (output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=accept.data.1 request=%llu action=%llu resource=%u use=%u\n", (unsigned long long)request.serial, (unsigned long long)action_index, resource_index, use_index); } return ERR_INVALID_DATA; }
 	}
 	RendererRD::ExternalConsumedColorProofSnapshot observed;
 	const Error checked = source.copy_native_color_consumption(observed);
 	if (checked != OK) {
+		if (checked == ERR_INVALID_DATA && output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=accept.color_snapshot request=%llu action=%llu\n", (unsigned long long)request.serial, (unsigned long long)action_index); }
 		return checked;
 	}
 	if (!source.owner || source.slot >= source.owner->slot_count || source.view_cell >= source.owner->view_capacity ||
@@ -986,12 +999,19 @@ Error Registry::production_output_predecessor_accept_locked(ProductionRequest &r
 			!output_token_nonzero(current->common.output_tag) ||
 			memcmp(current->common.output_tag.bytes, observed.get_common().output_tag.ptr(), 32) == 0 ||
 			memcmp(current->common.previous_consumed_tuple_token.bytes, observed.get_token().bytes, 32)) {
+		if (output_history_invalid_trace_once()) {
+			std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=accept.common request=%llu action=%llu resource=%u use=%u staged=%u pin_empty=%u same_request=%u same_attachment=%u particles_match=%u generation_match=%u epoch_match=%u history_reset=%u has_previous_tuple=%u has_actual_previous_camera=%u newer_present=%u view_tag_match=%u output_tag_nonzero=%u output_tag_equal=%u previous_token_match=%u current_present=%llu previous_present=%llu current_epoch=%llu previous_epoch=%llu\n",
+					(unsigned long long)request.serial, (unsigned long long)action_index, resource_index, use_index, unsigned(staged), unsigned(old_cell.pin.is_empty()), unsigned(old_cell.pin.request == &request), unsigned(old_cell.pin.request && old_cell.pin.request->attachment == request.attachment),
+					unsigned(observed.get_particles().get_id() == current->particles), unsigned(observed.get_generation() == current->common.generation), unsigned(observed.get_view_epoch() == current->view_epoch), current->common.history_reset, current->common.has_previous_consumed_tuple, current->common.has_actual_previous_camera, unsigned(current->common.present_seq > observed.get_common().present_seq),
+					unsigned(memcmp(current->common.view_tag.bytes, observed.get_common().view_tag.ptr(), 32) == 0), unsigned(output_token_nonzero(current->common.output_tag)), unsigned(memcmp(current->common.output_tag.bytes, observed.get_common().output_tag.ptr(), 32) == 0), unsigned(memcmp(current->common.previous_consumed_tuple_token.bytes, observed.get_token().bytes, 32) == 0),
+					(unsigned long long)current->common.present_seq, (unsigned long long)observed.get_common().present_seq, (unsigned long long)current->view_epoch, (unsigned long long)observed.get_view_epoch());
+		}
 		return ERR_INVALID_DATA;
 	}
 	const auto &camera = observed.get_common().current_camera_token;
 	if (!staged && (current->common.actual_previous_camera.view_id != camera.view_id || current->common.actual_previous_camera.view_epoch != camera.view_epoch ||
 			current->common.actual_previous_camera.capture_ordinal != camera.capture_ordinal)) {
-		return ERR_INVALID_DATA;
+		if (output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=accept.data.2 request=%llu action=%llu resource=%u use=%u\n", (unsigned long long)request.serial, (unsigned long long)action_index, resource_index, use_index); } return ERR_INVALID_DATA;
 	}
 	auto &action = request.actions[action_index];
 	auto &resource = request.resources[resource_index];
@@ -1000,24 +1020,24 @@ Error Registry::production_output_predecessor_accept_locked(ProductionRequest &r
 			use_index < action.declaration.first_use || use_index - action.declaration.first_use >= action.declaration.use_count ||
 			use.request != &request || use.declaration.resource_slot != resource_index || use.declaration.access != GDEXTENSION_PRODUCTION_READ_V1 ||
 			!old_slot.storage || old_slot.original_action_ordinal >= old_cell.pin.request->action_count) {
-		return ERR_INVALID_DATA;
+		if (output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=accept.data.3 request=%llu action=%llu resource=%u use=%u\n", (unsigned long long)request.serial, (unsigned long long)action_index, resource_index, use_index); } return ERR_INVALID_DATA;
 	}
 	if (!resource.output_predecessor_view.is_empty()) {
 		return resource.output_predecessor_action == action_index && resource.output_predecessor_view.owner == source.owner &&
 				resource.output_predecessor_view.slot == source.slot && production_output_predecessor_matches_locked(request, resource, rd) ? OK : ERR_ALREADY_IN_USE;
 	}
-	if (action.prepared && !(action.output_prepare_version == 3 && !action.output_plan_prepared && output_input_equal(action.output_input, *current))) { return ERR_INVALID_DATA; }
+	if (action.prepared && !(action.output_prepare_version == 3 && !action.output_plan_prepared && output_input_equal(action.output_input, *current))) { if (output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=accept.data.4 request=%llu action=%llu resource=%u use=%u\n", (unsigned long long)request.serial, (unsigned long long)action_index, resource_index, use_index); } return ERR_INVALID_DATA; }
 	const auto &role = old_cell.pin.request->actions[old_slot.original_action_ordinal].output_roles[0];
 	if (!source.owner->config.capacity) {
-		if (role.bytes || role.resource_slot != UINT32_MAX || !old_slot.guard_resources_ready) { return ERR_INVALID_DATA; }
+		if (role.bytes || role.resource_slot != UINT32_MAX || !old_slot.guard_resources_ready) { if (output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=accept.data.5 request=%llu action=%llu resource=%u use=%u\n", (unsigned long long)request.serial, (unsigned long long)action_index, resource_index, use_index); } return ERR_INVALID_DATA; }
 		for (uint32_t r : { uint32_t(RendererRD::ExternalOutputStorage::CURRENT_RECORDS), uint32_t(RendererRD::ExternalOutputStorage::PREVIOUS_RECORDS) }) {
 			const auto &records = old_slot.storage->resources[r];
-			if (records.bytes || records.rid.is_valid() || records.witness.cell.is_valid()) { return ERR_INVALID_DATA; }
+			if (records.bytes || records.rid.is_valid() || records.witness.cell.is_valid()) { if (output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=accept.data.6 request=%llu action=%llu resource=%u use=%u\n", (unsigned long long)request.serial, (unsigned long long)action_index, resource_index, use_index); } return ERR_INVALID_DATA; }
 		}
 		if (source.owner->config.profile == RendererRD::ExternalOutputConfig::INDEXED_144) {
 			for (uint32_t r : { uint32_t(RendererRD::ExternalOutputStorage::INDEXED_VERTEX_HISTORY_VALIDITY), uint32_t(RendererRD::ExternalOutputStorage::INDEXED_STAGING) }) {
 				const auto &records = old_slot.storage->resources[r];
-				if (records.bytes || records.rid.is_valid() || records.witness.cell.is_valid()) { return ERR_INVALID_DATA; }
+				if (records.bytes || records.rid.is_valid() || records.witness.cell.is_valid()) { if (output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=accept.data.7 request=%llu action=%llu resource=%u use=%u\n", (unsigned long long)request.serial, (unsigned long long)action_index, resource_index, use_index); } return ERR_INVALID_DATA; }
 			}
 		}
 		ProductionOutputGuardSource guard;
@@ -1028,9 +1048,9 @@ Error Registry::production_output_predecessor_accept_locked(ProductionRequest &r
 		if (resource.request != &request || resource.request_serial != request.serial || resource.imported || resource.owned_serial || resource.use_count || resource.output_alias_prepared ||
 				resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || resource.declaration.ownership != GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1 ||
 				resource.declaration.physical_bytes != 32 || !buffer || (resource.declaration.required_usage & ~uint64_t(buffer->usage)) ||
-				use.declaration.byte_offset || use.declaration.byte_size != 32) { return ERR_INVALID_DATA; }
+				use.declaration.byte_offset || use.declaration.byte_size != 32) { if (output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=accept.data.8 request=%llu action=%llu resource=%u use=%u\n", (unsigned long long)request.serial, (unsigned long long)action_index, resource_index, use_index); } return ERR_INVALID_DATA; }
 		for (uint32_t i = 0; i < request.use_count; ++i) {
-			if (request.uses[i].declaration.resource_slot == resource_index && i != use_index) { return ERR_INVALID_DATA; }
+			if (request.uses[i].declaration.resource_slot == resource_index && i != use_index) { if (output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=accept.data.9 request=%llu action=%llu resource=%u use=%u\n", (unsigned long long)request.serial, (unsigned long long)action_index, resource_index, use_index); } return ERR_INVALID_DATA; }
 		}
 		const Error retained = production_output_view_retain_locked(source, resource.output_predecessor_view, rd);
 		if (retained != OK) { return retained; }
@@ -1047,11 +1067,11 @@ Error Registry::production_output_predecessor_accept_locked(ProductionRequest &r
 		return OK;
 	}
 	if (!role.bytes || role.resource_slot >= old_cell.pin.request->resource_count) {
-		return ERR_INVALID_DATA;
+		if (output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=accept.data.10 request=%llu action=%llu resource=%u use=%u\n", (unsigned long long)request.serial, (unsigned long long)action_index, resource_index, use_index); } return ERR_INVALID_DATA;
 	}
 	const auto &origin = old_cell.pin.request->resources[role.resource_slot].declaration;
 	const auto &storage = old_slot.storage->resources[RendererRD::ExternalOutputStorage::CURRENT_RECORDS];
-	const auto *buffer = rd.storage_buffer_owner.get_or_null(storage.rid);
+	const auto *buffer = rd._production_output_storage_buffer(storage.rid);
 	const uint64_t expected_record_stride = source.owner->config.profile == RendererRD::ExternalOutputConfig::INDEXED_144 ? 576ull : 192ull;
 	if (resource.request != &request || resource.request_serial != request.serial || resource.imported || resource.owned_serial || resource.use_count || resource.output_alias_prepared ||
 			resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || resource.declaration.ownership != GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1 ||
@@ -1059,7 +1079,7 @@ Error Registry::production_output_predecessor_accept_locked(ProductionRequest &r
 			resource.declaration.physical_bytes != storage.bytes || uint64_t(storage.bytes) != uint64_t(source.owner->config.capacity) * expected_record_stride ||
 			storage.witness.cell.is_null() || !buffer ||
 			buffer->native_disposal.cell != storage.witness.cell || buffer->size != storage.bytes || (resource.declaration.required_usage & ~uint64_t(buffer->usage))) {
-		return ERR_INVALID_DATA;
+		if (output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=accept.data.11 request=%llu action=%llu resource=%u use=%u\n", (unsigned long long)request.serial, (unsigned long long)action_index, resource_index, use_index); } return ERR_INVALID_DATA;
 	}
 	// Reject every writable declaration before taking any source pin.
 	bool declared = false;
@@ -1068,13 +1088,13 @@ Error Registry::production_output_predecessor_accept_locked(ProductionRequest &r
 		if (row.declaration.resource_slot == resource_index) {
 			if (row.request != &request || row.declaration.access != GDEXTENSION_PRODUCTION_READ_V1 || !row.declaration.byte_size ||
 					row.declaration.byte_offset > storage.bytes || row.declaration.byte_size > storage.bytes - row.declaration.byte_offset) {
-				return ERR_INVALID_DATA;
+				if (output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=accept.data.12 request=%llu action=%llu resource=%u use=%u\n", (unsigned long long)request.serial, (unsigned long long)action_index, resource_index, use_index); } return ERR_INVALID_DATA;
 			}
 			declared = true;
 		}
 	}
 	if (!declared) {
-		return ERR_INVALID_DATA;
+		if (output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=accept.data.13 request=%llu action=%llu resource=%u use=%u\n", (unsigned long long)request.serial, (unsigned long long)action_index, resource_index, use_index); } return ERR_INVALID_DATA;
 	}
 	const Error retained = production_output_view_retain_locked(source, resource.output_predecessor_view, rd);
 	if (retained != OK) {
@@ -1106,7 +1126,7 @@ bool Registry::production_output_source_matches_locked(const ProductionRequest &
 			return false;
 		}
 		const auto &resource = request.resources[use.declaration.resource_slot];
-		const auto *buffer = rd.storage_buffer_owner.get_or_null(resource.primary);
+		const auto *buffer = rd._production_output_storage_buffer(resource.primary);
 		const bool history_guard = resource.output_guard_history;
 		if (history_guard) {
 			if (!production_output_guard_matches_locked(request, resource, rd) || resource.output_action_ordinal != declaration.action_ordinal ||
@@ -1233,7 +1253,7 @@ bool Registry::production_output_history_guard_uses_locked(const ProductionReque
 
 Error Registry::production_output_history_guard_accept_locked(ProductionRequest &request, uint64_t acquire, uint32_t anchor_index, uint32_t guard_index, RenderingDevice &rd) {
 	if (!Lock::owns(*this) || !rd.native_immutable_is_render_thread() || request.frozen || request.native_static_sealed ||
-			request.cancelled || request.release_started || acquire >= request.action_count || anchor_index >= request.resource_count || guard_index >= request.resource_count || anchor_index == guard_index) { return ERR_INVALID_DATA; }
+			request.cancelled || request.release_started || acquire >= request.action_count || anchor_index >= request.resource_count || guard_index >= request.resource_count || anchor_index == guard_index) { if (output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=guard.data.1 request=%llu action=%llu resource=%u use=%u\n", (unsigned long long)request.serial, (unsigned long long)acquire, anchor_index, guard_index); } return ERR_INVALID_DATA; }
 	const auto &anchor = request.resources[anchor_index];
 	auto &guard = request.resources[guard_index];
 	const auto &view = anchor.output_predecessor_view;
@@ -1242,15 +1262,16 @@ Error Registry::production_output_history_guard_accept_locked(ProductionRequest 
 			(view.owner->config.profile != RendererRD::ExternalOutputConfig::INSTANCE_192 && view.owner->config.profile != RendererRD::ExternalOutputConfig::INDEXED_144) ||
 			guard.request != &request || guard.request_serial != request.serial || guard.output_alias_prepared || guard.owned_serial || guard.use_count ||
 			guard.retiring || guard.returned || !guard.output_predecessor_view.is_empty() || guard.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 ||
-			guard.declaration.ownership != GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1 || guard.declaration.physical_bytes != 32) { return ERR_INVALID_DATA; }
+			guard.declaration.ownership != GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1 || guard.declaration.physical_bytes != 32) { if (output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=guard.data.2 request=%llu action=%llu resource=%u use=%u\n", (unsigned long long)request.serial, (unsigned long long)acquire, anchor_index, guard_index); } return ERR_INVALID_DATA; }
 	if (guard.output_guard_readonly) {
 		return guard.output_guard_history && guard.output_action_ordinal == acquire && guard.output_guard_anchor == anchor_index &&
 				production_output_guard_matches_locked(request, guard, rd) ? OK : ERR_ALREADY_IN_USE;
 	}
-	if (guard.imported || guard.primary.is_valid() || guard.backing_serial || guard.output_witness.cell.is_valid()) { return ERR_INVALID_DATA; }
+	if (guard.imported || guard.primary.is_valid() || guard.backing_serial || guard.output_witness.cell.is_valid()) { if (output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=guard.data.3 request=%llu action=%llu resource=%u use=%u\n", (unsigned long long)request.serial, (unsigned long long)acquire, anchor_index, guard_index); } return ERR_INVALID_DATA; }
 	guard.output_guard_readonly = true; guard.output_guard_history = true; guard.output_action_ordinal = acquire; guard.output_guard_anchor = anchor_index;
 	const Error bound = production_output_guard_bind_locked(request, guard, rd);
 	if (bound != OK) { guard.output_guard_readonly = false; guard.output_guard_history = false; guard.output_action_ordinal = UINT64_MAX; guard.output_guard_anchor = UINT32_MAX; }
+	if (bound == ERR_INVALID_DATA && output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=guard.bind_return request=%llu action=%llu anchor=%u guard=%u\n", (unsigned long long)request.serial, (unsigned long long)acquire, anchor_index, guard_index); }
 	return bound;
 }
 
@@ -1358,7 +1379,7 @@ bool Registry::production_output_alias_matches_locked(const ProductionRequest &r
 		return false;
 	}
 	const auto &physical = **slot.output_witness.cell;
-	const auto *buffer = rd.storage_buffer_owner.get_or_null(slot.primary);
+	const auto *buffer = rd._production_output_storage_buffer(slot.primary);
 	if (action.request != &request || action.output_root != slot.output_root_serial ||
 			(action.output_state != ProductionActionCell::OutputState::RESERVING && action.output_state != ProductionActionCell::OutputState::BOUND) ||
 			!buffer || buffer->native_disposal.cell != slot.output_witness.cell ||
@@ -1389,8 +1410,13 @@ Error Registry::production_output_alias_bind_locked(ProductionRequest &request, 
 	auto &slot = request.resources[role.resource_slot];
 	const auto &use = request.uses[role.use_index];
 	const auto &physical = **witness.cell;
-	const auto *buffer = rd.storage_buffer_owner.get_or_null(RID::from_uint64(physical.rid));
-	if (!slot.output_alias_prepared || slot.output_action_ordinal != action.declaration.action_ordinal || slot.imported || slot.owned_serial || slot.use_count ||
+	const RID rid = RID::from_uint64(physical.rid);
+	const auto *buffer = rd._production_output_storage_buffer(rid);
+	const bool correct_owner = rd.storage_buffer_owner.owns(rid) ||
+			(action.output_role_count == 5 && action.output_prepare_version == 3 &&
+					((role.role == GDEXTENSION_OUTPUT_ROLE_CURRENT_VERTICES_V1 && rd.vertex_buffer_owner.owns(rid)) ||
+							(role.role == GDEXTENSION_OUTPUT_ROLE_INDEX_STAGING_V1 && rd.index_buffer_owner.owns(rid))));
+	if (!correct_owner || !slot.output_alias_prepared || slot.output_action_ordinal != action.declaration.action_ordinal || slot.imported || slot.owned_serial || slot.use_count ||
 			slot.declaration.original_generation != role.generation || slot.declaration.physical_bytes != role.bytes || use.declaration.resource_slot != role.resource_slot ||
 			!buffer || buffer->size != role.bytes || (slot.declaration.required_usage & ~uint64_t(buffer->usage)) || buffer->native_disposal.cell != witness.cell || physical.state != NativeDisposalWitness::State::LIVE ||
 			physical.production_request != &request || physical.production_request_serial != request.serial || physical.production_group_serial != group || physical.production_pin_serial != pin.serial || physical.production_ordinal != ordinal) {
@@ -1647,7 +1673,14 @@ Error Registry::production_output_demand_locked(ProductionAttachment &attachment
 	}
 	const bool pipelines = layout_resource_count && input.read_capacity;
 	const uint64_t borrower = pipelines ? uint64_t(facts.view_capacity) + facts.surface_capacity + facts.read_capacity : 0;
-	const uint64_t per_row = uint64_t(input.read_graph_capacity) * 2 + 6;
+	uint32_t material_capacity = input.read_graph_capacity;
+	if (pipelines) {
+		error = RendererRD::ExternalOutputOwner::plan_material_disposal_capacity(input.read_graph_capacity, facts.read_capacity, material_capacity);
+		if (error != OK) {
+			return error;
+		}
+	}
+	const uint64_t per_row = uint64_t(input.read_graph_capacity) + material_capacity + 6;
 	const uint64_t fixed = 1 + (layout_resource_count ? uint64_t(layout_resource_count) + 1 : 0) + borrower + bound.guard_owned_resources + 1;
 	if (pipelines && input.read_capacity > (UINT64_MAX - fixed) / per_row) {
 		return ERR_PARAMETER_RANGE_ERROR;
@@ -1700,7 +1733,7 @@ Error Registry::production_schedule_locked(ProductionRequest &request, Rendering
 			if (action.readback_slot >= request.readback_count) {
 				return ERR_INVALID_DATA;
 			}
-			error = production_staging_graph_bound(request.readbacks[action.readback_slot].declaration.byte_size, rd.download_staging_buffers.block_size, graphs);
+			error = production_readback_graph_bound(request.readbacks[action.readback_slot].declaration.byte_size, rd.download_staging_buffers.block_size, graphs);
 		} else if (action.declaration.action_kind == GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1) {
 			// Preserve the original Acquire-only preparation path. It has no
 			// guard; only its original finite read graph reservation is paid.
@@ -1829,7 +1862,7 @@ Error Registry::production_output_predecessor_service_locked(ProductionRequest &
 	if (!production_dto_valid(binding) || !production_dto_valid(ref) || ref.registry_instance != instance || !ref.borrow_control_serial ||
 			!production_dto_valid(prepare) || binding.use_index < prepare.first_source_use ||
 			binding.use_index - prepare.first_source_use >= prepare.source_use_count) {
-		return ERR_INVALID_DATA;
+		if (output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=service.data.1 request=%llu action=%llu resource=%u use=%u\n", (unsigned long long)request.serial, (unsigned long long)prepare.action_ordinal, binding.resource_slot, binding.use_index); } return ERR_INVALID_DATA;
 	}
 	// Resolve only the same accepted attachment's finite original request slab.
 	// No request/owner is created by a locator or caller RID.
@@ -1839,7 +1872,7 @@ Error Registry::production_output_predecessor_service_locked(ProductionRequest &
 		if (candidate.serial == ref.request_serial) { original = &candidate; break; }
 	}
 	if (!original || original == &request || original->attachment != request.attachment || ref.action_ordinal >= original->action_count) {
-		return ERR_INVALID_DATA;
+		if (output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=service.data.2 request=%llu action=%llu resource=%u use=%u\n", (unsigned long long)request.serial, (unsigned long long)prepare.action_ordinal, binding.resource_slot, binding.use_index); } return ERR_INVALID_DATA;
 	}
 	auto &action = original->actions[ref.action_ordinal];
 	if (action.request != original || !action.consumed_proof_requested || action.consumed_proof_returned ||
@@ -1869,6 +1902,7 @@ Error Registry::production_output_predecessor_service_locked(ProductionRequest &
 		const auto guard_slot = request.actions[prepare.action_ordinal].staged_history_guard;
 		if (guard_slot != UINT32_MAX) { return production_output_history_guard_accept_locked(request, prepare.action_ordinal, binding.resource_slot, guard_slot, rd); }
 	}
+	if (accepted == ERR_INVALID_DATA && output_history_invalid_trace_once()) { std::fprintf(stderr, "[OUTPUT-HISTORY-INVALID] site=service.accept_propagated request=%llu action=%llu resource=%u use=%u\n", (unsigned long long)request.serial, (unsigned long long)prepare.action_ordinal, binding.resource_slot, binding.use_index); }
 	return accepted;
 }
 
@@ -3315,7 +3349,15 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 		out->status = output_status(ERR_PARAMETER_RANGE_ERROR, "output_guard_owned_capacity");
 		return;
 	}
-	const uint64_t per_row_uses = uint64_t(action.output_read_graph_capacity) * 2 + 6;
+	uint32_t material_capacity = action.output_read_graph_capacity;
+	if (reserve_pipelines && owner.generation_config_inline) {
+		const Error capacity_error = Owner::plan_material_disposal_capacity(action.output_read_graph_capacity, owner.preparation_capacity, material_capacity);
+		if (capacity_error != OK) {
+			out->status = output_status(capacity_error, "output_material_disposal_capacity");
+			return;
+		}
+	}
+	const uint64_t per_row_uses = uint64_t(action.output_read_graph_capacity) + material_capacity + 6;
 	const uint64_t fixed_uses = 1u + (layout.resource_count ? uint64_t(layout.resource_count) + 1 : 0) +
 			(reserve_pipelines ? borrower_headroom : 0) + (guard_members ? uint64_t(guard_members) + 1 : 0);
 	if (reserve_pipelines && uint64_t(action.output_read_capacity) > (UINT64_MAX - fixed_uses) / per_row_uses) {
@@ -3652,6 +3694,12 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 	using Storage = RendererRD::ExternalOutputStorage;
 	const bool is_light64 = (role_count == 2);
 	const bool motion_required = !is_light64 && (owner.config.motion == RendererRD::ExternalOutputConfig::REQUIRED);
+	const bool generated_geometry = !is_light64 && !motion_required && owner.config.capacity && request->native_static_sealed;
+	if (generated_geometry && (action.output_prepare_version != 3 || !action.output_plan_prepared ||
+			!action.scene_cull_prepared || action.scene_cull_capture.is_null() || action.scene_cull_capture != action.preinput_camera_source)) {
+		out->status = output_status(ERR_UNAUTHORIZED, "output_original_indexed_geometry_source");
+		return;
+	}
 
 	auto project_v2 = [&](bool writable = true) {
 		out->request_serial = request->serial;
@@ -3828,7 +3876,15 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 		out->status = output_status(ERR_PARAMETER_RANGE_ERROR, "output_guard_owned_capacity");
 		return;
 	}
-	const uint64_t per_row_uses = uint64_t(action.output_read_graph_capacity) * 2 + 6;
+	uint32_t material_capacity = action.output_read_graph_capacity;
+	if (reserve_pipelines && owner.generation_config_inline) {
+		const Error capacity_error = Owner::plan_material_disposal_capacity(action.output_read_graph_capacity, owner.preparation_capacity, material_capacity);
+		if (capacity_error != OK) {
+			out->status = output_status(capacity_error, "output_material_disposal_capacity");
+			return;
+		}
+	}
+	const uint64_t per_row_uses = uint64_t(action.output_read_graph_capacity) + material_capacity + 6;
 	const uint64_t fixed_uses = 1u + (owned_resource_count ? uint64_t(owned_resource_count) + 1 : 0) +
 			(reserve_pipelines ? borrower_headroom : 0) + (guard_members ? uint64_t(guard_members) + 1 : 0);
 	if (reserve_pipelines && uint64_t(action.output_read_capacity) > (UINT64_MAX - fixed_uses) / per_row_uses) {
@@ -3943,7 +3999,7 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 			if (is_light64) {
 				error = slot.storage->allocate_light64_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity);
 			} else {
-				error = slot.storage->allocate_indexed144_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity, motion_required, surfaces);
+				error = slot.storage->allocate_indexed144_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity, motion_required, surfaces, generated_geometry);
 			}
 			relock_mutex_after_call();
 		}
@@ -4441,7 +4497,7 @@ void Registry::production_finalize_output(ProductionPhysicalContextRef context, 
 		}
 		const auto &resource = request->resources[mapping.resource_slot];
 		const auto &use = request->uses[mapping.use_index].declaration;
-		const auto *buffer = rd->storage_buffer_owner.get_or_null(resource.primary);
+		const auto *buffer = rd->_production_output_storage_buffer(resource.primary);
 		const uint64_t word_byte = uint64_t(mapping.word_offset) * 4;
 		valid &= buffer && resource.declaration.original_generation == mapping.generation && use.resource_slot == mapping.resource_slot && use.access == GDEXTENSION_PRODUCTION_READ_V1 && word_byte >= use.byte_offset && word_byte - use.byte_offset <= use.byte_size && use.byte_size - (word_byte - use.byte_offset) >= 4;
 		if (valid) {
@@ -4828,7 +4884,7 @@ void Registry::production_output_seal(ProductionPhysicalContextRef context, GDEx
 			out->status = output_status(ERR_INVALID_DATA, "output_seal_duplicate_mismatch");
 			return;
 		}
-		out->state = uint32_t(slot.state) + 1;
+		out->state = GDEXTENSION_OUTPUT_SEAL_RECORDED_ORDERED_V1;
 		out->packet_token = action.output_packet_token;
 		out->status = output_status(OK, "");
 		return;
@@ -4865,6 +4921,33 @@ void Registry::production_output_seal(ProductionPhysicalContextRef context, GDEx
 		out->status = output_status(ERR_UNAVAILABLE, "output_original_capture_required");
 		return;
 	}
+	const bool generated_geometry = owner.config.profile == RendererRD::ExternalOutputConfig::INDEXED_144 &&
+			owner.config.motion == RendererRD::ExternalOutputConfig::DISABLED && owner.config.capacity && request->native_static_sealed;
+	if (generated_geometry) {
+		if (action.output_prepare_version != 3 || !slot.scene_cull_bound || !action.scene_cull_prepared ||
+				action.scene_cull_capture != action.preinput_camera_source) {
+			out->status = output_status(ERR_UNAUTHORIZED, "output_original_indexed_geometry_source");
+			return;
+		}
+		// Original Registry ownership stays held. Try RD without waiting; its
+		// recursive lock is borrowed by the typed RID/source-only hold factories.
+		if (!rd->_thread_safe_.try_lock()) {
+			out->status = output_status(ERR_BUSY, "output_indexed_geometry_device");
+			return;
+		}
+		MutexScopeUnlock<Mutex> rd_lock(rd->_thread_safe_);
+		error = production_output_native_append_enter_locked();
+		if (error == OK) {
+			production_native_effect_enter_locked(*request);
+			error = owner.prepare_generated_indexed144_surfaces(slot_index);
+		}
+		if (error != OK) {
+			// The original Reserved/Writing slot owns every successful prefix.
+			// A refusal cannot publish or replace the original Surface sources.
+			out->status = output_status(error, "output_indexed_geometry_prefix");
+			return;
+		}
+	}
 	const GDExtensionOutputTokenV1 absent{};
 	if (memcmp(action.output_packet_token.bytes, absent.bytes, 32) == 0) {
 		uint64_t receipt = 0;
@@ -4892,8 +4975,10 @@ void Registry::production_output_seal(ProductionPhysicalContextRef context, GDEx
 	seal.original_append.error = OK;
 	++request->next_action;
 	++request->revision;
-	CRASH_COND(production_output_native_append_enter_locked() != OK);
-	out->state = uint32_t(slot.state) + 1;
+	if (!generated_geometry) {
+		CRASH_COND(production_output_native_append_enter_locked() != OK);
+	}
+	out->state = GDEXTENSION_OUTPUT_SEAL_RECORDED_ORDERED_V1;
 	out->packet_token = action.output_packet_token;
 	out->status = output_status(OK, "");
 }

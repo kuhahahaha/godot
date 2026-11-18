@@ -41,6 +41,7 @@ class TestNativeDisposalAccess {
 public:
 	static void immutable_inline();
 	static void immutable_batch(uint32_t p_mode);
+	static void material_pass_observer_budget();
 	static void sampled_disposal();
 	static void sampled_failure();
 	static void sampled_identity();
@@ -3323,6 +3324,178 @@ void TestNativeDisposalAccess::depth_allocation_quote() {
 }
 TEST_CASE("[RenderingDevice][NativeDisposal][DepthAllocationQuote] original finite quote gates creation and preserves failed actual prefix") {
 	TestNativeDisposalAccess::depth_allocation_quote();
+}
+
+// Test-owned metadata only. The original RD eligibility, graph walk, staging,
+// adoption and drop code operate on the same test driver resource identities.
+void TestNativeDisposalAccess::material_pass_observer_budget() {
+	using namespace GDExtensionDeviceExit;
+	using RD = RenderingDevice;
+	using D = RenderingDeviceDriver;
+	RD rd;
+	TestNativeDisposal::Driver driver;
+	attach(rd, driver);
+	ProductionRequest predecessor, successor;
+	predecessor.serial = 21;
+	successor.serial = 22;
+	ProductionUseCell previous_cells[4], cells[5];
+	predecessor.uses = previous_cells;
+	predecessor.capacity.resource_uses = 4;
+	successor.uses = cells;
+	successor.capacity.resource_uses = 5;
+	constexpr uint64_t pin = 32, material_group = 41;
+	constexpr uint32_t capacity = 4; // G=2, P=2.
+	RD::Shader shader_value;
+	shader_value.driver_id = D::ShaderID(100);
+	const RID shader = rd.shader_owner.make_rid(shader_value);
+	RD::RenderPipeline pipeline_value;
+	pipeline_value.driver_id = D::PipelineID(101);
+	const RID pipeline = rd.render_pipeline_owner.make_rid(pipeline_value);
+	RD::UniformSet set_value;
+	set_value.driver_id = D::UniformSetID(102);
+	const RID transforms = rd.uniform_set_owner.make_rid(set_value);
+	set_value.driver_id = D::UniformSetID(103);
+	const RID foreign = rd.uniform_set_owner.make_rid(set_value);
+
+	const RID observers[] = { pipeline, transforms };
+	const RD::NativeMaterialDisposalBudget budget{ 2, { observers, 2 } };
+	const auto mode = RD::NativeClosureMode::MATERIAL_DISPOSAL;
+	for (uint32_t i = 0; i < capacity; ++i) {
+		auto &cell = cells[i];
+		cell.output_role = ProductionUseCell::OutputRole::DISPOSAL_RESERVED;
+		cell.disposal_group_serial = material_group;
+		cell.disposal_ordinal = i;
+		cell.disposal.request = &successor;
+		cell.disposal.request_serial = successor.serial;
+		cell.disposal.group = material_group;
+		cell.disposal.owned = true;
+		cell.disposal.counter_dropped = true;
+	}
+	cells[capacity].output_role = ProductionUseCell::OutputRole::DISPOSAL_GROUP;
+	cells[capacity].disposal_group_serial = material_group;
+	cells[capacity].disposal_group_pin_serial = pin;
+	cells[capacity].disposal_group_count = capacity;
+	{
+		MutexLock lock(rd._thread_safe_);
+		rd._add_dependency(pipeline, shader);
+		rd._add_dependency(transforms, shader);
+		rd._add_dependency(foreign, shader);
+		for (uint32_t i = 0; i < 2; ++i) {
+			auto &member = previous_cells[i];
+			const uint64_t group = 42 + i;
+			uint32_t kind;
+			uint64_t serial, driver_id;
+			auto **head = rd._production_disposal_head(observers[i], kind, serial, driver_id);
+			REQUIRE(head != nullptr);
+			member.output_role = ProductionUseCell::OutputRole::DISPOSAL_MEMBER;
+			member.disposal_group_serial = group;
+			member.disposal.request = &predecessor;
+			member.disposal.request_serial = predecessor.serial;
+			member.disposal.group = group;
+			member.disposal.rid = observers[i].get_id();
+			member.disposal.serial = serial;
+			member.disposal.native_driver_id = driver_id;
+			member.disposal.kind = kind;
+			member.disposal.owned = true;
+			member.disposal.counter_dropped = true;
+			member.disposal.state.store(1, std::memory_order_release);
+			*head = &member.disposal;
+			auto &header = previous_cells[i + 2];
+			header.output_role = ProductionUseCell::OutputRole::DISPOSAL_GROUP;
+			header.disposal_group_serial = group;
+			header.disposal_group_pin_serial = pin;
+			header.disposal_group_count = 1;
+			REQUIRE(rd._production_output_owned_seal_locked(predecessor, pin, group) == OK);
+			CHECK(rd._production_output_pass_observer_locked(observers[i], predecessor, pin, group, i == 0));
+			CHECK_FALSE(rd._production_output_pass_observer_locked(observers[i], successor, pin, group, i == 0));
+			CHECK_FALSE(rd._production_output_pass_observer_locked(observers[i], predecessor, pin + 1, group, i == 0));
+			CHECK_FALSE(rd._production_output_pass_observer_locked(observers[i], predecessor, pin, group + 1, i == 0));
+			CHECK_FALSE(rd._production_output_pass_observer_locked(observers[i], predecessor, pin, group, i != 0));
+			++member.disposal.serial;
+			CHECK_FALSE(rd._production_output_pass_observer_locked(observers[i], predecessor, pin, group, i == 0));
+			--member.disposal.serial;
+			header.disposal_group_release = true;
+			CHECK_FALSE(rd._production_output_pass_observer_locked(observers[i], predecessor, pin, group, i == 0));
+			header.disposal_group_release = false;
+			bool *retiring = nullptr;
+			REQUIRE(rd._native_immutable_counter(observers[i], &retiring) != nullptr);
+			REQUIRE(retiring != nullptr);
+			*retiring = true;
+			CHECK_FALSE(rd._production_output_pass_observer_locked(observers[i], predecessor, pin, group, i == 0));
+			*retiring = false;
+		}
+		CHECK_FALSE(rd._production_output_pass_observer_locked(foreign, predecessor, pin, 43, false));
+	}
+	RD::NativeImmutableHold hold;
+	const RID roots[] = { shader, transforms };
+	// A physically held transform and the ordinary observer consume G even
+	// though both test driver sets have the same shader and descriptor shape.
+	REQUIRE(rd.native_immutable_hold_acquire({ roots, 2 }, hold, 3) == OK);
+	hold.material_origin = shader;
+	hold.material_origin_generation = 1;
+	RD::NativeImmutableHold *holds[] = { &hold };
+	{
+		MutexLock lock(rd._thread_safe_);
+		uint32_t count = 99;
+		CHECK(rd._production_output_hold_inventory_locked(successor, material_group, { holds, 1 }, capacity, count, mode, &budget) == ERR_OUT_OF_MEMORY);
+		CHECK(count == 99);
+		CHECK(cells[0].output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED);
+		uint64_t refused = 0;
+		CHECK(rd._production_output_hold_adopt_locked(successor, pin, material_group, { holds, 1 }, capacity, refused, mode, &budget) == ERR_OUT_OF_MEMORY);
+		CHECK(refused == 0);
+	}
+	REQUIRE(rd.native_immutable_hold_release(hold) == OK);
+	REQUIRE(rd.native_immutable_hold_acquire({ roots, 1 }, hold, 3) == OK);
+	hold.material_origin = shader;
+	hold.material_origin_generation = 1;
+	uint64_t adopted = 0;
+	{
+		MutexLock lock(rd._thread_safe_);
+		uint32_t count = 99;
+		const RD::NativeMaterialDisposalBudget only_one{ 2, { observers, 1 } };
+		CHECK(rd._production_output_hold_inventory_locked(successor, material_group, { holds, 1 }, capacity, count, mode, &only_one) == ERR_OUT_OF_MEMORY);
+		REQUIRE(rd._production_output_hold_inventory_locked(successor, material_group, { holds, 1 }, capacity, count, mode, &budget) == OK);
+		CHECK(count == 4);
+		CHECK(cells[0].output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED);
+		REQUIRE(rd._production_output_hold_adopt_locked(successor, pin, material_group, { holds, 1 }, capacity, adopted, mode, &budget) == OK);
+		CHECK(adopted == material_group);
+		CHECK_FALSE(hold.is_active());
+		CHECK(rd._production_output_pass_observer_locked(pipeline, predecessor, pin, 42, true));
+		CHECK(rd._production_output_pass_observer_locked(transforms, predecessor, pin, 43, false));
+	}
+	cells[capacity].disposal_group_release = true;
+	const RD::NativeDisposalBudget drop_budget{ 64, 64, OS::get_singleton()->get_ticks_usec() + 10000000 };
+	RD::NativeDisposalUsage usage;
+	REQUIRE(rd._production_output_drop_step(successor, drop_budget, usage) == OK);
+	{
+		MutexLock lock(rd._thread_safe_);
+		CHECK(*rd._native_immutable_counter(shader) == 0);
+		// The observer group left the two original owned groups intact.
+		CHECK(*rd._native_immutable_counter(pipeline) == 1);
+		CHECK(*rd._native_immutable_counter(transforms) == 1);
+		CHECK(rd.native_immutable_hold_count == 2);
+		for (uint32_t i = 0; i < 2; ++i) {
+			uint32_t kind;
+			uint64_t serial, driver_id;
+			auto **head = rd._production_disposal_head(observers[i], kind, serial, driver_id);
+			REQUIRE(*head == &previous_cells[i].disposal);
+			*head = nullptr;
+			*rd._native_immutable_counter(observers[i]) = 0;
+		}
+		rd.native_immutable_hold_count = 0;
+		for (RID rid : { pipeline, transforms, foreign, shader }) {
+			CHECK(rd._free_dependencies(rid, lock));
+		}
+		rd.uniform_set_owner.free(foreign);
+		rd.uniform_set_owner.free(transforms);
+		rd.render_pipeline_owner.free(pipeline);
+		rd.shader_owner.free(shader);
+	}
+	detach(rd);
+}
+
+TEST_CASE("[RenderingDevice][MaterialPassObserverBudget] original observer credit preserves held and foreign limits") {
+	TestNativeDisposalAccess::material_pass_observer_budget();
 }
 
 // These tests exercise shared capture/drop primitives against real RD resources.

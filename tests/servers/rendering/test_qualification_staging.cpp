@@ -1,3 +1,4 @@
+#include "core/extension/gdextension_record_source.h"
 #include "tests/test_macros.h"
 #include "servers/rendering/rendering_device.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
@@ -12,6 +13,22 @@ public:
   staging.blocks.write[0].driver_id=RenderingDeviceDriver::BufferID(51);staging.blocks.write[0].frame_used=10;staging.blocks.write[0].fill_amount=32;
   RenderingDevice::Buffer buffer;buffer.driver_id=RenderingDeviceDriver::BufferID(71);buffer.size=64;buffer.backing_serial=11;buffer.draw_tracker=RenderingDeviceGraph::resource_tracker_create();buffer.draw_tracker->buffer_driver_id=buffer.driver_id;
   return device.storage_buffer_owner.make_rid(buffer);
+ }
+ static void configure_production_readback(RenderingDevice &device, RID rid, uint32_t bytes, bool two_blocks) {
+  device.qualification_recording = false;
+  device.storage_buffer_owner.get_or_null(rid)->size = bytes;
+  if (two_blocks) {
+   auto &staging = device.download_staging_buffers;
+   staging.max_size = 128;
+   staging.blocks.resize(2);
+   staging.blocks.write[0].fill_amount = 0; // Current frame's exact-fit block.
+   staging.blocks.write[1].driver_id = RenderingDeviceDriver::BufferID(52);
+   staging.blocks.write[1].frame_used = 0;
+   staging.blocks.write[1].fill_amount = 0;
+  }
+ }
+ static Error append_production(RenderingDevice &device, RID rid, GDExtensionDeviceExit::BufferReadbackSourceCapture &capture) {
+  return device._buffer_get_data_async(rid, Callable(), 0, capture.byte_capacity, {}, &capture);
  }
  static auto progress(){RenderingDevice::QualificationUploadProgress progress;progress.max_segments=8;return progress;}
  static void upload_fixture(RenderingDevice &device,uint8_t *bytes){device.upload_staging_buffers=device.download_staging_buffers;device.upload_staging_buffers.blocks.write[0].data_ptr=bytes;}
@@ -44,6 +61,60 @@ TEST_CASE("[Qualification] readback retains actual graph prefix without either s
  TestQualificationStagingAccess::reusable(device);
  CHECK(TestQualificationStagingAccess::append(device,rid,result)==OK);REQUIRE(result->copies.size()==2);CHECK(result->copies[1].region.src_offset==32);CHECK(result->copies[1].region.size==32);CHECK(result->issued_size==64);CHECK(driver.waits==0);
  TestQualificationStagingAccess::detach(device,rid);
+}
+TEST_CASE("[ProductionRequest][Requirements] checked readback staging records only whole chunks and the final suffix") {
+ using namespace GDExtensionDeviceExit;
+ for (const bool two_blocks : { false, true }) {
+  Driver driver;
+  RenderingDevice device;
+  const RID rid = TestQualificationStagingAccess::attach(device, driver);
+  constexpr uint32_t bytes = 68;
+  TestQualificationStagingAccess::configure_production_readback(device, rid, bytes, two_blocks);
+  ReadbackSourceState state;
+  state.request_serial = 101;
+  uint8_t destination[bytes] = {};
+  BufferUploadSourceSegment segments[2];
+  BufferReadbackSourceCapture capture;
+  capture.state = &state;
+  capture.bytes = destination;
+  capture.byte_capacity = bytes;
+  capture.segments = segments;
+  capture.capacity = 2;
+
+  if (!two_blocks) {
+   // A half-used current-frame block must yield Busy before any fragment.
+   CHECK(TestQualificationStagingAccess::append_production(device, rid, capture) == ERR_BUSY);
+   CHECK(capture.count == 0);
+   CHECK(state.issued == 0);
+   CHECK(TestQualificationStagingAccess::queued(device) == 0);
+   TestQualificationStagingAccess::reusable(device);
+  }
+
+  CHECK(TestQualificationStagingAccess::append_production(device, rid, capture) == (two_blocks ? OK : ERR_BUSY));
+  CHECK(capture.count == (two_blocks ? 2u : 1u));
+  CHECK(segments[0].handle.is_valid());
+  CHECK(segments[0].begin == 0);
+  CHECK(segments[0].end == 64);
+  CHECK(state.issued == (two_blocks ? bytes : 64u));
+  CHECK(TestQualificationStagingAccess::queued(device) == 1);
+  if (two_blocks) {
+   CHECK(segments[1].handle.is_valid());
+   CHECK(segments[1].begin == 64);
+   CHECK(segments[1].end == bytes);
+  } else {
+   // The real captured prefix stays owned while the only block is in flight.
+   TestQualificationStagingAccess::in_flight(device);
+   CHECK(TestQualificationStagingAccess::append_production(device, rid, capture) == ERR_BUSY);
+   CHECK(capture.count == 1);
+   CHECK(state.issued == 64);
+   CHECK(TestQualificationStagingAccess::queued(device) == 1);
+  }
+  CHECK(state.error == OK);
+  CHECK(state.completed == 0);
+  CHECK_FALSE(state.delivered);
+  CHECK(driver.waits == 0);
+  TestQualificationStagingAccess::detach(device, rid);
+ }
 }
 TEST_CASE("[Qualification] in flight staging refuses before first readback append") {
  RenderingDevice device;Driver driver;RID rid=TestQualificationStagingAccess::attach(device,driver);auto result=TestQualificationStagingAccess::result();TestQualificationStagingAccess::in_flight(device);
