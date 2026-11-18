@@ -173,6 +173,27 @@ GDExtensionDeviceSessionResultV1 device_session_scene_phase_unregister_v1(GDExte
 	}
 	return { Registry::get_singleton().scene_phase_unregister(registration, *out), 0, 0, 0 };
 }
+GDExtensionDeviceSessionResultV1 device_session_scene_depth_snapshot_arm_v1(GDExtensionProductionAttachmentRefV1 attachment, const GDExtensionSceneDepthSnapshotArmV1 *input) {
+	SceneMemoryRange input_range;
+	if (!scene_object_range(input, input_range)) {
+		return { ERR_INVALID_PARAMETER, 0, 0, 0 };
+	}
+	return { Registry::get_singleton().scene_depth_snapshot_arm(attachment, *input), 0, 0, 0 };
+}
+GDExtensionDeviceSessionResultV1 device_session_scene_depth_snapshot_borrow_v1(GDExtensionProductionPhysicalContextRefV1 context, GDExtensionProductionRequestRefV1 request, uint64_t action_ordinal, uint64_t viewport_rid, const GDExtensionSceneOperationKeyV1 *key, GDExtensionSceneDepthSnapshotBorrowResultV1 *out) {
+	SceneMemoryRange key_range, out_range;
+	if (!scene_object_range(key, key_range) || !scene_object_range(out, out_range) || scene_ranges_overlap(key_range, out_range)) {
+		return { ERR_INVALID_PARAMETER, 0, 0, 0 };
+	}
+	return { Registry::get_singleton().scene_depth_snapshot_borrow(context, request, action_ordinal, RID::from_uint64(viewport_rid), *key, *out), 0, 0, 0 };
+}
+
+static_assert(std::is_standard_layout_v<GDExtensionSceneDepthSnapshotArmV1> && std::is_trivially_copyable_v<GDExtensionSceneDepthSnapshotArmV1>);
+static_assert(sizeof(GDExtensionSceneDepthSnapshotArmV1) == 32);
+static_assert(std::is_standard_layout_v<GDExtensionSceneDepthSnapshotBorrowResultV1> && std::is_trivially_copyable_v<GDExtensionSceneDepthSnapshotBorrowResultV1>);
+static_assert(sizeof(GDExtensionSceneDepthSnapshotBorrowResultV1) == 216);
+static_assert(std::is_same_v<decltype(&device_session_scene_depth_snapshot_arm_v1), GDExtensionInterfaceDeviceSessionSceneDepthSnapshotArmV1>);
+static_assert(std::is_same_v<decltype(&device_session_scene_depth_snapshot_borrow_v1), GDExtensionInterfaceDeviceSessionSceneDepthSnapshotBorrowV1>);
 
 static_assert(std::is_same_v<decltype(&device_session_scene_operation_query_v1), GDExtensionInterfaceDeviceSessionSceneOperationQueryV1>);
 static_assert(std::is_same_v<decltype(&device_session_scene_operation_bind_v1), GDExtensionInterfaceDeviceSessionSceneOperationBindV1>);
@@ -671,6 +692,8 @@ void register_production_interfaces() {
 	GDExtension::register_interface_function("device_session_scene_phase_relay_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_scene_phase_relay_v1));
 	GDExtension::register_interface_function("device_session_scene_phase_register_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_scene_phase_register_v1));
 	GDExtension::register_interface_function("device_session_scene_phase_unregister_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_scene_phase_unregister_v1));
+	GDExtension::register_interface_function("device_session_scene_depth_snapshot_arm_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_scene_depth_snapshot_arm_v1));
+	GDExtension::register_interface_function("device_session_scene_depth_snapshot_borrow_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_scene_depth_snapshot_borrow_v1));
 	GDExtension::register_interface_function("device_session_production_request_requirements_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_request_requirements_v1));
 	GDExtension::register_interface_function("device_session_production_request_requirements_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_request_requirements_v2));
 	GDExtension::register_interface_function("device_session_production_reserve_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_reserve_v2));

@@ -41,6 +41,7 @@ class RenderingDevice;
 namespace GDExtensionDeviceExit {
 
 inline constexpr uint64_t LATE_DEPTH_SAMPLE_KIND = 0x4b30364c44505448ull; // "K06LDPTH"
+inline constexpr uint64_t SCENE_DEPTH_SNAPSHOT_SAMPLE_KIND = 0x4b303644534e4150ull; // "K06DSNAP"
 
 struct LateTransparentDepthDescriptor {
 	RID viewport;
@@ -80,6 +81,7 @@ public:
 };
 
 GDExtensionSceneOpaque32V1 make_late_depth_sample_token(uint64_t p_viewport_serial, uint64_t p_frame_number, uint32_t p_width, uint32_t p_height);
+GDExtensionSceneOpaque32V1 make_scene_depth_snapshot_sample_token(uint64_t p_viewport_serial, uint64_t p_snapshot_generation, uint32_t p_width, uint32_t p_height);
 
 bool has_active_late_transparent_depth_phase(const RenderingDevice *p_device = nullptr, RID p_viewport = RID());
 void dispatch_late_transparent_depth_phase(RenderingDevice &p_device);

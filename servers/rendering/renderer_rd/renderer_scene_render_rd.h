@@ -381,6 +381,7 @@ public:
 	virtual bool is_volumetric_supported() const;
 	virtual uint32_t get_max_elements() const;
 
+	void capture_particle_scene_depth_snapshot(RD *p_rd, const RenderDataRD *p_render_data, bool p_is_reflection_probe);
 	void dispatch_late_particle_collision_phase(RD *p_rd, const RenderDataRD *p_render_data, bool p_is_reflection_probe);
 	uint64_t get_late_particle_phase_dispatch_count() const { return late_particle_phase_dispatches.get(); }
 

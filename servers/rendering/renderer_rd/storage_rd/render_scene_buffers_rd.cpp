@@ -32,6 +32,8 @@
 #include "render_scene_buffers_rd.compat.inc"
 
 #include "core/object/class_db.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_collision_scene_rd.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/rendering_device_binds.h"
 #include "servers/rendering/rendering_server.h" // IWYU pragma: keep // Needed to bind RSE enums.
@@ -41,6 +43,14 @@ RenderSceneBuffersRD::RenderSceneBuffersRD() {
 }
 
 RenderSceneBuffersRD::~RenderSceneBuffersRD() {
+	if (render_target.is_valid()) {
+		if (RendererRD::ParticlesStorage *ps = RendererRD::ParticlesStorage::get_singleton()) {
+			if (RendererRD::ParticlesCollisionSceneRD *cs = ps->get_collision_scene_rd()) {
+				cs->invalidate_render_target_depth_snapshot(render_target, false);
+			}
+		}
+	}
+
 	cleanup();
 
 	data_buffers.clear();
@@ -132,6 +142,14 @@ void RenderSceneBuffersRD::update_samplers() {
 }
 
 void RenderSceneBuffersRD::cleanup() {
+	if (render_target.is_valid()) {
+		if (RendererRD::ParticlesStorage *ps = RendererRD::ParticlesStorage::get_singleton()) {
+			if (RendererRD::ParticlesCollisionSceneRD *cs = ps->get_collision_scene_rd()) {
+				cs->invalidate_render_target_depth_snapshot(render_target, true);
+			}
+		}
+	}
+
 	// Free our data buffers (but don't destroy them)
 	for (KeyValue<StringName, Ref<RenderBufferCustomDataRD>> &E : data_buffers) {
 		E.value->free_data();

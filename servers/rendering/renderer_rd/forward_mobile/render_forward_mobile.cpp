@@ -40,6 +40,7 @@
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/light_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_collision_scene_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
@@ -1120,10 +1121,17 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 			resolve_depth_buffer = true;
 		}
 
-		const RID scene_viewport = p_render_data->source_viewport.is_valid()
+		RendererRD::ParticlesStorage *ps = RendererRD::ParticlesStorage::get_singleton();
+		RendererRD::ParticlesCollisionSceneRD *collision_scene = (!is_reflection_probe && ps) ? ps->get_collision_scene_rd() : nullptr;
+		RID scene_viewport = p_render_data->source_viewport.is_valid()
 				? p_render_data->source_viewport
 				: (p_render_data->get_native_camera_source().is_valid() ? p_render_data->get_native_camera_source()->get_viewport() : RID());
-		if (GDExtensionDeviceExit::has_active_late_transparent_depth_phase(RD::get_singleton(), scene_viewport)) {
+		if (scene_viewport.is_null() && collision_scene && rb->get_render_target().is_valid()) {
+			scene_viewport = collision_scene->find_viewport_by_render_target(rb->get_render_target());
+		}
+		const uint64_t frame_number = RSG::rasterizer ? RSG::rasterizer->get_frame_number() : 0u;
+		if (GDExtensionDeviceExit::has_active_late_transparent_depth_phase(RD::get_singleton(), scene_viewport) ||
+				(collision_scene && collision_scene->has_pending_depth_snapshot_request(scene_viewport, frame_number))) {
 			scene_state.used_depth_texture = true;
 		}
 
@@ -1481,6 +1489,8 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 			RD::get_singleton()->draw_command_end_label(); // Render 3D Pass / Render Reflection Probe Pass
 
 			RD::get_singleton()->draw_list_end();
+
+			dispatch_late_particle_collision_phase(RD::get_singleton(), p_render_data, is_reflection_probe);
 
 			// note, if MSAA is used we should get an automatic resolve of the color buffer here.
 

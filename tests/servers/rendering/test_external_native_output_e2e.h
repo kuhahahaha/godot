@@ -114,6 +114,9 @@ struct WaveGNativeOutputPorts {
 	GDExtensionInterfaceDeviceSessionScenePhaseRelayV1 scene_relay = nullptr;
 	GDExtensionInterfaceDeviceSessionScenePhaseRegisterV1 scene_register = nullptr;
 	GDExtensionInterfaceDeviceSessionScenePhaseUnregisterV1 scene_unregister = nullptr;
+	GDExtensionInterfaceDeviceSessionSceneOperationBindV1 scene_operation_bind = nullptr;
+	GDExtensionInterfaceDeviceSessionSceneDepthSnapshotArmV1 scene_depth_arm = nullptr;
+	GDExtensionInterfaceDeviceSessionSceneDepthSnapshotBorrowV1 scene_depth_borrow = nullptr;
 
 	template <typename T>
 	static T get_fn(const char *p_name) {
@@ -199,6 +202,9 @@ struct WaveGNativeOutputPorts {
 		scene_relay = get_fn<GDExtensionInterfaceDeviceSessionScenePhaseRelayV1>("device_session_scene_phase_relay_v1");
 		scene_register = get_fn<GDExtensionInterfaceDeviceSessionScenePhaseRegisterV1>("device_session_scene_phase_register_v1");
 		scene_unregister = get_fn<GDExtensionInterfaceDeviceSessionScenePhaseUnregisterV1>("device_session_scene_phase_unregister_v1");
+		scene_operation_bind = get_fn<GDExtensionInterfaceDeviceSessionSceneOperationBindV1>("device_session_scene_operation_bind_v1");
+		scene_depth_arm = get_fn<GDExtensionInterfaceDeviceSessionSceneDepthSnapshotArmV1>("device_session_scene_depth_snapshot_arm_v1");
+		scene_depth_borrow = get_fn<GDExtensionInterfaceDeviceSessionSceneDepthSnapshotBorrowV1>("device_session_scene_depth_snapshot_borrow_v1");
 
 		return qual_open && qual_storage_create && qual_storage_retire && qual_storage_observe && qual_storage_release &&
 				qual_unit_create && qual_unit_retire && qual_unit_observe && qual_unit_release &&
@@ -214,7 +220,8 @@ struct WaveGNativeOutputPorts {
 				output_acquire_v1 && output_acquire_v2 && output_finalize_v1 && output_seal_v1 && output_cancel_v1 && output_cancel_schedule && output_return_consume &&
 				observe_v3 && copy_v1 && cancel_v1 && release_v2 && close_v1 &&
 				callable_create && camera_relay && camera_bind_relay && camera_bind_request && camera_close &&
-				scene_capability && scene_relay && scene_register && scene_unregister;
+				scene_capability && scene_relay && scene_register && scene_unregister &&
+				scene_operation_bind && scene_depth_arm && scene_depth_borrow;
 	}
 };
 
@@ -942,6 +949,319 @@ static void run_wave_g_native_output_cpu() {
 	CHECK(after_counts.attachments == baseline_counts.attachments);
 }
 
+static void run_scene_depth_snapshot_c_abi_lifecycle_with_device(
+		RenderingDevice *p_metal_rd,
+		uint64_t p_viewport_rid,
+		const GDExtensionDeviceExit::SceneDepthSnapshotCAbiTestCallbacks &p_callbacks) {
+	using namespace GDExtensionDeviceExit;
+	REQUIRE(p_metal_rd != nullptr);
+	REQUIRE(p_viewport_rid != 0ull);
+	auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
+	REQUIRE(server != nullptr);
+	server->sync();
+
+	WaveGNativeOutputPorts ports;
+	REQUIRE(ports.load());
+
+	struct MainInstanceScope {
+		RenderingDevice *rd = nullptr;
+		bool prev = false;
+		MainInstanceScope(RenderingDevice *p_rd) : rd(p_rd), prev(p_rd->is_main_instance) {
+			rd->is_main_instance = true;
+		}
+		~MainInstanceScope() {
+			if (rd) {
+				rd->is_main_instance = prev;
+			}
+		}
+	} main_scope(p_metal_rd);
+
+	struct CAbiBorrowProbe {
+		WaveGNativeOutputPorts *ports = nullptr;
+		uint64_t viewport_rid = 0;
+		GDExtensionSceneOperationKeyV1 key = {};
+		GDExtensionSceneDepthSnapshotBorrowResultV1 borrow_out = {};
+		GDExtensionSceneDepthSnapshotBorrowResultV1 retry_out = {};
+		Error borrow_err = ERR_UNCONFIGURED;
+		Error retry_err = ERR_UNCONFIGURED;
+		Error append_err = ERR_UNCONFIGURED;
+		GDExtensionProductionRequestRefV1 target_req = {};
+		uint32_t calls = 0;
+		SceneDepthSnapshotCAbiTestCallbacks callbacks = {};
+
+		static uint64_t word(const GDExtensionSceneOpaque32V1 &p_op, uint32_t p_idx) {
+			uint64_t val = 0;
+			for (uint32_t i = 0; i < 8; ++i) {
+				val |= uint64_t(p_op.bytes[p_idx * 8 + i]) << (8 * i);
+			}
+			return val;
+		}
+		static void on_callable_free(void *) {}
+		static void on_callable_call(void *, const GDExtensionConstVariantPtr *, GDExtensionInt, GDExtensionVariantPtr r_ret, GDExtensionCallError *r_err) {
+			*reinterpret_cast<Variant *>(r_ret) = Variant();
+			*r_err = { GDEXTENSION_CALL_OK, 0, 0 };
+		}
+		static void on_scene_phase(void *p_userdata, const GDExtensionNativeScenePhaseV1 *p_phase, GDExtensionProductionRequestRefV1 p_req, const GDExtensionProductionOperationV1 *p_op) {
+			if (!p_phase) {
+				return;
+			}
+			const ProductionPhysicalContextRef ctx = {
+				word(p_phase->physical_context, 0),
+				word(p_phase->physical_context, 1)
+			};
+			on_record(p_userdata, ctx, p_req, p_op);
+		}
+		static void on_record(void *p_userdata, ProductionPhysicalContextRef p_ctx, GDExtensionProductionRequestRefV1 p_req, const GDExtensionProductionOperationV1 *) {
+			auto &self = *static_cast<CAbiBorrowProbe *>(p_userdata);
+			if (p_req.handle_serial != self.target_req.handle_serial || p_req.registry_instance != self.target_req.registry_instance) {
+				return;
+			}
+			++self.calls;
+			self.borrow_err = Error(self.ports->scene_depth_borrow(
+					p_ctx, p_req, 0, self.viewport_rid, &self.key, &self.borrow_out).native_error);
+			self.retry_err = Error(self.ports->scene_depth_borrow(
+					p_ctx, p_req, 0, self.viewport_rid, &self.key, &self.retry_out).native_error);
+			if (self.callbacks.on_borrowed_in_phase) {
+				self.callbacks.on_borrowed_in_phase(self.callbacks.userdata, self.borrow_out);
+			}
+			uint64_t rev = 0;
+			Error e = Error(self.ports->read_revision(p_ctx, p_req, &rev).native_error);
+			if (e == OK) {
+				GDExtensionProductionAppendV2 app = {};
+				e = Error(self.ports->append_v2(p_ctx, p_req, 0, rev, &app).native_error);
+			}
+			self.append_err = e;
+		}
+	};
+
+	CAbiBorrowProbe probe;
+	probe.ports = &ports;
+	probe.viewport_rid = p_viewport_rid;
+	probe.callbacks = p_callbacks;
+
+	OrdinalPlan pool = {};
+	pool.attachment_requests = 4;
+	pool.capacity.abi = production_dto_abi<GDExtensionProductionCapacityV1>();
+	pool.capacity.requests = 4;
+	pool.capacity.suboperations = 8;
+	pool.capacity.resources = 8;
+	pool.capacity.resource_uses = 64;
+	pool.capacity.graph_memberships = 32;
+	pool.capacity.return_cells = 8;
+	pool.capacity.retained_payload_bytes = 4096;
+
+	SingletonEnrollment enrollment;
+	{
+		MutexLock rd_lock(p_metal_rd->_thread_safe_);
+		MutexLock reg_lock(enrollment.registry.mutex);
+		REQUIRE(enrollment.registry.production_membership_bound_locked(*p_metal_rd, pool.capacity.graph_memberships, p_metal_rd->transfer_worker_pool_max_size, pool.capacity.native_memberships) == OK);
+	}
+	enrollment.public_port = false;
+	enrollment.server = server;
+	REQUIRE(enrollment.initialize_owner(
+					1, false, true, &CAbiBorrowProbe::on_record, &probe, false, 1, false,
+					+[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &pool, p_metal_rd, true) == OK);
+
+	Callable phase_callable;
+	GDExtensionNormalRelayRefV1 scene_relay_ref = {};
+	GDExtensionScenePhaseRegistrationRefV1 scene_reg_ref = {};
+	{
+		MutexLock reg_lock(enrollment.registry.mutex);
+		enrollment.registry.records[enrollment.reference.slot].guard.entry_classes |= 1u << 8;
+	}
+	GDExtensionCallableCustomInfo2 cinfo = {};
+	cinfo.callable_userdata = &probe;
+	cinfo.call_func = &CAbiBorrowProbe::on_callable_call;
+	cinfo.free_func = &CAbiBorrowProbe::on_callable_free;
+	cinfo.token = enrollment.registry.records[enrollment.reference.slot].original_owner;
+	ports.callable_create(reinterpret_cast<GDExtensionUninitializedTypePtr>(&phase_callable), &cinfo);
+	REQUIRE(ports.qual_open(&Enrollment::ABI, enrollment.ready, enrollment.context, enrollment.session,
+					{ enrollment.instance, enrollment.holder.handle_serial }, &enrollment.qualification)
+					.native_error == OK);
+	REQUIRE(ports.scene_relay(reinterpret_cast<GDExtensionConstTypePtr>(&phase_callable), &CAbiBorrowProbe::on_scene_phase, &scene_relay_ref).native_error == OK);
+
+	GDExtensionScenePhaseSinkConfigV1 phase_cfg = {};
+	phase_cfg.abi = { 1, sizeof(phase_cfg), 0 };
+	phase_cfg.phase = SCENE_PHASE_BEFORE_PARTICLES;
+	phase_cfg.max_operations = 8;
+	REQUIRE(ports.scene_capability(enrollment.attachment, &phase_cfg.device_capability).native_error == OK);
+	REQUIRE(ports.scene_register(scene_relay_ref, enrollment.attachment, &phase_cfg, &scene_reg_ref).native_error == OK);
+	enrollment.frame.leave();
+
+	// Arm viewport via C ABI and verify invalid parameter rejection:
+	GDExtensionSceneDepthSnapshotArmV1 bad_arm = {};
+	CHECK(ports.scene_depth_arm(enrollment.attachment, nullptr).native_error == ERR_INVALID_PARAMETER);
+	CHECK(ports.scene_depth_arm(enrollment.attachment, &bad_arm).native_error == ERR_INVALID_PARAMETER);
+
+	GDExtensionSceneDepthSnapshotArmV1 arm_in = {};
+	arm_in.abi = Enrollment::ABI;
+	arm_in.abi.struct_size = sizeof(arm_in);
+	arm_in.viewport_rid = p_viewport_rid;
+	arm_in.slab_thickness_m = 0.50f;
+	arm_in.silhouette_jump_m = 0.50f;
+	REQUIRE(ports.scene_depth_arm(enrollment.attachment, &arm_in).native_error == OK);
+	if (p_callbacks.on_armed) {
+		p_callbacks.on_armed(p_callbacks.userdata);
+	}
+
+	// Create a qualified 32B storage buffer for a 1-action SCENE_PHASE_BEFORE_PARTICLES request:
+	GDExtensionStorageCreateRequestV1 src_origin = {};
+	src_origin.abi = Enrollment::ABI;
+	src_origin.bytes = 32;
+	src_origin.allocation_slot = 0;
+	src_origin.part = 0;
+	src_origin.allocation_generation = 1;
+	src_origin.create_attempt = 1;
+	GDExtensionStorageBackingV1 src_backing = {};
+	REQUIRE(ports.qual_storage_create(enrollment.qualification, &src_origin, &src_backing).native_error == OK);
+	p_metal_rd->_submit_transfer_workers();
+	p_metal_rd->_wait_for_transfer_workers();
+	p_metal_rd->swap_buffers(false);
+
+	const uint32_t upload_words[8] = { 1, 2, 3, 4, 0, 0, 0, 0 };
+	const GDExtensionProductionResourceV1 res = {
+		GDEXTENSION_PRODUCTION_STORAGE_V1, 0, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, sizeof(upload_words), 0
+	};
+	const GDExtensionProductionUseV1 use = { 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, sizeof(upload_words), 0 };
+	const GDExtensionProductionActionV2 act = {
+		0, 10, 1, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX
+	};
+	const GDExtensionProductionUploadV2 up_dto = { production_dto_abi<GDExtensionProductionUploadV2>(), 0, 10, 1, 0, 0, 0, 0, sizeof(upload_words) };
+	GDExtensionProductionMetadataQuoteV1 quote = {};
+	REQUIRE(ports.req_quote_v1(enrollment.attachment, &act, 1, &res, 1, &use, 1, &up_dto, 1, nullptr, 0, 0, sizeof(upload_words), &quote).native_error == OK);
+
+	const GDExtensionProductionOperationV1 op = { production_dto_abi<GDExtensionProductionOperationV1>(), 9101, 1, 10, 11 };
+	GDExtensionProductionRequestRefV1 req = {};
+	REQUIRE(ports.reserve_v2(enrollment.attachment, &op, &quote.capacity, &act, 1, &res, 1, &use, 1, nullptr, 0, &req).native_error == OK);
+	REQUIRE(ports.import_storage(req, 0, &src_backing).native_error == OK);
+	REQUIRE(ports.prepare_upload_v2(req, &up_dto, upload_words, sizeof(upload_words)).native_error == OK);
+
+	probe.key = {};
+	probe.key.abi = { 1, sizeof(GDExtensionSceneOperationKeyV1), 0 };
+	probe.key.owner_generation = enrollment.holder.generation;
+	probe.key.transport_operation = op;
+	probe.key.record_request = scene_phase_opaque(101, 102, 103, 104);
+	probe.key.operation_ref = scene_phase_opaque(201, 202, 203, 204);
+	probe.key.cursor_ref = scene_phase_opaque(301, 302, 303, 304);
+	probe.key.schedule_digest = scene_phase_opaque(401, 402, 403, 404);
+	{
+		CallbackScope owner_entry(enrollment.reference);
+		REQUIRE(owner_entry.get_error() == OK);
+		REQUIRE(ports.scene_operation_bind(req, 0, &probe.key).native_error == OK);
+	}
+
+	probe.target_req = req;
+	uint64_t ctrl = 0;
+	REQUIRE(ports.record_schedule(req, &ctrl) == OK);
+	server->sync();
+	Registry::get_singleton().scene_phase_dispatch(*p_metal_rd);
+
+	GDExtensionProductionRecordReportV2 rec = {};
+	REQUIRE(ports.record_consume_v2(req, ctrl, &rec).native_error == OK);
+	CHECK(rec.result.native_error == OK);
+	if (rec.flags & GDEXTENSION_PRODUCTION_RECORD_HAS_SEGMENT_V1) {
+		CallbackScope owner_entry(enrollment.reference);
+		REQUIRE(owner_entry.get_error() == OK);
+		REQUIRE(ports.ack_segment(req, rec.segment.segment, rec.segment.segment_revision).native_error == OK);
+	}
+
+	CHECK(probe.calls == 1u);
+	CHECK(probe.borrow_err == OK);
+	CHECK(probe.retry_err == OK);
+	CHECK(probe.append_err == OK);
+	CHECK(memcmp(&probe.borrow_out, &probe.retry_out, sizeof(probe.borrow_out)) == 0);
+
+	const GDExtensionProductionServiceBudgetV1 budget = {
+		production_dto_abi<GDExtensionProductionServiceBudgetV1>(),
+		OS::get_singleton()->get_ticks_usec() + 10000000,
+		8, 64, 64, 0
+	};
+	for (uint32_t turn = 0; turn < 64; ++turn) {
+		p_metal_rd->_submit_transfer_workers();
+		p_metal_rd->_wait_for_transfer_workers();
+		if (!p_metal_rd->native_disposal_active) {
+			p_metal_rd->swap_buffers(false);
+		}
+		GDExtensionProductionObserveResultV3 obs = {};
+		const Error o1 = Error(ports.observe_v3(req, &budget, &obs).native_error);
+		if (o1 != OK && o1 != ERR_BUSY) {
+			break;
+		}
+		server->sync();
+		(void)ports.observe_v3(req, &budget, &obs);
+		if (obs.report.known_obligations > 0 && obs.report.complete_obligations == obs.report.known_obligations && obs.report.possible_obligations == 0) {
+			break;
+		}
+	}
+
+	if (p_callbacks.on_before_release) {
+		p_callbacks.on_before_release(p_callbacks.userdata);
+	}
+
+	ports.cancel_v1(req);
+	for (uint32_t turn = 0; turn < 64; ++turn) {
+		GDExtensionProductionServiceBudgetV1 rem = {};
+		GDExtensionProductionReportV2 rep = {};
+		const Error rel_err = Error(ports.release_v2(req, &budget, &rem, &rep).native_error);
+		if (rel_err == OK && !rep.service_pending) {
+			break;
+		}
+		server->sync();
+		(void)ports.release_v2(req, &budget, &rem, &rep);
+		p_metal_rd->_submit_transfer_workers();
+		p_metal_rd->_wait_for_transfer_workers();
+		if (!p_metal_rd->native_disposal_active) {
+			p_metal_rd->swap_buffers(false);
+		}
+	}
+
+	if (p_callbacks.on_after_release) {
+		p_callbacks.on_after_release(p_callbacks.userdata);
+	}
+
+	// Retire qualified storage buffer & close enrollment cleanly:
+	{
+		const GDExtensionStorageRetireRequestV1 ret_in = {
+			Enrollment::ABI, src_backing.backing, src_backing.rid, src_backing.backing_serial, 0, 0, 1, 1, 0
+		};
+		GDExtensionStorageRetireRefV1 ret_ref = {};
+		GDExtensionStorageRetireReportV1 ret_rep = {};
+		REQUIRE(ports.qual_storage_retire(enrollment.qualification, &ret_in, &ret_ref, &ret_rep).native_error == OK);
+		for (uint32_t turn = 0; turn < 64 && ret_rep.state != 1; ++turn) {
+			const GDExtensionQualificationBudgetV1 qbudget = { Enrollment::ABI, 4, 5000, 0 };
+			REQUIRE(ports.qual_storage_observe(enrollment.qualification, ret_ref, &qbudget, &ret_rep).native_error == OK);
+			if (ret_rep.state != 1) {
+				p_metal_rd->_submit_transfer_workers();
+				p_metal_rd->_wait_for_transfer_workers();
+				p_metal_rd->swap_buffers(false);
+			}
+		}
+		REQUIRE(ret_rep.state == 1);
+		REQUIRE(ports.qual_storage_release(enrollment.qualification, ret_ref).native_error == OK);
+	}
+
+	GDExtensionScenePhaseCloseV1 scene_closed = {};
+	Error sp_unreg = Error(ports.scene_unregister(scene_reg_ref, &scene_closed).native_error);
+	phase_callable = Callable();
+	for (uint32_t turn = 0; turn < 8 && sp_unreg == ERR_BUSY; ++turn) {
+		server->sync();
+		if (MessageQueue::get_singleton()) {
+			MessageQueue::get_singleton()->flush();
+		}
+		sp_unreg = Error(ports.scene_unregister(scene_reg_ref, &scene_closed).native_error);
+	}
+	CHECK(sp_unreg == OK);
+	CHECK(ports.close_v1(enrollment.attachment).native_error == OK);
+	enrollment.attachment = {};
+	server->sync();
+	enrollment.server = nullptr;
+	enrollment.cleanup_owner(true);
+	CHECK(enrollment.owner_cleaned);
+}
+
+static inline const bool s_scene_depth_c_abi_registered =
+		(GDExtensionDeviceExit::g_scene_depth_snapshot_c_abi_test_runner = &Access::run_scene_depth_snapshot_c_abi_lifecycle_with_device, true);
+
 struct LiveMetalWaveGNativeOutputHarness {
 	SingletonEnrollment enrollment;
 	WaveGNativeOutputPorts ports;
@@ -968,6 +1288,15 @@ struct LiveMetalWaveGNativeOutputHarness {
 		WITHDRAW_OUTPUT,
 		CANCEL_SLOT,
 		EXECUTE_PACKET,
+		SCENE_DEPTH_BORROW,
+	};
+
+	struct SceneDepthBorrowPlan {
+		uint64_t viewport_rid = 0;
+		GDExtensionSceneOperationKeyV1 key = {};
+		GDExtensionSceneDepthSnapshotBorrowResultV1 out = {};
+		Error borrow_error = ERR_UNCONFIGURED;
+		Error append_error = ERR_UNCONFIGURED;
 	};
 
 	struct PacketRecordPlan {
@@ -1003,6 +1332,7 @@ struct LiveMetalWaveGNativeOutputHarness {
 	GDExtensionOutputTokenV1 active_cancel_lease = {};
 	GDExtensionOutputStatusV1 active_cancel_out = {};
 	PacketRecordPlan *active_packet = nullptr;
+	SceneDepthBorrowPlan *active_depth_borrow = nullptr;
 
 	struct NormalHostPrepContext {
 		LiveMetalWaveGNativeOutputHarness *self = nullptr;
@@ -1185,6 +1515,19 @@ struct LiveMetalWaveGNativeOutputHarness {
 					return;
 				}
 			}
+			return;
+		}
+		if (self.active_kind == ActiveRecordKind::SCENE_DEPTH_BORROW && self.active_depth_borrow) {
+			auto &plan = *self.active_depth_borrow;
+			plan.borrow_error = Error(self.ports.scene_depth_borrow(
+					p_ctx, p_req, 0, plan.viewport_rid, &plan.key, &plan.out).native_error);
+			uint64_t rev = 0;
+			Error e = Error(self.ports.read_revision(p_ctx, p_req, &rev).native_error);
+			if (e == OK) {
+				GDExtensionProductionAppendV2 app = {};
+				e = Error(self.ports.append_v2(p_ctx, p_req, 0, rev, &app).native_error);
+			}
+			plan.append_error = e;
 		}
 	}
 
@@ -2161,7 +2504,7 @@ void main() {
 		}
 
 		String sub_step;
-		for (uint32_t draw_try = 0; draw_try < 64; ++draw_try) {
+		for (uint32_t draw_try = 0; draw_try < 5000; ++draw_try) {
 			if (backend == 1) {
 				err = TestProductionRequest::wave_g_mobile_draw_external(sel, &render_data, p_material, p_profile, owner_capacity > 0, fb_format, fb, sub_step, p_self.role9_check_motion_pass);
 			} else {
@@ -4645,6 +4988,376 @@ void main() {
 		server->sync();
 	}
 
+	bool borrow_and_verify_scene_depth_v2(
+			const String &p_tag,
+			RID p_viewport,
+			const GDExtensionStorageBackingV1 &p_src_backing,
+			float p_expected_world_z,
+			bool p_test_samplerless_compute,
+			uint64_t &r_snapshot_gen) {
+		using namespace GDExtensionDeviceExit;
+		r_snapshot_gen = 0ull;
+
+		const uint32_t dummy_words[8] = { 7, 0, 0, 0, 0, 0, 0, 0 };
+		const GDExtensionProductionResourceV1 res = {
+			GDEXTENSION_PRODUCTION_STORAGE_V1, 0, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, sizeof(dummy_words), 0
+		};
+		const GDExtensionProductionUseV1 use = { 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, sizeof(dummy_words), 0 };
+		const GDExtensionProductionActionV2 act = {
+			0, 10, 1, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX
+		};
+		const GDExtensionProductionUploadV2 up_dto = { production_dto_abi<GDExtensionProductionUploadV2>(), 0, 10, 1, 0, 0, 0, 0, sizeof(dummy_words) };
+		GDExtensionProductionMetadataQuoteV1 quote = {};
+		Error err = Error(ports.req_quote_v1(enrollment.attachment, &act, 1, &res, 1, &use, 1, &up_dto, 1, nullptr, 0, 0, sizeof(dummy_words), &quote).native_error);
+		if (err != OK) {
+			record_check(p_tag + ".quote", false);
+			return false;
+		}
+		const uint64_t nonce = ++next_nonce;
+		const GDExtensionProductionOperationV1 op = { production_dto_abi<GDExtensionProductionOperationV1>(), nonce, 1, 10, 11 };
+		GDExtensionProductionRequestRefV1 req = {};
+		err = Error(ports.reserve_v2(enrollment.attachment, &op, &quote.capacity, &act, 1, &res, 1, &use, 1, nullptr, 0, &req).native_error);
+		if (err != OK) {
+			record_check(p_tag + ".reserve", false);
+			return false;
+		}
+		if (ports.import_storage(req, 0, &p_src_backing).native_error != OK ||
+				ports.prepare_upload_v2(req, &up_dto, dummy_words, sizeof(dummy_words)).native_error != OK) {
+			release_request_cleanly(req);
+			record_check(p_tag + ".prep", false);
+			return false;
+		}
+
+		SceneDepthBorrowPlan plan;
+		plan.viewport_rid = p_viewport.get_id();
+		plan.key.abi = { 1, sizeof(GDExtensionSceneOperationKeyV1), 0 };
+		plan.key.owner_generation = enrollment.holder.generation;
+		plan.key.transport_operation = op;
+		plan.key.record_request = scene_phase_opaque(nonce, 102, 103, 104);
+		plan.key.operation_ref = scene_phase_opaque(nonce, 202, 203, 204);
+		plan.key.cursor_ref = scene_phase_opaque(nonce, 302, 303, 304);
+		plan.key.schedule_digest = scene_phase_opaque(nonce, 402, 403, 404);
+		{
+			CallbackScope owner_entry(enrollment.reference);
+			err = owner_entry.get_error();
+			if (err == OK) {
+				err = Error(ports.scene_operation_bind(req, 0, &plan.key).native_error);
+			}
+		}
+		if (err != OK) {
+			release_request_cleanly(req);
+			record_check(p_tag + ".bind_key", false);
+			return false;
+		}
+
+		active_depth_borrow = &plan;
+		GDExtensionProductionRecordReportV2 rec = {};
+		err = run_record_sync(req, ActiveRecordKind::SCENE_DEPTH_BORROW, rec);
+		active_depth_borrow = nullptr;
+
+		const bool borrow_ok = (err == OK &&
+				plan.borrow_error == OK &&
+				plan.append_error == OK &&
+				plan.out.outcome.outcome == 1u &&
+				plan.out.meta_ssbo_rid != 0ull &&
+				plan.out.depth_texture_rid != 0ull &&
+				plan.out.snapshot_generation >= 1ull &&
+				plan.out.width == 64u &&
+				plan.out.height == 64u &&
+				plan.out.flags == 3u);
+		record_check(p_tag + ".borrow_permit_and_flags", borrow_ok);
+		if (!borrow_ok) {
+			Dictionary d;
+			d["run_err"] = int(err);
+			d["borrow_err"] = int(plan.borrow_error);
+			d["append_err"] = int(plan.append_error);
+			d["outcome"] = plan.out.outcome.outcome;
+			d["gen"] = plan.out.snapshot_generation;
+			d["w"] = plan.out.width;
+			d["h"] = plan.out.height;
+			d["flags"] = plan.out.flags;
+			diagnostics[p_tag + ".borrow_diag"] = d;
+			release_request_cleanly(req);
+			return false;
+		}
+		r_snapshot_gen = plan.out.snapshot_generation;
+
+		struct ReadbackVerifyState {
+			uint64_t meta_rid = 0;
+			uint64_t tex_rid = 0;
+			bool test_compute = false;
+			bool meta_ok = false;
+			bool tex_ok = false;
+			bool compute_ok = true;
+			float raw_center = -1.0f;
+			float world_z = 0.0f;
+		} verify;
+		verify.meta_rid = plan.out.meta_ssbo_rid;
+		verify.tex_rid = plan.out.depth_texture_rid;
+		verify.test_compute = p_test_samplerless_compute;
+
+		server->call_on_render_thread(callable_mp_static((+[](uint64_t p_rd_addr, uint64_t p_v_addr) {
+			auto *p_rd = reinterpret_cast<RenderingDevice *>(uintptr_t(p_rd_addr));
+			auto *st = reinterpret_cast<ReadbackVerifyState *>(uintptr_t(p_v_addr));
+			if (!p_rd || !st) {
+				return;
+			}
+			const RID meta_buf = RID::from_uint64(st->meta_rid);
+			const RID depth_tex = RID::from_uint64(st->tex_rid);
+			const Vector<uint8_t> meta_bytes = p_rd->buffer_get_data(meta_buf);
+			const Vector<uint8_t> tex_bytes = p_rd->texture_get_data(depth_tex, 0);
+			if (meta_bytes.size() == 256 && tex_bytes.size() == 64 * 64 * 4) {
+				uint32_t magic = 0;
+				uint32_t ver = 0;
+				uint32_t w = 0;
+				uint32_t h = 0;
+				uint32_t flags = 0;
+				memcpy(&magic, meta_bytes.ptr() + 0, 4);
+				memcpy(&ver, meta_bytes.ptr() + 4, 4);
+				memcpy(&w, meta_bytes.ptr() + 8, 4);
+				memcpy(&h, meta_bytes.ptr() + 12, 4);
+				memcpy(&flags, meta_bytes.ptr() + 236, 4);
+				st->meta_ok = (magic == 0x4b303644u && ver == 2u && w == 64u && h == 64u && flags == 3u);
+
+				const float *texels = reinterpret_cast<const float *>(tex_bytes.ptr());
+				const float d_c = texels[32 * 64 + 32];
+				st->raw_center = d_c;
+				st->tex_ok = (Math::is_finite(d_c) && d_c > 0.005f && d_c < 0.99f);
+
+				float clip_to_world[16] = {};
+				memcpy(clip_to_world, meta_bytes.ptr() + 96, 64);
+				const float nx = ((32.0f + 0.5f) / 64.0f) * 2.0f - 1.0f;
+				const float ny = ((32.0f + 0.5f) / 64.0f) * 2.0f - 1.0f;
+				const float wx = clip_to_world[0] * nx + clip_to_world[4] * ny + clip_to_world[8] * d_c + clip_to_world[12];
+				const float wy = clip_to_world[1] * nx + clip_to_world[5] * ny + clip_to_world[9] * d_c + clip_to_world[13];
+				const float wz = clip_to_world[2] * nx + clip_to_world[6] * ny + clip_to_world[10] * d_c + clip_to_world[14];
+				const float ww = clip_to_world[3] * nx + clip_to_world[7] * ny + clip_to_world[11] * d_c + clip_to_world[15];
+				(void)wx;
+				(void)wy;
+				if (Math::is_finite(ww) && Math::abs(ww) > 1e-6f) {
+					st->world_z = wz / ww;
+				}
+			}
+
+			if (st->test_compute) {
+				st->compute_ok = false;
+				static constexpr const char *kCompGlsl =
+						"#version 450\n"
+						"#extension GL_EXT_samplerless_texture_functions : enable\n"
+						"layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;\n"
+						"layout(set = 0, binding = 0) uniform texture2D u_depth_tex;\n"
+						"layout(set = 0, binding = 1, std430) readonly buffer MetaBuf { uint meta_words[64]; } u_meta;\n"
+						"layout(set = 0, binding = 2, std430) writeonly buffer OutBuf { float fetched_depth; uint magic; } u_out;\n"
+						"void main() {\n"
+						"	u_out.fetched_depth = texelFetch(u_depth_tex, ivec2(32, 32), 0).r;\n"
+						"	u_out.magic = u_meta.meta_words[0];\n"
+						"}\n";
+				String comp_err;
+				RD::ShaderStageSPIRVData cs_stage;
+				cs_stage.shader_stage = RD::SHADER_STAGE_COMPUTE;
+				cs_stage.spirv = p_rd->shader_compile_spirv_from_source(RD::SHADER_STAGE_COMPUTE, String::utf8(kCompGlsl), RD::SHADER_LANGUAGE_GLSL, &comp_err, false);
+				if (!cs_stage.spirv.is_empty()) {
+					Vector<RD::ShaderStageSPIRVData> stages;
+					stages.push_back(cs_stage);
+					const RID c_shader = p_rd->shader_create_from_spirv(stages);
+					const RID c_pipe = c_shader.is_valid() ? p_rd->compute_pipeline_create(c_shader) : RID();
+					const RID out_ssbo = p_rd->storage_buffer_create(16);
+					if (c_pipe.is_valid() && out_ssbo.is_valid()) {
+						RD::Uniform u0(RD::UNIFORM_TYPE_TEXTURE, 0, depth_tex);
+						RD::Uniform u1(RD::UNIFORM_TYPE_STORAGE_BUFFER, 1, meta_buf);
+						RD::Uniform u2(RD::UNIFORM_TYPE_STORAGE_BUFFER, 2, out_ssbo);
+						Vector<RD::Uniform> uniforms;
+						uniforms.push_back(u0);
+						uniforms.push_back(u1);
+						uniforms.push_back(u2);
+						const RID uset = p_rd->uniform_set_create(uniforms, c_shader, 0);
+						if (uset.is_valid()) {
+							const RD::ComputeListID cl = p_rd->compute_list_begin();
+							p_rd->compute_list_bind_compute_pipeline(cl, c_pipe);
+							p_rd->compute_list_bind_uniform_set(cl, uset, 0);
+							p_rd->compute_list_dispatch(cl, 1, 1, 1);
+							p_rd->compute_list_end();
+							const Vector<uint8_t> out_bytes = p_rd->buffer_get_data(out_ssbo);
+							if (out_bytes.size() >= 8) {
+								float fetched = 0.0f;
+								uint32_t magic_word = 0;
+								memcpy(&fetched, out_bytes.ptr() + 0, 4);
+								memcpy(&magic_word, out_bytes.ptr() + 4, 4);
+								st->compute_ok = (magic_word == 0x4b303644u && Math::abs(fetched - st->raw_center) <= 1e-6f);
+							}
+							p_rd->free_rid(uset);
+						}
+					}
+					if (out_ssbo.is_valid()) {
+						p_rd->free_rid(out_ssbo);
+					}
+					if (c_pipe.is_valid()) {
+						p_rd->free_rid(c_pipe);
+					}
+					if (c_shader.is_valid()) {
+						p_rd->free_rid(c_shader);
+					}
+				}
+			}
+		})).bind(uint64_t(uintptr_t(device)), uint64_t(uintptr_t(&verify))));
+		server->sync();
+
+		rt_advance_rd_frame();
+		for (uint32_t turn = 0; turn < 64; ++turn) {
+			GDExtensionProductionObserveResultV3 obs = {};
+			if (pump_observe_once(req, obs) != OK) {
+				break;
+			}
+			if (obs.report.known_obligations > 0 && obs.report.complete_obligations == obs.report.known_obligations && obs.report.possible_obligations == 0) {
+				break;
+			}
+			rt_advance_rd_frame();
+		}
+
+		const Error rel_err = release_request_cleanly(req);
+		const bool depth_match = verify.meta_ok && verify.tex_ok && verify.compute_ok && Math::abs(verify.world_z - p_expected_world_z) < 0.08f;
+		record_check(p_tag + ".meta_and_depth_reconstruct", depth_match);
+		record_check(p_tag + ".request_released", rel_err == OK);
+		if (!depth_match) {
+			Dictionary d;
+			d["meta_ok"] = verify.meta_ok;
+			d["tex_ok"] = verify.tex_ok;
+			d["compute_ok"] = verify.compute_ok;
+			d["raw_center"] = verify.raw_center;
+			d["world_z"] = verify.world_z;
+			d["expected_z"] = p_expected_world_z;
+			diagnostics[p_tag + ".depth_diag"] = d;
+		}
+		return depth_match && rel_err == OK;
+	}
+
+	bool run_scene_depth_v2_viewport_e2e(
+			const String &p_label,
+			bool p_use_msaa_4x,
+			const GDExtensionStorageBackingV1 &p_src_backing) {
+		RID scen = server->scenario_create();
+		RID cam = server->camera_create();
+		server->camera_set_perspective(cam, 90.0f, 0.1f, 100.0f);
+		server->camera_set_transform(cam, Transform3D());
+
+		RID vp = server->viewport_create();
+		server->viewport_set_size(vp, 64, 64);
+		server->viewport_set_active(vp, true);
+		server->viewport_set_update_mode(vp, RSE::VIEWPORT_UPDATE_ALWAYS);
+		server->viewport_set_scenario(vp, scen);
+		server->viewport_attach_camera(vp, cam);
+		server->viewport_set_msaa_3d(vp, p_use_msaa_4x ? RSE::VIEWPORT_MSAA_4X : RSE::VIEWPORT_MSAA_DISABLED);
+
+		RID quad_mesh = server->mesh_create();
+		{
+			Array arr;
+			arr.resize(RSE::ARRAY_MAX);
+			PackedVector3Array vtx;
+			vtx.push_back(Vector3(-15.0f, -15.0f, 0.0f));
+			vtx.push_back(Vector3(15.0f, -15.0f, 0.0f));
+			vtx.push_back(Vector3(-15.0f, 15.0f, 0.0f));
+			vtx.push_back(Vector3(15.0f, 15.0f, 0.0f));
+			PackedInt32Array idx;
+			idx.push_back(0);
+			idx.push_back(1);
+			idx.push_back(2);
+			idx.push_back(2);
+			idx.push_back(1);
+			idx.push_back(3);
+			arr[RSE::ARRAY_VERTEX] = vtx;
+			arr[RSE::ARRAY_INDEX] = idx;
+			server->mesh_add_surface_from_arrays(quad_mesh, RSE::PRIMITIVE_TRIANGLES, arr);
+		}
+		RID opaque_shd = server->shader_create_from_code(
+				"shader_type spatial; render_mode unshaded, cull_disabled; void fragment() { ALBEDO = vec3(0.2, 0.7, 0.3); }");
+		RID opaque_mat = server->material_create();
+		server->material_set_shader(opaque_mat, opaque_shd);
+
+		RID opaque_inst = server->instance_create();
+		server->instance_set_base(opaque_inst, quad_mesh);
+		server->instance_set_scenario(opaque_inst, scen);
+		server->instance_set_transform(opaque_inst, Transform3D(Basis(), Vector3(0.0f, 0.0f, -5.0f)));
+		server->instance_set_surface_override_material(opaque_inst, 0, opaque_mat);
+
+		server->call_on_render_thread(callable_mp_static((+[](uint64_t p_rd_addr) {
+			auto *p_rd = reinterpret_cast<RenderingDevice *>(uintptr_t(p_rd_addr));
+			if (auto *mats = RendererRD::MaterialStorage::get_singleton()) {
+				mats->_update_queued_materials();
+			}
+			if (p_rd) {
+				for (uint32_t f = 0; f < 2; ++f) {
+					p_rd->_submit_transfer_workers();
+					p_rd->_wait_for_transfer_workers();
+					p_rd->swap_buffers(false);
+				}
+			}
+		})).bind(uint64_t(uintptr_t(device))));
+		server->sync();
+
+		GDExtensionSceneDepthSnapshotArmV1 arm_in = {};
+		arm_in.abi = Enrollment::ABI;
+		arm_in.abi.struct_size = sizeof(arm_in);
+		arm_in.viewport_rid = vp.get_id();
+		arm_in.slab_thickness_m = 0.50f;
+		arm_in.silhouette_jump_m = 0.50f;
+		const Error arm_err = Error(ports.scene_depth_arm(enrollment.attachment, &arm_in).native_error);
+		record_check(p_label + ".arm_v1", arm_err == OK);
+
+		// Frame 0: Opaque-only (-5.0m floor, 0 transparent elements)
+		server->draw(false, 1.0 / 60.0);
+		server->sync();
+
+		uint64_t f0_gen = 0;
+		const bool f0_ok = borrow_and_verify_scene_depth_v2(
+				p_label + ".f0_opaque", vp, p_src_backing, -5.0f, !p_use_msaa_4x, f0_gen);
+
+		bool f1_ok = true;
+		if (!p_use_msaa_4x) {
+			// Frame 1 (T08): Add transparent quad at z = -2.0m with depth_draw_always so post-transparent
+			// capture would erroneously read -2.0m; pre-transparent capture MUST still read -5.0m!
+			RID alpha_shd = server->shader_create_from_code(
+					"shader_type spatial; render_mode unshaded, cull_disabled, blend_mix, depth_draw_always; "
+					"void fragment() { ALBEDO = vec3(0.9, 0.1, 0.1); ALPHA = 0.5; }");
+			RID alpha_mat = server->material_create();
+			server->material_set_shader(alpha_mat, alpha_shd);
+			RID alpha_inst = server->instance_create();
+			server->instance_set_base(alpha_inst, quad_mesh);
+			server->instance_set_scenario(alpha_inst, scen);
+			server->instance_set_transform(alpha_inst, Transform3D(Basis(), Vector3(0.0f, 0.0f, -2.0f)));
+			server->instance_set_surface_override_material(alpha_inst, 0, alpha_mat);
+
+			server->call_on_render_thread(callable_mp_static(+[]() {
+				if (auto *mats = RendererRD::MaterialStorage::get_singleton()) {
+					mats->_update_queued_materials();
+				}
+			}));
+			server->sync();
+
+			server->draw(false, 1.0 / 60.0);
+			server->sync();
+
+			uint64_t f1_gen = 0;
+			f1_ok = borrow_and_verify_scene_depth_v2(
+					p_label + ".f1_pre_transparent", vp, p_src_backing, -5.0f, false, f1_gen);
+			record_check(p_label + ".f1_gen_advanced", f1_gen > f0_gen);
+
+			server->free_rid(alpha_inst);
+			server->free_rid(alpha_mat);
+			server->free_rid(alpha_shd);
+		}
+
+		server->free_rid(opaque_inst);
+		server->free_rid(opaque_mat);
+		server->free_rid(opaque_shd);
+		server->free_rid(quad_mesh);
+		server->free_rid(vp);
+		server->free_rid(cam);
+		server->free_rid(scen);
+		server->sync();
+		rt_advance_rd_frame();
+		return arm_err == OK && f0_ok && f1_ok;
+	}
+
 	Dictionary run_all() {
 		using namespace GDExtensionDeviceExit;
 		Dictionary out;
@@ -4865,6 +5578,10 @@ void main() {
 
 				// 6. Role 9 (GDEXTENSION_OUTPUT_ROLE_AUX_PARAMS_V1 = 9): 4-role PrepareV3/AcquireV2, WithoutPrevious fallback, Guard NaN/subnormal, Color+Motion draw, & 32B zero sentinel!
 				run_role9_aux_params_suite(src_cap4, 1u);
+
+				// 7. SceneDepthSnapshotMeta256 v2 pre-transparent capture (MSAA_DISABLED + opaque-only Frame 0 + Frame 1 alpha exclusion) & VIEWPORT_MSAA_4X depth resolve!
+				run_scene_depth_v2_viewport_e2e("scene_depth_v2_pre_transparent", false, src_cap2);
+				run_scene_depth_v2_viewport_e2e("scene_depth_v2_msaa_4x", true, src_cap2);
 
 				record_check("retire_src_cap4", retire_qualified_source_buffer(src_cap4, src_cap4_origin) == OK);
 				record_check("retire_src_cap2", retire_qualified_source_buffer(src_cap2, src_cap2_origin) == OK);

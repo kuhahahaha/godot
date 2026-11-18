@@ -37,6 +37,7 @@
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/light_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_collision_scene_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
@@ -2753,10 +2754,17 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	}
 
 	if (!is_reflection_probe && rb.is_valid()) {
-		const RID scene_viewport = p_render_data->source_viewport.is_valid()
+		RendererRD::ParticlesStorage *ps = RendererRD::ParticlesStorage::get_singleton();
+		RendererRD::ParticlesCollisionSceneRD *collision_scene = ps ? ps->get_collision_scene_rd() : nullptr;
+		RID scene_viewport = p_render_data->source_viewport.is_valid()
 				? p_render_data->source_viewport
 				: (p_render_data->get_native_camera_source().is_valid() ? p_render_data->get_native_camera_source()->get_viewport() : RID());
-		if (GDExtensionDeviceExit::has_active_late_transparent_depth_phase(RD::get_singleton(), scene_viewport)) {
+		if (scene_viewport.is_null() && collision_scene && rb->get_render_target().is_valid()) {
+			scene_viewport = collision_scene->find_viewport_by_render_target(rb->get_render_target());
+		}
+		const uint64_t frame_number = RSG::rasterizer ? RSG::rasterizer->get_frame_number() : 0u;
+		if (GDExtensionDeviceExit::has_active_late_transparent_depth_phase(RD::get_singleton(), scene_viewport) ||
+				(collision_scene && collision_scene->has_pending_depth_snapshot_request(scene_viewport, frame_number))) {
 			scene_state.used_depth_texture = true;
 		}
 	}

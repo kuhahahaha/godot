@@ -1489,6 +1489,8 @@ public:
 	Error scene_phase_bind_operation(GDExtensionProductionRequestRefV1, uint64_t, const GDExtensionSceneOperationKeyV1 &);
 	Error scene_phase_bind_request_viewport(GDExtensionProductionRequestRefV1, RID);
 	Error scene_phase_borrow(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint64_t, const GDExtensionSceneOperationKeyV1 &, const GDExtensionSceneOpaque32V1 &, const Ref<SceneReadContent> &, GDExtensionSceneReadOutcomeV1 &);
+	Error scene_depth_snapshot_arm(GDExtensionProductionAttachmentRefV1, const GDExtensionSceneDepthSnapshotArmV1 &);
+	Error scene_depth_snapshot_borrow(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint64_t, RID, const GDExtensionSceneOperationKeyV1 &, GDExtensionSceneDepthSnapshotBorrowResultV1 &);
 	void scene_phase_dispatch_for_phase(RenderingDevice &, uint32_t, RID p_viewport = RID());
 	bool has_active_scene_phase_sink(uint32_t, const RenderingDevice * = nullptr, RID = RID());
 	Error register_normal_relay(const Callable &p_callback, NormalRelayToken &r_token);
@@ -1554,4 +1556,18 @@ public:
 	int32_t release(const GDExtensionDeviceExitAbi *p_request, GDExtensionDeviceExitLibraryViewRef p_view);
 	int32_t clone(const GDExtensionDeviceExitAbi *p_request, GDExtensionDeviceExitLibraryViewRef p_source, GDExtensionDeviceExitLibraryViewRef *r_view);
 };
+
+#ifdef TESTS_ENABLED
+struct SceneDepthSnapshotCAbiTestCallbacks {
+	void *userdata = nullptr;
+	void (*on_armed)(void *p_userdata) = nullptr;
+	void (*on_borrowed_in_phase)(void *p_userdata, const GDExtensionSceneDepthSnapshotBorrowResultV1 &p_result) = nullptr;
+	void (*on_before_release)(void *p_userdata) = nullptr;
+	void (*on_after_release)(void *p_userdata) = nullptr;
+};
+inline void (*g_scene_depth_snapshot_c_abi_test_runner)(
+		RenderingDevice *p_metal_rd,
+		uint64_t p_viewport_rid,
+		const SceneDepthSnapshotCAbiTestCallbacks &p_callbacks) = nullptr;
+#endif
 } // namespace GDExtensionDeviceExit
