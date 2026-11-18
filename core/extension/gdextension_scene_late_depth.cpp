@@ -31,11 +31,15 @@
 #include "gdextension_scene_late_depth.h"
 
 #include "core/extension/gdextension_library_exit_guard.h"
+#include "core/extension/gdextension_production_request.h"
 #include "core/extension/gdextension_scene_phase_bind.h"
 #include "core/os/mutex.h"
 #include "core/templates/hash_map.h"
 #include "core/templates/local_vector.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_collision_scene_rd.h"
 #include "servers/rendering/rendering_device.h"
+
+#include <cstring>
 
 namespace GDExtensionDeviceExit {
 
@@ -129,6 +133,161 @@ Error LateTransparentDepthContent::return_after_reads() {
 GDExtensionSceneOpaque32V1 make_late_depth_sample_token(uint64_t p_viewport_serial, uint64_t p_frame_number, uint32_t p_width, uint32_t p_height) {
 	const uint64_t packed_dims = (uint64_t(p_width) << 32u) | uint64_t(p_height);
 	return scene_phase_opaque(LATE_DEPTH_SAMPLE_KIND, p_viewport_serial, p_frame_number, packed_dims);
+}
+
+GDExtensionSceneOpaque32V1 make_scene_depth_snapshot_sample_token(uint64_t p_viewport_serial, uint64_t p_snapshot_generation, uint32_t p_width, uint32_t p_height) {
+	const uint64_t packed_dims = (uint64_t(p_width) << 32u) | uint64_t(p_height);
+	return scene_phase_opaque(SCENE_DEPTH_SNAPSHOT_SAMPLE_KIND, p_viewport_serial, p_snapshot_generation, packed_dims);
+}
+
+Error Registry::scene_depth_snapshot_arm(
+		GDExtensionProductionAttachmentRefV1 p_attachment,
+		const GDExtensionSceneDepthSnapshotArmV1 &p_input) {
+	if (p_input.abi.abi_version != 1u ||
+			p_input.abi.struct_size != sizeof(GDExtensionSceneDepthSnapshotArmV1) ||
+			p_input.abi.reserved != 0u ||
+			p_input.viewport_rid == 0ull ||
+			!Math::is_finite(p_input.slab_thickness_m) ||
+			!Math::is_finite(p_input.silhouette_jump_m) ||
+			p_input.slab_thickness_m < 0.0f ||
+			p_input.silhouette_jump_m < 0.0f) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	RenderingDevice *main_rd = RenderingDevice::get_singleton();
+	RendererRD::ParticlesCollisionSceneRD *collision_scene = RendererRD::ParticlesCollisionSceneRD::get_for_device(main_rd);
+	if (!main_rd || !main_rd->is_main_instance || !collision_scene || !collision_scene->is_initialized()) {
+		return ERR_UNAVAILABLE;
+	}
+
+	{
+		Lock lock(*this, Lock::BLOCK_OR_BORROW);
+		ProductionAttachment *attachment = nullptr;
+		RenderingDevice *device = nullptr;
+		const Error err = production_attachment_locked(p_attachment, true, attachment, device);
+		if (err != OK) {
+			return err;
+		}
+		if (!device || device != main_rd) {
+			return ERR_UNAVAILABLE;
+		}
+		if (!attachment->scene_registration || attachment->scene_closed ||
+				attachment->scene_config.phase != SCENE_PHASE_BEFORE_PARTICLES) {
+			return ERR_UNAUTHORIZED;
+		}
+	}
+
+	return collision_scene->request_viewport_depth_snapshot(
+			RID::from_uint64(p_input.viewport_rid),
+			p_input.slab_thickness_m,
+			p_input.silhouette_jump_m);
+}
+
+Error Registry::scene_depth_snapshot_borrow(
+		ProductionPhysicalContextRef p_context,
+		GDExtensionProductionRequestRefV1 p_request,
+		uint64_t p_action_ordinal,
+		RID p_viewport,
+		const GDExtensionSceneOperationKeyV1 &p_key,
+		GDExtensionSceneDepthSnapshotBorrowResultV1 &r_out) {
+	r_out = {};
+	r_out.abi = { 1u, uint32_t(sizeof(r_out)), 0u };
+	r_out.outcome.abi = { 1u, uint32_t(sizeof(r_out.outcome)), 0u };
+	auto fail = [&](Error p_err) {
+		r_out.outcome.native_error = p_err;
+		return p_err;
+	};
+
+	if (p_viewport.is_null()) {
+		return fail(ERR_INVALID_PARAMETER);
+	}
+	const Error env_err = validate_scene_operation_key_envelope(p_key);
+	if (env_err != OK) {
+		return fail(env_err);
+	}
+
+	RenderingDevice *main_rd = RenderingDevice::get_singleton();
+	RendererRD::ParticlesCollisionSceneRD *collision_scene = RendererRD::ParticlesCollisionSceneRD::get_for_device(main_rd);
+	if (!main_rd || !main_rd->is_main_instance || !collision_scene || !collision_scene->is_initialized()) {
+		return fail(ERR_UNAVAILABLE);
+	}
+
+	GDExtensionSceneOpaque32V1 expected_dev_cap = {};
+	Ref<RendererRD::ParticlesCollisionSceneRD::DepthReadLease> lease;
+	GDExtensionSceneOpaque32V1 sample_token = {};
+	bool already_decided = false;
+	{
+		Lock lock(*this, Lock::BLOCK_OR_BORROW);
+		ProductionRequest *request = nullptr;
+		RenderingDevice *device = nullptr;
+		const Error err = production_physical_request_locked(p_context, p_request, request, device, false);
+		if (err != OK) {
+			return fail(err);
+		}
+		if (!device || device != main_rd) {
+			return fail(ERR_UNAVAILABLE);
+		}
+		if (!request->attachment->scene_registration || request->attachment->scene_closed ||
+				request->attachment->scene_config.phase != SCENE_PHASE_BEFORE_PARTICLES) {
+			return fail(ERR_UNAUTHORIZED);
+		}
+		if (p_action_ordinal >= request->action_count) {
+			return fail(ERR_INVALID_DATA);
+		}
+		const auto &action = request->actions[p_action_ordinal];
+		if (!action.scene_key_bound || memcmp(&action.scene_key, &p_key, sizeof(p_key)) != 0) {
+			return fail(ERR_INVALID_DATA);
+		}
+		if (action.original_append.state != CheckedRecordAppend::State::Rejected) {
+			already_decided = true;
+		} else {
+			expected_dev_cap = request->attachment->scene_config.device_capability;
+			if (action.scene_attempt.content.is_valid() &&
+					scene_phase_word(action.scene_attempt.sample, 0) == SCENE_DEPTH_SNAPSHOT_SAMPLE_KIND) {
+				lease = Ref<RendererRD::ParticlesCollisionSceneRD::DepthReadLease>(
+						static_cast<RendererRD::ParticlesCollisionSceneRD::DepthReadLease *>(action.scene_attempt.content.ptr()));
+				sample_token = action.scene_attempt.sample;
+			}
+		}
+	}
+
+	if (already_decided) {
+		return scene_phase_borrow(p_context, p_request, p_action_ordinal, p_key, {}, Ref<SceneReadContent>(), r_out.outcome);
+	}
+
+	bool newly_acquired = false;
+	if (lease.is_null()) {
+		const Error acq_err = collision_scene->acquire_depth_snapshot_read_lease(
+				p_viewport, lease, sample_token, &expected_dev_cap);
+		if (acq_err != OK) {
+			return fail(acq_err);
+		}
+		newly_acquired = true;
+	}
+
+	const Error borrow_err = scene_phase_borrow(
+			p_context, p_request, p_action_ordinal, p_key, sample_token, lease, r_out.outcome);
+	if (borrow_err != OK || r_out.outcome.outcome != 1u) {
+		if (newly_acquired && lease.is_valid()) {
+			lease->return_after_reads();
+			lease.unref();
+		}
+		return borrow_err;
+	}
+
+	Ref<RendererRD::ParticlesCollisionSceneRD::DepthSnapshotGeneration> gen = lease->get_generation();
+	if (gen.is_null()) {
+		return fail(ERR_UNAVAILABLE);
+	}
+	r_out.sample_token = sample_token;
+	r_out.meta_ssbo_rid = gen->meta_buffer.get_id();
+	r_out.depth_texture_rid = gen->depth_texture.get_id();
+	r_out.snapshot_generation = gen->meta.snapshot_generation;
+	r_out.width = gen->meta.width;
+	r_out.height = gen->meta.height;
+	r_out.flags = gen->meta.flags;
+	r_out.reserved = 0u;
+	return OK;
 }
 
 bool has_active_late_transparent_depth_phase(const RenderingDevice *p_device, RID p_viewport) {

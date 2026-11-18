@@ -3840,6 +3840,28 @@ typedef struct {
 	uint32_t exterior_mask[32];
 } GDExtensionMaterialQualificationFixedOracleV1;
 
+/* Input DTO arming per-viewport post-opaque Reverse-Z R32_SFLOAT depth snapshot capture on the main RenderingDevice. */
+typedef struct {
+	GDExtensionDeviceExitAbi abi;
+	uint64_t viewport_rid;
+	float slab_thickness_m;
+	float silhouette_jump_m;
+} GDExtensionSceneDepthSnapshotArmV1;
+
+/* Output DTO returned when borrowing a pre-transparent Reverse-Z R32_SFLOAT scene depth snapshot lease inside SCENE_PHASE_BEFORE_PARTICLES. */
+typedef struct {
+	GDExtensionDeviceExitAbi abi;
+	GDExtensionSceneReadOutcomeV1 outcome;
+	GDExtensionSceneOpaque32V1 sample_token;
+	uint64_t meta_ssbo_rid;
+	uint64_t depth_texture_rid;
+	uint64_t snapshot_generation;
+	uint32_t width;
+	uint32_t height;
+	uint32_t flags;
+	uint32_t reserved;
+} GDExtensionSceneDepthSnapshotBorrowResultV1;
+
 /**
  * @name get_godot_version
  * @since 4.1
@@ -9696,6 +9718,36 @@ typedef GDExtensionDeviceSessionResultV1 (*GDExtensionInterfaceDeviceSessionProd
  * @param out_result Aligned writable V2 result, left untouched when either DTO extent is invalid or overlaps the other.
  */
 typedef void (*GDExtensionInterfaceDeviceSessionOutputAcquireV2)(GDExtensionProductionPhysicalContextRefV1 physical_context, GDExtensionProductionRequestRefV1 request, uint64_t action_ordinal, const GDExtensionOutputAcquireInputV1 *input, GDExtensionOutputAcquireResultV2 *out_result);
+
+/**
+ * @name device_session_scene_depth_snapshot_arm_v1
+ * @since 4.7
+ *
+ * Arm per-viewport post-opaque Reverse-Z R32_SFLOAT depth snapshot capture on the main RenderingDevice for a SCENE_PHASE_BEFORE_PARTICLES attachment.
+ *
+ * @param attachment Original accepted production attachment registered for SCENE_PHASE_BEFORE_PARTICLES on the main RenderingDevice.
+ * @param input Aligned readable arm input specifying the target viewport RID and viewport diagnostic defaults.
+ *
+ * @return Structured native result; returns ERR_UNAVAILABLE on non-RD or uninitialized backends.
+ */
+typedef GDExtensionDeviceSessionResultV1 (*GDExtensionInterfaceDeviceSessionSceneDepthSnapshotArmV1)(GDExtensionProductionAttachmentRefV1 attachment, const GDExtensionSceneDepthSnapshotArmV1 *input);
+
+/**
+ * @name device_session_scene_depth_snapshot_borrow_v1
+ * @since 4.7
+ *
+ * Borrow a RefCounted pre-transparent Reverse-Z R32_SFLOAT scene depth snapshot lease for viewport_rid inside SCENE_PHASE_BEFORE_PARTICLES physical execution, binding automatic return_after_reads() retention onto the paid request action.
+ *
+ * @param context Actual protected SCENE_PHASE_BEFORE_PARTICLES physical execution context.
+ * @param request Original live production request owned by this attachment.
+ * @param action_ordinal Original action index within the retained request.
+ * @param viewport_rid Target renderer viewport RID whose pre-transparent depth snapshot is borrowed.
+ * @param key Immutable 200-byte original scene operation key bound to action_ordinal.
+ * @param out Aligned writable result populated with outcome, sample_token, meta_ssbo_rid, depth_texture_rid, snapshot_generation, width, height, and flags.
+ *
+ * @return Structured native result; returns ERR_UNAVAILABLE on non-RD or uninitialized backends.
+ */
+typedef GDExtensionDeviceSessionResultV1 (*GDExtensionInterfaceDeviceSessionSceneDepthSnapshotBorrowV1)(GDExtensionProductionPhysicalContextRefV1 context, GDExtensionProductionRequestRefV1 request, uint64_t action_ordinal, uint64_t viewport_rid, const GDExtensionSceneOperationKeyV1 *key, GDExtensionSceneDepthSnapshotBorrowResultV1 *out);
 
 #ifdef __cplusplus
 }

@@ -38,6 +38,7 @@
 #include "servers/rendering/renderer_rd/shaders/decal_data_inc.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/light_data_inc.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/scene_data_inc.glsl.gen.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_collision_scene_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_data_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
@@ -2063,10 +2064,126 @@ RendererSceneRenderRD::~RendererSceneRenderRD() {
 	cull_argument.reset(); //avoid exit error
 }
 
+void RendererSceneRenderRD::capture_particle_scene_depth_snapshot(RD *p_rd, const RenderDataRD *p_render_data, bool p_is_reflection_probe) {
+	if (!p_rd || !p_render_data || p_is_reflection_probe || p_render_data->render_buffers.is_null() || !copy_effects) {
+		return;
+	}
+	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
+	const uint32_t view_count = p_render_data->scene_data ? MAX(p_render_data->scene_data->view_count, 1u) : MAX(rb->get_view_count(), 1u);
+	if (view_count != 1u) {
+		return;
+	}
+	RendererRD::ParticlesStorage *ps = RendererRD::ParticlesStorage::get_singleton();
+	RendererRD::ParticlesCollisionSceneRD *collision_scene = ps ? ps->get_collision_scene_rd() : nullptr;
+	if (!collision_scene) {
+		return;
+	}
+
+	RID viewport = p_render_data->source_viewport.is_valid()
+			? p_render_data->source_viewport
+			: (p_render_data->get_native_camera_source().is_valid() ? p_render_data->get_native_camera_source()->get_viewport() : RID());
+	if (viewport.is_null() && rb->get_render_target().is_valid()) {
+		viewport = collision_scene->find_viewport_by_render_target(rb->get_render_target());
+	}
+	if (viewport.is_null()) {
+		return;
+	}
+
+	const uint64_t frame_number = RSG::rasterizer ? RSG::rasterizer->get_frame_number() : 0u;
+	if (!collision_scene->has_pending_depth_snapshot_request(viewport, frame_number)) {
+		return;
+	}
+
+	const Size2i internal_size = rb->get_internal_size();
+	if (internal_size.x < 2 || internal_size.y < 2) {
+		return;
+	}
+
+	RID src_depth;
+	if (rb->has_texture(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH)) {
+		src_depth = rb->get_texture_slice(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH, 0u, 0u);
+	} else if (rb->has_depth_texture()) {
+		src_depth = rb->get_depth_texture(0u);
+	}
+	if (src_depth.is_null()) {
+		return;
+	}
+
+	const RD::TextureFormat src_fmt = p_rd->texture_get_format(src_depth);
+	RID temp_depth_slice;
+	if (src_fmt.format == RD::DATA_FORMAT_D32_SFLOAT_S8_UINT ||
+			src_fmt.format == RD::DATA_FORMAT_D24_UNORM_S8_UINT ||
+			src_fmt.format == RD::DATA_FORMAT_D16_UNORM_S8_UINT ||
+			src_fmt.texture_type != RD::TEXTURE_TYPE_2D ||
+			src_fmt.array_layers > 1u) {
+		temp_depth_slice = p_rd->texture_create_shared_from_slice(RD::TextureView(), src_depth, 0u, 0u, 1u, RD::TEXTURE_SLICE_2D);
+		if (temp_depth_slice.is_null()) {
+			return;
+		}
+	}
+	const RID src_depth_view = temp_depth_slice.is_valid() ? temp_depth_slice : src_depth;
+
+	Ref<RendererRD::ParticlesCollisionSceneRD::DepthSnapshotGeneration> dst_gen;
+	if (collision_scene->prepare_viewport_depth_snapshot_target(
+				viewport,
+				uint32_t(internal_size.x),
+				uint32_t(internal_size.y),
+				rb->get_render_target(),
+				dst_gen) != OK ||
+			dst_gen.is_null()) {
+		if (temp_depth_slice.is_valid()) {
+			p_rd->free_rid(temp_depth_slice);
+		}
+		return;
+	}
+
+	copy_effects->copy_to_fb_rect(
+			src_depth_view,
+			dst_gen->framebuffer_rid,
+			Rect2i(0, 0, internal_size.x, internal_size.y),
+			false,
+			false,
+			false,
+			false,
+			RID(),
+			false,
+			false,
+			/*p_linear=*/false,
+			false,
+			Rect2(),
+			1.0f,
+			/*p_bilinear_filtering=*/false);
+
+	if (temp_depth_slice.is_valid()) {
+		p_rd->free_rid(temp_depth_slice);
+	}
+
+	Transform3D cam_transform;
+	Projection cam_projection;
+	float z_near = 0.0f;
+	float z_far = 0.0f;
+	if (p_render_data->scene_data) {
+		cam_transform = p_render_data->scene_data->cam_transform;
+		cam_projection = p_render_data->scene_data->get_cam_projection();
+		z_near = p_render_data->scene_data->z_near;
+		z_far = p_render_data->scene_data->z_far;
+	}
+	(void)collision_scene->finalize_viewport_depth_snapshot_target(
+			viewport,
+			dst_gen,
+			cam_transform,
+			cam_projection,
+			z_near,
+			z_far,
+			frame_number,
+			rb->get_render_target());
+}
+
 void RendererSceneRenderRD::dispatch_late_particle_collision_phase(RD *p_rd, const RenderDataRD *p_render_data, bool p_is_reflection_probe) {
 	if (!p_rd || !p_render_data || p_is_reflection_probe || p_render_data->render_buffers.is_null()) {
 		return;
 	}
+	capture_particle_scene_depth_snapshot(p_rd, p_render_data, p_is_reflection_probe);
 	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
 	RID readable_depth;
 	if (rb->has_texture(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH)) {

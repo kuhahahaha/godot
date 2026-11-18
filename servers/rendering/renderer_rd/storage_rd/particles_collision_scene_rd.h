@@ -37,10 +37,12 @@
 #include "core/object/ref_counted.h"
 #include "core/os/mutex.h"
 #include "core/os/thread.h"
+#include "core/templates/hash_map.h"
 #include "core/templates/local_vector.h"
 #include "core/templates/rid.h"
 #include "core/templates/safe_refcount.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 
@@ -128,6 +130,28 @@ struct SceneCurrentDepthMeta256 {
 	uint32_t view_count = 1;
 };
 
+struct alignas(16) SceneDepthSnapshotMeta256 {
+	static constexpr uint32_t MAGIC = 0x4b303644u; // "K06D"
+	static constexpr uint32_t VERSION = 2u;
+	static constexpr uint32_t FLAG_PRESENT = 1u;
+	static constexpr uint32_t FLAG_REVERSE_Z = 2u;
+
+	uint32_t magic = MAGIC;
+	uint32_t version = VERSION;
+	uint32_t width = 0u;
+	uint32_t height = 0u;
+	uint64_t snapshot_generation = 0ull;
+	uint64_t view_id = 0ull;
+	float world_to_clip[16] = {};
+	float clip_to_world[16] = {};
+	float view_to_world[16] = {};
+	float z_near = 0.05f;
+	float slab_thickness_m = 0.50f;
+	float silhouette_jump_m = 0.50f;
+	uint32_t flags = FLAG_REVERSE_Z;
+	uint32_t reserved[4] = { 0u, 0u, 0u, 0u };
+};
+
 struct SceneSdfMeta256 {
 	uint32_t magic = 0x4b303656u; // "K06V"
 	uint32_t version = 1;
@@ -152,6 +176,16 @@ static_assert(std::is_standard_layout_v<SceneSphereRecord32> && sizeof(SceneSphe
 static_assert(std::is_standard_layout_v<SceneSphereMeta208> && sizeof(SceneSphereMeta208) == 208);
 static_assert(std::is_standard_layout_v<SceneHeightMeta352> && sizeof(SceneHeightMeta352) == 352);
 static_assert(std::is_standard_layout_v<SceneCurrentDepthMeta256> && sizeof(SceneCurrentDepthMeta256) == 256);
+static_assert(std::is_standard_layout_v<SceneDepthSnapshotMeta256> && std::is_trivially_copyable_v<SceneDepthSnapshotMeta256>);
+static_assert(sizeof(SceneDepthSnapshotMeta256) == 256 && alignof(SceneDepthSnapshotMeta256) == 16);
+static_assert(offsetof(SceneDepthSnapshotMeta256, world_to_clip) == 32);
+static_assert(offsetof(SceneDepthSnapshotMeta256, clip_to_world) == 96);
+static_assert(offsetof(SceneDepthSnapshotMeta256, view_to_world) == 160);
+static_assert(offsetof(SceneDepthSnapshotMeta256, z_near) == 224);
+static_assert(offsetof(SceneDepthSnapshotMeta256, slab_thickness_m) == 228);
+static_assert(offsetof(SceneDepthSnapshotMeta256, silhouette_jump_m) == 232);
+static_assert(offsetof(SceneDepthSnapshotMeta256, flags) == 236);
+static_assert(offsetof(SceneDepthSnapshotMeta256, reserved) == 240);
 static_assert(std::is_standard_layout_v<SceneSdfMeta256> && sizeof(SceneSdfMeta256) == 256);
 
 struct CollisionContactResult {
@@ -171,6 +205,7 @@ public:
 	class LiveDeviceGuard : public RefCounted {
 	public:
 		SafeNumeric<uint64_t> rd_addr{ 0 };
+		SafeNumeric<uint64_t> owner_addr{ 0 };
 		Thread::ID owner_thread_id = 0;
 
 		void set_device(RenderingDevice *p_rd) {
@@ -178,6 +213,12 @@ public:
 		}
 		RenderingDevice *get_device() const {
 			return reinterpret_cast<RenderingDevice *>(uintptr_t(rd_addr.get()));
+		}
+		void set_owner(ParticlesCollisionSceneRD *p_owner) {
+			owner_addr.set(uint64_t(uintptr_t(p_owner)));
+		}
+		ParticlesCollisionSceneRD *get_owner() const {
+			return reinterpret_cast<ParticlesCollisionSceneRD *>(uintptr_t(owner_addr.get()));
 		}
 	};
 
@@ -218,7 +259,70 @@ public:
 		const GDExtensionSceneOpaque32V1 &get_sample_token() const { return expected_sample; }
 	};
 
+	class DepthSnapshotGeneration : public RefCounted {
+	public:
+		RenderingDevice *rd = nullptr;
+		Ref<LiveDeviceGuard> device_guard;
+		SafeNumeric<uint32_t> *live_rids = nullptr;
+		SafeNumeric<uint32_t> *fb_first_frees = nullptr;
+		SafeNumeric<uint32_t> active_leases{ 0 };
+		RID meta_buffer;
+		RID depth_texture;
+		RID framebuffer_rid;
+		uint32_t texture_width = 0;
+		uint32_t texture_height = 0;
+		SceneDepthSnapshotMeta256 meta;
+
+		~DepthSnapshotGeneration() override;
+		Error allocate_gpu_resources(uint32_t p_tex_width, uint32_t p_tex_height, bool p_simulate_fb_fail = false);
+		Error upload_metadata();
+		void release_gpu_resources();
+	};
+
+	class DepthReadLease : public GDExtensionDeviceExit::SceneReadContent {
+		GDExtensionSceneOpaque32V1 expected_device = {};
+		GDExtensionSceneOpaque32V1 expected_sample = {};
+		Ref<DepthSnapshotGeneration> generation;
+		SafeNumeric<uint32_t> *active_leases = nullptr;
+		Ref<LiveDeviceGuard> device_guard;
+		bool returned = false;
+
+	public:
+		DepthReadLease(
+				const GDExtensionSceneOpaque32V1 &p_device,
+				const GDExtensionSceneOpaque32V1 &p_sample,
+				const Ref<DepthSnapshotGeneration> &p_generation,
+				SafeNumeric<uint32_t> *p_active_leases,
+				const Ref<LiveDeviceGuard> &p_device_guard);
+		~DepthReadLease() override;
+
+		Error validate(const GDExtensionSceneOpaque32V1 &p_device, const GDExtensionSceneOpaque32V1 &p_sample) const override;
+		Error return_after_reads() override;
+
+		bool is_returned() const { return returned; }
+		Ref<DepthSnapshotGeneration> get_generation() const { return returned ? Ref<DepthSnapshotGeneration>() : generation; }
+		const GDExtensionSceneOpaque32V1 &get_sample_token() const { return expected_sample; }
+	};
+
 private:
+	struct ViewportDepthSlot {
+		RID viewport;
+		RID render_target;
+		Ref<DepthSnapshotGeneration> current_snapshot;
+		Ref<DepthSnapshotGeneration> unpopulated_sentinel;
+		float default_slab_thickness_m = 0.50f;
+		float default_silhouette_jump_m = 0.50f;
+		uint64_t last_captured_frame = 0;
+		bool has_captured_frame = false;
+		bool pending_capture = false;
+	};
+
+	struct StandaloneNearestCopyPipeline {
+		RID sampler;
+		RID shader;
+		RID pipeline;
+	};
+
 	mutable Mutex snapshot_mutex;
 	RenderingDevice *device = nullptr;
 	Ref<LiveDeviceGuard> live_device_guard;
@@ -226,22 +330,90 @@ private:
 	uint64_t next_snapshot_generation = 1;
 	uint64_t scene_epoch = 1;
 	Ref<SphereSnapshot> current_sphere_snapshot;
+	HashMap<uint64_t, ViewportDepthSlot> depth_snapshots_by_viewport;
+	LocalVector<Ref<DepthSnapshotGeneration>> retired_depth_snapshots;
+	StandaloneNearestCopyPipeline standalone_copy;
 	SafeNumeric<uint32_t> active_lease_counter{ 0 };
 	SafeNumeric<uint32_t> live_rid_counter{ 0 };
+	SafeNumeric<uint32_t> fb_first_free_counter{ 0 };
+	SafeNumeric<uint32_t> simulate_fb_fail_once{ 0 };
+
+	void reap_retired_depth_snapshots_locked(LocalVector<Ref<DepthSnapshotGeneration>> &r_to_release);
+	Error ensure_standalone_nearest_copy_pipeline(RenderingDevice *p_rd, int64_t p_fb_format);
+	void release_standalone_nearest_copy_pipeline(RenderingDevice *p_rd);
 
 public:
 	ParticlesCollisionSceneRD() = default;
 	~ParticlesCollisionSceneRD();
 
+	static ParticlesCollisionSceneRD *get_for_device(const RenderingDevice *p_device);
+
 	void initialize(RenderingDevice *p_device, const GDExtensionSceneOpaque32V1 &p_device_capability);
 	void shutdown();
+
+	bool is_initialized() const;
+	RenderingDevice *get_device() const;
 
 	Error update_sphere_colliders(const LocalVector<SceneSphereRecord32> &p_colliders, const Vector3 &p_bounds_min, const Vector3 &p_bounds_max);
 	Error acquire_sphere_read_lease(Ref<SphereReadLease> &r_lease, GDExtensionSceneOpaque32V1 &r_sample_token);
 
+	Error request_viewport_depth_snapshot(RID p_viewport, float p_slab_thickness_m = 0.50f, float p_silhouette_jump_m = 0.50f);
+	bool has_pending_depth_snapshot_request(RID p_viewport, uint64_t p_frame_number) const;
+	RID find_viewport_by_render_target(RID p_render_target);
+	bool has_viewport_depth_snapshot(RID p_viewport) const;
+	uint32_t get_retired_depth_snapshot_count() const;
+	uint32_t get_fb_first_free_count() const { return fb_first_free_counter.get(); }
+	void set_simulate_framebuffer_create_failure_once(bool p_enable) { simulate_fb_fail_once.set(p_enable ? 1u : 0u); }
+
+	Error acquire_depth_snapshot_read_lease(
+			RID p_viewport,
+			Ref<DepthReadLease> &r_lease,
+			GDExtensionSceneOpaque32V1 &r_sample_token,
+			const GDExtensionSceneOpaque32V1 *p_expected_device_override = nullptr);
+
+	Error prepare_viewport_depth_snapshot_target(
+			RID p_viewport,
+			uint32_t p_width,
+			uint32_t p_height,
+			RID p_render_target,
+			Ref<DepthSnapshotGeneration> &r_target_gen);
+	Error finalize_viewport_depth_snapshot_target(
+			RID p_viewport,
+			const Ref<DepthSnapshotGeneration> &p_target_gen,
+			const Transform3D &p_cam_transform,
+			const Projection &p_cam_projection,
+			float p_z_near,
+			float p_z_far,
+			uint64_t p_frame_number,
+			RID p_render_target = RID());
+	Error capture_viewport_depth_snapshot(
+			RID p_viewport,
+			RID p_src_depth_texture,
+			uint32_t p_width,
+			uint32_t p_height,
+			const Transform3D &p_cam_transform,
+			const Projection &p_cam_projection,
+			float p_z_near,
+			float p_z_far,
+			uint64_t p_frame_number,
+			RID p_render_target = RID(),
+			uint32_t p_view_count = 1u,
+			bool p_is_reflection_probe = false);
+
+	void invalidate_viewport_depth_snapshot(RID p_viewport, bool p_preserve_armed_request = false);
+	void invalidate_render_target_depth_snapshot(RID p_render_target, bool p_preserve_armed_request = false);
+	void reap_retired_depth_snapshots();
+
 	uint32_t get_active_lease_count() const { return active_lease_counter.get(); }
 	uint32_t get_live_rid_count() const { return live_rid_counter.get(); }
 	uint64_t get_current_snapshot_generation() const;
+
+	static void fill_depth_snapshot_matrices(
+			const Transform3D &p_cam_transform,
+			const Projection &p_cam_projection,
+			float p_z_near,
+			float p_z_far,
+			SceneDepthSnapshotMeta256 &r_meta);
 
 	// Deterministic reference/GPU-parity kernels for K06 collision & SDF sources:
 	static CollisionContactResult evaluate_sphere_collision(
@@ -268,6 +440,18 @@ public:
 			const Vector3 &p_velocity,
 			float p_particle_radius,
 			float p_dt);
+
+	static CollisionContactResult evaluate_depth_snapshot_v2_collision(
+			const SceneDepthSnapshotMeta256 &p_meta,
+			const LocalVector<float> &p_depth_texels,
+			const Vector3 &p_position,
+			const Vector3 &p_velocity,
+			float p_particle_radius,
+			float p_dt,
+			float p_restitution = 0.5f,
+			float p_friction = 0.1f,
+			float p_slab_thickness_override_m = -1.0f,
+			float p_silhouette_jump_override_m = -1.0f);
 
 	static CollisionContactResult evaluate_sdf_3d_collision(
 			const SceneSdfMeta256 &p_meta,

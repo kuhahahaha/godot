@@ -30,8 +30,14 @@
 
 #include "particles_collision_scene_rd.h"
 
+#include "core/extension/gdextension_scene_late_depth.h"
 #include "core/extension/gdextension_scene_phase_bind.h"
+#include "core/math/vector4.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/rendering_device.h"
+#include "servers/rendering/rendering_server.h"
+#include "servers/rendering/rendering_server_globals.h"
 
 #include <cmath>
 #include <cstring>
@@ -41,6 +47,26 @@ namespace RendererRD {
 namespace {
 
 constexpr uint64_t SCENE_SPHERE_SAMPLE_KIND = 0x4b30365350485231ull; // "K06SPHR1"
+
+Mutex g_live_collision_scenes_mutex;
+LocalVector<ParticlesCollisionSceneRD *> g_live_collision_scenes;
+
+Vector4 mat4_mul_vec4_col_major(const float p_m[16], const Vector4 &p_v) {
+	return Vector4(
+			p_m[0] * p_v.x + p_m[4] * p_v.y + p_m[8] * p_v.z + p_m[12] * p_v.w,
+			p_m[1] * p_v.x + p_m[5] * p_v.y + p_m[9] * p_v.z + p_m[13] * p_v.w,
+			p_m[2] * p_v.x + p_m[6] * p_v.y + p_m[10] * p_v.z + p_m[14] * p_v.w,
+			p_m[3] * p_v.x + p_m[7] * p_v.y + p_m[11] * p_v.z + p_m[15] * p_v.w);
+}
+
+Transform3D transform_from_col_major_mat4(const float p_m[16]) {
+	Transform3D xf;
+	xf.basis.set_column(0, Vector3(p_m[0], p_m[1], p_m[2]));
+	xf.basis.set_column(1, Vector3(p_m[4], p_m[5], p_m[6]));
+	xf.basis.set_column(2, Vector3(p_m[8], p_m[9], p_m[10]));
+	xf.origin = Vector3(p_m[12], p_m[13], p_m[14]);
+	return xf;
+}
 
 Vector3 sanitize_vec3(const Vector3 &p_v, const Vector3 &p_fallback = Vector3()) {
 	if (Math::is_finite(p_v.x) && Math::is_finite(p_v.y) && Math::is_finite(p_v.z)) {
@@ -231,40 +257,890 @@ Error ParticlesCollisionSceneRD::SphereReadLease::return_after_reads() {
 	return OK;
 }
 
+ParticlesCollisionSceneRD::DepthSnapshotGeneration::~DepthSnapshotGeneration() {
+	release_gpu_resources();
+}
+
+Error ParticlesCollisionSceneRD::DepthSnapshotGeneration::allocate_gpu_resources(
+		uint32_t p_tex_width,
+		uint32_t p_tex_height,
+		bool p_simulate_fb_fail) {
+	if (!rd || p_tex_width == 0u || p_tex_height == 0u || p_tex_width > 16384u || p_tex_height > 16384u) {
+		return ERR_INVALID_PARAMETER;
+	}
+	release_gpu_resources();
+
+	Vector<uint8_t> meta_bytes;
+	meta_bytes.resize(sizeof(SceneDepthSnapshotMeta256));
+	memcpy(meta_bytes.ptrw(), &meta, sizeof(SceneDepthSnapshotMeta256));
+	meta_buffer = rd->storage_buffer_create(sizeof(SceneDepthSnapshotMeta256), meta_bytes);
+	if (meta_buffer.is_null()) {
+		return ERR_CANT_CREATE;
+	}
+	if (live_rids) {
+		live_rids->increment();
+	}
+
+	RD::TextureFormat tf;
+	tf.format = RD::DATA_FORMAT_R32_SFLOAT;
+	tf.width = p_tex_width;
+	tf.height = p_tex_height;
+	tf.depth = 1u;
+	tf.array_layers = 1u;
+	tf.mipmaps = 1u;
+	tf.texture_type = RD::TEXTURE_TYPE_2D;
+	tf.samples = RD::TEXTURE_SAMPLES_1;
+	uint32_t usage = RD::TEXTURE_USAGE_SAMPLING_BIT |
+			RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT |
+			RD::TEXTURE_USAGE_STORAGE_BIT |
+			RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT |
+			RD::TEXTURE_USAGE_CAN_COPY_TO_BIT;
+	if (!rd->texture_is_format_supported_for_usage(RD::DATA_FORMAT_R32_SFLOAT, usage)) {
+		usage &= ~uint32_t(RD::TEXTURE_USAGE_STORAGE_BIT);
+	}
+	tf.usage_bits = usage;
+
+	Vector<Vector<uint8_t>> init_data;
+	if (p_tex_width == 1u && p_tex_height == 1u) {
+		Vector<uint8_t> zero_texel;
+		zero_texel.resize(sizeof(float));
+		memset(zero_texel.ptrw(), 0, sizeof(float));
+		init_data.push_back(zero_texel);
+	}
+	depth_texture = rd->texture_create(tf, RD::TextureView(), init_data);
+	if (depth_texture.is_null()) {
+		release_gpu_resources();
+		return ERR_CANT_CREATE;
+	}
+	if (live_rids) {
+		live_rids->increment();
+	}
+
+	if (!p_simulate_fb_fail) {
+		Vector<RID> fb_attachments;
+		fb_attachments.push_back(depth_texture);
+		framebuffer_rid = rd->framebuffer_create(fb_attachments);
+	}
+	if (framebuffer_rid.is_null()) {
+		release_gpu_resources();
+		return ERR_CANT_CREATE;
+	}
+	if (live_rids) {
+		live_rids->increment();
+	}
+
+	texture_width = p_tex_width;
+	texture_height = p_tex_height;
+	return OK;
+}
+
+Error ParticlesCollisionSceneRD::DepthSnapshotGeneration::upload_metadata() {
+	if (!rd || meta_buffer.is_null()) {
+		return ERR_UNCONFIGURED;
+	}
+	return rd->buffer_update(meta_buffer, 0, sizeof(SceneDepthSnapshotMeta256), &meta);
+}
+
+static bool is_on_device_owner_thread(const RenderingDevice *p_rd, const ParticlesCollisionSceneRD::LiveDeviceGuard *p_guard) {
+	if (p_rd && RenderingServer::get_singleton() != nullptr &&
+			RenderingServer::get_singleton()->get_rendering_device() == p_rd) {
+		return RenderingServer::get_singleton()->is_on_render_thread();
+	}
+	if (p_guard && p_guard->owner_thread_id != 0) {
+		return Thread::get_caller_id() == p_guard->owner_thread_id;
+	}
+	return true;
+}
+
+void ParticlesCollisionSceneRD::DepthSnapshotGeneration::release_gpu_resources() {
+	if (!framebuffer_rid.is_valid() && !depth_texture.is_valid() && !meta_buffer.is_valid()) {
+		return;
+	}
+	RenderingDevice *live_rd = device_guard.is_valid() ? device_guard->get_device() : rd;
+	if (!live_rd) {
+		framebuffer_rid = RID();
+		depth_texture = RID();
+		meta_buffer = RID();
+		return;
+	}
+	ERR_FAIL_COND_MSG(!is_on_device_owner_thread(live_rd, device_guard.ptr()),
+			"ParticlesCollisionSceneRD::DepthSnapshotGeneration::release_gpu_resources must run on the owning render thread.");
+	// Strict RD disposal order: free framebuffer_rid BEFORE depth_texture and meta_buffer.
+	if (framebuffer_rid.is_valid()) {
+		const bool tex_still_live = depth_texture.is_valid() && live_rd->texture_is_valid(depth_texture);
+		live_rd->free_rid(framebuffer_rid);
+		framebuffer_rid = RID();
+		if (live_rids) {
+			live_rids->decrement();
+		}
+		if (tex_still_live && fb_first_frees) {
+			fb_first_frees->increment();
+		}
+	}
+	if (depth_texture.is_valid()) {
+		live_rd->free_rid(depth_texture);
+		depth_texture = RID();
+		if (live_rids) {
+			live_rids->decrement();
+		}
+	}
+	if (meta_buffer.is_valid()) {
+		live_rd->free_rid(meta_buffer);
+		meta_buffer = RID();
+		if (live_rids) {
+			live_rids->decrement();
+		}
+	}
+}
+
+ParticlesCollisionSceneRD::DepthReadLease::DepthReadLease(
+		const GDExtensionSceneOpaque32V1 &p_device,
+		const GDExtensionSceneOpaque32V1 &p_sample,
+		const Ref<DepthSnapshotGeneration> &p_generation,
+		SafeNumeric<uint32_t> *p_active_leases,
+		const Ref<LiveDeviceGuard> &p_device_guard) :
+		expected_device(p_device),
+		expected_sample(p_sample),
+		generation(p_generation),
+		active_leases(p_active_leases),
+		device_guard(p_device_guard) {
+	if (generation.is_valid()) {
+		generation->active_leases.increment();
+	}
+	if (active_leases) {
+		active_leases->increment();
+	}
+}
+
+ParticlesCollisionSceneRD::DepthReadLease::~DepthReadLease() {
+	if (!returned) {
+		return_after_reads();
+	}
+}
+
+Error ParticlesCollisionSceneRD::DepthReadLease::validate(
+		const GDExtensionSceneOpaque32V1 &p_device,
+		const GDExtensionSceneOpaque32V1 &p_sample) const {
+	if (returned || generation.is_null()) {
+		return ERR_UNAVAILABLE;
+	}
+	if (GDExtensionDeviceExit::scene_opaque32_is_zero(p_device) || GDExtensionDeviceExit::scene_opaque32_is_zero(p_sample)) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (!GDExtensionDeviceExit::scene_opaque32_equal(p_device, expected_device) ||
+			!GDExtensionDeviceExit::scene_opaque32_equal(p_sample, expected_sample)) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (generation->meta_buffer.is_null() || generation->depth_texture.is_null()) {
+		return ERR_INVALID_DATA;
+	}
+	return OK;
+}
+
+Error ParticlesCollisionSceneRD::DepthReadLease::return_after_reads() {
+	if (!returned) {
+		returned = true;
+		if (generation.is_valid()) {
+			generation->active_leases.decrement();
+			generation.unref();
+		}
+		if (active_leases) {
+			active_leases->decrement();
+		}
+		if (device_guard.is_valid()) {
+			RenderingDevice *live_rd = device_guard->get_device();
+			if (live_rd && is_on_device_owner_thread(live_rd, device_guard.ptr())) {
+				if (ParticlesCollisionSceneRD *owner = device_guard->get_owner()) {
+					owner->reap_retired_depth_snapshots();
+				}
+			}
+		}
+	}
+	return OK;
+}
+
+ParticlesCollisionSceneRD *ParticlesCollisionSceneRD::get_for_device(const RenderingDevice *p_device) {
+	if (!p_device) {
+		return nullptr;
+	}
+	if (ParticlesStorage *ps = ParticlesStorage::get_singleton()) {
+		ParticlesCollisionSceneRD *cs = ps->get_collision_scene_rd();
+		if (cs && cs->get_device() == p_device) {
+			return cs;
+		}
+	}
+	MutexLock lock(g_live_collision_scenes_mutex);
+	for (uint32_t i = 0; i < g_live_collision_scenes.size(); ++i) {
+		ParticlesCollisionSceneRD *candidate = g_live_collision_scenes[i];
+		if (candidate && candidate->get_device() == p_device) {
+			return candidate;
+		}
+	}
+	return nullptr;
+}
+
 ParticlesCollisionSceneRD::~ParticlesCollisionSceneRD() {
 	shutdown();
 }
 
 void ParticlesCollisionSceneRD::initialize(RenderingDevice *p_device, const GDExtensionSceneOpaque32V1 &p_device_capability) {
 	shutdown();
-	MutexLock lock(snapshot_mutex);
-	device = p_device;
-	live_device_guard.instantiate();
-	live_device_guard->set_device(p_device);
-	live_device_guard->owner_thread_id = p_device ? Thread::get_caller_id() : 0;
-	device_capability = p_device_capability;
-	next_snapshot_generation = 1;
-	scene_epoch = 1;
+	{
+		MutexLock lock(snapshot_mutex);
+		device = p_device;
+		live_device_guard.instantiate();
+		live_device_guard->set_device(p_device);
+		live_device_guard->set_owner(p_device ? this : nullptr);
+		live_device_guard->owner_thread_id = p_device ? Thread::get_caller_id() : 0;
+		device_capability = p_device_capability;
+		next_snapshot_generation = 1;
+		scene_epoch = 1;
+	}
+	if (p_device) {
+		MutexLock reg_lock(g_live_collision_scenes_mutex);
+		if (!g_live_collision_scenes.has(this)) {
+			g_live_collision_scenes.push_back(this);
+		}
+	}
 }
 
 void ParticlesCollisionSceneRD::shutdown() {
+	{
+		MutexLock reg_lock(g_live_collision_scenes_mutex);
+		g_live_collision_scenes.erase(this);
+	}
+
 	Ref<SphereSnapshot> snap_to_drop;
+	LocalVector<Ref<DepthSnapshotGeneration>> depth_to_drop;
 	Ref<LiveDeviceGuard> guard_to_retire;
+	RenderingDevice *rd_to_clean = nullptr;
+	StandaloneNearestCopyPipeline copy_to_clean;
 	{
 		MutexLock lock(snapshot_mutex);
 		snap_to_drop = current_sphere_snapshot;
 		current_sphere_snapshot.unref();
+		for (KeyValue<uint64_t, ViewportDepthSlot> &kv : depth_snapshots_by_viewport) {
+			if (kv.value.current_snapshot.is_valid()) {
+				depth_to_drop.push_back(kv.value.current_snapshot);
+			}
+			if (kv.value.unpopulated_sentinel.is_valid()) {
+				depth_to_drop.push_back(kv.value.unpopulated_sentinel);
+			}
+		}
+		depth_snapshots_by_viewport.clear();
+		for (uint32_t i = 0; i < retired_depth_snapshots.size(); ++i) {
+			if (retired_depth_snapshots[i].is_valid()) {
+				depth_to_drop.push_back(retired_depth_snapshots[i]);
+			}
+		}
+		retired_depth_snapshots.clear();
+		copy_to_clean = standalone_copy;
+		standalone_copy = StandaloneNearestCopyPipeline();
+		rd_to_clean = device;
 		guard_to_retire = live_device_guard;
 		live_device_guard.unref();
 		device = nullptr;
 		device_capability = {};
 	}
-	if (snap_to_drop.is_valid() && guard_to_retire.is_valid() && guard_to_retire->owner_thread_id == Thread::get_caller_id()) {
-		snap_to_drop->release_gpu_resources();
+	const bool on_owner_thread = is_on_device_owner_thread(rd_to_clean, guard_to_retire.ptr());
+	if (guard_to_retire.is_valid()) {
+		guard_to_retire->set_owner(nullptr);
+	}
+	if (on_owner_thread) {
+		if (snap_to_drop.is_valid()) {
+			snap_to_drop->release_gpu_resources();
+		}
+		for (uint32_t i = 0; i < depth_to_drop.size(); ++i) {
+			depth_to_drop[i]->release_gpu_resources();
+		}
+		if (rd_to_clean) {
+			if (copy_to_clean.pipeline.is_valid()) {
+				rd_to_clean->free_rid(copy_to_clean.pipeline);
+			}
+			if (copy_to_clean.shader.is_valid()) {
+				rd_to_clean->free_rid(copy_to_clean.shader);
+			}
+			if (copy_to_clean.sampler.is_valid()) {
+				rd_to_clean->free_rid(copy_to_clean.sampler);
+			}
+		}
 	}
 	snap_to_drop.unref();
+	depth_to_drop.clear();
 	if (guard_to_retire.is_valid()) {
 		guard_to_retire->set_device(nullptr);
+	}
+}
+
+bool ParticlesCollisionSceneRD::is_initialized() const {
+	MutexLock lock(snapshot_mutex);
+	return device != nullptr && !GDExtensionDeviceExit::scene_opaque32_is_zero(device_capability);
+}
+
+RenderingDevice *ParticlesCollisionSceneRD::get_device() const {
+	MutexLock lock(snapshot_mutex);
+	return device;
+}
+
+void ParticlesCollisionSceneRD::reap_retired_depth_snapshots_locked(LocalVector<Ref<DepthSnapshotGeneration>> &r_to_release) {
+	uint32_t write_idx = 0;
+	for (uint32_t i = 0; i < retired_depth_snapshots.size(); ++i) {
+		Ref<DepthSnapshotGeneration> &gen = retired_depth_snapshots[i];
+		if (gen.is_null()) {
+			continue;
+		}
+		if (gen->active_leases.get() == 0u) {
+			r_to_release.push_back(gen);
+		} else {
+			if (write_idx != i) {
+				retired_depth_snapshots[write_idx] = gen;
+			}
+			++write_idx;
+		}
+	}
+	retired_depth_snapshots.resize(write_idx);
+}
+
+void ParticlesCollisionSceneRD::reap_retired_depth_snapshots() {
+	LocalVector<Ref<DepthSnapshotGeneration>> to_release;
+	bool can_release_gpu = false;
+	{
+		MutexLock lock(snapshot_mutex);
+		reap_retired_depth_snapshots_locked(to_release);
+		can_release_gpu = device != nullptr && live_device_guard.is_valid() && live_device_guard->owner_thread_id == Thread::get_caller_id();
+	}
+	if (can_release_gpu) {
+		for (uint32_t i = 0; i < to_release.size(); ++i) {
+			to_release[i]->release_gpu_resources();
+		}
+	}
+	to_release.clear();
+}
+
+Error ParticlesCollisionSceneRD::request_viewport_depth_snapshot(
+		RID p_viewport,
+		float p_slab_thickness_m,
+		float p_silhouette_jump_m) {
+	if (p_viewport.is_null() || !Math::is_finite(p_slab_thickness_m) || !Math::is_finite(p_silhouette_jump_m) ||
+			p_slab_thickness_m < 0.0f || p_silhouette_jump_m < 0.0f) {
+		return ERR_INVALID_PARAMETER;
+	}
+	MutexLock lock(snapshot_mutex);
+	if (!device || GDExtensionDeviceExit::scene_opaque32_is_zero(device_capability)) {
+		return ERR_UNAVAILABLE;
+	}
+	ViewportDepthSlot &slot = depth_snapshots_by_viewport[p_viewport.get_id()];
+	slot.viewport = p_viewport;
+	slot.default_slab_thickness_m = (p_slab_thickness_m > 0.0f) ? p_slab_thickness_m : 0.50f;
+	slot.default_silhouette_jump_m = (p_silhouette_jump_m > 0.0f) ? p_silhouette_jump_m : 0.50f;
+	slot.pending_capture = true;
+	if (slot.render_target.is_null() && is_on_device_owner_thread(device, live_device_guard.ptr()) &&
+			RSG::viewport != nullptr && RSG::viewport->viewport_owner.owns(p_viewport)) {
+		slot.render_target = RSG::viewport->viewport_get_render_target(p_viewport);
+	}
+	return OK;
+}
+
+bool ParticlesCollisionSceneRD::has_pending_depth_snapshot_request(RID p_viewport, uint64_t p_frame_number) const {
+	(void)p_frame_number;
+	if (p_viewport.is_null()) {
+		return false;
+	}
+	MutexLock lock(snapshot_mutex);
+	if (!device) {
+		return false;
+	}
+	const ViewportDepthSlot *slot = depth_snapshots_by_viewport.getptr(p_viewport.get_id());
+	return slot != nullptr && slot->pending_capture;
+}
+
+RID ParticlesCollisionSceneRD::find_viewport_by_render_target(RID p_render_target) {
+	if (p_render_target.is_null()) {
+		return RID();
+	}
+	MutexLock lock(snapshot_mutex);
+	if (!device) {
+		return RID();
+	}
+	const bool can_query_vp = is_on_device_owner_thread(device, live_device_guard.ptr()) && RSG::viewport != nullptr;
+	for (KeyValue<uint64_t, ViewportDepthSlot> &kv : depth_snapshots_by_viewport) {
+		if (kv.value.render_target.is_null() && can_query_vp && kv.value.viewport.is_valid() &&
+				RSG::viewport->viewport_owner.owns(kv.value.viewport)) {
+			kv.value.render_target = RSG::viewport->viewport_get_render_target(kv.value.viewport);
+		}
+		if (kv.value.render_target == p_render_target && kv.value.viewport.is_valid()) {
+			return kv.value.viewport;
+		}
+	}
+	return RID();
+}
+
+bool ParticlesCollisionSceneRD::has_viewport_depth_snapshot(RID p_viewport) const {
+	if (p_viewport.is_null()) {
+		return false;
+	}
+	MutexLock lock(snapshot_mutex);
+	return depth_snapshots_by_viewport.has(p_viewport.get_id());
+}
+
+uint32_t ParticlesCollisionSceneRD::get_retired_depth_snapshot_count() const {
+	MutexLock lock(snapshot_mutex);
+	return retired_depth_snapshots.size();
+}
+
+Error ParticlesCollisionSceneRD::acquire_depth_snapshot_read_lease(
+		RID p_viewport,
+		Ref<DepthReadLease> &r_lease,
+		GDExtensionSceneOpaque32V1 &r_sample_token,
+		const GDExtensionSceneOpaque32V1 *p_expected_device_override) {
+	r_lease.unref();
+	r_sample_token = {};
+	if (p_viewport.is_null()) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	LocalVector<Ref<DepthSnapshotGeneration>> to_release;
+	Error result_err = OK;
+	{
+		MutexLock lock(snapshot_mutex);
+		if (!device || GDExtensionDeviceExit::scene_opaque32_is_zero(device_capability)) {
+			return ERR_UNAVAILABLE;
+		}
+		if (!is_on_device_owner_thread(device, live_device_guard.ptr())) {
+			return ERR_UNAUTHORIZED;
+		}
+		reap_retired_depth_snapshots_locked(to_release);
+
+		ViewportDepthSlot &slot = depth_snapshots_by_viewport[p_viewport.get_id()];
+		slot.viewport = p_viewport;
+		slot.pending_capture = true;
+		if (slot.render_target.is_null() && RSG::viewport != nullptr && RSG::viewport->viewport_owner.owns(p_viewport)) {
+			slot.render_target = RSG::viewport->viewport_get_render_target(p_viewport);
+		}
+
+		Ref<DepthSnapshotGeneration> chosen_gen = slot.current_snapshot;
+		if (chosen_gen.is_null()) {
+			if (slot.unpopulated_sentinel.is_null()) {
+				Ref<DepthSnapshotGeneration> sentinel;
+				sentinel.instantiate();
+				sentinel->rd = device;
+				sentinel->device_guard = live_device_guard;
+				sentinel->live_rids = &live_rid_counter;
+				sentinel->fb_first_frees = &fb_first_free_counter;
+				sentinel->meta = SceneDepthSnapshotMeta256();
+				sentinel->meta.magic = SceneDepthSnapshotMeta256::MAGIC;
+				sentinel->meta.version = SceneDepthSnapshotMeta256::VERSION;
+				sentinel->meta.width = 0u;
+				sentinel->meta.height = 0u;
+				sentinel->meta.snapshot_generation = 0ull;
+				sentinel->meta.view_id = p_viewport.get_id();
+				sentinel->meta.slab_thickness_m = slot.default_slab_thickness_m;
+				sentinel->meta.silhouette_jump_m = slot.default_silhouette_jump_m;
+				sentinel->meta.flags = SceneDepthSnapshotMeta256::FLAG_REVERSE_Z;
+
+				const bool sim_fail = (simulate_fb_fail_once.get() != 0u);
+				if (sim_fail) {
+					simulate_fb_fail_once.set(0u);
+				}
+				result_err = sentinel->allocate_gpu_resources(1u, 1u, sim_fail);
+				if (result_err == OK) {
+					slot.unpopulated_sentinel = sentinel;
+				}
+			}
+			chosen_gen = slot.unpopulated_sentinel;
+		}
+
+		if (result_err == OK && chosen_gen.is_valid()) {
+			const GDExtensionSceneOpaque32V1 expected_dev =
+					(p_expected_device_override && !GDExtensionDeviceExit::scene_opaque32_is_zero(*p_expected_device_override))
+					? *p_expected_device_override
+					: device_capability;
+			r_sample_token = GDExtensionDeviceExit::make_scene_depth_snapshot_sample_token(
+					p_viewport.get_id(),
+					chosen_gen->meta.snapshot_generation,
+					chosen_gen->meta.width,
+					chosen_gen->meta.height);
+			r_lease.instantiate(expected_dev, r_sample_token, chosen_gen, &active_lease_counter, live_device_guard);
+		} else if (result_err == OK) {
+			result_err = ERR_CANT_CREATE;
+		}
+	}
+
+	for (uint32_t i = 0; i < to_release.size(); ++i) {
+		to_release[i]->release_gpu_resources();
+	}
+	return result_err;
+}
+
+Error ParticlesCollisionSceneRD::prepare_viewport_depth_snapshot_target(
+		RID p_viewport,
+		uint32_t p_width,
+		uint32_t p_height,
+		RID p_render_target,
+		Ref<DepthSnapshotGeneration> &r_target_gen) {
+	r_target_gen.unref();
+	if (p_viewport.is_null() || p_width < 2u || p_height < 2u || p_width > 16384u || p_height > 16384u) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	LocalVector<Ref<DepthSnapshotGeneration>> to_release;
+	Error result_err = OK;
+	{
+		MutexLock lock(snapshot_mutex);
+		if (!device || GDExtensionDeviceExit::scene_opaque32_is_zero(device_capability)) {
+			return ERR_UNAVAILABLE;
+		}
+		if (!is_on_device_owner_thread(device, live_device_guard.ptr())) {
+			return ERR_UNAUTHORIZED;
+		}
+		reap_retired_depth_snapshots_locked(to_release);
+
+		ViewportDepthSlot &slot = depth_snapshots_by_viewport[p_viewport.get_id()];
+		slot.viewport = p_viewport;
+		if (p_render_target.is_valid()) {
+			slot.render_target = p_render_target;
+		}
+
+		const bool sim_fail = (simulate_fb_fail_once.get() != 0u);
+		if (!sim_fail && slot.current_snapshot.is_valid() &&
+				slot.current_snapshot->active_leases.get() == 0u &&
+				slot.current_snapshot->texture_width == p_width &&
+				slot.current_snapshot->texture_height == p_height &&
+				slot.current_snapshot->framebuffer_rid.is_valid()) {
+			r_target_gen = slot.current_snapshot;
+		} else {
+			if (sim_fail) {
+				simulate_fb_fail_once.set(0u);
+			}
+			Ref<DepthSnapshotGeneration> next_gen;
+			next_gen.instantiate();
+			next_gen->rd = device;
+			next_gen->device_guard = live_device_guard;
+			next_gen->live_rids = &live_rid_counter;
+			next_gen->fb_first_frees = &fb_first_free_counter;
+			next_gen->meta = SceneDepthSnapshotMeta256();
+			next_gen->meta.view_id = p_viewport.get_id();
+			next_gen->meta.slab_thickness_m = slot.default_slab_thickness_m;
+			next_gen->meta.silhouette_jump_m = slot.default_silhouette_jump_m;
+			result_err = next_gen->allocate_gpu_resources(p_width, p_height, sim_fail);
+			if (result_err == OK) {
+				r_target_gen = next_gen;
+			}
+		}
+	}
+
+	for (uint32_t i = 0; i < to_release.size(); ++i) {
+		to_release[i]->release_gpu_resources();
+	}
+	return result_err;
+}
+
+Error ParticlesCollisionSceneRD::finalize_viewport_depth_snapshot_target(
+		RID p_viewport,
+		const Ref<DepthSnapshotGeneration> &p_target_gen,
+		const Transform3D &p_cam_transform,
+		const Projection &p_cam_projection,
+		float p_z_near,
+		float p_z_far,
+		uint64_t p_frame_number,
+		RID p_render_target) {
+	if (p_viewport.is_null() || p_target_gen.is_null()) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	LocalVector<Ref<DepthSnapshotGeneration>> to_release;
+	Error result_err = OK;
+	{
+		MutexLock lock(snapshot_mutex);
+		if (!device || GDExtensionDeviceExit::scene_opaque32_is_zero(device_capability)) {
+			return ERR_UNAVAILABLE;
+		}
+		if (!is_on_device_owner_thread(device, live_device_guard.ptr())) {
+			return ERR_UNAUTHORIZED;
+		}
+		reap_retired_depth_snapshots_locked(to_release);
+
+		ViewportDepthSlot &slot = depth_snapshots_by_viewport[p_viewport.get_id()];
+		slot.viewport = p_viewport;
+		if (p_render_target.is_valid()) {
+			slot.render_target = p_render_target;
+		}
+
+		SceneDepthSnapshotMeta256 meta;
+		meta.magic = SceneDepthSnapshotMeta256::MAGIC;
+		meta.version = SceneDepthSnapshotMeta256::VERSION;
+		meta.width = p_target_gen->texture_width;
+		meta.height = p_target_gen->texture_height;
+		meta.snapshot_generation = next_snapshot_generation++;
+		meta.view_id = p_viewport.get_id();
+		meta.slab_thickness_m = slot.default_slab_thickness_m;
+		meta.silhouette_jump_m = slot.default_silhouette_jump_m;
+		fill_depth_snapshot_matrices(p_cam_transform, p_cam_projection, p_z_near, p_z_far, meta);
+		if ((meta.flags & SceneDepthSnapshotMeta256::FLAG_PRESENT) == 0u) {
+			meta.width = 0u;
+			meta.height = 0u;
+		}
+
+		p_target_gen->meta = meta;
+		result_err = p_target_gen->upload_metadata();
+		if (result_err == OK) {
+			if (slot.current_snapshot.is_valid() && slot.current_snapshot != p_target_gen) {
+				if (slot.current_snapshot->active_leases.get() > 0u) {
+					retired_depth_snapshots.push_back(slot.current_snapshot);
+				} else {
+					to_release.push_back(slot.current_snapshot);
+				}
+			}
+			if (slot.unpopulated_sentinel.is_valid()) {
+				if (slot.unpopulated_sentinel->active_leases.get() > 0u) {
+					retired_depth_snapshots.push_back(slot.unpopulated_sentinel);
+				} else {
+					to_release.push_back(slot.unpopulated_sentinel);
+				}
+				slot.unpopulated_sentinel.unref();
+			}
+			slot.current_snapshot = p_target_gen;
+			slot.last_captured_frame = p_frame_number;
+			slot.has_captured_frame = true;
+			slot.pending_capture = false;
+		}
+	}
+
+	for (uint32_t i = 0; i < to_release.size(); ++i) {
+		to_release[i]->release_gpu_resources();
+	}
+	return result_err;
+}
+
+Error ParticlesCollisionSceneRD::ensure_standalone_nearest_copy_pipeline(RenderingDevice *p_rd, int64_t p_fb_format) {
+	if (!p_rd) {
+		return ERR_UNAVAILABLE;
+	}
+	if (standalone_copy.pipeline.is_valid() && standalone_copy.shader.is_valid() && standalone_copy.sampler.is_valid()) {
+		return OK;
+	}
+	if (standalone_copy.sampler.is_null()) {
+		RD::SamplerState samp;
+		samp.mag_filter = RD::SAMPLER_FILTER_NEAREST;
+		samp.min_filter = RD::SAMPLER_FILTER_NEAREST;
+		samp.mip_filter = RD::SAMPLER_FILTER_NEAREST;
+		samp.repeat_u = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+		samp.repeat_v = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+		samp.repeat_w = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+		standalone_copy.sampler = p_rd->sampler_create(samp);
+		if (standalone_copy.sampler.is_null()) {
+			return ERR_CANT_CREATE;
+		}
+	}
+	if (standalone_copy.shader.is_null()) {
+		static constexpr const char *kVertGlsl =
+				"#version 450\n"
+				"layout(location = 0) out vec2 v_uv;\n"
+				"void main() {\n"
+				"	vec2 pos = (gl_VertexIndex == 0) ? vec2(-1.0, -1.0) : ((gl_VertexIndex == 1) ? vec2(3.0, -1.0) : vec2(-1.0, 3.0));\n"
+				"	v_uv = pos * 0.5 + 0.5;\n"
+				"	gl_Position = vec4(pos, 0.0, 1.0);\n"
+				"}\n";
+		static constexpr const char *kFragGlsl =
+				"#version 450\n"
+				"layout(location = 0) in vec2 v_uv;\n"
+				"layout(set = 0, binding = 0) uniform sampler2D u_src_depth;\n"
+				"layout(location = 0) out float o_depth;\n"
+				"void main() {\n"
+				"	o_depth = textureLod(u_src_depth, v_uv, 0.0).r;\n"
+				"}\n";
+		String err_msg;
+		RD::ShaderStageSPIRVData vs;
+		vs.shader_stage = RD::SHADER_STAGE_VERTEX;
+		vs.spirv = p_rd->shader_compile_spirv_from_source(RD::SHADER_STAGE_VERTEX, String::utf8(kVertGlsl), RD::SHADER_LANGUAGE_GLSL, &err_msg, false);
+		if (vs.spirv.is_empty()) {
+			return ERR_COMPILATION_FAILED;
+		}
+		RD::ShaderStageSPIRVData fs;
+		fs.shader_stage = RD::SHADER_STAGE_FRAGMENT;
+		fs.spirv = p_rd->shader_compile_spirv_from_source(RD::SHADER_STAGE_FRAGMENT, String::utf8(kFragGlsl), RD::SHADER_LANGUAGE_GLSL, &err_msg, false);
+		if (fs.spirv.is_empty()) {
+			return ERR_COMPILATION_FAILED;
+		}
+		Vector<RD::ShaderStageSPIRVData> stages;
+		stages.push_back(vs);
+		stages.push_back(fs);
+		standalone_copy.shader = p_rd->shader_create_from_spirv(stages);
+		if (standalone_copy.shader.is_null()) {
+			return ERR_CANT_CREATE;
+		}
+	}
+	RD::PipelineColorBlendState bs;
+	bs.attachments.push_back(RD::PipelineColorBlendState::Attachment());
+	standalone_copy.pipeline = p_rd->render_pipeline_create(
+			standalone_copy.shader,
+			p_fb_format,
+			RD::INVALID_ID,
+			RD::RENDER_PRIMITIVE_TRIANGLES,
+			RD::PipelineRasterizationState(),
+			RD::PipelineMultisampleState(),
+			RD::PipelineDepthStencilState(),
+			bs);
+	return standalone_copy.pipeline.is_valid() ? OK : ERR_CANT_CREATE;
+}
+
+Error ParticlesCollisionSceneRD::capture_viewport_depth_snapshot(
+		RID p_viewport,
+		RID p_src_depth_texture,
+		uint32_t p_width,
+		uint32_t p_height,
+		const Transform3D &p_cam_transform,
+		const Projection &p_cam_projection,
+		float p_z_near,
+		float p_z_far,
+		uint64_t p_frame_number,
+		RID p_render_target,
+		uint32_t p_view_count,
+		bool p_is_reflection_probe) {
+	RenderingDevice *live_rd = nullptr;
+	{
+		MutexLock lock(snapshot_mutex);
+		if (!device || GDExtensionDeviceExit::scene_opaque32_is_zero(device_capability)) {
+			return ERR_UNAVAILABLE;
+		}
+		if (!is_on_device_owner_thread(device, live_device_guard.ptr())) {
+			return ERR_UNAUTHORIZED;
+		}
+		live_rd = device;
+	}
+	if (p_is_reflection_probe || p_view_count != 1u) {
+		return OK;
+	}
+	if (p_viewport.is_null() || p_src_depth_texture.is_null() || p_width < 2u || p_height < 2u) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	Ref<DepthSnapshotGeneration> target_gen;
+	Error err = prepare_viewport_depth_snapshot_target(p_viewport, p_width, p_height, p_render_target, target_gen);
+	if (err != OK) {
+		return err;
+	}
+
+	const RD::TextureFormat src_fmt = live_rd->texture_get_format(p_src_depth_texture);
+	const bool needs_depth_slice = (src_fmt.format == RD::DATA_FORMAT_D32_SFLOAT_S8_UINT ||
+			src_fmt.format == RD::DATA_FORMAT_D24_UNORM_S8_UINT ||
+			src_fmt.format == RD::DATA_FORMAT_D16_UNORM_S8_UINT ||
+			src_fmt.texture_type != RD::TEXTURE_TYPE_2D ||
+			src_fmt.array_layers > 1u);
+	RID temp_slice;
+	if (needs_depth_slice) {
+		temp_slice = live_rd->texture_create_shared_from_slice(RD::TextureView(), p_src_depth_texture, 0u, 0u, 1u, RD::TEXTURE_SLICE_2D);
+		if (temp_slice.is_null()) {
+			return ERR_CANT_CREATE;
+		}
+	}
+	const RID sample_tex = temp_slice.is_valid() ? temp_slice : p_src_depth_texture;
+
+	{
+		MutexLock lock(snapshot_mutex);
+		err = ensure_standalone_nearest_copy_pipeline(live_rd, live_rd->framebuffer_get_format(target_gen->framebuffer_rid));
+	}
+	if (err != OK) {
+		if (temp_slice.is_valid()) {
+			live_rd->free_rid(temp_slice);
+		}
+		return err;
+	}
+
+	RD::Uniform u_src;
+	u_src.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+	u_src.binding = 0;
+	u_src.append_id(standalone_copy.sampler);
+	u_src.append_id(sample_tex);
+	Vector<RD::Uniform> uniforms;
+	uniforms.push_back(u_src);
+	const RID uniform_set = live_rd->uniform_set_create(uniforms, standalone_copy.shader, 0u);
+	if (uniform_set.is_null()) {
+		if (temp_slice.is_valid()) {
+			live_rd->free_rid(temp_slice);
+		}
+		return ERR_CANT_CREATE;
+	}
+
+	const RD::DrawListID dl = live_rd->draw_list_begin(target_gen->framebuffer_rid, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 1.0f, 0u, Rect2i(0, 0, int(p_width), int(p_height)));
+	live_rd->draw_list_bind_render_pipeline(dl, standalone_copy.pipeline);
+	live_rd->draw_list_bind_uniform_set(dl, uniform_set, 0u);
+	live_rd->draw_list_draw(dl, false, 1u, 3u);
+	live_rd->draw_list_end();
+
+	live_rd->free_rid(uniform_set);
+	if (temp_slice.is_valid()) {
+		live_rd->free_rid(temp_slice);
+	}
+
+	return finalize_viewport_depth_snapshot_target(
+			p_viewport, target_gen, p_cam_transform, p_cam_projection, p_z_near, p_z_far, p_frame_number, p_render_target);
+}
+
+void ParticlesCollisionSceneRD::invalidate_viewport_depth_snapshot(RID p_viewport, bool p_preserve_armed_request) {
+	if (p_viewport.is_null()) {
+		return;
+	}
+	LocalVector<Ref<DepthSnapshotGeneration>> to_release;
+	bool can_release_gpu = false;
+	{
+		MutexLock lock(snapshot_mutex);
+		can_release_gpu = device != nullptr && is_on_device_owner_thread(device, live_device_guard.ptr());
+		if (can_release_gpu) {
+			reap_retired_depth_snapshots_locked(to_release);
+		}
+		ViewportDepthSlot *slot = depth_snapshots_by_viewport.getptr(p_viewport.get_id());
+		if (slot) {
+			if (slot->current_snapshot.is_valid()) {
+				if (slot->current_snapshot->active_leases.get() > 0u || !can_release_gpu) {
+					retired_depth_snapshots.push_back(slot->current_snapshot);
+				} else {
+					to_release.push_back(slot->current_snapshot);
+				}
+				slot->current_snapshot.unref();
+			}
+			const bool keep_armed_slot = p_preserve_armed_request && slot->pending_capture;
+			if (!keep_armed_slot) {
+				if (slot->unpopulated_sentinel.is_valid()) {
+					if (slot->unpopulated_sentinel->active_leases.get() > 0u || !can_release_gpu) {
+						retired_depth_snapshots.push_back(slot->unpopulated_sentinel);
+					} else {
+						to_release.push_back(slot->unpopulated_sentinel);
+					}
+					slot->unpopulated_sentinel.unref();
+				}
+				depth_snapshots_by_viewport.erase(p_viewport.get_id());
+			}
+		}
+	}
+	if (can_release_gpu) {
+		for (uint32_t i = 0; i < to_release.size(); ++i) {
+			to_release[i]->release_gpu_resources();
+		}
+	}
+	to_release.clear();
+}
+
+void ParticlesCollisionSceneRD::invalidate_render_target_depth_snapshot(RID p_render_target, bool p_preserve_armed_request) {
+	if (p_render_target.is_null()) {
+		return;
+	}
+	LocalVector<RID> matching_viewports;
+	{
+		MutexLock lock(snapshot_mutex);
+		const bool can_query_vp = device != nullptr && is_on_device_owner_thread(device, live_device_guard.ptr()) && RSG::viewport != nullptr;
+		for (KeyValue<uint64_t, ViewportDepthSlot> &kv : depth_snapshots_by_viewport) {
+			if (kv.value.render_target.is_null() && can_query_vp && kv.value.viewport.is_valid() &&
+					RSG::viewport->viewport_owner.owns(kv.value.viewport)) {
+				kv.value.render_target = RSG::viewport->viewport_get_render_target(kv.value.viewport);
+			}
+			if (kv.value.render_target == p_render_target && kv.value.viewport.is_valid()) {
+				matching_viewports.push_back(kv.value.viewport);
+			}
+		}
+	}
+	for (uint32_t i = 0; i < matching_viewports.size(); ++i) {
+		invalidate_viewport_depth_snapshot(matching_viewports[i], p_preserve_armed_request);
 	}
 }
 
@@ -847,6 +1723,296 @@ CollisionContactResult ParticlesCollisionSceneRD::evaluate_sdf_3d_collision(
 	out.contact_point = candidate - world_normal * signed_dist;
 	out.post_position = candidate + world_normal * penetration;
 	out.post_velocity = apply_bounce_and_friction(p_velocity, world_normal, p_meta.restitution, p_meta.friction);
+	return out;
+}
+
+void ParticlesCollisionSceneRD::fill_depth_snapshot_matrices(
+		const Transform3D &p_cam_transform,
+		const Projection &p_cam_projection,
+		float p_z_near,
+		float p_z_far,
+		SceneDepthSnapshotMeta256 &r_meta) {
+	r_meta.magic = SceneDepthSnapshotMeta256::MAGIC;
+	r_meta.version = SceneDepthSnapshotMeta256::VERSION;
+	r_meta.z_near = p_z_near;
+	if (!Math::is_finite(r_meta.slab_thickness_m) || r_meta.slab_thickness_m <= 0.0f) {
+		r_meta.slab_thickness_m = 0.50f;
+	}
+	if (!Math::is_finite(r_meta.silhouette_jump_m) || r_meta.silhouette_jump_m <= 0.0f) {
+		r_meta.silhouette_jump_m = 0.50f;
+	}
+	for (int i = 0; i < 4; ++i) {
+		r_meta.reserved[i] = 0u;
+	}
+
+	bool valid = Math::is_finite(p_z_near) && Math::is_finite(p_z_far) &&
+			(p_z_near > 0.0f) && (p_z_far > p_z_near) &&
+			transform_is_finite(p_cam_transform);
+	if (valid) {
+		for (int c = 0; c < 4; ++c) {
+			for (int r = 0; r < 4; ++r) {
+				if (!Math::is_finite(p_cam_projection.columns[c][r])) {
+					valid = false;
+					break;
+				}
+			}
+			if (!valid) {
+				break;
+			}
+		}
+		if (valid) {
+			const real_t proj_det = p_cam_projection.determinant();
+			if (!Math::is_finite(proj_det) || Math::abs(proj_det) <= real_t(1e-20)) {
+				valid = false;
+			}
+		}
+	}
+
+	if (!valid) {
+		memset(r_meta.world_to_clip, 0, sizeof(r_meta.world_to_clip));
+		memset(r_meta.clip_to_world, 0, sizeof(r_meta.clip_to_world));
+		memset(r_meta.view_to_world, 0, sizeof(r_meta.view_to_world));
+		r_meta.flags = SceneDepthSnapshotMeta256::FLAG_REVERSE_Z;
+		return;
+	}
+
+	const Projection view_from_world(p_cam_transform.affine_inverse());
+	const Projection world_to_clip = p_cam_projection * view_from_world;
+	const Projection inv_projection = p_cam_projection.inverse();
+	const Projection view_to_world_proj(p_cam_transform);
+	const Projection clip_to_world = view_to_world_proj * inv_projection;
+
+	bool all_finite = true;
+	for (int c = 0; c < 4; ++c) {
+		for (int r = 0; r < 4; ++r) {
+			const int idx = c * 4 + r;
+			r_meta.world_to_clip[idx] = float(world_to_clip.columns[c][r]);
+			r_meta.clip_to_world[idx] = float(clip_to_world.columns[c][r]);
+			r_meta.view_to_world[idx] = float(view_to_world_proj.columns[c][r]);
+			if (!Math::is_finite(r_meta.world_to_clip[idx]) ||
+					!Math::is_finite(r_meta.clip_to_world[idx]) ||
+					!Math::is_finite(r_meta.view_to_world[idx])) {
+				all_finite = false;
+			}
+		}
+	}
+
+	if (!all_finite) {
+		memset(r_meta.world_to_clip, 0, sizeof(r_meta.world_to_clip));
+		memset(r_meta.clip_to_world, 0, sizeof(r_meta.clip_to_world));
+		memset(r_meta.view_to_world, 0, sizeof(r_meta.view_to_world));
+		r_meta.flags = SceneDepthSnapshotMeta256::FLAG_REVERSE_Z;
+		return;
+	}
+
+	r_meta.flags = SceneDepthSnapshotMeta256::FLAG_PRESENT | SceneDepthSnapshotMeta256::FLAG_REVERSE_Z;
+}
+
+CollisionContactResult ParticlesCollisionSceneRD::evaluate_depth_snapshot_v2_collision(
+		const SceneDepthSnapshotMeta256 &p_meta,
+		const LocalVector<float> &p_depth_texels,
+		const Vector3 &p_position,
+		const Vector3 &p_velocity,
+		float p_particle_radius,
+		float p_dt,
+		float p_restitution,
+		float p_friction,
+		float p_slab_thickness_override_m,
+		float p_silhouette_jump_override_m) {
+	CollisionContactResult out;
+	if (!vec3_is_finite(p_position) || !vec3_is_finite(p_velocity) ||
+			!Math::is_finite(p_particle_radius) || !Math::is_finite(p_dt)) {
+		out.post_position = sanitize_vec3(p_position);
+		out.post_velocity = sanitize_vec3(p_velocity);
+		return out;
+	}
+	const float safe_particle_radius = MAX(0.0f, p_particle_radius);
+	const Vector3 candidate = p_position + p_velocity * p_dt;
+	if (!vec3_is_finite(candidate)) {
+		out.post_position = p_position;
+		out.post_velocity = p_velocity;
+		return out;
+	}
+	out.post_position = candidate;
+	out.post_velocity = p_velocity;
+
+	if (p_meta.magic != SceneDepthSnapshotMeta256::MAGIC ||
+			p_meta.version != SceneDepthSnapshotMeta256::VERSION ||
+			(p_meta.flags & ~3u) != 0u ||
+			(p_meta.flags & SceneDepthSnapshotMeta256::FLAG_PRESENT) == 0u ||
+			p_meta.width < 2u || p_meta.height < 2u ||
+			p_meta.width > 16384u || p_meta.height > 16384u ||
+			p_depth_texels.size() < uint64_t(p_meta.width) * uint64_t(p_meta.height) ||
+			!Math::is_finite(p_meta.z_near) || !(p_meta.z_near > 0.0f)) {
+		return out;
+	}
+
+	for (int i = 0; i < 16; ++i) {
+		if (!Math::is_finite(p_meta.world_to_clip[i]) ||
+				!Math::is_finite(p_meta.clip_to_world[i]) ||
+				!Math::is_finite(p_meta.view_to_world[i])) {
+			return out;
+		}
+	}
+
+	const Transform3D view_to_world_xf = transform_from_col_major_mat4(p_meta.view_to_world);
+	if (!transform_is_finite(view_to_world_xf)) {
+		return out;
+	}
+
+	const float slab_m = (Math::is_finite(p_slab_thickness_override_m) && p_slab_thickness_override_m >= 0.0f)
+			? p_slab_thickness_override_m
+			: p_meta.slab_thickness_m;
+	const float sil_m = (Math::is_finite(p_silhouette_jump_override_m) && p_silhouette_jump_override_m >= 0.0f)
+			? p_silhouette_jump_override_m
+			: p_meta.silhouette_jump_m;
+	if (!Math::is_finite(slab_m) || !(slab_m >= 0.0f) || !Math::is_finite(sil_m) || !(sil_m >= 0.0f)) {
+		return out;
+	}
+
+	const Transform3D world_to_view_xf = view_to_world_xf.affine_inverse();
+	const Vector3 cand_view = world_to_view_xf.xform(candidate);
+	if (!vec3_is_finite(cand_view)) {
+		return out;
+	}
+	const float particle_linear_z = -cand_view.z;
+	if (!(particle_linear_z > p_meta.z_near)) {
+		return out;
+	}
+
+	const Vector4 clip = mat4_mul_vec4_col_major(p_meta.world_to_clip, Vector4(candidate.x, candidate.y, candidate.z, 1.0f));
+	if (!Math::is_finite(clip.x) || !Math::is_finite(clip.y) || !Math::is_finite(clip.z) ||
+			!Math::is_finite(clip.w) || !(clip.w > 1e-6f)) {
+		return out;
+	}
+	const float ndc_x = clip.x / clip.w;
+	const float ndc_y = clip.y / clip.w;
+	const float u = ndc_x * 0.5f + 0.5f;
+	const float v = ndc_y * 0.5f + 0.5f;
+	if (!(u >= 0.0f && u <= 1.0f && v >= 0.0f && v <= 1.0f)) {
+		return out;
+	}
+
+	const int px = CLAMP(int(u * float(p_meta.width)), 0, int(p_meta.width) - 1);
+	const int py = CLAMP(int(v * float(p_meta.height)), 0, int(p_meta.height) - 1);
+	auto fetch_texel = [&](int x, int y) -> float {
+		const int cx = CLAMP(x, 0, int(p_meta.width) - 1);
+		const int cy = CLAMP(y, 0, int(p_meta.height) - 1);
+		return p_depth_texels[uint32_t(cy) * p_meta.width + uint32_t(cx)];
+	};
+
+	const bool reverse_z = (p_meta.flags & SceneDepthSnapshotMeta256::FLAG_REVERSE_Z) != 0u;
+	auto is_empty_depth_texel = [&](float raw_d) -> bool {
+		if (!Math::is_finite(raw_d)) {
+			return true;
+		}
+		return reverse_z ? (raw_d <= 1e-7f || raw_d > 1.0f) : (raw_d >= 1.0f - 1e-7f || raw_d < 0.0f);
+	};
+
+	const float d_c = fetch_texel(px, py);
+	if (!Math::is_finite(d_c)) {
+		return out;
+	}
+	if (is_empty_depth_texel(d_c)) {
+		out.empty_depth = true;
+		return out;
+	}
+
+	auto unproject_ndc = [&](float p_nx, float p_ny, float p_raw_d, Vector3 &r_world) -> bool {
+		const Vector4 w4 = mat4_mul_vec4_col_major(p_meta.clip_to_world, Vector4(p_nx, p_ny, p_raw_d, 1.0f));
+		if (!Math::is_finite(w4.x) || !Math::is_finite(w4.y) || !Math::is_finite(w4.z) ||
+				!Math::is_finite(w4.w) || Math::abs(w4.w) <= 1e-7f) {
+			return false;
+		}
+		r_world = Vector3(w4.x / w4.w, w4.y / w4.w, w4.z / w4.w);
+		return vec3_is_finite(r_world);
+	};
+	auto unproject_texel = [&](int sx, int sy, float p_raw_d, Vector3 &r_world) -> bool {
+		const float su = (float(sx) + 0.5f) / float(p_meta.width);
+		const float sv = (float(sy) + 0.5f) / float(p_meta.height);
+		return unproject_ndc(su * 2.0f - 1.0f, sv * 2.0f - 1.0f, p_raw_d, r_world);
+	};
+
+	Vector3 p_c;
+	if (!unproject_texel(px, py, d_c, p_c)) {
+		return out;
+	}
+	const float z_c = -(world_to_view_xf.xform(p_c)).z;
+	if (!Math::is_finite(z_c) || !(z_c > 0.0f)) {
+		return out;
+	}
+
+	const float front_z = particle_linear_z + safe_particle_radius;
+	const float back_z = particle_linear_z - safe_particle_radius;
+	if (!(front_z >= z_c && back_z <= z_c + slab_m)) {
+		return out;
+	}
+
+	Vector3 contact_world = p_c;
+	Vector3 ray_surface;
+	if (unproject_ndc(ndc_x, ndc_y, d_c, ray_surface)) {
+		contact_world = ray_surface;
+	}
+
+	const Vector3 cam_eye(p_meta.view_to_world[12], p_meta.view_to_world[13], p_meta.view_to_world[14]);
+	Vector3 cam_back(p_meta.view_to_world[8], p_meta.view_to_world[9], p_meta.view_to_world[10]);
+	if (cam_back.length_squared() > 1e-12f) {
+		cam_back.normalize();
+	} else {
+		cam_back = Vector3(0.0f, 0.0f, 1.0f);
+	}
+	const bool is_ortho = (Math::abs(p_meta.world_to_clip[11]) < 1e-5f) && (Math::abs(p_meta.world_to_clip[15]) > 1e-5f);
+	Vector3 eye_normal = cam_back;
+	if (!is_ortho) {
+		const Vector3 to_eye = cam_eye - contact_world;
+		if (vec3_is_finite(to_eye) && to_eye.length_squared() > 1e-12f) {
+			eye_normal = to_eye.normalized();
+		}
+	}
+
+	Vector3 world_normal = eye_normal;
+	const int rx = MIN(px + 1, int(p_meta.width) - 1);
+	const int uy = MIN(py + 1, int(p_meta.height) - 1);
+	if (rx != px && uy != py) {
+		const float d_r = fetch_texel(rx, py);
+		const float d_u = fetch_texel(px, uy);
+		Vector3 p_r;
+		Vector3 p_u;
+		if (!is_empty_depth_texel(d_r) && !is_empty_depth_texel(d_u) &&
+				unproject_texel(rx, py, d_r, p_r) && unproject_texel(px, uy, d_u, p_u)) {
+			const float z_r = -(world_to_view_xf.xform(p_r)).z;
+			const float z_u = -(world_to_view_xf.xform(p_u)).z;
+			if (Math::is_finite(z_r) && Math::is_finite(z_u) &&
+					Math::abs(z_c - z_r) <= sil_m && Math::abs(z_c - z_u) <= sil_m) {
+				Vector3 n = (p_r - p_c).cross(p_u - p_c);
+				if (vec3_is_finite(n) && n.length_squared() > 1e-12f) {
+					n.normalize();
+					if (n.dot(eye_normal) < 0.0f) {
+						n = -n;
+					}
+					world_normal = n;
+				} else {
+					out.silhouette_fallback_used = true;
+				}
+			} else {
+				out.silhouette_fallback_used = true;
+			}
+		} else {
+			out.silhouette_fallback_used = true;
+		}
+	} else {
+		out.silhouette_fallback_used = true;
+	}
+
+	const float signed_normal_dist = (candidate - contact_world).dot(world_normal);
+	out.collided = true;
+	out.penetration = signed_normal_dist < safe_particle_radius
+			? (safe_particle_radius - signed_normal_dist)
+			: MAX(0.0f, front_z - z_c);
+	out.contact_point = contact_world;
+	out.world_normal = world_normal;
+	out.post_position = candidate + world_normal * out.penetration;
+	out.post_velocity = apply_bounce_and_friction(p_velocity, world_normal, p_restitution, p_friction);
 	return out;
 }
 

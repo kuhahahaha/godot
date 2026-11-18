@@ -13988,6 +13988,80 @@
                     "type": "uint32_t"
                 }
             ]
+        },
+        {
+            "name": "GDExtensionSceneDepthSnapshotArmV1",
+            "kind": "struct",
+            "description": [
+                "Input DTO arming per-viewport post-opaque Reverse-Z R32_SFLOAT depth snapshot capture on the main RenderingDevice."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "viewport_rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "slab_thickness_m",
+                    "type": "float"
+                },
+                {
+                    "name": "silhouette_jump_m",
+                    "type": "float"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionSceneDepthSnapshotBorrowResultV1",
+            "kind": "struct",
+            "description": [
+                "Output DTO returned when borrowing a pre-transparent Reverse-Z R32_SFLOAT scene depth snapshot lease inside SCENE_PHASE_BEFORE_PARTICLES."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "outcome",
+                    "type": "GDExtensionSceneReadOutcomeV1"
+                },
+                {
+                    "name": "sample_token",
+                    "type": "GDExtensionSceneOpaque32V1"
+                },
+                {
+                    "name": "meta_ssbo_rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "depth_texture_rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "snapshot_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "width",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "height",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "flags",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
         }
     ],
     "interface": [
@@ -28788,6 +28862,92 @@
                     ]
                 }
             ]
+        },
+        {
+            "name": "device_session_scene_depth_snapshot_arm_v1",
+            "since": "4.7",
+            "description": [
+                "Arm per-viewport post-opaque Reverse-Z R32_SFLOAT depth snapshot capture on the main RenderingDevice for a SCENE_PHASE_BEFORE_PARTICLES attachment."
+            ],
+            "arguments": [
+                {
+                    "name": "attachment",
+                    "type": "GDExtensionProductionAttachmentRefV1",
+                    "description": [
+                        "Original accepted production attachment registered for SCENE_PHASE_BEFORE_PARTICLES on the main RenderingDevice."
+                    ]
+                },
+                {
+                    "name": "input",
+                    "type": "const GDExtensionSceneDepthSnapshotArmV1*",
+                    "description": [
+                        "Aligned readable arm input specifying the target viewport RID and viewport diagnostic defaults."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Structured native result; returns ERR_UNAVAILABLE on non-RD or uninitialized backends."
+                ]
+            }
+        },
+        {
+            "name": "device_session_scene_depth_snapshot_borrow_v1",
+            "since": "4.7",
+            "description": [
+                "Borrow a RefCounted pre-transparent Reverse-Z R32_SFLOAT scene depth snapshot lease for viewport_rid inside SCENE_PHASE_BEFORE_PARTICLES physical execution, binding automatic return_after_reads() retention onto the paid request action."
+            ],
+            "arguments": [
+                {
+                    "name": "context",
+                    "type": "GDExtensionProductionPhysicalContextRefV1",
+                    "description": [
+                        "Actual protected SCENE_PHASE_BEFORE_PARTICLES physical execution context."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Original live production request owned by this attachment."
+                    ]
+                },
+                {
+                    "name": "action_ordinal",
+                    "type": "uint64_t",
+                    "description": [
+                        "Original action index within the retained request."
+                    ]
+                },
+                {
+                    "name": "viewport_rid",
+                    "type": "uint64_t",
+                    "description": [
+                        "Target renderer viewport RID whose pre-transparent depth snapshot is borrowed."
+                    ]
+                },
+                {
+                    "name": "key",
+                    "type": "const GDExtensionSceneOperationKeyV1*",
+                    "description": [
+                        "Immutable 200-byte original scene operation key bound to action_ordinal."
+                    ]
+                },
+                {
+                    "name": "out",
+                    "type": "GDExtensionSceneDepthSnapshotBorrowResultV1*",
+                    "description": [
+                        "Aligned writable result populated with outcome, sample_token, meta_ssbo_rid, depth_texture_rid, snapshot_generation, width, height, and flags."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Structured native result; returns ERR_UNAVAILABLE on non-RD or uninitialized backends."
+                ]
+            }
         }
     ]
 }
