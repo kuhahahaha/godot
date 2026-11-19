@@ -3403,12 +3403,12 @@ Error RenderingDevice::_production_mq_create_targets_and_framebuffer(const Textu
 	framebuffer.qualification_return = &r_fb_physical;
 	framebuffer.format_id = format_id;
 	framebuffer.texture_ids = attachment_rids;
-	framebuffer.size = Size2i(32, 32);
+	framebuffer.size = Size2i(int32_t(p_color_fmt.width), int32_t(p_color_fmt.height));
 	framebuffer.view_count = 1;
 
 	RDG::FramebufferCache *framebuffer_cache = RDG::framebuffer_cache_create();
-	framebuffer_cache->width = 32;
-	framebuffer_cache->height = 32;
+	framebuffer_cache->width = p_color_fmt.width;
+	framebuffer_cache->height = p_color_fmt.height;
 	framebuffer_cache->textures = textures;
 	framebuffer_cache->trackers = trackers;
 	framebuffer_cache->render_pass_creation_user_data = (void *)(&framebuffer_formats[format_id].E->key());
