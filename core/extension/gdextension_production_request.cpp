@@ -3194,7 +3194,7 @@ bool Registry::production_release_owner_tail_locked(const ProductionRequest &r, 
 		}
 	}
 	for (uint32_t i = 0; i < r.resource_count; ++i) {
-		if (r.resources[i].transfer_pending || r.resources[i].metadata_data || r.resources[i].metadata_consumer || !r.resources[i].output_predecessor_view.is_empty()) {
+		if (r.resources[i].transfer_pending || r.resources[i].metadata_data || r.resources[i].metadata_consumer || !r.resources[i].output_predecessor_view.is_empty() || r.resources[i].scene_depth_lease_count != 0) {
 			return false;
 		}
 	}
@@ -3459,6 +3459,71 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 		relock_mutex_after_call();
 		--r->capture_inflight;
 		return result(returned == OK ? ERR_BUSY : returned, 16); // One charged owner return per turn.
+	}
+	for (uint32_t i = 0; i < r->resource_count; ++i) {
+		auto &slot = r->resources[i];
+		if (slot.scene_depth_lease_count == 0) {
+			continue;
+		}
+		if (reclaim) {
+			if (!budget && !usage && rd && rd->native_immutable_is_render_thread()) {
+				const uint32_t count = MIN(slot.scene_depth_lease_count, MAX_SCENE_DEPTH_SET1_PAIRS);
+				Ref<SceneReadContent> returning[MAX_SCENE_DEPTH_SET1_PAIRS];
+				for (uint32_t d = 0; d < count; ++d) {
+					returning[d] = slot.scene_depth_leases[d];
+					slot.scene_depth_leases[d].unref();
+				}
+				slot.scene_depth_lease_count = 0;
+				++r->capture_inflight;
+				unlock_mutex_for_call();
+				for (uint32_t d = 0; d < count; ++d) {
+					if (returning[d].is_valid()) {
+						(void)returning[d]->return_after_reads();
+						returning[d].unref();
+					}
+				}
+				relock_mutex_after_call();
+				--r->capture_inflight;
+				continue;
+			}
+			return result(ERR_BUSY, 16);
+		}
+		if (!budget && !usage) {
+			return result(OK);
+		}
+		if (!rd || !rd->native_immutable_is_render_thread() || !budget || !usage || !service_budget_active(*budget) ||
+				usage->passes >= MIN(budget->passes, 64u) || usage->receipts >= MIN(budget->receipts, 128u)) {
+			return result(ERR_BUSY, 16);
+		}
+		const uint32_t count = MIN(slot.scene_depth_lease_count, MAX_SCENE_DEPTH_SET1_PAIRS);
+		Ref<SceneReadContent> returning[MAX_SCENE_DEPTH_SET1_PAIRS];
+		for (uint32_t d = 0; d < count; ++d) {
+			returning[d] = slot.scene_depth_leases[d];
+			slot.scene_depth_leases[d].unref();
+		}
+		slot.scene_depth_lease_count = 0;
+		++r->capture_inflight;
+		++usage->passes;
+		++usage->receipts;
+		unlock_mutex_for_call();
+		Error lease_err = OK;
+		for (uint32_t d = 0; d < count; ++d) {
+			if (returning[d].is_valid()) {
+				const Error ret = returning[d]->return_after_reads();
+				if (lease_err == OK && ret != OK) {
+					lease_err = ret;
+				}
+				returning[d].unref();
+			}
+		}
+		relock_mutex_after_call();
+		--r->capture_inflight;
+		if (r->revision < UINT64_MAX) {
+			++r->revision;
+		}
+		if (lease_err != OK) {
+			return result(lease_err, 16);
+		}
 	}
 	// The predecessor pin outlives all actual consumer graphs/native observations.
 	// Return it only in the original charged RT RELEASE, never metadata reclaim.

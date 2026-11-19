@@ -30,6 +30,7 @@
 
 #include "core/extension/gdextension_production_request.h"
 #include "core/os/thread.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_collision_scene_rd.h"
 #include "servers/rendering/rendering_device.h"
 
 namespace GDExtensionDeviceExit {
@@ -135,6 +136,9 @@ Error Registry::production_incoming_readbacks_validate_locked(const ProductionRe
 					const auto *shader = rd.shader_owner.get_or_null(request.resources[dispatch.unit_slot].secondary);
 					for (uint32_t set_index = 0; set_index < dispatch.set_count; ++set_index) {
 						const auto &set = request.resources[dispatch.first_set_slot + set_index];
+						if (set.scene_depth_set1) {
+							continue;
+						}
 						for (uint32_t b = 0; b < set.binding_count; ++b) {
 							const auto &binding = request.uses[set.first_binding + b].binding;
 							for (const auto &uniform : shader->uniform_sets[set_index]) {
@@ -197,6 +201,71 @@ Error Registry::production_dispatch_closure_locked(const ProductionRequest &requ
 	for (uint32_t i = 0; i < dispatch.set_count; ++i) {
 		const auto &slot = request.resources[dispatch.first_set_slot + i];
 		const auto *set = rd.uniform_set_owner.get_or_null(slot.primary);
+		if (slot.scene_depth_set1) {
+			if (i != 1u || slot.output_set_deferred || !slot.imported || slot.creating || slot.retiring || slot.returned ||
+					!set || !set->driver_id || set->shader_id != pipeline->shader || set->shader_set != 1u ||
+					set->format != pipeline->set_formats[1] || !set->shared_textures_to_update.is_empty() ||
+					!set->pending_clear_textures.is_empty() || !set->writable_resources.is_empty() ||
+					slot.imported_unit_slot != dispatch.unit_slot || slot.shader_set != 1u ||
+					slot.binding_count < 1u || slot.binding_count > MAX_SCENE_DEPTH_SET1_PAIRS ||
+					slot.scene_depth_lease_count != slot.binding_count ||
+					uint32_t(shader->uniform_sets[1].size()) != 2u * slot.binding_count ||
+					slot.first_binding > request.capacity.resource_uses ||
+					slot.binding_count > request.capacity.resource_uses - slot.first_binding ||
+					slot.use_count != 1u || !slot.uses[0].linked() || !slot.uses[0].same_physical() ||
+					set->qualification_return != &slot.owned_physical ||
+					unit.use_count != 2u || !set->qualification_dependencies.has(unit.uses[0].physical) ||
+					set->qualification_dependencies.size() != 1u) {
+				return ERR_INVALID_DATA;
+			}
+			for (uint32_t d = 0; d < slot.binding_count; ++d) {
+				const auto &binding = request.uses[slot.first_binding + d].binding;
+				float slab_m = 0.0f;
+				float jump_m = 0.0f;
+				if (!production_dto_valid(binding) || binding.set != 1u || binding.binding != 2u * d ||
+						binding.array_element > 1u || binding.resource_slot != SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
+						!decode_scene_depth_pair_params(binding.bytes, slab_m, jump_m)) {
+					return ERR_INVALID_DATA;
+				}
+				uint32_t meta_matches = 0;
+				uint32_t tex_matches = 0;
+				for (const auto &uniform : shader->uniform_sets[1]) {
+					if (uniform.binding == 2u * d + 0u) {
+						if (uniform.type != RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER || uniform.writable ||
+								(uniform.length > 0 && uint32_t(uniform.length) != sizeof(RendererRD::SceneDepthSnapshotMeta256))) {
+							return ERR_INVALID_DATA;
+						}
+						++meta_matches;
+					} else if (uniform.binding == 2u * d + 1u) {
+						if (uniform.type != RenderingDevice::UNIFORM_TYPE_TEXTURE || uniform.writable || uniform.length != 1) {
+							return ERR_INVALID_DATA;
+						}
+						++tex_matches;
+					}
+				}
+				if (meta_matches != 1u || tex_matches != 1u) {
+					return ERR_INVALID_DATA;
+				}
+				if (slot.scene_depth_leases[d].is_null()) {
+					return ERR_INVALID_DATA;
+				}
+				const auto *lease = static_cast<const RendererRD::ParticlesCollisionSceneRD::DepthReadLease *>(slot.scene_depth_leases[d].ptr());
+				if (lease->is_returned()) {
+					return ERR_UNAVAILABLE;
+				}
+				const Ref<RendererRD::ParticlesCollisionSceneRD::DepthSnapshotGeneration> gen = lease->get_generation();
+				if (gen.is_null() || gen->meta_buffer.is_null() || gen->depth_texture.is_null()) {
+					return ERR_INVALID_DATA;
+				}
+				const auto *meta_buf = rd.storage_buffer_owner.get_or_null(gen->meta_buffer);
+				const auto *depth_tex = rd.texture_owner.get_or_null(gen->depth_texture);
+				if (!meta_buf || !meta_buf->driver_id || meta_buf->size != sizeof(RendererRD::SceneDepthSnapshotMeta256) ||
+						!depth_tex || !depth_tex->driver_id || depth_tex->format != RenderingDevice::DATA_FORMAT_R32_SFLOAT) {
+					return ERR_INVALID_DATA;
+				}
+			}
+			continue;
+		}
 		const bool deferred = !request.frozen && slot.output_set_deferred && !slot.imported && !set && slot.owned_serial && !slot.creating && !slot.retiring;
 		if ((!deferred && (!slot.imported || !set || !set->driver_id || set->shader_id != pipeline->shader || set->format != pipeline->set_formats[i] || !set->shared_textures_to_update.is_empty() || !set->pending_clear_textures.is_empty())) || slot.imported_unit_slot != dispatch.unit_slot || slot.shader_set != i || slot.binding_count != shader->uniform_sets[i].size() || slot.first_binding > request.capacity.resource_uses || slot.binding_count > request.capacity.resource_uses - slot.first_binding) {
 			return ERR_INVALID_DATA;
@@ -259,6 +328,9 @@ Error Registry::production_dispatch_closure_locked(const ProductionRequest &requ
 		bool covered = false;
 		for (uint32_t i = 0; i < dispatch.set_count; ++i) {
 			const auto &slot = request.resources[dispatch.first_set_slot + i];
+			if (slot.scene_depth_set1) {
+				continue;
+			}
 			for (uint32_t b = 0; b < slot.binding_count; ++b) {
 				const auto &binding = request.uses[slot.first_binding + b].binding;
 				for (const auto &uniform : shader->uniform_sets[i]) {
@@ -647,6 +719,9 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 			const auto &dispatch = action.dispatch;
 			for (uint32_t set_index = 0; set_index < dispatch.set_count; ++set_index) {
 				const auto &set = request.resources[dispatch.first_set_slot + set_index];
+				if (set.scene_depth_set1) {
+					continue;
+				}
 				for (uint32_t b = 0; b < set.binding_count; ++b) {
 					used |= request.uses[set.first_binding + b].binding.resource_slot == i;
 				}

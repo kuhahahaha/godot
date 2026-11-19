@@ -32,6 +32,7 @@
 #include "core/io/native_drain_diagnostic.h"
 #include "core/os/os.h"
 #include "core/os/thread.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_collision_scene_rd.h"
 #include "servers/rendering/rendering_device.h"
 
 #include <cstring>
@@ -341,16 +342,33 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 			}
 			// Copy the complete finite binding origin before queue publication.
 			// Native shader reflection is checked on RT before the first effect.
-			for (uint32_t i = 0; i < count; ++i) {
-				const auto &binding = bindings[i];
-				if (!production_dto_valid(binding) || binding.set != shader_set || binding.array_element || binding.offset || binding.resource_slot >= request->resource_count || (i && bindings[i - 1].binding >= binding.binding)) {
+			const bool scene_depth_set1 = (shader_set == 1u && bindings[0].resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT);
+			if (scene_depth_set1) {
+				if (count > MAX_SCENE_DEPTH_SET1_PAIRS) {
 					return result(ERR_INVALID_DATA);
 				}
-				const auto &resource = request->resources[binding.resource_slot];
-				const bool original_physical = resource.imported && ((resource.use_count == 1 && resource.uses[0].same_physical() && resource.uses[0].linked()) || !resource.output_predecessor_view.is_empty() || (resource.output_guard_readonly && resource.output_guard_history));
-				const bool deferred_alias = resource.output_alias_prepared && !resource.imported && resource.output_action_ordinal < request->action_count && request->actions[resource.output_action_ordinal].prepared;
-				if ((!original_physical && !deferred_alias) || resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || resource.retiring || binding.bytes != resource.declaration.physical_bytes) {
-					return result(ERR_INVALID_DATA);
+				for (uint32_t i = 0; i < count; ++i) {
+					const auto &binding = bindings[i];
+					float slab_m = 0.0f;
+					float jump_m = 0.0f;
+					if (!production_dto_valid(binding) || binding.set != 1u || binding.binding != 2u * i ||
+							binding.array_element > 1u || binding.resource_slot != SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
+							!decode_scene_depth_pair_params(binding.bytes, slab_m, jump_m)) {
+						return result(ERR_INVALID_DATA);
+					}
+				}
+			} else {
+				for (uint32_t i = 0; i < count; ++i) {
+					const auto &binding = bindings[i];
+					if (!production_dto_valid(binding) || binding.set != shader_set || binding.array_element || binding.offset || binding.resource_slot >= request->resource_count || (i && bindings[i - 1].binding >= binding.binding)) {
+						return result(ERR_INVALID_DATA);
+					}
+					const auto &resource = request->resources[binding.resource_slot];
+					const bool original_physical = resource.imported && ((resource.use_count == 1 && resource.uses[0].same_physical() && resource.uses[0].linked()) || !resource.output_predecessor_view.is_empty() || (resource.output_guard_readonly && resource.output_guard_history));
+					const bool deferred_alias = resource.output_alias_prepared && !resource.imported && resource.output_action_ordinal < request->action_count && request->actions[resource.output_action_ordinal].prepared;
+					if ((!original_physical && !deferred_alias) || resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || resource.retiring || binding.bytes != resource.declaration.physical_bytes) {
+						return result(ERR_INVALID_DATA);
+					}
 				}
 			}
 			production_serials.take(slot.owned_serial);
@@ -362,12 +380,15 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 			slot.binding_count = count;
 			slot.imported_unit_slot = unit_index;
 			slot.shader_set = shader_set;
+			slot.scene_depth_set1 = scene_depth_set1;
 			for (uint32_t i = 0; i < count; ++i) {
 				request->uses[slot.first_binding + i].binding = bindings[i];
 			}
 			request->binding_used += count;
-			for (uint32_t i = 0; i < count; ++i) {
-				slot.output_set_deferred |= request->resources[bindings[i].resource_slot].output_alias_prepared;
+			if (!scene_depth_set1) {
+				for (uint32_t i = 0; i < count; ++i) {
+					slot.output_set_deferred |= request->resources[bindings[i].resource_slot].output_alias_prepared;
+				}
 			}
 			if (slot.output_set_deferred) {
 				// Preparation only. The original output action creates this exact
@@ -720,51 +741,170 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 		}
 		const auto &unit = request.resources[slot.imported_unit_slot];
 		const auto *shader = rd.shader_owner.get_or_null(unit.secondary);
-		if (!unit.imported || unit.use_count != 2 || !shader || slot.shader_set >= uint32_t(shader->uniform_sets.size()) || shader->uniform_sets[slot.shader_set].size() != slot.binding_count) {
-			return finish(ERR_INVALID_DATA);
-		}
-		LocalVector<RenderingDevice::Uniform> uniforms;
-		LocalVector<QualificationPhysicalReturn *> dependencies;
-		uniforms.resize(slot.binding_count);
-		dependencies.reserve(slot.binding_count + 1);
-		dependencies.push_back(unit.uses[0].physical);
-		for (uint32_t i = 0; i < slot.binding_count; ++i) {
-			const auto &binding = request.uses[slot.first_binding + i].binding;
-			const auto &resource = request.resources[binding.resource_slot];
-			const bool exact_alias = resource.output_alias_prepared && production_output_alias_matches_locked(request, resource, rd);
-			const bool predecessor = production_output_predecessor_matches_locked(request, resource, rd) || (resource.output_guard_history && production_output_guard_matches_locked(request, resource, rd));
-			if (!resource.imported || resource.retiring || (!exact_alias && !predecessor && (resource.use_count != 1 || !resource.uses[0].same_physical() || !resource.uses[0].linked()))) {
+		if (slot.scene_depth_set1) {
+			if (!unit.imported || unit.use_count != 2 || !shader || slot.shader_set != 1u ||
+					slot.binding_count < 1u || slot.binding_count > MAX_SCENE_DEPTH_SET1_PAIRS ||
+					uint32_t(shader->uniform_sets.size()) <= 1u ||
+					uint32_t(shader->uniform_sets[1].size()) != 2u * slot.binding_count) {
 				return finish(ERR_INVALID_DATA);
 			}
-			bool reflected = false;
-			for (const auto &uniform : shader->uniform_sets[slot.shader_set]) {
-				reflected |= uniform.binding == binding.binding && uniform.type == RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER && (!predecessor || !uniform.writable);
+			struct SceneDepthPairSpec {
+				uint64_t viewport_rid = 0ull;
+				float slab_m = 0.50f;
+				float jump_m = 0.50f;
+			};
+			SceneDepthPairSpec specs[MAX_SCENE_DEPTH_SET1_PAIRS];
+			for (uint32_t d = 0; d < slot.binding_count; ++d) {
+				const auto &binding = request.uses[slot.first_binding + d].binding;
+				if (!production_dto_valid(binding) || binding.set != 1u || binding.binding != 2u * d ||
+						binding.array_element > 1u || binding.resource_slot != SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
+						!decode_scene_depth_pair_params(binding.bytes, specs[d].slab_m, specs[d].jump_m)) {
+					return finish(ERR_INVALID_DATA);
+				}
+				specs[d].viewport_rid = binding.offset;
+				uint32_t meta_matches = 0;
+				uint32_t tex_matches = 0;
+				for (const auto &uniform : shader->uniform_sets[1]) {
+					if (uniform.binding == 2u * d + 0u) {
+						if (uniform.type != RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER || uniform.writable ||
+								(uniform.length > 0 && uint32_t(uniform.length) != sizeof(RendererRD::SceneDepthSnapshotMeta256))) {
+							return finish(ERR_INVALID_DATA);
+						}
+						++meta_matches;
+					} else if (uniform.binding == 2u * d + 1u) {
+						if (uniform.type != RenderingDevice::UNIFORM_TYPE_TEXTURE || uniform.writable || uniform.length != 1) {
+							return finish(ERR_INVALID_DATA);
+						}
+						++tex_matches;
+					}
+				}
+				if (meta_matches != 1u || tex_matches != 1u) {
+					return finish(ERR_INVALID_DATA);
+				}
 			}
-			if (!reflected) {
+			if (!rd._qualification_reserve_free_event(&slot.owned_physical)) {
+				return finish(ERR_PARAMETER_RANGE_ERROR);
+			}
+			const uint32_t pair_count = slot.binding_count;
+			const RID unit_shader_rid = unit.secondary;
+			LocalVector<QualificationPhysicalReturn *> dependencies;
+			dependencies.reserve(1);
+			dependencies.push_back(unit.uses[0].physical);
+
+			Ref<RendererRD::ParticlesCollisionSceneRD::DepthReadLease> acquired_leases[MAX_SCENE_DEPTH_SET1_PAIRS];
+			Error acq_err = OK;
+			production_native_effect_enter_locked(request);
+			++request.capture_inflight;
+			rd._thread_safe_.unlock();
+			unlock_mutex_for_call();
+			{
+				RendererRD::ParticlesCollisionSceneRD *collision_scene = RendererRD::ParticlesCollisionSceneRD::get_for_device(&rd);
+				if (!collision_scene || !collision_scene->is_initialized()) {
+					acq_err = ERR_UNAVAILABLE;
+				} else {
+					LocalVector<RenderingDevice::Uniform> uniforms;
+					uniforms.resize(2u * pair_count);
+					for (uint32_t d = 0; d < pair_count; ++d) {
+						GDExtensionSceneOpaque32V1 sample_token = {};
+						acq_err = collision_scene->acquire_depth_snapshot_read_lease(
+								RID::from_uint64(specs[d].viewport_rid),
+								specs[d].slab_m,
+								specs[d].jump_m,
+								acquired_leases[d],
+								sample_token);
+						if (acq_err != OK || acquired_leases[d].is_null()) {
+							if (acq_err == OK) {
+								acq_err = ERR_CANT_CREATE;
+							}
+							break;
+						}
+						const Ref<RendererRD::ParticlesCollisionSceneRD::DepthSnapshotGeneration> gen = acquired_leases[d]->get_generation();
+						if (gen.is_null() || gen->meta_buffer.is_null() || gen->depth_texture.is_null()) {
+							acq_err = ERR_CANT_CREATE;
+							break;
+						}
+						uniforms[2u * d + 0u].uniform_type = RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER;
+						uniforms[2u * d + 0u].binding = 2u * d + 0u;
+						uniforms[2u * d + 0u].append_id(gen->meta_buffer);
+						uniforms[2u * d + 1u].uniform_type = RenderingDevice::UNIFORM_TYPE_TEXTURE;
+						uniforms[2u * d + 1u].binding = 2u * d + 1u;
+						uniforms[2u * d + 1u].append_id(gen->depth_texture);
+					}
+					if (acq_err == OK) {
+						rid = rd._uniform_set_create_qualification(uniforms, unit_shader_rid, 1u, false, &slot.owned_physical, &dependencies, nullptr, &request);
+						if (rid.is_null()) {
+							acq_err = ERR_CANT_CREATE;
+						}
+					}
+					if (acq_err != OK) {
+						for (uint32_t d = 0; d < pair_count; ++d) {
+							if (acquired_leases[d].is_valid()) {
+								(void)collision_scene->release_depth_snapshot_read_lease(acquired_leases[d]);
+							}
+						}
+					}
+				}
+			}
+			rd._thread_safe_.lock();
+			relock_mutex_after_call();
+			CRASH_COND(!request.capture_inflight || slot.request != &request);
+			--request.capture_inflight;
+			if (acq_err != OK || rid.is_null()) {
+				rd._qualification_release_free_event(&slot.owned_physical);
+				return finish(acq_err != OK ? acq_err : ERR_CANT_CREATE);
+			}
+			slot.backing_serial = slot.owned_physical.serial;
+			slot.scene_depth_lease_count = pair_count;
+			for (uint32_t d = 0; d < pair_count; ++d) {
+				slot.scene_depth_leases[d] = acquired_leases[d];
+			}
+		} else {
+			if (!unit.imported || unit.use_count != 2 || !shader || slot.shader_set >= uint32_t(shader->uniform_sets.size()) || shader->uniform_sets[slot.shader_set].size() != slot.binding_count) {
 				return finish(ERR_INVALID_DATA);
 			}
-			uniforms[i].uniform_type = RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER;
-			uniforms[i].binding = binding.binding;
-			uniforms[i].append_id(resource.primary);
-			if (!exact_alias && !predecessor && !dependencies.has(resource.uses[0].physical)) {
-				dependencies.push_back(resource.uses[0].physical);
+			LocalVector<RenderingDevice::Uniform> uniforms;
+			LocalVector<QualificationPhysicalReturn *> dependencies;
+			uniforms.resize(slot.binding_count);
+			dependencies.reserve(slot.binding_count + 1);
+			dependencies.push_back(unit.uses[0].physical);
+			for (uint32_t i = 0; i < slot.binding_count; ++i) {
+				const auto &binding = request.uses[slot.first_binding + i].binding;
+				const auto &resource = request.resources[binding.resource_slot];
+				const bool exact_alias = resource.output_alias_prepared && production_output_alias_matches_locked(request, resource, rd);
+				const bool predecessor = production_output_predecessor_matches_locked(request, resource, rd) || (resource.output_guard_history && production_output_guard_matches_locked(request, resource, rd));
+				if (!resource.imported || resource.retiring || (!exact_alias && !predecessor && (resource.use_count != 1 || !resource.uses[0].same_physical() || !resource.uses[0].linked()))) {
+					return finish(ERR_INVALID_DATA);
+				}
+				bool reflected = false;
+				for (const auto &uniform : shader->uniform_sets[slot.shader_set]) {
+					reflected |= uniform.binding == binding.binding && uniform.type == RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER && (!predecessor || !uniform.writable);
+				}
+				if (!reflected) {
+					return finish(ERR_INVALID_DATA);
+				}
+				uniforms[i].uniform_type = RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER;
+				uniforms[i].binding = binding.binding;
+				uniforms[i].append_id(resource.primary);
+				if (!exact_alias && !predecessor && !dependencies.has(resource.uses[0].physical)) {
+					dependencies.push_back(resource.uses[0].physical);
+				}
 			}
+			if (!rd._qualification_reserve_free_event(&slot.owned_physical)) {
+				return finish(ERR_PARAMETER_RANGE_ERROR);
+			}
+			production_native_effect_enter_locked(request);
+			++request.capture_inflight;
+			unlock_mutex_for_call();
+			rid = rd._uniform_set_create_qualification(uniforms, unit.secondary, slot.shader_set, false, &slot.owned_physical, &dependencies, nullptr, &request);
+			relock_mutex_after_call();
+			CRASH_COND(!request.capture_inflight);
+			--request.capture_inflight;
+			if (rid.is_null()) {
+				rd._qualification_release_free_event(&slot.owned_physical);
+				return finish(ERR_CANT_CREATE);
+			}
+			slot.backing_serial = slot.owned_physical.serial;
 		}
-		if (!rd._qualification_reserve_free_event(&slot.owned_physical)) {
-			return finish(ERR_PARAMETER_RANGE_ERROR);
-		}
-		production_native_effect_enter_locked(request);
-		++request.capture_inflight;
-		unlock_mutex_for_call();
-		rid = rd._uniform_set_create_qualification(uniforms, unit.secondary, slot.shader_set, false, &slot.owned_physical, &dependencies, nullptr, &request);
-		relock_mutex_after_call();
-		CRASH_COND(!request.capture_inflight);
-		--request.capture_inflight;
-		if (rid.is_null()) {
-			rd._qualification_release_free_event(&slot.owned_physical);
-			return finish(ERR_CANT_CREATE);
-		}
-		slot.backing_serial = slot.owned_physical.serial;
 	}
 	slot.primary = rid;
 	const Error error = slot.uses[0].attach(slot.owned_physical, request, request.serial);

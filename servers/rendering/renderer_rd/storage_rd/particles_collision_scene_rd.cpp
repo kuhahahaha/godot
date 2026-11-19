@@ -519,6 +519,10 @@ void ParticlesCollisionSceneRD::shutdown() {
 		MutexLock lock(snapshot_mutex);
 		snap_to_drop = current_sphere_snapshot;
 		current_sphere_snapshot.unref();
+		if (shared_null_viewport_sentinel.is_valid()) {
+			depth_to_drop.push_back(shared_null_viewport_sentinel);
+			shared_null_viewport_sentinel.unref();
+		}
 		for (KeyValue<uint64_t, ViewportDepthSlot> &kv : depth_snapshots_by_viewport) {
 			if (kv.value.current_snapshot.is_valid()) {
 				depth_to_drop.push_back(kv.value.current_snapshot);
@@ -606,8 +610,10 @@ void ParticlesCollisionSceneRD::reap_retired_depth_snapshots() {
 	bool can_release_gpu = false;
 	{
 		MutexLock lock(snapshot_mutex);
-		reap_retired_depth_snapshots_locked(to_release);
-		can_release_gpu = device != nullptr && live_device_guard.is_valid() && live_device_guard->owner_thread_id == Thread::get_caller_id();
+		can_release_gpu = device != nullptr && is_on_device_owner_thread(device, live_device_guard.ptr());
+		if (can_release_gpu) {
+			reap_retired_depth_snapshots_locked(to_release);
+		}
 	}
 	if (can_release_gpu) {
 		for (uint32_t i = 0; i < to_release.size(); ++i) {
@@ -770,6 +776,139 @@ Error ParticlesCollisionSceneRD::acquire_depth_snapshot_read_lease(
 		to_release[i]->release_gpu_resources();
 	}
 	return result_err;
+}
+
+Error ParticlesCollisionSceneRD::acquire_depth_snapshot_read_lease(
+		RID p_viewport,
+		float p_slab_thickness_m,
+		float p_silhouette_jump_m,
+		Ref<DepthReadLease> &r_lease,
+		GDExtensionSceneOpaque32V1 &r_sample_token,
+		const GDExtensionSceneOpaque32V1 *p_expected_device_override) {
+	r_lease.unref();
+	r_sample_token = {};
+	if (!Math::is_finite(p_slab_thickness_m) || !Math::is_finite(p_silhouette_jump_m) ||
+			p_slab_thickness_m < 0.01f || p_slab_thickness_m > 10.0f ||
+			p_silhouette_jump_m < 0.01f || p_silhouette_jump_m > 10.0f) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	LocalVector<Ref<DepthSnapshotGeneration>> to_release;
+	Error result_err = OK;
+	{
+		MutexLock lock(snapshot_mutex);
+		if (!device || GDExtensionDeviceExit::scene_opaque32_is_zero(device_capability)) {
+			return ERR_UNAVAILABLE;
+		}
+		if (!is_on_device_owner_thread(device, live_device_guard.ptr())) {
+			return ERR_UNAUTHORIZED;
+		}
+		reap_retired_depth_snapshots_locked(to_release);
+
+		Ref<DepthSnapshotGeneration> chosen_gen;
+		uint64_t sample_viewport_id = 0ull;
+		if (p_viewport.is_null()) {
+			if (shared_null_viewport_sentinel.is_null()) {
+				Ref<DepthSnapshotGeneration> sentinel;
+				sentinel.instantiate();
+				sentinel->rd = device;
+				sentinel->device_guard = live_device_guard;
+				sentinel->live_rids = &live_rid_counter;
+				sentinel->fb_first_frees = &fb_first_free_counter;
+				sentinel->meta = SceneDepthSnapshotMeta256();
+				sentinel->meta.magic = SceneDepthSnapshotMeta256::MAGIC;
+				sentinel->meta.version = SceneDepthSnapshotMeta256::VERSION;
+				sentinel->meta.width = 0u;
+				sentinel->meta.height = 0u;
+				sentinel->meta.snapshot_generation = 0ull;
+				sentinel->meta.view_id = 0ull;
+				sentinel->meta.slab_thickness_m = p_slab_thickness_m;
+				sentinel->meta.silhouette_jump_m = p_silhouette_jump_m;
+				sentinel->meta.flags = SceneDepthSnapshotMeta256::FLAG_REVERSE_Z;
+
+				const bool sim_fail = (simulate_fb_fail_once.get() != 0u);
+				if (sim_fail) {
+					simulate_fb_fail_once.set(0u);
+				}
+				result_err = sentinel->allocate_gpu_resources(1u, 1u, sim_fail);
+				if (result_err == OK) {
+					shared_null_viewport_sentinel = sentinel;
+				}
+			}
+			chosen_gen = shared_null_viewport_sentinel;
+		} else {
+			sample_viewport_id = p_viewport.get_id();
+			ViewportDepthSlot &slot = depth_snapshots_by_viewport[sample_viewport_id];
+			slot.viewport = p_viewport;
+			slot.default_slab_thickness_m = p_slab_thickness_m;
+			slot.default_silhouette_jump_m = p_silhouette_jump_m;
+			slot.pending_capture = true;
+			if (slot.render_target.is_null() && RSG::viewport != nullptr && RSG::viewport->viewport_owner.owns(p_viewport)) {
+				slot.render_target = RSG::viewport->viewport_get_render_target(p_viewport);
+			}
+
+			chosen_gen = slot.current_snapshot;
+			if (chosen_gen.is_null()) {
+				if (slot.unpopulated_sentinel.is_null()) {
+					Ref<DepthSnapshotGeneration> sentinel;
+					sentinel.instantiate();
+					sentinel->rd = device;
+					sentinel->device_guard = live_device_guard;
+					sentinel->live_rids = &live_rid_counter;
+					sentinel->fb_first_frees = &fb_first_free_counter;
+					sentinel->meta = SceneDepthSnapshotMeta256();
+					sentinel->meta.magic = SceneDepthSnapshotMeta256::MAGIC;
+					sentinel->meta.version = SceneDepthSnapshotMeta256::VERSION;
+					sentinel->meta.width = 0u;
+					sentinel->meta.height = 0u;
+					sentinel->meta.snapshot_generation = 0ull;
+					sentinel->meta.view_id = sample_viewport_id;
+					sentinel->meta.slab_thickness_m = slot.default_slab_thickness_m;
+					sentinel->meta.silhouette_jump_m = slot.default_silhouette_jump_m;
+					sentinel->meta.flags = SceneDepthSnapshotMeta256::FLAG_REVERSE_Z;
+
+					const bool sim_fail = (simulate_fb_fail_once.get() != 0u);
+					if (sim_fail) {
+						simulate_fb_fail_once.set(0u);
+					}
+					result_err = sentinel->allocate_gpu_resources(1u, 1u, sim_fail);
+					if (result_err == OK) {
+						slot.unpopulated_sentinel = sentinel;
+					}
+				}
+				chosen_gen = slot.unpopulated_sentinel;
+			}
+		}
+
+		if (result_err == OK && chosen_gen.is_valid()) {
+			const GDExtensionSceneOpaque32V1 expected_dev =
+					(p_expected_device_override && !GDExtensionDeviceExit::scene_opaque32_is_zero(*p_expected_device_override))
+					? *p_expected_device_override
+					: device_capability;
+			r_sample_token = GDExtensionDeviceExit::make_scene_depth_snapshot_sample_token(
+					sample_viewport_id,
+					chosen_gen->meta.snapshot_generation,
+					chosen_gen->meta.width,
+					chosen_gen->meta.height);
+			r_lease.instantiate(expected_dev, r_sample_token, chosen_gen, &active_lease_counter, live_device_guard);
+		} else if (result_err == OK) {
+			result_err = ERR_CANT_CREATE;
+		}
+	}
+
+	for (uint32_t i = 0; i < to_release.size(); ++i) {
+		to_release[i]->release_gpu_resources();
+	}
+	return result_err;
+}
+
+Error ParticlesCollisionSceneRD::release_depth_snapshot_read_lease(Ref<DepthReadLease> &r_lease) {
+	if (r_lease.is_null()) {
+		return OK;
+	}
+	const Error err = r_lease->return_after_reads();
+	r_lease.unref();
+	return err;
 }
 
 Error ParticlesCollisionSceneRD::prepare_viewport_depth_snapshot_target(
