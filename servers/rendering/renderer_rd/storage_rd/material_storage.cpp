@@ -3836,9 +3836,18 @@ Error MaterialStorage::material_settle_native_uploads(RID p_material) {
 			}
 		}
 	}
-	if (TextureStorage *textures = TextureStorage::get_singleton()) {
-		for (const RID &tex_rid : material->data->texture_cache) {
-			const RID rd_tex = textures->texture_get_rd_texture(tex_rid);
+	TextureStorage *textures = TextureStorage::get_singleton();
+	for (const RID &tex_rid : material->data->texture_cache) {
+		const RID rd_tex = rd->texture_is_valid(tex_rid) ? tex_rid : (textures ? textures->texture_get_rd_texture(tex_rid) : RID());
+		if (rd_tex.is_valid()) {
+			const Error settled = rd->_native_settle_transfer_worker(rd_tex);
+			if (settled != OK) {
+				return settled;
+			}
+		}
+	}
+	for (int i = 0; i < 2; ++i) {
+		for (const RID &rd_tex : material->data->native_uniform_sets[i].textures) {
 			if (rd_tex.is_valid()) {
 				const Error settled = rd->_native_settle_transfer_worker(rd_tex);
 				if (settled != OK) {

@@ -3128,12 +3128,16 @@ Error RenderingDevice::_native_settle_transfer_worker(RID p_rid) {
 			return OK;
 		}
 		if (Texture *tex = texture_owner.owns(p_rid) ? texture_owner.get_or_null(p_rid) : nullptr) {
-			const Error err = _check_transfer_worker_texture(tex);
-			if (err != OK) {
-				return err;
-			}
-			if (tex->transfer_worker_index >= 0) {
-				r_needs_flush = true;
+			Texture *cur = tex;
+			for (uint32_t depth = 0; cur && depth < 4; ++depth) {
+				const Error err = _check_transfer_worker_texture(cur);
+				if (err != OK) {
+					return err;
+				}
+				if (cur->transfer_worker_index >= 0) {
+					r_needs_flush = true;
+				}
+				cur = cur->owner.is_valid() && texture_owner.owns(cur->owner) ? texture_owner.get_or_null(cur->owner) : nullptr;
 			}
 			return OK;
 		}
