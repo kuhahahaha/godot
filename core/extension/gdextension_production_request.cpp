@@ -783,31 +783,6 @@ Error Registry::production_reserve_metadata_locked(ProductionAttachment &a, cons
 }
 Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a, const GDExtensionProductionOperationV1 &op, const GDExtensionProductionCapacityV1 &c, const ProductionActionRows &actions, uint32_t action_count, const GDExtensionProductionResourceV1 *resources, uint32_t resource_count, const GDExtensionProductionUseV1 *uses, uint32_t use_count, const ProductionReadbackRows &readbacks, uint32_t readback_count, ProductionRequest *&out, uint32_t contract_version) {
 	out = nullptr;
-	// Temporary passive observation of the original range refusal only.
-	auto trace_range = [&](const char *site, uint32_t missing = 0, uint64_t required = 0, uint64_t available = 0, uint64_t commands = 0, uint64_t frames = 0, uint64_t payload = 0, uint64_t readback = 0) {
-		const char *enabled = std::getenv("ANGE_TRACE_RESERVE_RANGE");
-		if (!enabled || enabled[0] != '1') { return; }
-		static std::atomic_flag emitted = ATOMIC_FLAG_INIT;
-		if (emitted.test_and_set(std::memory_order_relaxed)) { return; }
-		uint32_t live = 0, frozen = 0, cancelled = 0, releasing = 0;
-		if (a.requests) for (uint32_t i = 0; i < a.quote.capacity.requests; ++i) {
-			const auto &row = a.requests[i];
-			if (!row.serial) { continue; }
-			++live; frozen += row.frozen; cancelled += row.cancelled; releasing += row.release_started;
-			std::fprintf(stderr, "[RESERVE-RANGE-ROW] site=%s attachment=%llu serial=%llu nonce=%llu generation=%llu capacity_uses_graphs_natives=%u:%u:%u command_frame_slices=%u:%u actual_actions_graphs_natives=%u:%u:%u frozen=%u cancelled=%u release_started=%u\n",
-					site, (unsigned long long)a.serial, (unsigned long long)row.serial, (unsigned long long)row.operation.owner_request_nonce, (unsigned long long)row.operation.record_generation,
-					row.capacity.resource_uses, row.capacity.graph_memberships, row.capacity.native_memberships, row.command_count, row.frame_count,
-					row.action_count, row.graph_count, row.native_count, unsigned(row.frozen), unsigned(row.cancelled), unsigned(row.release_started));
-		}
-		const auto &q = a.quote.capacity;
-		std::fprintf(stderr, "[RESERVE-RANGE] site=%s attachment=%llu nonce=%llu generation=%llu range=%llu:%llu children=%u live=%u frozen=%u cancelled=%u releasing=%u missing=%u required=%llu available=%llu c=%u:%u:%u:%u:%u:%u:%u:%u:%llu:%llu pool=%u:%u:%u:%u:%u:%u:%u:%u:%llu:%llu command_slices=%llu:%llu frame_slices=%llu:%llu byte_offsets=%llu:%llu scene_prefix=%llu\n",
-				site, (unsigned long long)a.serial, (unsigned long long)op.owner_request_nonce, (unsigned long long)op.record_generation, (unsigned long long)op.canonical_begin, (unsigned long long)op.canonical_end,
-				a.children, live, frozen, cancelled, releasing, missing, (unsigned long long)required, (unsigned long long)available,
-				c.requests, c.suboperations, c.resources, c.resource_uses, c.graph_memberships, c.native_memberships, c.readbacks, c.return_cells, (unsigned long long)c.retained_payload_bytes, (unsigned long long)c.readback_bytes,
-				q.requests, q.suboperations, q.resources, q.resource_uses, q.graph_memberships, q.native_memberships, q.readbacks, q.return_cells, (unsigned long long)q.retained_payload_bytes, (unsigned long long)q.readback_bytes,
-				(unsigned long long)commands, (unsigned long long)a.quote.graph_slots, (unsigned long long)frames, (unsigned long long)a.quote.graph_frames,
-				(unsigned long long)payload, (unsigned long long)readback, (unsigned long long)a.scene_prefix_bytes);
-	};
 	// The private staging caller must already have authenticated this actual
 	// attachment. This method stores associations; it does not import B's scope.
 	ProductionAttachment *checked = nullptr;
@@ -994,7 +969,6 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 			return e;
 		}
 		if (memberships > c.native_memberships) {
-			trace_range("memberships", 0, memberships, c.native_memberships);
 			return ERR_PARAMETER_RANGE_ERROR;
 		}
 	}
@@ -1009,7 +983,6 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 		}
 	}
 	if (production_serials.exhausted) {
-		trace_range("serials_exhausted", uint32_t(production_serials.exhausted) << 1);
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
 	if (!r) {
@@ -1044,8 +1017,6 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	auto *cc = free_cells(a.commands, uint32_t(a.quote.graph_slots), uint32_t(request_quote.graph_slots));
 	auto *fc = free_cells(a.frames, uint32_t(a.quote.graph_frames), uint32_t(request_quote.graph_frames));
 	if ((c.suboperations && !ac) || (c.resources && !rc) || (c.resource_uses && !uc) || (c.readbacks && !bc) || (c.graph_memberships && !gc) || (c.native_memberships && !nc) || (c.return_cells && !tc) || (request_quote.graph_slots && !cc) || (request_quote.graph_frames && !fc)) {
-		const uint32_t missing = uint32_t(c.suboperations && !ac) | (uint32_t(c.resources && !rc) << 1) | (uint32_t(c.resource_uses && !uc) << 2) | (uint32_t(c.readbacks && !bc) << 3) | (uint32_t(c.graph_memberships && !gc) << 4) | (uint32_t(c.native_memberships && !nc) << 5) | (uint32_t(c.return_cells && !tc) << 6) | (uint32_t(request_quote.graph_slots && !cc) << 7) | (uint32_t(request_quote.graph_frames && !fc) << 8);
-		trace_range("cell_slices", missing, 0, 0, request_quote.graph_slots, request_quote.graph_frames);
 		// Declared cell counts already fit the accepted pool. A changed RD
 		// prefix can still make this request's derived capture slice too large.
 		if (request_quote.graph_slots > a.quote.graph_slots || request_quote.graph_frames > a.quote.graph_frames) {
@@ -1079,7 +1050,6 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	};
 	uint64_t payload = 0, readback = 0;
 	if (!free_bytes(c.retained_payload_bytes, a.quote.capacity.retained_payload_bytes, false, payload) || !free_bytes(c.readback_bytes, a.quote.capacity.readback_bytes, true, readback)) {
-		trace_range("byte_slices", 0, 0, 0, request_quote.graph_slots, request_quote.graph_frames, payload, readback);
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
 	// All validation and every finite slice succeed before publishing any cell.
@@ -4142,8 +4112,9 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 						}
 					}
 				}
+				Error maintenance = OK;
 				if (progress) {
-					const Error maintenance = production_maintenance_locked(request, *rd, cell.input.budget, cell.output.service_usage);
+					maintenance = production_maintenance_locked(request, *rd, cell.input.budget, cell.output.service_usage);
 					if (error == OK) {
 						error = maintenance;
 					}

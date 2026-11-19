@@ -707,7 +707,7 @@ private:
 	static constexpr uint32_t RECORD_CAPACITY = MAX_LIVE_GENERATIONS;
 	static constexpr uint32_t VIEW_CAPACITY = 8192;
 	static constexpr uint32_t NORMAL_RELAY_CAPACITY = 4096;
-	static constexpr uint32_t PRIVATE_CAPACITY = 16384;
+	static constexpr uint32_t PRIVATE_CAPACITY = 131072;
 	static constexpr uint32_t INVALID_SLOT = UINT32_MAX;
 	enum class Phase { RUNNING,
 		FINALIZING,

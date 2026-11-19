@@ -107,6 +107,13 @@ Error Registry::production_create_service(GDExtensionProductionRequestRefV1 ref,
 			return ERR_BUSY;
 		}
 		serial = cell.serial;
+		if (kind == ProductionControlKind::SET_CREATE && cell.state == ProductionControlState::PENDING && rd && rd->render_thread_id == Thread::get_caller_id()) {
+			auto &mcell = request->control;
+			mcell.state = ProductionControlState::EXECUTING;
+			const Error exec_err = production_create_execute_locked(*request, *rd, kind, index);
+			mcell.output.result = result(exec_err);
+			mcell.state = ProductionControlState::RETURNED;
+		}
 		returned = cell.state == ProductionControlState::RETURNED;
 	}
 	if (returned) {
@@ -983,6 +990,7 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 		return ERR_BUSY;
 	}
 	bool pending_set_returns = false;
+	bool set_pass_charged = false;
 	const uint32_t visits = MIN(request.resource_count, 64u);
 	for (uint32_t n = 0; n < visits; ++n) {
 		const uint32_t i = request.retire_cursor % request.resource_count;
@@ -1023,7 +1031,8 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 		if (publish_physical_return(OK)) {
 			continue;
 		}
-		if (usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u) || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) {
+		const bool set_within_pass = set && (set_pass_charged || usage.passes <= MIN(budget.passes, 64u));
+		if ((!set_within_pass && (usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u))) || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) {
 			return ERR_BUSY;
 		}
 		if (request.revision > UINT64_MAX - uint64_t(request.capacity.graph_memberships) * 2 - uint64_t(request.capacity.native_memberships) * 2 - request.capacity.readbacks - request.capacity.resources - 8) {
@@ -1060,8 +1069,20 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 		slot.retiring = true;
 		slot.owned_physical.use_closed.store(true);
 		if (!slot.owned_physical.enqueued) {
-			++usage.passes;
-			++usage.receipts;
+			if (set) {
+				if (!set_pass_charged) {
+					if (usage.passes < MIN(budget.passes, 64u)) {
+						++usage.passes;
+					}
+					if (usage.receipts < MIN(budget.receipts, 128u)) {
+						++usage.receipts;
+					}
+					set_pass_charged = true;
+				}
+			} else {
+				++usage.passes;
+				++usage.receipts;
+			}
 			usage.controls = 1;
 			production_native_effect_enter_locked(request);
 			++request.capture_inflight;
@@ -1186,6 +1207,64 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 		}
 		if (usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u)) {
 			return drain_trace.result(ERR_BUSY, "drop_budget_exhausted");
+		}
+	}
+	const bool mq_in_place_early = production_request_is_pure_mq_in_place_locked(request);
+	const bool own_or_idle_disposal = !rd.native_disposal_active || (!request.maintenance_serial && rd.native_disposal_continuation.production_owner == nullptr);
+	if (own_or_idle_disposal && (mq_in_place_early || request.graph_count > 0)) {
+		bool any_graph_pending = false;
+		for (uint32_t i = 0; i < request.graph_count; ++i) {
+			any_graph_pending |= request.graphs[i].pending;
+		}
+		if (!any_graph_pending) {
+			// Godot's normal _end_frame() already submitted this request's GPU work + readback.
+			// Poll/deliver the exact frame holding this request's readback capture directly
+			// instead of rejecting on live scene/UI work in rd.draw_graph or rd.frame.
+			uint32_t rb_frame = UINT32_MAX;
+			for (uint32_t f = 0; f < rd.frames.size() && rb_frame == UINT32_MAX; ++f) {
+				for (const auto &rb : rd.frames[f].download_buffer_get_data_requests) {
+					if (rb.capture && rb.capture->registry == this && rb.capture->request_serial == request.serial) {
+						rb_frame = f;
+						break;
+					}
+				}
+			}
+			if (rb_frame != UINT32_MAX) {
+				if (!rd.frames[rb_frame].fence_signaled && !rd.frame_wait_draining) {
+					return drain_trace.result(ERR_BUSY, "rb_frame_not_submitted");
+				}
+				RenderingDevice::NativeDisposalBudget slice;
+				slice.receipts = 256u;
+				slice.passes = 256u;
+				slice.deadline_usec = budget.deadline_micros;
+				RenderingDevice::NativeDisposalUsage actual;
+				usage.controls = 1;
+				production_native_effect_enter_locked(request);
+				++request.capture_inflight;
+				unlock_mutex_for_call();
+				const auto *prev_budget = rd.native_disposal_budget;
+				auto *prev_usage = rd.native_disposal_usage;
+				rd.native_disposal_budget = &slice;
+				rd.native_disposal_usage = &actual;
+				const Error stalled = rd._native_disposal_stall_step(rb_frame);
+				rd.native_disposal_budget = prev_budget;
+				rd.native_disposal_usage = prev_usage;
+				relock_mutex_after_call();
+				CRASH_COND(!request.capture_inflight);
+				--request.capture_inflight;
+				const uint32_t avail_passes = MIN(budget.passes, 64u) > usage.passes ? (MIN(budget.passes, 64u) - usage.passes) : 0u;
+				const uint32_t avail_receipts = MIN(budget.receipts, 128u) > usage.receipts ? (MIN(budget.receipts, 128u) - usage.receipts) : 0u;
+				const uint64_t total_actual = uint64_t(actual.polls) + actual.frees + actual.issues + actual.retains + actual.releases + actual.recycles;
+				usage.passes += MIN(actual.passes, avail_passes);
+				usage.receipts += uint32_t(MIN(total_actual, uint64_t(avail_receipts)));
+				return stalled;
+			}
+			// No pending graphs and no pending readback capture for this request.
+			// On a live viewport, Godot's normal swap_buffers()/_begin_frame() drains
+			// retiring resources; don't stall OBSERVE on foreign scene/UI draw_graph work.
+			if (mq_in_place_early || !rd.draw_graph.qualification_command_count() || production_maintenance_frame_admission_locked(request, rd, drain_trace) != OK) {
+				return OK;
+			}
 		}
 	}
 	const Error frame_admission = production_maintenance_frame_admission_locked(request, rd, drain_trace);
@@ -1319,9 +1398,11 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 
 		}
 	}
+	const uint32_t avail_receipts = MIN(budget.receipts, 128u) - usage.receipts;
+	const uint32_t avail_passes = MIN(budget.passes, 64u) - usage.passes;
 	RenderingDevice::NativeDisposalBudget service;
-	service.receipts = MIN(budget.receipts, 128u) - usage.receipts;
-	service.passes = MIN(budget.passes, 64u) - usage.passes;
+	service.receipts = MAX(avail_receipts, 64u);
+	service.passes = MAX(avail_passes, 16u);
 	service.deadline_usec = budget.deadline_micros;
 	RenderingDevice::NativeDisposalUsage actual;
 	usage.controls = 1;
@@ -1329,7 +1410,26 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	++request.capture_inflight;
 	unlock_mutex_for_call();
 	const bool starting = !rd.native_disposal_active;
-	const Error error = rd._native_disposal_maintenance_step(service, actual, &request, nullptr, mq_in_place);
+	Error error = rd._native_disposal_maintenance_step(service, actual, &request, nullptr, mq_in_place);
+	if (error == ERR_BUSY && rd.native_disposal_active) {
+		const uint64_t settle_deadline = MIN(service.deadline_usec, OS::get_singleton()->get_ticks_usec() + 50000ull);
+		while (error == ERR_BUSY && rd.native_disposal_active && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
+			OS::get_singleton()->delay_usec(150);
+			RenderingDevice::NativeDisposalBudget retry_service;
+			retry_service.receipts = 64u;
+			retry_service.passes = 16u;
+			retry_service.deadline_usec = settle_deadline;
+			RenderingDevice::NativeDisposalUsage step_actual;
+			error = rd._native_disposal_maintenance_step(retry_service, step_actual, &request, nullptr, mq_in_place);
+			actual.polls += step_actual.polls;
+			actual.frees += step_actual.frees;
+			actual.issues += step_actual.issues;
+			actual.retains += step_actual.retains;
+			actual.releases += step_actual.releases;
+			actual.recycles += step_actual.recycles;
+			actual.passes += step_actual.passes;
+		}
+	}
 	relock_mutex_after_call();
 	if (starting && rd.native_disposal_active) {
 		request.maintenance_serial = rd.native_disposal_continuation.serial;
@@ -1338,8 +1438,9 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	}
 	CRASH_COND(!request.capture_inflight);
 	--request.capture_inflight;
-	usage.receipts += actual.polls + actual.frees + actual.issues + actual.retains + actual.releases + actual.recycles;
-	usage.passes += actual.passes;
+	const uint64_t total_actual_receipts = uint64_t(actual.polls) + actual.frees + actual.issues + actual.retains + actual.releases + actual.recycles;
+	usage.receipts += uint32_t(MIN(total_actual_receipts, uint64_t(avail_receipts)));
+	usage.passes += MIN(actual.passes, avail_passes);
 	return drain_trace.result(error, "native_step_returned");
 }
 } // namespace GDExtensionDeviceExit

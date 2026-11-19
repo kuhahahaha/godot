@@ -36,6 +36,8 @@
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/rendering_server_globals.h"
+#include <cstdio>
+#include <cstdlib>
 
 #ifdef TESTS_ENABLED
 #include "core/os/os.h"

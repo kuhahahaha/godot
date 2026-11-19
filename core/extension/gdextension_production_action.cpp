@@ -543,7 +543,7 @@ Error Registry::production_retain_sources_locked(RenderingDevice &rd, uint32_t f
 			}
 			// An uncaptured issue prefix must keep its original frame owner alive;
 			// absence of a metadata row is never proof that no source exists.
-			if (request.effects_pending) {
+			if (!view && request.effects_pending) {
 				for (uint32_t g = 0; g < request.graph_count; ++g) {
 					if (request.graphs[g].device_frame == frame && request.graphs[g].device_epoch == epoch) {
 						return FAILED;

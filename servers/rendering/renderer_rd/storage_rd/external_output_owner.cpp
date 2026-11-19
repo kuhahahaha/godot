@@ -66,6 +66,9 @@ Error ExternalOutputOwner::validate_scene_cull(uint32_t p_slot) const {
 		return ERR_INVALID_DATA;
 	}
 	const auto &camera = slot.request.common.current_camera_token;
+	if (slot.state == LeaseState::ADOPTED) {
+		return OK;
+	}
 	return scene->instance_particle_output_cull_window_matches(slot.scene_cull_instance, slot.scene_cull_viewport,
 			camera.view_id, camera.view_epoch, camera.capture_ordinal) ? OK : ERR_BUSY;
 }
@@ -1376,6 +1379,38 @@ Error ExternalOutputOwner::acquire_camera_view(const ExternalSurfaceSelection &p
 		matched_slot = s;
 	}
 	if (matched_slot == UINT32_MAX) {
+		// Hold the most recently sealed valid slot for the same (generation, view_id, view_epoch)
+		// across frames while the producer prepares the next simulation/export frame.
+		uint64_t best_present_seq = 0;
+		for (uint32_t s = 0; s < slot_count; ++s) {
+			if (is_indexed144 && s != surface_cell.slot) {
+				continue;
+			}
+			const auto &slot = slots[s];
+			if ((slot.state != LeaseState::SEALED_RECORDED && slot.state != LeaseState::ADOPTED) || slot.publication_closed || slot.pass_uses_closed) {
+				continue;
+			}
+			const uint32_t view_idx = s / config.max_inflight;
+			if (view_idx >= config.max_views || !views[view_idx].occupied || views[view_idx].closed) {
+				continue;
+			}
+			if (slot.request.common.generation != generation || views[view_idx].epoch != slot.request.view_epoch ||
+					slot.request.view_epoch != camera_token.view_epoch ||
+					slot.request.common.current_camera_token.view_id != camera_token.view_id ||
+					slot.request.common.current_camera_token.view_epoch != camera_token.view_epoch) {
+				continue;
+			}
+			if (!slot.original_registry || slot.original_pin.is_empty() ||
+					!slot.original_registry->production_output_pin_matches(slot.original_pin, slot.original_request, *rd)) {
+				continue;
+			}
+			if (matched_slot == UINT32_MAX || slot.request.common.present_seq >= best_present_seq) {
+				matched_slot = s;
+				best_present_seq = slot.request.common.present_seq;
+			}
+		}
+	}
+	if (matched_slot == UINT32_MAX) {
 		return ERR_UNAVAILABLE;
 	}
 	if (!next_view_serial) {
@@ -1399,9 +1434,6 @@ Error ExternalOutputOwner::acquire_camera_view(const ExternalSurfaceSelection &p
 	}
 	const uint64_t serial = next_view_serial;
 	next_view_serial = serial == UINT64_MAX ? 0 : serial + 1;
-	if (slot.state == LeaseState::SEALED_RECORDED) {
-		slot.state = LeaseState::ADOPTED;
-	}
 	if (slot.native_camera_source.is_valid()) {
 		cell.camera_source = slot.native_camera_source;
 	}

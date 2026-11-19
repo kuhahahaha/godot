@@ -59,19 +59,36 @@ bool same_read_list(const RDG::RecordHandle &a, const RDG::RecordHandle &b) {
 bool RenderingDevice::_production_output_raster_permitted(RID rid) {
 	using namespace GDExtensionDeviceExit;
 	const auto &scope = production_output_raster_recording;
-	if (!scope.owner || !scope.request || !draw_list.active || !same_read_list(scope.begin, draw_list.begin_handle) ||
-			scope.read >= scope.owner->read_capacity) {
+	if (!scope.owner || !scope.request || !draw_list.active || !same_read_list(scope.begin, draw_list.begin_handle)) {
 		return false;
 	}
-	const auto &read = scope.owner->read_cells[scope.read];
-	if (!read.admitted || !read.list_linked || read.pin.is_empty() || read.pin.request != scope.request ||
-			!same_read_list(read.list_begin, scope.begin) || read.slot >= scope.owner->slot_count) {
-		return false;
+	uint32_t slot_index = UINT32_MAX;
+	if (scope.replay_adopted) {
+		if (scope.replay_slot >= scope.owner->slot_count) {
+			return false;
+		}
+		slot_index = scope.replay_slot;
+		const auto &slot = scope.owner->slots[slot_index];
+		if (slot.state != RendererRD::ExternalOutputOwner::LeaseState::ADOPTED || slot.publication_closed ||
+				slot.pass_uses_closed || slot.original_pin.is_empty() || slot.original_pin.request != scope.request) {
+			return false;
+		}
+	} else {
+		if (scope.read >= scope.owner->read_capacity) {
+			return false;
+		}
+		const auto &read = scope.owner->read_cells[scope.read];
+		if (!read.admitted || !read.list_linked || read.pin.is_empty() || read.pin.request != scope.request ||
+				!same_read_list(read.list_begin, scope.begin) || read.slot >= scope.owner->slot_count) {
+			return false;
+		}
+		slot_index = read.slot;
+		const auto &slot = scope.owner->slots[slot_index];
+		if (read.camera_source.is_null() || read.camera_source != slot.native_camera_source || !scope.request->capture_inflight) {
+			return false;
+		}
 	}
-	const auto &slot = scope.owner->slots[read.slot];
-	if (read.camera_source.is_null() || read.camera_source != slot.native_camera_source || !scope.request->capture_inflight) {
-		return false;
-	}
+	const auto &slot = scope.owner->slots[slot_index];
 	uint32_t kind = UINT32_MAX;
 	uint64_t incarnation = 0, driver_id = 0;
 	const auto *head = _production_disposal_head(rid, kind, incarnation, driver_id);
@@ -107,6 +124,65 @@ bool RenderingDevice::_production_output_raster_permitted(RID rid) {
 		}
 	}
 	return false;
+}
+
+Error RenderingDevice::_production_output_replay_adopted_record(RendererRD::ExternalOutputOwner &owner, uint32_t slot_index, const RendererRD::ExternalPipelinePreparation &row, uint32_t surface_index, DrawListID list, const void *push, uint32_t push_bytes) {
+	using namespace GDExtensionDeviceExit;
+	if (!native_immutable_is_render_thread() || owner.device != this || !owner.admits_work() ||
+			!draw_list.active || list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT) || _recording_error() != OK ||
+			production_output_raster_recording.owner || production_output_guard_recording.request || production_recording_request ||
+			slot_index >= owner.slot_count || row.selected_geometry >= 2) {
+		return ERR_UNAVAILABLE;
+	}
+	const auto &slot = owner.slots[slot_index];
+	if (slot.state != RendererRD::ExternalOutputOwner::LeaseState::ADOPTED || !slot.storage ||
+			slot.publication_closed || slot.pass_uses_closed || slot.original_pin.is_empty() || !slot.original_pin.request) {
+		return ERR_UNAVAILABLE;
+	}
+	const auto &geometry = row.geometry[row.selected_geometry];
+	const auto &material = row.material.get_snapshot();
+	const RID commands = slot.storage->resources[RendererRD::ExternalOutputStorage::PROTECTED_COMMANDS].rid;
+	const uint64_t command_offset = uint64_t(surface_index) * 20;
+	if (!row.created_pipeline.is_valid() || !row.transforms_uniform_set.is_valid() || !commands.is_valid() || command_offset > UINT32_MAX) {
+		return ERR_INVALID_DATA;
+	}
+	auto &scope = production_output_raster_recording;
+	scope.owner = &owner;
+	scope.read = UINT32_MAX;
+	scope.request = slot.original_pin.request;
+	scope.begin = draw_list.begin_handle;
+	scope.groups[0] = row.pipeline_owned_group;
+	scope.groups[1] = row.geometry_reserved_group;
+	scope.groups[2] = row.material_reserved_group;
+	scope.groups[3] = row.transforms_owned_group;
+	scope.groups[4] = slot.owned_group;
+	scope.storage_reads[0] = commands;
+	scope.storage_reads[1] = slot.storage->resources[RendererRD::ExternalOutputStorage::CURRENT_RECORDS].rid;
+	scope.storage_reads[2] = owner.config.profile == RendererRD::ExternalOutputConfig::INDEXED_144
+			? slot.storage->resources[RendererRD::ExternalOutputStorage::INDEXED_VERTEX_HISTORY_VALIDITY].rid
+			: slot.storage->resources[RendererRD::ExternalOutputStorage::PREVIOUS_RECORDS].rid;
+	scope.storage_reads[3] = slot.storage->resources[RendererRD::ExternalOutputStorage::OUTPUT_META].rid;
+	scope.storage_reads[4] = slot.storage->resources[RendererRD::ExternalOutputStorage::INSTANCE_AUX_PARAMS].rid;
+	scope.replay_adopted = true;
+	scope.replay_slot = slot_index;
+	struct ReplayScopeReturn {
+		RenderingDevice &device;
+		~ReplayScopeReturn() {
+			device.production_output_raster_recording = ProductionOutputRasterRecording();
+		}
+	} scope_return{ *this };
+	draw_list_bind_render_pipeline(list, row.created_pipeline);
+	draw_list_bind_vertex_array(list, geometry.get_retained_vertex_array());
+	draw_list_bind_index_array(list, geometry.get_retained_index_array());
+	if (material.uniform_set.is_valid()) {
+		draw_list_bind_uniform_set(list, material.uniform_set, material.uniform_set_index);
+	}
+	draw_list_bind_uniform_set(list, row.transforms_uniform_set, 2);
+	if (push && push_bytes) {
+		draw_list_set_push_constant(list, push, push_bytes);
+	}
+	draw_list_draw_indirect(list, true, commands, uint32_t(command_offset), 1, 20);
+	return OK;
 }
 
 Error RenderingDevice::_production_output_read_record(RendererRD::ExternalPacketBinding &binding, DrawListID list, const void *push, uint32_t push_bytes) {
