@@ -219,13 +219,22 @@ ObjectAccessChain subAccessChainFromSecondElement(const ObjectAccessChain& chain
     return pos_delimiter == std::string::npos ? "" : chain.substr(pos_delimiter + 1);
 }
 
+// A helper function to test whether 'prefix' is a delimiter-aligned prefix of 'chain'.
+bool hasAccessChainPrefix(const ObjectAccessChain& chain, const ObjectAccessChain& prefix)
+{
+    if (chain.size() < prefix.size() || chain.compare(0, prefix.size(), prefix) != 0)
+        return false;
+    return chain.size() == prefix.size() || chain[prefix.size()] == ObjectAccesschainDelimiter;
+}
+
 // A helper function to get the access chain after removing a given prefix.
 ObjectAccessChain getSubAccessChainAfterPrefix(const ObjectAccessChain& chain,
                                                const ObjectAccessChain& prefix)
 {
-    size_t pos = chain.find(prefix);
-    if (pos != 0)
+    if (!hasAccessChainPrefix(chain, prefix))
         return chain;
+    if (chain.size() == prefix.size())
+        return ObjectAccessChain();
     return chain.substr(prefix.length() + sizeof(ObjectAccesschainDelimiter));
 }
 
@@ -534,12 +543,12 @@ public:
         // Compare the access chain string of the assignee node with the given
         // precise object to determine if this assignment should propagate
         // 'precise'.
-        if (assignee_object.find(precise_object) == 0) {
+        if (hasAccessChainPrefix(assignee_object, precise_object)) {
             // The access chain string of the given precise object is a prefix
             // of assignee's access chain string. The assignee should be
             // 'precise'.
             return make_tuple(true, ObjectAccessChain());
-        } else if (precise_object.find(assignee_object) == 0) {
+        } else if (hasAccessChainPrefix(precise_object, assignee_object)) {
             // The assignee's access chain string is a prefix of the given
             // precise object, the assignee object contains 'precise' object,
             // and we need to pass the remained access chain to the object nodes
@@ -689,6 +698,19 @@ protected:
             }
             return false;
         }
+        if (!remained_accesschain_.empty()) {
+            // Non-struct-constructor aggregates (such as EOpFunctionCall) do not
+            // map remained_accesschain_ struct member indices onto their arguments.
+            StateSettingGuard<ObjectAccessChain> clear_remained_accesschain(
+                &remained_accesschain_, ObjectAccessChain());
+            incrementDepth(node);
+            for (glslang::TIntermSequence::iterator sit = node->getSequence().begin();
+                 sit != node->getSequence().end(); sit++) {
+                (*sit)->traverse(this);
+            }
+            decrementDepth();
+            return false;
+        }
         return true;
     }
 
@@ -705,7 +727,7 @@ protected:
             // object set with the access chain of this node + remained
             // access chain .
             ObjectAccessChain new_precise_accesschain = accesschain_mapping_.at(node);
-            if (remained_accesschain_.empty()) {
+            if (remained_accesschain_.empty() || !node->getType().isStruct()) {
                 node->getWritableType().getQualifier().noContraction = true;
             } else {
                 new_precise_accesschain += ObjectAccesschainDelimiter + remained_accesschain_;
@@ -754,7 +776,7 @@ protected:
         // marked as 'precise'.  Otherwise, the unused access chain should be
         // appended to the symbol ID to build a new access chain which points to
         // the nested 'precise' object in this symbol object.
-        if (remained_accesschain_.empty()) {
+        if (remained_accesschain_.empty() || !node->getType().isStruct()) {
             node->getWritableType().getQualifier().noContraction = true;
         } else {
             new_precise_accesschain += ObjectAccesschainDelimiter + remained_accesschain_;
