@@ -10578,8 +10578,12 @@ Error RenderingDevice::_submit_transfer_workers(RDD::CommandBufferID p_draw_comm
 	for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
 		TransferWorker *worker = transfer_worker_pool[i];
 		if (p_draw_command_buffer) {
+			MutexLock thread_lock(worker->thread_mutex);
 			MutexLock lock(worker->operations_mutex);
 			if (worker->operations_processed >= transfer_worker_operation_used_by_draw[worker->index]) {
+				if (frames.is_empty() || uint32_t(frame) >= frames.size() || frames[frame].qualification_tickets.is_empty()) {
+					worker->qualification_batch_sealed = false;
+				}
 				// The operation used by the draw has already been processed, we don't need to wait on the worker.
 				continue;
 			}
@@ -10596,6 +10600,9 @@ Error RenderingDevice::_submit_transfer_workers(RDD::CommandBufferID p_draw_comm
 			}
 
 			_production_join_transfer_worker(worker, false);
+			if (frames.is_empty() || uint32_t(frame) >= frames.size() || frames[frame].qualification_tickets.is_empty()) {
+				worker->qualification_batch_sealed = false;
+			}
 			if (p_draw_command_buffer) {
 				_flush_barriers_for_transfer_worker(worker);
 			}
@@ -13652,13 +13659,28 @@ Error RenderingDevice::_native_disposal_maintenance() {
 		return cleanup_credits;
 	}
 	if (qualification_frame_advance_pending) {
-		return _begin_frame(false, true);
+		Error pending_err = _begin_frame(false, true);
+		if (pending_err == ERR_BUSY) {
+			const uint64_t settle_deadline = OS::get_singleton()->get_ticks_usec() + 50000ull;
+			while (pending_err == ERR_BUSY && qualification_frame_advance_pending && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
+				OS::get_singleton()->delay_usec(150);
+				pending_err = _begin_frame(false, true);
+			}
+		}
+		return pending_err;
 	}
 	if (draw_graph.has_driver_callbacks()) {
 		return ERR_BUSY;
 	}
 	const uint32_t next = (frame + 1) % frames.size();
 	Error error = _stall_for_frame(next, true);
+	if (error == ERR_BUSY) {
+		const uint64_t settle_deadline = OS::get_singleton()->get_ticks_usec() + 50000ull;
+		while (error == ERR_BUSY && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
+			OS::get_singleton()->delay_usec(150);
+			error = _stall_for_frame(next, true);
+		}
+	}
 	if (error != OK) {
 		return error;
 	}
@@ -13677,7 +13699,27 @@ Error RenderingDevice::_native_disposal_maintenance() {
 	}
 	frame = (frame + 1) % frames.size();
 	qualification_frame_advance_pending = true;
-	return _begin_frame(false, true);
+	error = _begin_frame(false, true);
+	if (error == ERR_BUSY) {
+		const uint64_t settle_deadline = OS::get_singleton()->get_ticks_usec() + 50000ull;
+		while (error == ERR_BUSY && qualification_frame_advance_pending && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
+			OS::get_singleton()->delay_usec(150);
+			error = _begin_frame(false, true);
+		}
+	}
+	return error;
+}
+
+void RenderingDevice::pump_qualification_frame_if_idle() {
+	if (!is_main_instance || render_thread_id != Thread::get_caller_id() || frames.is_empty() || uint32_t(frame) >= frames.size()) {
+		return;
+	}
+	if (draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining || !frames[frame].swap_chains_to_present.is_empty()) {
+		return;
+	}
+	if (!frames[frame].qualification_tickets.is_empty() || qualification_frame_advance_pending.load() || native_disposal_active.load()) {
+		(void)_native_disposal_maintenance();
+	}
 }
 
 bool RenderingDevice::_qualification_free_event_available(bool p_reserved) const {
@@ -15165,6 +15207,14 @@ Error RenderingDevice::_begin_frame(bool p_presented, bool p_nonblocking) {
 	// membership; this never waits for a worker sealed by the frame being ended.
 	if (frames[frame].qualification_tickets.is_empty()) {
 		_qualification_retry_deferred_frees();
+		MutexLock transfer_worker_lock(transfer_worker_pool_mutex);
+		for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
+			TransferWorker *worker = transfer_worker_pool[i];
+			MutexLock lock(worker->thread_mutex);
+			if (worker->submitted && !worker->recording && !worker->submission_pending && !worker->qualification_batch_sealed) {
+				_wait_for_transfer_worker(worker, false);
+			}
+		}
 	}
 
 	// Erase pending resources.

@@ -1397,16 +1397,39 @@ GDExtensionDeviceSessionResultV1 Registry::production_record_material_qualificat
 	const bool is_particle_surface = mq->prepare.recipe == GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_PARTICLE_SURFACE_V1;
 	unlock_mutex_for_call();
 
+	// Preflight download staging capacity before touching draw_graph so staging
+	// exhaustion returns ERR_BUSY cleanly without setting request->effects_pending.
+	Error staging_preflight = OK;
+	{
+		MutexLock rd_lock(rd->_thread_safe_);
+		const uint32_t raw_bytes = is_particle_surface ? GDEXTENSION_MATERIAL_QUALIFICATION_PARTICLE_COLOR_RAW_BYTES_V1 : GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_RAW_BYTES_V1;
+		const uint32_t align = MAX(32u, uint32_t(rd->driver->api_trait_get(RDD::API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT)));
+		uint32_t staging_offset = 0;
+		uint32_t staging_amount = 0;
+		RenderingDevice::StagingRequiredAction staging_action = RenderingDevice::STAGING_REQUIRED_ACTION_NONE;
+		const Error alloc_err = rd->_staging_buffer_allocate(rd->download_staging_buffers, raw_bytes, align, staging_offset, staging_amount, staging_action, false);
+		if (alloc_err != OK) {
+			staging_preflight = alloc_err;
+		} else if (staging_action != RenderingDevice::STAGING_REQUIRED_ACTION_NONE || staging_amount != raw_bytes) {
+			staging_preflight = ERR_BUSY;
+		}
+	}
+
 	Color clear_colors[1] = { is_particle_surface ? Color(0.0f, 0.0f, 0.0f, 0.0f) : Color(0.0f, 0.0f, 0.0f, 1.0f) };
-	const auto begun = rd->_draw_list_begin_recorded(
-			mq->framebuffer_rid,
-			RenderingDevice::DRAW_CLEAR_COLOR_0 | RenderingDevice::DRAW_CLEAR_DEPTH,
-			VectorView<Color>(clear_colors, 1),
-			0.0f,
-			0,
-			Rect2(),
-			0,
-			false);
+	RenderingDevice::DrawListBeginResult begun;
+	if (staging_preflight == OK) {
+		begun = rd->_draw_list_begin_recorded(
+				mq->framebuffer_rid,
+				RenderingDevice::DRAW_CLEAR_COLOR_0 | RenderingDevice::DRAW_CLEAR_DEPTH,
+				VectorView<Color>(clear_colors, 1),
+				0.0f,
+				0,
+				Rect2(),
+				0,
+				false);
+	} else {
+		begun.error = staging_preflight;
+	}
 	RenderingDevice::DrawAppendResult bind_pipe;
 	RenderingDevice::DrawAppendResult drawn;
 	RenderingDevice::DrawAppendResult ended;

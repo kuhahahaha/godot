@@ -29,6 +29,8 @@
 /**************************************************************************/
 
 #include "material_storage.h"
+#include <cstdio>
+#include <cstdlib>
 
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
@@ -3368,11 +3370,11 @@ Error MaterialStorage::material_recipe_source_acquire(RID p_material, NativeReci
 		return selected;
 	}
 	source.owner = this;
+	NativeSelectionShaderFeatures features;
 	auto fail = [&](Error error) {
 		const Error returned = material_recipe_source_release(source);
 		return returned == OK ? error : returned; // A return prefix stays in source.
 	};
-	NativeSelectionShaderFeatures features;
 	Error error = material_selection_get_shader_features(source.selection, features);
 	if (error != OK) {
 		return fail(error);
@@ -3836,14 +3838,33 @@ Error MaterialStorage::material_settle_native_uploads(RID p_material) {
 			}
 		}
 	}
-	if (TextureStorage *textures = TextureStorage::get_singleton()) {
-		for (const RID &tex_rid : material->data->texture_cache) {
+	TextureStorage *textures = TextureStorage::get_singleton();
+	auto settle_tex = [&](const RID &tex_rid) -> Error {
+		if (!tex_rid.is_valid()) {
+			return OK;
+		}
+		if (rd->texture_is_valid(tex_rid)) {
+			return rd->_native_settle_transfer_worker(tex_rid);
+		}
+		if (textures && textures->owns_texture(tex_rid)) {
 			const RID rd_tex = textures->texture_get_rd_texture(tex_rid);
 			if (rd_tex.is_valid()) {
-				const Error settled = rd->_native_settle_transfer_worker(rd_tex);
-				if (settled != OK) {
-					return settled;
-				}
+				return rd->_native_settle_transfer_worker(rd_tex);
+			}
+		}
+		return OK;
+	};
+	for (const RID &tex_rid : material->data->texture_cache) {
+		const Error settled = settle_tex(tex_rid);
+		if (settled != OK) {
+			return settled;
+		}
+	}
+	for (uint32_t i = 0; i < 2; ++i) {
+		for (const RID &tex_rid : material->data->native_uniform_sets[i].textures) {
+			const Error settled = settle_tex(tex_rid);
+			if (settled != OK) {
+				return settled;
 			}
 		}
 	}

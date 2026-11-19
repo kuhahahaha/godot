@@ -36,6 +36,8 @@
 #include "servers/rendering/renderer_rd/storage_rd/render_data_rd.h"
 #include "servers/rendering/rendering_server.h"
 
+#include <cstdio>
+#include <cstdlib>
 #include <limits>
 
 namespace RendererRD {
@@ -1527,7 +1529,12 @@ Error ParticlesStorage::particles_external_prepare_pipeline(const ExternalSurfac
 		row.backend_error = ERR_CANT_CREATE;
 	}
 	if (row.backend_error == OK) {
-		row.backend_error = _external_transforms_prepare_owned_prefix(row);
+		for (int attempt = 0; attempt < 32; ++attempt) {
+			row.backend_error = _external_transforms_prepare_owned_prefix(row);
+			if (row.backend_error != ERR_BUSY) {
+				break;
+			}
+		}
 	}
 	row.finish_error = slot.original_registry->production_output_preparation_finish(scope);
 	out = &row;
@@ -1565,6 +1572,41 @@ Error ParticlesStorage::particles_external_draw(const ExternalSurfaceSelection &
 		}
 		const Error view_error = view.release_checked();
 		return error != OK ? error : view_error;
+	}
+	if (view.owner && view.slot < view.owner->slot_count) {
+		const auto &slot = view.owner->slots[view.slot];
+		if (slot.state == ExternalOutputOwner::LeaseState::ADOPTED &&
+				slot.native_camera_source != p_render_data->get_native_camera_source() &&
+				slot.storage && !slot.publication_closed && !slot.pass_uses_closed) {
+			// Already-adopted immutable slot replayed on a subsequent frame while the
+			// producer computes the next step: draw directly from the prepared pipeline
+			// & ProtectedCommands without allocating a new ReadCell or blocking OBSERVE.
+			const ExternalPipelinePreparation *ready_row = nullptr;
+			for (uint32_t i = 0; i < view.owner->preparation_capacity; ++i) {
+				const auto &cand = view.owner->preparation_rows[i];
+				if (cand.owner == view.owner && cand.owner_slot == view.slot && cand.tuple_surface == surface.flattened_surface &&
+						cand.tuple_state == ExternalPipelinePreparation::TupleState::READY && cand.finish_complete &&
+						cand.finish_error == OK && cand.backend_error == OK && cand.pipeline_sealed &&
+						cand.selection == p_pipeline) {
+					ready_row = &cand;
+					break;
+				}
+			}
+			if (ready_row && ready_row->selected_geometry < 2 && ready_row->created_pipeline.is_valid() && ready_row->transforms_uniform_set.is_valid()) {
+				auto *rd = RD::get_singleton();
+				const RID commands = slot.storage->resources[ExternalOutputStorage::PROTECTED_COMMANDS].rid;
+				ExternalPacketBinding dummy_binding;
+				dummy_binding.selection = ready_row->selection;
+				dummy_binding.ubershader = ready_row->ubershader;
+				const void *push = nullptr;
+				uint32_t push_bytes = 0;
+				if (rd && commands.is_valid() && p_prepare_push(p_push_context, dummy_binding, push, push_bytes) == OK) {
+					const Error replay_err = rd->_production_output_replay_adopted_record(*view.owner, view.slot, *ready_row, surface.flattened_surface, p_list, push, push_bytes);
+					const Error view_error = view.release_checked();
+					return replay_err != OK ? replay_err : view_error;
+				}
+			}
+		}
 	}
 	if (p_preparation == ExternalDrawPreparation::PREPARE_FOR_DRAW) {
 		const ExternalPipelinePreparation *preparation = nullptr;

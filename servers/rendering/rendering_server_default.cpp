@@ -579,6 +579,9 @@ void RenderingServerDefault::sync() {
 		command_queue.sync();
 	} else {
 		command_queue.flush_all(); // Flush all pending from other threads.
+		if (RenderingDevice::get_singleton()) {
+			RenderingDevice::get_singleton()->pump_qualification_frame_if_idle();
+		}
 	}
 }
 

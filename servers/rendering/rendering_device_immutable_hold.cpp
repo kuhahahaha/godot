@@ -1315,9 +1315,11 @@ Error RenderingDevice::_production_output_resource_preflight_locked(GDExtensionD
 					RendererRD::MaterialStorage::_native_hold_callback_is_owned(set->production_material_origin, set->production_material_origin_generation, set->invalidated_callback, set->invalidated_callback_userdata, rid);
 		}
 		// The packet material's bidirectional disposal inventory can reach a
-		// renderer-owned cache set. Observe it without taking a native hold.
+		// renderer-owned cache set or a sibling material's uniform set sharing
+		// a default sampler/texture. Observe it without taking a native hold.
 		const bool cache_observer = !material_owned && material_observer &&
-				UniformSetCacheRD::owns_invalidation_callback(rid, set->invalidated_callback, set->invalidated_callback_userdata);
+				(UniformSetCacheRD::owns_invalidation_callback(rid, set->invalidated_callback, set->invalidated_callback_userdata) ||
+						set->invalidated_callback == RendererRD::MaterialStorage::_material_uniform_set_erased);
 		if (!material_owned && !cache_observer) {
 #ifdef TESTS_ENABLED
 			trace_refusal("uniform_set_callback", ERR_UNAVAILABLE, kind, set);
@@ -3135,6 +3137,34 @@ Error RenderingDevice::_native_settle_transfer_worker(RID p_rid) {
 			if (tex->transfer_worker_index >= 0) {
 				r_needs_flush = true;
 			}
+			RID owner_rid = tex->owner;
+			for (int hop = 0; hop < 8 && owner_rid.is_valid(); ++hop) {
+				Texture *owner_tex = texture_owner.owns(owner_rid) ? texture_owner.get_or_null(owner_rid) : nullptr;
+				if (!owner_tex) {
+					break;
+				}
+				const Error oerr = _check_transfer_worker_texture(owner_tex);
+				if (oerr != OK) {
+					return oerr;
+				}
+				if (owner_tex->transfer_worker_index >= 0) {
+					r_needs_flush = true;
+				}
+				owner_rid = owner_tex->owner;
+			}
+			if (const auto *rev = reverse_dependency_map.getptr(p_rid)) {
+				for (RID dep : *rev) {
+					if (Texture *dep_tex = texture_owner.owns(dep) ? texture_owner.get_or_null(dep) : nullptr) {
+						const Error derr = _check_transfer_worker_texture(dep_tex);
+						if (derr != OK) {
+							return derr;
+						}
+						if (dep_tex->transfer_worker_index >= 0) {
+							r_needs_flush = true;
+						}
+					}
+				}
+			}
 			return OK;
 		}
 		return OK;
@@ -3399,12 +3429,12 @@ Error RenderingDevice::_production_mq_create_targets_and_framebuffer(const Textu
 	framebuffer.qualification_return = &r_fb_physical;
 	framebuffer.format_id = format_id;
 	framebuffer.texture_ids = attachment_rids;
-	framebuffer.size = Size2i(32, 32);
+	framebuffer.size = Size2i(p_color_fmt.width, p_color_fmt.height);
 	framebuffer.view_count = 1;
 
 	RDG::FramebufferCache *framebuffer_cache = RDG::framebuffer_cache_create();
-	framebuffer_cache->width = 32;
-	framebuffer_cache->height = 32;
+	framebuffer_cache->width = p_color_fmt.width;
+	framebuffer_cache->height = p_color_fmt.height;
 	framebuffer_cache->textures = textures;
 	framebuffer_cache->trackers = trackers;
 	framebuffer_cache->render_pass_creation_user_data = (void *)(&framebuffer_formats[format_id].E->key());

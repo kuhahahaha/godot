@@ -2446,7 +2446,9 @@ GDExtensionDeviceSessionResultV1 Registry::production_stage_camera_payload_v2(GD
 						bytes[i] <= use.byte_size - (action.upload.destination_offset - use.byte_offset);
 			}
 		}
-		if (!writable || !consumed) { return predecessor_result(ERR_INVALID_DATA); }
+		if (!writable || !consumed) {
+			return predecessor_result(ERR_INVALID_DATA);
+		}
 		for (uint32_t j = 0; j < i; ++j) { if (ordinals[j] == ordinals[i]) { return predecessor_result(ERR_INVALID_DATA); } }
 	}
 	if (!any) { return predecessor_result(ERR_INVALID_PARAMETER); }
@@ -5220,10 +5222,11 @@ Error Registry::production_output_read_begin_locked(RendererRD::ExternalOutputOw
 		return ERR_BUSY;
 	}
 	// New raster reads may share the still-open native list. Require every
-	// original producer graph ordered; later read graphs carry no new recipe.
+	// still-pending producer graph ordered; graphs already submitted on prior
+	// frames are already ordered before this draw list.
 	for (uint32_t i = 0; i < request.graph_count; ++i) {
 		uint32_t command = UINT32_MAX;
-		if (!request.graphs[i].output_read && !owner.device->draw_graph._resolve_record_command_index(request.graphs[i].handle, command)) {
+		if (!request.graphs[i].output_read && request.graphs[i].pending && !owner.device->draw_graph._resolve_record_command_index(request.graphs[i].handle, command)) {
 			return ERR_BUSY;
 		}
 	}

@@ -362,6 +362,7 @@ private:
 	Error _production_mq_record_depth_copy(RID p_depth_tex, RID p_dst_ssbo, RDG::RecordHandle &r_handle);
 	bool _production_output_raster_permitted(RID);
 	Error _production_output_read_record(::RendererRD::ExternalPacketBinding &, DrawListID, const void *, uint32_t);
+	Error _production_output_replay_adopted_record(::RendererRD::ExternalOutputOwner &, uint32_t, const ::RendererRD::ExternalPipelinePreparation &, uint32_t, DrawListID, const void *, uint32_t);
 	Error _production_output_empty_read_record(::RendererRD::ExternalPacketBinding &, DrawListID);
 	Error _production_output_reads_close();
 	struct ProductionOutputRasterRecording {
@@ -371,6 +372,8 @@ private:
 		RDG::RecordHandle begin;
 		uint64_t groups[5] = {};
 		RID storage_reads[5];
+		bool replay_adopted = false;
+		uint32_t replay_slot = UINT32_MAX;
 	} production_output_raster_recording;
 	::RendererRD::ExternalOutputOwner *production_output_list_head_owner = nullptr;
 	uint32_t production_output_list_head_read = UINT32_MAX, production_output_list_reads = 0;
@@ -2912,6 +2915,7 @@ public:
 	Error _stall_for_frame(uint32_t p_frame, bool p_nonblocking = false);
 	Error _stall_for_previous_frames();
 	Error _flush_and_stall_for_all_frames(bool p_begin_frame = true);
+	void pump_qualification_frame_if_idle();
 
 	template <typename T>
 	void _free_rids(T &p_owner, const char *p_type);

@@ -29,6 +29,8 @@
 /**************************************************************************/
 
 #include "render_forward_mobile.h"
+#include <cstdio>
+#include <cstdlib>
 
 #include "core/config/project_settings.h"
 #include "core/extension/gdextension_scene_late_depth.h"
@@ -3056,24 +3058,34 @@ void RenderForwardMobile::_prepare_external_color(const RenderListParameters &p_
 		}
 		const bool indexed144 = view.get_profile() == RendererRD::ExternalOutputConfig::INDEXED_144;
 		const bool instance192 = view.get_profile() == RendererRD::ExternalOutputConfig::INSTANCE_192;
+		bool shader_ready = true;
 		if (indexed144 || (instance192 && selected.shader->instance192_shader_supported())) {
 			const auto version = selected.base_key.version;
 			RID native_shader;
 			uint64_t input_mask = 0;
-			const Error ready = selected.shader->get_native_shader_if_ready(version, false, indexed144, instance192, native_shader, input_mask);
+			Error ready = selected.shader->get_native_shader_if_ready(version, false, indexed144, instance192, native_shader, input_mask);
 			if ((ready == ERR_UNAVAILABLE || ready == ERR_BUSY) && particles_storage->particles_external_view_can_prepare_shader(view)) {
 				// Enable the real renderer's exact precision group before the paid
 				// preparation begins. Its backend still observes shader readiness.
 				const RID variant = selected.shader->get_shader_variant(version, false, indexed144, instance192);
-				if (variant.is_valid() && selected.shader->get_native_shader_if_ready(version, false, indexed144, instance192, native_shader, input_mask) == ERR_BUSY) {
-					selected.shader->is_valid(); // Join any other outstanding groups of this version.
+				if (variant.is_valid()) {
+					ready = selected.shader->get_native_shader_if_ready(version, false, indexed144, instance192, native_shader, input_mask);
+					if (ready == ERR_BUSY) {
+						selected.shader->is_valid(); // Join any other outstanding groups of this version.
+						ready = selected.shader->get_native_shader_if_ready(version, false, indexed144, instance192, native_shader, input_mask);
+					}
 				}
 			}
+			shader_ready = (ready == OK);
+		}
+		if (!shader_ready) {
+			ERR_FAIL_COND(view.release_checked() != OK);
+			continue;
 		}
 		const RendererRD::ExternalPipelinePreparation *preparation = nullptr;
 		// The original row retains preparation errors and partial custody. Only
 		// the in-list resolver can accept a complete ready row for this key.
-		external_pipeline_prepare_for_view(surface, view, request, preparation, true);
+		(void)external_pipeline_prepare_for_view(surface, view, request, preparation, true);
 		ERR_FAIL_COND(view.release_checked() != OK);
 	}
 }
@@ -3214,7 +3226,7 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 			prev_xforms_uniform_set = RID();
 			prev_material_uniform_set = RID();
 			if (external_error != OK && external_error != ERR_UNAVAILABLE) {
-				return;
+				continue;
 			}
 
 			continue;
@@ -4716,7 +4728,9 @@ Error RenderForwardMobile::_plan_native_material_recipe(RID selected_material, R
 	auto *meshes = MeshStorage::get_singleton();
 	if (!storage || !meshes || get_singleton() != this) { return ERR_UNCONFIGURED; }
 	Error error = plan._begin(*storage, *meshes, selected_material, selected_mesh, selected_surface, actual_format, limit, p_allowed_rejections);
-	if (error != OK) { return error; }
+	if (error != OK) {
+		return error;
+	}
 	auto fail = [&](Error error) { const Error returned = plan.release(); return returned == OK ? error : returned; };
 	MaterialStorage::MaterialData *original = nullptr;
 	error = plan._material_data(original);
