@@ -1753,7 +1753,8 @@ uint32_t Registry::find_view(GDExtensionDeviceExitLibraryViewRef p_view) const {
 	if (p_view.registry_instance != instance || p_view.handle_serial == 0) {
 		return INVALID_SLOT;
 	}
-	for (uint32_t i = 0; i < view_limit; i++) {
+	const uint32_t scan_limit = MIN(views_high_water, view_limit);
+	for (uint32_t i = 0; i < scan_limit; i++) {
 		if (views[i].domain == ViewDomain::METADATA && views[i].serial == p_view.handle_serial) {
 			return i;
 		}
@@ -1768,6 +1769,7 @@ Error Registry::issue_view(uint32_t p_record, GDExtensionDeviceExitLibraryViewRe
 		if (views[i].serial == 0) {
 			serials.take(views[i].serial);
 			views[i].record = p_record;
+			note_view_slot(i);
 			records[p_record].external_refs++;
 			*r_view = { instance, views[i].serial };
 			return OK;

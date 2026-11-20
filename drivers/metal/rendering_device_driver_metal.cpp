@@ -51,6 +51,8 @@
 #include "rendering_device_driver_metal.h"
 
 #include "core/extension/gdextension_library_exit_guard.h"
+#include "core/io/dir_access.h"
+#include "core/io/file_access.h"
 
 thread_local LocalVector<RenderingDeviceDriverMetal::CompletionRecord *> *RenderingDeviceDriverMetal::active_completion_records = nullptr;
 thread_local uint64_t RenderingDeviceDriverMetal::active_native_serial = 0;
@@ -2076,21 +2078,40 @@ String RenderingDeviceDriverMetal::_pipeline_get_cache_path() const {
 }
 
 bool RenderingDeviceDriverMetal::pipeline_cache_create(const Vector<uint8_t> &p_data) {
-	return false;
-	// TODO: Convert to metal-cpp when pipeline caching is re-enabled
-	// CharString path = _pipeline_get_cache_path().utf8();
-	// NS::SharedPtr<MTL::BinaryArchiveDescriptor> desc = NS::TransferPtr(MTL::BinaryArchiveDescriptor::alloc()->init());
-	// NS::Error *error = nullptr;
-	// archive = NS::TransferPtr(device->newBinaryArchive(desc.get(), &error));
-	// return true;
+	String cache_path = _pipeline_get_cache_path();
+	DirAccess::make_dir_recursive_absolute(cache_path.get_base_dir());
+
+	NS::SharedPtr<MTL::BinaryArchiveDescriptor> desc = NS::TransferPtr(MTL::BinaryArchiveDescriptor::alloc()->init());
+	NS::Error *error = nullptr;
+	if (FileAccess::exists(cache_path)) {
+		CharString path_utf8 = cache_path.utf8();
+		NS::String *ns_path = NS::String::string(path_utf8.get_data(), NS::UTF8StringEncoding);
+		desc->setUrl(NS::URL::fileURLWithPath(ns_path));
+		archive = NS::TransferPtr(device->newBinaryArchive(desc.get(), &error));
+		if (!archive || error != nullptr) {
+			print_verbose(vformat("Metal binary archive load missed (%s); starting fresh archive.", cache_path));
+			archive = nullptr;
+			error = nullptr;
+			desc->setUrl(nullptr);
+		}
+	}
+	if (!archive) {
+		archive = NS::TransferPtr(device->newBinaryArchive(desc.get(), &error));
+	}
+	if (!archive) {
+		return false;
+	}
+	archive_count = 1;
+	return true;
 }
 
 void RenderingDeviceDriverMetal::pipeline_cache_free() {
 	archive = nullptr;
+	archive_count = 0;
 }
 
 size_t RenderingDeviceDriverMetal::pipeline_cache_query_size() {
-	return archive_count * 1024;
+	return (archive_count > 0 ? archive_count : 1u) * 1024u;
 }
 
 Vector<uint8_t> RenderingDeviceDriverMetal::pipeline_cache_serialize() {
@@ -2098,16 +2119,18 @@ Vector<uint8_t> RenderingDeviceDriverMetal::pipeline_cache_serialize() {
 		return Vector<uint8_t>();
 	}
 
-	// TODO: Convert to metal-cpp when pipeline caching is re-enabled
-	// CharString path = _pipeline_get_cache_path().utf8();
-	// NS::URL *target = NS::URL::fileURLWithPath(NS::String::string(path.get_data(), NS::UTF8StringEncoding));
-	// NS::Error *error = nullptr;
-	// if (archive->serializeToURL(target, &error)) {
-	//     return Vector<uint8_t>();
-	// } else {
-	//     print_line(error->localizedDescription()->utf8String());
-	//     return Vector<uint8_t>();
-	// }
+	String cache_path = _pipeline_get_cache_path();
+	DirAccess::make_dir_recursive_absolute(cache_path.get_base_dir());
+	String tmp_path = cache_path + ".tmp";
+	CharString tmp_utf8 = tmp_path.utf8();
+	NS::String *ns_tmp = NS::String::string(tmp_utf8.get_data(), NS::UTF8StringEncoding);
+	NS::URL *target = NS::URL::fileURLWithPath(ns_tmp);
+	NS::Error *error = nullptr;
+	if (archive->serializeToURL(target, &error)) {
+		DirAccess::rename_absolute(tmp_path, cache_path);
+	} else if (error != nullptr) {
+		print_verbose(String("Metal binary archive serialize skipped: ") + error->localizedDescription()->utf8String());
+	}
 	return Vector<uint8_t>();
 }
 
@@ -2708,10 +2731,11 @@ RDD::PipelineID RenderingDeviceDriverMetal::render_pipeline_create(
 	ERR_FAIL_COND_V_MSG(!pipeline->state, PipelineID(), "Failed to create render pipeline state");
 
 	if (arc) {
-		if (arc->addRenderPipelineFunctions(desc.get(), &error)) {
+		NS::Error *arc_err = nullptr;
+		if (arc->addRenderPipelineFunctions(desc.get(), &arc_err)) {
 			archive_count += 1;
-		} else {
-			print_error(error->localizedDescription()->utf8String());
+		} else if (arc_err != nullptr) {
+			print_verbose(String("Metal binary archive addRenderPipelineFunctions skipped: ") + arc_err->localizedDescription()->utf8String());
 		}
 	}
 
@@ -2802,10 +2826,11 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 	pipeline->shader = shader;
 
 	if (arc) {
-		if (arc->addComputePipelineFunctions(desc.get(), &error)) {
+		NS::Error *arc_err = nullptr;
+		if (arc->addComputePipelineFunctions(desc.get(), &arc_err)) {
 			archive_count += 1;
-		} else {
-			print_error(error->localizedDescription()->utf8String());
+		} else if (arc_err != nullptr) {
+			print_verbose(String("Metal binary archive addComputePipelineFunctions skipped: ") + arc_err->localizedDescription()->utf8String());
 		}
 	}
 

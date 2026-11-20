@@ -640,43 +640,50 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 		decltype(finish_transfer_staging) &finish;
 		~TransferStagingReturn() { finish(); }
 	} transfer_staging_return{ finish_transfer_staging };
-	for (uint32_t i = 0; i < request.resource_count; ++i) {
-		bool used = false;
-		if (action.declaration.action_kind == GDEXTENSION_PRODUCTION_DISPATCH_V1) {
-			// Driver preparations follow actual set bindings, including aliases.
-			const auto &dispatch = action.dispatch;
-			for (uint32_t set_index = 0; set_index < dispatch.set_count; ++set_index) {
-				const auto &set = request.resources[dispatch.first_set_slot + set_index];
-				for (uint32_t b = 0; b < set.binding_count; ++b) {
-					used |= request.uses[set.first_binding + b].binding.resource_slot == i;
-				}
-			}
-		} else {
-			for (uint32_t u = 0; u < action.declaration.use_count; ++u) {
-				used |= request.uses[action.declaration.first_use + u].declaration.resource_slot == i;
-			}
+	auto check_transfer_resource = [&](uint32_t resource_slot) -> Error {
+		if (resource_slot >= request.resource_count) {
+			return OK;
 		}
-		auto &resource = request.resources[i];
-		if (!used || resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1) {
-			continue;
+		auto &resource = request.resources[resource_slot];
+		if (resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || resource.transfer_staged) {
+			return OK;
 		}
 		const auto *buffer = rd._get_buffer_from_owner(resource.primary);
 		if (buffer && buffer->transfer_worker_index >= 0) {
 			const uint32_t worker_index = uint32_t(buffer->transfer_worker_index);
 			if (worker_index >= rd.transfer_worker_pool_size || !rd.transfer_worker_pool[worker_index]->operations_mutex.try_lock()) {
-				observed.error = ERR_BUSY;
-				return observed;
+				return ERR_BUSY;
 			}
 			const bool already_returned = rd.transfer_worker_pool[worker_index]->operations_processed >= buffer->transfer_worker_operation;
 			rd.transfer_worker_pool[worker_index]->operations_mutex.unlock();
 			if (already_returned) {
-				continue;
+				return OK;
 			}
 			resource.transfer_staged = !resource.transfer_pending;
 			resource.transfer_worker = uint32_t(buffer->transfer_worker_index);
 			resource.transfer_operation = buffer->transfer_worker_operation;
 			resource.transfer_action_ordinal = action.declaration.action_ordinal;
 			resource.transfer_pending = true;
+		}
+		return OK;
+	};
+	if (action.declaration.action_kind == GDEXTENSION_PRODUCTION_DISPATCH_V1) {
+		const auto &dispatch = action.dispatch;
+		for (uint32_t set_index = 0; set_index < dispatch.set_count; ++set_index) {
+			const auto &set = request.resources[dispatch.first_set_slot + set_index];
+			for (uint32_t b = 0; b < set.binding_count; ++b) {
+				if (check_transfer_resource(request.uses[set.first_binding + b].binding.resource_slot) == ERR_BUSY) {
+					observed.error = ERR_BUSY;
+					return observed;
+				}
+			}
+		}
+	} else {
+		for (uint32_t u = 0; u < action.declaration.use_count; ++u) {
+			if (check_transfer_resource(request.uses[action.declaration.first_use + u].declaration.resource_slot) == ERR_BUSY) {
+				observed.error = ERR_BUSY;
+				return observed;
+			}
 		}
 	}
 	// Fixed request and entity/RD ownership survive synchronous driver loss.
@@ -743,7 +750,7 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 				continue;
 			}
 		}
-		if (!rd._production_resource_permitted(resource.primary) || (resource.secondary.is_valid() && !rd._production_resource_permitted(resource.secondary))) {
+		if (!rd._production_resource_slot_permitted(resource, resource.primary) || (resource.secondary.is_valid() && !rd._production_resource_slot_permitted(resource, resource.secondary))) {
 			rd.production_recording_request = nullptr;
 			--request.capture_inflight;
 			observed.error = ERR_UNAUTHORIZED;
@@ -948,6 +955,64 @@ Error Registry::production_ack_segment_locked(ProductionRequest &request, uint64
 	request.acknowledged_segment = segment;
 	++request.revision;
 	return OK;
+}
+
+bool Registry::production_readback_ready_to_pump(const BufferReadbackSourceCapture &capture) {
+	Lock lock(*this);
+	if (capture.registry != this || !capture.request_serial) {
+		return false;
+	}
+	const ProductionRequest *target = nullptr;
+	RenderingDevice *target_rd = nullptr;
+	for (auto *attachment : production_attachments) {
+		if (!attachment) {
+			continue;
+		}
+		for (uint32_t i = 0; i < attachment->quote.capacity.requests; ++i) {
+			const auto &candidate = attachment->requests[i];
+			if (candidate.serial == capture.request_serial && candidate.attachment == attachment) {
+				target = &candidate;
+				target_rd = attachment->held_device;
+				break;
+			}
+		}
+		if (target) {
+			break;
+		}
+	}
+	if (!target || !target_rd) {
+		return false;
+	}
+	if (target->control.state != ProductionControlState::OWNER_CONSUMED &&
+			target->control.input.kind == ProductionControlKind::RECORD) {
+		return false;
+	}
+	if (!((target->cancelled || target->next_action == target->action_count) &&
+				target->acknowledged_segment == target->segment.segment &&
+				!target->compute_list_open && !target->draw_list_open &&
+				!target->capture_inflight && !target->continuation_inflight)) {
+		return false;
+	}
+	// Do not advance the RD frame while any sibling request on this device is
+	// actively mid-recording an unclosed action plan.
+	for (auto *attachment : production_attachments) {
+		if (!attachment || attachment->held_device != target_rd) {
+			continue;
+		}
+		for (uint32_t i = 0; i < attachment->quote.capacity.requests; ++i) {
+			const auto &other = attachment->requests[i];
+			if (!other.serial || &other == target) {
+				continue;
+			}
+			if (other.compute_list_open || other.draw_list_open ||
+					(other.control.state != ProductionControlState::OWNER_CONSUMED &&
+							other.control.input.kind == ProductionControlKind::RECORD) ||
+					(!other.cancelled && other.next_action > 0 && other.next_action < other.action_count)) {
+				return false;
+			}
+		}
+	}
+	return true;
 }
 
 Error Registry::production_readback_delivery(BufferReadbackSourceCapture &capture, bool begin) {
