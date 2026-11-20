@@ -354,6 +354,7 @@ private:
 	RID production_mq_permitted_framebuffer;
 	RID production_mq_permitted_readback_ssbo;
 	bool _production_resource_permitted(RID);
+	bool _production_resource_slot_permitted(const GDExtensionDeviceExit::ProductionResourceSlot &p_slot, RID p_rid);
 	Error _native_settle_transfer_worker(RID p_rid);
 	Error _production_disposal_attach_owned(GDExtensionDeviceExit::ProductionDisposalUse &r_use, GDExtensionDeviceExit::ProductionRequest &p_request, RID p_rid);
 	Error _production_mq_prepare_readback_buffer(RID p_buffer);

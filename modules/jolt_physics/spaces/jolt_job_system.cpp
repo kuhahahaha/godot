@@ -202,7 +202,7 @@ JoltJobSystem::~JoltJobSystem() {
 }
 
 void JoltJobSystem::pre_step() {
-	// Nothing to do.
+	_reclaim_jobs();
 }
 
 void JoltJobSystem::post_step() {

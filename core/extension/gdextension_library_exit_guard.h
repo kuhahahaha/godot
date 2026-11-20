@@ -885,6 +885,12 @@ private:
 	Error register_normal_relay_holder(const Callable &p_callback, const RecordRef &p_owner, const CleanupAction &p_cleanup, NormalRelayToken &r_token);
 	uint32_t record_limit = RECORD_CAPACITY;
 	uint32_t view_limit = VIEW_CAPACITY;
+	uint32_t views_high_water = 0;
+	_FORCE_INLINE_ void note_view_slot(uint32_t p_slot) {
+		if (p_slot + 1 > views_high_water) {
+			views_high_water = p_slot + 1;
+		}
+	}
 	uint32_t private_limit = PRIVATE_CAPACITY;
 	uint32_t action_limit = 8;
 	char reservation_failure[64] = {};
@@ -1139,6 +1145,7 @@ private:
 	Error production_observe_service(GDExtensionProductionRequestRefV1, const GDExtensionProductionServiceBudgetV1 &);
 	Error production_sets_step_locked(ProductionRequest &, RenderingDevice &, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
 	Error production_readback_delivery(BufferReadbackSourceCapture &, bool);
+	bool production_readback_ready_to_pump(const BufferReadbackSourceCapture &);
 	void production_native_effect_enter_locked(ProductionRequest &);
 	void production_append_effect_enter_locked(ProductionRequest &);
 	Error production_raster_prepare_execute_locked(ProductionRequest &, RenderingDevice &);

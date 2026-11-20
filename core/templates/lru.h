@@ -93,6 +93,11 @@ public:
 		return _map.getptr(p_key);
 	}
 
+	const Pair *peek_pair(const TKey &p_key) const {
+		const Element *e = _map.getptr(p_key);
+		return e ? &(*e)->get() : nullptr;
+	}
+
 	bool erase(const TKey &p_key) {
 		Element *e = _map.getptr(p_key);
 		if (!e) {

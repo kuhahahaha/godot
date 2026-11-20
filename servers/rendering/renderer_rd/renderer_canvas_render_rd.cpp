@@ -2995,6 +2995,20 @@ void RendererCanvasRenderRD::_uniform_set_invalidation_callback(void *p_userdata
 	static_cast<RendererCanvasRenderRD *>(singleton)->rid_set_to_uniform_set.erase(*key);
 }
 
+bool RendererCanvasRenderRD::owns_invalidation_callback(RID p_uniform_set, RD::InvalidationCallback p_callback, const void *p_userdata) {
+	if (p_callback != _uniform_set_invalidation_callback || !p_uniform_set.is_valid() || !p_userdata) {
+		return false;
+	}
+	const RD *rd = RD::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread() || !singleton) {
+		return false;
+	}
+	const auto *self = static_cast<const RendererCanvasRenderRD *>(singleton);
+	const RIDSetKey *key = static_cast<const RIDSetKey *>(p_userdata);
+	const RIDCache::Pair *pair = self->rid_set_to_uniform_set.peek_pair(*key);
+	return pair != nullptr && &pair->key == key && pair->data == p_uniform_set;
+}
+
 void RendererCanvasRenderRD::_canvas_texture_invalidation_callback(bool p_deleted, void *p_userdata) {
 	KeyValue<RID, TightLocalVector<RID>> *kv = static_cast<KeyValue<RID, TightLocalVector<RID>> *>(p_userdata);
 	RD *rd = RD::get_singleton();

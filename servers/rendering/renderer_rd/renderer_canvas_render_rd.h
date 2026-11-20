@@ -503,6 +503,11 @@ class RendererCanvasRenderRD : public RendererCanvasRender {
 	static void _uniform_set_invalidation_callback(void *p_userdata);
 	static void _canvas_texture_invalidation_callback(bool p_deleted, void *p_userdata);
 
+public:
+	static bool owns_invalidation_callback(RID p_uniform_set, RD::InvalidationCallback p_callback, const void *p_userdata);
+
+private:
+
 	typedef LRUCache<RIDSetKey, RID, HashMapHasherDefault, HashMapComparatorDefault<RIDSetKey>, _before_evict> RIDCache;
 	RIDCache rid_set_to_uniform_set;
 	/// Maps a CanvasTexture to its associated uniform sets, which must

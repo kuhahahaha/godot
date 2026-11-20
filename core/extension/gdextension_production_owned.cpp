@@ -1541,7 +1541,7 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	if (error == ERR_BUSY && rd.native_disposal_active) {
 		const uint64_t settle_deadline = MIN(service.deadline_usec, OS::get_singleton()->get_ticks_usec() + 50000ull);
 		while (error == ERR_BUSY && rd.native_disposal_active && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
-			OS::get_singleton()->delay_usec(150);
+			OS::get_singleton()->delay_usec(50);
 			RenderingDevice::NativeDisposalBudget retry_service;
 			retry_service.receipts = 64u;
 			retry_service.passes = 16u;

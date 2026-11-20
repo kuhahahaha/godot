@@ -13663,7 +13663,7 @@ Error RenderingDevice::_native_disposal_maintenance() {
 		if (pending_err == ERR_BUSY) {
 			const uint64_t settle_deadline = OS::get_singleton()->get_ticks_usec() + 50000ull;
 			while (pending_err == ERR_BUSY && qualification_frame_advance_pending && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
-				OS::get_singleton()->delay_usec(150);
+				OS::get_singleton()->delay_usec(50);
 				pending_err = _begin_frame(false, true);
 			}
 		}
@@ -13677,7 +13677,7 @@ Error RenderingDevice::_native_disposal_maintenance() {
 	if (error == ERR_BUSY) {
 		const uint64_t settle_deadline = OS::get_singleton()->get_ticks_usec() + 50000ull;
 		while (error == ERR_BUSY && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
-			OS::get_singleton()->delay_usec(150);
+			OS::get_singleton()->delay_usec(50);
 			error = _stall_for_frame(next, true);
 		}
 	}
@@ -13703,7 +13703,7 @@ Error RenderingDevice::_native_disposal_maintenance() {
 	if (error == ERR_BUSY) {
 		const uint64_t settle_deadline = OS::get_singleton()->get_ticks_usec() + 50000ull;
 		while (error == ERR_BUSY && qualification_frame_advance_pending && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
-			OS::get_singleton()->delay_usec(150);
+			OS::get_singleton()->delay_usec(50);
 			error = _begin_frame(false, true);
 		}
 	}
@@ -13717,7 +13717,20 @@ void RenderingDevice::pump_qualification_frame_if_idle() {
 	if (draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining || !frames[frame].swap_chains_to_present.is_empty()) {
 		return;
 	}
-	if (!frames[frame].qualification_tickets.is_empty() || qualification_frame_advance_pending.load() || native_disposal_active.load() ||
+	bool has_production_readbacks = false;
+	for (const auto &slot : frames) {
+		for (const auto &req : slot.download_buffer_get_data_requests) {
+			if (req.capture != nullptr && req.capture->registry != nullptr &&
+					req.capture->registry->production_readback_ready_to_pump(*req.capture)) {
+				has_production_readbacks = true;
+				break;
+			}
+		}
+		if (has_production_readbacks) {
+			break;
+		}
+	}
+	if (!frames[frame].qualification_tickets.is_empty() || has_production_readbacks || qualification_frame_advance_pending.load() || native_disposal_active.load() ||
 			GDExtensionDeviceExit::Registry::get_singleton().has_natural_close_pending_work(this)) {
 		(void)_native_disposal_maintenance();
 	}
@@ -18216,6 +18229,31 @@ RenderingDevice::SourceDrawAppendResult RenderingDevice::_record_source_draw_ind
 	result.observed.state = result.native.effect == NativeAppendEffect::Recorded ? Observation::State::Appended : result.native.effect == NativeAppendEffect::NoNewEffect ? Observation::State::Rejected
 																																										  : Observation::State::Unknown;
 	return result;
+}
+
+bool RenderingDevice::_production_resource_slot_permitted(const GDExtensionDeviceExit::ProductionResourceSlot &p_slot, RID rid) {
+	const auto *request = production_recording_request;
+	if (request && request->serial && request->frozen && request->capture_inflight &&
+			p_slot.imported && (p_slot.primary == rid || p_slot.secondary == rid)) {
+		if (p_slot.output_guard_readonly) {
+			if ((p_slot.output_guard_history ? GDExtensionDeviceExit::Registry::get_singleton().production_output_history_guard_uses_locked(*request, p_slot, request->next_action) : request->next_action == p_slot.output_guard_consumer) &&
+					GDExtensionDeviceExit::Registry::get_singleton().production_output_guard_matches_locked(*request, p_slot, *this)) {
+				return true;
+			}
+		} else {
+			if ((!p_slot.output_predecessor_view.is_empty() && GDExtensionDeviceExit::Registry::get_singleton().production_output_predecessor_matches_locked(*request, p_slot, *this)) ||
+					(p_slot.output_alias_prepared && GDExtensionDeviceExit::Registry::get_singleton().production_output_alias_matches_locked(*request, p_slot, *this))) {
+				return true;
+			}
+			for (uint32_t u = 0; u < p_slot.use_count; ++u) {
+				const auto &use = p_slot.uses[u];
+				if (use.rid == rid.get_id() && use.request == request && use.request_serial == request->serial && use.same_physical() && use.linked() && !use.physical->use_closed.load()) {
+					return true;
+				}
+			}
+		}
+	}
+	return _production_resource_permitted(rid);
 }
 
 // An existing request's exact reverse pins permit these mechanical resources

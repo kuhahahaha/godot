@@ -321,6 +321,7 @@ Error Registry::register_guard(GDExtensionClassLibraryPtr p_library, const Guard
 		if (!views[i].serial) {
 			record.control_view_slot = i;
 			views[i] = { record.reserved_control_view, scope->reference.slot, ViewDomain::PREFLIGHT, record.reserved_control_frame, 0 };
+			note_view_slot(i);
 			break;
 		}
 	}
@@ -333,6 +334,7 @@ Error Registry::register_guard(GDExtensionClassLibraryPtr p_library, const Guard
 			if (!views[slot].serial) {
 				record.scene_ready_view_slot = slot;
 				views[slot] = { record.scene_ready_view_serial, scope->reference.slot, ViewDomain::SCENE_READY, record.reserved_scene_ready_frame, 0 };
+				note_view_slot(slot);
 				break;
 			}
 		}
@@ -348,6 +350,7 @@ Error Registry::register_guard(GDExtensionClassLibraryPtr p_library, const Guard
 			for (uint32_t slot = 0; slot < view_limit; slot++) {
 				if (!views[slot].serial) {
 					views[slot] = { view_serial, scope->reference.slot, domain, frame, 0 };
+					note_view_slot(slot);
 					break;
 				}
 			}
@@ -776,6 +779,7 @@ Error Registry::issue_borrow_locked(ViewDomain domain, uint64_t action, uint64_t
 			return ERR_PARAMETER_RANGE_ERROR;
 		}
 		views[i] = { out, frame->reference->slot, domain, frame->frame_id, action };
+		note_view_slot(i);
 		return OK;
 	}
 	return ERR_PARAMETER_RANGE_ERROR;
@@ -784,7 +788,8 @@ Error Registry::resolve_borrow_locked(uint64_t registry_instance, uint64_t seria
 	if (registry_instance != instance || !serial) {
 		return ERR_INVALID_DATA;
 	}
-	for (uint32_t i = 0; i < view_limit; i++) {
+	const uint32_t scan_limit = MIN(views_high_water, view_limit);
+	for (uint32_t i = 0; i < scan_limit; i++) {
 		auto &view = views[i];
 		if (view.serial != serial || view.domain != domain || !view.frame) {
 			continue;
@@ -800,7 +805,10 @@ Error Registry::resolve_borrow_locked(uint64_t registry_instance, uint64_t seria
 	return ERR_INVALID_DATA;
 }
 void Registry::expire_frame_locked(uint64_t frame) {
-	for (auto &view : views) {
+	uint32_t new_high_water = 0;
+	const uint32_t scan_limit = MIN(views_high_water, VIEW_CAPACITY);
+	for (uint32_t i = 0; i < scan_limit; i++) {
+		auto &view = views[i];
 		if (view.domain != ViewDomain::METADATA && view.frame == frame) {
 			auto &record = records[view.record];
 			if (record.control_view_slot != INVALID_SLOT && &view == &views[record.control_view_slot] && record.control_reference_reserved) {
@@ -809,7 +817,11 @@ void Registry::expire_frame_locked(uint64_t frame) {
 				view = {};
 			}
 		}
+		if (view.serial) {
+			new_high_water = i + 1;
+		}
 	}
+	views_high_water = new_high_water;
 }
 Error Registry::borrow_guarded_library(const GDExtensionDeviceExitAbi *abi, GDExtensionClassLibraryPtr library, GuardedLibraryRef *out) {
 	if (!abi_valid(abi) || !empty_output(out)) {
@@ -1496,6 +1508,7 @@ Error Registry::guarded_preflight(const RecordRef &ref, CloseRoute route) {
 		}
 		context.level_phase = LevelPhase::PREFLIGHT;
 		views[record.control_view_slot] = { serial, ref.slot, ViewDomain::PREFLIGHT, context.frame_id, 0 };
+		note_view_slot(record.control_view_slot);
 		borrowed = { instance, serial };
 		callback = record.guard.preflight;
 		userdata = record.guard.preflight_userdata;

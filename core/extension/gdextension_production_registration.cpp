@@ -189,7 +189,8 @@ Error Registry::producer_view_locked(GDExtensionProducerRegistrationRefV1 p_ref,
 	if (p_ref.registry_instance != instance || !p_ref.handle_serial) {
 		return ERR_INVALID_DATA;
 	}
-	for (uint32_t i = 0; i < view_limit; ++i) {
+	const uint32_t scan_limit = MIN(views_high_water, view_limit);
+	for (uint32_t i = 0; i < scan_limit; ++i) {
 		const View &view = views[i];
 		if (view.domain == ViewDomain::PRODUCER_REGISTRATION && view.serial == p_ref.handle_serial) {
 			const Record &record = records[view.record];
@@ -223,6 +224,7 @@ void Registry::issue_producer_view_locked(uint32_t p_record, uint32_t p_view, GD
 	view.record = p_record;
 	view.domain = ViewDomain::PRODUCER_REGISTRATION;
 	view.frame = 0; // Owned metadata, not an expiring initializer borrow.
+	note_view_slot(p_view);
 	records[p_record].external_refs++;
 	r_ref = { instance, view.serial };
 }

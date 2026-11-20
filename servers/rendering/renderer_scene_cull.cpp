@@ -4737,7 +4737,7 @@ void RendererSceneCull::_update_dirty_instance(Instance *p_instance) const {
 						for (int i = 0; i < p_instance->materials.size(); i++) {
 							RID mat = p_instance->materials[i].is_valid() ? p_instance->materials[i] : RSG::mesh_storage->mesh_surface_get_material(mesh, i);
 
-							if (!mat.is_valid()) {
+							if (!mat.is_valid() || !RSG::material_storage->material_exists(mat)) {
 								cast_shadows = true;
 							} else {
 								if (RSG::material_storage->material_casts_shadows(mat)) {
@@ -4768,7 +4768,7 @@ void RendererSceneCull::_update_dirty_instance(Instance *p_instance) const {
 						for (int i = 0; i < sc; i++) {
 							RID mat = RSG::mesh_storage->mesh_surface_get_material(mesh, i);
 
-							if (!mat.is_valid()) {
+							if (!mat.is_valid() || !RSG::material_storage->material_exists(mat)) {
 								cast_shadows = true;
 
 							} else {
@@ -4806,7 +4806,7 @@ void RendererSceneCull::_update_dirty_instance(Instance *p_instance) const {
 						for (int j = 0; j < sc; j++) {
 							RID mat = RSG::mesh_storage->mesh_surface_get_material(mesh, j);
 
-							if (!mat.is_valid()) {
+							if (!mat.is_valid() || !RSG::material_storage->material_exists(mat)) {
 								cast_shadows = true;
 							} else {
 								if (RSG::material_storage->material_casts_shadows(mat)) {
