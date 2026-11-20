@@ -115,11 +115,28 @@ bool RenderingDevice::_production_output_raster_permitted(RID rid) {
 		}
 		// The exact original slot pin owns this group, including borrowed
 		// immutable material/geometry incarnations. A numeric group alone fails.
-		for (uint32_t i = scope.request->use_count + scope.request->binding_used; i < scope.request->capacity.resource_uses; ++i) {
-			const auto &row = scope.request->uses[i];
-			if (row.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && row.disposal_group_serial == use->group &&
-					row.disposal_group_pin_serial == slot.original_pin.serial && !row.disposal_group_release && !row.disposal_group_dropped) {
+		const uint32_t start = scope.request->use_count + scope.request->binding_used;
+		if (use->group_cell_index >= start && use->group_cell_index < scope.request->capacity.resource_uses) {
+			const auto &row = scope.request->uses[use->group_cell_index];
+			if (row.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP &&
+					row.disposal_group_serial == use->group &&
+					row.disposal_group_pin_serial == slot.original_pin.serial &&
+					!row.disposal_group_release && !row.disposal_group_dropped) {
 				return true;
+			}
+			// Exact group cell exists but does not match/is released: do not scan further for this use!
+			if (row.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP &&
+					row.disposal_group_serial == use->group) {
+				continue;
+			}
+		}
+		if (use->group_cell_index == UINT32_MAX) {
+			for (uint32_t i = start; i < scope.request->capacity.resource_uses; ++i) {
+				const auto &row = scope.request->uses[i];
+				if (row.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && row.disposal_group_serial == use->group &&
+						row.disposal_group_pin_serial == slot.original_pin.serial && !row.disposal_group_release && !row.disposal_group_dropped) {
+					return true;
+				}
 			}
 		}
 	}
