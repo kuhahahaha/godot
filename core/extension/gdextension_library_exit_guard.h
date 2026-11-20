@@ -770,6 +770,7 @@ private:
 		void *prepare_userdata = nullptr;
 		bool prepare_active = false;
 		bool prepare_ready = false;
+		bool natural_close_draining = false;
 		CloseRoute prepare_route = CloseRoute::EXPLICIT;
 		bool preflight_sealed = false;
 		CloseRoute preflight_route = CloseRoute::EXPLICIT;
@@ -1518,6 +1519,7 @@ public:
 	Error maybe_emit_post_close_capsule(const RecordRef &p_ref, const String &p_resolved_library_path);
 	Error resolve_core_close_return(const RecordRef &p_ref, CoreCloseReturnFact &r_fact);
 	Error retain_private(const RecordRef &p_ref, RecordRef &r_ref);
+	bool has_natural_close_pending_work(const RenderingDevice *p_rd);
 
 	// Internal implementation seam. No guarded version is exposed to loaders
 	// until reciprocal ABI/census adoption; production state machine is tested

@@ -370,6 +370,9 @@ public:
 		uint64_t last_pass = 0;
 		uint32_t index = 0;
 
+		virtual bool uses_screen_texture_backbuffer() const override { return uses_screen_texture; }
+		virtual bool uses_depth_texture_backbuffer() const override { return uses_depth_texture; }
+
 		_FORCE_INLINE_ bool uses_alpha_pass() const {
 			bool has_read_screen_alpha = uses_screen_texture || uses_depth_texture || uses_normal_texture;
 			bool has_base_alpha = (uses_alpha && (!uses_alpha_clip || uses_alpha_antialiasing));
@@ -391,14 +394,14 @@ public:
 			return !uses_particle_trails && !writes_modelview_or_projection && !uses_vertex && !uses_discard && !uses_depth_prepass_alpha && !uses_alpha_clip && !uses_alpha_antialiasing && !uses_point_size && !uses_world_coordinates && !wireframe && !stencil_enabled && backface_culling;
 		}
 
-		virtual void set_code(const String &p_Code);
-		virtual bool is_animated() const;
-		virtual bool casts_shadows() const;
-		virtual RenderingServerTypes::ShaderNativeSourceCode get_native_source_code() const;
+		virtual void set_code(const String &p_Code) override;
+		virtual bool is_animated() const override;
+		virtual bool casts_shadows() const override;
+		virtual RenderingServerTypes::ShaderNativeSourceCode get_native_source_code() const override;
 		// Structural support only: caller must still pin a qualified material,
 		// bounds/source/history proof and backend mirror-cull calibration.
 		bool instance192_shader_supported() const;
-		virtual Pair<ShaderRD *, RID> get_native_shader_and_version() const;
+		virtual Pair<ShaderRD *, RID> get_native_shader_and_version() const override;
 		Error get_native_instance192_shader_features(NativeInstance192ShaderFeatures &r_features) const override;
 		RD::PolygonCullMode get_cull_mode_from_cull_variant(CullVariant p_cull_variant);
 		void _clear_vertex_input_mask_cache();
@@ -430,9 +433,9 @@ public:
 		uint32_t index = 0;
 		RID next_pass;
 		uint8_t priority;
-		virtual void set_render_priority(int p_priority);
-		virtual void set_next_pass(RID p_pass);
-		virtual bool update_parameters(const HashMap<StringName, Variant> &p_parameters, bool p_uniform_dirty, bool p_textures_dirty);
+		virtual void set_render_priority(int p_priority) override;
+		virtual void set_next_pass(RID p_pass) override;
+		virtual bool update_parameters(const HashMap<StringName, Variant> &p_parameters, bool p_uniform_dirty, bool p_textures_dirty) override;
 		virtual ~MaterialData();
 	};
 

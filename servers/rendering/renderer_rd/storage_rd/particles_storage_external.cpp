@@ -1373,6 +1373,34 @@ Error ParticlesStorage::particles_external_scene_material_facts(RID p_particles,
 	return OK;
 }
 
+void ParticlesStorage::particles_external_query_owner_framebuffer_reads(RID p_particles, bool &r_uses_screen_texture, bool &r_uses_depth_texture) const {
+	auto *rd = RenderingDevice::get_singleton();
+	auto *materials = MaterialStorage::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread() || !materials) {
+		return;
+	}
+	const Particles *particles = particles_owner.get_or_null(p_particles);
+	if (!particles || !particles->external) {
+		return;
+	}
+	const ExternalOutputOwner &owner = *particles->external;
+	if (!owner.admits_work() || !owner.generation_selection_complete || !owner.generation_materials ||
+			(owner.config.profile != ExternalOutputConfig::INSTANCE_192 && owner.config.profile != ExternalOutputConfig::INDEXED_144)) {
+		return;
+	}
+	for (uint32_t i = 0; i < owner.generation_material_count; ++i) {
+		const RID mat_rid = owner.generation_materials[i].material;
+		if (mat_rid.is_null()) {
+			continue;
+		}
+		const MaterialStorage::ShaderData *shader_data = materials->material_get_shader_data(mat_rid);
+		if (shader_data) {
+			r_uses_screen_texture |= shader_data->uses_screen_texture_backbuffer();
+			r_uses_depth_texture |= shader_data->uses_depth_texture_backbuffer();
+		}
+	}
+}
+
 uint32_t ParticlesStorage::particles_external_surface_count(RID p_particles) const {
 	auto *rd = RenderingDevice::get_singleton();
 	if (!rd || !rd->native_immutable_is_render_thread()) {
@@ -1397,7 +1425,7 @@ Error ParticlesStorage::particles_external_surface_acquire(RID p_particles, uint
 	return particles && particles->external ? particles->external->surface_acquire(p_surface, r_selection) : ERR_DOES_NOT_EXIST;
 }
 Error ParticlesStorage::particles_external_generated_surfaces_for_view(RID p_particles, const ::RenderDataRD &p_render_data,
-		uint32_t &r_slot, uint32_t &r_count) const {
+		uint32_t &r_slot, uint32_t &r_count, bool p_allow_adopted_replay, bool p_defer_transparent_replay) const {
 	auto *rd = RenderingDevice::get_singleton();
 	if (!rd || !rd->native_immutable_is_render_thread() || p_render_data.reflection_probe.is_valid() ||
 			!::RenderDataRD::admission_succeeded(p_render_data.admit_camera_status())) {
@@ -1408,8 +1436,59 @@ Error ParticlesStorage::particles_external_generated_surfaces_for_view(RID p_par
 		return ERR_UNAVAILABLE;
 	}
 	const auto &owner = *particles->external;
+	const Ref<RendererViewport::Viewport::CameraCapture> capture = p_render_data.get_native_camera_source();
 	uint32_t slot = UINT32_MAX;
-	const Error selected = owner.find_generated_slot_for_capture(p_render_data.get_native_camera_source(), slot);
+	Error selected = owner.find_generated_slot_for_capture(capture, slot);
+	const bool can_replay_adopted = p_allow_adopted_replay &&
+			!(p_defer_transparent_replay && (owner.config.pass_mask & ExternalOutputConfig::PASS_TRANSPARENT) != 0);
+	if (selected == ERR_UNAVAILABLE && can_replay_adopted && capture.is_valid() &&
+			owner.admits_work() && owner.config.profile == ExternalOutputConfig::INDEXED_144 &&
+			owner.config.motion == ExternalOutputConfig::DISABLED && owner.config.capacity > 0) {
+		const auto &camera_token = capture->get_token();
+		uint64_t best_present_seq = 0;
+		for (uint32_t s = 0; s < owner.slot_count; ++s) {
+			const auto &cand_slot = owner.slots[s];
+			if (cand_slot.state != ExternalOutputOwner::LeaseState::ADOPTED ||
+					cand_slot.publication_closed || cand_slot.pass_uses_closed ||
+					cand_slot.generated_indexed_mesh.is_null() || !cand_slot.storage ||
+					!cand_slot.scene_cull_bound || !cand_slot.guard_resources_ready) {
+				continue;
+			}
+			const uint32_t view_idx = s / owner.config.max_inflight;
+			if (view_idx >= owner.config.max_views || !owner.views[view_idx].occupied || owner.views[view_idx].closed) {
+				continue;
+			}
+			if (cand_slot.request.common.generation != owner.generation ||
+					owner.views[view_idx].epoch != cand_slot.request.view_epoch ||
+					cand_slot.request.view_epoch != camera_token.view_epoch ||
+					cand_slot.request.common.current_camera_token.view_id != camera_token.view_id ||
+					cand_slot.request.common.current_camera_token.view_epoch != camera_token.view_epoch) {
+				continue;
+			}
+			if (!cand_slot.original_registry || cand_slot.original_pin.is_empty() ||
+					!cand_slot.original_registry->production_output_pin_matches(cand_slot.original_pin, cand_slot.original_request, *rd)) {
+				continue;
+			}
+			bool has_ready_row = false;
+			for (uint32_t r = 0; r < owner.preparation_capacity; ++r) {
+				const auto &row = owner.preparation_rows[r];
+				if (row.owner == &owner && row.owner_slot == s &&
+						row.tuple_state == ExternalPipelinePreparation::TupleState::READY &&
+						row.finish_complete && row.finish_error == OK && row.backend_error == OK && row.pipeline_sealed) {
+					has_ready_row = true;
+					break;
+				}
+			}
+			if (!has_ready_row) {
+				continue;
+			}
+			if (slot == UINT32_MAX || cand_slot.request.common.present_seq >= best_present_seq) {
+				slot = s;
+				best_present_seq = cand_slot.request.common.present_seq;
+				selected = OK;
+			}
+		}
+	}
 	if (selected != OK) {
 		return selected;
 	}

@@ -1623,6 +1623,11 @@ uint32_t ParticlesMeshLightSortRD::dispatch_registered_external_lights_gpu(
 					continue;
 				}
 			}
+			if (reg.owner_ptr != nullptr && reg.is_slot_visible_fn != nullptr) {
+				if (!reg.is_slot_visible_fn(reg.owner_ptr, reg.generation, reg.slot_index, reg.lease_serial)) {
+					continue;
+				}
+			}
 			// Strict Cross-World & Cross-Viewport isolation:
 			if (reg.viewport_rid.is_valid()) {
 				if (p_is_reflection_probe || p_source_viewport != reg.viewport_rid) {

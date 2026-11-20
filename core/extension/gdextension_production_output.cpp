@@ -5160,6 +5160,22 @@ void Registry::production_output_seal(ProductionPhysicalContextRef context, GDEx
 				}
 				return true;
 			};
+			reg.is_slot_visible_fn = [](const RendererRD::ExternalOutputOwner *p_owner, uint64_t p_gen, uint32_t p_slot, uint64_t p_lease) -> bool {
+				if (!p_owner || p_owner->generation != p_gen || p_slot >= p_owner->slot_count) {
+					return false;
+				}
+				const auto &live_slot = p_owner->slots[p_slot];
+				if (live_slot.lease_serial != p_lease) {
+					return false;
+				}
+				if (live_slot.scene_cull_bound) {
+					RendererSceneCull *scene = static_cast<RendererSceneCull *>(RSG::scene);
+					if (!scene || !scene->instance_is_visible(live_slot.scene_cull_instance)) {
+						return false;
+					}
+				}
+				return true;
+			};
 			reg.generation = owner.generation;
 			reg.slot_index = slot_index;
 			reg.lease_serial = slot.lease_serial;

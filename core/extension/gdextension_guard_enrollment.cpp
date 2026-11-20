@@ -724,6 +724,7 @@ void Registry::clear_guard_control_locked(Record &record) {
 	record.prepare_userdata = nullptr;
 	record.prepare_active = false;
 	record.prepare_ready = false;
+	record.natural_close_draining = false;
 	record.prepare_route = CloseRoute::EXPLICIT;
 	if (record.control_reference_reserved) {
 		record.private_refs--;
@@ -1322,6 +1323,9 @@ Error Registry::prepare_exit(const RecordRef &ref, CloseRoute route) {
 			return ERR_BUSY;
 		}
 		record.prepare_active = true;
+		if (route == CloseRoute::SHUTDOWN || route == CloseRoute::TEST_CLEANUP) {
+			record.natural_close_draining = true;
+		}
 		callback = record.prepare_callback;
 		userdata = record.prepare_userdata;
 		generation = record.snapshot.library_generation;

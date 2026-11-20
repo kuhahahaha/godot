@@ -1211,11 +1211,33 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	}
 	const bool mq_in_place_early = production_request_is_pure_mq_in_place_locked(request);
 	const bool own_or_idle_disposal = !rd.native_disposal_active || (!request.maintenance_serial && rd.native_disposal_continuation.production_owner == nullptr);
-	if (own_or_idle_disposal && (mq_in_place_early || request.graph_count > 0)) {
-		bool any_graph_pending = false;
-		for (uint32_t i = 0; i < request.graph_count; ++i) {
-			any_graph_pending |= request.graphs[i].pending;
+	bool any_graph_pending = false;
+	for (uint32_t i = 0; i < request.graph_count; ++i) {
+		any_graph_pending |= request.graphs[i].pending;
+	}
+	bool has_retiring_disposals = false;
+	for (uint32_t i = 0; i < request.resource_count && !has_retiring_disposals; ++i) {
+		const auto &slot = request.resources[i];
+		MutexLock physical(slot.owned_physical.mutex);
+		has_retiring_disposals |= slot.retiring && slot.owned_physical.enqueued && !slot.owned_physical.free_event && !slot.returned;
+	}
+	for (uint32_t g = request.use_count + request.binding_used; g < request.capacity.resource_uses && !has_retiring_disposals; ++g) {
+		const auto &group = request.uses[g];
+		if (group.output_role != ProductionUseCell::OutputRole::DISPOSAL_GROUP || !group.disposal_group_release) {
+			continue;
 		}
+		has_retiring_disposals |= !group.disposal_group_dropped;
+		for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses && !has_retiring_disposals; ++i) {
+			const auto &member = request.uses[i];
+			if (member.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && member.disposal_group_serial == group.disposal_group_serial) {
+				const uint8_t st = member.disposal.state.load(std::memory_order_acquire);
+				has_retiring_disposals |= (st == 1 || st == 2);
+			}
+		}
+	}
+	const bool is_closing_exit = request.attachment && (request.attachment->closing ||
+			(request.attachment->library < RECORD_CAPACITY && records[request.attachment->library].natural_close_draining));
+	if (own_or_idle_disposal && (mq_in_place_early || request.graph_count > 0)) {
 		if (!any_graph_pending) {
 			// Godot's normal _end_frame() already submitted this request's GPU work + readback.
 			// Poll/deliver the exact frame holding this request's readback capture directly
@@ -1260,16 +1282,82 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 				return stalled;
 			}
 			// No pending graphs and no pending readback capture for this request.
-			// On a live viewport, Godot's normal swap_buffers()/_begin_frame() drains
-			// retiring resources; don't stall OBSERVE on foreign scene/UI draw_graph work.
-			if (mq_in_place_early || !rd.draw_graph.qualification_command_count() || production_maintenance_frame_admission_locked(request, rd, drain_trace) != OK) {
+			// Only return early if this request has no retiring disposals waiting to drain.
+			if (mq_in_place_early || (!has_retiring_disposals && (!rd.draw_graph.qualification_command_count() || production_maintenance_frame_admission_locked(request, rd, drain_trace) != OK))) {
 				return OK;
 			}
 		}
 	}
+	auto drain_owned_on_close = [&](Error fallback_err) -> Error {
+		if (fallback_err != ERR_BUSY || !is_closing_exit || !has_retiring_disposals || any_graph_pending ||
+				rd.native_disposal_active.load() || !rd.driver || rd.frames.is_empty() ||
+				rd.draw_list.active || rd.compute_list.active || rd.raytracing_list.active ||
+				rd.frame_wait_draining || rd.draw_graph.has_driver_callbacks()) {
+			return fallback_err;
+		}
+		for (uint32_t fi = 0; fi < rd.frames.size(); ++fi) {
+			if (rd.frames[fi].disposal.active) {
+				return fallback_err;
+			}
+			for (const auto &rb : rd.frames[fi].download_buffer_get_data_requests) {
+				if (!rb.capture || rb.capture->registry != this) {
+					return fallback_err;
+				}
+			}
+		}
+		const uint32_t avail_rec = MIN(budget.receipts, 128u) > usage.receipts ? (MIN(budget.receipts, 128u) - usage.receipts) : 0u;
+		const uint32_t avail_pas = MIN(budget.passes, 64u) > usage.passes ? (MIN(budget.passes, 64u) - usage.passes) : 0u;
+		if (!avail_rec || !avail_pas || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) {
+			return fallback_err;
+		}
+		RenderingDevice::NativeDisposalBudget drain_budget;
+		drain_budget.receipts = MAX(avail_rec, 64u);
+		drain_budget.passes = MAX(avail_pas, 16u);
+		drain_budget.deadline_usec = budget.deadline_micros;
+		RenderingDevice::NativeDisposalUsage drain_usage;
+		const uint64_t request_serial = request.serial, control_serial = request.control.serial;
+		auto *const attachment = request.attachment;
+		const uint64_t epoch = attachment->epoch;
+		production_native_effect_enter_locked(request);
+		++request.capture_inflight;
+		rd._thread_safe_.unlock();
+		unlock_mutex_for_call();
+		Error drained = rd._production_mq_drain_owned_disposals_step(request, nullptr, 0, drain_budget, drain_usage);
+		if (drained == ERR_BUSY) {
+			const uint64_t settle_deadline = MIN(drain_budget.deadline_usec, OS::get_singleton()->get_ticks_usec() + 50000ull);
+			while (drained == ERR_BUSY && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
+				OS::get_singleton()->delay_usec(150);
+				RenderingDevice::NativeDisposalBudget retry_budget;
+				retry_budget.receipts = 64u;
+				retry_budget.passes = 16u;
+				retry_budget.deadline_usec = settle_deadline;
+				RenderingDevice::NativeDisposalUsage retry_usage;
+				drained = rd._production_mq_drain_owned_disposals_step(request, nullptr, 0, retry_budget, retry_usage);
+				drain_usage.polls += retry_usage.polls;
+				drain_usage.frees += retry_usage.frees;
+				drain_usage.issues += retry_usage.issues;
+				drain_usage.retains += retry_usage.retains;
+				drain_usage.releases += retry_usage.releases;
+				drain_usage.recycles += retry_usage.recycles;
+				drain_usage.passes += retry_usage.passes;
+			}
+		}
+		rd._thread_safe_.lock();
+		relock_mutex_after_call();
+		CRASH_COND(!request.capture_inflight);
+		--request.capture_inflight;
+		usage.controls = 1;
+		const uint64_t total_rec = uint64_t(drain_usage.polls) + drain_usage.frees + drain_usage.issues + drain_usage.retains + drain_usage.releases + drain_usage.recycles;
+		usage.receipts += uint32_t(MIN(total_rec, uint64_t(avail_rec)));
+		usage.passes += MIN(drain_usage.passes, avail_pas);
+		if (request.serial != request_serial || request.control.serial != control_serial || request.control.state != ProductionControlState::EXECUTING || request.attachment != attachment || attachment->held_device != &rd || attachment->epoch != epoch || device_records[attachment->device].epoch != epoch || device_records[attachment->device].object != &rd) {
+			return ERR_INVALID_DATA;
+		}
+		return drained;
+	};
 	const Error frame_admission = production_maintenance_frame_admission_locked(request, rd, drain_trace);
 	if (frame_admission != OK) {
-		return frame_admission;
+		return drain_owned_on_close(frame_admission);
 	}
 	auto owned_physical = [&](const QualificationPhysicalReturn *physical) {
 		if (!physical) {
@@ -1332,7 +1420,7 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 			const auto &frame = rd.frames[frame_index];
 			const Error foreign_frame = production_maintenance_foreign_frame_admission_locked(request, rd, frame_index, resuming, drain_trace);
 			if (foreign_frame != OK) {
-				return foreign_frame;
+				return drain_owned_on_close(foreign_frame);
 			}
 			uint32_t buffers = frame_index == fresh_buffer_target ? frame.buffers_to_dispose_of.size() : 0;
 			uint32_t sets = frame.uniform_sets_to_dispose_of.size();
@@ -1354,14 +1442,14 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 			const auto *buffer = frame.buffers_to_dispose_of.front();
 			for (uint32_t i = 0; i < buffers; ++i) {
 				if (!buffer || (!owned_physical(buffer->get().qualification_return) && !exact_closure(buffer->get().production_disposal_uses, 9, buffer->get().driver_id.id, buffer->get().backing_serial))) {
-					return drain_trace.result(ERR_BUSY, "foreign_buffer");
+					return drain_owned_on_close(drain_trace.result(ERR_BUSY, "foreign_buffer"));
 				}
 				buffer = buffer->next();
 			}
 			const auto *set = frame.uniform_sets_to_dispose_of.front();
 			for (uint32_t i = 0; i < sets; ++i) {
 				if (!set || (!owned_physical(set->get().qualification_return) && !exact_closure(set->get().production_disposal_uses, 4, set->get().driver_id.id))) {
-					return drain_trace.result(ERR_BUSY, "foreign_uniform_set");
+					return drain_owned_on_close(drain_trace.result(ERR_BUSY, "foreign_uniform_set"));
 				}
 				set = set->next();
 			}
@@ -1388,12 +1476,12 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 			auto *framebuffer = frame.framebuffers_to_dispose_of.front();
 			for (uint32_t i = 0; i < framebuffers; ++i) {
 				if (!framebuffer || !owned_physical(framebuffer->get().qualification_return)) {
-					return drain_trace.result(ERR_BUSY, "foreign_framebuffer");
+					return drain_owned_on_close(drain_trace.result(ERR_BUSY, "foreign_framebuffer"));
 				}
 				framebuffer = framebuffer->next();
 			}
 			if (!closure_prefix(frame.render_pipelines_to_dispose_of, 0) || !closure_prefix(frame.compute_pipelines_to_dispose_of, 1) || !closure_prefix(frame.shaders_to_dispose_of, 5) || !closure_prefix(frame.samplers_to_dispose_of, 6) || !closure_prefix(frame.textures_to_dispose_of, 8)) {
-				return drain_trace.result(ERR_BUSY, "foreign_closure_prefix");
+				return drain_owned_on_close(drain_trace.result(ERR_BUSY, "foreign_closure_prefix"));
 			}
 
 		}
@@ -1442,5 +1530,45 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	usage.receipts += uint32_t(MIN(total_actual_receipts, uint64_t(avail_receipts)));
 	usage.passes += MIN(actual.passes, avail_passes);
 	return drain_trace.result(error, "native_step_returned");
+}
+
+bool Registry::has_natural_close_pending_work(const RenderingDevice *p_rd) {
+	if (!p_rd || !mutex.try_lock()) {
+		return false;
+	}
+	bool pending = false;
+	bool has_closing_attachment = false;
+	for (const auto *attachment : production_attachments) {
+		if (!attachment || attachment->held_device != p_rd || attachment->library >= RECORD_CAPACITY) {
+			continue;
+		}
+		if (!attachment->closing && !records[attachment->library].natural_close_draining) {
+			continue;
+		}
+		has_closing_attachment = true;
+		if (!attachment->requests) {
+			continue;
+		}
+		for (uint32_t r = 0; r < attachment->quote.capacity.requests && !pending; ++r) {
+			const auto &req = attachment->requests[r];
+			if (!req.serial) {
+				continue;
+			}
+			for (uint32_t g = 0; g < req.graph_count; ++g) {
+				if (req.graphs[g].pending) {
+					pending = true;
+					break;
+				}
+			}
+		}
+		if (pending) {
+			break;
+		}
+	}
+	if (!pending && has_closing_attachment && p_rd->draw_graph.qualification_command_count() > 0) {
+		pending = true;
+	}
+	mutex.unlock();
+	return pending;
 }
 } // namespace GDExtensionDeviceExit

@@ -13717,7 +13717,8 @@ void RenderingDevice::pump_qualification_frame_if_idle() {
 	if (draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining || !frames[frame].swap_chains_to_present.is_empty()) {
 		return;
 	}
-	if (!frames[frame].qualification_tickets.is_empty() || qualification_frame_advance_pending.load() || native_disposal_active.load()) {
+	if (!frames[frame].qualification_tickets.is_empty() || qualification_frame_advance_pending.load() || native_disposal_active.load() ||
+			GDExtensionDeviceExit::Registry::get_singleton().has_natural_close_pending_work(this)) {
 		(void)_native_disposal_maintenance();
 	}
 }
