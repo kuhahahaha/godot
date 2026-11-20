@@ -356,7 +356,10 @@ bool RenderingDevice::native_immutable_uniform_set_matches_pipeline(RID set_rid,
 
 bool RenderingDevice::_native_immutable_uniform_set_writes(const UniformSet &set) const {
 	for (RID rid : set.writable_resources) {
-		if (native_immutable_resource_is_held(rid) || native_immutable_resource_is_retiring(rid)) {
+		if (native_immutable_resource_is_retiring(rid)) {
+			return true;
+		}
+		if (native_immutable_resource_is_held(rid) && !_production_output_fast_refresh_buffer_permitted(rid)) {
 			return true;
 		}
 	}

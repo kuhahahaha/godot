@@ -29,11 +29,13 @@
 /**************************************************************************/
 
 #include "core/extension/gdextension_library_exit_guard.h"
+#include "core/math/affine_f32.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_mesh_light_sort_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_data_rd.h"
+#include "servers/rendering/renderer_scene_cull.h"
 #include "servers/rendering/rendering_server.h"
 
 #include <cstdio>
@@ -1576,7 +1578,7 @@ Error ParticlesStorage::particles_external_draw(const ExternalSurfaceSelection &
 	if (view.owner && view.slot < view.owner->slot_count) {
 		const auto &slot = view.owner->slots[view.slot];
 		if (slot.state == ExternalOutputOwner::LeaseState::ADOPTED &&
-				slot.native_camera_source != p_render_data->get_native_camera_source() &&
+				(slot.fast_refresh_active || slot.native_camera_source != p_render_data->get_native_camera_source()) &&
 				slot.storage && !slot.publication_closed && !slot.pass_uses_closed) {
 			// Already-adopted immutable slot replayed on a subsequent frame while the
 			// producer computes the next step: draw directly from the prepared pipeline
@@ -1723,4 +1725,783 @@ void ParticlesStorage::particles_external_create_typed_v3(GDExtensionProductionP
 	}
 }
 
+namespace {
+
+bool fast_refresh_invert_affine_f32(const float p_affine[12], float r_inverse[12]) {
+	for (uint32_t i = 0; i < 12; ++i) {
+		if (!Math::is_finite(p_affine[i])) {
+			return false;
+		}
+	}
+	double basis[3][3];
+	for (uint32_t row = 0; row < 3; ++row) {
+		for (uint32_t column = 0; column < 3; ++column) {
+			basis[row][column] = double(p_affine[row * 4 + column]);
+		}
+	}
+	double inverse[3][4] = {};
+	for (uint32_t row = 0; row < 3; ++row) {
+		for (uint32_t column = 0; column < 3; ++column) {
+			inverse[column][row] = basis[(row + 1) % 3][(column + 1) % 3] * basis[(row + 2) % 3][(column + 2) % 3] -
+					basis[(row + 1) % 3][(column + 2) % 3] * basis[(row + 2) % 3][(column + 1) % 3];
+		}
+	}
+	const double determinant = AffineF32::exact_basis_determinant(p_affine);
+	if (!Math::is_finite(determinant) || determinant == 0.0) {
+		return false;
+	}
+	for (uint32_t row = 0; row < 3; ++row) {
+		for (uint32_t column = 0; column < 3; ++column) {
+			inverse[row][column] /= determinant;
+		}
+		float numerator_affine[12];
+		for (uint32_t i = 0; i < 12; ++i) {
+			numerator_affine[i] = p_affine[i];
+		}
+		for (uint32_t column = 0; column < 3; ++column) {
+			numerator_affine[column * 4 + row] = p_affine[column * 4 + 3];
+		}
+		inverse[row][3] = -AffineF32::exact_basis_determinant(numerator_affine) / determinant;
+	}
+	for (uint32_t row = 0; row < 3; ++row) {
+		for (uint32_t column = 0; column < 4; ++column) {
+			if (!Math::is_finite(inverse[row][column]) || Math::abs(inverse[row][column]) > double(std::numeric_limits<float>::max())) {
+				return false;
+			}
+			const float val = float(inverse[row][column]);
+			if (!Math::is_finite(val)) {
+				return false;
+			}
+			r_inverse[row * 4 + column] = val;
+		}
+	}
+	return true;
+}
+
+Transform3D fast_refresh_decode_transform(const float p_affine[12]) {
+	Transform3D xf;
+	for (uint32_t row = 0; row < 3; ++row) {
+		for (uint32_t col = 0; col < 3; ++col) {
+			xf.basis.rows[row][col] = real_t(p_affine[row * 4 + col]);
+		}
+		xf.origin[row] = real_t(p_affine[row * 4 + 3]);
+	}
+	return xf;
+}
+
+} // namespace
+
+int32_t ParticlesStorage::particles_external_begin_fast_refresh_v1(const GDExtensionFastRefreshBeginInputV1 *p_input, GDExtensionFastRefreshTargetsV1 *p_out_targets) {
+	if (p_out_targets) {
+		*p_out_targets = {};
+		p_out_targets->abi_version = 1;
+		p_out_targets->struct_size = sizeof(GDExtensionFastRefreshTargetsV1);
+		p_out_targets->native_error = int32_t(ERR_INVALID_PARAMETER);
+		p_out_targets->slot_index = UINT32_MAX;
+	}
+	auto fail = [&](Error p_err) -> int32_t {
+		if (p_out_targets) {
+			p_out_targets->native_error = int32_t(p_err);
+		}
+		return int32_t(p_err);
+	};
+	if (!p_input || !p_out_targets || p_input->abi_version != 1 || p_input->struct_size != sizeof(GDExtensionFastRefreshBeginInputV1) ||
+			p_input->reserved != 0 || p_input->reserved2 != 0 || p_input->has_host_affine > 1 ||
+			p_input->particles_rid == 0 || p_input->next_present_seq == 0) {
+		return fail(ERR_INVALID_PARAMETER);
+	}
+	RenderingServer *rs = RenderingServer::get_singleton();
+	RenderingDevice *rd = RenderingDevice::get_singleton();
+	if (!rs || !rs->is_on_render_thread() || !rd || rs->get_rendering_device() != rd) {
+		return fail(ERR_UNAUTHORIZED);
+	}
+	if (rd->draw_list.active || rd->compute_list.active || rd->raytracing_list.active) {
+		return fail(ERR_BUSY);
+	}
+	const RID particles_rid = RID::from_uint64(p_input->particles_rid);
+	Particles *particles = particles_owner.get_or_null(particles_rid);
+	if (!particles || !particles->external) {
+		return fail(ERR_DOES_NOT_EXIST);
+	}
+	ExternalOutputOwner &owner = *particles->external;
+	if (owner.device != rd || owner.state != ExternalOutputOwner::GenerationState::ACTIVE) {
+		return fail(ERR_UNAVAILABLE);
+	}
+	if (owner.config.profile != ExternalOutputConfig::INSTANCE_192 &&
+			owner.config.profile != ExternalOutputConfig::INDEXED_144 &&
+			owner.config.profile != ExternalOutputConfig::PARTICLE_LIGHT_64) {
+		return fail(ERR_UNAVAILABLE);
+	}
+	uint32_t best_slot = UINT32_MAX;
+	uint64_t best_present_seq = 0;
+	uint64_t best_lease_serial = 0;
+	for (uint32_t i = 0; i < owner.slot_count; ++i) {
+		const ExternalOutputOwner::Slot &cand = owner.slots[i];
+		if (cand.state != ExternalOutputOwner::LeaseState::ADOPTED || cand.storage == nullptr ||
+				cand.publication_closed || cand.pass_uses_closed ||
+				cand.original_pin.is_empty() || owner.preparation_request(i) == nullptr) {
+			continue;
+		}
+		if (best_slot == UINT32_MAX || cand.request.common.present_seq > best_present_seq ||
+				(cand.request.common.present_seq == best_present_seq && cand.lease_serial > best_lease_serial)) {
+			best_slot = i;
+			best_present_seq = cand.request.common.present_seq;
+			best_lease_serial = cand.lease_serial;
+		}
+	}
+	if (best_slot == UINT32_MAX) {
+		return fail(ERR_UNAVAILABLE);
+	}
+	ExternalOutputOwner::Slot &slot = owner.slots[best_slot];
+	if (p_input->has_host_affine) {
+		float cur_inv[12] = {};
+		float prev_inv[12] = {};
+		if (!fast_refresh_invert_affine_f32(p_input->current_host_affine, cur_inv) ||
+				!fast_refresh_invert_affine_f32(p_input->previous_host_affine, prev_inv)) {
+			return fail(ERR_INVALID_DATA);
+		}
+		slot.current_host = fast_refresh_decode_transform(p_input->current_host_affine);
+		slot.previous_host = fast_refresh_decode_transform(p_input->previous_host_affine);
+		const RID proof_rid = slot.storage->resources[ExternalOutputStorage::GEOMETRY_PROOF].rid;
+		if (slot.guard_proof_payload != nullptr &&
+				slot.guard_proof_bytes >= sizeof(ParticlesExternalGuard::GeometryProofHeader) &&
+				proof_rid.is_valid()) {
+			ParticlesExternalGuard::GeometryProofHeader header;
+			memcpy(&header, slot.guard_proof_payload, sizeof(header));
+			memcpy(header.current_host_inverse_rows, cur_inv, sizeof(cur_inv));
+			memcpy(header.previous_host_inverse_rows, prev_inv, sizeof(prev_inv));
+			if (slot.scene_cull_bound) {
+				if (auto *scene = static_cast<RendererSceneCull *>(RSG::scene)) {
+					RendererSceneCull::NativeParticleSceneFacts actual;
+					if (scene->instance_get_committed_particle_scene_facts(slot.scene_cull_instance, slot.scene_cull_particles, actual) == OK &&
+							actual.scenario == slot.scene_cull_scenario &&
+							actual.world_aabb.is_finite() && actual.world_aabb.get_end().is_finite() && actual.world_aabb.has_volume()) {
+						slot.scene_cull_version = actual.version;
+						slot.scene_cull_local = actual.local_aabb;
+						slot.scene_cull_world = actual.world_aabb;
+						const Vector3 end = actual.world_aabb.get_end();
+						for (uint32_t axis = 0; axis < 3; ++axis) {
+							header.cull_min[axis] = float(actual.world_aabb.position[axis]);
+							header.cull_max[axis] = float(end[axis]);
+						}
+					}
+				}
+			}
+			memcpy(slot.guard_proof_payload, &header, sizeof(header));
+			const Error upd = rd->buffer_update(proof_rid, 0, sizeof(header), slot.guard_proof_payload);
+			if (upd != OK) {
+				return fail(upd);
+			}
+		}
+	}
+	slot.fast_refresh_active = true;
+	rd->production_output_fast_refresh.owner = &owner;
+	rd->production_output_fast_refresh.slot_index = best_slot;
+	rd->production_output_fast_refresh.lease_serial = slot.lease_serial;
+	rd->production_output_fast_refresh.request = owner.preparation_request(best_slot);
+	rd->production_output_fast_refresh.request_serial = owner.preparation_request_serial(best_slot);
+	rd->production_output_fast_refresh.pin_serial = owner.preparation_pin_serial(best_slot);
+	rd->production_output_fast_refresh.owned_group = slot.owned_group;
+	rd->production_output_fast_refresh.active = true;
+
+	p_out_targets->native_error = int32_t(OK);
+	p_out_targets->slot_index = best_slot;
+	p_out_targets->lease_serial = slot.lease_serial;
+	p_out_targets->current_present_seq = slot.request.common.present_seq;
+	p_out_targets->profile = uint32_t(owner.config.profile);
+	p_out_targets->capacity = owner.config.capacity;
+	p_out_targets->surface_count = slot.surface_count;
+	p_out_targets->aux_params_enabled = slot.storage->resources[ExternalOutputStorage::INSTANCE_AUX_PARAMS].bytes != 0 ? 1u : 0u;
+	p_out_targets->current_records_rid = slot.storage->resources[ExternalOutputStorage::CURRENT_RECORDS].rid.get_id();
+	p_out_targets->previous_records_rid = slot.storage->resources[ExternalOutputStorage::PREVIOUS_RECORDS].rid.get_id();
+	p_out_targets->output_meta_rid = slot.storage->resources[ExternalOutputStorage::OUTPUT_META].rid.get_id();
+	p_out_targets->aux_params_rid = slot.storage->resources[ExternalOutputStorage::INSTANCE_AUX_PARAMS].rid.get_id();
+	p_out_targets->indexed_staging_rid = slot.storage->resources[ExternalOutputStorage::INDEXED_STAGING].rid.get_id();
+	p_out_targets->indexed_history_rid = slot.storage->resources[ExternalOutputStorage::INDEXED_VERTEX_HISTORY_VALIDITY].rid.get_id();
+	p_out_targets->guard_status_rid = slot.storage->resources[ExternalOutputStorage::GUARD_STATUS].rid.get_id();
+	p_out_targets->protected_commands_rid = slot.storage->resources[ExternalOutputStorage::PROTECTED_COMMANDS].rid.get_id();
+	p_out_targets->motion_required = owner.config.motion == ExternalOutputConfig::REQUIRED ? 1u : 0u;
+	p_out_targets->reserved = 0;
+	return int32_t(OK);
+}
+
+int32_t ParticlesStorage::particles_external_end_fast_refresh_v1(const GDExtensionFastRefreshEndInputV1 *p_input) {
+	if (!p_input || p_input->abi_version != 1 || p_input->struct_size != sizeof(GDExtensionFastRefreshEndInputV1) ||
+			p_input->reserved != 0 || p_input->parity_bank > 1 ||
+			p_input->particles_rid == 0 || p_input->lease_serial == 0 || p_input->next_present_seq == 0) {
+		return int32_t(ERR_INVALID_PARAMETER);
+	}
+	RenderingServer *rs = RenderingServer::get_singleton();
+	RenderingDevice *rd = RenderingDevice::get_singleton();
+	if (!rs || !rs->is_on_render_thread() || !rd || rs->get_rendering_device() != rd) {
+		return int32_t(ERR_UNAUTHORIZED);
+	}
+	if (rd->draw_list.active || rd->compute_list.active || rd->raytracing_list.active) {
+		return int32_t(ERR_BUSY);
+	}
+	const RID particles_rid = RID::from_uint64(p_input->particles_rid);
+	Particles *particles = particles_owner.get_or_null(particles_rid);
+	if (!particles || !particles->external) {
+		return int32_t(ERR_DOES_NOT_EXIST);
+	}
+	ExternalOutputOwner &owner = *particles->external;
+	if (owner.device != rd || owner.state != ExternalOutputOwner::GenerationState::ACTIVE ||
+			p_input->slot_index >= owner.slot_count) {
+		return int32_t(ERR_UNAVAILABLE);
+	}
+	ExternalOutputOwner::Slot &slot = owner.slots[p_input->slot_index];
+	if (slot.state != ExternalOutputOwner::LeaseState::ADOPTED || slot.lease_serial != p_input->lease_serial ||
+			slot.publication_closed || slot.pass_uses_closed || !slot.storage ||
+			slot.original_pin.is_empty() || !owner.preparation_request(p_input->slot_index)) {
+		return int32_t(ERR_UNAVAILABLE);
+	}
+
+	rd->production_output_fast_refresh.owner = &owner;
+	rd->production_output_fast_refresh.slot_index = p_input->slot_index;
+	rd->production_output_fast_refresh.lease_serial = slot.lease_serial;
+	rd->production_output_fast_refresh.request = owner.preparation_request(p_input->slot_index);
+	rd->production_output_fast_refresh.request_serial = owner.preparation_request_serial(p_input->slot_index);
+	rd->production_output_fast_refresh.pin_serial = owner.preparation_pin_serial(p_input->slot_index);
+	rd->production_output_fast_refresh.owned_group = slot.owned_group;
+	rd->production_output_fast_refresh.active = true;
+	struct FastRefreshScopeExit {
+		RenderingDevice *device = nullptr;
+		~FastRefreshScopeExit() {
+			if (device) {
+				device->production_output_fast_refresh = RenderingDevice::ProductionOutputFastRefreshScope();
+			}
+		}
+	} scope_exit{ rd };
+
+	const uint32_t view_idx = p_input->slot_index / owner.config.max_inflight;
+	const uint32_t bank = p_input->parity_bank;
+
+	if (owner.config.profile == ExternalOutputConfig::PARTICLE_LIGHT_64) {
+		const RID status_rid = slot.storage->resources[ExternalOutputStorage::GUARD_STATUS].rid;
+		if (status_rid.is_valid()) {
+			const uint32_t light64_status_words[8] = {
+				0u,
+				0u,
+				0u,
+				1u,
+				owner.config.capacity,
+				uint32_t(ExternalOutputConfig::PARTICLE_LIGHT_64),
+				uint32_t(p_input->next_present_seq),
+				uint32_t(p_input->next_present_seq >> 32),
+			};
+			const Error upd = rd->buffer_update(status_rid, 0, sizeof(light64_status_words), light64_status_words);
+			if (upd != OK) {
+				return int32_t(upd);
+			}
+		}
+		slot.request.common.present_seq = p_input->next_present_seq;
+		if (view_idx < owner.config.max_views && owner.views[view_idx].occupied) {
+			owner.views[view_idx].last_present = MAX(owner.views[view_idx].last_present, p_input->next_present_seq);
+		}
+		if (mesh_light_sort_rd) {
+			mesh_light_sort_rd->update_external_light_slot_present_seq(
+					p_input->particles_rid, owner.generation, p_input->slot_index, slot.lease_serial, p_input->next_present_seq);
+		}
+		slot.fast_refresh_active = true;
+		return int32_t(OK);
+	}
+
+	const uint32_t max_groups_x = uint32_t(MIN(uint64_t(UINT32_MAX), rd->limit_get(RD::LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_X)));
+	if (max_groups_x == 0) {
+		return int32_t(ERR_UNAVAILABLE);
+	}
+
+	if (owner.config.profile == ExternalOutputConfig::INSTANCE_192) {
+		using Guard = ParticlesExternalGuard;
+		if (!external_guard || !external_guard->is_prepared() || !slot.guard_resources_ready ||
+				!slot.guard_proof_payload || slot.guard_proof_bytes < sizeof(Guard::GeometryProofHeader)) {
+			return int32_t(ERR_UNAVAILABLE);
+		}
+		Guard::GeometryProofHeader proof;
+		memcpy(&proof, slot.guard_proof_payload, sizeof(proof));
+		bool proof_dirty = false;
+		if (p_input->source_count_word_offset != UINT32_MAX && proof.source_accessor[0] != p_input->source_count_word_offset) {
+			proof.source_accessor[0] = p_input->source_count_word_offset;
+			proof_dirty = true;
+		}
+		for (uint32_t g = 0; g < 4; ++g) {
+			if (p_input->source_gate_word_offsets[g] != UINT32_MAX && proof.source_gate_words[g] != p_input->source_gate_word_offsets[g]) {
+				proof.source_gate_words[g] = p_input->source_gate_word_offsets[g];
+				proof_dirty = true;
+			}
+		}
+
+		Guard::PushConstant push;
+		push.capacity = owner.config.capacity;
+		push.sequence_low = uint32_t(p_input->next_present_seq);
+		push.sequence_high = uint32_t(p_input->next_present_seq >> 32);
+		push.surface_count = slot.surface_count;
+		push.record_base = 0;
+		push.record_count = push.capacity;
+
+		const bool no_previous_records = push.capacity != 0 && proof.options[0] == 0 &&
+				slot.storage->resources[ExternalOutputStorage::PREVIOUS_RECORDS].rid.is_null() &&
+				slot.storage->resources[ExternalOutputStorage::PREVIOUS_RECORDS].bytes == 0;
+		const bool aux_enabled = push.capacity != 0 && proof.options[1] == 1;
+		Guard::Mode init_mode = Guard::INIT;
+		Guard::Mode validate_mode = Guard::VALIDATE;
+		Guard::Mode finalize_mode = Guard::FINALIZE;
+		if (push.capacity == 0) {
+			init_mode = Guard::INIT_EMPTY;
+			finalize_mode = Guard::FINALIZE_EMPTY;
+		} else if (no_previous_records) {
+			init_mode = aux_enabled ? Guard::INIT_NO_MOTION_AUX : Guard::INIT_NO_MOTION;
+			validate_mode = aux_enabled ? Guard::VALIDATE_NO_MOTION_AUX : Guard::VALIDATE_NO_MOTION;
+			finalize_mode = aux_enabled ? Guard::FINALIZE_NO_MOTION_AUX : Guard::FINALIZE_NO_MOTION;
+		} else if (aux_enabled) {
+			init_mode = Guard::INIT_AUX;
+			validate_mode = Guard::VALIDATE_AUX;
+			finalize_mode = Guard::FINALIZE_AUX;
+		}
+
+		const uint32_t mode_count = push.capacity ? 3u : 2u;
+		const Guard::Mode modes[3] = { init_mode, push.capacity ? validate_mode : finalize_mode, finalize_mode };
+
+		bool cache_hit = (slot.fast_refresh_source_count_rid[bank] == p_input->source_count_rid) && p_input->source_count_rid != 0;
+		for (uint32_t g = 0; g < 4 && cache_hit; ++g) {
+			cache_hit = (slot.fast_refresh_source_gate_rids[bank][g] == p_input->source_gate_rids[g]) && p_input->source_gate_rids[g] != 0;
+		}
+		for (uint32_t i = 0; i < mode_count && cache_hit; ++i) {
+			const RID set = slot.fast_refresh_guard_sets[bank][modes[i]];
+			cache_hit = set.is_valid() && rd->uniform_set_is_valid(set);
+		}
+
+		if (!cache_hit || proof_dirty) {
+			Guard::Bindings bindings;
+			for (uint32_t binding = 0; binding < Guard::BINDING_COUNT; ++binding) {
+				if (binding == Guard::SOURCE_COUNT) {
+					const RID rid = RID::from_uint64(p_input->source_count_rid);
+					const RenderingDevice::Buffer *buf = rd->_production_output_storage_buffer(rid);
+					if (!buf) {
+						return int32_t(ERR_INVALID_PARAMETER);
+					}
+					bindings.buffers[binding] = { rid, buf->size };
+				} else if (binding >= Guard::SOURCE_COUNT_VALIDITY && binding <= Guard::SOURCE_INSTANCE_GATE) {
+					const uint32_t g = binding - Guard::SOURCE_COUNT_VALIDITY;
+					const RID rid = RID::from_uint64(p_input->source_gate_rids[g]);
+					const RenderingDevice::Buffer *buf = rd->_production_output_storage_buffer(rid);
+					if (!buf) {
+						return int32_t(ERR_INVALID_PARAMETER);
+					}
+					bindings.buffers[binding] = { rid, buf->size };
+				} else {
+					const uint32_t role = binding == Guard::INSTANCE_AUX_PARAMS
+							? uint32_t(ExternalOutputStorage::INSTANCE_AUX_PARAMS)
+							: (binding <= Guard::OUTPUT_META ? binding : binding - 1);
+					const ExternalOutputStorage::Resource &res = slot.storage->resources[role];
+					bindings.buffers[binding] = { res.rid, res.bytes };
+				}
+			}
+			Guard::LayoutPlan plan;
+			const Error planned = Guard::plan_layout(push, bindings, proof, max_groups_x, plan);
+			if (planned != OK) {
+				return int32_t(planned);
+			}
+			init_mode = plan.initialize_mode;
+			validate_mode = plan.validate_mode;
+			finalize_mode = plan.finalize_mode;
+			if (proof_dirty) {
+				const RID proof_rid = slot.storage->resources[ExternalOutputStorage::GEOMETRY_PROOF].rid;
+				if (proof_rid.is_null()) {
+					return int32_t(ERR_UNAVAILABLE);
+				}
+				memcpy(slot.guard_proof_payload, &proof, sizeof(proof));
+				const Error upd = rd->buffer_update(proof_rid, 0, sizeof(proof), slot.guard_proof_payload);
+				if (upd != OK) {
+					return int32_t(upd);
+				}
+			}
+			if (!cache_hit) {
+				for (uint32_t m = 0; m < ExternalOutputOwner::GUARD_MODE_CAPACITY; ++m) {
+					if (slot.fast_refresh_guard_sets[bank][m].is_valid()) {
+						if (rd->uniform_set_is_valid(slot.fast_refresh_guard_sets[bank][m])) {
+							rd->free_rid(slot.fast_refresh_guard_sets[bank][m]);
+						}
+						slot.fast_refresh_guard_sets[bank][m] = RID();
+					}
+				}
+				slot.fast_refresh_source_count_rid[bank] = 0;
+				for (uint32_t g = 0; g < 4; ++g) {
+					slot.fast_refresh_source_gate_rids[bank][g] = 0;
+				}
+				const Guard::Mode active_modes[3] = { init_mode, push.capacity ? validate_mode : finalize_mode, finalize_mode };
+				for (uint32_t i = 0; i < mode_count; ++i) {
+					const Guard::Mode mode = active_modes[i];
+					const RID shader = external_guard->get_shader(mode);
+					if (shader.is_null()) {
+						return int32_t(ERR_UNAVAILABLE);
+					}
+					const RID created = rd->uniform_set_create(plan.uniforms, shader, 0);
+					if (created.is_null()) {
+						for (uint32_t j = 0; j < i; ++j) {
+							const Guard::Mode prev_mode = active_modes[j];
+							if (slot.fast_refresh_guard_sets[bank][prev_mode].is_valid()) {
+								rd->free_rid(slot.fast_refresh_guard_sets[bank][prev_mode]);
+								slot.fast_refresh_guard_sets[bank][prev_mode] = RID();
+							}
+						}
+						return int32_t(ERR_CANT_CREATE);
+					}
+					slot.fast_refresh_guard_sets[bank][mode] = created;
+				}
+				slot.fast_refresh_source_count_rid[bank] = p_input->source_count_rid;
+				for (uint32_t g = 0; g < 4; ++g) {
+					slot.fast_refresh_source_gate_rids[bank][g] = p_input->source_gate_rids[g];
+				}
+			}
+		}
+
+		const RID init_pipe = external_guard->get_pipeline(init_mode);
+		const RID finalize_pipe = external_guard->get_pipeline(finalize_mode);
+		const RID validate_pipe = push.capacity ? external_guard->get_pipeline(validate_mode) : RID();
+		const RID init_set = slot.fast_refresh_guard_sets[bank][init_mode];
+		const RID finalize_set = slot.fast_refresh_guard_sets[bank][finalize_mode];
+		const RID validate_set = push.capacity ? slot.fast_refresh_guard_sets[bank][validate_mode] : RID();
+		if (init_pipe.is_null() || finalize_pipe.is_null() || init_set.is_null() || finalize_set.is_null() ||
+				(push.capacity && (validate_pipe.is_null() || validate_set.is_null()))) {
+			return int32_t(ERR_UNAVAILABLE);
+		}
+
+		const RD::ComputeListID cl = rd->compute_list_begin();
+		if (cl == RD::INVALID_ID) {
+			return int32_t(ERR_CANT_CREATE);
+		}
+		Guard::PushConstant stage_pc = push;
+		stage_pc.record_base = 0;
+		stage_pc.record_count = 0;
+		rd->compute_list_bind_compute_pipeline(cl, init_pipe);
+		rd->compute_list_bind_uniform_set(cl, init_set, 0);
+		rd->compute_list_set_push_constant(cl, &stage_pc, sizeof(stage_pc));
+		rd->compute_list_dispatch(cl, 1, 1, 1);
+		rd->compute_list_add_barrier(cl);
+
+		if (push.capacity > 0) {
+			const uint64_t chunk_capacity = MIN(uint64_t(max_groups_x) * 64ull, uint64_t(push.capacity));
+			for (uint32_t base = 0; base < push.capacity;) {
+				Guard::PushConstant chunk = push;
+				chunk.record_base = base;
+				chunk.record_count = uint32_t(MIN(chunk_capacity, uint64_t(push.capacity - base)));
+				const uint32_t groups_x = (chunk.record_count + 63u) / 64u;
+				rd->compute_list_bind_compute_pipeline(cl, validate_pipe);
+				rd->compute_list_bind_uniform_set(cl, validate_set, 0);
+				rd->compute_list_set_push_constant(cl, &chunk, sizeof(chunk));
+				rd->compute_list_dispatch(cl, groups_x, 1, 1);
+				base += chunk.record_count;
+			}
+			rd->compute_list_add_barrier(cl);
+		}
+
+		rd->compute_list_bind_compute_pipeline(cl, finalize_pipe);
+		rd->compute_list_bind_uniform_set(cl, finalize_set, 0);
+		rd->compute_list_set_push_constant(cl, &stage_pc, sizeof(stage_pc));
+		rd->compute_list_dispatch(cl, 1, 1, 1);
+		rd->compute_list_end();
+
+		slot.request.common.present_seq = p_input->next_present_seq;
+		if (view_idx < owner.config.max_views && owner.views[view_idx].occupied) {
+			owner.views[view_idx].last_present = MAX(owner.views[view_idx].last_present, p_input->next_present_seq);
+		}
+		slot.fast_refresh_active = true;
+		return int32_t(OK);
+	}
+
+	if (owner.config.profile == ExternalOutputConfig::INDEXED_144) {
+		using Guard = ParticlesExternalGuardIndexed144;
+		if (!external_guard_indexed144 || !external_guard_indexed144->is_prepared() || !slot.guard_resources_ready ||
+				!slot.guard_proof_payload || slot.guard_proof_bytes < sizeof(Guard::GeometryProofHeader)) {
+			return int32_t(ERR_UNAVAILABLE);
+		}
+		Guard::GeometryProofHeader proof;
+		memcpy(&proof, slot.guard_proof_payload, sizeof(proof));
+		bool proof_dirty = false;
+		if (p_input->source_count_word_offset != UINT32_MAX && proof.source_accessor[0] != p_input->source_count_word_offset) {
+			proof.source_accessor[0] = p_input->source_count_word_offset;
+			proof_dirty = true;
+		}
+		for (uint32_t g = 0; g < 4; ++g) {
+			if (p_input->source_gate_word_offsets[g] != UINT32_MAX && proof.source_gate_words[g] != p_input->source_gate_word_offsets[g]) {
+				proof.source_gate_words[g] = p_input->source_gate_word_offsets[g];
+				proof_dirty = true;
+			}
+		}
+
+		Guard::PushConstant push;
+		push.capacity = owner.config.capacity;
+		push.sequence_low = uint32_t(p_input->next_present_seq);
+		push.sequence_high = uint32_t(p_input->next_present_seq >> 32);
+		push.surface_count = slot.surface_count;
+		push.segment_base = 0;
+		push.segment_count = push.capacity;
+
+		const bool motion_required = (proof.options[0] == 1u);
+		const bool motion_buffers_omitted = !motion_required && push.capacity > 0 &&
+				slot.storage->resources[ExternalOutputStorage::PREVIOUS_RECORDS].rid.is_null() &&
+				slot.storage->resources[ExternalOutputStorage::PREVIOUS_RECORDS].bytes == 0 &&
+				slot.storage->resources[ExternalOutputStorage::INDEXED_VERTEX_HISTORY_VALIDITY].rid.is_null() &&
+				slot.storage->resources[ExternalOutputStorage::INDEXED_VERTEX_HISTORY_VALIDITY].bytes == 0;
+		Guard::Mode init_mode = Guard::INIT;
+		Guard::Mode validate_mode = Guard::VALIDATE;
+		Guard::Mode finalize_mode = Guard::FINALIZE;
+		if (push.capacity == 0) {
+			init_mode = Guard::INIT_EMPTY;
+			finalize_mode = Guard::FINALIZE_EMPTY;
+		} else if (motion_buffers_omitted) {
+			init_mode = Guard::INIT_NO_MOTION;
+			validate_mode = Guard::VALIDATE_NO_MOTION;
+			finalize_mode = Guard::FINALIZE_NO_MOTION;
+		}
+
+		const uint32_t mode_count = push.capacity ? 3u : 2u;
+		const Guard::Mode modes[3] = { init_mode, push.capacity ? validate_mode : finalize_mode, finalize_mode };
+
+		bool cache_hit = (slot.fast_refresh_source_count_rid[bank] == p_input->source_count_rid) && p_input->source_count_rid != 0;
+		for (uint32_t g = 0; g < 4 && cache_hit; ++g) {
+			cache_hit = (slot.fast_refresh_source_gate_rids[bank][g] == p_input->source_gate_rids[g]) && p_input->source_gate_rids[g] != 0;
+		}
+		for (uint32_t i = 0; i < mode_count && cache_hit; ++i) {
+			const RID set = slot.fast_refresh_guard_sets[bank][modes[i]];
+			cache_hit = set.is_valid() && rd->uniform_set_is_valid(set);
+		}
+
+		if (!cache_hit || proof_dirty) {
+			auto role_for_binding = [](uint32_t p_binding) -> uint32_t {
+				switch (p_binding) {
+					case Guard::CURRENT_VERTICES:
+						return ExternalOutputStorage::CURRENT_RECORDS;
+					case Guard::ALIGNED_PREVIOUS_VERTICES:
+						return ExternalOutputStorage::PREVIOUS_RECORDS;
+					case Guard::VERTEX_HISTORY_VALIDITY:
+						return ExternalOutputStorage::INDEXED_VERTEX_HISTORY_VALIDITY;
+					case Guard::INDEX_STAGING:
+						return ExternalOutputStorage::INDEXED_STAGING;
+					case Guard::OUTPUT_META:
+						return ExternalOutputStorage::OUTPUT_META;
+					case Guard::GUARD_SCRATCH:
+						return ExternalOutputStorage::GUARD_SCRATCH;
+					case Guard::GUARD_STATUS:
+						return ExternalOutputStorage::GUARD_STATUS;
+					case Guard::PROTECTED_COMMANDS:
+						return ExternalOutputStorage::PROTECTED_COMMANDS;
+					case Guard::GEOMETRY_PROOF:
+						return ExternalOutputStorage::GEOMETRY_PROOF;
+					default:
+						return UINT32_MAX;
+				}
+			};
+			Guard::Bindings bindings;
+			for (uint32_t binding = 0; binding < Guard::BINDING_COUNT; ++binding) {
+				if (binding == Guard::SOURCE_COUNT) {
+					const RID rid = RID::from_uint64(p_input->source_count_rid);
+					const RenderingDevice::Buffer *buf = rd->_production_output_storage_buffer(rid);
+					if (!buf) {
+						return int32_t(ERR_INVALID_PARAMETER);
+					}
+					bindings.buffers[binding] = { rid, buf->size };
+				} else if (binding >= Guard::SOURCE_COUNT_VALIDITY && binding <= Guard::SOURCE_INSTANCE_GATE) {
+					const uint32_t g = binding - Guard::SOURCE_COUNT_VALIDITY;
+					const RID rid = RID::from_uint64(p_input->source_gate_rids[g]);
+					const RenderingDevice::Buffer *buf = rd->_production_output_storage_buffer(rid);
+					if (!buf) {
+						return int32_t(ERR_INVALID_PARAMETER);
+					}
+					bindings.buffers[binding] = { rid, buf->size };
+				} else {
+					const uint32_t role = role_for_binding(binding);
+					if (role == UINT32_MAX) {
+						return int32_t(ERR_INVALID_DATA);
+					}
+					const ExternalOutputStorage::Resource &res = slot.storage->resources[role];
+					bindings.buffers[binding] = { res.rid, res.bytes };
+				}
+			}
+			Guard::LayoutPlan plan;
+			const Error planned = Guard::plan_layout(push, bindings, proof, max_groups_x, plan);
+			if (planned != OK) {
+				return int32_t(planned);
+			}
+			init_mode = plan.initialize_mode;
+			validate_mode = plan.validate_mode;
+			finalize_mode = plan.finalize_mode;
+			if (proof_dirty) {
+				const RID proof_rid = slot.storage->resources[ExternalOutputStorage::GEOMETRY_PROOF].rid;
+				if (proof_rid.is_null()) {
+					return int32_t(ERR_UNAVAILABLE);
+				}
+				memcpy(slot.guard_proof_payload, &proof, sizeof(proof));
+				const Error upd = rd->buffer_update(proof_rid, 0, sizeof(proof), slot.guard_proof_payload);
+				if (upd != OK) {
+					return int32_t(upd);
+				}
+			}
+			if (!cache_hit) {
+				for (uint32_t m = 0; m < ExternalOutputOwner::GUARD_MODE_CAPACITY; ++m) {
+					if (slot.fast_refresh_guard_sets[bank][m].is_valid()) {
+						if (rd->uniform_set_is_valid(slot.fast_refresh_guard_sets[bank][m])) {
+							rd->free_rid(slot.fast_refresh_guard_sets[bank][m]);
+						}
+						slot.fast_refresh_guard_sets[bank][m] = RID();
+					}
+				}
+				slot.fast_refresh_source_count_rid[bank] = 0;
+				for (uint32_t g = 0; g < 4; ++g) {
+					slot.fast_refresh_source_gate_rids[bank][g] = 0;
+				}
+				const Guard::Mode active_modes[3] = { init_mode, push.capacity ? validate_mode : finalize_mode, finalize_mode };
+				for (uint32_t i = 0; i < mode_count; ++i) {
+					const Guard::Mode mode = active_modes[i];
+					const RID shader = external_guard_indexed144->get_shader(mode);
+					if (shader.is_null()) {
+						return int32_t(ERR_UNAVAILABLE);
+					}
+					const RID created = rd->uniform_set_create(plan.uniforms, shader, 0);
+					if (created.is_null()) {
+						for (uint32_t j = 0; j < i; ++j) {
+							const Guard::Mode prev_mode = active_modes[j];
+							if (slot.fast_refresh_guard_sets[bank][prev_mode].is_valid()) {
+								rd->free_rid(slot.fast_refresh_guard_sets[bank][prev_mode]);
+								slot.fast_refresh_guard_sets[bank][prev_mode] = RID();
+							}
+						}
+						return int32_t(ERR_CANT_CREATE);
+					}
+					slot.fast_refresh_guard_sets[bank][mode] = created;
+				}
+				slot.fast_refresh_source_count_rid[bank] = p_input->source_count_rid;
+				for (uint32_t g = 0; g < 4; ++g) {
+					slot.fast_refresh_source_gate_rids[bank][g] = p_input->source_gate_rids[g];
+				}
+			}
+		}
+
+		const RID init_pipe = external_guard_indexed144->get_pipeline(init_mode);
+		const RID finalize_pipe = external_guard_indexed144->get_pipeline(finalize_mode);
+		const RID validate_pipe = push.capacity ? external_guard_indexed144->get_pipeline(validate_mode) : RID();
+		const RID init_set = slot.fast_refresh_guard_sets[bank][init_mode];
+		const RID finalize_set = slot.fast_refresh_guard_sets[bank][finalize_mode];
+		const RID validate_set = push.capacity ? slot.fast_refresh_guard_sets[bank][validate_mode] : RID();
+		if (init_pipe.is_null() || finalize_pipe.is_null() || init_set.is_null() || finalize_set.is_null() ||
+				(push.capacity && (validate_pipe.is_null() || validate_set.is_null()))) {
+			return int32_t(ERR_UNAVAILABLE);
+		}
+
+		const RD::ComputeListID cl = rd->compute_list_begin();
+		if (cl == RD::INVALID_ID) {
+			return int32_t(ERR_CANT_CREATE);
+		}
+		Guard::PushConstant stage_pc = push;
+		stage_pc.segment_base = 0;
+		stage_pc.segment_count = 0;
+		rd->compute_list_bind_compute_pipeline(cl, init_pipe);
+		rd->compute_list_bind_uniform_set(cl, init_set, 0);
+		rd->compute_list_set_push_constant(cl, &stage_pc, sizeof(stage_pc));
+		rd->compute_list_dispatch(cl, 1, 1, 1);
+		rd->compute_list_add_barrier(cl);
+
+		if (push.capacity > 0) {
+			const uint64_t chunk_capacity = MIN(uint64_t(max_groups_x) * 64ull, uint64_t(push.capacity));
+			for (uint32_t base = 0; base < push.capacity;) {
+				Guard::PushConstant chunk = push;
+				chunk.segment_base = base;
+				chunk.segment_count = uint32_t(MIN(chunk_capacity, uint64_t(push.capacity - base)));
+				const uint32_t groups_x = (chunk.segment_count + 63u) / 64u;
+				rd->compute_list_bind_compute_pipeline(cl, validate_pipe);
+				rd->compute_list_bind_uniform_set(cl, validate_set, 0);
+				rd->compute_list_set_push_constant(cl, &chunk, sizeof(chunk));
+				rd->compute_list_dispatch(cl, groups_x, 1, 1);
+				base += chunk.segment_count;
+			}
+			rd->compute_list_add_barrier(cl);
+		}
+
+		rd->compute_list_bind_compute_pipeline(cl, finalize_pipe);
+		rd->compute_list_bind_uniform_set(cl, finalize_set, 0);
+		rd->compute_list_set_push_constant(cl, &stage_pc, sizeof(stage_pc));
+		rd->compute_list_dispatch(cl, 1, 1, 1);
+		rd->compute_list_end();
+
+		slot.request.common.present_seq = p_input->next_present_seq;
+		if (view_idx < owner.config.max_views && owner.views[view_idx].occupied) {
+			owner.views[view_idx].last_present = MAX(owner.views[view_idx].last_present, p_input->next_present_seq);
+		}
+		slot.fast_refresh_active = true;
+		return int32_t(OK);
+	}
+
+	return int32_t(ERR_UNAVAILABLE);
+}
+
+int32_t ParticlesStorage::particles_external_release_fast_refresh_v1(uint64_t p_particles_rid, uint32_t p_slot_index) {
+	if (p_particles_rid == 0) {
+		return int32_t(ERR_INVALID_PARAMETER);
+	}
+	RenderingServer *rs = RenderingServer::get_singleton();
+	RenderingDevice *rd = RenderingDevice::get_singleton();
+	if (!rs || !rs->is_on_render_thread() || !rd || rs->get_rendering_device() != rd) {
+		return int32_t(ERR_UNAUTHORIZED);
+	}
+	Particles *particles = particles_owner.get_or_null(RID::from_uint64(p_particles_rid));
+	if (!particles || !particles->external) {
+		return int32_t(ERR_DOES_NOT_EXIST);
+	}
+	ExternalOutputOwner &owner = *particles->external;
+	if (owner.device != rd) {
+		return int32_t(ERR_UNAVAILABLE);
+	}
+	if (rd->production_output_fast_refresh.owner == &owner &&
+			(p_slot_index == UINT32_MAX || rd->production_output_fast_refresh.slot_index == p_slot_index)) {
+		rd->production_output_fast_refresh = RenderingDevice::ProductionOutputFastRefreshScope();
+	}
+	if (p_slot_index == UINT32_MAX) {
+		for (uint32_t i = 0; i < owner.slot_count; ++i) {
+			owner.slots[i].release_fast_refresh_resources(rd);
+		}
+		return int32_t(OK);
+	}
+	if (p_slot_index >= owner.slot_count) {
+		return int32_t(ERR_INVALID_PARAMETER);
+	}
+	owner.slots[p_slot_index].release_fast_refresh_resources(rd);
+	return int32_t(OK);
+}
+
 } // namespace RendererRD
+
+namespace GDExtensionDeviceExit {
+
+int32_t ange_external_output_begin_fast_refresh_v1(const GDExtensionFastRefreshBeginInputV1 *p_input, GDExtensionFastRefreshTargetsV1 *p_out_targets) {
+	RendererRD::ParticlesStorage *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		if (p_out_targets) {
+			*p_out_targets = {};
+			p_out_targets->abi_version = 1;
+			p_out_targets->struct_size = sizeof(GDExtensionFastRefreshTargetsV1);
+			p_out_targets->native_error = int32_t(ERR_UNAVAILABLE);
+			p_out_targets->slot_index = UINT32_MAX;
+		}
+		return int32_t(ERR_UNAVAILABLE);
+	}
+	return storage->particles_external_begin_fast_refresh_v1(p_input, p_out_targets);
+}
+
+int32_t ange_external_output_end_fast_refresh_v1(const GDExtensionFastRefreshEndInputV1 *p_input) {
+	RendererRD::ParticlesStorage *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		return int32_t(ERR_UNAVAILABLE);
+	}
+	return storage->particles_external_end_fast_refresh_v1(p_input);
+}
+
+int32_t ange_external_output_release_fast_refresh_v1(uint64_t p_particles_rid, uint32_t p_slot_index) {
+	RendererRD::ParticlesStorage *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		return int32_t(ERR_UNAVAILABLE);
+	}
+	return storage->particles_external_release_fast_refresh_v1(p_particles_rid, p_slot_index);
+}
+
+} // namespace GDExtensionDeviceExit

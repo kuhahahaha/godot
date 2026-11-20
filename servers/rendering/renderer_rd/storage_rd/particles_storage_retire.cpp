@@ -752,6 +752,12 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			!slot.pass_uses_closed || owner.slot_has_custody(p_slot)) {
 		return trace_failure(3, "custody.L674", ERR_BUSY);
 	}
+	if (owner.device && owner.device == RenderingDevice::get_singleton() && owner.device->native_immutable_is_render_thread()) {
+		if (owner.device->production_output_fast_refresh.owner == &owner && owner.device->production_output_fast_refresh.slot_index == p_slot) {
+			owner.device->production_output_fast_refresh = RenderingDevice::ProductionOutputFastRefreshScope();
+		}
+		slot.release_fast_refresh_resources(owner.device);
+	}
 	auto spend = [&]() {
 		if (r_usage.passes >= MIN(p_budget.passes, 64u) || r_usage.receipts >= MIN(p_budget.receipts, 128u) ||
 				OS::get_singleton()->get_ticks_usec() >= p_budget.deadline_micros) {

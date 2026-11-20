@@ -61,7 +61,13 @@ Error ExternalOutputOwner::validate_scene_cull(uint32_t p_slot) const {
 	if (observed != OK) {
 		return observed;
 	}
-	if (actual.scenario != slot.scene_cull_scenario || actual.version != slot.scene_cull_version ||
+	if (actual.scenario != slot.scene_cull_scenario) {
+		return ERR_INVALID_DATA;
+	}
+	if (slot.state == LeaseState::ADOPTED && slot.fast_refresh_active) {
+		return OK;
+	}
+	if (actual.version != slot.scene_cull_version ||
 			actual.transform != slot.current_host || actual.local_aabb != slot.scene_cull_local || actual.world_aabb != slot.scene_cull_world) {
 		return ERR_INVALID_DATA;
 	}
@@ -132,6 +138,53 @@ Error ExternalOutputOwner::validate_native_selection(const ExternalOutputConfig 
 	}
 	surface_count = flattened;
 	return OK;
+}
+
+void ExternalOutputOwner::Slot::release_fast_refresh_resources(RenderingDevice *p_rd) {
+	fast_refresh_active = false;
+	for (uint32_t b = 0; b < 2; ++b) {
+		fast_refresh_source_count_rid[b] = 0;
+		for (uint32_t g = 0; g < 4; ++g) {
+			fast_refresh_source_gate_rids[b][g] = 0;
+		}
+		for (uint32_t m = 0; m < GUARD_MODE_CAPACITY; ++m) {
+			if (fast_refresh_guard_sets[b][m].is_valid()) {
+				if (p_rd && p_rd->uniform_set_is_valid(fast_refresh_guard_sets[b][m])) {
+					p_rd->free_rid(fast_refresh_guard_sets[b][m]);
+				}
+				fast_refresh_guard_sets[b][m] = RID();
+			}
+		}
+	}
+}
+
+void ExternalOutputOwner::withdraw() {
+	invalidate_generation_demand();
+	RenderingDevice *rd = (device && device == RenderingDevice::get_singleton() && device->native_immutable_is_render_thread()) ? device : nullptr;
+	if (rd && rd->production_output_fast_refresh.owner == this) {
+		rd->production_output_fast_refresh = RenderingDevice::ProductionOutputFastRefreshScope();
+	}
+	for (uint32_t i = 0; i < slot_count; ++i) {
+		if (rd) {
+			slots[i].release_fast_refresh_resources(rd);
+		} else {
+			slots[i].fast_refresh_active = false;
+		}
+	}
+	if (state == GenerationState::RELEASED || state == GenerationState::FAULTED_RETIRING || state == GenerationState::WITHDRAWING || state == GenerationState::RETIRING) {
+		return;
+	}
+	state = GenerationState::WITHDRAWING;
+	for (uint32_t i = 0; i < config.max_views; ++i) {
+		views[i].closed = true;
+	}
+	for (uint32_t i = 0; i < slot_count; ++i) {
+		slots[i].publication_closed = true;
+		slots[i].pass_uses_closed = true;
+		if (slots[i].state != LeaseState::EMPTY && slots[i].state != LeaseState::RELEASED) {
+			slots[i].state = LeaseState::RETIRING;
+		}
+	}
 }
 
 void ExternalOutputOwner::invalidate_generation_demand() {
@@ -1168,6 +1221,15 @@ Error ExternalOutputOwner::cancel_slot(uint32_t p_slot) {
 	if (cell.state == LeaseState::EMPTY || cell.state == LeaseState::RELEASED) {
 		return ERR_DOES_NOT_EXIST;
 	}
+	RenderingDevice *rd = (device && device == RenderingDevice::get_singleton() && device->native_immutable_is_render_thread()) ? device : nullptr;
+	if (rd && rd->production_output_fast_refresh.owner == this && rd->production_output_fast_refresh.slot_index == p_slot) {
+		rd->production_output_fast_refresh = RenderingDevice::ProductionOutputFastRefreshScope();
+	}
+	if (rd) {
+		cell.release_fast_refresh_resources(rd);
+	} else {
+		cell.fast_refresh_active = false;
+	}
 	cell.publication_closed = true;
 	cell.pass_uses_closed = true;
 	cell.state = LeaseState::RETIRING;
@@ -2097,6 +2159,34 @@ Error ExternalOutputOwner::find_generated_slot_for_capture(const Ref<RendererVie
 			return ERR_INVALID_DATA;
 		}
 		matched = i;
+	}
+	if (matched == UINT32_MAX) {
+		const auto &camera_token = p_capture->get_token();
+		if (camera_token.is_valid()) {
+			uint64_t best_present_seq = 0;
+			for (uint32_t i = 0; i < slot_count; ++i) {
+				const auto &slot = slots[i];
+				if ((slot.state != LeaseState::SEALED_RECORDED && slot.state != LeaseState::ADOPTED) ||
+						slot.publication_closed || slot.pass_uses_closed || slot.generated_indexed_mesh.is_null() ||
+						!slot.scene_cull_bound || !slot.guard_resources_ready) {
+					continue;
+				}
+				const uint32_t view_idx = i / config.max_inflight;
+				if (view_idx >= config.max_views || !views[view_idx].occupied || views[view_idx].closed) {
+					continue;
+				}
+				if (slot.request.common.generation != generation || views[view_idx].epoch != slot.request.view_epoch ||
+						slot.request.view_epoch != camera_token.view_epoch ||
+						slot.request.common.current_camera_token.view_id != camera_token.view_id ||
+						slot.request.common.current_camera_token.view_epoch != camera_token.view_epoch) {
+					continue;
+				}
+				if (matched == UINT32_MAX || slot.request.common.present_seq >= best_present_seq) {
+					matched = i;
+					best_present_seq = slot.request.common.present_seq;
+				}
+			}
+		}
 	}
 	if (matched == UINT32_MAX) {
 		return ERR_UNAVAILABLE;

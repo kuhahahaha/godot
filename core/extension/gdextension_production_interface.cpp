@@ -753,5 +753,15 @@ void register_production_interfaces() {
 	GDExtension::register_interface_function("device_session_production_release_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_release_v1));
 	GDExtension::register_interface_function("device_session_production_close_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_close_v1));
 	GDExtension::register_interface_function("device_session_production_installation_observe_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_installation_observe_v1));
+
+	static_assert(std::is_standard_layout_v<GDExtensionFastRefreshBeginInputV1> && std::is_trivially_copyable_v<GDExtensionFastRefreshBeginInputV1>);
+	static_assert(sizeof(GDExtensionFastRefreshBeginInputV1) == 136);
+	static_assert(std::is_standard_layout_v<GDExtensionFastRefreshTargetsV1> && std::is_trivially_copyable_v<GDExtensionFastRefreshTargetsV1>);
+	static_assert(sizeof(GDExtensionFastRefreshTargetsV1) == 120);
+	static_assert(std::is_standard_layout_v<GDExtensionFastRefreshEndInputV1> && std::is_trivially_copyable_v<GDExtensionFastRefreshEndInputV1>);
+	static_assert(sizeof(GDExtensionFastRefreshEndInputV1) == 104);
+	GDExtension::register_interface_function("ange_external_output_begin_fast_refresh_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&ange_external_output_begin_fast_refresh_v1));
+	GDExtension::register_interface_function("ange_external_output_end_fast_refresh_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&ange_external_output_end_fast_refresh_v1));
+	GDExtension::register_interface_function("ange_external_output_release_fast_refresh_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&ange_external_output_release_fast_refresh_v1));
 }
 } // namespace GDExtensionDeviceExit

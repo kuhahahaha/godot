@@ -1172,7 +1172,7 @@ RenderingDevice::CopyAppendResult RenderingDevice::_buffer_copy_recorded(RID p_s
 		ERR_FAIL_V_MSG(ERR_INVALID_PARAMETER, "Source buffer argument is not a valid buffer of any type.");
 	}
 
-	if (native_immutable_resource_is_held(p_dst_buffer) || native_immutable_resource_is_retiring(p_dst_buffer)) {
+	if (native_immutable_resource_is_retiring(p_dst_buffer) || (native_immutable_resource_is_held(p_dst_buffer) && !_production_output_fast_refresh_buffer_permitted(p_dst_buffer))) {
 		return ERR_BUSY;
 	}
 	Buffer *dst_buffer = _get_buffer_from_owner(p_dst_buffer);
@@ -1226,7 +1226,7 @@ RenderingDevice::CopyAppendResult RenderingDevice::_buffer_copy_recorded(RID p_s
 }
 
 Error RenderingDevice::_buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_t p_offset, uint32_t p_size, const void *p_data, QualificationUploadProgress *p_progress, GDExtensionDeviceExit::BufferUploadSourceCapture *p_source) {
-	if (native_immutable_resource_is_held(p_buffer_id) || native_immutable_resource_is_retiring(p_buffer_id)) {
+	if (native_immutable_resource_is_retiring(p_buffer_id) || (native_immutable_resource_is_held(p_buffer_id) && !_production_output_fast_refresh_buffer_permitted(p_buffer_id))) {
 		return ERR_BUSY;
 	}
 	if (_recording_error() != OK) {
@@ -1390,7 +1390,7 @@ Error RenderingDevice::_buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_
 }
 
 Error RenderingDevice::buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p_size, const void *p_data, bool p_skip_check) {
-	if (native_immutable_resource_is_held(p_buffer) || native_immutable_resource_is_retiring(p_buffer)) {
+	if (native_immutable_resource_is_retiring(p_buffer) || (native_immutable_resource_is_held(p_buffer) && !_production_output_fast_refresh_buffer_permitted(p_buffer))) {
 		return ERR_BUSY;
 	}
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
@@ -1406,7 +1406,7 @@ Error RenderingDevice::buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p
 	ERR_FAIL_NULL_V_MSG(buffer, ERR_INVALID_PARAMETER, "Buffer argument is not a valid buffer of any type.");
 	ERR_FAIL_COND_V_MSG(uint64_t(p_offset) + p_size > buffer->size, ERR_INVALID_PARAMETER, "Attempted to write buffer (" + itos((uint64_t(p_offset) + p_size) - buffer->size) + " bytes) past the end.");
 
-	ERR_FAIL_COND_V(buffer->qualification_return, ERR_UNAUTHORIZED);
+	ERR_FAIL_COND_V(buffer->qualification_return && !_production_resource_permitted(p_buffer), ERR_UNAUTHORIZED);
 #ifdef TESTS_ENABLED
 	if (test_buffer_update_fault_count > 0 && test_buffer_update_fault_buffer == p_buffer) {
 #if defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
@@ -1532,7 +1532,7 @@ void RenderingDevice::update_perf_report() {
 }
 
 Error RenderingDevice::buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_size) {
-	if (native_immutable_resource_is_held(p_buffer) || native_immutable_resource_is_retiring(p_buffer)) {
+	if (native_immutable_resource_is_retiring(p_buffer) || (native_immutable_resource_is_held(p_buffer) && !_production_output_fast_refresh_buffer_permitted(p_buffer))) {
 		return ERR_BUSY;
 	}
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
@@ -1559,7 +1559,7 @@ Error RenderingDevice::buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_
 	ERR_FAIL_COND_V_MSG(uint64_t(p_offset) + p_size > buffer->size, ERR_INVALID_PARAMETER,
 			"Attempted to write buffer (" + itos((uint64_t(p_offset) + p_size) - buffer->size) + " bytes) past the end.");
 
-	ERR_FAIL_COND_V(buffer->qualification_return, ERR_UNAUTHORIZED);
+	ERR_FAIL_COND_V(buffer->qualification_return && !_production_resource_permitted(p_buffer), ERR_UNAUTHORIZED);
 	if (p_size == 0) {
 		return OK;
 	}
@@ -5823,36 +5823,40 @@ RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Unif
 			}
 			if (buffer && buffer->native_disposal.cell.is_valid() && buffer->native_disposal.cell->production_request) {
 				const auto &physical = **buffer->native_disposal.cell;
-				bool predecessor = false;
-				if (p_production && p_shader_set < uint32_t(shader->uniform_sets.size())) {
-					for (uint32_t r = 0; r < p_production->resource_count; ++r) {
-						const auto &resource = p_production->resources[r];
-						const bool history_guard = resource.output_guard_history && resource.output_witness.cell == buffer->native_disposal.cell &&
-								GDExtensionDeviceExit::Registry::get_singleton().production_output_guard_matches_locked(*p_production, resource, *this);
-						if (resource.primary == uniform.get_id(i) && (history_guard || (resource.output_predecessor_witness.cell == buffer->native_disposal.cell &&
-								GDExtensionDeviceExit::Registry::get_singleton().production_output_predecessor_matches_locked(*p_production, resource, *this)))) {
-							for (const auto &reflected : shader->uniform_sets[p_shader_set]) {
-								predecessor |= reflected.binding == uniform.binding && reflected.type == UNIFORM_TYPE_STORAGE_BUFFER && !reflected.writable;
+				const bool fast_refresh = !p_production && _production_output_fast_refresh_buffer_permitted(uniform.get_id(i)) &&
+						physical.production_dependent_sets != UINT32_MAX;
+				if (!fast_refresh) {
+					bool predecessor = false;
+					if (p_production && p_shader_set < uint32_t(shader->uniform_sets.size())) {
+						for (uint32_t r = 0; r < p_production->resource_count; ++r) {
+							const auto &resource = p_production->resources[r];
+							const bool history_guard = resource.output_guard_history && resource.output_witness.cell == buffer->native_disposal.cell &&
+									GDExtensionDeviceExit::Registry::get_singleton().production_output_guard_matches_locked(*p_production, resource, *this);
+							if (resource.primary == uniform.get_id(i) && (history_guard || (resource.output_predecessor_witness.cell == buffer->native_disposal.cell &&
+									GDExtensionDeviceExit::Registry::get_singleton().production_output_predecessor_matches_locked(*p_production, resource, *this)))) {
+								for (const auto &reflected : shader->uniform_sets[p_shader_set]) {
+									predecessor |= reflected.binding == uniform.binding && reflected.type == UNIFORM_TYPE_STORAGE_BUFFER && !reflected.writable;
+								}
 							}
 						}
 					}
-				}
-				ERR_FAIL_COND_V(!p_production || (!predecessor && (physical.production_request != p_production || physical.production_request_serial != p_production->serial)) || physical.state != NativeDisposalWitness::State::LIVE || physical.production_dependent_sets == UINT32_MAX, RID());
-				// The original owned-set factory carries its actual predeclared
-				// group/root witness; nonowning E09 sets require exact aliases.
-				bool declared = predecessor || (p_native_disposal && p_native_disposal->cell.is_valid() && p_native_disposal->cell->production_request == p_production && p_native_disposal->cell->production_request_serial == p_production->serial && p_native_disposal->cell->production_group_serial == physical.production_group_serial && p_native_disposal->cell->production_pin_serial == physical.production_pin_serial);
-				if (p_sources && u < p_sources->size()) {
-					const auto &source = (*p_sources)[u];
-					declared |= source.buffer == uniform.get_id(i) && source.owned_group == physical.production_group_serial &&
-							source.owned_ordinal == physical.production_ordinal && p_native_disposal && p_native_disposal->cell.is_valid() &&
-							p_native_disposal->cell->production_pin_serial == physical.production_pin_serial;
+					ERR_FAIL_COND_V(!p_production || (!predecessor && (physical.production_request != p_production || physical.production_request_serial != p_production->serial)) || physical.state != NativeDisposalWitness::State::LIVE || physical.production_dependent_sets == UINT32_MAX, RID());
+					// The original owned-set factory carries its actual predeclared
+					// group/root witness; nonowning E09 sets require exact aliases.
+					bool declared = predecessor || (p_native_disposal && p_native_disposal->cell.is_valid() && p_native_disposal->cell->production_request == p_production && p_native_disposal->cell->production_request_serial == p_production->serial && p_native_disposal->cell->production_group_serial == physical.production_group_serial && p_native_disposal->cell->production_pin_serial == physical.production_pin_serial);
+					if (p_sources && u < p_sources->size()) {
+						const auto &source = (*p_sources)[u];
+						declared |= source.buffer == uniform.get_id(i) && source.owned_group == physical.production_group_serial &&
+								source.owned_ordinal == physical.production_ordinal && p_native_disposal && p_native_disposal->cell.is_valid() &&
+								p_native_disposal->cell->production_pin_serial == physical.production_pin_serial;
+					}
+					for (uint32_t r = 0; r < p_production->resource_count; ++r) {
+						const auto &resource = p_production->resources[r];
+						declared |= resource.output_alias_prepared && resource.imported && !resource.retiring && resource.output_witness.cell == buffer->native_disposal.cell && resource.primary == uniform.get_id(i) && resource.output_root_serial == physical.production_pin_serial && resource.output_group_serial == physical.production_group_serial;
+					}
+					ERR_FAIL_COND_V(!declared, RID());
 				}
 				bool duplicate = false;
-				for (uint32_t r = 0; r < p_production->resource_count; ++r) {
-					const auto &resource = p_production->resources[r];
-					declared |= resource.output_alias_prepared && resource.imported && !resource.retiring && resource.output_witness.cell == buffer->native_disposal.cell && resource.primary == uniform.get_id(i) && resource.output_root_serial == physical.production_pin_serial && resource.output_group_serial == physical.production_group_serial;
-				}
-				ERR_FAIL_COND_V(!declared, RID());
 				for (const auto &dependency : output_dependencies) {
 					duplicate |= dependency.cell == buffer->native_disposal.cell;
 				}
@@ -6229,7 +6233,7 @@ RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Unif
 					buffer = vertex_buffer_owner.get_or_null(buffer_id);
 
 					ERR_FAIL_COND_V_MSG(!(buffer->usage.has_flag(RDD::BUFFER_USAGE_STORAGE_BIT)), RID(), "Vertex buffer supplied (binding: " + itos(uniform.binding) + ") was not created with storage flag.");
-				} else if (p_production && index_buffer_owner.owns(buffer_id)) {
+				} else if ((p_production || _production_output_fast_refresh_buffer_permitted(buffer_id)) && index_buffer_owner.owns(buffer_id)) {
 					buffer = _production_output_storage_buffer(buffer_id);
 				}
 				ERR_FAIL_NULL_V_MSG(buffer, RID(), "Storage buffer supplied (binding: " + itos(uniform.binding) + ") is invalid.");
@@ -18255,11 +18259,66 @@ bool RenderingDevice::_production_resource_slot_permitted(const GDExtensionDevic
 	return _production_resource_permitted(rid);
 }
 
+bool RenderingDevice::_production_output_fast_refresh_buffer_permitted(RID p_rid) const {
+	if (!production_output_fast_refresh.active || render_thread_id != Thread::get_caller_id() || p_rid.is_null()) {
+		return false;
+	}
+	auto *self = const_cast<RenderingDevice *>(this);
+	const Buffer *buffer = self->_production_output_storage_buffer(p_rid);
+	if (!buffer || buffer->native_disposal.cell.is_null()) {
+		return false;
+	}
+	const auto &physical = **buffer->native_disposal.cell;
+	return physical.state == NativeDisposalWitness::State::LIVE &&
+			physical.production_request == production_output_fast_refresh.request &&
+			physical.production_request_serial == production_output_fast_refresh.request_serial &&
+			physical.production_pin_serial == production_output_fast_refresh.pin_serial &&
+			physical.production_group_serial == production_output_fast_refresh.owned_group;
+}
+
 // An existing request's exact reverse pins permit these mechanical resources
 // only during its core-owned record borrow. This is not an admission issuer.
 bool RenderingDevice::_production_resource_permitted(RID rid) {
 	if (_production_output_raster_permitted(rid)) {
 		return true;
+	}
+	if (production_output_fast_refresh.active && render_thread_id == Thread::get_caller_id() && rid.is_valid()) {
+		if (_production_output_fast_refresh_buffer_permitted(rid)) {
+			return true;
+		}
+		if (Buffer *buffer = _get_buffer_from_owner(rid)) {
+			if (buffer->qualification_return && !buffer->qualification_return->use_closed.load()) {
+				return true;
+			}
+		}
+		if (compute_pipeline_owner.owns(rid)) {
+			if (ComputePipeline *pipe = compute_pipeline_owner.get_or_null(rid)) {
+				if (pipe->qualification_return && !pipe->qualification_return->use_closed.load()) {
+					return true;
+				}
+			}
+		}
+		if (shader_owner.owns(rid)) {
+			if (Shader *sh = shader_owner.get_or_null(rid)) {
+				if (sh->qualification_return && !sh->qualification_return->use_closed.load()) {
+					return true;
+				}
+			}
+		}
+		if (uniform_set_owner.owns(rid)) {
+			if (UniformSet *us = uniform_set_owner.get_or_null(rid)) {
+				bool closed = us->qualification_return && us->qualification_return->use_closed.load();
+				for (auto *cell : us->qualification_dependencies) {
+					if (!cell || cell->use_closed.load()) {
+						closed = true;
+						break;
+					}
+				}
+				if (!closed) {
+					return true;
+				}
+			}
+		}
 	}
 	const auto *request = production_recording_request;
 	if (!request || !request->serial || !request->frozen || !request->capture_inflight) {

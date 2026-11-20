@@ -33,7 +33,62 @@
 // Internal implementation declarations; public ABI comes only from JSON.
 #include "gdextension_interface.gen.h"
 
+#include <cstdint>
+
+typedef struct {
+	uint32_t abi_version;
+	uint32_t struct_size;
+	uint32_t reserved;
+	uint64_t particles_rid;
+	uint64_t next_present_seq;
+	uint32_t has_host_affine;
+	uint32_t reserved2;
+	float current_host_affine[12];
+	float previous_host_affine[12];
+} GDExtensionFastRefreshBeginInputV1;
+
+typedef struct {
+	uint32_t abi_version;
+	uint32_t struct_size;
+	int32_t native_error;
+	uint32_t slot_index;
+	uint64_t lease_serial;
+	uint64_t current_present_seq;
+	uint32_t profile;
+	uint32_t capacity;
+	uint32_t surface_count;
+	uint32_t aux_params_enabled;
+	uint64_t current_records_rid;
+	uint64_t previous_records_rid;
+	uint64_t output_meta_rid;
+	uint64_t aux_params_rid;
+	uint64_t indexed_staging_rid;
+	uint64_t indexed_history_rid;
+	uint64_t guard_status_rid;
+	uint64_t protected_commands_rid;
+	uint32_t motion_required;
+	uint32_t reserved;
+} GDExtensionFastRefreshTargetsV1;
+
+typedef struct {
+	uint32_t abi_version;
+	uint32_t struct_size;
+	uint32_t slot_index;
+	uint32_t parity_bank;
+	uint64_t particles_rid;
+	uint64_t lease_serial;
+	uint64_t next_present_seq;
+	uint64_t source_count_rid;
+	uint64_t source_gate_rids[4];
+	uint32_t source_count_word_offset;
+	uint32_t source_gate_word_offsets[4];
+	uint32_t reserved;
+} GDExtensionFastRefreshEndInputV1;
+
 namespace GDExtensionDeviceExit {
+int32_t ange_external_output_begin_fast_refresh_v1(const GDExtensionFastRefreshBeginInputV1 *p_input, GDExtensionFastRefreshTargetsV1 *p_out_targets);
+int32_t ange_external_output_end_fast_refresh_v1(const GDExtensionFastRefreshEndInputV1 *p_input);
+int32_t ange_external_output_release_fast_refresh_v1(uint64_t p_particles_rid, uint32_t p_slot_index);
 GDExtensionDeviceSessionResultV1 device_session_output_selection_facts_v2(GDExtensionProductionAttachmentRefV1, GDExtensionOutputMetadataSelectionRefV2, const GDExtensionOutputSelectionFactsInputV2 *, GDExtensionOutputSelectionFactsV2 *);
 GDExtensionDeviceSessionResultV1 device_session_output_metadata_selection_query_v2(const GDExtensionOutputMetadataSelectionQueryV2*, GDExtensionOutputMetadataSelectionRequirementsV2*);
 GDExtensionDeviceSessionResultV1 device_session_output_metadata_selection_prepare_v2(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputMetadataSelectionPrepareV2*, GDExtensionOutputMetadataSelectionResultV2*);

@@ -376,6 +376,17 @@ private:
 		bool replay_adopted = false;
 		uint32_t replay_slot = UINT32_MAX;
 	} production_output_raster_recording;
+	struct ProductionOutputFastRefreshScope {
+		const ::RendererRD::ExternalOutputOwner *owner = nullptr;
+		uint32_t slot_index = UINT32_MAX;
+		uint64_t lease_serial = 0;
+		const GDExtensionDeviceExit::ProductionRequest *request = nullptr;
+		uint64_t request_serial = 0;
+		uint64_t pin_serial = 0;
+		uint64_t owned_group = 0;
+		bool active = false;
+	} production_output_fast_refresh;
+	bool _production_output_fast_refresh_buffer_permitted(RID p_rid) const;
 	::RendererRD::ExternalOutputOwner *production_output_list_head_owner = nullptr;
 	uint32_t production_output_list_head_read = UINT32_MAX, production_output_list_reads = 0;
 	GDExtensionDeviceExit::CheckedRecordAppend _record_source_dispatch(const GDExtensionDeviceExit::OriginalOperationIdentity &, ComputeListID, uint32_t, uint32_t, uint32_t, const void * = nullptr, uint32_t = 0);
