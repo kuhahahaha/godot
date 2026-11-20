@@ -1341,6 +1341,55 @@ bool Registry::has_active_scene_phase_sink(uint32_t p_phase, const RenderingDevi
 	return false;
 }
 
+bool Registry::has_pending_offscreen_production_work(const RenderingDevice *p_device) {
+	Lock lock(*this);
+	for (const auto *attachment : production_attachments) {
+		if (!attachment || attachment->closing || (attachment->library < RECORD_CAPACITY && records[attachment->library].natural_close_draining)) {
+			continue;
+		}
+		if (p_device && attachment->held_device != p_device) {
+			continue;
+		}
+		if (attachment->scene_registration && !attachment->scene_closed && !attachment->scene_occurrence) {
+			return true;
+		}
+		for (uint32_t i = 0; i < attachment->quote.capacity.requests; ++i) {
+			const auto &req = attachment->requests[i];
+			if (!req.serial) {
+				continue;
+			}
+			if (req.control.state == ProductionControlState::QUEUED || req.control.state == ProductionControlState::EXECUTING || req.control.scene_waiting) {
+				return true;
+			}
+			for (uint32_t j = 0; j < req.action_count; ++j) {
+				const auto &sub = req.actions[j].camera_ready_subscriber;
+				if (sub.registry != nullptr && !sub.released && !sub.closed) {
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
+void Registry::wake_scene_waiting_for_library_locked(uint32_t p_library_slot) {
+	auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
+	if (!server) {
+		return;
+	}
+	for (auto *attachment : production_attachments) {
+		if (!attachment || attachment->library != p_library_slot) {
+			continue;
+		}
+		for (uint32_t i = 0; i < attachment->quote.capacity.requests; ++i) {
+			auto &request = attachment->requests[i];
+			if (request.serial && request.control.scene_waiting && request.control.state == ProductionControlState::QUEUED && request.control.input.kind == ProductionControlKind::RECORD) {
+				(void)server->_try_production_control_dispatch(instance, attachment->serial, request.serial, request.control.serial);
+			}
+		}
+	}
+}
+
 Error Registry::scene_phase_bind_request_viewport(GDExtensionProductionRequestRefV1 ref, RID p_viewport) {
 	Lock lock(*this);
 	ProductionRequest *request = nullptr;

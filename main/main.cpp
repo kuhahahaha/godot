@@ -5292,14 +5292,18 @@ bool Main::iteration() {
 	RenderingServer::get_singleton()->sync(); //sync if still drawing from previous frames.
 
 	GodotProfileZoneGrouped(_profile_zone, "RenderingServer::draw");
-	const bool has_pending_resources_for_processing = RD::get_singleton() && RD::get_singleton()->has_pending_resources_for_processing();
+	const bool has_active_camera_subscribers = RenderingServer::get_singleton()->is_render_loop_enabled() &&
+			((RSG::viewport && RSG::viewport->has_active_camera_source_subscribers()) ||
+					GDExtensionDeviceExit::Registry::get_singleton().has_pending_offscreen_production_work(RD::get_singleton()));
+	const bool has_pending_resources_for_processing = (RD::get_singleton() && RD::get_singleton()->has_pending_resources_for_processing()) ||
+			has_active_camera_subscribers;
 	bool wants_present = (DisplayServer::get_singleton()->can_any_window_draw() ||
 								 DisplayServer::get_singleton()->has_additional_outputs()) &&
 			RenderingServer::get_singleton()->is_render_loop_enabled();
 
 	if (wants_present || has_pending_resources_for_processing) {
 		wants_present |= force_redraw_requested;
-		if ((!force_redraw_requested) && OS::get_singleton()->is_in_low_processor_usage_mode()) {
+		if ((!force_redraw_requested) && (!has_active_camera_subscribers) && OS::get_singleton()->is_in_low_processor_usage_mode()) {
 			if (RenderingServer::get_singleton()->has_changed()) {
 				RenderingServer::get_singleton()->draw(wants_present, scaled_step); // flush visual commands
 				Engine::get_singleton()->increment_frames_drawn();

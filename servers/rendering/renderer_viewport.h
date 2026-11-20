@@ -470,6 +470,7 @@ public:
 	bool viewport_bind_camera_source_observer(RID p_viewport, const Ref<Viewport::CameraSourceObserver> &p_observer);
 	bool viewport_unbind_camera_source_observer(RID p_viewport, const Ref<Viewport::CameraSourceObserver> &p_observer);
 	// Core-only fanout for independently retained original associations. No U05 grant.
+	bool has_active_camera_source_subscribers() const;
 	bool viewport_subscribe_camera_source(RID p_viewport, Viewport::CameraSourceSubscriber *p_observer);
 	bool viewport_unsubscribe_camera_source(RID p_viewport, Viewport::CameraSourceSubscriber *p_observer);
 	bool viewport_subscribe_camera_source(RID p_viewport, const Ref<Viewport::CameraSourceObserver> &p_observer);

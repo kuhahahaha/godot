@@ -1324,7 +1324,11 @@ Error Registry::prepare_exit(const RecordRef &ref, CloseRoute route) {
 		}
 		record.prepare_active = true;
 		if (route == CloseRoute::SHUTDOWN || route == CloseRoute::TEST_CLEANUP) {
+			const bool was_draining = record.natural_close_draining;
 			record.natural_close_draining = true;
+			if (!was_draining) {
+				wake_scene_waiting_for_library_locked(ref.slot);
+			}
 		}
 		callback = record.prepare_callback;
 		userdata = record.prepare_userdata;

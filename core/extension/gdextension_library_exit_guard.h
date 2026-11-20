@@ -1494,6 +1494,8 @@ public:
 	Error scene_depth_snapshot_borrow(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint64_t, RID, const GDExtensionSceneOperationKeyV1 &, GDExtensionSceneDepthSnapshotBorrowResultV1 &);
 	void scene_phase_dispatch_for_phase(RenderingDevice &, uint32_t, RID p_viewport = RID());
 	bool has_active_scene_phase_sink(uint32_t, const RenderingDevice * = nullptr, RID = RID());
+	bool has_pending_offscreen_production_work(const RenderingDevice * = nullptr);
+	void wake_scene_waiting_for_library_locked(uint32_t p_library_slot);
 	Error register_normal_relay(const Callable &p_callback, NormalRelayToken &r_token);
 	Error call_normal_relay(NormalRelayToken p_token, const Variant **p_arguments, int p_argcount, Variant &r_return_value, Callable::CallError &r_error);
 	Error cancel_normal_relay(NormalRelayToken p_token);

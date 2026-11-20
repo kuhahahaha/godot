@@ -3777,16 +3777,25 @@ Error RenderingDevice::_production_mq_drain_owned_disposals_step(const GDExtensi
 	} scoped_budget(*this, p_budget, r_usage);
 
 	const uint32_t initial_passes = r_usage.passes;
+	bool any_owned = false;
+	for (uint32_t fi = 0; fi < frames.size() && !any_owned; ++fi) {
+		any_owned = frame_has_owned(frames[fi]);
+	}
+	if (!any_owned) {
+		return OK;
+	}
 	for (uint32_t fi = 0; fi < frames.size(); ++fi) {
-		Frame &f = frames[fi];
-		if (!frame_has_owned(f)) {
-			continue;
-		}
-		if (f.fence_signaled) {
+		if (frames[fi].fence_signaled) {
 			const Error poll_err = _native_disposal_stall_step(fi);
 			if (poll_err != OK) {
 				return poll_err;
 			}
+		}
+	}
+	for (uint32_t fi = 0; fi < frames.size(); ++fi) {
+		Frame &f = frames[fi];
+		if (!frame_has_owned(f)) {
+			continue;
 		}
 
 		// 1. Render pipelines (kind 0).

@@ -871,7 +871,7 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 				visible = true;
 			}
 
-			if (vp->update_mode == RSE::VIEWPORT_UPDATE_WHEN_VISIBLE && RSG::texture_storage->render_target_was_used(vp->render_target)) {
+			if (vp->update_mode == RSE::VIEWPORT_UPDATE_WHEN_VISIBLE && (RSG::texture_storage->render_target_was_used(vp->render_target) || vp->camera_source_observer != nullptr || vp->camera_source_subscribers != nullptr)) {
 				visible = true;
 			}
 
@@ -1645,6 +1645,16 @@ bool RendererViewport::viewport_unbind_camera_source_observer(RID p_viewport, co
 	observer->detach_pending = true;
 	_close_camera_source_observers(observer);
 	return true;
+}
+
+bool RendererViewport::has_active_camera_source_subscribers() const {
+	for (int i = 0; i < active_viewports.size(); i++) {
+		const Viewport *vp = active_viewports[i];
+		if (vp && (vp->camera_source_observer != nullptr || vp->camera_source_subscribers != nullptr)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 bool RendererViewport::viewport_subscribe_camera_source(RID p_viewport, const Ref<Viewport::CameraSourceObserver> &p_observer) {

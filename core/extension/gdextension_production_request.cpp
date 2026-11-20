@@ -4258,7 +4258,7 @@ void Registry::production_control_dispatch(uint64_t registry, uint64_t attachmen
 					const auto &action = r.actions[j];
 					closed_anchor |= action.output_source_prepared && action.camera_ready_subscriber.is_closed();
 				}
-				if (a->closing || a->camera_ready_closed || a->scene_closed || !device.live || r.cancelled || r.release_started || r.source_device_lost || closed_anchor) {
+				if (a->closing || owner.natural_close_draining || a->camera_ready_closed || a->scene_closed || !device.live || r.cancelled || r.release_started || r.source_device_lost || closed_anchor) {
 					cell.scene_waiting = false;
 					production_control_execute_locked(r, nullptr); // Original CQMT admission rejection, no native frame/body.
 					return;
@@ -4267,6 +4267,11 @@ void Registry::production_control_dispatch(uint64_t registry, uint64_t attachmen
 				return; // Genuine camera invocation owns native execution; never CQMT.
 			}
 			if (a->scene_registration && cell.input.kind == ProductionControlKind::RECORD && !cell.input.output_cancel && !a->scene_occurrence && !a->scene_closed) {
+				if (owner.natural_close_draining) {
+					cell.scene_waiting = false;
+					production_control_execute_locked(r, nullptr);
+					return;
+				}
 				cell.scene_waiting = true;
 				return; // Original queued mailbox waits for actual SceneBeforeParticles.
 			}

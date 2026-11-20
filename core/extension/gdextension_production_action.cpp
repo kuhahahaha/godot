@@ -382,6 +382,7 @@ Error Registry::production_capture_graph_locked(ProductionRequest &request, Rend
 	cell.fact.command_slot = UINT32_MAX;
 	cell.fact.membership_parent = UINT32_MAX;
 	cell.fact.phase = 1;
+	rd.frames_pending_resources_for_processing = uint32_t(rd.frames.size());
 	++request.revision;
 	return OK;
 }

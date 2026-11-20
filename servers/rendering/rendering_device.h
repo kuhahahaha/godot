@@ -2891,7 +2891,7 @@ private:
 	uint32_t frames_pending_resources_for_processing = 0u;
 
 public:
-	bool has_pending_resources_for_processing() const { return frames_pending_resources_for_processing != 0u; }
+	bool has_pending_resources_for_processing() const { return frames_pending_resources_for_processing != 0u || draw_graph.qualification_command_count() != 0u; }
 
 private:
 	void _free_pending_resources(int p_frame);

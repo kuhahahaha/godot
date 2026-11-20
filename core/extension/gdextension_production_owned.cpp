@@ -1126,19 +1126,26 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 	if (rd.native_disposal_active.load()) {
 		return production_maintenance_locked(request, rd, budget, usage);
 	}
+	const bool is_closing_exit = request.attachment && (request.attachment->closing ||
+			(request.attachment->library < RECORD_CAPACITY && records[request.attachment->library].natural_close_draining));
 	const Error frame_admission = production_maintenance_frame_admission_locked(request, rd, admission_trace);
-	if (frame_admission != OK) {
+	if (frame_admission != OK && !(is_closing_exit && frame_admission == ERR_BUSY)) {
 		return frame_admission;
 	}
 	for (uint32_t frame_index = 0; frame_index < rd.frames.size(); ++frame_index) {
 		const Error foreign_frame = production_maintenance_foreign_frame_admission_locked(request, rd, frame_index, false, admission_trace);
-		if (foreign_frame != OK) {
+		if (foreign_frame != OK && !(is_closing_exit && foreign_frame == ERR_BUSY)) {
 			return foreign_frame;
 		}
 	}
+	const uint32_t avail_rec = MIN(budget.receipts, 128u) > usage.receipts ? (MIN(budget.receipts, 128u) - usage.receipts) : 0u;
+	const uint32_t avail_pas = MIN(budget.passes, 64u) > usage.passes ? (MIN(budget.passes, 64u) - usage.passes) : 0u;
+	if (!avail_rec || !avail_pas || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) {
+		return ERR_BUSY;
+	}
 	RenderingDevice::NativeDisposalBudget drain_budget;
-	drain_budget.receipts = MIN(budget.receipts, 128u) - usage.receipts;
-	drain_budget.passes = MIN(budget.passes, 64u) - usage.passes;
+	drain_budget.receipts = is_closing_exit ? MAX(avail_rec, 64u) : avail_rec;
+	drain_budget.passes = is_closing_exit ? MAX(avail_pas, 16u) : avail_pas;
 	drain_budget.deadline_usec = budget.deadline_micros;
 	RenderingDevice::NativeDisposalUsage drain_usage;
 	const uint64_t request_serial = request.serial, control_serial = request.control.serial;
@@ -1148,16 +1155,47 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 	++request.capture_inflight;
 	rd._thread_safe_.unlock();
 	unlock_mutex_for_call();
-	const Error drained = rd._production_mq_drain_owned_disposals_step(request, nullptr, 0, drain_budget, drain_usage);
+	Error drained = rd._production_mq_drain_owned_disposals_step(request, nullptr, 0, drain_budget, drain_usage);
+	if (drained == ERR_BUSY && is_closing_exit) {
+		const uint64_t settle_deadline = MIN(drain_budget.deadline_usec, OS::get_singleton()->get_ticks_usec() + 50000ull);
+		while (drained == ERR_BUSY && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
+			OS::get_singleton()->delay_usec(150);
+			RenderingDevice::NativeDisposalBudget retry_budget;
+			retry_budget.receipts = 64u;
+			retry_budget.passes = 16u;
+			retry_budget.deadline_usec = settle_deadline;
+			RenderingDevice::NativeDisposalUsage retry_usage;
+			drained = rd._production_mq_drain_owned_disposals_step(request, nullptr, 0, retry_budget, retry_usage);
+			drain_usage.polls += retry_usage.polls;
+			drain_usage.frees += retry_usage.frees;
+			drain_usage.issues += retry_usage.issues;
+			drain_usage.retains += retry_usage.retains;
+			drain_usage.releases += retry_usage.releases;
+			drain_usage.recycles += retry_usage.recycles;
+			drain_usage.passes += retry_usage.passes;
+		}
+	}
 	rd._thread_safe_.lock();
 	relock_mutex_after_call();
 	CRASH_COND(!request.capture_inflight);
 	--request.capture_inflight;
 	usage.controls = 1;
-	usage.receipts += drain_usage.polls + drain_usage.frees + drain_usage.issues + drain_usage.retains + drain_usage.releases + drain_usage.recycles;
-	usage.passes += drain_usage.passes;
+	const uint64_t total_rec = uint64_t(drain_usage.polls) + drain_usage.frees + drain_usage.issues + drain_usage.retains + drain_usage.releases + drain_usage.recycles;
+	usage.receipts += uint32_t(MIN(total_rec, uint64_t(avail_rec)));
+	usage.passes += MIN(drain_usage.passes, avail_pas);
 	if (request.serial != request_serial || request.control.serial != control_serial || request.control.state != ProductionControlState::EXECUTING || request.attachment != attachment || attachment->held_device != &rd || attachment->epoch != epoch || device_records[attachment->device].epoch != epoch || device_records[attachment->device].object != &rd) {
 		return ERR_INVALID_DATA;
+	}
+	for (uint32_t i = 0; i < request.resource_count; ++i) {
+		auto &slot = request.resources[i];
+		if (slot.declaration.resource_kind == GDEXTENSION_PRODUCTION_SET_V1 && slot.declaration.ownership == GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 && !slot.returned) {
+			MutexLock physical(slot.owned_physical.mutex);
+			if (slot.owned_physical.free_event) {
+				slot.returned = true;
+				slot.imported = false;
+				request.returns[i].pending = false;
+			}
+		}
 	}
 	return drained;
 }
@@ -1283,14 +1321,14 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 			}
 			// No pending graphs and no pending readback capture for this request.
 			// On live viewports (!is_closing_exit), normal swap_buffers()/_begin_frame()
-			// drains retiring resources; only hold OBSERVE for retiring disposals during close.
-			if (mq_in_place_early || (!(is_closing_exit && has_retiring_disposals) && (!rd.draw_graph.qualification_command_count() || production_maintenance_frame_admission_locked(request, rd, drain_trace) != OK))) {
+			// drains retiring resources; only hold OBSERVE for retiring disposals.
+			if (!has_retiring_disposals && (mq_in_place_early || !rd.draw_graph.qualification_command_count() || production_maintenance_frame_admission_locked(request, rd, drain_trace) != OK)) {
 				return OK;
 			}
 		}
 	}
 	auto drain_owned_on_close = [&](Error fallback_err) -> Error {
-		if (fallback_err != ERR_BUSY || !is_closing_exit || !has_retiring_disposals || any_graph_pending ||
+		if (fallback_err != ERR_BUSY || !(is_closing_exit || mq_in_place_early) || !has_retiring_disposals || any_graph_pending ||
 				rd.native_disposal_active.load() || !rd.driver || rd.frames.is_empty() ||
 				rd.draw_list.active || rd.compute_list.active || rd.raytracing_list.active ||
 				rd.frame_wait_draining || rd.draw_graph.has_driver_callbacks()) {

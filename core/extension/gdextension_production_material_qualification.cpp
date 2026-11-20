@@ -1514,6 +1514,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_record_material_qualificat
 		rd->frames[rd->frame].download_buffer_copy_regions.push_back(buf_region);
 		rd->download_staging_buffers.blocks.write[rd->download_staging_buffers.current].fill_amount = staging_offset + raw_bytes;
 		rd->frames[rd->frame].download_buffer_get_data_requests.push_back(dl_req);
+		rd->frames_pending_resources_for_processing = uint32_t(rd->frames.size());
 
 		mq->readback_capture.segment(mq->readback_capture.count++) = { dl_handle, 0, raw_bytes };
 		return OK;
