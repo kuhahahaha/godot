@@ -862,6 +862,33 @@ bool ParticlesMeshLightSortRD::update_external_light_slot_present_seq(
 	return true;
 }
 
+uint32_t ParticlesMeshLightSortRD::update_external_light_slots_present_seq_batch(
+		const ExternalLightSlotPresentSeqUpdate *p_updates,
+		uint32_t p_count) {
+	if (!p_updates || p_count == 0) {
+		return 0;
+	}
+	uint32_t updated = 0;
+	MutexLock lock(active_lights_mutex);
+	for (uint32_t i = 0; i < p_count; ++i) {
+		const ExternalLightSlotPresentSeqUpdate &u = p_updates[i];
+		if (u.owner_key == 0 || u.next_present_seq == 0) {
+			continue;
+		}
+		HashMap<uint64_t, ExternalOwnerLightState>::Iterator it = external_owner_lights.find(u.owner_key);
+		if (!it || !it->value.has_pending_rd_slot) {
+			continue;
+		}
+		ExternalLightSlotRegistration &reg = it->value.pending_slot;
+		if (reg.generation != u.generation || reg.slot_index != u.slot_index || reg.lease_serial != u.lease_serial) {
+			continue;
+		}
+		reg.present_seq = u.next_present_seq;
+		++updated;
+	}
+	return updated;
+}
+
 void ParticlesMeshLightSortRD::unregister_external_light_slot(uint64_t p_owner_key, uint64_t p_generation, uint32_t p_slot_index) {
 	if (p_owner_key == 0) {
 		return;

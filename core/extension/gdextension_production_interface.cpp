@@ -763,5 +763,7 @@ void register_production_interfaces() {
 	GDExtension::register_interface_function("ange_external_output_begin_fast_refresh_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&ange_external_output_begin_fast_refresh_v1));
 	GDExtension::register_interface_function("ange_external_output_end_fast_refresh_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&ange_external_output_end_fast_refresh_v1));
 	GDExtension::register_interface_function("ange_external_output_release_fast_refresh_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&ange_external_output_release_fast_refresh_v1));
+	GDExtension::register_interface_function("ange_external_output_begin_fast_refresh_batch_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&ange_external_output_begin_fast_refresh_batch_v1));
+	GDExtension::register_interface_function("ange_external_output_end_fast_refresh_batch_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&ange_external_output_end_fast_refresh_batch_v1));
 }
 } // namespace GDExtensionDeviceExit

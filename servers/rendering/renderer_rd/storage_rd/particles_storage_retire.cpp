@@ -753,9 +753,7 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		return trace_failure(3, "custody.L674", ERR_BUSY);
 	}
 	if (owner.device && owner.device == RenderingDevice::get_singleton() && owner.device->native_immutable_is_render_thread()) {
-		if (owner.device->production_output_fast_refresh.owner == &owner && owner.device->production_output_fast_refresh.slot_index == p_slot) {
-			owner.device->production_output_fast_refresh = RenderingDevice::ProductionOutputFastRefreshScope();
-		}
+		owner.device->production_output_fast_refresh.remove_owner(&owner, p_slot);
 		slot.release_fast_refresh_resources(owner.device);
 	}
 	auto spend = [&]() {

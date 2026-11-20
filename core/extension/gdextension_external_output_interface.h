@@ -85,10 +85,16 @@ typedef struct {
 	uint32_t reserved;
 } GDExtensionFastRefreshEndInputV1;
 
+enum {
+	GDEXTENSION_FAST_REFRESH_END_FLAG_TRUSTED_TIER2 = 0x1u,
+};
+
 namespace GDExtensionDeviceExit {
 int32_t ange_external_output_begin_fast_refresh_v1(const GDExtensionFastRefreshBeginInputV1 *p_input, GDExtensionFastRefreshTargetsV1 *p_out_targets);
 int32_t ange_external_output_end_fast_refresh_v1(const GDExtensionFastRefreshEndInputV1 *p_input);
 int32_t ange_external_output_release_fast_refresh_v1(uint64_t p_particles_rid, uint32_t p_slot_index);
+int32_t ange_external_output_begin_fast_refresh_batch_v1(uint32_t p_count, const GDExtensionFastRefreshBeginInputV1 *p_inputs, GDExtensionFastRefreshTargetsV1 *p_out_targets);
+int32_t ange_external_output_end_fast_refresh_batch_v1(uint32_t p_count, const GDExtensionFastRefreshEndInputV1 *p_inputs, uint32_t p_flags, int32_t *p_out_errors);
 GDExtensionDeviceSessionResultV1 device_session_output_selection_facts_v2(GDExtensionProductionAttachmentRefV1, GDExtensionOutputMetadataSelectionRefV2, const GDExtensionOutputSelectionFactsInputV2 *, GDExtensionOutputSelectionFactsV2 *);
 GDExtensionDeviceSessionResultV1 device_session_output_metadata_selection_query_v2(const GDExtensionOutputMetadataSelectionQueryV2*, GDExtensionOutputMetadataSelectionRequirementsV2*);
 GDExtensionDeviceSessionResultV1 device_session_output_metadata_selection_prepare_v2(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputMetadataSelectionPrepareV2*, GDExtensionOutputMetadataSelectionResultV2*);

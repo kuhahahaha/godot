@@ -161,8 +161,8 @@ void ExternalOutputOwner::Slot::release_fast_refresh_resources(RenderingDevice *
 void ExternalOutputOwner::withdraw() {
 	invalidate_generation_demand();
 	RenderingDevice *rd = (device && device == RenderingDevice::get_singleton() && device->native_immutable_is_render_thread()) ? device : nullptr;
-	if (rd && rd->production_output_fast_refresh.owner == this) {
-		rd->production_output_fast_refresh = RenderingDevice::ProductionOutputFastRefreshScope();
+	if (rd) {
+		rd->production_output_fast_refresh.remove_owner(this);
 	}
 	for (uint32_t i = 0; i < slot_count; ++i) {
 		if (rd) {
@@ -1222,8 +1222,8 @@ Error ExternalOutputOwner::cancel_slot(uint32_t p_slot) {
 		return ERR_DOES_NOT_EXIST;
 	}
 	RenderingDevice *rd = (device && device == RenderingDevice::get_singleton() && device->native_immutable_is_render_thread()) ? device : nullptr;
-	if (rd && rd->production_output_fast_refresh.owner == this && rd->production_output_fast_refresh.slot_index == p_slot) {
-		rd->production_output_fast_refresh = RenderingDevice::ProductionOutputFastRefreshScope();
+	if (rd) {
+		rd->production_output_fast_refresh.remove_owner(this, p_slot);
 	}
 	if (rd) {
 		cell.release_fast_refresh_resources(rd);

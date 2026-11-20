@@ -18260,7 +18260,7 @@ bool RenderingDevice::_production_resource_slot_permitted(const GDExtensionDevic
 }
 
 bool RenderingDevice::_production_output_fast_refresh_buffer_permitted(RID p_rid) const {
-	if (!production_output_fast_refresh.active || render_thread_id != Thread::get_caller_id() || p_rid.is_null()) {
+	if (!production_output_fast_refresh.active || production_output_fast_refresh.count == 0 || render_thread_id != Thread::get_caller_id() || p_rid.is_null()) {
 		return false;
 	}
 	auto *self = const_cast<RenderingDevice *>(this);
@@ -18269,11 +18269,20 @@ bool RenderingDevice::_production_output_fast_refresh_buffer_permitted(RID p_rid
 		return false;
 	}
 	const auto &physical = **buffer->native_disposal.cell;
-	return physical.state == NativeDisposalWitness::State::LIVE &&
-			physical.production_request == production_output_fast_refresh.request &&
-			physical.production_request_serial == production_output_fast_refresh.request_serial &&
-			physical.production_pin_serial == production_output_fast_refresh.pin_serial &&
-			physical.production_group_serial == production_output_fast_refresh.owned_group;
+	if (physical.state != NativeDisposalWitness::State::LIVE) {
+		return false;
+	}
+	const uint32_t count = production_output_fast_refresh.count;
+	for (uint32_t i = 0; i < count; ++i) {
+		const ProductionOutputFastRefreshEntry &entry = production_output_fast_refresh.entry_at(i);
+		if (physical.production_request == entry.request &&
+				physical.production_request_serial == entry.request_serial &&
+				physical.production_pin_serial == entry.pin_serial &&
+				physical.production_group_serial == entry.owned_group) {
+			return true;
+		}
+	}
+	return false;
 }
 
 // An existing request's exact reverse pins permit these mechanical resources
