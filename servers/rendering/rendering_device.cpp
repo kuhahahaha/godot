@@ -13663,7 +13663,7 @@ Error RenderingDevice::_native_disposal_maintenance() {
 		if (pending_err == ERR_BUSY) {
 			const uint64_t settle_deadline = OS::get_singleton()->get_ticks_usec() + 50000ull;
 			while (pending_err == ERR_BUSY && qualification_frame_advance_pending && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
-				OS::get_singleton()->delay_usec(150);
+				OS::get_singleton()->delay_usec(50);
 				pending_err = _begin_frame(false, true);
 			}
 		}
@@ -13677,7 +13677,7 @@ Error RenderingDevice::_native_disposal_maintenance() {
 	if (error == ERR_BUSY) {
 		const uint64_t settle_deadline = OS::get_singleton()->get_ticks_usec() + 50000ull;
 		while (error == ERR_BUSY && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
-			OS::get_singleton()->delay_usec(150);
+			OS::get_singleton()->delay_usec(50);
 			error = _stall_for_frame(next, true);
 		}
 	}
@@ -13703,7 +13703,7 @@ Error RenderingDevice::_native_disposal_maintenance() {
 	if (error == ERR_BUSY) {
 		const uint64_t settle_deadline = OS::get_singleton()->get_ticks_usec() + 50000ull;
 		while (error == ERR_BUSY && qualification_frame_advance_pending && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
-			OS::get_singleton()->delay_usec(150);
+			OS::get_singleton()->delay_usec(50);
 			error = _begin_frame(false, true);
 		}
 	}
