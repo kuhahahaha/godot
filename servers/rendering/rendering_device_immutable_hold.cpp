@@ -31,6 +31,7 @@
 #include "core/extension/gdextension_production_request.h"
 #include "core/os/os.h"
 #include "core/os/thread.h"
+#include "servers/rendering/renderer_rd/renderer_canvas_render_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
@@ -1214,7 +1215,8 @@ Error RenderingDevice::_native_prospective_hold_increments_locked(const VectorVi
 			// never as an actual forward dependency of a prospective hold.
 			const auto *set = uniform_set_owner.owns(key.actual) ? uniform_set_owner.get_or_null(key.actual) : nullptr;
 			if (set && set->invalidated_callback && this == get_singleton() &&
-					UniformSetCacheRD::owns_invalidation_callback(key.actual, set->invalidated_callback, set->invalidated_callback_userdata)) {
+					(UniformSetCacheRD::owns_invalidation_callback(key.actual, set->invalidated_callback, set->invalidated_callback_userdata) ||
+							RendererCanvasRenderRD::owns_invalidation_callback(key.actual, set->invalidated_callback, set->invalidated_callback_userdata))) {
 				return ERR_UNAVAILABLE;
 			}
 		}
@@ -1319,6 +1321,7 @@ Error RenderingDevice::_production_output_resource_preflight_locked(GDExtensionD
 		// a default sampler/texture. Observe it without taking a native hold.
 		const bool cache_observer = !material_owned && material_observer &&
 				(UniformSetCacheRD::owns_invalidation_callback(rid, set->invalidated_callback, set->invalidated_callback_userdata) ||
+						RendererCanvasRenderRD::owns_invalidation_callback(rid, set->invalidated_callback, set->invalidated_callback_userdata) ||
 						set->invalidated_callback == RendererRD::MaterialStorage::_material_uniform_set_erased);
 		if (!material_owned && !cache_observer) {
 #ifdef TESTS_ENABLED
@@ -2219,7 +2222,8 @@ Error RenderingDevice::_production_output_owned_cancel_unbound(GDExtensionDevice
 bool RenderingDevice::_production_output_cache_observer_callback_supported_locked(RID rid, const GDExtensionDeviceExit::ProductionRequest &request, const GDExtensionDeviceExit::ProductionDisposalUse *required_observer) {
 	const auto *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr;
 	if (!set || !set->invalidated_callback || set->qualification_return || this != get_singleton() ||
-			!UniformSetCacheRD::owns_invalidation_callback(rid, set->invalidated_callback, set->invalidated_callback_userdata)) {
+			(!UniformSetCacheRD::owns_invalidation_callback(rid, set->invalidated_callback, set->invalidated_callback_userdata) &&
+					!RendererCanvasRenderRD::owns_invalidation_callback(rid, set->invalidated_callback, set->invalidated_callback_userdata))) {
 		return false;
 	}
 	uint32_t kind;
