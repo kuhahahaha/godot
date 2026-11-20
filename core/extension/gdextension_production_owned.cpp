@@ -1282,8 +1282,9 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 				return stalled;
 			}
 			// No pending graphs and no pending readback capture for this request.
-			// Only return early if this request has no retiring disposals waiting to drain.
-			if (mq_in_place_early || (!has_retiring_disposals && (!rd.draw_graph.qualification_command_count() || production_maintenance_frame_admission_locked(request, rd, drain_trace) != OK))) {
+			// On live viewports (!is_closing_exit), normal swap_buffers()/_begin_frame()
+			// drains retiring resources; only hold OBSERVE for retiring disposals during close.
+			if (mq_in_place_early || (!(is_closing_exit && has_retiring_disposals) && (!rd.draw_graph.qualification_command_count() || production_maintenance_frame_admission_locked(request, rd, drain_trace) != OK))) {
 				return OK;
 			}
 		}
