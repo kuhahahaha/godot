@@ -106,12 +106,12 @@ constexpr NS::UInteger RESOURCE_STORAGE_MODE_MASK = 0xFull << RESOURCE_STORAGE_M
 uint64_t MetalHeapAllocator::_preferred_block_size(uint32_t p_pool) {
 	switch (p_pool) {
 		case POOL_PRIVATE:
-			return 128ull * 1024 * 1024;
-		case POOL_SHARED:
 			return 32ull * 1024 * 1024;
+		case POOL_SHARED:
+			return 8ull * 1024 * 1024;
 		case POOL_SHARED_WC:
 		default:
-			return 16ull * 1024 * 1024;
+			return 8ull * 1024 * 1024;
 	}
 }
 

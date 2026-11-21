@@ -739,7 +739,6 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		if (error != OK) { return trace_failure(2, "proof.L660", error); }
 		++r_usage.passes;
 		r_usage.controls = 1;
-		return OK;
 	}
 	// The sealed packet remains live. Its exact preflight and read-cell
 	// settlement above complete OBSERVE while the original pin stays held.
@@ -765,18 +764,24 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		r_usage.controls = 1;
 		return true;
 	};
+	bool cleared_history_view = false;
 	for (uint32_t i = 0; i < owner.config.max_views; ++i) {
 		if (owner.views[i].history_slot == p_slot) {
-			if ((!owner.views[i].closed && (!slot.publication_closed || !slot.pass_uses_closed)) || !spend()) {
+			if (!owner.views[i].closed && (!slot.publication_closed || !slot.pass_uses_closed)) {
 				return trace_failure(4, "history.L688", ERR_BUSY);
+			}
+			if (!cleared_history_view) {
+				if (!spend()) {
+					return trace_failure(4, "history.L688", ERR_BUSY);
+				}
+				cleared_history_view = true;
 			}
 			// Closing the view removes a future logical reference only. Native
 			// groups and old payload storage remain pinned below until returned.
 			owner.views[i].history_slot = UINT32_MAX;
-			return OK;
 		}
 	}
-	if (slot.preparation_reserved_count) {
+	while (slot.preparation_reserved_count) {
 		while (slot.retire_preparation_index < owner.preparation_capacity) {
 			auto &row = owner.preparation_rows[slot.retire_preparation_index];
 			if (row.owner == &owner && row.owner_slot == p_slot) {
@@ -801,18 +806,22 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			if (row.finish_error != OK) {
 				return trace_failure(5, "preparation.L719", row.finish_error);
 			}
-			GDExtensionDeviceExit::Registry::Lock lock(*slot.original_registry);
-			row.finish_error = _production_output_preparation_finish_row_locked(row, *owner.device, *original, owner.preparation_pin_serial(p_slot));
-			return trace_failure(5, "preparation.L723", row.finish_error);
+			{
+				GDExtensionDeviceExit::Registry::Lock lock(*slot.original_registry);
+				row.finish_error = _production_output_preparation_finish_row_locked(row, *owner.device, *original, owner.preparation_pin_serial(p_slot));
+			}
+			if (row.finish_error != OK) {
+				return trace_failure(5, "preparation.L723", row.finish_error);
+			}
 		}
 		if (row.transforms_owned_group) {
 			error = owner.device->_production_output_retire_service(p_pin, row.transforms_owned_group, p_budget, r_usage, observation);
-			if (error == OK) {
-				row.transforms_owned_group = 0;
-				row.transforms_uniform_set = RID();
-				row.transforms_uniform_witness = NativeDisposalWitness();
+			if (error != OK) {
+				return trace_failure(5, "preparation.L732", error, row.transforms_owned_group, &observation);
 			}
-			return trace_failure(5, "preparation.L732", error, row.transforms_owned_group, &observation);
+			row.transforms_owned_group = 0;
+			row.transforms_uniform_set = RID();
+			row.transforms_uniform_witness = NativeDisposalWitness();
 		}
 		if (row.pipeline_owned_group) {
 			const uint32_t before = r_usage.passes;
@@ -821,9 +830,7 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 				row.pipeline_owned_group = 0;
 				row.owned_pipeline_root = RID();
 				row.created_pipeline = RID();
-				return OK;
-			}
-			if (error != ERR_BUSY || r_usage.passes != before) {
+			} else if (error != ERR_BUSY || r_usage.passes != before) {
 				return trace_failure(5, "preparation.L744", error, row.pipeline_owned_group, &observation);
 			}
 			// A waiting owned pipeline allows its original borrowed groups to
@@ -833,42 +840,54 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		// Detached directory owners must mark their complete original roots (or
 		// return their shared metadata share) before the common G group releases.
 		for (auto &geometry : row.geometry) {
-			if (geometry.is_active()) {
+			while (geometry.is_active()) {
+				const uint32_t before_prep = r_usage.passes;
 				error = MeshStorage::_native_hold_prepare_tuple_directory_return(p_pin, geometry, p_budget, r_usage);
-				if (error != OK) {
-					return trace_failure(5, "preparation.L756", error);
+				if (error == OK) {
+					break;
 				}
+				if (error == ERR_BUSY && r_usage.passes != before_prep) {
+					continue;
+				}
+				return trace_failure(5, "preparation.L756", error);
 			}
 		}
 		for (uint64_t *group : { &row.geometry_reserved_group, &row.material_reserved_group }) {
 			if (*group) {
 				error = owner.device->_production_output_retire_service(p_pin, *group, p_budget, r_usage, observation);
-				if (error == OK) {
-					*group = 0;
+				if (error != OK) {
+					return trace_failure(5, "preparation.L766", error, *group, &observation);
 				}
-				return trace_failure(5, "preparation.L766", error, *group, &observation);
+				*group = 0;
 			}
 		}
 		for (uint32_t i = 0; i < 2; ++i) {
-			if (row.geometry[i].is_active()) {
+			while (row.geometry[i].is_active()) {
 				if (!row.geometry_adopted || !row.geometry_transferred[i]) {
 					return trace_failure(5, "preparation.L772", ERR_BUSY);
 				}
 				if (!row.geometry_metadata_returned[i] && row.geometry[i].has_retirement_directory()) {
 					// The original directory service charges its own bounded pass.
-					return trace_failure(5, "preparation.L776", MeshStorage::_native_hold_return_directory(p_pin, row.geometry[i], p_budget, r_usage));
+					error = MeshStorage::_native_hold_return_directory(p_pin, row.geometry[i], p_budget, r_usage);
+					if (error != OK) {
+						return trace_failure(5, "preparation.L776", error);
+					}
+					continue;
 				}
 				if (!spend()) {
 					return trace_failure(5, "preparation.L779", ERR_BUSY);
 				}
 				if (!row.geometry_metadata_returned[i]) {
 					error = MeshStorage::_native_hold_begin_return(row.geometry[i]);
-					if (error == OK) {
-						row.geometry_metadata_returned[i] = true;
+					if (error != OK) {
+						return trace_failure(5, "preparation.L786", error);
 					}
-					return trace_failure(5, "preparation.L786", error);
+					row.geometry_metadata_returned[i] = true;
 				}
-				return trace_failure(5, "preparation.L788", MeshStorage::_native_hold_finish_return(row.geometry[i]));
+				error = MeshStorage::_native_hold_finish_return(row.geometry[i]);
+				if (error != OK) {
+					return trace_failure(5, "preparation.L788", error);
+				}
 			}
 		}
 		if (row.material.is_active()) {
@@ -877,12 +896,15 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			}
 			if (!row.material_metadata_returned) {
 				error = MaterialStorage::_native_hold_begin_return(row.material);
-				if (error == OK) {
-					row.material_metadata_returned = true;
+				if (error != OK) {
+					return trace_failure(5, "preparation.L800", error);
 				}
-				return trace_failure(5, "preparation.L800", error);
+				row.material_metadata_returned = true;
 			}
-			return trace_failure(5, "preparation.L802", MaterialStorage::_native_hold_finish_return(row.material));
+			error = MaterialStorage::_native_hold_finish_return(row.material);
+			if (error != OK) {
+				return trace_failure(5, "preparation.L802", error);
+			}
 		}
 		if (row.pipeline_owned_group || !spend()) {
 			return trace_failure(5, "preparation.L805", ERR_BUSY);
@@ -897,12 +919,12 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			slot.surfaces[row.owner_surface].preparation = nullptr;
 		}
 		error = owner.return_preparation_bank_row(p_slot, slot.retire_preparation_index);
-		if (error == OK) {
-			++slot.retire_preparation_index;
+		if (error != OK) {
+			return trace_failure(5, "preparation.L820", error);
 		}
-		return trace_failure(5, "preparation.L820", error);
+		++slot.retire_preparation_index;
 	}
-	if (slot.retire_surface < slot.surface_count) {
+	while (slot.retire_surface < slot.surface_count) {
 		if (!slot.surfaces) {
 			return trace_failure(6, "surface.L824", ERR_INVALID_DATA);
 		}
@@ -914,9 +936,7 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 				surface.pipeline_owned_group = 0;
 				surface.created_pipeline = RID();
 				surface.pipeline_group_returned = true;
-				return OK;
-			}
-			if (error != ERR_BUSY || r_usage.passes != before) {
+			} else if (error != ERR_BUSY || r_usage.passes != before) {
 				return trace_failure(6, "surface.L837", error, surface.pipeline_owned_group, &observation);
 			}
 			// The owned group must start release before its material borrow.
@@ -939,63 +959,78 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 					if (!spend()) {
 						return trace_failure(6, "surface.L857", ERR_BUSY);
 					}
-					return trace_failure(6, "surface.L859", MeshStorage::mesh_surface_hold_release(surface.geometry));
+					error = MeshStorage::mesh_surface_hold_release(surface.geometry);
+					if (error != OK) {
+						return trace_failure(6, "surface.L859", error);
+					}
+				} else {
+					// Missing original capture/transfer prefix cannot be inferred
+					// from a live wrapper. Retain it for original prefix recovery.
+					return trace_failure(6, "surface.L863", ERR_BUSY);
 				}
-				// Missing original capture/transfer prefix cannot be inferred
-				// from a live wrapper. Retain it for original prefix recovery.
-				return trace_failure(6, "surface.L863", ERR_BUSY);
-			}
-			if (surface.geometry_group) {
-				error = owner.device->_production_output_retire_service(p_pin, surface.geometry_group, p_budget, r_usage, observation);
-				if (error == OK) {
+			} else {
+				if (surface.geometry_group) {
+					error = owner.device->_production_output_retire_service(p_pin, surface.geometry_group, p_budget, r_usage, observation);
+					if (error != OK) {
+						return trace_failure(6, "surface.L871", error, surface.geometry_group, &observation);
+					}
 					surface.geometry_group = 0;
 					surface.geometry_group_returned = true;
 				}
-				return trace_failure(6, "surface.L871", error, surface.geometry_group, &observation);
-			}
-			if (!surface.geometry_group_returned) {
-				return trace_failure(6, "surface.L874", ERR_INVALID_DATA);
-			}
-			if (surface.geometry.is_transferred_live_snapshot()) {
-				// The original group has observed actual use closure and returned
-				// this native reference. Still-live borrowed objects can report
-				// borrowed_detached; they remain owned by MeshStorage. No complete
-				// Surface retirement directory was captured or is being claimed.
-				if (surface.geometry.has_retirement_directory()) {
-					return trace_failure(6, "surface.L882", ERR_INVALID_DATA);
+				if (!surface.geometry_group_returned) {
+					return trace_failure(6, "surface.L874", ERR_INVALID_DATA);
 				}
-				if (!spend()) {
-					return trace_failure(6, "surface.L885", ERR_BUSY);
+				if (surface.geometry.is_transferred_live_snapshot()) {
+					// The original group has observed actual use closure and returned
+					// this native reference. Still-live borrowed objects can report
+					// borrowed_detached; they remain owned by MeshStorage. No complete
+					// Surface retirement directory was captured or is being claimed.
+					if (surface.geometry.has_retirement_directory()) {
+						return trace_failure(6, "surface.L882", ERR_INVALID_DATA);
+					}
+					if (!spend()) {
+						return trace_failure(6, "surface.L885", ERR_BUSY);
+					}
+					error = MeshStorage::_native_hold_finish_return(surface.geometry);
+					if (error != OK) {
+						return trace_failure(6, "surface.L887", error);
+					}
+				} else {
+					while (!surface.geometry_directory_returned) {
+						if (!surface.geometry.has_retirement_directory()) {
+							return trace_failure(6, "surface.L891", ERR_INVALID_DATA);
+						}
+						const uint32_t before = r_usage.passes;
+						error = MeshStorage::_native_hold_return_directory(p_pin, surface.geometry, p_budget, r_usage);
+						if (error == OK) {
+							surface.geometry_directory_returned = true;
+							break;
+						}
+						if (error != ERR_BUSY || r_usage.passes != before) {
+							return trace_failure(6, "surface.L900", error);
+						}
+						bool marked = false;
+						error = MeshStorage::_native_hold_mark_next_retirement_root(p_pin, surface.geometry, p_budget, r_usage, marked);
+						if (error != OK) {
+							return trace_failure(6, "surface.L903", error);
+						}
+					}
+					if (!spend()) {
+						return trace_failure(6, "surface.L906", ERR_BUSY);
+					}
+					if (!surface.geometry_metadata_returned) {
+						error = MeshStorage::_native_hold_begin_return(surface.geometry);
+						if (error != OK) {
+							return trace_failure(6, "surface.L913", error);
+						}
+						surface.geometry_metadata_returned = true;
+					}
+					error = MeshStorage::_native_hold_finish_return(surface.geometry);
+					if (error != OK) {
+						return trace_failure(6, "surface.L915", error);
+					}
 				}
-				return trace_failure(6, "surface.L887", MeshStorage::_native_hold_finish_return(surface.geometry));
 			}
-			if (!surface.geometry_directory_returned) {
-				if (!surface.geometry.has_retirement_directory()) {
-					return trace_failure(6, "surface.L891", ERR_INVALID_DATA);
-				}
-				const uint32_t before = r_usage.passes;
-				error = MeshStorage::_native_hold_return_directory(p_pin, surface.geometry, p_budget, r_usage);
-				if (error == OK) {
-					surface.geometry_directory_returned = true;
-					return OK;
-				}
-				if (error != ERR_BUSY || r_usage.passes != before) {
-					return trace_failure(6, "surface.L900", error);
-				}
-				bool marked = false;
-				return trace_failure(6, "surface.L903", MeshStorage::_native_hold_mark_next_retirement_root(p_pin, surface.geometry, p_budget, r_usage, marked));
-			}
-			if (!spend()) {
-				return trace_failure(6, "surface.L906", ERR_BUSY);
-			}
-			if (!surface.geometry_metadata_returned) {
-				error = MeshStorage::_native_hold_begin_return(surface.geometry);
-				if (error == OK) {
-					surface.geometry_metadata_returned = true;
-				}
-				return trace_failure(6, "surface.L913", error);
-			}
-			return trace_failure(6, "surface.L915", MeshStorage::_native_hold_finish_return(surface.geometry));
 		}
 		if (!surface.material.is_active() && surface.material_group) {
 			return trace_failure(6, "surface.L918", ERR_INVALID_DATA);
@@ -1006,11 +1041,11 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			}
 			if (surface.material_group) {
 				error = owner.device->_production_output_retire_service(p_pin, surface.material_group, p_budget, r_usage, observation);
-				if (error == OK) {
-					surface.material_group = 0;
-					surface.material_group_returned = true;
+				if (error != OK) {
+					return trace_failure(6, "surface.L930", error, surface.material_group, &observation);
 				}
-				return trace_failure(6, "surface.L930", error, surface.material_group, &observation);
+				surface.material_group = 0;
+				surface.material_group_returned = true;
 			}
 			if (!surface.material_group_returned) {
 				return trace_failure(6, "surface.L933", ERR_INVALID_DATA);
@@ -1020,12 +1055,15 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			}
 			if (!surface.material_metadata_returned) {
 				error = MaterialStorage::_native_hold_begin_return(surface.material);
-				if (error == OK) {
-					surface.material_metadata_returned = true;
+				if (error != OK) {
+					return trace_failure(6, "surface.L943", error);
 				}
-				return trace_failure(6, "surface.L943", error);
+				surface.material_metadata_returned = true;
 			}
-			return trace_failure(6, "surface.L945", MaterialStorage::_native_hold_finish_return(surface.material));
+			error = MaterialStorage::_native_hold_finish_return(surface.material);
+			if (error != OK) {
+				return trace_failure(6, "surface.L945", error);
+			}
 		}
 		if (surface.pipeline_owned_group) {
 			return trace_failure(6, "surface.L948", ERR_BUSY); // Preserve this pass for original native progress.
@@ -1057,7 +1095,6 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			return trace_failure(6, "surface.L974", error);
 		}
 		++slot.retire_surface;
-		return OK;
 	}
 	if (slot.surfaces) {
 		if (!spend()) {
@@ -1072,7 +1109,6 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		}
 		slot.surfaces = nullptr;
 		slot.surface_count = slot.retire_surface = 0;
-		return OK;
 	}
 	if (slot.generated_indexed_mesh.is_valid()) {
 		auto *meshes = MeshStorage::get_singleton();
@@ -1084,7 +1120,6 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		}
 		meshes->mesh_free(slot.generated_indexed_mesh);
 		slot.generated_indexed_mesh = RID();
-		return OK;
 	}
 	if (slot.guard_owned_group) {
 		if (slot.original_pin.is_empty()) {
@@ -1106,7 +1141,6 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		slot.guard_resources_ready = false;
 		slot.guard_proof_payload = nullptr;
 		slot.guard_proof_bytes = 0;
-		return OK;
 	}
 	if (slot.owned_group) {
 		// Before dropping an owned group, every real storage RID must belong
@@ -1121,29 +1155,25 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 					return trace_failure(8, "storage.L1038", ERR_INVALID_DATA);
 				}
 			}
-			if (!spend()) {
-				return trace_failure(8, "storage.L1042", ERR_BUSY);
-			}
 			slot.output_membership_group = slot.owned_group;
-			return OK;
 		}
 		error = owner.device->_production_output_retire_service(p_pin, slot.owned_group, p_budget, r_usage, observation);
-		if (error == OK) {
-			slot.owned_group = 0;
-			// The returning typed role-6 owner frees its dependent index array.
-			slot.generated_index_array = RID();
-			slot.output_group_returned = true;
-			if (slot.storage) {
-				slot.storage->retirement_requested = true;
-			}
+		if (error != OK) {
+			return trace_failure(8, "storage.L1057", error, slot.owned_group, &observation);
 		}
-		return trace_failure(8, "storage.L1057", error, slot.owned_group, &observation);
+		slot.owned_group = 0;
+		// The returning typed role-6 owner frees its dependent index array.
+		slot.generated_index_array = RID();
+		slot.output_group_returned = true;
+		if (slot.storage) {
+			slot.storage->retirement_requested = true;
+		}
 	}
 	if (slot.storage) {
 		if (!slot.output_group_returned || !slot.storage->retirement_requested || slot.storage->unknown) {
 			return trace_failure(9, "witness.L1061", ERR_INVALID_DATA);
 		}
-		if (slot.retire_resource < ExternalOutputStorage::RESOURCE_COUNT) {
+		while (slot.retire_resource < ExternalOutputStorage::RESOURCE_COUNT) {
 			const auto &resource = slot.storage->resources[slot.retire_resource];
 			if (resource.rid.is_valid()) {
 				if (OS::get_singleton()->get_ticks_usec() >= p_budget.deadline_micros) {
@@ -1164,16 +1194,13 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 				if (report.state != NativeDisposalWitness::State::RETURNED) {
 					return trace_failure(9, "witness.L1082", ERR_BUSY, 0, nullptr, uint32_t(report.state)); // Preserve budget for original native cursor.
 				}
-			}
-			if (!spend()) {
-				return trace_failure(9, "witness.L1086", ERR_BUSY);
-			}
-			if (resource.rid.is_valid()) {
+				if (!spend()) {
+					return trace_failure(9, "witness.L1086", ERR_BUSY);
+				}
 				++r_usage.receipts;
 				++slot.physical_returned;
 			}
 			++slot.retire_resource;
-			return OK;
 		}
 		if (!spend()) {
 			return trace_failure(8, "storage.L1096", ERR_BUSY);
@@ -1186,7 +1213,6 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			delete slot.storage;
 		}
 		slot.storage = nullptr;
-		return OK;
 	}
 	if (!spend()) {
 		return trace_failure(10, "final_unpin.L1109", ERR_BUSY);

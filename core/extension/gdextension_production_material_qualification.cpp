@@ -258,6 +258,20 @@ void fill_particle_surface_oracle_descriptor(GDExtensionMaterialQualificationFix
 	r_oracle.recipe = mq_sha256_domain("godot.material_qualification.recipe.current_reset_f32_world_particle_surface.v1", recipe_bytes, sizeof(recipe_bytes));
 }
 
+const GDExtensionMaterialQualificationFixedOracleV1 &mq_fixed_oracle(uint32_t p_recipe) {
+	static const GDExtensionMaterialQualificationFixedOracleV1 default_oracle = []() {
+		GDExtensionMaterialQualificationFixedOracleV1 v;
+		mq_populate_fixed_oracle(v);
+		return v;
+	}();
+	static const GDExtensionMaterialQualificationFixedOracleV1 particle_oracle = []() {
+		GDExtensionMaterialQualificationFixedOracleV1 v;
+		fill_particle_surface_oracle_descriptor(v);
+		return v;
+	}();
+	return p_recipe == GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_PARTICLE_SURFACE_V1 ? particle_oracle : default_oracle;
+}
+
 bool mq_budget_has_step(const GDExtensionProductionServiceBudgetV1 &p_budget, const ProductionServiceUsage &p_usage) {
 	if (!p_budget.controls || !p_budget.passes || !p_budget.receipts || !p_budget.deadline_micros) {
 		return false;
@@ -584,12 +598,6 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_material_qualifica
 	mq->selection.surface_index = prepare->surface_index;
 	mq->selection.state = GDEXTENSION_MATERIAL_QUALIFICATION_PENDING_V1;
 
-	if (prepare->recipe == GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_PARTICLE_SURFACE_V1) {
-		fill_particle_surface_oracle_descriptor(mq->oracle);
-	} else {
-		mq_populate_fixed_oracle(mq->oracle);
-	}
-
 	mq->framebuffer_physical.bridge = r->attachment->serial;
 	production_serials.take(mq->framebuffer_physical.serial);
 	mq->framebuffer_physical.child = mq->framebuffer_physical.serial;
@@ -668,7 +676,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_material_recipe(GD
 	if (mq.recipe_failed) {
 		return mq_result(mq.recipe_error != OK ? mq.recipe_error : ERR_CANT_CREATE, 10);
 	}
-	*out_oracle = mq.oracle;
+	*out_oracle = mq_fixed_oracle(mq.prepare.recipe);
 	if (mq.recipe_ready) {
 		return mq_result(OK);
 	}
@@ -1195,15 +1203,16 @@ Error Registry::production_material_qualification_observe_locked(ProductionReque
 					if (uint32_t(mq->roster.borrowed.size()) > MAX_BORROWED_DEPS) {
 						recipe_err = ERR_PARAMETER_RANGE_ERROR;
 					} else {
+						const auto &oracle = mq_fixed_oracle(mq->prepare.recipe);
 						GDExtensionMaterialQualificationResultMetadataV1 &meta = prepared_meta;
 						meta = {};
 						meta.abi = { 1, sizeof(meta), 0 };
 						meta.action_ordinal = mq->prepare.action_ordinal;
 						meta.origin = mq->prepare.origin;
 						meta.selection = mq->selection;
-						meta.recipe = mq->oracle.recipe;
-						meta.verifier = mq->oracle.verifier;
-						meta.vector_table = mq->oracle.vector_table;
+						meta.recipe = oracle.recipe;
+						meta.verifier = oracle.verifier;
+						meta.vector_table = oracle.vector_table;
 						meta.recipe_version = 1;
 						meta.verifier_version = 1;
 						meta.vector_ordinal = 0;
@@ -1219,9 +1228,9 @@ Error Registry::production_material_qualification_observe_locked(ProductionReque
 						meta.fixture_primitive = uint32_t(mq->derived_surface.get_primitive());
 						meta.fixture_vertex_format = uint64_t(mq->derived_surface.get_vertex_format());
 						meta.fixture_input_mask = mq->roster.material.get_input_mask();
-						meta.fixture_geometry = mq->oracle.fixture_geometry;
-						meta.fixed_camera = mq->oracle.camera;
-						meta.fixed_instance_records = mq->oracle.instances;
+						meta.fixture_geometry = oracle.fixture_geometry;
+						meta.fixed_camera = oracle.camera;
+						meta.fixed_instance_records = oracle.instances;
 
 						const uint32_t backend_id = scene_render->get_native_material_recipe_backend();
 						meta.renderer_variant = mq_sha256_domain("ange.mq.renderer_variant.v1", &backend_id, sizeof(backend_id));

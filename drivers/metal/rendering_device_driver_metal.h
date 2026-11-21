@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "core/object/worker_thread_pool.h"
 #include "core/templates/paged_allocator.h"
 #include "drivers/metal/metal_allocator.h"
 #include "drivers/metal/metal_device_profile.h"
@@ -128,8 +129,24 @@ protected:
 	RDD::FragmentShadingRateCapabilities fsr_capabilities;
 	RDD::FragmentDensityMapCapabilities fdm_capabilities;
 
+	enum class PipelineCacheMode {
+		DISABLED,
+		RELEASE_AFTER_WARMUP,
+		PERSIST,
+	};
+	static constexpr uint32_t ARCHIVE_WARMUP_IDLE_FRAMES = 16;
+	static constexpr uint32_t ARCHIVE_WARMUP_MIN_FRAMES = 16;
+
+	Mutex archive_mutex;
+	Mutex archive_serialize_mutex;
 	NS::SharedPtr<MTL::BinaryArchive> archive;
+	std::atomic<bool> archive_active{ false };
 	uint32_t archive_count = 0;
+	bool archive_dirty = false;
+	bool archive_activity_this_frame = false;
+	uint32_t archive_idle_frames = 0;
+	PipelineCacheMode pipeline_cache_mode = PipelineCacheMode::RELEASE_AFTER_WARMUP;
+	WorkerThreadPool::TaskID archive_release_task = WorkerThreadPool::INVALID_TASK_ID;
 	// DEV: When true, attempting to create a pipeline will fail if it cannot use the archive.
 	bool archive_fail_on_miss = false;
 
@@ -453,6 +470,12 @@ public:
 	// ----- CACHE -----
 private:
 	String _pipeline_get_cache_path() const;
+	NS::SharedPtr<MTL::BinaryArchive> _acquire_pipeline_archive();
+	void _record_pipeline_archive_addition(MTL::BinaryArchive *p_archive);
+	void _serialize_archive_to_path(MTL::BinaryArchive *p_archive, const String &p_cache_path);
+	void _wait_archive_release_task();
+	void _maybe_release_pipeline_archive(uint32_t p_frames_drawn);
+	static void _release_archive_task_func(void *p_userdata);
 
 public:
 	virtual bool pipeline_cache_create(const Vector<uint8_t> &p_data) override final;

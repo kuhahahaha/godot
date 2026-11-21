@@ -1583,8 +1583,37 @@ Error Registry::production_output_demand_publish(ProductionPhysicalContextRef co
 	return OK;
 }
 
+// Decouple material/geometry preparation closure budget (max_resources) from the
+// per-read RDG graph budget (output_read_graph_capacity), keeping at least 64
+// ordinary closure entries when the request/attachment use-cell pool affords it.
+static uint32_t resolve_preparation_resource_capacity(uint32_t p_graph_cap, uint32_t p_read_cap, uint32_t p_bank_rows, bool p_inline_config, uint64_t p_fixed_uses, uint64_t p_available_uses) {
+	const uint32_t desired = MAX(p_graph_cap, 64u);
+	if (!p_read_cap || p_graph_cap >= desired) {
+		return desired;
+	}
+	const uint64_t observer_uses = p_inline_config && p_bank_rows > 0 ? 2ull * (uint64_t(p_bank_rows) - 1ull) : 0ull;
+	const uint64_t base_per_row = observer_uses + 6ull;
+	if (desired <= (UINT64_MAX - base_per_row) / 2ull) {
+		const uint64_t per_row_desired = 2ull * uint64_t(desired) + base_per_row;
+		if (uint64_t(p_read_cap) <= (UINT64_MAX - p_fixed_uses) / per_row_desired &&
+				p_fixed_uses + uint64_t(p_read_cap) * per_row_desired <= p_available_uses) {
+			return desired;
+		}
+	}
+	if (p_available_uses > p_fixed_uses) {
+		const uint64_t row_budget = (p_available_uses - p_fixed_uses) / uint64_t(p_read_cap);
+		if (row_budget > base_per_row) {
+			const uint64_t affordable = (row_budget - base_per_row) / 2ull;
+			if (affordable > p_graph_cap) {
+				return uint32_t(MIN(affordable, uint64_t(desired)));
+			}
+		}
+	}
+	return p_graph_cap;
+}
+
 // Registry and this exact RD are held. No admission/selection or ownership is created.
-Error Registry::production_output_demand_locked(ProductionAttachment &attachment, RenderingDevice &rd, const GDExtensionProductionOutputDemandInputV1 &input, GDExtensionProductionOutputGuardDemandV1 &out) {
+Error Registry::production_output_demand_locked(ProductionAttachment &attachment, RenderingDevice &rd, const GDExtensionProductionOutputDemandInputV1 &input, GDExtensionProductionOutputGuardDemandV1 &out, uint64_t available_use_cells) {
 	if (!production_dto_valid(input) || input.reserved || !input.particles || !input.generation || (input.source_space != 1 && input.source_space != 2) || ((!input.read_capacity) != (!input.read_graph_capacity))) {
 		return ERR_INVALID_PARAMETER;
 	}
@@ -1676,15 +1705,16 @@ Error Registry::production_output_demand_locked(ProductionAttachment &attachment
 	}
 	const bool pipelines = layout_resource_count && input.read_capacity;
 	const uint64_t borrower = pipelines ? uint64_t(facts.view_capacity) + facts.surface_capacity + facts.read_capacity : 0;
-	uint32_t material_capacity = input.read_graph_capacity;
+	const uint64_t fixed = 1 + (layout_resource_count ? uint64_t(layout_resource_count) + 1 : 0) + borrower + bound.guard_owned_resources + 1;
+	const uint32_t prep_resource_capacity = pipelines ? resolve_preparation_resource_capacity(input.read_graph_capacity, input.read_capacity, facts.read_capacity, true, fixed, available_use_cells) : input.read_graph_capacity;
+	uint32_t material_capacity = prep_resource_capacity;
 	if (pipelines) {
-		error = RendererRD::ExternalOutputOwner::plan_material_disposal_capacity(input.read_graph_capacity, facts.read_capacity, material_capacity);
+		error = RendererRD::ExternalOutputOwner::plan_material_disposal_capacity(prep_resource_capacity, facts.read_capacity, material_capacity);
 		if (error != OK) {
 			return error;
 		}
 	}
-	const uint64_t per_row = uint64_t(input.read_graph_capacity) + material_capacity + 6;
-	const uint64_t fixed = 1 + (layout_resource_count ? uint64_t(layout_resource_count) + 1 : 0) + borrower + bound.guard_owned_resources + 1;
+	const uint64_t per_row = uint64_t(prep_resource_capacity) + material_capacity + 6;
 	if (pipelines && input.read_capacity > (UINT64_MAX - fixed) / per_row) {
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
@@ -3402,17 +3432,18 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 		out->status = output_status(ERR_PARAMETER_RANGE_ERROR, "output_guard_owned_capacity");
 		return;
 	}
-	uint32_t material_capacity = action.output_read_graph_capacity;
+	const uint64_t fixed_uses = 1u + (layout.resource_count ? uint64_t(layout.resource_count) + 1 : 0) +
+			(reserve_pipelines ? borrower_headroom : 0) + (guard_members ? uint64_t(guard_members) + 1 : 0);
+	const uint32_t prep_resource_capacity = reserve_pipelines ? resolve_preparation_resource_capacity(action.output_read_graph_capacity, action.output_read_capacity, owner.preparation_capacity, owner.generation_config_inline, fixed_uses, spare) : action.output_read_graph_capacity;
+	uint32_t material_capacity = prep_resource_capacity;
 	if (reserve_pipelines && owner.generation_config_inline) {
-		const Error capacity_error = Owner::plan_material_disposal_capacity(action.output_read_graph_capacity, owner.preparation_capacity, material_capacity);
+		const Error capacity_error = Owner::plan_material_disposal_capacity(prep_resource_capacity, owner.preparation_capacity, material_capacity);
 		if (capacity_error != OK) {
 			out->status = output_status(capacity_error, "output_material_disposal_capacity");
 			return;
 		}
 	}
-	const uint64_t per_row_uses = uint64_t(action.output_read_graph_capacity) + material_capacity + 6;
-	const uint64_t fixed_uses = 1u + (layout.resource_count ? uint64_t(layout.resource_count) + 1 : 0) +
-			(reserve_pipelines ? borrower_headroom : 0) + (guard_members ? uint64_t(guard_members) + 1 : 0);
+	const uint64_t per_row_uses = uint64_t(prep_resource_capacity) + material_capacity + 6;
 	if (reserve_pipelines && uint64_t(action.output_read_capacity) > (UINT64_MAX - fixed_uses) / per_row_uses) {
 		out->status = output_status(ERR_PARAMETER_RANGE_ERROR, "output_preparation_quote_overflow");
 		return;
@@ -3522,7 +3553,7 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 		if (error == OK && reserve_pipelines) {
 			// Prepay all row groups before the first storage/native factory.
 			unlock_mutex_for_call();
-			error = storage->_external_preparation_bank_reserve_owned_prefix(context, RID::from_uint64(input->particles), slot_index, action.output_read_graph_capacity);
+			error = storage->_external_preparation_bank_reserve_owned_prefix(context, RID::from_uint64(input->particles), slot_index, prep_resource_capacity);
 			relock_mutex_after_call();
 		}
 		if (error == OK) {
@@ -3971,17 +4002,18 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 		out->status = output_status(ERR_PARAMETER_RANGE_ERROR, "output_guard_owned_capacity");
 		return;
 	}
-	uint32_t material_capacity = action.output_read_graph_capacity;
+	const uint64_t fixed_uses = 1u + (owned_resource_count ? uint64_t(owned_resource_count) + 1 : 0) +
+			(reserve_pipelines ? borrower_headroom : 0) + (guard_members ? uint64_t(guard_members) + 1 : 0);
+	const uint32_t prep_resource_capacity = reserve_pipelines ? resolve_preparation_resource_capacity(action.output_read_graph_capacity, action.output_read_capacity, owner.preparation_capacity, owner.generation_config_inline, fixed_uses, spare) : action.output_read_graph_capacity;
+	uint32_t material_capacity = prep_resource_capacity;
 	if (reserve_pipelines && owner.generation_config_inline) {
-		const Error capacity_error = Owner::plan_material_disposal_capacity(action.output_read_graph_capacity, owner.preparation_capacity, material_capacity);
+		const Error capacity_error = Owner::plan_material_disposal_capacity(prep_resource_capacity, owner.preparation_capacity, material_capacity);
 		if (capacity_error != OK) {
 			out->status = output_status(capacity_error, "output_material_disposal_capacity");
 			return;
 		}
 	}
-	const uint64_t per_row_uses = uint64_t(action.output_read_graph_capacity) + material_capacity + 6;
-	const uint64_t fixed_uses = 1u + (owned_resource_count ? uint64_t(owned_resource_count) + 1 : 0) +
-			(reserve_pipelines ? borrower_headroom : 0) + (guard_members ? uint64_t(guard_members) + 1 : 0);
+	const uint64_t per_row_uses = uint64_t(prep_resource_capacity) + material_capacity + 6;
 	if (reserve_pipelines && uint64_t(action.output_read_capacity) > (UINT64_MAX - fixed_uses) / per_row_uses) {
 		out->status = output_status(ERR_PARAMETER_RANGE_ERROR, "output_preparation_quote_overflow");
 		return;
@@ -4086,7 +4118,7 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 		}
 		if (error == OK && reserve_pipelines) {
 			unlock_mutex_for_call();
-			error = storage->_external_preparation_bank_reserve_owned_prefix(context, RID::from_uint64(input->particles), slot_index, action.output_read_graph_capacity);
+			error = storage->_external_preparation_bank_reserve_owned_prefix(context, RID::from_uint64(input->particles), slot_index, prep_resource_capacity);
 			relock_mutex_after_call();
 		}
 		if (error == OK) {

@@ -172,13 +172,13 @@ public:
 
 	struct NativeCallFact {
 		uint64_t serial = 0;
-		IssueFact issue = IssueFact::NotIssued;
 		int64_t native_code = 0;
+		uint64_t completion_serial = 0;
+		IssueFact issue = IssueFact::NotIssued;
 		Error error = OK;
 		CompletionCapability completion = CompletionCapability::Disabled;
-		uint64_t completion_serial = 0;
-		bool present = false;
 		uint32_t queue_index = 0;
+		bool present = false;
 		bool source_owner_returned = false;
 		bool frame_observer_owned = false;
 		// WSI call diagnostics have no GPU-submission completion obligation.
