@@ -1767,6 +1767,7 @@ void RenderingDeviceDriverMetal::shader_destroy_modules(ShaderID p_shader) {
 
 RDD::UniformSetID RenderingDeviceDriverMetal::uniform_set_create(VectorView<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index) {
 	//p_linear_pool_index = -1; // TODO:? Linear pools not implemented or not supported by API backend.
+	last_uniform_set_create_error = OK;
 
 	MDShader *shader = (MDShader *)(p_shader.id);
 	ERR_FAIL_INDEX_V_MSG(p_set_index, shader->sets.size(), UniformSetID(), "Set index out of range");
@@ -1925,7 +1926,8 @@ RDD::UniformSetID RenderingDeviceDriverMetal::uniform_set_create(VectorView<Boun
 		}
 
 		if (!is_dynamic) {
-			set->arg_buffer = allocator->new_buffer(shader_set.buffer_size, base_hazard_tracking | MTL::ResourceStorageModePrivate);
+			const bool unified_shared = device->hasUnifiedMemory();
+			set->arg_buffer = allocator->new_buffer(shader_set.buffer_size, base_hazard_tracking | (unified_shared ? MTL::ResourceStorageModeShared : MTL::ResourceStorageModePrivate));
 			if (!set->arg_buffer.buffer) {
 				memdelete(set);
 				ERR_FAIL_V_MSG(UniformSetID(), "Failed to allocate Metal argument buffer.");
@@ -1941,13 +1943,18 @@ RDD::UniformSetID RenderingDeviceDriverMetal::uniform_set_create(VectorView<Boun
 			snprintf(label, sizeof(label), "Uniform Set %u", p_set_index);
 			set->arg_buffer.buffer->setLabel(NS::String::string(label, NS::UTF8StringEncoding));
 #endif
-			const Error copy_error = _copy_queue_copy_to_buffer(arg_buffer_data, set->arg_buffer.buffer.get());
-			if (copy_error != OK) {
-				// Refusal happens before this destination is encoded. Any earlier
-				// flushed prefix remains in the original Frame completion reports.
-				allocator->free_buffer(set->arg_buffer);
-				memdelete(set);
-				return UniformSetID();
+			if (unified_shared) {
+				memcpy(set->arg_buffer.buffer->contents(), arg_buffer_data.ptr(), arg_buffer_data.size());
+			} else {
+				const Error copy_error = _copy_queue_copy_to_buffer(arg_buffer_data, set->arg_buffer.buffer.get());
+				if (copy_error != OK) {
+					// Refusal happens before this destination is encoded. Any earlier
+					// flushed prefix remains in the original Frame completion reports.
+					last_uniform_set_create_error = copy_error;
+					allocator->free_buffer(set->arg_buffer);
+					memdelete(set);
+					return UniformSetID();
+				}
 			}
 		} else {
 			// Store the arg buffer data for dynamic uniform sets.
@@ -3220,8 +3227,8 @@ Error RenderingDeviceDriverMetal::_copy_queue_initialize() {
 	copy_queue.get()->setLabel(MTLSTR("Copy Command Queue"));
 	ERR_FAIL_COND_V(!copy_queue, ERR_CANT_CREATE);
 
-	// Reserve 64 KiB for copy commands. If the buffer fills, it will be flushed automatically.
-	copy_queue_buffer = allocator->new_buffer(64 * 1024, MTL::ResourceStorageModeShared | MTL::ResourceHazardTrackingModeUntracked);
+	// Reserve 1 MiB for copy commands. If the buffer fills, it will be flushed automatically.
+	copy_queue_buffer = allocator->new_buffer(1024 * 1024, MTL::ResourceStorageModeShared | MTL::ResourceHazardTrackingModeUntracked);
 	copy_queue_buffer.buffer.get()->setLabel(MTLSTR("Copy Command Scratch Buffer"));
 
 	return OK;

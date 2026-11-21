@@ -346,7 +346,7 @@ void vertex_shader(in vec3 vertex,
 	mat4 matrix;
 	mat4 read_model_matrix = model_matrix;
 
-#ifndef USE_INSTANCE192_OUTPUT
+#if !defined(USE_INSTANCE192_OUTPUT) && !defined(USE_INDEXED144_VERTEX_INPUT)
 	if (sc_multimesh()) {
 		//multimesh, instances are for it
 
@@ -505,12 +505,14 @@ void vertex_shader(in vec3 vertex,
 	// Then we combine the translations from the model matrix and the view matrix using emulated doubles.
 	// We add the result to the vertex and ignore the final lost precision.
 	vec3 model_origin = model_matrix[3].xyz;
+#if !defined(USE_INSTANCE192_OUTPUT) && !defined(USE_INDEXED144_VERTEX_INPUT)
 	if (sc_multimesh()) {
 		modelview = modelview * matrix;
 
 		vec3 instance_origin = mat3(model_matrix) * matrix[3].xyz;
 		model_origin = double_add_vec3(model_origin, model_precision, instance_origin, vec3(0.0), model_precision);
 	}
+#endif
 
 	// Overwrite the translation part of modelview with improved precision.
 	vec3 temp_precision; // Will be ignored.

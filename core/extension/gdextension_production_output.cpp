@@ -3008,7 +3008,18 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_output_v3(GDExtens
 			return result(same ? OK : ERR_INVALID_DATA);
 		}
 		if (action->output_prepare_version == 1 && action->output_plan_prepared) {
-			if (!action->output_roles_pending_v3) {
+			bool zero_v3_upgrade = !action->output_roles_pending_v3 &&
+					!action->output_plan.acquire.roles[0].bytes && !action->output_plan.acquire.roles[1].bytes && !action->output_plan.acquire.roles[2].bytes &&
+					!action->output_roles[0].bytes && !action->output_roles[1].bytes && !action->output_roles[2].bytes;
+			if (zero_v3_upgrade) {
+				for (uint32_t i = 0; i < role_count; ++i) {
+					if (canonical_roles[i].bytes != 0) {
+						zero_v3_upgrade = false;
+						break;
+					}
+				}
+			}
+			if (!action->output_roles_pending_v3 && !zero_v3_upgrade) {
 				if (role_count != 3) {
 					return result(ERR_INVALID_DATA);
 				}
@@ -3686,6 +3697,8 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 			out->status = output_status(error, "original_record_context");
 			return;
 		}
+		out->request_serial = request->serial;
+		out->action_ordinal = ordinal;
 		if (!request->frozen || ordinal >= request->action_count || request->capture_inflight || request->cancelled || request->release_started || request->control.state != ProductionControlState::EXECUTING || request->control.input.kind != ProductionControlKind::RECORD) {
 			out->status = output_status(ERR_UNAUTHORIZED, "original_output_action");
 			return;
@@ -4753,11 +4766,11 @@ void Registry::production_finalize_output(ProductionPhysicalContextRef context, 
 		0u,
 		0u,
 		0u,
-		1u,
-		owner.config.capacity,
-		uint32_t(RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64),
+		0u,
 		uint32_t(slot.request.common.present_seq),
 		uint32_t(slot.request.common.present_seq >> 32),
+		1u,
+		0u,
 	};
 	if (is_light64) {
 		slot.previous_host = has_history ? history.previous_host : slot.current_host;

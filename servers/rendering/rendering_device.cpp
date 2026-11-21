@@ -5790,6 +5790,7 @@ RID RenderingDevice::_qualification_uniform_set_create(const VectorView<Uniform>
 RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Uniform> &p_uniforms, RID p_shader, uint32_t p_shader_set, bool p_linear_pool, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> *p_children, const NativeDisposalWitness *p_native_disposal, const GDExtensionDeviceExit::ProductionRequest *p_production, const VectorView<ProductionOutputUniformSource> *p_sources) {
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Recording is suspended after a frame fence wait failure.");
 	_THREAD_SAFE_METHOD_
+	last_uniform_set_create_error = OK;
 	QualificationSourceAdmissionScope source_admission(*this);
 	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_shader), RID());
 
@@ -6331,6 +6332,10 @@ RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Unif
 		if (reserved_set.is_valid()) {
 			uniform_set_owner.initialize_rid(reserved_set, UniformSet());
 			uniform_set_owner.free(reserved_set);
+		}
+		last_uniform_set_create_error = driver->take_last_uniform_set_create_error();
+		if (last_uniform_set_create_error == ERR_BUSY) {
+			return RID();
 		}
 		ERR_FAIL_V(RID());
 	}
@@ -12425,7 +12430,7 @@ Error RenderingDevice::_native_disposal_depth_sample_set_create(const NativeDisp
 	// the clear. This disposal witness grants no read/source/bind authority.
 	const RID created = _uniform_set_create_qualification(VectorView<Uniform>(&uniform, 1), p_shader, p_set, false, nullptr, nullptr, &reserved);
 	if (created.is_null()) {
-		return ERR_CANT_CREATE; // Earlier published parents remain caller-owned.
+		return last_uniform_set_create_error == ERR_BUSY ? ERR_BUSY : ERR_CANT_CREATE; // Earlier published parents remain caller-owned.
 	}
 	r_rid = created;
 	r_witness = reserved;
@@ -12529,7 +12534,7 @@ Error RenderingDevice::_native_disposal_uniform_set_create(const VectorView<Unif
 	}
 	const RID rid = _uniform_set_create_qualification(p_uniforms, p_shader, p_set, false, nullptr, nullptr, &reserved, p_owner, p_sources);
 	if (rid.is_null()) {
-		return ERR_CANT_CREATE;
+		return last_uniform_set_create_error == ERR_BUSY ? ERR_BUSY : ERR_CANT_CREATE;
 	}
 	r_rid = rid;
 	r_witness = reserved;

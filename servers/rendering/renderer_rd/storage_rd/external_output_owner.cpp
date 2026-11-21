@@ -44,7 +44,7 @@
 #include <cstdlib>
 
 namespace RendererRD {
-Error ExternalOutputOwner::validate_scene_cull(uint32_t p_slot) const {
+Error ExternalOutputOwner::validate_scene_cull(uint32_t p_slot, bool p_allow_sealed_replay) const {
 	if (p_slot >= slot_count) {
 		return ERR_INVALID_PARAMETER;
 	}
@@ -67,14 +67,14 @@ Error ExternalOutputOwner::validate_scene_cull(uint32_t p_slot) const {
 	if ((slot.state == LeaseState::ADOPTED || slot.state == LeaseState::SEALED_RECORDED) && slot.fast_refresh_active) {
 		return OK;
 	}
+	if (slot.state == LeaseState::ADOPTED || (p_allow_sealed_replay && slot.state == LeaseState::SEALED_RECORDED)) {
+		return OK;
+	}
 	if (actual.version != slot.scene_cull_version ||
 			actual.transform != slot.current_host || actual.local_aabb != slot.scene_cull_local || actual.world_aabb != slot.scene_cull_world) {
 		return ERR_INVALID_DATA;
 	}
 	const auto &camera = slot.request.common.current_camera_token;
-	if (slot.state == LeaseState::ADOPTED) {
-		return OK;
-	}
 	return scene->instance_particle_output_cull_window_matches(slot.scene_cull_instance, slot.scene_cull_viewport,
 			camera.view_id, camera.view_epoch, camera.capture_ordinal) ? OK : ERR_BUSY;
 }
@@ -1489,6 +1489,43 @@ Error ExternalOutputOwner::acquire_camera_view(const ExternalSurfaceSelection &p
 		return ERR_OUT_OF_MEMORY;
 	}
 	auto &slot = slots[matched_slot];
+	if (slot.state == LeaseState::SEALED_RECORDED && !slot.native_color_consumption_serial &&
+			slot.consumed_proof_requested && slot.consumed_proof_view.is_empty() && !slot.consumed_borrow_serial &&
+			slot.native_camera_source.is_valid() && slot.retained_host_snapshot) {
+		if (next_view_serial == UINT64_MAX) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+		uint32_t proof_index = UINT32_MAX;
+		for (uint32_t i = 0; i < view_capacity; ++i) {
+			const auto &candidate = view_cells[i];
+			if (i != selected_cell && !candidate.consumer && candidate.pin.is_empty() && candidate.camera_source.is_null()) {
+				proof_index = i;
+				break;
+			}
+		}
+		if (proof_index == UINT32_MAX) {
+			return ERR_OUT_OF_MEMORY;
+		}
+		auto &proof_cell = view_cells[proof_index];
+		const Error proof_borrowed = slot.original_registry->production_output_pin_borrow(slot.original_pin, *rd, proof_cell.pin);
+		if (proof_borrowed != OK) {
+			return proof_borrowed;
+		}
+		auto &proof = slot.consumed_proof_view;
+		proof_cell.camera_source = slot.native_camera_source;
+		proof_cell.consumer = &proof;
+		proof_cell.serial = next_view_serial++;
+		proof_cell.slot = matched_slot;
+		proof.owner = this;
+		proof.serial = proof_cell.serial;
+		proof.slot = matched_slot;
+		proof.view_cell = proof_index;
+		proof.profile = config.profile;
+		proof.space = config.space;
+		proof.current_host = slot.current_host;
+		proof.previous_host = slot.previous_host;
+		proof.retained_host_snapshot = true;
+	}
 	auto &cell = view_cells[selected_cell];
 	const Error error = slot.original_registry->production_output_pin_borrow(slot.original_pin, *rd, cell.pin);
 	if (error != OK) {

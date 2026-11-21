@@ -618,6 +618,7 @@ public:
 		return scope && scope->capture_hidden && scope->capture_hidden(scope->owner, p_report);
 	}
 
+	virtual Error take_last_uniform_set_create_error() { return OK; }
 	virtual bool native_issue_bound(NativeIssueKind p_kind, uint32_t p_commands, uint32_t &r_bound) const { return false; }
 	// Internal original-owner accounting profile. Unsupported drivers retain
 	// their existing conservative qualification admission, without a fallback.

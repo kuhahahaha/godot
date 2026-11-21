@@ -840,7 +840,7 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 					if (acq_err == OK) {
 						rid = rd._uniform_set_create_qualification(uniforms, unit_shader_rid, 1u, false, &slot.owned_physical, &dependencies, nullptr, &request);
 						if (rid.is_null()) {
-							acq_err = ERR_CANT_CREATE;
+							acq_err = rd.get_last_uniform_set_create_error() == ERR_BUSY ? ERR_BUSY : ERR_CANT_CREATE;
 						}
 					}
 					if (acq_err != OK) {
@@ -908,7 +908,7 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 			--request.capture_inflight;
 			if (rid.is_null()) {
 				rd._qualification_release_free_event(&slot.owned_physical);
-				return finish(ERR_CANT_CREATE);
+				return finish(rd.get_last_uniform_set_create_error() == ERR_BUSY ? ERR_BUSY : ERR_CANT_CREATE);
 			}
 			slot.backing_serial = slot.owned_physical.serial;
 		}
@@ -1128,13 +1128,17 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 	}
 	const bool is_closing_exit = request.attachment && (request.attachment->closing ||
 			(request.attachment->library < RECORD_CAPACITY && records[request.attachment->library].natural_close_draining));
+	const bool live_window_set_drain = !rd.screen_swap_chains.is_empty() && rd.driver && !rd.frames.is_empty() &&
+			!rd.draw_list.active && !rd.compute_list.active && !rd.raytracing_list.active &&
+			!rd.frame_wait_draining && !rd.draw_graph.has_driver_callbacks();
+	const bool allow_set_busy_bypass = is_closing_exit || live_window_set_drain;
 	const Error frame_admission = production_maintenance_frame_admission_locked(request, rd, admission_trace);
-	if (frame_admission != OK && !(is_closing_exit && frame_admission == ERR_BUSY)) {
+	if (frame_admission != OK && !(allow_set_busy_bypass && frame_admission == ERR_BUSY)) {
 		return frame_admission;
 	}
 	for (uint32_t frame_index = 0; frame_index < rd.frames.size(); ++frame_index) {
 		const Error foreign_frame = production_maintenance_foreign_frame_admission_locked(request, rd, frame_index, false, admission_trace);
-		if (foreign_frame != OK && !(is_closing_exit && foreign_frame == ERR_BUSY)) {
+		if (foreign_frame != OK && !(allow_set_busy_bypass && foreign_frame == ERR_BUSY)) {
 			return foreign_frame;
 		}
 	}
@@ -1262,20 +1266,23 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 		MutexLock physical(slot.owned_physical.mutex);
 		has_retiring_disposals |= slot.retiring && slot.owned_physical.enqueued && !slot.owned_physical.free_event && !slot.returned;
 	}
-	for (uint32_t g = request.use_count + request.binding_used; g < request.capacity.resource_uses && !has_retiring_disposals; ++g) {
+	bool has_retiring_output_groups = false;
+	const uint32_t member_end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
+	for (uint32_t g = request.disposal_group_head; g != UINT32_MAX && !has_retiring_output_groups; g = request.uses[g].disposal_group_next) {
 		const auto &group = request.uses[g];
 		if (group.output_role != ProductionUseCell::OutputRole::DISPOSAL_GROUP || !group.disposal_group_release) {
 			continue;
 		}
-		has_retiring_disposals |= !group.disposal_group_dropped;
-		for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses && !has_retiring_disposals; ++i) {
+		has_retiring_output_groups |= !group.disposal_group_dropped;
+		for (uint32_t i = request.use_count + request.binding_used; i < member_end && !has_retiring_output_groups; ++i) {
 			const auto &member = request.uses[i];
 			if (member.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && member.disposal_group_serial == group.disposal_group_serial) {
 				const uint8_t st = member.disposal.state.load(std::memory_order_acquire);
-				has_retiring_disposals |= (st == 1 || st == 2);
+				has_retiring_output_groups |= (st == 1 || st == 2);
 			}
 		}
 	}
+	has_retiring_disposals |= has_retiring_output_groups;
 	const bool is_closing_exit = request.attachment && (request.attachment->closing ||
 			(request.attachment->library < RECORD_CAPACITY && records[request.attachment->library].natural_close_draining));
 	if (own_or_idle_disposal && (mq_in_place_early || request.graph_count > 0)) {
@@ -1330,11 +1337,13 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 			}
 		}
 	}
+	const bool live_window_retire = !rd.screen_swap_chains.is_empty() && has_retiring_disposals && !any_graph_pending;
 	auto drain_owned_on_close = [&](Error fallback_err) -> Error {
-		if (fallback_err != ERR_BUSY || !(is_closing_exit || mq_in_place_early) || !has_retiring_disposals || any_graph_pending ||
+		if (fallback_err != ERR_BUSY || !(is_closing_exit || mq_in_place_early || has_retiring_output_groups || live_window_retire) || !has_retiring_disposals || any_graph_pending ||
 				rd.native_disposal_active.load() || !rd.driver || rd.frames.is_empty() ||
 				rd.draw_list.active || rd.compute_list.active || rd.raytracing_list.active ||
-				rd.frame_wait_draining || rd.draw_graph.has_driver_callbacks()) {
+				rd.frame_wait_draining || rd.draw_graph.has_driver_callbacks() ||
+				(!is_closing_exit && !mq_in_place_early && !has_retiring_output_groups && !live_window_retire && rd.draw_graph.qualification_command_count())) {
 			return fallback_err;
 		}
 		for (uint32_t fi = 0; fi < rd.frames.size(); ++fi) {
@@ -1342,7 +1351,7 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 				return fallback_err;
 			}
 			for (const auto &rb : rd.frames[fi].download_buffer_get_data_requests) {
-				if (!rb.capture || rb.capture->registry != this) {
+				if (!rb.capture || rb.capture->registry != this || (rb.capture->request_serial == request.serial && !rd.frames[fi].fence_signaled)) {
 					return fallback_err;
 				}
 			}
@@ -1365,8 +1374,8 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 		rd._thread_safe_.unlock();
 		unlock_mutex_for_call();
 		Error drained = rd._production_mq_drain_owned_disposals_step(request, nullptr, 0, drain_budget, drain_usage);
-		if (drained == ERR_BUSY) {
-			const uint64_t settle_deadline = MIN(drain_budget.deadline_usec, OS::get_singleton()->get_ticks_usec() + 50000ull);
+		if (drained == ERR_BUSY && (is_closing_exit || mq_in_place_early)) {
+			const uint64_t settle_deadline = MIN(drain_budget.deadline_usec, OS::get_singleton()->get_ticks_usec() + 1500ull);
 			while (drained == ERR_BUSY && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
 				OS::get_singleton()->delay_usec(150);
 				RenderingDevice::NativeDisposalBudget retry_budget;
@@ -1437,6 +1446,9 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 		return false;
 	};
 	const bool resuming = rd.native_disposal_active && request.maintenance_serial == rd.native_disposal_continuation.serial;
+	if (has_retiring_output_groups && !resuming && !rd.screen_swap_chains.is_empty()) {
+		return drain_owned_on_close(ERR_BUSY);
+	}
 	const bool mq_in_place = production_request_is_pure_mq_in_place_locked(request);
 	if (mq_in_place) {
 		const uint32_t target_frame = resuming ? rd.native_disposal_continuation.target : rd.frame;
@@ -1459,6 +1471,9 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 		const uint32_t fresh_buffer_target = rd.qualification_frame_advance_pending ?
 				uint32_t(rd.frame) : (rd.frame + 1) % rd.frames.size();
 		for (uint32_t frame_index = 0; frame_index < rd.frames.size(); ++frame_index) {
+			if (resuming && frame_index != rd.native_disposal_continuation.target) {
+				continue;
+			}
 			const auto &frame = rd.frames[frame_index];
 			const Error foreign_frame = production_maintenance_foreign_frame_admission_locked(request, rd, frame_index, resuming, drain_trace);
 			if (foreign_frame != OK) {
@@ -1542,7 +1557,7 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	const bool starting = !rd.native_disposal_active;
 	Error error = rd._native_disposal_maintenance_step(service, actual, &request, nullptr, mq_in_place);
 	if (error == ERR_BUSY && rd.native_disposal_active) {
-		const uint64_t settle_deadline = MIN(service.deadline_usec, OS::get_singleton()->get_ticks_usec() + 50000ull);
+		const uint64_t settle_deadline = MIN(service.deadline_usec, OS::get_singleton()->get_ticks_usec() + 2000ull);
 		while (error == ERR_BUSY && rd.native_disposal_active && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
 			OS::get_singleton()->delay_usec(50);
 			RenderingDevice::NativeDisposalBudget retry_service;
@@ -1602,13 +1617,43 @@ bool Registry::has_natural_close_pending_work(const RenderingDevice *p_rd) {
 					break;
 				}
 			}
+			if (!pending) {
+				for (uint32_t i = 0; i < req.resource_count; ++i) {
+					if (req.resources[i].retiring && !req.resources[i].returned) {
+						pending = true;
+						break;
+					}
+				}
+			}
+			if (!pending && req.disposal_group_head != UINT32_MAX) {
+				for (uint32_t g = req.disposal_group_head; g != UINT32_MAX; g = req.uses[g].disposal_group_next) {
+					const auto &group = req.uses[g];
+					if (group.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && group.disposal_group_release) {
+						pending = true;
+						break;
+					}
+				}
+			}
 		}
 		if (pending) {
 			break;
 		}
 	}
-	if (!pending && has_closing_attachment && p_rd->draw_graph.qualification_command_count() > 0) {
-		pending = true;
+	if (!pending && has_closing_attachment) {
+		if (p_rd->draw_graph.qualification_command_count() > 0) {
+			pending = true;
+		} else {
+			for (uint32_t f = 0; f < p_rd->frames.size(); ++f) {
+				const auto &fr = p_rd->frames[f];
+				if (!fr.fence_signaled || !fr.buffers_to_dispose_of.is_empty() || !fr.uniform_sets_to_dispose_of.is_empty() ||
+						!fr.render_pipelines_to_dispose_of.is_empty() || !fr.compute_pipelines_to_dispose_of.is_empty() ||
+						!fr.shaders_to_dispose_of.is_empty() || !fr.textures_to_dispose_of.is_empty() ||
+						!fr.framebuffers_to_dispose_of.is_empty()) {
+					pending = true;
+					break;
+				}
+			}
+		}
 	}
 	mutex.unlock();
 	return pending;

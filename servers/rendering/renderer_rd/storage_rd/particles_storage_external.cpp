@@ -1441,6 +1441,7 @@ Error ParticlesStorage::particles_external_generated_surfaces_for_view(RID p_par
 	const Ref<RendererViewport::Viewport::CameraCapture> capture = p_render_data.get_native_camera_source();
 	uint32_t slot = UINT32_MAX;
 	Error selected = owner.find_generated_slot_for_capture(capture, slot);
+	bool replayed_across_capture = false;
 	const bool can_replay_adopted = p_allow_adopted_replay &&
 			!(p_defer_transparent_replay && (owner.config.pass_mask & ExternalOutputConfig::PASS_TRANSPARENT) != 0);
 	if (selected == ERR_UNAVAILABLE && can_replay_adopted && capture.is_valid() &&
@@ -1450,7 +1451,8 @@ Error ParticlesStorage::particles_external_generated_surfaces_for_view(RID p_par
 		uint64_t best_present_seq = 0;
 		for (uint32_t s = 0; s < owner.slot_count; ++s) {
 			const auto &cand_slot = owner.slots[s];
-			if (cand_slot.state != ExternalOutputOwner::LeaseState::ADOPTED ||
+			if ((cand_slot.state != ExternalOutputOwner::LeaseState::SEALED_RECORDED &&
+						cand_slot.state != ExternalOutputOwner::LeaseState::ADOPTED) ||
 					cand_slot.publication_closed || cand_slot.pass_uses_closed ||
 					cand_slot.generated_indexed_mesh.is_null() || !cand_slot.storage ||
 					!cand_slot.scene_cull_bound || !cand_slot.guard_resources_ready) {
@@ -1471,30 +1473,33 @@ Error ParticlesStorage::particles_external_generated_surfaces_for_view(RID p_par
 					!cand_slot.original_registry->production_output_pin_matches(cand_slot.original_pin, cand_slot.original_request, *rd)) {
 				continue;
 			}
-			bool has_ready_row = false;
-			for (uint32_t r = 0; r < owner.preparation_capacity; ++r) {
-				const auto &row = owner.preparation_rows[r];
-				if (row.owner == &owner && row.owner_slot == s &&
-						row.tuple_state == ExternalPipelinePreparation::TupleState::READY &&
-						row.finish_complete && row.finish_error == OK && row.backend_error == OK && row.pipeline_sealed) {
-					has_ready_row = true;
-					break;
+			if (cand_slot.state == ExternalOutputOwner::LeaseState::ADOPTED) {
+				bool has_ready_row = false;
+				for (uint32_t r = 0; r < owner.preparation_capacity; ++r) {
+					const auto &row = owner.preparation_rows[r];
+					if (row.owner == &owner && row.owner_slot == s &&
+							row.tuple_state == ExternalPipelinePreparation::TupleState::READY &&
+							row.finish_complete && row.finish_error == OK && row.backend_error == OK && row.pipeline_sealed) {
+						has_ready_row = true;
+						break;
+					}
 				}
-			}
-			if (!has_ready_row) {
-				continue;
+				if (!has_ready_row) {
+					continue;
+				}
 			}
 			if (slot == UINT32_MAX || cand_slot.request.common.present_seq >= best_present_seq) {
 				slot = s;
 				best_present_seq = cand_slot.request.common.present_seq;
 				selected = OK;
+				replayed_across_capture = true;
 			}
 		}
 	}
 	if (selected != OK) {
 		return selected;
 	}
-	const Error scene = owner.validate_scene_cull(slot);
+	const Error scene = owner.validate_scene_cull(slot, replayed_across_capture);
 	if (scene != OK) {
 		return scene;
 	}
@@ -2226,6 +2231,7 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_v1(const GDExtensi
 					}
 					const RID created = rd->uniform_set_create(plan.uniforms, shader, 0);
 					if (created.is_null()) {
+						const Error create_err = rd->get_last_uniform_set_create_error() == ERR_BUSY ? ERR_BUSY : ERR_CANT_CREATE;
 						for (uint32_t j = 0; j < i; ++j) {
 							const Guard::Mode prev_mode = active_modes[j];
 							if (slot.fast_refresh_guard_sets[bank][prev_mode].is_valid()) {
@@ -2233,7 +2239,7 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_v1(const GDExtensi
 								slot.fast_refresh_guard_sets[bank][prev_mode] = RID();
 							}
 						}
-						return int32_t(ERR_CANT_CREATE);
+						return int32_t(create_err);
 					}
 					slot.fast_refresh_guard_sets[bank][mode] = created;
 				}
@@ -2448,6 +2454,7 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_v1(const GDExtensi
 					}
 					const RID created = rd->uniform_set_create(plan.uniforms, shader, 0);
 					if (created.is_null()) {
+						const Error create_err = rd->get_last_uniform_set_create_error() == ERR_BUSY ? ERR_BUSY : ERR_CANT_CREATE;
 						for (uint32_t j = 0; j < i; ++j) {
 							const Guard::Mode prev_mode = active_modes[j];
 							if (slot.fast_refresh_guard_sets[bank][prev_mode].is_valid()) {
@@ -2455,7 +2462,7 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_v1(const GDExtensi
 								slot.fast_refresh_guard_sets[bank][prev_mode] = RID();
 							}
 						}
-						return int32_t(ERR_CANT_CREATE);
+						return int32_t(create_err);
 					}
 					slot.fast_refresh_guard_sets[bank][mode] = created;
 				}
@@ -3089,7 +3096,7 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 						} else {
 							const RID created = rd->uniform_set_create(plan.uniforms, shader, 0);
 							if (created.is_null()) {
-								create_err = ERR_CANT_CREATE;
+								create_err = rd->get_last_uniform_set_create_error() == ERR_BUSY ? ERR_BUSY : ERR_CANT_CREATE;
 							} else {
 								slot.fast_refresh_guard_sets[bank][mode] = created;
 							}
@@ -3312,7 +3319,7 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 						} else {
 							const RID created = rd->uniform_set_create(plan.uniforms, shader, 0);
 							if (created.is_null()) {
-								create_err = ERR_CANT_CREATE;
+								create_err = rd->get_last_uniform_set_create_error() == ERR_BUSY ? ERR_BUSY : ERR_CANT_CREATE;
 							} else {
 								slot.fast_refresh_guard_sets[bank][mode] = created;
 							}

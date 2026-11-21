@@ -4113,7 +4113,8 @@ void Compiler::analyze_variable_scope(SPIRFunction &entry, AnalyzeVariableScopeA
 			if (!variable.phi_variable)
 			{
 				auto *block = &get<SPIRBlock>(dominating_block);
-				bool preserve = may_read_undefined_variable_in_block(*block, var.first);
+				bool preserve = block->loop_dominator != BlockID(SPIRBlock::NoDominator) &&
+				                may_read_undefined_variable_in_block(*block, var.first);
 				if (preserve)
 				{
 					// Find the outermost loop scope.

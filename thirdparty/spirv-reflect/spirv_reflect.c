@@ -232,6 +232,10 @@ typedef struct SpvReflectPrvParser {
 
   SpvReflectPrvPhysicalPointerStruct* physical_pointer_structs;
   uint32_t                            physical_pointer_struct_count;
+
+  uint32_t                            id_bound;
+  uint32_t*                           id_to_node;
+  uint32_t*                           id_to_access_chain;
 } SpvReflectPrvParser;
 // clang-format on
 
@@ -511,6 +515,10 @@ static bool IsSpecConstant(const SpvReflectPrvNode* p_node) {
 }
 
 static SpvReflectPrvNode* FindNode(SpvReflectPrvParser* p_parser, uint32_t result_id) {
+  if (result_id != 0 && IsNotNull(p_parser->id_to_node) && result_id < p_parser->id_bound) {
+    uint32_t idx = p_parser->id_to_node[result_id];
+    return (idx != (uint32_t)INVALID_VALUE) ? &(p_parser->nodes[idx]) : NULL;
+  }
   SpvReflectPrvNode* p_node = NULL;
   for (size_t i = 0; i < p_parser->node_count; ++i) {
     SpvReflectPrvNode* p_elem = &(p_parser->nodes[i]);
@@ -535,6 +543,10 @@ static SpvReflectTypeDescription* FindType(SpvReflectShaderModule* p_module, uin
 }
 
 static SpvReflectPrvAccessChain* FindAccessChain(SpvReflectPrvParser* p_parser, uint32_t id) {
+  if (id != 0 && IsNotNull(p_parser->id_to_access_chain) && id < p_parser->id_bound) {
+    uint32_t idx = p_parser->id_to_access_chain[id];
+    return (idx != (uint32_t)INVALID_VALUE) ? &p_parser->access_chains[idx] : 0;
+  }
   const uint32_t ac_count = p_parser->access_chain_count;
   for (uint32_t i = 0; i < ac_count; i++) {
     if (p_parser->access_chains[i].result_id == id) {
@@ -668,6 +680,9 @@ static void DestroyParser(SpvReflectPrvParser* p_parser) {
     if (IsNotNull(p_parser->physical_pointer_structs)) {
       SafeFree(p_parser->physical_pointer_structs);
     }
+    SafeFree(p_parser->id_to_node);
+    SafeFree(p_parser->id_to_access_chain);
+    p_parser->id_bound = 0;
     p_parser->node_count = 0;
   }
 }
@@ -730,6 +745,24 @@ static SpvReflectResult ParseNodes(SpvReflectPrvParser* p_parser) {
     p_parser->access_chains = (SpvReflectPrvAccessChain*)calloc(p_parser->access_chain_count, sizeof(*(p_parser->access_chains)));
     if (IsNull(p_parser->access_chains)) {
       return SPV_REFLECT_RESULT_ERROR_ALLOC_FAILED;
+    }
+  }
+
+  // O(1) SPIR-V <id> lookup tables bounded by header[3] (SPIR-V Bound)
+  {
+    uint32_t id_bound = (p_parser->spirv_word_count > 3) ? p_spirv[3] : 0;
+    if (id_bound > 0 && id_bound <= 16777216u) {
+      p_parser->id_to_node = (uint32_t*)malloc((size_t)id_bound * sizeof(uint32_t));
+      if (IsNotNull(p_parser->id_to_node)) {
+        memset(p_parser->id_to_node, 0xFF, (size_t)id_bound * sizeof(uint32_t));
+        p_parser->id_bound = id_bound;
+      }
+      if (p_parser->access_chain_count > 0 && p_parser->id_bound > 0) {
+        p_parser->id_to_access_chain = (uint32_t*)malloc((size_t)id_bound * sizeof(uint32_t));
+        if (IsNotNull(p_parser->id_to_access_chain)) {
+          memset(p_parser->id_to_access_chain, 0xFF, (size_t)id_bound * sizeof(uint32_t));
+        }
+      }
     }
   }
 
@@ -891,6 +924,9 @@ static SpvReflectResult ParseNodes(SpvReflectPrvParser* p_parser) {
         SpvReflectPrvNode* p_fwd_node = FindNode(p_parser, result_id);
         if (p_fwd_node) {
           p_fwd_node->result_id = 0;
+          if (IsNotNull(p_parser->id_to_node) && result_id < p_parser->id_bound) {
+            p_parser->id_to_node[result_id] = (uint32_t)INVALID_VALUE;
+          }
         }
         // Register pointer type
         p_node->result_id = result_id;
@@ -970,6 +1006,11 @@ static SpvReflectResult ParseNodes(SpvReflectPrvParser* p_parser) {
             }
           }
         }
+        if (IsNotNull(p_parser->id_to_access_chain) && p_access_chain->result_id != 0 &&
+            p_access_chain->result_id < p_parser->id_bound &&
+            p_parser->id_to_access_chain[p_access_chain->result_id] == (uint32_t)INVALID_VALUE) {
+          p_parser->id_to_access_chain[p_access_chain->result_id] = access_chain_index;
+        }
         ++access_chain_index;
       } break;
 
@@ -986,6 +1027,11 @@ static SpvReflectResult ParseNodes(SpvReflectPrvParser* p_parser) {
         if (function_node != (uint32_t)INVALID_VALUE) {
           SpvReflectPrvNode* p_func_node = &(p_parser->nodes[function_node]);
           CHECKED_READU32(p_parser, p_func_node->word_offset + 2, p_func_node->result_id);
+          if (IsNotNull(p_parser->id_to_node) && p_func_node->result_id != 0 &&
+              p_func_node->result_id < p_parser->id_bound &&
+              p_parser->id_to_node[p_func_node->result_id] == (uint32_t)INVALID_VALUE) {
+            p_parser->id_to_node[p_func_node->result_id] = function_node;
+          }
           ++(p_parser->function_count);
         }
         FALLTHROUGH;
@@ -1006,6 +1052,12 @@ static SpvReflectResult ParseNodes(SpvReflectPrvParser* p_parser) {
       case SpvOpSDiv: {
         CHECKED_READU32(p_parser, p_node->word_offset + 2, p_node->result_id);
       } break;
+    }
+
+    if (IsNotNull(p_parser->id_to_node) && p_node->result_id != 0 &&
+        p_node->result_id < p_parser->id_bound &&
+        p_parser->id_to_node[p_node->result_id] == (uint32_t)INVALID_VALUE) {
+      p_parser->id_to_node[p_node->result_id] = node_index;
     }
 
     if (p_node->is_type) {

@@ -1086,6 +1086,17 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		slot.generated_indexed_mesh = RID();
 		return OK;
 	}
+	if (slot.generated_index_array.is_valid()) {
+		if (!owner.device) {
+			return trace_failure(6, "surface.L1005", ERR_UNCONFIGURED);
+		}
+		if (!spend()) {
+			return trace_failure(6, "surface.L1008", ERR_BUSY);
+		}
+		owner.device->free_rid(slot.generated_index_array);
+		slot.generated_index_array = RID();
+		return OK;
+	}
 	if (slot.guard_owned_group) {
 		if (slot.original_pin.is_empty()) {
 			return trace_failure(7, "guard_SET.L1008", ERR_INVALID_DATA);

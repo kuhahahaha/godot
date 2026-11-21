@@ -634,7 +634,7 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 		return observed;
 	}
 	if (request.native_count > request.capacity.native_memberships || memberships > request.capacity.native_memberships - request.native_count) {
-		observed.error = ERR_PARAMETER_RANGE_ERROR;
+		observed.error = (!rd.screen_swap_chains.is_empty() && request.native_count <= request.capacity.native_memberships) ? ERR_BUSY : ERR_PARAMETER_RANGE_ERROR;
 		return observed;
 	}
 	auto &action = request.actions[index];

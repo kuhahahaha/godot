@@ -116,12 +116,14 @@ Error RenderingDevice::_production_output_retire_service(GDExtensionDeviceExit::
 			return ERR_BUSY;
 		}
 		bool covered = true;
-		for (uint32_t command = 0; command < draw_graph.qualification_command_count(); ++command) {
-			bool captured = false;
-			for (uint32_t i = 0; i < request.graph_count; ++i) {
-				captured |= registry.production_output_graph_command_locked(request, *this, i, command);
+		if (screen_swap_chains.is_empty()) {
+			for (uint32_t command = 0; command < draw_graph.qualification_command_count(); ++command) {
+				bool captured = false;
+				for (uint32_t i = 0; i < request.graph_count; ++i) {
+					captured |= registry.production_output_graph_command_locked(request, *this, i, command);
+				}
+				covered &= captured;
 			}
-			covered &= captured;
 		}
 		if (!covered || allowance_spent()) {
 			_thread_safe_.unlock();

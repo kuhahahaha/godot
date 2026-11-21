@@ -270,7 +270,7 @@ Error ParticlesStorage::particles_external_view_acquire(const ExternalSurfaceSel
 		}
 	}
 	if (owner.config.profile == ExternalOutputConfig::INDEXED_144 && surface_cell.slot < owner.slot_count &&
-			owner.slots[surface_cell.slot].generated_indexed_mesh.is_valid()) {
+			owner.slots[surface_cell.slot].generated_indexed_mesh.is_valid() && selected != UINT32_MAX) {
 		if (selected != surface_cell.slot) {
 			return trace_failure(ERR_UNAUTHORIZED, 6); // The original slot Surface cannot follow a different live view.
 		}

@@ -2163,6 +2163,7 @@ private:
 
 	RID _qualification_uniform_set_create(const VectorView<Uniform> &, RID, uint32_t, GDExtensionDeviceExit::QualificationPhysicalReturn *, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> &);
 	RID _uniform_set_create_qualification(const VectorView<Uniform> &, RID, uint32_t, bool, GDExtensionDeviceExit::QualificationPhysicalReturn *, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> *, const NativeDisposalWitness *p_native_disposal = nullptr, const GDExtensionDeviceExit::ProductionRequest *p_production = nullptr, const VectorView<ProductionOutputUniformSource> *p_sources = nullptr);
+	Error last_uniform_set_create_error = OK;
 	Error _qualification_texture_upload(RID, const uint8_t *, uint32_t, QualificationUploadProgress &);
 	RID_Owner<UniformSet, true> uniform_set_owner;
 
@@ -2171,6 +2172,7 @@ private:
 	Error _uniform_set_admit_clear_transfers(UniformSet *p_set);
 
 public:
+	Error get_last_uniform_set_create_error() const { return last_uniform_set_create_error; }
 	/** Bake a set of uniforms that can be bound at runtime with the given shader.
 	 * @remark				Setting p_linear_pool = true while keeping the RID around for longer than the current frame will result in undefined behavior.
 	 * @param p_uniforms	The uniforms to bake into a set.

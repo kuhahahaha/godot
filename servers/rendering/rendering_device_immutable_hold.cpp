@@ -780,13 +780,15 @@ Error RenderingDevice::_production_output_directory_return(GDExtensionDeviceExit
 			return ERR_BUSY;
 		}
 		MutexScopeUnlock<Mutex> unlock(_thread_safe_);
-		for (uint32_t command = 0; command < draw_graph.qualification_command_count(); ++command) {
-			bool captured = false;
-			for (uint32_t i = 0; i < request.graph_count; ++i) {
-				captured |= registry.production_output_graph_command_locked(request, *this, i, command);
-			}
-			if (!captured) {
-				return ERR_BUSY;
+		if (screen_swap_chains.is_empty()) {
+			for (uint32_t command = 0; command < draw_graph.qualification_command_count(); ++command) {
+				bool captured = false;
+				for (uint32_t i = 0; i < request.graph_count; ++i) {
+					captured |= registry.production_output_graph_command_locked(request, *this, i, command);
+				}
+				if (!captured) {
+					return ERR_BUSY;
+				}
 			}
 		}
 		if (OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) {
@@ -1991,7 +1993,19 @@ Error RenderingDevice::_production_output_drop_step(GDExtensionDeviceExit::Produ
 		}
 		bool owned_in_request = false;
 		for (auto *related = *head; related; related = related->next) {
-			owned_in_request |= related->request == &request && related->request_serial == request.serial && related->owned && related->state.load(std::memory_order_acquire) == 1;
+			if (related->request == &request && related->request_serial == request.serial && related->owned && related->state.load(std::memory_order_acquire) == 1) {
+				bool related_releasing = (related->group == node.group);
+				if (!related_releasing) {
+					for (uint32_t g = request.disposal_group_head; g != UINT32_MAX; g = request.uses[g].disposal_group_next) {
+						const auto &rg = request.uses[g];
+						if (rg.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && rg.disposal_group_serial == related->group) {
+							related_releasing = rg.disposal_group_release;
+							break;
+						}
+					}
+				}
+				owned_in_request |= related_releasing;
+			}
 		}
 		if (!*retiring && !node.owned && owned_in_request && !node.qualified_borrow) {
 			continue;
