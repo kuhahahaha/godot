@@ -80,7 +80,7 @@ Error RenderingDevice::_production_output_retire_service(GDExtensionDeviceExit::
 		return OK;
 	}
 	ProductionUseCell *group = nullptr;
-	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+	for (uint32_t i = request.disposal_group_head; i != UINT32_MAX; i = request.uses[i].disposal_group_next) {
 		auto &cell = request.uses[i];
 		if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP &&
 				cell.disposal_group_serial == serial && cell.disposal_group_pin_serial == pin.serial) {
@@ -94,7 +94,8 @@ Error RenderingDevice::_production_output_retire_service(GDExtensionDeviceExit::
 	const uint32_t group_cell_index = uint32_t(group - request.uses);
 	// Source closure excludes future factories. Return one original unbound
 	// reservation per pass; bound physical members remain exact obligations.
-	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+	const uint32_t end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
+	for (uint32_t i = request.use_count + request.binding_used; i < end; ++i) {
 		auto &cell = request.uses[i];
 		if (cell.disposal_group_serial == serial && cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED) {
 			if (allowance_spent()) {

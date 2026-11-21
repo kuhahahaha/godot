@@ -158,7 +158,7 @@ bool RenderingDevice::_production_output_pass_observer_locked(RID rid, const GDE
 	if (!original_member || begin > request.capacity.resource_uses || !request.uses) {
 		return false;
 	}
-	for (uint64_t i = begin; i < request.capacity.resource_uses; ++i) {
+	for (uint32_t i = request.disposal_group_head; i != UINT32_MAX; i = request.uses[i].disposal_group_next) {
 		const auto &cell = request.uses[i];
 		if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_serial == group &&
 				cell.disposal_group_pin_serial == pin && cell.disposal_group_count == 1 &&
@@ -650,12 +650,14 @@ Error RenderingDevice::_production_output_directory_bind_adopted_locked(GDExtens
 	}
 	const auto &request = *pin.request;
 	const uint32_t begin = request.use_count + request.binding_used;
+	const uint32_t end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
 	bool captured = false;
-	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+	for (uint32_t i = request.disposal_group_head; i != UINT32_MAX; i = request.uses[i].disposal_group_next) {
 		const auto &cell = request.uses[i];
 		if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_serial == serial && cell.disposal_group_pin_serial == pin.serial &&
 				cell.disposal_group_native_hold && !cell.disposal_group_release && !cell.disposal_group_dropped) {
 			captured = true;
+			break;
 		}
 	}
 	if (!captured) {
@@ -664,11 +666,14 @@ Error RenderingDevice::_production_output_directory_bind_adopted_locked(GDExtens
 	for (uint32_t root_index = 0; root_index < roots.size(); ++root_index) {
 		const RID root = roots[root_index];
 		bool found = false;
-		for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+		for (uint32_t i = begin; i < end; ++i) {
 			const auto &cell = request.uses[i];
-			found |= cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && cell.disposal_group_serial == serial &&
+			if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && cell.disposal_group_serial == serial &&
 					cell.disposal.request == &request && cell.disposal.request_serial == request.serial && cell.disposal.rid == root.get_id() &&
-					cell.disposal.state.load(std::memory_order_acquire) == 1 && !cell.disposal.counter_dropped;
+					cell.disposal.state.load(std::memory_order_acquire) == 1 && !cell.disposal.counter_dropped) {
+				found = true;
+				break;
+			}
 		}
 		if (!found) {
 			return ERR_INVALID_DATA;
@@ -746,9 +751,8 @@ Error RenderingDevice::_production_output_directory_return(GDExtensionDeviceExit
 	if (!budget.controls || !budget.passes || !budget.receipts || usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u) || !budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros || request.source_device_lost) {
 		return ERR_BUSY;
 	}
-	const uint32_t begin = request.use_count + request.binding_used;
 	ProductionUseCell *group = nullptr;
-	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+	for (uint32_t i = request.disposal_group_head; i != UINT32_MAX; i = request.uses[i].disposal_group_next) {
 		auto &cell = request.uses[i];
 		if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_serial == binding.group_serial && cell.disposal_group_pin_serial == pin.serial) {
 			group = &cell;
@@ -848,12 +852,12 @@ Error RenderingDevice::_production_output_directory_mark_root(GDExtensionDeviceE
 	if (native_disposal_budget || native_disposal_active || draw_list.active || compute_list.active || raytracing_list.active) {
 		return ERR_BUSY;
 	}
-	const uint32_t begin = request.use_count + request.binding_used;
 	bool original_group = false;
-	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+	for (uint32_t i = request.disposal_group_head; i != UINT32_MAX; i = request.uses[i].disposal_group_next) {
 		const auto &cell = request.uses[i];
 		if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_serial == binding.group_serial && cell.disposal_group_pin_serial == pin.serial && !cell.disposal_group_release && !cell.disposal_group_dropped) {
 			original_group = true;
+			break;
 		}
 	}
 	if (!original_group) {
@@ -1142,7 +1146,8 @@ Error RenderingDevice::_native_prospective_closure_keys_locked(const VectorView<
 
 void RenderingDevice::_production_output_hold_inventory_clear_locked(GDExtensionDeviceExit::ProductionRequest &request, uint64_t reserved_group) {
 	using namespace GDExtensionDeviceExit;
-	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+	const uint32_t end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
+	for (uint32_t i = request.use_count + request.binding_used; i < end; ++i) {
 		auto &cell = request.uses[i];
 		if (cell.output_role != ProductionUseCell::OutputRole::DISPOSAL_STAGED || cell.disposal_group_serial != reserved_group) {
 			continue;
@@ -1420,7 +1425,8 @@ Error RenderingDevice::_production_output_owned_destination_locked(GDExtensionDe
 	}
 	// Same destination rule as the original owned factory. The caller must
 	// separately authenticate its pin/group and validate prepaid group layout.
-	for (uint32_t i = uint32_t(begin); i < request.capacity.resource_uses; ++i) {
+	const uint32_t end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
+	for (uint32_t i = uint32_t(begin); i < end; ++i) {
 		auto &cell = request.uses[i];
 		if (cell.disposal_group_serial == group && cell.disposal_ordinal == ordinal && cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED) {
 			destination = &cell;
@@ -1440,8 +1446,9 @@ Error RenderingDevice::_production_output_hold_reservation_locked(GDExtensionDev
 	// A prospective caller must never accept an arena carrying another dry
 	// inventory. Adopt preserves its historical own-reservation error order;
 	// its actual stage call performs this same global check before mutation.
+	const uint32_t end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
 	if (require_unstaged) {
-		for (uint32_t i = uint32_t(wide_begin); i < request.capacity.resource_uses; ++i) {
+		for (uint32_t i = uint32_t(wide_begin); i < end; ++i) {
 			if (request.uses[i].output_role == ProductionUseCell::OutputRole::DISPOSAL_STAGED) {
 				return ERR_BUSY;
 			}
@@ -1452,7 +1459,7 @@ Error RenderingDevice::_production_output_hold_reservation_locked(GDExtensionDev
 	}
 	uint32_t found = UINT32_MAX;
 	uint32_t cells = 0;
-	for (uint32_t i = uint32_t(wide_begin); i < request.capacity.resource_uses; ++i) {
+	for (uint32_t i = uint32_t(wide_begin); i < end; ++i) {
 		const auto &cell = request.uses[i];
 		if (cell.disposal_group_serial != reserved_group) {
 			continue;
@@ -1514,7 +1521,8 @@ Error RenderingDevice::_production_output_hold_stage_locked(GDExtensionDeviceExi
 		return ERR_INVALID_DATA;
 	}
 	const uint32_t begin = uint32_t(wide_begin);
-	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+	const uint32_t end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
+	for (uint32_t i = begin; i < end; ++i) {
 		if (request.uses[i].output_role == ProductionUseCell::OutputRole::DISPOSAL_STAGED) {
 			return ERR_BUSY;
 		}
@@ -1530,7 +1538,8 @@ Error RenderingDevice::_production_output_hold_stage_locked(GDExtensionDeviceExi
 	uint32_t count = 0, ordinary = 0;
 	auto rollback = [&]() { _production_output_hold_inventory_clear_locked(request, reserved_group); };
 	auto stage = [&](RID rid, uint32_t pins) -> Error {
-		for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+		const uint32_t staged_end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
+		for (uint32_t i = begin; i < staged_end; ++i) {
 			auto &c = request.uses[i];
 			if (c.output_role == ProductionUseCell::OutputRole::DISPOSAL_STAGED && c.disposal_group_serial == reserved_group && c.disposal.rid == rid.get_id()) {
 				const auto *counter = _native_immutable_counter(rid);
@@ -1551,7 +1560,8 @@ Error RenderingDevice::_production_output_hold_stage_locked(GDExtensionDeviceExi
 		if (count == limit || (material_budget && ordinary_cell && ordinary == material_budget->ordinary_limit)) {
 			return ERR_OUT_OF_MEMORY;
 		}
-		for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+		const uint32_t search_end = reserved_group ? staged_end : request.capacity.resource_uses;
+		for (uint32_t i = begin; i < search_end; ++i) {
 			auto &c = request.uses[i];
 			const bool eligible = reserved_group ? c.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED && c.disposal_group_serial == reserved_group : c.output_role == ProductionUseCell::OutputRole::UNUSED && !c.disposal_group_serial && !c.output_consumer && !c.dependency.physical;
 			if (eligible) {
@@ -1586,7 +1596,8 @@ Error RenderingDevice::_production_output_hold_stage_locked(GDExtensionDeviceExi
 	uint32_t previous = UINT32_MAX;
 	while (previous != count) {
 		previous = count;
-		for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+		const uint32_t pass_end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
+		for (uint32_t i = begin; i < pass_end; ++i) {
 			auto &cell = request.uses[i];
 			if (cell.output_role != ProductionUseCell::OutputRole::DISPOSAL_STAGED || cell.disposal_group_serial != reserved_group) {
 				continue;
@@ -1642,7 +1653,8 @@ Error RenderingDevice::_production_output_hold_adopt_locked(GDExtensionDeviceExi
 		request.next_disposal_group_serial = serial == UINT64_MAX ? 0 : serial + 1;
 	}
 	const uint32_t group_cell_index = uint32_t(group - request.uses);
-	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+	const uint32_t end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
+	for (uint32_t i = begin; i < end; ++i) {
 		auto &c = request.uses[i];
 		if (c.output_role == ProductionUseCell::OutputRole::DISPOSAL_STAGED && c.disposal_group_serial == reserved_group) {
 			auto &n = c.disposal;
@@ -1719,7 +1731,7 @@ Error RenderingDevice::_production_output_hold_begin_return(GDExtensionDeviceExi
 			return ERR_BUSY;
 		}
 	}
-	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+	for (uint32_t i = request.disposal_group_head; i != UINT32_MAX; i = request.uses[i].disposal_group_next) {
 		auto &cell = request.uses[i];
 		if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_serial == serial && cell.disposal_group_pin_serial == pin.serial) {
 			cell.disposal_group_release = true;
@@ -1752,15 +1764,24 @@ Error RenderingDevice::_production_output_hold_returned_locked(GDExtensionDevice
 		return ERR_BUSY;
 	}
 	bool found = false;
-	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+	for (uint32_t g = request.disposal_group_head; g != UINT32_MAX; g = request.uses[g].disposal_group_next) {
+		const auto &cell = request.uses[g];
+		if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_serial == serial) {
+			found = cell.disposal_group_pin_serial == pin.serial;
+			observation.dropped = found && cell.disposal_group_dropped;
+			break;
+		}
+	}
+	if (!found) {
+		return ERR_DOES_NOT_EXIST;
+	}
+	const uint32_t end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
+	for (uint32_t i = request.use_count + request.binding_used; i < end; ++i) {
 		const auto &cell = request.uses[i];
 		if (cell.disposal_group_serial != serial) {
 			continue;
 		}
-		if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP) {
-			found = cell.disposal_group_pin_serial == pin.serial;
-			observation.dropped = found && cell.disposal_group_dropped;
-		} else if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER) {
+		if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER) {
 			switch (cell.disposal.state.load(std::memory_order_acquire)) {
 				case 1:
 					++observation.held;
@@ -1810,17 +1831,48 @@ Error RenderingDevice::_production_output_drop_step(GDExtensionDeviceExit::Produ
 	}
 	// Callback replacement is legal for the original RD owner. Admission must
 	// use its current callback at each turn, not a stale capture-time proof.
+	const uint32_t end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
 	{
 		MutexLock lock(_thread_safe_);
 		const uint32_t begin = request.use_count + request.binding_used;
-		for (uint32_t g = begin; g < request.capacity.resource_uses; ++g) {
+		uint64_t released_groups[64];
+		uint32_t released_count = 0;
+		bool released_overflow = false;
+		for (uint32_t g = request.disposal_group_head; g != UINT32_MAX; g = request.uses[g].disposal_group_next) {
 			const auto &group = request.uses[g];
 			if (group.output_role != ProductionUseCell::OutputRole::DISPOSAL_GROUP || !group.disposal_group_release) {
 				continue;
 			}
-			for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+			if (released_count < 64) {
+				released_groups[released_count++] = group.disposal_group_serial;
+			} else {
+				released_overflow = true;
+			}
+		}
+		if (released_count > 0) {
+			auto is_released_group = [&](uint64_t serial) {
+				if (!serial) {
+					return false;
+				}
+				for (uint32_t k = 0; k < released_count; ++k) {
+					if (released_groups[k] == serial) {
+						return true;
+					}
+				}
+				if (!released_overflow) {
+					return false;
+				}
+				for (uint32_t g = request.disposal_group_head; g != UINT32_MAX; g = request.uses[g].disposal_group_next) {
+					const auto &group = request.uses[g];
+					if (group.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && group.disposal_group_release && group.disposal_group_serial == serial) {
+						return true;
+					}
+				}
+				return false;
+			};
+			for (uint32_t i = begin; i < end; ++i) {
 				const auto &cell = request.uses[i];
-				if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && cell.disposal.group == group.disposal_group_serial && cell.disposal.state.load(std::memory_order_acquire) == 1) {
+				if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && is_released_group(cell.disposal.group) && cell.disposal.state.load(std::memory_order_acquire) == 1) {
 					const RID rid = RID::from_uint64(cell.disposal.rid);
 					if (!_production_output_callback_supported(rid) && !_production_output_cache_observer_callback_supported_locked(rid, request, &cell.disposal)) {
 						return ERR_UNAVAILABLE;
@@ -1844,13 +1896,13 @@ Error RenderingDevice::_production_output_drop_step(GDExtensionDeviceExit::Produ
 	native_disposal_budget = &budget;
 	native_disposal_usage = &usage;
 	const uint32_t begin = request.use_count + request.binding_used;
-	for (uint32_t g = begin; g < request.capacity.resource_uses; ++g) {
+	for (uint32_t g = request.disposal_group_head; g != UINT32_MAX; g = request.uses[g].disposal_group_next) {
 		auto &group = request.uses[g];
 		if (group.output_role != ProductionUseCell::OutputRole::DISPOSAL_GROUP || !group.disposal_group_release || group.disposal_group_dropped) {
 			continue;
 		}
 		bool all_dropped = true;
-		for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+		for (uint32_t i = begin; i < end; ++i) {
 			auto &cell = request.uses[i];
 			auto &node = cell.disposal;
 			if (cell.output_role != ProductionUseCell::OutputRole::DISPOSAL_MEMBER || node.group != group.disposal_group_serial || node.counter_dropped) {
@@ -1882,7 +1934,7 @@ Error RenderingDevice::_production_output_drop_step(GDExtensionDeviceExit::Produ
 			}
 			node.counter_dropped = true;
 		}
-		for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+		for (uint32_t i = begin; i < end; ++i) {
 			const auto &cell = request.uses[i];
 			if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && cell.disposal.group == group.disposal_group_serial) {
 				all_dropped &= cell.disposal.counter_dropped;
@@ -1898,7 +1950,7 @@ Error RenderingDevice::_production_output_drop_step(GDExtensionDeviceExit::Produ
 			group.disposal_group_dropped = true;
 		}
 	}
-	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+	for (uint32_t i = begin; i < end; ++i) {
 		auto &cell = request.uses[i];
 		auto &node = cell.disposal;
 		if (cell.output_role != ProductionUseCell::OutputRole::DISPOSAL_MEMBER || !node.counter_dropped || node.state.load(std::memory_order_acquire) != 1) {
@@ -1911,10 +1963,12 @@ Error RenderingDevice::_production_output_drop_step(GDExtensionDeviceExit::Produ
 				released = group.disposal_group_release && group.disposal_group_dropped;
 			}
 		} else if (node.group_cell_index == UINT32_MAX) {
-			for (uint32_t g = begin; g < request.capacity.resource_uses; ++g) {
+			for (uint32_t g = request.disposal_group_head; g != UINT32_MAX; g = request.uses[g].disposal_group_next) {
 				const auto &group = request.uses[g];
 				if (group.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && group.disposal_group_serial == node.group) {
+					node.group_cell_index = g;
 					released = group.disposal_group_release && group.disposal_group_dropped;
+					break;
 				}
 			}
 		}
@@ -2096,8 +2150,9 @@ Error RenderingDevice::_production_output_owned_rollback(GDExtensionProductionPh
 		return ERR_BUSY;
 	}
 	const uint32_t begin = request->use_count + request->binding_used;
+	const uint32_t end = MIN(request->disposal_use_high_water, request->capacity.resource_uses);
 	uint32_t groups = 0, members = 0, expected = 0;
-	for (uint32_t i = begin; i < request->capacity.resource_uses; ++i) {
+	for (uint32_t i = begin; i < end; ++i) {
 		const auto &cell = request->uses[i];
 		if (cell.disposal_group_serial != serial) {
 			continue;
@@ -2127,7 +2182,7 @@ Error RenderingDevice::_production_output_owned_rollback(GDExtensionProductionPh
 	}
 	// All checks precede mutation. Only unused metadata rows return to capacity;
 	// the consumed group serial is never rewound or reused.
-	for (uint32_t i = begin; i < request->capacity.resource_uses; ++i) {
+	for (uint32_t i = begin; i < end; ++i) {
 		auto &cell = request->uses[i];
 		if (cell.disposal_group_serial != serial) {
 			continue;
@@ -2169,10 +2224,11 @@ Error RenderingDevice::_production_output_owned_bind(GDExtensionProductionPhysic
 Error RenderingDevice::_production_output_owned_bind_locked(GDExtensionDeviceExit::ProductionRequest &request, uint64_t pin_serial, uint64_t serial, uint32_t ordinal, const NativeDisposalWitness &witness) {
 	using namespace GDExtensionDeviceExit;
 	uint32_t group_cell_index = UINT32_MAX;
-	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+	for (uint32_t i = request.disposal_group_head; i != UINT32_MAX; i = request.uses[i].disposal_group_next) {
 		const auto &g = request.uses[i];
 		if (g.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && g.disposal_group_serial == serial && g.disposal_group_pin_serial == pin_serial) {
 			group_cell_index = i;
+			break;
 		}
 	}
 	if (group_cell_index == UINT32_MAX) {
@@ -2199,7 +2255,8 @@ Error RenderingDevice::_production_output_owned_bind_locked(GDExtensionDeviceExi
 																																														  : true)) {
 		return ERR_INVALID_DATA;
 	}
-	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+	const uint32_t end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
+	for (uint32_t i = request.use_count + request.binding_used; i < end; ++i) {
 		auto &c = request.uses[i];
 		if (c.disposal_group_serial != serial || c.disposal_ordinal != ordinal) {
 			continue;
@@ -2237,16 +2294,18 @@ Error RenderingDevice::_production_output_owned_cancel_unbound(GDExtensionDevice
 		return ERR_BUSY;
 	}
 	uint32_t group_cell_index = UINT32_MAX;
-	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+	for (uint32_t i = request.disposal_group_head; i != UINT32_MAX; i = request.uses[i].disposal_group_next) {
 		const auto &g = request.uses[i];
 		if (g.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && g.disposal_group_serial == serial && g.disposal_group_pin_serial == pin.serial) {
 			group_cell_index = i;
+			break;
 		}
 	}
 	if (group_cell_index == UINT32_MAX) {
 		return ERR_DOES_NOT_EXIST;
 	}
-	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+	const uint32_t end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
+	for (uint32_t i = request.use_count + request.binding_used; i < end; ++i) {
 		auto &c = request.uses[i];
 		if (c.disposal_group_serial != serial) {
 			continue;
@@ -2330,10 +2389,11 @@ bool RenderingDevice::_production_output_hold_contains(GDExtensionDeviceExit::Pr
 	}
 	const auto &request = *pin.request;
 	bool active = false;
-	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+	for (uint32_t i = request.disposal_group_head; i != UINT32_MAX; i = request.uses[i].disposal_group_next) {
 		const auto &g = request.uses[i];
 		if (g.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && g.disposal_group_serial == serial && g.disposal_group_pin_serial == pin.serial) {
 			active = !g.disposal_group_release && !g.disposal_group_dropped;
+			break;
 		}
 	}
 	if (!active) {
@@ -2373,9 +2433,12 @@ bool RenderingDevice::_production_output_owned_storage_contains(GDExtensionDevic
 	}
 	auto &request = *pin.request;
 	bool original_group = false;
-	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+	for (uint32_t i = request.disposal_group_head; i != UINT32_MAX; i = request.uses[i].disposal_group_next) {
 		const auto &row = request.uses[i];
-		original_group |= row.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && row.disposal_group_serial == group && row.disposal_group_pin_serial == pin.serial && !row.disposal_group_release && !row.disposal_group_dropped;
+		if (row.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && row.disposal_group_serial == group && row.disposal_group_pin_serial == pin.serial && !row.disposal_group_release && !row.disposal_group_dropped) {
+			original_group = true;
+			break;
+		}
 	}
 	if (!original_group || !_thread_safe_.try_lock()) {
 		return false;
@@ -2416,16 +2479,18 @@ Error RenderingDevice::_production_output_owned_create_preflight_locked(GDExtens
 		return ERR_BUSY;
 	}
 	bool found = false;
-	for (uint32_t i = request->use_count + request->binding_used; i < request->capacity.resource_uses; ++i) {
+	for (uint32_t i = request->disposal_group_head; i != UINT32_MAX; i = request->uses[i].disposal_group_next) {
 		const auto &c = request->uses[i];
 		if (c.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && c.disposal_group_serial == group && c.disposal_group_pin_serial == pin.serial && !c.disposal_group_release) {
 			found = true;
+			break;
 		}
 	}
 	if (!found) {
 		return ERR_DOES_NOT_EXIST;
 	}
-	for (uint32_t i = request->use_count + request->binding_used; i < request->capacity.resource_uses; ++i) {
+	const uint32_t end = MIN(request->disposal_use_high_water, request->capacity.resource_uses);
+	for (uint32_t i = request->use_count + request->binding_used; i < end; ++i) {
 		const auto &c = request->uses[i];
 		if (c.disposal_group_serial == group && c.disposal_ordinal == ordinal) {
 			return c.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED ? OK : ERR_ALREADY_IN_USE;
@@ -2624,14 +2689,18 @@ Error RenderingDevice::_production_output_owned_uniform_set_create_locked(GDExte
 		return error;
 	}
 	bool destination_group = false;
-	for (uint32_t u = request->use_count + request->binding_used; u < request->capacity.resource_uses; ++u) {
+	for (uint32_t u = request->disposal_group_head; u != UINT32_MAX; u = request->uses[u].disposal_group_next) {
 		const auto &cell = request->uses[u];
-		destination_group |= cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_serial == group &&
-				cell.disposal_group_pin_serial == pin.serial && ordinal < cell.disposal_group_count && !cell.disposal_group_release && !cell.disposal_group_dropped;
+		if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_serial == group &&
+				cell.disposal_group_pin_serial == pin.serial && ordinal < cell.disposal_group_count && !cell.disposal_group_release && !cell.disposal_group_dropped) {
+			destination_group = true;
+			break;
+		}
 	}
 	if (!destination_group) {
 		return ERR_UNAUTHORIZED;
 	}
+	const uint32_t disposal_end = MIN(request->disposal_use_high_water, request->capacity.resource_uses);
 	// Locate the actual original source-owning Acquire, independently of the
 	// current successor Finalize ordinal. No copied source DTO grants access.
 	const ProductionActionCell *acquire = nullptr;
@@ -2668,12 +2737,15 @@ Error RenderingDevice::_production_output_owned_uniform_set_create_locked(GDExte
 				return ERR_UNAUTHORIZED;
 			}
 			bool retained = false;
-			for (uint32_t u = request->use_count + request->binding_used; u < request->capacity.resource_uses; ++u) {
+			for (uint32_t u = request->use_count + request->binding_used; u < disposal_end; ++u) {
 				const auto &member = request->uses[u];
-				retained |= member.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && member.disposal_group_serial == source.owned_group &&
+				if (member.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && member.disposal_group_serial == source.owned_group &&
 						member.disposal_ordinal == source.owned_ordinal && member.disposal.owned && member.disposal.request == request &&
 						member.disposal.request_serial == request->serial && member.disposal.rid == source.buffer.get_id() &&
-						member.disposal.serial == buffer->backing_serial && member.disposal.state.load(std::memory_order_acquire) == 1;
+						member.disposal.serial == buffer->backing_serial && member.disposal.state.load(std::memory_order_acquire) == 1) {
+					retained = true;
+					break;
+				}
 			}
 			if (!retained) {
 				return ERR_UNAUTHORIZED;
@@ -2784,12 +2856,16 @@ Error RenderingDevice::_production_output_guard_begin_locked(GDExtensionDeviceEx
 			return ERR_UNAUTHORIZED;
 		}
 		bool member_found = false;
-		for (uint32_t u = request.use_count + request.binding_used; u < request.capacity.resource_uses; ++u) {
+		const uint32_t disposal_end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
+		for (uint32_t u = request.use_count + request.binding_used; u < disposal_end; ++u) {
 			const auto &member = request.uses[u];
-			member_found |= member.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && member.disposal_group_serial == physical.production_group_serial &&
+			if (member.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && member.disposal_group_serial == physical.production_group_serial &&
 					member.disposal_ordinal == physical.production_ordinal && member.disposal.owned && member.disposal.request == &request &&
 					member.disposal.request_serial == request.serial && member.disposal.rid == resources[i].get_id() &&
-					member.disposal.serial == physical.serial && member.disposal.state.load(std::memory_order_acquire) == 1;
+					member.disposal.serial == physical.serial && member.disposal.state.load(std::memory_order_acquire) == 1) {
+				member_found = true;
+				break;
+			}
 		}
 		if (!member_found) {
 			return ERR_UNAUTHORIZED;
@@ -2851,10 +2927,12 @@ Error RenderingDevice::_production_output_owned_seal_locked(GDExtensionDeviceExi
 	using namespace GDExtensionDeviceExit;
 	ProductionUseCell *group = nullptr;
 	const uint32_t begin = request.use_count + request.binding_used;
-	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+	const uint32_t end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
+	for (uint32_t i = request.disposal_group_head; i != UINT32_MAX; i = request.uses[i].disposal_group_next) {
 		auto &c = request.uses[i];
 		if (c.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && c.disposal_group_serial == serial && c.disposal_group_pin_serial == pin_serial) {
 			group = &c;
+			break;
 		}
 	}
 	if (!group) {
@@ -2870,7 +2948,7 @@ Error RenderingDevice::_production_output_owned_seal_locked(GDExtensionDeviceExi
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
 	uint32_t count = 0;
-	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+	for (uint32_t i = begin; i < end; ++i) {
 		auto &c = request.uses[i];
 		if (c.disposal_group_serial != serial || &c == group) {
 			continue;
@@ -2896,7 +2974,7 @@ Error RenderingDevice::_production_output_owned_seal_locked(GDExtensionDeviceExi
 	if (count != group->disposal_group_count) {
 		return ERR_INVALID_DATA;
 	}
-	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+	for (uint32_t i = begin; i < end; ++i) {
 		auto &c = request.uses[i];
 		if (c.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && c.disposal_group_serial == serial) {
 			auto *counter = _native_immutable_counter(RID::from_uint64(c.disposal.rid));
@@ -2968,7 +3046,7 @@ Error RenderingDevice::_production_output_owned_render_pipeline_create_locked(GD
 		return destination;
 	}
 	if (reserved->disposal.group_cell_index == UINT32_MAX) {
-		for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+		for (uint32_t i = request.disposal_group_head; i != UINT32_MAX; i = request.uses[i].disposal_group_next) {
 			const auto &g = request.uses[i];
 			if (g.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && g.disposal_group_serial == group) {
 				reserved->disposal.group_cell_index = i;

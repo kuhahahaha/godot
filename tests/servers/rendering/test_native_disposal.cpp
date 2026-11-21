@@ -3370,11 +3370,13 @@ void TestNativeDisposalAccess::material_pass_observer_budget() {
 		cell.disposal.group = material_group;
 		cell.disposal.owned = true;
 		cell.disposal.counter_dropped = true;
+		successor.note_disposal_use_index(i);
 	}
 	cells[capacity].output_role = ProductionUseCell::OutputRole::DISPOSAL_GROUP;
 	cells[capacity].disposal_group_serial = material_group;
 	cells[capacity].disposal_group_pin_serial = pin;
 	cells[capacity].disposal_group_count = capacity;
+	successor.link_disposal_group(capacity);
 	{
 		MutexLock lock(rd._thread_safe_);
 		rd._add_dependency(pipeline, shader);
@@ -3399,12 +3401,14 @@ void TestNativeDisposalAccess::material_pass_observer_budget() {
 			member.disposal.owned = true;
 			member.disposal.counter_dropped = true;
 			member.disposal.state.store(1, std::memory_order_release);
+			predecessor.note_disposal_use_index(i);
 			*head = &member.disposal;
 			auto &header = previous_cells[i + 2];
 			header.output_role = ProductionUseCell::OutputRole::DISPOSAL_GROUP;
 			header.disposal_group_serial = group;
 			header.disposal_group_pin_serial = pin;
 			header.disposal_group_count = 1;
+			predecessor.link_disposal_group(i + 2);
 			REQUIRE(rd._production_output_owned_seal_locked(predecessor, pin, group) == OK);
 			CHECK(rd._production_output_pass_observer_locked(observers[i], predecessor, pin, group, i == 0));
 			CHECK_FALSE(rd._production_output_pass_observer_locked(observers[i], successor, pin, group, i == 0));
@@ -3594,6 +3598,8 @@ void TestNativeDisposalAccess::immutable_batch(uint32_t p_mode) {
 	}
 	auto reserve = [&](uint32_t count) {
 		request.capacity.resource_uses = count + 1;
+		request.disposal_group_head = UINT32_MAX;
+		request.disposal_use_high_water = 0;
 		for (uint32_t i = 0; i < 6; ++i) {
 			cells[i].~ProductionUseCell();
 			new (&cells[i]) ProductionUseCell;
@@ -3608,11 +3614,13 @@ void TestNativeDisposalAccess::immutable_batch(uint32_t p_mode) {
 			cell.disposal.group = group_serial;
 			cell.disposal.owned = true;
 			cell.disposal.counter_dropped = true;
+			request.note_disposal_use_index(i);
 		}
 		cells[count].output_role = ProductionUseCell::OutputRole::DISPOSAL_GROUP;
 		cells[count].disposal_group_serial = group_serial;
 		cells[count].disposal_group_pin_serial = pin_serial;
 		cells[count].disposal_group_count = count;
+		request.link_disposal_group(count);
 	};
 	auto untouched = [&](uint32_t count) {
 		CHECK(first.is_valid());
@@ -3674,10 +3682,12 @@ void TestNativeDisposalAccess::immutable_batch(uint32_t p_mode) {
 		// Preserve the complete valid target reservation while another group's
 		// dry inventory occupies one separate cell in the same admitted arena.
 		const uint32_t original_capacity = request.capacity.resource_uses;
+		const uint32_t original_high_water = request.disposal_use_high_water;
 		auto &other_staged = cells[resource_count + 1];
 		request.capacity.resource_uses = original_capacity + 1;
 		other_staged.output_role = ProductionUseCell::OutputRole::DISPOSAL_STAGED;
 		other_staged.disposal_group_serial = group_serial + 1;
+		request.note_disposal_use_index(resource_count + 1);
 		CHECK(rd._production_output_hold_reservation_locked(request, pin_serial, group_serial, resource_count, group_index) == ERR_BUSY);
 		CHECK(group_index == UINT32_MAX);
 		CHECK(rd._production_output_hold_reservation_locked(request, pin_serial, group_serial, resource_count, group_index, false) == OK);
@@ -3692,6 +3702,7 @@ void TestNativeDisposalAccess::immutable_batch(uint32_t p_mode) {
 		other_staged.~ProductionUseCell();
 		new (&other_staged) ProductionUseCell;
 		request.capacity.resource_uses = original_capacity;
+		request.disposal_use_high_water = original_high_water;
 		if (status != ERR_BUSY) {
 			return false;
 		}

@@ -1206,9 +1206,12 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 		return drain_trace.result(ERR_BUSY, "budget_or_inflight_or_loss");
 	}
 	bool closure_drop = false;
-	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+	for (uint32_t i = request.disposal_group_head; i != UINT32_MAX; i = request.uses[i].disposal_group_next) {
 		const auto &cell = request.uses[i];
-		closure_drop |= cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_release;
+		if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_release) {
+			closure_drop = true;
+			break;
+		}
 	}
 	// Finish the original same-owner native cursor before another hold-drop
 	// step; drop preflight deliberately rejects an active cursor. Otherwise
