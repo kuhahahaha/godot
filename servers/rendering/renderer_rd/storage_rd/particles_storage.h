@@ -32,6 +32,7 @@
 
 #include "core/extension/gdextension_interface.gen.h"
 #include "core/templates/local_vector.h"
+#include "core/extension/gdextension_external_output_interface.h"
 #include "core/templates/rid_owner.h"
 #include "core/templates/self_list.h"
 #include "servers/rendering/renderer_rd/pipeline_deferred_rd.h"
@@ -665,6 +666,11 @@ public:
 	Error particles_external_resolve(const ExternalPacketViewLease &p_view, const ExternalPacketPipelineRequest &p_pipeline, RD::DrawListID p_list, ExternalPacketBinding &r_binding);
 	Error particles_external_draw(const ExternalSurfaceSelection &p_surface, const ::RenderDataRD *p_render_data, RD::DrawListID p_list, const ExternalPacketPipelineRequest &p_pipeline, ExternalPipelinePrepareForView p_prepare, void *p_renderer, ExternalPushPrepareForBinding p_prepare_push, void *p_push_context, ExternalDrawPreparation p_preparation = ExternalDrawPreparation::PREPARE_FOR_DRAW);
 	Error particles_external_end_draw_list();
+	int32_t particles_external_begin_fast_refresh_v1(const GDExtensionFastRefreshBeginInputV1 *p_input, GDExtensionFastRefreshTargetsV1 *p_out_targets);
+	int32_t particles_external_end_fast_refresh_v1(const GDExtensionFastRefreshEndInputV1 *p_input);
+	int32_t particles_external_release_fast_refresh_v1(uint64_t p_particles_rid, uint32_t p_slot_index);
+	int32_t particles_external_begin_fast_refresh_batch_v1(uint32_t p_count, const GDExtensionFastRefreshBeginInputV1 *p_inputs, GDExtensionFastRefreshTargetsV1 *p_out_targets);
+	int32_t particles_external_end_fast_refresh_batch_v1(uint32_t p_count, const GDExtensionFastRefreshEndInputV1 *p_inputs, uint32_t p_flags, int32_t *p_out_errors);
 
 	virtual void particles_free(RID p_rid) override;
 

@@ -376,6 +376,87 @@ private:
 		bool replay_adopted = false;
 		uint32_t replay_slot = UINT32_MAX;
 	} production_output_raster_recording;
+	struct ProductionOutputFastRefreshEntry {
+		const ::RendererRD::ExternalOutputOwner *owner = nullptr;
+		uint32_t slot_index = UINT32_MAX;
+		uint64_t lease_serial = 0;
+		const GDExtensionDeviceExit::ProductionRequest *request = nullptr;
+		uint64_t request_serial = 0;
+		uint64_t pin_serial = 0;
+		uint64_t owned_group = 0;
+	};
+	struct ProductionOutputFastRefreshScope {
+		static constexpr uint32_t INLINE_CAPACITY = 128;
+		ProductionOutputFastRefreshEntry inline_entries[INLINE_CAPACITY];
+		LocalVector<ProductionOutputFastRefreshEntry> overflow_entries;
+		uint32_t count = 0;
+		bool active = false;
+
+		void clear() {
+			count = 0;
+			active = false;
+			if (!overflow_entries.is_empty()) {
+				overflow_entries.clear();
+			}
+		}
+		void set_single(const ProductionOutputFastRefreshEntry &p_entry) {
+			count = 1;
+			inline_entries[0] = p_entry;
+			if (!overflow_entries.is_empty()) {
+				overflow_entries.clear();
+			}
+			active = true;
+		}
+		void push(const ProductionOutputFastRefreshEntry &p_entry) {
+			for (uint32_t i = 0; i < count; ++i) {
+				ProductionOutputFastRefreshEntry &existing = entry_at(i);
+				if (existing.owner == p_entry.owner && existing.slot_index == p_entry.slot_index) {
+					existing = p_entry;
+					active = true;
+					return;
+				}
+			}
+			if (count < INLINE_CAPACITY) {
+				inline_entries[count++] = p_entry;
+			} else {
+				overflow_entries.push_back(p_entry);
+				++count;
+			}
+			active = true;
+		}
+		const ProductionOutputFastRefreshEntry &entry_at(uint32_t p_index) const {
+			return p_index < INLINE_CAPACITY ? inline_entries[p_index] : overflow_entries[p_index - INLINE_CAPACITY];
+		}
+		ProductionOutputFastRefreshEntry &entry_at(uint32_t p_index) {
+			return p_index < INLINE_CAPACITY ? inline_entries[p_index] : overflow_entries[p_index - INLINE_CAPACITY];
+		}
+		void remove_owner(const ::RendererRD::ExternalOutputOwner *p_owner, uint32_t p_slot_index = UINT32_MAX) {
+			if (!active || !p_owner || count == 0) {
+				return;
+			}
+			uint32_t dst = 0;
+			for (uint32_t src = 0; src < count; ++src) {
+				const ProductionOutputFastRefreshEntry &entry = entry_at(src);
+				const bool match = (entry.owner == p_owner) && (p_slot_index == UINT32_MAX || entry.slot_index == p_slot_index);
+				if (!match) {
+					if (dst != src) {
+						entry_at(dst) = entry;
+					}
+					++dst;
+				}
+			}
+			count = dst;
+			if (count <= INLINE_CAPACITY) {
+				if (!overflow_entries.is_empty()) {
+					overflow_entries.clear();
+				}
+			} else {
+				overflow_entries.resize(count - INLINE_CAPACITY);
+			}
+			active = (count > 0);
+		}
+	} production_output_fast_refresh;
+	bool _production_output_fast_refresh_buffer_permitted(RID p_rid) const;
 	::RendererRD::ExternalOutputOwner *production_output_list_head_owner = nullptr;
 	uint32_t production_output_list_head_read = UINT32_MAX, production_output_list_reads = 0;
 	GDExtensionDeviceExit::CheckedRecordAppend _record_source_dispatch(const GDExtensionDeviceExit::OriginalOperationIdentity &, ComputeListID, uint32_t, uint32_t, uint32_t, const void * = nullptr, uint32_t = 0);

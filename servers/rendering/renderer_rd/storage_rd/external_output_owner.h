@@ -160,6 +160,11 @@ class ExternalOutputOwner {
 		uint64_t scene_cull_version = 0;
 		AABB scene_cull_local, scene_cull_world;
 		bool scene_cull_bound = false;
+		bool fast_refresh_active = false;
+		RID fast_refresh_guard_sets[2][GUARD_MODE_CAPACITY];
+		uint64_t fast_refresh_source_count_rid[2] = {};
+		uint64_t fast_refresh_source_gate_rids[2][4] = {};
+		void release_fast_refresh_resources(RenderingDevice *p_rd);
 
 	};
 	Error validate_scene_cull(uint32_t p_slot) const;
@@ -302,6 +307,7 @@ class ExternalOutputOwner {
 		return p_row.pipeline_pin == &slot.original_pin && slot.original_registry == slot.original_pin.registry ? slot.original_registry : nullptr;
 	}
 	GDExtensionDeviceExit::ProductionRequest *preparation_request(uint32_t p_slot) const { return p_slot < slot_count ? slots[p_slot].original_pin.request : nullptr; }
+	uint64_t preparation_request_serial(uint32_t p_slot) const { return p_slot < slot_count ? slots[p_slot].original_pin.request_serial : 0; }
 	uint64_t preparation_pin_serial(uint32_t p_slot) const { return p_slot < slot_count ? slots[p_slot].original_pin.serial : 0; }
 	Error select_preparation_tuple(uint32_t, uint32_t, const ExternalPacketPipelineRequest &, uint32_t &, bool &);
 	bool preparation_view_matches(const ExternalPacketViewLease &, uint32_t, bool p_cleanup = false) const;
@@ -392,6 +398,11 @@ public:
 		CRASH_COND(state != GenerationState::RELEASED);
 		for (uint32_t i = 0; i < slot_count; ++i) {
 			CRASH_COND(slots[i].storage || slots[i].surfaces || slots[i].generated_indexed_mesh.is_valid() || slots[i].generated_index_array.is_valid() || slots[i].guard_owned_group || slots[i].guard_resources_ready || slots[i].guard_proof_payload || !slots[i].original_pin.is_empty());
+			for (uint32_t b = 0; b < 2; ++b) {
+				for (uint32_t m = 0; m < GUARD_MODE_CAPACITY; ++m) {
+					CRASH_COND(slots[i].fast_refresh_guard_sets[b][m].is_valid());
+				}
+			}
 		}
 	}
 
@@ -462,23 +473,7 @@ private:
 	// Withdrawal changes admission only. Existing captures, buffers, bindings,
 	// original request references and history stay retained for real retirement.
 	void invalidate_generation_demand();
-	void withdraw() {
-		invalidate_generation_demand();
-		if (state == GenerationState::RELEASED || state == GenerationState::FAULTED_RETIRING || state == GenerationState::WITHDRAWING || state == GenerationState::RETIRING) {
-			return;
-		}
-		state = GenerationState::WITHDRAWING;
-		for (uint32_t i = 0; i < config.max_views; ++i) {
-			views[i].closed = true;
-		}
-		for (uint32_t i = 0; i < slot_count; ++i) {
-			slots[i].publication_closed = true;
-			slots[i].pass_uses_closed = true;
-			if (slots[i].state != LeaseState::EMPTY && slots[i].state != LeaseState::RELEASED) {
-				slots[i].state = LeaseState::RETIRING;
-			}
-		}
-	}
+	void withdraw();
 	bool admits_work() const {
 		return state == GenerationState::CONFIGURED || state == GenerationState::ACTIVE;
 	}

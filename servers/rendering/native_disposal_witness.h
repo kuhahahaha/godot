@@ -55,6 +55,7 @@ class ProductionDisposalUse {
 	uint64_t request_serial = 0, group = 0;
 	uint64_t rid = 0, serial = 0, native_driver_id = 0;
 	uint32_t kind = UINT32_MAX;
+	uint32_t group_cell_index = UINT32_MAX;
 	ProductionDisposalUse *next = nullptr;
 	// Multiplicity belongs to this physical incarnation, not another free node.
 	uint32_t counter_pins_remaining = 0;

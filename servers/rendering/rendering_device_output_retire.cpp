@@ -91,6 +91,7 @@ Error RenderingDevice::_production_output_retire_service(GDExtensionDeviceExit::
 	if (!group) {
 		return ERR_DOES_NOT_EXIST;
 	}
+	const uint32_t group_cell_index = uint32_t(group - request.uses);
 	// Source closure excludes future factories. Return one original unbound
 	// reservation per pass; bound physical members remain exact obligations.
 	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
@@ -99,6 +100,7 @@ Error RenderingDevice::_production_output_retire_service(GDExtensionDeviceExit::
 			if (allowance_spent()) {
 				return ERR_BUSY;
 			}
+			cell.disposal.group_cell_index = group_cell_index;
 			cell.disposal.state.store(6, std::memory_order_release);
 			cell.output_role = ProductionUseCell::OutputRole::DISPOSAL_MEMBER;
 			++usage.passes;

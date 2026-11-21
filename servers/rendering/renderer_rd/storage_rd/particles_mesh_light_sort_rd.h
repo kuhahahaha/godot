@@ -359,7 +359,16 @@ public:
 	Error publish_active_particle_lights(
 			const LocalVector<ParticleLightRecord64> &p_candidates,
 			uint32_t p_max_lights = MAX_PARTICLE_LIGHTS);
+	struct ExternalLightSlotPresentSeqUpdate {
+		uint64_t owner_key = 0;
+		uint64_t generation = 0;
+		uint32_t slot_index = UINT32_MAX;
+		uint64_t lease_serial = 0;
+		uint64_t next_present_seq = 0;
+	};
 	void register_sealed_external_light_slot(const ExternalLightSlotRegistration &p_slot);
+	bool update_external_light_slot_present_seq(uint64_t p_owner_key, uint64_t p_generation, uint32_t p_slot_index, uint64_t p_lease_serial, uint64_t p_next_present_seq);
+	uint32_t update_external_light_slots_present_seq_batch(const ExternalLightSlotPresentSeqUpdate *p_updates, uint32_t p_count);
 	void unregister_external_light_slot(uint64_t p_owner_key, uint64_t p_generation, uint32_t p_slot_index);
 	void unregister_external_light_owner(uint64_t p_owner_key);
 	Error upsert_external_role8_packet(
