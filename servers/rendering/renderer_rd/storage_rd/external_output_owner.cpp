@@ -64,7 +64,7 @@ Error ExternalOutputOwner::validate_scene_cull(uint32_t p_slot) const {
 	if (actual.scenario != slot.scene_cull_scenario) {
 		return ERR_INVALID_DATA;
 	}
-	if (slot.state == LeaseState::ADOPTED && slot.fast_refresh_active) {
+	if ((slot.state == LeaseState::ADOPTED || slot.state == LeaseState::SEALED_RECORDED) && slot.fast_refresh_active) {
 		return OK;
 	}
 	if (actual.version != slot.scene_cull_version ||

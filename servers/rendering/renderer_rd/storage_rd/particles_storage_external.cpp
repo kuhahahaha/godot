@@ -1833,18 +1833,23 @@ int32_t ParticlesStorage::particles_external_begin_fast_refresh_v1(const GDExten
 		return fail(ERR_UNAVAILABLE);
 	}
 	uint32_t best_slot = UINT32_MAX;
+	bool best_is_adopted = false;
 	uint64_t best_present_seq = 0;
 	uint64_t best_lease_serial = 0;
 	for (uint32_t i = 0; i < owner.slot_count; ++i) {
 		const ExternalOutputOwner::Slot &cand = owner.slots[i];
-		if (cand.state != ExternalOutputOwner::LeaseState::ADOPTED || cand.storage == nullptr ||
+		const bool is_adopted = cand.state == ExternalOutputOwner::LeaseState::ADOPTED;
+		const bool is_sealed = cand.state == ExternalOutputOwner::LeaseState::SEALED_RECORDED;
+		if ((!is_adopted && !is_sealed) || cand.storage == nullptr ||
 				cand.publication_closed || cand.pass_uses_closed ||
 				cand.original_pin.is_empty() || owner.preparation_request(i) == nullptr) {
 			continue;
 		}
-		if (best_slot == UINT32_MAX || cand.request.common.present_seq > best_present_seq ||
-				(cand.request.common.present_seq == best_present_seq && cand.lease_serial > best_lease_serial)) {
+		if (best_slot == UINT32_MAX || (is_adopted && !best_is_adopted) ||
+				(is_adopted == best_is_adopted && (cand.request.common.present_seq > best_present_seq ||
+				(cand.request.common.present_seq == best_present_seq && cand.lease_serial > best_lease_serial)))) {
 			best_slot = i;
+			best_is_adopted = is_adopted;
 			best_present_seq = cand.request.common.present_seq;
 			best_lease_serial = cand.lease_serial;
 		}
@@ -1951,7 +1956,9 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_v1(const GDExtensi
 		return int32_t(ERR_UNAVAILABLE);
 	}
 	ExternalOutputOwner::Slot &slot = owner.slots[p_input->slot_index];
-	if (slot.state != ExternalOutputOwner::LeaseState::ADOPTED || slot.lease_serial != p_input->lease_serial ||
+	if ((slot.state != ExternalOutputOwner::LeaseState::ADOPTED &&
+				slot.state != ExternalOutputOwner::LeaseState::SEALED_RECORDED) ||
+			slot.lease_serial != p_input->lease_serial ||
 			slot.publication_closed || slot.pass_uses_closed || !slot.storage ||
 			slot.original_pin.is_empty() || !owner.preparation_request(p_input->slot_index)) {
 		return int32_t(ERR_UNAVAILABLE);
@@ -2538,18 +2545,23 @@ int32_t ParticlesStorage::particles_external_begin_fast_refresh_batch_v1(
 			continue;
 		}
 		uint32_t best_slot = UINT32_MAX;
+		bool best_is_adopted = false;
 		uint64_t best_present_seq = 0;
 		uint64_t best_lease_serial = 0;
 		for (uint32_t i = 0; i < owner.slot_count; ++i) {
 			const ExternalOutputOwner::Slot &cand = owner.slots[i];
-			if (cand.state != ExternalOutputOwner::LeaseState::ADOPTED || cand.storage == nullptr ||
+			const bool is_adopted = cand.state == ExternalOutputOwner::LeaseState::ADOPTED;
+			const bool is_sealed = cand.state == ExternalOutputOwner::LeaseState::SEALED_RECORDED;
+			if ((!is_adopted && !is_sealed) || cand.storage == nullptr ||
 					cand.publication_closed || cand.pass_uses_closed ||
 					cand.original_pin.is_empty() || owner.preparation_request(i) == nullptr) {
 				continue;
 			}
-			if (best_slot == UINT32_MAX || cand.request.common.present_seq > best_present_seq ||
-					(cand.request.common.present_seq == best_present_seq && cand.lease_serial > best_lease_serial)) {
+			if (best_slot == UINT32_MAX || (is_adopted && !best_is_adopted) ||
+					(is_adopted == best_is_adopted && (cand.request.common.present_seq > best_present_seq ||
+					(cand.request.common.present_seq == best_present_seq && cand.lease_serial > best_lease_serial)))) {
 				best_slot = i;
+				best_is_adopted = is_adopted;
 				best_present_seq = cand.request.common.present_seq;
 				best_lease_serial = cand.lease_serial;
 			}
@@ -2778,7 +2790,9 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 			continue;
 		}
 		ExternalOutputOwner::Slot &slot = owner.slots[in.slot_index];
-		if (slot.state != ExternalOutputOwner::LeaseState::ADOPTED || slot.lease_serial != in.lease_serial ||
+		if ((slot.state != ExternalOutputOwner::LeaseState::ADOPTED &&
+					slot.state != ExternalOutputOwner::LeaseState::SEALED_RECORDED) ||
+				slot.lease_serial != in.lease_serial ||
 				slot.publication_closed || slot.pass_uses_closed || !slot.storage ||
 				slot.original_pin.is_empty() || !owner.preparation_request(in.slot_index)) {
 			set_item_result(idx, ERR_UNAVAILABLE);

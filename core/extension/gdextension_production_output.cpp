@@ -455,7 +455,8 @@ Error Registry::production_output_preparation_validate_locked(ProductionOutputPi
 			!preparation->pipeline_sealed && preparation->created_pipeline == *original_root;
 	const ProductionDisposalUse *created_member = nullptr;
 	uint32_t headers = 0, members = 0;
-	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+	const uint32_t end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
+	for (uint32_t i = request.use_count + request.binding_used; i < end; ++i) {
 		const auto &cell = request.uses[i];
 		if (cell.disposal_group_serial != group) {
 			continue;
@@ -1214,7 +1215,8 @@ bool Registry::production_output_guard_source_locked(const ProductionRequest &ow
 			physical.production_request != original || physical.production_request_serial != original->serial || physical.production_pin_serial != acquire.output_root ||
 			physical.production_group_serial != slot->owned_group || !physical.matches(status.rid.get_id(), buffer->backing_serial, buffer->driver_id.id)) { return false; }
 	bool member = false;
-	for (uint32_t i = original->use_count + original->binding_used; i < original->capacity.resource_uses; ++i) {
+	const uint32_t end = MIN(original->disposal_use_high_water, original->capacity.resource_uses);
+	for (uint32_t i = original->use_count + original->binding_used; i < end; ++i) {
 		const auto &row = original->uses[i];
 		if (row.output_role != ProductionUseCell::OutputRole::DISPOSAL_MEMBER || row.disposal_group_serial != slot->owned_group || row.disposal_ordinal != physical.production_ordinal) { continue; }
 		member = row.disposal.owned && row.disposal.request == original && row.disposal.request_serial == original->serial &&
@@ -1389,7 +1391,8 @@ bool Registry::production_output_alias_matches_locked(const ProductionRequest &r
 			!physical.matches(slot.primary.get_id(), buffer->backing_serial, buffer->driver_id.id) || slot.backing_serial != buffer->backing_serial || buffer->size != slot.declaration.physical_bytes || (slot.declaration.required_usage & ~uint64_t(buffer->usage))) {
 		return false;
 	}
-	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+	const uint32_t end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
+	for (uint32_t i = request.use_count + request.binding_used; i < end; ++i) {
 		const auto &member = request.uses[i];
 		if (member.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && member.disposal_group_serial == slot.output_group_serial && member.disposal_ordinal == slot.output_member_ordinal) {
 			return member.disposal.owned && member.disposal.request == &request && member.disposal.request_serial == request.serial &&
