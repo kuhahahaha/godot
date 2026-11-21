@@ -526,6 +526,7 @@ struct ProductionOutputDemandSnapshot {
 };
 class ProductionUseCell {
 	friend class ProductionOutputPreparationScope;
+	friend class ProductionRequest;
 	friend class ::RendererRD::ExternalOutputOwner;
 	friend class Registry;
 	friend class ::RenderingDevice;
@@ -563,6 +564,7 @@ class ProductionUseCell {
 	bool output_demand_ready = false;
 	std::atomic<bool> output_demand_live{ false };
 	uint32_t output_prev = UINT32_MAX, output_next = UINT32_MAX;
+	uint32_t disposal_group_prev = UINT32_MAX, disposal_group_next = UINT32_MAX;
 	ProductionDisposalUse disposal;
 	uint64_t disposal_group_serial = 0, disposal_group_pin_serial = 0;
 	uint32_t disposal_group_count = 0, disposal_ordinal = UINT32_MAX;
@@ -803,7 +805,37 @@ class ProductionRequest {
 	uint64_t next_control_serial = 1;
 	uint64_t next_output_pin_serial = 1;
 	uint32_t output_owner_head = UINT32_MAX, output_owner_cursor = UINT32_MAX;
+	uint32_t disposal_group_head = UINT32_MAX;
+	uint32_t disposal_use_high_water = 0;
 	uint64_t next_disposal_group_serial = 1;
+	void note_disposal_use_index(uint32_t index) {
+		if (index + 1 > disposal_use_high_water) {
+			disposal_use_high_water = index + 1;
+		}
+	}
+	void link_disposal_group(uint32_t index) {
+		auto &g = uses[index];
+		g.disposal_group_prev = UINT32_MAX;
+		g.disposal_group_next = disposal_group_head;
+		if (disposal_group_head != UINT32_MAX) {
+			uses[disposal_group_head].disposal_group_prev = index;
+		}
+		disposal_group_head = index;
+		note_disposal_use_index(index);
+	}
+	void unlink_disposal_group(uint32_t index) {
+		auto &g = uses[index];
+		if (g.disposal_group_prev != UINT32_MAX) {
+			uses[g.disposal_group_prev].disposal_group_next = g.disposal_group_next;
+		} else if (disposal_group_head == index) {
+			disposal_group_head = g.disposal_group_next;
+		}
+		if (g.disposal_group_next != UINT32_MAX) {
+			uses[g.disposal_group_next].disposal_group_prev = g.disposal_group_prev;
+		}
+		g.disposal_group_prev = UINT32_MAX;
+		g.disposal_group_next = UINT32_MAX;
+	}
 	bool frozen = false, cancelled = false, effects_pending = false;
 	bool compute_list_open = false;
 	bool draw_list_open = false;

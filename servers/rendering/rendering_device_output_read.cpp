@@ -131,11 +131,25 @@ bool RenderingDevice::_production_output_raster_permitted(RID rid) {
 			}
 		}
 		if (use->group_cell_index == UINT32_MAX) {
-			for (uint32_t i = start; i < scope.request->capacity.resource_uses; ++i) {
-				const auto &row = scope.request->uses[i];
-				if (row.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && row.disposal_group_serial == use->group &&
-						row.disposal_group_pin_serial == slot.original_pin.serial && !row.disposal_group_release && !row.disposal_group_dropped) {
-					return true;
+			if (scope.request->disposal_group_head != UINT32_MAX) {
+				for (uint32_t g = scope.request->disposal_group_head; g != UINT32_MAX; g = scope.request->uses[g].disposal_group_next) {
+					const auto &row = scope.request->uses[g];
+					if (row.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && row.disposal_group_serial == use->group) {
+						const_cast<ProductionDisposalUse *>(use)->group_cell_index = g;
+						if (row.disposal_group_pin_serial == slot.original_pin.serial && !row.disposal_group_release && !row.disposal_group_dropped) {
+							return true;
+						}
+						break;
+					}
+				}
+			} else {
+				for (uint32_t i = start; i < scope.request->capacity.resource_uses; ++i) {
+					const auto &row = scope.request->uses[i];
+					if (row.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && row.disposal_group_serial == use->group &&
+							row.disposal_group_pin_serial == slot.original_pin.serial && !row.disposal_group_release && !row.disposal_group_dropped) {
+						const_cast<ProductionDisposalUse *>(use)->group_cell_index = i;
+						return true;
+					}
 				}
 			}
 		}

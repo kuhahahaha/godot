@@ -3063,27 +3063,55 @@ Error Registry::production_output_unpin_locked(ProductionOutputPin &pin) {
 			return ERR_BUSY;
 		}
 	}
-	auto owns_group = [&](uint64_t serial) {
-		for (uint32_t index = request.use_count + request.binding_used; index < request.capacity.resource_uses; ++index) {
-			const auto &group = request.uses[index];
-			if (group.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && group.disposal_group_serial == serial && group.disposal_group_pin_serial == pin.serial) {
-				return true;
+	uint64_t owned_groups[64];
+	uint32_t owned_group_count = 0;
+	bool owned_groups_overflow = false;
+	for (uint32_t g = request.disposal_group_head; g != UINT32_MAX; g = request.uses[g].disposal_group_next) {
+		const auto &group = request.uses[g];
+		if (group.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && group.disposal_group_pin_serial == pin.serial) {
+			if (!group.disposal_group_dropped) {
+				return ERR_BUSY;
+			}
+			if (owned_group_count < 64) {
+				owned_groups[owned_group_count++] = group.disposal_group_serial;
+			} else {
+				owned_groups_overflow = true;
 			}
 		}
-		return false;
-	};
-	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
-		const auto &member = request.uses[i];
-		if (!owns_group(member.disposal_group_serial)) {
-			continue;
-		}
-		if (member.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED) {
-			return ERR_BUSY;
-		}
-		if (member.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && !member.disposal_group_dropped) {
-			return ERR_BUSY;
-		}
-		if (member.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER) {
+	}
+	if (owned_group_count > 0) {
+		auto owns_group = [&](uint64_t serial) {
+			if (!serial) {
+				return false;
+			}
+			for (uint32_t k = 0; k < owned_group_count; ++k) {
+				if (owned_groups[k] == serial) {
+					return true;
+				}
+			}
+			if (!owned_groups_overflow) {
+				return false;
+			}
+			for (uint32_t g = request.disposal_group_head; g != UINT32_MAX; g = request.uses[g].disposal_group_next) {
+				const auto &group = request.uses[g];
+				if (group.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && group.disposal_group_serial == serial && group.disposal_group_pin_serial == pin.serial) {
+					return true;
+				}
+			}
+			return false;
+		};
+		const uint32_t end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
+		for (uint32_t i = request.use_count + request.binding_used; i < end; ++i) {
+			const auto &member = request.uses[i];
+			if (member.output_role != ProductionUseCell::OutputRole::DISPOSAL_RESERVED && member.output_role != ProductionUseCell::OutputRole::DISPOSAL_MEMBER) {
+				continue;
+			}
+			if (!owns_group(member.disposal_group_serial)) {
+				continue;
+			}
+			if (member.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED) {
+				return ERR_BUSY;
+			}
 			const uint8_t state = member.disposal.state.load(std::memory_order_acquire);
 			if (state != 3 && state != 4 && state != 6 && state != 7) {
 				return ERR_BUSY;
@@ -4033,17 +4061,56 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 				for (uint32_t i = 0; i < request.readback_count; ++i) {
 					progress |= request.readbacks[i].source.issued && request.readbacks[i].source.returned != request.readbacks[i].source.issued;
 				}
-				for (uint32_t g = request.use_count + request.binding_used; g < request.capacity.resource_uses; ++g) {
-					const auto &group = request.uses[g];
-					if (group.output_role != ProductionUseCell::OutputRole::DISPOSAL_GROUP || !group.disposal_group_release) {
-						continue;
+				if (!progress && request.disposal_group_head != UINT32_MAX) {
+					uint64_t released_groups[64];
+					uint32_t released_count = 0;
+					bool released_overflow = false;
+					for (uint32_t g = request.disposal_group_head; g != UINT32_MAX; g = request.uses[g].disposal_group_next) {
+						const auto &group = request.uses[g];
+						if (group.output_role != ProductionUseCell::OutputRole::DISPOSAL_GROUP || !group.disposal_group_release) {
+							continue;
+						}
+						if (!group.disposal_group_dropped) {
+							progress = true;
+							break;
+						}
+						if (released_count < 64) {
+							released_groups[released_count++] = group.disposal_group_serial;
+						} else {
+							released_overflow = true;
+						}
 					}
-					progress |= !group.disposal_group_dropped;
-					for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
-						const auto &member = request.uses[i];
-						if (member.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && member.disposal_group_serial == group.disposal_group_serial) {
-							const uint8_t state = member.disposal.state.load(std::memory_order_acquire);
-							progress |= state == 1 || state == 2;
+					if (!progress && released_count > 0) {
+						auto is_released_group = [&](uint64_t serial) {
+							if (!serial) {
+								return false;
+							}
+							for (uint32_t k = 0; k < released_count; ++k) {
+								if (released_groups[k] == serial) {
+									return true;
+								}
+							}
+							if (!released_overflow) {
+								return false;
+							}
+							for (uint32_t g = request.disposal_group_head; g != UINT32_MAX; g = request.uses[g].disposal_group_next) {
+								const auto &group = request.uses[g];
+								if (group.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && group.disposal_group_release && group.disposal_group_serial == serial) {
+									return true;
+								}
+							}
+							return false;
+						};
+						const uint32_t end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
+						for (uint32_t i = request.use_count + request.binding_used; i < end; ++i) {
+							const auto &member = request.uses[i];
+							if (member.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && is_released_group(member.disposal_group_serial)) {
+								const uint8_t state = member.disposal.state.load(std::memory_order_acquire);
+								if (state == 1 || state == 2) {
+									progress = true;
+									break;
+								}
+							}
 						}
 					}
 				}

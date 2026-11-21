@@ -1556,6 +1556,7 @@ Error RenderingDevice::_production_output_hold_stage_locked(GDExtensionDeviceExi
 			const bool eligible = reserved_group ? c.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED && c.disposal_group_serial == reserved_group : c.output_role == ProductionUseCell::OutputRole::UNUSED && !c.disposal_group_serial && !c.output_consumer && !c.dependency.physical;
 			if (eligible) {
 				c.output_role = ProductionUseCell::OutputRole::DISPOSAL_STAGED;
+				request.note_disposal_use_index(i);
 				c.disposal.rid = rid.get_id();
 				c.disposal.serial = metadata.serial;
 				c.disposal.native_driver_id = metadata.native_driver_id;
@@ -1672,6 +1673,9 @@ Error RenderingDevice::_production_output_hold_adopt_locked(GDExtensionDeviceExi
 	group->disposal_group_serial = serial;
 	group->disposal_group_count = reserved_group ? limit : count;
 	group->output_role = ProductionUseCell::OutputRole::DISPOSAL_GROUP;
+	if (!reserved_group) {
+		request.link_disposal_group(group_cell_index);
+	}
 	for (uint32_t h = 0; h < holds.size(); ++h) {
 		NativeImmutableHold *hold = holds[h];
 		hold->_clear_resources();
@@ -2058,9 +2062,11 @@ Error RenderingDevice::_production_output_owned_reserve(GDExtensionProductionPhy
 			c.disposal.owned = true;
 			c.disposal.counter_dropped = true;
 		}
+		request->note_disposal_use_index(i);
 		++assigned;
 	}
 	if (group_cell_index != UINT32_MAX) {
+		request->link_disposal_group(group_cell_index);
 		for (uint32_t i = first_assigned; i < group_cell_index; ++i) {
 			auto &c = request->uses[i];
 			if (c.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED && c.disposal_group_serial == serial) {
@@ -2125,6 +2131,9 @@ Error RenderingDevice::_production_output_owned_rollback(GDExtensionProductionPh
 		auto &cell = request->uses[i];
 		if (cell.disposal_group_serial != serial) {
 			continue;
+		}
+		if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP) {
+			request->unlink_disposal_group(i);
 		}
 		cell.disposal.~ProductionDisposalUse();
 		new (&cell.disposal) ProductionDisposalUse();
