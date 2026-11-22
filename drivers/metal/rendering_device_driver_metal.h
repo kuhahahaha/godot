@@ -134,8 +134,8 @@ protected:
 		RELEASE_AFTER_WARMUP,
 		PERSIST,
 	};
-	static constexpr uint32_t ARCHIVE_WARMUP_IDLE_FRAMES = 16;
-	static constexpr uint32_t ARCHIVE_WARMUP_MIN_FRAMES = 16;
+	static constexpr uint32_t ARCHIVE_WARMUP_IDLE_FRAMES = 300;
+	static constexpr uint32_t ARCHIVE_WARMUP_MIN_FRAMES = 300;
 
 	Mutex archive_mutex;
 	Mutex archive_serialize_mutex;

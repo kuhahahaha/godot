@@ -1809,9 +1809,7 @@ void ParticlesStorage::particles_external_create_typed_v3(GDExtensionProductionP
 	}
 }
 
-namespace {
-
-bool fast_refresh_invert_affine_f32(const float p_affine[12], float r_inverse[12]) {
+bool ParticlesStorage::fast_refresh_invert_affine_f32(const float p_affine[12], float r_inverse[12]) {
 	for (uint32_t i = 0; i < 12; ++i) {
 		if (!Math::is_finite(p_affine[i])) {
 			return false;
@@ -1869,16 +1867,20 @@ bool fast_refresh_invert_affine_f32(const float p_affine[12], float r_inverse[12
 				return true;
 			}
 			const float val = float(inverse[row][column]);
-			if (!Math::is_finite(val) || (val != 0.0f && Math::abs(val) < std::numeric_limits<float>::min())) {
+			if (!Math::is_finite(val)) {
 				write_fallback_inverse();
 				return true;
 			}
-			candidate[row * 4 + column] = val;
+			// Flush individual subnormal components to 0.0f rather than discarding
+			// the entire valid inverse matrix.
+			candidate[row * 4 + column] = (Math::abs(val) < std::numeric_limits<float>::min()) ? 0.0f : val;
 		}
 	}
 	memcpy(r_inverse, candidate, sizeof(candidate));
 	return true;
 }
+
+namespace {
 
 Transform3D fast_refresh_decode_transform(const float p_affine[12]) {
 	Transform3D xf;

@@ -29,15 +29,19 @@
 /**************************************************************************/
 
 #include "core/extension/gdextension_library_exit_guard.h"
+#include "core/extension/gdextension_production_request.h"
 #include "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h"
 #include "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_config.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_mesh_light_sort_rd.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_scene_cull.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_globals.h"
 #include "tests/test_macros.h"
+
+#include <limits>
 
 #if defined(METAL_ENABLED) && defined(MACOS_ENABLED)
 #include "drivers/metal/rendering_context_driver_metal.h"
@@ -98,6 +102,66 @@ TEST_CASE("[ExternalOutput][Block23] ShaderData virtual backbuffer texture queri
 	CHECK(clustered_ref.uses_depth_texture_backbuffer());
 
 	CHECK_FALSE(GDExtensionDeviceExit::Registry::get_singleton().has_natural_close_pending_work(nullptr));
+	CHECK(GDExtensionDeviceExit::ProductionGraphCell::MAX_OUTPUT_READ_TRANSFERS == 32u);
+}
+
+TEST_CASE("[ExternalOutput][Block23] fast_refresh_invert_affine_f32 flushes subnormals without discarding valid rotation") {
+	// 90-degree Z rotation with a subnormal (0,0) component (det == 1.0):
+	// inverse has subnormal (1,1) entry which must flush to 0.0f while preserving
+	// the valid rotation and rotated translation.
+	const float subnormal = std::numeric_limits<float>::min() * 0.25f;
+	REQUIRE(subnormal != 0.0f);
+	REQUIRE(Math::abs(subnormal) < std::numeric_limits<float>::min());
+
+	const float rotated[12] = {
+		subnormal, -1.0f, 0.0f, 3.0f,
+		1.0f, 0.0f, 0.0f, -4.0f,
+		0.0f, 0.0f, 1.0f, 5.0f,
+	};
+	float inv[12] = {};
+	REQUIRE(RendererRD::ParticlesStorage::fast_refresh_invert_affine_f32(rotated, inv));
+	CHECK(inv[0] == 0.0f);
+	CHECK(inv[1] == doctest::Approx(1.0f));
+	CHECK(inv[2] == 0.0f);
+	CHECK(inv[3] == doctest::Approx(4.0f));
+	CHECK(inv[4] == doctest::Approx(-1.0f));
+	CHECK(inv[5] == 0.0f);
+	CHECK(inv[6] == 0.0f);
+	CHECK(inv[7] == doctest::Approx(3.0f));
+	CHECK(inv[8] == 0.0f);
+	CHECK(inv[9] == 0.0f);
+	CHECK(inv[10] == doctest::Approx(1.0f));
+	CHECK(inv[11] == doctest::Approx(-5.0f));
+
+	// True singular matrix (zero scale on Y axis) falls back cleanly to identity basis
+	// and negated translation so Tier-2 fast-refresh stays resident without shader faults.
+	const float singular[12] = {
+		1.0f, 0.0f, 0.0f, 2.0f,
+		0.0f, 0.0f, 0.0f, -3.0f,
+		0.0f, 0.0f, 1.0f, 4.0f,
+	};
+	float singular_inv[12] = {};
+	REQUIRE(RendererRD::ParticlesStorage::fast_refresh_invert_affine_f32(singular, singular_inv));
+	CHECK(singular_inv[0] == 1.0f);
+	CHECK(singular_inv[1] == 0.0f);
+	CHECK(singular_inv[2] == 0.0f);
+	CHECK(singular_inv[3] == -2.0f);
+	CHECK(singular_inv[4] == 0.0f);
+	CHECK(singular_inv[5] == 1.0f);
+	CHECK(singular_inv[6] == 0.0f);
+	CHECK(singular_inv[7] == 3.0f);
+	CHECK(singular_inv[8] == 0.0f);
+	CHECK(singular_inv[9] == 0.0f);
+	CHECK(singular_inv[10] == 1.0f);
+	CHECK(singular_inv[11] == -4.0f);
+
+	// Non-finite input still fails validation.
+	float nan_affine[12] = {
+		1.0f, 0.0f, 0.0f, 0.0f,
+		0.0f, 1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 1.0f, std::numeric_limits<float>::quiet_NaN(),
+	};
+	CHECK_FALSE(RendererRD::ParticlesStorage::fast_refresh_invert_affine_f32(nan_affine, singular_inv));
 }
 
 TEST_CASE("[SceneTree][ExternalOutput][Block23] RendererSceneCull instance_is_visible tracks visibility state") {

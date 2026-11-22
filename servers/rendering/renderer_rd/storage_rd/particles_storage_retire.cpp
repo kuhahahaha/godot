@@ -1130,7 +1130,6 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		}
 		owner.device->free_rid(slot.generated_index_array);
 		slot.generated_index_array = RID();
-		return OK;
 	}
 	if (slot.guard_owned_group) {
 		if (slot.original_pin.is_empty()) {

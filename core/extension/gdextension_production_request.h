@@ -610,7 +610,7 @@ class ProductionGraphCell {
 	friend struct ::TestProductionNativeObserve::Access;
 #endif
 public:
-	static constexpr uint32_t MAX_OUTPUT_READ_TRANSFERS = 16;
+	static constexpr uint32_t MAX_OUTPUT_READ_TRANSFERS = 32;
 private:
 	ProductionGraphCell() = default;
 	ProductionNativeBatchCell native_batch;

@@ -2174,7 +2174,10 @@ void RenderingDeviceDriverMetal::_maybe_release_pipeline_archive(uint32_t p_fram
 		}
 		to_release = std::move(archive);
 		need_serialize = archive_dirty;
+		archive_count = 0;
 		archive_dirty = false;
+		archive_activity_this_frame = false;
+		archive_idle_frames = 0;
 		archive_active.store(false, std::memory_order_release);
 	}
 
@@ -2864,30 +2867,33 @@ RDD::PipelineID RenderingDeviceDriverMetal::render_pipeline_create(
 
 	MTL::PipelineOption options = MTL::PipelineOptionNone;
 	MTL::BinaryArchive *arc = local_archive.get();
+	NS::Error *error = nullptr;
 	if (arc) {
 		NS::SharedPtr<NS::Array> archives = NS::TransferPtr(NS::Array::array(reinterpret_cast<NS::Object *const *>(&arc), 1)->retain());
 		desc->setBinaryArchives(archives.get());
 		if (archive_fail_on_miss) {
 			options |= MTL::PipelineOptionFailOnBinaryArchiveMiss;
 		}
+		// Guard archive read (newRenderPipelineState) and mutation (addRenderPipelineFunctions)
+		// against concurrent serializeToURL / add*PipelineFunctions; strict lock order is
+		// archive_serialize_mutex -> archive_mutex.
+		MutexLock serialize_lock(archive_serialize_mutex);
+		pipeline->state = NS::TransferPtr(device->newRenderPipelineState(desc.get(), options, nullptr, &error));
+		if (error == nullptr && pipeline->state) {
+			NS::Error *arc_err = nullptr;
+			if (arc->addRenderPipelineFunctions(desc.get(), &arc_err)) {
+				_record_pipeline_archive_addition(arc);
+			} else if (arc_err != nullptr) {
+				print_verbose(String("Metal binary archive addRenderPipelineFunctions skipped: ") + arc_err->localizedDescription()->utf8String());
+			}
+		}
+	} else {
+		pipeline->state = NS::TransferPtr(device->newRenderPipelineState(desc.get(), options, nullptr, &error));
 	}
-
-	NS::Error *error = nullptr;
-	pipeline->state = NS::TransferPtr(device->newRenderPipelineState(desc.get(), options, nullptr, &error));
 	pipeline->shader = shader;
 
 	ERR_FAIL_COND_V_MSG(error != nullptr, PipelineID(), String("error creating pipeline: ") + error->localizedDescription()->utf8String());
 	ERR_FAIL_COND_V_MSG(!pipeline->state, PipelineID(), "Failed to create render pipeline state");
-
-	if (arc) {
-		MutexLock serialize_lock(archive_serialize_mutex);
-		NS::Error *arc_err = nullptr;
-		if (arc->addRenderPipelineFunctions(desc.get(), &arc_err)) {
-			_record_pipeline_archive_addition(arc);
-		} else if (arc_err != nullptr) {
-			print_verbose(String("Metal binary archive addRenderPipelineFunctions skipped: ") + arc_err->localizedDescription()->utf8String());
-		}
-	}
 
 	return PipelineID(pipeline);
 }
@@ -2961,32 +2967,36 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 
 	MTL::PipelineOption options = MTL::PipelineOptionNone;
 	MTL::BinaryArchive *arc = local_archive.get();
+	NS::Error *error = nullptr;
+	NS::SharedPtr<MTL::ComputePipelineState> state;
 	if (arc) {
 		NS::SharedPtr<NS::Array> archives = NS::TransferPtr(NS::Array::array(reinterpret_cast<NS::Object *const *>(&arc), 1)->retain());
 		desc->setBinaryArchives(archives.get());
 		if (archive_fail_on_miss) {
 			options |= MTL::PipelineOptionFailOnBinaryArchiveMiss;
 		}
+		// Guard archive read (newComputePipelineState) and mutation (addComputePipelineFunctions)
+		// against concurrent serializeToURL / add*PipelineFunctions; strict lock order is
+		// archive_serialize_mutex -> archive_mutex.
+		MutexLock serialize_lock(archive_serialize_mutex);
+		state = NS::TransferPtr(device->newComputePipelineState(desc.get(), options, nullptr, &error));
+		if (error == nullptr && state) {
+			NS::Error *arc_err = nullptr;
+			if (arc->addComputePipelineFunctions(desc.get(), &arc_err)) {
+				_record_pipeline_archive_addition(arc);
+			} else if (arc_err != nullptr) {
+				print_verbose(String("Metal binary archive addComputePipelineFunctions skipped: ") + arc_err->localizedDescription()->utf8String());
+			}
+		}
+	} else {
+		state = NS::TransferPtr(device->newComputePipelineState(desc.get(), options, nullptr, &error));
 	}
-
-	NS::Error *error = nullptr;
-	NS::SharedPtr<MTL::ComputePipelineState> state = NS::TransferPtr(device->newComputePipelineState(desc.get(), options, nullptr, &error));
 	ERR_FAIL_COND_V_MSG(error != nullptr, PipelineID(), String("error creating pipeline: ") + error->localizedDescription()->utf8String());
 	ERR_FAIL_COND_V_MSG(!state, PipelineID(), "Failed to create compute pipeline state");
 
 	MDComputePipeline *pipeline = new MDComputePipeline(state);
 	pipeline->compute_state.local = shader->local;
 	pipeline->shader = shader;
-
-	if (arc) {
-		MutexLock serialize_lock(archive_serialize_mutex);
-		NS::Error *arc_err = nullptr;
-		if (arc->addComputePipelineFunctions(desc.get(), &arc_err)) {
-			_record_pipeline_archive_addition(arc);
-		} else if (arc_err != nullptr) {
-			print_verbose(String("Metal binary archive addComputePipelineFunctions skipped: ") + arc_err->localizedDescription()->utf8String());
-		}
-	}
 
 	return PipelineID(pipeline);
 }
