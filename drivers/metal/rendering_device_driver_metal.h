@@ -134,15 +134,21 @@ protected:
 		RELEASE_AFTER_WARMUP,
 		PERSIST,
 	};
-	static constexpr uint32_t ARCHIVE_WARMUP_IDLE_FRAMES = 60;
-	static constexpr uint32_t ARCHIVE_WARMUP_MIN_FRAMES = 60;
-	static constexpr uint32_t ARCHIVE_WARMUP_MAX_FRAMES = 180;
+	static constexpr uint32_t ARCHIVE_WARMUP_IDLE_FRAMES = 30;
+	static constexpr uint32_t ARCHIVE_WARMUP_MIN_FRAMES = 30;
+	static constexpr uint32_t ARCHIVE_WARMUP_MAX_FRAMES = 90;
+	static constexpr uint32_t ARCHIVE_WARMUP_MAX_PIPELINES = 64;
+	static constexpr uint32_t ARCHIVE_WARMUP_MAX_COMPUTE_PIPELINES = 16;
+	static constexpr uint64_t ARCHIVE_MAX_DISK_BYTES = 64ull * 1024ull * 1024ull;
 
 	Mutex archive_mutex;
 	Mutex archive_serialize_mutex;
 	NS::SharedPtr<MTL::BinaryArchive> archive;
 	std::atomic<bool> archive_active{ false };
+	std::atomic<bool> archive_tearing_down{ false };
 	uint32_t archive_count = 0;
+	uint32_t archive_added_pipelines = 0;
+	uint32_t archive_added_compute_pipelines = 0;
 	bool archive_dirty = false;
 	bool archive_activity_this_frame = false;
 	uint32_t archive_idle_frames = 0;
@@ -606,7 +612,8 @@ public:
 private:
 	String _pipeline_get_cache_path() const;
 	NS::SharedPtr<MTL::BinaryArchive> _acquire_pipeline_archive();
-	void _record_pipeline_archive_addition(MTL::BinaryArchive *p_archive);
+	bool _can_add_to_pipeline_archive(MTL::BinaryArchive *p_archive, bool p_is_compute);
+	void _record_pipeline_archive_addition(MTL::BinaryArchive *p_archive, bool p_is_compute);
 	void _serialize_archive_to_path(MTL::BinaryArchive *p_archive, const String &p_cache_path);
 	void _wait_archive_release_task();
 	void _maybe_release_pipeline_archive(uint32_t p_frames_drawn);
@@ -795,6 +802,14 @@ public:
 			(void)_acquire_pipeline_archive();
 		}
 		_maybe_release_pipeline_archive(p_frames_drawn);
+	}
+	bool test_record_pipeline_archive_addition(bool p_is_compute) {
+		NS::SharedPtr<MTL::BinaryArchive> local_archive = _acquire_pipeline_archive();
+		if (!local_archive || !_can_add_to_pipeline_archive(local_archive.get(), p_is_compute)) {
+			return false;
+		}
+		_record_pipeline_archive_addition(local_archive.get(), p_is_compute);
+		return true;
 	}
 #endif
 

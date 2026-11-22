@@ -2132,10 +2132,30 @@ NS::SharedPtr<MTL::BinaryArchive> RenderingDeviceDriverMetal::_acquire_pipeline_
 	return archive;
 }
 
-void RenderingDeviceDriverMetal::_record_pipeline_archive_addition(MTL::BinaryArchive *p_archive) {
+bool RenderingDeviceDriverMetal::_can_add_to_pipeline_archive(MTL::BinaryArchive *p_archive, bool p_is_compute) {
+	MutexLock lock(archive_mutex);
+	if (archive.get() != p_archive) {
+		return false;
+	}
+	if (pipeline_cache_mode == PipelineCacheMode::RELEASE_AFTER_WARMUP) {
+		if (archive_added_pipelines >= ARCHIVE_WARMUP_MAX_PIPELINES) {
+			return false;
+		}
+		if (p_is_compute && archive_added_compute_pipelines >= ARCHIVE_WARMUP_MAX_COMPUTE_PIPELINES) {
+			return false;
+		}
+	}
+	return true;
+}
+
+void RenderingDeviceDriverMetal::_record_pipeline_archive_addition(MTL::BinaryArchive *p_archive, bool p_is_compute) {
 	MutexLock lock(archive_mutex);
 	if (archive.get() == p_archive) {
 		archive_count += 1;
+		archive_added_pipelines += 1;
+		if (p_is_compute) {
+			archive_added_compute_pipelines += 1;
+		}
 		archive_dirty = true;
 	}
 }
@@ -2164,7 +2184,9 @@ void RenderingDeviceDriverMetal::_release_archive_task_func(void *p_userdata) {
 	{
 		NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 		if (job->archive) {
-			job->driver->_serialize_archive_to_path(job->archive.get(), job->cache_path);
+			if (!job->driver->archive_tearing_down.load(std::memory_order_acquire)) {
+				job->driver->_serialize_archive_to_path(job->archive.get(), job->cache_path);
+			}
 			job->archive.reset();
 		}
 	}
@@ -2203,12 +2225,15 @@ void RenderingDeviceDriverMetal::_maybe_release_pipeline_archive(uint32_t p_fram
 		}
 		const bool idle_ready = archive_idle_frames >= ARCHIVE_WARMUP_IDLE_FRAMES && p_frames_drawn >= ARCHIVE_WARMUP_MIN_FRAMES;
 		const bool ceiling_reached = archive_open_frames >= ARCHIVE_WARMUP_MAX_FRAMES;
-		if (!idle_ready && !ceiling_reached) {
+		const bool pipeline_cap_reached = archive_added_pipelines >= ARCHIVE_WARMUP_MAX_PIPELINES;
+		if (!idle_ready && !ceiling_reached && !pipeline_cap_reached) {
 			return;
 		}
 		to_release = std::move(archive);
 		need_serialize = archive_dirty;
 		archive_count = 0;
+		archive_added_pipelines = 0;
+		archive_added_compute_pipelines = 0;
 		archive_dirty = false;
 		archive_activity_this_frame = false;
 		archive_idle_frames = 0;
@@ -2221,7 +2246,7 @@ void RenderingDeviceDriverMetal::_maybe_release_pipeline_archive(uint32_t p_fram
 	}
 
 	print_verbose("Metal: releasing binary pipeline archive after warmup to reclaim host memory.");
-	if (need_serialize) {
+	if (need_serialize && !archive_tearing_down.load(std::memory_order_acquire)) {
 		String cache_path = _pipeline_get_cache_path();
 		if (WorkerThreadPool *wtp = WorkerThreadPool::get_singleton()) {
 			_wait_archive_release_task();
@@ -2244,6 +2269,7 @@ bool RenderingDeviceDriverMetal::pipeline_cache_create(const Vector<uint8_t> &p_
 		return false;
 	}
 	_wait_archive_release_task();
+	archive_tearing_down.store(false, std::memory_order_release);
 
 	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 	String cache_path = _pipeline_get_cache_path();
@@ -2253,15 +2279,25 @@ bool RenderingDeviceDriverMetal::pipeline_cache_create(const Vector<uint8_t> &p_
 	NS::SharedPtr<MTL::BinaryArchive> loaded_archive;
 	NS::Error *error = nullptr;
 	if (FileAccess::exists(cache_path)) {
-		CharString path_utf8 = cache_path.utf8();
-		NS::String *ns_path = NS::String::string(path_utf8.get_data(), NS::UTF8StringEncoding);
-		desc->setUrl(NS::URL::fileURLWithPath(ns_path));
-		loaded_archive = NS::TransferPtr(device->newBinaryArchive(desc.get(), &error));
-		if (!loaded_archive || error != nullptr) {
-			print_verbose(vformat("Metal binary archive load missed (%s); starting fresh archive.", cache_path));
-			loaded_archive = nullptr;
-			error = nullptr;
-			desc->setUrl(nullptr);
+		bool skip_oversized = false;
+		if (pipeline_cache_mode == PipelineCacheMode::RELEASE_AFTER_WARMUP) {
+			Ref<FileAccess> existing = FileAccess::open(cache_path, FileAccess::READ);
+			if (existing.is_valid() && existing->get_length() > ARCHIVE_MAX_DISK_BYTES) {
+				print_verbose(vformat("Metal binary archive on disk (%d MiB) exceeds warmup cap; starting fresh lean archive.", int(existing->get_length() / (1024 * 1024))));
+				skip_oversized = true;
+			}
+		}
+		if (!skip_oversized) {
+			CharString path_utf8 = cache_path.utf8();
+			NS::String *ns_path = NS::String::string(path_utf8.get_data(), NS::UTF8StringEncoding);
+			desc->setUrl(NS::URL::fileURLWithPath(ns_path));
+			loaded_archive = NS::TransferPtr(device->newBinaryArchive(desc.get(), &error));
+			if (!loaded_archive || error != nullptr) {
+				print_verbose(vformat("Metal binary archive load missed (%s); starting fresh archive.", cache_path));
+				loaded_archive = nullptr;
+				error = nullptr;
+				desc->setUrl(nullptr);
+			}
 		}
 	}
 	if (!loaded_archive) {
@@ -2273,6 +2309,8 @@ bool RenderingDeviceDriverMetal::pipeline_cache_create(const Vector<uint8_t> &p_
 	MutexLock lock(archive_mutex);
 	archive = std::move(loaded_archive);
 	archive_count = 1;
+	archive_added_pipelines = 0;
+	archive_added_compute_pipelines = 0;
 	archive_dirty = false;
 	archive_activity_this_frame = false;
 	archive_idle_frames = 0;
@@ -2282,12 +2320,15 @@ bool RenderingDeviceDriverMetal::pipeline_cache_create(const Vector<uint8_t> &p_
 }
 
 void RenderingDeviceDriverMetal::pipeline_cache_free() {
+	archive_tearing_down.store(true, std::memory_order_release);
 	_wait_archive_release_task();
 	NS::SharedPtr<MTL::BinaryArchive> to_release;
 	{
 		MutexLock lock(archive_mutex);
 		to_release = std::move(archive);
 		archive_count = 0;
+		archive_added_pipelines = 0;
+		archive_added_compute_pipelines = 0;
 		archive_dirty = false;
 		archive_activity_this_frame = false;
 		archive_idle_frames = 0;
@@ -2306,13 +2347,20 @@ size_t RenderingDeviceDriverMetal::pipeline_cache_query_size() {
 }
 
 Vector<uint8_t> RenderingDeviceDriverMetal::pipeline_cache_serialize() {
+	if (archive_tearing_down.load(std::memory_order_acquire)) {
+		return Vector<uint8_t>();
+	}
 	NS::SharedPtr<MTL::BinaryArchive> local_archive;
+	bool was_dirty = false;
 	{
 		MutexLock lock(archive_mutex);
-		local_archive = archive;
-		archive_dirty = false;
+		was_dirty = archive_dirty;
+		if (was_dirty) {
+			local_archive = archive;
+			archive_dirty = false;
+		}
 	}
-	if (!local_archive) {
+	if (!local_archive || !was_dirty) {
 		return Vector<uint8_t>();
 	}
 
@@ -3181,10 +3229,10 @@ RDD::PipelineID RenderingDeviceDriverMetal::render_pipeline_create(
 		// archive_serialize_mutex -> archive_mutex.
 		MutexLock serialize_lock(archive_serialize_mutex);
 		pipeline->state = NS::TransferPtr(device->newRenderPipelineState(desc.get(), options, nullptr, &error));
-		if (error == nullptr && pipeline->state) {
+		if (error == nullptr && pipeline->state && _can_add_to_pipeline_archive(arc, false)) {
 			NS::Error *arc_err = nullptr;
 			if (arc->addRenderPipelineFunctions(desc.get(), &arc_err)) {
-				_record_pipeline_archive_addition(arc);
+				_record_pipeline_archive_addition(arc, false);
 			} else if (arc_err != nullptr) {
 				print_verbose(String("Metal binary archive addRenderPipelineFunctions skipped: ") + arc_err->localizedDescription()->utf8String());
 			}
@@ -3338,10 +3386,10 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 		// archive_serialize_mutex -> archive_mutex.
 		MutexLock serialize_lock(archive_serialize_mutex);
 		state = NS::TransferPtr(device->newComputePipelineState(desc.get(), options, nullptr, &error));
-		if (error == nullptr && state) {
+		if (error == nullptr && state && _can_add_to_pipeline_archive(arc, true)) {
 			NS::Error *arc_err = nullptr;
 			if (arc->addComputePipelineFunctions(desc.get(), &arc_err)) {
-				_record_pipeline_archive_addition(arc);
+				_record_pipeline_archive_addition(arc, true);
 			} else if (arc_err != nullptr) {
 				print_verbose(String("Metal binary archive addComputePipelineFunctions skipped: ") + arc_err->localizedDescription()->utf8String());
 			}

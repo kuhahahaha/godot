@@ -754,7 +754,7 @@ TEST_CASE("[ExternalOutput][Block23] BUG-71 Metal compute PSO cache deduplicates
 	rd.sync();
 }
 
-TEST_CASE("[ExternalOutput][Metal][BUG-82][BUG-83] binary archive releases under continuous churn and heap allocator never pins dedicated or spill blocks") {
+TEST_CASE("[ExternalOutput][Metal][BUG-82][BUG-83][BUG-86] binary archive bounds warmup memory/churn and heap allocator never pins dedicated or spill blocks") {
 	RenderingContextDriverMetal context;
 	REQUIRE(context.initialize() == OK);
 
@@ -763,26 +763,41 @@ TEST_CASE("[ExternalOutput][Metal][BUG-82][BUG-83] binary archive releases under
 	auto *metal_driver = static_cast<RenderingDeviceDriverMetal *>(driver_base);
 	REQUIRE(metal_driver->initialize(0, 2) == OK);
 
-	// BUG-82: Binary archive MUST release under continuous per-frame PSO churn
-	// at ARCHIVE_WARMUP_MAX_FRAMES (180), and release after ARCHIVE_WARMUP_IDLE_FRAMES (60)
-	// when idle.
+	// BUG-82 + BUG-86: Binary archive MUST release under continuous per-frame PSO churn
+	// at ARCHIVE_WARMUP_MAX_FRAMES (90), release after ARCHIVE_WARMUP_IDLE_FRAMES (30)
+	// when idle, and cap additions at ARCHIVE_WARMUP_MAX_PIPELINES (64) / compute (16).
 	REQUIRE(metal_driver->pipeline_cache_create(Vector<uint8_t>()));
 	CHECK(metal_driver->is_pipeline_archive_active());
-	for (uint32_t f = 1; f < 180; ++f) {
+	for (uint32_t f = 1; f < 90; ++f) {
 		metal_driver->test_step_pipeline_archive_frame(f, true);
 		CHECK(metal_driver->is_pipeline_archive_active());
 	}
-	metal_driver->test_step_pipeline_archive_frame(180, true);
+	metal_driver->test_step_pipeline_archive_frame(90, true);
 	CHECK_FALSE(metal_driver->is_pipeline_archive_active());
 
-	// Reopen and verify idle release after 60 idle frames (with p_frames_drawn >= 60).
+	// Reopen and verify idle release after 30 idle frames (with p_frames_drawn >= 30).
 	REQUIRE(metal_driver->pipeline_cache_create(Vector<uint8_t>()));
 	CHECK(metal_driver->is_pipeline_archive_active());
-	for (uint32_t f = 1; f < 60; ++f) {
+	for (uint32_t f = 1; f < 30; ++f) {
 		metal_driver->test_step_pipeline_archive_frame(f, false);
 		CHECK(metal_driver->is_pipeline_archive_active());
 	}
-	metal_driver->test_step_pipeline_archive_frame(60, false);
+	metal_driver->test_step_pipeline_archive_frame(30, false);
+	CHECK_FALSE(metal_driver->is_pipeline_archive_active());
+
+	// Reopen and verify compute additions cap at 16 and total additions cap at 64,
+	// triggering immediate archive release on the very next frame!
+	REQUIRE(metal_driver->pipeline_cache_create(Vector<uint8_t>()));
+	CHECK(metal_driver->is_pipeline_archive_active());
+	for (uint32_t i = 0; i < 16; ++i) {
+		CHECK(metal_driver->test_record_pipeline_archive_addition(true));
+	}
+	CHECK_FALSE(metal_driver->test_record_pipeline_archive_addition(true)); // Compute cap reached!
+	for (uint32_t i = 16; i < 64; ++i) {
+		CHECK(metal_driver->test_record_pipeline_archive_addition(false));
+	}
+	CHECK_FALSE(metal_driver->test_record_pipeline_archive_addition(false)); // Total cap reached!
+	metal_driver->test_step_pipeline_archive_frame(1, true);
 	CHECK_FALSE(metal_driver->is_pipeline_archive_active());
 
 	// BUG-83.2: MetalHeapAllocator must NEVER recycle Kind::DEDICATED buffers,
