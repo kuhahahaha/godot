@@ -1776,15 +1776,11 @@ void RenderingDeviceDriverMetal::shader_free(ShaderID p_shader) {
 		for (const RenderPipelineCacheKey &key : stale_render_keys) {
 			render_pso_cache.erase(key);
 		}
-		LocalVector<ComputePipelineCacheKey> stale_compute_keys;
-		for (const KeyValue<ComputePipelineCacheKey, ComputePipelineCacheEntry> &kv : compute_pso_cache) {
-			if (kv.key.shader_id == p_shader.id) {
-				stale_compute_keys.push_back(kv.key);
-			}
-		}
-		for (const ComputePipelineCacheKey &key : stale_compute_keys) {
-			compute_pso_cache.erase(key);
-		}
+		// compute_pso_cache is content-addressed by MDLibrary SHA-256 + descriptor
+		// mutability + specialization constants and stores self-contained
+		// NS::SharedPtr<MTL::ComputePipelineState> (no raw MDComputeShader pointers),
+		// so entries remain valid across shader_free and are bounded by
+		// MAX_COMPUTE_PSO_CACHE_ENTRIES and cleared in ~RenderingDeviceDriverMetal().
 	}
 	MDShader *obj = (MDShader *)p_shader.id;
 	delete obj;
@@ -2693,7 +2689,10 @@ bool RenderingDeviceDriverMetal::RenderPipelineCacheKey::operator==(const Render
 
 bool RenderingDeviceDriverMetal::ComputePipelineCacheKey::operator==(const ComputePipelineCacheKey &p_rhs) const {
 	if (cached_hash != p_rhs.cached_hash ||
-			shader_id != p_rhs.shader_id ||
+			memcmp(library_key.data, p_rhs.library_key.data, sizeof(library_key.data)) != 0 ||
+			uses_argument_buffers != p_rhs.uses_argument_buffers ||
+			argument_buffer_count != p_rhs.argument_buffer_count ||
+			dynamic_buffer_mask != p_rhs.dynamic_buffer_mask ||
 			spec_constants.size() != p_rhs.spec_constants.size()) {
 		return false;
 	}
@@ -3247,22 +3246,36 @@ void RenderingDeviceDriverMetal::command_compute_dispatch_indirect(CommandBuffer
 RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) {
 	MDComputeShader *shader = (MDComputeShader *)(p_shader.id);
 
+	const SHA256Digest *lib_key = shader->kernel ? shader->kernel->get_cache_key() : nullptr;
+	const bool can_cache = (lib_key != nullptr) && (!shader->uses_argument_buffers || shader->sets.size() <= 64);
 	ComputePipelineCacheKey cache_key;
-	cache_key.shader_id = p_shader.id;
-	cache_key.spec_constants.reserve(p_specialization_constants.size());
-	uint32_t h = hash_murmur3_one_64(cache_key.shader_id);
-	for (uint32_t i = 0; i < p_specialization_constants.size(); ++i) {
-		PipelineSpecConstKey sk;
-		sk.constant_id = p_specialization_constants[i].constant_id;
-		sk.type = uint32_t(p_specialization_constants[i].type);
-		sk.bits = _metal_spec_const_bits(p_specialization_constants[i]);
-		h = hash_murmur3_one_32(sk.constant_id, h);
-		h = hash_murmur3_one_32(sk.type, h);
-		h = hash_murmur3_one_32(sk.bits, h);
-		cache_key.spec_constants.push_back(sk);
-	}
-	cache_key.cached_hash = hash_fmix32(h);
-	{
+	if (can_cache) {
+		cache_key.library_key = *lib_key;
+		cache_key.uses_argument_buffers = shader->uses_argument_buffers;
+		if (shader->uses_argument_buffers) {
+			cache_key.argument_buffer_count = shader->sets.size();
+			for (uint32_t i = 0; i < shader->sets.size(); ++i) {
+				if (!shader->sets[i].dynamic_uniforms.is_empty()) {
+					cache_key.dynamic_buffer_mask |= (uint64_t(1) << i);
+				}
+			}
+		}
+		cache_key.spec_constants.reserve(p_specialization_constants.size());
+		uint32_t h = hash_murmur3_buffer(cache_key.library_key.data, sizeof(cache_key.library_key.data));
+		h = hash_murmur3_one_32(cache_key.uses_argument_buffers ? 1u : 0u, h);
+		h = hash_murmur3_one_32(cache_key.argument_buffer_count, h);
+		h = hash_murmur3_one_64(cache_key.dynamic_buffer_mask, h);
+		for (uint32_t i = 0; i < p_specialization_constants.size(); ++i) {
+			PipelineSpecConstKey sk;
+			sk.constant_id = p_specialization_constants[i].constant_id;
+			sk.type = uint32_t(p_specialization_constants[i].type);
+			sk.bits = _metal_spec_const_bits(p_specialization_constants[i]);
+			h = hash_murmur3_one_32(sk.constant_id, h);
+			h = hash_murmur3_one_32(sk.type, h);
+			h = hash_murmur3_one_32(sk.bits, h);
+			cache_key.spec_constants.push_back(sk);
+		}
+		cache_key.cached_hash = hash_fmix32(h);
 		MutexLock lock(pipeline_state_cache_mutex);
 		if (const ComputePipelineCacheEntry *cached = compute_pso_cache.getptr(cache_key)) {
 			MDComputePipeline *pipeline = new MDComputePipeline(cached->state);
@@ -3333,7 +3346,7 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 
 	compute_pso_cache_misses.fetch_add(1, std::memory_order_relaxed);
 	total_compute_pso_cache_misses.fetch_add(1, std::memory_order_relaxed);
-	{
+	if (can_cache) {
 		MutexLock lock(pipeline_state_cache_mutex);
 		if (compute_pso_cache.size() >= MAX_COMPUTE_PSO_CACHE_ENTRIES) {
 			compute_pso_cache.clear();

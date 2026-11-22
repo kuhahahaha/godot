@@ -651,6 +651,108 @@ TEST_CASE("[ExternalOutput][Block23] BUG-50 PARTICLE_LIGHT_64 fast-refresh updat
 	rd.free_rid(recs_rid);
 	rd.free_rid(meta_rid);
 }
+
+TEST_CASE("[ExternalOutput][Block23] BUG-71 Metal compute PSO cache deduplicates identical compute shaders across distinct units") {
+	REQUIRE(RenderingDevice::get_singleton() == nullptr);
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDevice rd;
+	REQUIRE(rd.initialize(&context) == OK);
+
+	static constexpr const char *kComputeGlslA =
+			"#version 450\n"
+			"layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;\n"
+			"layout(set = 0, binding = 0, std430) buffer OutBuf { uint data[]; };\n"
+			"void main() {\n"
+			"    uint idx = gl_GlobalInvocationID.x;\n"
+			"    data[idx] = idx * 3u + 7u;\n"
+			"}\n";
+	static constexpr const char *kComputeGlslDiff =
+			"#version 450\n"
+			"layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;\n"
+			"layout(set = 0, binding = 0, std430) buffer OutBuf { uint data[]; };\n"
+			"void main() {\n"
+			"    uint idx = gl_GlobalInvocationID.x;\n"
+			"    data[idx] = idx * 5u + 11u;\n"
+			"}\n";
+
+	auto compile_compute_bytecode = [&](const char *p_glsl) -> Vector<uint8_t> {
+		String err;
+		RD::ShaderStageSPIRVData cs;
+		cs.shader_stage = RD::SHADER_STAGE_COMPUTE;
+		cs.spirv = rd.shader_compile_spirv_from_source(RD::SHADER_STAGE_COMPUTE, String::utf8(p_glsl), RD::SHADER_LANGUAGE_GLSL, &err, false);
+		REQUIRE(!cs.spirv.is_empty());
+		Vector<RD::ShaderStageSPIRVData> stages;
+		stages.push_back(cs);
+		const Vector<uint8_t> bytecode = rd.shader_compile_binary_from_spirv(stages, String("bug71_compute"));
+		REQUIRE(!bytecode.is_empty());
+		return bytecode;
+	};
+
+	const Vector<uint8_t> bytecode_a = compile_compute_bytecode(kComputeGlslA);
+	const Vector<uint8_t> bytecode_diff = compile_compute_bytecode(kComputeGlslDiff);
+
+	const RID shader_a = rd.shader_create_from_bytecode(bytecode_a);
+	const RID shader_b = rd.shader_create_from_bytecode(bytecode_a);
+	REQUIRE(shader_a.is_valid());
+	REQUIRE(shader_b.is_valid());
+	CHECK(shader_a != shader_b);
+
+	const uint64_t misses_before = RenderingDeviceDriverMetal::get_total_compute_pso_cache_misses();
+	const uint64_t hits_before = RenderingDeviceDriverMetal::get_total_compute_pso_cache_hits();
+
+	const RID pipe_a = rd.compute_pipeline_create(shader_a);
+	REQUIRE(pipe_a.is_valid());
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_misses() == misses_before + 1u);
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_hits() == hits_before);
+
+	// Distinct MDComputeShader unit with identical SPIR-V bytecode MUST hit compute_pso_cache
+	// and reuse the exact same MTL::ComputePipelineState* pointer!
+	const RID pipe_b = rd.compute_pipeline_create(shader_b);
+	REQUIRE(pipe_b.is_valid());
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_misses() == misses_before + 1u);
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_hits() == hits_before + 1u);
+
+	const uint64_t mtl_pso_a = rd.get_driver_resource(RD::DRIVER_RESOURCE_COMPUTE_PIPELINE, pipe_a, 0);
+	const uint64_t mtl_pso_b = rd.get_driver_resource(RD::DRIVER_RESOURCE_COMPUTE_PIPELINE, pipe_b, 0);
+	CHECK(mtl_pso_a != 0u);
+	CHECK(mtl_pso_b == mtl_pso_a);
+
+	// Freeing shader_a + pipe_a MUST NOT evict the content-addressed PSO entry or break pipe_b,
+	// and recreating a third identical shader unit MUST still hit compute_pso_cache.
+	rd.free_rid(pipe_a);
+	rd.free_rid(shader_a);
+	rd.submit();
+	rd.sync();
+
+	const RID shader_c = rd.shader_create_from_bytecode(bytecode_a);
+	REQUIRE(shader_c.is_valid());
+	const RID pipe_c = rd.compute_pipeline_create(shader_c);
+	REQUIRE(pipe_c.is_valid());
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_misses() == misses_before + 1u);
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_hits() == hits_before + 2u);
+	CHECK(rd.get_driver_resource(RD::DRIVER_RESOURCE_COMPUTE_PIPELINE, pipe_c, 0) == mtl_pso_a);
+
+	// A different compute shader MUST miss and produce a distinct MTL::ComputePipelineState*.
+	const RID shader_diff = rd.shader_create_from_bytecode(bytecode_diff);
+	REQUIRE(shader_diff.is_valid());
+	const RID pipe_diff = rd.compute_pipeline_create(shader_diff);
+	REQUIRE(pipe_diff.is_valid());
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_misses() == misses_before + 2u);
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_hits() == hits_before + 2u);
+	const uint64_t mtl_pso_diff = rd.get_driver_resource(RD::DRIVER_RESOURCE_COMPUTE_PIPELINE, pipe_diff, 0);
+	CHECK(mtl_pso_diff != 0u);
+	CHECK(mtl_pso_diff != mtl_pso_a);
+
+	rd.free_rid(pipe_diff);
+	rd.free_rid(shader_diff);
+	rd.free_rid(pipe_c);
+	rd.free_rid(shader_c);
+	rd.free_rid(pipe_b);
+	rd.free_rid(shader_b);
+	rd.submit();
+	rd.sync();
+}
 #endif
 
 } // namespace TestExternalOutputBlock23

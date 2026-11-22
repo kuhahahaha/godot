@@ -242,7 +242,10 @@ protected:
 	};
 
 	struct ComputePipelineCacheKey {
-		uint64_t shader_id = 0;
+		SHA256Digest library_key;
+		bool uses_argument_buffers = false;
+		uint32_t argument_buffer_count = 0;
+		uint64_t dynamic_buffer_mask = 0;
 		LocalVector<PipelineSpecConstKey> spec_constants;
 		uint32_t cached_hash = 0;
 

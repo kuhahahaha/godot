@@ -765,6 +765,10 @@ MDLibrary::~MDLibrary() {
 void MDLibrary::set_label(NS::String *p_label) {
 }
 
+const SHA256Digest *MDLibrary::get_cache_key() const {
+	return _entry ? &_entry->key : nullptr;
+}
+
 #pragma mark - MDLazyLibrary
 
 /// Loads the MTLLibrary when the library is first accessed.

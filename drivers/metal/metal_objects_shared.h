@@ -854,6 +854,7 @@ public:
 #endif
 
 	virtual bool retire_ready_nonblocking() const { return true; }
+	const SHA256Digest *get_cache_key() const;
 	virtual MTL::Library *get_library() = 0;
 	virtual NS::Error *get_error() = 0;
 	virtual void set_label(NS::String *p_label);
