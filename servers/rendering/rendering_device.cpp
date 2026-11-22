@@ -9345,6 +9345,16 @@ RDG::RecordHandle RenderingDevice::_compute_list_dispatch_recorded(ComputeListID
 		}
 	}
 #endif
+	ERR_FAIL_COND_V_MSG(!compute_list.state.pipeline_shader_driver_id, RDG::RecordHandle(), "No compute pipeline was set before attempting to dispatch.");
+	for (uint32_t i = 0; i < compute_list.state.set_count; i++) {
+		if (compute_list.state.sets[i].pipeline_expected_format == 0) {
+			continue;
+		}
+		ERR_FAIL_COND_V_MSG(compute_list.state.sets[i].pipeline_expected_format != compute_list.state.sets[i].uniform_set_format,
+				RDG::RecordHandle(), "Uniform set (" + itos(i) + ") was not supplied or does not match compute pipeline format.");
+		ERR_FAIL_NULL_V_MSG(uniform_set_owner.get_or_null(compute_list.state.sets[i].uniform_set),
+				RDG::RecordHandle(), "Uniform set (" + itos(i) + ") is invalid or was freed before compute dispatch.");
+	}
 	// Reserve pending-clear worker dependencies before descriptor graph prefixes.
 	for (uint32_t i = 0; i < compute_list.state.set_count; ++i) {
 		if (!compute_list.state.sets[i].pipeline_expected_format || compute_list.state.sets[i].bound) {
@@ -9533,6 +9543,16 @@ void RenderingDevice::compute_list_dispatch_indirect(ComputeListID p_list, RID p
 		}
 	}
 #endif
+	ERR_FAIL_COND_MSG(!compute_list.state.pipeline_shader_driver_id, "No compute pipeline was set before attempting to dispatch.");
+	for (uint32_t i = 0; i < compute_list.state.set_count; i++) {
+		if (compute_list.state.sets[i].pipeline_expected_format == 0) {
+			continue;
+		}
+		ERR_FAIL_COND_MSG(compute_list.state.sets[i].pipeline_expected_format != compute_list.state.sets[i].uniform_set_format,
+				"Uniform set (" + itos(i) + ") was not supplied or does not match compute pipeline format.");
+		ERR_FAIL_NULL_MSG(uniform_set_owner.get_or_null(compute_list.state.sets[i].uniform_set),
+				"Uniform set (" + itos(i) + ") is invalid or was freed before compute dispatch.");
+	}
 	// Reserve pending-clear worker dependencies before descriptor graph prefixes.
 	for (uint32_t i = 0; i < compute_list.state.set_count; ++i) {
 		if (!compute_list.state.sets[i].pipeline_expected_format || compute_list.state.sets[i].bound) {

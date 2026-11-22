@@ -282,6 +282,86 @@ TEST_CASE("[ExternalOutput][Block23] ParticleLight64 instant hide via is_slot_vi
 	rd.free_rid(recs_rid);
 	rd.free_rid(meta_rid);
 }
+
+TEST_CASE("[ExternalOutput][Block23] compute_list_dispatch guards missing or freed uniform sets without crashing") {
+	REQUIRE(RenderingDevice::get_singleton() == nullptr);
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDevice rd;
+	REQUIRE(rd.initialize(&context) == OK);
+
+	static constexpr const char *kWriteSsboGlsl =
+			"#version 450\n"
+			"layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;\n"
+			"layout(set = 0, binding = 0, std430) buffer OutBuf { uint v; } u_out;\n"
+			"void main() { u_out.v = 1u; }\n";
+	String shd_err;
+	RD::ShaderStageSPIRVData cs_stage;
+	cs_stage.shader_stage = RD::SHADER_STAGE_COMPUTE;
+	cs_stage.spirv = rd.shader_compile_spirv_from_source(RD::SHADER_STAGE_COMPUTE, String::utf8(kWriteSsboGlsl), RD::SHADER_LANGUAGE_GLSL, &shd_err, false);
+	REQUIRE(!cs_stage.spirv.is_empty());
+
+	Vector<RD::ShaderStageSPIRVData> stages;
+	stages.push_back(cs_stage);
+	const RID shader = rd.shader_create_from_spirv(stages);
+	REQUIRE(shader.is_valid());
+	const RID pipeline = rd.compute_pipeline_create(shader);
+	REQUIRE(pipeline.is_valid());
+
+	const RID ssbo = rd.storage_buffer_create(16u);
+	REQUIRE(ssbo.is_valid());
+	const RID indirect_buf = rd.storage_buffer_create(16u, {}, RD::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT);
+	REQUIRE(indirect_buf.is_valid());
+
+	Vector<RD::Uniform> uniforms;
+	RD::Uniform u;
+	u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+	u.binding = 0;
+	u.append_id(ssbo);
+	uniforms.push_back(u);
+	const RID uniform_set = rd.uniform_set_create(uniforms, shader, 0);
+	REQUIRE(uniform_set.is_valid());
+
+	// Case 1: writable SSBO held immutable causes compute_list_bind_uniform_set to fail;
+	// subsequent dispatch / dispatch_indirect must return cleanly without dereferencing nullptr.
+	Vector<RID> roots;
+	roots.push_back(ssbo);
+	RD::NativeImmutableHold hold;
+	REQUIRE(rd.native_immutable_hold_acquire(roots, hold, 8u) == OK);
+	const uint32_t before_dispatches = rd.test_get_compute_dispatch_count();
+	ERR_PRINT_OFF;
+	{
+		RD::ComputeListID cl = rd.compute_list_begin();
+		rd.compute_list_bind_compute_pipeline(cl, pipeline);
+		rd.compute_list_bind_uniform_set(cl, uniform_set, 0);
+		rd.compute_list_dispatch(cl, 1, 1, 1);
+		rd.compute_list_dispatch_indirect(cl, indirect_buf, 0);
+		rd.compute_list_end();
+	}
+	ERR_PRINT_ON;
+	CHECK(rd.test_get_compute_dispatch_count() == before_dispatches);
+	REQUIRE(rd.native_immutable_hold_release(hold) == OK);
+
+	// Case 2: uniform set freed after binding (format still matches pipeline);
+	// dispatch / dispatch_indirect must still guard null uniform_set cleanly.
+	ERR_PRINT_OFF;
+	{
+		RD::ComputeListID cl = rd.compute_list_begin();
+		rd.compute_list_bind_compute_pipeline(cl, pipeline);
+		rd.compute_list_bind_uniform_set(cl, uniform_set, 0);
+		rd.free_rid(uniform_set);
+		rd.compute_list_dispatch(cl, 1, 1, 1);
+		rd.compute_list_dispatch_indirect(cl, indirect_buf, 0);
+		rd.compute_list_end();
+	}
+	ERR_PRINT_ON;
+	CHECK(rd.test_get_compute_dispatch_count() == before_dispatches);
+
+	rd.free_rid(indirect_buf);
+	rd.free_rid(ssbo);
+	rd.free_rid(pipeline);
+	rd.free_rid(shader);
+}
 #endif
 
 } // namespace TestExternalOutputBlock23

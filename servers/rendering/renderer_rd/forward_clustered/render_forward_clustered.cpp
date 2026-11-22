@@ -3745,7 +3745,8 @@ void RenderForwardClustered::_update_render_base_uniform_set(Error *p_error, Vec
 			return;
 		}
 		*p_error = OK;
-		if (ltc.lut1_texture.is_null() || ltc.lut2_texture.is_null()) {
+		if (ltc.lut1_texture.is_null() || ltc.lut2_texture.is_null() ||
+				native_qualification_zero_storage_buffer.is_null() || native_qualification_zero_uniform_buffer.is_null()) {
 			*p_error = ERR_BUSY;
 			return;
 		}
@@ -3761,11 +3762,14 @@ void RenderForwardClustered::_update_render_base_uniform_set(Error *p_error, Vec
 		if (!p_native_sources) { lightmap_texture_array_version = light_storage->lightmap_array_get_version(); }
 
 		auto *texture_storage = RendererRD::TextureStorage::get_singleton();
-		// The fixed qualification scene has no decals or area lights. Its shader
-		// still declares the atlas samplers in the shared layout.
+		// The fixed qualification scene has no lights, probes, lightmaps, decals,
+		// globals, or SDFGI. Use fixed zero-initialized Set-0 buffers so live
+		// per-frame mutable renderer buffers are never pinned immutable.
 		const RID fixed_atlas = p_native_sources
 				? texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK)
 				: RID();
+		const RID fixed_storage = p_native_sources ? native_qualification_zero_storage_buffer : RID();
+		const RID fixed_uniform = p_native_sources ? native_qualification_zero_uniform_buffer : RID();
 		Vector<RD::Uniform> uniforms;
 
 		{
@@ -3780,21 +3784,21 @@ void RenderForwardClustered::_update_render_base_uniform_set(Error *p_error, Vec
 			RD::Uniform u;
 			u.binding = 3;
 			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-			u.append_id(RendererRD::LightStorage::get_singleton()->get_omni_light_buffer());
+			u.append_id(p_native_sources ? fixed_storage : RendererRD::LightStorage::get_singleton()->get_omni_light_buffer());
 			uniforms.push_back(u);
 		}
 		{
 			RD::Uniform u;
 			u.binding = 4;
 			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-			u.append_id(RendererRD::LightStorage::get_singleton()->get_spot_light_buffer());
+			u.append_id(p_native_sources ? fixed_storage : RendererRD::LightStorage::get_singleton()->get_spot_light_buffer());
 			uniforms.push_back(u);
 		}
 		{
 			RD::Uniform u;
 			u.binding = 5;
 			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-			u.append_id(RendererRD::LightStorage::get_singleton()->get_area_light_buffer());
+			u.append_id(p_native_sources ? fixed_storage : RendererRD::LightStorage::get_singleton()->get_area_light_buffer());
 			uniforms.push_back(u);
 		}
 
@@ -3802,28 +3806,28 @@ void RenderForwardClustered::_update_render_base_uniform_set(Error *p_error, Vec
 			RD::Uniform u;
 			u.binding = 6;
 			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-			u.append_id(RendererRD::LightStorage::get_singleton()->get_reflection_probe_buffer());
+			u.append_id(p_native_sources ? fixed_storage : RendererRD::LightStorage::get_singleton()->get_reflection_probe_buffer());
 			uniforms.push_back(u);
 		}
 		{
 			RD::Uniform u;
 			u.binding = 7;
 			u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
-			u.append_id(RendererRD::LightStorage::get_singleton()->get_directional_light_buffer());
+			u.append_id(p_native_sources ? fixed_uniform : RendererRD::LightStorage::get_singleton()->get_directional_light_buffer());
 			uniforms.push_back(u);
 		}
 		{
 			RD::Uniform u;
 			u.binding = 8;
 			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-			u.append_id(scene_state.lightmap_buffer);
+			u.append_id(p_native_sources ? fixed_storage : scene_state.lightmap_buffer);
 			uniforms.push_back(u);
 		}
 		{
 			RD::Uniform u;
 			u.binding = 9;
 			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-			u.append_id(scene_state.lightmap_capture_buffer);
+			u.append_id(p_native_sources ? fixed_storage : scene_state.lightmap_capture_buffer);
 			uniforms.push_back(u);
 		}
 		{
@@ -3846,7 +3850,7 @@ void RenderForwardClustered::_update_render_base_uniform_set(Error *p_error, Vec
 			RD::Uniform u;
 			u.binding = 12;
 			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-			u.append_id(RendererRD::TextureStorage::get_singleton()->get_decal_buffer());
+			u.append_id(p_native_sources ? fixed_storage : RendererRD::TextureStorage::get_singleton()->get_decal_buffer());
 			uniforms.push_back(u);
 		}
 
@@ -3854,7 +3858,7 @@ void RenderForwardClustered::_update_render_base_uniform_set(Error *p_error, Vec
 			RD::Uniform u;
 			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 			u.binding = 13;
-			u.append_id(RendererRD::MaterialStorage::get_singleton()->global_shader_uniforms_get_storage_buffer());
+			u.append_id(p_native_sources ? fixed_storage : RendererRD::MaterialStorage::get_singleton()->global_shader_uniforms_get_storage_buffer());
 			uniforms.push_back(u);
 		}
 
@@ -3862,7 +3866,7 @@ void RenderForwardClustered::_update_render_base_uniform_set(Error *p_error, Vec
 			RD::Uniform u;
 			u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
 			u.binding = 14;
-			u.append_id(sdfgi_get_ubo());
+			u.append_id(p_native_sources ? fixed_uniform : sdfgi_get_ubo());
 			uniforms.push_back(u);
 		}
 
@@ -6138,6 +6142,12 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (ltc.lut2_texture.is_valid()) {
 		RS::get_singleton()->free_rid(ltc.lut2_texture);
 	}
+	if (native_qualification_zero_storage_buffer.is_valid()) {
+		RD::get_singleton()->free_rid(native_qualification_zero_storage_buffer);
+	}
+	if (native_qualification_zero_uniform_buffer.is_valid()) {
+		RD::get_singleton()->free_rid(native_qualification_zero_uniform_buffer);
+	}
 
 	{
 		for (const RID &rid : scene_state.uniform_buffers) {
@@ -6440,6 +6450,29 @@ Error RenderForwardClustered::ensure_native_material_recipe_sources_ready() {
 	}
 	if (ltc.lut1_texture.is_null() || ltc.lut2_texture.is_null()) {
 		_update_render_base_uniform_set(nullptr, nullptr);
+	}
+	if (native_qualification_zero_storage_buffer.is_null()) {
+		Vector<uint8_t> zero_storage;
+		if (zero_storage.resize_initialized(512) != OK) {
+			return ERR_OUT_OF_MEMORY;
+		}
+		native_qualification_zero_storage_buffer = rd->storage_buffer_create(uint32_t(zero_storage.size()), zero_storage);
+		if (native_qualification_zero_storage_buffer.is_null()) {
+			return ERR_CANT_CREATE;
+		}
+	}
+	if (native_qualification_zero_uniform_buffer.is_null()) {
+		const auto *light_storage = RendererRD::LightStorage::get_singleton();
+		const uint32_t dir_light_bytes = light_storage ? light_storage->get_directional_light_buffer_size() : 0u;
+		const uint32_t ubo_bytes = MAX(MAX(dir_light_bytes, uint32_t(sizeof(RendererRD::GI::SDFGIData))), 64u);
+		Vector<uint8_t> zero_ubo;
+		if (zero_ubo.resize_initialized(ubo_bytes) != OK) {
+			return ERR_OUT_OF_MEMORY;
+		}
+		native_qualification_zero_uniform_buffer = rd->uniform_buffer_create(ubo_bytes, zero_ubo);
+		if (native_qualification_zero_uniform_buffer.is_null()) {
+			return ERR_CANT_CREATE;
+		}
 	}
 	if (scene_state.instance_buffer[RENDER_LIST_OPAQUE]._get_if_ready(0u).is_null()) {
 		if (scene_state.instance_buffer[RENDER_LIST_OPAQUE].get_size(0u) == 0u) {
