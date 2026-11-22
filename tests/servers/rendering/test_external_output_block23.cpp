@@ -753,6 +753,102 @@ TEST_CASE("[ExternalOutput][Block23] BUG-71 Metal compute PSO cache deduplicates
 	rd.submit();
 	rd.sync();
 }
+
+TEST_CASE("[ExternalOutput][Metal][BUG-82][BUG-83] binary archive releases under continuous churn and heap allocator never pins dedicated or spill blocks") {
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+
+	RenderingDeviceDriver *driver_base = context.driver_create();
+	REQUIRE(driver_base != nullptr);
+	auto *metal_driver = static_cast<RenderingDeviceDriverMetal *>(driver_base);
+	REQUIRE(metal_driver->initialize(0, 2) == OK);
+
+	// BUG-82: Binary archive MUST release under continuous per-frame PSO churn
+	// at ARCHIVE_WARMUP_MAX_FRAMES (180), and release after ARCHIVE_WARMUP_IDLE_FRAMES (60)
+	// when idle.
+	REQUIRE(metal_driver->pipeline_cache_create(Vector<uint8_t>()));
+	CHECK(metal_driver->is_pipeline_archive_active());
+	for (uint32_t f = 1; f < 180; ++f) {
+		metal_driver->test_step_pipeline_archive_frame(f, true);
+		CHECK(metal_driver->is_pipeline_archive_active());
+	}
+	metal_driver->test_step_pipeline_archive_frame(180, true);
+	CHECK_FALSE(metal_driver->is_pipeline_archive_active());
+
+	// Reopen and verify idle release after 60 idle frames (with p_frames_drawn >= 60).
+	REQUIRE(metal_driver->pipeline_cache_create(Vector<uint8_t>()));
+	CHECK(metal_driver->is_pipeline_archive_active());
+	for (uint32_t f = 1; f < 60; ++f) {
+		metal_driver->test_step_pipeline_archive_frame(f, false);
+		CHECK(metal_driver->is_pipeline_archive_active());
+	}
+	metal_driver->test_step_pipeline_archive_frame(60, false);
+	CHECK_FALSE(metal_driver->is_pipeline_archive_active());
+
+	// BUG-83.2: MetalHeapAllocator must NEVER recycle Kind::DEDICATED buffers,
+	// and must evict recycled buffers from spill POOL blocks so extra placement heaps
+	// are reclaimed rather than pinned.
+	{
+		MetalHeapAllocator heap_alloc(metal_driver->get_device());
+		const MTL::ResourceOptions shared_opts = MTL::ResourceStorageModeShared;
+
+		// 10 MiB > POOL_SHARED preferred block/2 (8 MiB), <= max_recycled_bytes (16 MiB):
+		// lands in DEDICATED and MUST be freed immediately (dedicated_count -> 0).
+		MetalBuffer dedicated = heap_alloc.new_buffer(10u * 1024u * 1024u, shared_opts);
+		REQUIRE(dedicated.buffer.get() != nullptr);
+		CHECK(dedicated.allocation.kind == MetalAllocation::Kind::DEDICATED);
+		MetalAllocatorStats stats = {};
+		heap_alloc.get_stats(stats);
+		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].dedicated_count == 1u);
+		heap_alloc.free_buffer(dedicated);
+		heap_alloc.get_stats(stats);
+		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].dedicated_count == 0u);
+		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].dedicated_bytes == 0u);
+
+		// Spill POOL_SHARED (16 MiB blocks) across 3 blocks using 3x 7 MiB POOL buffers
+		// (each <= 8 MiB -> Kind::POOL, two fit per block -> 2 blocks; add 3rd -> 2 blocks,
+		// 5x 7 MiB -> 3 blocks). Freeing the 3rd block's sole buffer MUST NOT leave it
+		// pinned in recycled_buffers once there are > 1 blocks + empty block!
+		MetalBuffer b0 = heap_alloc.new_buffer(7u * 1024u * 1024u, shared_opts);
+		MetalBuffer b1 = heap_alloc.new_buffer(7u * 1024u * 1024u, shared_opts);
+		MetalBuffer b2 = heap_alloc.new_buffer(7u * 1024u * 1024u, shared_opts);
+		MetalBuffer b3 = heap_alloc.new_buffer(7u * 1024u * 1024u, shared_opts);
+		MetalBuffer b4 = heap_alloc.new_buffer(7u * 1024u * 1024u, shared_opts);
+		REQUIRE(b4.buffer.get() != nullptr);
+		CHECK(b4.allocation.kind == MetalAllocation::Kind::POOL);
+		heap_alloc.get_stats(stats);
+		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].block_count == 3u);
+
+		// Free b2, b3, b4 (emptying blocks 1 and 2) -> spill block 2 MUST be reclaimed
+		// (block_count drops from 3 to 2, keeping at most 1 empty cached block!).
+		heap_alloc.free_buffer(b2);
+		heap_alloc.free_buffer(b3);
+		heap_alloc.free_buffer(b4);
+		heap_alloc.get_stats(stats);
+		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].block_count == 2u);
+
+		// Small POOL buffer in block 0 still recycles cleanly.
+		const uint64_t hits_before = heap_alloc.get_buffer_recycle_hits();
+		MetalBuffer small_a = heap_alloc.new_buffer(4096u, shared_opts);
+		REQUIRE(small_a.buffer.get() != nullptr);
+		heap_alloc.free_buffer(small_a);
+		MetalBuffer small_b = heap_alloc.new_buffer(4096u, shared_opts);
+		REQUIRE(small_b.buffer.get() != nullptr);
+		CHECK(heap_alloc.get_buffer_recycle_hits() == hits_before + 1u);
+
+		heap_alloc.free_buffer(small_b);
+		heap_alloc.free_buffer(b1);
+		heap_alloc.free_buffer(b0);
+	}
+
+	// BUG-83.3: fence_free cleanly drains unrecycled fences with zero crash.
+	const RDD::FenceID fence = metal_driver->fence_create();
+	REQUIRE(fence.id != 0);
+	metal_driver->fence_free(fence);
+
+	metal_driver->pipeline_cache_free();
+	context.driver_free(driver_base);
+}
 #endif
 
 } // namespace TestExternalOutputBlock23

@@ -1632,9 +1632,10 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 
 		std::shared_ptr<MDLibrary> library;
 		if (shader_data.library_size > 0) {
-			ERR_FAIL_COND_V_MSG(mtl_reflection_data.os_min_version > device_properties->os_version,
-					RDD::ShaderID(),
-					"Metal shader binary was generated for a newer target OS");
+			if (mtl_reflection_data.os_min_version > device_properties->os_version) {
+				memdelete(cd);
+				ERR_FAIL_V_MSG(RDD::ShaderID(), "Metal shader binary was generated for a newer target OS");
+			}
 #ifdef TESTS_ENABLED
 			audit["phase"] = "binary_load";
 			cd->creation_seq = ShaderCompileAudit::emit(audit);
@@ -1645,6 +1646,7 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 					source.get(),
 #endif
 					binary);
+			dispatch_release(binary);
 		} else {
 			library = MDLibrary::create(cd, device, source.get(), options.get(), _shader_load_strategy);
 		}
@@ -2192,13 +2194,16 @@ void RenderingDeviceDriverMetal::_maybe_release_pipeline_archive(uint32_t p_fram
 			archive_active.store(false, std::memory_order_release);
 			return;
 		}
+		++archive_open_frames;
 		if (archive_activity_this_frame) {
 			archive_activity_this_frame = false;
 			archive_idle_frames = 0;
-			return;
+		} else {
+			++archive_idle_frames;
 		}
-		++archive_idle_frames;
-		if (archive_idle_frames < ARCHIVE_WARMUP_IDLE_FRAMES || p_frames_drawn < ARCHIVE_WARMUP_MIN_FRAMES) {
+		const bool idle_ready = archive_idle_frames >= ARCHIVE_WARMUP_IDLE_FRAMES && p_frames_drawn >= ARCHIVE_WARMUP_MIN_FRAMES;
+		const bool ceiling_reached = archive_open_frames >= ARCHIVE_WARMUP_MAX_FRAMES;
+		if (!idle_ready && !ceiling_reached) {
 			return;
 		}
 		to_release = std::move(archive);
@@ -2207,6 +2212,7 @@ void RenderingDeviceDriverMetal::_maybe_release_pipeline_archive(uint32_t p_fram
 		archive_dirty = false;
 		archive_activity_this_frame = false;
 		archive_idle_frames = 0;
+		archive_open_frames = 0;
 		archive_active.store(false, std::memory_order_release);
 	}
 
@@ -2270,6 +2276,7 @@ bool RenderingDeviceDriverMetal::pipeline_cache_create(const Vector<uint8_t> &p_
 	archive_dirty = false;
 	archive_activity_this_frame = false;
 	archive_idle_frames = 0;
+	archive_open_frames = 0;
 	archive_active.store(true, std::memory_order_release);
 	return true;
 }
@@ -2284,6 +2291,7 @@ void RenderingDeviceDriverMetal::pipeline_cache_free() {
 		archive_dirty = false;
 		archive_activity_this_frame = false;
 		archive_idle_frames = 0;
+		archive_open_frames = 0;
 		archive_active.store(false, std::memory_order_release);
 	}
 	if (to_release) {
@@ -2938,7 +2946,7 @@ RDD::PipelineID RenderingDeviceDriverMetal::render_pipeline_create(
 
 	// Input assembly & tessellation.
 
-	MDRenderPipeline *pipeline = new MDRenderPipeline();
+	std::unique_ptr<MDRenderPipeline> pipeline = std::make_unique<MDRenderPipeline>();
 
 	switch (p_render_primitive) {
 		case RENDER_PRIMITIVE_POINTS:
@@ -3204,7 +3212,7 @@ RDD::PipelineID RenderingDeviceDriverMetal::render_pipeline_create(
 		render_pso_cache.insert(std::move(cache_key), std::move(entry));
 	}
 
-	return PipelineID(pipeline);
+	return PipelineID(pipeline.release());
 }
 
 #pragma mark - Compute

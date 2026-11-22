@@ -451,14 +451,17 @@ public:
 		params.view_count = 1;
 		Renderer::NativeSurfacePipelineSelection selected;
 
-		// INDEXED_144 (ribbons) must XOR host owner->mirror with params.reverse_cull:
+		// BUG-84: external_particles uploads Identity (store_transform=false) and
+		// ANGE's ribbon exporter already canonicalizes world-space CCW winding for
+		// det(H) < 0, so INDEXED_144 must preserve params.reverse_cull regardless
+		// of host owner->mirror (avoiding double-flip backface culling):
 		surface.external_surface.profile = RendererRD::ExternalOutputConfig::INDEXED_144;
 		for (bool mirror : { false, true }) {
 			for (bool reverse_cull : { false, true }) {
 				owner.mirror = mirror;
 				params.reverse_cull = reverse_cull;
 				const auto req = Renderer::_external_pipeline_request(params, surface, selected);
-				CHECK(req.reverse_cull == (mirror != reverse_cull));
+				CHECK(req.reverse_cull == reverse_cull);
 			}
 		}
 
@@ -513,6 +516,6 @@ TEST_CASE("[B4][MobileNativePassSelection][MobileNativeSurfacePipeline] actual s
 	RendererSceneRenderImplementation::TestMobileNativePassSelection::native_surface_pipeline();
 }
 
-TEST_CASE("[ExternalOutput][MobileNativePassSelection] BUG-47 INDEXED_144 reverses hardware face culling on mirrored host scale") {
+TEST_CASE("[ExternalOutput][MobileNativePassSelection] BUG-84 INDEXED_144 preserves hardware face culling on mirrored host scale") {
 	RendererSceneRenderImplementation::TestMobileNativePassSelection::external_indexed144_mirror_reverse_cull();
 }

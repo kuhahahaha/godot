@@ -134,8 +134,9 @@ protected:
 		RELEASE_AFTER_WARMUP,
 		PERSIST,
 	};
-	static constexpr uint32_t ARCHIVE_WARMUP_IDLE_FRAMES = 300;
-	static constexpr uint32_t ARCHIVE_WARMUP_MIN_FRAMES = 300;
+	static constexpr uint32_t ARCHIVE_WARMUP_IDLE_FRAMES = 60;
+	static constexpr uint32_t ARCHIVE_WARMUP_MIN_FRAMES = 60;
+	static constexpr uint32_t ARCHIVE_WARMUP_MAX_FRAMES = 180;
 
 	Mutex archive_mutex;
 	Mutex archive_serialize_mutex;
@@ -145,6 +146,7 @@ protected:
 	bool archive_dirty = false;
 	bool archive_activity_this_frame = false;
 	uint32_t archive_idle_frames = 0;
+	uint32_t archive_open_frames = 0;
 	PipelineCacheMode pipeline_cache_mode = PipelineCacheMode::RELEASE_AFTER_WARMUP;
 	WorkerThreadPool::TaskID archive_release_task = WorkerThreadPool::INVALID_TASK_ID;
 	// DEV: When true, attempting to create a pipeline will fail if it cannot use the archive.
@@ -786,6 +788,15 @@ public:
 	static uint64_t get_total_render_pso_cache_misses() { return total_render_pso_cache_misses.load(std::memory_order_relaxed); }
 	static uint64_t get_total_compute_pso_cache_hits() { return total_compute_pso_cache_hits.load(std::memory_order_relaxed); }
 	static uint64_t get_total_compute_pso_cache_misses() { return total_compute_pso_cache_misses.load(std::memory_order_relaxed); }
+	bool is_pipeline_archive_active() const { return archive_active.load(std::memory_order_acquire); }
+#ifdef TESTS_ENABLED
+	void test_step_pipeline_archive_frame(uint32_t p_frames_drawn, bool p_simulate_activity) {
+		if (p_simulate_activity) {
+			(void)_acquire_pipeline_archive();
+		}
+		_maybe_release_pipeline_archive(p_frames_drawn);
+	}
+#endif
 
 private:
 	/*********************/

@@ -401,9 +401,7 @@ RendererRD::ExternalPacketPipelineRequest RenderForwardClustered::_external_pipe
 	external_request.color_flags = p_selected.color_pass_flags;
 	external_request.view_count = p_params.view_count;
 	external_request.wireframe = p_params.force_wireframe;
-	const bool is_indexed144 = p_surface.external_surface.get_profile() == RendererRD::ExternalOutputConfig::INDEXED_144;
-	const bool host_mirror = p_surface.owner != nullptr && p_surface.owner->mirror;
-	external_request.reverse_cull = is_indexed144 ? (host_mirror != p_params.reverse_cull) : p_params.reverse_cull;
+	external_request.reverse_cull = p_params.reverse_cull;
 	external_request.double_sided_shadow = (p_surface.flags & GeometryInstanceSurfaceDataCache::FLAG_USES_DOUBLE_SIDED_SHADOWS) != 0;
 	external_request.specialization[0] = p_selected.specialization.packed_0;
 	external_request.specialization[1] = p_selected.specialization.packed_1;

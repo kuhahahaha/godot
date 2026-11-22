@@ -178,8 +178,10 @@ private:
 	struct Block {
 		NS::SharedPtr<MTL::Heap> heap;
 		OffsetAllocator::Allocator *metadata = nullptr;
-		// The number of live allocations in this block.
+		// The number of live allocations in this block (including recycled buffers).
 		uint32_t live = 0;
+		// Subset of `live` currently sitting idle in pool.recycled_buffers.
+		uint32_t recycled_count = 0;
 	};
 
 	struct RecycledBuffer {
