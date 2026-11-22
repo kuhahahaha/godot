@@ -110,7 +110,7 @@ Error Registry::production_create_service(GDExtensionProductionRequestRefV1 ref,
 		if (kind == ProductionControlKind::SET_CREATE && cell.state == ProductionControlState::PENDING && rd && rd->render_thread_id == Thread::get_caller_id()) {
 			auto &mcell = request->control;
 			mcell.state = ProductionControlState::EXECUTING;
-			const Error exec_err = production_create_execute_locked(*request, *rd, kind, index);
+			const Error exec_err = production_set_create_execute_batch_locked(*request, *rd, index);
 			mcell.output.result = result(exec_err);
 			mcell.state = ProductionControlState::RETURNED;
 		}
@@ -312,6 +312,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 	if (!count || !valid(bindings)) {
 		return result(ERR_INVALID_PARAMETER);
 	}
+	uint64_t schedule_leader_serial = 0;
 	{
 		Lock lock(*this);
 		ProductionRequest *request = nullptr;
@@ -328,6 +329,10 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 		if (slot.declaration.resource_kind != GDEXTENSION_PRODUCTION_SET_V1 || slot.declaration.ownership != GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || !unit.imported || unit.declaration.resource_kind != GDEXTENSION_PRODUCTION_UNIT_V1 || unit.use_count != 2 || slot.declaration.original_part != shader_set) {
 			return result(ERR_INVALID_DATA);
 		}
+		const bool can_batch_with_leader =
+				(request->control.state == ProductionControlState::PENDING || request->control.state == ProductionControlState::QUEUED) &&
+				request->control.input.kind == ProductionControlKind::SET_CREATE &&
+				rd && rd->render_thread_id != Thread::get_caller_id();
 		if (slot.owned_serial) {
 			if (slot.imported_unit_slot != unit_index || slot.shader_set != shader_set || slot.binding_count != count) {
 				return result(ERR_INVALID_DATA);
@@ -340,9 +345,55 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 			if (slot.output_set_deferred) {
 				return result(OK);
 			}
+			const bool is_active_leader =
+					request->control.state != ProductionControlState::OWNER_CONSUMED &&
+					request->control.input.kind == ProductionControlKind::SET_CREATE &&
+					request->control.input.resource_slot == index;
+			if (!is_active_leader) {
+				if (!slot.creating && !slot.batched_set_create) {
+					return result(slot.handoff_error);
+				}
+				if (slot.batched_set_create && slot.creating) {
+					if (request->control.state == ProductionControlState::PENDING && request->control.input.kind == ProductionControlKind::SET_CREATE) {
+						schedule_leader_serial = request->control.serial;
+					} else {
+						return result(ERR_BUSY);
+					}
+				} else if (slot.creating && can_batch_with_leader) {
+					ProductionAttachment *checked = nullptr;
+					if ((error = production_attachment_locked({ instance, request->attachment->serial }, true, checked, rd)) != OK) {
+						slot.creating = false;
+						slot.handoff_error = error;
+						request->returns[index].pending = false;
+						return result(error);
+					}
+					if (request->cancelled || request->release_started || (request->native_static_sealed && !request->frozen) || request->continuation_inflight) {
+						slot.creating = false;
+						slot.handoff_error = ERR_BUSY;
+						request->returns[index].pending = false;
+						return result(ERR_BUSY);
+					}
+					slot.batched_set_create = true;
+					if (request->control.state == ProductionControlState::PENDING) {
+						schedule_leader_serial = request->control.serial;
+					} else {
+						return result(ERR_BUSY);
+					}
+				}
+			}
 		} else {
-			if ((error = production_request_locked(ref, true, request, rd)) != OK) {
-				return result(error);
+			if (can_batch_with_leader) {
+				ProductionAttachment *checked = nullptr;
+				if ((error = production_attachment_locked({ instance, request->attachment->serial }, true, checked, rd)) != OK) {
+					return result(error);
+				}
+				if (request->cancelled || request->release_started || (request->native_static_sealed && !request->frozen) || request->continuation_inflight) {
+					return result(ERR_BUSY);
+				}
+			} else {
+				if ((error = production_request_locked(ref, true, request, rd)) != OK) {
+					return result(error);
+				}
 			}
 			if (request->frozen || request->capture_inflight || request->binding_used > request->capacity.resource_uses - request->use_count || count > request->capacity.resource_uses - request->use_count - request->binding_used || request->revision > UINT64_MAX - uint64_t(request->capacity.graph_memberships) * 2 - uint64_t(request->capacity.native_memberships) * 2 - request->capacity.readbacks - request->capacity.resources - 8 || production_serials.exhausted || production_serials.next > UINT64_MAX - 2 || !request->next_control_serial) {
 				return result(ERR_INVALID_DATA);
@@ -405,9 +456,22 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 			slot.creating = true;
 			request->returns[index].pending = true;
 			request->returns[index].serial = slot.retire_serial;
-			error = production_create_accept_locked(*request, ProductionControlKind::SET_CREATE, index);
-			CRASH_COND(error != OK);
+			if (can_batch_with_leader) {
+				slot.batched_set_create = true;
+				if (request->control.state == ProductionControlState::PENDING) {
+					schedule_leader_serial = request->control.serial;
+				} else {
+					return result(ERR_BUSY);
+				}
+			} else {
+				error = production_create_accept_locked(*request, ProductionControlKind::SET_CREATE, index);
+				CRASH_COND(error != OK);
+			}
 		}
+	}
+	if (schedule_leader_serial) {
+		const Error scheduled = production_control_schedule(ref, schedule_leader_serial);
+		return result(scheduled == OK ? ERR_BUSY : scheduled);
 	}
 	return result(production_create_service(ref, ProductionControlKind::SET_CREATE, index));
 }
@@ -922,6 +986,39 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 	++request.revision;
 	return finish(error != OK ? error : request.source_device_lost ? ERR_UNAVAILABLE
 																   : OK);
+}
+
+void Registry::production_set_create_cancel_batched_locked(ProductionRequest &request, Error p_error) {
+	for (uint32_t i = 0; i < request.resource_count; ++i) {
+		auto &slot = request.resources[i];
+		if (!slot.batched_set_create) {
+			continue;
+		}
+		slot.batched_set_create = false;
+		if (slot.creating) {
+			slot.creating = false;
+			slot.handoff_error = p_error;
+			if (!slot.primary.is_valid() && i < request.capacity.return_cells) {
+				request.returns[i].pending = false;
+			}
+		}
+	}
+}
+
+Error Registry::production_set_create_execute_batch_locked(ProductionRequest &request, RenderingDevice &rd, uint32_t leader_index) {
+	const Error leader_err = production_create_execute_locked(request, rd, ProductionControlKind::SET_CREATE, leader_index);
+	for (uint32_t other = 0; other < request.resource_count; ++other) {
+		if (other == leader_index) {
+			continue;
+		}
+		auto &other_slot = request.resources[other];
+		if (!other_slot.batched_set_create || !other_slot.creating) {
+			continue;
+		}
+		other_slot.batched_set_create = false;
+		(void)production_create_execute_locked(request, rd, ProductionControlKind::SET_CREATE, other);
+	}
+	return leader_err;
 }
 
 bool Registry::production_maintenance_budget_ready_locked(const ProductionRequest &request, const GDExtensionProductionServiceBudgetV1 &budget, const ProductionServiceUsage &usage) const {

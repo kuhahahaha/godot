@@ -1142,6 +1142,8 @@ private:
 	Error production_create_service(GDExtensionProductionRequestRefV1, ProductionControlKind, uint32_t);
 	Error production_create_accept_locked(ProductionRequest &, ProductionControlKind, uint32_t);
 	Error production_create_execute_locked(ProductionRequest &, RenderingDevice &, ProductionControlKind, uint32_t);
+	Error production_set_create_execute_batch_locked(ProductionRequest &, RenderingDevice &, uint32_t);
+	void production_set_create_cancel_batched_locked(ProductionRequest &, Error);
 	Error production_observe_service(GDExtensionProductionRequestRefV1, const GDExtensionProductionServiceBudgetV1 &);
 	Error production_sets_step_locked(ProductionRequest &, RenderingDevice &, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
 	Error production_readback_delivery(BufferReadbackSourceCapture &, bool);

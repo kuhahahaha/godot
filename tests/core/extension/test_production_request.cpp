@@ -4772,6 +4772,256 @@ struct Access {
 		}
 		CHECK(test.setup.owner_cleaned);
 	}
+	struct BatchedSetCreate {
+		static constexpr uint32_t BATCH_SETS = 8;
+		bool cancel_while_queued = false;
+		SplitEnrollment setup;
+		Semaphore owner_ready, rt_returned;
+		Error initialized = ERR_UNCONFIGURED, qualification_opened = ERR_UNCONFIGURED, unit_created = ERR_UNCONFIGURED;
+		GDExtensionNativeUnitBackingV1 unit = {};
+		GDExtensionNativeUnitRetireRefV1 unit_retired = {};
+		uint32_t phase = 0;
+		bool done = false, passed = true;
+		uint32_t first_failure_line = 0, last_failure_line = 0, failure_count = 0;
+		bool check(uint32_t line, bool ok) {
+			if (!ok) {
+				if (!first_failure_line) {
+					first_failure_line = line;
+				}
+				last_failure_line = line;
+				++failure_count;
+				passed = false;
+			}
+			return ok;
+		}
+		void rendezvous(uint32_t next_phase) {
+			phase = next_phase;
+			owner_ready.post();
+			rt_returned.wait();
+		}
+		static void run(void *data) {
+			auto &test = *static_cast<BatchedSetCreate *>(data);
+			auto &fixture = *test.setup.fixture;
+			auto &registry = fixture.registry;
+			using namespace GDExtensionDeviceExit;
+			OrdinalPlan plan;
+			plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 1, 2 + BATCH_SETS, 1 + BATCH_SETS, 1, 64, 0, 2 + BATCH_SETS, 8, 4 };
+			plan.attachment_requests = 1;
+			test.initialized = fixture.initialize_owner(1, false, true, nullptr, nullptr, false, 1, false, nullptr, false, false, false, false, &plan, nullptr, true);
+			if (test.initialized != OK) {
+				fixture.cleanup_owner();
+				test.done = true;
+				test.owner_ready.post();
+				return;
+			}
+			const auto reserve_v2 = reinterpret_cast<GDExtensionInterfaceDeviceSessionProductionReserveV2>(GDExtension::get_interface_function("device_session_production_reserve_v2"));
+			if (!test.check(__LINE__, reserve_v2 != nullptr)) {
+				fixture.cleanup_owner();
+				test.done = true;
+				test.owner_ready.post();
+				return;
+			}
+			GDExtensionProductionActionV2 action = { 0, 10, 0, 0, GDEXTENSION_PRODUCTION_DISPATCH_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
+			GDExtensionProductionResourceV1 resources[2 + BATCH_SETS] = {};
+			resources[0] = { GDEXTENSION_PRODUCTION_UNIT_V1, 0, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 0, 0, 0 };
+			resources[1] = { GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 16, uint64_t(RDD::BUFFER_USAGE_STORAGE_BIT) };
+			for (uint32_t i = 0; i < BATCH_SETS; ++i) {
+				resources[2 + i] = { GDEXTENSION_PRODUCTION_SET_V1, 2 + i, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 0, 0 };
+			}
+			GDExtensionProductionUseV1 use = { 1, GDEXTENSION_PRODUCTION_READ_WRITE_V1, 0, 16, 0 };
+			GDExtensionProductionRequestRefV1 ref = {};
+			const Error reserved = Error(reserve_v2(fixture.attachment, &plan.operation, &plan.capacity, &action, 1, resources, 2 + BATCH_SETS, &use, 1, nullptr, 0, &ref).native_error);
+			if (!test.check(__LINE__, reserved == OK && ref.handle_serial != 0)) {
+				fixture.cleanup_owner();
+				test.done = true;
+				test.owner_ready.post();
+				return;
+			}
+			{
+				MutexLock lock(registry.mutex);
+				RenderingDevice *rd_ptr = nullptr;
+				test.check(__LINE__, registry.production_request_locked(ref, false, fixture.request, rd_ptr) == OK);
+			}
+			auto &request = *fixture.request;
+			test.qualification_opened = Error(registry.qualification_open(&Enrollment::ABI, fixture.ready, fixture.context, fixture.session, { fixture.instance, fixture.holder.handle_serial }, &fixture.qualification).native_error);
+			if (!test.check(__LINE__, test.qualification_opened == OK && fixture.qualification.handle_serial)) {
+				test.check(__LINE__, registry.production_cancel(ref).native_error == OK);
+				test.check(__LINE__, registry.production_release(ref).native_error == OK);
+				fixture.cleanup_owner();
+				test.done = true;
+				test.owner_ready.post();
+				return;
+			}
+			test.rendezvous(1); // Create qualification compute unit on RT.
+			if (!test.check(__LINE__, test.unit_created == OK && test.unit.unit.handle_serial != 0)) {
+				test.check(__LINE__, registry.production_cancel(ref).native_error == OK);
+				test.check(__LINE__, registry.production_release(ref).native_error == OK);
+				fixture.cleanup_owner();
+				test.done = true;
+				test.owner_ready.post();
+				return;
+			}
+			test.check(__LINE__, registry.production_import_unit(ref, 0, &test.unit).native_error == OK);
+			const GDExtensionStorageCreateRequestV1 storage_origin = { Enrollment::ABI, 16u, 1, 0, 1, 1, 0 };
+			GDExtensionStorageBackingV1 backing = {};
+			test.check(__LINE__, registry.production_storage_create(ref, 1, &storage_origin, &backing).native_error == ERR_BUSY);
+			test.rendezvous(2); // Execute STORAGE_CREATE on RT.
+			test.check(__LINE__, registry.production_storage_create(ref, 1, &storage_origin, &backing).native_error == OK);
+
+			const GDExtensionProductionSetBindingV1 binding = { production_dto_abi<GDExtensionProductionSetBindingV1>(), 0, 0, 0, 1, 0, 16u };
+			if (test.cancel_while_queued) {
+				test.rendezvous(3); // Saturate FIFO so leader stays PENDING while followers batch onto it.
+			}
+			test.check(__LINE__, registry.production_set_create(ref, 2, 0, 0, &binding, 1).native_error == ERR_BUSY);
+			const uint64_t leader_serial = request.control.serial;
+			test.check(__LINE__, leader_serial != 0 && request.control.input.kind == ProductionControlKind::SET_CREATE && request.control.input.resource_slot == 2);
+			test.check(__LINE__, request.control.state == (test.cancel_while_queued ? ProductionControlState::PENDING : ProductionControlState::QUEUED));
+
+			// Enqueue all 7 follower uniform sets while the single leader control is active.
+			for (uint32_t i = 1; i < BATCH_SETS; ++i) {
+				test.check(__LINE__, registry.production_set_create(ref, 2 + i, 0, 0, &binding, 1).native_error == ERR_BUSY);
+				test.check(__LINE__, request.control.serial == leader_serial);
+				test.check(__LINE__, request.resources[2 + i].batched_set_create && request.resources[2 + i].creating && request.returns[2 + i].pending);
+			}
+			test.check(__LINE__, fixture.driver.set_creates == 0 && request.binding_used == BATCH_SETS);
+
+			if (test.cancel_while_queued) {
+				// Simulate request cancellation before the queued batch runs on RT.
+				{
+					MutexLock lock(registry.mutex);
+					request.cancelled = true;
+				}
+				test.rendezvous(4); // Drain stale FIFO entries; leader still PENDING.
+				test.check(__LINE__, request.control.state == ProductionControlState::PENDING);
+				test.check(__LINE__, registry.production_set_create(ref, 2, 0, 0, &binding, 1).native_error == ERR_BUSY);
+				test.check(__LINE__, request.control.state == ProductionControlState::QUEUED);
+				test.rendezvous(5); // Single RT turn executes leader + all 7 followers under cancelled state.
+				test.check(__LINE__, fixture.driver.set_creates == 0);
+				test.check(__LINE__, request.control.state == ProductionControlState::RETURNED);
+				for (uint32_t i = 1; i < BATCH_SETS; ++i) {
+					test.check(__LINE__, !request.resources[2 + i].creating && !request.resources[2 + i].batched_set_create && !request.returns[2 + i].pending);
+					test.check(__LINE__, registry.production_set_create(ref, 2 + i, 0, 0, &binding, 1).native_error == ERR_BUSY);
+				}
+				test.check(__LINE__, registry.production_set_create(ref, 2, 0, 0, &binding, 1).native_error == ERR_BUSY);
+				test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED && !request.returns[2].pending);
+			} else {
+				// ONE single RT control execution creates ALL 8 uniform sets.
+				test.rendezvous(5);
+				test.check(__LINE__, fixture.driver.set_creates == BATCH_SETS);
+				test.check(__LINE__, request.control.serial == leader_serial && request.control.state == ProductionControlState::RETURNED);
+				// Polling followers returns OK immediately with zero RT round-trips.
+				for (uint32_t i = 1; i < BATCH_SETS; ++i) {
+					test.check(__LINE__, !request.resources[2 + i].creating && !request.resources[2 + i].batched_set_create && request.resources[2 + i].imported);
+					test.check(__LINE__, registry.production_set_create(ref, 2 + i, 0, 0, &binding, 1).native_error == OK);
+				}
+				// Polling leader consumes request.control back to OWNER_CONSUMED.
+				test.check(__LINE__, registry.production_set_create(ref, 2, 0, 0, &binding, 1).native_error == OK);
+				test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED && request.resources[2].imported);
+				// Mismatched bindings on an already-finished follower still fail cleanly.
+				GDExtensionProductionSetBindingV1 wrong = binding;
+				wrong.bytes = 32u;
+				test.check(__LINE__, registry.production_set_create(ref, 3, 0, 0, &wrong, 1).native_error == ERR_INVALID_DATA);
+				test.check(__LINE__, registry.production_cancel(ref).native_error == OK);
+			}
+
+			// Cleanly retire storage + all created uniform sets and verify zero leaked return cells.
+			const GDExtensionStorageRetireRequestV1 retire_origin = { Enrollment::ABI, backing.backing, backing.rid, backing.backing_serial, 1, 0, 1, 1, 0 };
+			GDExtensionStorageRetireRefV1 retire_ref = {};
+			GDExtensionStorageRetireReportV1 retire_report = {};
+			test.check(__LINE__, registry.production_storage_retire(ref, 1, &retire_origin, &retire_ref, &retire_report).native_error == OK);
+			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 4, 16, 0 };
+			for (uint32_t turn = 0; turn < 32 && retire_report.state != 1; ++turn) {
+				const Error sched = Error(registry.production_storage_observe(ref, retire_ref, &budget, &retire_report).native_error);
+				test.check(__LINE__, sched == OK || sched == ERR_BUSY);
+				if (request.control.state != ProductionControlState::OWNER_CONSUMED) {
+					test.rendezvous(6);
+					const Error cons = Error(registry.production_storage_observe(ref, retire_ref, &budget, &retire_report).native_error);
+					test.check(__LINE__, cons == OK || cons == ERR_BUSY);
+				}
+			}
+			test.check(__LINE__, retire_report.state == 1 && fixture.driver.buffer_frees == 1);
+			if (!test.cancel_while_queued) {
+				test.check(__LINE__, fixture.driver.set_frees == BATCH_SETS);
+			}
+			test.check(__LINE__, registry.production_storage_release(ref, retire_ref).native_error == OK);
+			test.check(__LINE__, drain_request_cursor(fixture, ref, [&]() { test.rendezvous(6); }));
+			for (uint32_t i = 0; i < 2 + BATCH_SETS; ++i) {
+				test.check(__LINE__, !request.returns[i].pending);
+			}
+			test.check(__LINE__, registry.production_release(ref).native_error == OK && request.serial == 0);
+			test.rendezvous(7);
+			GDExtensionNativeUnitRetireReportV1 unit_report = {};
+			const GDExtensionQualificationBudgetV1 unit_budget = { Enrollment::ABI, 1, 5000, 0 };
+			for (uint32_t turn = 0; turn < 32 && unit_report.state != 1; ++turn) {
+				test.check(__LINE__, registry.qualification_native_unit_retire_observe(fixture.qualification, test.unit_retired, &unit_budget, &unit_report).native_error == OK);
+				test.rendezvous(8);
+			}
+			test.check(__LINE__, unit_report.state == 1);
+			test.check(__LINE__, registry.qualification_native_unit_retire_release(fixture.qualification, test.unit_retired).native_error == OK);
+			fixture.cleanup_owner();
+			test.done = true;
+			test.owner_ready.post();
+		}
+	};
+	static void singleton_batched_set_create(bool cancel_while_queued = false) {
+		auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
+		if (!check_step(server && !server->create_thread && server->server_thread == Thread::get_caller_id() && !RenderingDevice::get_singleton())) {
+			return;
+		}
+		server->sync();
+		BatchedSetCreate test;
+		test.cancel_while_queued = cancel_while_queued;
+		test.setup.server = server;
+		Thread owner;
+		owner.start(&split_owner_start<BatchedSetCreate>, &test);
+		if (!check_step(migrate_split_owner(test.setup))) {
+			test.setup.main_released.post();
+			owner.wait_to_finish();
+			return;
+		}
+		auto &fixture = *test.setup.fixture;
+		while (true) {
+			test.owner_ready.wait();
+			if (test.done) {
+				break;
+			}
+			if (test.phase == 1) {
+				fixture.rd.draw_graph.initialize(&fixture.driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+				fixture.rd.draw_graph.begin();
+				fixture.rd.frames[0].qualification_epoch = 1;
+				fixture.rd.frames[0].fence = RDD::FenceID(93);
+				fixture.rd.frames[0].command_buffer = RDD::CommandBufferID(90);
+				fixture.rd.frames[0].command_pool = RDD::CommandPoolID(94);
+				fixture.rd.main_queue = RDD::CommandQueueID(1);
+				test.unit_created = create_split_unit(fixture, test.unit, 16u);
+			} else if (test.phase == 3) {
+				uint32_t filled = 0;
+				while (filled < (1u << 20) && server->_try_production_control_dispatch(0, 0, 0, 0)) {
+					++filled;
+				}
+				CHECK((filled > 0 && filled < (1u << 20)));
+			} else if (test.phase == 7) {
+				QuoteDriver::QualificationCleanupScope cleanup_scope(fixture.driver);
+				const GDExtensionNativeUnitRetireRequestV1 retire = { Enrollment::ABI, test.unit.unit, 92, 0 };
+				GDExtensionNativeUnitRetireReportV1 report = {};
+				CHECK(fixture.registry.qualification_native_unit_retire(fixture.qualification, &retire, &test.unit_retired, &report).native_error == OK);
+				fixture.rd._free_pending_resources(0);
+			} else if (test.phase == 8) {
+				QuoteDriver::QualificationCleanupScope cleanup_scope(fixture.driver);
+				server->sync();
+			} else {
+				server->sync();
+			}
+			test.rt_returned.post();
+		}
+		test.setup.main_released.post();
+		owner.wait_to_finish();
+		CHECK(test.initialized == OK);
+		CHECK(test.qualification_opened == OK);
+		CHECK(test.unit_created == OK);
+		CHECK_MESSAGE(test.passed, "BatchedSetCreate first failure line=", test.first_failure_line, ", last failure line=", test.last_failure_line, ", failed checks=", test.failure_count, ", final phase=", test.phase);
+		CHECK(test.setup.owner_cleaned);
+	}
 	static void singleton_split_owner_observe() {
 		auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
 		if (!check_step(server && !server->create_thread && server->server_thread == Thread::get_caller_id() && !RenderingDevice::get_singleton())) {
@@ -22099,5 +22349,14 @@ TEST_CASE("[SceneTree][ProductionRequest][ObservePrepaidNativePasses] one origin
 	}
 	SUBCASE("original two-pass aggregation") {
 		TestProductionRequest::Access::observe_prepaid_native_passes(2);
+	}
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][BatchedSetCreate] separate-RT batched SET_CREATE completes 8 sets in one RT turn and cancels cleanly") {
+	SUBCASE("8 sets created in 1 RT turn") {
+		TestProductionRequest::Access::singleton_batched_set_create(false);
+	}
+	SUBCASE("cancellation with queued batch leaks zero return cells") {
+		TestProductionRequest::Access::singleton_batched_set_create(true);
 	}
 }

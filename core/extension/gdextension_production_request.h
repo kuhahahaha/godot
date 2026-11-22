@@ -397,7 +397,7 @@ class ProductionResourceSlot {
 	GDExtensionStorageRetireRequestV1 retire_origin = {};
 	GDExtensionStorageRetireReportV1 retire_report = {};
 	uint64_t owned_serial = 0, retire_serial = 0;
-	bool creating = false, retiring = false, returned = false;
+	bool creating = false, batched_set_create = false, retiring = false, returned = false;
 	// Independent CPU allocation, not a GPU storage backing or return fact.
 	ProductionOutputMetadataLease *metadata_consumer = nullptr;
 	void *metadata_data = nullptr;

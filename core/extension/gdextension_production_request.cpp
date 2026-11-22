@@ -2452,6 +2452,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_cancel_locked(ProductionRe
 		r->cancelled = true;
 		++r->revision;
 	}
+	production_set_create_cancel_batched_locked(*r, ERR_UNAVAILABLE);
 	return result(r->effects_pending ? ERR_BUSY : OK);
 }
 GDExtensionDeviceSessionResultV1 Registry::production_release_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionServiceBudgetV1 *input, GDExtensionProductionServiceBudgetV1 *remaining, GDExtensionProductionReportV2 *report, uint32_t expected_contract) {
@@ -4238,8 +4239,15 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 			cell.output.result = result(rd ? production_raster_prepare_execute_locked(request, *rd) : production_raster_prepare_finish_locked(request, ERR_UNAVAILABLE));
 			break;
 		case ProductionControlKind::STORAGE_CREATE:
-		case ProductionControlKind::SET_CREATE:
 			cell.output.result = result(rd ? production_create_execute_locked(request, *rd, cell.input.kind, cell.input.resource_slot) : ERR_UNAVAILABLE);
+			break;
+		case ProductionControlKind::SET_CREATE:
+			if (rd) {
+				cell.output.result = result(production_set_create_execute_batch_locked(request, *rd, cell.input.resource_slot));
+			} else {
+				production_set_create_cancel_batched_locked(request, ERR_UNAVAILABLE);
+				cell.output.result = result(ERR_UNAVAILABLE);
+			}
 			break;
 		case ProductionControlKind::CANCEL:
 			cell.output.result = production_cancel_locked(request);
@@ -4348,6 +4356,8 @@ void Registry::production_control_dispatch(uint64_t registry, uint64_t attachmen
 				cell.output.control_serial = cell.serial;
 				if (cell.input.kind == ProductionControlKind::RASTER_CREATE) {
 					production_raster_prepare_finish_locked(r, ERR_INVALID_DATA);
+				} else if (cell.input.kind == ProductionControlKind::SET_CREATE) {
+					production_set_create_cancel_batched_locked(r, ERR_INVALID_DATA);
 				}
 				cell.output.result = result(ERR_INVALID_DATA, 16);
 				cell.state = ProductionControlState::RETURNED;
