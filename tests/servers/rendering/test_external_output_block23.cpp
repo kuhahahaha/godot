@@ -310,11 +310,9 @@ TEST_CASE("[ExternalOutput][Block23] compute_list_dispatch guards missing or fre
 	const RID pipeline = rd.compute_pipeline_create(shader);
 	REQUIRE(pipeline.is_valid());
 
-	Vector<uint8_t> zero_init;
-	zero_init.resize(16);
-	memset(zero_init.ptrw(), 0, 16);
-	const RID ssbo = rd.storage_buffer_create(16u, zero_init);
+	const RID ssbo = rd.storage_buffer_create(16u);
 	REQUIRE(ssbo.is_valid());
+	REQUIRE(rd.buffer_clear(ssbo, 0u, 16u) == OK);
 	Vector<uint8_t> indirect_init;
 	indirect_init.resize(16);
 	memset(indirect_init.ptrw(), 0, 16);
