@@ -315,7 +315,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_request_requirements_inter
 				return result(ERR_INVALID_DATA);
 			}
 		}
-		error = production_output_demand_locked(*attachment, *rd, input, projected.write[i]);
+		error = production_output_demand_locked(*attachment, *rd, input, projected.write[i], uint64_t(pool.resource_uses - capacity.resource_uses));
 		if (error != OK) {
 			return result(error);
 		}
@@ -2890,7 +2890,8 @@ Error Registry::production_output_generation_cleanup_context(ProductionPhysicalC
 }
 
 // Enter and return holding Registry and RD locks, within original OBSERVE.
-// One exact linked root row per dispatch; no arena scan or callback registry.
+// Sweeps across live output owners up to the offered pass/receipt/deadline
+// budget (preserving single-owner dispatch when budget.passes <= 1).
 Error Registry::production_output_owners_service_locked(ProductionRequest &request, RenderingDevice &rd) {
 	auto &control = request.control;
 	if (control.state != ProductionControlState::EXECUTING || control.input.kind != ProductionControlKind::OBSERVE || control.input.request_serial != request.serial) {
@@ -2901,59 +2902,96 @@ Error Registry::production_output_owners_service_locked(ProductionRequest &reque
 	}
 	const auto &budget = control.input.budget;
 	auto &usage = control.output.service_usage;
-	if (!budget.controls || usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u) || !budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros || request.capture_inflight || request.continuation_inflight || request.source_device_lost || request.revision > UINT64_MAX - uint64_t(request.capacity.graph_memberships) * 2 - uint64_t(request.capacity.native_memberships) * 2 - request.capacity.readbacks - request.capacity.resources - 8) {
+	auto budget_exhausted = [&]() {
+		return !budget.controls || usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u) ||
+				!budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros ||
+				request.capture_inflight || request.continuation_inflight || request.source_device_lost ||
+				request.revision > UINT64_MAX - uint64_t(request.capacity.graph_memberships) * 2 - uint64_t(request.capacity.native_memberships) * 2 - request.capacity.readbacks - request.capacity.resources - 8;
+	};
+	if (budget_exhausted()) {
 		return ERR_BUSY;
 	}
-	const uint32_t index = request.output_owner_cursor;
-	if (index >= request.capacity.resource_uses) {
-		return ERR_INVALID_DATA;
-	}
-	const auto &row = request.uses[index];
-	if (row.request != &request || row.output_role != ProductionUseCell::OutputRole::NATIVE_CONSUMER || !row.output_generation || !row.output_consumer || !production_output_pin_matches_locked(*row.output_consumer, { instance, request.serial }, rd)) {
-		return ERR_INVALID_DATA;
-	}
-	const ProductionOutputOwnerKind kind = row.output_owner_kind;
-	const RID particles = row.output_particles;
-	const uint64_t generation = row.output_generation, lease = row.output_lease, pin_serial = row.output_pin_serial;
-	const uint32_t slot = row.output_slot;
-	ProductionOutputPin *const pin = row.output_consumer; // Synchronous original custody, never persisted.
-	if (!rd._production_output_owner_matches(kind, particles, generation, slot, lease, *pin, { instance, request.serial })) {
-		return ERR_INVALID_DATA;
-	}
-	// Advance before owner may unlink this row. unpin repairs this cursor.
-	request.output_owner_cursor = row.output_next != UINT32_MAX ? row.output_next : request.output_owner_head;
 	const uint64_t serial = request.serial, control_serial = control.serial;
 	auto *const attachment = request.attachment;
 	const uint64_t epoch = attachment->epoch;
-	usage.controls = 1; // Same original OBSERVE control, not a second pass.
-	// One O(1) locator dispatch per control. Actual component phases alone
-	// debit passes/receipts, so a positive one-pass slice can make progress.
-	production_native_effect_enter_locked(request);
-	++request.capture_inflight;
-	rd._thread_safe_.unlock();
-	unlock_mutex_for_call();
-	const Error result = rd._production_output_owner_service(kind, particles, generation, slot, lease, *pin, budget, usage);
-	// Blocking acquisition is RD -> Registry, as in native source capture and
-	// owned factory return. Registry-held entry points use RD.try_lock() and
-	// return ERR_BUSY on contention; they must never wait for RD. The capture
-	// pin retains this original request while both locks are released.
-	rd._thread_safe_.lock();
-	relock_mutex_after_call();
-	CRASH_COND(!request.capture_inflight);
-	--request.capture_inflight;
-	if (request.serial != serial || request.control.serial != control_serial || request.control.state != ProductionControlState::EXECUTING || request.attachment != attachment || attachment->held_device != &rd || attachment->epoch != epoch || device_records[attachment->device].epoch != epoch || device_records[attachment->device].object != &rd) {
-		return ERR_INVALID_DATA;
+	const bool multi_owner = budget.passes > 1;
+	uint32_t no_progress_streak = 0;
+	Error aggregate_result = OK;
+	for (;;) {
+		if (request.output_owner_cursor == UINT32_MAX) {
+			return OK;
+		}
+		if (budget_exhausted()) {
+			return ERR_BUSY;
+		}
+		uint32_t live_owners = 0;
+		for (uint32_t c = request.output_owner_head; c != UINT32_MAX; c = request.uses[c].output_next) {
+			if (c >= request.capacity.resource_uses || ++live_owners > request.capacity.resource_uses) {
+				return ERR_INVALID_DATA;
+			}
+		}
+		if (multi_owner && no_progress_streak >= live_owners) {
+			return aggregate_result;
+		}
+		const uint32_t index = request.output_owner_cursor;
+		if (index >= request.capacity.resource_uses) {
+			return ERR_INVALID_DATA;
+		}
+		const auto &row = request.uses[index];
+		if (row.request != &request || row.output_role != ProductionUseCell::OutputRole::NATIVE_CONSUMER || !row.output_generation || !row.output_consumer || !production_output_pin_matches_locked(*row.output_consumer, { instance, request.serial }, rd)) {
+			return ERR_INVALID_DATA;
+		}
+		const ProductionOutputOwnerKind kind = row.output_owner_kind;
+		const RID particles = row.output_particles;
+		const uint64_t generation = row.output_generation, lease = row.output_lease, pin_serial = row.output_pin_serial;
+		const uint32_t slot = row.output_slot;
+		ProductionOutputPin *const pin = row.output_consumer; // Synchronous original custody, never persisted.
+		if (!rd._production_output_owner_matches(kind, particles, generation, slot, lease, *pin, { instance, request.serial })) {
+			return ERR_INVALID_DATA;
+		}
+		// Advance before owner may unlink this row. unpin repairs this cursor.
+		request.output_owner_cursor = row.output_next != UINT32_MAX ? row.output_next : request.output_owner_head;
+		const uint32_t passes_before = usage.passes;
+		const uint32_t receipts_before = usage.receipts;
+		const uint64_t revision_before = request.revision;
+		usage.controls = 1; // Same original OBSERVE control, not a second pass.
+		// O(1) locator dispatch per owner visit. Actual component phases alone
+		// debit passes/receipts, so a positive pass slice can make progress.
+		production_native_effect_enter_locked(request);
+		++request.capture_inflight;
+		rd._thread_safe_.unlock();
+		unlock_mutex_for_call();
+		const Error result = rd._production_output_owner_service(kind, particles, generation, slot, lease, *pin, budget, usage);
+		// Blocking acquisition is RD -> Registry, as in native source capture and
+		// owned factory return. Registry-held entry points use RD.try_lock() and
+		// return ERR_BUSY on contention; they must never wait for RD. The capture
+		// pin retains this original request while both locks are released.
+		rd._thread_safe_.lock();
+		relock_mutex_after_call();
+		CRASH_COND(!request.capture_inflight);
+		--request.capture_inflight;
+		if (request.serial != serial || request.control.serial != control_serial || request.control.state != ProductionControlState::EXECUTING || request.attachment != attachment || attachment->held_device != &rd || attachment->epoch != epoch || device_records[attachment->device].epoch != epoch || device_records[attachment->device].object != &rd) {
+			return ERR_INVALID_DATA;
+		}
+		// Re-resolve the original finite row. The callback may have unpinned it;
+		// neither the old pin pointer nor an owner pointer is touched after return.
+		const auto &returned = request.uses[index];
+		const bool unlinked = returned.request == &request && returned.output_role == ProductionUseCell::OutputRole::UNUSED && returned.output_owner_kind == ProductionOutputOwnerKind::NONE && !returned.output_consumer && !returned.output_pin_serial && !returned.output_generation && returned.output_prev == UINT32_MAX && returned.output_next == UINT32_MAX;
+		if (!unlinked && (returned.request != &request || returned.output_role != ProductionUseCell::OutputRole::NATIVE_CONSUMER || returned.output_pin_serial != pin_serial || returned.output_owner_kind != kind || returned.output_particles != particles || returned.output_generation != generation || returned.output_slot != slot || returned.output_lease != lease)) {
+			return ERR_INVALID_DATA;
+		}
+		if (result != OK && result != ERR_BUSY) {
+			return result;
+		}
+		if (!multi_owner) {
+			return result;
+		}
+		if (result == ERR_BUSY) {
+			aggregate_result = ERR_BUSY;
+		}
+		const bool made_progress = unlinked || usage.passes != passes_before || usage.receipts != receipts_before || request.revision != revision_before;
+		no_progress_streak = made_progress ? 0 : no_progress_streak + 1;
 	}
-	// Re-resolve the original finite row. The callback may have unpinned it;
-	// neither the old pin pointer nor an owner pointer is touched after return.
-	const auto &returned = request.uses[index];
-	if (returned.request == &request && returned.output_role == ProductionUseCell::OutputRole::UNUSED && returned.output_owner_kind == ProductionOutputOwnerKind::NONE && !returned.output_consumer && !returned.output_pin_serial && !returned.output_generation && returned.output_prev == UINT32_MAX && returned.output_next == UINT32_MAX) {
-		return result;
-	}
-	if (returned.request != &request || returned.output_role != ProductionUseCell::OutputRole::NATIVE_CONSUMER || returned.output_pin_serial != pin_serial || returned.output_owner_kind != kind || returned.output_particles != particles || returned.output_generation != generation || returned.output_slot != slot || returned.output_lease != lease) {
-		return ERR_INVALID_DATA;
-	}
-	return result;
 }
 
 Error Registry::production_output_generation_return(ProductionOutputPin &pin, RenderingDevice &rd, RID particles,

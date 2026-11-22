@@ -1115,7 +1115,7 @@ private:
 	bool production_use_matches_locked(const ProductionRequest &, const ProductionActionCell &, uint32_t, uint64_t, uint64_t, uint32_t) const;
 	Error production_freeze_locked(ProductionRequest &);
 	GDExtensionDeviceSessionResultV1 production_request_requirements_internal(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionActionV2 *actions, uint32_t action_count, const GDExtensionProductionResourceV1 *resources, uint32_t resource_count, const GDExtensionProductionUseV1 *uses, uint32_t use_count, const GDExtensionProductionUploadV2 *uploads, uint32_t upload_count, const GDExtensionProductionReadbackSourceV1 *readbacks, uint32_t readback_count, uint32_t binding_count, uint64_t payload_bytes, const GDExtensionProductionOutputDemandInputV1 *outputs, uint32_t output_count, GDExtensionProductionOutputGuardDemandV1 *demands, uint32_t demand_capacity, GDExtensionProductionMetadataQuoteV1 *out);
-	Error production_output_demand_locked(ProductionAttachment &, RenderingDevice &, const GDExtensionProductionOutputDemandInputV1 &, GDExtensionProductionOutputGuardDemandV1 &);
+	Error production_output_demand_locked(ProductionAttachment &, RenderingDevice &, const GDExtensionProductionOutputDemandInputV1 &, GDExtensionProductionOutputGuardDemandV1 &, uint64_t available_use_cells = UINT64_MAX);
 	Error production_schedule_locked(ProductionRequest &, RenderingDevice &, bool);
 	Error production_freeze_rd_locked(ProductionRequest &, RenderingDevice *, bool p_stage_only = false);
 	Error production_output_scene_validate_locked(const ProductionActionCell &, const GDExtensionOutputAcquireInputV1 &) const;

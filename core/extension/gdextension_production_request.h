@@ -609,23 +609,26 @@ class ProductionGraphCell {
 	friend struct ::TestProductionRequest::Access;
 	friend struct ::TestProductionNativeObserve::Access;
 #endif
+public:
+	static constexpr uint32_t MAX_OUTPUT_READ_TRANSFERS = 16;
+private:
 	ProductionGraphCell() = default;
 	ProductionNativeBatchCell native_batch;
 	ProductionRequest *request = nullptr;
 	RDG::RecordHandle handle;
 	BufferUploadSourceSegment captured;
 	GDExtensionProductionFactV2 fact = {};
-	uint32_t device_frame = UINT32_MAX;
 	uint64_t device_epoch = 0;
+	uint32_t device_frame = UINT32_MAX;
+	uint32_t output_read_transfer_count = 0;
 	bool pending = false;
 	bool output_read = false; // Actual native read graph; no shader recipe credit.
 	struct OutputReadTransfer {
-		uint32_t worker = UINT32_MAX;
 		uint64_t operation = 0;
+		uint32_t worker = UINT32_MAX;
 		bool pending = false;
 	};
-	OutputReadTransfer output_read_transfers[32];
-	uint32_t output_read_transfer_count = 0;
+	OutputReadTransfer output_read_transfers[MAX_OUTPUT_READ_TRANSFERS];
 };
 class ProductionNativeCell {
 	friend class Registry;
@@ -639,9 +642,9 @@ class ProductionNativeCell {
 	NativeSourceMember member;
 	// Only original source capture populates these rows; no public numeric writer.
 	// Aliases retain each membership edge but only the first cell owns a ref.
-	uint32_t owner_index = UINT32_MAX;
 	GDExtensionProductionFactV2 fact = {};
 	NativeSourceObservation observation;
+	uint32_t owner_index = UINT32_MAX;
 	Error release_error = OK;
 };
 class ProductionReturnCell {

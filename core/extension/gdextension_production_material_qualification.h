@@ -38,27 +38,20 @@
 namespace GDExtensionDeviceExit {
 
 struct MaterialQualificationState {
-	static constexpr uint32_t MAX_DISPOSAL_USES = 32;
-	static constexpr uint32_t MAX_OWNED_BUFFERS = 16;
+	// Max attachments per state: 5 fixture surf bufs + 1 surf uset + 2 targets +
+	// 8 owned buffers (roster creates <= 7) + 1 readback SSBO + 3 sets + 1 pipeline = 21.
+	static constexpr uint32_t MAX_DISPOSAL_USES = 24;
+	static constexpr uint32_t MAX_OWNED_BUFFERS = 8;
 	static constexpr uint32_t MQ_RETAINED_RESULT_BYTES = sizeof(GDExtensionMaterialQualificationResultMetadataV1) + GDEXTENSION_MATERIAL_QUALIFICATION_DEPTH_RAW_BYTES_V1;
 
 	GDExtensionMaterialQualificationPrepareV1 prepare = {};
 	uint64_t result_payload_offset = 0;
 	uint64_t payload_offset = 0;
-	uint32_t payload_bytes = 0;
+	uint64_t candidate_surface_raw_format = 0;
+	uint64_t depth_backing_serial = 0;
+	uint64_t depth_allocation_generation = 0;
 
 	GDExtensionMaterialQualificationSelectionFactsV1 selection = {};
-	GDExtensionMaterialQualificationFixedOracleV1 oracle = {};
-
-	uint64_t candidate_surface_raw_format = 0;
-	bool selection_done = false;
-	bool recipe_requested = false;
-	bool recipe_ready = false;
-	bool recipe_failed = false;
-	Error recipe_error = OK;
-	bool recorded = false;
-	bool retiring_started = false;
-	bool rids_freed = false;
 
 	RendererRD::MeshStorage::NativeSelectionLease candidate_mesh_lease;
 	RendererRD::MaterialStorage::NativeSelectionLease candidate_material_lease;
@@ -66,44 +59,50 @@ struct MaterialQualificationState {
 	RendererRD::MeshStorage::NativeSurfaceHold derived_surface;
 
 	RID fixture_mesh_rid;
-	bool fixture_buf_disposal_attached[5] = {};
-	bool fixture_buf_settled[5] = {};
-	bool fixture_uset_disposal_attached = false;
-	bool fixture_mesh_settled = false;
-
 	RID color_tex;
 	RID depth_tex;
 	RID framebuffer_rid;
-	bool color_tex_disposal_attached = false;
-	bool depth_tex_disposal_attached = false;
 	QualificationPhysicalReturn framebuffer_physical;
-	uint64_t depth_backing_serial = 0;
-	uint64_t depth_allocation_generation = 0;
 
 	RID owned_buffers[MAX_OWNED_BUFFERS];
-	bool owned_buffer_disposal_attached[MAX_OWNED_BUFFERS] = {};
-	bool owned_buffer_settled[MAX_OWNED_BUFFERS] = {};
-	uint32_t owned_buffer_count = 0;
-
 	RID uniform_sets[3];
-	bool uniform_set_disposal_attached[3] = {};
 	RID material_uniform_set;
 	RID native_shader_rid;
 	RID pipeline_rid;
-	bool pipeline_disposal_attached = false;
 	RID vertex_array_rid;
 	RID index_array_rid;
 	RID depth_readback_ssbo;
-	bool readback_ssbo_disposal_attached = false;
-	bool readback_prepared = false;
-	uint8_t push_constant[16] = {};
 
 	ProductionDisposalUse disposal_uses[MAX_DISPOSAL_USES];
-	uint32_t disposal_use_count = 0;
 
 	ReadbackSourceState readback_state;
 	BufferUploadSourceSegment readback_segments[2];
 	BufferReadbackSourceCapture readback_capture;
+
+	uint32_t payload_bytes = 0;
+	uint32_t owned_buffer_count = 0;
+	uint32_t disposal_use_count = 0;
+	Error recipe_error = OK;
+	uint8_t push_constant[16] = {};
+	bool selection_done = false;
+	bool recipe_requested = false;
+	bool recipe_ready = false;
+	bool recipe_failed = false;
+	bool recorded = false;
+	bool retiring_started = false;
+	bool rids_freed = false;
+	bool fixture_buf_disposal_attached[5] = {};
+	bool fixture_buf_settled[5] = {};
+	bool fixture_uset_disposal_attached = false;
+	bool fixture_mesh_settled = false;
+	bool color_tex_disposal_attached = false;
+	bool depth_tex_disposal_attached = false;
+	bool owned_buffer_disposal_attached[MAX_OWNED_BUFFERS] = {};
+	bool owned_buffer_settled[MAX_OWNED_BUFFERS] = {};
+	bool uniform_set_disposal_attached[3] = {};
+	bool pipeline_disposal_attached = false;
+	bool readback_ssbo_disposal_attached = false;
+	bool readback_prepared = false;
 };
 
 } // namespace GDExtensionDeviceExit

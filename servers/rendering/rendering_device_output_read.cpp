@@ -318,7 +318,7 @@ Error RenderingDevice::_production_output_read_record(RendererRD::ExternalPacket
 	// The one shared close needs at most one still-live batch per worker.
 	// Check the union across already linked reads of this original request
 	// before this read can issue any bind/transfer effect.
-	uint32_t worker_ids[32] = {}, worker_count = 0;
+	uint32_t worker_ids[GDExtensionDeviceExit::ProductionGraphCell::MAX_OUTPUT_READ_TRANSFERS] = {}, worker_count = 0;
 	auto add_worker = [&](int32_t worker) {
 		if (worker < 0) {
 			return true;
@@ -328,7 +328,7 @@ Error RenderingDevice::_production_output_read_record(RendererRD::ExternalPacket
 				return true;
 			}
 		}
-		if (worker_count >= MIN(32u, request.native_workers_bound)) {
+		if (worker_count >= MIN(GDExtensionDeviceExit::ProductionGraphCell::MAX_OUTPUT_READ_TRANSFERS, request.native_workers_bound)) {
 			return false;
 		}
 		worker_ids[worker_count++] = uint32_t(worker);
@@ -710,13 +710,13 @@ Error RenderingDevice::_production_output_reads_close() {
 					}
 				}
 				if (entry == UINT32_MAX) {
-					if (graph.output_read_transfer_count == 32) {
+					if (graph.output_read_transfer_count == GDExtensionDeviceExit::ProductionGraphCell::MAX_OUTPUT_READ_TRANSFERS) {
 						request.effects_pending = true;
 						result = ERR_OUT_OF_MEMORY;
 						break;
 					}
 					entry = graph.output_read_transfer_count++;
-					graph.output_read_transfers[entry] = { dependency.worker, dependency.operation, true };
+					graph.output_read_transfers[entry] = { dependency.operation, dependency.worker, true };
 				}
 				if (dependency.operation > graph.output_read_transfers[entry].operation) {
 					graph.output_read_transfers[entry].operation = dependency.operation;

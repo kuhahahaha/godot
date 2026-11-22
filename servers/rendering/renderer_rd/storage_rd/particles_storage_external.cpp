@@ -1817,6 +1817,24 @@ bool fast_refresh_invert_affine_f32(const float p_affine[12], float r_inverse[12
 			return false;
 		}
 	}
+	auto write_fallback_inverse = [&]() {
+		// Singular or near-singular host_affine (e.g. temporary scale == 0 during
+		// spawn-in animation, hide, or pause): preserve a finite normal-or-zero
+		// fallback inverse with identity rotation/scale and negated translation
+		// so Tier 2 fast-refresh stays resident without shader NUMERIC_FAULT.
+		for (uint32_t row = 0; row < 3; ++row) {
+			for (uint32_t column = 0; column < 3; ++column) {
+				r_inverse[row * 4 + column] = (row == column) ? 1.0f : 0.0f;
+			}
+			const float neg_t = -p_affine[row * 4 + 3];
+			r_inverse[row * 4 + 3] = (!Math::is_finite(neg_t) || Math::abs(neg_t) < std::numeric_limits<float>::min()) ? 0.0f : neg_t;
+		}
+	};
+	const double determinant = AffineF32::exact_basis_determinant(p_affine);
+	if (!Math::is_finite(determinant) || Math::abs(determinant) < 1e-12) {
+		write_fallback_inverse();
+		return true;
+	}
 	double basis[3][3];
 	for (uint32_t row = 0; row < 3; ++row) {
 		for (uint32_t column = 0; column < 3; ++column) {
@@ -1829,10 +1847,6 @@ bool fast_refresh_invert_affine_f32(const float p_affine[12], float r_inverse[12
 			inverse[column][row] = basis[(row + 1) % 3][(column + 1) % 3] * basis[(row + 2) % 3][(column + 2) % 3] -
 					basis[(row + 1) % 3][(column + 2) % 3] * basis[(row + 2) % 3][(column + 1) % 3];
 		}
-	}
-	const double determinant = AffineF32::exact_basis_determinant(p_affine);
-	if (!Math::is_finite(determinant) || determinant == 0.0) {
-		return false;
 	}
 	for (uint32_t row = 0; row < 3; ++row) {
 		for (uint32_t column = 0; column < 3; ++column) {
@@ -1847,18 +1861,22 @@ bool fast_refresh_invert_affine_f32(const float p_affine[12], float r_inverse[12
 		}
 		inverse[row][3] = -AffineF32::exact_basis_determinant(numerator_affine) / determinant;
 	}
+	float candidate[12] = {};
 	for (uint32_t row = 0; row < 3; ++row) {
 		for (uint32_t column = 0; column < 4; ++column) {
 			if (!Math::is_finite(inverse[row][column]) || Math::abs(inverse[row][column]) > double(std::numeric_limits<float>::max())) {
-				return false;
+				write_fallback_inverse();
+				return true;
 			}
 			const float val = float(inverse[row][column]);
-			if (!Math::is_finite(val)) {
-				return false;
+			if (!Math::is_finite(val) || (val != 0.0f && Math::abs(val) < std::numeric_limits<float>::min())) {
+				write_fallback_inverse();
+				return true;
 			}
-			r_inverse[row * 4 + column] = val;
+			candidate[row * 4 + column] = val;
 		}
 	}
+	memcpy(r_inverse, candidate, sizeof(candidate));
 	return true;
 }
 

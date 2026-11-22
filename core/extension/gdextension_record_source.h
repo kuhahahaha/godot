@@ -70,8 +70,8 @@ struct NativeSourceMember {
 	uint64_t epoch = 0;
 	bool retained = false;
 	bool owner_released = false;
-	int64_t completion_native_code = 0;
 	Error retention_error = OK;
+	int64_t completion_native_code = 0;
 };
 struct NativeSourceIssueView {
 	const RDD::QueueCallReport &report;
