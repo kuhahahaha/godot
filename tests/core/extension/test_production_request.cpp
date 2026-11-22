@@ -6568,6 +6568,176 @@ struct Access {
 		CHECK(fixture.rd.draw_graph.qualification_command_count() == 1);
 	}
 
+	static void lazy_arena_hwm_and_natives_interval() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment fixture;
+		auto &registry = *fixture.registry;
+		auto &record = registry.records[0];
+		auto &device = registry.device_records[0];
+		const uint32_t private_before = record.private_refs, device_before = device.refs;
+		// Large-headroom pool simulating SceneReady arena (4096-wide native_memberships).
+		const GDExtensionProductionCapacityV1 whole = { production_dto_abi<GDExtensionProductionCapacityV1>(), 8, 64, 32, 128, 64, 4096, 8, 32, 4096, 4096 };
+		GDExtensionProductionMetadataQuoteV1 quote = {};
+		REQUIRE(registry.production_quote(&Enrollment::ABI, { Enrollment::INSTANCE, 5 }, { Enrollment::INSTANCE, 9 }, { Enrollment::INSTANCE, 6 }, { Enrollment::INSTANCE, 7 }, &whole, &quote).native_error == OK);
+		GDExtensionProductionAttachmentRefV1 attachment = {};
+		GDExtensionProductionInstallationReportV1 installed = {};
+		REQUIRE(registry.production_accept(&Enrollment::ABI, { Enrollment::INSTANCE, 5 }, { Enrollment::INSTANCE, 9 }, { Enrollment::INSTANCE, 6 }, { Enrollment::INSTANCE, 7 }, { Enrollment::INSTANCE, 3 }, &quote, &attachment, &installed).native_error == OK);
+		REQUIRE(installed.state == GDEXTENSION_PRODUCTION_INSTALL_ACCEPTED_V1);
+		CHECK(installed.allocated_bytes == quote.allocation_bytes);
+
+		ProductionAttachment *pool_ptr = nullptr;
+		{
+			MutexLock lock(registry.mutex);
+			RenderingDevice *rd_ptr = nullptr;
+			REQUIRE(registry.production_attachment_locked(attachment, false, pool_ptr, rd_ptr) == OK);
+		}
+		REQUIRE(pool_ptr != nullptr);
+		auto &pool = *pool_ptr;
+		// Immediately after accept, all lazy pool HWMs MUST be 0 (zero pre-faulting).
+		CHECK(pool.actions_hwm == 0);
+		CHECK(pool.resources_hwm == 0);
+		CHECK(pool.uses_hwm == 0);
+		CHECK(pool.readbacks_hwm == 0);
+		CHECK(pool.graphs_hwm == 0);
+		CHECK(pool.returns_hwm == 0);
+		CHECK(pool.commands_hwm == 0);
+		CHECK(pool.frames_hwm == 0);
+		CHECK(pool.material_qualifications_live == 0);
+		CHECK(pool.material_qualifications_constructed_total == 0);
+
+		// Reserve non-MQ request r1 with small cell slice and large native headroom.
+		GDExtensionProductionCapacityV1 cap1 = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 2, 2, 3, 2, 1024, 0, 2, 64, 0 };
+		Request *r1 = nullptr;
+		REQUIRE(fixture.reserve(attachment, cap1, 101, r1) == OK);
+		REQUIRE(r1 != nullptr);
+		CHECK(pool.actions_hwm == 2);
+		CHECK(pool.resources_hwm == 2);
+		CHECK(pool.uses_hwm == 3);
+		CHECK(pool.readbacks_hwm == 0);
+		CHECK(pool.graphs_hwm == 2);
+		CHECK(pool.returns_hwm == 2);
+		CHECK(pool.commands_hwm == r1->command_count);
+		CHECK(pool.frames_hwm == r1->frame_count);
+		CHECK(pool.material_qualifications_live == 0);
+		CHECK(pool.material_qualifications_constructed_total == 0);
+		CHECK(r1->natives_offset == 0);
+		CHECK(r1->natives == &pool.natives[0]);
+		CHECK(r1->natives[0].request == nullptr);
+		CHECK(r1->natives[1023].request == nullptr);
+
+		// Reserve v2 MQ request r2 -> constructs exactly 1 MaterialQualificationState lazily.
+		GDExtensionProductionCapacityV1 cap2 = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 1, 1, 1, 1, 1024, 0, 1, 64, 0 };
+		Request *r2 = nullptr;
+		{
+			MutexLock lock(registry.mutex);
+			const GDExtensionProductionOperationV1 op = { production_dto_abi<GDExtensionProductionOperationV1>(), 102, 1, 10, 11 };
+			const GDExtensionProductionActionV2 mq_action = { 0, 10, 0, 0, GDEXTENSION_PRODUCTION_MATERIAL_QUALIFICATION_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
+			const GDExtensionProductionResourceV1 resource = { GDEXTENSION_PRODUCTION_STORAGE_V1, 0, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 16, 0 };
+			const GDExtensionProductionUseV1 use = { 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 4, 0 };
+			REQUIRE(registry.production_reserve_metadata_rows_locked(pool, op, cap2, { nullptr, &mq_action }, 1, &resource, 1, &use, 1, {}, 0, r2, 2) == OK);
+		}
+		REQUIRE(r2 != nullptr);
+		CHECK(pool.actions_hwm == 3);
+		CHECK(pool.resources_hwm == 3);
+		CHECK(pool.uses_hwm == 4);
+		CHECK(pool.graphs_hwm == 3);
+		CHECK(pool.returns_hwm == 3);
+		CHECK(r2->actions[0].material_qualification_constructed);
+		CHECK(pool.material_qualifications_live == 1);
+		CHECK(pool.material_qualifications_constructed_total == 1);
+		CHECK(r2->natives_offset == 1024);
+		CHECK(r2->natives == &pool.natives[1024]);
+
+		// Failed reservation (byte overflow or natives fragmentation) MUST NOT advance any HWM.
+		auto cap_bad_bytes = cap1;
+		cap_bad_bytes.retained_payload_bytes = whole.retained_payload_bytes + 1;
+		Request *rejected = nullptr;
+		CHECK(fixture.reserve(attachment, cap_bad_bytes, 103, rejected) == ERR_INVALID_PARAMETER);
+		CHECK(rejected == nullptr);
+		CHECK(pool.actions_hwm == 3);
+		CHECK(pool.uses_hwm == 4);
+		CHECK(pool.material_qualifications_constructed_total == 1);
+
+		// Reserve r3 taking natives [2048, 3072), then release r1 & r3 to create a fragmented hole around r2 [1024, 2048).
+		Request *r3 = nullptr;
+		REQUIRE(fixture.reserve(attachment, cap1, 104, r3) == OK);
+		REQUIRE(r3 != nullptr);
+		CHECK(r3->natives_offset == 2048);
+		const GDExtensionProductionRequestRefV1 r1_ref = { Enrollment::INSTANCE, r1->serial };
+		const GDExtensionProductionRequestRefV1 r2_ref = { Enrollment::INSTANCE, r2->serial };
+		const GDExtensionProductionRequestRefV1 r3_ref = { Enrollment::INSTANCE, r3->serial };
+		REQUIRE(registry.production_cancel(r1_ref).native_error == OK);
+		REQUIRE(registry.production_release(r1_ref).native_error == OK);
+		REQUIRE(registry.production_cancel(r3_ref).native_error == OK);
+		REQUIRE(registry.production_release(r3_ref).native_error == OK);
+
+		// Remaining free natives are [0, 1024) and [2048, 4096) (max contiguous = 2048).
+		// Requesting 2500 MUST return ERR_BUSY without advancing HWMs.
+		const uint32_t actions_hwm_before = pool.actions_hwm;
+		const uint32_t uses_hwm_before = pool.uses_hwm;
+		auto cap_frag = cap1;
+		cap_frag.native_memberships = 2500;
+		CHECK(fixture.reserve(attachment, cap_frag, 105, rejected) == ERR_BUSY);
+		CHECK(rejected == nullptr);
+		CHECK(pool.actions_hwm == actions_hwm_before);
+		CHECK(pool.uses_hwm == uses_hwm_before);
+
+		// Requesting 2048 fits cleanly at [2048, 4096).
+		cap_frag.native_memberships = 2048;
+		Request *r4 = nullptr;
+		REQUIRE(fixture.reserve(attachment, cap_frag, 106, r4) == OK);
+		REQUIRE(r4 != nullptr);
+		CHECK(r4->natives_offset == 2048);
+		// Verify lazy ProductionNativeCell construction (matching gdextension_production_action.cpp) works in owner/fact queries and clears on release.
+		{
+			RDD::NativeCallFact synthetic_source = {};
+			synthetic_source.serial = 42;
+			synthetic_source.queue_index = 1;
+			synthetic_source.completion_serial = 7;
+			synthetic_source.issue = RDD::IssueFact::KnownAccepted;
+			synthetic_source.completion = RDD::CompletionCapability::Fence;
+			MutexLock lock(registry.mutex);
+			new (&r4->natives[0]) ProductionNativeCell();
+			r4->natives[0].request = r4;
+			r4->natives[0].owner_index = 0;
+			r4->natives[0].member.source = synthetic_source;
+			r4->native_count = 1;
+			const ProductionNativeCell *owner = nullptr;
+			CHECK(registry.production_native_owner_locked(*r4, 0, owner) == OK);
+			CHECK(owner == &r4->natives[0]);
+			GDExtensionProductionFactV2 fact = {};
+			CHECK(registry.production_native_fact_locked(*r4, 0, fact) == OK);
+			CHECK(fact.native_serial == 42u);
+			CHECK(fact.membership_parent == UINT32_MAX);
+			// Mark synthetic obligation complete & returned so release reclaims cleanly.
+			r4->natives[0].observation.state = NativeSourceObservation::State::Complete;
+			r4->natives[0].member.retained = true;
+			r4->natives[0].member.owner_released = true;
+		}
+		const GDExtensionProductionRequestRefV1 r4_ref = { Enrollment::INSTANCE, r4->serial };
+		REQUIRE(registry.production_cancel(r4_ref).native_error == OK);
+		REQUIRE(registry.production_release(r4_ref).native_error == OK);
+		// Only used native slot [2048] was zeroed back on release.
+		CHECK(pool.natives[2048].member.source.serial == 0);
+		CHECK(pool.natives[2048].owner_index == 0);
+
+		// Releasing MQ request r2 destroys its lazily constructed MaterialQualificationState.
+		REQUIRE(registry.production_cancel(r2_ref).native_error == OK);
+		REQUIRE(registry.production_release(r2_ref).native_error == OK);
+		CHECK(pool.material_qualifications_live == 0);
+		CHECK(pool.material_qualifications_constructed_total == 1);
+		// HWM stayed far below full pool capacities.
+		CHECK(pool.actions_hwm < whole.suboperations);
+		CHECK(pool.uses_hwm < whole.resource_uses);
+		CHECK(pool.readbacks_hwm == 0);
+
+		REQUIRE(registry.production_close(attachment).native_error == OK);
+		CHECK(record.private_refs == private_before);
+		CHECK(device.refs == device_before);
+		CHECK(fixture.holder.production_children == 0);
+		CHECK(record.cleanup_reservations == 0);
+	}
+
 	static void actual_entity_hold() {
 		Enrollment fixture;
 		auto &registry = *fixture.registry;
@@ -23005,4 +23175,8 @@ TEST_CASE("[SceneTree][ProductionRequest][BatchedSetCreate] separate-RT batched 
 
 TEST_CASE("[SceneTree][ProductionRequest][MixedSet1][BUG-59] Set 1 combines leading scene-depth sentinel pairs with trailing writable SSBOs through create and dispatch closure") {
 	TestProductionRequest::Access::singleton_mixed_set1_scene_depth_and_storage();
+}
+
+TEST_CASE("[ProductionRequest][BUG-76] virtual zero-paged arena lazily constructs cell pools via HWM, lazy MQ state, and interval-tracked natives") {
+	TestProductionRequest::Access::lazy_arena_hwm_and_natives_interval();
 }

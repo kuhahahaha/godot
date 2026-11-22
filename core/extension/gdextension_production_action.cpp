@@ -522,6 +522,8 @@ void Registry::production_capture_issue_locked(RenderingDevice &rd, uint32_t slo
 					}
 					const uint32_t index = request.native_count++;
 					auto &native = request.natives[index];
+					new (&native) ProductionNativeCell();
+					native.request = &request;
 					native.owner_index = owner == UINT32_MAX ? index : owner;
 					native.member.source = source;
 					native.member.frame = uint32_t(rd.frame);

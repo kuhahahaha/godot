@@ -603,35 +603,45 @@ GDExtensionDeviceSessionResultV1 Registry::production_accept(const GDExtensionDe
 	if (slot == INVALID_SLOT || production_serials.exhausted || frame_serials.exhausted || record.private_refs >= private_limit || d.refs == UINT32_MAX || holder->production_children == UINT32_MAX || quote.cleanup_slots > UINT32_MAX - record.cleanup_reservations || uint64_t(record.active_callbacks) + record.cleanup_reservations + quote.cleanup_slots > UINT32_MAX || quote.cleanup_slots > UINT32_MAX - record.cleanup_by_phase[uint8_t(CleanupPhase::BINDING)]) {
 		return result(ERR_PARAMETER_RANGE_ERROR, 19);
 	}
-	void *arena = Memory::alloc_static(quote.allocation_bytes);
+	// Allocate zero-initialized demand-paged virtual memory (calloc) so large
+	// contiguous production arenas do not pre-fault hundreds of MiB of RSS at
+	// SceneReady. Only ProductionAttachment and the small requests table are
+	// eagerly constructed; all other cell pools construct lazily via per-pool
+	// high-water marks (BUG-76 / RAM-2).
+	void *arena = Memory::alloc_static_zeroed(quote.allocation_bytes);
 	if (!arena) {
 		return result(ERR_OUT_OF_MEMORY, 19);
 	}
 	uint64_t offset = 0;
-	auto allocate = [&](auto *type, uint64_t count) {
+	auto reserve_lazy = [&](auto *type, uint64_t count) {
 		using T = std::remove_pointer_t<decltype(type)>;
 		offset += (alignof(T) - offset % alignof(T)) % alignof(T);
 		T *p = reinterpret_cast<T *>(static_cast<uint8_t *>(arena) + offset);
-		for (uint64_t i = 0; i < count; ++i) {
-			new (&p[i]) T();
-		}
 		offset += count * sizeof(T);
 		return p;
 	};
-	auto *attachment = allocate(static_cast<ProductionAttachment *>(nullptr), 1);
-	attachment->requests = allocate(static_cast<ProductionRequest *>(nullptr), quote.capacity.requests);
-	attachment->actions = allocate(static_cast<ProductionActionCell *>(nullptr), quote.capacity.suboperations);
-	attachment->material_qualifications = allocate(static_cast<MaterialQualificationState *>(nullptr), quote.capacity.suboperations);
-	attachment->resources = allocate(static_cast<ProductionResourceSlot *>(nullptr), quote.capacity.resources);
-	attachment->uses = allocate(static_cast<ProductionUseCell *>(nullptr), quote.capacity.resource_uses);
-	attachment->readbacks = allocate(static_cast<ProductionReadbackCell *>(nullptr), quote.capacity.readbacks);
-	attachment->graphs = allocate(static_cast<ProductionGraphCell *>(nullptr), quote.capacity.graph_memberships);
-	attachment->natives = allocate(static_cast<ProductionNativeCell *>(nullptr), quote.capacity.native_memberships);
-	attachment->returns = allocate(static_cast<ProductionReturnCell *>(nullptr), quote.capacity.return_cells);
-	attachment->commands = allocate(static_cast<ProductionCaptureCell *>(nullptr), quote.graph_slots);
-	attachment->frames = allocate(static_cast<ProductionCaptureCell *>(nullptr), quote.graph_frames);
-	attachment->payload = allocate(static_cast<uint8_t *>(nullptr), quote.capacity.retained_payload_bytes);
-	attachment->readback_bytes = allocate(static_cast<uint8_t *>(nullptr), quote.capacity.readback_bytes);
+	auto allocate_eager = [&](auto *type, uint64_t count) {
+		using T = std::remove_pointer_t<decltype(type)>;
+		T *p = reserve_lazy(type, count);
+		for (uint64_t i = 0; i < count; ++i) {
+			new (&p[i]) T();
+		}
+		return p;
+	};
+	auto *attachment = allocate_eager(static_cast<ProductionAttachment *>(nullptr), 1);
+	attachment->requests = allocate_eager(static_cast<ProductionRequest *>(nullptr), quote.capacity.requests);
+	attachment->actions = reserve_lazy(static_cast<ProductionActionCell *>(nullptr), quote.capacity.suboperations);
+	attachment->material_qualifications = reserve_lazy(static_cast<MaterialQualificationState *>(nullptr), quote.capacity.suboperations);
+	attachment->resources = reserve_lazy(static_cast<ProductionResourceSlot *>(nullptr), quote.capacity.resources);
+	attachment->uses = reserve_lazy(static_cast<ProductionUseCell *>(nullptr), quote.capacity.resource_uses);
+	attachment->readbacks = reserve_lazy(static_cast<ProductionReadbackCell *>(nullptr), quote.capacity.readbacks);
+	attachment->graphs = reserve_lazy(static_cast<ProductionGraphCell *>(nullptr), quote.capacity.graph_memberships);
+	attachment->natives = reserve_lazy(static_cast<ProductionNativeCell *>(nullptr), quote.capacity.native_memberships);
+	attachment->returns = reserve_lazy(static_cast<ProductionReturnCell *>(nullptr), quote.capacity.return_cells);
+	attachment->commands = reserve_lazy(static_cast<ProductionCaptureCell *>(nullptr), quote.graph_slots);
+	attachment->frames = reserve_lazy(static_cast<ProductionCaptureCell *>(nullptr), quote.graph_frames);
+	attachment->payload = reserve_lazy(static_cast<uint8_t *>(nullptr), quote.capacity.retained_payload_bytes);
+	attachment->readback_bytes = reserve_lazy(static_cast<uint8_t *>(nullptr), quote.capacity.readback_bytes);
 	CRASH_COND(offset != quote.allocation_bytes);
 	production_serials.take(attachment->serial);
 	attachment->library = library;
@@ -988,34 +998,78 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	if (!r) {
 		return ERR_BUSY;
 	}
-	auto free_cells = [](auto *cells, uint32_t total, uint32_t count) {
+	auto find_free_cells = [](auto *cells, uint32_t total, uint32_t hwm, uint32_t count, uint32_t &out_need_hwm) {
 		using T = std::remove_pointer_t<decltype(cells)>;
+		out_need_hwm = hwm;
 		if (!count) {
 			return cells;
 		}
+		if (count > total) {
+			return static_cast<T *>(nullptr);
+		}
 		uint32_t run = 0;
-		for (uint32_t i = 0; i < total; ++i) {
+		for (uint32_t i = 0; i < hwm; ++i) {
 			run = cells[i].request ? 0 : run + 1;
 			if (run == count) {
 				return &cells[i + 1 - count];
 			}
 		}
-		return static_cast<T *>(nullptr);
+		const uint32_t start = hwm - run;
+		if (count > total - start) {
+			return static_cast<T *>(nullptr);
+		}
+		out_need_hwm = start + count;
+		return &cells[start];
 	};
-	auto *ac = free_cells(a.actions, a.quote.capacity.suboperations, c.suboperations);
-	auto *rc = free_cells(a.resources, a.quote.capacity.resources, c.resources);
-	auto *uc = free_cells(a.uses, a.quote.capacity.resource_uses, c.resource_uses);
-	auto *bc = free_cells(a.readbacks, a.quote.capacity.readbacks, c.readbacks);
-	auto *gc = free_cells(a.graphs, a.quote.capacity.graph_memberships, c.graph_memberships);
-	auto *nc = free_cells(a.natives, a.quote.capacity.native_memberships, c.native_memberships);
-	auto *tc = free_cells(a.returns, a.quote.capacity.return_cells, c.return_cells);
+	auto free_natives = [&](uint32_t count, uint32_t total, uint32_t &offset) {
+		offset = 0;
+		if (!count) {
+			return true;
+		}
+		for (;;) {
+			if (count > total || offset > total - count) {
+				return false;
+			}
+			bool moved = false;
+			for (uint32_t i = 0; i < a.quote.capacity.requests; ++i) {
+				const auto &q = a.requests[i];
+				if (!q.serial || !q.capacity.native_memberships) {
+					continue;
+				}
+				const uint64_t start = q.natives_offset;
+				const uint64_t end = start + q.capacity.native_memberships;
+				if (uint64_t(offset) < end && start < uint64_t(offset) + count) {
+					if (end > total) {
+						return false;
+					}
+					offset = uint32_t(end);
+					moved = true;
+					break;
+				}
+			}
+			if (!moved) {
+				return true;
+			}
+		}
+	};
+	uint32_t need_actions_hwm = a.actions_hwm, need_resources_hwm = a.resources_hwm, need_uses_hwm = a.uses_hwm;
+	uint32_t need_readbacks_hwm = a.readbacks_hwm, need_graphs_hwm = a.graphs_hwm, need_returns_hwm = a.returns_hwm;
+	uint32_t need_commands_hwm = a.commands_hwm, need_frames_hwm = a.frames_hwm;
+	auto *ac = find_free_cells(a.actions, a.quote.capacity.suboperations, a.actions_hwm, c.suboperations, need_actions_hwm);
+	auto *rc = find_free_cells(a.resources, a.quote.capacity.resources, a.resources_hwm, c.resources, need_resources_hwm);
+	auto *uc = find_free_cells(a.uses, a.quote.capacity.resource_uses, a.uses_hwm, c.resource_uses, need_uses_hwm);
+	auto *bc = find_free_cells(a.readbacks, a.quote.capacity.readbacks, a.readbacks_hwm, c.readbacks, need_readbacks_hwm);
+	auto *gc = find_free_cells(a.graphs, a.quote.capacity.graph_memberships, a.graphs_hwm, c.graph_memberships, need_graphs_hwm);
+	uint32_t natives_offset = 0;
+	auto *nc = free_natives(c.native_memberships, a.quote.capacity.native_memberships, natives_offset) ? (c.native_memberships ? &a.natives[natives_offset] : a.natives) : nullptr;
+	auto *tc = find_free_cells(a.returns, a.quote.capacity.return_cells, a.returns_hwm, c.return_cells, need_returns_hwm);
 	GDExtensionProductionMetadataQuoteV1 request_quote = {};
 	e = production_device_quote_locked(*rd, c, request_quote, worker_bound);
 	if (e != OK) {
 		return e;
 	}
-	auto *cc = free_cells(a.commands, uint32_t(a.quote.graph_slots), uint32_t(request_quote.graph_slots));
-	auto *fc = free_cells(a.frames, uint32_t(a.quote.graph_frames), uint32_t(request_quote.graph_frames));
+	auto *cc = find_free_cells(a.commands, uint32_t(a.quote.graph_slots), a.commands_hwm, uint32_t(request_quote.graph_slots), need_commands_hwm);
+	auto *fc = find_free_cells(a.frames, uint32_t(a.quote.graph_frames), a.frames_hwm, uint32_t(request_quote.graph_frames), need_frames_hwm);
 	if ((c.suboperations && !ac) || (c.resources && !rc) || (c.resource_uses && !uc) || (c.readbacks && !bc) || (c.graph_memberships && !gc) || (c.native_memberships && !nc) || (c.return_cells && !tc) || (request_quote.graph_slots && !cc) || (request_quote.graph_frames && !fc)) {
 		// Declared cell counts already fit the accepted pool. A changed RD
 		// prefix can still make this request's derived capture slice too large.
@@ -1053,6 +1107,21 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
 	// All validation and every finite slice succeed before publishing any cell.
+	auto extend_hwm = [](auto *cells, uint32_t &hwm, uint32_t need_hwm) {
+		using T = std::remove_pointer_t<decltype(cells)>;
+		for (uint32_t i = hwm; i < need_hwm; ++i) {
+			new (&cells[i]) T();
+		}
+		hwm = need_hwm;
+	};
+	extend_hwm(a.actions, a.actions_hwm, need_actions_hwm);
+	extend_hwm(a.resources, a.resources_hwm, need_resources_hwm);
+	extend_hwm(a.uses, a.uses_hwm, need_uses_hwm);
+	extend_hwm(a.readbacks, a.readbacks_hwm, need_readbacks_hwm);
+	extend_hwm(a.graphs, a.graphs_hwm, need_graphs_hwm);
+	extend_hwm(a.returns, a.returns_hwm, need_returns_hwm);
+	extend_hwm(a.commands, a.commands_hwm, need_commands_hwm);
+	extend_hwm(a.frames, a.frames_hwm, need_frames_hwm);
 	a.request_reserved_once = true;
 	production_serials.take(r->serial);
 	r->attachment = &a;
@@ -1067,6 +1136,7 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	r->readbacks = bc;
 	r->graphs = gc;
 	r->natives = nc;
+	r->natives_offset = natives_offset;
 	r->returns = tc;
 	r->commands = cc;
 	r->frames = fc;
@@ -1085,12 +1155,18 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	claim(uc, c.resource_uses);
 	claim(bc, c.readbacks);
 	claim(gc, c.graph_memberships);
-	claim(nc, c.native_memberships);
+	// natives uses interval-tracked zero-backed allocation; avoid touching headroom pages.
 	claim(tc, c.return_cells);
 	claim(cc, r->command_count);
 	claim(fc, r->frame_count);
 	for (uint32_t i = 0; i < action_count; ++i) {
 		ac[i].declaration = actions[i];
+		if (actions[i].action_kind == GDEXTENSION_PRODUCTION_MATERIAL_QUALIFICATION_V1) {
+			new (&r->material_qualifications[i]) MaterialQualificationState();
+			ac[i].material_qualification_constructed = true;
+			++a.material_qualifications_live;
+			++a.material_qualifications_constructed_total;
+		}
 	}
 	for (uint32_t i = 0; i < resource_count; ++i) {
 		rc[i].declaration = resources[i];
@@ -2080,7 +2156,8 @@ Error Registry::production_native_owner_locked(const ProductionRequest &r, uint3
 			(cell.owner_index != index && (cell.member.retained || cell.member.owner_released))) {
 		return ERR_INVALID_DATA;
 	}
-	if (cell.fact.membership_parent != UINT32_MAX && (cell.fact.membership_parent >= r.graph_count || !r.graphs || r.graphs[cell.fact.membership_parent].request != &r)) {
+	const bool has_parent = (cell.fact.membership_parent != UINT32_MAX) && !(cell.fact.phase == 0 && cell.fact.membership_parent == 0 && r.graph_count == 0);
+	if (has_parent && (cell.fact.membership_parent >= r.graph_count || !r.graphs || r.graphs[cell.fact.membership_parent].request != &r)) {
 		return ERR_INVALID_DATA;
 	}
 	out = &owner;
@@ -2095,6 +2172,9 @@ Error Registry::production_native_fact_locked(const ProductionRequest &r, uint32
 	}
 	const auto &member = r.natives[index].member;
 	out = r.natives[index].fact;
+	if (out.phase == 0 && out.membership_parent == 0 && r.graph_count == 0) {
+		out.membership_parent = UINT32_MAX;
+	}
 	out.native_serial = member.source.serial;
 	out.completion_serial = member.source.completion_serial;
 	out.backend_queue = member.source.queue_index;
@@ -3755,14 +3835,27 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 	if (!reclaim) {
 		return result(OK);
 	}
+	static_assert(std::is_trivially_copyable_v<ProductionNativeCell>);
+	static_assert(std::is_trivially_destructible_v<ProductionNativeCell>);
+	if (r->material_qualifications) {
+		for (uint32_t i = 0; i < r->action_count; ++i) {
+			if (r->actions[i].material_qualification_constructed) {
+				r->material_qualifications[i].~MaterialQualificationState();
+				r->actions[i].material_qualification_constructed = false;
+				CRASH_COND(!r->attachment->material_qualifications_live);
+				--r->attachment->material_qualifications_live;
+			}
+		}
+	}
 	auto reset = [](auto *cells, uint32_t count) { using T=std::remove_pointer_t<decltype(cells)>;for(uint32_t i=0;i<count;++i){cells[i].~T();new (&cells[i]) T();} };
 	reset(r->actions, r->capacity.suboperations);
-	reset(r->material_qualifications, r->capacity.suboperations);
 	reset(r->resources, r->capacity.resources);
 	reset(r->uses, r->capacity.resource_uses);
 	reset(r->readbacks, r->capacity.readbacks);
 	reset(r->graphs, r->capacity.graph_memberships);
-	reset(r->natives, r->capacity.native_memberships);
+	if (r->native_count) {
+		std::memset(r->natives, 0, sizeof(ProductionNativeCell) * r->native_count);
+	}
 	reset(r->returns, r->capacity.return_cells);
 	reset(r->commands, r->command_count);
 	reset(r->frames, r->frame_count);
@@ -3890,17 +3983,16 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 	}
 	auto destroy = [](auto *cells, uint32_t count) { using T=std::remove_pointer_t<decltype(cells)>;for(uint32_t i=0;i<count;++i){cells[i].~T();
 } };
+	CRASH_COND(a->material_qualifications_live != 0);
 	destroy(a->requests, a->quote.capacity.requests);
-	destroy(a->actions, a->quote.capacity.suboperations);
-	destroy(a->material_qualifications, a->quote.capacity.suboperations);
-	destroy(a->resources, a->quote.capacity.resources);
-	destroy(a->uses, a->quote.capacity.resource_uses);
-	destroy(a->readbacks, a->quote.capacity.readbacks);
-	destroy(a->graphs, a->quote.capacity.graph_memberships);
-	destroy(a->natives, a->quote.capacity.native_memberships);
-	destroy(a->returns, a->quote.capacity.return_cells);
-	destroy(a->commands, uint32_t(a->quote.graph_slots));
-	destroy(a->frames, uint32_t(a->quote.graph_frames));
+	destroy(a->actions, a->actions_hwm);
+	destroy(a->resources, a->resources_hwm);
+	destroy(a->uses, a->uses_hwm);
+	destroy(a->readbacks, a->readbacks_hwm);
+	destroy(a->graphs, a->graphs_hwm);
+	destroy(a->returns, a->returns_hwm);
+	destroy(a->commands, a->commands_hwm);
+	destroy(a->frames, a->frames_hwm);
 	void *arena = a->arena;
 	a->~ProductionAttachment();
 	Memory::free_static(arena);

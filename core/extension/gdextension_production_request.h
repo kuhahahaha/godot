@@ -539,6 +539,7 @@ class ProductionActionCell {
 	bool output_source_prepared = false;
 	uint32_t camera_payload_kind = 0; // Explicit staged upload codec: 1 view24, 2 sort18, 3 control3.
 	bool output_camera_pending = false; // Only explicit staged preparation may leave camera fields unresolved.
+	bool material_qualification_constructed = false;
 	MaterialQualificationState *material_qualification = nullptr;
 };
 struct ProductionOutputDemandSnapshot {
@@ -806,6 +807,7 @@ class ProductionRequest {
 	ProductionCaptureCell *commands = nullptr, *frames = nullptr;
 	uint32_t action_count = 0, resource_count = 0, use_count = 0, readback_count = 0;
 	uint32_t binding_used = 0;
+	uint32_t natives_offset = 0;
 	uint64_t payload_offset = 0, readback_offset = 0, payload_used = 0;
 	uint32_t command_count = 0, frame_count = 0;
 	uint64_t revision = 1;
@@ -942,6 +944,9 @@ class ProductionAttachment {
 	bool camera_ready_closed = false, camera_ready_relay_closed = false, camera_ready_close_active = false;
 	bool opened = false;
 	bool closing = false;
+	uint32_t actions_hwm = 0, resources_hwm = 0, uses_hwm = 0, readbacks_hwm = 0;
+	uint32_t graphs_hwm = 0, returns_hwm = 0, commands_hwm = 0, frames_hwm = 0;
+	uint32_t material_qualifications_live = 0, material_qualifications_constructed_total = 0;
 	// Open must acquire the original device holder and operation-window receiver.
 	// Metadata reservations do not satisfy those two obligations.
 };
