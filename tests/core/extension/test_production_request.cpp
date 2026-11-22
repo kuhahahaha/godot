@@ -4995,6 +4995,8 @@ struct Access {
 			RETRY_AFTER_BUSY,
 			CANCEL_AFTER_BUSY,
 			ORPHANED_FOLLOWER_OWNER_CONSUMED,
+			BUG77A_FOLLOWER_NO_HIJACK,
+			BUG77A_DEFENSIVE_RETURNED_DRAIN,
 		};
 		static constexpr uint32_t BATCH_SETS = 8;
 		Mode mode = Mode::NORMAL;
@@ -5102,13 +5104,22 @@ struct Access {
 			test.check(__LINE__, leader_serial != 0 && request.control.input.kind == ProductionControlKind::SET_CREATE && request.control.input.resource_slot == 2);
 			test.check(__LINE__, request.control.state == (cancel_while_queued ? ProductionControlState::PENDING : ProductionControlState::QUEUED));
 
-			// Enqueue all 7 follower uniform sets while the single leader control is active.
-			for (uint32_t i = 1; i < BATCH_SETS; ++i) {
-				test.check(__LINE__, registry.production_set_create(ref, 2 + i, 0, 0, &binding, 1).native_error == ERR_BUSY);
-				test.check(__LINE__, request.control.serial == leader_serial);
-				test.check(__LINE__, request.resources[2 + i].batched_set_create && request.resources[2 + i].creating && request.returns[2 + i].pending);
+			const bool skip_initial_follower_batch = (test.mode == Mode::BUG77A_FOLLOWER_NO_HIJACK);
+			if (!skip_initial_follower_batch) {
+				// Enqueue all 7 follower uniform sets while the single leader control is active.
+				for (uint32_t i = 1; i < BATCH_SETS; ++i) {
+					test.check(__LINE__, registry.production_set_create(ref, 2 + i, 0, 0, &binding, 1).native_error == ERR_BUSY);
+					test.check(__LINE__, request.control.serial == leader_serial);
+					test.check(__LINE__, request.resources[2 + i].batched_set_create && request.resources[2 + i].creating && request.returns[2 + i].pending);
+				}
+				test.check(__LINE__, fixture.driver.set_creates == 0 && request.binding_used == BATCH_SETS);
+			} else {
+				// Leave slot 3 uninitialized (owned_serial==0) while batching slot 4 (owned_serial!=0)
+				// so BUG-77A verifies BOTH fresh and pre-owned followers cannot hijack leadership.
+				test.check(__LINE__, registry.production_set_create(ref, 4, 0, 0, &binding, 1).native_error == ERR_BUSY);
+				test.check(__LINE__, request.control.serial == leader_serial && request.resources[4].batched_set_create && request.resources[4].creating);
+				test.check(__LINE__, request.resources[3].owned_serial == 0);
 			}
-			test.check(__LINE__, fixture.driver.set_creates == 0 && request.binding_used == BATCH_SETS);
 
 			bool expect_sets_created = false;
 			if (cancel_while_queued) {
@@ -5199,6 +5210,80 @@ struct Access {
 				test.check(__LINE__, fixture.driver.set_creates == BATCH_SETS);
 				test.check(__LINE__, registry.production_set_create(ref, 3, 0, 0, &binding, 1).native_error == OK);
 				test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED && !request.resources[3].creating && request.resources[3].imported);
+				test.check(__LINE__, registry.production_cancel(ref).native_error == OK);
+				expect_sets_created = true;
+			} else if (test.mode == Mode::BUG77A_FOLLOWER_NO_HIJACK) {
+				// BUG-77A: Exact 5-step deadlock reproduction:
+				// 1. Leader s_0 (slot 2) + follower s_2 (slot 4) hit transient ERR_BUSY on RT.
+				test.rendezvous(9);
+				test.check(__LINE__, fixture.driver.set_creates == 0);
+				test.check(__LINE__, request.control.serial == leader_serial && request.control.state == ProductionControlState::RETURNED);
+				test.check(__LINE__, request.resources[2].creating && !request.resources[2].imported);
+				test.check(__LINE__, request.resources[4].creating && !request.resources[4].imported && !request.resources[4].batched_set_create);
+				// 2. MT polls leader s_0 -> consumes RETURNED(ERR_BUSY) -> control.state == OWNER_CONSUMED, returns ERR_BUSY.
+				test.check(__LINE__, registry.production_set_create(ref, 2, 0, 0, &binding, 1).native_error == ERR_BUSY);
+				test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED && request.resources[2].creating);
+				// 3. Follower loop immediately calls production_set_create(s_1) (fresh owned_serial==0)
+				//    and production_set_create(s_2) (already-owned creating==true) while control is OWNER_CONSUMED.
+				//    NEITHER follower may hijack leadership while earlier s_0 is still creating!
+				test.check(__LINE__, registry.production_set_create(ref, 3, 0, 0, &binding, 1).native_error == ERR_BUSY);
+				test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED && request.resources[3].owned_serial == 0);
+				test.check(__LINE__, registry.production_set_create(ref, 4, 0, 0, &binding, 1).native_error == ERR_BUSY);
+				test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED && request.resources[4].creating && !request.resources[4].batched_set_create);
+				// 4. Leader s_0 retries and cleanly re-acquires leadership; all 7 followers batch onto s_0.
+				test.check(__LINE__, registry.production_set_create(ref, 2, 0, 0, &binding, 1).native_error == ERR_BUSY);
+				const uint64_t retry_serial = request.control.serial;
+				test.check(__LINE__, retry_serial != leader_serial && request.control.state == ProductionControlState::QUEUED && request.control.input.resource_slot == 2);
+				for (uint32_t i = 1; i < BATCH_SETS; ++i) {
+					test.check(__LINE__, registry.production_set_create(ref, 2 + i, 0, 0, &binding, 1).native_error == ERR_BUSY);
+					test.check(__LINE__, request.control.serial == retry_serial && request.resources[2 + i].batched_set_create && request.resources[2 + i].creating);
+				}
+				// 5. Single RT turn creates all 8 sets; all 8 return OK; production_cancel never wedges.
+				fixture.driver.fail_next_set_creates_busy = 0;
+				test.rendezvous(5);
+				test.check(__LINE__, fixture.driver.set_creates == BATCH_SETS);
+				for (uint32_t i = 1; i < BATCH_SETS; ++i) {
+					test.check(__LINE__, registry.production_set_create(ref, 2 + i, 0, 0, &binding, 1).native_error == OK);
+				}
+				test.check(__LINE__, registry.production_set_create(ref, 2, 0, 0, &binding, 1).native_error == OK);
+				test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED && request.resources[2].imported);
+				test.check(__LINE__, registry.production_cancel(ref).native_error == OK);
+				expect_sets_created = true;
+			} else if (test.mode == Mode::BUG77A_DEFENSIVE_RETURNED_DRAIN) {
+				// BUG-77A defensive recovery: if request.control is stuck in RETURNED for
+				// SET_CREATE on slot 3 while earlier slot 2 is still creating, polling slot 2
+				// MUST drain the mismatched RETURNED control back to OWNER_CONSUMED so neither
+				// slot 2 retry nor production_cancel can deadlock.
+				test.rendezvous(9); // All 8 slots hit transient ERR_BUSY -> creating==true, batched_set_create==false.
+				test.check(__LINE__, registry.production_set_create(ref, 2, 0, 0, &binding, 1).native_error == ERR_BUSY);
+				test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED);
+				// Artificially force slot 3 as active leader & execute only slot 3 -> control stuck in RETURNED(slot=3, OK).
+				{
+					MutexLock lock(registry.mutex);
+					test.check(__LINE__, registry.production_create_accept_locked(request, ProductionControlKind::SET_CREATE, 3) == OK);
+				}
+				const uint64_t mismatched_serial = request.control.serial;
+				test.check(__LINE__, registry.production_control_schedule(ref, mismatched_serial) == OK);
+				test.rendezvous(5); // RT executes slot 3 -> control = {RETURNED, SET_CREATE, 3, OK}; slot 2 still creating!
+				test.check(__LINE__, fixture.driver.set_creates == 1 && request.resources[3].imported && !request.resources[3].creating);
+				test.check(__LINE__, request.control.state == ProductionControlState::RETURNED && request.control.input.resource_slot == 3);
+				test.check(__LINE__, request.resources[2].creating && !request.resources[2].imported);
+				// Polling slot 2 drains mismatched RETURNED(slot=3) -> OWNER_CONSUMED (returns ERR_BUSY).
+				test.check(__LINE__, registry.production_set_create(ref, 2, 0, 0, &binding, 1).native_error == ERR_BUSY);
+				test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED);
+				// Now slot 2 re-acquires leadership, re-batches remaining slots 4..9, and completes cleanly!
+				test.check(__LINE__, registry.production_set_create(ref, 2, 0, 0, &binding, 1).native_error == ERR_BUSY);
+				test.check(__LINE__, request.control.state == ProductionControlState::QUEUED && request.control.input.resource_slot == 2);
+				for (uint32_t i = 2; i < BATCH_SETS; ++i) {
+					test.check(__LINE__, registry.production_set_create(ref, 2 + i, 0, 0, &binding, 1).native_error == ERR_BUSY);
+				}
+				test.rendezvous(5);
+				test.check(__LINE__, fixture.driver.set_creates == BATCH_SETS);
+				for (uint32_t i = 1; i < BATCH_SETS; ++i) {
+					test.check(__LINE__, registry.production_set_create(ref, 2 + i, 0, 0, &binding, 1).native_error == OK);
+				}
+				test.check(__LINE__, registry.production_set_create(ref, 2, 0, 0, &binding, 1).native_error == OK);
+				test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED);
 				test.check(__LINE__, registry.production_cancel(ref).native_error == OK);
 				expect_sets_created = true;
 			} else {
@@ -23179,4 +23264,13 @@ TEST_CASE("[SceneTree][ProductionRequest][MixedSet1][BUG-59] Set 1 combines lead
 
 TEST_CASE("[ProductionRequest][BUG-76] virtual zero-paged arena lazily constructs cell pools via HWM, lazy MQ state, and interval-tracked natives") {
 	TestProductionRequest::Access::lazy_arena_hwm_and_natives_interval();
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][BatchedSetCreate][BUG-77A] follower never hijacks SET_CREATE leader after transient ERR_BUSY and mismatched RETURNED drains cleanly") {
+	SUBCASE("follower does not hijack leader while earlier SET_V1 slot is still creating") {
+		TestProductionRequest::Access::singleton_batched_set_create(TestProductionRequest::Access::BatchedSetCreate::Mode::BUG77A_FOLLOWER_NO_HIJACK);
+	}
+	SUBCASE("defensive drain of mismatched RETURNED SET_CREATE control unblocks leader and cancel") {
+		TestProductionRequest::Access::singleton_batched_set_create(TestProductionRequest::Access::BatchedSetCreate::Mode::BUG77A_DEFENSIVE_RETURNED_DRAIN);
+	}
 }
