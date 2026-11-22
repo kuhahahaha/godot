@@ -1584,9 +1584,48 @@ Error RenderingDevice::buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_
 	return OK;
 }
 
+Error RenderingDevice::_prepare_synchronous_readback() {
+	if (qualification_frame_advance_pending.load() &&
+			!native_disposal_active.load(std::memory_order_acquire) &&
+			!frame_wait_draining.load() &&
+			frame_issue_error.load() == OK &&
+			frame_wait_error.load() == OK &&
+			!frame_wait_native_code_valid.load() &&
+			!draw_list.active && !compute_list.active && !raytracing_list.active &&
+			driver != nullptr && !frames.is_empty() && uint32_t(frame) < frames.size()) {
+		const Error begin_error = _begin_frame(true);
+		if (begin_error != OK) {
+			const bool has_fatal_error = frame_issue_error.load() != OK ||
+					frame_wait_error.load() != OK ||
+					frame_wait_native_code_valid.load();
+			if (has_fatal_error) {
+				ERR_PRINT("A frame fence wait failed; readback recording is suspended.");
+			} else {
+				ERR_PRINT(vformat("Frame advance is still pending (error=%d); readback recording is temporarily busy.", int(begin_error)));
+			}
+			return begin_error;
+		}
+	}
+	const Error recording_error = _recording_error();
+	if (recording_error != OK) {
+		const bool has_fatal_error = frame_issue_error.load() != OK ||
+				frame_wait_error.load() != OK ||
+				frame_wait_native_code_valid.load();
+		if (has_fatal_error) {
+			ERR_PRINT("A frame fence wait failed; readback recording is suspended.");
+		} else {
+			ERR_PRINT(vformat("Frame advance or disposal maintenance is active (error=%d); readback recording is temporarily busy.", int(recording_error)));
+		}
+		return recording_error;
+	}
+	return OK;
+}
+
 Vector<uint8_t> RenderingDevice::buffer_get_data(RID p_buffer, uint32_t p_offset, uint32_t p_size) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, Vector<uint8_t>(), "A frame fence wait failed; readback recording is suspended.");
 	ERR_RENDER_THREAD_GUARD_V(Vector<uint8_t>());
+	if (_prepare_synchronous_readback() != OK) {
+		return Vector<uint8_t>();
+	}
 
 	Buffer *buffer = _get_buffer_from_owner(p_buffer);
 	if (!buffer) {
@@ -3458,8 +3497,10 @@ Error RenderingDevice::_texture_clear_depth_stencil(RID p_texture_rid, Texture *
 }
 
 Vector<uint8_t> RenderingDevice::texture_get_data(RID p_texture, uint32_t p_layer) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, Vector<uint8_t>(), "A frame fence wait failed; readback recording is suspended.");
 	ERR_RENDER_THREAD_GUARD_V(Vector<uint8_t>());
+	if (_prepare_synchronous_readback() != OK) {
+		return Vector<uint8_t>();
+	}
 
 	Texture *tex = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL_V(tex, Vector<uint8_t>());

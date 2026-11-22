@@ -293,6 +293,249 @@ public:
 		device.frames.clear();
 		device.driver = nullptr;
 	}
+	static void synchronous_readback_resumes_pending_frame() {
+		struct CapturedErrors {
+			uint32_t count = 0;
+			Vector<String> messages;
+			static void capture(void *p_data, const char *, const char *, int, const char *p_error, const char *p_rationale, bool, ErrorHandlerType p_type) {
+				if (p_type == ERR_HANDLER_ERROR) {
+					auto *self = static_cast<CapturedErrors *>(p_data);
+					++self->count;
+					String msg;
+					if (p_error && *p_error) {
+						msg += String::utf8(p_error);
+					}
+					if (p_rationale && *p_rationale) {
+						if (!msg.is_empty()) {
+							msg += " ";
+						}
+						msg += String::utf8(p_rationale);
+					}
+					self->messages.push_back(msg);
+				}
+			}
+			ErrorHandlerList handler{ &CapturedErrors::capture, this };
+			CapturedErrors() { add_error_handler(&handler); }
+			~CapturedErrors() { remove_error_handler(&handler); }
+			void reset() {
+				count = 0;
+				messages.clear();
+			}
+			bool has_substring(const String &p_sub) const {
+				for (const String &m : messages) {
+					if (m.contains(p_sub)) {
+						return true;
+					}
+				}
+				return false;
+			}
+		};
+
+		struct ReadbackDriver : TransferTestDriverBase {
+			bool native_observation = false;
+			bool native_ready = true;
+			Error fence_wait_result = OK;
+			uint32_t fence_waits = 0;
+			uint32_t resets = 0;
+			uint32_t begins = 0;
+			uint32_t copies = 0;
+			uint32_t submissions = 0;
+			uint32_t freed_buffers = 0;
+			uint8_t staging_bytes[4] = { 0x11, 0x22, 0x33, 0x44 };
+			uint8_t tex_bytes[4] = { 0x55, 0x66, 0x77, 0x88 };
+
+			bool native_call_observation_supported() const override { return native_observation; }
+			FencePollResult native_call_wait(uint64_t serial) override {
+				FencePollResult result;
+				if (native_ready) {
+					result.completed = true;
+					result.completed_serial = serial;
+				}
+				return result;
+			}
+			Error native_call_recycle_wait(uint64_t) override { return OK; }
+			Error fence_wait(FenceID) override {
+				++fence_waits;
+				return fence_wait_result;
+			}
+			bool command_pool_reset(CommandPoolID) override {
+				++resets;
+				return true;
+			}
+			bool command_buffer_begin(CommandBufferID) override { return true; }
+			void begin_segment(uint32_t, uint32_t) override { ++begins; }
+			void command_buffer_end(CommandBufferID) override {}
+			void end_segment() override {}
+			void command_pipeline_barrier(CommandBufferID, BitField<PipelineStageBits>, BitField<PipelineStageBits>, VectorView<MemoryAccessBarrier>, VectorView<BufferBarrier>, VectorView<TextureBarrier>, VectorView<AccelerationStructureBarrier>) override {}
+			void command_copy_buffer(CommandBufferID, BufferID, BufferID, VectorView<BufferCopyRegion>) override { ++copies; }
+			Error command_queue_execute_and_present(CommandQueueID, VectorView<SemaphoreID>, VectorView<CommandBufferID>, VectorView<SemaphoreID>, FenceID, VectorView<SwapChainID>) override {
+				++submissions;
+				QueueCallReport report;
+				report.issued = true;
+				record_queue_call_report(report);
+				return OK;
+			}
+			BufferID buffer_create(uint64_t, BitField<BufferUsageBits>, MemoryAllocationType, uint64_t) override { return BufferID(91); }
+			uint8_t *buffer_map(BufferID) override { return staging_bytes; }
+			void buffer_unmap(BufferID) override {}
+			void buffer_free(BufferID) override { ++freed_buffers; }
+			Vector<uint8_t> texture_get_data(TextureID, uint32_t) override {
+				Vector<uint8_t> out;
+				out.resize(4);
+				memcpy(out.ptrw(), tex_bytes, 4);
+				return out;
+			}
+		} driver;
+
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.is_main_instance = true;
+		device.main_queue = RenderingDeviceDriver::CommandQueueID(1);
+		device.present_queue = device.main_queue;
+		device.frames.resize(2);
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 2, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		for (uint32_t i = 0; i < 2; ++i) {
+			auto &f = device.frames[i];
+			f.command_pool = RenderingDeviceDriver::CommandPoolID(21 + i);
+			f.command_buffer = RenderingDeviceDriver::CommandBufferID(31 + i);
+			f.fence = RenderingDeviceDriver::FenceID(41 + i);
+			f.fence_signaled = false;
+			f.primary_command_buffer_begun = false;
+		}
+		device.frame = 1;
+		device.frames[1].fence_signaled = true;
+
+		RenderingDevice::Buffer src_buf;
+		src_buf.driver_id = RenderingDeviceDriver::BufferID(71);
+		src_buf.size = 4;
+		src_buf.usage = RenderingDeviceDriver::BUFFER_USAGE_VERTEX_BIT | RenderingDeviceDriver::BUFFER_USAGE_TRANSFER_FROM_BIT;
+		const RID buf_rid = device.vertex_buffer_owner.make_rid(src_buf);
+
+		RenderingDevice::Texture src_tex;
+		src_tex.driver_id = RenderingDeviceDriver::TextureID(81);
+		src_tex.width = 1;
+		src_tex.height = 1;
+		src_tex.depth = 1;
+		src_tex.layers = 1;
+		src_tex.mipmaps = 1;
+		src_tex.usage_flags = RenderingDevice::TEXTURE_USAGE_CAN_COPY_FROM_BIT | RenderingDevice::TEXTURE_USAGE_CPU_READ_BIT;
+		const RID tex_rid = device.texture_owner.make_rid(src_tex);
+
+		CapturedErrors errors;
+
+		// 1. Pending ordinary frame advance (post _native_disposal_maintenance ERR_BUSY)
+		//    must cleanly resume _begin_frame(true) and return real buffer & texture data with 0 errors.
+		device.qualification_frame_advance_pending = true;
+		ERR_PRINT_OFF;
+		const Vector<uint8_t> buf_data = device.buffer_get_data(buf_rid, 0, 4);
+		ERR_PRINT_ON;
+		CHECK(errors.count == 0);
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+		CHECK(device._recording_error() == OK);
+		CHECK(driver.copies == 1);
+		CHECK(driver.submissions == 1);
+		CHECK(driver.fence_waits == 2);
+		CHECK(driver.freed_buffers == 1);
+		REQUIRE(buf_data.size() == 4);
+		CHECK(buf_data[0] == 0x11);
+		CHECK(buf_data[1] == 0x22);
+		CHECK(buf_data[2] == 0x33);
+		CHECK(buf_data[3] == 0x44);
+
+		// Same resumption path for texture_get_data().
+		device.qualification_frame_advance_pending = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		const Vector<uint8_t> tex_data = device.texture_get_data(tex_rid, 0);
+		ERR_PRINT_ON;
+		CHECK(errors.count == 0);
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+		CHECK(device._recording_error() == OK);
+		REQUIRE(tex_data.size() == 4);
+		CHECK(tex_data[0] == 0x55);
+		CHECK(tex_data[1] == 0x66);
+		CHECK(tex_data[2] == 0x77);
+		CHECK(tex_data[3] == 0x88);
+
+		// 2. Transient non-fatal busy during _begin_frame(true) must emit an accurate
+		//    non-fence busy diagnostic (never "A frame fence wait failed").
+		driver.native_observation = true;
+		driver.native_ready = false;
+		RenderingDeviceDriver::QueueCallReport report;
+		RenderingDeviceDriver::NativeCallFact fact;
+		fact.serial = fact.completion_serial = 19;
+		report.calls.push_back(fact);
+		device.frames[1].chain_reports.clear();
+		device.frames[1].chain_reports.push_back(report);
+		device.qualification_frame_advance_pending = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		CHECK(device.buffer_get_data(buf_rid, 0, 4).is_empty());
+		CHECK(device.texture_get_data(tex_rid, 0).is_empty());
+		ERR_PRINT_ON;
+		CHECK(errors.count == 2);
+		CHECK_FALSE(errors.has_substring("frame fence wait failed"));
+		CHECK(errors.has_substring("temporarily busy"));
+		CHECK(device.qualification_frame_advance_pending);
+		CHECK(device.frame_wait_error == OK);
+		CHECK(device.frame_issue_error == OK);
+		CHECK_FALSE(device.frame_wait_native_code_valid);
+
+		// Transient native_disposal_active busy before _begin_frame(true).
+		driver.native_observation = false;
+		device.frames[1].chain_reports.clear();
+		device.qualification_frame_advance_pending = false;
+		device.native_disposal_active = true;
+		const uint32_t resets_before_disposal = driver.resets;
+		errors.reset();
+		ERR_PRINT_OFF;
+		CHECK(device.buffer_get_data(buf_rid, 0, 4).is_empty());
+		ERR_PRINT_ON;
+		CHECK(driver.resets == resets_before_disposal);
+		CHECK(errors.count == 1);
+		CHECK_FALSE(errors.has_substring("frame fence wait failed"));
+		CHECK(errors.has_substring("temporarily busy"));
+		device.native_disposal_active = false;
+
+		// 3a. Pre-existing genuine fence wait failure must STILL fail closed with the fence error
+		//     without attempting _begin_frame(true).
+		device.qualification_frame_advance_pending = true;
+		device.frame_wait_error = ERR_TIMEOUT;
+		const uint32_t resets_before_fatal = driver.resets;
+		errors.reset();
+		ERR_PRINT_OFF;
+		CHECK(device.buffer_get_data(buf_rid, 0, 4).is_empty());
+		CHECK(device.texture_get_data(tex_rid, 0).is_empty());
+		ERR_PRINT_ON;
+		CHECK(driver.resets == resets_before_fatal);
+		CHECK(errors.count == 2);
+		CHECK(errors.has_substring("A frame fence wait failed; readback recording is suspended."));
+		CHECK(device.qualification_frame_advance_pending);
+
+		// 3b. Genuine fence wait failure occurring DURING _begin_frame(true) must STILL fail closed
+		//     with the fence error and record frame_wait_error.
+		device.frame_wait_error = OK;
+		device.frame_wait_native_code_valid = false;
+		device.frames[1].fence_signaled = true;
+		driver.fence_wait_result = ERR_TIMEOUT;
+		errors.reset();
+		ERR_PRINT_OFF;
+		CHECK(device.buffer_get_data(buf_rid, 0, 4).is_empty());
+		ERR_PRINT_ON;
+		CHECK(errors.count == 1);
+		CHECK(errors.has_substring("A frame fence wait failed; readback recording is suspended."));
+		CHECK(device.frame_wait_error == ERR_TIMEOUT);
+		CHECK(device.qualification_frame_advance_pending);
+
+		// Teardown: clean up mock RIDs and detach fake driver.
+		device.vertex_buffer_owner.free(buf_rid);
+		device.texture_owner.free(tex_rid);
+		device.frames.clear();
+		device.main_queue = RenderingDeviceDriver::CommandQueueID();
+		device.present_queue = RenderingDeviceDriver::CommandQueueID();
+		device.driver = nullptr;
+	}
 	static void attach_native_source(RenderingDevice &device, RenderingDeviceDriver &driver) {
 		device.driver = &driver;
 		device.frames.resize(1);
@@ -1426,4 +1669,8 @@ TEST_CASE("[SceneTree][R01][FrameWait] pending ordinary draw preserves real issu
 
 TEST_CASE("[R01][FrameWait] actual fence Busy remains an error during ordinary frame advance") {
 	TestFrameWaitAccess::ordinary_fence_busy_reports_error();
+}
+
+TEST_CASE("[RenderingDevice][BUG-92] synchronous readback resumes pending frame advance and distinguishes transient busy from real fence errors") {
+	TestFrameWaitAccess::synchronous_readback_resumes_pending_frame();
 }

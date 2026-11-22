@@ -2971,6 +2971,7 @@ private:
 		const Error wait_error = frame_wait_error.load();
 		return wait_error != OK ? wait_error : ((frame_wait_draining.load() || qualification_frame_advance_pending.load() || native_disposal_active.load()) ? ERR_BUSY : OK);
 	}
+	Error _prepare_synchronous_readback();
 
 	// Whenever logic/physics request a graphics operation (not just deleting a resource) that requires
 	// us to flush all graphics commands, we must set frames_pending_resources_for_processing = frames.size().
