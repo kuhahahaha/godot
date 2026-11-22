@@ -654,9 +654,10 @@ public:
 	// RT source observation only; callback updates the caller's existing native
 	// dependency/uniform directory. No surface cell, holder or draw grant.
 	Error particles_external_scene_material_facts(RID p_particles, ExternalSceneMaterialFacts &r_facts, ExternalSceneMaterialVisit p_visit, void *p_context) const;
+	void particles_external_query_owner_framebuffer_reads(RID p_particles, bool &r_uses_screen_texture, bool &r_uses_depth_texture) const;
 	uint32_t particles_external_surface_count(RID p_particles) const;
 	Error particles_external_surface_acquire(RID p_particles, uint32_t p_ordinal, ExternalSurfaceSelection &r_selection);
-	Error particles_external_generated_surfaces_for_view(RID p_particles, const ::RenderDataRD &, uint32_t &r_slot, uint32_t &r_count) const;
+	Error particles_external_generated_surfaces_for_view(RID p_particles, const ::RenderDataRD &, uint32_t &r_slot, uint32_t &r_count, bool p_allow_adopted_replay = false, bool p_defer_transparent_replay = false) const;
 	Error particles_external_slot_surface_acquire(RID p_particles, uint32_t p_slot, uint32_t p_ordinal, ExternalSurfaceSelection &r_selection);
 	Error particles_external_surface_release(ExternalSurfaceSelection &p_selection);
 	Error particles_external_view_acquire(const ExternalSurfaceSelection &p_selection, const ::RenderDataRD *p_render_data, ExternalPacketViewLease &r_view);

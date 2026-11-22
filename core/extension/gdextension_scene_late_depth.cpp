@@ -171,8 +171,8 @@ Error Registry::scene_depth_snapshot_arm(
 		if (!device || device != main_rd) {
 			return ERR_UNAVAILABLE;
 		}
-		if (!attachment->scene_registration || attachment->scene_closed ||
-				attachment->scene_config.phase != SCENE_PHASE_BEFORE_PARTICLES) {
+		if (!attachment->opened || attachment->closing ||
+				(attachment->scene_registration && (attachment->scene_closed || attachment->scene_config.phase != SCENE_PHASE_BEFORE_PARTICLES))) {
 			return ERR_UNAUTHORIZED;
 		}
 	}

@@ -216,8 +216,14 @@ protected:
 	/// so barriers mode must make them resident explicitly at encoder creation time.
 	Mutex imported_textures_mutex;
 	LocalVector<MTL::Texture *> imported_textures;
+	Error last_uniform_set_create_error = OK;
 
 public:
+	Error take_last_uniform_set_create_error() override {
+		Error err = last_uniform_set_create_error;
+		last_uniform_set_create_error = OK;
+		return err;
+	}
 	Error qualification_prepare_segment(QueueCallReport &r_report, bool p_nonblocking = true) override;
 	bool native_call_observation_supported() const override { return true; }
 	FencePollResult native_call_poll(uint64_t p_native_serial) override;

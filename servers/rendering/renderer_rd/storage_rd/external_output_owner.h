@@ -167,7 +167,7 @@ class ExternalOutputOwner {
 		void release_fast_refresh_resources(RenderingDevice *p_rd);
 
 	};
-	Error validate_scene_cull(uint32_t p_slot) const;
+	Error validate_scene_cull(uint32_t p_slot, bool p_allow_sealed_replay = false) const;
 
 	struct View {
 		// CPU records for the original at-most-four in-flight slots, priced

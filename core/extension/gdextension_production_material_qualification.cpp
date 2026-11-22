@@ -357,8 +357,45 @@ Error mq_create_fixture_quad_surface(uint64_t p_candidate_format, RenderingServe
 		uv2.write[3] = Vector2(1.0f, 1.0f);
 		arrays[RSE::ARRAY_TEX_UV2] = uv2;
 	}
+	for (uint32_t c = 0; c < RSE::ARRAY_CUSTOM_COUNT; ++c) {
+		const uint32_t ai = RSE::ARRAY_CUSTOM0 + c;
+		if (!(p_candidate_format & (uint64_t(1) << ai))) {
+			continue;
+		}
+		const uint32_t custom_type = (p_candidate_format >> (RSE::ARRAY_FORMAT_CUSTOM_BASE + RSE::ARRAY_FORMAT_CUSTOM_BITS * c)) & RSE::ARRAY_FORMAT_CUSTOM_MASK;
+		switch (custom_type) {
+			case RSE::ARRAY_CUSTOM_RGBA8_UNORM:
+			case RSE::ARRAY_CUSTOM_RGBA8_SNORM:
+			case RSE::ARRAY_CUSTOM_RG_HALF: {
+				Vector<uint8_t> bytes;
+				bytes.resize_initialized(16);
+				arrays[ai] = bytes;
+			} break;
+			case RSE::ARRAY_CUSTOM_RGBA_HALF: {
+				Vector<uint8_t> bytes;
+				bytes.resize_initialized(32);
+				arrays[ai] = bytes;
+			} break;
+			case RSE::ARRAY_CUSTOM_R_FLOAT:
+			case RSE::ARRAY_CUSTOM_RG_FLOAT:
+			case RSE::ARRAY_CUSTOM_RGB_FLOAT:
+			case RSE::ARRAY_CUSTOM_RGBA_FLOAT: {
+				const int32_t comps = int32_t(custom_type - RSE::ARRAY_CUSTOM_R_FLOAT + 1);
+				Vector<float> floats;
+				floats.resize_initialized(4 * comps);
+				arrays[ai] = floats;
+			} break;
+			default:
+				return ERR_INVALID_DATA;
+		}
+	}
 
-	const uint64_t compress_flags = p_candidate_format & RSE::ARRAY_FLAG_COMPRESS_ATTRIBUTES;
+	const uint64_t custom_format_mask =
+			(uint64_t(RSE::ARRAY_FORMAT_CUSTOM_MASK) << RSE::ARRAY_FORMAT_CUSTOM0_SHIFT) |
+			(uint64_t(RSE::ARRAY_FORMAT_CUSTOM_MASK) << RSE::ARRAY_FORMAT_CUSTOM1_SHIFT) |
+			(uint64_t(RSE::ARRAY_FORMAT_CUSTOM_MASK) << RSE::ARRAY_FORMAT_CUSTOM2_SHIFT) |
+			(uint64_t(RSE::ARRAY_FORMAT_CUSTOM_MASK) << RSE::ARRAY_FORMAT_CUSTOM3_SHIFT);
+	const uint64_t compress_flags = p_candidate_format & (RSE::ARRAY_FLAG_COMPRESS_ATTRIBUTES | custom_format_mask);
 	return rs->mesh_create_surface_data_from_arrays(&r_sd, RSE::PRIMITIVE_TRIANGLES, arrays, Array(), Dictionary(), compress_flags);
 }
 
@@ -770,8 +807,10 @@ Error Registry::production_material_qualification_observe_locked(ProductionReque
 					observed_raw_format = mesh_obs.format;
 					observed.candidate_mesh_revision = mesh_obs.mesh_revision;
 					observed.candidate_primitive = uint32_t(mesh_obs.primitive);
+					const bool is_particle_surface = prep.recipe == GDEXTENSION_MATERIAL_QUALIFICATION_RECIPE_CURRENT_RESET_F32_WORLD_PARTICLE_SURFACE_V1;
 					const uint64_t forbidden_mesh_bits = RSE::ARRAY_FORMAT_BONES | RSE::ARRAY_FORMAT_WEIGHTS |
-							RSE::ARRAY_FORMAT_CUSTOM0 | RSE::ARRAY_FORMAT_CUSTOM1 | RSE::ARRAY_FORMAT_CUSTOM2 | RSE::ARRAY_FORMAT_CUSTOM3;
+							(is_particle_surface ? 0ULL : (RSE::ARRAY_FORMAT_CUSTOM0 | RSE::ARRAY_FORMAT_CUSTOM1)) |
+							RSE::ARRAY_FORMAT_CUSTOM2 | RSE::ARRAY_FORMAT_CUSTOM3;
 					const bool static_finite = meshes->mesh_get_blend_shape_count(mesh_rid) == 0 &&
 							mesh_obs.vertex_count > 0 &&
 							mesh_obs.primitive == RSE::PRIMITIVE_TRIANGLES &&
@@ -1523,6 +1562,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_record_material_qualificat
 		rd->frames[rd->frame].download_buffer_copy_regions.push_back(buf_region);
 		rd->download_staging_buffers.blocks.write[rd->download_staging_buffers.current].fill_amount = staging_offset + raw_bytes;
 		rd->frames[rd->frame].download_buffer_get_data_requests.push_back(dl_req);
+		rd->frames_pending_resources_for_processing = uint32_t(rd->frames.size());
 
 		mq->readback_capture.segment(mq->readback_capture.count++) = { dl_handle, 0, raw_bytes };
 		return OK;

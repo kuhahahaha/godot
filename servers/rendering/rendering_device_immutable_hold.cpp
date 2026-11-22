@@ -780,13 +780,15 @@ Error RenderingDevice::_production_output_directory_return(GDExtensionDeviceExit
 			return ERR_BUSY;
 		}
 		MutexScopeUnlock<Mutex> unlock(_thread_safe_);
-		for (uint32_t command = 0; command < draw_graph.qualification_command_count(); ++command) {
-			bool captured = false;
-			for (uint32_t i = 0; i < request.graph_count; ++i) {
-				captured |= registry.production_output_graph_command_locked(request, *this, i, command);
-			}
-			if (!captured) {
-				return ERR_BUSY;
+		if (screen_swap_chains.is_empty()) {
+			for (uint32_t command = 0; command < draw_graph.qualification_command_count(); ++command) {
+				bool captured = false;
+				for (uint32_t i = 0; i < request.graph_count; ++i) {
+					captured |= registry.production_output_graph_command_locked(request, *this, i, command);
+				}
+				if (!captured) {
+					return ERR_BUSY;
+				}
 			}
 		}
 		if (OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) {
@@ -1991,7 +1993,19 @@ Error RenderingDevice::_production_output_drop_step(GDExtensionDeviceExit::Produ
 		}
 		bool owned_in_request = false;
 		for (auto *related = *head; related; related = related->next) {
-			owned_in_request |= related->request == &request && related->request_serial == request.serial && related->owned && related->state.load(std::memory_order_acquire) == 1;
+			if (related->request == &request && related->request_serial == request.serial && related->owned && related->state.load(std::memory_order_acquire) == 1) {
+				bool related_releasing = (related->group == node.group);
+				if (!related_releasing) {
+					for (uint32_t g = request.disposal_group_head; g != UINT32_MAX; g = request.uses[g].disposal_group_next) {
+						const auto &rg = request.uses[g];
+						if (rg.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && rg.disposal_group_serial == related->group) {
+							related_releasing = rg.disposal_group_release;
+							break;
+						}
+					}
+				}
+				owned_in_request |= related_releasing;
+			}
 		}
 		if (!*retiring && !node.owned && owned_in_request && !node.qualified_borrow) {
 			continue;
@@ -3265,12 +3279,16 @@ Error RenderingDevice::_native_settle_transfer_worker(RID p_rid) {
 			return OK;
 		}
 		if (Texture *tex = texture_owner.owns(p_rid) ? texture_owner.get_or_null(p_rid) : nullptr) {
-			const Error err = _check_transfer_worker_texture(tex);
-			if (err != OK) {
-				return err;
-			}
-			if (tex->transfer_worker_index >= 0) {
-				r_needs_flush = true;
+			Texture *cur = tex;
+			for (uint32_t depth = 0; cur && depth < 4; ++depth) {
+				const Error err = _check_transfer_worker_texture(cur);
+				if (err != OK) {
+					return err;
+				}
+				if (cur->transfer_worker_index >= 0) {
+					r_needs_flush = true;
+				}
+				cur = cur->owner.is_valid() && texture_owner.owns(cur->owner) ? texture_owner.get_or_null(cur->owner) : nullptr;
 			}
 			RID owner_rid = tex->owner;
 			for (int hop = 0; hop < 8 && owner_rid.is_valid(); ++hop) {
@@ -3564,7 +3582,7 @@ Error RenderingDevice::_production_mq_create_targets_and_framebuffer(const Textu
 	framebuffer.qualification_return = &r_fb_physical;
 	framebuffer.format_id = format_id;
 	framebuffer.texture_ids = attachment_rids;
-	framebuffer.size = Size2i(p_color_fmt.width, p_color_fmt.height);
+	framebuffer.size = Size2i(int32_t(p_color_fmt.width), int32_t(p_color_fmt.height));
 	framebuffer.view_count = 1;
 
 	RDG::FramebufferCache *framebuffer_cache = RDG::framebuffer_cache_create();
@@ -3803,31 +3821,35 @@ Error RenderingDevice::_production_mq_drain_owned_disposals_step(const GDExtensi
 		return false;
 	};
 
-	// The same accepted request may own qualified SET children as well as MQ
-	// disposal witnesses. Logical free already closed their original use edges;
-	// only that exact still-pending physical cell can authorize its return.
-	auto owns_set = [&](const UniformSet &set) -> bool {
-		if (owns_disposal(set.production_disposal_uses, 4, set.driver_id.id)) {
-			return true;
+	auto owns_qual_return = [&](const GDExtensionDeviceExit::QualificationPhysicalReturn *p_qual) -> bool {
+		if (!p_qual) {
+			return false;
 		}
-		if (set.qualification_return) {
-			for (uint32_t i = 0; i < p_request.resource_count; ++i) {
-				const auto &slot = p_request.resources[i];
-				if (slot.declaration.resource_kind == GDEXTENSION_PRODUCTION_SET_V1 &&
-						slot.declaration.ownership == GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 &&
-						slot.request == &p_request && slot.request_serial == p_request.serial &&
-						&slot.owned_physical == set.qualification_return && slot.retiring &&
-						slot.owned_physical.enqueued && !slot.returned) {
-					return true;
-				}
+		for (uint32_t i = 0; i < p_request.resource_count; ++i) {
+			const auto &slot = p_request.resources[i];
+			if (slot.declaration.ownership == GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 &&
+					slot.request == &p_request && slot.request_serial == p_request.serial &&
+					&slot.owned_physical == p_qual && slot.retiring &&
+					slot.owned_physical.enqueued && !slot.returned) {
+				return true;
 			}
 		}
 		return false;
 	};
 
+	// The same accepted request may own qualified SET/STORAGE/RASTER children as well as MQ
+	// disposal witnesses. Logical free already closed their original use edges;
+	// only that exact still-pending physical cell can authorize its return.
+	auto owns_set = [&](const UniformSet &set) -> bool {
+		return owns_disposal(set.production_disposal_uses, 4, set.driver_id.id) || owns_qual_return(set.qualification_return);
+	};
+
 	auto owns_fb = [&](const GDExtensionDeviceExit::QualificationPhysicalReturn *p_phys) -> bool {
 		if (!p_phys) {
 			return false;
+		}
+		if (owns_qual_return(p_phys)) {
+			return true;
 		}
 		for (uint32_t i = 0; i < p_fb_count; ++i) {
 			if (p_fb_physicals[i] == p_phys) {
@@ -3840,13 +3862,31 @@ Error RenderingDevice::_production_mq_drain_owned_disposals_step(const GDExtensi
 	auto frame_has_owned = [&](const Frame &f) -> bool {
 		for (auto *elem = f.render_pipelines_to_dispose_of.front(); elem; elem = elem->next()) {
 			const RenderPipeline &pipeline = elem->get();
-			if (owns_disposal(pipeline.production_disposal_uses, 0, pipeline.driver_id.id)) {
+			if (owns_disposal(pipeline.production_disposal_uses, 0, pipeline.driver_id.id) || owns_qual_return(pipeline.qualification_return)) {
+				return true;
+			}
+		}
+		for (auto *elem = f.compute_pipelines_to_dispose_of.front(); elem; elem = elem->next()) {
+			const ComputePipeline &pipeline = elem->get();
+			if (owns_disposal(pipeline.production_disposal_uses, 1, pipeline.driver_id.id) || owns_qual_return(pipeline.qualification_return)) {
 				return true;
 			}
 		}
 		for (auto *elem = f.uniform_sets_to_dispose_of.front(); elem; elem = elem->next()) {
 			const UniformSet &uniform_set = elem->get();
 			if (owns_set(uniform_set)) {
+				return true;
+			}
+		}
+		for (auto *elem = f.shaders_to_dispose_of.front(); elem; elem = elem->next()) {
+			const Shader &shader = elem->get();
+			if (owns_disposal(shader.production_disposal_uses, 5, shader.driver_id.id) || owns_qual_return(shader.qualification_return)) {
+				return true;
+			}
+		}
+		for (auto *elem = f.samplers_to_dispose_of.front(); elem; elem = elem->next()) {
+			const Sampler &sampler = elem->get();
+			if (owns_disposal(sampler.production_disposal_uses, 6, sampler.driver_id.id) || owns_qual_return(sampler.qualification_return)) {
 				return true;
 			}
 		}
@@ -3857,13 +3897,13 @@ Error RenderingDevice::_production_mq_drain_owned_disposals_step(const GDExtensi
 		}
 		for (auto *elem = f.textures_to_dispose_of.front(); elem; elem = elem->next()) {
 			const Texture &texture = elem->get();
-			if (owns_disposal(texture.production_disposal_uses, 8, texture.driver_id.id)) {
+			if (owns_disposal(texture.production_disposal_uses, 8, texture.driver_id.id) || owns_qual_return(texture.qualification_return)) {
 				return true;
 			}
 		}
 		for (auto *elem = f.buffers_to_dispose_of.front(); elem; elem = elem->next()) {
 			const Buffer &buffer = elem->get();
-			if (owns_disposal(buffer.production_disposal_uses, 9, buffer.driver_id.id, buffer.backing_serial)) {
+			if (owns_disposal(buffer.production_disposal_uses, 9, buffer.driver_id.id, buffer.backing_serial) || owns_qual_return(buffer.qualification_return)) {
 				return true;
 			}
 		}
@@ -3886,23 +3926,32 @@ Error RenderingDevice::_production_mq_drain_owned_disposals_step(const GDExtensi
 	} scoped_budget(*this, p_budget, r_usage);
 
 	const uint32_t initial_passes = r_usage.passes;
+	bool any_owned = false;
+	for (uint32_t fi = 0; fi < frames.size() && !any_owned; ++fi) {
+		any_owned = frame_has_owned(frames[fi]);
+	}
+	if (!any_owned) {
+		return OK;
+	}
 	for (uint32_t fi = 0; fi < frames.size(); ++fi) {
-		Frame &f = frames[fi];
-		if (!frame_has_owned(f)) {
-			continue;
-		}
-		if (f.fence_signaled) {
+		if (frames[fi].fence_signaled) {
 			const Error poll_err = _native_disposal_stall_step(fi);
 			if (poll_err != OK) {
 				return poll_err;
 			}
+		}
+	}
+	for (uint32_t fi = 0; fi < frames.size(); ++fi) {
+		Frame &f = frames[fi];
+		if (!frame_has_owned(f)) {
+			continue;
 		}
 
 		// 1. Render pipelines (kind 0).
 		for (auto *elem = f.render_pipelines_to_dispose_of.front(); elem;) {
 			auto *next = elem->next();
 			RenderPipeline &pipeline = elem->get();
-			if (!owns_disposal(pipeline.production_disposal_uses, 0, pipeline.driver_id.id)) {
+			if (!owns_disposal(pipeline.production_disposal_uses, 0, pipeline.driver_id.id) && !owns_qual_return(pipeline.qualification_return)) {
 				elem = next;
 				continue;
 			}
@@ -3921,6 +3970,27 @@ Error RenderingDevice::_production_mq_drain_owned_disposals_step(const GDExtensi
 			}
 			_qualification_freed(pipeline.qualification_return);
 			f.render_pipelines_to_dispose_of.erase(elem);
+			elem = next;
+		}
+
+		// 1b. Compute pipelines (kind 1).
+		for (auto *elem = f.compute_pipelines_to_dispose_of.front(); elem;) {
+			auto *next = elem->next();
+			ComputePipeline &pipeline = elem->get();
+			if (!owns_disposal(pipeline.production_disposal_uses, 1, pipeline.driver_id.id) && !owns_qual_return(pipeline.qualification_return)) {
+				elem = next;
+				continue;
+			}
+			if (!admit(NativeDisposalWork::FREE)) {
+				return ERR_BUSY;
+			}
+			driver->pipeline_free(pipeline.driver_id);
+			_production_disposal_returned(pipeline.production_disposal_uses);
+			_qualification_freed(pipeline.qualification_return);
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+			capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::ComputePipeline, pipeline.driver_id.id);
+#endif
+			f.compute_pipelines_to_dispose_of.erase(elem);
 			elem = next;
 		}
 
@@ -3951,6 +4021,47 @@ Error RenderingDevice::_production_mq_drain_owned_disposals_step(const GDExtensi
 			capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::UniformSet, uniform_set.driver_id.id);
 #endif
 			f.uniform_sets_to_dispose_of.erase(elem);
+			elem = next;
+		}
+
+		// 2b. Shaders (kind 5) & Samplers (kind 6).
+		for (auto *elem = f.shaders_to_dispose_of.front(); elem;) {
+			auto *next = elem->next();
+			Shader &shader = elem->get();
+			if (!owns_disposal(shader.production_disposal_uses, 5, shader.driver_id.id) && !owns_qual_return(shader.qualification_return)) {
+				elem = next;
+				continue;
+			}
+			if (!admit(NativeDisposalWork::POLL) || !driver->shader_retire_ready_nonblocking(shader.driver_id)) {
+				return ERR_BUSY;
+			}
+			if (!admit(NativeDisposalWork::FREE)) {
+				return ERR_BUSY;
+			}
+			driver->shader_free(shader.driver_id);
+			_production_disposal_returned(shader.production_disposal_uses);
+			_qualification_freed(shader.qualification_return);
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+			capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::Shader, shader.driver_id.id);
+#endif
+			f.shaders_to_dispose_of.erase(elem);
+			elem = next;
+		}
+		for (auto *elem = f.samplers_to_dispose_of.front(); elem;) {
+			auto *next = elem->next();
+			Sampler &sampler = elem->get();
+			if (!owns_disposal(sampler.production_disposal_uses, 6, sampler.driver_id.id) && !owns_qual_return(sampler.qualification_return)) {
+				elem = next;
+				continue;
+			}
+			if (!admit(NativeDisposalWork::FREE)) {
+				return ERR_BUSY;
+			}
+			driver->sampler_free(sampler.driver_id);
+			_native_disposal_returned(sampler.native_disposal, sampler.native_disposal_rid, sampler.native_disposal_serial, sampler.driver_id.id);
+			_production_disposal_returned(sampler.production_disposal_uses);
+			_qualification_freed(sampler.qualification_return);
+			f.samplers_to_dispose_of.erase(elem);
 			elem = next;
 		}
 
@@ -3999,7 +4110,7 @@ Error RenderingDevice::_production_mq_drain_owned_disposals_step(const GDExtensi
 		for (auto *elem = f.textures_to_dispose_of.front(); elem;) {
 			auto *next = elem->next();
 			Texture &texture = elem->get();
-			if (!owns_disposal(texture.production_disposal_uses, 8, texture.driver_id.id)) {
+			if (!owns_disposal(texture.production_disposal_uses, 8, texture.driver_id.id) && !owns_qual_return(texture.qualification_return)) {
 				elem = next;
 				continue;
 			}
@@ -4051,7 +4162,7 @@ Error RenderingDevice::_production_mq_drain_owned_disposals_step(const GDExtensi
 		for (auto *elem = f.buffers_to_dispose_of.front(); elem;) {
 			auto *next = elem->next();
 			Buffer &buffer = elem->get();
-			if (!owns_disposal(buffer.production_disposal_uses, 9, buffer.driver_id.id, buffer.backing_serial)) {
+			if (!owns_disposal(buffer.production_disposal_uses, 9, buffer.driver_id.id, buffer.backing_serial) && !owns_qual_return(buffer.qualification_return)) {
 				elem = next;
 				continue;
 			}

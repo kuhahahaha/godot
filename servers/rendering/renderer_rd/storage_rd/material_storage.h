@@ -125,6 +125,8 @@ public:
 		virtual RenderingServerTypes::ShaderNativeSourceCode get_native_source_code() const = 0;
 		virtual Pair<ShaderRD *, RID> get_native_shader_and_version() const = 0;
 		virtual Error get_native_instance192_shader_features(NativeInstance192ShaderFeatures &r_features) const { return ERR_UNAVAILABLE; }
+		virtual bool uses_screen_texture_backbuffer() const { return false; }
+		virtual bool uses_depth_texture_backbuffer() const { return false; }
 
 		virtual ~ShaderData() {}
 

@@ -183,6 +183,7 @@ public:
 		uint64_t owner_key = 0;
 		const ExternalOutputOwner *owner_ptr = nullptr;
 		SlotLiveCheckFn is_slot_live_fn = nullptr;
+		SlotLiveCheckFn is_slot_visible_fn = nullptr;
 		uint64_t generation = 0;
 		uint32_t slot_index = UINT32_MAX;
 		uint64_t lease_serial = 0;

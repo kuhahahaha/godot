@@ -196,6 +196,7 @@ Error Registry::production_unpin_resources_locked(ProductionRequest &p_request) 
 			return ERR_INVALID_DATA;
 		}
 		if (!slot.output_predecessor_view.is_empty()) { return ERR_BUSY; } // Original RT release must return it first.
+		if (slot.scene_depth_lease_count != 0) { return ERR_BUSY; }
 		if (slot.output_alias_prepared && slot.output_witness.cell.is_valid() && slot.output_witness.cell->state != NativeDisposalWitness::State::RETURNED) {
 			return ERR_BUSY;
 		}
@@ -233,6 +234,7 @@ Error Registry::production_unpin_resources_locked(ProductionRequest &p_request) 
 			slot.output_witness = NativeDisposalWitness();
 		}
 		slot.imported = false;
+		slot.scene_depth_set1 = false;
 		slot.first_binding = UINT32_MAX;
 		slot.binding_count = 0;
 		slot.imported_unit_slot = UINT32_MAX;

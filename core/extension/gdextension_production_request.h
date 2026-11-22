@@ -41,6 +41,7 @@
 #include "servers/rendering/rendering_device.h"
 
 #include <atomic>
+#include <cstring>
 
 class TestProductionResourceUseAccess;
 class TestNativeDisposalAccess;
@@ -145,6 +146,19 @@ template <class T>
 bool production_dto_valid(const T &value) {
 	const auto expected = production_dto_abi<T>();
 	return value.abi.abi_version == expected.abi_version && value.abi.struct_size == expected.struct_size && value.abi.reserved == 0;
+}
+
+inline constexpr uint32_t SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT = 0xFFFFFFFEu;
+inline constexpr uint32_t MAX_SCENE_DEPTH_SET1_PAIRS = 8u;
+
+inline bool decode_scene_depth_pair_params(uint64_t p_packed_bytes, float &r_slab_thickness_m, float &r_silhouette_jump_m) {
+	const uint32_t slab_bits = uint32_t(p_packed_bytes >> 32u);
+	const uint32_t jump_bits = uint32_t(p_packed_bytes & 0xFFFFFFFFu);
+	std::memcpy(&r_slab_thickness_m, &slab_bits, sizeof(float));
+	std::memcpy(&r_silhouette_jump_m, &jump_bits, sizeof(float));
+	return Math::is_finite(r_slab_thickness_m) && Math::is_finite(r_silhouette_jump_m) &&
+			r_slab_thickness_m >= 0.01f && r_slab_thickness_m <= 10.0f &&
+			r_silhouette_jump_m >= 0.01f && r_silhouette_jump_m <= 10.0f;
 }
 
 // Synchronous input views only. Rows copy into the original accepted arena.
@@ -338,6 +352,9 @@ class ProductionResourceSlot {
 	uint32_t shader_set = UINT32_MAX;
 	uint32_t first_binding = UINT32_MAX, binding_count = 0;
 	bool imported = false;
+	bool scene_depth_set1 = false;
+	uint32_t scene_depth_lease_count = 0;
+	Ref<SceneReadContent> scene_depth_leases[MAX_SCENE_DEPTH_SET1_PAIRS];
 	// Nonowning alias of an actual output DISPOSAL_MEMBER. The native group
 	// remains the sole free owner; owned_physical is never populated for this.
 	NativeDisposalWitness output_witness;

@@ -254,6 +254,11 @@ Error RendererSceneCull::instance_get_committed_particle_scene_facts(RID p_insta
 	return OK;
 }
 
+bool RendererSceneCull::instance_is_visible(RID p_instance) const {
+	const Instance *instance = instance_owner.get_or_null(p_instance);
+	return instance != nullptr && instance->visible;
+}
+
 bool RendererSceneCull::instance_particle_output_cull_window_matches(RID p_instance, RID p_viewport, uint64_t p_view_id,
 		uint64_t p_view_epoch, uint64_t p_capture_ordinal) const {
 	const Instance *instance = instance_owner.get_or_null(p_instance);

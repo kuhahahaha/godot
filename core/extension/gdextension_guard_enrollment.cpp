@@ -727,6 +727,7 @@ void Registry::clear_guard_control_locked(Record &record) {
 	record.prepare_userdata = nullptr;
 	record.prepare_active = false;
 	record.prepare_ready = false;
+	record.natural_close_draining = false;
 	record.prepare_route = CloseRoute::EXPLICIT;
 	if (record.control_reference_reserved) {
 		record.private_refs--;
@@ -1334,6 +1335,13 @@ Error Registry::prepare_exit(const RecordRef &ref, CloseRoute route) {
 			return ERR_BUSY;
 		}
 		record.prepare_active = true;
+		if (route == CloseRoute::SHUTDOWN || route == CloseRoute::TEST_CLEANUP) {
+			const bool was_draining = record.natural_close_draining;
+			record.natural_close_draining = true;
+			if (!was_draining) {
+				wake_scene_waiting_for_library_locked(ref.slot);
+			}
+		}
 		callback = record.prepare_callback;
 		userdata = record.prepare_userdata;
 		generation = record.snapshot.library_generation;

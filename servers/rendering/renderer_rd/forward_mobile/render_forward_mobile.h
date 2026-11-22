@@ -797,7 +797,8 @@ public:
 	void _geometry_instance_add_surface_with_material(GeometryInstanceForwardMobile *ginstance, uint32_t p_surface, SceneShaderForwardMobile::MaterialData *p_material, uint32_t p_material_id, uint32_t p_shader_id, RID p_mesh, RendererRD::ExternalSurfaceSelection *p_external = nullptr);
 	void _geometry_instance_add_surface_with_material_chain(GeometryInstanceForwardMobile *ginstance, uint32_t p_surface, SceneShaderForwardMobile::MaterialData *p_material, RID p_mat_src, RID p_mesh);
 	void _geometry_instance_add_surface(GeometryInstanceForwardMobile *ginstance, uint32_t p_surface, RID p_material, RID p_mesh);
-	GeometryInstanceSurfaceDataCache *_collect_generated_slot_surfaces(GeometryInstanceForwardMobile *, const RenderDataRD &, LocalVector<GeometryInstanceSurfaceDataCache *> &);
+	GeometryInstanceSurfaceDataCache *_collect_generated_slot_surfaces(GeometryInstanceForwardMobile *, const RenderDataRD &, LocalVector<GeometryInstanceSurfaceDataCache *> &, bool p_allow_adopted_replay = false, bool p_defer_transparent_replay = false);
+	void _append_late_generated_alpha_surfaces(const RenderDataRD *p_render_data, LocalVector<GeometryInstanceSurfaceDataCache *> &r_generated_surfaces);
 	void _geometry_instance_update(RenderGeometryInstance *p_geometry_instance);
 	void _mesh_compile_pipeline_for_surface(SceneShaderForwardMobile::ShaderData *p_shader, void *p_mesh_surface, bool p_instanced_surface, RSE::PipelineSource p_source, SceneShaderForwardMobile::ShaderData::PipelineKey &r_pipeline_key, Vector<ShaderPipelinePair> *r_pipeline_pairs = nullptr);
 	void _mesh_compile_pipelines_for_surface(const SurfacePipelineData &p_surface, const GlobalPipelineData &p_global, RSE::PipelineSource p_source, Vector<ShaderPipelinePair> *r_pipeline_pairs = nullptr);

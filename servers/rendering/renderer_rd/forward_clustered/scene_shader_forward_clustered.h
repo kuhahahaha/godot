@@ -348,6 +348,9 @@ public:
 		uint64_t last_pass = 0;
 		uint32_t index = 0;
 
+		virtual bool uses_screen_texture_backbuffer() const override { return uses_screen_texture; }
+		virtual bool uses_depth_texture_backbuffer() const override { return uses_depth_texture; }
+
 		_FORCE_INLINE_ bool uses_alpha_pass() const {
 			bool has_read_screen_alpha = uses_screen_texture || uses_depth_texture || uses_normal_texture;
 			bool has_base_alpha = (uses_alpha && (!uses_alpha_clip || uses_alpha_antialiasing)) || has_read_screen_alpha;
@@ -369,15 +372,15 @@ public:
 			return !uses_particle_trails && !writes_modelview_or_projection && !uses_vertex && !uses_position && !uses_discard && !uses_depth_prepass_alpha && !uses_alpha_clip && !uses_alpha_antialiasing && backface_culling && !uses_point_size && !uses_world_coordinates && !wireframe && !uses_z_clip_scale && !stencil_enabled;
 		}
 
-		virtual void set_code(const String &p_Code);
+		virtual void set_code(const String &p_Code) override;
 
-		virtual bool is_animated() const;
-		virtual bool casts_shadows() const;
-		virtual RenderingServerTypes::ShaderNativeSourceCode get_native_source_code() const;
+		virtual bool is_animated() const override;
+		virtual bool casts_shadows() const override;
+		virtual RenderingServerTypes::ShaderNativeSourceCode get_native_source_code() const override;
 		// Structural support only: caller must still pin a qualified material,
 		// bounds/source/history proof and backend mirror-cull calibration.
 		bool instance192_shader_supported() const;
-		virtual Pair<ShaderRD *, RID> get_native_shader_and_version() const;
+		virtual Pair<ShaderRD *, RID> get_native_shader_and_version() const override;
 		Error get_native_instance192_shader_features(NativeInstance192ShaderFeatures &r_features) const override;
 		uint16_t _get_shader_version(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader) const;
 		RID _get_shader_variant(uint16_t p_shader_version, bool p_indexed144 = false, bool p_instance192 = false) const;
@@ -412,9 +415,9 @@ public:
 		uint32_t index = 0;
 		RID next_pass;
 		uint8_t priority;
-		virtual void set_render_priority(int p_priority);
-		virtual void set_next_pass(RID p_pass);
-		virtual bool update_parameters(const HashMap<StringName, Variant> &p_parameters, bool p_uniform_dirty, bool p_textures_dirty);
+		virtual void set_render_priority(int p_priority) override;
+		virtual void set_next_pass(RID p_pass) override;
+		virtual bool update_parameters(const HashMap<StringName, Variant> &p_parameters, bool p_uniform_dirty, bool p_textures_dirty) override;
 		virtual ~MaterialData();
 	};
 

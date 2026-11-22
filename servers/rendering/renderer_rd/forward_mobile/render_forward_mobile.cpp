@@ -1136,6 +1136,23 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 				(collision_scene && collision_scene->has_pending_depth_snapshot_request(scene_viewport, frame_number))) {
 			scene_state.used_depth_texture = true;
 		}
+		if (ps && p_render_data->instances) {
+			bool ext_screen_tex = false;
+			bool ext_depth_tex = false;
+			for (uint32_t i = 0; i < p_render_data->instances->size() && (!ext_screen_tex || !ext_depth_tex); ++i) {
+				const RenderGeometryInstance *ginst = (*p_render_data->instances)[i];
+				const GeometryInstanceForwardMobile *minst = static_cast<const GeometryInstanceForwardMobile *>(ginst);
+				if (minst && minst->data && minst->data->base_type == RSE::INSTANCE_PARTICLES) {
+					ps->particles_external_query_owner_framebuffer_reads(minst->data->base, ext_screen_tex, ext_depth_tex);
+				}
+			}
+			if (ext_screen_tex) {
+				scene_state.used_screen_texture = true;
+			}
+			if (ext_depth_tex) {
+				scene_state.used_depth_texture = true;
+			}
+		}
 
 		if (scene_state.used_screen_texture || scene_state.used_depth_texture) {
 			// can't use our last two subpasses because we're reading from screen texture or depth texture
@@ -1542,6 +1559,7 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 			}
 
 			dispatch_late_particle_collision_phase(RD::get_singleton(), p_render_data, is_reflection_probe);
+			_append_late_generated_alpha_surfaces(p_render_data, generated_surfaces);
 
 			if (render_list[RENDER_LIST_ALPHA].element_info.size() > 0) {
 				RD::get_singleton()->draw_command_begin_label("Render Transparent Pass");
@@ -2602,7 +2620,13 @@ void RenderForwardMobile::_fill_render_list(RenderListType p_render_list, const 
 
 		GeometryInstanceSurfaceDataCache *surf = inst->surface_caches;
 		if (p_generated_surfaces && !surf && inst->data->base_type == RSE::INSTANCE_PARTICLES) {
-			surf = _collect_generated_slot_surfaces(inst, *p_render_data, *p_generated_surfaces);
+			RID fill_viewport = p_render_data->source_viewport.is_valid()
+					? p_render_data->source_viewport
+					: (p_render_data->get_native_camera_source().is_valid() ? p_render_data->get_native_camera_source()->get_viewport() : RID());
+			const bool allow_adopted_replay = p_render_data->reflection_probe.is_null();
+			const bool defer_transparent_replay = allow_adopted_replay &&
+					GDExtensionDeviceExit::has_active_late_transparent_depth_phase(RD::get_singleton(), fill_viewport);
+			surf = _collect_generated_slot_surfaces(inst, *p_render_data, *p_generated_surfaces, allow_adopted_replay, defer_transparent_replay);
 		}
 
 		float lod_distance = 0.0;
@@ -3832,10 +3856,10 @@ void RenderForwardMobile::_geometry_instance_add_surface(GeometryInstanceForward
 }
 
 RenderForwardMobile::GeometryInstanceSurfaceDataCache *RenderForwardMobile::_collect_generated_slot_surfaces(GeometryInstanceForwardMobile *p_instance, const RenderDataRD &p_render_data,
-		LocalVector<GeometryInstanceSurfaceDataCache *> &r_surfaces) {
+		LocalVector<GeometryInstanceSurfaceDataCache *> &r_surfaces, bool p_allow_adopted_replay, bool p_defer_transparent_replay) {
 	auto *particles = RendererRD::ParticlesStorage::get_singleton();
 	uint32_t slot = UINT32_MAX, count = 0;
-	if (particles->particles_external_generated_surfaces_for_view(p_instance->data->base, p_render_data, slot, count) != OK) {
+	if (particles->particles_external_generated_surfaces_for_view(p_instance->data->base, p_render_data, slot, count, p_allow_adopted_replay, p_defer_transparent_replay) != OK) {
 		return nullptr;
 	}
 	auto *materials = RendererRD::MaterialStorage::get_singleton();
@@ -3860,6 +3884,60 @@ RenderForwardMobile::GeometryInstanceSurfaceDataCache *RenderForwardMobile::_col
 	auto *surfaces = p_instance->surface_caches;
 	p_instance->surface_caches = nullptr;
 	return surfaces;
+}
+
+void RenderForwardMobile::_append_late_generated_alpha_surfaces(const RenderDataRD *p_render_data, LocalVector<GeometryInstanceSurfaceDataCache *> &r_generated_surfaces) {
+	if (!p_render_data || !p_render_data->instances || !p_render_data->scene_data || p_render_data->reflection_probe.is_valid()) {
+		return;
+	}
+	const float z_max = p_render_data->scene_data->cam_projection.get_z_far() - p_render_data->scene_data->cam_projection.get_z_near();
+#ifdef DEBUG_ENABLED
+	const bool force_alpha = unlikely(get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_OVERDRAW);
+#else
+	const bool force_alpha = false;
+#endif
+	bool appended = false;
+	const uint32_t existing_generated = r_generated_surfaces.size();
+	for (uint32_t i = 0; i < p_render_data->instances->size(); ++i) {
+		GeometryInstanceForwardMobile *inst = static_cast<GeometryInstanceForwardMobile *>((*p_render_data->instances)[i]);
+		if (!inst || inst->surface_caches || !inst->data || inst->data->base_type != RSE::INSTANCE_PARTICLES) {
+			continue;
+		}
+		bool already_collected = false;
+		for (uint32_t g = 0; g < existing_generated; ++g) {
+			if (r_generated_surfaces[g] && r_generated_surfaces[g]->owner == inst) {
+				already_collected = true;
+				break;
+			}
+		}
+		if (already_collected) {
+			continue;
+		}
+		GeometryInstanceSurfaceDataCache *surf = _collect_generated_slot_surfaces(inst, *p_render_data, r_generated_surfaces, true);
+		if (!surf) {
+			continue;
+		}
+		const uint32_t depth_layer = z_max > 0.0f ? uint32_t(CLAMP(int(inst->depth * 16.0f / z_max), 0, 15)) : 0u;
+		const bool uses_lightmap = (inst->flags_cache & (INSTANCE_DATA_FLAG_USE_LIGHTMAP | INSTANCE_DATA_FLAG_USE_LIGHTMAP_CAPTURE)) != 0;
+		while (surf) {
+			if (!RenderDataRD::admission_succeeded(p_render_data->admit_surface_status(surf->material_generation))) {
+				surf = surf->next;
+				continue;
+			}
+			surf->sort.uses_lightmap = uses_lightmap ? 1 : 0;
+			surf->sort.lod_index = 0;
+			surf->sort.depth_layer = depth_layer;
+			if (force_alpha || (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_PASS_ALPHA)) {
+				render_list[RENDER_LIST_ALPHA].add_element(surf);
+				appended = true;
+			}
+			surf = surf->next;
+		}
+	}
+	if (appended) {
+		render_list[RENDER_LIST_ALPHA].sort_by_reverse_depth_and_priority();
+		_fill_instance_data(RENDER_LIST_ALPHA);
+	}
 }
 
 void RenderForwardMobile::_geometry_instance_update(RenderGeometryInstance *p_geometry_instance) {

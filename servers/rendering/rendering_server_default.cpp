@@ -576,6 +576,9 @@ void RenderingServerDefault::set_physics_interpolation_enabled(bool p_enabled) {
 
 void RenderingServerDefault::sync() {
 	if (create_thread) {
+		if (RenderingDevice::get_singleton()) {
+			command_queue.push(RenderingDevice::get_singleton(), &RenderingDevice::pump_qualification_frame_if_idle);
+		}
 		command_queue.sync();
 	} else {
 		command_queue.flush_all(); // Flush all pending from other threads.

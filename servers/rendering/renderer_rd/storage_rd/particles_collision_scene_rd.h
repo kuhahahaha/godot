@@ -330,6 +330,7 @@ private:
 	uint64_t next_snapshot_generation = 1;
 	uint64_t scene_epoch = 1;
 	Ref<SphereSnapshot> current_sphere_snapshot;
+	Ref<DepthSnapshotGeneration> shared_null_viewport_sentinel;
 	HashMap<uint64_t, ViewportDepthSlot> depth_snapshots_by_viewport;
 	LocalVector<Ref<DepthSnapshotGeneration>> retired_depth_snapshots;
 	StandaloneNearestCopyPipeline standalone_copy;
@@ -370,6 +371,14 @@ public:
 			Ref<DepthReadLease> &r_lease,
 			GDExtensionSceneOpaque32V1 &r_sample_token,
 			const GDExtensionSceneOpaque32V1 *p_expected_device_override = nullptr);
+	Error acquire_depth_snapshot_read_lease(
+			RID p_viewport,
+			float p_slab_thickness_m,
+			float p_silhouette_jump_m,
+			Ref<DepthReadLease> &r_lease,
+			GDExtensionSceneOpaque32V1 &r_sample_token,
+			const GDExtensionSceneOpaque32V1 *p_expected_device_override = nullptr);
+	Error release_depth_snapshot_read_lease(Ref<DepthReadLease> &r_lease);
 
 	Error prepare_viewport_depth_snapshot_target(
 			RID p_viewport,

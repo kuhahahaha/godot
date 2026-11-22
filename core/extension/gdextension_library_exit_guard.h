@@ -770,6 +770,7 @@ private:
 		void *prepare_userdata = nullptr;
 		bool prepare_active = false;
 		bool prepare_ready = false;
+		bool natural_close_draining = false;
 		CloseRoute prepare_route = CloseRoute::EXPLICIT;
 		bool preflight_sealed = false;
 		CloseRoute preflight_route = CloseRoute::EXPLICIT;
@@ -1500,6 +1501,8 @@ public:
 	Error scene_depth_snapshot_borrow(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint64_t, RID, const GDExtensionSceneOperationKeyV1 &, GDExtensionSceneDepthSnapshotBorrowResultV1 &);
 	void scene_phase_dispatch_for_phase(RenderingDevice &, uint32_t, RID p_viewport = RID());
 	bool has_active_scene_phase_sink(uint32_t, const RenderingDevice * = nullptr, RID = RID());
+	bool has_pending_offscreen_production_work(const RenderingDevice * = nullptr);
+	void wake_scene_waiting_for_library_locked(uint32_t p_library_slot);
 	Error register_normal_relay(const Callable &p_callback, NormalRelayToken &r_token);
 	Error call_normal_relay(NormalRelayToken p_token, const Variant **p_arguments, int p_argcount, Variant &r_return_value, Callable::CallError &r_error);
 	Error cancel_normal_relay(NormalRelayToken p_token);
@@ -1525,6 +1528,7 @@ public:
 	Error maybe_emit_post_close_capsule(const RecordRef &p_ref, const String &p_resolved_library_path);
 	Error resolve_core_close_return(const RecordRef &p_ref, CoreCloseReturnFact &r_fact);
 	Error retain_private(const RecordRef &p_ref, RecordRef &r_ref);
+	bool has_natural_close_pending_work(const RenderingDevice *p_rd);
 
 	// Internal implementation seam. No guarded version is exposed to loaders
 	// until reciprocal ABI/census adoption; production state machine is tested

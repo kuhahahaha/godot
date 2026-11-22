@@ -92,6 +92,7 @@ public:
 	};
 	// RT-only, no dirty flush or mutation. Original source binding is a separate owner duty.
 	Error instance_get_committed_particle_scene_facts(RID p_instance, RID p_expected_particles, NativeParticleSceneFacts &r_facts) const;
+	bool instance_is_visible(RID p_instance) const;
 	// Core-only original selected-view transaction. The live pre-cull scope,
 	// retained source owners and original RECORD context remain separate gates.
 	Error instance_commit_particle_output_cull(RID p_instance, RID p_particles, RID p_scenario, uint64_t p_generation,

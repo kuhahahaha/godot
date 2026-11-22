@@ -574,7 +574,15 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_create(GDExtens
 			return result(recording_error, recording_error == ERR_BUSY ? GDEXTENSION_DEVICE_SESSION_REASON_STORAGE_CREATE_DEFERRED_V1 : GDEXTENSION_DEVICE_SESSION_REASON_NOT_ADMITTED_V1);
 		}
 		uint32_t history_index = UINT32_MAX;
-		const Error history_error = bridge->storage_origins.prepare(history_index);
+		Error history_error = bridge->storage_origins.prepare(history_index);
+		if (history_error == ERR_PARAMETER_RANGE_ERROR && !bridge->storage_frontiers && !rd->screen_swap_chains.is_empty() && bridge->storage_origins.retired_count()) {
+			for (uint32_t hi = 0; hi < QualificationBridge::STORAGE_HISTORY_CAPACITY; ++hi) {
+				bridge->storage_origins.reclaim_cold(hi, [&](const auto &origin) {
+					return origin.allocation_slot != request->allocation_slot || origin.allocation_generation < request->allocation_generation;
+				});
+			}
+			history_error = bridge->storage_origins.prepare(history_index);
+		}
 		if (history_error != OK) {
 			trace_child_metadata(*bridge, "storage", "history_refused", history_error, 19);
 #ifdef TESTS_ENABLED

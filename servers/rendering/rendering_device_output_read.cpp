@@ -242,7 +242,9 @@ Error RenderingDevice::_production_output_read_record(RendererRD::ExternalPacket
 	if (!slot.original_registry || !slot.storage || row.selected_geometry >= 2) {
 		return ERR_UNAUTHORIZED;
 	}
-	const Error scene_commit = owner.validate_scene_cull(read.slot);
+	const bool allow_sealed_replay = slot.state == Owner::LeaseState::SEALED_RECORDED &&
+			read.camera_retained && read.camera_source.is_valid() && read.camera_source == slot.native_camera_source;
+	const Error scene_commit = owner.validate_scene_cull(read.slot, allow_sealed_replay);
 	if (scene_commit != OK) {
 		return scene_commit;
 	}
@@ -580,7 +582,9 @@ Error RenderingDevice::_production_output_empty_read_record(RendererRD::External
 			binding.command_bytes || binding.command_offset || read.raster_bound || read.draw_accepted || read.transfer_count) {
 		return ERR_UNAUTHORIZED;
 	}
-	const Error scene_commit = owner.validate_scene_cull(read.slot);
+	const bool allow_sealed_replay = slot.state == Owner::LeaseState::SEALED_RECORDED &&
+			read.camera_retained && read.camera_source.is_valid() && read.camera_source == slot.native_camera_source;
+	const Error scene_commit = owner.validate_scene_cull(read.slot, allow_sealed_replay);
 	if (scene_commit != OK) {
 		return scene_commit;
 	}
