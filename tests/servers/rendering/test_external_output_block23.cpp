@@ -308,9 +308,19 @@ TEST_CASE("[ExternalOutput][Block23] compute_list_dispatch guards missing or fre
 	const RID pipeline = rd.compute_pipeline_create(shader);
 	REQUIRE(pipeline.is_valid());
 
-	const RID ssbo = rd.storage_buffer_create(16u);
+	Vector<uint8_t> zero_init;
+	zero_init.resize(16);
+	memset(zero_init.ptrw(), 0, 16);
+	const RID ssbo = rd.storage_buffer_create(16u, zero_init);
 	REQUIRE(ssbo.is_valid());
-	const RID indirect_buf = rd.storage_buffer_create(16u, {}, RD::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT);
+	Vector<uint8_t> indirect_init;
+	indirect_init.resize(16);
+	memset(indirect_init.ptrw(), 0, 16);
+	uint32_t *ind = reinterpret_cast<uint32_t *>(indirect_init.ptrw());
+	ind[0] = 1u;
+	ind[1] = 1u;
+	ind[2] = 1u;
+	const RID indirect_buf = rd.storage_buffer_create(16u, indirect_init, RD::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT);
 	REQUIRE(indirect_buf.is_valid());
 
 	Vector<RD::Uniform> uniforms;
@@ -328,7 +338,6 @@ TEST_CASE("[ExternalOutput][Block23] compute_list_dispatch guards missing or fre
 	roots.push_back(ssbo);
 	RD::NativeImmutableHold hold;
 	REQUIRE(rd.native_immutable_hold_acquire(roots, hold, 8u) == OK);
-	const uint32_t before_dispatches = rd.test_get_compute_dispatch_count();
 	ERR_PRINT_OFF;
 	{
 		RD::ComputeListID cl = rd.compute_list_begin();
@@ -339,8 +348,16 @@ TEST_CASE("[ExternalOutput][Block23] compute_list_dispatch guards missing or fre
 		rd.compute_list_end();
 	}
 	ERR_PRINT_ON;
-	CHECK(rd.test_get_compute_dispatch_count() == before_dispatches);
 	REQUIRE(rd.native_immutable_hold_release(hold) == OK);
+	rd.submit();
+	rd.sync();
+	{
+		const Vector<uint8_t> out = rd.buffer_get_data(ssbo);
+		REQUIRE(out.size() == 16);
+		uint32_t v = 0xdeadbeefu;
+		memcpy(&v, out.ptr(), sizeof(v));
+		CHECK(v == 0u);
+	}
 
 	// Case 2: uniform set freed after binding (format still matches pipeline);
 	// dispatch / dispatch_indirect must still guard null uniform_set cleanly.
@@ -355,7 +372,15 @@ TEST_CASE("[ExternalOutput][Block23] compute_list_dispatch guards missing or fre
 		rd.compute_list_end();
 	}
 	ERR_PRINT_ON;
-	CHECK(rd.test_get_compute_dispatch_count() == before_dispatches);
+	rd.submit();
+	rd.sync();
+	{
+		const Vector<uint8_t> out = rd.buffer_get_data(ssbo);
+		REQUIRE(out.size() == 16);
+		uint32_t v = 0xdeadbeefu;
+		memcpy(&v, out.ptr(), sizeof(v));
+		CHECK(v == 0u);
+	}
 
 	rd.free_rid(indirect_buf);
 	rd.free_rid(ssbo);
