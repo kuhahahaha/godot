@@ -739,6 +739,9 @@ Error RenderingDevice::_qualification_retain_tickets(uint32_t index) {
 	return OK;
 }
 Error RenderingDevice::_qualification_poll_tickets(uint32_t index) {
+	return _qualification_poll_tickets(index, true);
+}
+Error RenderingDevice::_qualification_poll_tickets(uint32_t index, bool p_nonblocking) {
 	const Error production = _production_retain_frame_sources(index);
 	if (production != OK) {
 		return production;
@@ -752,7 +755,15 @@ Error RenderingDevice::_qualification_poll_tickets(uint32_t index) {
 			if (member.owner_released) {
 				continue;
 			}
-			const auto completion = poll_native_source(*driver, member, ticket->source_origin);
+			auto completion = poll_native_source(*driver, member, ticket->source_origin);
+			if (!p_nonblocking && completion.error == OK &&
+					completion.state == GDExtensionDeviceExit::NativeSourceObservation::State::Pending &&
+					member.retained && member.source.serial != 0) {
+				// Blocking frame stall: wait for this exact retained native command buffer
+				// before re-polling so synchronous frame advance does not return spurious ERR_BUSY.
+				(void)driver->native_call_wait(member.source.serial);
+				completion = poll_native_source(*driver, member, ticket->source_origin);
+			}
 			if (completion.error == ERR_BUSY) {
 				return ERR_BUSY;
 			}

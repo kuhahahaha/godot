@@ -6910,6 +6910,85 @@ struct Access {
 		CHECK(record.cleanup_reservations == 0);
 	}
 
+	static void mq_observe_guards_recording_error() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment fixture;
+		auto &registry = *fixture.registry;
+		auto &record = registry.records[0];
+		auto &device = registry.device_records[0];
+		const uint32_t private_before = record.private_refs, device_before = device.refs;
+
+		const GDExtensionProductionCapacityV1 whole = { production_dto_abi<GDExtensionProductionCapacityV1>(), 4, 8, 8, 8, 8, 128, 4, 8, 256, 256 };
+		GDExtensionProductionMetadataQuoteV1 quote = {};
+		REQUIRE(registry.production_quote(&Enrollment::ABI, { Enrollment::INSTANCE, 5 }, { Enrollment::INSTANCE, 9 }, { Enrollment::INSTANCE, 6 }, { Enrollment::INSTANCE, 7 }, &whole, &quote).native_error == OK);
+		GDExtensionProductionAttachmentRefV1 attachment = {};
+		GDExtensionProductionInstallationReportV1 installed = {};
+		REQUIRE(registry.production_accept(&Enrollment::ABI, { Enrollment::INSTANCE, 5 }, { Enrollment::INSTANCE, 9 }, { Enrollment::INSTANCE, 6 }, { Enrollment::INSTANCE, 7 }, { Enrollment::INSTANCE, 3 }, &quote, &attachment, &installed).native_error == OK);
+
+		ProductionAttachment *pool_ptr = nullptr;
+		{
+			MutexLock lock(registry.mutex);
+			RenderingDevice *rd_ptr = nullptr;
+			REQUIRE(registry.production_attachment_locked(attachment, false, pool_ptr, rd_ptr) == OK);
+		}
+		REQUIRE(pool_ptr != nullptr);
+
+		GDExtensionProductionCapacityV1 cap_mq = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 1, 1, 1, 1, 32, 0, 1, 64, 0 };
+		Request *r = nullptr;
+		{
+			MutexLock lock(registry.mutex);
+			const GDExtensionProductionOperationV1 op = { production_dto_abi<GDExtensionProductionOperationV1>(), 301, 1, 10, 11 };
+			const GDExtensionProductionActionV2 mq_action = { 0, 10, 0, 0, GDEXTENSION_PRODUCTION_MATERIAL_QUALIFICATION_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
+			const GDExtensionProductionResourceV1 resource = { GDEXTENSION_PRODUCTION_STORAGE_V1, 0, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 16, 0 };
+			const GDExtensionProductionUseV1 use = { 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 4, 0 };
+			REQUIRE(registry.production_reserve_metadata_rows_locked(*pool_ptr, op, cap_mq, { nullptr, &mq_action }, 1, &resource, 1, &use, 1, {}, 0, r, 2) == OK);
+		}
+		REQUIRE(r != nullptr);
+		REQUIRE(r->actions[0].material_qualification_constructed);
+		auto *mq = &r->material_qualifications[0];
+		r->actions[0].material_qualification = mq;
+		mq->selection_done = false;
+		mq->recipe_requested = true;
+		mq->recipe_failed = false;
+
+		const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), UINT64_MAX, 4, 8, 8, 0 };
+		ProductionServiceUsage usage = {};
+
+		// BUG-115 Part (b): When qualification_frame_advance_pending is true (_recording_error() == ERR_BUSY),
+		// production_material_qualification_observe_locked MUST return ERR_BUSY before entering Phase A/B
+		// so Phase B cannot call mesh_add_surface -> vertex_buffer_create and permanently latch recipe_failed!
+		fixture.rd.qualification_frame_advance_pending = true;
+		{
+			MutexLock lock(registry.mutex);
+			CHECK(registry.production_material_qualification_observe_locked(*r, fixture.rd, budget, usage) == ERR_BUSY);
+		}
+		CHECK_FALSE(mq->selection_done);
+		CHECK_FALSE(mq->recipe_failed);
+		CHECK(usage.passes == 0);
+		fixture.rd.qualification_frame_advance_pending = false;
+
+		// Same guard when frame_wait_error != OK.
+		fixture.rd.frame_wait_error = ERR_TIMEOUT;
+		{
+			MutexLock lock(registry.mutex);
+			CHECK(registry.production_material_qualification_observe_locked(*r, fixture.rd, budget, usage) == ERR_BUSY);
+		}
+		CHECK_FALSE(mq->selection_done);
+		CHECK_FALSE(mq->recipe_failed);
+		CHECK(usage.passes == 0);
+		fixture.rd.frame_wait_error = OK;
+
+		r->actions[0].material_qualification = nullptr;
+		const GDExtensionProductionRequestRefV1 r_ref = { Enrollment::INSTANCE, r->serial };
+		REQUIRE(registry.production_cancel(r_ref).native_error == OK);
+		REQUIRE(registry.production_release(r_ref).native_error == OK);
+		REQUIRE(registry.production_close(attachment).native_error == OK);
+		CHECK(record.private_refs == private_before);
+		CHECK(device.refs == device_before);
+		CHECK(fixture.holder.production_children == 0);
+		CHECK(record.cleanup_reservations == 0);
+	}
+
 	static void aux_pre_append_rt_authorization() {
 		using namespace GDExtensionDeviceExit;
 		Enrollment fixture;
@@ -23525,4 +23604,8 @@ TEST_CASE("[ProductionRequest][BUG-85B] pre-append frozen RT callback authorizes
 
 TEST_CASE("[ProductionRequest][BUG-111] byte-arena reservation separates permanent oversize from transient contention") {
 	TestProductionRequest::Access::byte_arena_oversize_vs_busy();
+}
+
+TEST_CASE("[ProductionRequest][BUG-115] material qualification observe returns ERR_BUSY when RD recording is suspended without latching recipe_failed") {
+	TestProductionRequest::Access::mq_observe_guards_recording_error();
 }

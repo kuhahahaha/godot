@@ -512,6 +512,7 @@ private:
 	void _qualification_issue_tickets_locked(uint32_t p_slot, const RDD::QueueCallReport &p_report, Error p_error);
 	Error _qualification_retain_tickets(uint32_t p_frame);
 	Error _qualification_poll_tickets(uint32_t p_frame);
+	Error _qualification_poll_tickets(uint32_t p_frame, bool p_nonblocking);
 	void _qualification_return_frame_tickets(uint32_t p_frame);
 	std::atomic<bool> qualification_frame_advance_pending{ false };
 	Error _qualification_enqueue(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
@@ -2972,6 +2973,7 @@ private:
 		return wait_error != OK ? wait_error : ((frame_wait_draining.load() || qualification_frame_advance_pending.load() || native_disposal_active.load()) ? ERR_BUSY : OK);
 	}
 	Error _prepare_synchronous_readback();
+	Error _ensure_recording_ready();
 
 	// Whenever logic/physics request a graphics operation (not just deleting a resource) that requires
 	// us to flush all graphics commands, we must set frames_pending_resources_for_processing = frames.size().

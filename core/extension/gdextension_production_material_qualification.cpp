@@ -731,7 +731,7 @@ Error Registry::production_material_qualification_observe_locked(ProductionReque
 	if (request.cancelled || request.release_started || request.source_device_lost || request.capture_inflight || request.continuation_inflight) {
 		return OK;
 	}
-	if (!rd.native_immutable_is_render_thread() || rd.draw_list.active || rd.compute_list.active || rd.raytracing_list.active || rd.draw_graph.has_driver_callbacks()) {
+	if (!rd.native_immutable_is_render_thread() || rd.draw_list.active || rd.compute_list.active || rd.raytracing_list.active || rd.draw_graph.has_driver_callbacks() || rd._recording_error() != OK) {
 		return ERR_BUSY;
 	}
 

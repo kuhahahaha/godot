@@ -715,7 +715,7 @@ void RenderingDevice::_hit_sbt_add_dirty_range(HitShaderBindingTable *p_hit_sbt,
 }
 
 RID RenderingDevice::hit_sbt_create(RID p_raytracing_pipeline, uint32_t p_initial_hit_group_capacity) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V_MSG(_ensure_recording_ready() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V_MSG(!has_feature(SUPPORTS_RAYTRACING_PIPELINE) && !has_feature(SUPPORTS_RAY_QUERY), RID(), "The current rendering device has neither raytracing pipeline nor ray query support.");
 
 	RaytracingPipeline *raytracing_pipeline = raytracing_pipeline_owner.get_or_null(p_raytracing_pipeline);
@@ -1651,6 +1651,61 @@ Error RenderingDevice::_prepare_synchronous_readback() {
 	return OK;
 }
 
+Error RenderingDevice::_ensure_recording_ready() {
+	const Error initial_error = _recording_error();
+	if (initial_error == OK) {
+		return OK;
+	}
+	const bool can_resume_frame = render_thread_id == Thread::get_caller_id() &&
+			!production_recording_request &&
+			!frame_wait_draining.load() &&
+			frame_issue_error.load() == OK &&
+			frame_wait_error.load() == OK &&
+			!frame_wait_native_code_valid.load() &&
+			!draw_list.active && !compute_list.active && !raytracing_list.active &&
+			driver != nullptr && !frames.is_empty() && uint32_t(frame) < frames.size();
+
+	if (can_resume_frame) {
+		// Finish ordinary (non-production, non-selected) disposal continuation without theft.
+		if (native_disposal_active.load(std::memory_order_acquire) &&
+				!native_disposal_continuation.production_owner &&
+				!native_disposal_continuation.in_place_no_disposal &&
+				native_disposal_continuation.scene_selection.cell.is_null() &&
+				native_disposal_continuation.height_selection.is_null()) {
+			const Error maint_err = _native_disposal_maintenance();
+			if (maint_err != OK) {
+				return maint_err;
+			}
+		}
+
+		// Finish an already-closed qualification graph before rotating to the next frame.
+		if (!native_disposal_active.load(std::memory_order_acquire) &&
+				!qualification_frame_advance_pending.load() &&
+				frames[frame].qualification_graph_closed) {
+			Error end_err = _end_frame(false);
+			if (end_err == OK) {
+				end_err = _execute_frame(false);
+			}
+			if (end_err != OK) {
+				return end_err;
+			}
+			frame = (frame + 1) % frames.size();
+			qualification_frame_advance_pending = true;
+		}
+
+		// Resume a pending ordinary frame advance via blocking _begin_frame(true).
+		if (qualification_frame_advance_pending.load() &&
+				!native_disposal_active.load(std::memory_order_acquire)) {
+			const Error begin_error = _begin_frame(true);
+			if (begin_error != OK) {
+				return begin_error;
+			}
+		}
+	}
+
+	return _recording_error();
+}
+
 Vector<uint8_t> RenderingDevice::buffer_get_data(RID p_buffer, uint32_t p_offset, uint32_t p_size) {
 	ERR_RENDER_THREAD_GUARD_V(Vector<uint8_t>());
 	if (_prepare_synchronous_readback() != OK) {
@@ -1966,7 +2021,8 @@ RID RenderingDevice::storage_buffer_create(uint32_t p_size_bytes, Span<uint8_t> 
 }
 
 RID RenderingDevice::_storage_buffer_create_internal(uint32_t p_size_bytes, Span<uint8_t> p_data, BitField<StorageBufferUsage> p_usage, BitField<BufferCreationBits> p_creation_bits, const NativeDisposalWitness *p_native_disposal) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	const Error rec_err = p_native_disposal ? _recording_error() : _ensure_recording_ready();
+	ERR_FAIL_COND_V_MSG(rec_err != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V(p_data.size() && (uint32_t)p_data.size() != p_size_bytes, RID());
 
 	const uint64_t backing_serial = _reserve_backing_serial();
@@ -2074,7 +2130,7 @@ RID RenderingDevice::_storage_buffer_create_internal(uint32_t p_size_bytes, Span
 }
 
 RID RenderingDevice::texture_buffer_create(uint32_t p_size_elements, DataFormat p_format, Span<uint8_t> p_data) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V_MSG(_ensure_recording_ready() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	uint32_t element_size = get_format_vertex_size(p_format);
 	ERR_FAIL_COND_V_MSG(element_size == 0, RID(), "Format requested is not supported for texture buffers");
 	uint64_t size_bytes = uint64_t(element_size) * p_size_elements;
@@ -2152,7 +2208,8 @@ RID RenderingDevice::_qualification_texture_create(const TextureFormat &p_format
 
 RID RenderingDevice::_texture_create_internal(const TextureFormat &p_format, const TextureView &p_view, const Vector<Vector<uint8_t>> &p_data, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved, const NativeDisposalWitness *p_native_disposal) {
 	ERR_FAIL_COND_V(p_native_disposal && (p_cell || p_reserved.is_null() || !p_data.is_empty()), RID());
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	const Error rec_err = (p_cell || p_native_disposal) ? _recording_error() : _ensure_recording_ready();
+	ERR_FAIL_COND_V_MSG(rec_err != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	// Check the stored enum representation before copying or reading it.
 	static_assert(sizeof(p_format.format) == sizeof(uint32_t));
 	uint32_t format_value = 0;
@@ -2431,7 +2488,7 @@ RID RenderingDevice::_texture_create_internal(const TextureFormat &p_format, con
 }
 
 RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with_texture) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V_MSG(_ensure_recording_ready() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_with_texture), RID());
 	Texture *src_texture = texture_owner.get_or_null(p_with_texture);
 	ERR_FAIL_NULL_V(src_texture, RID());
@@ -2540,7 +2597,7 @@ RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with
 }
 
 RID RenderingDevice::texture_create_from_extension(TextureType p_type, DataFormat p_format, TextureSamples p_samples, BitField<RenderingDevice::TextureUsageBits> p_usage, uint64_t p_image, uint64_t p_width, uint64_t p_height, uint64_t p_depth, uint64_t p_layers, uint64_t p_mipmaps) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V_MSG(_ensure_recording_ready() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	// This method creates a texture object using a VkImage created by an extension, module or other external source (OpenXR uses this).
 
 	Texture texture;
@@ -2584,7 +2641,7 @@ RID RenderingDevice::texture_create_from_extension(TextureType p_type, DataForma
 }
 
 RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view, RID p_with_texture, uint32_t p_layer, uint32_t p_mipmap, uint32_t p_mipmaps, TextureSliceType p_slice_type, uint32_t p_layers) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V_MSG(_ensure_recording_ready() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_with_texture), RID());
 	Texture *src_texture = texture_owner.get_or_null(p_with_texture);
 	ERR_FAIL_NULL_V(src_texture, RID());
@@ -4989,7 +5046,7 @@ bool RenderingDevice::sampler_is_format_supported_for_filter(DataFormat p_format
 /***********************/
 
 RID RenderingDevice::vertex_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p_data, BitField<BufferCreationBits> p_creation_bits) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V_MSG(_ensure_recording_ready() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V(p_data.size() && (uint32_t)p_data.size() != p_size_bytes, RID());
 
 	Buffer buffer;
@@ -5386,7 +5443,7 @@ uint64_t RenderingDevice::_generated_indexed144_backing_serial(RID p_rid, const 
 }
 
 RID RenderingDevice::index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, Span<uint8_t> p_data, bool p_use_restart_indices, BitField<BufferCreationBits> p_creation_bits) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V_MSG(_ensure_recording_ready() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V(p_index_count == 0, RID());
 
 	IndexBuffer index_buffer;
@@ -5750,7 +5807,7 @@ Error RenderingDevice::shader_get_native_vertex_input_mask_if_ready(RID p_shader
 /******************/
 
 RID RenderingDevice::uniform_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p_data, BitField<BufferCreationBits> p_creation_bits) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V_MSG(_ensure_recording_ready() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V(p_data.size() && (uint32_t)p_data.size() != p_size_bytes, RID());
 
 	Buffer buffer;
@@ -15735,7 +15792,29 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 			}
 		}
 	}
-	const Error ticket_poll = _qualification_poll_tickets(p_frame);
+	// BUG-115 Part (a): In blocking mode, wait on hidden native reports (e.g., copy-queue flushes)
+	// WITHOUT releasing their observers yet before polling qualification tickets, and allow
+	// _qualification_poll_tickets to wait on any remaining in-flight retained ticket serials so
+	// blocking _begin_frame(true) does not return spurious ERR_BUSY while GPU work is finishing.
+	if (!p_nonblocking) {
+		for (auto &report : frames[p_frame].qualification_hidden_reports) {
+			for (auto &call : report.calls) {
+				if (call.presentation_only || call.source_owner_returned) {
+					continue;
+				}
+				const auto completion = driver->native_call_wait(call.serial);
+				if (completion.native_error) {
+					frame_wait_native_code = completion.native_code;
+					frame_wait_native_code_valid = true;
+					return FAILED;
+				}
+				if (!completion.matches(call.completion_serial)) {
+					return ERR_BUSY;
+				}
+			}
+		}
+	}
+	const Error ticket_poll = _qualification_poll_tickets(p_frame, p_nonblocking);
 	if (ticket_poll != OK) {
 		return ticket_poll;
 	}

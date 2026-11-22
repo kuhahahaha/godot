@@ -53,6 +53,7 @@
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
+#include "core/os/os.h"
 
 thread_local LocalVector<RenderingDeviceDriverMetal::CompletionRecord *> *RenderingDeviceDriverMetal::active_completion_records = nullptr;
 thread_local uint64_t RenderingDeviceDriverMetal::active_native_serial = 0;
@@ -113,21 +114,36 @@ RenderingDeviceDriver::FencePollResult RenderingDeviceDriverMetal::native_call_w
 		return {};
 	}
 	command->waitUntilCompleted();
+	// Metal's addCompletedHandler executes on a driver callback queue and can lag
+	// waitUntilCompleted() by a few microseconds. Wait briefly for record->completed
+	// to land so blocking waits never return spurious ERR_BUSY or race record retirement.
+	const uint64_t handler_deadline = OS::get_singleton() ? (OS::get_singleton()->get_ticks_usec() + 50000ull) : 0ull;
 	FencePollResult out;
-	MutexLock lock(completion_records_mutex);
-	for (auto *record : completion_records) {
-		if (record->serial == serial) {
-			out.completed_serial = serial;
-			out.native_error = record->failed.load();
-			out.completed = record->completed.load() && !out.native_error;
-			out.native_code = record->native_code.load();
-			if (out.completed) {
-				out.resolved_issue = IssueFact::KnownAccepted;
+	for (;;) {
+		bool found = false;
+		bool done = false;
+		{
+			MutexLock lock(completion_records_mutex);
+			for (auto *record : completion_records) {
+				if (record->serial == serial) {
+					found = true;
+					done = record->completed.load();
+					out.completed_serial = serial;
+					out.native_error = record->failed.load();
+					out.completed = done && !out.native_error;
+					out.native_code = record->native_code.load();
+					if (out.completed) {
+						out.resolved_issue = IssueFact::KnownAccepted;
+					}
+					break;
+				}
 			}
-			break;
 		}
+		if (!found || done || !OS::get_singleton() || OS::get_singleton()->get_ticks_usec() >= handler_deadline) {
+			return out;
+		}
+		OS::get_singleton()->delay_usec(10);
 	}
-	return out;
 }
 Error RenderingDeviceDriverMetal::native_call_recycle(uint64_t serial) {
 	if (!serial) {
