@@ -354,7 +354,9 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 					return result(slot.handoff_error);
 				}
 				if (slot.batched_set_create && slot.creating) {
-					if (request->control.state == ProductionControlState::PENDING && request->control.input.kind == ProductionControlKind::SET_CREATE) {
+					if (request->control.state == ProductionControlState::OWNER_CONSUMED) {
+						slot.batched_set_create = false;
+					} else if (request->control.state == ProductionControlState::PENDING && request->control.input.kind == ProductionControlKind::SET_CREATE) {
 						schedule_leader_serial = request->control.serial;
 					} else {
 						return result(ERR_BUSY);

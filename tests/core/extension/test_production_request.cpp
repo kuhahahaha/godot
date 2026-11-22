@@ -4994,6 +4994,7 @@ struct Access {
 			CANCEL_WHILE_QUEUED,
 			RETRY_AFTER_BUSY,
 			CANCEL_AFTER_BUSY,
+			ORPHANED_FOLLOWER_OWNER_CONSUMED,
 		};
 		static constexpr uint32_t BATCH_SETS = 8;
 		Mode mode = Mode::NORMAL;
@@ -5170,6 +5171,36 @@ struct Access {
 						test.check(__LINE__, request.resources[2 + i].handoff_error == ERR_UNAVAILABLE);
 					}
 				}
+			} else if (test.mode == Mode::ORPHANED_FOLLOWER_OWNER_CONSUMED) {
+				// BUG-68B: Simulate a follower left in (batched_set_create==true && creating==true)
+				// after its leader control returned to OWNER_CONSUMED without executing it.
+				{
+					MutexLock lock(registry.mutex);
+					request.resources[3].batched_set_create = false;
+				}
+				test.rendezvous(5); // Executes leader (2) + followers (4..9) = BATCH_SETS - 1 sets.
+				test.check(__LINE__, fixture.driver.set_creates == BATCH_SETS - 1);
+				test.check(__LINE__, request.control.serial == leader_serial && request.control.state == ProductionControlState::RETURNED);
+				for (uint32_t i = 2; i < BATCH_SETS; ++i) {
+					test.check(__LINE__, registry.production_set_create(ref, 2 + i, 0, 0, &binding, 1).native_error == OK);
+				}
+				test.check(__LINE__, registry.production_set_create(ref, 2, 0, 0, &binding, 1).native_error == OK);
+				test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED && request.resources[2].imported);
+				{
+					MutexLock lock(registry.mutex);
+					request.resources[3].batched_set_create = true;
+				}
+				test.check(__LINE__, request.resources[3].batched_set_create && request.resources[3].creating && !request.resources[3].imported);
+				// Polling the orphaned follower MUST clear batched_set_create and promote it to a fresh leader instead of returning ERR_BUSY forever.
+				test.check(__LINE__, registry.production_set_create(ref, 3, 0, 0, &binding, 1).native_error == ERR_BUSY);
+				test.check(__LINE__, !request.resources[3].batched_set_create && request.resources[3].creating);
+				test.check(__LINE__, request.control.state == ProductionControlState::QUEUED && request.control.serial != leader_serial && request.control.input.kind == ProductionControlKind::SET_CREATE && request.control.input.resource_slot == 3);
+				test.rendezvous(5); // RT executes promoted slot 3.
+				test.check(__LINE__, fixture.driver.set_creates == BATCH_SETS);
+				test.check(__LINE__, registry.production_set_create(ref, 3, 0, 0, &binding, 1).native_error == OK);
+				test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED && !request.resources[3].creating && request.resources[3].imported);
+				test.check(__LINE__, registry.production_cancel(ref).native_error == OK);
+				expect_sets_created = true;
 			} else {
 				// ONE single RT control execution creates ALL 8 uniform sets.
 				test.rendezvous(5);
@@ -22966,6 +22997,9 @@ TEST_CASE("[SceneTree][ProductionRequest][BatchedSetCreate] separate-RT batched 
 	}
 	SUBCASE("BUG-53 cancel after transient ERR_BUSY clears all pending return cells and release succeeds") {
 		TestProductionRequest::Access::singleton_batched_set_create(TestProductionRequest::Access::BatchedSetCreate::Mode::CANCEL_AFTER_BUSY);
+	}
+	SUBCASE("BUG-68B orphaned batched follower promotes to leader when control is OWNER_CONSUMED") {
+		TestProductionRequest::Access::singleton_batched_set_create(TestProductionRequest::Access::BatchedSetCreate::Mode::ORPHANED_FOLLOWER_OWNER_CONSUMED);
 	}
 }
 
