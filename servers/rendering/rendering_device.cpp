@@ -18359,6 +18359,47 @@ bool RenderingDevice::_production_resource_permitted(RID rid) {
 			}
 		}
 	}
+	// BUG-85B: During a non-cleanup frozen production record callback before/between
+	// production_append_rt_v2 calls (when production_recording_request == nullptr),
+	// authorize live !use_closed qualification-owned auxiliary buffers, pipelines,
+	// shaders, and uniform sets (e.g. NG3D build, CurveLUT uploads, GAP-02 record
+	// resets). Once production_record_effect_locked sets production_recording_request,
+	// this branch deactivates so strict per-slot request validation runs unchanged.
+	if (production_output_fast_refresh.aux_pre_append_active && !production_recording_request && render_thread_id == Thread::get_caller_id() && rid.is_valid()) {
+		if (Buffer *buffer = _get_buffer_from_owner(rid)) {
+			if (buffer->qualification_return && !buffer->qualification_return->use_closed.load()) {
+				return true;
+			}
+		}
+		if (compute_pipeline_owner.owns(rid)) {
+			if (ComputePipeline *pipe = compute_pipeline_owner.get_or_null(rid)) {
+				if (pipe->qualification_return && !pipe->qualification_return->use_closed.load()) {
+					return true;
+				}
+			}
+		}
+		if (shader_owner.owns(rid)) {
+			if (Shader *sh = shader_owner.get_or_null(rid)) {
+				if (sh->qualification_return && !sh->qualification_return->use_closed.load()) {
+					return true;
+				}
+			}
+		}
+		if (uniform_set_owner.owns(rid)) {
+			if (UniformSet *us = uniform_set_owner.get_or_null(rid)) {
+				bool closed = us->qualification_return && us->qualification_return->use_closed.load();
+				for (auto *cell : us->qualification_dependencies) {
+					if (!cell || cell->use_closed.load()) {
+						closed = true;
+						break;
+					}
+				}
+				if (!closed) {
+					return true;
+				}
+			}
+		}
+	}
 	const auto *request = production_recording_request;
 	if (!request || !request->serial || !request->frozen || !request->capture_inflight) {
 		return false;

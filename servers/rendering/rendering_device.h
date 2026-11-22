@@ -391,6 +391,11 @@ private:
 		LocalVector<ProductionOutputFastRefreshEntry> overflow_entries;
 		uint32_t count = 0;
 		bool active = false;
+		// BUG-85B: Narrow RT-only flag authorizing live !use_closed auxiliary
+		// qualification resources inside a non-cleanup frozen record callback
+		// while production_recording_request == nullptr. Placed in trailing
+		// padding to preserve exact RenderingDevice layout.
+		bool aux_pre_append_active = false;
 
 		void clear() {
 			count = 0;

@@ -6823,6 +6823,163 @@ struct Access {
 		CHECK(record.cleanup_reservations == 0);
 	}
 
+	static void aux_pre_append_rt_authorization() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment fixture;
+		auto &registry = *fixture.registry;
+		auto &rd = fixture.rd;
+
+		const GDExtensionProductionCapacityV1 cap = { production_dto_abi<GDExtensionProductionCapacityV1>(), 2, 2, 2, 2, 2, 32, 0, 2, 64, 0 };
+		const auto attachment = fixture.accept(cap);
+
+		QualificationPhysicalReturn aux_buf_return;
+		QualificationPhysicalReturn aux_set_return;
+		RenderingDevice::Buffer buf_obj;
+		buf_obj.size = 16;
+		buf_obj.usage = RDD::BUFFER_USAGE_STORAGE_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT;
+		buf_obj.driver_id = RDD::BufferID(101);
+		buf_obj.qualification_return = &aux_buf_return;
+		const RID aux_buf = rd.storage_buffer_owner.make_rid(buf_obj);
+
+		RenderingDevice::UniformSet set_obj;
+		set_obj.format = 1;
+		set_obj.driver_id = RDD::UniformSetID(201);
+		set_obj.qualification_return = &aux_set_return;
+		set_obj.qualification_dependencies.push_back(&aux_buf_return);
+		const RID aux_set = rd.uniform_set_owner.make_rid(set_obj);
+
+		const uint8_t payload[16] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
+
+		struct Probe {
+			RenderingDevice *rd = nullptr;
+			Request *req = nullptr;
+			RID aux_buf;
+			RID aux_set;
+			QualificationPhysicalReturn *aux_buf_return = nullptr;
+			const uint8_t *payload = nullptr;
+			bool called = false;
+			bool aux_active_in_cb = false;
+			bool buf_permitted_pre_append = false;
+			bool set_permitted_pre_append = false;
+			Error buf_update_pre_append = ERR_UNCONFIGURED;
+			bool set_bound_pre_append = false;
+			bool buf_rejected_during_append = false;
+			bool set_rejected_during_append = false;
+			Error buf_update_during_append = OK;
+			bool buf_rejected_when_closed = false;
+			bool set_rejected_when_closed = false;
+		} probe{ &rd, nullptr, aux_buf, aux_set, &aux_buf_return, payload };
+
+		const auto receiver = +[](void *p_userdata, ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *) {
+			auto &p = *static_cast<Probe *>(p_userdata);
+			p.called = true;
+			p.aux_active_in_cb = p.rd->production_output_fast_refresh.aux_pre_append_active && p.rd->production_recording_request == nullptr;
+			// (b) Pre-append inside frozen non-cleanup receiver: aux buffer_update & compute uniform set bind SUCCEED.
+			p.buf_permitted_pre_append = p.rd->_production_resource_permitted(p.aux_buf);
+			p.set_permitted_pre_append = p.rd->_production_resource_permitted(p.aux_set);
+			p.buf_update_pre_append = p.rd->buffer_update(p.aux_buf, 0, 16, p.payload);
+			p.rd->compute_list.active = true;
+			p.rd->compute_list.state.set_count = 1;
+			p.rd->compute_list.state.sets[0] = {};
+			p.rd->compute_list.state.sets[0].pipeline_expected_format = 1;
+			p.rd->compute_list_bind_uniform_set(RD::ID_TYPE_COMPUTE_LIST, p.aux_set, 0);
+			p.set_bound_pre_append = (p.rd->compute_list.state.sets[0].uniform_set == p.aux_set);
+			p.rd->compute_list.state.sets[0] = {};
+			p.rd->compute_list.state.set_count = 0;
+			p.rd->compute_list.active = false;
+
+			// (c) During production_append_rt_v2 (production_recording_request != nullptr):
+			// strict per-slot request validation MUST still reject undeclared aux buffers/sets!
+			p.rd->production_recording_request = p.req;
+			p.req->capture_inflight = 1;
+			p.buf_rejected_during_append = !p.rd->_production_resource_permitted(p.aux_buf);
+			p.set_rejected_during_append = !p.rd->_production_resource_permitted(p.aux_set);
+			ERR_PRINT_OFF;
+			p.buf_update_during_append = p.rd->buffer_update(p.aux_buf, 0, 16, p.payload);
+			ERR_PRINT_ON;
+			p.req->capture_inflight = 0;
+			p.rd->production_recording_request = nullptr;
+
+			// (d1) Closed qualification_return (use_closed == true) MUST be rejected even in pre-append scope.
+			p.aux_buf_return->use_closed.store(true);
+			p.buf_rejected_when_closed = !p.rd->_production_resource_permitted(p.aux_buf);
+			p.set_rejected_when_closed = !p.rd->_production_resource_permitted(p.aux_set);
+			p.aux_buf_return->use_closed.store(false);
+		};
+
+		REQUIRE(registry.production_install_record_receiver({ Enrollment::INSTANCE, 5 }, attachment, receiver, &probe, nullptr) == OK);
+		REQUIRE(registry.production_open({ Enrollment::INSTANCE, 5 }, attachment).native_error == OK);
+
+		auto single = cap;
+		single.requests = single.suboperations = single.resources = single.resource_uses = single.graph_memberships = single.return_cells = 1;
+		single.native_memberships = 16;
+		single.retained_payload_bytes = 16;
+		Request *req = nullptr;
+		REQUIRE(fixture.reserve(attachment, single, 85, req) == OK);
+		REQUIRE(req != nullptr);
+		probe.req = req;
+
+		fixture.driver.execution_thread = Thread::get_caller_id();
+		fixture.driver.upload_mode = true;
+		fixture.driver.allocations = 1;
+		rd.upload_staging_buffers.block_size = rd.upload_staging_buffers.max_size = 64;
+		rd.upload_staging_buffers.usage_bits = RDD::BUFFER_USAGE_TRANSFER_FROM_BIT;
+		REQUIRE(rd._insert_staging_block(rd.upload_staging_buffers) == OK);
+
+		// (a) Outside production_aux_pre_append_active: qualification buffer/set MUST be rejected.
+		CHECK_FALSE(rd.production_output_fast_refresh.aux_pre_append_active);
+		CHECK_FALSE(rd._production_resource_permitted(aux_buf));
+		CHECK_FALSE(rd._production_resource_permitted(aux_set));
+		ERR_PRINT_OFF;
+		CHECK(rd.buffer_update(aux_buf, 0, 16, payload) == ERR_UNAUTHORIZED);
+		ERR_PRINT_ON;
+
+		{
+			MutexLock lock(registry.mutex);
+			req->frozen = true;
+			req->control.serial = 1;
+			req->control.state = ProductionControlState::EXECUTING;
+			req->control.input.kind = ProductionControlKind::RECORD;
+			req->control.input.output_cancel = false;
+			REQUIRE(registry.production_record_receive_locked(*req, rd, nullptr) == OK);
+			req->control = {};
+		}
+
+		CHECK(probe.called);
+		CHECK(probe.aux_active_in_cb);
+		CHECK(probe.buf_permitted_pre_append);
+		CHECK(probe.set_permitted_pre_append);
+		CHECK(probe.buf_update_pre_append == OK);
+		CHECK(probe.set_bound_pre_append);
+		CHECK(probe.buf_rejected_during_append);
+		CHECK(probe.set_rejected_during_append);
+		CHECK(probe.buf_update_during_append == ERR_UNAUTHORIZED);
+		CHECK(probe.buf_rejected_when_closed);
+		CHECK(probe.set_rejected_when_closed);
+
+		// (d2) After receiver(...) returns: permission MUST immediately revert to false.
+		CHECK_FALSE(rd.production_output_fast_refresh.aux_pre_append_active);
+		CHECK_FALSE(rd._production_resource_permitted(aux_buf));
+		CHECK_FALSE(rd._production_resource_permitted(aux_set));
+		ERR_PRINT_OFF;
+		CHECK(rd.buffer_update(aux_buf, 0, 16, payload) == ERR_UNAUTHORIZED);
+		ERR_PRINT_ON;
+
+		// Cleanup test-only RD resources & staging blocks cleanly.
+		rd.uniform_set_owner.free(aux_set);
+		rd.storage_buffer_owner.free(aux_buf);
+		for (auto &block : rd.upload_staging_buffers.blocks) {
+			fixture.driver.buffer_unmap(block.driver_id);
+			fixture.driver.buffer_free(block.driver_id);
+		}
+		rd.upload_staging_buffers.blocks.clear();
+
+		const GDExtensionProductionRequestRefV1 req_ref = { Enrollment::INSTANCE, req->serial };
+		REQUIRE(registry.production_cancel(req_ref).native_error == OK);
+		REQUIRE(registry.production_release(req_ref).native_error == OK);
+		REQUIRE(registry.production_close(attachment).native_error == OK);
+	}
+
 	static void actual_entity_hold() {
 		Enrollment fixture;
 		auto &registry = *fixture.registry;
@@ -23273,4 +23430,8 @@ TEST_CASE("[SceneTree][ProductionRequest][BatchedSetCreate][BUG-77A] follower ne
 	SUBCASE("defensive drain of mismatched RETURNED SET_CREATE control unblocks leader and cancel") {
 		TestProductionRequest::Access::singleton_batched_set_create(TestProductionRequest::Access::BatchedSetCreate::Mode::BUG77A_DEFENSIVE_RETURNED_DRAIN);
 	}
+}
+
+TEST_CASE("[ProductionRequest][BUG-85B] pre-append frozen RT callback authorizes live auxiliary qualification buffers and uniform sets without weakening append validation") {
+	TestProductionRequest::Access::aux_pre_append_rt_authorization();
 }

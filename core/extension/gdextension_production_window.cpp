@@ -699,6 +699,7 @@ Error Registry::production_record_receive_locked(ProductionRequest &request, Ren
 	void *userdata = attachment.record_receiver_userdata;
 	const auto operation = request.operation;
 	const uint64_t serial = request.serial, control = request.control.serial;
+	const bool allow_aux_pre_append = !cleanup && request.frozen && !request.cancelled;
 	++record.private_refs;
 	RecordRef reference(this, attachment.library);
 	unlock_mutex_for_call();
@@ -719,12 +720,26 @@ Error Registry::production_record_receive_locked(ProductionRequest &request, Ren
 			frame.serial = RegistrationContext::current->frame_id;
 			frame.control = control;
 			production_physical_frame = &frame;
+			struct AuxPreAppendScope {
+				RenderingDevice &rd;
+				bool previous = false;
+				AuxPreAppendScope(RenderingDevice &p_rd, bool p_enable) :
+						rd(p_rd), previous(p_rd.production_output_fast_refresh.aux_pre_append_active) {
+					if (p_enable) {
+						rd.production_output_fast_refresh.aux_pre_append_active = true;
+					}
+				}
+				~AuxPreAppendScope() {
+					rd.production_output_fast_refresh.aux_pre_append_active = previous;
+				}
+			};
 			if (cleanup) {
 				receiver(userdata, { instance, frame.serial }, { instance, serial }, &operation);
 			} else if (request.native_prepared_executor) {
 				frame.scene_occurrence = attachment.scene_occurrence;
 				error = production_prepared_record_body(request, device, { instance, frame.serial }, *p_native_invocation);
 			} else if (attachment.scene_registration) {
+				AuxPreAppendScope aux_scope(device, allow_aux_pre_append);
 				frame.scene_occurrence = attachment.scene_occurrence;
 				GDExtensionNativeScenePhaseV1 phase{};
 				phase.abi = { 1, sizeof(phase), 0 };
@@ -735,6 +750,7 @@ Error Registry::production_record_receive_locked(ProductionRequest &request, Ren
 				phase.expiry_serial = frame.serial;
 				error = scene_phase_call_relay(attachment.scene_relay, phase, { instance, serial }, operation);
 			} else {
+				AuxPreAppendScope aux_scope(device, allow_aux_pre_append);
 				receiver(userdata, { instance, frame.serial }, { instance, serial }, &operation);
 			}
 			// Actual protected frame return is a physical cutoff, not a caller
