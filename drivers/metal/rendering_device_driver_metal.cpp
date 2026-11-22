@@ -2088,6 +2088,7 @@ struct MetalArchiveReleaseJob {
 	RenderingDeviceDriverMetal *driver = nullptr;
 	NS::SharedPtr<MTL::BinaryArchive> archive;
 	String cache_path;
+	uint32_t archive_count = 0;
 };
 
 NS::SharedPtr<MTL::BinaryArchive> RenderingDeviceDriverMetal::_acquire_pipeline_archive() {
@@ -2109,8 +2110,13 @@ void RenderingDeviceDriverMetal::_record_pipeline_archive_addition(MTL::BinaryAr
 	}
 }
 
-void RenderingDeviceDriverMetal::_serialize_archive_to_path(MTL::BinaryArchive *p_archive, const String &p_cache_path) {
+void RenderingDeviceDriverMetal::_serialize_archive_to_path(MTL::BinaryArchive *p_archive, const String &p_cache_path, uint32_t p_archive_count) {
 	if (!p_archive || p_cache_path.is_empty()) {
+		return;
+	}
+	const bool enforce_cap = _is_archive_cap_enforced();
+	if (enforce_cap && p_archive_count > ARCHIVE_MAX_ENTRIES) {
+		WARN_PRINT(vformat("Metal binary archive serialize skipped (%d entries exceeds %d cap).", p_archive_count, ARCHIVE_MAX_ENTRIES));
 		return;
 	}
 	MutexLock serialize_lock(archive_serialize_mutex);
@@ -2122,9 +2128,27 @@ void RenderingDeviceDriverMetal::_serialize_archive_to_path(MTL::BinaryArchive *
 	NS::URL *target = NS::URL::fileURLWithPath(ns_tmp);
 	NS::Error *error = nullptr;
 	if (p_archive->serializeToURL(target, &error)) {
+		if (enforce_cap) {
+			const int64_t serialized_size = FileAccess::get_size(tmp_path);
+			if (serialized_size >= 0 && static_cast<uint64_t>(serialized_size) > archive_max_bytes) {
+				WARN_PRINT(vformat("Metal binary archive serialize skipped ('%s' is %.1f MiB, exceeds %s MiB cap).",
+						p_cache_path, serialized_size / (1024.0 * 1024.0), String::num_uint64(archive_max_bytes / (1024ull * 1024ull))));
+				DirAccess::remove_absolute(tmp_path);
+				if (FileAccess::exists(p_cache_path)) {
+					const int64_t existing_size = FileAccess::get_size(p_cache_path);
+					if (existing_size >= 0 && static_cast<uint64_t>(existing_size) > archive_max_bytes) {
+						DirAccess::remove_absolute(p_cache_path);
+					}
+				}
+				return;
+			}
+		}
 		DirAccess::rename_absolute(tmp_path, p_cache_path);
-	} else if (error != nullptr) {
-		print_verbose(String("Metal binary archive serialize skipped: ") + error->localizedDescription()->utf8String());
+	} else {
+		if (error != nullptr) {
+			print_verbose(String("Metal binary archive serialize skipped: ") + error->localizedDescription()->utf8String());
+		}
+		DirAccess::remove_absolute(tmp_path);
 	}
 }
 
@@ -2133,7 +2157,7 @@ void RenderingDeviceDriverMetal::_release_archive_task_func(void *p_userdata) {
 	{
 		NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 		if (job->archive) {
-			job->driver->_serialize_archive_to_path(job->archive.get(), job->cache_path);
+			job->driver->_serialize_archive_to_path(job->archive.get(), job->cache_path, job->archive_count);
 			job->archive.reset();
 		}
 	}
@@ -2157,6 +2181,7 @@ void RenderingDeviceDriverMetal::_maybe_release_pipeline_archive(uint32_t p_fram
 
 	NS::SharedPtr<MTL::BinaryArchive> to_release;
 	bool need_serialize = false;
+	uint32_t current_archive_count = 0;
 	{
 		MutexLock lock(archive_mutex);
 		if (!archive) {
@@ -2169,11 +2194,12 @@ void RenderingDeviceDriverMetal::_maybe_release_pipeline_archive(uint32_t p_fram
 			return;
 		}
 		++archive_idle_frames;
-		if (archive_idle_frames < ARCHIVE_WARMUP_IDLE_FRAMES || p_frames_drawn < ARCHIVE_WARMUP_MIN_FRAMES) {
+		if (archive_idle_frames < archive_warmup_idle_frames || p_frames_drawn < archive_warmup_min_frames) {
 			return;
 		}
 		to_release = std::move(archive);
 		need_serialize = archive_dirty;
+		current_archive_count = archive_count;
 		archive_dirty = false;
 		archive_active.store(false, std::memory_order_release);
 	}
@@ -2191,10 +2217,11 @@ void RenderingDeviceDriverMetal::_maybe_release_pipeline_archive(uint32_t p_fram
 			job->driver = this;
 			job->archive = std::move(to_release);
 			job->cache_path = cache_path;
+			job->archive_count = current_archive_count;
 			archive_release_task = wtp->add_native_task(&_release_archive_task_func, job, false, "MetalArchiveRelease");
 			return;
 		}
-		_serialize_archive_to_path(to_release.get(), cache_path);
+		_serialize_archive_to_path(to_release.get(), cache_path, current_archive_count);
 	}
 
 	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
@@ -2215,15 +2242,23 @@ bool RenderingDeviceDriverMetal::pipeline_cache_create(const Vector<uint8_t> &p_
 	NS::SharedPtr<MTL::BinaryArchive> loaded_archive;
 	NS::Error *error = nullptr;
 	if (FileAccess::exists(cache_path)) {
-		CharString path_utf8 = cache_path.utf8();
-		NS::String *ns_path = NS::String::string(path_utf8.get_data(), NS::UTF8StringEncoding);
-		desc->setUrl(NS::URL::fileURLWithPath(ns_path));
-		loaded_archive = NS::TransferPtr(device->newBinaryArchive(desc.get(), &error));
-		if (!loaded_archive || error != nullptr) {
-			print_verbose(vformat("Metal binary archive load missed (%s); starting fresh archive.", cache_path));
-			loaded_archive = nullptr;
-			error = nullptr;
-			desc->setUrl(nullptr);
+		const int64_t cache_size = FileAccess::get_size(cache_path);
+		if (_is_archive_cap_enforced() && cache_size >= 0 && static_cast<uint64_t>(cache_size) > archive_max_bytes) {
+			WARN_PRINT(vformat("Metal binary archive '%s' is %.1f MiB (exceeds %s MiB cap); purging oversized cache and starting fresh.",
+					cache_path, cache_size / (1024.0 * 1024.0), String::num_uint64(archive_max_bytes / (1024ull * 1024ull))));
+			DirAccess::remove_absolute(cache_path);
+			DirAccess::remove_absolute(cache_path + ".tmp");
+		} else {
+			CharString path_utf8 = cache_path.utf8();
+			NS::String *ns_path = NS::String::string(path_utf8.get_data(), NS::UTF8StringEncoding);
+			desc->setUrl(NS::URL::fileURLWithPath(ns_path));
+			loaded_archive = NS::TransferPtr(device->newBinaryArchive(desc.get(), &error));
+			if (!loaded_archive || error != nullptr) {
+				print_verbose(vformat("Metal binary archive load missed (%s); starting fresh archive.", cache_path));
+				loaded_archive = nullptr;
+				error = nullptr;
+				desc->setUrl(nullptr);
+			}
 		}
 	}
 	if (!loaded_archive) {
@@ -2267,16 +2302,18 @@ size_t RenderingDeviceDriverMetal::pipeline_cache_query_size() {
 
 Vector<uint8_t> RenderingDeviceDriverMetal::pipeline_cache_serialize() {
 	NS::SharedPtr<MTL::BinaryArchive> local_archive;
+	uint32_t local_archive_count = 0;
 	{
 		MutexLock lock(archive_mutex);
 		local_archive = archive;
+		local_archive_count = archive_count;
 		archive_dirty = false;
 	}
 	if (!local_archive) {
 		return Vector<uint8_t>();
 	}
 
-	_serialize_archive_to_path(local_archive.get(), _pipeline_get_cache_path());
+	_serialize_archive_to_path(local_archive.get(), _pipeline_get_cache_path(), local_archive_count);
 	return Vector<uint8_t>();
 }
 
@@ -3614,6 +3651,34 @@ RenderingDeviceDriverMetal::RenderingDeviceDriverMetal(RenderingContextDriverMet
 		pipeline_cache_mode = PipelineCacheMode::PERSIST;
 	} else {
 		pipeline_cache_mode = PipelineCacheMode::RELEASE_AFTER_WARMUP;
+	}
+
+	if (String max_mb_env = OS::get_singleton()->get_environment("ANGE_MTL_PIPELINE_CACHE_MAX_MB"); !max_mb_env.is_empty()) {
+		if (max_mb_env.is_valid_int()) {
+			int64_t max_mb = max_mb_env.to_int();
+			if (max_mb > 0 && static_cast<uint64_t>(max_mb) <= (UINT64_MAX / (1024ull * 1024ull))) {
+				archive_max_bytes = static_cast<uint64_t>(max_mb) * 1024ull * 1024ull;
+			} else {
+				WARN_PRINT(vformat("ANGE_MTL_PIPELINE_CACHE_MAX_MB='%s' out of range; using default %s MiB.",
+						max_mb_env, String::num_uint64(ARCHIVE_MAX_BYTES_DEFAULT / (1024ull * 1024ull))));
+			}
+		} else {
+			WARN_PRINT(vformat("ANGE_MTL_PIPELINE_CACHE_MAX_MB='%s' is not a valid integer; using default %s MiB.",
+					max_mb_env, String::num_uint64(ARCHIVE_MAX_BYTES_DEFAULT / (1024ull * 1024ull))));
+		}
+	}
+
+	if (String warmup_env = OS::get_singleton()->get_environment("ANGE_MTL_ARCHIVE_WARMUP_MIN_FRAMES"); !warmup_env.is_empty() && warmup_env.is_valid_int()) {
+		int64_t frames = warmup_env.to_int();
+		if (frames >= 0 && frames <= UINT32_MAX) {
+			archive_warmup_min_frames = static_cast<uint32_t>(frames);
+		}
+	}
+	if (String idle_env = OS::get_singleton()->get_environment("ANGE_MTL_ARCHIVE_WARMUP_IDLE_FRAMES"); !idle_env.is_empty() && idle_env.is_valid_int()) {
+		int64_t frames = idle_env.to_int();
+		if (frames >= 0 && frames <= UINT32_MAX) {
+			archive_warmup_idle_frames = static_cast<uint32_t>(frames);
+		}
 	}
 
 	// Barriers is the default; "none" selects native hazard tracking.

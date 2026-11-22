@@ -134,8 +134,10 @@ protected:
 		RELEASE_AFTER_WARMUP,
 		PERSIST,
 	};
-	static constexpr uint32_t ARCHIVE_WARMUP_IDLE_FRAMES = 16;
-	static constexpr uint32_t ARCHIVE_WARMUP_MIN_FRAMES = 16;
+	static constexpr uint32_t ARCHIVE_WARMUP_IDLE_FRAMES_DEFAULT = 8;
+	static constexpr uint32_t ARCHIVE_WARMUP_MIN_FRAMES_DEFAULT = 8;
+	static constexpr uint64_t ARCHIVE_MAX_BYTES_DEFAULT = 64ull * 1024ull * 1024ull;
+	static constexpr uint32_t ARCHIVE_MAX_ENTRIES = 4096;
 
 	Mutex archive_mutex;
 	Mutex archive_serialize_mutex;
@@ -145,6 +147,9 @@ protected:
 	bool archive_dirty = false;
 	bool archive_activity_this_frame = false;
 	uint32_t archive_idle_frames = 0;
+	uint32_t archive_warmup_idle_frames = ARCHIVE_WARMUP_IDLE_FRAMES_DEFAULT;
+	uint32_t archive_warmup_min_frames = ARCHIVE_WARMUP_MIN_FRAMES_DEFAULT;
+	uint64_t archive_max_bytes = ARCHIVE_MAX_BYTES_DEFAULT;
 	PipelineCacheMode pipeline_cache_mode = PipelineCacheMode::RELEASE_AFTER_WARMUP;
 	WorkerThreadPool::TaskID archive_release_task = WorkerThreadPool::INVALID_TASK_ID;
 	// DEV: When true, attempting to create a pipeline will fail if it cannot use the archive.
@@ -476,9 +481,12 @@ public:
 	// ----- CACHE -----
 private:
 	String _pipeline_get_cache_path() const;
+	bool _is_archive_cap_enforced() const {
+		return !archive_fail_on_miss && pipeline_cache_mode != PipelineCacheMode::PERSIST;
+	}
 	NS::SharedPtr<MTL::BinaryArchive> _acquire_pipeline_archive();
 	void _record_pipeline_archive_addition(MTL::BinaryArchive *p_archive);
-	void _serialize_archive_to_path(MTL::BinaryArchive *p_archive, const String &p_cache_path);
+	void _serialize_archive_to_path(MTL::BinaryArchive *p_archive, const String &p_cache_path, uint32_t p_archive_count);
 	void _wait_archive_release_task();
 	void _maybe_release_pipeline_archive(uint32_t p_frames_drawn);
 	static void _release_archive_task_func(void *p_userdata);
