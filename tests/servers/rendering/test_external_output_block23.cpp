@@ -332,6 +332,10 @@ TEST_CASE("[ExternalOutput][Block23] compute_list_dispatch guards missing or fre
 	const RID uniform_set = rd.uniform_set_create(uniforms, shader, 0);
 	REQUIRE(uniform_set.is_valid());
 
+	// Flush initial buffer uploads before acquiring an immutable hold.
+	rd.submit();
+	rd.sync();
+
 	// Case 1: writable SSBO held immutable causes compute_list_bind_uniform_set to fail;
 	// subsequent dispatch / dispatch_indirect must return cleanly without dereferencing nullptr.
 	Vector<RID> roots;
