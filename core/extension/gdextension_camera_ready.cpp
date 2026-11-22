@@ -203,6 +203,12 @@ Error Registry::camera_ready_native_invocation(ProductionCameraReadySubscriber &
 				!action.output_plan_prepared || action.preinput_camera_source.is_valid() || !action.preinput_host_prepared || action.preinput_host_returned) { return ERR_INVALID_DATA; }
 		// Prefix turns use the actual native scope, but do not bind its camera.
 		// Original owner consume/apply/ACK may therefore occur between captures.
+		// If pre_cull did not prepare scene cull for this capture (e.g. RECORD was
+		// queued after pre_cull ran, or pre_cull returned ERR_BUSY), defer without
+		// charging the stage budget or consuming the queued RECORD control.
+		if (!action.scene_cull_prepared || action.scene_cull_capture != capture) {
+			return ERR_BUSY;
+		}
 	}
 
 	// Every genuine staged RECORD control spends the same immutable native

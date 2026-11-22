@@ -44,6 +44,13 @@
 
 TEST_FORCE_LINK(test_production_native_observe)
 
+namespace TestProductionRequest {
+void wave_g_deliver_native_invocation(
+		RendererViewport &p_owner,
+		const Ref<RendererViewport::Viewport::CameraCapture> &p_capture,
+		RendererViewport::Viewport::CameraSourceSubscriber *p_subscriber);
+} // namespace TestProductionRequest
+
 namespace TestProductionNativeObserve {
 struct Access {
 	using Registry = GDExtensionDeviceExit::Registry;
@@ -658,6 +665,7 @@ struct Access {
 			frame.level_phase = LevelPhase::SCENE_READY;
 			registry->views[0] = { 5, 0, Registry::ViewDomain::SCENE_READY, 8, 0 };
 			registry->views[1] = { 9, 0, Registry::ViewDomain::PRODUCER_REGISTRATION, 0, 0 };
+			registry->note_view_slot(1);
 		}
 		~Enrollment() {
 			// Test teardown restores TLS/singleton even after REQUIRE. Injected
@@ -4589,6 +4597,85 @@ struct Access {
 		CHECK(RSG::viewport->free(viewport));
 		CHECK(RSG::scene->free(camera_rid));
 	}
+	static void staged_camera_unprepared_cull_preserves_stage_budget() {
+		using namespace GDExtensionDeviceExit;
+		REQUIRE(RSG::viewport != nullptr);
+		REQUIRE(RSG::scene != nullptr);
+		const RID viewport = RSG::viewport->viewport_allocate();
+		RSG::viewport->viewport_initialize(viewport);
+		const RID camera_rid = RSG::scene->camera_allocate();
+		RSG::scene->camera_initialize(camera_rid);
+		RSG::viewport->viewport_set_size(viewport, 64, 48, 1);
+		RSG::viewport->viewport_attach_camera(viewport, camera_rid);
+		auto *vp = RSG::viewport->viewport_owner.get_or_null(viewport);
+		REQUIRE(vp != nullptr);
+		if (vp->render_buffers.is_null()) {
+			vp->render_buffers = Ref<RenderSceneBuffers>(memnew(DelayedDeliveryTestBuffers));
+		}
+		REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, { 902, 1, 1 }));
+		RendererSceneRender::CameraData camera;
+		camera.set_camera(Transform3D(), Projection(), false, false, Vector2(), 0, 1);
+		camera.source_viewport = viewport;
+		const auto token = RSG::viewport->viewport_begin_camera_capture(viewport, camera, camera_rid, vp->render_buffers);
+		Ref<RendererViewport::Viewport::CameraCapture> capture;
+		REQUIRE(RSG::viewport->viewport_get_camera_capture_ref(viewport, token, capture));
+		{
+			Enrollment e;
+			auto c = capacity(4);
+			const auto attachment = e.accept(c);
+			REQUIRE(attachment.handle_serial != 0);
+			Request *r = nullptr;
+			const GDExtensionProductionOperationV1 operation{ production_dto_abi<GDExtensionProductionOperationV1>(), 312, 1, 10, 11 };
+			const GDExtensionProductionActionV2 row{ 0, 10, 0, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX };
+			{
+				MutexLock lock(e.registry->mutex);
+				ProductionAttachment *a = nullptr;
+				RenderingDevice *rd = nullptr;
+				REQUIRE(e.registry->production_attachment_locked(attachment, true, a, rd) == OK);
+				REQUIRE(e.registry->production_reserve_metadata_rows_locked(*a, operation, c, { nullptr, &row }, 1, nullptr, 0, nullptr, 0, {}, 0, r, 2) == OK);
+			}
+			REQUIRE(r != nullptr);
+			auto &action = r->actions[0];
+			auto &subscriber = action.camera_ready_subscriber;
+			r->native_prepared_executor = true;
+			r->native_static_sealed = true;
+			r->native_staged_anchor = 0;
+			r->native_stage_budget = budget();
+			r->control = {};
+			r->control.serial = 11;
+			r->control.input.request_serial = r->serial;
+			r->control.input.record_generation = r->operation.record_generation;
+			r->control.input.kind = ProductionControlKind::RECORD;
+			r->control.input.budget = r->native_stage_budget;
+			r->control.state = ProductionControlState::QUEUED;
+			r->control.scene_waiting = true;
+			action.prepared = true;
+			action.output_camera_pending = true;
+			action.output_plan_prepared = true;
+			action.preinput_host_prepared = true;
+			action.camera_ready_viewport = viewport;
+			action.scene_cull_prepared = false;
+			subscriber.registry = e.registry;
+			subscriber.attachment = attachment;
+			subscriber.request = { Enrollment::INSTANCE, r->serial };
+			subscriber.action_ordinal = 0;
+			subscriber.subscribed = true;
+			subscriber.last_error = OK;
+			REQUIRE(RSG::viewport->viewport_subscribe_camera_source(viewport, &subscriber));
+			TestProductionRequest::wave_g_deliver_native_invocation(*RSG::viewport, capture, &subscriber);
+			CHECK(subscriber.get_last_error() == ERR_BUSY);
+			CHECK(r->native_stage_controls_used == 0);
+			CHECK(r->native_stage_passes_used == 0);
+			CHECK(r->native_stage_receipts_used == 0);
+			CHECK(r->control.state == ProductionControlState::QUEUED);
+			CHECK(r->control.scene_waiting);
+			CHECK(RSG::viewport->viewport_unsubscribe_camera_source(viewport, &subscriber));
+			subscriber.subscribed = false;
+			subscriber.registry = nullptr;
+		}
+		CHECK(RSG::viewport->free(viewport));
+		CHECK(RSG::scene->free(camera_rid));
+	}
 
 	static void record_v3_actual_usage_projection() {
 		using namespace GDExtensionDeviceExit;
@@ -4685,6 +4772,9 @@ TEST_CASE("[ProductionNativeObserve][PreparedNativeRecordV2] exhausted original 
 }
 TEST_CASE("[SceneTree][ProductionNativeObserve][PreparedNativeRecordV2] delayed actual camera delivery cannot overwrite explicit staged intent") {
 	Access::staged_camera_delayed_delivery_refusal();
+}
+TEST_CASE("[SceneTree][ProductionNativeObserve][PreparedNativeRecordV2] unprepared staged cull defers invocation without charging stage budget") {
+	Access::staged_camera_unprepared_cull_preserves_stage_budget();
 }
 TEST_CASE("[ProductionNativeObserve][PreparedNativeRecordV2] V3 returns actual original control usage and residual budget") {
 	Access::record_v3_actual_usage_projection();

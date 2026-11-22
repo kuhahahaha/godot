@@ -1468,6 +1468,7 @@ struct Access {
 			frame.level_phase = LevelPhase::SCENE_READY;
 			registry->views[0] = { 5, 0, Registry::ViewDomain::SCENE_READY, 8, 0 };
 			registry->views[1] = { 9, 0, Registry::ViewDomain::PRODUCER_REGISTRATION, 0, 0 };
+			registry->note_view_slot(1);
 		}
 		~Enrollment() {
 			// Also restore TLS/singleton on a REQUIRE exception. These are actual
