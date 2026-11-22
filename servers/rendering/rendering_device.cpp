@@ -1585,38 +1585,68 @@ Error RenderingDevice::buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_
 }
 
 Error RenderingDevice::_prepare_synchronous_readback() {
-	if (qualification_frame_advance_pending.load() &&
-			!native_disposal_active.load(std::memory_order_acquire) &&
-			!frame_wait_draining.load() &&
-			frame_issue_error.load() == OK &&
-			frame_wait_error.load() == OK &&
-			!frame_wait_native_code_valid.load() &&
-			!draw_list.active && !compute_list.active && !raytracing_list.active &&
-			driver != nullptr && !frames.is_empty() && uint32_t(frame) < frames.size()) {
-		const Error begin_error = _begin_frame(true);
-		if (begin_error != OK) {
-			const bool has_fatal_error = frame_issue_error.load() != OK ||
-					frame_wait_error.load() != OK ||
-					frame_wait_native_code_valid.load();
-			if (has_fatal_error) {
-				ERR_PRINT("A frame fence wait failed; readback recording is suspended.");
-			} else {
-				ERR_PRINT(vformat("Frame advance is still pending (error=%d); readback recording is temporarily busy.", int(begin_error)));
-			}
-			return begin_error;
-		}
-	}
-	const Error recording_error = _recording_error();
-	if (recording_error != OK) {
+	const auto report_readback_suspension = [this](Error p_error, const char *p_busy_label) -> Error {
 		const bool has_fatal_error = frame_issue_error.load() != OK ||
 				frame_wait_error.load() != OK ||
 				frame_wait_native_code_valid.load();
 		if (has_fatal_error) {
 			ERR_PRINT("A frame fence wait failed; readback recording is suspended.");
 		} else {
-			ERR_PRINT(vformat("Frame advance or disposal maintenance is active (error=%d); readback recording is temporarily busy.", int(recording_error)));
+			ERR_PRINT(vformat("%s (error=%d); readback recording is temporarily busy.", p_busy_label, int(p_error)));
 		}
-		return recording_error;
+		return p_error;
+	};
+
+	const bool can_resume_frame = !frame_wait_draining.load() &&
+			frame_issue_error.load() == OK &&
+			frame_wait_error.load() == OK &&
+			!frame_wait_native_code_valid.load() &&
+			!draw_list.active && !compute_list.active && !raytracing_list.active &&
+			driver != nullptr && !frames.is_empty() && uint32_t(frame) < frames.size();
+
+	if (can_resume_frame) {
+		// Gap 1 (BUG-110): Finish an ordinary (non-production, non-selected) disposal continuation.
+		// Never steal a continuation owned by a production request, scene selection, or height selection.
+		if (native_disposal_active.load(std::memory_order_acquire) &&
+				!native_disposal_continuation.production_owner &&
+				!native_disposal_continuation.in_place_no_disposal &&
+				native_disposal_continuation.scene_selection.cell.is_null() &&
+				native_disposal_continuation.height_selection.is_null()) {
+			const Error maint_err = _native_disposal_maintenance();
+			if (maint_err != OK) {
+				return report_readback_suspension(maint_err, "Ordinary disposal maintenance is still pending");
+			}
+		}
+
+		// Gap 2 (BUG-110): Synchronously finish an already-closed qualification graph
+		// before rotating to the next frame and resuming _begin_frame(true).
+		if (!native_disposal_active.load(std::memory_order_acquire) &&
+				!qualification_frame_advance_pending.load() &&
+				frames[frame].qualification_graph_closed) {
+			Error end_err = _end_frame(false);
+			if (end_err == OK) {
+				end_err = _execute_frame(false);
+			}
+			if (end_err != OK) {
+				return report_readback_suspension(end_err, "Closed qualification frame flush is still pending");
+			}
+			frame = (frame + 1) % frames.size();
+			qualification_frame_advance_pending = true;
+		}
+
+		// BUG-92: Resume a pending ordinary frame advance via blocking _begin_frame(true).
+		if (qualification_frame_advance_pending.load() &&
+				!native_disposal_active.load(std::memory_order_acquire)) {
+			const Error begin_error = _begin_frame(true);
+			if (begin_error != OK) {
+				return report_readback_suspension(begin_error, "Frame advance is still pending");
+			}
+		}
+	}
+
+	const Error recording_error = _recording_error();
+	if (recording_error != OK) {
+		return report_readback_suspension(recording_error, "Frame advance or disposal maintenance is active");
 	}
 	return OK;
 }

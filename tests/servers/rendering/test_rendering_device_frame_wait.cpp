@@ -482,11 +482,13 @@ public:
 		CHECK(device.frame_issue_error == OK);
 		CHECK_FALSE(device.frame_wait_native_code_valid);
 
-		// Transient native_disposal_active busy before _begin_frame(true).
+		// Transient production-owned native_disposal_active busy before _begin_frame(true).
 		driver.native_observation = false;
 		device.frames[1].chain_reports.clear();
 		device.qualification_frame_advance_pending = false;
 		device.native_disposal_active = true;
+		device.native_disposal_continuation = {};
+		device.native_disposal_continuation.production_owner = reinterpret_cast<const GDExtensionDeviceExit::ProductionRequest *>(uintptr_t(0x1));
 		const uint32_t resets_before_disposal = driver.resets;
 		errors.reset();
 		ERR_PRINT_OFF;
@@ -496,6 +498,7 @@ public:
 		CHECK(errors.count == 1);
 		CHECK_FALSE(errors.has_substring("frame fence wait failed"));
 		CHECK(errors.has_substring("temporarily busy"));
+		device.native_disposal_continuation = {};
 		device.native_disposal_active = false;
 
 		// 3a. Pre-existing genuine fence wait failure must STILL fail closed with the fence error
@@ -529,6 +532,303 @@ public:
 		CHECK(device.qualification_frame_advance_pending);
 
 		// Teardown: clean up mock RIDs and detach fake driver.
+		device.vertex_buffer_owner.free(buf_rid);
+		device.texture_owner.free(tex_rid);
+		device.frames.clear();
+		device.main_queue = RenderingDeviceDriver::CommandQueueID();
+		device.present_queue = RenderingDeviceDriver::CommandQueueID();
+		device.driver = nullptr;
+	}
+	static void synchronous_readback_bug110_gaps() {
+		struct CapturedErrors {
+			uint32_t count = 0;
+			Vector<String> messages;
+			static void capture(void *p_data, const char *, const char *, int, const char *p_error, const char *p_rationale, bool, ErrorHandlerType p_type) {
+				if (p_type == ERR_HANDLER_ERROR) {
+					auto *self = static_cast<CapturedErrors *>(p_data);
+					++self->count;
+					String msg;
+					if (p_error && *p_error) {
+						msg += String::utf8(p_error);
+					}
+					if (p_rationale && *p_rationale) {
+						if (!msg.is_empty()) {
+							msg += " ";
+						}
+						msg += String::utf8(p_rationale);
+					}
+					self->messages.push_back(msg);
+				}
+			}
+			ErrorHandlerList handler{ &CapturedErrors::capture, this };
+			CapturedErrors() { add_error_handler(&handler); }
+			~CapturedErrors() { remove_error_handler(&handler); }
+			void reset() {
+				count = 0;
+				messages.clear();
+			}
+			bool has_substring(const String &p_sub) const {
+				for (const String &m : messages) {
+					if (m.contains(p_sub)) {
+						return true;
+					}
+				}
+				return false;
+			}
+		};
+
+		struct Bug110Driver : TransferTestDriverBase {
+			bool native_observation = false;
+			Error end_segment_result = OK;
+			uint32_t end_segment_calls = 0;
+			uint32_t fence_waits = 0;
+			uint32_t resets = 0;
+			uint32_t begins = 0;
+			uint32_t copies = 0;
+			uint32_t submissions = 0;
+			uint32_t freed_buffers = 0;
+			uint8_t staging_bytes[4] = { 0xA1, 0xB2, 0xC3, 0xD4 };
+			uint8_t tex_bytes[4] = { 0x1A, 0x2B, 0x3C, 0x4D };
+
+			bool native_call_observation_supported() const override { return native_observation; }
+			bool native_issue_bound(NativeIssueKind, uint32_t, uint32_t &r_bound) const override {
+				r_bound = 1;
+				return true;
+			}
+			Error fence_wait(FenceID) override {
+				++fence_waits;
+				return OK;
+			}
+			bool command_pool_reset(CommandPoolID) override {
+				++resets;
+				return true;
+			}
+			bool command_buffer_begin(CommandBufferID) override { return true; }
+			void begin_segment(uint32_t, uint32_t) override { ++begins; }
+			void command_buffer_end(CommandBufferID) override {}
+			void end_segment() override {}
+			Error end_segment_checked(bool) override {
+				++end_segment_calls;
+				return end_segment_result;
+			}
+			void command_pipeline_barrier(CommandBufferID, BitField<PipelineStageBits>, BitField<PipelineStageBits>, VectorView<MemoryAccessBarrier>, VectorView<BufferBarrier>, VectorView<TextureBarrier>, VectorView<AccelerationStructureBarrier>) override {}
+			void command_copy_buffer(CommandBufferID, BufferID, BufferID, VectorView<BufferCopyRegion>) override { ++copies; }
+			Error command_queue_execute_and_present(CommandQueueID, VectorView<SemaphoreID>, VectorView<CommandBufferID>, VectorView<SemaphoreID>, FenceID, VectorView<SwapChainID>) override {
+				++submissions;
+				QueueCallReport report;
+				report.issued = true;
+				record_queue_call_report(report);
+				return OK;
+			}
+			BufferID buffer_create(uint64_t, BitField<BufferUsageBits>, MemoryAllocationType, uint64_t) override { return BufferID(95); }
+			uint64_t buffer_get_allocation_size(BufferID) override { return 16; }
+			uint8_t *buffer_map(BufferID) override { return staging_bytes; }
+			void buffer_unmap(BufferID) override {}
+			void buffer_free(BufferID) override { ++freed_buffers; }
+			bool has_feature(Features) override { return false; }
+			uint64_t limit_get(Limit) override { return 1024; }
+			Vector<uint8_t> texture_get_data(TextureID, uint32_t) override {
+				Vector<uint8_t> out;
+				out.resize(4);
+				memcpy(out.ptrw(), tex_bytes, 4);
+				return out;
+			}
+		} driver;
+
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.is_main_instance = true;
+		device.main_queue = RenderingDeviceDriver::CommandQueueID(1);
+		device.present_queue = device.main_queue;
+		device.frames.resize(2);
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 2, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		for (uint32_t i = 0; i < 2; ++i) {
+			auto &f = device.frames[i];
+			f.command_pool = RenderingDeviceDriver::CommandPoolID(21 + i);
+			f.command_buffer = RenderingDeviceDriver::CommandBufferID(31 + i);
+			f.fence = RenderingDeviceDriver::FenceID(41 + i);
+			f.fence_signaled = false;
+			f.primary_command_buffer_begun = false;
+		}
+
+		RenderingDevice::Buffer src_buf;
+		src_buf.driver_id = RenderingDeviceDriver::BufferID(71);
+		src_buf.size = 4;
+		src_buf.usage = RenderingDeviceDriver::BUFFER_USAGE_VERTEX_BIT | RenderingDeviceDriver::BUFFER_USAGE_TRANSFER_FROM_BIT;
+		const RID buf_rid = device.vertex_buffer_owner.make_rid(src_buf);
+
+		RenderingDevice::Texture src_tex;
+		src_tex.driver_id = RenderingDeviceDriver::TextureID(81);
+		src_tex.width = 1;
+		src_tex.height = 1;
+		src_tex.depth = 1;
+		src_tex.layers = 1;
+		src_tex.mipmaps = 1;
+		src_tex.usage_flags = RenderingDevice::TEXTURE_USAGE_CAN_COPY_FROM_BIT | RenderingDevice::TEXTURE_USAGE_CPU_READ_BIT;
+		const RID tex_rid = device.texture_owner.make_rid(src_tex);
+
+		CapturedErrors errors;
+
+		// Gap 1: Ordinary (non-production, non-selected) native_disposal_active continuation
+		// must be completed by _prepare_synchronous_readback() so buffer_get_data() succeeds.
+		device.frame = 1;
+		device.frames[1].fence_signaled = false;
+		device.qualification_frame_advance_pending = true;
+		device.native_disposal_continuation = {};
+		device.native_disposal_continuation.serial = 1;
+		device.native_disposal_continuation.phase = 4;
+		device.native_disposal_continuation.target = 1;
+		device.native_disposal_active = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		const Vector<uint8_t> gap1_data = device.buffer_get_data(buf_rid, 0, 4);
+		ERR_PRINT_ON;
+		CHECK(errors.count == 0);
+		CHECK_FALSE(device.native_disposal_active);
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+		CHECK(device._recording_error() == OK);
+		REQUIRE(gap1_data.size() == 4);
+		CHECK(gap1_data[0] == 0xA1);
+		CHECK(gap1_data[1] == 0xB2);
+		CHECK(gap1_data[2] == 0xC3);
+		CHECK(gap1_data[3] == 0xD4);
+
+		// Gap 2a: Closed qualification graph without qualification_frame_advance_pending
+		// must synchronously finish (_end_frame(false) -> _execute_frame(false) -> rotate -> _begin_frame(true)).
+		device.frame = 0;
+		device.frames[0].primary_command_buffer_begun = true;
+		device.frames[0].fence_signaled = false;
+		device.frames[0].qualification_graph_closed = true;
+		device.frames[0].qualification_segment_closed = false;
+		device.frames[1].fence_signaled = true;
+		device.qualification_frame_advance_pending = false;
+		device.native_disposal_active = false;
+		const uint32_t end_seg_before = driver.end_segment_calls;
+		const uint32_t sub_before = driver.submissions;
+		errors.reset();
+		ERR_PRINT_OFF;
+		const Vector<uint8_t> gap2_buf = device.buffer_get_data(buf_rid, 0, 4);
+		ERR_PRINT_ON;
+		CHECK(errors.count == 0);
+		CHECK(device.frame == 1);
+		CHECK_FALSE(device.frames[1].qualification_graph_closed);
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+		CHECK(device._recording_error() == OK);
+		CHECK(driver.end_segment_calls > end_seg_before);
+		CHECK(driver.submissions >= sub_before + 2); // 1 for closed frame 0 + 1 for readback flush
+		REQUIRE(gap2_buf.size() == 4);
+		CHECK(gap2_buf[0] == 0xA1);
+		CHECK(gap2_buf[3] == 0xD4);
+
+		// Gap 2b: Same closed-graph resumption for texture_get_data().
+		device.frames[1].primary_command_buffer_begun = true;
+		device.frames[1].fence_signaled = false;
+		device.frames[1].qualification_graph_closed = true;
+		device.frames[1].qualification_segment_closed = false;
+		device.frames[0].fence_signaled = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		const Vector<uint8_t> gap2_tex = device.texture_get_data(tex_rid, 0);
+		ERR_PRINT_ON;
+		CHECK(errors.count == 0);
+		CHECK(device.frame == 0);
+		CHECK_FALSE(device.frames[0].qualification_graph_closed);
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+		REQUIRE(gap2_tex.size() == 4);
+		CHECK(gap2_tex[0] == 0x1A);
+		CHECK(gap2_tex[3] == 0x4D);
+
+		// Gap 2c: Transient ERR_BUSY from end_segment_checked() during closed-graph flush
+		// fails closed with non-fence busy diagnostic and preserves frame + closed state.
+		device.frames[0].primary_command_buffer_begun = true;
+		device.frames[0].fence_signaled = false;
+		device.frames[0].qualification_graph_closed = true;
+		device.frames[0].qualification_segment_closed = false;
+		driver.end_segment_result = ERR_BUSY;
+		errors.reset();
+		ERR_PRINT_OFF;
+		CHECK(device.buffer_get_data(buf_rid, 0, 4).is_empty());
+		ERR_PRINT_ON;
+		CHECK(errors.count == 1);
+		CHECK_FALSE(errors.has_substring("frame fence wait failed"));
+		CHECK(errors.has_substring("temporarily busy"));
+		CHECK(device.frame == 0);
+		CHECK(device.frames[0].qualification_graph_closed);
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+		driver.end_segment_result = OK;
+		device.frames[0].qualification_graph_closed = false;
+
+		// Non-theft invariants: production-owned, scene-selected, and height-selected
+		// native_disposal_active continuations MUST remain fail-closed without stealing!
+		// Prepare real witness & height range via RD's own factories while idle.
+		RID tmp_witness_storage;
+		NativeDisposalWitness scene_witness;
+		REQUIRE(device._native_disposal_storage_create(16, {}, tmp_witness_storage, scene_witness) == OK);
+		Ref<NativeHeightRange> height_range;
+		driver.native_observation = true;
+		REQUIRE(device._native_height_range_prepare(height_range) == OK);
+		driver.native_observation = false;
+		REQUIRE(height_range.is_valid());
+
+		const uint32_t resets_before_owned = driver.resets;
+		// (a) Production-owned continuation
+		device.native_disposal_continuation = {};
+		device.native_disposal_continuation.serial = 2;
+		device.native_disposal_continuation.phase = 4;
+		device.native_disposal_continuation.target = 0;
+		device.native_disposal_continuation.production_owner = reinterpret_cast<const GDExtensionDeviceExit::ProductionRequest *>(uintptr_t(0x1));
+		device.native_disposal_active = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		CHECK(device.buffer_get_data(buf_rid, 0, 4).is_empty());
+		CHECK(device.texture_get_data(tex_rid, 0).is_empty());
+		ERR_PRINT_ON;
+		CHECK(device.native_disposal_active);
+		CHECK(driver.resets == resets_before_owned);
+		CHECK(errors.count == 2);
+		CHECK_FALSE(errors.has_substring("frame fence wait failed"));
+		CHECK(errors.has_substring("temporarily busy"));
+
+		// (b) Scene-selected continuation
+		device.native_disposal_continuation = {};
+		device.native_disposal_continuation.serial = 3;
+		device.native_disposal_continuation.phase = 4;
+		device.native_disposal_continuation.target = 0;
+		device.native_disposal_continuation.scene_selection = scene_witness;
+		device.native_disposal_active = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		CHECK(device.buffer_get_data(buf_rid, 0, 4).is_empty());
+		ERR_PRINT_ON;
+		CHECK(device.native_disposal_active);
+		CHECK(driver.resets == resets_before_owned);
+		CHECK(errors.count == 1);
+		CHECK_FALSE(errors.has_substring("frame fence wait failed"));
+		CHECK(errors.has_substring("temporarily busy"));
+
+		// (c) Height-selected continuation
+		device.native_disposal_continuation = {};
+		device.native_disposal_continuation.serial = 4;
+		device.native_disposal_continuation.phase = 4;
+		device.native_disposal_continuation.target = 0;
+		device.native_disposal_continuation.height_selection = height_range;
+		device.native_disposal_active = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		CHECK(device.buffer_get_data(buf_rid, 0, 4).is_empty());
+		ERR_PRINT_ON;
+		CHECK(device.native_disposal_active);
+		CHECK(driver.resets == resets_before_owned);
+		CHECK(errors.count == 1);
+		CHECK_FALSE(errors.has_substring("frame fence wait failed"));
+		CHECK(errors.has_substring("temporarily busy"));
+
+		// Teardown
+		device.native_disposal_continuation = {};
+		device.native_disposal_active = false;
+		device.native_height_ranges.clear();
+		device.storage_buffer_owner.free(tmp_witness_storage);
 		device.vertex_buffer_owner.free(buf_rid);
 		device.texture_owner.free(tex_rid);
 		device.frames.clear();
@@ -1673,4 +1973,8 @@ TEST_CASE("[R01][FrameWait] actual fence Busy remains an error during ordinary f
 
 TEST_CASE("[RenderingDevice][BUG-92] synchronous readback resumes pending frame advance and distinguishes transient busy from real fence errors") {
 	TestFrameWaitAccess::synchronous_readback_resumes_pending_frame();
+}
+
+TEST_CASE("[RenderingDevice][BUG-110] synchronous readback closes ordinary disposal and closed-graph gaps without stealing owned continuations") {
+	TestFrameWaitAccess::synchronous_readback_bug110_gaps();
 }

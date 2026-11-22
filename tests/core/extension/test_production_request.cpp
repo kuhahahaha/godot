@@ -6473,9 +6473,10 @@ struct Access {
 		REQUIRE(fixture.reserve(attachment, single, 11, first) == OK);
 		const auto first_ref = GDExtensionProductionRequestRefV1{ Enrollment::INSTANCE, first->serial };
 		const uint64_t serial_before = registry.production_serials.next;
+		// BUG-111: 5B fits the 8B pool when idle, so exhaustion while first holds 4B is transient ERR_BUSY.
 		auto too_large = single;
 		too_large.retained_payload_bytes = 5;
-		CHECK(fixture.reserve(attachment, too_large, 12, refused) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(fixture.reserve(attachment, too_large, 12, refused) == ERR_BUSY);
 		CHECK(refused == nullptr);
 		CHECK(registry.production_serials.next == serial_before);
 		CHECK(first->attachment->children == 1);
@@ -6816,6 +6817,92 @@ struct Access {
 		CHECK(pool.uses_hwm < whole.resource_uses);
 		CHECK(pool.readbacks_hwm == 0);
 
+		REQUIRE(registry.production_close(attachment).native_error == OK);
+		CHECK(record.private_refs == private_before);
+		CHECK(device.refs == device_before);
+		CHECK(fixture.holder.production_children == 0);
+		CHECK(record.cleanup_reservations == 0);
+	}
+
+	static void byte_arena_oversize_vs_busy() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment fixture;
+		auto &registry = *fixture.registry;
+		auto &record = registry.records[0];
+		auto &device = registry.device_records[0];
+		const uint32_t private_before = record.private_refs, device_before = device.refs;
+
+		// Pool with 512B retained payload arena and 256B readback arena.
+		const GDExtensionProductionCapacityV1 whole = { production_dto_abi<GDExtensionProductionCapacityV1>(), 8, 16, 16, 32, 16, 128, 8, 16, 512, 256 };
+		GDExtensionProductionMetadataQuoteV1 quote = {};
+		REQUIRE(registry.production_quote(&Enrollment::ABI, { Enrollment::INSTANCE, 5 }, { Enrollment::INSTANCE, 9 }, { Enrollment::INSTANCE, 6 }, { Enrollment::INSTANCE, 7 }, &whole, &quote).native_error == OK);
+		GDExtensionProductionAttachmentRefV1 attachment = {};
+		GDExtensionProductionInstallationReportV1 installed = {};
+		REQUIRE(registry.production_accept(&Enrollment::ABI, { Enrollment::INSTANCE, 5 }, { Enrollment::INSTANCE, 9 }, { Enrollment::INSTANCE, 6 }, { Enrollment::INSTANCE, 7 }, { Enrollment::INSTANCE, 3 }, &quote, &attachment, &installed).native_error == OK);
+		REQUIRE(installed.state == GDEXTENSION_PRODUCTION_INSTALL_ACCEPTED_V1);
+
+		ProductionAttachment *pool_ptr = nullptr;
+		{
+			MutexLock lock(registry.mutex);
+			RenderingDevice *rd_ptr = nullptr;
+			REQUIRE(registry.production_attachment_locked(attachment, false, pool_ptr, rd_ptr) == OK);
+		}
+		REQUIRE(pool_ptr != nullptr);
+		// Reserve a 128B scene prefix at the start of the payload arena -> avail_payload = 384B.
+		pool_ptr->scene_prefix_bytes = 128;
+
+		// 1. Permanent oversize past avail_payload (400B <= 512B whole pool, but > 384B avail_payload)
+		//    must return ERR_PARAMETER_RANGE_ERROR.
+		GDExtensionProductionCapacityV1 cap_oversize = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 1, 1, 1, 1, 16, 0, 1, 400, 0 };
+		Request *rejected = nullptr;
+		CHECK(fixture.reserve(attachment, cap_oversize, 201, rejected) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(rejected == nullptr);
+
+		// 2. Transient retained_payload_bytes contention from an in-flight request
+		//    must return ERR_BUSY (never ERR_PARAMETER_RANGE_ERROR) and succeed once released.
+		GDExtensionProductionCapacityV1 cap_payload = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 1, 1, 1, 1, 16, 0, 1, 256, 0 };
+		Request *r1 = nullptr;
+		REQUIRE(fixture.reserve(attachment, cap_payload, 202, r1) == OK);
+		REQUIRE(r1 != nullptr);
+		CHECK(r1->payload_offset == 128u);
+
+		Request *r2 = nullptr;
+		CHECK(fixture.reserve(attachment, cap_payload, 203, r2) == ERR_BUSY);
+		CHECK(r2 == nullptr);
+
+		const GDExtensionProductionRequestRefV1 r1_ref = { Enrollment::INSTANCE, r1->serial };
+		REQUIRE(registry.production_cancel(r1_ref).native_error == OK);
+		REQUIRE(registry.production_release(r1_ref).native_error == OK);
+
+		REQUIRE(fixture.reserve(attachment, cap_payload, 203, r2) == OK);
+		REQUIRE(r2 != nullptr);
+		const GDExtensionProductionRequestRefV1 r2_ref = { Enrollment::INSTANCE, r2->serial };
+		REQUIRE(registry.production_cancel(r2_ref).native_error == OK);
+		REQUIRE(registry.production_release(r2_ref).native_error == OK);
+
+		// 3. Transient readback_bytes contention from an in-flight request
+		//    must return ERR_BUSY (never ERR_PARAMETER_RANGE_ERROR) and succeed once released.
+		GDExtensionProductionCapacityV1 cap_rb1 = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 1, 1, 1, 1, 16, 0, 1, 64, 192 };
+		GDExtensionProductionCapacityV1 cap_rb2 = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 1, 1, 1, 1, 16, 0, 1, 64, 128 };
+		Request *r3 = nullptr;
+		REQUIRE(fixture.reserve(attachment, cap_rb1, 204, r3) == OK);
+		REQUIRE(r3 != nullptr);
+
+		Request *r4 = nullptr;
+		CHECK(fixture.reserve(attachment, cap_rb2, 205, r4) == ERR_BUSY);
+		CHECK(r4 == nullptr);
+
+		const GDExtensionProductionRequestRefV1 r3_ref = { Enrollment::INSTANCE, r3->serial };
+		REQUIRE(registry.production_cancel(r3_ref).native_error == OK);
+		REQUIRE(registry.production_release(r3_ref).native_error == OK);
+
+		REQUIRE(fixture.reserve(attachment, cap_rb2, 205, r4) == OK);
+		REQUIRE(r4 != nullptr);
+		const GDExtensionProductionRequestRefV1 r4_ref = { Enrollment::INSTANCE, r4->serial };
+		REQUIRE(registry.production_cancel(r4_ref).native_error == OK);
+		REQUIRE(registry.production_release(r4_ref).native_error == OK);
+
+		pool_ptr->scene_prefix_bytes = 0;
 		REQUIRE(registry.production_close(attachment).native_error == OK);
 		CHECK(record.private_refs == private_before);
 		CHECK(device.refs == device_before);
@@ -23434,4 +23521,8 @@ TEST_CASE("[SceneTree][ProductionRequest][BatchedSetCreate][BUG-77A] follower ne
 
 TEST_CASE("[ProductionRequest][BUG-85B] pre-append frozen RT callback authorizes live auxiliary qualification buffers and uniform sets without weakening append validation") {
 	TestProductionRequest::Access::aux_pre_append_rt_authorization();
+}
+
+TEST_CASE("[ProductionRequest][BUG-111] byte-arena reservation separates permanent oversize from transient contention") {
+	TestProductionRequest::Access::byte_arena_oversize_vs_busy();
 }

@@ -1102,9 +1102,16 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 			}
 		}
 	};
-	uint64_t payload = 0, readback = 0;
-	if (!free_bytes(c.retained_payload_bytes, a.quote.capacity.retained_payload_bytes, false, payload) || !free_bytes(c.readback_bytes, a.quote.capacity.readback_bytes, true, readback)) {
+	const uint64_t avail_payload = a.quote.capacity.retained_payload_bytes >= a.scene_prefix_bytes
+			? (a.quote.capacity.retained_payload_bytes - a.scene_prefix_bytes)
+			: 0u;
+	if (c.retained_payload_bytes > avail_payload || c.readback_bytes > a.quote.capacity.readback_bytes) {
 		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	uint64_t payload = 0, readback = 0;
+	if (!free_bytes(c.retained_payload_bytes, a.quote.capacity.retained_payload_bytes, false, payload) ||
+			!free_bytes(c.readback_bytes, a.quote.capacity.readback_bytes, true, readback)) {
+		return ERR_BUSY;
 	}
 	// All validation and every finite slice succeed before publishing any cell.
 	auto extend_hwm = [](auto *cells, uint32_t &hwm, uint32_t need_hwm) {
