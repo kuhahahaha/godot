@@ -912,6 +912,8 @@ struct Access {
 		uint32_t imported_read_set_creates = 0, imported_read_set_frees = 0;
 		uint32_t imported_read_shader_creates = 0, imported_read_shader_frees = 0;
 		bool set_live = false;
+		bool multi_set_mode = false;
+		uint32_t multi_set_live = 0;
 		bool production_raster_factory = false, production_depth_live = false;
 		uint32_t production_fail_stage = 0, production_quiesce_stage = 0;
 		void (*production_factory_probe)(void *) = nullptr;
@@ -1288,7 +1290,11 @@ struct Access {
 				auxiliary_set_live = true;
 				return UniformSetID(182);
 			}
-			CHECK((shader == ShaderID(80) && set == 0 && pool == -1 && !set_live));
+			if (multi_set_mode) {
+				CHECK((shader == ShaderID(80) && set == 0 && pool == -1));
+			} else {
+				CHECK((shader == ShaderID(80) && set == 0 && pool == -1 && !set_live));
+			}
 			CHECK(uniforms.size() == 1);
 			if (uniforms.size() != 1) {
 				return {};
@@ -1300,6 +1306,10 @@ struct Access {
 			CHECK(uniforms[0].ids[0].id == 1);
 			++set_creates;
 			set_live = true;
+			if (multi_set_mode) {
+				++multi_set_live;
+				return UniformSetID(82 + set_creates);
+			}
 			return UniformSetID(82);
 		}
 		void uniform_set_free(UniformSetID id) override {
@@ -1320,6 +1330,15 @@ struct Access {
 				CHECK(auxiliary_set_live);
 				auxiliary_set_live = false;
 				++auxiliary_set_frees;
+				return;
+			}
+			if (multi_set_mode) {
+				CHECK((id.id > 82 && multi_set_live > 0));
+				++set_frees;
+				if (multi_set_live > 0) {
+					--multi_set_live;
+				}
+				set_live = multi_set_live > 0;
 				return;
 			}
 			CHECK((id == UniformSetID(82) && set_live));
@@ -4804,10 +4823,11 @@ struct Access {
 			auto &fixture = *test.setup.fixture;
 			auto &registry = fixture.registry;
 			using namespace GDExtensionDeviceExit;
+			fixture.driver.multi_set_mode = true;
 			OrdinalPlan plan;
-			plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 1, 2 + BATCH_SETS, 1 + BATCH_SETS, 1, 64, 0, 2 + BATCH_SETS, 8, 4 };
+			plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 1, 2 + BATCH_SETS, 2 + BATCH_SETS, 1, 64, 1, 2 + BATCH_SETS, 32, 32 };
 			plan.attachment_requests = 1;
-			test.initialized = fixture.initialize_owner(1, false, true, nullptr, nullptr, false, 1, false, nullptr, false, false, false, false, &plan, nullptr, true);
+			test.initialized = fixture.initialize_owner(1, false, true, +[](void *, ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *) {}, nullptr, false, 1, false, nullptr, false, false, false, false, &plan, nullptr, true);
 			if (test.initialized != OK) {
 				fixture.cleanup_owner();
 				test.done = true;
@@ -4823,8 +4843,8 @@ struct Access {
 			}
 			GDExtensionProductionActionV2 action = { 0, 10, 0, 0, GDEXTENSION_PRODUCTION_DISPATCH_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
 			GDExtensionProductionResourceV1 resources[2 + BATCH_SETS] = {};
-			resources[0] = { GDEXTENSION_PRODUCTION_UNIT_V1, 0, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 0, 0, 0 };
-			resources[1] = { GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 16, uint64_t(RDD::BUFFER_USAGE_STORAGE_BIT) };
+			resources[0] = { GDEXTENSION_PRODUCTION_UNIT_V1, 4, 5, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 6, 0, 0 };
+			resources[1] = { GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 16, 0 };
 			for (uint32_t i = 0; i < BATCH_SETS; ++i) {
 				resources[2 + i] = { GDEXTENSION_PRODUCTION_SET_V1, 2 + i, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 0, 0 };
 			}
