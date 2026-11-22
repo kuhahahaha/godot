@@ -1001,7 +1001,7 @@ public:
 	NS::SharedPtr<MTL::DepthStencilState> depth_stencil;
 	SampleCount sample_count = SampleCount1;
 
-	struct {
+	struct RasterState {
 		MTL::CullMode cull_mode = MTL::CullModeNone;
 		MTL::TriangleFillMode fill_mode = MTL::TriangleFillModeFill;
 		MTL::DepthClipMode clip_mode = MTL::DepthClipModeClip;

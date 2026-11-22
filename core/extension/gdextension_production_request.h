@@ -351,6 +351,10 @@ class ProductionResourceSlot {
 	uint32_t imported_unit_slot = UINT32_MAX;
 	uint32_t shader_set = UINT32_MAX;
 	uint32_t first_binding = UINT32_MAX, binding_count = 0;
+	// Per-resource O(1) last-writer hazard tracker within the active compute list.
+	uint32_t last_dispatch_write_epoch = 0;
+	uint64_t last_dispatch_write_begin = 0;
+	uint64_t last_dispatch_write_end = 0;
 	bool imported = false;
 	bool scene_depth_set1 = false;
 	uint32_t scene_depth_lease_count = 0;
@@ -858,6 +862,7 @@ class ProductionRequest {
 	}
 	bool frozen = false, cancelled = false, effects_pending = false;
 	bool compute_list_open = false;
+	uint32_t dispatch_barrier_epoch = 1;
 	bool draw_list_open = false;
 	bool raster_started = false;
 	// Monotonic across every control; empty later RECORDs cannot erase effects.

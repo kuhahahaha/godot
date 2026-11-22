@@ -182,15 +182,29 @@ private:
 		uint32_t live = 0;
 	};
 
+	struct RecycledBuffer {
+		uint64_t length = 0;
+		MTL::ResourceOptions options = 0;
+		MetalBuffer buffer;
+	};
+
+	static constexpr uint32_t MAX_RECYCLED_BUFFERS_PER_POOL = 64;
+	static uint64_t _max_recycled_bytes(uint32_t p_pool);
+
 	struct Pool {
 		SpinLock mutex;
 		LocalVector<Block> blocks;
 		LocalVector<MTL::Heap *> dedicated_heaps; // Owned (+1) refs, for get_heaps enumeration.
+		LocalVector<RecycledBuffer> recycled_buffers;
+		uint64_t recycled_bytes = 0;
 #ifdef DEBUG_ENABLED
 		MetalAllocatorStats::Pool stats;
 #endif
 		uint32_t empty_blocks = 0;
 	};
+
+	std::atomic<uint64_t> buffer_recycle_hits{ 0 };
+	static std::atomic<uint64_t> total_buffer_recycle_hits;
 
 	MTL::Device *device = nullptr;
 	Pool pools[POOL_COUNT];
@@ -222,6 +236,8 @@ public:
 	void free_texture(MetalTexture &p_texture) override;
 	uint64_t get_heaps(LocalVector<MTL::Heap *> &r_heaps) override;
 	uint64_t get_heap_generation() const override;
+	uint64_t get_buffer_recycle_hits() const { return buffer_recycle_hits.load(std::memory_order_relaxed); }
+	static uint64_t get_total_buffer_recycle_hits() { return total_buffer_recycle_hits.load(std::memory_order_relaxed); }
 #ifdef DEBUG_ENABLED
 	void get_stats(MetalAllocatorStats &r_stats) override;
 #endif

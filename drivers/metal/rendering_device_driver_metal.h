@@ -150,6 +150,130 @@ protected:
 	// DEV: When true, attempting to create a pipeline will fail if it cannot use the archive.
 	bool archive_fail_on_miss = false;
 
+	// In-memory PSO caches keyed by immutable pipeline state so repeated
+	// render_pipeline_create / compute_pipeline_create calls (e.g. per-frame
+	// external particle output slot leases) reuse compiled MTL::*PipelineState
+	// and MTL::DepthStencilState objects without invoking Metal compilation or
+	// binary archive serialization. Evicted deterministically on shader_free,
+	// vertex_format_free, and driver teardown.
+	struct PipelineSpecConstKey {
+		uint32_t constant_id = 0;
+		uint32_t type = 0;
+		uint32_t bits = 0;
+
+		bool operator==(const PipelineSpecConstKey &p_rhs) const {
+			return constant_id == p_rhs.constant_id && type == p_rhs.type && bits == p_rhs.bits;
+		}
+	};
+
+	struct RenderPipelineBlendAttachmentKey {
+		int32_t slot = -1;
+		uint8_t enable_blend = 0;
+		uint8_t src_color = 0;
+		uint8_t dst_color = 0;
+		uint8_t color_op = 0;
+		uint8_t src_alpha = 0;
+		uint8_t dst_alpha = 0;
+		uint8_t alpha_op = 0;
+		uint8_t write_mask = 0;
+
+		bool operator==(const RenderPipelineBlendAttachmentKey &p_rhs) const {
+			return slot == p_rhs.slot && enable_blend == p_rhs.enable_blend &&
+					src_color == p_rhs.src_color && dst_color == p_rhs.dst_color && color_op == p_rhs.color_op &&
+					src_alpha == p_rhs.src_alpha && dst_alpha == p_rhs.dst_alpha && alpha_op == p_rhs.alpha_op &&
+					write_mask == p_rhs.write_mask;
+		}
+	};
+
+	struct RenderPipelineCacheKey {
+		uint64_t shader_id = 0;
+		uint64_t vertex_format_id = 0;
+		uint32_t render_primitive = 0;
+		uint32_t dynamic_state = 0;
+		uint32_t color_format_count = 0;
+		uint16_t color_formats[MAX_COLOR_ATTACHMENT_COUNT] = {};
+		uint16_t depth_format = 0;
+		uint16_t stencil_format = 0;
+		uint32_t raster_flags = 0;
+		uint32_t cull_mode = 0;
+		uint32_t front_face = 0;
+		uint32_t depth_bias_constant_bits = 0;
+		uint32_t depth_bias_slope_bits = 0;
+		uint32_t depth_bias_clamp_bits = 0;
+		uint32_t patch_control_points = 0;
+		uint32_t sample_count = 1;
+		uint32_t msaa_flags = 0;
+		uint32_t depth_stencil_flags = 0;
+		uint32_t depth_compare_op = 0;
+		uint32_t front_fail = 0;
+		uint32_t front_pass = 0;
+		uint32_t front_depth_fail = 0;
+		uint32_t front_compare = 0;
+		uint32_t front_compare_mask = 0;
+		uint32_t front_write_mask = 0;
+		uint32_t front_reference = 0;
+		uint32_t back_fail = 0;
+		uint32_t back_pass = 0;
+		uint32_t back_depth_fail = 0;
+		uint32_t back_compare = 0;
+		uint32_t back_compare_mask = 0;
+		uint32_t back_write_mask = 0;
+		uint32_t back_reference = 0;
+		uint32_t blend_const_bits[4] = {};
+		LocalVector<RenderPipelineBlendAttachmentKey> blend_attachments;
+		LocalVector<PipelineSpecConstKey> spec_constants;
+		uint32_t cached_hash = 0;
+
+		uint32_t hash() const { return cached_hash; }
+		bool operator==(const RenderPipelineCacheKey &p_rhs) const;
+	};
+
+	struct RenderPipelineCacheKeyHasher {
+		static _FORCE_INLINE_ uint32_t hash(const RenderPipelineCacheKey &p_key) {
+			return p_key.cached_hash;
+		}
+	};
+
+	struct RenderPipelineCacheEntry {
+		NS::SharedPtr<MTL::RenderPipelineState> state;
+		NS::SharedPtr<MTL::DepthStencilState> depth_stencil;
+		SampleCount sample_count = SampleCount1;
+		MDRenderPipeline::RasterState raster_state;
+	};
+
+	struct ComputePipelineCacheKey {
+		uint64_t shader_id = 0;
+		LocalVector<PipelineSpecConstKey> spec_constants;
+		uint32_t cached_hash = 0;
+
+		uint32_t hash() const { return cached_hash; }
+		bool operator==(const ComputePipelineCacheKey &p_rhs) const;
+	};
+
+	struct ComputePipelineCacheKeyHasher {
+		static _FORCE_INLINE_ uint32_t hash(const ComputePipelineCacheKey &p_key) {
+			return p_key.cached_hash;
+		}
+	};
+
+	struct ComputePipelineCacheEntry {
+		NS::SharedPtr<MTL::ComputePipelineState> state;
+	};
+
+	static constexpr uint32_t MAX_RENDER_PSO_CACHE_ENTRIES = 1024;
+	static constexpr uint32_t MAX_COMPUTE_PSO_CACHE_ENTRIES = 512;
+	Mutex pipeline_state_cache_mutex;
+	HashMap<RenderPipelineCacheKey, RenderPipelineCacheEntry, RenderPipelineCacheKeyHasher> render_pso_cache;
+	HashMap<ComputePipelineCacheKey, ComputePipelineCacheEntry, ComputePipelineCacheKeyHasher> compute_pso_cache;
+	std::atomic<uint64_t> render_pso_cache_hits{ 0 };
+	std::atomic<uint64_t> render_pso_cache_misses{ 0 };
+	std::atomic<uint64_t> compute_pso_cache_hits{ 0 };
+	std::atomic<uint64_t> compute_pso_cache_misses{ 0 };
+	static std::atomic<uint64_t> total_render_pso_cache_hits;
+	static std::atomic<uint64_t> total_render_pso_cache_misses;
+	static std::atomic<uint64_t> total_compute_pso_cache_hits;
+	static std::atomic<uint64_t> total_compute_pso_cache_misses;
+
 #pragma mark - Copy Queue
 
 	Mutex copy_queue_mutex;
@@ -650,6 +774,15 @@ public:
 	_FORCE_INLINE_ uint32_t frame_count() const { return _frame_count; }
 	_FORCE_INLINE_ uint32_t frame_index() const { return _frame_index; }
 	_FORCE_INLINE_ uint32_t frames_drawn() const { return _frames_drawn; }
+
+	uint64_t get_render_pso_cache_hits() const { return render_pso_cache_hits.load(std::memory_order_relaxed); }
+	uint64_t get_render_pso_cache_misses() const { return render_pso_cache_misses.load(std::memory_order_relaxed); }
+	uint64_t get_compute_pso_cache_hits() const { return compute_pso_cache_hits.load(std::memory_order_relaxed); }
+	uint64_t get_compute_pso_cache_misses() const { return compute_pso_cache_misses.load(std::memory_order_relaxed); }
+	static uint64_t get_total_render_pso_cache_hits() { return total_render_pso_cache_hits.load(std::memory_order_relaxed); }
+	static uint64_t get_total_render_pso_cache_misses() { return total_render_pso_cache_misses.load(std::memory_order_relaxed); }
+	static uint64_t get_total_compute_pso_cache_hits() { return total_compute_pso_cache_hits.load(std::memory_order_relaxed); }
+	static uint64_t get_total_compute_pso_cache_misses() { return total_compute_pso_cache_misses.load(std::memory_order_relaxed); }
 
 private:
 	/*********************/

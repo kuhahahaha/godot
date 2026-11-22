@@ -855,40 +855,72 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 			// one compute list.  The graph does not infer a storage dependency
 			// from the sealed ANGE use rows, so a write in an earlier dispatch can
 			// otherwise remain invisible to a later read (the initial admission
-			// dispatch is the first real instance of this).  Insert the native
-			// barrier only for an actual overlapping storage write->use edge; do
-			// not split unrelated dispatches or alter the request's list contract.
-			auto has_prior_storage_write = [&](uint32_t resource_slot, uint64_t offset, uint64_t bytes) {
-				auto overlaps = [](uint64_t lhs_offset, uint64_t lhs_bytes, uint64_t rhs_offset, uint64_t rhs_bytes) {
-					return lhs_bytes && rhs_bytes && (lhs_offset <= rhs_offset ? rhs_offset - lhs_offset < lhs_bytes : lhs_offset - rhs_offset < rhs_bytes);
-				};
-				for (uint32_t prior_index = 0; prior_index < index; ++prior_index) {
-					const auto &prior = request.actions[prior_index];
-					if (prior.request != &request || prior.declaration.action_kind != GDEXTENSION_PRODUCTION_DISPATCH_V1 || !prior.prepared) {
+			// dispatch is the first real instance of this).  Track the last-writer
+			// byte span per resource slot in O(1) for the active barrier epoch and
+			// insert the native barrier only on an overlapping write->use edge.
+			auto range_end = [](uint64_t p_offset, uint64_t p_bytes) -> uint64_t {
+				return p_bytes > UINT64_MAX - p_offset ? UINT64_MAX : p_offset + p_bytes;
+			};
+			auto bump_dispatch_epoch = [&]() {
+				if (++request.dispatch_barrier_epoch == 0) {
+					for (uint32_t r = 0; r < request.resource_count; ++r) {
+						request.resources[r].last_dispatch_write_epoch = 0;
+					}
+					request.dispatch_barrier_epoch = 1;
+				}
+			};
+			if (!continuing_compute_list) {
+				bump_dispatch_epoch();
+			} else {
+				bool needs_barrier = false;
+				const uint32_t epoch = request.dispatch_barrier_epoch;
+				for (uint32_t use_index = 0; use_index < action.declaration.use_count; ++use_index) {
+					const auto &use = request.uses[action.declaration.first_use + use_index].declaration;
+					if (!use.byte_size || use.resource_slot >= request.resource_count) {
 						continue;
 					}
-					for (uint32_t use_index = 0; use_index < prior.declaration.use_count; ++use_index) {
-						const auto &use = request.uses[prior.declaration.first_use + use_index].declaration;
-						if (use.resource_slot != resource_slot ||
-							(use.access != GDEXTENSION_PRODUCTION_WRITE_V1 && use.access != GDEXTENSION_PRODUCTION_READ_WRITE_V1 && use.access != GDEXTENSION_PRODUCTION_ATOMIC_V1) ||
-							!overlaps(use.byte_offset, use.byte_size, offset, bytes)) {
-							continue;
-						}
-						return true;
+					const auto &res = request.resources[use.resource_slot];
+					if (res.last_dispatch_write_epoch != epoch) {
+						continue;
+					}
+					const uint64_t use_begin = use.byte_offset;
+					const uint64_t use_end = range_end(use.byte_offset, use.byte_size);
+					if (res.last_dispatch_write_begin < use_end && use_begin < res.last_dispatch_write_end) {
+						needs_barrier = true;
+						break;
 					}
 				}
-				return false;
-			};
-			bool needs_barrier = false;
-			for (uint32_t use_index = 0; use_index < action.declaration.use_count; ++use_index) {
-				const auto &use = request.uses[action.declaration.first_use + use_index].declaration;
-				if (has_prior_storage_write(use.resource_slot, use.byte_offset, use.byte_size)) {
-					needs_barrier = true;
-					break;
+				if (needs_barrier) {
+					rd.compute_list_add_barrier(list);
+					bump_dispatch_epoch();
 				}
 			}
-			if (needs_barrier && continuing_compute_list) {
-				rd.compute_list_add_barrier(list);
+			{
+				const uint32_t epoch = request.dispatch_barrier_epoch;
+				for (uint32_t use_index = 0; use_index < action.declaration.use_count; ++use_index) {
+					const auto &use = request.uses[action.declaration.first_use + use_index].declaration;
+					if (!use.byte_size || use.resource_slot >= request.resource_count ||
+							(use.access != GDEXTENSION_PRODUCTION_WRITE_V1 &&
+									use.access != GDEXTENSION_PRODUCTION_READ_WRITE_V1 &&
+									use.access != GDEXTENSION_PRODUCTION_ATOMIC_V1)) {
+						continue;
+					}
+					auto &res = request.resources[use.resource_slot];
+					const uint64_t write_begin = use.byte_offset;
+					const uint64_t write_end = range_end(use.byte_offset, use.byte_size);
+					if (res.last_dispatch_write_epoch != epoch) {
+						res.last_dispatch_write_epoch = epoch;
+						res.last_dispatch_write_begin = write_begin;
+						res.last_dispatch_write_end = write_end;
+					} else {
+						if (write_begin < res.last_dispatch_write_begin) {
+							res.last_dispatch_write_begin = write_begin;
+						}
+						if (write_end > res.last_dispatch_write_end) {
+							res.last_dispatch_write_end = write_end;
+						}
+					}
+				}
 			}
 			rd.compute_list_bind_compute_pipeline(list, pipeline);
 			for (uint32_t i = 0; i < dispatch.set_count; ++i) {

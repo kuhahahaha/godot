@@ -391,5 +391,15 @@ public:
 	~RendererSceneRenderRD();
 
 private:
+	struct CachedParticleDepthSlice {
+		RID source_texture;
+		RID slice_texture;
+		uint32_t width = 0;
+		uint32_t height = 0;
+		RD::DataFormat format = RD::DATA_FORMAT_MAX;
+		RD::TextureType texture_type = RD::TEXTURE_TYPE_MAX;
+		uint32_t array_layers = 0;
+	};
+	CachedParticleDepthSlice cached_particle_depth_slice;
 	SafeNumeric<uint64_t> late_particle_phase_dispatches{ 0 };
 };

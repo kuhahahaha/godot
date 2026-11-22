@@ -1200,6 +1200,18 @@ RDD::VertexFormatID RenderingDeviceDriverMetal::vertex_format_create(Span<Vertex
 }
 
 void RenderingDeviceDriverMetal::vertex_format_free(VertexFormatID p_vertex_format) {
+	{
+		MutexLock lock(pipeline_state_cache_mutex);
+		LocalVector<RenderPipelineCacheKey> stale_keys;
+		for (const KeyValue<RenderPipelineCacheKey, RenderPipelineCacheEntry> &kv : render_pso_cache) {
+			if (kv.key.vertex_format_id == p_vertex_format.id) {
+				stale_keys.push_back(kv.key);
+			}
+		}
+		for (const RenderPipelineCacheKey &key : stale_keys) {
+			render_pso_cache.erase(key);
+		}
+	}
 	MTL::VertexDescriptor *obj = reinterpret_cast<MTL::VertexDescriptor *>(p_vertex_format.id);
 	obj->release();
 }
@@ -1753,6 +1765,27 @@ bool RenderingDeviceDriverMetal::shader_retire_ready_nonblocking(ShaderID p_shad
 }
 
 void RenderingDeviceDriverMetal::shader_free(ShaderID p_shader) {
+	{
+		MutexLock lock(pipeline_state_cache_mutex);
+		LocalVector<RenderPipelineCacheKey> stale_render_keys;
+		for (const KeyValue<RenderPipelineCacheKey, RenderPipelineCacheEntry> &kv : render_pso_cache) {
+			if (kv.key.shader_id == p_shader.id) {
+				stale_render_keys.push_back(kv.key);
+			}
+		}
+		for (const RenderPipelineCacheKey &key : stale_render_keys) {
+			render_pso_cache.erase(key);
+		}
+		LocalVector<ComputePipelineCacheKey> stale_compute_keys;
+		for (const KeyValue<ComputePipelineCacheKey, ComputePipelineCacheEntry> &kv : compute_pso_cache) {
+			if (kv.key.shader_id == p_shader.id) {
+				stale_compute_keys.push_back(kv.key);
+			}
+		}
+		for (const ComputePipelineCacheKey &key : stale_compute_keys) {
+			compute_pso_cache.erase(key);
+		}
+	}
 	MDShader *obj = (MDShader *)p_shader.id;
 	delete obj;
 }
@@ -2578,6 +2611,100 @@ static_assert(ENUM_MEMBERS_EQUAL(RDD::BLEND_OP_REVERSE_SUBTRACT, MTL::BlendOpera
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BLEND_OP_MINIMUM, MTL::BlendOperationMin));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BLEND_OP_MAXIMUM, MTL::BlendOperationMax));
 
+std::atomic<uint64_t> RenderingDeviceDriverMetal::total_render_pso_cache_hits{ 0 };
+std::atomic<uint64_t> RenderingDeviceDriverMetal::total_render_pso_cache_misses{ 0 };
+std::atomic<uint64_t> RenderingDeviceDriverMetal::total_compute_pso_cache_hits{ 0 };
+std::atomic<uint64_t> RenderingDeviceDriverMetal::total_compute_pso_cache_misses{ 0 };
+
+static _FORCE_INLINE_ uint32_t _metal_float_bits(float p_val) {
+	uint32_t bits = 0;
+	memcpy(&bits, &p_val, sizeof(bits));
+	return bits;
+}
+
+static _FORCE_INLINE_ uint32_t _metal_spec_const_bits(const RDD::PipelineSpecializationConstant &p_sc) {
+	switch (p_sc.type) {
+		case RDD::PIPELINE_SPECIALIZATION_CONSTANT_TYPE_BOOL:
+			return p_sc.bool_value ? 1u : 0u;
+		case RDD::PIPELINE_SPECIALIZATION_CONSTANT_TYPE_FLOAT:
+			return _metal_float_bits(p_sc.float_value);
+		case RDD::PIPELINE_SPECIALIZATION_CONSTANT_TYPE_INT:
+		default:
+			return p_sc.int_value;
+	}
+}
+
+bool RenderingDeviceDriverMetal::RenderPipelineCacheKey::operator==(const RenderPipelineCacheKey &p_rhs) const {
+	if (cached_hash != p_rhs.cached_hash ||
+			shader_id != p_rhs.shader_id ||
+			vertex_format_id != p_rhs.vertex_format_id ||
+			render_primitive != p_rhs.render_primitive ||
+			dynamic_state != p_rhs.dynamic_state ||
+			color_format_count != p_rhs.color_format_count ||
+			depth_format != p_rhs.depth_format ||
+			stencil_format != p_rhs.stencil_format ||
+			raster_flags != p_rhs.raster_flags ||
+			cull_mode != p_rhs.cull_mode ||
+			front_face != p_rhs.front_face ||
+			depth_bias_constant_bits != p_rhs.depth_bias_constant_bits ||
+			depth_bias_slope_bits != p_rhs.depth_bias_slope_bits ||
+			depth_bias_clamp_bits != p_rhs.depth_bias_clamp_bits ||
+			patch_control_points != p_rhs.patch_control_points ||
+			sample_count != p_rhs.sample_count ||
+			msaa_flags != p_rhs.msaa_flags ||
+			depth_stencil_flags != p_rhs.depth_stencil_flags ||
+			depth_compare_op != p_rhs.depth_compare_op ||
+			front_fail != p_rhs.front_fail ||
+			front_pass != p_rhs.front_pass ||
+			front_depth_fail != p_rhs.front_depth_fail ||
+			front_compare != p_rhs.front_compare ||
+			front_compare_mask != p_rhs.front_compare_mask ||
+			front_write_mask != p_rhs.front_write_mask ||
+			front_reference != p_rhs.front_reference ||
+			back_fail != p_rhs.back_fail ||
+			back_pass != p_rhs.back_pass ||
+			back_depth_fail != p_rhs.back_depth_fail ||
+			back_compare != p_rhs.back_compare ||
+			back_compare_mask != p_rhs.back_compare_mask ||
+			back_write_mask != p_rhs.back_write_mask ||
+			back_reference != p_rhs.back_reference ||
+			memcmp(blend_const_bits, p_rhs.blend_const_bits, sizeof(blend_const_bits)) != 0 ||
+			blend_attachments.size() != p_rhs.blend_attachments.size() ||
+			spec_constants.size() != p_rhs.spec_constants.size()) {
+		return false;
+	}
+	for (uint32_t i = 0; i < color_format_count; ++i) {
+		if (color_formats[i] != p_rhs.color_formats[i]) {
+			return false;
+		}
+	}
+	for (uint32_t i = 0; i < blend_attachments.size(); ++i) {
+		if (!(blend_attachments[i] == p_rhs.blend_attachments[i])) {
+			return false;
+		}
+	}
+	for (uint32_t i = 0; i < spec_constants.size(); ++i) {
+		if (!(spec_constants[i] == p_rhs.spec_constants[i])) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool RenderingDeviceDriverMetal::ComputePipelineCacheKey::operator==(const ComputePipelineCacheKey &p_rhs) const {
+	if (cached_hash != p_rhs.cached_hash ||
+			shader_id != p_rhs.shader_id ||
+			spec_constants.size() != p_rhs.spec_constants.size()) {
+		return false;
+	}
+	for (uint32_t i = 0; i < spec_constants.size(); ++i) {
+		if (!(spec_constants[i] == p_rhs.spec_constants[i])) {
+			return false;
+		}
+	}
+	return true;
+}
+
 RDD::PipelineID RenderingDeviceDriverMetal::render_pipeline_create(
 		ShaderID p_shader,
 		VertexFormatID p_vertex_format,
@@ -2594,6 +2721,174 @@ RDD::PipelineID RenderingDeviceDriverMetal::render_pipeline_create(
 	MDRenderShader *shader = (MDRenderShader *)(p_shader.id);
 	MTL::VertexDescriptor *vert_desc = reinterpret_cast<MTL::VertexDescriptor *>(p_vertex_format.id);
 	MDRenderPass *pass = (MDRenderPass *)(p_render_pass.id);
+
+	// Build immutable cache key from all pipeline-defining inputs so repeated
+	// render_pipeline_create calls reuse compiled Metal PSO + DepthStencilState.
+	RenderPipelineCacheKey cache_key;
+	cache_key.shader_id = p_shader.id;
+	cache_key.vertex_format_id = p_vertex_format.id;
+	cache_key.render_primitive = uint32_t(p_render_primitive);
+	cache_key.dynamic_state = uint32_t(p_dynamic_state);
+	{
+		const MDSubpass &subpass = pass->subpasses[p_render_subpass];
+		cache_key.color_format_count = MIN<uint32_t>(subpass.color_references.size(), MAX_COLOR_ATTACHMENT_COUNT);
+		for (uint32_t i = 0; i < cache_key.color_format_count; ++i) {
+			const uint32_t attachment = subpass.color_references[i].attachment;
+			if (attachment != AttachmentReference::UNUSED) {
+				cache_key.color_formats[i] = uint16_t(pass->attachments[attachment].format);
+			}
+		}
+		if (subpass.depth_stencil_reference.attachment != AttachmentReference::UNUSED) {
+			const MDAttachment &a = pass->attachments[subpass.depth_stencil_reference.attachment];
+			if (a.type & MDAttachmentType::Depth) {
+				cache_key.depth_format = uint16_t(a.format);
+			}
+			if (a.type & MDAttachmentType::Stencil) {
+				cache_key.stencil_format = uint16_t(a.format);
+			}
+		}
+	}
+	cache_key.raster_flags =
+			(p_rasterization_state.discard_primitives ? 1u : 0u) |
+			(p_rasterization_state.enable_depth_clamp ? 2u : 0u) |
+			(p_rasterization_state.wireframe ? 4u : 0u) |
+			(p_rasterization_state.depth_bias_enabled ? 8u : 0u);
+	cache_key.cull_mode = uint32_t(p_rasterization_state.cull_mode);
+	cache_key.front_face = uint32_t(p_rasterization_state.front_face);
+	cache_key.depth_bias_constant_bits = _metal_float_bits(p_rasterization_state.depth_bias_constant_factor);
+	cache_key.depth_bias_slope_bits = _metal_float_bits(p_rasterization_state.depth_bias_slope_factor);
+	cache_key.depth_bias_clamp_bits = _metal_float_bits(p_rasterization_state.depth_bias_clamp);
+	cache_key.patch_control_points = p_rasterization_state.patch_control_points;
+	{
+		SampleCount resolved_samples = SampleCount1;
+		if (p_multisample_state.sample_count > TEXTURE_SAMPLES_1) {
+			resolved_samples = (*device_properties).find_nearest_supported_sample_count(p_multisample_state.sample_count);
+		}
+		cache_key.sample_count = uint32_t(resolved_samples);
+	}
+	cache_key.msaa_flags =
+			(p_multisample_state.enable_alpha_to_coverage ? 1u : 0u) |
+			(p_multisample_state.enable_alpha_to_one ? 2u : 0u);
+	{
+		const bool key_depth_enabled = p_depth_stencil_state.enable_depth_test && cache_key.depth_format != uint16_t(MTL::PixelFormatInvalid);
+		const bool key_stencil_enabled = p_depth_stencil_state.enable_stencil && cache_key.stencil_format != uint16_t(MTL::PixelFormatInvalid);
+		cache_key.depth_stencil_flags =
+				(key_depth_enabled ? 1u : 0u) |
+				(key_stencil_enabled ? 2u : 0u) |
+				(p_depth_stencil_state.enable_depth_write ? 4u : 0u);
+		if (key_depth_enabled || key_stencil_enabled) {
+			cache_key.depth_compare_op = uint32_t(p_depth_stencil_state.depth_compare_operator);
+		}
+		if (key_stencil_enabled) {
+			cache_key.front_fail = uint32_t(p_depth_stencil_state.front_op.fail);
+			cache_key.front_pass = uint32_t(p_depth_stencil_state.front_op.pass);
+			cache_key.front_depth_fail = uint32_t(p_depth_stencil_state.front_op.depth_fail);
+			cache_key.front_compare = uint32_t(p_depth_stencil_state.front_op.compare);
+			cache_key.front_compare_mask = p_depth_stencil_state.front_op.compare_mask;
+			cache_key.front_write_mask = p_depth_stencil_state.front_op.write_mask;
+			cache_key.front_reference = p_depth_stencil_state.front_op.reference;
+			cache_key.back_fail = uint32_t(p_depth_stencil_state.back_op.fail);
+			cache_key.back_pass = uint32_t(p_depth_stencil_state.back_op.pass);
+			cache_key.back_depth_fail = uint32_t(p_depth_stencil_state.back_op.depth_fail);
+			cache_key.back_compare = uint32_t(p_depth_stencil_state.back_op.compare);
+			cache_key.back_compare_mask = p_depth_stencil_state.back_op.compare_mask;
+			cache_key.back_write_mask = p_depth_stencil_state.back_op.write_mask;
+			cache_key.back_reference = p_depth_stencil_state.back_op.reference;
+		}
+	}
+	cache_key.blend_const_bits[0] = _metal_float_bits(p_blend_state.blend_constant.r);
+	cache_key.blend_const_bits[1] = _metal_float_bits(p_blend_state.blend_constant.g);
+	cache_key.blend_const_bits[2] = _metal_float_bits(p_blend_state.blend_constant.b);
+	cache_key.blend_const_bits[3] = _metal_float_bits(p_blend_state.blend_constant.a);
+	cache_key.blend_attachments.reserve(p_color_attachments.size());
+	for (uint32_t i = 0; i < p_color_attachments.size(); ++i) {
+		if (p_color_attachments[i] == ATTACHMENT_UNUSED) {
+			continue;
+		}
+		const PipelineColorBlendState::Attachment &bs = p_blend_state.attachments[i];
+		RenderPipelineBlendAttachmentKey bk;
+		bk.slot = p_color_attachments[i];
+		bk.enable_blend = bs.enable_blend ? 1u : 0u;
+		bk.src_color = uint8_t(bs.src_color_blend_factor);
+		bk.dst_color = uint8_t(bs.dst_color_blend_factor);
+		bk.color_op = uint8_t(bs.color_blend_op);
+		bk.src_alpha = uint8_t(bs.src_alpha_blend_factor);
+		bk.dst_alpha = uint8_t(bs.dst_alpha_blend_factor);
+		bk.alpha_op = uint8_t(bs.alpha_blend_op);
+		bk.write_mask = (bs.write_r ? 1u : 0u) | (bs.write_g ? 2u : 0u) | (bs.write_b ? 4u : 0u) | (bs.write_a ? 8u : 0u);
+		cache_key.blend_attachments.push_back(bk);
+	}
+	cache_key.spec_constants.reserve(p_specialization_constants.size());
+	for (uint32_t i = 0; i < p_specialization_constants.size(); ++i) {
+		PipelineSpecConstKey sk;
+		sk.constant_id = p_specialization_constants[i].constant_id;
+		sk.type = uint32_t(p_specialization_constants[i].type);
+		sk.bits = _metal_spec_const_bits(p_specialization_constants[i]);
+		cache_key.spec_constants.push_back(sk);
+	}
+	{
+		uint32_t h = hash_murmur3_one_64(cache_key.shader_id);
+		h = hash_murmur3_one_64(cache_key.vertex_format_id, h);
+		h = hash_murmur3_one_32(cache_key.render_primitive, h);
+		h = hash_murmur3_one_32(cache_key.dynamic_state, h);
+		h = hash_murmur3_one_32(cache_key.color_format_count, h);
+		if (cache_key.color_format_count > 0) {
+			h = hash_murmur3_buffer(cache_key.color_formats, cache_key.color_format_count * sizeof(cache_key.color_formats[0]), h);
+		}
+		h = hash_murmur3_one_32((uint32_t(cache_key.depth_format) << 16) | cache_key.stencil_format, h);
+		h = hash_murmur3_one_32(cache_key.raster_flags, h);
+		h = hash_murmur3_one_32((cache_key.cull_mode << 8) | cache_key.front_face, h);
+		h = hash_murmur3_one_32(cache_key.depth_bias_constant_bits, h);
+		h = hash_murmur3_one_32(cache_key.depth_bias_slope_bits, h);
+		h = hash_murmur3_one_32(cache_key.depth_bias_clamp_bits, h);
+		h = hash_murmur3_one_32(cache_key.patch_control_points, h);
+		h = hash_murmur3_one_32(cache_key.sample_count, h);
+		h = hash_murmur3_one_32(cache_key.msaa_flags, h);
+		h = hash_murmur3_one_32(cache_key.depth_stencil_flags, h);
+		h = hash_murmur3_one_32(cache_key.depth_compare_op, h);
+		if (cache_key.depth_stencil_flags & 2u) {
+			h = hash_murmur3_one_32(cache_key.front_fail, h);
+			h = hash_murmur3_one_32(cache_key.front_pass, h);
+			h = hash_murmur3_one_32(cache_key.front_depth_fail, h);
+			h = hash_murmur3_one_32(cache_key.front_compare, h);
+			h = hash_murmur3_one_32(cache_key.front_compare_mask, h);
+			h = hash_murmur3_one_32(cache_key.front_write_mask, h);
+			h = hash_murmur3_one_32(cache_key.front_reference, h);
+			h = hash_murmur3_one_32(cache_key.back_fail, h);
+			h = hash_murmur3_one_32(cache_key.back_pass, h);
+			h = hash_murmur3_one_32(cache_key.back_depth_fail, h);
+			h = hash_murmur3_one_32(cache_key.back_compare, h);
+			h = hash_murmur3_one_32(cache_key.back_compare_mask, h);
+			h = hash_murmur3_one_32(cache_key.back_write_mask, h);
+			h = hash_murmur3_one_32(cache_key.back_reference, h);
+		}
+		h = hash_murmur3_buffer(cache_key.blend_const_bits, sizeof(cache_key.blend_const_bits), h);
+		for (const RenderPipelineBlendAttachmentKey &bk : cache_key.blend_attachments) {
+			h = hash_murmur3_one_32(uint32_t(bk.slot), h);
+			h = hash_murmur3_one_32(uint32_t(bk.enable_blend) | (uint32_t(bk.src_color) << 8) | (uint32_t(bk.dst_color) << 16) | (uint32_t(bk.color_op) << 24), h);
+			h = hash_murmur3_one_32(uint32_t(bk.src_alpha) | (uint32_t(bk.dst_alpha) << 8) | (uint32_t(bk.alpha_op) << 16) | (uint32_t(bk.write_mask) << 24), h);
+		}
+		for (const PipelineSpecConstKey &sk : cache_key.spec_constants) {
+			h = hash_murmur3_one_32(sk.constant_id, h);
+			h = hash_murmur3_one_32(sk.type, h);
+			h = hash_murmur3_one_32(sk.bits, h);
+		}
+		cache_key.cached_hash = hash_fmix32(h);
+	}
+	{
+		MutexLock lock(pipeline_state_cache_mutex);
+		if (const RenderPipelineCacheEntry *cached = render_pso_cache.getptr(cache_key)) {
+			MDRenderPipeline *pipeline = new MDRenderPipeline();
+			pipeline->state = cached->state;
+			pipeline->depth_stencil = cached->depth_stencil;
+			pipeline->sample_count = cached->sample_count;
+			pipeline->raster_state = cached->raster_state;
+			pipeline->shader = shader;
+			render_pso_cache_hits.fetch_add(1, std::memory_order_relaxed);
+			total_render_pso_cache_hits.fetch_add(1, std::memory_order_relaxed);
+			return PipelineID(pipeline);
+		}
+	}
 
 	os_signpost_id_t reflect_id = os_signpost_id_make_with_pointer(LOG_INTERVALS, shader);
 	os_signpost_interval_begin(LOG_INTERVALS, reflect_id, "render_pipeline_create", "shader_name=%{public}s", shader->name.get_data());
@@ -2895,6 +3190,21 @@ RDD::PipelineID RenderingDeviceDriverMetal::render_pipeline_create(
 	ERR_FAIL_COND_V_MSG(error != nullptr, PipelineID(), String("error creating pipeline: ") + error->localizedDescription()->utf8String());
 	ERR_FAIL_COND_V_MSG(!pipeline->state, PipelineID(), "Failed to create render pipeline state");
 
+	render_pso_cache_misses.fetch_add(1, std::memory_order_relaxed);
+	total_render_pso_cache_misses.fetch_add(1, std::memory_order_relaxed);
+	{
+		MutexLock lock(pipeline_state_cache_mutex);
+		if (render_pso_cache.size() >= MAX_RENDER_PSO_CACHE_ENTRIES) {
+			render_pso_cache.clear();
+		}
+		RenderPipelineCacheEntry entry;
+		entry.state = pipeline->state;
+		entry.depth_stencil = pipeline->depth_stencil;
+		entry.sample_count = pipeline->sample_count;
+		entry.raster_state = pipeline->raster_state;
+		render_pso_cache.insert(std::move(cache_key), std::move(entry));
+	}
+
 	return PipelineID(pipeline);
 }
 
@@ -2936,6 +3246,33 @@ void RenderingDeviceDriverMetal::command_compute_dispatch_indirect(CommandBuffer
 
 RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) {
 	MDComputeShader *shader = (MDComputeShader *)(p_shader.id);
+
+	ComputePipelineCacheKey cache_key;
+	cache_key.shader_id = p_shader.id;
+	cache_key.spec_constants.reserve(p_specialization_constants.size());
+	uint32_t h = hash_murmur3_one_64(cache_key.shader_id);
+	for (uint32_t i = 0; i < p_specialization_constants.size(); ++i) {
+		PipelineSpecConstKey sk;
+		sk.constant_id = p_specialization_constants[i].constant_id;
+		sk.type = uint32_t(p_specialization_constants[i].type);
+		sk.bits = _metal_spec_const_bits(p_specialization_constants[i]);
+		h = hash_murmur3_one_32(sk.constant_id, h);
+		h = hash_murmur3_one_32(sk.type, h);
+		h = hash_murmur3_one_32(sk.bits, h);
+		cache_key.spec_constants.push_back(sk);
+	}
+	cache_key.cached_hash = hash_fmix32(h);
+	{
+		MutexLock lock(pipeline_state_cache_mutex);
+		if (const ComputePipelineCacheEntry *cached = compute_pso_cache.getptr(cache_key)) {
+			MDComputePipeline *pipeline = new MDComputePipeline(cached->state);
+			pipeline->compute_state.local = shader->local;
+			pipeline->shader = shader;
+			compute_pso_cache_hits.fetch_add(1, std::memory_order_relaxed);
+			total_compute_pso_cache_hits.fetch_add(1, std::memory_order_relaxed);
+			return PipelineID(pipeline);
+		}
+	}
 
 	os_signpost_id_t reflect_id = os_signpost_id_make_with_pointer(LOG_INTERVALS, shader);
 	os_signpost_interval_begin(LOG_INTERVALS, reflect_id, "compute_pipeline_create", "shader_name=%{public}s", shader->name.get_data());
@@ -2993,6 +3330,18 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 	}
 	ERR_FAIL_COND_V_MSG(error != nullptr, PipelineID(), String("error creating pipeline: ") + error->localizedDescription()->utf8String());
 	ERR_FAIL_COND_V_MSG(!state, PipelineID(), "Failed to create compute pipeline state");
+
+	compute_pso_cache_misses.fetch_add(1, std::memory_order_relaxed);
+	total_compute_pso_cache_misses.fetch_add(1, std::memory_order_relaxed);
+	{
+		MutexLock lock(pipeline_state_cache_mutex);
+		if (compute_pso_cache.size() >= MAX_COMPUTE_PSO_CACHE_ENTRIES) {
+			compute_pso_cache.clear();
+		}
+		ComputePipelineCacheEntry entry;
+		entry.state = state;
+		compute_pso_cache.insert(std::move(cache_key), std::move(entry));
+	}
 
 	MDComputePipeline *pipeline = new MDComputePipeline(state);
 	pipeline->compute_state.local = shader->local;
@@ -3643,6 +3992,11 @@ RenderingDeviceDriverMetal::RenderingDeviceDriverMetal(RenderingContextDriverMet
 }
 
 RenderingDeviceDriverMetal::~RenderingDeviceDriverMetal() {
+	{
+		MutexLock lock(pipeline_state_cache_mutex);
+		render_pso_cache.clear();
+		compute_pso_cache.clear();
+	}
 	pipeline_cache_free();
 	drain_completion_records();
 	for (KeyValue<SHA256Digest, ShaderCacheEntry *> &kv : _shader_cache) {

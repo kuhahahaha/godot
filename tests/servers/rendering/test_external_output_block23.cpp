@@ -44,7 +44,9 @@
 #include <limits>
 
 #if defined(METAL_ENABLED) && defined(MACOS_ENABLED)
+#include "drivers/metal/metal_allocator.h"
 #include "drivers/metal/rendering_context_driver_metal.h"
+#include "drivers/metal/rendering_device_driver_metal.h"
 #endif
 
 TEST_FORCE_LINK(test_external_output_block23)
@@ -323,6 +325,19 @@ TEST_CASE("[ExternalOutput][Block23] compute_list_dispatch guards missing or fre
 	const RID indirect_buf = rd.storage_buffer_create(16u, indirect_init, RD::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT);
 	REQUIRE(indirect_buf.is_valid());
 
+	// Flush initial buffer uploads before acquiring an immutable hold.
+	rd.submit();
+	rd.sync();
+
+	// Case 1: writable SSBO held immutable causes compute_list_bind_uniform_set to fail;
+	// subsequent dispatch / dispatch_indirect must return cleanly without dereferencing nullptr.
+	// Acquire the hold before creating the writable uniform set so native_immutable_hold_acquire
+	// does not reject the pre-existing writable dependent uniform set.
+	Vector<RID> roots;
+	roots.push_back(ssbo);
+	RD::NativeImmutableHold hold;
+	REQUIRE(rd.native_immutable_hold_acquire(roots, hold, 8u) == OK);
+
 	Vector<RD::Uniform> uniforms;
 	RD::Uniform u;
 	u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
@@ -331,17 +346,6 @@ TEST_CASE("[ExternalOutput][Block23] compute_list_dispatch guards missing or fre
 	uniforms.push_back(u);
 	const RID uniform_set = rd.uniform_set_create(uniforms, shader, 0);
 	REQUIRE(uniform_set.is_valid());
-
-	// Flush initial buffer uploads before acquiring an immutable hold.
-	rd.submit();
-	rd.sync();
-
-	// Case 1: writable SSBO held immutable causes compute_list_bind_uniform_set to fail;
-	// subsequent dispatch / dispatch_indirect must return cleanly without dereferencing nullptr.
-	Vector<RID> roots;
-	roots.push_back(ssbo);
-	RD::NativeImmutableHold hold;
-	REQUIRE(rd.native_immutable_hold_acquire(roots, hold, 8u) == OK);
 	ERR_PRINT_OFF;
 	{
 		RD::ComputeListID cl = rd.compute_list_begin();
@@ -390,6 +394,126 @@ TEST_CASE("[ExternalOutput][Block23] compute_list_dispatch guards missing or fre
 	rd.free_rid(ssbo);
 	rd.free_rid(pipeline);
 	rd.free_rid(shader);
+}
+
+TEST_CASE("[ExternalOutput][Block23] Metal driver render PSO cache reuses pipeline across consecutive lease frames and invalidates on shader recreation") {
+	REQUIRE(RenderingDevice::get_singleton() == nullptr);
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDevice rd;
+	REQUIRE(rd.initialize(&context) == OK);
+
+	static constexpr const char *kVertGlsl =
+			"#version 450\n"
+			"void main() {\n"
+			"    vec2 pos[3] = vec2[](vec2(-1.0, -1.0), vec2(3.0, -1.0), vec2(-1.0, 3.0));\n"
+			"    gl_Position = vec4(pos[gl_VertexIndex % 3], 0.0, 1.0);\n"
+			"}\n";
+	static constexpr const char *kFragGlsl =
+			"#version 450\n"
+			"layout(location = 0) out vec4 out_color;\n"
+			"void main() {\n"
+			"    out_color = vec4(1.0, 0.5, 0.25, 1.0);\n"
+			"}\n";
+
+	auto compile_render_shader = [&]() -> RID {
+		String err;
+		RD::ShaderStageSPIRVData vs;
+		vs.shader_stage = RD::SHADER_STAGE_VERTEX;
+		vs.spirv = rd.shader_compile_spirv_from_source(RD::SHADER_STAGE_VERTEX, String::utf8(kVertGlsl), RD::SHADER_LANGUAGE_GLSL, &err, false);
+		REQUIRE(!vs.spirv.is_empty());
+		RD::ShaderStageSPIRVData fs;
+		fs.shader_stage = RD::SHADER_STAGE_FRAGMENT;
+		fs.spirv = rd.shader_compile_spirv_from_source(RD::SHADER_STAGE_FRAGMENT, String::utf8(kFragGlsl), RD::SHADER_LANGUAGE_GLSL, &err, false);
+		REQUIRE(!fs.spirv.is_empty());
+		Vector<RD::ShaderStageSPIRVData> stages;
+		stages.push_back(vs);
+		stages.push_back(fs);
+		const RID s = rd.shader_create_from_spirv(stages);
+		REQUIRE(s.is_valid());
+		return s;
+	};
+
+	Vector<RD::AttachmentFormat> attachments;
+	RD::AttachmentFormat color_att;
+	color_att.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
+	color_att.samples = RD::TEXTURE_SAMPLES_1;
+	color_att.usage_flags = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
+	attachments.push_back(color_att);
+	const RD::FramebufferFormatID fb_fmt = rd.framebuffer_format_create(attachments);
+	REQUIRE(fb_fmt != RD::INVALID_FORMAT_ID);
+
+	const RID shader_gen1 = compile_render_shader();
+	const RD::PipelineRasterizationState raster;
+	const RD::PipelineMultisampleState msaa;
+	const RD::PipelineDepthStencilState ds;
+	const RD::PipelineColorBlendState blend = RD::PipelineColorBlendState::create_disabled(1);
+
+	const uint64_t hits_before = RenderingDeviceDriverMetal::get_total_render_pso_cache_hits();
+	const uint64_t misses_before = RenderingDeviceDriverMetal::get_total_render_pso_cache_misses();
+
+	// Frame 1 (lease_serial = 1): cold miss compiles MTL::RenderPipelineState once.
+	const RID pso_frame1 = rd.render_pipeline_create(shader_gen1, fb_fmt, RD::INVALID_FORMAT_ID, RD::RENDER_PRIMITIVE_TRIANGLES, raster, msaa, ds, blend);
+	REQUIRE(pso_frame1.is_valid());
+	CHECK(RenderingDeviceDriverMetal::get_total_render_pso_cache_misses() == misses_before + 1u);
+	CHECK(RenderingDeviceDriverMetal::get_total_render_pso_cache_hits() == hits_before);
+	rd.free_rid(pso_frame1);
+
+	// Frames 2..4 (monotonically increasing lease_serials): every new per-slot pipeline
+	// hits the Metal PSO cache without invoking newRenderPipelineState again.
+	for (uint32_t lease_serial = 2; lease_serial <= 4; ++lease_serial) {
+		const RID pso_next = rd.render_pipeline_create(shader_gen1, fb_fmt, RD::INVALID_FORMAT_ID, RD::RENDER_PRIMITIVE_TRIANGLES, raster, msaa, ds, blend);
+		REQUIRE(pso_next.is_valid());
+		rd.free_rid(pso_next);
+	}
+	CHECK(RenderingDeviceDriverMetal::get_total_render_pso_cache_misses() == misses_before + 1u);
+	CHECK(RenderingDeviceDriverMetal::get_total_render_pso_cache_hits() == hits_before + 3u);
+
+	// Material generation change (free old shader, create new shader): must invalidate
+	// the prior shader's cache entries and miss once before hitting again.
+	rd.free_rid(shader_gen1);
+	rd.submit();
+	rd.sync();
+
+	const RID shader_gen2 = compile_render_shader();
+	const RID pso_gen2_a = rd.render_pipeline_create(shader_gen2, fb_fmt, RD::INVALID_FORMAT_ID, RD::RENDER_PRIMITIVE_TRIANGLES, raster, msaa, ds, blend);
+	REQUIRE(pso_gen2_a.is_valid());
+	CHECK(RenderingDeviceDriverMetal::get_total_render_pso_cache_misses() == misses_before + 2u);
+	CHECK(RenderingDeviceDriverMetal::get_total_render_pso_cache_hits() == hits_before + 3u);
+	rd.free_rid(pso_gen2_a);
+
+	const RID pso_gen2_b = rd.render_pipeline_create(shader_gen2, fb_fmt, RD::INVALID_FORMAT_ID, RD::RENDER_PRIMITIVE_TRIANGLES, raster, msaa, ds, blend);
+	REQUIRE(pso_gen2_b.is_valid());
+	CHECK(RenderingDeviceDriverMetal::get_total_render_pso_cache_misses() == misses_before + 2u);
+	CHECK(RenderingDeviceDriverMetal::get_total_render_pso_cache_hits() == hits_before + 4u);
+	rd.free_rid(pso_gen2_b);
+	rd.free_rid(shader_gen2);
+	rd.submit();
+	rd.sync();
+}
+
+TEST_CASE("[ExternalOutput][Block23] Metal heap allocator recycles freed storage buffers across consecutive lease frames") {
+	REQUIRE(RenderingDevice::get_singleton() == nullptr);
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDevice rd;
+	REQUIRE(rd.initialize(&context) == OK);
+
+	const uint64_t recycle_before = MetalHeapAllocator::get_total_buffer_recycle_hits();
+	constexpr uint32_t kSlotBytes = 192u * 512u;
+
+	const RID buf1 = rd.storage_buffer_create(kSlotBytes);
+	REQUIRE(buf1.is_valid());
+	rd.free_rid(buf1);
+	rd.submit();
+	rd.sync();
+
+	const RID buf2 = rd.storage_buffer_create(kSlotBytes);
+	REQUIRE(buf2.is_valid());
+	CHECK(MetalHeapAllocator::get_total_buffer_recycle_hits() > recycle_before);
+	rd.free_rid(buf2);
+	rd.submit();
+	rd.sync();
 }
 #endif
 

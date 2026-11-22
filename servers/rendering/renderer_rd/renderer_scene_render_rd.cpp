@@ -2005,6 +2005,12 @@ void RendererSceneRenderRD::init() {
 }
 
 RendererSceneRenderRD::~RendererSceneRenderRD() {
+	if (cached_particle_depth_slice.slice_texture.is_valid()) {
+		if (RD *rd = RD::get_singleton(); rd && rd->texture_is_valid(cached_particle_depth_slice.slice_texture)) {
+			rd->free_rid(cached_particle_depth_slice.slice_texture);
+		}
+		cached_particle_depth_slice = CachedParticleDepthSlice();
+	}
 	if (forward_id_storage) {
 		memdelete(forward_id_storage);
 	}
@@ -2110,18 +2116,39 @@ void RendererSceneRenderRD::capture_particle_scene_depth_snapshot(RD *p_rd, cons
 	}
 
 	const RD::TextureFormat src_fmt = p_rd->texture_get_format(src_depth);
-	RID temp_depth_slice;
+	RID src_depth_view = src_depth;
 	if (src_fmt.format == RD::DATA_FORMAT_D32_SFLOAT_S8_UINT ||
 			src_fmt.format == RD::DATA_FORMAT_D24_UNORM_S8_UINT ||
 			src_fmt.format == RD::DATA_FORMAT_D16_UNORM_S8_UINT ||
 			src_fmt.texture_type != RD::TEXTURE_TYPE_2D ||
 			src_fmt.array_layers > 1u) {
-		temp_depth_slice = p_rd->texture_create_shared_from_slice(RD::TextureView(), src_depth, 0u, 0u, 1u, RD::TEXTURE_SLICE_2D);
-		if (temp_depth_slice.is_null()) {
-			return;
+		const bool cache_valid = cached_particle_depth_slice.slice_texture.is_valid() &&
+				cached_particle_depth_slice.source_texture == src_depth &&
+				cached_particle_depth_slice.width == src_fmt.width &&
+				cached_particle_depth_slice.height == src_fmt.height &&
+				cached_particle_depth_slice.format == src_fmt.format &&
+				cached_particle_depth_slice.texture_type == src_fmt.texture_type &&
+				cached_particle_depth_slice.array_layers == src_fmt.array_layers &&
+				p_rd->texture_is_valid(cached_particle_depth_slice.slice_texture);
+		if (!cache_valid) {
+			if (cached_particle_depth_slice.slice_texture.is_valid() && p_rd->texture_is_valid(cached_particle_depth_slice.slice_texture)) {
+				p_rd->free_rid(cached_particle_depth_slice.slice_texture);
+			}
+			cached_particle_depth_slice = CachedParticleDepthSlice();
+			const RID slice = p_rd->texture_create_shared_from_slice(RD::TextureView(), src_depth, 0u, 0u, 1u, RD::TEXTURE_SLICE_2D);
+			if (slice.is_null()) {
+				return;
+			}
+			cached_particle_depth_slice.source_texture = src_depth;
+			cached_particle_depth_slice.slice_texture = slice;
+			cached_particle_depth_slice.width = src_fmt.width;
+			cached_particle_depth_slice.height = src_fmt.height;
+			cached_particle_depth_slice.format = src_fmt.format;
+			cached_particle_depth_slice.texture_type = src_fmt.texture_type;
+			cached_particle_depth_slice.array_layers = src_fmt.array_layers;
 		}
+		src_depth_view = cached_particle_depth_slice.slice_texture;
 	}
-	const RID src_depth_view = temp_depth_slice.is_valid() ? temp_depth_slice : src_depth;
 
 	Ref<RendererRD::ParticlesCollisionSceneRD::DepthSnapshotGeneration> dst_gen;
 	if (collision_scene->prepare_viewport_depth_snapshot_target(
@@ -2131,9 +2158,6 @@ void RendererSceneRenderRD::capture_particle_scene_depth_snapshot(RD *p_rd, cons
 				rb->get_render_target(),
 				dst_gen) != OK ||
 			dst_gen.is_null()) {
-		if (temp_depth_slice.is_valid()) {
-			p_rd->free_rid(temp_depth_slice);
-		}
 		return;
 	}
 
@@ -2153,10 +2177,6 @@ void RendererSceneRenderRD::capture_particle_scene_depth_snapshot(RD *p_rd, cons
 			Rect2(),
 			1.0f,
 			/*p_bilinear_filtering=*/false);
-
-	if (temp_depth_slice.is_valid()) {
-		p_rd->free_rid(temp_depth_slice);
-	}
 
 	Transform3D cam_transform;
 	Projection cam_projection;
