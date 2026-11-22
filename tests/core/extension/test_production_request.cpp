@@ -49,6 +49,7 @@
 #include "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_collision_scene_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_data_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/utilities.h"
@@ -507,6 +508,56 @@ struct Access {
 			shader.code_decompressed_size = shader.code_compressed_bytes.size();
 			shaders.push_back(shader);
 		}
+		void initialize_mixed_set1(uint32_t p_storage_bytes) {
+			reflection_data.pipeline_type = RenderingDeviceCommons::PIPELINE_TYPE_COMPUTE;
+			reflection_data.stage_count = 1;
+			reflection_data.set_count = 2;
+			reflection_data.compute_local_size[0] = reflection_data.compute_local_size[1] = reflection_data.compute_local_size[2] = 1;
+			reflection_shader_stages.push_back(RenderingDeviceCommons::SHADER_STAGE_COMPUTE);
+			reflection_binding_set_uniforms_count.push_back(1);
+			reflection_binding_set_uniforms_count.push_back(3);
+			{
+				ReflectionBindingData b0;
+				b0.type = RenderingDeviceCommons::UNIFORM_TYPE_STORAGE_BUFFER;
+				b0.binding = 0;
+				b0.stages = 1u << RenderingDeviceCommons::SHADER_STAGE_COMPUTE;
+				b0.length = p_storage_bytes;
+				b0.writable = true;
+				reflection_binding_set_uniforms_data.push_back(b0);
+			}
+			{
+				ReflectionBindingData meta;
+				meta.type = RenderingDeviceCommons::UNIFORM_TYPE_STORAGE_BUFFER;
+				meta.binding = 0;
+				meta.stages = 1u << RenderingDeviceCommons::SHADER_STAGE_COMPUTE;
+				meta.length = sizeof(RendererRD::SceneDepthSnapshotMeta256);
+				meta.writable = false;
+				reflection_binding_set_uniforms_data.push_back(meta);
+			}
+			{
+				ReflectionBindingData tex;
+				tex.type = RenderingDeviceCommons::UNIFORM_TYPE_TEXTURE;
+				tex.binding = 1;
+				tex.stages = 1u << RenderingDeviceCommons::SHADER_STAGE_COMPUTE;
+				tex.length = 1;
+				tex.writable = false;
+				reflection_binding_set_uniforms_data.push_back(tex);
+			}
+			{
+				ReflectionBindingData trailing;
+				trailing.type = RenderingDeviceCommons::UNIFORM_TYPE_STORAGE_BUFFER;
+				trailing.binding = 2;
+				trailing.stages = 1u << RenderingDeviceCommons::SHADER_STAGE_COMPUTE;
+				trailing.length = p_storage_bytes;
+				trailing.writable = true;
+				reflection_binding_set_uniforms_data.push_back(trailing);
+			}
+			Shader shader;
+			shader.shader_stage = RenderingDeviceCommons::SHADER_STAGE_COMPUTE;
+			shader.code_compressed_bytes.push_back(42);
+			shader.code_decompressed_size = shader.code_compressed_bytes.size();
+			shaders.push_back(shader);
+		}
 	};
 	class UnitFormat : public RenderingShaderContainerFormat {
 	public:
@@ -627,6 +678,9 @@ struct Access {
 		uint8_t upload_memory[3][128] = {};
 		uint32_t upload_copies = 0;
 		uint8_t *buffer_map(BufferID id) override {
+			if (mixed_set1_mode && id == BufferID(710) && mixed_staging_live) {
+				return mixed_staging_bytes.ptrw();
+			}
 			if (alias_readback_mode) {
 				if (id == BufferID(500) && alias_upload_live) {
 					return alias_upload;
@@ -654,6 +708,9 @@ struct Access {
 			return buffer_map(id);
 		}
 		void buffer_unmap(BufferID id) override {
+			if (mixed_set1_mode && id == BufferID(710) && mixed_staging_live) {
+				return;
+			}
 			if (alias_readback_mode) {
 				CHECK(((id == BufferID(500) && alias_upload_live) || (id == BufferID(501) && alias_download_live)));
 				return;
@@ -661,6 +718,9 @@ struct Access {
 			CHECK((upload_mode && id == BufferID(2) && staging_live));
 		}
 		void command_copy_buffer(CommandBufferID, BufferID source, BufferID destination, VectorView<BufferCopyRegion> regions) override {
+			if (mixed_set1_mode) {
+				return;
+			}
 			if (material_profile_lane && destination == BufferID(600)) {
 				CHECK(Thread::get_caller_id() == execution_thread);
 				REQUIRE(source == BufferID(500));
@@ -721,6 +781,23 @@ struct Access {
 		}
 
 		BufferID buffer_create(uint64_t bytes, BitField<BufferUsageBits> usage, MemoryAllocationType allocation, uint64_t) override {
+			if (mixed_set1_mode) {
+				CHECK(Thread::get_caller_id() == execution_thread);
+				if (allocation == MEMORY_ALLOCATION_TYPE_CPU && usage.has_flag(BUFFER_USAGE_TRANSFER_FROM_BIT)) {
+					mixed_staging_bytes.resize(bytes);
+					mixed_staging_live = true;
+					return BufferID(710);
+				}
+				if (bytes == sizeof(RendererRD::SceneDepthSnapshotMeta256) && usage.has_flag(BUFFER_USAGE_STORAGE_BIT)) {
+					mixed_meta_live = true;
+					return BufferID(701);
+				}
+				CHECK((bytes == 16u && allocation == MEMORY_ALLOCATION_TYPE_GPU && usage.has_flag(BUFFER_USAGE_STORAGE_BIT) && mixed_storage_allocs < 2));
+				const uint32_t idx = mixed_storage_allocs++;
+				mixed_storage_live[idx] = true;
+				++allocations;
+				return BufferID(702 + idx);
+			}
 			if (material_profile_lane && usage.has_flag(BUFFER_USAGE_UNIFORM_BIT)) {
 				CHECK(Thread::get_caller_id() == execution_thread);
 				REQUIRE(bytes == 16);
@@ -797,6 +874,23 @@ struct Access {
 			return BufferID(1);
 		}
 		void buffer_free(BufferID id) override {
+			if (mixed_set1_mode) {
+				if (id == BufferID(710)) {
+					mixed_staging_live = false;
+					return;
+				}
+				if (id == BufferID(701)) {
+					CHECK(mixed_meta_live);
+					mixed_meta_live = false;
+					return;
+				}
+				CHECK((id == BufferID(702) || id == BufferID(703)));
+				const uint32_t idx = uint32_t(id.id - 702);
+				CHECK(mixed_storage_live[idx]);
+				mixed_storage_live[idx] = false;
+				++buffer_frees;
+				return;
+			}
 			if (material_profile_lane && id == BufferID(600)) {
 				CHECK(Thread::get_caller_id() == execution_thread);
 				REQUIRE(material_ubo_live);
@@ -886,11 +980,17 @@ struct Access {
 			if (production_raster_factory) {
 				return 0;
 			}
+			if (mixed_set1_mode) {
+				if (trait == API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT || trait == API_TRAIT_TEXTURE_DATA_ROW_PITCH_STEP) {
+					return 1;
+				}
+				return 0;
+			}
 			FAIL_CHECK("Unexpected source-service CPU driver trait");
 			return 0;
 		}
 		uint64_t limit_get(Limit p_limit) override {
-			if (production_raster_factory) {
+			if (production_raster_factory || mixed_set1_mode) {
 				return 8192;
 			}
 			// Immutable limits are queried by owner-side prepare before RT append.
@@ -914,6 +1014,21 @@ struct Access {
 		bool set_live = false;
 		bool multi_set_mode = false;
 		uint32_t multi_set_live = 0;
+		uint32_t fail_next_set_creates_busy = 0;
+		Error last_uniform_set_create_error = OK;
+		Error take_last_uniform_set_create_error() override {
+			const Error err = last_uniform_set_create_error;
+			last_uniform_set_create_error = OK;
+			return err;
+		}
+		bool mixed_set1_mode = false;
+		bool mixed_staging_live = false;
+		bool mixed_meta_live = false;
+		bool mixed_depth_tex_live = false;
+		bool mixed_fb_live = false;
+		uint32_t mixed_storage_allocs = 0;
+		bool mixed_storage_live[2] = {};
+		Vector<uint8_t> mixed_staging_bytes;
 		bool production_raster_factory = false, production_depth_live = false;
 		uint32_t production_fail_stage = 0, production_quiesce_stage = 0;
 		void (*production_factory_probe)(void *) = nullptr;
@@ -929,6 +1044,12 @@ struct Access {
 		Request *production_raster_request = nullptr;
 		Vector<uint32_t> production_free_order;
 		TextureID texture_create(const TextureFormat &value, const TextureView &view) override {
+			if (mixed_set1_mode) {
+				CHECK(Thread::get_caller_id() == execution_thread);
+				CHECK((value.format == DATA_FORMAT_R32_SFLOAT && value.width == 1 && value.height == 1));
+				mixed_depth_tex_live = true;
+				return TextureID(720);
+			}
 			CHECK(production_raster_factory);
 			CHECK(Thread::get_caller_id() == execution_thread);
 			CHECK(value.format == DATA_FORMAT_D32_SFLOAT);
@@ -948,6 +1069,11 @@ struct Access {
 			return TextureID(380);
 		}
 		void texture_free(TextureID id) override {
+			if (mixed_set1_mode && id == TextureID(720)) {
+				CHECK(mixed_depth_tex_live);
+				mixed_depth_tex_live = false;
+				return;
+			}
 			CHECK(production_raster_factory);
 			CHECK(id == TextureID(380));
 			CHECK(production_depth_live);
@@ -963,10 +1089,26 @@ struct Access {
 			production_free_order.push_back(1);
 		}
 		uint64_t texture_get_allocation_size(TextureID id) override {
+			if (mixed_set1_mode && id == TextureID(720)) {
+				return 4;
+			}
 			CHECK(id == TextureID(380));
 			return 128;
 		}
+		void texture_get_copyable_layout(TextureID id, const TextureSubresource &, TextureCopyableLayout *r_layout) override {
+			CHECK((mixed_set1_mode && id == TextureID(720) && r_layout != nullptr));
+			if (r_layout) {
+				r_layout->size = 4;
+				r_layout->row_pitch = 4;
+			}
+		}
+		void command_copy_buffer_to_texture(CommandBufferID, BufferID, TextureID, TextureLayout, VectorView<BufferTextureCopyRegion>) override {
+			CHECK(mixed_set1_mode);
+		}
 		BitField<TextureUsageBits> texture_get_usages_supported_by_format(DataFormat value, bool readable) override {
+			if (mixed_set1_mode && value == DATA_FORMAT_R32_SFLOAT) {
+				return TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_STORAGE_BIT | TEXTURE_USAGE_CAN_COPY_FROM_BIT | TEXTURE_USAGE_CAN_COPY_TO_BIT;
+			}
 			CHECK(value == DATA_FORMAT_D32_SFLOAT);
 			CHECK_FALSE(readable);
 			return TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
@@ -983,6 +1125,9 @@ struct Access {
 			return value;
 		}
 		RenderPassID render_pass_create(VectorView<Attachment> attachments, VectorView<Subpass>, VectorView<SubpassDependency>, uint32_t, AttachmentReference) override {
+			if (mixed_set1_mode) {
+				return RenderPassID(725);
+			}
 			if (production_raster_factory) {
 				++production_stage_attempts[2];
 				if (production_fail_stage == 3) {
@@ -999,6 +1144,9 @@ struct Access {
 			return RenderPassID(280);
 		}
 		void render_pass_free(RenderPassID id) override {
+			if (mixed_set1_mode && id == RenderPassID(725)) {
+				return;
+			}
 			if (production_raster_join) {
 				CHECK(id.id >= 280);
 				CHECK(id.id < 280 + production_render_pass_creates);
@@ -1016,6 +1164,11 @@ struct Access {
 			CHECK(id == RenderPassID(280));
 		}
 		FramebufferID framebuffer_create(RenderPassID pass, VectorView<TextureID> attachments, uint32_t width, uint32_t height) override {
+			if (mixed_set1_mode) {
+				CHECK((attachments.size() == 1 && attachments[0] == TextureID(720) && width == 1 && height == 1));
+				mixed_fb_live = true;
+				return FramebufferID(730);
+			}
 			CHECK(production_raster_join);
 			CHECK(pass == RenderPassID(281));
 			REQUIRE(attachments.size() == 1);
@@ -1028,6 +1181,11 @@ struct Access {
 			return FramebufferID(381);
 		}
 		void framebuffer_free(FramebufferID id) override {
+			if (mixed_set1_mode && id == FramebufferID(730)) {
+				CHECK(mixed_fb_live);
+				mixed_fb_live = false;
+				return;
+			}
 			CHECK(id == FramebufferID(381));
 			CHECK(production_framebuffer_live);
 			CHECK_FALSE(production_render_pass_active);
@@ -1157,6 +1315,11 @@ struct Access {
 			}
 			CHECK(reflection.pipeline_type == PIPELINE_TYPE_COMPUTE);
 			CHECK(uint64_t(container->get_compile_flags()) == 0);
+			if (mixed_set1_mode) {
+				CHECK((reflection.uniform_sets.size() == 2 && reflection.uniform_sets[0].size() == 1 && reflection.uniform_sets[1].size() == 3));
+				++shader_creates;
+				return ShaderID(80);
+			}
 			CHECK(reflection.uniform_sets.size() == 1);
 			if (reflection.uniform_sets.size() != 1 || reflection.uniform_sets[0].size() != 1) {
 				FAIL_CHECK("Unexpected original unit reflection in SET fixture");
@@ -1263,6 +1426,31 @@ struct Access {
 		}
 		UniformSetID uniform_set_create(VectorView<BoundUniform> uniforms, ShaderID shader, uint32_t set, int pool) override {
 			CHECK(Thread::get_caller_id() == execution_thread);
+			if (fail_next_set_creates_busy > 0) {
+				--fail_next_set_creates_busy;
+				last_uniform_set_create_error = ERR_BUSY;
+				return {};
+			}
+			if (mixed_set1_mode && shader == ShaderID(80)) {
+				CHECK((pool == -1 && (set == 0 || set == 1)));
+				if (set == 0) {
+					CHECK((uniforms.size() == 1 && uniforms[0].binding == 0 && uniforms[0].type == UNIFORM_TYPE_STORAGE_BUFFER && uniforms[0].ids.size() == 1 && uniforms[0].ids[0].id == 702));
+					++set_creates;
+					++multi_set_live;
+					set_live = true;
+					return UniformSetID(83);
+				}
+				CHECK(uniforms.size() == 3);
+				if (uniforms.size() == 3) {
+					CHECK((uniforms[0].binding == 0 && uniforms[0].type == UNIFORM_TYPE_STORAGE_BUFFER && uniforms[0].ids.size() == 1 && uniforms[0].ids[0].id == 701));
+					CHECK((uniforms[1].binding == 1 && uniforms[1].type == UNIFORM_TYPE_TEXTURE && uniforms[1].ids.size() == 1 && uniforms[1].ids[0].id == 720));
+					CHECK((uniforms[2].binding == 2 && uniforms[2].type == UNIFORM_TYPE_STORAGE_BUFFER && uniforms[2].ids.size() == 1 && uniforms[2].ids[0].id == 703));
+				}
+				++set_creates;
+				++multi_set_live;
+				set_live = true;
+				return UniformSetID(84);
+			}
 			if (shader == ShaderID(380)) {
 				REQUIRE(imported_read_reflection_lane);
 				REQUIRE((set == 0 && pool == -1 && !imported_read_set_live));
@@ -1330,6 +1518,15 @@ struct Access {
 				CHECK(auxiliary_set_live);
 				auxiliary_set_live = false;
 				++auxiliary_set_frees;
+				return;
+			}
+			if (mixed_set1_mode && (id == UniformSetID(83) || id == UniformSetID(84))) {
+				CHECK(multi_set_live > 0);
+				++set_frees;
+				if (multi_set_live > 0) {
+					--multi_set_live;
+				}
+				set_live = multi_set_live > 0;
 				return;
 			}
 			if (multi_set_mode) {
@@ -4792,8 +4989,14 @@ struct Access {
 		CHECK(test.setup.owner_cleaned);
 	}
 	struct BatchedSetCreate {
+		enum class Mode {
+			NORMAL,
+			CANCEL_WHILE_QUEUED,
+			RETRY_AFTER_BUSY,
+			CANCEL_AFTER_BUSY,
+		};
 		static constexpr uint32_t BATCH_SETS = 8;
-		bool cancel_while_queued = false;
+		Mode mode = Mode::NORMAL;
 		SplitEnrollment setup;
 		Semaphore owner_ready, rt_returned;
 		Error initialized = ERR_UNCONFIGURED, qualification_opened = ERR_UNCONFIGURED, unit_created = ERR_UNCONFIGURED;
@@ -4889,13 +5092,14 @@ struct Access {
 			test.check(__LINE__, registry.production_storage_create(ref, 1, &storage_origin, &backing).native_error == OK);
 
 			const GDExtensionProductionSetBindingV1 binding = { production_dto_abi<GDExtensionProductionSetBindingV1>(), 0, 0, 0, 1, 0, 16u };
-			if (test.cancel_while_queued) {
+			const bool cancel_while_queued = (test.mode == Mode::CANCEL_WHILE_QUEUED);
+			if (cancel_while_queued) {
 				test.rendezvous(3); // Saturate FIFO so leader stays PENDING while followers batch onto it.
 			}
 			test.check(__LINE__, registry.production_set_create(ref, 2, 0, 0, &binding, 1).native_error == ERR_BUSY);
 			const uint64_t leader_serial = request.control.serial;
 			test.check(__LINE__, leader_serial != 0 && request.control.input.kind == ProductionControlKind::SET_CREATE && request.control.input.resource_slot == 2);
-			test.check(__LINE__, request.control.state == (test.cancel_while_queued ? ProductionControlState::PENDING : ProductionControlState::QUEUED));
+			test.check(__LINE__, request.control.state == (cancel_while_queued ? ProductionControlState::PENDING : ProductionControlState::QUEUED));
 
 			// Enqueue all 7 follower uniform sets while the single leader control is active.
 			for (uint32_t i = 1; i < BATCH_SETS; ++i) {
@@ -4905,7 +5109,8 @@ struct Access {
 			}
 			test.check(__LINE__, fixture.driver.set_creates == 0 && request.binding_used == BATCH_SETS);
 
-			if (test.cancel_while_queued) {
+			bool expect_sets_created = false;
+			if (cancel_while_queued) {
 				// Simulate request cancellation before the queued batch runs on RT.
 				{
 					MutexLock lock(registry.mutex);
@@ -4924,6 +5129,47 @@ struct Access {
 				}
 				test.check(__LINE__, registry.production_set_create(ref, 2, 0, 0, &binding, 1).native_error == ERR_BUSY);
 				test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED && !request.returns[2].pending);
+			} else if (test.mode == Mode::RETRY_AFTER_BUSY || test.mode == Mode::CANCEL_AFTER_BUSY) {
+				// Inject transient ERR_BUSY on all 8 uniform_set_create calls during the first RT turn (BUG-54).
+				test.rendezvous(9);
+				test.check(__LINE__, fixture.driver.set_creates == 0 && fixture.driver.fail_next_set_creates_busy == 0);
+				test.check(__LINE__, request.control.serial == leader_serial && request.control.state == ProductionControlState::RETURNED);
+				// All 8 slots MUST remain creating==true (not permanently failed!) while followers have batched_set_create==false.
+				for (uint32_t i = 0; i < BATCH_SETS; ++i) {
+					test.check(__LINE__, request.resources[2 + i].creating && !request.resources[2 + i].imported && !request.resources[2 + i].batched_set_create && request.returns[2 + i].pending);
+				}
+				// Poll leader to consume the RETURNED ERR_BUSY control back to OWNER_CONSUMED.
+				test.check(__LINE__, registry.production_set_create(ref, 2, 0, 0, &binding, 1).native_error == ERR_BUSY);
+				test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED && request.resources[2].creating && request.returns[2].pending);
+
+				if (test.mode == Mode::RETRY_AFTER_BUSY) {
+					// BUG-54: Re-polling leader + 7 followers re-batches and succeeds in ONE retry RT turn (no infinite livelock).
+					test.check(__LINE__, registry.production_set_create(ref, 2, 0, 0, &binding, 1).native_error == ERR_BUSY);
+					const uint64_t retry_serial = request.control.serial;
+					test.check(__LINE__, retry_serial != 0 && retry_serial != leader_serial && request.control.state == ProductionControlState::QUEUED);
+					for (uint32_t i = 1; i < BATCH_SETS; ++i) {
+						test.check(__LINE__, registry.production_set_create(ref, 2 + i, 0, 0, &binding, 1).native_error == ERR_BUSY);
+						test.check(__LINE__, request.control.serial == retry_serial && request.resources[2 + i].batched_set_create && request.resources[2 + i].creating);
+					}
+					test.rendezvous(5);
+					test.check(__LINE__, fixture.driver.set_creates == BATCH_SETS);
+					for (uint32_t i = 1; i < BATCH_SETS; ++i) {
+						test.check(__LINE__, !request.resources[2 + i].creating && request.resources[2 + i].imported);
+						test.check(__LINE__, registry.production_set_create(ref, 2 + i, 0, 0, &binding, 1).native_error == OK);
+					}
+					test.check(__LINE__, registry.production_set_create(ref, 2, 0, 0, &binding, 1).native_error == OK);
+					test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED && request.resources[2].imported);
+					test.check(__LINE__, registry.production_cancel(ref).native_error == OK);
+					expect_sets_created = true;
+				} else {
+					// BUG-53: Cancelling after transient ERR_BUSY (when batched_set_create==false on leader AND followers)
+					// MUST clear creating and returns[i].pending on ALL 8 slots so production_release succeeds without deadlock!
+					test.check(__LINE__, registry.production_cancel(ref).native_error == OK);
+					for (uint32_t i = 0; i < BATCH_SETS; ++i) {
+						test.check(__LINE__, !request.resources[2 + i].creating && !request.resources[2 + i].batched_set_create && !request.returns[2 + i].pending);
+						test.check(__LINE__, request.resources[2 + i].handoff_error == ERR_UNAVAILABLE);
+					}
+				}
 			} else {
 				// ONE single RT control execution creates ALL 8 uniform sets.
 				test.rendezvous(5);
@@ -4942,6 +5188,7 @@ struct Access {
 				wrong.bytes = 32u;
 				test.check(__LINE__, registry.production_set_create(ref, 3, 0, 0, &wrong, 1).native_error == ERR_INVALID_DATA);
 				test.check(__LINE__, registry.production_cancel(ref).native_error == OK);
+				expect_sets_created = true;
 			}
 
 			// Cleanly retire storage + all created uniform sets and verify zero leaked return cells.
@@ -4960,7 +5207,7 @@ struct Access {
 				}
 			}
 			test.check(__LINE__, retire_report.state == 1 && fixture.driver.buffer_frees == 1);
-			if (!test.cancel_while_queued) {
+			if (expect_sets_created) {
 				test.check(__LINE__, fixture.driver.set_frees == BATCH_SETS);
 			}
 			test.check(__LINE__, registry.production_storage_release(ref, retire_ref).native_error == OK);
@@ -4983,14 +5230,14 @@ struct Access {
 			test.owner_ready.post();
 		}
 	};
-	static void singleton_batched_set_create(bool cancel_while_queued = false) {
+	static void singleton_batched_set_create(BatchedSetCreate::Mode mode = BatchedSetCreate::Mode::NORMAL) {
 		auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
 		if (!check_step(server && !server->create_thread && server->server_thread == Thread::get_caller_id() && !RenderingDevice::get_singleton())) {
 			return;
 		}
 		server->sync();
 		BatchedSetCreate test;
-		test.cancel_while_queued = cancel_while_queued;
+		test.mode = mode;
 		test.setup.server = server;
 		Thread owner;
 		owner.start(&split_owner_start<BatchedSetCreate>, &test);
@@ -5029,6 +5276,9 @@ struct Access {
 			} else if (test.phase == 8) {
 				QuoteDriver::QualificationCleanupScope cleanup_scope(fixture.driver);
 				server->sync();
+			} else if (test.phase == 9) {
+				fixture.driver.fail_next_set_creates_busy = BatchedSetCreate::BATCH_SETS;
+				server->sync();
 			} else {
 				server->sync();
 			}
@@ -5040,6 +5290,338 @@ struct Access {
 		CHECK(test.qualification_opened == OK);
 		CHECK(test.unit_created == OK);
 		CHECK_MESSAGE(test.passed, "BatchedSetCreate first failure line=", test.first_failure_line, ", last failure line=", test.last_failure_line, ", failed checks=", test.failure_count, ", final phase=", test.phase);
+		CHECK(test.setup.owner_cleaned);
+	}
+	static Error create_split_mixed_set1_unit(SingletonEnrollment &fixture, GDExtensionNativeUnitBackingV1 &unit, uint32_t p_storage_bytes) {
+		Ref<UnitContainer> container;
+		container.instantiate();
+		container->initialize_mixed_set1(p_storage_bytes);
+		const Vector<uint8_t> bytes = container->to_bytes();
+		if (!check_step(!bytes.is_empty())) {
+			return ERR_INVALID_DATA;
+		}
+		GDExtensionNativeUnitCreateRequestV1 origin = {};
+		origin.abi = Enrollment::ABI;
+		origin.library_generation = fixture.holder.generation;
+		origin.preparation_generation = 6;
+		origin.operation_serial = 91;
+		origin.record_slot = 4;
+		origin.physical_unit = 5;
+		origin.expected_flags = 0;
+		origin.container_byte_count = bytes.size();
+		const Error digest = CryptoCore::sha256(bytes.ptr(), bytes.size(), origin.container_digest);
+		if (!check_step(digest == OK)) {
+			return digest;
+		}
+		const Error created = Error(fixture.registry.qualification_native_unit_create(fixture.qualification, &origin, bytes.ptr(), bytes.size(), &unit).native_error);
+		if (!check_step(created == OK && unit.unit.handle_serial != 0 && unit.state == 1 && unit.native_error == OK)) {
+			return created != OK ? created : ERR_INVALID_DATA;
+		}
+		return OK;
+	}
+	struct MixedSet1SceneDepthAndStorage {
+		SplitEnrollment setup;
+		Semaphore owner_ready, rt_returned;
+		Error initialized = ERR_UNCONFIGURED, qualification_opened = ERR_UNCONFIGURED, unit_created = ERR_UNCONFIGURED;
+		Error closure_err = ERR_UNCONFIGURED;
+		bool set1_writable_only_trailing = false;
+		GDExtensionNativeUnitBackingV1 unit = {};
+		GDExtensionNativeUnitRetireRefV1 unit_retired = {};
+		RendererRD::ParticlesCollisionSceneRD collision_scene;
+		uint32_t phase = 0;
+		bool done = false, passed = true;
+		uint32_t first_failure_line = 0, last_failure_line = 0, failure_count = 0;
+		bool check(uint32_t line, bool ok) {
+			if (!ok) {
+				if (!first_failure_line) {
+					first_failure_line = line;
+				}
+				last_failure_line = line;
+				++failure_count;
+				passed = false;
+			}
+			return ok;
+		}
+		void rendezvous(uint32_t next_phase) {
+			phase = next_phase;
+			owner_ready.post();
+			rt_returned.wait();
+		}
+		static void run(void *data) {
+			auto &test = *static_cast<MixedSet1SceneDepthAndStorage *>(data);
+			auto &fixture = *test.setup.fixture;
+			auto &registry = fixture.registry;
+			using namespace GDExtensionDeviceExit;
+			fixture.driver.mixed_set1_mode = true;
+			OrdinalPlan plan;
+			plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 1, 5, 8, 1, 64, 1, 5, 32, 32 };
+			plan.attachment_requests = 1;
+			test.initialized = fixture.initialize_owner(1, false, true, +[](void *, ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *) {}, nullptr, false, 1, false, nullptr, false, false, false, false, &plan, nullptr, true);
+			if (test.initialized != OK) {
+				fixture.cleanup_owner();
+				test.done = true;
+				test.owner_ready.post();
+				return;
+			}
+			const auto reserve_v2 = reinterpret_cast<GDExtensionInterfaceDeviceSessionProductionReserveV2>(GDExtension::get_interface_function("device_session_production_reserve_v2"));
+			if (!test.check(__LINE__, reserve_v2 != nullptr)) {
+				fixture.cleanup_owner();
+				test.done = true;
+				test.owner_ready.post();
+				return;
+			}
+			GDExtensionProductionActionV2 action = { 0, 10, 0, 0, GDEXTENSION_PRODUCTION_DISPATCH_V1, 0, 0, 2, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
+			GDExtensionProductionResourceV1 resources[5] = {};
+			resources[0] = { GDEXTENSION_PRODUCTION_UNIT_V1, 4, 5, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 6, 0, 0 };
+			resources[1] = { GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 16, 0 };
+			resources[2] = { GDEXTENSION_PRODUCTION_STORAGE_V1, 2, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 16, 0 };
+			resources[3] = { GDEXTENSION_PRODUCTION_SET_V1, 3, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 0, 0 };
+			resources[4] = { GDEXTENSION_PRODUCTION_SET_V1, 4, 1, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 0, 0 };
+			GDExtensionProductionUseV1 uses[2] = {
+				{ 1, GDEXTENSION_PRODUCTION_READ_WRITE_V1, 0, 16, 0 },
+				{ 2, GDEXTENSION_PRODUCTION_READ_WRITE_V1, 0, 16, 0 },
+			};
+			GDExtensionProductionRequestRefV1 ref = {};
+			const Error reserved = Error(reserve_v2(fixture.attachment, &plan.operation, &plan.capacity, &action, 1, resources, 5, uses, 2, nullptr, 0, &ref).native_error);
+			if (!test.check(__LINE__, reserved == OK && ref.handle_serial != 0)) {
+				fixture.cleanup_owner();
+				test.done = true;
+				test.owner_ready.post();
+				return;
+			}
+			{
+				MutexLock lock(registry.mutex);
+				RenderingDevice *rd_ptr = nullptr;
+				test.check(__LINE__, registry.production_request_locked(ref, false, fixture.request, rd_ptr) == OK);
+			}
+			auto &request = *fixture.request;
+			test.qualification_opened = Error(registry.qualification_open(&Enrollment::ABI, fixture.ready, fixture.context, fixture.session, { fixture.instance, fixture.holder.handle_serial }, &fixture.qualification).native_error);
+			if (!test.check(__LINE__, test.qualification_opened == OK && fixture.qualification.handle_serial)) {
+				test.check(__LINE__, registry.production_cancel(ref).native_error == OK);
+				test.check(__LINE__, registry.production_release(ref).native_error == OK);
+				fixture.cleanup_owner();
+				test.done = true;
+				test.owner_ready.post();
+				return;
+			}
+			test.rendezvous(1); // Initialize ParticlesCollisionSceneRD + mixed Set-1 compute unit on RT.
+			if (!test.check(__LINE__, test.unit_created == OK && test.unit.unit.handle_serial != 0)) {
+				test.check(__LINE__, registry.production_cancel(ref).native_error == OK);
+				test.check(__LINE__, registry.production_release(ref).native_error == OK);
+				test.rendezvous(9);
+				fixture.cleanup_owner();
+				test.done = true;
+				test.owner_ready.post();
+				return;
+			}
+			test.check(__LINE__, registry.production_import_unit(ref, 0, &test.unit).native_error == OK);
+
+			const GDExtensionStorageCreateRequestV1 s1_origin = { Enrollment::ABI, 16u, 1, 0, 1, 1, 0 };
+			const GDExtensionStorageCreateRequestV1 s2_origin = { Enrollment::ABI, 16u, 2, 0, 1, 1, 0 };
+			GDExtensionStorageBackingV1 backing1 = {}, backing2 = {};
+			test.check(__LINE__, registry.production_storage_create(ref, 1, &s1_origin, &backing1).native_error == ERR_BUSY);
+			test.rendezvous(2);
+			test.check(__LINE__, registry.production_storage_create(ref, 1, &s1_origin, &backing1).native_error == OK);
+			test.check(__LINE__, registry.production_storage_create(ref, 2, &s2_origin, &backing2).native_error == ERR_BUSY);
+			test.rendezvous(2);
+			test.check(__LINE__, registry.production_storage_create(ref, 2, &s2_origin, &backing2).native_error == OK);
+
+			// Pack valid scene-depth params (slab=0.5m, jump=0.5m) into 64-bit bytes field.
+			uint32_t slab_bits = 0, jump_bits = 0;
+			const float slab_m = 0.50f, jump_m = 0.50f;
+			std::memcpy(&slab_bits, &slab_m, sizeof(float));
+			std::memcpy(&jump_bits, &jump_m, sizeof(float));
+			const uint64_t packed_sd = (uint64_t(slab_bits) << 32u) | uint64_t(jump_bits);
+
+			// Negative MT validation checks for BUG-59 mixed Set 1:
+			// 1. Trailing SSBO colliding with depth pair binding (binding=1 < 2*1) -> ERR_INVALID_DATA.
+			const GDExtensionProductionSetBindingV1 bad_overlap[2] = {
+				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, 0, 0, SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT, 0, packed_sd },
+				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, 1, 0, 2, 0, 16u },
+			};
+			test.check(__LINE__, registry.production_set_create(ref, 4, 0, 1, bad_overlap, 2).native_error == ERR_INVALID_DATA);
+
+			// 2. Interleaved sentinel after trailing SSBO -> ERR_INVALID_DATA.
+			const GDExtensionProductionSetBindingV1 bad_interleaved[3] = {
+				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, 0, 0, SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT, 0, packed_sd },
+				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, 2, 0, 2, 0, 16u },
+				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, 4, 0, SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT, 0, packed_sd },
+			};
+			test.check(__LINE__, registry.production_set_create(ref, 4, 0, 1, bad_interleaved, 3).native_error == ERR_INVALID_DATA);
+
+			// Create Set 0 (SSBO slot 1 at binding 0) + mixed Set 1 (depth pair at binding 0 + trailing writable SSBO slot 2 at binding 2) in one batched RT turn!
+			const GDExtensionProductionSetBindingV1 set0_binding = { production_dto_abi<GDExtensionProductionSetBindingV1>(), 0, 0, 0, 1, 0, 16u };
+			const GDExtensionProductionSetBindingV1 set1_bindings[2] = {
+				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, 0, 0, SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT, 0, packed_sd },
+				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, 2, 0, 2, 0, 16u },
+			};
+			test.check(__LINE__, registry.production_set_create(ref, 3, 0, 0, &set0_binding, 1).native_error == ERR_BUSY);
+			test.check(__LINE__, registry.production_set_create(ref, 4, 0, 1, set1_bindings, 2).native_error == ERR_BUSY);
+			test.rendezvous(2); // RT creates BOTH Set 0 and mixed Set 1!
+			test.check(__LINE__, fixture.driver.set_creates == 2);
+			test.check(__LINE__, registry.production_set_create(ref, 4, 0, 1, set1_bindings, 2).native_error == OK);
+			test.check(__LINE__, registry.production_set_create(ref, 3, 0, 0, &set0_binding, 1).native_error == OK);
+			test.check(__LINE__, request.resources[4].scene_depth_set1 && request.resources[4].scene_depth_lease_count == 1u);
+			test.check(__LINE__, test.collision_scene.get_active_lease_count() == 1u);
+
+			// Prepare dispatch referencing Set 0 + mixed Set 1 and verify production_dispatch_closure_locked returns OK on RT!
+			const GDExtensionProductionDispatchV2 dispatch = { production_dto_abi<GDExtensionProductionDispatchV2>(), 0, 10, 0, 0, 0, 3, 2, 1, 1, 1, 0, 0 };
+			test.check(__LINE__, registry.production_prepare_dispatch_v2(ref, &dispatch, nullptr, 0).native_error == OK);
+			test.rendezvous(3); // RT runs production_dispatch_closure_locked + verifies writable_resources.
+			test.check(__LINE__, test.closure_err == OK && test.set1_writable_only_trailing);
+
+			// Cancel, retire both storages (freeing both sets + releasing the scene-depth lease), and release request cleanly.
+			test.check(__LINE__, registry.production_cancel(ref).native_error == OK);
+			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 4, 16, 0 };
+			auto retire_storage = [&](uint32_t slot_idx, const GDExtensionStorageBackingV1 &bk) {
+				const GDExtensionStorageRetireRequestV1 ro = { Enrollment::ABI, bk.backing, bk.rid, bk.backing_serial, slot_idx, 0, 1, 1, 0 };
+				GDExtensionStorageRetireRefV1 rref = {};
+				GDExtensionStorageRetireReportV1 rrep = {};
+				test.check(__LINE__, registry.production_storage_retire(ref, slot_idx, &ro, &rref, &rrep).native_error == OK);
+				for (uint32_t turn = 0; turn < 32 && rrep.state != 1; ++turn) {
+					const Error sched = Error(registry.production_storage_observe(ref, rref, &budget, &rrep).native_error);
+					test.check(__LINE__, sched == OK || sched == ERR_BUSY);
+					if (request.control.state != ProductionControlState::OWNER_CONSUMED) {
+						test.rendezvous(6);
+						const Error cons = Error(registry.production_storage_observe(ref, rref, &budget, &rrep).native_error);
+						test.check(__LINE__, cons == OK || cons == ERR_BUSY);
+					}
+				}
+				test.check(__LINE__, rrep.state == 1);
+				test.check(__LINE__, registry.production_storage_release(ref, rref).native_error == OK);
+			};
+			retire_storage(1, backing1);
+			retire_storage(2, backing2);
+			test.check(__LINE__, fixture.driver.buffer_frees == 2 && fixture.driver.set_frees == 2);
+			test.check(__LINE__, drain_request_cursor(fixture, ref, [&]() { test.rendezvous(6); }));
+			Error rel_err = ERR_BUSY;
+			for (uint32_t turn = 0; turn < 16 && rel_err == ERR_BUSY; ++turn) {
+				GDExtensionProductionServiceBudgetV1 rem = {};
+				GDExtensionProductionReportV2 rel_rep = {};
+				rel_err = Error(registry.production_release_v2(ref, &budget, &rem, &rel_rep, 2).native_error);
+				if (rel_err == ERR_BUSY && request.control.state != ProductionControlState::OWNER_CONSUMED) {
+					test.rendezvous(6);
+				}
+			}
+			test.check(__LINE__, rel_err == OK && request.serial == 0);
+			test.check(__LINE__, test.collision_scene.get_active_lease_count() == 0u);
+			test.rendezvous(7);
+			GDExtensionNativeUnitRetireReportV1 unit_report = {};
+			const GDExtensionQualificationBudgetV1 unit_budget = { Enrollment::ABI, 1, 5000, 0 };
+			for (uint32_t turn = 0; turn < 32 && unit_report.state != 1; ++turn) {
+				test.check(__LINE__, registry.qualification_native_unit_retire_observe(fixture.qualification, test.unit_retired, &unit_budget, &unit_report).native_error == OK);
+				test.rendezvous(8);
+			}
+			test.check(__LINE__, unit_report.state == 1);
+			test.check(__LINE__, registry.qualification_native_unit_retire_release(fixture.qualification, test.unit_retired).native_error == OK);
+			test.rendezvous(9); // Shutdown ParticlesCollisionSceneRD cleanly on RT.
+			fixture.cleanup_owner();
+			test.done = true;
+			test.owner_ready.post();
+		}
+	};
+	static void singleton_mixed_set1_scene_depth_and_storage() {
+		auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
+		if (!check_step(server && !server->create_thread && server->server_thread == Thread::get_caller_id() && !RenderingDevice::get_singleton())) {
+			return;
+		}
+		server->sync();
+		MixedSet1SceneDepthAndStorage test;
+		test.setup.server = server;
+		Thread owner;
+		owner.start(&split_owner_start<MixedSet1SceneDepthAndStorage>, &test);
+		if (!check_step(migrate_split_owner(test.setup))) {
+			test.setup.main_released.post();
+			owner.wait_to_finish();
+			return;
+		}
+		auto &fixture = *test.setup.fixture;
+		while (true) {
+			test.owner_ready.wait();
+			if (test.done) {
+				break;
+			}
+			if (test.phase == 1) {
+				fixture.rd.draw_graph.initialize(&fixture.driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+				fixture.rd.draw_graph.begin();
+				fixture.rd.frames[0].qualification_epoch = 1;
+				fixture.rd.frames[0].fence = RDD::FenceID(93);
+				fixture.rd.frames[0].command_buffer = RDD::CommandBufferID(90);
+				fixture.rd.frames[0].command_pool = RDD::CommandPoolID(94);
+				fixture.rd.main_queue = RDD::CommandQueueID(1);
+				fixture.rd.upload_staging_buffers.block_size = fixture.rd.upload_staging_buffers.max_size = 4096;
+				fixture.rd.upload_staging_buffers.usage_bits = RDD::BUFFER_USAGE_TRANSFER_FROM_BIT;
+				CHECK(fixture.rd._insert_staging_block(fixture.rd.upload_staging_buffers) == OK);
+				auto *tw = memnew(RD::TransferWorker);
+				tw->index = 0;
+				tw->staging_buffer = RDD::BufferID(710);
+				tw->max_transfer_size = 4096;
+				tw->staging_buffer_size_allocated = 4096;
+				tw->command_buffer = RDD::CommandBufferID(90);
+				tw->command_pool = RDD::CommandPoolID(94);
+				tw->command_fence = RDD::FenceID(93);
+				tw->recording = true;
+				fixture.driver.mixed_staging_bytes.resize(4096);
+				fixture.driver.mixed_staging_live = true;
+				fixture.rd.transfer_worker_pool.push_back(tw);
+				fixture.rd.transfer_worker_pool_available_list.push_back(0);
+				fixture.rd.transfer_worker_pool_size = 1;
+				fixture.rd.transfer_worker_pool_max_size = 1;
+				fixture.rd.transfer_worker_operation_used_by_draw.resize(1);
+				fixture.rd.transfer_worker_operation_used_by_draw[0] = 0;
+				fixture.rd.frames[0].transfer_worker_semaphores.push_back(RDD::SemaphoreID(62));
+				GDExtensionSceneOpaque32V1 dev_cap = {};
+				dev_cap.bytes[0] = 0x59u;
+				test.collision_scene.initialize(&fixture.rd, dev_cap);
+				test.unit_created = create_split_mixed_set1_unit(fixture, test.unit, 16u);
+			} else if (test.phase == 3) {
+				MutexLock lock(fixture.registry.mutex);
+				auto &req = *fixture.request;
+				test.closure_err = fixture.registry.production_dispatch_closure_locked(req, fixture.rd, req.actions[0], req.actions[0].dispatch);
+				const auto *set1 = fixture.rd.uniform_set_owner.get_or_null(req.resources[4].primary);
+				const auto *lease = static_cast<const RendererRD::ParticlesCollisionSceneRD::DepthReadLease *>(req.resources[4].scene_depth_leases[0].ptr());
+				const Ref<RendererRD::ParticlesCollisionSceneRD::DepthSnapshotGeneration> gen = lease ? lease->get_generation() : Ref<RendererRD::ParticlesCollisionSceneRD::DepthSnapshotGeneration>();
+				test.set1_writable_only_trailing = set1 != nullptr && gen.is_valid() &&
+						set1->writable_resources.has(req.resources[2].primary) &&
+						!set1->writable_resources.has(gen->meta_buffer) &&
+						!set1->writable_resources.has(gen->depth_texture);
+				for (RD::TransferWorker *tw : fixture.rd.transfer_worker_pool) {
+					tw->operations_processed = tw->operations_counter;
+					tw->recording = false;
+				}
+			} else if (test.phase == 7) {
+				QuoteDriver::QualificationCleanupScope cleanup_scope(fixture.driver);
+				const GDExtensionNativeUnitRetireRequestV1 retire = { Enrollment::ABI, test.unit.unit, 92, 0 };
+				GDExtensionNativeUnitRetireReportV1 report = {};
+				CHECK(fixture.registry.qualification_native_unit_retire(fixture.qualification, &retire, &test.unit_retired, &report).native_error == OK);
+				fixture.rd._free_pending_resources(0);
+			} else if (test.phase == 8) {
+				QuoteDriver::QualificationCleanupScope cleanup_scope(fixture.driver);
+				server->sync();
+			} else if (test.phase == 9) {
+				test.collision_scene.shutdown();
+				CHECK(test.collision_scene.get_live_rid_count() == 0u);
+				CHECK(test.collision_scene.get_active_lease_count() == 0u);
+				for (RD::TransferWorker *tw : fixture.rd.transfer_worker_pool) {
+					memdelete(tw);
+				}
+				fixture.rd.transfer_worker_pool.clear();
+				fixture.rd.transfer_worker_pool_available_list.clear();
+				fixture.rd.transfer_worker_pool_size = 0;
+				fixture.rd.transfer_worker_pool_max_size = 0;
+				fixture.rd.transfer_worker_operation_used_by_draw.clear();
+				fixture.rd.frames[0].transfer_worker_semaphores.clear();
+			} else {
+				server->sync();
+			}
+			test.rt_returned.post();
+		}
+		test.setup.main_released.post();
+		owner.wait_to_finish();
+		CHECK(test.initialized == OK);
+		CHECK(test.qualification_opened == OK);
+		CHECK(test.unit_created == OK);
+		CHECK_MESSAGE(test.passed, "MixedSet1 first failure line=", test.first_failure_line, ", last failure line=", test.last_failure_line, ", failed checks=", test.failure_count, ", final phase=", test.phase, ", closure_err=", int(test.closure_err));
 		CHECK(test.setup.owner_cleaned);
 	}
 	static void singleton_split_owner_observe() {
@@ -22374,9 +22956,19 @@ TEST_CASE("[SceneTree][ProductionRequest][ObservePrepaidNativePasses] one origin
 
 TEST_CASE("[SceneTree][ProductionRequest][BatchedSetCreate] separate-RT batched SET_CREATE completes 8 sets in one RT turn and cancels cleanly") {
 	SUBCASE("8 sets created in 1 RT turn") {
-		TestProductionRequest::Access::singleton_batched_set_create(false);
+		TestProductionRequest::Access::singleton_batched_set_create(TestProductionRequest::Access::BatchedSetCreate::Mode::NORMAL);
 	}
 	SUBCASE("cancellation with queued batch leaks zero return cells") {
-		TestProductionRequest::Access::singleton_batched_set_create(true);
+		TestProductionRequest::Access::singleton_batched_set_create(TestProductionRequest::Access::BatchedSetCreate::Mode::CANCEL_WHILE_QUEUED);
 	}
+	SUBCASE("BUG-54 transient ERR_BUSY retries cleanly and succeeds on next RT turn") {
+		TestProductionRequest::Access::singleton_batched_set_create(TestProductionRequest::Access::BatchedSetCreate::Mode::RETRY_AFTER_BUSY);
+	}
+	SUBCASE("BUG-53 cancel after transient ERR_BUSY clears all pending return cells and release succeeds") {
+		TestProductionRequest::Access::singleton_batched_set_create(TestProductionRequest::Access::BatchedSetCreate::Mode::CANCEL_AFTER_BUSY);
+	}
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][MixedSet1][BUG-59] Set 1 combines leading scene-depth sentinel pairs with trailing writable SSBOs through create and dispatch closure") {
+	TestProductionRequest::Access::singleton_mixed_set1_scene_depth_and_storage();
 }

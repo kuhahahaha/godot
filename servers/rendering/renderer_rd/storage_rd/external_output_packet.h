@@ -42,6 +42,10 @@ class RenderForwardClustered;
 class RenderForwardMobile;
 class SceneShaderForwardClustered;
 class SceneShaderForwardMobile;
+#ifdef TESTS_ENABLED
+class TestClusteredNativePassSelection;
+class TestMobileNativePassSelection;
+#endif
 } //namespace RendererSceneRenderImplementation
 
 namespace RendererRD {
@@ -89,6 +93,8 @@ struct ExternalMaterialPassClassification {
 class ExternalSurfaceSelection {
 #ifdef TESTS_ENABLED
 	friend class TestExternalOutputOwnerStateAccess;
+	friend class RendererSceneRenderImplementation::TestClusteredNativePassSelection;
+	friend class RendererSceneRenderImplementation::TestMobileNativePassSelection;
 #endif
 	friend class RendererSceneRenderImplementation::RenderForwardClustered;
 	friend class RendererSceneRenderImplementation::RenderForwardMobile;

@@ -76,6 +76,7 @@ struct Access {
 		uint32_t worker_resets = 0, worker_recycles = 0, main_worker_waits = 0;
 		uint32_t worker_pool_frees = 0, worker_fence_frees = 0;
 		bool worker_retain_required = false;
+		bool main_frame_retain_required = false;
 		FramebufferID swap_chain_acquire_framebuffer(CommandQueueID, SwapChainID, bool &resize) override {
 			++screen_acquires;
 			resize = false;
@@ -377,6 +378,9 @@ struct Access {
 					CHECK(retain_error == OK);
 				}
 				++worker_recycles;
+			}
+			if (main_frame_retain_required && id == FenceID(93) && serial > 2000 && serial < 2128) {
+				CHECK(retains[serial - 2000] > 0);
 			}
 			++fence_recycles;
 			return OK;
@@ -2646,6 +2650,67 @@ struct Access {
 		CHECK(r->serial == 0);
 		CHECK(e.registry->production_close(attachment_ref).native_error == OK);
 		CHECK(e.rd.production_entity_holds == nullptr);
+	}
+
+	static void stall_for_frame_retains_production_sources() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		auto *r = transfer_setup(e);
+		REQUIRE(r != nullptr);
+		const GDExtensionProductionRequestRefV1 ref = { Enrollment::INSTANCE, r->serial };
+		for (uint32_t i = 0; i < 3; ++i) {
+			REQUIRE(effect(e, *r, i).error == OK);
+		}
+		// Issue frame 0 WITHOUT delivering/stalling or running any OBSERVE turn first.
+		execute_transfers(e, *r, false);
+		REQUIRE(r->native_count > 0);
+		const uint64_t issued_serial = r->natives[0].member.source.serial;
+		REQUIRE((issued_serial > 0 && issued_serial < 128));
+		CHECK_FALSE(r->natives[0].member.retained);
+		CHECK(e.driver.retains[issued_serial] == 0);
+
+		// BUG-69: If retain returns ERR_BUSY, ordinary _stall_for_frame MUST return ERR_BUSY
+		// without recycling the frame fence (which would drop unretained completion records).
+		e.driver.complete = true;
+		e.driver.main_frame_retain_required = true;
+		e.driver.retain_error = ERR_BUSY;
+		CHECK(e.rd._stall_for_frame(0, true) == ERR_BUSY);
+		CHECK(e.driver.fence_recycles == 0);
+		CHECK_FALSE(r->natives[0].member.retained);
+
+		// Once retain succeeds, ordinary _stall_for_frame MUST retain all unretained production
+		// sources BEFORE recycling the frame fence, so subsequent OBSERVE completes cleanly.
+		e.driver.retain_error = OK;
+		REQUIRE(e.rd._stall_for_frame(0, true) == OK);
+		CHECK(e.driver.fence_recycles == 1);
+		CHECK(r->natives[0].member.retained);
+		CHECK(e.driver.retains[issued_serial] > 0);
+		e.driver.main_frame_retain_required = false;
+
+		const auto observed = turn(e, *r, ProductionControlKind::OBSERVE, budget());
+		CHECK(observed.owner_return.native_error == OK);
+		CHECK(observed.report.known_obligations > 0);
+		CHECK(observed.report.complete_obligations == observed.report.known_obligations);
+
+		CHECK(e.registry->production_cancel(ref).native_error == OK);
+		auto retire_slot = [&](uint32_t slot) {
+			GDExtensionStorageRetireRefV1 retire = {};
+			REQUIRE(retire_storage(e, *r, slot, retire));
+			const auto b = budget(16, 4);
+			GDExtensionStorageRetireReportV1 report = {};
+			for (uint32_t turn_index = 0; turn_index < 32 && report.state != 1; ++turn_index) {
+				const auto err = observe_storage(e, ref, retire, &b, &report).native_error;
+				CHECK((err == OK || err == ERR_BUSY));
+			}
+			CHECK(report.state == 1);
+			CHECK(e.registry->production_storage_release(ref, retire).native_error == OK);
+			CHECK(finish_owned_maintenance(e, *r, b));
+		};
+		retire_slot(0);
+		retire_slot(1);
+		const auto release = turn(e, *r, ProductionControlKind::RELEASE, budget());
+		CHECK(release.owner_return.native_error == OK);
+		CHECK(r->serial == 0);
 	}
 
 	static void transfer_roundtrip(uint32_t source_count = 1) {
@@ -4975,4 +5040,8 @@ TEST_CASE("[ProductionNativeObserve][OwnSetSelective] original SET return preser
 	const auto expected = Access::own_set_with_ordinary_disposal(true);
 	const auto actual = Access::own_set_with_ordinary_disposal(false);
 	CHECK(actual == expected);
+}
+
+TEST_CASE("[ProductionNativeObserve][BUG-69] ordinary _stall_for_frame retains unretained production frame sources before fence recycle") {
+	TestProductionNativeObserve::Access::stall_for_frame_retains_production_sources();
 }

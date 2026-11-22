@@ -400,18 +400,39 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 			}
 			// Copy the complete finite binding origin before queue publication.
 			// Native shader reflection is checked on RT before the first effect.
+			// Set 1 may combine leading scene-depth sentinel pairs (0xFFFFFFFE)
+			// with trailing GDEXTENSION_PRODUCTION_STORAGE_V1 SSBOs (e.g. neighbor_grid).
 			const bool scene_depth_set1 = (shader_set == 1u && bindings[0].resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT);
 			if (scene_depth_set1) {
-				if (count > MAX_SCENE_DEPTH_SET1_PAIRS) {
+				uint32_t sd_pair_count = 0;
+				while (sd_pair_count < count && bindings[sd_pair_count].resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT) {
+					++sd_pair_count;
+				}
+				if (sd_pair_count < 1u || sd_pair_count > MAX_SCENE_DEPTH_SET1_PAIRS) {
 					return result(ERR_INVALID_DATA);
 				}
-				for (uint32_t i = 0; i < count; ++i) {
+				for (uint32_t i = 0; i < sd_pair_count; ++i) {
 					const auto &binding = bindings[i];
 					float slab_m = 0.0f;
 					float jump_m = 0.0f;
 					if (!production_dto_valid(binding) || binding.set != 1u || binding.binding != 2u * i ||
 							binding.array_element > 1u || binding.resource_slot != SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
 							!decode_scene_depth_pair_params(binding.bytes, slab_m, jump_m)) {
+						return result(ERR_INVALID_DATA);
+					}
+				}
+				for (uint32_t i = sd_pair_count; i < count; ++i) {
+					const auto &binding = bindings[i];
+					if (!production_dto_valid(binding) || binding.set != 1u || binding.array_element || binding.offset ||
+							binding.resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
+							binding.resource_slot >= request->resource_count ||
+							binding.binding < 2u * sd_pair_count ||
+							(i > sd_pair_count && bindings[i - 1].binding >= binding.binding)) {
+						return result(ERR_INVALID_DATA);
+					}
+					const auto &resource = request->resources[binding.resource_slot];
+					const bool original_physical = resource.imported && ((resource.use_count == 1 && resource.uses[0].same_physical() && resource.uses[0].linked()) || !resource.output_predecessor_view.is_empty() || (resource.output_guard_readonly && resource.output_guard_history));
+					if (!original_physical || resource.output_alias_prepared || resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || resource.retiring || binding.bytes != resource.declaration.physical_bytes) {
 						return result(ERR_INVALID_DATA);
 					}
 				}
@@ -813,10 +834,16 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 		const auto &unit = request.resources[slot.imported_unit_slot];
 		const auto *shader = rd.shader_owner.get_or_null(unit.secondary);
 		if (slot.scene_depth_set1) {
+			uint32_t pair_count = 0;
+			while (pair_count < slot.binding_count &&
+					request.uses[slot.first_binding + pair_count].binding.resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT) {
+				++pair_count;
+			}
+			const uint32_t storage_count = slot.binding_count - pair_count;
 			if (!unit.imported || unit.use_count != 2 || !shader || slot.shader_set != 1u ||
-					slot.binding_count < 1u || slot.binding_count > MAX_SCENE_DEPTH_SET1_PAIRS ||
+					pair_count < 1u || pair_count > MAX_SCENE_DEPTH_SET1_PAIRS ||
 					uint32_t(shader->uniform_sets.size()) <= 1u ||
-					uint32_t(shader->uniform_sets[1].size()) != 2u * slot.binding_count) {
+					uint32_t(shader->uniform_sets[1].size()) != 2u * pair_count + storage_count) {
 				return finish(ERR_INVALID_DATA);
 			}
 			struct SceneDepthPairSpec {
@@ -825,7 +852,7 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 				float jump_m = 0.50f;
 			};
 			SceneDepthPairSpec specs[MAX_SCENE_DEPTH_SET1_PAIRS];
-			for (uint32_t d = 0; d < slot.binding_count; ++d) {
+			for (uint32_t d = 0; d < pair_count; ++d) {
 				const auto &binding = request.uses[slot.first_binding + d].binding;
 				if (!production_dto_valid(binding) || binding.set != 1u || binding.binding != 2u * d ||
 						binding.array_element > 1u || binding.resource_slot != SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
@@ -853,14 +880,45 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 					return finish(ERR_INVALID_DATA);
 				}
 			}
+			LocalVector<RenderingDevice::Uniform> trailing_uniforms;
+			LocalVector<QualificationPhysicalReturn *> dependencies;
+			trailing_uniforms.resize(storage_count);
+			dependencies.reserve(storage_count + 1);
+			dependencies.push_back(unit.uses[0].physical);
+			for (uint32_t s = 0; s < storage_count; ++s) {
+				const auto &binding = request.uses[slot.first_binding + pair_count + s].binding;
+				if (!production_dto_valid(binding) || binding.set != 1u || binding.array_element || binding.offset ||
+						binding.resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
+						binding.resource_slot >= request.resource_count ||
+						binding.binding < 2u * pair_count ||
+						(s > 0 && request.uses[slot.first_binding + pair_count + s - 1].binding.binding >= binding.binding)) {
+					return finish(ERR_INVALID_DATA);
+				}
+				const auto &resource = request.resources[binding.resource_slot];
+				const bool predecessor = production_output_predecessor_matches_locked(request, resource, rd) ||
+						(resource.output_guard_history && production_output_guard_matches_locked(request, resource, rd));
+				if (!resource.imported || resource.retiring || resource.output_alias_prepared ||
+						(!predecessor && (resource.use_count != 1 || !resource.uses[0].same_physical() || !resource.uses[0].linked()))) {
+					return finish(ERR_INVALID_DATA);
+				}
+				bool reflected = false;
+				for (const auto &uniform : shader->uniform_sets[1]) {
+					reflected |= uniform.binding == binding.binding && uniform.type == RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER && (!predecessor || !uniform.writable);
+				}
+				if (!reflected) {
+					return finish(ERR_INVALID_DATA);
+				}
+				trailing_uniforms[s].uniform_type = RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER;
+				trailing_uniforms[s].binding = binding.binding;
+				trailing_uniforms[s].append_id(resource.primary);
+				if (!predecessor && !dependencies.has(resource.uses[0].physical)) {
+					dependencies.push_back(resource.uses[0].physical);
+				}
+			}
 			if (!rd._qualification_reserve_free_event(&slot.owned_physical)) {
 				return finish(ERR_PARAMETER_RANGE_ERROR);
 			}
-			const uint32_t pair_count = slot.binding_count;
 			const RID unit_shader_rid = unit.secondary;
-			LocalVector<QualificationPhysicalReturn *> dependencies;
-			dependencies.reserve(1);
-			dependencies.push_back(unit.uses[0].physical);
 
 			Ref<RendererRD::ParticlesCollisionSceneRD::DepthReadLease> acquired_leases[MAX_SCENE_DEPTH_SET1_PAIRS];
 			Error acq_err = OK;
@@ -874,7 +932,7 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 					acq_err = ERR_UNAVAILABLE;
 				} else {
 					LocalVector<RenderingDevice::Uniform> uniforms;
-					uniforms.resize(2u * pair_count);
+					uniforms.resize(2u * pair_count + storage_count);
 					for (uint32_t d = 0; d < pair_count; ++d) {
 						GDExtensionSceneOpaque32V1 sample_token = {};
 						acq_err = collision_scene->acquire_depth_snapshot_read_lease(
@@ -901,6 +959,9 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 						uniforms[2u * d + 1u].binding = 2u * d + 1u;
 						uniforms[2u * d + 1u].append_id(gen->depth_texture);
 					}
+					for (uint32_t s = 0; s < storage_count; ++s) {
+						uniforms[2u * pair_count + s] = trailing_uniforms[s];
+					}
 					if (acq_err == OK) {
 						rid = rd._uniform_set_create_qualification(uniforms, unit_shader_rid, 1u, false, &slot.owned_physical, &dependencies, nullptr, &request);
 						if (rid.is_null()) {
@@ -922,7 +983,8 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 			--request.capture_inflight;
 			if (acq_err != OK || rid.is_null()) {
 				rd._qualification_release_free_event(&slot.owned_physical);
-				return finish(acq_err != OK ? acq_err : ERR_CANT_CREATE);
+				const Error fail_err = acq_err != OK ? acq_err : ERR_CANT_CREATE;
+				return fail_err == ERR_BUSY ? ERR_BUSY : finish(fail_err);
 			}
 			slot.backing_serial = slot.owned_physical.serial;
 			slot.scene_depth_lease_count = pair_count;
@@ -972,7 +1034,8 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 			--request.capture_inflight;
 			if (rid.is_null()) {
 				rd._qualification_release_free_event(&slot.owned_physical);
-				return finish(rd.get_last_uniform_set_create_error() == ERR_BUSY ? ERR_BUSY : ERR_CANT_CREATE);
+				const Error fail_err = rd.get_last_uniform_set_create_error() == ERR_BUSY ? ERR_BUSY : ERR_CANT_CREATE;
+				return fail_err == ERR_BUSY ? ERR_BUSY : finish(fail_err);
 			}
 			slot.backing_serial = slot.owned_physical.serial;
 		}
@@ -991,14 +1054,16 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 void Registry::production_set_create_cancel_batched_locked(ProductionRequest &request, Error p_error) {
 	for (uint32_t i = 0; i < request.resource_count; ++i) {
 		auto &slot = request.resources[i];
-		if (!slot.batched_set_create) {
+		if (!slot.creating && !slot.batched_set_create) {
 			continue;
 		}
+		const bool is_create_slot = slot.declaration.resource_kind == GDEXTENSION_PRODUCTION_SET_V1 ||
+				slot.declaration.resource_kind == GDEXTENSION_PRODUCTION_STORAGE_V1;
 		slot.batched_set_create = false;
-		if (slot.creating) {
+		if (is_create_slot && slot.creating && !slot.primary.is_valid()) {
 			slot.creating = false;
 			slot.handoff_error = p_error;
-			if (!slot.primary.is_valid() && i < request.capacity.return_cells) {
+			if (i < request.capacity.return_cells) {
 				request.returns[i].pending = false;
 			}
 		}

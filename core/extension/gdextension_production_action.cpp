@@ -136,10 +136,8 @@ Error Registry::production_incoming_readbacks_validate_locked(const ProductionRe
 					const auto *shader = rd.shader_owner.get_or_null(request.resources[dispatch.unit_slot].secondary);
 					for (uint32_t set_index = 0; set_index < dispatch.set_count; ++set_index) {
 						const auto &set = request.resources[dispatch.first_set_slot + set_index];
-						if (set.scene_depth_set1) {
-							continue;
-						}
-						for (uint32_t b = 0; b < set.binding_count; ++b) {
+						const uint32_t b_start = set.scene_depth_set1 ? set.scene_depth_lease_count : 0u;
+						for (uint32_t b = b_start; b < set.binding_count; ++b) {
 							const auto &binding = request.uses[set.first_binding + b].binding;
 							for (const auto &uniform : shader->uniform_sets[set_index]) {
 								if (uniform.binding != binding.binding || uniform.type != RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER || !uniform.writable) {
@@ -202,23 +200,26 @@ Error Registry::production_dispatch_closure_locked(const ProductionRequest &requ
 		const auto &slot = request.resources[dispatch.first_set_slot + i];
 		const auto *set = rd.uniform_set_owner.get_or_null(slot.primary);
 		if (slot.scene_depth_set1) {
+			const uint32_t pair_count = slot.scene_depth_lease_count;
+			const uint32_t storage_count = slot.binding_count >= pair_count ? (slot.binding_count - pair_count) : 0u;
 			if (i != 1u || slot.output_set_deferred || !slot.imported || slot.creating || slot.retiring || slot.returned ||
 					!set || !set->driver_id || set->shader_id != pipeline->shader || set->shader_set != 1u ||
 					set->format != pipeline->set_formats[1] || !set->shared_textures_to_update.is_empty() ||
-					!set->pending_clear_textures.is_empty() || !set->writable_resources.is_empty() ||
+					!set->pending_clear_textures.is_empty() || (storage_count == 0u && !set->writable_resources.is_empty()) ||
 					slot.imported_unit_slot != dispatch.unit_slot || slot.shader_set != 1u ||
-					slot.binding_count < 1u || slot.binding_count > MAX_SCENE_DEPTH_SET1_PAIRS ||
-					slot.scene_depth_lease_count != slot.binding_count ||
-					uint32_t(shader->uniform_sets[1].size()) != 2u * slot.binding_count ||
+					pair_count < 1u || pair_count > MAX_SCENE_DEPTH_SET1_PAIRS ||
+					slot.binding_count < pair_count ||
+					uint32_t(shader->uniform_sets[1].size()) != 2u * pair_count + storage_count ||
 					slot.first_binding > request.capacity.resource_uses ||
 					slot.binding_count > request.capacity.resource_uses - slot.first_binding ||
 					slot.use_count != 1u || !slot.uses[0].linked() || !slot.uses[0].same_physical() ||
 					set->qualification_return != &slot.owned_physical ||
 					unit.use_count != 2u || !set->qualification_dependencies.has(unit.uses[0].physical) ||
-					set->qualification_dependencies.size() != 1u) {
+					(storage_count == 0u && set->qualification_dependencies.size() != 1u) ||
+					set->qualification_dependencies.size() > 1u + storage_count) {
 				return ERR_INVALID_DATA;
 			}
-			for (uint32_t d = 0; d < slot.binding_count; ++d) {
+			for (uint32_t d = 0; d < pair_count; ++d) {
 				const auto &binding = request.uses[slot.first_binding + d].binding;
 				float slab_m = 0.0f;
 				float jump_m = 0.0f;
@@ -257,10 +258,47 @@ Error Registry::production_dispatch_closure_locked(const ProductionRequest &requ
 				if (gen.is_null() || gen->meta_buffer.is_null() || gen->depth_texture.is_null()) {
 					return ERR_INVALID_DATA;
 				}
+				if (set->writable_resources.has(gen->meta_buffer) || set->writable_resources.has(gen->depth_texture)) {
+					return ERR_INVALID_DATA;
+				}
 				const auto *meta_buf = rd.storage_buffer_owner.get_or_null(gen->meta_buffer);
 				const auto *depth_tex = rd.texture_owner.get_or_null(gen->depth_texture);
 				if (!meta_buf || !meta_buf->driver_id || meta_buf->size != sizeof(RendererRD::SceneDepthSnapshotMeta256) ||
 						!depth_tex || !depth_tex->driver_id || depth_tex->format != RenderingDevice::DATA_FORMAT_R32_SFLOAT) {
+					return ERR_INVALID_DATA;
+				}
+			}
+			for (uint32_t s = 0; s < storage_count; ++s) {
+				const auto &binding = request.uses[slot.first_binding + pair_count + s].binding;
+				if (binding.resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
+						binding.resource_slot >= request.resource_count || binding.set != 1u ||
+						binding.array_element || binding.binding < 2u * pair_count) {
+					return ERR_INVALID_DATA;
+				}
+				const auto &storage = request.resources[binding.resource_slot];
+				bool physical_dependency = storage.use_count == 1 && storage.uses[0].linked() && storage.uses[0].same_physical() && set->qualification_dependencies.has(storage.uses[0].physical);
+				const bool history_guard = storage.output_guard_history && production_output_history_guard_uses_locked(request, storage, action.declaration.action_ordinal) && production_output_guard_matches_locked(request, storage, rd);
+				if (storage.output_guard_readonly && !history_guard) { return ERR_UNAUTHORIZED; }
+				const bool predecessor = production_output_predecessor_matches_locked(request, storage, rd) || history_guard;
+				if (predecessor) {
+					physical_dependency = false;
+					for (const auto &dependency : set->production_output_dependencies) {
+						physical_dependency |= dependency.cell == (history_guard ? storage.output_witness.cell : storage.output_predecessor_witness.cell);
+					}
+					for (const auto &uniform : shader->uniform_sets[1]) {
+						if (uniform.binding == binding.binding && uniform.writable) { return ERR_UNAUTHORIZED; }
+					}
+				}
+				if (!storage.imported || storage.retiring || storage.output_alias_prepared || storage.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || !physical_dependency) {
+					return ERR_INVALID_DATA;
+				}
+				bool covered = false;
+				for (const auto &uniform : shader->uniform_sets[1]) {
+					for (uint32_t u = 0; u < declaration.use_count; ++u) {
+						covered |= compatible(binding, uniform, request.uses[declaration.first_use + u].declaration);
+					}
+				}
+				if (!covered) {
 					return ERR_INVALID_DATA;
 				}
 			}
@@ -328,10 +366,8 @@ Error Registry::production_dispatch_closure_locked(const ProductionRequest &requ
 		bool covered = false;
 		for (uint32_t i = 0; i < dispatch.set_count; ++i) {
 			const auto &slot = request.resources[dispatch.first_set_slot + i];
-			if (slot.scene_depth_set1) {
-				continue;
-			}
-			for (uint32_t b = 0; b < slot.binding_count; ++b) {
+			const uint32_t b_start = slot.scene_depth_set1 ? slot.scene_depth_lease_count : 0u;
+			for (uint32_t b = b_start; b < slot.binding_count; ++b) {
 				const auto &binding = request.uses[slot.first_binding + b].binding;
 				for (const auto &uniform : shader->uniform_sets[i]) {
 					covered |= compatible(binding, uniform, use);
@@ -744,10 +780,8 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 		const auto &dispatch = action.dispatch;
 		for (uint32_t set_index = 0; set_index < dispatch.set_count; ++set_index) {
 			const auto &set = request.resources[dispatch.first_set_slot + set_index];
-			if (set.scene_depth_set1) {
-				continue;
-			}
-			for (uint32_t b = 0; b < set.binding_count; ++b) {
+			const uint32_t b_start = set.scene_depth_set1 ? set.scene_depth_lease_count : 0u;
+			for (uint32_t b = b_start; b < set.binding_count; ++b) {
 				if (check_transfer_resource(request.uses[set.first_binding + b].binding.resource_slot) == ERR_BUSY) {
 					observed.error = ERR_BUSY;
 					return observed;

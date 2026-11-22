@@ -15637,6 +15637,10 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 	if (height_retain != OK) {
 		return height_retain;
 	}
+	const Error production_retain = _production_retain_frame_sources(p_frame);
+	if (production_retain != OK) {
+		return production_retain;
+	}
 	frame_wait_native_code = 0;
 	frame_wait_native_code_valid = false;
 	// Original Frame ownership covers every actual slot call, including slots

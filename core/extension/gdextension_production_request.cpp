@@ -3849,9 +3849,12 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 	scene_owner_close_locked(*a); // Only an accepted close revokes Scene admission.
 	for (uint32_t i = 0; i < a->quote.capacity.requests; ++i) {
 		auto &request = a->requests[i];
-		if (request.serial && !request.cancelled) {
-			request.cancelled = true;
-			++request.revision;
+		if (request.serial) {
+			if (!request.cancelled) {
+				request.cancelled = true;
+				++request.revision;
+			}
+			production_set_create_cancel_batched_locked(request, ERR_UNAVAILABLE);
 		}
 	}
 	if (rd && rd->render_thread_id == Thread::get_caller_id() && rd->_thread_safe_.try_lock()) {
@@ -4239,7 +4242,12 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 			cell.output.result = result(rd ? production_raster_prepare_execute_locked(request, *rd) : production_raster_prepare_finish_locked(request, ERR_UNAVAILABLE));
 			break;
 		case ProductionControlKind::STORAGE_CREATE:
-			cell.output.result = result(rd ? production_create_execute_locked(request, *rd, cell.input.kind, cell.input.resource_slot) : ERR_UNAVAILABLE);
+			if (rd) {
+				cell.output.result = result(production_create_execute_locked(request, *rd, cell.input.kind, cell.input.resource_slot));
+			} else {
+				production_set_create_cancel_batched_locked(request, ERR_UNAVAILABLE);
+				cell.output.result = result(ERR_UNAVAILABLE);
+			}
 			break;
 		case ProductionControlKind::SET_CREATE:
 			if (rd) {
@@ -4356,7 +4364,7 @@ void Registry::production_control_dispatch(uint64_t registry, uint64_t attachmen
 				cell.output.control_serial = cell.serial;
 				if (cell.input.kind == ProductionControlKind::RASTER_CREATE) {
 					production_raster_prepare_finish_locked(r, ERR_INVALID_DATA);
-				} else if (cell.input.kind == ProductionControlKind::SET_CREATE) {
+				} else if (cell.input.kind == ProductionControlKind::SET_CREATE || cell.input.kind == ProductionControlKind::STORAGE_CREATE) {
 					production_set_create_cancel_batched_locked(r, ERR_INVALID_DATA);
 				}
 				cell.output.result = result(ERR_INVALID_DATA, 16);

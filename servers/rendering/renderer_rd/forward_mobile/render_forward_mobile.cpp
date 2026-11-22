@@ -3037,7 +3037,9 @@ RendererRD::ExternalPacketPipelineRequest RenderForwardMobile::_external_pipelin
 	external_request.subpass = p_selection.base_key.render_pass;
 	external_request.view_count = p_params.view_count;
 	external_request.wireframe = p_params.force_wireframe;
-	external_request.reverse_cull = p_params.reverse_cull;
+	const bool is_indexed144 = p_surface.external_surface.get_profile() == RendererRD::ExternalOutputConfig::INDEXED_144;
+	const bool host_mirror = p_surface.owner != nullptr && p_surface.owner->mirror;
+	external_request.reverse_cull = is_indexed144 ? (host_mirror != p_params.reverse_cull) : p_params.reverse_cull;
 	external_request.double_sided_shadow = (p_surface.flags & GeometryInstanceSurfaceDataCache::FLAG_USES_DOUBLE_SIDED_SHADOWS) != 0;
 	external_request.specialization[0] = pipeline_specialization.packed_0;
 	external_request.specialization[1] = pipeline_specialization.packed_1;

@@ -513,6 +513,144 @@ TEST_CASE("[ExternalOutput][Block23] Metal heap allocator recycles freed storage
 	rd.submit();
 	rd.sync();
 }
+
+TEST_CASE("[ExternalOutput][Block23] BUG-50 PARTICLE_LIGHT_64 fast-refresh updates world_bounds and scaled camera cluster emit matches ClusterBuilderRD") {
+	REQUIRE(RenderingDevice::get_singleton() == nullptr);
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDevice rd;
+	REQUIRE(rd.initialize(&context) == OK);
+
+	using Lane = RendererRD::ParticlesMeshLightSortRD;
+	Lane lane;
+
+	RendererRD::ParticleLightRecord64 gpu_recs[2] = {};
+	gpu_recs[0].position_world[0] = 3.0f;
+	gpu_recs[0].position_world[1] = -2.0f;
+	gpu_recs[0].position_world[2] = -5.0f;
+	gpu_recs[0].radius = 4.0f;
+	gpu_recs[0].color_hdr[0] = 2.0f;
+	gpu_recs[0].color_hdr[1] = 1.0f;
+	gpu_recs[0].color_hdr[2] = 0.5f;
+	gpu_recs[0].attenuation_exp = 1.0f;
+	gpu_recs[0].flags = RendererRD::ParticleLightRecord64::FLAG_ACTIVE;
+	gpu_recs[0].id_index = 1u;
+	gpu_recs[0].id_acquire_tag = 10u;
+	gpu_recs[0].screen_importance_q16 = 4096u;
+	gpu_recs[0].specular_scale = 1.0f;
+	gpu_recs[0].diffuse_scale = 1.0f;
+
+	const uint32_t meta_words[8] = {
+		1u, 0u, 0u, 0u, 2u, uint32_t(RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64), 5u, 0u
+	};
+	Vector<uint8_t> meta_init;
+	meta_init.resize(sizeof(meta_words));
+	memcpy(meta_init.ptrw(), meta_words, sizeof(meta_words));
+
+	Vector<uint8_t> recs_init;
+	recs_init.resize(sizeof(gpu_recs));
+	memcpy(recs_init.ptrw(), gpu_recs, sizeof(gpu_recs));
+
+	const RID meta_rid = rd.storage_buffer_create(sizeof(meta_words), meta_init);
+	const RID recs_rid = rd.storage_buffer_create(sizeof(gpu_recs), recs_init);
+	const RID omni_buf = rd.storage_buffer_create(8u * 224u);
+	rd.buffer_clear(omni_buf, 0, 8u * 224u);
+
+	const RID vp_rid = RID::from_uint64(0x4444u);
+	const RID scen_rid = RID::from_uint64(0xDDDDu);
+	const RendererRD::ExternalOutputOwner *dummy_owner = reinterpret_cast<const RendererRD::ExternalOutputOwner *>(uintptr_t(0x5000));
+
+	const AABB initial_bounds(Vector3(-5.0f, -5.0f, -5.0f), Vector3(10.0f, 10.0f, 10.0f));
+	const AABB moved_bounds_single(Vector3(100.0f, 20.0f, -40.0f), Vector3(12.0f, 12.0f, 12.0f));
+	const AABB moved_bounds_batch(Vector3(-250.0f, 5.0f, 80.0f), Vector3(16.0f, 16.0f, 16.0f));
+
+	Lane::ExternalLightSlotRegistration reg;
+	reg.owner_key = 0xAA01u;
+	reg.owner_ptr = dummy_owner;
+	reg.is_slot_live_fn = &mock_is_slot_live;
+	reg.is_slot_visible_fn = &mock_is_slot_visible;
+	reg.generation = 11u;
+	reg.slot_index = 0u;
+	reg.lease_serial = 3u;
+	reg.viewport_rid = vp_rid;
+	reg.scenario_rid = scen_rid;
+	reg.world_bounds = initial_bounds;
+	reg.meta_rid = meta_rid;
+	reg.records_rid = recs_rid;
+	reg.capacity = 2u;
+	reg.present_seq = 5u;
+
+	g_mock_slot_visible = true;
+	lane.register_sealed_external_light_slot(reg);
+
+	// 1. Single fast-refresh present_seq + world_bounds propagation:
+	CHECK(lane.update_external_light_slot_present_seq(0xAA01u, 11u, 0u, 3u, 6u, &moved_bounds_single));
+	LocalVector<Lane::ReservedGpuLightBounds> bounds;
+	CHECK(lane.dispatch_registered_external_lights_gpu(&rd, vp_rid, scen_rid, false, Transform3D(), 1.0f, omni_buf, 0u, 8u, bounds) == 2u);
+	REQUIRE(bounds.size() == 1u);
+	CHECK(bounds[0].world_bounds.position.is_equal_approx(moved_bounds_single.position));
+	CHECK(bounds[0].world_bounds.size.is_equal_approx(moved_bounds_single.size));
+
+	// 2. Batch fast-refresh present_seq + world_bounds propagation:
+	Lane::ExternalLightSlotPresentSeqUpdate batch_upd;
+	batch_upd.owner_key = 0xAA01u;
+	batch_upd.generation = 11u;
+	batch_upd.slot_index = 0u;
+	batch_upd.lease_serial = 3u;
+	batch_upd.next_present_seq = 7u;
+	batch_upd.world_bounds = moved_bounds_batch;
+	batch_upd.has_world_bounds = true;
+	CHECK(lane.update_external_light_slots_present_seq_batch(&batch_upd, 1u) == 1u);
+
+	// Advance the GPU slot meta's present_seq to match fast-refresh seq 7 so the
+	// harvest compute shader accepts the record and emits the scaled cluster element.
+	const uint32_t meta_words_seq7[8] = {
+		1u, 0u, 0u, 0u, 2u, uint32_t(RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64), 7u, 0u
+	};
+	REQUIRE(rd.buffer_update(meta_rid, 0u, sizeof(meta_words_seq7), meta_words_seq7) == OK);
+
+	// 3. Non-unit camera scale (cluster_scale = 2.0): verify GPU cluster element
+	// matches ClusterBuilderRD::add_light (un-orthonormalized cluster_pos, orthonormal
+	// basis rows, r_elem = radius * cluster_scale * sphere_overfit, and non-squared r2).
+	// world_pos = (3, -2, -5), view = scale(2) + origin(0, 0, -2) => cluster_pos = (6, -4, -12),
+	// length_sq = 36 + 16 + 144 = 196.
+	// r_elem = 4 * 2 * 1.05 = 8.4; correct r2 = 8.4 * 1.05 = 8.82 => r2^2 = 77.79 (< 196 => touches_near = 0).
+	// Buggy squared r2 would be 8.4 * 2.1 = 17.64 => r2^2 = 311.17 (> 196 => falsely touches_near = 1!).
+	const Transform3D scaled_view(Basis::from_scale(Vector3(2.0f, 2.0f, 2.0f)), Vector3(0.0f, 0.0f, -2.0f));
+	CHECK(lane.dispatch_registered_external_lights_gpu(&rd, vp_rid, scen_rid, false, scaled_view, 1.0f, omni_buf, 0u, 8u, bounds) == 2u);
+	REQUIRE(bounds.size() == 1u);
+	CHECK(bounds[0].world_bounds.position.is_equal_approx(moved_bounds_batch.position));
+	CHECK(bounds[0].world_bounds.size.is_equal_approx(moved_bounds_batch.size));
+
+	rd.submit();
+	rd.sync();
+
+	const RID elem_buf = lane.get_light_cluster_elements_buffer();
+	REQUIRE(elem_buf.is_valid());
+	const Vector<uint8_t> elem_bytes = rd.buffer_get_data(elem_buf, 0u, 20u * sizeof(uint32_t));
+	REQUIRE(elem_bytes.size() == int(20u * sizeof(uint32_t)));
+	uint32_t words[20] = {};
+	memcpy(words, elem_bytes.ptr(), sizeof(words));
+	auto as_f32 = [](uint32_t w) -> float {
+		float f = 0.0f;
+		memcpy(&f, &w, sizeof(f));
+		return f;
+	};
+	CHECK(words[1] == 0u); // touches_near must be 0 (proves cluster_scale is NOT squared in r2).
+	CHECK(Math::is_equal_approx(as_f32(words[4]), 1.0f)); // Orthonormalized basis row0.x.
+	CHECK(Math::is_equal_approx(as_f32(words[9]), 1.0f)); // Orthonormalized basis row1.y.
+	CHECK(Math::is_equal_approx(as_f32(words[14]), 1.0f)); // Orthonormalized basis row2.z.
+	CHECK(Math::is_equal_approx(as_f32(words[7]), 6.0f)); // cluster_pos.x = 2*3 + 0.
+	CHECK(Math::is_equal_approx(as_f32(words[11]), -4.0f)); // cluster_pos.y = 2*(-2) + 0.
+	CHECK(Math::is_equal_approx(as_f32(words[15]), -12.0f)); // cluster_pos.z = 2*(-5) - 2.
+	CHECK(Math::is_equal_approx(as_f32(words[16]), 8.4f)); // r_elem = 4 * 2 * 1.05.
+
+	lane.unregister_external_light_owner(0xAA01u);
+	lane.release_light_gpu_bridge(&rd);
+	rd.free_rid(omni_buf);
+	rd.free_rid(recs_rid);
+	rd.free_rid(meta_rid);
+}
 #endif
 
 } // namespace TestExternalOutputBlock23
