@@ -1880,6 +1880,20 @@ bool ParticlesStorage::fast_refresh_invert_affine_f32(const float p_affine[12], 
 	return true;
 }
 
+void ParticlesStorage::fast_refresh_encode_light64_guard_status(uint64_t p_present_seq, uint32_t r_words[8]) {
+	// Canonical GUARD_STATUS ABI layout matching gdextension_production_output.cpp
+	// and ANGE validate_output_guard_status32:
+	// [0..3] = fault/status/reserved zeros, [4..5] = present_seq (lo, hi), [6] = finalized (1), [7] = 0.
+	r_words[0] = 0u;
+	r_words[1] = 0u;
+	r_words[2] = 0u;
+	r_words[3] = 0u;
+	r_words[4] = uint32_t(p_present_seq);
+	r_words[5] = uint32_t(p_present_seq >> 32);
+	r_words[6] = 1u;
+	r_words[7] = 0u;
+}
+
 namespace {
 
 Transform3D fast_refresh_decode_transform(const float p_affine[12]) {
@@ -2098,16 +2112,8 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_v1(const GDExtensi
 	if (owner.config.profile == ExternalOutputConfig::PARTICLE_LIGHT_64) {
 		const RID status_rid = slot.storage->resources[ExternalOutputStorage::GUARD_STATUS].rid;
 		if (status_rid.is_valid()) {
-			const uint32_t light64_status_words[8] = {
-				0u,
-				0u,
-				0u,
-				1u,
-				owner.config.capacity,
-				uint32_t(ExternalOutputConfig::PARTICLE_LIGHT_64),
-				uint32_t(p_input->next_present_seq),
-				uint32_t(p_input->next_present_seq >> 32),
-			};
+			uint32_t light64_status_words[8] = {};
+			fast_refresh_encode_light64_guard_status(p_input->next_present_seq, light64_status_words);
 			const Error upd = rd->buffer_update(status_rid, 0, sizeof(light64_status_words), light64_status_words);
 			if (upd != OK) {
 				return int32_t(upd);
@@ -2949,16 +2955,8 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 		if (owner.config.profile == ExternalOutputConfig::PARTICLE_LIGHT_64) {
 			const RID status_rid = slot.storage->resources[ExternalOutputStorage::GUARD_STATUS].rid;
 			if (status_rid.is_valid()) {
-				const uint32_t light64_status_words[8] = {
-					0u,
-					0u,
-					0u,
-					1u,
-					owner.config.capacity,
-					uint32_t(ExternalOutputConfig::PARTICLE_LIGHT_64),
-					uint32_t(in.next_present_seq),
-					uint32_t(in.next_present_seq >> 32),
-				};
+				uint32_t light64_status_words[8] = {};
+				fast_refresh_encode_light64_guard_status(in.next_present_seq, light64_status_words);
 				const Error upd = rd->buffer_update(status_rid, 0, sizeof(light64_status_words), light64_status_words);
 				if (upd != OK) {
 					set_item_result(idx, upd);

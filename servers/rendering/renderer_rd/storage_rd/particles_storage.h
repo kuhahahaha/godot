@@ -667,6 +667,7 @@ public:
 	Error particles_external_draw(const ExternalSurfaceSelection &p_surface, const ::RenderDataRD *p_render_data, RD::DrawListID p_list, const ExternalPacketPipelineRequest &p_pipeline, ExternalPipelinePrepareForView p_prepare, void *p_renderer, ExternalPushPrepareForBinding p_prepare_push, void *p_push_context, ExternalDrawPreparation p_preparation = ExternalDrawPreparation::PREPARE_FOR_DRAW);
 	Error particles_external_end_draw_list();
 	static bool fast_refresh_invert_affine_f32(const float p_affine[12], float r_inverse[12]);
+	static void fast_refresh_encode_light64_guard_status(uint64_t p_present_seq, uint32_t r_words[8]);
 	int32_t particles_external_begin_fast_refresh_v1(const GDExtensionFastRefreshBeginInputV1 *p_input, GDExtensionFastRefreshTargetsV1 *p_out_targets);
 	int32_t particles_external_end_fast_refresh_v1(const GDExtensionFastRefreshEndInputV1 *p_input);
 	int32_t particles_external_release_fast_refresh_v1(uint64_t p_particles_rid, uint32_t p_slot_index);

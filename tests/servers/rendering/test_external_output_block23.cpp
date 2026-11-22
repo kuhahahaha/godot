@@ -166,6 +166,31 @@ TEST_CASE("[ExternalOutput][Block23] fast_refresh_invert_affine_f32 flushes subn
 	CHECK_FALSE(RendererRD::ParticlesStorage::fast_refresh_invert_affine_f32(nan_affine, singular_inv));
 }
 
+TEST_CASE("[ExternalOutput][BUG-99] PARTICLE_LIGHT_64 fast-refresh GUARD_STATUS uses canonical 32-byte ABI layout") {
+	// Verify canonical GUARD_STATUS word layout matching gdextension_production_output.cpp
+	// and ANGE validate_output_guard_status32:
+	//   { 0, 0, 0, 0, seq_lo, seq_hi, 1, 0 }
+	// (Regression guard against M-06 where fast-refresh wrote OUTPUT_META layout
+	//   { 0, 0, 0, 1, cap, 4, seq_lo, seq_hi } into GUARD_STATUS.)
+	const uint64_t test_seqs[3] = {
+		1ull,
+		0x00000000FFFFFFFFull,
+		0x123456789ABCDEF0ull,
+	};
+	for (uint64_t seq : test_seqs) {
+		uint32_t words[8] = { 0xdeadbeefu, 0xdeadbeefu, 0xdeadbeefu, 0xdeadbeefu, 0xdeadbeefu, 0xdeadbeefu, 0xdeadbeefu, 0xdeadbeefu };
+		RendererRD::ParticlesStorage::fast_refresh_encode_light64_guard_status(seq, words);
+		CHECK(words[0] == 0u);
+		CHECK(words[1] == 0u);
+		CHECK(words[2] == 0u);
+		CHECK(words[3] == 0u);
+		CHECK(words[4] == uint32_t(seq));
+		CHECK(words[5] == uint32_t(seq >> 32));
+		CHECK(words[6] == 1u);
+		CHECK(words[7] == 0u);
+	}
+}
+
 TEST_CASE("[SceneTree][ExternalOutput][Block23] RendererSceneCull instance_is_visible tracks visibility state") {
 	RenderingServer *rs = RenderingServer::get_singleton();
 	REQUIRE(rs != nullptr);
