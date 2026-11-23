@@ -451,12 +451,9 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_reserve(GDExtensionQ
 	uint64_t cleanup_child_serial = 0;
 	if (header.kind == 3) {
 		const auto q = pod<GDExtensionStorageRetireRequestV1>(cell->request.ptr());
-		for (auto *child : bridge->storage) {
-			if (child && child->serial == q.backing.handle_serial) {
-				cleanup_reserved = &child->cleanup_serial_reserved;
-				cleanup_child_serial = child->serial;
-				break;
-			}
+		if (auto *child = bridge->find_storage_by_serial_locked(q.backing.handle_serial)) {
+			cleanup_reserved = &child->cleanup_serial_reserved;
+			cleanup_child_serial = child->serial;
 		}
 	} else if (header.kind == 5) {
 		const auto q = pod<GDExtensionNativeUnitRetireRequestV1>(cell->request.ptr());
@@ -769,12 +766,9 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_activate(GDExtension
 			}
 			bool no_effect = false;
 			if (cell->header.kind == 3) {
-				for (auto *child : bridge->storage) {
-					if (child && child->serial == cell->cleanup_child_serial) {
-						MutexLock physical_lock(child->physical.mutex);
-						no_effect = !child->creating && !child->retiring && !child->acknowledged && !child->physical.use_closed.load() && !child->physical.enqueued && !child->physical.free_event;
-						break;
-					}
+				if (auto *child = bridge->find_storage_by_serial_locked(cell->cleanup_child_serial)) {
+					MutexLock physical_lock(child->physical.mutex);
+					no_effect = !child->creating && !child->retiring && !child->acknowledged && !child->physical.use_closed.load() && !child->physical.enqueued && !child->physical.free_event;
 				}
 			}
 			if (cell->header.kind == 5) {
@@ -913,12 +907,9 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_release(GDExtensionQ
 		bool *reserved = nullptr;
 		bool acknowledged = false;
 		if (cell->header.kind == 3) {
-			for (auto *child : bridge->storage) {
-				if (child && child->serial == cell->cleanup_child_serial) {
-					reserved = &child->cleanup_serial_reserved;
-					acknowledged = child->acknowledged;
-					break;
-				}
+			if (auto *child = bridge->find_storage_by_serial_locked(cell->cleanup_child_serial)) {
+				reserved = &child->cleanup_serial_reserved;
+				acknowledged = child->acknowledged;
 			}
 		}
 		if (cell->header.kind == 5) {

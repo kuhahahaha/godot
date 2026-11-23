@@ -1004,6 +1004,10 @@ public:
 			REQUIRE(f.registry->qualification_rt_release(f.ref, create_refs[i]).native_error == OK);
 		}
 		CHECK(f.bridge->rt_retired_highwater == N);
+		CHECK(f.bridge->storage_by_serial.size() == N);
+		CHECK(f.bridge->storage_by_retire_serial.size() == N);
+		CHECK(f.bridge->storage_by_origin.size() == N);
+		CHECK(f.bridge->find_storage_by_serial_locked(backings[15].backing.handle_serial) != nullptr);
 
 		// Retired op_serials (1 and 32) return ERR_DOES_NOT_EXIST, 17.
 		for (uint64_t old_op : { 1ull, 32ull }) {

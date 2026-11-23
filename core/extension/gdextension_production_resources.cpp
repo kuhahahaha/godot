@@ -74,28 +74,27 @@ GDExtensionDeviceSessionResultV1 Registry::production_import_storage(GDExtension
 		if (!bridge || bridge->library != request->attachment->library || bridge->device != request->attachment->device || bridge->epoch != request->attachment->epoch) {
 			continue;
 		}
-		for (auto *child : bridge->storage) {
-			if (!child || child->serial != p_backing->backing.handle_serial) {
-				continue;
-			}
-			const auto &stored = child->backing;
-			auto *buffer = rd->storage_buffer_owner.get_or_null(RID::from_uint64(stored.rid));
-			if (child->creating || child->retiring || child->acknowledged || child->maintenance_error != OK || !abi(stored.abi) || stored.state != 1 || stored.native_error != OK || stored.backing.registry_instance != instance || stored.backing.handle_serial != child->serial || stored.rid != p_backing->rid || stored.backing_serial != p_backing->backing_serial || stored.byte_size != p_backing->byte_size || stored.usage_bits != p_backing->usage_bits || stored.native_error != p_backing->native_error || stored.state != p_backing->state || child->origin.allocation_slot != decl.original_slot || child->origin.part != decl.original_part || child->origin.allocation_generation != decl.original_generation || child->origin.bytes != decl.physical_bytes || stored.byte_size != decl.physical_bytes || (decl.required_usage & ~stored.usage_bits) || !buffer || !buffer->driver_id || buffer->qualification_return != &child->physical || buffer->backing_serial != stored.backing_serial || buffer->size != stored.byte_size || child->physical.bridge != bridge->serial || child->physical.child != child->serial || child->physical.rid != stored.rid || child->physical.serial != stored.backing_serial) {
-				return result(ERR_INVALID_DATA);
-			}
-			if (slot->imported && (slot->primary.get_id() != stored.rid || slot->backing_serial != stored.backing_serial || slot->use_count != 1)) {
-				return result(ERR_INVALID_DATA);
-			}
-			error = slot->uses[0].attach(child->physical, *request, request->serial);
-			if (error != OK) {
-				return result(error);
-			}
-			slot->primary = RID::from_uint64(stored.rid);
-			slot->backing_serial = stored.backing_serial;
-			slot->use_count = 1;
-			slot->imported = true;
-			return result(OK);
+		auto *child = bridge->find_storage_by_serial_locked(p_backing->backing.handle_serial);
+		if (!child) {
+			continue;
 		}
+		const auto &stored = child->backing;
+		auto *buffer = rd->storage_buffer_owner.get_or_null(RID::from_uint64(stored.rid));
+		if (child->creating || child->retiring || child->acknowledged || child->maintenance_error != OK || !abi(stored.abi) || stored.state != 1 || stored.native_error != OK || stored.backing.registry_instance != instance || stored.backing.handle_serial != child->serial || stored.rid != p_backing->rid || stored.backing_serial != p_backing->backing_serial || stored.byte_size != p_backing->byte_size || stored.usage_bits != p_backing->usage_bits || stored.native_error != p_backing->native_error || stored.state != p_backing->state || child->origin.allocation_slot != decl.original_slot || child->origin.part != decl.original_part || child->origin.allocation_generation != decl.original_generation || child->origin.bytes != decl.physical_bytes || stored.byte_size != decl.physical_bytes || (decl.required_usage & ~stored.usage_bits) || !buffer || !buffer->driver_id || buffer->qualification_return != &child->physical || buffer->backing_serial != stored.backing_serial || buffer->size != stored.byte_size || child->physical.bridge != bridge->serial || child->physical.child != child->serial || child->physical.rid != stored.rid || child->physical.serial != stored.backing_serial) {
+			return result(ERR_INVALID_DATA);
+		}
+		if (slot->imported && (slot->primary.get_id() != stored.rid || slot->backing_serial != stored.backing_serial || slot->use_count != 1)) {
+			return result(ERR_INVALID_DATA);
+		}
+		error = slot->uses[0].attach(child->physical, *request, request->serial);
+		if (error != OK) {
+			return result(error);
+		}
+		slot->primary = RID::from_uint64(stored.rid);
+		slot->backing_serial = stored.backing_serial;
+		slot->use_count = 1;
+		slot->imported = true;
+		return result(OK);
 	}
 	return result(ERR_DOES_NOT_EXIST);
 }

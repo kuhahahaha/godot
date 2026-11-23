@@ -33,6 +33,7 @@
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "core/extension/gdextension_qualification_child_history.h"
 #include "core/extension/gdextension_record_source.h"
+#include "core/templates/hash_map.h"
 #include "core/templates/local_vector.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/renderer_rd/storage_rd/height_frame_resources.h"
@@ -572,6 +573,162 @@ struct Registry::QualificationBridge {
 		uint64_t tracked_request_bytes() const { return bridge_request_bytes + origin_arena_request_bytes + hot_cell_request_bytes + physical_pin_request_bytes; }
 	};
 	ChildMetadataStats child_metadata_stats() const;
+	struct StorageOriginKey {
+		uint32_t allocation_slot = 0;
+		uint32_t part = 0;
+		uint64_t allocation_generation = 0;
+		uint64_t create_attempt = 0;
+		bool operator==(const StorageOriginKey &p_other) const {
+			return allocation_slot == p_other.allocation_slot &&
+					part == p_other.part &&
+					allocation_generation == p_other.allocation_generation &&
+					create_attempt == p_other.create_attempt;
+		}
+	};
+	struct StorageOriginKeyHasher {
+		static uint32_t hash(const StorageOriginKey &p_key) {
+			uint32_t h = hash_murmur3_one_32(p_key.allocation_slot);
+			h = hash_murmur3_one_32(p_key.part, h);
+			h = hash_murmur3_one_64(p_key.allocation_generation, h);
+			h = hash_murmur3_one_64(p_key.create_attempt, h);
+			return hash_fmix32(h);
+		}
+	};
+	HashMap<uint64_t, uint32_t> storage_by_serial;
+	HashMap<uint64_t, uint32_t> storage_by_retire_serial;
+	HashMap<StorageOriginKey, uint32_t, StorageOriginKeyHasher> storage_by_origin;
+	LocalVector<uint32_t> storage_free_slots;
+	uint32_t storage_next_fresh_slot = 0;
+	uint32_t storage_acknowledged_count = 0;
+
+	uint32_t alloc_storage_slot_locked() {
+		while (!storage_free_slots.is_empty()) {
+			const uint32_t slot = storage_free_slots[storage_free_slots.size() - 1];
+			storage_free_slots.resize(storage_free_slots.size() - 1);
+			if (slot < STORAGE_CHILD_CAPACITY && storage[slot] == nullptr) {
+				return slot;
+			}
+		}
+		while (storage_next_fresh_slot < STORAGE_CHILD_CAPACITY) {
+			const uint32_t slot = storage_next_fresh_slot++;
+			if (storage[slot] == nullptr) {
+				return slot;
+			}
+		}
+		for (uint32_t i = 0; i < STORAGE_CHILD_CAPACITY; ++i) {
+			if (storage[i] == nullptr) {
+				return i;
+			}
+		}
+		return STORAGE_CHILD_CAPACITY;
+	}
+	void index_storage_slot_locked(uint32_t p_slot, Storage *p_child) {
+		CRASH_COND(p_slot >= STORAGE_CHILD_CAPACITY || !p_child || storage[p_slot] != nullptr);
+		storage[p_slot] = p_child;
+		if (p_child->serial) {
+			storage_by_serial.insert(p_child->serial, p_slot);
+		}
+		if (p_child->retire_serial) {
+			storage_by_retire_serial.insert(p_child->retire_serial, p_slot);
+		}
+		const StorageOriginKey key{ p_child->origin.allocation_slot, p_child->origin.part, p_child->origin.allocation_generation, p_child->origin.create_attempt };
+		storage_by_origin.insert(key, p_slot);
+	}
+	void unindex_storage_slot_locked(uint32_t p_slot, Storage *p_child) {
+		CRASH_COND(p_slot >= STORAGE_CHILD_CAPACITY || !p_child);
+		if (p_child->serial) {
+			const uint32_t *found = storage_by_serial.getptr(p_child->serial);
+			if (found && *found == p_slot) {
+				storage_by_serial.erase(p_child->serial);
+			}
+		}
+		if (p_child->retire_serial) {
+			const uint32_t *found = storage_by_retire_serial.getptr(p_child->retire_serial);
+			if (found && *found == p_slot) {
+				storage_by_retire_serial.erase(p_child->retire_serial);
+			}
+		}
+		const StorageOriginKey key{ p_child->origin.allocation_slot, p_child->origin.part, p_child->origin.allocation_generation, p_child->origin.create_attempt };
+		const uint32_t *found_origin = storage_by_origin.getptr(key);
+		if (found_origin && *found_origin == p_slot) {
+			storage_by_origin.erase(key);
+		}
+		if (p_child->acknowledged && storage_acknowledged_count) {
+			--storage_acknowledged_count;
+		}
+		storage[p_slot] = nullptr;
+		storage_free_slots.push_back(p_slot);
+	}
+	Storage *find_storage_by_serial_locked(uint64_t p_serial) const {
+		if (!p_serial) {
+			return nullptr;
+		}
+		if (const uint32_t *slot = storage_by_serial.getptr(p_serial)) {
+			if (*slot < STORAGE_CHILD_CAPACITY) {
+				Storage *child = storage[*slot];
+				if (child && child->serial == p_serial) {
+					return child;
+				}
+			}
+		}
+#ifdef TESTS_ENABLED
+		for (uint32_t i = 0; i < STORAGE_CHILD_CAPACITY; ++i) {
+			Storage *child = storage[i];
+			if (child && child->serial == p_serial) {
+				return child;
+			}
+		}
+#endif
+		return nullptr;
+	}
+	Storage *find_storage_by_retire_serial_locked(uint64_t p_retire_serial) const {
+		if (!p_retire_serial) {
+			return nullptr;
+		}
+		if (const uint32_t *slot = storage_by_retire_serial.getptr(p_retire_serial)) {
+			if (*slot < STORAGE_CHILD_CAPACITY) {
+				Storage *child = storage[*slot];
+				if (child && child->retire_serial == p_retire_serial) {
+					return child;
+				}
+			}
+		}
+#ifdef TESTS_ENABLED
+		for (uint32_t i = 0; i < STORAGE_CHILD_CAPACITY; ++i) {
+			Storage *child = storage[i];
+			if (child && child->retire_serial == p_retire_serial) {
+				return child;
+			}
+		}
+#endif
+		return nullptr;
+	}
+	Storage *find_storage_by_origin_locked(const GDExtensionStorageCreateRequestV1 &p_req) const {
+		const StorageOriginKey key{ p_req.allocation_slot, p_req.part, p_req.allocation_generation, p_req.create_attempt };
+		if (const uint32_t *slot = storage_by_origin.getptr(key)) {
+			if (*slot < STORAGE_CHILD_CAPACITY) {
+				Storage *child = storage[*slot];
+				if (child && child->origin.allocation_slot == p_req.allocation_slot &&
+						child->origin.allocation_generation == p_req.allocation_generation &&
+						child->origin.part == p_req.part &&
+						child->origin.create_attempt == p_req.create_attempt) {
+					return child;
+				}
+			}
+		}
+#ifdef TESTS_ENABLED
+		for (uint32_t i = 0; i < STORAGE_CHILD_CAPACITY; ++i) {
+			Storage *child = storage[i];
+			if (child && child->origin.allocation_slot == p_req.allocation_slot &&
+					child->origin.allocation_generation == p_req.allocation_generation &&
+					child->origin.part == p_req.part &&
+					child->origin.create_attempt == p_req.create_attempt) {
+				return child;
+			}
+		}
+#endif
+		return nullptr;
+	}
 	QualificationTicket *tickets[TICKET_CAPACITY] = {};
 	Storage *storage[STORAGE_CHILD_CAPACITY] = {};
 	Texture *textures[RESOURCE_CAPACITY] = {};
@@ -611,7 +768,8 @@ inline void Registry::QualificationBridge::collect_retired_children_locked() {
 		memdelete(child);
 		child = nullptr;
 	}
-	for (auto *&child : bridge->storage) {
+	for (uint32_t s = 0; s < QualificationBridge::STORAGE_CHILD_CAPACITY; ++s) {
+		auto *child = bridge->storage[s];
 		if (child && child->acknowledged) {
 			trace_storage_child(*child, "collect_candidate");
 		}
@@ -630,8 +788,8 @@ inline void Registry::QualificationBridge::collect_retired_children_locked() {
 		} else {
 			bridge->storage_origins.archive_retired_origin(child->history_index, child->serial, child->retire_serial);
 		}
+		bridge->unindex_storage_slot_locked(s, child);
 		memdelete(child);
-		child = nullptr;
 	}
 	for (auto *&child : bridge->units) {
 		if (!child || !child->acknowledged || child->history_index == UINT32_MAX || bridge->any_rt_occupied_matching([&](const QualificationRtCell &p_cell) { return p_cell.cleanup_child_serial == child->serial; }) || child->creating || child->queued || child->queue_ref_credit || child->cleanup_serial_reserved || child->maintenance_error != OK || child->accepted_rt_refs || referenced(child->shader) || referenced(child->pipeline) || (child->raster && referenced(child->raster->framebuffer))) {
