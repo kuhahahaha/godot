@@ -10678,13 +10678,41 @@ Error RenderingDevice::_submit_transfer_workers(RDD::CommandBufferID p_draw_comm
 				const bool operation_covered = worker->operations_submitted >= transfer_worker_operation_used_by_draw[worker->index];
 				bool known = false;
 				for (const auto &report : frames[frame].qualification_hidden_reports) {
-					if (report.submission_serial == worker->last_submission.submission_serial && !report.calls.is_empty() && report.calls[0].serial == worker->last_submission.calls[0].serial) {
+					if (report.submission_serial == worker->last_submission.submission_serial && !report.calls.is_empty() && !worker->last_submission.calls.is_empty() && report.calls[0].serial == worker->last_submission.calls[0].serial) {
 						known = true;
 						break;
 					}
 				}
 				if (!known) {
-					frames[frame].qualification_hidden_reports.push_back(worker->last_submission);
+					RDD::QueueCallReport hidden = worker->last_submission;
+					if (driver->native_call_observation_supported()) {
+						RDD::NativeCallBlockingScope blocking_scope(!native_disposal_budget);
+						for (uint32_t c = 0; c < hidden.calls.size(); ++c) {
+							auto &call = hidden.calls.write[c];
+							if (call.presentation_only || call.source_owner_returned || !call.serial) {
+								continue;
+							}
+							if (!_native_disposal_admit(NativeDisposalWork::RETAIN)) {
+								for (uint32_t j = 0; j < c; ++j) {
+									if (hidden.calls[j].frame_observer_owned) {
+										(void)driver->native_call_release(hidden.calls[j].serial);
+									}
+								}
+								return ERR_BUSY;
+							}
+							const Error retain_err = driver->native_call_retain(call.serial);
+							if (retain_err != OK) {
+								for (uint32_t j = 0; j < c; ++j) {
+									if (hidden.calls[j].frame_observer_owned) {
+										(void)driver->native_call_release(hidden.calls[j].serial);
+									}
+								}
+								return retain_err;
+							}
+							call.frame_observer_owned = true;
+						}
+					}
+					frames[frame].qualification_hidden_reports.push_back(hidden);
 				}
 				{
 					auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
@@ -15761,6 +15789,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 	if (frame_wait_draining) {
 		return ERR_BUSY;
 	}
+	RDD::NativeCallBlockingScope blocking_scope(!p_nonblocking);
 	const Error height_retain = _native_height_retain_frame_sources(p_frame);
 	if (height_retain != OK) {
 		return height_retain;

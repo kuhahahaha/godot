@@ -742,6 +742,7 @@ Error RenderingDevice::_qualification_poll_tickets(uint32_t index) {
 	return _qualification_poll_tickets(index, true);
 }
 Error RenderingDevice::_qualification_poll_tickets(uint32_t index, bool p_nonblocking) {
+	RDD::NativeCallBlockingScope blocking_scope(!p_nonblocking);
 	const Error production = _production_retain_frame_sources(index);
 	if (production != OK) {
 		return production;

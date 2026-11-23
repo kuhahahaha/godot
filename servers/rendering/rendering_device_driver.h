@@ -613,6 +613,24 @@ public:
 		auto *scope = active_native_source_admission;
 		return !scope || !scope->can_block || scope->can_block(scope->owner);
 	}
+	static thread_local uint32_t native_call_blocking_depth;
+	static bool native_call_blocking_allowed() {
+		return native_call_blocking_depth > 0;
+	}
+	struct NativeCallBlockingScope {
+		bool active = false;
+		explicit NativeCallBlockingScope(bool p_blocking) :
+				active(p_blocking) {
+			if (active) {
+				++native_call_blocking_depth;
+			}
+		}
+		~NativeCallBlockingScope() {
+			if (active) {
+				--native_call_blocking_depth;
+			}
+		}
+	};
 	static bool capture_hidden_native_source(const QueueCallReport &p_report) {
 		auto *scope = active_native_source_admission;
 		return scope && scope->capture_hidden && scope->capture_hidden(scope->owner, p_report);

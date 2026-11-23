@@ -364,6 +364,7 @@ public:
 	FencePollResult native_call_poll(uint64_t p_native_serial) override;
 	FencePollResult native_call_wait(uint64_t p_native_serial) override;
 	Error native_call_recycle(uint64_t p_native_serial) override;
+	Error native_call_recycle_wait(uint64_t p_native_serial) override;
 	Error native_call_retain(uint64_t p_native_serial) override;
 	Error native_call_release(uint64_t p_native_serial) override;
 	void encode_imported_resources(MTL::RenderCommandEncoder *p_enc);

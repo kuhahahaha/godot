@@ -77,7 +77,12 @@ uint64_t RenderingDeviceDriverMetal::reserve_native_call_serials(uint32_t count)
 }
 RenderingDeviceDriver::FencePollResult RenderingDeviceDriverMetal::native_call_poll(uint64_t serial) {
 	FencePollResult out;
-	if (!serial || !completion_records_mutex.try_lock()) {
+	if (!serial) {
+		return out;
+	}
+	if (native_call_blocking_allowed()) {
+		completion_records_mutex.lock();
+	} else if (!completion_records_mutex.try_lock()) {
 		return out;
 	}
 	for (auto *record : completion_records) {
@@ -177,11 +182,38 @@ Error RenderingDeviceDriverMetal::native_call_recycle(uint64_t serial) {
 	return ERR_DOES_NOT_EXIST;
 }
 
+Error RenderingDeviceDriverMetal::native_call_recycle_wait(uint64_t serial) {
+	if (!serial) {
+		return ERR_INVALID_PARAMETER;
+	}
+	MutexLock lock(completion_records_mutex);
+	for (uint32_t i = 0; i < completion_records.size(); ++i) {
+		auto *record = completion_records[i];
+		if (record->serial != serial) {
+			continue;
+		}
+		if (!record->completed.load() || record->failed.load()) {
+			return ERR_BUSY;
+		}
+		if (!record->fence_owned.load()) {
+			record->retired.store(true);
+			if (!record->observers) {
+				completion_records.remove_at(i);
+				memdelete(record);
+			}
+		}
+		return OK;
+	}
+	return ERR_DOES_NOT_EXIST;
+}
+
 Error RenderingDeviceDriverMetal::native_call_retain(uint64_t serial) {
 	if (!serial) {
 		return ERR_INVALID_PARAMETER;
 	}
-	if (!completion_records_mutex.try_lock()) {
+	if (native_call_blocking_allowed()) {
+		completion_records_mutex.lock();
+	} else if (!completion_records_mutex.try_lock()) {
 		return ERR_BUSY;
 	}
 	for (auto *record : completion_records) {
@@ -202,7 +234,9 @@ Error RenderingDeviceDriverMetal::native_call_release(uint64_t serial) {
 	if (!serial) {
 		return ERR_INVALID_PARAMETER;
 	}
-	if (!completion_records_mutex.try_lock()) {
+	if (native_call_blocking_allowed()) {
+		completion_records_mutex.lock();
+	} else if (!completion_records_mutex.try_lock()) {
 		return ERR_BUSY;
 	}
 	for (uint32_t i = 0; i < completion_records.size(); ++i) {
@@ -3752,6 +3786,12 @@ Error RenderingDeviceDriverMetal::qualification_prepare_segment(QueueCallReport 
 	completion_records_mutex.unlock();
 	if (!p_nonblocking && !record->completed.load()) {
 		copy_queue_command_buffer.get()->waitUntilCompleted();
+		if (!record->completed.load() && OS::get_singleton()) {
+			const uint64_t handler_deadline = OS::get_singleton()->get_ticks_usec() + 50000ull;
+			while (!record->completed.load() && OS::get_singleton()->get_ticks_usec() < handler_deadline) {
+				OS::get_singleton()->delay_usec(10);
+			}
+		}
 	}
 	if (!record->completed.load()) {
 		return ERR_BUSY;

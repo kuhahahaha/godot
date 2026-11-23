@@ -1095,6 +1095,174 @@ public:
 		device.present_queue = RenderingDeviceDriver::CommandQueueID();
 		device.driver = nullptr;
 	}
+	static void bug118_transfer_worker_hidden_report_retains_observer() {
+		struct Bug118Driver : TransferTestDriverBase {
+			uint32_t observers_801 = 0;
+			bool retired_801 = false;
+			bool alive_801 = true;
+			bool fail_retain_802 = false;
+			bool retain_saw_blocking = false;
+			bool release_saw_blocking = false;
+			bool wait_saw_blocking = false;
+			uint32_t fence_waits = 0;
+
+			bool native_call_observation_supported() const override { return true; }
+			Error native_call_retain(uint64_t serial) override {
+				if (serial == 801) {
+					if (!alive_801) {
+						return ERR_DOES_NOT_EXIST;
+					}
+					retain_saw_blocking = retain_saw_blocking || native_call_blocking_allowed();
+					++observers_801;
+					return OK;
+				}
+				if (serial == 802 && fail_retain_802) {
+					return ERR_BUSY;
+				}
+				return OK;
+			}
+			Error native_call_release(uint64_t serial) override {
+				if (serial == 801) {
+					if (!alive_801 || observers_801 == 0) {
+						return ERR_DOES_NOT_EXIST;
+					}
+					release_saw_blocking = release_saw_blocking || native_call_blocking_allowed();
+					--observers_801;
+					if (observers_801 == 0 && retired_801) {
+						alive_801 = false;
+					}
+					return OK;
+				}
+				return OK;
+			}
+			FencePollResult native_call_poll(uint64_t serial) override {
+				FencePollResult out;
+				if (serial == 801 && alive_801) {
+					out.completed = true;
+					out.completed_serial = 801;
+					out.resolved_issue = IssueFact::KnownAccepted;
+				}
+				return out;
+			}
+			FencePollResult native_call_wait(uint64_t serial) override {
+				wait_saw_blocking = wait_saw_blocking || native_call_blocking_allowed();
+				return native_call_poll(serial);
+			}
+			Error native_call_recycle_wait(uint64_t) override { return OK; }
+			Error fence_recycle(FenceID, uint64_t) override {
+				// Mirrors Metal's retire_completion_records(): erases record immediately if observers == 0!
+				retired_801 = true;
+				if (observers_801 == 0) {
+					alive_801 = false;
+				}
+				return OK;
+			}
+			Error fence_wait(FenceID) override {
+				++fence_waits;
+				return OK;
+			}
+		} driver;
+
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.is_main_instance = true;
+		device.frames.resize(1);
+		device.frames[0].command_buffer = RenderingDeviceDriver::CommandBufferID(31);
+		device.frames[0].fence = RenderingDeviceDriver::FenceID(41);
+		device.frames[0].fence_signaled = true;
+		device.frames[0].qualification_epoch = 1;
+		device.frames[0].transfer_worker_semaphores.push_back(RenderingDeviceDriver::SemaphoreID(51));
+
+		RenderingDevice::TransferWorker worker;
+		worker.index = 0;
+		worker.submitted = true;
+		worker.recording = false;
+		worker.submission_pending = false;
+		worker.operations_processed = 0;
+		worker.operations_submitted = 1;
+		worker.operations_counter = 1;
+		worker.command_fence = RenderingDeviceDriver::FenceID(901);
+
+		RenderingDeviceDriver::NativeCallFact call_801;
+		call_801.serial = call_801.completion_serial = 801;
+		call_801.queue_index = 3;
+		call_801.issue = RenderingDeviceDriver::IssueFact::KnownAccepted;
+		call_801.completion = RenderingDeviceDriver::CompletionCapability::Fence;
+		call_801.frame_observer_owned = false;
+
+		RenderingDeviceDriver::NativeCallFact call_802 = call_801;
+		call_802.serial = call_802.completion_serial = 802;
+
+		worker.last_submission.submission_serial = 55;
+		worker.last_submission.issued = true;
+		worker.last_submission.calls.push_back(call_801);
+		worker.last_submission.calls.push_back(call_802);
+
+		device.transfer_worker_pool.push_back(&worker);
+		device.transfer_worker_pool_size = 1;
+		device.transfer_worker_operation_used_by_draw.push_back(1);
+
+		GDExtensionDeviceExit::QualificationTicket ticket;
+		REQUIRE(ticket.credits.initialize(8, 1, 1, 1, 2) == OK);
+		ticket.report.revision = 1;
+		ticket.frame_refs = 1;
+		device.frames[0].qualification_tickets.push_back(&ticket);
+
+		// 1. Rollback safety: if retaining the second call fails with ERR_BUSY,
+		//    the first call's frame observer is cleanly released and qualification_hidden_reports stays empty.
+		driver.fail_retain_802 = true;
+		CHECK(device._submit_transfer_workers(device.frames[0].command_buffer, true) == ERR_BUSY);
+		CHECK(driver.observers_801 == 0);
+		CHECK(device.frames[0].qualification_hidden_reports.is_empty());
+
+		// 2. Primary BUG-118 fix: retaining worker->last_submission sets frame_observer_owned = true
+		//    and keeps CompletionRecord alive across worker fence_recycle() until Frame 0 retires!
+		driver.fail_retain_802 = false;
+		worker.last_submission.calls.resize(1); // Keep only call_801
+		REQUIRE(device._submit_transfer_workers(device.frames[0].command_buffer, true) == OK);
+		CHECK(driver.retain_saw_blocking);
+		REQUIRE(device.frames[0].qualification_hidden_reports.size() == 1);
+		CHECK(device.frames[0].qualification_hidden_reports[0].calls[0].frame_observer_owned);
+		CHECK_FALSE(worker.last_submission.calls[0].frame_observer_owned); // Original worker report not mutated.
+		// Frame observer + ticket observer both retained 801.
+		CHECK(driver.observers_801 >= 1);
+
+		// Simulate ticket finishing its own release while Frame 0 still owns its hidden report observer.
+		for (auto &member : ticket.natives) {
+			if (member.retained && !member.owner_released) {
+				REQUIRE(driver.native_call_release(member.source.serial) == OK);
+				member.owner_released = true;
+			}
+		}
+		CHECK(driver.observers_801 == 1); // Frame 0's frame_observer_owned still holds 801!
+
+		// Next frame's _wait_for_transfer_worker recycles worker->fence (Metal retire_completion_records).
+		// With BUG-118 fixed, observers_801 == 1 keeps alive_801 == true!
+		REQUIRE(driver.fence_recycle(worker.command_fence, 55) == OK);
+		CHECK(driver.retired_801);
+		CHECK(driver.alive_801);
+
+		// Frame 0 rotates back around and runs blocking _stall_for_frame(0, false):
+		// Must complete with OK (not permanent ERR_BUSY!) and release 801 so CompletionRecord frees cleanly!
+		driver.release_saw_blocking = false;
+		driver.wait_saw_blocking = false;
+		CHECK(device._stall_for_frame(0, false) == OK);
+		CHECK(driver.wait_saw_blocking);
+		CHECK(driver.release_saw_blocking);
+		CHECK(device.frames[0].qualification_hidden_reports.is_empty());
+		CHECK(driver.observers_801 == 0);
+		CHECK_FALSE(driver.alive_801); // Cleanly deleted on frame observer release (zero leak!).
+		CHECK(driver.fence_waits == 1);
+
+		// Teardown
+		device.frames[0].qualification_tickets.clear();
+		device.transfer_worker_pool.clear();
+		device.transfer_worker_pool_size = 0;
+		device.transfer_worker_operation_used_by_draw.clear();
+		device.frames.clear();
+		device.driver = nullptr;
+	}
 	static void attach_native_source(RenderingDevice &device, RenderingDeviceDriver &driver) {
 		device.driver = &driver;
 		device.frames.resize(1);
@@ -2240,4 +2408,8 @@ TEST_CASE("[RenderingDevice][BUG-110] synchronous readback closes ordinary dispo
 
 TEST_CASE("[RenderingDevice][BUG-115] blocking _stall_for_frame waits on hidden reports and ticket serials and resource creation resumes pending frame advance") {
 	TestFrameWaitAccess::bug115_blocking_stall_and_resource_creation();
+}
+
+TEST_CASE("[RenderingDevice][BUG-118] transfer worker hidden reports retain frame observer across worker fence recycle") {
+	TestFrameWaitAccess::bug118_transfer_worker_hidden_report_retains_observer();
 }
