@@ -6150,6 +6150,305 @@ struct Access {
 		e.rd._free_pending_resources(0);
 		CHECK(st.physical.free_event != 0);
 	}
+
+	static void pillar1_passive_harvest_while_control_returned_and_other_frame_readback() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		e.driver.complete = false;
+		auto c = capacity(8);
+		c.retained_payload_bytes = 64;
+		c.readback_bytes = 16;
+		c.readbacks = 1;
+		const auto attachment_ref = e.accept(c);
+		REQUIRE(attachment_ref.handle_serial != 0);
+		graph_initialize(e);
+		e.rd.frames.resize(2);
+		e.rd.frames[1].qualification_epoch = 2;
+		e.rd.frames[1].fence = RDD::FenceID(93);
+		e.rd.frames[1].command_buffer = RDD::CommandBufferID(92);
+		e.rd.frames[1].command_pool = RDD::CommandPoolID(96);
+		e.rd.next_qualification_frame_epoch = 3;
+		e.rd.download_staging_buffers.block_size = 128;
+		e.rd.download_staging_buffers.max_size = 256;
+		e.rd.download_staging_buffers.usage_bits = RDD::BUFFER_USAGE_TRANSFER_TO_BIT;
+		REQUIRE(e.rd._insert_staging_block(e.rd.download_staging_buffers) == OK);
+
+		ProductionAttachment *att = nullptr;
+		RenderingDevice *rd = nullptr;
+		Request *r = nullptr;
+		const GDExtensionProductionOperationV1 op = { production_dto_abi<GDExtensionProductionOperationV1>(), 711, 1, 10, 12 };
+		const GDExtensionProductionActionV2 actions[] = {
+			{ 0, 10, 0, 0, GDEXTENSION_PRODUCTION_DISPATCH_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+			{ 1, 11, 0, 0, GDEXTENSION_PRODUCTION_READBACK_V1, 0, 1, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, 0 },
+		};
+		const GDExtensionProductionResourceV1 resources[] = {
+			{ GDEXTENSION_PRODUCTION_UNIT_V1, 4, 5, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 6, 0, 0 },
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 128, 0 },
+			{ GDEXTENSION_PRODUCTION_SET_V1, 2, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 0, 0 },
+		};
+		const GDExtensionProductionUseV1 uses[] = {
+			{ 1, GDEXTENSION_PRODUCTION_READ_WRITE_V1, 0, 128, 0 },
+			{ 1, GDEXTENSION_PRODUCTION_READ_V1, 0, 16, 0 },
+		};
+		const GDExtensionProductionReadbackV2 readback = { 1, 0, 0, 1, 0, 16 };
+		{
+			MutexLock lock(e.registry->mutex);
+			REQUIRE(e.registry->production_attachment_locked(attachment_ref, true, att, rd) == OK);
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op, c, { nullptr, actions }, 2, resources, 3, uses, 2, { nullptr, &readback, 0, nullptr }, 1, r, 2) == OK);
+		}
+		REQUIRE(r != nullptr);
+		const GDExtensionProductionRequestRefV1 ref{ Enrollment::INSTANCE, r->serial };
+		REQUIRE(import_original_unit(e, *r));
+
+		e.original_storage = memnew(Registry::QualificationBridge::Storage);
+		auto &st = *e.original_storage;
+		st.serial = 712;
+		st.creating = false;
+		st.origin = { Enrollment::ABI, 128, 1, 0, 1, 1, 0 };
+		st.physical.bridge = e.original_bridge->serial;
+		st.physical.child = st.serial;
+		e.original_bridge->storage[0] = &st;
+		const RID srid = e.rd._qualification_storage_create(128, &st.physical);
+		REQUIRE(srid.is_valid());
+		const auto *sbuf = e.rd.storage_buffer_owner.get_or_null(srid);
+		REQUIRE(sbuf != nullptr);
+		st.physical.rid = srid.get_id();
+		st.backing = { Enrollment::ABI, { Enrollment::INSTANCE, st.serial }, srid.get_id(), sbuf->backing_serial, sbuf->size, uint64_t(sbuf->usage), OK, 1 };
+		REQUIRE(e.registry->production_import_storage(ref, 1, &st.backing).native_error == OK);
+
+		const GDExtensionProductionSetBindingV1 binding = { production_dto_abi<GDExtensionProductionSetBindingV1>(), 0, 0, 0, 1, 0, 128 };
+		REQUIRE(e.registry->production_set_create(ref, 2, 0, 0, &binding, 1).native_error == OK);
+		REQUIRE(r->resources[2].cached_persistent_set);
+
+		const uint32_t push[4] = { 7, 11, 13, 17 };
+		const GDExtensionProductionDispatchV2 dispatch = { production_dto_abi<GDExtensionProductionDispatchV2>(), 0, 10, 0, 0, 0, 2, 1, 2, 3, 4, sizeof(push), 0 };
+		REQUIRE(e.registry->production_prepare_dispatch_v2(ref, &dispatch, push, sizeof(push)).native_error == OK);
+		REQUIRE(e.registry->production_prepare_readback_v2(ref, 1, 0).native_error == OK);
+		REQUIRE(effect(e, *r, 0).state == CheckedRecordAppend::State::Appended);
+		REQUIRE(effect(e, *r, 1).state == CheckedRecordAppend::State::Appended);
+		GDExtensionProductionSegmentV2 seg = {};
+		{
+			MutexLock lock(e.registry->mutex);
+			REQUIRE(e.registry->production_close_segment_locked(*r, seg) == OK);
+			REQUIRE(e.registry->production_ack_segment_locked(*r, seg.segment, seg.segment_revision) == OK);
+		}
+		execute_transfers(e, *r, false);
+		{
+			MutexLock lock(e.registry->mutex);
+			REQUIRE(e.registry->production_retain_sources_locked(e.rd, 0, e.rd.frames[0].qualification_epoch) == OK);
+		}
+		REQUIRE(e.rd.frames[0].download_buffer_get_data_requests.size() == 1);
+		REQUIRE(e.rd.frames[0].fence_signaled);
+		REQUIRE(r->native_count >= 1);
+		REQUIRE(r->natives[0].member.retained);
+		CHECK_FALSE(r->readbacks[0].source.delivered);
+
+		// Put control into RETURNED (unconsumed OBSERVE #1 while GPU was still pending — exact live Metal v22 scenario!).
+		const auto nonzero = budget(4, 4);
+		GDExtensionProductionReportV2 rep = {};
+		CHECK(e.registry->production_observe_v2(ref, &nonzero, &rep).native_error == ERR_UNAVAILABLE);
+		{
+			MutexLock lock(e.registry->mutex);
+			REQUIRE(r->control.state == ProductionControlState::PENDING);
+			r->control.state = ProductionControlState::QUEUED;
+			e.registry->production_control_execute_locked(*r, &e.rd);
+			REQUIRE(r->control.state == ProductionControlState::RETURNED);
+		}
+		CHECK(r->natives[0].observation.state != NativeSourceObservation::State::Complete);
+		CHECK_FALSE(r->readbacks[0].source.delivered);
+
+		// GPU completes while RD advances to frame 1 (frame 0 still holds fence + readback!).
+		e.driver.complete = true;
+		e.rd.frame = 1;
+		e.driver.expected_begin_frame = 1;
+		REQUIRE(e.rd._begin_frame(false, true) == OK);
+
+		// Passive RT harvest MUST have completed BOTH natives[] (despite control == RETURNED!) AND frame 0's readback!
+		CHECK(r->natives[0].observation.state == NativeSourceObservation::State::Complete);
+		CHECK(r->readbacks[0].source.delivered);
+		CHECK(r->readbacks[0].source.returned == r->readbacks[0].source.issued);
+		CHECK_FALSE(e.rd.frames[0].fence_signaled);
+		CHECK(e.rd.frames[0].download_buffer_get_data_requests.is_empty());
+
+		// Consuming OBSERVE #1 projects freshly harvested 100% settled report immediately!
+		GDExtensionProductionReportV2 after_consume = {};
+		const auto consume_obs = e.registry->production_observe_v2(ref, &nonzero, &after_consume);
+		CHECK((consume_obs.native_error == OK || consume_obs.native_error == ERR_BUSY));
+		CHECK(r->control.state == ProductionControlState::OWNER_CONSUMED);
+		CHECK(after_consume.possible_obligations == 0);
+		CHECK(after_consume.known_obligations == after_consume.complete_obligations);
+		CHECK(after_consume.ready_readbacks == 1);
+
+		// Follow-up OBSERVE hits Main-thread fast-path with ZERO new RT control cell!
+		const uint64_t ctrl_before_fast = r->control.serial;
+		GDExtensionProductionReportV2 fast_rep = {};
+		CHECK(e.registry->production_observe_v2(ref, &nonzero, &fast_rep).native_error == OK);
+		CHECK(r->control.serial == ctrl_before_fast);
+		CHECK(fast_rep.ready_readbacks == 1);
+
+		// Main-thread RELEASE fast-path releases cleanly in 1 synchronous call!
+		GDExtensionProductionServiceBudgetV1 rem = {};
+		GDExtensionProductionReportV2 rel_rep = {};
+		CHECK(e.registry->production_release_v2(ref, &nonzero, &rem, &rel_rep).native_error == OK);
+		CHECK(rel_rep.service_control_serial == 0);
+		CHECK(rel_rep.service_pending == 0);
+		CHECK(r->serial == 0);
+		CHECK(att->children == 0);
+
+		CHECK(e.registry->production_close(attachment_ref).native_error == ERR_BUSY);
+		e.rd._free_pending_resources(1);
+		e.rd._free_pending_resources(0);
+		CHECK(e.registry->production_close(attachment_ref).native_error == OK);
+		st.physical.use_closed.store(true);
+		e.rd.qualification_retiring = true;
+		e.rd.free_rid(RID::from_uint64(st.backing.rid));
+		e.rd.qualification_retiring = false;
+		e.rd._free_pending_resources(1);
+		e.rd._free_pending_resources(0);
+		CHECK(st.physical.free_event != 0);
+	}
+
+	static void pillar1_release_main_fast_path_and_rt_guard() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		e.driver.complete = true;
+		auto c = capacity(8);
+		c.retained_payload_bytes = 64;
+		auto pool = c;
+		pool.requests = 2;
+		pool.suboperations *= 2;
+		pool.resources *= 2;
+		pool.resource_uses *= 2;
+		pool.graph_memberships *= 2;
+		pool.native_memberships *= 2;
+		pool.return_cells *= 2;
+		pool.retained_payload_bytes *= 2;
+		const auto attachment_ref = e.accept(pool);
+		REQUIRE(attachment_ref.handle_serial != 0);
+		graph_initialize(e);
+
+		ProductionAttachment *att = nullptr;
+		RenderingDevice *rd = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			REQUIRE(e.registry->production_attachment_locked(attachment_ref, true, att, rd) == OK);
+		}
+		REQUIRE(att != nullptr);
+
+		auto reserve_and_complete = [&](uint64_t op_serial, bool init_unit_and_storage) -> Request * {
+			const GDExtensionProductionOperationV1 op = { production_dto_abi<GDExtensionProductionOperationV1>(), op_serial, 1, 10, 11 };
+			const GDExtensionProductionActionV2 action = { 0, 10, 0, 0, GDEXTENSION_PRODUCTION_DISPATCH_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
+			const GDExtensionProductionResourceV1 resources[] = {
+				{ GDEXTENSION_PRODUCTION_UNIT_V1, 4, 5, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 6, 0, 0 },
+				{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 128, 0 },
+				{ GDEXTENSION_PRODUCTION_SET_V1, 2, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 0, 0 },
+			};
+			const GDExtensionProductionUseV1 use = { 1, GDEXTENSION_PRODUCTION_READ_WRITE_V1, 0, 128, 0 };
+			Request *r = nullptr;
+			{
+				MutexLock lock(e.registry->mutex);
+				REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op, c, { nullptr, &action }, 1, resources, 3, &use, 1, { nullptr, nullptr, 0, nullptr }, 0, r, 2) == OK);
+			}
+			REQUIRE(r != nullptr);
+			const GDExtensionProductionRequestRefV1 ref{ Enrollment::INSTANCE, r->serial };
+			if (init_unit_and_storage) {
+				REQUIRE(import_original_unit(e, *r));
+				e.original_storage = memnew(Registry::QualificationBridge::Storage);
+				auto &st = *e.original_storage;
+				st.serial = 722;
+				st.creating = false;
+				st.origin = { Enrollment::ABI, 128, 1, 0, 1, 1, 0 };
+				st.physical.bridge = e.original_bridge->serial;
+				st.physical.child = st.serial;
+				e.original_bridge->storage[0] = &st;
+				const RID srid = e.rd._qualification_storage_create(128, &st.physical);
+				REQUIRE(srid.is_valid());
+				const auto *sbuf = e.rd.storage_buffer_owner.get_or_null(srid);
+				REQUIRE(sbuf != nullptr);
+				st.physical.rid = srid.get_id();
+				st.backing = { Enrollment::ABI, { Enrollment::INSTANCE, st.serial }, srid.get_id(), sbuf->backing_serial, sbuf->size, uint64_t(sbuf->usage), OK, 1 };
+			} else {
+				REQUIRE(e.registry->production_import_unit(ref, 0, &e.original_unit->backing).native_error == OK);
+			}
+			REQUIRE(e.registry->production_import_storage(ref, 1, &e.original_storage->backing).native_error == OK);
+			const GDExtensionProductionSetBindingV1 binding = { production_dto_abi<GDExtensionProductionSetBindingV1>(), 0, 0, 0, 1, 0, 128 };
+			REQUIRE(e.registry->production_set_create(ref, 2, 0, 0, &binding, 1).native_error == OK);
+			REQUIRE(r->resources[2].cached_persistent_set);
+			const uint32_t push[4] = { 7, 11, 13, 17 };
+			const GDExtensionProductionDispatchV2 dispatch = { production_dto_abi<GDExtensionProductionDispatchV2>(), 0, 10, 0, 0, 0, 2, 1, 2, 3, 4, sizeof(push), 0 };
+			REQUIRE(e.registry->production_prepare_dispatch_v2(ref, &dispatch, push, sizeof(push)).native_error == OK);
+			REQUIRE(effect(e, *r, 0).state == CheckedRecordAppend::State::Appended);
+			GDExtensionProductionSegmentV2 seg = {};
+			{
+				MutexLock lock(e.registry->mutex);
+				REQUIRE(e.registry->production_close_segment_locked(*r, seg) == OK);
+				REQUIRE(e.registry->production_ack_segment_locked(*r, seg.segment, seg.segment_revision) == OK);
+			}
+			execute_transfers(e, *r, false);
+			{
+				MutexLock lock(e.registry->mutex);
+				REQUIRE(e.registry->production_retain_sources_locked(e.rd, 0, e.rd.frames[0].qualification_epoch) == OK);
+			}
+			e.driver.expected_begin_frame = 0;
+			REQUIRE(e.rd._begin_frame(false, true) == OK);
+			REQUIRE(r->natives[0].observation.state == NativeSourceObservation::State::Complete);
+			return r;
+		};
+
+		// 1. Settled PersistentSetEntry request completes RELEASE synchronously on Main (ZERO RT turn!).
+		Request *r1 = reserve_and_complete(731, true);
+		const GDExtensionProductionRequestRefV1 ref1{ Enrollment::INSTANCE, r1->serial };
+		const auto offered = budget(8, 8);
+		GDExtensionProductionServiceBudgetV1 rem = {};
+		GDExtensionProductionReportV2 rel_rep = {};
+		const uint64_t nat_serial = r1->natives[0].member.source.serial;
+		REQUIRE(nat_serial < 128);
+		const uint32_t releases_before = e.driver.releases[nat_serial];
+		CHECK(e.registry->production_release_v2(ref1, &offered, &rem, &rel_rep).native_error == OK);
+		CHECK(rel_rep.service_control_serial == 0);
+		CHECK(rel_rep.service_pending == 0);
+		CHECK(rel_rep.cause.native_error == OK);
+		CHECK(r1->serial == 0);
+		CHECK(att->children == 0);
+		CHECK(e.driver.releases[nat_serial] == releases_before + 1);
+		CHECK(rem.controls == offered.controls - 1);
+		CHECK(rem.receipts == offered.receipts - 1);
+
+		// 2. Request with RT-only custody (unreturned preinput host transform) MUST NOT bypass RT RELEASE!
+		Request *r2 = reserve_and_complete(732, false);
+		const GDExtensionProductionRequestRefV1 ref2{ Enrollment::INSTANCE, r2->serial };
+		r2->actions[0].preinput_host_prepared = true;
+		r2->actions[0].preinput_host_returned = false;
+		GDExtensionProductionServiceBudgetV1 rem2 = {};
+		GDExtensionProductionReportV2 rel_rep2 = {};
+		CHECK(e.registry->production_release_v2(ref2, &offered, &rem2, &rel_rep2).native_error == ERR_BUSY);
+		CHECK(rel_rep2.service_control_serial != 0);
+		CHECK(rel_rep2.service_pending == 1);
+		CHECK(r2->serial == ref2.handle_serial);
+		CHECK(r2->control.state == ProductionControlState::PENDING);
+		CHECK(r2->control.input.kind == ProductionControlKind::RELEASE);
+		// Execute the RT RELEASE turn cleanly and consume.
+		{
+			MutexLock lock(e.registry->mutex);
+			r2->control.state = ProductionControlState::QUEUED;
+			e.registry->production_control_execute_locked(*r2, &e.rd);
+		}
+		CHECK(r2->actions[0].preinput_host_returned);
+		CHECK(e.registry->production_release_v2(ref2, &offered, &rem2, &rel_rep2).native_error == OK);
+		CHECK(r2->serial == 0);
+		CHECK(att->children == 0);
+
+		CHECK(e.registry->production_close(attachment_ref).native_error == ERR_BUSY);
+		e.rd._free_pending_resources(0);
+		CHECK(e.registry->production_close(attachment_ref).native_error == OK);
+		auto &st = *e.original_storage;
+		st.physical.use_closed.store(true);
+		e.rd.qualification_retiring = true;
+		e.rd.free_rid(RID::from_uint64(st.backing.rid));
+		e.rd.qualification_retiring = false;
+		e.rd._free_pending_resources(0);
+		CHECK(st.physical.free_event != 0);
+	}
 };
 TEST_CASE("[ProductionNativeObserve][PreparedNativeRecordV2] cancel rejects transferred native wait before consume without erasing actual prefix") {
 	Access::native_record_wait_rejection(false);
@@ -6422,4 +6721,12 @@ TEST_CASE("[ProductionNativeObserve][Pillar1][PersistentSetCache] persistent Uni
 
 TEST_CASE("[ProductionNativeObserve][Pillar1][ObserveFastPath] passive RT _begin_frame harvest completes obligations and Main-thread OBSERVE fast-path returns synchronous OK without RT turn") {
 	TestProductionNativeObserve::Access::pillar1_observe_fast_path_and_passive_rt_harvest();
+}
+
+TEST_CASE("[ProductionNativeObserve][Pillar1][PassiveHarvestReturned] passive RT _begin_frame harvests obligations while control is RETURNED and delivers other-frame production readbacks non-blockingly") {
+	TestProductionNativeObserve::Access::pillar1_passive_harvest_while_control_returned_and_other_frame_readback();
+}
+
+TEST_CASE("[ProductionNativeObserve][Pillar1][ReleaseFastPath] settled PersistentSetEntry request completes RELEASE synchronously on Main while RT-only custody still takes RT RELEASE") {
+	TestProductionNativeObserve::Access::pillar1_release_main_fast_path_and_rt_guard();
 }

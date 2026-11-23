@@ -895,7 +895,7 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 		if (v.physical_unit < resource_count && resources[v.physical_unit].resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1) {
 			return ERR_INVALID_DATA;
 		}
-		if (v.action_ordinal != i || v.source_recipe_reserved || v.canonical_suboperation < op.canonical_begin || v.canonical_suboperation >= op.canonical_end || (i && v.canonical_suboperation < actions[i - 1].canonical_suboperation) || (contract_version == 1 && v.canonical_suboperation != op.canonical_begin + i) || v.action_kind < GDEXTENSION_PRODUCTION_DISPATCH_V1 || (v.action_kind > GDEXTENSION_PRODUCTION_READBACK_V1 && (contract_version != 2 || (v.action_kind != GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1 && v.action_kind != GDEXTENSION_PRODUCTION_MATERIAL_QUALIFICATION_V1))) || v.list_boundary > GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1 || v.first_use > use_count || v.use_count > use_count - v.first_use) {
+		if (v.action_ordinal != i || v.source_recipe_reserved || v.canonical_suboperation < op.canonical_begin || v.canonical_suboperation >= op.canonical_end || (contract_version == 1 && v.canonical_suboperation != op.canonical_begin + i) || v.action_kind < GDEXTENSION_PRODUCTION_DISPATCH_V1 || (v.action_kind > GDEXTENSION_PRODUCTION_READBACK_V1 && (contract_version != 2 || (v.action_kind != GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1 && v.action_kind != GDEXTENSION_PRODUCTION_MATERIAL_QUALIFICATION_V1))) || v.list_boundary > GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1 || v.first_use > use_count || v.use_count > use_count - v.first_use) {
 			return ERR_INVALID_DATA;
 		}
 		if (v.action_kind == GDEXTENSION_PRODUCTION_MATERIAL_QUALIFICATION_V1 && (v.physical_unit != UINT32_MAX || v.readback_slot != UINT32_MAX || v.use_count != 0)) {
@@ -2429,6 +2429,50 @@ void Registry::production_observe_completed_frames_rt(RenderingDevice &p_rd) {
 	if (!p_rd.driver || p_rd.native_disposal_active || p_rd.frame_wait_draining || p_rd.render_thread_id != Thread::get_caller_id()) {
 		return;
 	}
+	// Passively deliver production readbacks on any OTHER already-completed GPU frame slot
+	// without blocking, so readbacks do not wait frames.size()-1 swaps to be harvested.
+	if (p_rd.frames.size() > 1 && p_rd.failed_wait_frame < 0 && p_rd.frame_wait_error == OK && p_rd.frame_issue_error == OK) {
+		for (uint32_t f = 0; f < p_rd.frames.size(); ++f) {
+			if (f == uint32_t(p_rd.frame)) {
+				continue;
+			}
+			const auto &slot = p_rd.frames[f];
+			if (slot.download_buffer_get_data_requests.is_empty() || slot.disposal.active ||
+					!slot.download_texture_get_data_requests.is_empty() || !slot.qualification_tickets.is_empty() ||
+					!slot.fence_signaled || slot.chain_reports.is_empty() ||
+					!slot.chain_reports[slot.chain_reports.size() - 1].submission_serial) {
+				continue;
+			}
+			bool eligible = true;
+			{
+				Lock lock(*this);
+				for (const auto &rb : slot.download_buffer_get_data_requests) {
+					if (!rb.capture || rb.capture->registry != this || !rb.capture->state ||
+							rb.result_offset > 0 || rb.result_offset != rb.capture->state->returned) {
+						eligible = false;
+						break;
+					}
+					for (uint32_t other_f = 0; other_f < p_rd.frames.size() && eligible; ++other_f) {
+						if (other_f == f) {
+							continue;
+						}
+						for (const auto &other_rb : p_rd.frames[other_f].download_buffer_get_data_requests) {
+							if (other_rb.capture == rb.capture) {
+								eligible = false;
+								break;
+							}
+						}
+					}
+					if (!eligible) {
+						break;
+					}
+				}
+			}
+			if (eligible) {
+				(void)p_rd._stall_for_frame(int(f), true);
+			}
+		}
+	}
 	const auto origin = NativeSourceOrigin::production();
 	Lock lock(*this);
 	for (uint32_t a_idx = 0; a_idx < RECORD_CAPACITY; ++a_idx) {
@@ -2445,7 +2489,8 @@ void Registry::production_observe_completed_frames_rt(RenderingDevice &p_rd) {
 			}
 			auto &r = attachment->requests[r_idx];
 			if (!r.serial || r.source_device_lost || r.capture_inflight || r.continuation_inflight ||
-					r.control.state != ProductionControlState::OWNER_CONSUMED ||
+					r.effects_pending ||
+					r.control.state == ProductionControlState::EXECUTING ||
 					!r.native_count || !r.natives || r.native_count > r.capacity.native_memberships ||
 					r.revision > UINT64_MAX - uint64_t(r.capacity.graph_memberships) * 2 - uint64_t(r.capacity.native_memberships) * 2 - r.capacity.readbacks - r.capacity.resources - 8) {
 				continue;
@@ -2855,6 +2900,37 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_v2(GDExtensionProd
 				if (ready.native_error != ERR_BUSY || (!own_tail && !mq_tail) || request->capture_inflight || request->continuation_inflight || (request->compute_list_open || request->draw_list_open) || (report->cause.native_error != OK && !returned_map_failure && !mq_tail) || (!request->cancelled && request->next_action != request->action_count)) {
 					if (ready.native_error == ERR_BUSY) { trace_release_busy(5, "ready_refused"); }
 					return ready;
+				}
+			} else if (production_release_main_fast_path_eligible_locked(*request, offered, *report)) {
+				GDExtensionProductionServiceBudgetV1 fast_budget = offered;
+				fast_budget.passes = MIN(offered.passes, 64u);
+				fast_budget.receipts = MIN(offered.receipts, 128u);
+				ProductionServiceUsage fast_usage = {};
+				const auto fast_released = production_release_locked(*request, rd, true, &fast_budget, &fast_usage);
+				if (fast_released.native_error == OK) {
+					*remaining = offered;
+					remaining->controls = offered.controls >= fast_usage.controls ? offered.controls - fast_usage.controls : 0;
+					remaining->passes = offered.passes >= fast_usage.passes ? offered.passes - fast_usage.passes : 0;
+					remaining->receipts = offered.receipts >= fast_usage.receipts ? offered.receipts - fast_usage.receipts : 0;
+					report->service_control_serial = 0;
+					report->service_pending = 0;
+					report->cause = result(OK);
+					return result(OK);
+				}
+				if (fast_released.native_error != ERR_BUSY) {
+					report->service_control_serial = 0;
+					report->service_pending = 0;
+					report->cause = fast_released;
+					return fast_released;
+				}
+				if (fast_usage.controls || fast_usage.passes || fast_usage.receipts) {
+					*remaining = offered;
+					remaining->controls = offered.controls >= fast_usage.controls ? offered.controls - fast_usage.controls : 0;
+					remaining->passes = offered.passes >= fast_usage.passes ? offered.passes - fast_usage.passes : 0;
+					remaining->receipts = offered.receipts >= fast_usage.receipts ? offered.receipts - fast_usage.receipts : 0;
+					report->service_control_serial = 0;
+					report->service_pending = 0;
+					return fast_released;
 				}
 			}
 			accept = publish = true;
@@ -3475,6 +3551,44 @@ GDExtensionDeviceSessionResultV1 Registry::production_release(GDExtensionProduct
 	}
 	return production_release_locked(*r, rd, true);
 }
+bool Registry::production_release_main_fast_path_eligible_locked(const ProductionRequest &r, const GDExtensionProductionServiceBudgetV1 &offered, const GDExtensionProductionReportV2 &report) const {
+	if (!r.serial || !r.attachment || r.control.state != ProductionControlState::OWNER_CONSUMED ||
+			r.capture_inflight || r.continuation_inflight || r.effects_pending || r.source_device_lost ||
+			r.maintenance_serial || r.compute_list_open || r.draw_list_open ||
+			r.native_prepared_unread || r.native_batch_pending_ack ||
+			r.release_ready.control_serial != 0 ||
+			r.disposal_group_head != UINT32_MAX || r.output_owner_cursor != UINT32_MAX || r.output_owner_head != UINT32_MAX ||
+			r.action_count == 0 || r.next_action != r.action_count ||
+			r.segment.segment == 0 || r.acknowledged_segment != r.segment.segment ||
+			report.possible_obligations != 0 || report.known_obligations != report.complete_obligations ||
+			report.physical_returns_pending != 0 ||
+			!offered.controls || MIN(offered.passes, 64u) < r.native_count || MIN(offered.receipts, 128u) < r.native_count) {
+		return false;
+	}
+	for (uint32_t i = 0; i < r.resource_count; ++i) {
+		const auto &slot = r.resources[i];
+		if (slot.transfer_pending || slot.metadata_data || slot.metadata_consumer ||
+				!slot.output_predecessor_view.is_empty() || slot.scene_depth_lease_count != 0 ||
+				slot.retiring || slot.material_pipeline_shader_hold.is_active() || slot.material_pipeline_reservation.is_valid()) {
+			return false;
+		}
+		if (slot.declaration.ownership == GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 &&
+				!slot.cached_persistent_set && !slot.returned && slot.primary.is_valid()) {
+			return false;
+		}
+	}
+	for (uint32_t i = 0; i < r.action_count; ++i) {
+		const auto &action = r.actions[i];
+		if (action.material_qualification || action.scene_attempt.content.is_valid() ||
+				action.preinput_camera_source.is_valid() || action.scene_cull_capture.is_valid() ||
+				(action.camera_ready_subscriber.registry && !action.camera_ready_subscriber.released) ||
+				(action.preinput_host_prepared && !action.preinput_host_returned)) {
+			return false;
+		}
+	}
+	return true;
+}
+
 bool Registry::production_release_owner_tail_locked(const ProductionRequest &r, RenderingDevice *rd, bool require_proof) const {
 	if (!r.serial || !r.attachment || !rd || !rd->driver || r.attachment->held_device != rd || r.capture_inflight || r.continuation_inflight || r.effects_pending || r.source_device_lost || r.maintenance_serial || r.compute_list_open || r.draw_list_open || (!r.cancelled && r.next_action != r.action_count)) {
 		return false;

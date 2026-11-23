@@ -1186,6 +1186,7 @@ private:
 	Error production_entity_return_locked(ProductionAttachment &);
 	GDExtensionDeviceSessionResultV1 production_cancel_locked(ProductionRequest &);
 	GDExtensionDeviceSessionResultV1 production_release_locked(ProductionRequest &, RenderingDevice *, bool, const GDExtensionProductionServiceBudgetV1 * = nullptr, ProductionServiceUsage * = nullptr, bool = false);
+	bool production_release_main_fast_path_eligible_locked(const ProductionRequest &, const GDExtensionProductionServiceBudgetV1 &, const GDExtensionProductionReportV2 &) const;
 	bool production_release_owner_tail_locked(const ProductionRequest &, RenderingDevice *, bool) const;
 	void production_release_owner_execute_locked(ProductionRequest &, RenderingDevice *);
 	Error production_native_owner_locked(const ProductionRequest &, uint32_t, const ProductionNativeCell *&) const;
