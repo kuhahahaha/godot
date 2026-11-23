@@ -164,13 +164,7 @@ RenderingDeviceDriver::FencePollResult RenderingDeviceDriverMetal::fence_wait_ob
 	}
 	for (CompletionRecord *record : fence->completion_records) {
 		record->command_buffer->waitUntilCompleted();
-	}
-	int64_t failed_code = 0;
-	if (!completion_records_complete(fence->completion_records) && !completion_records_failed(fence->completion_records, failed_code) && OS::get_singleton()) {
-		const uint64_t handler_deadline = OS::get_singleton()->get_ticks_usec() + 50000ull;
-		while (!completion_records_complete(fence->completion_records) && !completion_records_failed(fence->completion_records, failed_code) && OS::get_singleton()->get_ticks_usec() < handler_deadline) {
-			OS::get_singleton()->delay_usec(10);
-		}
+		publish_command_buffer_status(record, record->command_buffer.get());
 	}
 	return fence_poll(p_fence, p_expected_submission_serial);
 }
@@ -195,6 +189,7 @@ void RenderingDeviceDriverMetal::fence_free(FenceID p_fence) {
 		for (CompletionRecord *record : fence->completion_records) {
 			if (record && record->command_buffer) {
 				record->command_buffer->waitUntilCompleted();
+				publish_command_buffer_status(record, record->command_buffer.get());
 			}
 		}
 		retire_completion_records(fence->completion_records);

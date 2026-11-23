@@ -1137,8 +1137,10 @@ bool Registry::production_readback_ready_to_pump(const BufferReadbackSourceCaptu
 				!target->capture_inflight && !target->continuation_inflight)) {
 		return false;
 	}
-	// Do not advance the RD frame while any sibling request on this device is
-	// actively mid-recording an unclosed action plan.
+	// Do not advance the RD frame while any sibling request on this device has an
+	// actively open compute/draw list or an in-flight RT recording call. Idle siblings
+	// with closed lists (even mid-plan or with a queued/returned RECORD control) must
+	// not starve a completed sibling's readback pump (BUG-120).
 	for (auto *attachment : production_attachments) {
 		if (!attachment || attachment->held_device != target_rd) {
 			continue;
@@ -1149,9 +1151,9 @@ bool Registry::production_readback_ready_to_pump(const BufferReadbackSourceCaptu
 				continue;
 			}
 			if (other.compute_list_open || other.draw_list_open ||
-					(other.control.state != ProductionControlState::OWNER_CONSUMED &&
-							other.control.input.kind == ProductionControlKind::RECORD) ||
-					(!other.cancelled && other.next_action > 0 && other.next_action < other.action_count)) {
+					other.capture_inflight || other.continuation_inflight ||
+					(other.control.state == ProductionControlState::EXECUTING &&
+							other.control.input.kind == ProductionControlKind::RECORD)) {
 				return false;
 			}
 		}

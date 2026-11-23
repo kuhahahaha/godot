@@ -34,6 +34,7 @@ TEST_FORCE_LINK(test_rendering_device_frame_wait)
 
 #include "core/extension/gdextension_qualification_internal.h"
 #include "core/object/callable_mp.h"
+#include "core/os/os.h"
 #include "core/os/thread.h"
 #include "servers/rendering/renderer_compositor.h"
 #include "servers/rendering/rendering_device.h"
@@ -1263,6 +1264,187 @@ public:
 		device.frames.clear();
 		device.driver = nullptr;
 	}
+	static void bug119a_draw_list_end_blocks_on_thread_safe() {
+		TransferTestDriverBase driver;
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.is_main_instance = true;
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		device.draw_graph.begin(true);
+		device.draw_list.active = true;
+		device.production_output_list_head_owner = reinterpret_cast<::RendererRD::ExternalOutputOwner *>(uintptr_t(0x1));
+		device.production_output_list_head_read = UINT32_MAX;
+		device.production_output_list_reads = 0;
+
+		struct LockHolder {
+			RenderingDevice *device = nullptr;
+			std::atomic<bool> acquired{ false };
+			std::atomic<bool> released{ false };
+		} holder;
+		holder.device = &device;
+
+		Thread worker;
+		worker.start(
+				[](void *p_userdata) {
+					auto *h = static_cast<LockHolder *>(p_userdata);
+					h->device->_thread_safe_.lock();
+					h->acquired.store(true, std::memory_order_release);
+					OS::get_singleton()->delay_usec(8000);
+					h->released.store(true, std::memory_order_release);
+					h->device->_thread_safe_.unlock();
+				},
+				&holder);
+
+		while (!holder.acquired.load(std::memory_order_acquire)) {
+			OS::get_singleton()->delay_usec(50);
+		}
+		// Non-blocking path (used by particles_storage_external.cpp) still refuses cleanly when contended.
+		CHECK(device._production_output_reads_close(false) == ERR_UNAVAILABLE);
+		CHECK(device.draw_list.active);
+		CHECK(device.production_output_list_head_owner != nullptr);
+
+		// Blocking draw_list_end() must wait for _thread_safe_ and close the draw list cleanly.
+		ERR_PRINT_OFF;
+		device.draw_list_end();
+		ERR_PRINT_ON;
+		CHECK(holder.released.load(std::memory_order_acquire));
+		CHECK_FALSE(device.draw_list.active);
+		CHECK(device.production_output_list_head_owner == nullptr);
+
+		worker.wait_to_finish();
+		device.draw_graph.finalize();
+		device.driver = nullptr;
+	}
+	static void bug119b_unknown_ticket_known_hidden_and_unsubmitted_worker() {
+		struct Bug119BDriver final : TransferTestDriverBase {
+			uint32_t observers_901 = 0;
+			bool return_unknown_serial = true;
+			bool native_call_observation_supported() const override { return true; }
+			Error native_call_retain(uint64_t p_serial) override {
+				if (p_serial == 901) {
+					++observers_901;
+					return OK;
+				}
+				return ERR_DOES_NOT_EXIST;
+			}
+			Error native_call_release(uint64_t p_serial) override {
+				if (p_serial == 901 && observers_901 > 0) {
+					--observers_901;
+					return OK;
+				}
+				return ERR_DOES_NOT_EXIST;
+			}
+			FencePollResult native_call_poll(uint64_t p_serial) override {
+				if (p_serial == 901) {
+					FencePollResult out;
+					out.completed = true;
+					out.completed_serial = 901;
+					out.resolved_issue = IssueFact::KnownAccepted;
+					return out;
+				}
+				if (return_unknown_serial && p_serial == 999) {
+					FencePollResult out;
+					out.completed = true;
+					out.completed_serial = 999;
+					out.resolved_issue = IssueFact::IssuedUnknown; // Unrefined IssuedUnknown -> poll_native_source returns OK + State::Unknown!
+					return out;
+				}
+				return {};
+			}
+			FencePollResult native_call_wait(uint64_t p_serial) override {
+				return native_call_poll(p_serial);
+			}
+		} driver;
+
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.is_main_instance = true;
+		device.frames.resize(1);
+		device.frames[0].command_buffer = RenderingDeviceDriver::CommandBufferID(31);
+		device.frames[0].fence = RenderingDeviceDriver::FenceID(41);
+		device.frames[0].qualification_epoch = 1;
+		device.frames[0].transfer_worker_semaphores.push_back(RenderingDeviceDriver::SemaphoreID(51));
+
+		// 1. State::Unknown in blocking _qualification_poll_tickets must return FAILED (not infinite ERR_BUSY).
+		GDExtensionDeviceExit::QualificationTicket unknown_ticket;
+		REQUIRE(unknown_ticket.credits.initialize(8, 1, 1, 1, 2) == OK);
+		unknown_ticket.report.revision = 1;
+		unknown_ticket.frame_refs = 1;
+		unknown_ticket.facts.push_back(GDExtensionQualificationFactV1{});
+		GDExtensionDeviceExit::QualificationTicket::NativeMember mem;
+		mem.source.serial = 999;
+		mem.source.completion_serial = 999;
+		mem.source.queue_index = 1;
+		mem.source.issue = RenderingDeviceDriver::IssueFact::IssuedUnknown;
+		mem.source.completion = RenderingDeviceDriver::CompletionCapability::CommandBuffer;
+		mem.retained = true;
+		mem.fact = 0;
+		unknown_ticket.natives.push_back(mem);
+		device.frames[0].qualification_tickets.push_back(&unknown_ticket);
+
+		CHECK(device._qualification_poll_tickets(0, true) == ERR_BUSY);
+		CHECK(device._qualification_poll_tickets(0, false) == FAILED);
+		device.frames[0].qualification_tickets.clear();
+
+		// 2. Unsubmitted worker with stale last_submission must be rejected with ERR_UNAVAILABLE
+		//    in _qualification_admit_frame_ticket and _check_transfer_worker_operation.
+		RenderingDevice::TransferWorker worker;
+		worker.index = 0;
+		worker.submitted = false;
+		worker.recording = false;
+		worker.submission_pending = false;
+		worker.operations_processed = 0;
+		worker.operations_submitted = 0;
+		worker.operations_counter = 1;
+		RenderingDeviceDriver::NativeCallFact call_901;
+		call_901.serial = call_901.completion_serial = 901;
+		call_901.queue_index = 3;
+		call_901.issue = RenderingDeviceDriver::IssueFact::KnownAccepted;
+		call_901.completion = RenderingDeviceDriver::CompletionCapability::Fence;
+		call_901.frame_observer_owned = false;
+		worker.last_submission.submission_serial = 66;
+		worker.last_submission.issued = true;
+		worker.last_submission.calls.push_back(call_901);
+
+		device.transfer_worker_pool.push_back(&worker);
+		device.transfer_worker_pool_size = 1;
+		device.transfer_worker_operation_used_by_draw.push_back(1);
+
+		GDExtensionDeviceExit::QualificationTicket admit_ticket;
+		REQUIRE(admit_ticket.credits.initialize(8, 1, 1, 1, 2) == OK);
+		CHECK(device._qualification_admit_frame_ticket(&admit_ticket) == ERR_UNAVAILABLE);
+
+		// 3. Pre-existing known hidden report missing frame_observer_owned gets retained in _submit_transfer_workers.
+		worker.submitted = true;
+		worker.operations_submitted = 1;
+		device.frames[0].qualification_hidden_reports.push_back(worker.last_submission);
+		REQUIRE_FALSE(device.frames[0].qualification_hidden_reports[0].calls[0].frame_observer_owned);
+		device.frames[0].qualification_tickets.push_back(&admit_ticket);
+		admit_ticket.frame_refs = 1;
+		REQUIRE(device._submit_transfer_workers(device.frames[0].command_buffer, true) == OK);
+		REQUIRE(device.frames[0].qualification_hidden_reports.size() == 1);
+		CHECK(device.frames[0].qualification_hidden_reports[0].calls[0].frame_observer_owned);
+		CHECK(driver.observers_901 >= 1);
+
+		// Clean release via _stall_for_frame
+		for (auto &nm : admit_ticket.natives) {
+			if (nm.retained && !nm.owner_released) {
+				(void)driver.native_call_release(nm.source.serial);
+				nm.owner_released = true;
+			}
+		}
+		CHECK(device._stall_for_frame(0, false) == OK);
+		CHECK(driver.observers_901 == 0);
+
+		device.frames[0].qualification_tickets.clear();
+		device.transfer_worker_pool.clear();
+		device.transfer_worker_pool_size = 0;
+		device.transfer_worker_operation_used_by_draw.clear();
+		device.frames.clear();
+		device.driver = nullptr;
+	}
 	static void attach_native_source(RenderingDevice &device, RenderingDeviceDriver &driver) {
 		device.driver = &driver;
 		device.frames.resize(1);
@@ -2412,4 +2594,12 @@ TEST_CASE("[RenderingDevice][BUG-115] blocking _stall_for_frame waits on hidden 
 
 TEST_CASE("[RenderingDevice][BUG-118] transfer worker hidden reports retain frame observer across worker fence recycle") {
 	TestFrameWaitAccess::bug118_transfer_worker_hidden_report_retains_observer();
+}
+
+TEST_CASE("[RenderingDevice][BUG-119A] draw_list_end blocks on _thread_safe_ and closes production output reads cleanly") {
+	TestFrameWaitAccess::bug119a_draw_list_end_blocks_on_thread_safe();
+}
+
+TEST_CASE("[RenderingDevice][BUG-119B] unknown ticket fails blocking poll, unsubmitted worker returns unavailable, and known hidden report retains observer") {
+	TestFrameWaitAccess::bug119b_unknown_ticket_known_hidden_and_unsubmitted_worker();
 }

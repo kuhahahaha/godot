@@ -90,8 +90,12 @@ protected:
 		uint64_t serial = 0;
 		std::atomic<bool> fence_owned{ false };
 		uint32_t observers = 0;
+		// 1 ref for completion_records ownership + 1 ref for Metal's async addCompletedHandler.
+		std::atomic<uint32_t> live_refs{ 2 };
 		NS::SharedPtr<MTL::CommandBuffer> command_buffer;
 	};
+	static void publish_command_buffer_status(CompletionRecord *p_record, MTL::CommandBuffer *p_command_buffer);
+	static void release_completion_record(CompletionRecord *p_record);
 
 	std::atomic<uint64_t> next_native_call_serial{ 1 };
 	uint64_t reserve_native_call_serials(uint32_t p_count);

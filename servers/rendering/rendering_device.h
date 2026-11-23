@@ -366,6 +366,7 @@ private:
 	Error _production_output_replay_adopted_record(::RendererRD::ExternalOutputOwner &, uint32_t, const ::RendererRD::ExternalPipelinePreparation &, uint32_t, DrawListID, const void *, uint32_t);
 	Error _production_output_empty_read_record(::RendererRD::ExternalPacketBinding &, DrawListID);
 	Error _production_output_reads_close();
+	Error _production_output_reads_close(bool p_blocking);
 	struct ProductionOutputRasterRecording {
 		::RendererRD::ExternalOutputOwner *owner = nullptr;
 		uint32_t read = UINT32_MAX;

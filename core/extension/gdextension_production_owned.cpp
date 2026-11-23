@@ -1493,19 +1493,46 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	if (own_or_idle_disposal && (mq_in_place_early || request.graph_count > 0)) {
 		if (!any_graph_pending) {
 			// Godot's normal _end_frame() already submitted this request's GPU work + readback.
-			// Poll/deliver the exact frame holding this request's readback capture directly
-			// instead of rejecting on live scene/UI work in rd.draw_graph or rd.frame.
+			// Poll/deliver the earliest frame holding this request's readback capture (matching
+			// returned offset) only when every capture on that frame is in-order, avoiding
+			// out-of-order segment delivery on split multi-frame readbacks (BUG-120).
+			auto frame_readbacks_in_order = [&](uint32_t fi) -> bool {
+				for (const auto &other_rb : rd.frames[fi].download_buffer_get_data_requests) {
+					if (!other_rb.capture) {
+						continue;
+					}
+					if (!other_rb.capture->state || other_rb.result_offset != other_rb.capture->state->returned) {
+						return false;
+					}
+				}
+				return true;
+			};
 			uint32_t rb_frame = UINT32_MAX;
 			for (uint32_t f = 0; f < rd.frames.size() && rb_frame == UINT32_MAX; ++f) {
 				for (const auto &rb : rd.frames[f].download_buffer_get_data_requests) {
-					if (rb.capture && rb.capture->registry == this && rb.capture->request_serial == request.serial) {
+					if (rb.capture && rb.capture->registry == this && rb.capture->request_serial == request.serial &&
+							rb.capture->state && rb.result_offset == rb.capture->state->returned) {
 						rb_frame = f;
 						break;
 					}
 				}
 			}
 			if (rb_frame != UINT32_MAX) {
+				if (!frame_readbacks_in_order(rb_frame)) {
+					return drain_trace.result(ERR_BUSY, "split_readback_order");
+				}
 				if (!rd.frames[rb_frame].fence_signaled && !rd.frame_wait_draining) {
+					if (!rd.frames[rb_frame].primary_command_buffer_begun && !rd.frames[rb_frame].disposal.active) {
+						usage.controls = 1;
+						production_native_effect_enter_locked(request);
+						++request.capture_inflight;
+						unlock_mutex_for_call();
+						const Error delivered = rd._stall_for_frame(rb_frame, true);
+						relock_mutex_after_call();
+						CRASH_COND(!request.capture_inflight);
+						--request.capture_inflight;
+						return delivered;
+					}
 					return drain_trace.result(ERR_BUSY, "rb_frame_not_submitted");
 				}
 				RenderingDevice::NativeDisposalBudget slice;
@@ -1644,8 +1671,24 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	};
 	auto exact_closure = [&](const ProductionDisposalUse *node, uint32_t kind, uint64_t native_driver_id, uint64_t backing = 0) {
 		for (; node; node = node->next) {
-			if (node->request == &request && node->request_serial == request.serial && node->kind == kind && node->rid && node->serial && node->native_driver_id == native_driver_id && (!backing || node->serial == backing) && node->state.load(std::memory_order_acquire) == 2) {
+			if (!node->request || !node->request_serial || node->kind != kind || !node->rid || !node->serial || node->native_driver_id != native_driver_id || (backing && node->serial != backing) || node->state.load(std::memory_order_acquire) != 2) {
+				continue;
+			}
+			if (node->request == &request && node->request_serial == request.serial) {
 				return true;
+			}
+			// Mirror owned_physical: admit live sibling production requests on this same RD
+			// so concurrent slots do not mutually starve on each other's output closures (BUG-120).
+			for (auto *attachment : production_attachments) {
+				if (!attachment || attachment->held_device != &rd) {
+					continue;
+				}
+				for (uint32_t r = 0; r < attachment->quote.capacity.requests; ++r) {
+					const auto &owner = attachment->requests[r];
+					if (owner.serial && node->request == &owner && node->request_serial == owner.serial) {
+						return true;
+					}
+				}
 			}
 		}
 		return false;
@@ -1668,6 +1711,21 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 		for (const auto &readback : frame.download_buffer_get_data_requests) {
 			if (!readback.capture || readback.capture->registry != this) {
 				return drain_trace.result(ERR_BUSY, "foreign_readback");
+			}
+			// Forbid in-place stall if this frame carries a non-initial segment of a split
+			// readback or a capture that also has an undelivered segment on another frame (BUG-120).
+			if (readback.result_offset > 0 || !readback.capture->state || readback.result_offset != readback.capture->state->returned) {
+				return drain_trace.result(ERR_BUSY, "split_readback_order");
+			}
+			for (uint32_t other_f = 0; other_f < rd.frames.size(); ++other_f) {
+				if (other_f == target_frame) {
+					continue;
+				}
+				for (const auto &other_rb : rd.frames[other_f].download_buffer_get_data_requests) {
+					if (other_rb.capture == readback.capture) {
+						return drain_trace.result(ERR_BUSY, "split_readback_other_frame");
+					}
+				}
 			}
 		}
 	} else {

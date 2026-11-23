@@ -8888,7 +8888,8 @@ void RenderingDevice::_draw_list_end(Rect2i *r_last_viewport) {
 
 void RenderingDevice::draw_list_end() {
 	if (production_output_list_head_owner) {
-		_production_output_reads_close();
+		const Error err = _production_output_reads_close(true);
+		ERR_FAIL_COND_MSG(err != OK, vformat("Failed to close production output reads draw list (error=%d).", int(err)));
 		return;
 	}
 	_draw_list_end_recorded(false);
@@ -10477,8 +10478,10 @@ Error RenderingDevice::_check_transfer_worker_operation(uint32_t index, uint64_t
 				if (error != OK) {
 					return error;
 				}
-			} else {
+			} else if (worker->submitted && operation <= worker->operations_submitted) {
 				prefix = worker->last_submission;
+			} else {
+				return ERR_UNAVAILABLE;
 			}
 			const Error admission = _qualification_admit_worker(index, worker->operations_counter, prefix, future);
 			if (admission != OK) {
@@ -10676,43 +10679,57 @@ Error RenderingDevice::_submit_transfer_workers(RDD::CommandBufferID p_draw_comm
 				// A failed worker may still have an actual native prefix. Join that exact
 				// report before retaining the worker as failed; never lose its callbacks.
 				const bool operation_covered = worker->operations_submitted >= transfer_worker_operation_used_by_draw[worker->index];
-				bool known = false;
-				for (const auto &report : frames[frame].qualification_hidden_reports) {
+				int64_t known_index = -1;
+				for (uint32_t r = 0; r < frames[frame].qualification_hidden_reports.size(); ++r) {
+					const auto &report = frames[frame].qualification_hidden_reports[r];
 					if (report.submission_serial == worker->last_submission.submission_serial && !report.calls.is_empty() && !worker->last_submission.calls.is_empty() && report.calls[0].serial == worker->last_submission.calls[0].serial) {
-						known = true;
+						known_index = int64_t(r);
 						break;
 					}
 				}
-				if (!known) {
-					RDD::QueueCallReport hidden = worker->last_submission;
-					if (driver->native_call_observation_supported()) {
-						RDD::NativeCallBlockingScope blocking_scope(!native_disposal_budget);
-						for (uint32_t c = 0; c < hidden.calls.size(); ++c) {
-							auto &call = hidden.calls.write[c];
-							if (call.presentation_only || call.source_owner_returned || !call.serial) {
-								continue;
-							}
-							if (!_native_disposal_admit(NativeDisposalWork::RETAIN)) {
-								for (uint32_t j = 0; j < c; ++j) {
-									if (hidden.calls[j].frame_observer_owned) {
-										(void)driver->native_call_release(hidden.calls[j].serial);
-									}
-								}
-								return ERR_BUSY;
-							}
-							const Error retain_err = driver->native_call_retain(call.serial);
-							if (retain_err != OK) {
-								for (uint32_t j = 0; j < c; ++j) {
-									if (hidden.calls[j].frame_observer_owned) {
-										(void)driver->native_call_release(hidden.calls[j].serial);
-									}
-								}
-								return retain_err;
-							}
-							call.frame_observer_owned = true;
+				auto retain_hidden_report_calls = [&](RDD::QueueCallReport &report) -> Error {
+					if (!driver->native_call_observation_supported()) {
+						return OK;
+					}
+					RDD::NativeCallBlockingScope blocking_scope(!native_disposal_budget);
+					LocalVector<uint32_t> newly_retained;
+					for (uint32_t c = 0; c < report.calls.size(); ++c) {
+						auto &call = report.calls.write[c];
+						if (call.presentation_only || call.source_owner_returned || call.frame_observer_owned || !call.serial) {
+							continue;
 						}
+						if (!_native_disposal_admit(NativeDisposalWork::RETAIN)) {
+							for (uint32_t idx : newly_retained) {
+								(void)driver->native_call_release(report.calls[idx].serial);
+								report.calls.write[idx].frame_observer_owned = false;
+							}
+							return ERR_BUSY;
+						}
+						const Error retain_err = driver->native_call_retain(call.serial);
+						if (retain_err != OK) {
+							for (uint32_t idx : newly_retained) {
+								(void)driver->native_call_release(report.calls[idx].serial);
+								report.calls.write[idx].frame_observer_owned = false;
+							}
+							return retain_err;
+						}
+						call.frame_observer_owned = true;
+						newly_retained.push_back(c);
+					}
+					return OK;
+				};
+				if (known_index < 0) {
+					RDD::QueueCallReport hidden = worker->last_submission;
+					const Error retain_err = retain_hidden_report_calls(hidden);
+					if (retain_err != OK) {
+						return retain_err;
 					}
 					frames[frame].qualification_hidden_reports.push_back(hidden);
+				} else {
+					const Error retain_err = retain_hidden_report_calls(frames[frame].qualification_hidden_reports[uint32_t(known_index)]);
+					if (retain_err != OK) {
+						return retain_err;
+					}
 				}
 				{
 					auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
@@ -13731,13 +13748,29 @@ Error RenderingDevice::_native_disposal_stall_step(uint32_t p_frame) {
 			const uint64_t capacity = capture ? capture->byte_capacity : uint64_t(result->bytes.size());
 			uint8_t *bytes = capture ? capture->bytes : result->bytes.ptrw();
 			const uint64_t completed = capture ? capture->state->completed : result->completed_size;
+			auto log_readback_invalid_data = [&](const char *p_site) {
+#ifndef TESTS_ENABLED
+				static std::atomic<uint32_t> rb_invalid_diag_count{ 0 };
+				const uint32_t n = rb_invalid_diag_count.fetch_add(1, std::memory_order_relaxed);
+				if (n < 16 || (n % 128) == 0) {
+					const uint64_t ret = capture ? capture->state->returned : 0;
+					const uint64_t iss = capture ? capture->state->issued : uint64_t(result->issued_size);
+					print_error(vformat("[BUG-120] readback ERR_INVALID_DATA site=%s frame=%d offset=%d returned=%d issued=%d completed=%d size=%d capacity=%d final=%d (occ=%d)",
+							p_site, int64_t(p_frame), int64_t(request.result_offset), int64_t(ret), int64_t(iss), int64_t(completed), int64_t(request.size), int64_t(capacity), int(request.final_segment), int64_t(n + 1)));
+				}
+#else
+				(void)p_site;
+#endif
+			};
 			if (!cursor.request_started) {
 				if (capture) {
 					if (capture->state->returned > capture->state->issued || request.result_offset != capture->state->returned || request.size > capture->state->issued - capture->state->returned) {
+						log_readback_invalid_data("disposal_stall.returned_bounds");
 						error = ERR_INVALID_DATA;
 					}
 				}
 				if (request.result_offset != completed || request.result_offset > capacity || request.size > capacity - request.result_offset) {
+					log_readback_invalid_data("disposal_stall.completed_bounds");
 					error = ERR_INVALID_DATA;
 				}
 				cursor.request_started = true;
@@ -13747,6 +13780,7 @@ Error RenderingDevice::_native_disposal_stall_step(uint32_t p_frame) {
 				const auto &region = f.download_buffer_copy_regions[local];
 				if (!cursor.mapped) {
 					if (cursor.offset > request.size || region.size > request.size - cursor.offset) {
+						log_readback_invalid_data("disposal_stall.region_bounds");
 						error = ERR_INVALID_DATA;
 						break;
 					}
@@ -13776,6 +13810,7 @@ Error RenderingDevice::_native_disposal_stall_step(uint32_t p_frame) {
 			}
 			if (error == OK && !delivered) {
 				if (cursor.offset != request.size) {
+					log_readback_invalid_data("disposal_stall.array_offset");
 					error = ERR_INVALID_DATA;
 				} else {
 					const uint64_t total = completed + cursor.offset;
@@ -13786,6 +13821,7 @@ Error RenderingDevice::_native_disposal_stall_step(uint32_t p_frame) {
 					}
 					if (request.final_segment) {
 						if (total != capacity) {
+							log_readback_invalid_data("disposal_stall.final_capacity");
 							error = ERR_INVALID_DATA;
 						} else {
 							delivered = true;
@@ -15800,6 +15836,24 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 	}
 	frame_wait_native_code = 0;
 	frame_wait_native_code_valid = false;
+	auto log_blocking_stall_busy = [&](const char *p_branch, uint64_t p_serial, bool p_completed, uint64_t p_completed_serial, Error p_err) {
+#ifndef TESTS_ENABLED
+		if (!p_nonblocking && p_err == ERR_BUSY) {
+			static std::atomic<uint32_t> stall_busy_diag_count{ 0 };
+			const uint32_t n = stall_busy_diag_count.fetch_add(1, std::memory_order_relaxed);
+			if (n < 16 || (n % 256) == 0) {
+				print_error(vformat("[BUG-119B] blocking _stall_for_frame ERR_BUSY branch=%s frame=%d serial=%d completed=%d completed_serial=%d (occ=%d)",
+						p_branch, int64_t(p_frame), int64_t(p_serial), int(p_completed), int64_t(p_completed_serial), int64_t(n + 1)));
+			}
+		}
+#else
+		(void)p_branch;
+		(void)p_serial;
+		(void)p_completed;
+		(void)p_completed_serial;
+		(void)p_err;
+#endif
+	};
 	// Original Frame ownership covers every actual slot call, including slots
 	// without the final fence. Qualification only polls; ordinary frame waits may
 	// use the original native wait, then recycle the same sources independently.
@@ -15816,6 +15870,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 					return FAILED;
 				}
 				if (!completion.matches(call.completion_serial)) {
+					log_blocking_stall_busy("chain_reports", call.serial, completion.completed, completion.completed_serial, ERR_BUSY);
 					return ERR_BUSY;
 				}
 			}
@@ -15838,6 +15893,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 					return FAILED;
 				}
 				if (!completion.matches(call.completion_serial)) {
+					log_blocking_stall_busy("hidden_reports_pre", call.serial, completion.completed, completion.completed_serial, ERR_BUSY);
 					return ERR_BUSY;
 				}
 			}
@@ -15845,6 +15901,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 	}
 	const Error ticket_poll = _qualification_poll_tickets(p_frame, p_nonblocking);
 	if (ticket_poll != OK) {
+		log_blocking_stall_busy("tickets", 0, false, 0, ticket_poll);
 		return ticket_poll;
 	}
 	if (driver->native_call_observation_supported()) {
@@ -15856,6 +15913,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 					}
 					const Error recycled = p_nonblocking ? driver->native_call_recycle(call.serial) : driver->native_call_recycle_wait(call.serial);
 					if (recycled != OK) {
+						log_blocking_stall_busy("recycle_wait", call.serial, false, 0, recycled);
 						return recycled;
 					}
 					call.source_owner_returned = true;
@@ -15876,11 +15934,13 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 				return FAILED;
 			}
 			if (!completion.matches(call.completion_serial)) {
+				log_blocking_stall_busy("hidden_reports_post", call.serial, completion.completed, completion.completed_serial, ERR_BUSY);
 				return ERR_BUSY;
 			}
 			if (call.frame_observer_owned) {
 				const Error released = driver->native_call_release(call.serial);
 				if (released != OK) {
+					log_blocking_stall_busy("hidden_reports_post_release", call.serial, completion.completed, completion.completed_serial, released);
 					return released;
 				}
 			}
@@ -15889,7 +15949,8 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 	}
 	frames[p_frame].qualification_hidden_reports.clear();
 
-	if (frames[p_frame].fence_signaled) {
+	const bool had_signaled_fence = frames[p_frame].fence_signaled;
+	if (had_signaled_fence) {
 		GodotProfileZoneGroupedFirst(_profile_zone, "driver->fence_wait");
 
 		Error wait_error = OK;
@@ -15940,18 +16001,70 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 		}
 		frames[p_frame].fence_signaled = false;
 		frames[p_frame].primary_command_buffer_begun = false;
+	}
+	bool retry_deferred_captures = false;
+	if (!had_signaled_fence && !frames[p_frame].fence_signaled && !frames[p_frame].primary_command_buffer_begun && !frames[p_frame].disposal.active) {
+		for (const auto &request : frames[p_frame].download_buffer_get_data_requests) {
+			if (request.capture != nullptr) {
+				retry_deferred_captures = true;
+				break;
+			}
+		}
+		if (retry_deferred_captures && p_nonblocking) {
+			if (!frames[p_frame].download_texture_get_data_requests.is_empty()) {
+				return ERR_BUSY;
+			}
+			for (const auto &request : frames[p_frame].download_buffer_get_data_requests) {
+				if (!request.capture && (request.result.is_null() || !request.result->qualification_owned)) {
+					return ERR_BUSY;
+				}
+			}
+		}
+	}
+	if (had_signaled_fence || retry_deferred_captures) {
 		frame_wait_draining = true;
+		struct FrameWaitDrainingGuard {
+			std::atomic<bool> &draining;
+			~FrameWaitDrainingGuard() { draining = false; }
+		} draining_guard{ frame_wait_draining };
 
 		// Flush any pending requests for asynchronous buffer downloads.
 		if (!frames[p_frame].download_buffer_get_data_requests.is_empty()) {
 			GodotProfileZoneGrouped(_profile_zone, "flush asynchronous buffer downloads");
 			const LocalVector<BufferGetDataRequest> requests = std::move(frames[p_frame].download_buffer_get_data_requests);
+			LocalVector<BufferGetDataRequest> remaining_requests;
+			Error deferred_error = OK;
 			for (uint32_t i = 0; i < requests.size(); i++) {
 				const BufferGetDataRequest &request = requests[i];
 				const Ref<BufferGetDataResult> result = request.result;
 				auto *capture = request.capture;
-				if (capture && (!capture->registry || capture->registry->production_readback_delivery(*capture, true) != OK)) {
-					continue;
+				if (capture) {
+					if (!capture->registry) {
+						continue;
+					}
+					bool capture_already_deferred = false;
+					for (const auto &pending : remaining_requests) {
+						if (pending.capture == capture) {
+							capture_already_deferred = true;
+							break;
+						}
+					}
+					if (capture_already_deferred) {
+						remaining_requests.push_back(request);
+						continue;
+					}
+					// BUG-120: Never drop a production readback segment if delivery is transiently ERR_BUSY.
+					// Preserve undelivered requests + staging buffers/regions on this frame for retry.
+					const Error delivery_err = capture->registry->production_readback_delivery(*capture, true);
+					if (delivery_err != OK) {
+						if (delivery_err == ERR_BUSY) {
+							remaining_requests.push_back(request);
+							if (deferred_error == OK) {
+								deferred_error = ERR_BUSY;
+							}
+						}
+						continue;
+					}
 				}
 				auto finish_delivery = [&]() {
 					if (capture) {
@@ -15968,8 +16081,25 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 				if (!capture && result.is_null()) {
 					continue;
 				}
+				auto log_readback_invalid_data = [&](const char *p_site, uint64_t p_completed, uint64_t p_capacity) {
+#ifndef TESTS_ENABLED
+					static std::atomic<uint32_t> rb_invalid_diag_count{ 0 };
+					const uint32_t n = rb_invalid_diag_count.fetch_add(1, std::memory_order_relaxed);
+					if (n < 16 || (n % 128) == 0) {
+						const uint64_t ret = capture ? capture->state->returned : 0;
+						const uint64_t iss = capture ? capture->state->issued : uint64_t(result->issued_size);
+						print_error(vformat("[BUG-120] readback ERR_INVALID_DATA site=%s frame=%d offset=%d returned=%d issued=%d completed=%d size=%d capacity=%d final=%d (occ=%d)",
+								p_site, int64_t(p_frame), int64_t(request.result_offset), int64_t(ret), int64_t(iss), int64_t(p_completed), int64_t(request.size), int64_t(p_capacity), int(request.final_segment), int64_t(n + 1)));
+					}
+#else
+					(void)p_site;
+					(void)p_completed;
+					(void)p_capacity;
+#endif
+				};
 				if (capture) {
 					if (request.result_offset != capture->state->returned || request.size > capture->state->issued - capture->state->returned) {
+						log_readback_invalid_data("stall_for_frame.returned_bounds", capture->state->completed, capture->byte_capacity);
 						capture->state->error = ERR_INVALID_DATA;
 						continue;
 					}
@@ -15983,6 +16113,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 					continue;
 				}
 				if (request.result_offset != completed || request.result_offset > byte_size || request.size > byte_size - request.result_offset) {
+					log_readback_invalid_data("stall_for_frame.completed_bounds", completed, byte_size);
 					result_error = ERR_INVALID_DATA;
 					continue;
 				}
@@ -15992,6 +16123,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 					uint32_t local_index = request.frame_local_index + j;
 					const RDD::BufferCopyRegion &region = frames[p_frame].download_buffer_copy_regions[local_index];
 					if (region.size > request.size - array_offset) {
+						log_readback_invalid_data("stall_for_frame.region_bounds", completed, byte_size);
 						result_error = ERR_INVALID_DATA;
 						break;
 					}
@@ -16015,6 +16147,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 					continue;
 				}
 				if (array_offset != request.size) {
+					log_readback_invalid_data("stall_for_frame.array_offset", completed, byte_size);
 					result_error = ERR_INVALID_DATA;
 					continue;
 				}
@@ -16028,6 +16161,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 					continue;
 				}
 				if (completed != byte_size) {
+					log_readback_invalid_data("stall_for_frame.final_capacity", completed, byte_size);
 					result_error = ERR_INVALID_DATA;
 					continue;
 				}
@@ -16041,9 +16175,14 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 				}
 			}
 
-			frames[p_frame].download_buffer_staging_buffers.clear();
-			frames[p_frame].download_buffer_copy_regions.clear();
-			frames[p_frame].download_buffer_get_data_requests.clear();
+			if (remaining_requests.is_empty()) {
+				frames[p_frame].download_buffer_staging_buffers.clear();
+				frames[p_frame].download_buffer_copy_regions.clear();
+				frames[p_frame].download_buffer_get_data_requests.clear();
+			} else {
+				frames[p_frame].download_buffer_get_data_requests = std::move(remaining_requests);
+				return deferred_error;
+			}
 		}
 
 		// Flush any pending requests for asynchronous texture downloads.

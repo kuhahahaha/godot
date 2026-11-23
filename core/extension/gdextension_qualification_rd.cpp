@@ -526,7 +526,8 @@ Error RenderingDevice::_qualification_admit_frame_ticket(QualificationTicket *ti
   if(worker->operations_processed>=transfer_worker_operation_used_by_draw[i])continue;
   Quote quote{worker,{},0};
   if(worker->recording || worker->submission_pending){const Error error=driver->qualification_worker_source_quote(worker->command_buffer,quote.prefix,quote.future);if(error!=OK)return error;}
-  else quote.prefix=worker->last_submission;
+  else if(worker->submitted && transfer_worker_operation_used_by_draw[i]<=worker->operations_submitted)quote.prefix=worker->last_submission;
+  else return ERR_UNAVAILABLE;
   const Error error=collect(quote.prefix);if(error!=OK)return error;
   needed+=quote.future;quotes.push_back(std::move(quote));
  }
@@ -804,6 +805,9 @@ Error RenderingDevice::_qualification_poll_tickets(uint32_t index, bool p_nonblo
 			}
 			registry.qualification_ticket_publish(ticket, this);
 			if (completion.state != GDExtensionDeviceExit::NativeSourceObservation::State::Complete) {
+				if (!p_nonblocking && completion.state == GDExtensionDeviceExit::NativeSourceObservation::State::Unknown) {
+					return FAILED;
+				}
 				return ERR_BUSY;
 			}
 		}

@@ -104,10 +104,31 @@ RenderingDeviceDriver::FencePollResult RenderingDeviceDriverMetal::native_call_p
 	completion_records_mutex.unlock();
 	return out;
 }
+void RenderingDeviceDriverMetal::publish_command_buffer_status(CompletionRecord *p_record, MTL::CommandBuffer *p_command_buffer) {
+	if (!p_record || !p_command_buffer) {
+		return;
+	}
+	const MTL::CommandBufferStatus status = p_command_buffer->status();
+	if (status != MTL::CommandBufferStatusCompleted && status != MTL::CommandBufferStatusError) {
+		return;
+	}
+	p_record->native_code.store(static_cast<int64_t>(status), std::memory_order_relaxed);
+	p_record->failed.store(status != MTL::CommandBufferStatusCompleted, std::memory_order_relaxed);
+	p_record->completed.store(true, std::memory_order_release);
+}
+
+void RenderingDeviceDriverMetal::release_completion_record(CompletionRecord *p_record) {
+	if (p_record && p_record->live_refs.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+		memdelete(p_record);
+	}
+}
+
 RenderingDeviceDriver::FencePollResult RenderingDeviceDriverMetal::native_call_wait(uint64_t serial) {
 	NS::SharedPtr<MTL::CommandBuffer> command;
+	uint32_t active_records = 0;
 	{
 		MutexLock lock(completion_records_mutex);
+		active_records = completion_records.size();
 		for (auto *record : completion_records) {
 			if (record->serial == serial) {
 				command = record->command_buffer;
@@ -116,39 +137,52 @@ RenderingDeviceDriver::FencePollResult RenderingDeviceDriverMetal::native_call_w
 		}
 	}
 	if (!command) {
-		return {};
+#ifndef TESTS_ENABLED
+		static std::atomic<uint32_t> missing_diag_count{ 0 };
+		const uint32_t diag_n = missing_diag_count.fetch_add(1, std::memory_order_relaxed);
+		if (diag_n < 8 || (diag_n % 256) == 0) {
+			print_error(String("[BUG-119B] Metal native_call_wait missing completion record: serial=") + itos(int64_t(serial)) +
+					" active_records=" + itos(int64_t(active_records)) + " occ=" + itos(int64_t(diag_n + 1)));
+		}
+#else
+		(void)active_records;
+#endif
+		FencePollResult missing;
+		missing.completed = false;
+		missing.native_error = true;
+		missing.completed_serial = 0;
+		missing.native_code = ERR_DOES_NOT_EXIST;
+		missing.resolved_issue = IssueFact::NotIssued;
+		return missing;
 	}
 	command->waitUntilCompleted();
-	// Metal's addCompletedHandler executes on a driver callback queue and can lag
-	// waitUntilCompleted() by a few microseconds. Wait briefly for record->completed
-	// to land so blocking waits never return spurious ERR_BUSY or race record retirement.
-	const uint64_t handler_deadline = OS::get_singleton() ? (OS::get_singleton()->get_ticks_usec() + 50000ull) : 0ull;
 	FencePollResult out;
-	for (;;) {
-		bool found = false;
-		bool done = false;
-		{
-			MutexLock lock(completion_records_mutex);
-			for (auto *record : completion_records) {
-				if (record->serial == serial) {
-					found = true;
-					done = record->completed.load();
-					out.completed_serial = serial;
-					out.native_error = record->failed.load();
-					out.completed = done && !out.native_error;
-					out.native_code = record->native_code.load();
-					if (out.completed) {
-						out.resolved_issue = IssueFact::KnownAccepted;
-					}
-					break;
+	{
+		MutexLock lock(completion_records_mutex);
+		for (auto *record : completion_records) {
+			if (record->serial == serial) {
+				publish_command_buffer_status(record, command.get());
+				const bool done = record->completed.load(std::memory_order_acquire);
+				out.completed_serial = serial;
+				out.native_error = record->failed.load(std::memory_order_relaxed);
+				out.completed = done && !out.native_error;
+				out.native_code = record->native_code.load(std::memory_order_relaxed);
+				if (out.completed) {
+					out.resolved_issue = IssueFact::KnownAccepted;
 				}
+				return out;
 			}
 		}
-		if (!found || done || !OS::get_singleton() || OS::get_singleton()->get_ticks_usec() >= handler_deadline) {
-			return out;
-		}
-		OS::get_singleton()->delay_usec(10);
 	}
+	const MTL::CommandBufferStatus status = command->status();
+	out.completed_serial = serial;
+	out.native_code = static_cast<int64_t>(status);
+	out.native_error = (status != MTL::CommandBufferStatusCompleted);
+	out.completed = (status == MTL::CommandBufferStatusCompleted);
+	if (out.completed) {
+		out.resolved_issue = IssueFact::KnownAccepted;
+	}
+	return out;
 }
 Error RenderingDeviceDriverMetal::native_call_recycle(uint64_t serial) {
 	if (!serial) {
@@ -172,7 +206,7 @@ Error RenderingDeviceDriverMetal::native_call_recycle(uint64_t serial) {
 			record->retired.store(true);
 			if (!record->observers) {
 				completion_records.remove_at(i);
-				memdelete(record);
+				release_completion_record(record);
 			}
 		}
 		completion_records_mutex.unlock();
@@ -199,7 +233,7 @@ Error RenderingDeviceDriverMetal::native_call_recycle_wait(uint64_t serial) {
 			record->retired.store(true);
 			if (!record->observers) {
 				completion_records.remove_at(i);
-				memdelete(record);
+				release_completion_record(record);
 			}
 		}
 		return OK;
@@ -251,7 +285,7 @@ Error RenderingDeviceDriverMetal::native_call_release(uint64_t serial) {
 		--record->observers;
 		if (!record->observers && record->retired.load()) {
 			completion_records.remove_at(i);
-			memdelete(record);
+			release_completion_record(record);
 		}
 		completion_records_mutex.unlock();
 		return OK;
@@ -279,10 +313,8 @@ RenderingDeviceDriverMetal::CompletionRecord *RenderingDeviceDriverMetal::regist
 	record->serial = serial;
 	record->command_buffer = NS::RetainPtr(p_command_buffer);
 	p_command_buffer->addCompletedHandler([record](MTL::CommandBuffer *p_completed) {
-		const MTL::CommandBufferStatus status = p_completed->status();
-		record->native_code.store(static_cast<int64_t>(status));
-		record->failed.store(status != MTL::CommandBufferStatusCompleted);
-		record->completed.store(true);
+		publish_command_buffer_status(record, p_completed);
+		release_completion_record(record);
 	});
 	if (!p_collection_locked) {
 		completion_records_mutex.lock();
@@ -334,7 +366,7 @@ void RenderingDeviceDriverMetal::retire_completion_records(const LocalVector<Com
 				break;
 			}
 		}
-		memdelete(record);
+		release_completion_record(record);
 	}
 }
 
@@ -348,11 +380,12 @@ void RenderingDeviceDriverMetal::drain_completion_records() {
 		records = std::move(completion_records);
 	}
 	// Wait outside the collection lock and before the derived driver releases
-	// command-buffer wrappers and their scratch resources. waitUntilCompleted
-	// also waits for completion handlers, whose last access publishes completed.
+	// command-buffer wrappers and their scratch resources. live_refs keeps each
+	// record alive until both this drain and Metal's async completion handler finish.
 	for (CompletionRecord *record : records) {
 		record->command_buffer->waitUntilCompleted();
-		memdelete(record);
+		publish_command_buffer_status(record, record->command_buffer.get());
+		release_completion_record(record);
 	}
 }
 
@@ -3784,27 +3817,22 @@ Error RenderingDeviceDriverMetal::qualification_prepare_segment(QueueCallReport 
 	// callback and native release/poll paths share this mutex; holding it across
 	// waitUntilCompleted starves native_call_release indefinitely.
 	completion_records_mutex.unlock();
-	if (!p_nonblocking && !record->completed.load()) {
+	if (!p_nonblocking && !record->completed.load(std::memory_order_acquire)) {
 		copy_queue_command_buffer.get()->waitUntilCompleted();
-		if (!record->completed.load() && OS::get_singleton()) {
-			const uint64_t handler_deadline = OS::get_singleton()->get_ticks_usec() + 50000ull;
-			while (!record->completed.load() && OS::get_singleton()->get_ticks_usec() < handler_deadline) {
-				OS::get_singleton()->delay_usec(10);
-			}
-		}
+		publish_command_buffer_status(record, copy_queue_command_buffer.get());
 	}
-	if (!record->completed.load()) {
+	if (!record->completed.load(std::memory_order_acquire)) {
 		return ERR_BUSY;
 	}
-	if (record->failed.load()) {
+	if (record->failed.load(std::memory_order_relaxed)) {
 		return FAILED;
 	}
 	completion_records_mutex.lock();
-	if (!record->completed.load()) {
+	if (!record->completed.load(std::memory_order_acquire)) {
 		completion_records_mutex.unlock();
 		return ERR_BUSY;
 	}
-	if (record->failed.load()) {
+	if (record->failed.load(std::memory_order_relaxed)) {
 		completion_records_mutex.unlock();
 		return FAILED;
 	}
@@ -3821,7 +3849,7 @@ Error RenderingDeviceDriverMetal::qualification_prepare_segment(QueueCallReport 
 				break;
 			}
 		}
-		memdelete(record);
+		release_completion_record(record);
 	}
 	completion_records_mutex.unlock();
 	return OK;
