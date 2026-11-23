@@ -397,7 +397,7 @@ class ProductionResourceSlot {
 	GDExtensionStorageRetireRequestV1 retire_origin = {};
 	GDExtensionStorageRetireReportV1 retire_report = {};
 	uint64_t owned_serial = 0, retire_serial = 0;
-	bool creating = false, batched_set_create = false, retiring = false, returned = false;
+	bool creating = false, batched_set_create = false, cached_persistent_set = false, retiring = false, returned = false;
 	// Independent CPU allocation, not a GPU storage backing or return fact.
 	ProductionOutputMetadataLease *metadata_consumer = nullptr;
 	void *metadata_data = nullptr;
@@ -890,6 +890,59 @@ class ProductionRequest {
 	RID scene_target_viewport;
 	// No numeric field or DTO populates original scope/window/K03 authority.
 };
+struct PersistentSetBindingKey {
+	uint32_t binding = 0;
+	uint64_t rid = 0;
+	uint64_t backing_serial = 0;
+	bool operator==(const PersistentSetBindingKey &p_other) const {
+		return binding == p_other.binding && rid == p_other.rid && backing_serial == p_other.backing_serial;
+	}
+};
+
+struct PersistentSetKey {
+	uint64_t shader_rid = 0;
+	uint64_t shader_serial = 0;
+	uint32_t shader_set = 0;
+	LocalVector<PersistentSetBindingKey> bindings; // Sorted ascending by binding.
+	bool operator==(const PersistentSetKey &p_other) const {
+		if (shader_rid != p_other.shader_rid || shader_serial != p_other.shader_serial || shader_set != p_other.shader_set || bindings.size() != p_other.bindings.size()) {
+			return false;
+		}
+		for (uint32_t i = 0; i < bindings.size(); ++i) {
+			if (!(bindings[i] == p_other.bindings[i])) {
+				return false;
+			}
+		}
+		return true;
+	}
+};
+
+struct PersistentSetKeyHasher {
+	static uint32_t hash(const PersistentSetKey &p_key) {
+		uint32_t h = hash_murmur3_one_64(p_key.shader_rid);
+		h = hash_murmur3_one_64(p_key.shader_serial, h);
+		h = hash_murmur3_one_32(p_key.shader_set, h);
+		h = hash_murmur3_one_32(p_key.bindings.size(), h);
+		for (uint32_t i = 0; i < p_key.bindings.size(); ++i) {
+			h = hash_murmur3_one_32(p_key.bindings[i].binding, h);
+			h = hash_murmur3_one_64(p_key.bindings[i].rid, h);
+			h = hash_murmur3_one_64(p_key.bindings[i].backing_serial, h);
+		}
+		return hash_fmix32(h);
+	}
+};
+
+struct PersistentSetEntry {
+	uint64_t serial = 0;
+	RID rid;
+	PersistentSetKey key;
+	QualificationPhysicalReturn physical;
+	LocalVector<QualificationPhysicalReturn *> dependencies;
+	uint64_t last_used_tick = 0;
+	bool evicted = false;
+	bool retire_enqueued = false;
+};
+
 class ProductionAttachment {
 	friend class Registry;
 	friend class ::RenderingDevice;
@@ -952,6 +1005,12 @@ class ProductionAttachment {
 	uint64_t payload_reclaim_hwm = 0, readback_reclaim_hwm = 0, natives_reclaim_hwm = 0;
 	uint32_t mq_reclaim_hwm = 0;
 	uint64_t arena_reclaimed_bytes_total = 0;
+	// Attachment-scoped persistent UniformSet cache for long-lived retained storage bindings.
+	static constexpr uint32_t PERSISTENT_SET_MAX_LIVE = 2048u;
+	HashMap<PersistentSetKey, PersistentSetEntry *, PersistentSetKeyHasher> persistent_set_lookup;
+	LocalVector<PersistentSetEntry *> persistent_sets;
+	uint64_t persistent_set_tick = 0;
+	bool persistent_set_close_drain_queued = false;
 	// Open must acquire the original device holder and operation-window receiver.
 	// Metadata reservations do not satisfy those two obligations.
 };

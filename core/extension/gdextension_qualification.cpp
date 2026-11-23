@@ -871,6 +871,9 @@ void Registry::qualification_retire_step(QualificationBridge *bridge, RenderingD
 				return 3;
 			}
 		}
+		if (cell.dependent_children.load()) {
+			production_persistent_sets_evict_for_dependency_rt(rd, &cell);
+		}
 		if (cell.dependent_children.load() || !no_dependents(RID::from_uint64(cell.rid))) {
 			return 4;
 		}

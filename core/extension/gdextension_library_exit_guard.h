@@ -113,6 +113,7 @@ struct CheckedRecordAppend;
 struct OriginalOperationIdentity;
 struct BufferReadbackSourceCapture;
 struct NativeSourceIssueView;
+struct PersistentSetKey;
 // Core physical call-frame identity only. Its serial is issued by the actual
 // protected RT entry and expires on return; no Runtime/source authority.
 using ProductionPhysicalContextRef = GDExtensionProductionPhysicalContextRefV1;
@@ -704,6 +705,8 @@ private:
 	friend struct TestDeviceExitEntry::Access;
 #endif
 	void production_control_dispatch(uint64_t, uint64_t, uint64_t, uint64_t);
+	void production_persistent_sets_close_drain_rt(uint64_t, uint64_t);
+	void production_observe_completed_frames_rt(RenderingDevice &);
 	static constexpr uint32_t RECORD_CAPACITY = MAX_LIVE_GENERATIONS;
 	static constexpr uint32_t VIEW_CAPACITY = 8192;
 	static constexpr uint32_t NORMAL_RELAY_CAPACITY = 4096;
@@ -1144,6 +1147,11 @@ private:
 	Error production_create_execute_locked(ProductionRequest &, RenderingDevice &, ProductionControlKind, uint32_t);
 	Error production_set_create_execute_batch_locked(ProductionRequest &, RenderingDevice &, uint32_t);
 	void production_set_create_cancel_batched_locked(ProductionRequest &, Error);
+	bool production_persistent_set_build_key_locked(const ProductionRequest &, uint32_t, uint32_t, const GDExtensionProductionSetBindingV1 *, uint32_t, PersistentSetKey &) const;
+	bool production_persistent_set_build_key_from_slot_locked(const ProductionRequest &, const ProductionResourceSlot &, PersistentSetKey &) const;
+	void production_persistent_sets_evict_lru_locked(ProductionAttachment &);
+	void production_persistent_sets_evict_for_dependency_rt(RenderingDevice *, QualificationPhysicalReturn *);
+	void production_persistent_sets_reap_and_retire_rt(RenderingDevice *, bool p_unlock_rd_around_free);
 	Error production_observe_service(GDExtensionProductionRequestRefV1, const GDExtensionProductionServiceBudgetV1 &);
 	Error production_sets_step_locked(ProductionRequest &, RenderingDevice &, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
 	Error production_readback_delivery(BufferReadbackSourceCapture &, bool);

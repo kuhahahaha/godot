@@ -692,3 +692,9 @@ bool RenderingServerDefault::_try_production_control_dispatch(uint64_t registry,
 	// A single attempt cannot requeue itself while flush_all is consuming it.
 	return command_queue.try_push_bounded(65536, this, &RenderingServerDefault::_production_control_dispatch, registry, attachment, request, control);
 }
+void RenderingServerDefault::_production_persistent_sets_drain(uint64_t registry, uint64_t attachment) {
+	GDExtensionDeviceExit::Registry::get_singleton().production_persistent_sets_close_drain_rt(registry, attachment);
+}
+bool RenderingServerDefault::_try_production_persistent_sets_drain(uint64_t registry, uint64_t attachment) {
+	return command_queue.try_push_bounded(65536, this, &RenderingServerDefault::_production_persistent_sets_drain, registry, attachment);
+}

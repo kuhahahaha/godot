@@ -308,6 +308,251 @@ GDExtensionDeviceSessionResultV1 Registry::production_storage_release(GDExtensio
 	return result(ERR_DOES_NOT_EXIST);
 }
 
+bool Registry::production_persistent_set_build_key_locked(const ProductionRequest &p_request, uint32_t p_unit_index, uint32_t p_shader_set, const GDExtensionProductionSetBindingV1 *p_bindings, uint32_t p_count, PersistentSetKey &r_key) const {
+	if (!p_bindings || !p_count || p_unit_index >= p_request.resource_count) {
+		return false;
+	}
+	const auto &unit = p_request.resources[p_unit_index];
+	if (unit.declaration.resource_kind != GDEXTENSION_PRODUCTION_UNIT_V1 || !unit.imported || unit.retiring ||
+			unit.use_count != 2 || !unit.uses[0].same_physical() || !unit.uses[0].linked() ||
+			!unit.uses[0].physical || unit.uses[0].physical->use_closed.load() ||
+			unit.secondary.is_null() || !unit.uses[0].physical->serial) {
+		return false;
+	}
+	r_key.shader_rid = unit.secondary.get_id();
+	r_key.shader_serial = unit.uses[0].physical->serial;
+	r_key.shader_set = p_shader_set;
+	r_key.bindings.resize(p_count);
+	for (uint32_t i = 0; i < p_count; ++i) {
+		const auto &binding = p_bindings[i];
+		if (binding.resource_slot >= p_request.resource_count) {
+			r_key.bindings.clear();
+			return false;
+		}
+		const auto &resource = p_request.resources[binding.resource_slot];
+		if (resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 ||
+				resource.declaration.ownership != GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1 ||
+				!resource.imported || resource.retiring || resource.output_alias_prepared ||
+				!resource.output_predecessor_view.is_empty() || resource.output_guard_readonly || resource.output_guard_history ||
+				resource.use_count != 1 || !resource.uses[0].same_physical() || !resource.uses[0].linked() ||
+				!resource.uses[0].physical || resource.uses[0].physical->use_closed.load() ||
+				resource.primary.is_null() || !resource.backing_serial) {
+			r_key.bindings.clear();
+			return false;
+		}
+		r_key.bindings[i] = { binding.binding, resource.primary.get_id(), resource.backing_serial };
+	}
+	return true;
+}
+
+bool Registry::production_persistent_set_build_key_from_slot_locked(const ProductionRequest &p_request, const ProductionResourceSlot &p_slot, PersistentSetKey &r_key) const {
+	if (p_slot.scene_depth_set1 || p_slot.output_set_deferred || !p_slot.binding_count ||
+			p_slot.first_binding > p_request.capacity.resource_uses ||
+			p_slot.binding_count > p_request.capacity.resource_uses - p_slot.first_binding ||
+			p_slot.imported_unit_slot >= p_request.resource_count) {
+		return false;
+	}
+	const auto &unit = p_request.resources[p_slot.imported_unit_slot];
+	if (unit.declaration.resource_kind != GDEXTENSION_PRODUCTION_UNIT_V1 || !unit.imported || unit.retiring ||
+			unit.use_count != 2 || !unit.uses[0].same_physical() || !unit.uses[0].linked() ||
+			!unit.uses[0].physical || unit.uses[0].physical->use_closed.load() ||
+			unit.secondary.is_null() || !unit.uses[0].physical->serial) {
+		return false;
+	}
+	r_key.shader_rid = unit.secondary.get_id();
+	r_key.shader_serial = unit.uses[0].physical->serial;
+	r_key.shader_set = p_slot.shader_set;
+	r_key.bindings.resize(p_slot.binding_count);
+	for (uint32_t i = 0; i < p_slot.binding_count; ++i) {
+		const auto &binding = p_request.uses[p_slot.first_binding + i].binding;
+		if (binding.resource_slot >= p_request.resource_count) {
+			r_key.bindings.clear();
+			return false;
+		}
+		const auto &resource = p_request.resources[binding.resource_slot];
+		if (resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 ||
+				resource.declaration.ownership != GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1 ||
+				!resource.imported || resource.retiring || resource.output_alias_prepared ||
+				!resource.output_predecessor_view.is_empty() || resource.output_guard_readonly || resource.output_guard_history ||
+				resource.use_count != 1 || !resource.uses[0].same_physical() || !resource.uses[0].linked() ||
+				!resource.uses[0].physical || resource.uses[0].physical->use_closed.load() ||
+				resource.primary.is_null() || !resource.backing_serial) {
+			r_key.bindings.clear();
+			return false;
+		}
+		r_key.bindings[i] = { binding.binding, resource.primary.get_id(), resource.backing_serial };
+	}
+	return true;
+}
+
+void Registry::production_persistent_sets_evict_lru_locked(ProductionAttachment &p_attachment) {
+	while (p_attachment.persistent_set_lookup.size() > ProductionAttachment::PERSISTENT_SET_MAX_LIVE) {
+		PersistentSetEntry *victim = nullptr;
+		for (uint32_t i = 0; i < p_attachment.persistent_sets.size(); ++i) {
+			PersistentSetEntry *entry = p_attachment.persistent_sets[i];
+			if (!entry || entry->evicted || entry->physical.production_uses != nullptr) {
+				continue;
+			}
+			if (!victim || entry->last_used_tick < victim->last_used_tick) {
+				victim = entry;
+			}
+		}
+		if (!victim) {
+			break;
+		}
+		victim->evicted = true;
+		p_attachment.persistent_set_lookup.erase(victim->key);
+	}
+}
+
+void Registry::production_persistent_sets_reap_and_retire_rt(RenderingDevice *p_rd, bool p_unlock_rd_around_free) {
+	if (!p_rd || p_rd->render_thread_id != Thread::get_caller_id()) {
+		return;
+	}
+	const bool can_free = p_rd->driver && !p_rd->frames.is_empty() && p_rd->_recording_error() == OK &&
+			!p_rd->draw_list.active && !p_rd->compute_list.active && !p_rd->raytracing_list.active &&
+			!p_rd->frame_wait_draining && !p_rd->draw_graph.has_driver_callbacks() &&
+			p_rd->frames[p_rd->frame].qualification_epoch != 0;
+	LocalVector<RID> to_free;
+	{
+		Lock lock(*this);
+		for (auto *attachment : production_attachments) {
+			if (!attachment || attachment->held_device != p_rd || attachment->persistent_sets.is_empty()) {
+				continue;
+			}
+			uint32_t i = 0;
+			while (i < attachment->persistent_sets.size()) {
+				PersistentSetEntry *entry = attachment->persistent_sets[i];
+				if (!entry) {
+					attachment->persistent_sets.remove_at_unordered(i);
+					continue;
+				}
+				uint64_t free_event = 0;
+				{
+					MutexLock phys_lock(entry->physical.mutex);
+					free_event = entry->physical.free_event;
+				}
+				if (entry->evicted && entry->physical.production_uses == nullptr && free_event != 0) {
+					attachment->persistent_set_lookup.erase(entry->key);
+					attachment->persistent_sets.remove_at_unordered(i);
+					memdelete(entry);
+					continue;
+				}
+				if (can_free && entry->evicted && !entry->retire_enqueued &&
+						entry->physical.production_uses == nullptr &&
+						p_rd->_qualification_free_event_available(entry->physical.event_capacity_reserved) &&
+						(attachment->closing || to_free.size() < 256u)) {
+					entry->physical.use_closed.store(true);
+					entry->retire_enqueued = true;
+					to_free.push_back(entry->rid);
+				}
+				++i;
+			}
+		}
+	}
+	if (to_free.is_empty()) {
+		return;
+	}
+	const bool previous_retiring = p_rd->qualification_retiring;
+	p_rd->qualification_retiring = true;
+	if (p_unlock_rd_around_free) {
+		p_rd->_thread_safe_.unlock();
+	}
+	for (uint32_t i = 0; i < to_free.size(); ++i) {
+		p_rd->free_rid(to_free[i]);
+	}
+	if (p_unlock_rd_around_free) {
+		p_rd->_thread_safe_.lock();
+	}
+	p_rd->qualification_retiring = previous_retiring;
+	{
+		Lock lock(*this);
+		for (auto *attachment : production_attachments) {
+			if (!attachment || attachment->held_device != p_rd || attachment->persistent_sets.is_empty()) {
+				continue;
+			}
+			uint32_t i = 0;
+			while (i < attachment->persistent_sets.size()) {
+				PersistentSetEntry *entry = attachment->persistent_sets[i];
+				if (!entry) {
+					attachment->persistent_sets.remove_at_unordered(i);
+					continue;
+				}
+				bool enqueued = false;
+				uint64_t free_event = 0;
+				{
+					MutexLock phys_lock(entry->physical.mutex);
+					enqueued = entry->physical.enqueued;
+					free_event = entry->physical.free_event;
+				}
+				if (entry->evicted && entry->physical.production_uses == nullptr && free_event != 0) {
+					attachment->persistent_set_lookup.erase(entry->key);
+					attachment->persistent_sets.remove_at_unordered(i);
+					memdelete(entry);
+					continue;
+				}
+				if (entry->retire_enqueued && !enqueued && free_event == 0) {
+					entry->retire_enqueued = false;
+				}
+				++i;
+			}
+		}
+	}
+}
+
+void Registry::production_persistent_sets_evict_for_dependency_rt(RenderingDevice *p_rd, QualificationPhysicalReturn *p_dep) {
+	if (!p_rd || !p_dep || p_rd->render_thread_id != Thread::get_caller_id()) {
+		return;
+	}
+	bool any_evicted = false;
+	{
+		Lock lock(*this);
+		for (auto *attachment : production_attachments) {
+			if (!attachment || attachment->held_device != p_rd || attachment->persistent_sets.is_empty()) {
+				continue;
+			}
+			for (uint32_t i = 0; i < attachment->persistent_sets.size(); ++i) {
+				PersistentSetEntry *entry = attachment->persistent_sets[i];
+				if (!entry) {
+					continue;
+				}
+				if (entry->dependencies.has(p_dep)) {
+					if (!entry->evicted) {
+						entry->evicted = true;
+						attachment->persistent_set_lookup.erase(entry->key);
+					}
+					any_evicted = true;
+				}
+			}
+		}
+	}
+	if (any_evicted) {
+		production_persistent_sets_reap_and_retire_rt(p_rd, true);
+	}
+}
+
+void Registry::production_persistent_sets_close_drain_rt(uint64_t p_registry_instance, uint64_t p_attachment_serial) {
+	if (p_registry_instance != instance) {
+		return;
+	}
+	RenderingDevice *rd = nullptr;
+	{
+		Lock lock(*this);
+		for (auto *attachment : production_attachments) {
+			if (attachment && attachment->serial == p_attachment_serial) {
+				attachment->persistent_set_close_drain_queued = false;
+				rd = attachment->held_device;
+				break;
+			}
+		}
+	}
+	if (!rd || rd->render_thread_id != Thread::get_caller_id() || !rd->_thread_safe_.try_lock()) {
+		return;
+	}
+	MutexScopeUnlock<Mutex> unlock(rd->_thread_safe_);
+	production_persistent_sets_reap_and_retire_rt(rd, true);
+}
+
 GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProductionRequestRefV1 ref, uint32_t index, uint32_t unit_index, uint32_t shader_set, const GDExtensionProductionSetBindingV1 *bindings, uint32_t count) {
 	if (!count || !valid(bindings)) {
 		return result(ERR_INVALID_PARAMETER);
@@ -487,6 +732,46 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 						}
 					}
 				}
+				PersistentSetKey cache_key;
+				bool cache_eligible = false;
+				if (!scene_depth_set1) {
+					bool has_output_alias = false;
+					for (uint32_t i = 0; i < count; ++i) {
+						has_output_alias |= request->resources[bindings[i].resource_slot].output_alias_prepared;
+					}
+					if (!has_output_alias && !request->attachment->closing &&
+							production_persistent_set_build_key_locked(*request, unit_index, shader_set, bindings, count, cache_key)) {
+						cache_eligible = true;
+						PersistentSetEntry **found = request->attachment->persistent_set_lookup.getptr(cache_key);
+						if (found && *found && !(*found)->evicted && !(*found)->physical.use_closed.load()) {
+							PersistentSetEntry *entry = *found;
+							const Error attach_err = slot.uses[0].attach(entry->physical, *request, request->serial);
+							if (attach_err == OK) {
+								slot.owned_serial = entry->serial;
+								slot.primary = entry->rid;
+								slot.backing_serial = entry->physical.serial;
+								slot.imported_unit_slot = unit_index;
+								slot.shader_set = shader_set;
+								slot.scene_depth_set1 = false;
+								slot.first_binding = request->use_count + request->binding_used;
+								slot.binding_count = count;
+								for (uint32_t i = 0; i < count; ++i) {
+									request->uses[slot.first_binding + i].binding = bindings[i];
+								}
+								request->binding_used += count;
+								slot.use_count = 1;
+								slot.imported = true;
+								slot.cached_persistent_set = true;
+								slot.creating = false;
+								slot.handoff_error = OK;
+								request->returns[index].pending = false;
+								request->returns[index].serial = 0;
+								entry->last_used_tick = ++request->attachment->persistent_set_tick;
+								return result(OK);
+							}
+						}
+					}
+				}
 				production_serials.take(slot.owned_serial);
 				production_serials.take(slot.retire_serial);
 				production_serials.take(slot.owned_physical.serial);
@@ -497,6 +782,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 				slot.imported_unit_slot = unit_index;
 				slot.shader_set = shader_set;
 				slot.scene_depth_set1 = scene_depth_set1;
+				slot.cached_persistent_set = cache_eligible;
 				for (uint32_t i = 0; i < count; ++i) {
 					request->uses[slot.first_binding + i].binding = bindings[i];
 				}
@@ -507,6 +793,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 					}
 				}
 				if (slot.output_set_deferred) {
+					slot.cached_persistent_set = false;
 					// Preparation only. The original output action creates this exact
 					// set after its actual aliases exist, inside the same RECORD.
 					return result(OK);
@@ -1065,6 +1352,78 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 					dependencies.push_back(resource.uses[0].physical);
 				}
 			}
+			if (slot.cached_persistent_set) {
+				PersistentSetKey cache_key;
+				if (production_persistent_set_build_key_from_slot_locked(request, slot, cache_key)) {
+					PersistentSetEntry **existing = request.attachment->persistent_set_lookup.getptr(cache_key);
+					if (existing && *existing && !(*existing)->evicted && !(*existing)->physical.use_closed.load()) {
+						PersistentSetEntry *entry = *existing;
+						slot.owned_serial = entry->serial;
+						slot.primary = entry->rid;
+						slot.backing_serial = entry->physical.serial;
+						const Error attach_err = slot.uses[0].attach(entry->physical, request, request.serial);
+						if (attach_err == OK) {
+							slot.use_count = 1;
+							slot.imported = true;
+							request.returns[index].pending = false;
+							entry->last_used_tick = ++request.attachment->persistent_set_tick;
+						}
+						++request.revision;
+						return finish(attach_err != OK ? attach_err : request.source_device_lost ? ERR_UNAVAILABLE
+																								 : OK);
+					}
+					if (production_serials.exhausted || production_serials.next > UINT64_MAX - 2) {
+						return finish(ERR_PARAMETER_RANGE_ERROR);
+					}
+					PersistentSetEntry *entry = memnew(PersistentSetEntry);
+					production_serials.take(entry->serial);
+					production_serials.take(entry->physical.serial);
+					entry->physical.bridge = request.attachment->serial;
+					entry->physical.child = entry->serial;
+					entry->key = cache_key;
+					entry->dependencies = dependencies;
+					if (!rd._qualification_reserve_free_event(&entry->physical)) {
+						memdelete(entry);
+						return finish(ERR_PARAMETER_RANGE_ERROR);
+					}
+					production_native_effect_enter_locked(request);
+					++request.capture_inflight;
+					unlock_mutex_for_call();
+					rid = rd._uniform_set_create_qualification(uniforms, unit.secondary, slot.shader_set, false, &entry->physical, &dependencies, nullptr, &request);
+					relock_mutex_after_call();
+					CRASH_COND(!request.capture_inflight);
+					--request.capture_inflight;
+					if (rid.is_null()) {
+						rd._qualification_release_free_event(&entry->physical);
+						memdelete(entry);
+						const Error fail_err = rd.get_last_uniform_set_create_error() == ERR_BUSY ? ERR_BUSY : ERR_CANT_CREATE;
+						return fail_err == ERR_BUSY ? ERR_BUSY : finish(fail_err);
+					}
+					entry->rid = rid;
+					entry->physical.rid = rid.get_id();
+					entry->last_used_tick = ++request.attachment->persistent_set_tick;
+					request.attachment->persistent_sets.push_back(entry);
+					if (!request.attachment->closing && !request.attachment->persistent_set_lookup.has(entry->key)) {
+						request.attachment->persistent_set_lookup.insert(entry->key, entry);
+						production_persistent_sets_evict_lru_locked(*request.attachment);
+					} else {
+						entry->evicted = true;
+					}
+					slot.owned_serial = entry->serial;
+					slot.primary = entry->rid;
+					slot.backing_serial = entry->physical.serial;
+					const Error attach_err = slot.uses[0].attach(entry->physical, request, request.serial);
+					if (attach_err == OK) {
+						slot.use_count = 1;
+						slot.imported = true;
+						request.returns[index].pending = false;
+					}
+					++request.revision;
+					return finish(attach_err != OK ? attach_err : request.source_device_lost ? ERR_UNAVAILABLE
+																							 : OK);
+				}
+				slot.cached_persistent_set = false;
+			}
 			if (!rd._qualification_reserve_free_event(&slot.owned_physical)) {
 				return finish(ERR_PARAMETER_RANGE_ERROR);
 			}
@@ -1105,6 +1464,7 @@ void Registry::production_set_create_cancel_batched_locked(ProductionRequest &re
 		slot.batched_set_create = false;
 		if (is_create_slot && slot.creating && !slot.primary.is_valid()) {
 			slot.creating = false;
+			slot.cached_persistent_set = false;
 			slot.handoff_error = p_error;
 			if (i < request.capacity.return_cells) {
 				request.returns[i].pending = false;
@@ -1205,7 +1565,7 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 		const bool storage = slot.declaration.resource_kind == GDEXTENSION_PRODUCTION_STORAGE_V1;
 		const bool raster = request.raster_reserved && slot.declaration.resource_kind == GDEXTENSION_PRODUCTION_RASTER_PHYSICAL_V1;
 		const bool raster_retire = raster && request.raster_prepare_origin.create_attempt && !request.resources[0].creating && (request.cancelled || request.next_action == request.action_count || request.resources[0].handoff_error != OK);
-		if (slot.declaration.ownership != GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || !slot.primary.is_valid() || slot.returned ||
+		if (slot.declaration.ownership != GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || !slot.primary.is_valid() || slot.returned || slot.cached_persistent_set ||
 				(!set && !storage && !raster) || (raster && !raster_retire) || (storage && !slot.retiring) || (set && !request.cancelled && request.next_action != request.action_count)) {
 			continue;
 		}
@@ -1397,7 +1757,7 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 	}
 	for (uint32_t i = 0; i < request.resource_count; ++i) {
 		auto &slot = request.resources[i];
-		if (slot.declaration.resource_kind == GDEXTENSION_PRODUCTION_SET_V1 && slot.declaration.ownership == GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 && !slot.returned) {
+		if (slot.declaration.resource_kind == GDEXTENSION_PRODUCTION_SET_V1 && slot.declaration.ownership == GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 && !slot.returned && !slot.cached_persistent_set) {
 			MutexLock physical(slot.owned_physical.mutex);
 			if (slot.owned_physical.free_event) {
 				slot.returned = true;
@@ -1664,6 +2024,11 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 					if (production_material_qualification_owns_framebuffer_physical(owner.actions[a], physical)) {
 						return true;
 					}
+				}
+			}
+			for (uint32_t p = 0; p < attachment->persistent_sets.size(); ++p) {
+				if (attachment->persistent_sets[p] && &attachment->persistent_sets[p]->physical == physical) {
+					return true;
 				}
 			}
 		}

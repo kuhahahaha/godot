@@ -15581,6 +15581,11 @@ Error RenderingDevice::_begin_frame(bool p_presented, bool p_nonblocking) {
 	frame_wait_error = OK;
 	failed_wait_frame = -1;
 	qualification_frame_advance_pending = false;
+	if (!native_disposal_active && !frame_wait_draining) {
+		if (auto *registry = production_entity_registry.load(std::memory_order_acquire)) {
+			registry->production_observe_completed_frames_rt(*this);
+		}
+	}
 	return OK;
 }
 

@@ -116,6 +116,8 @@ class RenderingServerDefault : public RenderingServer {
 	void _qualification_rt_dispatch(uint64_t, uint64_t);
 	bool _try_production_control_dispatch(uint64_t, uint64_t, uint64_t, uint64_t);
 	void _production_control_dispatch(uint64_t, uint64_t, uint64_t, uint64_t);
+	bool _try_production_persistent_sets_drain(uint64_t, uint64_t);
+	void _production_persistent_sets_drain(uint64_t, uint64_t);
 	void _qualification_service(uint64_t, uint64_t, uint32_t, uint32_t, uint32_t);
 
 	void _free(RID p_rid);

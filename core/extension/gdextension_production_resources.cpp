@@ -234,6 +234,7 @@ Error Registry::production_unpin_resources_locked(ProductionRequest &p_request) 
 			slot.output_witness = NativeDisposalWitness();
 		}
 		slot.imported = false;
+		slot.cached_persistent_set = false;
 		slot.scene_depth_set1 = false;
 		slot.first_binding = UINT32_MAX;
 		slot.binding_count = 0;
