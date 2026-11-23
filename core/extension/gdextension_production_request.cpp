@@ -2524,7 +2524,17 @@ GDExtensionDeviceSessionResultV1 Registry::production_cancel(GDExtensionProducti
 	if (e != OK) {
 		return result(e, 16);
 	}
-	production_native_record_reject_wait_locked(*r);
+	if (!production_native_record_reject_wait_locked(*r)) {
+		auto &cell = r->control;
+		if (!r->native_prepared_executor && r->attachment && r->attachment->scene_registration &&
+				cell.serial && cell.state == ProductionControlState::QUEUED && cell.scene_waiting &&
+				cell.input.kind == ProductionControlKind::RECORD && !cell.input.output_cancel &&
+				cell.input.request_serial == r->serial && cell.input.record_generation == r->operation.record_generation &&
+				cell.record_history.admitted && !r->capture_inflight && !r->continuation_inflight) {
+			cell.scene_waiting = false;
+			production_control_execute_locked(*r, nullptr);
+		}
+	}
 	if (r->control.state != ProductionControlState::OWNER_CONSUMED) {
 		return result(ERR_BUSY, 16);
 	}
@@ -3291,7 +3301,17 @@ GDExtensionDeviceSessionResultV1 Registry::production_release(GDExtensionProduct
 	if (e != OK) {
 		return result(e, 16);
 	}
-	production_native_record_reject_wait_locked(*r);
+	if (!production_native_record_reject_wait_locked(*r)) {
+		auto &cell = r->control;
+		if (!r->native_prepared_executor && r->attachment && r->attachment->scene_registration &&
+				cell.serial && cell.state == ProductionControlState::QUEUED && cell.scene_waiting &&
+				cell.input.kind == ProductionControlKind::RECORD && !cell.input.output_cancel &&
+				cell.input.request_serial == r->serial && cell.input.record_generation == r->operation.record_generation &&
+				cell.record_history.admitted && !r->capture_inflight && !r->continuation_inflight) {
+			cell.scene_waiting = false;
+			production_control_execute_locked(*r, nullptr);
+		}
+	}
 	if (r->control.state != ProductionControlState::OWNER_CONSUMED) {
 		return result(ERR_BUSY, 16);
 	}
@@ -3748,6 +3768,8 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 		Ref<RendererViewport::Viewport::CameraCapture> returning_cull = action.scene_cull_capture;
 		action.preinput_camera_source.unref(); // returning pins final destruction.
 		action.scene_cull_capture.unref();
+		action.scene_cull_attempted = false;
+		action.scene_cull_attempted_camera = {};
 		action.preinput_camera_returned = true;
 		unlock_mutex_for_call();
 		returning.unref();

@@ -106,6 +106,8 @@ Error Registry::camera_ready_native_pre_cull(ProductionCameraReadySubscriber &ob
 		}
 		returning = action.scene_cull_capture;
 		action.scene_cull_prepared = false;
+		action.scene_cull_attempted = false;
+		action.scene_cull_attempted_camera = {};
 		if (request->cancelled || request->release_started || request->effects_pending || request->source_device_lost ||
 				request->capture_inflight || request->continuation_inflight || request->native_prepared_unread ||
 				request->control.state != ProductionControlState::QUEUED || request->control.input.kind != ProductionControlKind::RECORD ||
@@ -114,6 +116,9 @@ Error Registry::camera_ready_native_pre_cull(ProductionCameraReadySubscriber &ob
 			action.scene_cull_error = ERR_BUSY;
 			return ERR_BUSY;
 		}
+		const auto &token = capture->get_token();
+		action.scene_cull_attempted = true;
+		action.scene_cull_attempted_camera = { token.view_id, token.view_epoch, token.capture_ordinal };
 		action.scene_cull_error = production_prepare_staged_cull_locked(*request, action, *device, borrow);
 		return action.scene_cull_error;
 	}
@@ -133,6 +138,8 @@ Error Registry::camera_ready_native_pre_cull(ProductionCameraReadySubscriber &ob
 	}
 	returning = action.scene_cull_capture;
 	action.scene_cull_prepared = false;
+	action.scene_cull_attempted = false;
+	action.scene_cull_attempted_camera = {};
 	if (request->cancelled || request->release_started || request->effects_pending || request->source_device_lost ||
 			request->capture_inflight || request->continuation_inflight || request->native_prepared_unread ||
 			request->control.state != ProductionControlState::QUEUED || request->control.input.kind != ProductionControlKind::RECORD ||
@@ -141,6 +148,9 @@ Error Registry::camera_ready_native_pre_cull(ProductionCameraReadySubscriber &ob
 		action.scene_cull_error = ERR_BUSY;
 		return ERR_BUSY;
 	}
+	const auto &token = capture->get_token();
+	action.scene_cull_attempted = true;
+	action.scene_cull_attempted_camera = { token.view_id, token.view_epoch, token.capture_ordinal };
 	action.scene_cull_error = production_prepare_staged_cull_locked(*request, action, *device, borrow);
 	return action.scene_cull_error;
 }
@@ -203,11 +213,39 @@ Error Registry::camera_ready_native_invocation(ProductionCameraReadySubscriber &
 				!action.output_plan_prepared || action.preinput_camera_source.is_valid() || !action.preinput_host_prepared || action.preinput_host_returned) { return ERR_INVALID_DATA; }
 		// Prefix turns use the actual native scope, but do not bind its camera.
 		// Original owner consume/apply/ACK may therefore occur between captures.
-		// If pre_cull did not prepare scene cull for this capture (e.g. RECORD was
-		// queued after pre_cull ran, or pre_cull returned ERR_BUSY), defer without
-		// charging the stage budget or consuming the queued RECORD control.
 		if (!action.scene_cull_prepared || action.scene_cull_capture != capture) {
-			return ERR_BUSY;
+			const auto &token = capture->get_token();
+			const bool attempted_this_capture = action.scene_cull_attempted &&
+					action.scene_cull_attempted_camera.view_id == token.view_id &&
+					action.scene_cull_attempted_camera.view_epoch == token.view_epoch &&
+					action.scene_cull_attempted_camera.capture_ordinal == token.capture_ordinal;
+			if (!attempted_this_capture) {
+				// Genuine race: RECORD was queued after pre_cull ran for this capture.
+				// Defer without charging the stage budget or consuming the queued RECORD control.
+				return ERR_BUSY;
+			}
+			if (action.scene_cull_error == ERR_BUSY) {
+				// Transient pre_cull busy on this capture: charge one pass/receipt against
+				// the stage budget so a stuck ERR_BUSY terminates deterministically instead
+				// of spinning uncharged until deadline_micros.
+				const auto &budget = request->native_stage_budget;
+				if (!budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros ||
+						request->native_stage_controls_used >= budget.controls ||
+						request->native_stage_passes_used >= budget.passes ||
+						request->native_stage_receipts_used >= budget.receipts) {
+					production_native_record_reject_wait_locked(*request);
+					return ERR_BUSY;
+				}
+				++request->native_stage_passes_used;
+				++request->native_stage_receipts_used;
+				if (request->native_stage_passes_used >= budget.passes || request->native_stage_receipts_used >= budget.receipts) {
+					production_native_record_reject_wait_locked(*request);
+				}
+				return ERR_BUSY;
+			}
+			// Permanent pre_cull failure on this capture (e.g. ERR_INVALID_DATA,
+			// ERR_UNAUTHORIZED, ERR_INVALID_PARAMETER): fall through to charge and
+			// execute the control so RETURNED immediately reports action.scene_cull_error.
 		}
 	}
 

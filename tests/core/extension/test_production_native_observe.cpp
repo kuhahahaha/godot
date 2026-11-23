@@ -5314,6 +5314,321 @@ struct Access {
 		e.rd.qualification_retiring = false;
 		e.rd._free_pending_resources(0);
 	}
+
+	static void bug137_staged_cull_permanent_failure_and_bounded_busy() {
+		using namespace GDExtensionDeviceExit;
+		REQUIRE(RSG::viewport != nullptr);
+		REQUIRE(RSG::scene != nullptr);
+		const RID viewport = RSG::viewport->viewport_allocate();
+		RSG::viewport->viewport_initialize(viewport);
+		const RID camera_rid = RSG::scene->camera_allocate();
+		RSG::scene->camera_initialize(camera_rid);
+		RSG::viewport->viewport_set_size(viewport, 64, 48, 1);
+		RSG::viewport->viewport_attach_camera(viewport, camera_rid);
+		auto *vp = RSG::viewport->viewport_owner.get_or_null(viewport);
+		REQUIRE(vp != nullptr);
+		if (vp->render_buffers.is_null()) {
+			vp->render_buffers = Ref<RenderSceneBuffers>(memnew(DelayedDeliveryTestBuffers));
+		}
+		REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, { 937, 1, 1 }));
+		RendererSceneRender::CameraData camera;
+		camera.set_camera(Transform3D(), Projection(), false, false, Vector2(), 0, 1);
+		camera.source_viewport = viewport;
+		const auto token = RSG::viewport->viewport_begin_camera_capture(viewport, camera, camera_rid, vp->render_buffers);
+		Ref<RendererViewport::Viewport::CameraCapture> capture;
+		REQUIRE(RSG::viewport->viewport_get_camera_capture_ref(viewport, token, capture));
+
+		// Part 1: Repeated ERR_BUSY from pre_cull is bounded by stage pass/receipt budget
+		// and terminates into RETURNED instead of spinning uncharged until deadline_micros.
+		{
+			Enrollment e;
+			auto c = capacity(4);
+			const auto attachment = e.accept(c);
+			REQUIRE(attachment.handle_serial != 0);
+			Request *r = nullptr;
+			const GDExtensionProductionOperationV1 operation{ production_dto_abi<GDExtensionProductionOperationV1>(), 337, 1, 10, 11 };
+			const GDExtensionProductionActionV2 row{ 0, 10, 0, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX };
+			{
+				MutexLock lock(e.registry->mutex);
+				ProductionAttachment *a = nullptr;
+				RenderingDevice *rd = nullptr;
+				REQUIRE(e.registry->production_attachment_locked(attachment, true, a, rd) == OK);
+				a->opened = true;
+				REQUIRE(e.registry->production_reserve_metadata_rows_locked(*a, operation, c, { nullptr, &row }, 1, nullptr, 0, nullptr, 0, {}, 0, r, 2) == OK);
+			}
+			REQUIRE(r != nullptr);
+			const GDExtensionProductionRequestRefV1 ref{ Enrollment::INSTANCE, r->serial };
+			auto &action = r->actions[0];
+			auto &subscriber = action.camera_ready_subscriber;
+			r->native_prepared_executor = true;
+			r->native_static_sealed = true;
+			r->native_staged_anchor = 0;
+			r->native_stage_budget = budget(3, 3);
+			r->control = {};
+			r->control.serial = 11;
+			r->control.input.request_serial = r->serial;
+			r->control.input.record_generation = r->operation.record_generation;
+			r->control.input.kind = ProductionControlKind::RECORD;
+			r->control.input.budget = r->native_stage_budget;
+			r->control.state = ProductionControlState::QUEUED;
+			r->control.scene_waiting = true;
+			r->control.record_history.admitted = true;
+			action.prepared = true;
+			action.output_source_prepared = true;
+			action.output_camera_pending = true;
+			action.output_plan_prepared = true;
+			action.preinput_host_prepared = true;
+			action.camera_ready_viewport = viewport;
+			action.scene_cull_prepared = false;
+			action.scene_cull_attempted = true;
+			action.scene_cull_attempted_camera = { token.view_id, token.view_epoch, token.capture_ordinal };
+			action.scene_cull_error = ERR_BUSY;
+			subscriber.registry = e.registry;
+			subscriber.attachment = attachment;
+			subscriber.request = ref;
+			subscriber.action_ordinal = 0;
+			subscriber.subscribed = true;
+			subscriber.last_error = OK;
+			REQUIRE(RSG::viewport->viewport_subscribe_camera_source(viewport, &subscriber));
+
+			// First 2 attempts charge passes/receipts while remaining QUEUED.
+			TestProductionRequest::wave_g_deliver_native_invocation(*RSG::viewport, capture, &subscriber);
+			CHECK(subscriber.get_last_error() == ERR_BUSY);
+			CHECK(r->native_stage_passes_used == 1);
+			CHECK(r->native_stage_receipts_used == 1);
+			CHECK(r->control.state == ProductionControlState::QUEUED);
+			CHECK(r->control.scene_waiting);
+
+			TestProductionRequest::wave_g_deliver_native_invocation(*RSG::viewport, capture, &subscriber);
+			CHECK(r->native_stage_passes_used == 2);
+			CHECK(r->native_stage_receipts_used == 2);
+			CHECK(r->control.state == ProductionControlState::QUEUED);
+
+			// 3rd attempt exhausts passes/receipts and immediately rejects wait into RETURNED.
+			TestProductionRequest::wave_g_deliver_native_invocation(*RSG::viewport, capture, &subscriber);
+			CHECK(r->native_stage_passes_used == 3);
+			CHECK(r->native_stage_receipts_used == 3);
+			CHECK(r->control.state == ProductionControlState::RETURNED);
+			CHECK_FALSE(r->control.scene_waiting);
+
+			GDExtensionProductionRecordReportV3 report{};
+			REQUIRE(e.registry->production_record_consume_v3(ref, 11, &report).native_error == OK);
+			CHECK(report.record.result.native_error == ERR_UNAVAILABLE);
+			CHECK(report.remaining.passes == 0);
+			CHECK(report.remaining.receipts == 0);
+
+			CHECK(RSG::viewport->viewport_unsubscribe_camera_source(viewport, &subscriber));
+			subscriber.subscribed = false;
+			subscriber.registry = nullptr;
+		}
+
+		// Part 2: Permanent scene_cull_error (e.g. ERR_INVALID_DATA) on this capture
+		// surfaces immediately through RETURNED without waiting for deadline_micros.
+		{
+			Enrollment e;
+			auto c = capacity(4);
+			const auto attachment = e.accept(c);
+			REQUIRE(attachment.handle_serial != 0);
+			Request *r = nullptr;
+			const GDExtensionProductionOperationV1 operation{ production_dto_abi<GDExtensionProductionOperationV1>(), 338, 1, 10, 11 };
+			const GDExtensionProductionActionV2 row{ 0, 10, 0, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX };
+			{
+				MutexLock lock(e.registry->mutex);
+				ProductionAttachment *a = nullptr;
+				RenderingDevice *rd = nullptr;
+				REQUIRE(e.registry->production_attachment_locked(attachment, true, a, rd) == OK);
+				a->opened = true;
+				REQUIRE(e.registry->production_reserve_metadata_rows_locked(*a, operation, c, { nullptr, &row }, 1, nullptr, 0, nullptr, 0, {}, 0, r, 2) == OK);
+			}
+			REQUIRE(r != nullptr);
+			const GDExtensionProductionRequestRefV1 ref{ Enrollment::INSTANCE, r->serial };
+			auto &action = r->actions[0];
+			auto &subscriber = action.camera_ready_subscriber;
+			r->native_prepared_executor = true;
+			r->native_static_sealed = true;
+			r->native_staged_anchor = 0;
+			r->native_stage_budget = budget(16, 16);
+			r->control = {};
+			r->control.serial = 11;
+			r->control.input.request_serial = r->serial;
+			r->control.input.record_generation = r->operation.record_generation;
+			r->control.input.kind = ProductionControlKind::RECORD;
+			r->control.input.budget = r->native_stage_budget;
+			r->control.state = ProductionControlState::QUEUED;
+			r->control.scene_waiting = true;
+			r->control.record_history.admitted = true;
+			action.prepared = true;
+			action.output_source_prepared = true;
+			action.output_camera_pending = true;
+			action.output_plan_prepared = true;
+			action.preinput_host_prepared = true;
+			action.camera_ready_viewport = viewport;
+			action.scene_cull_prepared = false;
+			action.scene_cull_attempted = true;
+			action.scene_cull_attempted_camera = { token.view_id, token.view_epoch, token.capture_ordinal };
+			action.scene_cull_error = ERR_INVALID_DATA;
+			subscriber.registry = e.registry;
+			subscriber.attachment = attachment;
+			subscriber.request = ref;
+			subscriber.action_ordinal = 0;
+			subscriber.subscribed = true;
+			subscriber.last_error = OK;
+			REQUIRE(RSG::viewport->viewport_subscribe_camera_source(viewport, &subscriber));
+
+			TestProductionRequest::wave_g_deliver_native_invocation(*RSG::viewport, capture, &subscriber);
+			CHECK(subscriber.get_last_error() == ERR_INVALID_DATA);
+			CHECK(r->control.state == ProductionControlState::RETURNED);
+			CHECK_FALSE(r->control.scene_waiting);
+
+			GDExtensionProductionRecordReportV3 report{};
+			REQUIRE(e.registry->production_record_consume_v3(ref, 11, &report).native_error == OK);
+			CHECK(report.record.result.native_error == ERR_INVALID_DATA);
+			CHECK(report.controls_used == 1);
+			CHECK(report.passes_used == 1);
+			CHECK(report.receipts_used == 1);
+			CHECK(r->next_action == 0);
+
+			CHECK(RSG::viewport->viewport_unsubscribe_camera_source(viewport, &subscriber));
+			subscriber.subscribed = false;
+			subscriber.registry = nullptr;
+		}
+		CHECK(RSG::viewport->free(viewport));
+		CHECK(RSG::scene->free(camera_rid));
+	}
+
+	static void bug137_production_cancel_wakes_scene_waiting_staged_and_non_native() {
+		using namespace GDExtensionDeviceExit;
+		// Case 1: Staged (native_static_sealed) QUEUED && scene_waiting RECORD.
+		{
+			Enrollment e;
+			auto c = capacity(4);
+			const auto attachment = e.accept(c);
+			REQUIRE(attachment.handle_serial != 0);
+			Request *r = nullptr;
+			const GDExtensionProductionOperationV1 operation{ production_dto_abi<GDExtensionProductionOperationV1>(), 339, 1, 10, 11 };
+			const GDExtensionProductionActionV2 row{ 0, 10, 0, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX };
+			{
+				MutexLock lock(e.registry->mutex);
+				ProductionAttachment *a = nullptr;
+				RenderingDevice *rd = nullptr;
+				REQUIRE(e.registry->production_attachment_locked(attachment, true, a, rd) == OK);
+				a->opened = true;
+				REQUIRE(e.registry->production_reserve_metadata_rows_locked(*a, operation, c, { nullptr, &row }, 1, nullptr, 0, nullptr, 0, {}, 0, r, 2) == OK);
+			}
+			REQUIRE(r != nullptr);
+			const GDExtensionProductionRequestRefV1 ref{ Enrollment::INSTANCE, r->serial };
+			r->native_prepared_executor = true;
+			r->native_static_sealed = true;
+			r->native_stage_budget = budget(16, 16);
+			r->control = {};
+			r->control.serial = 21;
+			r->control.input.request_serial = r->serial;
+			r->control.input.record_generation = r->operation.record_generation;
+			r->control.input.kind = ProductionControlKind::RECORD;
+			r->control.input.budget = r->native_stage_budget;
+			r->control.state = ProductionControlState::QUEUED;
+			r->control.scene_waiting = true;
+			r->control.record_history.admitted = true;
+
+			// production_cancel wakes QUEUED && scene_waiting into RETURNED (returns ERR_BUSY until consumed).
+			CHECK(e.registry->production_cancel(ref).native_error == ERR_BUSY);
+			REQUIRE(r->control.state == ProductionControlState::RETURNED);
+			CHECK_FALSE(r->control.scene_waiting);
+
+			GDExtensionProductionRecordReportV3 report{};
+			REQUIRE(e.registry->production_record_consume_v3(ref, 21, &report).native_error == OK);
+			CHECK(report.record.result.native_error == ERR_UNAVAILABLE);
+			CHECK(e.registry->production_cancel(ref).native_error == OK);
+		}
+
+		// Case 2: Non-native-executor scene_registration QUEUED && scene_waiting RECORD.
+		{
+			Enrollment e;
+			auto c = capacity(4);
+			const auto attachment = e.accept(c);
+			REQUIRE(attachment.handle_serial != 0);
+			Request *r = nullptr;
+			const GDExtensionProductionOperationV1 operation{ production_dto_abi<GDExtensionProductionOperationV1>(), 340, 1, 10, 11 };
+			const GDExtensionProductionActionV2 row{ 0, 10, 0, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX };
+			{
+				MutexLock lock(e.registry->mutex);
+				ProductionAttachment *a = nullptr;
+				RenderingDevice *rd = nullptr;
+				REQUIRE(e.registry->production_attachment_locked(attachment, true, a, rd) == OK);
+				a->scene_registration = 77;
+				REQUIRE(e.registry->production_reserve_metadata_rows_locked(*a, operation, c, { nullptr, &row }, 1, nullptr, 0, nullptr, 0, {}, 0, r, 2) == OK);
+			}
+			REQUIRE(r != nullptr);
+			const GDExtensionProductionRequestRefV1 ref{ Enrollment::INSTANCE, r->serial };
+			r->control = {};
+			r->control.serial = 22;
+			r->control.input.request_serial = r->serial;
+			r->control.input.record_generation = r->operation.record_generation;
+			r->control.input.kind = ProductionControlKind::RECORD;
+			r->control.state = ProductionControlState::QUEUED;
+			r->control.scene_waiting = true;
+			r->control.record_history.admitted = true;
+
+			CHECK(e.registry->production_cancel(ref).native_error == ERR_BUSY);
+			REQUIRE(r->control.state == ProductionControlState::RETURNED);
+			CHECK_FALSE(r->control.scene_waiting);
+
+			ProductionControlOutput out{};
+			REQUIRE(e.registry->production_control_consume(ref, 22, &out) == OK);
+			CHECK(out.result.native_error == ERR_UNAVAILABLE);
+			CHECK(e.registry->production_cancel(ref).native_error == OK);
+		}
+	}
+
+	static void bug136_mq_record_checks_recording_error_before_append() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		auto c = capacity(4);
+		const auto attachment = e.accept(c);
+		REQUIRE(attachment.handle_serial != 0);
+		Request *r = nullptr;
+		const GDExtensionProductionOperationV1 operation{ production_dto_abi<GDExtensionProductionOperationV1>(), 341, 1, 10, 11 };
+		const GDExtensionProductionActionV2 row{ 0, 10, 0, 0, GDEXTENSION_PRODUCTION_MATERIAL_QUALIFICATION_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
+		struct ReceiverState {
+			Registry *registry = nullptr;
+			GDExtensionDeviceSessionResultV1 res = {};
+			bool called = false;
+		} state{ e.registry };
+		{
+			MutexLock lock(e.registry->mutex);
+			ProductionAttachment *a = nullptr;
+			RenderingDevice *rd = nullptr;
+			REQUIRE(e.registry->production_attachment_locked(attachment, true, a, rd) == OK);
+			a->opened = true;
+			a->record_receiver = [](void *p_userdata, GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_req, const GDExtensionProductionOperationV1 *) {
+				auto *s = static_cast<ReceiverState *>(p_userdata);
+				s->called = true;
+				s->res = s->registry->production_record_material_qualification(p_context, p_req, 0);
+			};
+			a->record_receiver_userdata = &state;
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*a, operation, c, { nullptr, &row }, 1, nullptr, 0, nullptr, 0, {}, 0, r, 2) == OK);
+		}
+		REQUIRE(r != nullptr);
+		const GDExtensionProductionRequestRefV1 ref{ Enrollment::INSTANCE, r->serial };
+		uint64_t serial = 0;
+		REQUIRE(e.registry->production_control_accept(ref, ProductionControlKind::RECORD, &serial) == OK);
+		e.rd.qualification_frame_advance_pending = true;
+		{
+			Registry::Lock lock(*e.registry);
+			r->control.state = ProductionControlState::QUEUED;
+			e.registry->production_control_execute_locked(*r, &e.rd);
+		}
+		e.rd.qualification_frame_advance_pending = false;
+		ProductionControlOutput out{};
+		REQUIRE(e.registry->production_control_consume(ref, serial, &out) == OK);
+
+		CHECK(state.called);
+		CHECK(state.res.native_error == ERR_BUSY);
+		CHECK_FALSE(r->frozen);
+		CHECK_FALSE(r->append_effect_entered);
+		CHECK_FALSE(r->effects_pending);
+		CHECK(e.registry->production_cancel(ref).native_error == OK);
+	}
 };
 TEST_CASE("[ProductionNativeObserve][PreparedNativeRecordV2] cancel rejects transferred native wait before consume without erasing actual prefix") {
 	Access::native_record_wait_rejection(false);
@@ -5558,4 +5873,16 @@ TEST_CASE("[ProductionNativeObserve][BUG-124] _native_disposal_stall_step pops d
 
 TEST_CASE("[ProductionNativeObserve][BUG-125] _stall_for_frame marks chain_reports source_owner_returned immediately on fence recycle before deferred readback ERR_BUSY") {
 	TestProductionNativeObserve::Access::bug125_stall_for_frame_marks_chain_reports_returned_before_deferred_busy();
+}
+
+TEST_CASE("[SceneTree][ProductionNativeObserve][BUG-137] permanent scene_cull failure surfaces through RETURNED immediately while repeated ERR_BUSY is stage-budget bounded") {
+	TestProductionNativeObserve::Access::bug137_staged_cull_permanent_failure_and_bounded_busy();
+}
+
+TEST_CASE("[ProductionNativeObserve][BUG-137] production_cancel immediately wakes QUEUED scene_waiting staged and non-native RECORD controls into RETURNED") {
+	TestProductionNativeObserve::Access::bug137_production_cancel_wakes_scene_waiting_staged_and_non_native();
+}
+
+TEST_CASE("[ProductionNativeObserve][BUG-136] production_record_material_qualification returns _recording_error before freezing or entering append") {
+	TestProductionNativeObserve::Access::bug136_mq_record_checks_recording_error_before_append();
 }

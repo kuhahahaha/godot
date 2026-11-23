@@ -2164,6 +2164,20 @@ Error Registry::production_prepared_record_body(ProductionRequest &request, Rend
 			graph_begin = request.graph_count;
 			ordinal = request.next_action; serial = request.serial; control_serial = request.control.serial; revision = request.revision;
 			auto &action = request.actions[ordinal];
+			if (request.native_static_sealed && !request.frozen && request.native_staged_anchor < request.action_count) {
+				const auto &anchor = request.actions[request.native_staged_anchor];
+				const auto &capture = invocation.get_capture();
+				if (anchor.output_camera_pending && (!anchor.scene_cull_prepared || anchor.scene_cull_capture != capture)) {
+					const auto &token = capture->get_token();
+					if (anchor.scene_cull_attempted &&
+							anchor.scene_cull_attempted_camera.view_id == token.view_id &&
+							anchor.scene_cull_attempted_camera.view_epoch == token.view_epoch &&
+							anchor.scene_cull_attempted_camera.capture_ordinal == token.capture_ordinal &&
+							anchor.scene_cull_error != OK && anchor.scene_cull_error != ERR_BUSY) {
+						return anchor.scene_cull_error;
+					}
+				}
+			}
 			if (request.native_history_fallback && !request.frozen) {
 				const Error selected = production_complete_staged_camera_locked(request, request.actions[request.native_staged_anchor], borrow);
 				if (selected != OK) { return selected; }
