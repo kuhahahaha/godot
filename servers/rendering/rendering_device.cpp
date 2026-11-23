@@ -997,6 +997,94 @@ Error RenderingDevice::_insert_staging_block(StagingBuffers &p_staging_buffers) 
 	return OK;
 }
 
+void RenderingDevice::_trim_idle_staging_buffers() {
+	if (!driver || frames.is_empty() || native_disposal_active || frame_wait_draining) {
+		return;
+	}
+	constexpr uint64_t STAGING_IDLE_FRAMES = 8;
+	constexpr uint64_t STAGING_FLOOR_BYTES = 8u * 1024u * 1024u;
+	constexpr uint32_t TRANSFER_WORKER_TRIM_BYTES = 4u * 1024u * 1024u;
+
+	auto trim_pool = [&](StagingBuffers &p_staging) {
+		if (p_staging.blocks.size() <= 1 || p_staging.block_size == 0) {
+			return;
+		}
+		const int max_floor_by_bytes = int(MAX<uint64_t>(1u, STAGING_FLOOR_BYTES / p_staging.block_size));
+		const int keep_blocks = MAX(1, MIN(int(MAX<uint32_t>(2u, frames.size())), max_floor_by_bytes));
+		if (p_staging.blocks.size() <= keep_blocks) {
+			return;
+		}
+		const uint64_t safe_age = uint64_t(frames.size()) + STAGING_IDLE_FRAMES;
+		for (int i = p_staging.blocks.size() - 1; i >= 0 && p_staging.blocks.size() > keep_blocks; --i) {
+			if (i == p_staging.current) {
+				continue;
+			}
+			const StagingBufferBlock &block = p_staging.blocks[i];
+			if (block.frame_used != 0 && (block.frame_used >= frames_drawn || frames_drawn - block.frame_used < safe_age)) {
+				continue;
+			}
+			if (block.driver_id) {
+				driver->buffer_unmap(block.driver_id);
+				driver->buffer_free(block.driver_id);
+			}
+			p_staging.blocks.remove_at(i);
+			if (i < p_staging.current) {
+				--p_staging.current;
+			}
+		}
+		if (p_staging.current >= p_staging.blocks.size()) {
+			p_staging.current = 0;
+		}
+	};
+
+	if (!upload_staging_buffers.used) {
+		trim_pool(upload_staging_buffers);
+	}
+
+	if (!download_staging_buffers.used) {
+		bool any_download_pending = false;
+		for (uint32_t f = 0; f < frames.size(); ++f) {
+			if (frames[f].maintenance_wait.mapped != nullptr ||
+					!frames[f].download_buffer_staging_buffers.is_empty() ||
+					!frames[f].download_texture_staging_buffers.is_empty() ||
+					!frames[f].download_buffer_get_data_requests.is_empty() ||
+					!frames[f].download_texture_get_data_requests.is_empty()) {
+				any_download_pending = true;
+				break;
+			}
+		}
+		if (!any_download_pending) {
+			trim_pool(download_staging_buffers);
+		}
+	}
+
+	if (transfer_worker_pool_size > 0 && transfer_worker_pool_mutex.try_lock()) {
+		MutexScopeUnlock<BinaryMutex> pool_unlock(transfer_worker_pool_mutex);
+		for (uint32_t i = 0; i < transfer_worker_pool_size; ++i) {
+			TransferWorker *worker = transfer_worker_pool[i];
+			if (!worker || !worker->thread_mutex.try_lock()) {
+				continue;
+			}
+			MutexScopeUnlock<BinaryMutex> worker_unlock(worker->thread_mutex);
+			if (!worker->submitted && !worker->recording && !worker->submission_pending &&
+					!worker->qualification_batch_sealed && !worker->qualification_observer_pending &&
+					!worker->height_observer_pending && !worker->production_observer_pending &&
+					!worker->poisoned && worker->staging_buffer_size_in_use == 0 &&
+					worker->staging_buffer.id != 0 && worker->staging_buffer_size_allocated > TRANSFER_WORKER_TRIM_BYTES) {
+				if (worker->idle_frames < uint32_t(STAGING_IDLE_FRAMES)) {
+					++worker->idle_frames;
+				} else {
+					driver->buffer_free(worker->staging_buffer);
+					worker->staging_buffer = RDD::BufferID();
+					worker->staging_buffer_size_allocated = 0;
+					worker->max_transfer_size = 0;
+					worker->idle_frames = 0;
+				}
+			}
+		}
+	}
+}
+
 Error RenderingDevice::_staging_buffer_allocate(StagingBuffers &p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, uint32_t &r_alloc_offset, uint32_t &r_alloc_size, StagingRequiredAction &r_required_action, bool p_can_segment) {
 	if (_recording_error() != OK) {
 		return _recording_error();
@@ -10053,6 +10141,7 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 	// Store the offset to return and increment the current size.
 	r_staging_offset = transfer_worker->staging_buffer_size_in_use;
 	transfer_worker->staging_buffer_size_in_use += p_transfer_size;
+	transfer_worker->idle_frames = 0;
 
 	if (!transfer_worker->recording) {
 		// Begin the command buffer if the worker wasn't recording yet.
@@ -10363,6 +10452,7 @@ bool RenderingDevice::_wait_for_transfer_worker(TransferWorker *p_transfer_worke
 	p_transfer_worker->height_observer_pending = false;
 	p_transfer_worker->submitted = false;
 	p_transfer_worker->submission_serial = 0;
+	p_transfer_worker->idle_frames = 0;
 
 	{
 		MutexLock lock(p_transfer_worker->operations_mutex);
@@ -15475,6 +15565,8 @@ Error RenderingDevice::_begin_frame(bool p_presented, bool p_nonblocking) {
 		download_staging_buffers.current = (download_staging_buffers.current + 1) % download_staging_buffers.blocks.size();
 		download_staging_buffers.used = false;
 	}
+
+	_trim_idle_staging_buffers();
 
 	if (frames[frame].timestamp_count) {
 		driver->timestamp_query_pool_get_results(frames[frame].timestamp_pool, frames[frame].timestamp_count, frames[frame].timestamp_result_values.ptr());

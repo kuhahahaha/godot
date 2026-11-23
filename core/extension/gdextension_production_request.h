@@ -949,6 +949,9 @@ class ProductionAttachment {
 	uint32_t actions_hwm = 0, resources_hwm = 0, uses_hwm = 0, readbacks_hwm = 0;
 	uint32_t graphs_hwm = 0, returns_hwm = 0, commands_hwm = 0, frames_hwm = 0;
 	uint32_t material_qualifications_live = 0, material_qualifications_constructed_total = 0;
+	uint64_t payload_reclaim_hwm = 0, readback_reclaim_hwm = 0, natives_reclaim_hwm = 0;
+	uint32_t mq_reclaim_hwm = 0;
+	uint64_t arena_reclaimed_bytes_total = 0;
 	// Open must acquire the original device holder and operation-window receiver.
 	// Metadata reservations do not satisfy those two obligations.
 };

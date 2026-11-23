@@ -5629,6 +5629,191 @@ struct Access {
 		CHECK_FALSE(r->effects_pending);
 		CHECK(e.registry->production_cancel(ref).native_error == OK);
 	}
+
+	static void bug138c_trim_idle_staging_buffers_and_transfer_worker() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		e.rd.frames.resize(2);
+		e.rd.upload_staging_buffers.block_size = 64u;
+		e.rd.upload_staging_buffers.max_size = 1024u;
+		e.rd.upload_staging_buffers.usage_bits = RDD::BUFFER_USAGE_TRANSFER_FROM_BIT;
+		e.rd.upload_staging_buffers.current = 0;
+		e.rd.upload_staging_buffers.used = false;
+
+		e.rd.download_staging_buffers.block_size = 64u;
+		e.rd.download_staging_buffers.max_size = 1024u;
+		e.rd.download_staging_buffers.usage_bits = RDD::BUFFER_USAGE_TRANSFER_TO_BIT;
+		e.rd.download_staging_buffers.current = 0;
+		e.rd.download_staging_buffers.used = false;
+
+		for (int i = 0; i < 8; ++i) {
+			REQUIRE(e.rd._insert_staging_block(e.rd.upload_staging_buffers) == OK);
+			e.rd.upload_staging_buffers.blocks.write[0].frame_used = 1;
+			REQUIRE(e.rd._insert_staging_block(e.rd.download_staging_buffers) == OK);
+			e.rd.download_staging_buffers.blocks.write[0].frame_used = 1;
+		}
+		e.rd.upload_staging_buffers.current = 3;
+		e.rd.download_staging_buffers.current = 4;
+		REQUIRE(e.rd.upload_staging_buffers.blocks.size() == 8);
+		REQUIRE(e.rd.download_staging_buffers.blocks.size() == 8);
+
+		RenderingDevice::TransferWorker *w_idle = memnew(RenderingDevice::TransferWorker);
+		w_idle->index = 0;
+		w_idle->staging_buffer = e.driver.buffer_create(64u, RDD::BUFFER_USAGE_TRANSFER_FROM_BIT, RDD::MEMORY_ALLOCATION_TYPE_CPU, 1);
+		w_idle->staging_buffer_size_allocated = 8u * 1024u * 1024u;
+		w_idle->max_transfer_size = 8u * 1024u * 1024u;
+		REQUIRE(w_idle->staging_buffer.id != 0);
+
+		RenderingDevice::TransferWorker *w_busy = memnew(RenderingDevice::TransferWorker);
+		w_busy->index = 1;
+		w_busy->submitted = true;
+		w_busy->staging_buffer = e.driver.buffer_create(64u, RDD::BUFFER_USAGE_TRANSFER_FROM_BIT, RDD::MEMORY_ALLOCATION_TYPE_CPU, 1);
+		w_busy->staging_buffer_size_allocated = 8u * 1024u * 1024u;
+		w_busy->max_transfer_size = 8u * 1024u * 1024u;
+		REQUIRE(w_busy->staging_buffer.id != 0);
+
+		e.rd.transfer_worker_pool.resize(2);
+		e.rd.transfer_worker_pool[0] = w_idle;
+		e.rd.transfer_worker_pool[1] = w_busy;
+		e.rd.transfer_worker_pool_size = 2;
+
+		const uint32_t frees_before = e.driver.buffer_frees;
+		// 1. Before 8 idle frames past ring size (frames_drawn = 5 < 1 + 2 + 8): nothing trimmed.
+		e.rd.frames_drawn = 5;
+		e.rd._trim_idle_staging_buffers();
+		CHECK(e.rd.upload_staging_buffers.blocks.size() == 8);
+		CHECK(e.rd.download_staging_buffers.blocks.size() == 8);
+		CHECK(w_idle->staging_buffer.id != 0);
+		CHECK(w_idle->idle_frames == 1);
+		CHECK(e.driver.buffer_frees == frees_before);
+
+		// 2. With a pending download readback on frame 0 and frames_drawn = 20:
+		//    upload staging trims to floor (2 blocks), download staging MUST NOT trim.
+		e.rd.frames[0].download_buffer_staging_buffers.push_back(e.rd.download_staging_buffers.blocks[0].driver_id);
+		e.rd.frames_drawn = 20;
+		e.rd._trim_idle_staging_buffers();
+		CHECK(e.rd.upload_staging_buffers.blocks.size() == 2);
+		CHECK(e.rd.upload_staging_buffers.current >= 0);
+		CHECK(e.rd.upload_staging_buffers.current < e.rd.upload_staging_buffers.blocks.size());
+		CHECK(e.rd.download_staging_buffers.blocks.size() == 8);
+		CHECK(e.driver.buffer_frees == frees_before + 6);
+
+		// 3. Once download readbacks drain, download staging trims cleanly to floor (2 blocks).
+		e.rd.frames[0].download_buffer_staging_buffers.clear();
+		e.rd._trim_idle_staging_buffers();
+		CHECK(e.rd.download_staging_buffers.blocks.size() == 2);
+		CHECK(e.rd.download_staging_buffers.current >= 0);
+		CHECK(e.rd.download_staging_buffers.current < e.rd.download_staging_buffers.blocks.size());
+		CHECK(e.driver.buffer_frees == frees_before + 12);
+
+		// 4. Advance idle frames to trigger idle TransferWorker staging trim (> 8 frames),
+		//    while submitted TransferWorker keeps its buffer intact.
+		for (int step = 0; step < 10; ++step) {
+			e.rd._trim_idle_staging_buffers();
+		}
+		CHECK(w_idle->staging_buffer.id == 0);
+		CHECK(w_idle->staging_buffer_size_allocated == 0);
+		CHECK(w_idle->max_transfer_size == 0);
+		CHECK(w_busy->staging_buffer.id != 0);
+		CHECK(w_busy->staging_buffer_size_allocated == 8u * 1024u * 1024u);
+		CHECK(e.driver.buffer_frees == frees_before + 13);
+
+		e.driver.buffer_free(w_busy->staging_buffer);
+		w_busy->staging_buffer = RDD::BufferID();
+		e.rd.transfer_worker_pool.clear();
+		e.rd.transfer_worker_pool_size = 0;
+		memdelete(w_idle);
+		memdelete(w_busy);
+	}
+
+	static void bug138c_arena_pod_reclaim_on_idle_and_reuse() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		auto pool_cap = capacity(16);
+		pool_cap.requests = 4;
+		pool_cap.readbacks = 8;
+		pool_cap.retained_payload_bytes = 256u * 1024u;
+		pool_cap.readback_bytes = 128u * 1024u;
+		const auto attachment_ref = e.accept(pool_cap);
+		REQUIRE(attachment_ref.handle_serial != 0);
+
+		ProductionAttachment *att = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			RenderingDevice *rd = nullptr;
+			REQUIRE(e.registry->production_attachment_locked(attachment_ref, true, att, rd) == OK);
+			att->scene_prefix_bytes = 64;
+			memset(att->payload, 0x5A, 64);
+		}
+		REQUIRE(att != nullptr);
+
+		auto req_cap = capacity(4);
+		req_cap.requests = 1;
+		req_cap.readbacks = 1;
+		req_cap.retained_payload_bytes = 96u * 1024u;
+		req_cap.readback_bytes = 64u * 1024u;
+		const GDExtensionProductionActionV2 actions[2] = {
+			{ 0, 10, 0, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX },
+			{ 1, 11, 0, 0, GDEXTENSION_PRODUCTION_MATERIAL_QUALIFICATION_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+		};
+		Request *r1 = nullptr;
+		Request *r2 = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			const GDExtensionProductionOperationV1 op1{ production_dto_abi<GDExtensionProductionOperationV1>(), 801, 1, 10, 12 };
+			const GDExtensionProductionOperationV1 op2{ production_dto_abi<GDExtensionProductionOperationV1>(), 802, 1, 10, 12 };
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op1, req_cap, { nullptr, actions }, 2, nullptr, 0, nullptr, 0, {}, 0, r1, 2) == OK);
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op2, req_cap, { nullptr, actions }, 2, nullptr, 0, nullptr, 0, {}, 0, r2, 2) == OK);
+		}
+		REQUIRE(r1 != nullptr);
+		REQUIRE(r2 != nullptr);
+		REQUIRE(att->children == 2);
+		memset(att->payload + r1->payload_offset, 0xA1, req_cap.retained_payload_bytes);
+		memset(att->readback_bytes + r1->readback_offset, 0xB2, req_cap.readback_bytes);
+
+		// Releasing r1 while r2 is still live (children == 1) must NOT reclaim yet.
+		const GDExtensionProductionRequestRefV1 ref1{ Enrollment::INSTANCE, r1->serial };
+		const GDExtensionProductionRequestRefV1 ref2{ Enrollment::INSTANCE, r2->serial };
+		REQUIRE(e.registry->production_cancel(ref1).native_error == OK);
+		REQUIRE(e.registry->production_release(ref1).native_error == OK);
+		CHECK(att->children == 1);
+		CHECK(att->arena_reclaimed_bytes_total == 0);
+
+		// Releasing r2 drops children to 0 and triggers POD/MQ page reclaim.
+		REQUIRE(e.registry->production_cancel(ref2).native_error == OK);
+		REQUIRE(e.registry->production_release(ref2).native_error == OK);
+		CHECK(att->children == 0);
+		CHECK(att->payload_reclaim_hwm == 0);
+		CHECK(att->readback_reclaim_hwm == 0);
+		CHECK(att->natives_reclaim_hwm == 0);
+		CHECK(att->mq_reclaim_hwm == 0);
+#if defined(__APPLE__)
+		CHECK(att->arena_reclaimed_bytes_total > 0);
+#endif
+		// Persistent scene_prefix_bytes at payload[0..64) must be untouched.
+		for (size_t i = 0; i < 64; ++i) {
+			CHECK(att->payload[i] == 0x5A);
+		}
+
+		// Subsequent request allocation, read/write, and release must succeed cleanly.
+		Request *r3 = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			const GDExtensionProductionOperationV1 op3{ production_dto_abi<GDExtensionProductionOperationV1>(), 803, 1, 10, 12 };
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op3, req_cap, { nullptr, actions }, 2, nullptr, 0, nullptr, 0, {}, 0, r3, 2) == OK);
+		}
+		REQUIRE(r3 != nullptr);
+		memset(att->payload + r3->payload_offset, 0xC3, 4096);
+		CHECK(att->payload[r3->payload_offset + 4095] == 0xC3);
+		memset(att->readback_bytes + r3->readback_offset, 0xD4, 4096);
+		CHECK(att->readback_bytes[r3->readback_offset + 4095] == 0xD4);
+		CHECK(r3->natives[0].owner_index == 0);
+		const GDExtensionProductionRequestRefV1 ref3{ Enrollment::INSTANCE, r3->serial };
+		REQUIRE(e.registry->production_cancel(ref3).native_error == OK);
+		REQUIRE(e.registry->production_release(ref3).native_error == OK);
+		CHECK(att->children == 0);
+		CHECK(e.registry->production_close(attachment_ref).native_error == OK);
+	}
 };
 TEST_CASE("[ProductionNativeObserve][PreparedNativeRecordV2] cancel rejects transferred native wait before consume without erasing actual prefix") {
 	Access::native_record_wait_rejection(false);
@@ -5885,4 +6070,12 @@ TEST_CASE("[ProductionNativeObserve][BUG-137] production_cancel immediately wake
 
 TEST_CASE("[ProductionNativeObserve][BUG-136] production_record_material_qualification returns _recording_error before freezing or entering append") {
 	TestProductionNativeObserve::Access::bug136_mq_record_checks_recording_error_before_append();
+}
+
+TEST_CASE("[ProductionNativeObserve][RenderingDevice][BUG-138C] idle staging blocks and TransferWorker staging buffer trim after idle threshold while preserving active readbacks") {
+	TestProductionNativeObserve::Access::bug138c_trim_idle_staging_buffers_and_transfer_worker();
+}
+
+TEST_CASE("[ProductionNativeObserve][BUG-138C] ProductionAttachment arena reclaims POD pages on idle while preserving scene_prefix_bytes and clean reuse") {
+	TestProductionNativeObserve::Access::bug138c_arena_pod_reclaim_on_idle_and_reuse();
 }

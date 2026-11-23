@@ -51,8 +51,41 @@
 #include <optional>
 #include <type_traits>
 
+#if defined(__APPLE__)
+#include <sys/mman.h>
+#include <unistd.h>
+#endif
+
 namespace GDExtensionDeviceExit {
 namespace {
+size_t reclaim_arena_pod_pages(void *p_base, size_t p_byte_len) {
+	if (!p_base || p_byte_len == 0) {
+		return 0;
+	}
+#if defined(__APPLE__) && defined(MADV_FREE_REUSABLE)
+	const long raw_page = sysconf(_SC_PAGESIZE);
+	if (raw_page <= 0) {
+		return 0;
+	}
+	const uintptr_t page_size = uintptr_t(raw_page);
+	const uintptr_t start = reinterpret_cast<uintptr_t>(p_base);
+	if (UINTPTR_MAX - start < p_byte_len) {
+		return 0;
+	}
+	const uintptr_t end = start + p_byte_len;
+	const uintptr_t rem = start % page_size;
+	const uintptr_t aligned_start = rem == 0 ? start : (start <= UINTPTR_MAX - (page_size - rem) ? start + (page_size - rem) : end);
+	const uintptr_t aligned_end = end - (end % page_size);
+	if (aligned_end <= aligned_start) {
+		return 0;
+	}
+	const size_t aligned_len = size_t(aligned_end - aligned_start);
+	if (madvise(reinterpret_cast<void *>(aligned_start), aligned_len, MADV_FREE_REUSABLE) == 0) {
+		return aligned_len;
+	}
+#endif
+	return 0;
+}
 GDExtensionDeviceSessionResultV1 result(Error e, uint32_t reason = 0) {
 	return { int32_t(e), reason, 0, 0 };
 }
@@ -1155,6 +1188,15 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	r->readback_count = readback_count;
 	r->payload_offset = payload;
 	r->readback_offset = readback;
+	if (c.retained_payload_bytes) {
+		a.payload_reclaim_hwm = MAX(a.payload_reclaim_hwm, payload + c.retained_payload_bytes);
+	}
+	if (c.readback_bytes) {
+		a.readback_reclaim_hwm = MAX(a.readback_reclaim_hwm, readback + c.readback_bytes);
+	}
+	if (c.native_memberships) {
+		a.natives_reclaim_hwm = MAX(a.natives_reclaim_hwm, uint64_t(natives_offset) + c.native_memberships);
+	}
 	auto claim = [&](auto *cells, uint32_t count) { for(uint32_t i=0;i<count;++i){cells[i].request=r;
 } };
 	claim(ac, c.suboperations);
@@ -1173,6 +1215,8 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 			ac[i].material_qualification_constructed = true;
 			++a.material_qualifications_live;
 			++a.material_qualifications_constructed_total;
+			const uint32_t mq_end = uint32_t((ac - a.actions) + i + 1);
+			a.mq_reclaim_hwm = MAX(a.mq_reclaim_hwm, mq_end);
 		}
 	}
 	for (uint32_t i = 0; i < resource_count; ++i) {
@@ -3888,10 +3932,37 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 	reset(r->returns, r->capacity.return_cells);
 	reset(r->commands, r->command_count);
 	reset(r->frames, r->frame_count);
-	CRASH_COND(!r->attachment->children);
-	--r->attachment->children;
+	auto *attachment = r->attachment;
+	CRASH_COND(!attachment->children);
+	--attachment->children;
 	r->~ProductionRequest();
 	new (r) ProductionRequest();
+	if (attachment->children == 0) {
+		uint64_t advised = 0;
+		if (attachment->payload && attachment->payload_reclaim_hwm > attachment->scene_prefix_bytes) {
+			const uint64_t end = MIN(attachment->payload_reclaim_hwm, attachment->quote.capacity.retained_payload_bytes);
+			if (end > attachment->scene_prefix_bytes) {
+				advised += reclaim_arena_pod_pages(attachment->payload + attachment->scene_prefix_bytes, size_t(end - attachment->scene_prefix_bytes));
+			}
+		}
+		if (attachment->readback_bytes && attachment->readback_reclaim_hwm > 0) {
+			const uint64_t end = MIN(attachment->readback_reclaim_hwm, attachment->quote.capacity.readback_bytes);
+			advised += reclaim_arena_pod_pages(attachment->readback_bytes, size_t(end));
+		}
+		if (attachment->natives && attachment->natives_reclaim_hwm > 0) {
+			const uint64_t end = MIN(attachment->natives_reclaim_hwm, uint64_t(attachment->quote.capacity.native_memberships));
+			advised += reclaim_arena_pod_pages(attachment->natives, size_t(end) * sizeof(ProductionNativeCell));
+		}
+		if (attachment->material_qualifications && attachment->material_qualifications_live == 0 && attachment->mq_reclaim_hwm > 0) {
+			const uint32_t end = MIN(attachment->mq_reclaim_hwm, attachment->quote.capacity.suboperations);
+			advised += reclaim_arena_pod_pages(attachment->material_qualifications, size_t(end) * sizeof(MaterialQualificationState));
+		}
+		attachment->arena_reclaimed_bytes_total += advised;
+		attachment->payload_reclaim_hwm = 0;
+		attachment->readback_reclaim_hwm = 0;
+		attachment->natives_reclaim_hwm = 0;
+		attachment->mq_reclaim_hwm = 0;
+	}
 	return result(OK);
 }
 GDExtensionDeviceSessionResultV1 Registry::production_installation_observe(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionServiceBudgetV1 *budget, GDExtensionProductionInstallationReportV1 *out) {

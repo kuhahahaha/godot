@@ -338,6 +338,7 @@ private:
 	Error _staging_buffer_allocate(StagingBuffers &p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, uint32_t &r_alloc_offset, uint32_t &r_alloc_size, StagingRequiredAction &r_required_action, bool p_can_segment = true);
 	Error _staging_buffer_execute_required_action(StagingBuffers &p_staging_buffers, StagingRequiredAction p_required_action);
 	Error _insert_staging_block(StagingBuffers &p_staging_buffers);
+	void _trim_idle_staging_buffers();
 
 	StagingBuffers upload_staging_buffers;
 	StagingBuffers download_staging_buffers;
@@ -2755,6 +2756,7 @@ private:
 		uint64_t operations_processed = 0;
 		uint64_t operations_submitted = 0;
 		uint64_t operations_counter = 0;
+		uint32_t idle_frames = 0;
 		BinaryMutex operations_mutex;
 	};
 
