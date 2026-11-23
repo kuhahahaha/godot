@@ -200,7 +200,8 @@ struct QualificationTicket {
 	LocalVector<QualificationPhysicalReturn *> physical_uses;
 	RDG::RecordHandle capture, body;
 	uint32_t frame_refs = 0, readback_copies_joined = 0, accepted_rt_refs = 0;
-	bool prepared = false, recorded = false, recording = false, queued = false, acknowledged = false, queue_ref_credit = false;
+	uint32_t live_ticket_index = UINT32_MAX;
+	bool prepared = false, recorded = false, recording = false, queued = false, acknowledged = false, queue_ref_credit = false, unacknowledged_tracked = false;
 	std::atomic<bool> admission_closed{ false };
 	bool stop_requested = false, continuation_pending = false;
 	uint32_t ordering_path_length = 0;
@@ -330,7 +331,7 @@ struct QualificationResource {
 	GDExtensionQualificationResourceRetireReportV1 report = {};
 	QualificationPhysicalReturn physical;
 	Error maintenance_error = OK;
-	bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false;
+	bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false, unacknowledged_tracked = false;
 	uint64_t upload_ticket = 0, last_upload_revision = 0;
 	GDExtensionQualificationTextureUploadV1 upload_origin = {};
 	RenderingDevice::QualificationUploadProgress upload;
@@ -507,7 +508,7 @@ struct Registry::QualificationBridge {
 		// Native operation in flight is distinct from retirement having started.
 		bool native_operation = false;
 		SceneHeightPublication publication;
-		bool quoting = true, create_attempted = false, retiring = false, acknowledged = false, cleanup_serial_reserved = false;
+		bool quoting = true, create_attempted = false, retiring = false, acknowledged = false, cleanup_serial_reserved = false, unacknowledged_tracked = false;
 	};
 	SceneDepth *scene_depth[CHILD_CAPACITY] = {};
 	struct Storage {
@@ -519,7 +520,7 @@ struct Registry::QualificationBridge {
 		GDExtensionStorageRetireReportV1 report = {};
 		QualificationPhysicalReturn physical;
 		Error maintenance_error = OK;
-		bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false;
+		bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false, unacknowledged_tracked = false;
 	};
 	// Original bridge child for a method texture. The producer and typed
 	// retire transaction must bind this cell before it can be admitted by wire.
@@ -557,7 +558,7 @@ struct Registry::QualificationBridge {
 		GDExtensionNativeUnitRetireReportV1 report = {};
 		QualificationPhysicalReturn shader, pipeline;
 		Error maintenance_error = OK;
-		bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false;
+		bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false, unacknowledged_tracked = false;
 	};
 	void collect_retired_children_locked();
 	// Additive TESTS_ENABLED diagnostics; callers hold Registry::mutex.
@@ -600,6 +601,72 @@ struct Registry::QualificationBridge {
 	LocalVector<uint32_t> storage_free_slots;
 	uint32_t storage_next_fresh_slot = 0;
 	uint32_t storage_acknowledged_count = 0;
+	// O(1) unacknowledged child counter across all 7 bridge child arrays (BUG-149D).
+	// Always mutated under Registry::mutex. Eliminates 270,848-pointer sweep in
+	// qualification_trim_cleanup_ref_credits_locked.
+	uint32_t unacknowledged_children = 0;
+	// Compact list of active (unacknowledged) tickets for O(live_tickets) scan
+	// inside collect_retired_children_locked instead of sweeping tickets[65536].
+	LocalVector<QualificationTicket *> live_tickets;
+
+	template <typename T>
+	void track_unacknowledged_child_locked(T *p_child) {
+		CRASH_COND(!p_child || p_child->acknowledged || p_child->unacknowledged_tracked);
+		p_child->unacknowledged_tracked = true;
+		++unacknowledged_children;
+	}
+	template <typename T>
+	void untrack_unacknowledged_child_locked(T *p_child) {
+		if (p_child && p_child->unacknowledged_tracked) {
+			CRASH_COND(unacknowledged_children == 0);
+			--unacknowledged_children;
+			p_child->unacknowledged_tracked = false;
+		}
+	}
+	template <typename T>
+	void acknowledge_child_locked(T *p_child) {
+		CRASH_COND(!p_child || p_child->acknowledged);
+		p_child->acknowledged = true;
+		if (p_child->unacknowledged_tracked) {
+			CRASH_COND(unacknowledged_children == 0);
+			--unacknowledged_children;
+			p_child->unacknowledged_tracked = false;
+		}
+	}
+	void track_ticket_locked(uint32_t p_slot, QualificationTicket *p_ticket) {
+		CRASH_COND(p_slot >= TICKET_CAPACITY || !p_ticket || tickets[p_slot] != nullptr || p_ticket->live_ticket_index != UINT32_MAX);
+		tickets[p_slot] = p_ticket;
+		p_ticket->live_ticket_index = live_tickets.size();
+		live_tickets.push_back(p_ticket);
+		track_unacknowledged_child_locked(p_ticket);
+	}
+	void remove_live_ticket_locked(QualificationTicket *p_ticket) {
+		if (!p_ticket || p_ticket->live_ticket_index == UINT32_MAX) {
+			return;
+		}
+		const uint32_t idx = p_ticket->live_ticket_index;
+		CRASH_COND(idx >= live_tickets.size() || live_tickets[idx] != p_ticket);
+		const uint32_t last = live_tickets.size() - 1;
+		if (idx != last) {
+			QualificationTicket *moved = live_tickets[last];
+			live_tickets[idx] = moved;
+			moved->live_ticket_index = idx;
+		}
+		live_tickets.resize(last);
+		p_ticket->live_ticket_index = UINT32_MAX;
+	}
+	void untrack_ticket_locked(uint32_t p_slot, QualificationTicket *p_ticket) {
+		CRASH_COND(p_slot >= TICKET_CAPACITY || !p_ticket);
+		remove_live_ticket_locked(p_ticket);
+		untrack_unacknowledged_child_locked(p_ticket);
+		if (tickets[p_slot] == p_ticket) {
+			tickets[p_slot] = nullptr;
+		}
+	}
+	void acknowledge_ticket_locked(QualificationTicket *p_ticket) {
+		acknowledge_child_locked(p_ticket);
+		remove_live_ticket_locked(p_ticket);
+	}
 
 	uint32_t alloc_storage_slot_locked() {
 		while (!storage_free_slots.is_empty()) {
@@ -625,6 +692,7 @@ struct Registry::QualificationBridge {
 	void index_storage_slot_locked(uint32_t p_slot, Storage *p_child) {
 		CRASH_COND(p_slot >= STORAGE_CHILD_CAPACITY || !p_child || storage[p_slot] != nullptr);
 		storage[p_slot] = p_child;
+		track_unacknowledged_child_locked(p_child);
 		if (p_child->serial) {
 			storage_by_serial.insert(p_child->serial, p_slot);
 		}
@@ -636,6 +704,7 @@ struct Registry::QualificationBridge {
 	}
 	void unindex_storage_slot_locked(uint32_t p_slot, Storage *p_child) {
 		CRASH_COND(p_slot >= STORAGE_CHILD_CAPACITY || !p_child);
+		untrack_unacknowledged_child_locked(p_child);
 		if (p_child->serial) {
 			const uint32_t *found = storage_by_serial.getptr(p_child->serial);
 			if (found && *found == p_slot) {
@@ -745,7 +814,7 @@ inline void Registry::QualificationBridge::collect_retired_children_locked() {
 		if (!cell.uses.is_empty() || cell.production_uses || cell.dependent_children.load()) {
 			return true;
 		}
-		for (const auto *ticket : bridge->tickets) {
+		for (const auto *ticket : bridge->live_tickets) {
 			if (ticket) {
 				for (const auto *forward : ticket->physical_uses) {
 					if (forward == &cell) {
@@ -754,6 +823,20 @@ inline void Registry::QualificationBridge::collect_retired_children_locked() {
 				}
 			}
 		}
+#ifdef TESTS_ENABLED
+		// Synthetic unit tests may install a ticket directly into tickets[0..1]
+		// without going through track_ticket_locked.
+		for (uint32_t i = 0; i < 2; ++i) {
+			const auto *ticket = bridge->tickets[i];
+			if (ticket && ticket->live_ticket_index == UINT32_MAX) {
+				for (const auto *forward : ticket->physical_uses) {
+					if (forward == &cell) {
+						return true;
+					}
+				}
+			}
+		}
+#endif
 		return false;
 	};
 	const auto returned = [](const QualificationPhysicalReturn &cell) {

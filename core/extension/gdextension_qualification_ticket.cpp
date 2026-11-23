@@ -661,7 +661,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record(GDExtensionQuali
 			records[bridge->library].private_refs += 2;
 			bridge->cleanup_refs_reserved = true;
 		}
-		bridge->tickets[slot] = ticket;
+		bridge->track_ticket_locked(slot, ticket);
 		++bridge->children;
 		++records[bridge->library].private_refs;
 		if (rd->_recording_error() != OK || rd->draw_list.active || rd->compute_list.active || rd->raytracing_list.active || rd->draw_graph.has_driver_callbacks()) {
@@ -672,7 +672,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record(GDExtensionQuali
 		}
 		error = rd->_qualification_pin_resources(ticket, resources);
 		if (error != OK) {
-			bridge->tickets[slot] = nullptr;
+			bridge->untrack_ticket_locked(slot, ticket);
 			--bridge->children;
 			--records[bridge->library].private_refs;
 			memdelete(ticket);
@@ -1078,7 +1078,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_release(GDExtensionQual
 		upload.progress.segments.reset();
 	}
 	ticket->admission_closed = true;
-	ticket->acknowledged = true;
+	bridge->acknowledge_ticket_locked(ticket);
 	--bridge->children;
 	--records[bridge->library].private_refs;
 	qualification_trim_cleanup_ref_credits_locked(bridge);
@@ -1215,7 +1215,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_prepare_uploads(GDExten
 		records[bridge->library].private_refs += 2;
 		bridge->cleanup_refs_reserved = true;
 	}
-	bridge->tickets[slot] = ticket;
+	bridge->track_ticket_locked(slot, ticket);
 	++bridge->children;
 	++records[bridge->library].private_refs;
 	ticket->physically_retired = true;

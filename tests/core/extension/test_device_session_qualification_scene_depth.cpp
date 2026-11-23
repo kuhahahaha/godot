@@ -773,6 +773,8 @@ public:
 	class Bug148Driver : public TransferTestDriverBase {
 	public:
 		uint64_t next_buffer = 100;
+		uint64_t next_texture = 200;
+		uint64_t next_sampler = 300;
 		uint32_t created_buffers = 0;
 		uint32_t freed_buffers = 0;
 		uint64_t limit_get(Limit) override {
@@ -789,6 +791,22 @@ public:
 		uint64_t buffer_get_allocation_size(BufferID) override {
 			return 128;
 		}
+		TextureID texture_create(const TextureFormat &, const TextureView &) override {
+			return TextureID(++next_texture);
+		}
+		void texture_free(TextureID) override {}
+		uint64_t texture_get_allocation_size(TextureID) override { return 64; }
+		BitField<TextureUsageBits> texture_get_usages_supported_by_format(DataFormat, bool) override {
+			return TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_STORAGE_BIT | TEXTURE_USAGE_CAN_UPDATE_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		}
+		uint64_t api_trait_get(ApiTrait) override { return 0; }
+		void set_object_name(ObjectType, ID, const String &) override {}
+		bool native_call_observation_supported() const override { return true; }
+		uint32_t qualification_native_call_bound(uint32_t p_slots) const override { return p_slots; }
+		SamplerID sampler_create(const SamplerState &) override {
+			return SamplerID(++next_sampler);
+		}
+		void sampler_free(SamplerID) override {}
 	};
 
 	struct Bug148Fixture {
@@ -1164,6 +1182,124 @@ public:
 		f.closed = true;
 		CHECK(f.registry->records[0].private_refs == 0);
 	}
+
+	static void bug149d_unacknowledged_children_and_live_tickets() {
+		Bug148Fixture f;
+		CHECK(f.bridge->unacknowledged_children == 0);
+		CHECK(f.bridge->live_tickets.is_empty());
+		CHECK_FALSE(f.bridge->cleanup_refs_reserved);
+
+		// 1. Storage create -> unacknowledged_children == 1, cleanup_refs_reserved == true.
+		const GDExtensionStorageCreateRequestV1 sreq{ { 1, 16, 0 }, 128, 0, 0, 1, 1, 0 };
+		GDExtensionStorageBackingV1 sbacking{};
+		REQUIRE(f.registry->qualification_storage_create(f.ref, &sreq, &sbacking).native_error == OK);
+		CHECK(f.bridge->unacknowledged_children == 1);
+		CHECK(f.bridge->cleanup_refs_reserved);
+
+		// 2. Texture create -> unacknowledged_children == 2.
+		GDExtensionQualificationSourceV1 tex_src{};
+		tex_src.session_serial = 1;
+		tex_src.generation = 1;
+		tex_src.digest[0] = 1;
+		const GDExtensionQualificationTextureCreateV1 treq{ { 1, 16, 0 }, tex_src, 1, 1, 4, 4, 1, 2, 1, 1 };
+		GDExtensionQualificationResourceBackingV1 tbacking{};
+		REQUIRE(f.registry->qualification_texture_create(f.ref, &treq, &tbacking).native_error == OK);
+		CHECK(f.bridge->unacknowledged_children == 2);
+
+		// 3. Sampler create -> unacknowledged_children == 3.
+		GDExtensionQualificationSourceV1 smp_src{};
+		smp_src.session_serial = 1;
+		smp_src.generation = 2;
+		smp_src.digest[0] = 2;
+		const GDExtensionQualificationSamplerCreateV1 smpreq{ { 1, 16, 0 }, smp_src, 1, 1, 0, 0, 0, 0, 0, 0 };
+		GDExtensionQualificationResourceBackingV1 smpbacking{};
+		REQUIRE(f.registry->qualification_sampler_create(f.ref, &smpreq, &smpbacking).native_error == OK);
+		CHECK(f.bridge->unacknowledged_children == 3);
+
+		// 4. Ticket create (prepare_uploads) -> unacknowledged_children == 4, live_tickets.size() == 1.
+		GDExtensionQualificationUploadPrepareV1 upreq{};
+		upreq.abi = { 1, 16, 0 };
+		upreq.library_generation = 1;
+		upreq.qualification_session_serial = 7;
+		upreq.record_generation = 11;
+		upreq.request_nonce = 13;
+		upreq.parent_serial = 17;
+		upreq.reservation_serial = 19;
+		upreq.attempt = 1;
+		upreq.upload_count = 1;
+		upreq.max_segments = 1;
+		upreq.expected_result_bytes = 16;
+		GDExtensionQualificationUploadPlanV1 uplan{};
+		uplan.abi = { 1, 16, 0 };
+		uplan.upload_index = 0;
+		uplan.role = 1;
+		uplan.owner_kind = 1;
+		uplan.rid = sbacking.rid;
+		uplan.backing_serial = sbacking.backing_serial;
+		uplan.byte_offset = 0;
+		uplan.byte_size = 16;
+		uplan.e05_backing = sbacking.backing;
+		uplan.payload_digest[0] = 1;
+		GDExtensionQualificationTicketRefV1 tref{};
+		GDExtensionQualificationReportV1 trep{};
+		REQUIRE(f.registry->qualification_prepare_uploads(f.ref, &upreq, &uplan, 1, &tref, &trep).native_error == OK);
+		CHECK(f.bridge->unacknowledged_children == 4);
+		CHECK(f.bridge->live_tickets.size() == 1);
+		CHECK(f.bridge->live_tickets[0]->live_ticket_index == 0);
+
+		// 5. SceneDepth quote -> unacknowledged_children == 5.
+		const GDExtensionStorageSceneDepthQuoteRequestV1 sdreq = request();
+		GDExtensionStorageSceneDepthQuoteV1 sdquote{};
+		REQUIRE(f.registry->qualification_scene_depth_quote(f.ref, &sdreq, &sdquote).native_error == OK);
+		CHECK(f.bridge->unacknowledged_children == 5);
+
+		// Acknowledge Ticket -> unacknowledged_children == 4, live_tickets empty, cleanup_refs_reserved stays true.
+		REQUIRE(f.registry->qualification_release(f.ref, tref).native_error == OK);
+		CHECK(f.bridge->unacknowledged_children == 4);
+		CHECK(f.bridge->live_tickets.is_empty());
+		CHECK(f.bridge->cleanup_refs_reserved);
+
+		// Retire & acknowledge SceneDepth -> unacknowledged_children == 3, cleanup_refs_reserved stays true.
+		const GDExtensionStorageSceneDepthRetireRequestV1 sdret = retire_request(sdquote.facet);
+		GDExtensionStorageSceneDepthReportV1 sdrep{};
+		REQUIRE(f.registry->qualification_scene_depth_retire(f.ref, &sdret, &sdrep).native_error == OK);
+		REQUIRE(f.registry->qualification_scene_depth_release(f.ref, sdquote.facet).native_error == OK);
+		CHECK(f.bridge->unacknowledged_children == 3);
+		CHECK(f.bridge->cleanup_refs_reserved);
+
+		// Retire & acknowledge Sampler & Texture -> unacknowledged_children drops 3 -> 2 -> 1.
+		const GDExtensionQualificationResourceRetireV1 smpret{ { 1, 16, 0 }, smpbacking.resource, smpbacking.rid, smpbacking.object_serial, 1 };
+		GDExtensionQualificationResourceRetireReportV1 smprep{};
+		REQUIRE(f.registry->qualification_resource_retire(f.ref, &smpret, &smprep).native_error == OK);
+		const GDExtensionQualificationResourceRetireV1 tret{ { 1, 16, 0 }, tbacking.resource, tbacking.rid, tbacking.object_serial, 2 };
+		GDExtensionQualificationResourceRetireReportV1 treport{};
+		REQUIRE(f.registry->qualification_resource_retire(f.ref, &tret, &treport).native_error == OK);
+		f.device._free_pending_resources(0);
+		f.registry->qualification_retire_step(f.bridge, &f.device, smpbacking.resource.handle_serial, 4);
+		f.registry->qualification_retire_step(f.bridge, &f.device, tbacking.resource.handle_serial, 4);
+		REQUIRE(f.registry->qualification_resource_retire_release(f.ref, smpbacking.resource, f.bridge->samplers[0]->report.revision).native_error == OK);
+		CHECK(f.bridge->unacknowledged_children == 2);
+		CHECK(f.bridge->cleanup_refs_reserved);
+		REQUIRE(f.registry->qualification_resource_retire_release(f.ref, tbacking.resource, f.bridge->textures[0]->report.revision).native_error == OK);
+		CHECK(f.bridge->unacknowledged_children == 1);
+		CHECK(f.bridge->cleanup_refs_reserved);
+
+		// Retire & acknowledge last child (Storage) -> unacknowledged_children == 0, cleanup_refs_reserved trims O(1)!
+		const GDExtensionStorageRetireRequestV1 sret{ { 1, 16, 0 }, sbacking.backing, sbacking.rid, sbacking.backing_serial, 0, 0, 1, 2, 0 };
+		GDExtensionStorageRetireRefV1 srref{};
+		GDExtensionStorageRetireReportV1 srrep{};
+		REQUIRE(f.registry->qualification_storage_retire(f.ref, &sret, &srref, &srrep).native_error == OK);
+		f.device._free_pending_resources(0);
+		f.registry->qualification_retire_step(f.bridge, &f.device, sbacking.backing.handle_serial, 1);
+		REQUIRE(f.registry->qualification_storage_retire_release(f.ref, srref).native_error == OK);
+		CHECK(f.bridge->unacknowledged_children == 0);
+		CHECK_FALSE(f.bridge->cleanup_refs_reserved);
+
+		// Close cleanly with zero leaks.
+		REQUIRE(f.registry->qualification_close(f.ref).native_error == OK);
+		f.closed = true;
+		CHECK(f.registry->records[0].private_refs == 0);
+	}
 };
 
 TEST_CASE("[SceneDepthR2] original quote exact retry and archived origin") {
@@ -1238,6 +1374,10 @@ TEST_CASE("[QualificationRt][BUG-148][Pillar1] 32 concurrent StorageCreate and 3
 
 TEST_CASE("[QualificationRt][BUG-148][Pillar1] close under private_limit saturation drains via slot-1 cleanup credit while concurrent slot 2 returns ERR_BUSY 19") {
 	TestQualificationSceneDepthAccess::bug148_close_under_private_limit_saturation();
+}
+
+TEST_CASE("[Qualification][BUG-149D][Pillar1] unacknowledged_children and live_tickets track create/acknowledge/trim/close in O(1)") {
+	TestQualificationSceneDepthAccess::bug149d_unacknowledged_children_and_live_tickets();
 }
 
 TEST_CASE("[StorageFinality] original duration observation preserves frontier and next service continuation") {

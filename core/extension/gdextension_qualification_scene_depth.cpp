@@ -399,6 +399,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_scene_depth_quote(GDExt
 		child->history_index = history_index;
 		bridge->scene_depth_origins.begin(history_index, *request, child->serial);
 		bridge->scene_depth[slot] = child;
+		bridge->track_unacknowledged_child_locked(child);
 		++bridge->children;
 		++records[bridge->library].private_refs;
 		if (accepted) {
@@ -869,7 +870,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_scene_depth_release(GDE
 		--qualification_cleanup_serial_reservations;
 		child->cleanup_serial_reserved = false;
 	}
-	child->acknowledged = true;
+	bridge->acknowledge_child_locked(child);
 	--bridge->children;
 	--records[bridge->library].private_refs;
 	bridge->collect_retired_children_locked();
