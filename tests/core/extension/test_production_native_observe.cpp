@@ -5070,6 +5070,250 @@ struct Access {
 		e.rd.qualification_retiring = false;
 		e.rd._free_pending_resources(0);
 	}
+
+	static void bug124_disposal_stall_pops_delivered_and_unmaps_interrupted_map() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		e.driver.complete = true;
+		auto *r0 = borrowed_readback_setup(e, true);
+		REQUIRE(r0 != nullptr);
+		const auto attachment_ref = GDExtensionProductionAttachmentRefV1{ Enrollment::INSTANCE, r0->attachment->serial };
+		Request *r1 = nullptr;
+		REQUIRE(e.reserve(attachment_ref, capacity(3), 88, r1) == OK);
+		REQUIRE(r1 != nullptr);
+
+		uint8_t dst0[8] = {}, dst1[8] = {};
+		r0->readbacks = r0->attachment->readbacks;
+		r0->readback_count = 1;
+		auto &rb0 = r0->readbacks[0];
+		rb0.capture.registry = e.registry;
+		rb0.capture.request_serial = r0->serial;
+		rb0.capture.state = &rb0.source;
+		rb0.capture.bytes = dst0;
+		rb0.capture.byte_capacity = 8;
+		rb0.source = {};
+		rb0.source.issued = 8;
+
+		r1->readbacks = r1->attachment->readbacks + 1;
+		r1->readback_count = 1;
+		auto &rb1 = r1->readbacks[0];
+		rb1.capture.registry = e.registry;
+		rb1.capture.request_serial = r1->serial;
+		rb1.capture.state = &rb1.source;
+		rb1.capture.bytes = dst1;
+		rb1.capture.byte_capacity = 8;
+		rb1.source = {};
+		rb1.source.issued = 8;
+
+		const RDD::BufferID stage0 = e.driver.buffer_create(8, {}, RDD::MEMORY_ALLOCATION_TYPE_CPU, 0);
+		const RDD::BufferID stage1 = e.driver.buffer_create(8, {}, RDD::MEMORY_ALLOCATION_TYPE_CPU, 0);
+		REQUIRE(stage0.id != 0);
+		REQUIRE(stage1.id != 0);
+		if (uint8_t *p0 = e.driver.buffer_map(stage0)) {
+			for (uint32_t i = 0; i < 8; ++i) {
+				p0[i] = uint8_t(0x30 + i);
+			}
+			e.driver.buffer_unmap(stage0);
+		}
+		if (uint8_t *p1 = e.driver.buffer_map(stage1)) {
+			for (uint32_t i = 0; i < 8; ++i) {
+				p1[i] = uint8_t(0x40 + i);
+			}
+			e.driver.buffer_unmap(stage1);
+		}
+
+		// Queue BOTH requests on frame 0 with fence_signaled = true.
+		RenderingDevice::BufferGetDataRequest req0;
+		req0.capture = &rb0.capture;
+		req0.result_offset = 0;
+		req0.size = 8;
+		req0.frame_local_index = 0;
+		req0.frame_local_count = 1;
+		req0.final_segment = true;
+
+		RenderingDevice::BufferGetDataRequest req1;
+		req1.capture = &rb1.capture;
+		req1.result_offset = 0;
+		req1.size = 8;
+		req1.frame_local_index = 1;
+		req1.frame_local_count = 1;
+		req1.final_segment = true;
+
+		e.rd.frames[0].download_buffer_staging_buffers.push_back(stage0);
+		e.rd.frames[0].download_buffer_staging_buffers.push_back(stage1);
+		e.rd.frames[0].download_buffer_copy_regions.push_back({ 0, 0, 8 });
+		e.rd.frames[0].download_buffer_copy_regions.push_back({ 0, 0, 8 });
+		e.rd.frames[0].download_buffer_get_data_requests.push_back(req0);
+		e.rd.frames[0].download_buffer_get_data_requests.push_back(req1);
+		e.rd.frames[0].fence_signaled = true;
+		e.rd.frames[0].primary_command_buffer_begun = true;
+		RDD::QueueCallReport rep0;
+		rep0.submission_serial = 21;
+		e.rd.frames[0].chain_reports.push_back(rep0);
+
+		// 1. Budget of 5 passes: fence_poll (1), fence_recycle (2), req0 map (3), req0 unmap (4),
+		//    req1 map (5) -> returns ERR_BUSY right before req1 unmap (pass 6), leaving cursor.mapped != nullptr!
+		RenderingDevice::NativeDisposalBudget slice;
+		slice.receipts = 5;
+		slice.passes = 5;
+		slice.deadline_usec = OS::get_singleton()->get_ticks_usec() + 60000000ull;
+		RenderingDevice::NativeDisposalUsage actual;
+		e.rd.native_disposal_budget = &slice;
+		e.rd.native_disposal_usage = &actual;
+		CHECK(e.rd._native_disposal_stall_step(0) == ERR_BUSY);
+		e.rd.native_disposal_budget = nullptr;
+		e.rd.native_disposal_usage = nullptr;
+
+		// Request 0 MUST already be delivered and popped; ONLY Request 1 remains at [0] and is mapped.
+		CHECK(rb0.source.delivered);
+		CHECK(rb0.source.error == OK);
+		CHECK(rb0.source.returned == 8);
+		CHECK(rb0.source.completed == 8);
+		CHECK(e.rd.frames[0].download_buffer_get_data_requests.size() == 1);
+		CHECK(e.rd.frames[0].download_buffer_get_data_requests[0].capture == &rb1.capture);
+		CHECK(e.rd.frames[0].download_buffer_staging_buffers.size() == 2);
+		CHECK(e.rd.frames[0].maintenance_wait.mapped != nullptr);
+		CHECK(e.driver.delivery_map_id == stage1.id);
+		CHECK_FALSE(rb1.source.delivered);
+		CHECK(rb1.source.error == OK);
+
+		// 2. Now _begin_frame() runs with !native_disposal_active:
+		//    Must NOT clobber maintenance_wait before _stall_for_frame(), must cleanly unmap
+		//    cursor.mapped, must NOT re-deliver Request 0 (0 ERR_INVALID_DATA!), and must deliver Request 1!
+		e.rd.frame = 0;
+		e.driver.expected_begin_frame = 0;
+		CHECK(e.rd._begin_frame(false, true) == OK);
+		CHECK(e.driver.delivery_map_id == 0);
+		CHECK(rb0.source.error == OK);
+		CHECK(rb0.source.returned == 8);
+		CHECK(rb1.source.delivered);
+		CHECK(rb1.source.error == OK);
+		CHECK(rb1.source.returned == 8);
+		CHECK(rb1.source.completed == 8);
+		for (uint32_t i = 0; i < 8; ++i) {
+			CHECK(dst0[i] == uint8_t(0x30 + i));
+			CHECK(dst1[i] == uint8_t(0x40 + i));
+		}
+		CHECK(e.rd.frames[0].download_buffer_get_data_requests.is_empty());
+		CHECK(e.rd.frames[0].download_buffer_staging_buffers.is_empty());
+		CHECK(e.rd.frames[0].download_buffer_copy_regions.is_empty());
+		CHECK(e.rd.frames[0].maintenance_wait.mapped == nullptr);
+
+		// 3. Also verify _production_mq_drain_owned_disposals_step resumes a Phase-4-interrupted stall
+		//    even when fence_signaled is already false!
+		rb1.source = {};
+		rb1.source.issued = 8;
+		memset(dst1, 0, sizeof(dst1));
+		e.rd.frames[0].download_buffer_staging_buffers.push_back(stage1);
+		e.rd.frames[0].download_buffer_copy_regions.push_back({ 0, 0, 8 });
+		req1.frame_local_index = 0;
+		e.rd.frames[0].download_buffer_get_data_requests.push_back(req1);
+		e.rd.frames[0].fence_signaled = false;
+		e.rd.frames[0].primary_command_buffer_begun = false;
+		e.rd.frames[0].maintenance_wait = {};
+		e.rd.frames[0].maintenance_wait.phase = 4;
+		e.rd.frames[0].maintenance_wait.fence_returned = true;
+
+		RenderingDevice::Buffer owned_buf;
+		owned_buf.driver_id = e.driver.buffer_create(16, {}, RDD::MEMORY_ALLOCATION_TYPE_GPU, 0);
+		owned_buf.size = 16;
+		owned_buf.backing_serial = 910;
+		REQUIRE(owned_buf.driver_id.id != 0);
+		const RID owned_rid = e.rd.storage_buffer_owner.make_rid(owned_buf);
+		ProductionDisposalUse owned_use;
+		REQUIRE(e.rd._production_disposal_attach_owned(owned_use, *r1, owned_rid) == OK);
+		e.rd.free_rid(owned_rid);
+
+		RenderingDevice::NativeDisposalBudget mq_budget;
+		mq_budget.receipts = 32;
+		mq_budget.passes = 16;
+		mq_budget.deadline_usec = OS::get_singleton()->get_ticks_usec() + 60000000ull;
+		RenderingDevice::NativeDisposalUsage mq_usage;
+		CHECK(e.rd._production_mq_drain_owned_disposals_step(*r1, nullptr, 0, mq_budget, mq_usage) == OK);
+		CHECK(rb1.source.delivered);
+		CHECK(rb1.source.error == OK);
+		CHECK(e.rd.frames[0].download_buffer_get_data_requests.is_empty());
+		CHECK(e.rd.frames[0].buffers_to_dispose_of.is_empty());
+
+		e.driver.buffer_free(stage0);
+		e.driver.buffer_free(stage1);
+		e.rd.frames[0].chain_reports.clear();
+		CHECK(e.registry->production_release({ Enrollment::INSTANCE, r1->serial }).native_error == OK);
+		CHECK(e.registry->production_cancel({ Enrollment::INSTANCE, r0->serial }).native_error == OK);
+		CHECK(turn(e, *r0, ProductionControlKind::RELEASE, budget()).owner_return.native_error == OK);
+		CHECK(e.registry->production_close(attachment_ref).native_error == OK);
+		auto &physical = e.original_storage->physical;
+		physical.use_closed.store(true);
+		e.rd.qualification_retiring = true;
+		e.rd.free_rid(RID::from_uint64(e.original_storage->backing.rid));
+		e.rd.qualification_retiring = false;
+		e.rd._free_pending_resources(0);
+	}
+
+	static void bug125_stall_for_frame_marks_chain_reports_returned_before_deferred_busy() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		e.driver.complete = true;
+		e.driver.height_observation = true;
+		auto *r = borrowed_readback_setup(e);
+		REQUIRE(r != nullptr);
+		for (uint32_t i = 0; i < 2; ++i) {
+			REQUIRE(effect(e, *r, i).state == CheckedRecordAppend::State::Appended);
+		}
+		execute_transfers(e, *r, false);
+		REQUIRE(e.rd.frames[0].download_buffer_get_data_requests.size() == 1);
+		REQUIRE_FALSE(e.rd.frames[0].chain_reports.is_empty());
+		REQUIRE_FALSE(e.rd.frames[0].chain_reports[0].calls.is_empty());
+
+		// Trigger transient ERR_BUSY during capture delivery inside _stall_for_frame.
+		r->capture_inflight = 1;
+		e.rd.production_recording_request = r;
+		CHECK(e.rd._stall_for_frame(0, true) == ERR_BUSY);
+		CHECK_FALSE(e.rd.frames[0].fence_signaled);
+		// BUG-125: chain_reports calls must ALREADY be marked source_owner_returned = true!
+		for (const auto &rep : e.rd.frames[0].chain_reports) {
+			for (const auto &call : rep.calls) {
+				if (!call.presentation_only) {
+					CHECK(call.source_owner_returned);
+				}
+			}
+		}
+		const uint64_t tracked_serial = e.rd.frames[0].chain_reports[0].calls[0].serial;
+		const uint32_t polls_after_recycle = tracked_serial < 128 ? e.driver.polls[tracked_serial] : 0;
+
+		// Clear transient contention and retry _stall_for_frame: must NOT re-poll the recycled call!
+		e.rd.production_recording_request = nullptr;
+		r->capture_inflight = 0;
+		CHECK(e.rd._stall_for_frame(0, true) == OK);
+		if (tracked_serial < 128) {
+			CHECK(e.driver.polls[tracked_serial] == polls_after_recycle);
+		}
+		CHECK(r->readbacks[0].source.delivered);
+		CHECK(r->readbacks[0].source.error == OK);
+
+		const auto ref = GDExtensionProductionRequestRefV1{ Enrollment::INSTANCE, r->serial };
+		const auto attachment = GDExtensionProductionAttachmentRefV1{ Enrollment::INSTANCE, r->attachment->serial };
+		CHECK(e.registry->production_cancel(ref).native_error == OK);
+		for (uint32_t i = 0; i < 64; ++i) {
+			turn(e, *r, ProductionControlKind::OBSERVE, budget());
+			GDExtensionProductionReportV1 rep = {};
+			auto q = budget(0, 0);
+			if (e.registry->production_observe(ref, &q, &rep).native_error == OK &&
+					rep.possible_obligations == 0 && rep.physical_returns_pending == 0 &&
+					rep.known_obligations == rep.complete_obligations && !e.rd.native_disposal_active) {
+				break;
+			}
+		}
+		REQUIRE(finish_owned_maintenance(e, *r, budget()));
+		CHECK(turn(e, *r, ProductionControlKind::RELEASE, budget()).owner_return.native_error == OK);
+		CHECK(e.registry->production_close(attachment).native_error == OK);
+		auto &physical = e.original_storage->physical;
+		physical.use_closed.store(true);
+		e.rd.qualification_retiring = true;
+		e.rd.free_rid(RID::from_uint64(e.original_storage->backing.rid));
+		e.rd.qualification_retiring = false;
+		e.rd._free_pending_resources(0);
+	}
 };
 TEST_CASE("[ProductionNativeObserve][PreparedNativeRecordV2] cancel rejects transferred native wait before consume without erasing actual prefix") {
 	Access::native_record_wait_rejection(false);
@@ -5306,4 +5550,12 @@ TEST_CASE("[ProductionNativeObserve][BUG-120] _stall_for_frame preserves readbac
 
 TEST_CASE("[ProductionNativeObserve][BUG-120] split multi-frame readbacks deliver in order and sibling requests do not starve pump or maintenance") {
 	TestProductionNativeObserve::Access::bug120_split_readback_order_and_sibling_pump_and_closure();
+}
+
+TEST_CASE("[ProductionNativeObserve][BUG-124] _native_disposal_stall_step pops delivered requests and _begin_frame cleanly unmaps and finishes remaining readbacks") {
+	TestProductionNativeObserve::Access::bug124_disposal_stall_pops_delivered_and_unmaps_interrupted_map();
+}
+
+TEST_CASE("[ProductionNativeObserve][BUG-125] _stall_for_frame marks chain_reports source_owner_returned immediately on fence recycle before deferred readback ERR_BUSY") {
+	TestProductionNativeObserve::Access::bug125_stall_for_frame_marks_chain_reports_returned_before_deferred_busy();
 }

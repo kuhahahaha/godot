@@ -13709,6 +13709,16 @@ Error RenderingDevice::_native_disposal_stall_step(uint32_t p_frame) {
 			f.fence_signaled = false;
 			cursor.fence_returned = true;
 			f.primary_command_buffer_begun = false;
+			// BUG-125: fence_recycle() above already retired/erased 0-observer driver completion
+			// records for this frame's chain_reports. Mark source_owner_returned immediately so
+			// any subsequent ERR_BUSY in Phase 4 cannot re-poll erased records in _stall_for_frame.
+			for (auto &report : f.chain_reports) {
+				for (auto &call : report.calls) {
+					if (!call.presentation_only) {
+						call.source_owner_returned = true;
+					}
+				}
+			}
 		}
 		cursor.ready = false;
 		cursor.phase = 4;
@@ -13722,8 +13732,12 @@ Error RenderingDevice::_native_disposal_stall_step(uint32_t p_frame) {
 			cursor.phase = 5;
 			return OK;
 		}
-		while (cursor.request < f.download_buffer_get_data_requests.size()) {
-			const auto &request = f.download_buffer_get_data_requests[cursor.request];
+		// BUG-124: Always process and pop front entry [0] on completion so an ERR_BUSY
+		// on a later entry never leaves already-delivered requests to be re-processed by
+		// _stall_for_frame(). Staging/region vectors stay intact until requests empty.
+		cursor.request = 0;
+		while (!f.download_buffer_get_data_requests.is_empty()) {
+			const auto &request = f.download_buffer_get_data_requests[0];
 			const auto result = request.result;
 			auto *capture = request.capture;
 			if (capture && (!capture->registry || capture->registry->production_readback_delivery(*capture, true) != OK)) {
@@ -13839,18 +13853,11 @@ Error RenderingDevice::_native_disposal_stall_step(uint32_t p_frame) {
 					capture->state->returned += request.size;
 				}
 			}
-			++cursor.request;
+			f.download_buffer_get_data_requests.remove_at(0);
+			cursor.request = 0;
 		}
-		f.download_buffer_get_data_requests.clear();
 		f.download_buffer_copy_regions.clear();
 		f.download_buffer_staging_buffers.clear();
-		for (auto &report : f.chain_reports) {
-			for (auto &call : report.calls) {
-				if (!call.presentation_only) {
-					call.source_owner_returned = true;
-				}
-			}
-		}
 		cursor.phase = 5;
 	}
 	return OK;
@@ -15363,7 +15370,6 @@ Error RenderingDevice::_begin_frame(bool p_presented, bool p_nonblocking) {
 	if (native_disposal_active) {
 		return ERR_BUSY;
 	}
-	frames[frame].maintenance_wait = {};
 	if (!next_qualification_frame_epoch) {
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
@@ -15392,6 +15398,9 @@ Error RenderingDevice::_begin_frame(bool p_presented, bool p_nonblocking) {
 #endif
 		return wait_error;
 	}
+	// BUG-124: Reset maintenance_wait only AFTER _stall_for_frame() succeeds so an
+	// ERR_BUSY return never clobbers an interrupted Phase-4 cursor or leaks cursor.mapped.
+	frames[frame].maintenance_wait = {};
 	if (p_nonblocking) {
 		for (const Shader &shader : frames[frame].shaders_to_dispose_of) {
 			if (!driver->shader_retire_ready_nonblocking(shader.driver_id)) {
@@ -16001,11 +16010,22 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 		}
 		frames[p_frame].fence_signaled = false;
 		frames[p_frame].primary_command_buffer_begun = false;
+		// BUG-125: fence_wait()/fence_recycle() above already retired/erased 0-observer driver
+		// completion records for this frame's chain_reports. Mark source_owner_returned immediately
+		// so any deferred ERR_BUSY readback retry cannot re-wait on erased completion records.
+		for (auto &report : frames[p_frame].chain_reports) {
+			for (auto &call : report.calls) {
+				if (!call.presentation_only) {
+					call.source_owner_returned = true;
+				}
+			}
+		}
 	}
 	bool retry_deferred_captures = false;
 	if (!had_signaled_fence && !frames[p_frame].fence_signaled && !frames[p_frame].primary_command_buffer_begun && !frames[p_frame].disposal.active) {
+		const bool interrupted_phase4 = frames[p_frame].maintenance_wait.phase == 4 && frames[p_frame].maintenance_wait.fence_returned;
 		for (const auto &request : frames[p_frame].download_buffer_get_data_requests) {
-			if (request.capture != nullptr) {
+			if (request.capture != nullptr || interrupted_phase4) {
 				retry_deferred_captures = true;
 				break;
 			}
@@ -16027,6 +16047,25 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 			std::atomic<bool> &draining;
 			~FrameWaitDrainingGuard() { draining = false; }
 		} draining_guard{ frame_wait_draining };
+
+		// BUG-124: If a prior _native_disposal_stall_step() returned ERR_BUSY mid-map,
+		// cleanly unmap its staging buffer before _stall_for_frame() maps the front request.
+		{
+			auto &mw = frames[p_frame].maintenance_wait;
+			if (mw.mapped != nullptr) {
+				if (!frames[p_frame].download_buffer_get_data_requests.is_empty()) {
+					const auto &front = frames[p_frame].download_buffer_get_data_requests[0];
+					const uint32_t local = front.frame_local_index + mw.region;
+					if (local < frames[p_frame].download_buffer_staging_buffers.size()) {
+						driver->buffer_unmap(frames[p_frame].download_buffer_staging_buffers[local]);
+					}
+				}
+				mw.mapped = nullptr;
+				mw.region = 0;
+				mw.offset = 0;
+				mw.request_started = false;
+			}
+		}
 
 		// Flush any pending requests for asynchronous buffer downloads.
 		if (!frames[p_frame].download_buffer_get_data_requests.is_empty()) {
@@ -16259,13 +16298,6 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 			frames[p_frame].download_texture_get_data_requests.clear();
 		}
 		_qualification_return_frame_tickets(p_frame);
-		for (auto &report : frames[p_frame].chain_reports) {
-			for (auto &call : report.calls) {
-				if (!call.presentation_only) {
-					call.source_owner_returned = true;
-				}
-			}
-		}
 		frame_wait_draining = false;
 	}
 	return OK;

@@ -1445,6 +1445,133 @@ public:
 		device.frames.clear();
 		device.driver = nullptr;
 	}
+	static void bug125_fence_recycle_marks_chain_reports_returned_before_phase4_busy() {
+		struct Bug125Driver final : TransferTestDriverBase {
+			bool record_701_alive = true;
+			uint32_t wait_calls_on_erased = 0;
+			uint32_t poll_calls_on_erased = 0;
+			uint8_t staging_bytes[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+
+			bool native_call_observation_supported() const override { return true; }
+			FencePollResult native_call_poll(uint64_t p_serial) override {
+				if (p_serial == 701) {
+					if (!record_701_alive) {
+						++poll_calls_on_erased;
+						FencePollResult missing;
+						missing.native_error = true;
+						missing.native_code = ERR_DOES_NOT_EXIST;
+						return missing;
+					}
+					FencePollResult ok;
+					ok.completed = true;
+					ok.completed_serial = 701;
+					ok.resolved_issue = IssueFact::KnownAccepted;
+					return ok;
+				}
+				return {};
+			}
+			FencePollResult native_call_wait(uint64_t p_serial) override {
+				if (p_serial == 701 && !record_701_alive) {
+					++wait_calls_on_erased;
+					FencePollResult missing;
+					missing.native_error = true;
+					missing.native_code = ERR_DOES_NOT_EXIST;
+					return missing;
+				}
+				return native_call_poll(p_serial);
+			}
+			FencePollResult fence_poll(FenceID, uint64_t p_serial) override {
+				FencePollResult ok;
+				ok.completed = true;
+				ok.completed_serial = p_serial;
+				ok.resolved_issue = IssueFact::KnownAccepted;
+				return ok;
+			}
+			Error fence_recycle(FenceID, uint64_t) override {
+				// Mirror Metal retire_completion_records(): 0-observer record is immediately erased!
+				record_701_alive = false;
+				return OK;
+			}
+			Error fence_wait(FenceID) override {
+				record_701_alive = false;
+				return OK;
+			}
+			uint8_t *buffer_map_observed(BufferID, int64_t &r_native_code) override {
+				r_native_code = 0;
+				return staging_bytes;
+			}
+			void buffer_unmap(BufferID) override {}
+		} driver;
+
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.is_main_instance = true;
+		device.frames.resize(1);
+		device.frames[0].fence = RenderingDeviceDriver::FenceID(41);
+		device.frames[0].fence_signaled = true;
+		device.frames[0].primary_command_buffer_begun = true;
+		device.frames[0].qualification_epoch = 1;
+
+		RenderingDeviceDriver::QueueCallReport rep;
+		rep.submission_serial = 701;
+		rep.issued = true;
+		RenderingDeviceDriver::NativeCallFact call_701;
+		call_701.serial = call_701.completion_serial = 701;
+		call_701.queue_index = 1;
+		call_701.issue = RenderingDeviceDriver::IssueFact::KnownAccepted;
+		call_701.completion = RenderingDeviceDriver::CompletionCapability::Fence;
+		call_701.source_owner_returned = false;
+		rep.calls.push_back(call_701);
+		device.frames[0].chain_reports.push_back(rep);
+
+		Ref<RenderingDevice::BufferGetDataResult> res;
+		res.instantiate();
+		res->qualification_owned = true;
+		res->bytes.resize(8);
+		res->issued_size = 8;
+		RenderingDevice::BufferGetDataRequest req;
+		req.result = res;
+		req.result_offset = 0;
+		req.size = 8;
+		req.frame_local_index = 0;
+		req.frame_local_count = 1;
+		req.final_segment = true;
+		device.frames[0].download_buffer_staging_buffers.push_back(RenderingDeviceDriver::BufferID(88));
+		device.frames[0].download_buffer_copy_regions.push_back({ 0, 0, 8 });
+		device.frames[0].download_buffer_get_data_requests.push_back(req);
+
+		// Budget of 3 passes/receipts: Phase 0 poll(701) [1], Phase 3 fence_poll [2], Phase 3 fence_recycle [3] ->
+		// erases record 701, then hits ERR_BUSY at Phase 4 readback WORK admission (pass 4)!
+		RenderingDevice::NativeDisposalBudget b;
+		b.receipts = 3;
+		b.passes = 3;
+		b.deadline_usec = OS::get_singleton()->get_ticks_usec() + 60000000ull;
+		RenderingDevice::NativeDisposalUsage u;
+		device.native_disposal_budget = &b;
+		device.native_disposal_usage = &u;
+		CHECK(device._native_disposal_stall_step(0) == ERR_BUSY);
+		device.native_disposal_budget = nullptr;
+		device.native_disposal_usage = nullptr;
+
+		CHECK_FALSE(driver.record_701_alive);
+		CHECK_FALSE(device.frames[0].fence_signaled);
+		CHECK(device.frames[0].chain_reports[0].calls[0].source_owner_returned);
+		CHECK(device.frames[0].download_buffer_get_data_requests.size() == 1);
+
+		// Subsequent blocking _stall_for_frame(0, false) must NOT call native_call_wait(701)
+		// on the erased completion record, and must deliver the pending readback cleanly with OK!
+		CHECK(device._stall_for_frame(0, false) == OK);
+		CHECK(driver.wait_calls_on_erased == 0);
+		CHECK(driver.poll_calls_on_erased == 0);
+		CHECK(res->delivered);
+		CHECK(res->error == OK);
+		CHECK(res->completed_size == 8);
+		CHECK(device.frames[0].download_buffer_get_data_requests.is_empty());
+
+		device.frames.clear();
+		device.driver = nullptr;
+	}
 	static void attach_native_source(RenderingDevice &device, RenderingDeviceDriver &driver) {
 		device.driver = &driver;
 		device.frames.resize(1);
@@ -2602,4 +2729,8 @@ TEST_CASE("[RenderingDevice][BUG-119A] draw_list_end blocks on _thread_safe_ and
 
 TEST_CASE("[RenderingDevice][BUG-119B] unknown ticket fails blocking poll, unsubmitted worker returns unavailable, and known hidden report retains observer") {
 	TestFrameWaitAccess::bug119b_unknown_ticket_known_hidden_and_unsubmitted_worker();
+}
+
+TEST_CASE("[RenderingDevice][BUG-125] fence_recycle marks chain_reports source_owner_returned before Phase 4 ERR_BUSY") {
+	TestFrameWaitAccess::bug125_fence_recycle_marks_chain_reports_returned_before_phase4_busy();
 }
