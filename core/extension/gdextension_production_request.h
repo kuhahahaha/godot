@@ -1008,6 +1008,7 @@ class ProductionAttachment {
 	// Attachment-scoped persistent UniformSet cache for long-lived retained storage bindings.
 	static constexpr uint32_t PERSISTENT_SET_MAX_LIVE = 2048u;
 	HashMap<PersistentSetKey, PersistentSetEntry *, PersistentSetKeyHasher> persistent_set_lookup;
+	HashMap<QualificationPhysicalReturn *, LocalVector<PersistentSetEntry *>> persistent_sets_by_dep;
 	LocalVector<PersistentSetEntry *> persistent_sets;
 	uint64_t persistent_set_tick = 0;
 	bool persistent_set_close_drain_queued = false;

@@ -385,6 +385,42 @@ bool Registry::production_persistent_set_build_key_from_slot_locked(const Produc
 	return true;
 }
 
+void Registry::production_persistent_set_index_deps_locked(ProductionAttachment &p_attachment, PersistentSetEntry &p_entry) {
+	for (uint32_t i = 0; i < p_entry.dependencies.size(); ++i) {
+		QualificationPhysicalReturn *dep = p_entry.dependencies[i];
+		if (!dep) {
+			continue;
+		}
+		LocalVector<PersistentSetEntry *> &bucket = p_attachment.persistent_sets_by_dep[dep];
+		if (!bucket.has(&p_entry)) {
+			bucket.push_back(&p_entry);
+		}
+	}
+}
+
+void Registry::production_persistent_set_unindex_deps_locked(ProductionAttachment &p_attachment, PersistentSetEntry &p_entry) {
+	for (uint32_t i = 0; i < p_entry.dependencies.size(); ++i) {
+		QualificationPhysicalReturn *dep = p_entry.dependencies[i];
+		if (!dep) {
+			continue;
+		}
+		LocalVector<PersistentSetEntry *> *bucket = p_attachment.persistent_sets_by_dep.getptr(dep);
+		if (!bucket) {
+			continue;
+		}
+		for (uint32_t j = 0; j < bucket->size();) {
+			if ((*bucket)[j] == &p_entry) {
+				bucket->remove_at_unordered(j);
+			} else {
+				++j;
+			}
+		}
+		if (bucket->is_empty()) {
+			p_attachment.persistent_sets_by_dep.erase(dep);
+		}
+	}
+}
+
 void Registry::production_persistent_sets_evict_lru_locked(ProductionAttachment &p_attachment) {
 	while (p_attachment.persistent_set_lookup.size() > ProductionAttachment::PERSISTENT_SET_MAX_LIVE) {
 		PersistentSetEntry *victim = nullptr;
@@ -434,6 +470,7 @@ void Registry::production_persistent_sets_reap_and_retire_rt(RenderingDevice *p_
 				}
 				if (entry->evicted && entry->physical.production_uses == nullptr && free_event != 0) {
 					attachment->persistent_set_lookup.erase(entry->key);
+					production_persistent_set_unindex_deps_locked(*attachment, *entry);
 					attachment->persistent_sets.remove_at_unordered(i);
 					memdelete(entry);
 					continue;
@@ -487,6 +524,7 @@ void Registry::production_persistent_sets_reap_and_retire_rt(RenderingDevice *p_
 				}
 				if (entry->evicted && entry->physical.production_uses == nullptr && free_event != 0) {
 					attachment->persistent_set_lookup.erase(entry->key);
+					production_persistent_set_unindex_deps_locked(*attachment, *entry);
 					attachment->persistent_sets.remove_at_unordered(i);
 					memdelete(entry);
 					continue;
@@ -508,21 +546,23 @@ void Registry::production_persistent_sets_evict_for_dependency_rt(RenderingDevic
 	{
 		Lock lock(*this);
 		for (auto *attachment : production_attachments) {
-			if (!attachment || attachment->held_device != p_rd || attachment->persistent_sets.is_empty()) {
+			if (!attachment || attachment->held_device != p_rd || attachment->persistent_sets_by_dep.is_empty()) {
 				continue;
 			}
-			for (uint32_t i = 0; i < attachment->persistent_sets.size(); ++i) {
-				PersistentSetEntry *entry = attachment->persistent_sets[i];
+			LocalVector<PersistentSetEntry *> *bucket = attachment->persistent_sets_by_dep.getptr(p_dep);
+			if (!bucket || bucket->is_empty()) {
+				continue;
+			}
+			for (uint32_t i = 0; i < bucket->size(); ++i) {
+				PersistentSetEntry *entry = (*bucket)[i];
 				if (!entry) {
 					continue;
 				}
-				if (entry->dependencies.has(p_dep)) {
-					if (!entry->evicted) {
-						entry->evicted = true;
-						attachment->persistent_set_lookup.erase(entry->key);
-					}
-					any_evicted = true;
+				if (!entry->evicted) {
+					entry->evicted = true;
+					attachment->persistent_set_lookup.erase(entry->key);
 				}
+				any_evicted = true;
 			}
 		}
 	}
@@ -1403,6 +1443,7 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 					entry->physical.rid = rid.get_id();
 					entry->last_used_tick = ++request.attachment->persistent_set_tick;
 					request.attachment->persistent_sets.push_back(entry);
+					production_persistent_set_index_deps_locked(*request.attachment, *entry);
 					if (!request.attachment->closing && !request.attachment->persistent_set_lookup.has(entry->key)) {
 						request.attachment->persistent_set_lookup.insert(entry->key, entry);
 						production_persistent_sets_evict_lru_locked(*request.attachment);

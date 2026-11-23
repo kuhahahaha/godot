@@ -2327,7 +2327,9 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_native_record_v2(G
 	if (request->native_staged_anchor != UINT64_MAX) {
 		if (anchors != 1 || request->native_staged_anchor >= request->action_count || !request->actions[request->native_staged_anchor].output_camera_pending) { return window_result(ERR_UNAVAILABLE); }
 		const auto &anchor = request->actions[request->native_staged_anchor];
-		if (!anchor.host_view_received || !anchor.camera_ready_subscriber.subscribed || anchor.camera_ready_subscriber.closed || anchor.camera_ready_subscriber.released) { return window_result(ERR_UNCONFIGURED); }
+		const bool already_subscribed = anchor.host_view_received && anchor.camera_ready_subscriber.subscribed;
+		const bool deferred_subscribe_ready = anchor.host_view_prepared && anchor.camera_ready_viewport.is_valid() && anchor.host_view_camera.is_valid() && anchor.camera_ready_subscriber.registry == this;
+		if ((!already_subscribed && !deferred_subscribe_ready) || anchor.camera_ready_subscriber.closed || anchor.camera_ready_subscriber.released) { return window_result(ERR_UNCONFIGURED); }
 		if (!request->native_stage_budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= request->native_stage_budget.deadline_micros) { return window_result(ERR_BUSY); }
 		if (!rd || !rd->_thread_safe_.try_lock()) { return window_result(ERR_BUSY); }
 		const Error sealed = production_freeze_rd_locked(*request, rd, true);

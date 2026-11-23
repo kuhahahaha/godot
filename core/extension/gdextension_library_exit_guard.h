@@ -114,6 +114,7 @@ struct OriginalOperationIdentity;
 struct BufferReadbackSourceCapture;
 struct NativeSourceIssueView;
 struct PersistentSetKey;
+struct PersistentSetEntry;
 // Core physical call-frame identity only. Its serial is issued by the actual
 // protected RT entry and expires on return; no Runtime/source authority.
 using ProductionPhysicalContextRef = GDExtensionProductionPhysicalContextRefV1;
@@ -1149,6 +1150,8 @@ private:
 	void production_set_create_cancel_batched_locked(ProductionRequest &, Error);
 	bool production_persistent_set_build_key_locked(const ProductionRequest &, uint32_t, uint32_t, const GDExtensionProductionSetBindingV1 *, uint32_t, PersistentSetKey &) const;
 	bool production_persistent_set_build_key_from_slot_locked(const ProductionRequest &, const ProductionResourceSlot &, PersistentSetKey &) const;
+	void production_persistent_set_index_deps_locked(ProductionAttachment &, PersistentSetEntry &);
+	void production_persistent_set_unindex_deps_locked(ProductionAttachment &, PersistentSetEntry &);
 	void production_persistent_sets_evict_lru_locked(ProductionAttachment &);
 	void production_persistent_sets_evict_for_dependency_rt(RenderingDevice *, QualificationPhysicalReturn *);
 	void production_persistent_sets_reap_and_retire_rt(RenderingDevice *, bool p_unlock_rd_around_free);
@@ -1298,6 +1301,7 @@ public:
 	Error production_output_predecessor_control(GDExtensionProductionRequestRefV1, const GDExtensionProductionOutputPrepareV1 &, const GDExtensionProductionOutputPredecessorV2 &, const GDExtensionProductionServiceBudgetV1 &, bool = false);
 	Error production_output_predecessor_service_locked(ProductionRequest &, RenderingDevice &);
 	Error production_output_predecessor_return_after_reads_locked(ProductionRequest &, RenderingDevice &, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
+	Error production_output_action_custody_return_after_slot_retire_locked(ProductionRequest &, RenderingDevice &, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
 	void production_finalize_output(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint64_t, GDExtensionProductionOutputFinalizeResultV1 *);
 	GDExtensionDeviceSessionResultV1 production_prepare_host_view(GDExtensionProductionRequestRefV1, uint64_t, const GDExtensionProductionHostViewInputV1 *);
 	GDExtensionDeviceSessionResultV1 production_read_host_view(GDExtensionProductionRequestRefV1, uint64_t, GDExtensionProductionHostViewAssociationV1 *);

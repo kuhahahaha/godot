@@ -2241,6 +2241,143 @@ Error Registry::production_output_predecessor_return_after_reads_locked(Producti
 	return returned;
 }
 
+Error Registry::production_output_action_custody_return_after_slot_retire_locked(ProductionRequest &request, RenderingDevice &rd, const GDExtensionProductionServiceBudgetV1 &budget, ProductionServiceUsage &usage) {
+	if (!request.frozen || request.cancelled || request.release_started || request.source_device_lost ||
+			request.effects_pending || request.capture_inflight || request.continuation_inflight ||
+			request.compute_list_open || request.draw_list_open ||
+			request.next_action != request.action_count || !request.segment.segment ||
+			request.acknowledged_segment != request.segment.segment ||
+			request.native_prepared_unread || request.native_batch_pending_ack ||
+			request.output_owner_head != UINT32_MAX || request.output_owner_cursor != UINT32_MAX ||
+			request.disposal_group_head != UINT32_MAX || !service_budget_active(budget)) {
+		return OK;
+	}
+	if (!Lock::owns(*this) || !rd.native_immutable_is_render_thread() || request.control.state != ProductionControlState::EXECUTING ||
+			request.control.input.kind != ProductionControlKind::OBSERVE || request.control.input.request_serial != request.serial ||
+			&budget != &request.control.input.budget || &usage != &request.control.output.service_usage ||
+			!request.attachment || request.attachment->held_device != &rd) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!RSG::viewport || RSG::viewport->is_camera_invocation_active()) {
+		return OK;
+	}
+	const auto &device = device_records[request.attachment->device];
+	if (!device.live || device.epoch != request.attachment->epoch || device.object != &rd) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (request.action_count > request.capacity.suboperations || (request.action_count && !request.actions)) {
+		return ERR_INVALID_DATA;
+	}
+	bool has_custody = false;
+	for (uint32_t i = 0; i < request.action_count; ++i) {
+		const auto &action = request.actions[i];
+		if (action.output_state != ProductionActionCell::OutputState::RETURNED) {
+			continue;
+		}
+		if ((action.preinput_host_prepared && !action.preinput_host_returned) ||
+				(action.camera_ready_subscriber.registry && !action.camera_ready_subscriber.released) ||
+				action.preinput_camera_source.is_valid() || action.scene_cull_capture.is_valid()) {
+			has_custody = true;
+			break;
+		}
+	}
+	if (!has_custody) {
+		return OK;
+	}
+	GDExtensionProductionReportV2 snap;
+	Error native_cause = OK;
+	const Error projected = production_report_contents_locked(request, snap, &native_cause);
+	if (projected != OK) {
+		return projected;
+	}
+	if (native_cause != OK || snap.possible_obligations || snap.known_obligations != snap.complete_obligations ||
+			snap.physical_returns_pending || snap.ready_readbacks != request.readback_count) {
+		return OK;
+	}
+	if (request.revision == UINT64_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	const uint64_t request_serial = request.serial;
+	ProductionAttachment *const attachment = request.attachment;
+	const uint64_t control_serial = request.control.serial;
+	bool mutated = false;
+	for (uint32_t i = 0; i < request.action_count; ++i) {
+		auto &action = request.actions[i];
+		if (action.output_state != ProductionActionCell::OutputState::RETURNED) {
+			continue;
+		}
+		if (action.preinput_host_prepared && !action.preinput_host_returned) {
+			action.output_scene = {};
+			action.output_scene_prepared = false;
+			action.preinput_host_transform = {};
+			action.preinput_host_returned = true;
+			mutated = true;
+		}
+		if (action.camera_ready_subscriber.registry && !action.camera_ready_subscriber.released) {
+			auto *returning = &action.camera_ready_subscriber;
+			if (!returning->is_camera_source_detaching() &&
+					usage.passes < MIN(budget.passes, 64u) &&
+					usage.receipts < MIN(budget.receipts, 128u) &&
+					before_service_deadline(budget)) {
+				const RID viewport = action.camera_ready_viewport;
+				++request.capture_inflight;
+				usage.controls = 1;
+				++usage.passes;
+				++usage.receipts;
+				unlock_mutex_for_call();
+				rd._thread_safe_.unlock();
+				RSG::viewport->viewport_unsubscribe_camera_source(viewport, returning);
+				if (!returning->subscribed) {
+					returning->camera_source_closed();
+				}
+				rd._thread_safe_.lock();
+				relock_mutex_after_call();
+				CRASH_COND(request.serial != request_serial || request.attachment != attachment ||
+						!request.capture_inflight || request.control.serial != control_serial ||
+						request.control.state != ProductionControlState::EXECUTING);
+				if (returning->closed) {
+					returning->subscribed = false;
+					returning->released = true;
+					action.camera_ready_viewport = RID();
+					mutated = true;
+				}
+				--request.capture_inflight;
+			}
+		}
+		if ((action.preinput_camera_source.is_valid() || action.scene_cull_capture.is_valid()) &&
+				usage.passes < MIN(budget.passes, 64u) &&
+				usage.receipts < MIN(budget.receipts, 128u) &&
+				before_service_deadline(budget)) {
+			++request.capture_inflight;
+			usage.controls = 1;
+			++usage.passes;
+			++usage.receipts;
+			Ref<RendererViewport::Viewport::CameraCapture> returning = action.preinput_camera_source;
+			Ref<RendererViewport::Viewport::CameraCapture> returning_cull = action.scene_cull_capture;
+			action.preinput_camera_source.unref();
+			action.scene_cull_capture.unref();
+			action.scene_cull_attempted = false;
+			action.scene_cull_attempted_camera = {};
+			action.preinput_camera_returned = true;
+			mutated = true;
+			unlock_mutex_for_call();
+			rd._thread_safe_.unlock();
+			returning.unref();
+			returning_cull.unref();
+			rd._thread_safe_.lock();
+			relock_mutex_after_call();
+			CRASH_COND(request.serial != request_serial || request.attachment != attachment ||
+					!request.capture_inflight || request.control.serial != control_serial ||
+					request.control.state != ProductionControlState::EXECUTING);
+			--request.capture_inflight;
+		}
+	}
+	if (mutated) {
+		++request.revision;
+	}
+	return OK;
+}
+
 Error Registry::production_native_owner_locked(const ProductionRequest &r, uint32_t index, const ProductionNativeCell *&out) const {
 	out = nullptr;
 	if (r.native_count > r.capacity.native_memberships || r.graph_count > r.capacity.graph_memberships || index >= r.native_count || !r.natives) {
@@ -4019,7 +4156,9 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 			returning->released = true;
 			action.camera_ready_viewport = RID();
 			--r->capture_inflight;
-			return result(ERR_BUSY, 16); // One original charged owner return.
+			if (usage->passes >= MIN(budget->passes, 64u) || usage->receipts >= MIN(budget->receipts, 128u) || !before_service_deadline(*budget)) {
+				return result(ERR_BUSY, 16);
+			}
 		}
 		if (action.preinput_camera_source.is_null() && action.scene_cull_capture.is_null()) {
 			continue;
@@ -4048,7 +4187,9 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 		returning_cull.unref();
 		relock_mutex_after_call();
 		--r->capture_inflight;
-		return result(ERR_BUSY, 16); // Exactly one charged original source return.
+		if (usage->passes >= MIN(budget->passes, 64u) || usage->receipts >= MIN(budget->receipts, 128u) || !before_service_deadline(*budget)) {
+			return result(ERR_BUSY, 16);
+		}
 	}
 	// Native observer references may only be dropped in the original owner's
 	// final-release phase. RT readiness neither releases them nor signs R01 ACK.
@@ -4305,6 +4446,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 				free_event = entry->physical.free_event;
 			}
 			if (entry->physical.production_uses == nullptr && free_event != 0) {
+				production_persistent_set_unindex_deps_locked(*a, *entry);
 				a->persistent_sets.remove_at_unordered(i);
 				memdelete(entry);
 				continue;
@@ -4360,6 +4502,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 	CRASH_COND(a->material_qualifications_live != 0);
 	CRASH_COND(!a->persistent_sets.is_empty());
 	CRASH_COND(!a->persistent_set_lookup.is_empty());
+	CRASH_COND(!a->persistent_sets_by_dep.is_empty());
 	destroy(a->requests, a->quote.capacity.requests);
 	destroy(a->actions, a->actions_hwm);
 	destroy(a->resources, a->resources_hwm);
@@ -4703,6 +4846,9 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 				if (error == OK) {
 					error = production_output_predecessor_return_after_reads_locked(request, *rd, cell.input.budget, cell.output.service_usage);
 				}
+				if (error == OK) {
+					error = production_output_action_custody_return_after_slot_retire_locked(request, *rd, cell.input.budget, cell.output.service_usage);
+				}
 			}
 			cell.output.result = result(error);
 		} break;
@@ -4853,6 +4999,42 @@ void Registry::production_control_dispatch(uint64_t registry, uint64_t attachmen
 					cell.scene_waiting = false;
 					production_control_execute_locked(r, nullptr); // Original CQMT admission rejection, no native frame/body.
 					return;
+				}
+				if (r.native_staged_anchor < r.action_count) {
+					auto &anchor = r.actions[r.native_staged_anchor];
+					auto *observer = &anchor.camera_ready_subscriber;
+					if (anchor.host_view_prepared && observer->registry == this && !observer->subscribed && !observer->closed && !observer->released) {
+						if (!RSG::viewport || r.capture_inflight || r.continuation_inflight) {
+							cell.scene_waiting = false;
+							production_control_execute_locked(r, nullptr);
+							return;
+						}
+						const RID viewport = anchor.camera_ready_viewport;
+						const RID camera = anchor.host_view_camera;
+						++r.capture_inflight;
+						unlock_mutex_for_call();
+						RendererViewport::Viewport::ViewPresentationKey native_key;
+						const Error received = RSG::viewport->viewport_receive_host_view(viewport, camera, native_key);
+						const bool subscribed = received == OK && RSG::viewport->viewport_subscribe_camera_source(viewport, observer);
+						relock_mutex_after_call();
+						CRASH_COND(r.serial != request || !r.capture_inflight || &anchor.camera_ready_subscriber != observer);
+						--r.capture_inflight;
+						if (subscribed) {
+							anchor.host_view_key = native_key;
+							anchor.host_view_received = true;
+							observer->subscribed = true;
+						}
+						if (cell.serial != serial || cell.state != ProductionControlState::QUEUED) {
+							return;
+						}
+						const auto &owner_after = records[a->library];
+						const auto &device_after = device_records[a->device];
+						if (!subscribed || a->closing || owner_after.natural_close_draining || a->camera_ready_closed || a->scene_closed || !device_after.live || r.cancelled || r.release_started || r.source_device_lost || observer->is_closed()) {
+							cell.scene_waiting = false;
+							production_control_execute_locked(r, nullptr);
+							return;
+						}
+					}
 				}
 				cell.scene_waiting = true;
 				return; // Genuine camera invocation owns native execution; never CQMT.
