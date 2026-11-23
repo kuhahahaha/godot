@@ -588,6 +588,18 @@ void RenderingServerDefault::sync() {
 	}
 }
 
+void RenderingServerDefault::flush_command_queue_only() {
+	if (create_thread) {
+		if (Thread::get_caller_id() == server_thread) {
+			command_queue.flush_all();
+		} else {
+			command_queue.sync();
+		}
+	} else {
+		command_queue.flush_all();
+	}
+}
+
 void RenderingServerDefault::draw(bool p_present, double frame_step) {
 	ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "Manually triggering the draw function from the RenderingServer can only be done on the main thread. Call this function from the main thread or use call_deferred().");
 	_update_particles_screen_refresh_rate();

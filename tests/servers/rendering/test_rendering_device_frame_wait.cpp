@@ -1572,6 +1572,68 @@ public:
 		device.frames.clear();
 		device.driver = nullptr;
 	}
+	static void bug128a_flush_command_queue_only_skips_qualification_pump() {
+		RenderingServer *rs = RenderingServer::get_singleton();
+		REQUIRE(rs != nullptr);
+		CHECK(rs->has_method("flush_command_queue_only"));
+
+		struct Bug128ADriver final : TransferTestDriverBase {
+			uint32_t fence_polls = 0;
+			uint32_t fence_waits = 0;
+			uint32_t begin_segments = 0;
+			FencePollResult fence_poll(FenceID, uint64_t p_serial) override {
+				++fence_polls;
+				FencePollResult ok;
+				ok.completed = true;
+				ok.completed_serial = p_serial;
+				ok.resolved_issue = IssueFact::KnownAccepted;
+				return ok;
+			}
+			Error fence_wait(FenceID) override {
+				++fence_waits;
+				return OK;
+			}
+			Error fence_recycle(FenceID, uint64_t) override { return OK; }
+			bool command_pool_reset(CommandPoolID) override { return true; }
+			void begin_segment(uint32_t, uint32_t) override { ++begin_segments; }
+			bool command_buffer_begin(CommandBufferID) override { return true; }
+		} driver;
+
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.is_main_instance = true;
+		device.frames.resize(1);
+		device.frames[0].fence = RenderingDeviceDriver::FenceID(41);
+		device.frames[0].command_buffer = RenderingDeviceDriver::CommandBufferID(31);
+		device.frames[0].command_pool = RenderingDeviceDriver::CommandPoolID(21);
+		device.frames[0].qualification_epoch = 1;
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		device.qualification_frame_advance_pending = true;
+
+		RenderingDevice *prev_rd = RenderingDevice::singleton;
+		RenderingDevice::singleton = &device;
+
+		// 1. Dynamic call("flush_command_queue_only") and direct flush_command_queue_only()
+		//    must NOT invoke pump_qualification_frame_if_idle() / _native_disposal_maintenance().
+		rs->call("flush_command_queue_only");
+		rs->flush_command_queue_only();
+		CHECK(device.qualification_frame_advance_pending.load());
+		CHECK(driver.begin_segments == 0);
+		CHECK(driver.fence_polls == 0);
+		CHECK(driver.fence_waits == 0);
+
+		// 2. By contrast, rs->sync() DOES invoke pump_qualification_frame_if_idle(), which
+		//    advances the pending qualification frame.
+		rs->sync();
+		CHECK_FALSE(device.qualification_frame_advance_pending.load());
+		CHECK(driver.begin_segments == 1);
+
+		RenderingDevice::singleton = prev_rd;
+		device.draw_graph.finalize();
+		device.frames.clear();
+		device.driver = nullptr;
+	}
 	static void attach_native_source(RenderingDevice &device, RenderingDeviceDriver &driver) {
 		device.driver = &driver;
 		device.frames.resize(1);
@@ -2733,4 +2795,8 @@ TEST_CASE("[RenderingDevice][BUG-119B] unknown ticket fails blocking poll, unsub
 
 TEST_CASE("[RenderingDevice][BUG-125] fence_recycle marks chain_reports source_owner_returned before Phase 4 ERR_BUSY") {
 	TestFrameWaitAccess::bug125_fence_recycle_marks_chain_reports_returned_before_phase4_busy();
+}
+
+TEST_CASE("[SceneTree][RenderingDevice][BUG-128A] flush_command_queue_only skips pump_qualification_frame_if_idle while sync triggers it") {
+	TestFrameWaitAccess::bug128a_flush_command_queue_only_skips_qualification_pump();
 }

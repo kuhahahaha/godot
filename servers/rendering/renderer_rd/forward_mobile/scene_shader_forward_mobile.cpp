@@ -714,6 +714,11 @@ RID SceneShaderForwardMobile::ShaderData::create_native_pipeline_checked(Pipelin
 		r_factory_error = ERR_CANT_CREATE;
 	}
 
+	// BUG-129: Transient ERR_BUSY from production pipeline factory is retried by caller.
+	if (unlikely(pipeline.is_null() && r_factory_error == ERR_BUSY)) {
+		return RID();
+	}
+
 	// Don't print error when it's expected.
 	if (unlikely(pipeline.is_null() && RD::get_singleton()->get_driver_workarounds().dont_print_on_render_pipeline_creation_failure)) {
 		return RID();
@@ -780,6 +785,11 @@ RID SceneShaderForwardMobile::ShaderData::create_native_pipeline(PipelineKey p_p
 	ERR_FAIL_COND_V(shader_rid.is_null(), RID());
 
 	RID pipeline = p_output ? p_output->_create_pipeline(shader_rid, p_pipeline_key.framebuffer_format_id, p_pipeline_key.vertex_format_id, primitive_rd, raster_state, multisample_state, depth_stencil_state, blend_state, 0, p_pipeline_key.render_pass, specialization_constants) : RD::get_singleton()->render_pipeline_create(shader_rid, p_pipeline_key.framebuffer_format_id, p_pipeline_key.vertex_format_id, primitive_rd, raster_state, multisample_state, depth_stencil_state, blend_state, 0, p_pipeline_key.render_pass, specialization_constants);
+
+	// BUG-129: Transient ERR_BUSY from production pipeline factory is retried by caller.
+	if (unlikely(pipeline.is_null() && p_output && p_output->last_error == ERR_BUSY)) {
+		return RID();
+	}
 
 	// Don't print error when it's expected.
 	if (unlikely(pipeline.is_null() && RD::get_singleton()->get_driver_workarounds().dont_print_on_render_pipeline_creation_failure)) {
