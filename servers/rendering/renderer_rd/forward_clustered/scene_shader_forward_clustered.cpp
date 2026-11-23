@@ -851,12 +851,12 @@ RID SceneShaderForwardClustered::ShaderData::_get_shader_variant(uint16_t p_shad
 		ERR_FAIL_NULL_V(SceneShaderForwardClustered::singleton, RID());
 		if (p_instance192) {
 			MutexLock lock(SceneShaderForwardClustered::singleton_mutex);
-			SceneShaderForwardClustered::singleton->shader.enable_group(SceneShaderForwardClustered::singleton->instance192_shader_groups[p_shader_version]);
+			SceneShaderForwardClustered::singleton->shader.version_enable_group(version, SceneShaderForwardClustered::singleton->instance192_shader_groups[p_shader_version]);
 			return SceneShaderForwardClustered::singleton->shader.version_get_shader(version, p_shader_version + INSTANCE192_VARIANT_OFFSET);
 		}
 		if (p_indexed144) {
 			MutexLock lock(SceneShaderForwardClustered::singleton_mutex);
-			SceneShaderForwardClustered::singleton->shader.enable_group(SceneShaderForwardClustered::singleton->indexed144_shader_groups[p_shader_version]);
+			SceneShaderForwardClustered::singleton->shader.version_enable_group(version, SceneShaderForwardClustered::singleton->indexed144_shader_groups[p_shader_version]);
 			return SceneShaderForwardClustered::singleton->shader.version_get_shader(version, p_shader_version + INDEXED144_VARIANT_OFFSET);
 		}
 		return SceneShaderForwardClustered::singleton->shader.version_get_shader(version, p_shader_version);
@@ -910,7 +910,7 @@ RID SceneShaderForwardClustered::ShaderData::warm_native_recipe_shader_variant()
 		const int group_idx = SceneShaderForwardClustered::singleton->native_recipe_shader_group;
 		const int variant_idx = SceneShaderForwardClustered::singleton->native_recipe_shader_variant;
 		ERR_FAIL_COND_V(group_idx < 0 || variant_idx < 0, RID());
-		SceneShaderForwardClustered::singleton->shader.enable_group(group_idx);
+		SceneShaderForwardClustered::singleton->shader.version_enable_group(version, group_idx);
 		return SceneShaderForwardClustered::singleton->shader.version_get_shader(version, variant_idx);
 	}
 	return RID();

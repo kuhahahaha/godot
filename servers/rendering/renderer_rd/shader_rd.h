@@ -97,6 +97,8 @@ private:
 		Vector<WorkerThreadPool::GroupID> group_compilation_tasks;
 
 		Vector<Vector<uint8_t>> variant_data;
+		Vector<uint8_t> variant_compiled;
+		Vector<bool> groups_enabled;
 		Vector<RID> variants;
 
 		bool valid;
@@ -119,6 +121,9 @@ private:
 	void _compile_version_end(Version *p_version, int p_group);
 	void _compile_ensure_finished(Version *p_version);
 	void _allocate_placeholders(Version *p_version, int p_group);
+	_FORCE_INLINE_ bool _version_group_enabled(const Version *p_version, int p_group) const {
+		return group_enabled[p_group] || (p_version && p_group < p_version->groups_enabled.size() && p_version->groups_enabled[p_group]);
+	}
 
 	RID_Owner<Version, true> version_owner;
 	Mutex versions_mutex;
@@ -220,7 +225,7 @@ public:
 		if (version->dirty) {
 			_initialize_version(version);
 			for (int i = 0; i < group_enabled.size(); i++) {
-				if (!group_enabled[i]) {
+				if (!_version_group_enabled(version, i)) {
 					_allocate_placeholders(version, i);
 					continue;
 				}
@@ -256,6 +261,8 @@ public:
 
 	// Enable/disable groups for things that might be enabled at run time.
 	void enable_group(int p_group);
+	void version_enable_group(RID p_version, int p_group);
+	bool version_is_group_enabled(RID p_version, int p_group);
 	bool is_group_enabled(int p_group) const;
 	int64_t get_group_count() const;
 	const LocalVector<int> &get_group_to_variants(int p_group) const;

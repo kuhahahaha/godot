@@ -4135,7 +4135,9 @@ RenderingDeviceDriverMetal::RenderingDeviceDriverMetal(RenderingContextDriverMet
 	}
 
 #if TARGET_OS_OSX
-	if (String res = OS::get_singleton()->get_environment("GODOT_MTL_SHADER_LOAD_STRATEGY"); res == U"lazy") {
+	if (String res = OS::get_singleton()->get_environment("GODOT_MTL_SHADER_LOAD_STRATEGY"); res == U"immediate") {
+		_shader_load_strategy = ShaderLoadStrategy::IMMEDIATE;
+	} else {
 		_shader_load_strategy = ShaderLoadStrategy::LAZY;
 	}
 #else
@@ -4286,7 +4288,7 @@ Error RenderingDeviceDriverMetal::_initialize(uint32_t p_device_index, uint32_t 
 	// on Metal 3 it is the residency mechanism (useHeaps), and Metal 4 always
 	// runs barriers.
 	bool use_heaps = sync_mode == Barriers;
-	allocator = MetalAllocator::create(device, use_heaps);
+	allocator = MetalAllocator::create(device, use_heaps, is_local_rendering_device());
 	if (use_heaps) {
 		print_verbose("Metal: heap suballocation enabled.");
 	}

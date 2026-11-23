@@ -16464,6 +16464,7 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 	context = p_context;
 	driver = context->driver_create();
 	driver->session_owner = this;
+	driver->is_local_device = !is_main_instance;
 
 	print_verbose("Devices:");
 	int32_t device_index = Engine::get_singleton()->get_gpu_index();

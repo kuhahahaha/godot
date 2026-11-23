@@ -49,9 +49,9 @@ public:
 
 #pragma mark - MetalAllocator
 
-MetalAllocator *MetalAllocator::create(MTL::Device *p_device, bool p_use_heaps) {
+MetalAllocator *MetalAllocator::create(MTL::Device *p_device, bool p_use_heaps, bool p_local_device) {
 	if (p_use_heaps) {
-		return memnew(MetalHeapAllocator(p_device));
+		return memnew(MetalHeapAllocator(p_device, p_local_device));
 	}
 	return memnew(MetalDeviceAllocator(p_device));
 }
@@ -105,7 +105,17 @@ constexpr NS::UInteger RESOURCE_STORAGE_MODE_MASK = 0xFull << RESOURCE_STORAGE_M
 
 std::atomic<uint64_t> MetalHeapAllocator::total_buffer_recycle_hits{ 0 };
 
-uint64_t MetalHeapAllocator::_preferred_block_size(uint32_t p_pool) {
+uint64_t MetalHeapAllocator::_preferred_block_size(uint32_t p_pool) const {
+	if (local_device) {
+		switch (p_pool) {
+			case POOL_PRIVATE:
+				return 8ull * 1024 * 1024;
+			case POOL_SHARED:
+			case POOL_SHARED_WC:
+			default:
+				return 4ull * 1024 * 1024;
+		}
+	}
 	switch (p_pool) {
 		case POOL_PRIVATE:
 			return 64ull * 1024 * 1024;
@@ -117,7 +127,17 @@ uint64_t MetalHeapAllocator::_preferred_block_size(uint32_t p_pool) {
 	}
 }
 
-uint64_t MetalHeapAllocator::_max_recycled_bytes(uint32_t p_pool) {
+uint64_t MetalHeapAllocator::_max_recycled_bytes(uint32_t p_pool) const {
+	if (local_device) {
+		switch (p_pool) {
+			case POOL_PRIVATE:
+				return 8ull * 1024 * 1024;
+			case POOL_SHARED:
+			case POOL_SHARED_WC:
+			default:
+				return 4ull * 1024 * 1024;
+		}
+	}
 	switch (p_pool) {
 		case POOL_PRIVATE:
 			return 64ull * 1024 * 1024;

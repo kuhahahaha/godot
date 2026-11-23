@@ -96,8 +96,10 @@ class RenderingDeviceDriver : public RenderingDeviceCommons {
 	friend class TestVulkanCompletionAccess;
 #endif
 	RenderingDevice *session_owner = nullptr;
+	bool is_local_device = false;
 
 protected:
+	bool is_local_rendering_device() const { return is_local_device; }
 	void notify_session_device_lost() const;
 	void session_loss_identity(uint64_t &, uint64_t &) const;
 	static void notify_session_device_lost(uint64_t, uint64_t);

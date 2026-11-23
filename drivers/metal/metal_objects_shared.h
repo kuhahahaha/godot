@@ -822,8 +822,9 @@ enum class ShaderLoadStrategy {
 	IMMEDIATE,
 	LAZY,
 
-	/// The default strategy is to load the shader immediately.
-	DEFAULT = IMMEDIATE,
+	/// Default to lazy shader library compilation so unused variants do not
+	/// eagerly compile Metal AIR / resident MTLLibrary objects at startup.
+	DEFAULT = LAZY,
 };
 
 NS::SharedPtr<MTL::CompileOptions> make_shader_compile_options(uint32_t p_msl_version, bool p_logging, bool p_invariance, bool p_disable_fast_math);

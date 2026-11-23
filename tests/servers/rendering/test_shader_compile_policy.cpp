@@ -56,6 +56,8 @@ TEST_FORCE_LINK(test_shader_compile_policy)
 #include <thread>
 
 #ifdef METAL_ENABLED
+#include "drivers/metal/metal_allocator.h"
+#include "drivers/metal/metal_objects_shared.h"
 #include "drivers/metal/rendering_shader_container_metal.h"
 
 #include <Metal/Metal.hpp>
@@ -303,6 +305,96 @@ public:
 			clustered->shader.~SceneForwardClusteredShaderRD();
 		}
 
+		rd.shader_owner.free(native_shader);
+		rd.driver = nullptr;
+		RenderingDevice::singleton = prev_rd;
+	}
+
+	static void check_bug139_per_version_group_and_variant_data_free() {
+		struct DummyDriver : TransferTestDriverBase {};
+		DummyDriver driver;
+		RenderingDevice *prev_rd = RenderingDevice::get_singleton();
+		RenderingDevice rd;
+		rd.driver = &driver;
+		rd.is_main_instance = true;
+		rd.render_thread_id = Thread::get_caller_id();
+		RenderingDevice::singleton = &rd;
+
+		RenderingDevice::Shader sh;
+		sh.driver_id = RDD::ShaderID(77);
+		sh.vertex_input_mask = 0x7;
+		const RID native_shader = rd.shader_owner.make_rid(sh);
+
+		struct TestShader : ShaderRD {
+			TestShader() {
+				setup("void main() {}", "void main() {}", nullptr, "Bug139Shader");
+				Vector<VariantDefine> defs;
+				defs.push_back(VariantDefine(0, "", true));
+				defs.push_back(VariantDefine(1, "#define PARTICLE_GROUP\n", false));
+				initialize(defs, "");
+			}
+		} shader;
+
+		const RID v_particle = shader.version_create(false);
+		const RID v_static = shader.version_create(false);
+		REQUIRE(v_particle.is_valid());
+		REQUIRE(v_static.is_valid());
+
+		// Enable group 1 ONLY on v_particle (simulating INDEXED144 / INSTANCE192 / native_recipe).
+		CHECK_FALSE(shader.is_group_enabled(1));
+		CHECK_FALSE(shader.version_is_group_enabled(v_particle, 1));
+		CHECK_FALSE(shader.version_is_group_enabled(v_static, 1));
+
+		shader.version_enable_group(v_particle, 1);
+		CHECK_FALSE(shader.is_group_enabled(1));
+		CHECK(shader.version_is_group_enabled(v_particle, 1));
+		CHECK_FALSE(shader.version_is_group_enabled(v_static, 1));
+
+		// Simulate post-compile state where variant_compiled[1] == 1 and variant_data[1] is freed (empty).
+		auto *vp = shader.version_owner.get_or_null(v_particle);
+		auto *vs = shader.version_owner.get_or_null(v_static);
+		REQUIRE(vp != nullptr);
+		REQUIRE(vs != nullptr);
+		vp->dirty = false;
+		vp->valid = true;
+		vp->initialize_needed = false;
+		vp->variants.resize_initialized(2);
+		vp->variant_data.resize(2);
+		vp->variant_compiled.resize_initialized(2);
+		vp->variants.write[1] = native_shader;
+		vp->variant_compiled.write[1] = 1;
+		CHECK(vp->variant_data[1].is_empty());
+
+		vs->dirty = false;
+		vs->valid = true;
+		vs->initialize_needed = false;
+		vs->variants.resize_initialized(2);
+		vs->variant_data.resize(2);
+		vs->variant_compiled.resize_initialized(2);
+		vs->variants.write[1] = native_shader;
+		vs->variant_compiled.write[1] = 0;
+
+		RID out_shader;
+		uint64_t out_mask = 0;
+		CHECK(shader.version_get_native_shader_if_ready(v_particle, 1, out_shader, out_mask) == OK);
+		CHECK(out_shader == native_shader);
+		CHECK(out_mask == 0x7);
+
+		// Non-particle version still has group 1 disabled and refuses lookup cleanly.
+		out_shader = RID();
+		out_mask = 0;
+		CHECK(shader.version_get_native_shader_if_ready(v_static, 1, out_shader, out_mask) == ERR_UNAVAILABLE);
+		CHECK(out_shader.is_null());
+
+		// Also verify uncompiled placeholder on v_particle (variant_compiled == 0 && variant_data empty) refuses.
+		vp->variants.write[0] = native_shader;
+		vp->variant_compiled.write[0] = 0;
+		CHECK(shader.version_get_native_shader_if_ready(v_particle, 0, out_shader, out_mask) == ERR_UNAVAILABLE);
+
+		vp->variants.clear();
+		vs->variants.clear();
+		CHECK(shader.version_free(v_particle));
+		CHECK(shader.version_free(v_static));
 		rd.shader_owner.free(native_shader);
 		rd.driver = nullptr;
 		RenderingDevice::singleton = prev_rd;
@@ -1849,5 +1941,23 @@ TEST_CASE("policy_options [ShaderCompilePolicy]") {
 TEST_CASE("[RenderingDevice][BUG-129] Mobile and Clustered create_native_pipeline_checked return null RID cleanly on ERR_BUSY without logging ERR_FAIL_COND_V") {
 	TestShaderCompilePolicyAccess::check_bug129_pipeline_busy_suppresses_err_fail();
 }
+
+TEST_CASE("[RenderingDevice][BUG-139] ShaderRD per-version particle group enable isolates non-particle versions and retains compiled readiness after freeing variant_data") {
+	TestShaderCompilePolicyAccess::check_bug139_per_version_group_and_variant_data_free();
+}
+
+#ifdef METAL_ENABLED
+TEST_CASE("[RenderingDevice][BUG-139] Metal defaults to LAZY shader load strategy and scales local-RD MetalHeapAllocator pools down") {
+	CHECK(ShaderLoadStrategy::DEFAULT == ShaderLoadStrategy::LAZY);
+	MetalHeapAllocator main_alloc(nullptr, false);
+	MetalHeapAllocator local_alloc(nullptr, true);
+	CHECK(main_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_PRIVATE) == 64ull * 1024 * 1024);
+	CHECK(main_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_SHARED) == 16ull * 1024 * 1024);
+	CHECK(main_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_SHARED_WC) == 16ull * 1024 * 1024);
+	CHECK(local_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_PRIVATE) == 8ull * 1024 * 1024);
+	CHECK(local_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_SHARED) == 4ull * 1024 * 1024);
+	CHECK(local_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_SHARED_WC) == 4ull * 1024 * 1024);
+}
+#endif
 
 } // namespace TestShaderCompilePolicy
