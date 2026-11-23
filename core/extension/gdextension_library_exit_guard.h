@@ -1004,7 +1004,7 @@ private:
 	static thread_local QualificationBridge *active_qualification_bridge;
 	static thread_local uint64_t active_qualification_serial;
 	bool qualification_accepted_call_locked(QualificationBridge *, uint32_t);
-	Error qualification_rt_schedule(GDExtensionQualificationBridgeRefV1);
+	Error qualification_rt_schedule(GDExtensionQualificationBridgeRefV1, uint64_t);
 	Error qualification_cleanup_retire_matches_original_child_locked(QualificationBridge *, uint32_t, const void *);
 	void qualification_trim_cleanup_ref_credits_locked(QualificationBridge *);
 	Error qualification_rt_ticket_locked(QualificationBridge *, const GDExtensionQualificationRtRequestV1 &, const uint8_t *, const uint8_t *, QualificationTicket *&);

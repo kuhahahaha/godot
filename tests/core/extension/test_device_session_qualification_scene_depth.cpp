@@ -115,7 +115,7 @@ class TestQualificationSceneDepthAccess {
 		void dispatch() {
 			// Original private test Registry has no RenderingServer singleton
 			// registration. Enroll only its queue pin, then call actual dispatch.
-			auto *cell = bridge->rt;
+			auto *cell = bridge->rt_slot0();
 			cell->active = true;
 			cell->state = 1;
 			cell->queued = true;
@@ -137,9 +137,12 @@ class TestQualificationSceneDepthAccess {
 						memdelete(child);
 					}
 				}
-				if (bridge->rt) {
-					memdelete(bridge->rt);
+				for (auto *cell : bridge->rt_cells) {
+					if (cell) {
+						memdelete(cell);
+					}
 				}
+				bridge->rt_cells.clear();
 				memdelete(bridge);
 			}
 			memdelete(registry);
@@ -766,6 +769,397 @@ public:
 		CHECK(f.driver.quotes == 2);
 		CHECK(f.driver.creates == 1);
 	}
+
+	class Bug148Driver : public TransferTestDriverBase {
+	public:
+		uint64_t next_buffer = 100;
+		uint32_t created_buffers = 0;
+		uint32_t freed_buffers = 0;
+		uint64_t limit_get(Limit) override {
+			return 1u << 24;
+		}
+		BufferID buffer_create(uint64_t, BitField<BufferUsageBits>, MemoryAllocationType, uint64_t) override {
+			++created_buffers;
+			return BufferID(++next_buffer);
+		}
+		void buffer_free(BufferID p_buffer) override {
+			CHECK(p_buffer.id >= 101);
+			++freed_buffers;
+		}
+		uint64_t buffer_get_allocation_size(BufferID) override {
+			return 128;
+		}
+	};
+
+	struct Bug148Fixture {
+		Registry *registry = memnew(Registry);
+		Bug148Driver driver;
+		RenderingDevice device;
+		RenderingDevice *previous = RenderingDevice::singleton;
+		struct Holder : GDExtensionDeviceExit::HolderRetirement {
+			Holder() : HolderRetirement(GDExtensionDeviceExit::RecordRef{}) {}
+			~Holder() = default;
+		} holder;
+		Registry::QualificationBridge *bridge = memnew(Registry::QualificationBridge);
+		GDExtensionQualificationBridgeRefV1 ref{ 71, 11 };
+		bool closed = false;
+		Bug148Fixture() {
+			RenderingDevice::singleton = &device;
+			device.is_main_instance = true;
+			device.render_thread_id = Thread::get_caller_id();
+			device.driver = &driver;
+			device.frames.resize(1);
+			device.frames[0].qualification_epoch = 1;
+			device.frames[0].primary_command_buffer_begun = true;
+			registry->instance = 71;
+			auto &record = registry->records[0];
+			record.owner_thread = Thread::get_caller_id();
+			record.snapshot.library_generation = 1;
+			record.guard_enrollment = GDExtensionDeviceExit::GuardEnrollment::QUALIFIED;
+			auto &d = registry->device_records[0];
+			d.object = &device;
+			d.live = true;
+			d.epoch = 1;
+			d.execution_thread = Thread::get_caller_id();
+			holder.generation = 1;
+			holder.qualification_children = 1;
+			bridge->serial = 11;
+			bridge->epoch = 1;
+			bridge->holder = &holder;
+			record.private_refs = 1;
+			d.refs = 1;
+			registry->qualification_bridges[0] = bridge;
+		}
+		void enqueue_and_dispatch_all(const LocalVector<GDExtensionQualificationRtRefV1> &p_refs) {
+			for (uint32_t i = 0; i < p_refs.size(); ++i) {
+				auto *cell = bridge->find_rt_by_serial(p_refs[i].handle_serial);
+				REQUIRE(cell != nullptr);
+				REQUIRE(cell->occupied);
+				cell->active = true;
+				cell->state = 1;
+				if (!cell->queued) {
+					const bool use_queue_credit = cell->header.kind == 3 && bridge->cleanup_refs_reserved;
+					if (cell->queue_ref_reserved) {
+						cell->queued = true;
+						++bridge->children;
+					} else if (use_queue_credit) {
+						if (!bridge->claim_cleanup_queue(cell->queued, cell->queue_ref_credit)) {
+							REQUIRE(registry->records[bridge->library].private_refs < registry->private_limit);
+							cell->queued = true;
+							++bridge->children;
+							++registry->records[bridge->library].private_refs;
+						}
+					} else {
+						REQUIRE(registry->records[bridge->library].private_refs < registry->private_limit);
+						cell->queued = true;
+						++bridge->children;
+						++registry->records[bridge->library].private_refs;
+					}
+				}
+			}
+			for (uint32_t i = 0; i < p_refs.size(); ++i) {
+				registry->qualification_rt_dispatch(bridge->serial, p_refs[i].handle_serial);
+			}
+		}
+		~Bug148Fixture() {
+			RenderingDevice::singleton = previous;
+			device.is_main_instance = false;
+			device.driver = nullptr;
+			device.frames.clear();
+			if (!closed && bridge) {
+				registry->qualification_bridges[0] = nullptr;
+				for (auto *child : bridge->storage) {
+					if (child) {
+						memdelete(child);
+					}
+				}
+				for (auto *cell : bridge->rt_cells) {
+					if (cell) {
+						memdelete(cell);
+					}
+				}
+				bridge->rt_cells.clear();
+				memdelete(bridge);
+			}
+			memdelete(registry);
+		}
+	};
+
+	static GDExtensionQualificationRtConfigV1 bug148_config(uint32_t p_slots, uint32_t p_payload = 256) {
+		return { { 1, sizeof(GDExtensionQualificationRtConfigV1), 0 }, p_slots, 312, 200, 1, p_payload };
+	}
+
+	static GDExtensionQualificationRtRequestV1 bug148_storage_create_header(uint64_t p_op_serial) {
+		return { { 1, sizeof(GDExtensionQualificationRtRequestV1), 0 }, 2, 0, p_op_serial, 0, sizeof(GDExtensionStorageCreateRequestV1), sizeof(GDExtensionStorageBackingV1), 0, 0 };
+	}
+
+	static GDExtensionQualificationRtRequestV1 bug148_storage_retire_header(uint64_t p_op_serial) {
+		return { { 1, sizeof(GDExtensionQualificationRtRequestV1), 0 }, 3, 0, p_op_serial, 0, sizeof(GDExtensionStorageRetireRequestV1), sizeof(GDExtensionStorageRetireRefV1) + sizeof(GDExtensionStorageRetireReportV1), 0, 0 };
+	}
+
+	static void bug148_configure_bounds_and_lockout() {
+		Bug148Fixture f;
+		// Reject slot_count == 0 and slot_count == 65.
+		auto bad_zero = bug148_config(0);
+		auto res = f.registry->qualification_rt_configure(f.ref, &bad_zero);
+		CHECK(res.native_error == ERR_INVALID_PARAMETER);
+		CHECK(res.reason == 2);
+		CHECK(f.bridge->rt_cells.is_empty());
+
+		auto bad_over = bug148_config(65);
+		res = f.registry->qualification_rt_configure(f.ref, &bad_over);
+		CHECK(res.native_error == ERR_INVALID_PARAMETER);
+		CHECK(res.reason == 2);
+		CHECK(f.bridge->rt_cells.is_empty());
+
+		// Reject checked total * slot_count > 128 MiB (64 * 4 MiB = 256 MiB).
+		auto bad_oom = bug148_config(64, 4u * 1024u * 1024u);
+		res = f.registry->qualification_rt_configure(f.ref, &bad_oom);
+		CHECK(res.native_error == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(res.reason == 19);
+		CHECK(f.bridge->rt_cells.is_empty());
+
+		// Accept 1, reconfigure to 32, then reconfigure to 64 before first acceptance.
+		auto c1 = bug148_config(1);
+		REQUIRE(f.registry->qualification_rt_configure(f.ref, &c1).native_error == OK);
+		CHECK(f.bridge->rt_cells.size() == 1);
+		auto c32 = bug148_config(32);
+		REQUIRE(f.registry->qualification_rt_configure(f.ref, &c32).native_error == OK);
+		CHECK(f.bridge->rt_cells.size() == 32);
+		auto c64 = bug148_config(64);
+		REQUIRE(f.registry->qualification_rt_configure(f.ref, &c64).native_error == OK);
+		CHECK(f.bridge->rt_cells.size() == 64);
+		CHECK(f.bridge->rt_config.slot_count == 64);
+
+		// Reserve 1 operation -> locks out further reconfiguration with ERR_BUSY, 16.
+		const auto hdr = bug148_storage_create_header(1);
+		const GDExtensionStorageCreateRequestV1 req{ { 1, sizeof(GDExtensionDeviceExitAbi), 0 }, 128, 1, 0, 1, 1, 0 };
+		GDExtensionQualificationRtRefV1 rt_ref{};
+		REQUIRE(f.registry->qualification_rt_reserve(f.ref, &hdr, &req, nullptr, &rt_ref).native_error == OK);
+		CHECK(f.bridge->rt_ever_accepted);
+		res = f.registry->qualification_rt_configure(f.ref, &c32);
+		CHECK(res.native_error == ERR_BUSY);
+		CHECK(res.reason == 16);
+
+		// Release unused reserve and close cleanly.
+		REQUIRE(f.registry->qualification_rt_release(f.ref, rt_ref).native_error == OK);
+		REQUIRE(f.registry->qualification_close(f.ref).native_error == OK);
+		f.closed = true;
+	}
+
+	static void bug148_concurrent_32_create_and_retire_one_drain() {
+		Bug148Fixture f;
+		auto cfg = bug148_config(32);
+		REQUIRE(f.registry->qualification_rt_configure(f.ref, &cfg).native_error == OK);
+
+		constexpr uint32_t N = 32;
+		LocalVector<GDExtensionQualificationRtRefV1> create_refs;
+		create_refs.resize(N);
+		LocalVector<GDExtensionStorageCreateRequestV1> create_reqs;
+		create_reqs.resize(N);
+		for (uint32_t i = 0; i < N; ++i) {
+			create_reqs[i] = { { 1, sizeof(GDExtensionDeviceExitAbi), 0 }, 128, i, 0, 1, 1, 0 };
+			const auto hdr = bug148_storage_create_header(i + 1);
+			REQUIRE(f.registry->qualification_rt_reserve(f.ref, &hdr, &create_reqs[i], nullptr, &create_refs[i]).native_error == OK);
+			CHECK(create_refs[i].handle_serial != 0);
+		}
+		// 33rd concurrent reserve returns ERR_BUSY, 16.
+		{
+			const GDExtensionStorageCreateRequestV1 extra_req{ { 1, sizeof(GDExtensionDeviceExitAbi), 0 }, 128, 99, 0, 1, 1, 0 };
+			const auto extra_hdr = bug148_storage_create_header(33);
+			GDExtensionQualificationRtRefV1 extra_ref{};
+			const auto busy = f.registry->qualification_rt_reserve(f.ref, &extra_hdr, &extra_req, nullptr, &extra_ref);
+			CHECK(busy.native_error == ERR_BUSY);
+			CHECK(busy.reason == 16);
+			CHECK(extra_ref.handle_serial == 0);
+		}
+		// Idempotent re-reserve matches exact handle_serial across slots; mismatch returns ERR_INVALID_DATA, 16.
+		for (uint32_t idx : { 0u, 15u, 31u }) {
+			const auto hdr = bug148_storage_create_header(idx + 1);
+			GDExtensionQualificationRtRefV1 repeat{};
+			REQUIRE(f.registry->qualification_rt_reserve(f.ref, &hdr, &create_reqs[idx], nullptr, &repeat).native_error == OK);
+			CHECK(repeat.handle_serial == create_refs[idx].handle_serial);
+			auto mutated = create_reqs[idx];
+			mutated.allocation_generation = 2;
+			GDExtensionQualificationRtRefV1 bad_ref{};
+			const auto mismatch = f.registry->qualification_rt_reserve(f.ref, &hdr, &mutated, nullptr, &bad_ref);
+			CHECK(mismatch.native_error == ERR_INVALID_DATA);
+			CHECK(mismatch.reason == 16);
+			CHECK(bad_ref.handle_serial == 0);
+		}
+
+		// Drain ALL 32 StorageCreate slots in ONE RT pass.
+		f.enqueue_and_dispatch_all(create_refs);
+		CHECK(f.driver.created_buffers == N);
+
+		LocalVector<GDExtensionStorageBackingV1> backings;
+		backings.resize(N);
+		for (uint32_t i = 0; i < N; ++i) {
+			GDExtensionQualificationRtObservationV1 obs{};
+			REQUIRE(f.registry->qualification_rt_observe(f.ref, create_refs[i], &obs, &backings[i], sizeof(backings[i]), nullptr, 0).native_error == OK);
+			CHECK(obs.state == 2);
+			CHECK(obs.call_result.native_error == OK);
+			CHECK(backings[i].backing.handle_serial != 0);
+			CHECK(backings[i].rid != 0);
+			REQUIRE(f.registry->qualification_rt_release(f.ref, create_refs[i]).native_error == OK);
+		}
+		CHECK(f.bridge->rt_retired_highwater == N);
+
+		// Retired op_serials (1 and 32) return ERR_DOES_NOT_EXIST, 17.
+		for (uint64_t old_op : { 1ull, 32ull }) {
+			const auto old_hdr = bug148_storage_create_header(old_op);
+			GDExtensionQualificationRtRefV1 old_ref{};
+			const auto stale = f.registry->qualification_rt_reserve(f.ref, &old_hdr, &create_reqs[0], nullptr, &old_ref);
+			CHECK(stale.native_error == ERR_DOES_NOT_EXIST);
+			CHECK(stale.reason == 17);
+		}
+
+		// Reserve ALL 32 concurrent kind=3 (StorageRetire) operations simultaneously!
+		LocalVector<GDExtensionQualificationRtRefV1> retire_refs;
+		retire_refs.resize(N);
+		for (uint32_t i = 0; i < N; ++i) {
+			const GDExtensionStorageRetireRequestV1 rreq{ { 1, sizeof(GDExtensionDeviceExitAbi), 0 }, backings[i].backing, backings[i].rid, backings[i].backing_serial, i, 0, 1, 1, 0 };
+			const auto hdr = bug148_storage_retire_header(100 + i + 1);
+			REQUIRE(f.registry->qualification_rt_reserve(f.ref, &hdr, &rreq, nullptr, &retire_refs[i]).native_error == OK);
+			CHECK(retire_refs[i].handle_serial != 0);
+		}
+		// Slot 0 uses cleanup_slot_in_use credit; slots 1..31 pay ordinary private_refs + queue_ref_reserved.
+		CHECK(f.bridge->cleanup_slot_in_use);
+		CHECK(f.bridge->find_rt_by_serial(retire_refs[0].handle_serial)->slot_ref_credit);
+		CHECK_FALSE(f.bridge->find_rt_by_serial(retire_refs[1].handle_serial)->slot_ref_credit);
+		CHECK(f.bridge->find_rt_by_serial(retire_refs[1].handle_serial)->queue_ref_reserved);
+
+		// Drain ALL 32 StorageRetire slots in ONE RT pass.
+		f.enqueue_and_dispatch_all(retire_refs);
+
+		struct RetireResultPair {
+			GDExtensionStorageRetireRefV1 ref;
+			GDExtensionStorageRetireReportV1 report;
+		};
+		LocalVector<GDExtensionStorageRetireRefV1> storage_retire_refs;
+		storage_retire_refs.resize(N);
+		for (uint32_t i = 0; i < N; ++i) {
+			GDExtensionQualificationRtObservationV1 obs{};
+			alignas(8) uint8_t raw[sizeof(GDExtensionStorageRetireRefV1) + sizeof(GDExtensionStorageRetireReportV1)] = {};
+			REQUIRE(f.registry->qualification_rt_observe(f.ref, retire_refs[i], &obs, raw, sizeof(raw), nullptr, 0).native_error == OK);
+			CHECK(obs.state == 2);
+			CHECK(obs.call_result.native_error == OK);
+			memcpy(&storage_retire_refs[i], raw, sizeof(GDExtensionStorageRetireRefV1));
+			CHECK(storage_retire_refs[i].handle_serial != 0);
+			REQUIRE(f.registry->qualification_rt_release(f.ref, retire_refs[i]).native_error == OK);
+		}
+		CHECK_FALSE(f.bridge->cleanup_slot_in_use);
+		CHECK_FALSE(f.bridge->cleanup_queue_in_use);
+
+		// Drive retirement step + free pending resources + finalize retire state + observe & release all 32 storage retires.
+		for (uint32_t i = 0; i < N; ++i) {
+			f.registry->qualification_retire_step(f.bridge, &f.device, backings[i].backing.handle_serial, 1);
+		}
+		f.device._free_pending_resources(0);
+		CHECK(f.driver.freed_buffers == N);
+		for (uint32_t i = 0; i < N; ++i) {
+			f.registry->qualification_retire_step(f.bridge, &f.device, backings[i].backing.handle_serial, 1);
+		}
+		for (uint32_t i = 0; i < N; ++i) {
+			GDExtensionStorageRetireReportV1 rep{};
+			GDExtensionQualificationBudgetV1 bud{ { 1, sizeof(GDExtensionDeviceExitAbi), 0 }, 1, 100, 0 };
+			REQUIRE(f.registry->qualification_storage_retire_observe(f.ref, storage_retire_refs[i], &bud, &rep).native_error == OK);
+			CHECK(rep.state == 1);
+			REQUIRE(f.registry->qualification_storage_retire_release(f.ref, storage_retire_refs[i]).native_error == OK);
+		}
+		REQUIRE(f.registry->qualification_close(f.ref).native_error == OK);
+		f.closed = true;
+		CHECK(f.registry->records[0].private_refs == 0);
+	}
+
+	static void bug148_close_under_private_limit_saturation() {
+		Bug148Fixture f;
+		auto cfg = bug148_config(4);
+		REQUIRE(f.registry->qualification_rt_configure(f.ref, &cfg).native_error == OK);
+
+		// Create 2 live storage buffers (establishes bridge->cleanup_refs_reserved == true).
+		LocalVector<GDExtensionQualificationRtRefV1> create_refs;
+		create_refs.resize(2);
+		for (uint32_t i = 0; i < 2; ++i) {
+			const GDExtensionStorageCreateRequestV1 req{ { 1, sizeof(GDExtensionDeviceExitAbi), 0 }, 128, i, 0, 1, 1, 0 };
+			const auto hdr = bug148_storage_create_header(i + 1);
+			REQUIRE(f.registry->qualification_rt_reserve(f.ref, &hdr, &req, nullptr, &create_refs[i]).native_error == OK);
+		}
+		f.enqueue_and_dispatch_all(create_refs);
+		GDExtensionStorageBackingV1 backings[2] = {};
+		for (uint32_t i = 0; i < 2; ++i) {
+			GDExtensionQualificationRtObservationV1 obs{};
+			REQUIRE(f.registry->qualification_rt_observe(f.ref, create_refs[i], &obs, &backings[i], sizeof(backings[i]), nullptr, 0).native_error == OK);
+			REQUIRE(f.registry->qualification_rt_release(f.ref, create_refs[i]).native_error == OK);
+		}
+		REQUIRE(f.bridge->cleanup_refs_reserved);
+
+		// Saturate private_limit completely (0 ordinary private_refs left) and enter closing.
+		f.registry->private_limit = f.registry->records[0].private_refs;
+		CHECK(f.registry->qualification_close(f.ref).native_error == ERR_BUSY);
+		CHECK(f.bridge->closing);
+
+		// Slot 1 StorageRetire succeeds via pre-reserved cleanup_slot_in_use credit!
+		const GDExtensionStorageRetireRequestV1 rreq0{ { 1, sizeof(GDExtensionDeviceExitAbi), 0 }, backings[0].backing, backings[0].rid, backings[0].backing_serial, 0, 0, 1, 1, 0 };
+		const auto rhdr0 = bug148_storage_retire_header(10);
+		GDExtensionQualificationRtRefV1 rref0{};
+		REQUIRE(f.registry->qualification_rt_reserve(f.ref, &rhdr0, &rreq0, nullptr, &rref0).native_error == OK);
+		CHECK(f.bridge->cleanup_slot_in_use);
+		CHECK(f.bridge->find_rt_by_serial(rref0.handle_serial)->slot_ref_credit);
+
+		// Concurrent slot 2 StorageRetire while cleanup_slot_in_use is held AND private_refs saturated returns ERR_BUSY, 19!
+		const GDExtensionStorageRetireRequestV1 rreq1{ { 1, sizeof(GDExtensionDeviceExitAbi), 0 }, backings[1].backing, backings[1].rid, backings[1].backing_serial, 1, 0, 1, 1, 0 };
+		const auto rhdr1 = bug148_storage_retire_header(11);
+		GDExtensionQualificationRtRefV1 rref1{};
+		const auto busy = f.registry->qualification_rt_reserve(f.ref, &rhdr1, &rreq1, nullptr, &rref1);
+		CHECK(busy.native_error == ERR_BUSY);
+		CHECK(busy.reason == 19);
+		CHECK(rref1.handle_serial == 0);
+
+		// Drain buffer 0 via cleanup queue credit and release its QRT cell.
+		LocalVector<GDExtensionQualificationRtRefV1> one;
+		one.push_back(rref0);
+		f.enqueue_and_dispatch_all(one);
+		alignas(8) uint8_t raw0[sizeof(GDExtensionStorageRetireRefV1) + sizeof(GDExtensionStorageRetireReportV1)] = {};
+		GDExtensionQualificationRtObservationV1 obs0{};
+		REQUIRE(f.registry->qualification_rt_observe(f.ref, rref0, &obs0, raw0, sizeof(raw0), nullptr, 0).native_error == OK);
+		CHECK(obs0.state == 2);
+		CHECK(obs0.call_result.native_error == OK);
+		GDExtensionStorageRetireRefV1 sref0{};
+		memcpy(&sref0, raw0, sizeof(sref0));
+		REQUIRE(f.registry->qualification_rt_release(f.ref, rref0).native_error == OK);
+		CHECK_FALSE(f.bridge->cleanup_slot_in_use);
+
+		// Now buffer 1 StorageRetire succeeds via slot-1 cleanup credit even at saturation!
+		REQUIRE(f.registry->qualification_rt_reserve(f.ref, &rhdr1, &rreq1, nullptr, &rref1).native_error == OK);
+		one[0] = rref1;
+		f.enqueue_and_dispatch_all(one);
+		alignas(8) uint8_t raw1[sizeof(GDExtensionStorageRetireRefV1) + sizeof(GDExtensionStorageRetireReportV1)] = {};
+		GDExtensionQualificationRtObservationV1 obs1{};
+		REQUIRE(f.registry->qualification_rt_observe(f.ref, rref1, &obs1, raw1, sizeof(raw1), nullptr, 0).native_error == OK);
+		CHECK(obs1.state == 2);
+		CHECK(obs1.call_result.native_error == OK);
+		GDExtensionStorageRetireRefV1 sref1{};
+		memcpy(&sref1, raw1, sizeof(sref1));
+		REQUIRE(f.registry->qualification_rt_release(f.ref, rref1).native_error == OK);
+
+		// Complete both retirements and close bridge cleanly.
+		f.registry->qualification_retire_step(f.bridge, &f.device, backings[0].backing.handle_serial, 1);
+		f.registry->qualification_retire_step(f.bridge, &f.device, backings[1].backing.handle_serial, 1);
+		f.device._free_pending_resources(0);
+		CHECK(f.driver.freed_buffers == 2);
+		f.registry->qualification_retire_step(f.bridge, &f.device, backings[0].backing.handle_serial, 1);
+		f.registry->qualification_retire_step(f.bridge, &f.device, backings[1].backing.handle_serial, 1);
+		GDExtensionStorageRetireReportV1 rep{};
+		GDExtensionQualificationBudgetV1 bud{ { 1, sizeof(GDExtensionDeviceExitAbi), 0 }, 1, 100, 0 };
+		REQUIRE(f.registry->qualification_storage_retire_observe(f.ref, sref0, &bud, &rep).native_error == OK);
+		REQUIRE(f.registry->qualification_storage_retire_release(f.ref, sref0).native_error == OK);
+		REQUIRE(f.registry->qualification_storage_retire_observe(f.ref, sref1, &bud, &rep).native_error == OK);
+		REQUIRE(f.registry->qualification_storage_retire_release(f.ref, sref1).native_error == OK);
+		REQUIRE(f.registry->qualification_close(f.ref).native_error == OK);
+		f.closed = true;
+		CHECK(f.registry->records[0].private_refs == 0);
+	}
 };
 
 TEST_CASE("[SceneDepthR2] original quote exact retry and archived origin") {
@@ -828,6 +1222,18 @@ TEST_CASE("[StorageFinality][EntryABI] installed original procedures enforce exa
 
 TEST_CASE("[StorageFinality] original accepted namespace refuses opt-in and idle domain closes") {
 	TestQualificationSceneDepthAccess::storage_finality_namespace_and_idle_close();
+}
+
+TEST_CASE("[QualificationRt][BUG-148][Pillar1] qualification_rt_configure validates slot_count 1..64 and checked total payload ceiling") {
+	TestQualificationSceneDepthAccess::bug148_configure_bounds_and_lockout();
+}
+
+TEST_CASE("[QualificationRt][BUG-148][Pillar1] 32 concurrent StorageCreate and 32 concurrent StorageRetire drain in one RT pass with zero leaks and clean close") {
+	TestQualificationSceneDepthAccess::bug148_concurrent_32_create_and_retire_one_drain();
+}
+
+TEST_CASE("[QualificationRt][BUG-148][Pillar1] close under private_limit saturation drains via slot-1 cleanup credit while concurrent slot 2 returns ERR_BUSY 19") {
+	TestQualificationSceneDepthAccess::bug148_close_under_private_limit_saturation();
 }
 
 TEST_CASE("[StorageFinality] original duration observation preserves frontier and next service continuation") {

@@ -229,11 +229,11 @@ Error validate_request(const GDExtensionQualificationRtRequestV1 &h, const uint8
 }
 } //namespace
 bool Registry::qualification_accepted_call_locked(QualificationBridge *bridge, uint32_t kind) {
-	if (!kind || active_qualification_bridge != bridge || !active_qualification_serial || !bridge->rt) {
+	if (!kind || active_qualification_bridge != bridge || !active_qualification_serial) {
 		return false;
 	}
-	auto *cell = bridge->rt;
-	if (!cell->occupied || !cell->active || !cell->queued || !cell->executing || cell->serial != active_qualification_serial || cell->header.kind != kind || cell->admission_consumed) {
+	auto *cell = bridge->find_rt_by_serial(active_qualification_serial);
+	if (!cell || !cell->occupied || !cell->active || !cell->queued || !cell->executing || cell->serial != active_qualification_serial || cell->header.kind != kind || cell->admission_consumed) {
 		return false;
 	}
 	// The accepted cell authorizes this one declared typed call. Consume at its
@@ -243,11 +243,12 @@ bool Registry::qualification_accepted_call_locked(QualificationBridge *bridge, u
 	return true;
 }
 GDExtensionDeviceSessionResultV1 Registry::qualification_rt_configure(GDExtensionQualificationBridgeRefV1 ref, const GDExtensionQualificationRtConfigV1 *config) {
-	if (!aligned(config) || !abi(config->abi, sizeof(*config)) || config->slot_count != 1 || config->max_request_bytes < 8 || config->max_request_bytes > MAX_REQUEST || config->max_result_bytes < 48 || config->max_result_bytes > MAX_RESULT || !config->max_segment_count || config->max_segment_count > MAX_SEGMENTS || !config->max_payload_bytes || config->max_payload_bytes > MAX_PAYLOAD) {
+	if (!aligned(config) || !abi(config->abi, sizeof(*config)) || !config->slot_count || config->slot_count > QualificationBridge::MAX_RT_SLOTS || config->max_request_bytes < 8 || config->max_request_bytes > MAX_REQUEST || config->max_result_bytes < 48 || config->max_result_bytes > MAX_RESULT || !config->max_segment_count || config->max_segment_count > MAX_SEGMENTS || !config->max_payload_bytes || config->max_payload_bytes > MAX_PAYLOAD) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	const uint64_t total = sizeof(GDExtensionQualificationRtRequestV1) + uint64_t(config->max_request_bytes) + config->max_payload_bytes + config->max_result_bytes + uint64_t(config->max_segment_count) * sizeof(GDExtensionQualificationUploadSegmentV1);
-	if (total > SIZE_MAX) {
+	const uint64_t max_total = MIN(uint64_t(SIZE_MAX), uint64_t(128) << 20);
+	if (total > max_total / config->slot_count) {
 		return result(ERR_PARAMETER_RANGE_ERROR, 19);
 	}
 	Lock lock(*this);
@@ -257,30 +258,41 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_configure(GDExtensio
 	if (error != OK) {
 		return result(error, error == ERR_UNAUTHORIZED ? 15 : 16);
 	}
-	if (bridge->rt && bridge->rt->ever_accepted) {
+	if (bridge->rt_ever_accepted) {
 		return result(ERR_BUSY, 16);
 	}
-	auto *cell = memnew(QualificationRtCell);
-	cell->config = *config;
-	cell->resource_refs.reserve(128);
-	error = cell->request.resize(config->max_request_bytes);
-	if (error == OK) {
-		error = cell->payload.resize(config->max_payload_bytes);
+	LocalVector<QualificationRtCell *> next_cells;
+	next_cells.reserve(config->slot_count);
+	for (uint32_t i = 0; i < config->slot_count; ++i) {
+		auto *cell = memnew(QualificationRtCell);
+		cell->config = *config;
+		cell->resource_refs.reserve(128);
+		error = cell->request.resize(config->max_request_bytes);
+		if (error == OK) {
+			error = cell->payload.resize(config->max_payload_bytes);
+		}
+		if (error == OK) {
+			error = cell->result.resize(config->max_result_bytes);
+		}
+		if (error == OK) {
+			error = cell->segments.resize(config->max_segment_count);
+		}
+		if (error != OK) {
+			memdelete(cell);
+			for (uint32_t j = 0; j < next_cells.size(); ++j) {
+				memdelete(next_cells[j]);
+			}
+			return result(error, 19);
+		}
+		next_cells.push_back(cell);
 	}
-	if (error == OK) {
-		error = cell->result.resize(config->max_result_bytes);
+	for (uint32_t i = 0; i < bridge->rt_cells.size(); ++i) {
+		if (bridge->rt_cells[i]) {
+			memdelete(bridge->rt_cells[i]);
+		}
 	}
-	if (error == OK) {
-		error = cell->segments.resize(config->max_segment_count);
-	}
-	if (error != OK) {
-		memdelete(cell);
-		return result(error, 19);
-	}
-	if (bridge->rt) {
-		memdelete(bridge->rt);
-	}
-	bridge->rt = cell;
+	bridge->rt_cells = std::move(next_cells);
+	bridge->rt_config = *config;
 	return result(OK);
 }
 Error Registry::qualification_rt_ticket_locked(QualificationBridge *bridge, const GDExtensionQualificationRtRequestV1 &header, const uint8_t *request, const uint8_t *payload, QualificationTicket *&ticket) {
@@ -383,23 +395,31 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_reserve(GDExtensionQ
 	if (error != OK) {
 		return result(error, error == ERR_UNAUTHORIZED ? 15 : 17);
 	}
-	auto *cell = bridge->rt;
-	if (!cell) {
+	if (bridge->rt_cells.is_empty()) {
 		return result(ERR_UNAVAILABLE, 18);
 	}
-	if (header.request_bytes > cell->config.max_request_bytes || header.result_capacity > cell->config.max_result_bytes || header.payload_bytes > cell->config.max_payload_bytes || header.segment_capacity > cell->config.max_segment_count) {
+	if (header.request_bytes > bridge->rt_config.max_request_bytes || header.result_capacity > bridge->rt_config.max_result_bytes || header.payload_bytes > bridge->rt_config.max_payload_bytes || header.segment_capacity > bridge->rt_config.max_segment_count) {
 		return result(ERR_PARAMETER_RANGE_ERROR, 19);
 	}
-	if (cell->occupied) {
-		if (cell->height_service_v2) return result(ERR_UNAVAILABLE, 18);
-		if (header.operation_serial != cell->header.operation_serial) {
-			return result(ERR_BUSY, 16);
+	if (QualificationRtCell *existing = bridge->find_rt_by_operation(header.operation_serial)) {
+		if (existing->height_service_v2) {
+			return result(ERR_UNAVAILABLE, 18);
 		}
-		if (memcmp(&header, &cell->header, sizeof(header)) || memcmp(request, cell->request.ptr(), header.request_bytes) || (header.payload_bytes && memcmp(payload, cell->payload.ptr(), header.payload_bytes))) {
+		if (memcmp(&header, &existing->header, sizeof(header)) || memcmp(request, existing->request.ptr(), header.request_bytes) || (header.payload_bytes && memcmp(payload, existing->payload.ptr(), header.payload_bytes))) {
 			return result(ERR_INVALID_DATA, 16);
 		}
-		*out = { instance, cell->serial };
+		*out = { instance, existing->serial };
 		return result(OK);
+	}
+	if (header.operation_serial <= bridge->rt_retired_highwater) {
+		return result(ERR_DOES_NOT_EXIST, 17);
+	}
+	auto *cell = bridge->find_free_rt_cell();
+	if (!cell) {
+		if (bridge->rt_cells.size() == 1 && bridge->rt_cells[0]->occupied && bridge->rt_cells[0]->height_service_v2) {
+			return result(ERR_UNAVAILABLE, 18);
+		}
+		return result(ERR_BUSY, 16);
 	}
 	// Copy only into the already configured scratch span. Until all checks
 	// succeed no ref, serial, retain, child state or native work is published.
@@ -426,9 +446,6 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_reserve(GDExtensionQ
 		if (error != OK) {
 			return result(error, error == ERR_UNAUTHORIZED ? 15 : 16);
 		}
-	}
-	if (header.operation_serial <= cell->retired_operation) {
-		return result(ERR_DOES_NOT_EXIST, 17);
 	}
 	bool *cleanup_reserved = nullptr;
 	uint64_t cleanup_child_serial = 0;
@@ -502,13 +519,14 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_reserve(GDExtensionQ
 		}
 	}
 	const bool use_cleanup_reservation = cleanup_reserved && *cleanup_reserved;
-	const bool use_slot_credit = (header.kind == 3 || header.kind == 5 || header.kind == 16 || header.kind == GDEXTENSION_QUALIFICATION_RT_RASTER_RETIRE_V1 || header.kind == 23 || header.kind == GDEXTENSION_QUALIFICATION_RT_STORAGE_GENERATION_FINALIZE_V1) && bridge->cleanup_refs_reserved;
+	const bool eligible_slot_credit = (header.kind == 3 || header.kind == 5 || header.kind == 16 || header.kind == GDEXTENSION_QUALIFICATION_RT_RASTER_RETIRE_V1 || header.kind == 23 || header.kind == GDEXTENSION_QUALIFICATION_RT_STORAGE_GENERATION_FINALIZE_V1) && bridge->cleanup_refs_reserved;
+	const bool use_slot_credit = eligible_slot_credit && !bridge->cleanup_slot_in_use;
 	const bool use_shared_queue = bridge->cleanup_refs_reserved && (use_slot_credit || header.kind == 8 || header.kind == 9 || header.kind == 17 || header.kind == GDEXTENSION_QUALIFICATION_RT_RECORD_PREPARED_V4 || header.kind == 10 || header.kind == 14 || header.kind == 15);
 	const uint32_t refs_needed = uint32_t(!use_slot_credit) + uint32_t(!use_shared_queue);
-	if (use_slot_credit && bridge->cleanup_slot_in_use) {
-		return result(ERR_BUSY, 19);
+	if (private_limit < refs_needed || records[bridge->library].private_refs > private_limit - refs_needed) {
+		return result(eligible_slot_credit && bridge->cleanup_slot_in_use ? ERR_BUSY : ERR_PARAMETER_RANGE_ERROR, 19);
 	}
-	if (private_limit < refs_needed || records[bridge->library].private_refs > private_limit - refs_needed || (use_cleanup_reservation ? (qualification_serials.exhausted || !qualification_cleanup_serial_reservations) : !qualification_serial_capacity(1))) {
+	if (use_cleanup_reservation ? (qualification_serials.exhausted || !qualification_cleanup_serial_reservations) : !qualification_serial_capacity(1)) {
 		return result(ERR_PARAMETER_RANGE_ERROR, 19);
 	}
 	if (header.payload_bytes) {
@@ -609,6 +627,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_reserve(GDExtensionQ
 	cell->scene_depth_serial = scene_depth ? scene_depth->serial : 0;
 	cell->occupied = true;
 	cell->ever_accepted = true;
+	bridge->rt_ever_accepted = true;
 	cell->active = false;
 	cell->queued = false;
 	cell->executing = false;
@@ -646,7 +665,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_reserve(GDExtensionQ
 	*out = { instance, cell->serial };
 	return result(OK);
 }
-Error Registry::qualification_rt_schedule(GDExtensionQualificationBridgeRefV1 ref) {
+Error Registry::qualification_rt_schedule(GDExtensionQualificationBridgeRefV1 ref, uint64_t cell_serial) {
 	QualificationBridge *bridge = nullptr;
 	RenderingDevice *rd = nullptr;
 	QualificationRtCell *cell = nullptr;
@@ -656,7 +675,7 @@ Error Registry::qualification_rt_schedule(GDExtensionQualificationBridgeRefV1 re
 		if (error != OK) {
 			return error;
 		}
-		cell = bridge->rt;
+		cell = bridge->find_rt_by_serial(cell_serial);
 		if (!cell || !cell->occupied) {
 			return ERR_DOES_NOT_EXIST;
 		}
@@ -683,7 +702,19 @@ Error Registry::qualification_rt_schedule(GDExtensionQualificationBridgeRefV1 re
 		const bool use_queue_credit = (cell->header.kind == 3 || cell->header.kind == 5 || cell->header.kind == 16 || cell->header.kind == GDEXTENSION_QUALIFICATION_RT_RASTER_RETIRE_V1 || cell->header.kind == 23 || cell->header.kind == GDEXTENSION_QUALIFICATION_RT_STORAGE_GENERATION_FINALIZE_V1 || ticket_work) && bridge->cleanup_refs_reserved;
 		if (use_queue_credit) {
 			if (!bridge->claim_cleanup_queue(cell->queued, cell->queue_ref_credit)) {
-				return OK;
+				if (bridge->rt_cells.size() <= 1) {
+					return OK;
+				}
+				if (cell->queue_ref_reserved) {
+					cell->queued = true;
+					++bridge->children;
+				} else if (records[bridge->library].private_refs < private_limit) {
+					cell->queued = true;
+					++bridge->children;
+					++records[bridge->library].private_refs;
+				} else {
+					return OK;
+				}
 			}
 		} else if (cell->queue_ref_reserved) {
 			cell->queued = true;
@@ -724,7 +755,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_activate(GDExtension
 		if (error != OK) {
 			return result(error, error == ERR_UNAUTHORIZED ? 15 : 17);
 		}
-		auto *cell = bridge->rt;
+		auto *cell = bridge->find_rt_by_serial(rt_ref.handle_serial);
 		if (rt_ref.registry_instance != instance || !cell || !cell->occupied || rt_ref.handle_serial != cell->serial) {
 			return result(ERR_DOES_NOT_EXIST, 17);
 		}
@@ -789,7 +820,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_activate(GDExtension
 		}
 		cell->state = 1;
 	}
-	const Error error = qualification_rt_schedule(ref);
+	const Error error = qualification_rt_schedule(ref, rt_ref.handle_serial);
 	return result(error, error == ERR_UNAUTHORIZED ? 15 : error != OK ? 17
 																	  : 0);
 }
@@ -810,7 +841,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_observe(GDExtensionQ
 		if (error != OK) {
 			return result(error, error == ERR_UNAUTHORIZED ? 15 : 17);
 		}
-		auto *cell = bridge->rt;
+		auto *cell = bridge->find_rt_by_serial(rt_ref.handle_serial);
 		if (rt_ref.registry_instance != instance || !cell || !cell->occupied || rt_ref.handle_serial != cell->serial) {
 			return result(ERR_DOES_NOT_EXIST, 17);
 		}
@@ -819,7 +850,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_observe(GDExtensionQ
 			return result(ERR_INVALID_PARAMETER, 2);
 		}
 	}
-	Error error = qualification_rt_schedule(ref);
+	Error error = qualification_rt_schedule(ref, rt_ref.handle_serial);
 	if (error != OK) {
 		return result(error, error == ERR_UNAUTHORIZED ? 15 : 17);
 	}
@@ -830,7 +861,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_observe(GDExtensionQ
 	if (error != OK) {
 		return result(error, error == ERR_UNAUTHORIZED ? 15 : 17);
 	}
-	auto *cell = bridge->rt;
+	auto *cell = bridge->find_rt_by_serial(rt_ref.handle_serial);
 	if (rt_ref.registry_instance != instance || !cell || !cell->occupied || rt_ref.handle_serial != cell->serial) {
 		return result(ERR_DOES_NOT_EXIST, 17);
 	}
@@ -864,7 +895,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_release(GDExtensionQ
 	if (error != OK) {
 		return result(error, error == ERR_UNAUTHORIZED ? 15 : 17);
 	}
-	auto *cell = bridge->rt;
+	auto *cell = bridge->find_rt_by_serial(rt_ref.handle_serial);
 	if (rt_ref.registry_instance != instance || !cell || !cell->occupied || rt_ref.handle_serial != cell->serial) {
 		return result(ERR_DOES_NOT_EXIST, 17);
 	}
@@ -967,6 +998,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_release(GDExtensionQ
 	}
 	cell->resource_refs.clear();
 	cell->retired_operation = cell->header.operation_serial;
+	bridge->rt_retired_highwater = MAX(bridge->rt_retired_highwater, cell->header.operation_serial);
 	cell->height_service_v2 = false;
 	cell->height_frame_identity = nullptr;
 	cell->height_owner_identity = nullptr;
@@ -1011,9 +1043,9 @@ void Registry::qualification_rt_dispatch(uint64_t bridge_serial, uint64_t serial
 				break;
 			}
 		}
-		CRASH_COND(!bridge || !bridge->rt);
-		cell = bridge->rt;
-		CRASH_COND(!cell->occupied || !cell->active || !cell->queued || cell->executing || cell->serial != serial || cell->state != 1);
+		CRASH_COND(!bridge);
+		cell = bridge->find_rt_by_serial(serial);
+		CRASH_COND(!cell || !cell->occupied || !cell->active || !cell->queued || cell->executing || cell->serial != serial || cell->state != 1);
 		cell->executing = true;
 		admission = qualification_bridge_locked({ instance, bridge_serial }, true, false, bridge, rd);
 		if (cell->raster_serial) {
@@ -1337,20 +1369,21 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_scene_depth_service_res
  QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;
  Error error=qualification_bridge_locked(ref,false,false,bridge,rd);
  if(error!=OK)return result(error,16);
- auto *cell=bridge->rt;
- if(!cell)return result(ERR_UNAVAILABLE,18);
- if(cell->occupied) {
-  if(!cell->height_service_v2 || cell->height_request.operation_serial!=request.operation_serial)return result(ERR_BUSY,16);
-  if(memcmp(&cell->height_request,&request,sizeof(request)) || memcmp(&cell->height_paid.grant,grant,sizeof(*grant)))return result(ERR_INVALID_DATA,16);
-  *out={instance,cell->serial};return result(OK);
+ if(bridge->rt_cells.is_empty())return result(ERR_UNAVAILABLE,18);
+ if(QualificationRtCell *existing=bridge->find_rt_by_operation(request.operation_serial)) {
+  if(!existing->height_service_v2)return result(ERR_BUSY,16);
+  if(memcmp(&existing->height_request,&request,sizeof(request)) || memcmp(&existing->height_paid.grant,grant,sizeof(*grant)))return result(ERR_INVALID_DATA,16);
+  *out={instance,existing->serial};return result(OK);
  }
+ if(request.operation_serial<=bridge->rt_retired_highwater || grant->grant_serial<=bridge->height_grant_highwater)return result(ERR_DOES_NOT_EXIST,17);
+ auto *cell=bridge->find_free_rt_cell();
+ if(!cell)return result(ERR_BUSY,16);
  if(!ledger.accept(*grant,OS::get_singleton()->get_ticks_usec()))return result(ERR_INVALID_PARAMETER,2);
  if(request.mode==1) {
   error=qualification_bridge_locked(ref,false,true,bridge,rd);
   if(error!=OK)return result(error,16);
  }
- if(request.operation_serial<=cell->retired_operation || grant->grant_serial<=bridge->height_grant_highwater)return result(ERR_DOES_NOT_EXIST,17);
- if(cell->config.max_result_bytes<sizeof(GDExtensionStorageSceneDepthReportV1) || (request.mode==2 && cell->config.max_request_bytes<sizeof(GDExtensionStorageSceneDepthRetireRequestV1)))return result(ERR_PARAMETER_RANGE_ERROR,19);
+ if(bridge->rt_config.max_result_bytes<sizeof(GDExtensionStorageSceneDepthReportV1) || (request.mode==2 && bridge->rt_config.max_request_bytes<sizeof(GDExtensionStorageSceneDepthRetireRequestV1)))return result(ERR_PARAMETER_RANGE_ERROR,19);
  uint32_t index=0;error=qualification_scene_depth_locked(bridge,request.facet,index);
  if(error!=OK)return result(error,17);
  auto *child=bridge->scene_depth[index];
@@ -1367,10 +1400,11 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_scene_depth_service_res
   if(error!=OK)return result(error,16);
  }
  const bool use_cleanup=request.mode==2 && child->cleanup_serial_reserved;
- const bool use_slot=request.mode==2 && bridge->cleanup_refs_reserved;
+ const bool eligible_slot=request.mode==2 && bridge->cleanup_refs_reserved;
+ const bool use_slot=eligible_slot && !bridge->cleanup_slot_in_use;
  const uint32_t refs_needed=uint32_t(!use_slot)+uint32_t(!use_slot);
- if(use_slot && bridge->cleanup_slot_in_use)return result(ERR_BUSY,19);
- if(private_limit<refs_needed || records[bridge->library].private_refs>private_limit-refs_needed || (use_cleanup?(qualification_serials.exhausted || !qualification_cleanup_serial_reservations):!qualification_serial_capacity(1)))return result(ERR_PARAMETER_RANGE_ERROR,19);
+ if(private_limit<refs_needed || records[bridge->library].private_refs>private_limit-refs_needed)return result(eligible_slot && bridge->cleanup_slot_in_use?ERR_BUSY:ERR_PARAMETER_RANGE_ERROR,19);
+ if(use_cleanup?(qualification_serials.exhausted || !qualification_cleanup_serial_reservations):!qualification_serial_capacity(1))return result(ERR_PARAMETER_RANGE_ERROR,19);
  // All rejection paths above precede original ref/serial/grant publication.
  if(use_cleanup){--qualification_cleanup_serial_reservations;child->cleanup_serial_reserved=false;}
  qualification_serials.take(cell->serial);
@@ -1382,7 +1416,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_scene_depth_service_res
  cell->height_snapshot={};cell->height_report={};cell->height_row_admitted=false;
  cell->scene_depth_serial=child->serial;cell->cleanup_child_serial=use_cleanup?child->serial:0;
  cell->raster_serial=0;cell->ticket=nullptr;cell->resource_refs.clear();
- cell->occupied=true;cell->ever_accepted=true;cell->active=false;cell->queued=false;cell->executing=false;cell->observed=false;cell->admission_consumed=false;
+ cell->occupied=true;cell->ever_accepted=true;bridge->rt_ever_accepted=true;cell->active=false;cell->queued=false;cell->executing=false;cell->observed=false;cell->admission_consumed=false;
  cell->state=0;cell->call_result={};cell->result_bytes=cell->segment_count=0;
  cell->slot_ref_credit=use_slot;cell->queue_ref_credit=false;cell->queue_ref_reserved=!use_slot;
  if(use_slot)bridge->cleanup_slot_in_use=true;else ++records[bridge->library].private_refs;
@@ -1395,7 +1429,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_scene_depth_service_act
  {
   Lock lock(*this);QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;
   Error error=qualification_bridge_locked(ref,false,false,bridge,rd);if(error!=OK)return result(error,16);
-  auto *cell=bridge->rt;
+  auto *cell=bridge->find_rt_by_serial(rt.handle_serial);
   if(rt.registry_instance!=instance || !cell || !cell->occupied || cell->serial!=rt.handle_serial || !cell->height_service_v2)return result(ERR_DOES_NOT_EXIST,17);
   auto &paid=cell->height_paid;
   if(paid.grant.grant_serial!=expected_grant || paid.execution_serial!=expected_execution)return result(ERR_INVALID_DATA,16);
@@ -1417,7 +1451,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_scene_depth_service_act
   cell->state=1;
  }
  // Same bounded scalar queue, original refs and refusal rollback as legacy RT.
- const Error error=qualification_rt_schedule(ref);return result(error,error==OK?0:16);
+ const Error error=qualification_rt_schedule(ref,rt.handle_serial);return result(error,error==OK?0:16);
 }
 
 GDExtensionDeviceSessionResultV1 Registry::qualification_scene_depth_service_observe_v2(GDExtensionQualificationBridgeRefV1 ref, GDExtensionQualificationRtRefV1 rt, GDExtensionQualificationServiceObservationV2 *out, GDExtensionStorageSceneDepthReportV1 *report) {
@@ -1425,7 +1459,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_scene_depth_service_obs
  *out={};*report={};
  Lock lock(*this);QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;
  Error error=qualification_bridge_locked(ref,false,false,bridge,rd);if(error!=OK)return result(error,16);
- auto *cell=bridge->rt;
+ auto *cell=bridge->find_rt_by_serial(rt.handle_serial);
  if(rt.registry_instance!=instance || !cell || !cell->occupied || cell->serial!=rt.handle_serial || !cell->height_service_v2)return result(ERR_DOES_NOT_EXIST,17);
  out->abi={2,sizeof(*out),0};out->mode=cell->height_request.mode;out->operation_serial=cell->height_request.operation_serial;out->slot_generation=cell->serial;out->grant_serial=cell->height_paid.grant.grant_serial;
  out->state=1;
@@ -1476,7 +1510,7 @@ void Registry::qualification_scene_depth_service_dispatch_v2(QualificationBridge
  }
  Lock lock(*this);
  // Child and bridge refs are held by this same queued original cell, not a new owner.
- const bool unchanged=bridge->serial==bridge_serial && bridge->epoch==epoch && bridge->rt==cell && cell->serial==cell_serial && cell->occupied && cell->executing && cell->height_service_v2 && cell->scene_depth_serial==cell->height_request.facet.handle_serial && (!child || (child->accepted_rt_refs && child->native_frame.ptr()==cell->height_frame_identity && child->native_frame.is_valid() && child->native_owner.is_valid() && child->native_owner.ptr()==cell->height_owner_identity && child->native_frame->resources==child->native_owner && &child->native_owner->device==rd && child->origin.allocation_slot==cell->height_request.allocation_slot && child->origin.part==cell->height_request.part && child->origin.allocation_generation==cell->height_request.allocation_generation && child->native_frame->snapshot.original_allocation_generation==cell->height_request.allocation_generation && child->native_frame->snapshot.original_k_frame_serial==cell->height_request.expected_frame_version && child->native_frame->native_range.ptr()==cell->height_range_identity));
+ const bool unchanged=bridge->serial==bridge_serial && bridge->epoch==epoch && bridge->find_rt_by_serial(cell_serial)==cell && cell->serial==cell_serial && cell->occupied && cell->executing && cell->height_service_v2 && cell->scene_depth_serial==cell->height_request.facet.handle_serial && (!child || (child->accepted_rt_refs && child->native_frame.ptr()==cell->height_frame_identity && child->native_frame.is_valid() && child->native_owner.is_valid() && child->native_owner.ptr()==cell->height_owner_identity && child->native_frame->resources==child->native_owner && &child->native_owner->device==rd && child->origin.allocation_slot==cell->height_request.allocation_slot && child->origin.part==cell->height_request.part && child->origin.allocation_generation==cell->height_request.allocation_generation && child->native_frame->snapshot.original_allocation_generation==cell->height_request.allocation_generation && child->native_frame->snapshot.original_k_frame_serial==cell->height_request.expected_frame_version && child->native_frame->native_range.ptr()==cell->height_range_identity));
  if(!unchanged)called=ERR_INVALID_DATA;
  auto &used=cell->height_paid.used;
  if(used.controls!=before.controls)called=ERR_INVALID_DATA;

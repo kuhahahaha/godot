@@ -94,9 +94,24 @@ void Registry::QualificationBridge::trace_storage_child(Storage &child, const ch
 		event_reserved = child.physical.event_capacity_reserved;
 		returned = rid ? closed && enqueued && free_event && free_event == reserved_event && !event_reserved : !event_reserved;
 	}
-	const bool rt_cleanup = rt && rt->occupied && rt->cleanup_child_serial == child.serial;
+	const QualificationRtCell *trace_rt = nullptr;
+	bool rt_cleanup = false;
+	for (uint32_t i = 0; i < rt_cells.size(); ++i) {
+		const QualificationRtCell *cell = rt_cells[i];
+		if (!cell || !cell->occupied) {
+			continue;
+		}
+		if (!trace_rt) {
+			trace_rt = cell;
+		}
+		if (cell->cleanup_child_serial == child.serial) {
+			trace_rt = cell;
+			rt_cleanup = true;
+			break;
+		}
+	}
 	print_line(vformat("QCHILD_STORAGE v=1 stage=%s bridge=%d library=%d device=%d epoch=%d cell_slot=%d child=%d history=%d origin_slot=%d generation=%d part=%d attempt=%d bytes=%d backing_rid=%d backing_serial=%d acknowledged=%d retiring=%d creating=%d queued=%d queue_credit=%d cleanup_credit=%d maintenance_error=%d rt_cleanup=%d rt_operation=%d rt_kind=%d rt_child=%d reverse_edges=%d forward_edges=%d production_use=%d dependents=%d returned=%d physical_rid=%d closed=%d enqueued=%d event_reserved=%d reserved_event=%d free_event=%d",
-			stage, serial, library, device, epoch, slot, child.serial, child.history_index, child.origin.allocation_slot, child.origin.allocation_generation, child.origin.part, child.origin.create_attempt, child.origin.bytes, child.backing.rid, child.backing.backing_serial, int(child.acknowledged), int(child.retiring), int(child.creating), int(child.queued), int(child.queue_ref_credit), int(child.cleanup_serial_reserved), int(child.maintenance_error), int(rt_cleanup), rt && rt->occupied ? rt->header.operation_serial : 0, rt && rt->occupied ? rt->header.kind : 0, rt && rt->occupied ? rt->cleanup_child_serial : 0, child.physical.uses.size(), forward_edges, int(child.physical.production_uses != nullptr), child.physical.dependent_children.load(), int(returned), rid, int(closed), int(enqueued), int(event_reserved), reserved_event, free_event));
+			stage, serial, library, device, epoch, slot, child.serial, child.history_index, child.origin.allocation_slot, child.origin.allocation_generation, child.origin.part, child.origin.create_attempt, child.origin.bytes, child.backing.rid, child.backing.backing_serial, int(child.acknowledged), int(child.retiring), int(child.creating), int(child.queued), int(child.queue_ref_credit), int(child.cleanup_serial_reserved), int(child.maintenance_error), int(rt_cleanup), trace_rt ? trace_rt->header.operation_serial : 0, trace_rt ? trace_rt->header.kind : 0, trace_rt ? trace_rt->cleanup_child_serial : 0, child.physical.uses.size(), forward_edges, int(child.physical.production_uses != nullptr), child.physical.dependent_children.load(), int(returned), rid, int(closed), int(enqueued), int(event_reserved), reserved_event, free_event));
 #endif
 }
 Error Registry::qualification_bridge_locked(GDExtensionQualificationBridgeRefV1 ref, bool execution, bool admit, QualificationBridge *&out, RenderingDevice *&rd, uint32_t accepted_kind) {
@@ -380,10 +395,14 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_close(GDExtensionQualif
 			memdelete(ticket);
 		}
 	}
-	if (bridge->rt) {
-		CRASH_COND(bridge->rt->occupied || bridge->rt->queued);
-		memdelete(bridge->rt);
+	for (uint32_t i = 0; i < bridge->rt_cells.size(); ++i) {
+		QualificationRtCell *cell = bridge->rt_cells[i];
+		if (cell) {
+			CRASH_COND(cell->occupied || cell->queued);
+			memdelete(cell);
+		}
 	}
+	bridge->rt_cells.clear();
 	memdelete(bridge);
 	reclaim_device_locked(device);
 	reclaim(library);
@@ -447,13 +466,16 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_generation_fina
 		return result(ERR_INVALID_DATA, 16);
 	}
 	if (generation > frontier.closed) {
-		// One original QRT cell includes reserved, queued, executing and unread
-		// completed create delivery. Never cancel or reinterpret its admission.
-		if (bridge->rt && bridge->rt->occupied && bridge->rt->header.kind == 2) {
-			GDExtensionStorageCreateRequestV1 origin;
-			memcpy(&origin, bridge->rt->request.ptr(), sizeof(origin));
-			if (origin.allocation_slot == request->allocation_slot && origin.allocation_generation <= generation) {
-				return result(ERR_BUSY, 16);
+		// Original QRT cells include reserved, queued, executing and unread
+		// completed create deliveries. Never cancel or reinterpret their admission.
+		for (uint32_t i = 0; i < bridge->rt_cells.size(); ++i) {
+			const QualificationRtCell *cell = bridge->rt_cells[i];
+			if (cell && cell->occupied && cell->header.kind == 2) {
+				GDExtensionStorageCreateRequestV1 origin;
+				memcpy(&origin, cell->request.ptr(), sizeof(origin));
+				if (origin.allocation_slot == request->allocation_slot && origin.allocation_generation <= generation) {
+					return result(ERR_BUSY, 16);
+				}
 			}
 		}
 		for (auto *child : bridge->storage) {

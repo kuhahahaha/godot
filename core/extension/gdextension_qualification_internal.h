@@ -377,7 +377,59 @@ struct Registry::QualificationBridge {
 	uint32_t device = 0;
 	uint64_t epoch = 0;
 	HolderRetirement *holder = nullptr;
-	QualificationRtCell *rt = nullptr;
+	static constexpr uint32_t MAX_RT_SLOTS = 64;
+	LocalVector<QualificationRtCell *> rt_cells;
+	GDExtensionQualificationRtConfigV1 rt_config = {};
+	bool rt_ever_accepted = false;
+	uint64_t rt_retired_highwater = 0;
+	QualificationRtCell *rt_slot0() const {
+		return rt_cells.is_empty() ? nullptr : rt_cells[0];
+	}
+	QualificationRtCell *find_rt_by_serial(uint64_t p_serial) const {
+		if (!p_serial) {
+			return nullptr;
+		}
+		for (uint32_t i = 0; i < rt_cells.size(); ++i) {
+			QualificationRtCell *cell = rt_cells[i];
+			if (cell && cell->occupied && cell->serial == p_serial) {
+				return cell;
+			}
+		}
+		return nullptr;
+	}
+	QualificationRtCell *find_rt_by_operation(uint64_t p_operation_serial) const {
+		if (!p_operation_serial) {
+			return nullptr;
+		}
+		for (uint32_t i = 0; i < rt_cells.size(); ++i) {
+			QualificationRtCell *cell = rt_cells[i];
+			if (cell && cell->occupied &&
+					((cell->height_service_v2 && cell->height_request.operation_serial == p_operation_serial) ||
+							(!cell->height_service_v2 && cell->header.operation_serial == p_operation_serial))) {
+				return cell;
+			}
+		}
+		return nullptr;
+	}
+	QualificationRtCell *find_free_rt_cell() const {
+		for (uint32_t i = 0; i < rt_cells.size(); ++i) {
+			QualificationRtCell *cell = rt_cells[i];
+			if (cell && !cell->occupied) {
+				return cell;
+			}
+		}
+		return nullptr;
+	}
+	template <typename Pred>
+	bool any_rt_occupied_matching(Pred &&p_pred) const {
+		for (uint32_t i = 0; i < rt_cells.size(); ++i) {
+			const QualificationRtCell *cell = rt_cells[i];
+			if (cell && cell->occupied && p_pred(*cell)) {
+				return true;
+			}
+		}
+		return false;
+	}
 	struct StorageFrontier {
 		uint64_t closed = 0, completed = 0;
 		uint32_t cursor = 0, reserved = 0;
@@ -552,7 +604,7 @@ inline void Registry::QualificationBridge::collect_retired_children_locked() {
 	};
 	for (auto *&child : bridge->scene_depth) {
 		if (!child || !child->acknowledged || child->quoting || child->native_operation || child->native_frame.is_valid() || child->accepted_rt_refs || child->cleanup_serial_reserved ||
-				(bridge->rt && bridge->rt->occupied && bridge->rt->scene_depth_serial == child->serial)) {
+				bridge->any_rt_occupied_matching([&](const QualificationRtCell &p_cell) { return p_cell.scene_depth_serial == child->serial; })) {
 			continue;
 		}
 		bridge->scene_depth_origins.archive_retired_origin(child->history_index, child->serial, child->retire_serial);
@@ -563,7 +615,7 @@ inline void Registry::QualificationBridge::collect_retired_children_locked() {
 		if (child && child->acknowledged) {
 			trace_storage_child(*child, "collect_candidate");
 		}
-		if (!child || !child->acknowledged || child->history_index == UINT32_MAX || (bridge->rt && bridge->rt->occupied && bridge->rt->cleanup_child_serial == child->serial) || child->creating || child->queued || child->queue_ref_credit || child->cleanup_serial_reserved || child->maintenance_error != OK || referenced(child->physical)) {
+		if (!child || !child->acknowledged || child->history_index == UINT32_MAX || bridge->any_rt_occupied_matching([&](const QualificationRtCell &p_cell) { return p_cell.cleanup_child_serial == child->serial; }) || child->creating || child->queued || child->queue_ref_credit || child->cleanup_serial_reserved || child->maintenance_error != OK || referenced(child->physical)) {
 			continue;
 		}
 		{
@@ -582,7 +634,7 @@ inline void Registry::QualificationBridge::collect_retired_children_locked() {
 		child = nullptr;
 	}
 	for (auto *&child : bridge->units) {
-		if (!child || !child->acknowledged || child->history_index == UINT32_MAX || (bridge->rt && bridge->rt->occupied && bridge->rt->cleanup_child_serial == child->serial) || child->creating || child->queued || child->queue_ref_credit || child->cleanup_serial_reserved || child->maintenance_error != OK || child->accepted_rt_refs || referenced(child->shader) || referenced(child->pipeline) || (child->raster && referenced(child->raster->framebuffer))) {
+		if (!child || !child->acknowledged || child->history_index == UINT32_MAX || bridge->any_rt_occupied_matching([&](const QualificationRtCell &p_cell) { return p_cell.cleanup_child_serial == child->serial; }) || child->creating || child->queued || child->queue_ref_credit || child->cleanup_serial_reserved || child->maintenance_error != OK || child->accepted_rt_refs || referenced(child->shader) || referenced(child->pipeline) || (child->raster && referenced(child->raster->framebuffer))) {
 			continue;
 		}
 		{

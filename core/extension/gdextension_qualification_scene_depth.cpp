@@ -347,13 +347,16 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_scene_depth_quote(GDExt
 			}
 			const bool accepted = qualification_accepted_call_locked(bridge, 21);
 			*out = existing->quote;
-			if (accepted && !bridge->rt->scene_depth_serial) {
-				if (existing->accepted_rt_refs == UINT32_MAX) {
-					*out = {};
-					return result(ERR_PARAMETER_RANGE_ERROR, 19);
+			if (accepted) {
+				QualificationRtCell *active_cell = bridge->find_rt_by_serial(active_qualification_serial);
+				if (active_cell && !active_cell->scene_depth_serial) {
+					if (existing->accepted_rt_refs == UINT32_MAX) {
+						*out = {};
+						return result(ERR_PARAMETER_RANGE_ERROR, 19);
+					}
+					active_cell->scene_depth_serial = existing->serial;
+					++existing->accepted_rt_refs;
 				}
-				bridge->rt->scene_depth_serial = existing->serial;
-				++existing->accepted_rt_refs;
 			}
 			return result(OK);
 		}
@@ -367,8 +370,9 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_scene_depth_quote(GDExt
 		if (error != OK) {
 			return result(error, 16);
 		}
-		const bool accepted = active_qualification_bridge == bridge && bridge->rt && bridge->rt->occupied && bridge->rt->executing &&
-				bridge->rt->serial == active_qualification_serial && bridge->rt->header.kind == 21 && bridge->rt->admission_consumed;
+		QualificationRtCell *active_cell = active_qualification_bridge == bridge ? bridge->find_rt_by_serial(active_qualification_serial) : nullptr;
+		const bool accepted = active_cell && active_cell->occupied && active_cell->executing &&
+				active_cell->serial == active_qualification_serial && active_cell->header.kind == 21 && active_cell->admission_consumed;
 		uint32_t slot = 0;
 		for (; slot < QualificationBridge::CHILD_CAPACITY && bridge->scene_depth[slot]; ++slot) {
 		}
@@ -398,7 +402,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_scene_depth_quote(GDExt
 		++bridge->children;
 		++records[bridge->library].private_refs;
 		if (accepted) {
-			bridge->rt->scene_depth_serial = child->serial;
+			active_cell->scene_depth_serial = child->serial;
 			++child->accepted_rt_refs;
 		}
 	}
@@ -542,7 +546,7 @@ Error Registry::qualification_scene_depth_service_execute_v2(QualificationBridge
 		RenderingDevice *device = nullptr;
 		Error error = qualification_bridge_locked({ instance, bridge_serial }, true, false, original, device);
 		if (error != OK) return error;
-		if (original != bridge || device != rd || bridge->epoch != epoch || bridge->rt != cell || cell->serial != cell_serial ||
+		if (original != bridge || device != rd || bridge->epoch != epoch || bridge->find_rt_by_serial(cell_serial) != cell || cell->serial != cell_serial ||
 				!cell->occupied || !cell->active || !cell->queued || !cell->executing || !cell->height_service_v2 ||
 				active_qualification_bridge != bridge || active_qualification_serial != cell_serial ||
 				memcmp(&request, &cell->height_request, sizeof(request)) || !cell->height_paid.accepted || !cell->height_paid.executing ||
@@ -854,7 +858,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_scene_depth_release(GDE
 	const bool returned = report.state == 6 && report.custody == 4 && report.known_created_mask && report.all_created_children_returned &&
 			(!(report.known_created_mask & 1) || report.depth_state == uint32_t(NativeDisposalWitness::State::RETURNED)) &&
 			(!(report.known_created_mask & 2) || report.framebuffer_state == uint32_t(NativeDisposalWitness::State::RETURNED));
-	if (child->quoting || child->native_operation || child->native_frame.is_valid() || !child->retiring || (!no_native && !returned) || report.maintenance_error != OK || child->accepted_rt_refs || (bridge->rt && bridge->rt->occupied && bridge->rt->scene_depth_serial == child->serial)) {
+	if (child->quoting || child->native_operation || child->native_frame.is_valid() || !child->retiring || (!no_native && !returned) || report.maintenance_error != OK || child->accepted_rt_refs || bridge->any_rt_occupied_matching([&](const QualificationRtCell &p_cell) { return p_cell.scene_depth_serial == child->serial; })) {
 		return result(ERR_BUSY, 16);
 	}
 	if (child->report.revision == UINT64_MAX) {
