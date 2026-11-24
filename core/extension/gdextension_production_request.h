@@ -153,6 +153,11 @@ inline constexpr uint32_t MAX_SCENE_DEPTH_SET1_PAIRS = 8u;
 inline constexpr uint32_t CURVE_LUT_READONLY_RESOURCE_SLOT = 0xFFFFFFFDu;
 inline constexpr uint32_t CURVE_LUT_READONLY_BYTES = 65568u;
 inline constexpr uint32_t MAX_CURVE_LUT_SET1_SLOTS = 16u;
+inline constexpr uint32_t RECORD_RING_STATS_RESOURCE_SLOT = 0xFFFFFFFCu;
+inline constexpr uint32_t RECORD_RING_STATS_BYTES = 16u;
+inline constexpr uint32_t RECORD_RING_PAYLOAD_RESOURCE_SLOT = 0xFFFFFFFBu;
+inline constexpr uint32_t RECORD_RING_PAYLOAD_BYTES = 262144u;
+inline constexpr uint32_t MAX_RECORD_RING_SET1_SLOTS = 8u;
 
 inline bool decode_scene_depth_pair_params(uint64_t p_packed_bytes, float &r_slab_thickness_m, float &r_silhouette_jump_m) {
 	const uint32_t slab_bits = uint32_t(p_packed_bytes >> 32u);
@@ -364,6 +369,8 @@ class ProductionResourceSlot {
 	Ref<SceneReadContent> scene_depth_leases[MAX_SCENE_DEPTH_SET1_PAIRS];
 	bool curve_lut_set1 = false;
 	uint32_t curve_lut_count = 0;
+	bool record_ring_set1 = false;
+	uint32_t record_ring_count = 0;
 	// Nonowning alias of an actual output DISPOSAL_MEMBER. The native group
 	// remains the sole free owner; owned_physical is never populated for this.
 	NativeDisposalWitness output_witness;

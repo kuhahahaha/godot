@@ -3424,7 +3424,7 @@ Error RenderingDevice::_production_prepare_static_sentinel_buffer(RID p_buffer, 
 	return (buf->draw_tracker != nullptr && buf->transfer_worker_index < 0) ? OK : ERR_CANT_CREATE;
 }
 
-Error RenderingDevice::_production_get_or_create_curve_lut_zero_buffer(RID &r_buffer) {
+Error RenderingDevice::_production_get_or_create_zero_scratch_buffer(RID &r_slot, uint32_t p_bytes, RID &r_buffer) {
 	r_buffer = RID();
 	if (!native_immutable_is_render_thread() || !driver || native_finalization_returned || production_finalization_started.load(std::memory_order_acquire) || qualification_retiring) {
 		return ERR_UNAUTHORIZED;
@@ -3436,37 +3436,68 @@ Error RenderingDevice::_production_get_or_create_curve_lut_zero_buffer(RID &r_bu
 	if (rec_err != OK) {
 		return rec_err;
 	}
-	if (production_curve_lut_zero_buffer.is_null()) {
+	if (r_slot.is_null()) {
 		Vector<uint8_t> zero_bytes;
-		if (zero_bytes.resize_initialized(GDExtensionDeviceExit::CURVE_LUT_READONLY_BYTES) != OK) {
+		if (zero_bytes.resize_initialized(p_bytes) != OK) {
 			return ERR_OUT_OF_MEMORY;
 		}
-		const RID created = storage_buffer_create(GDExtensionDeviceExit::CURVE_LUT_READONLY_BYTES, zero_bytes);
+		const RID created = storage_buffer_create(p_bytes, zero_bytes);
 		if (created.is_null()) {
 			return ERR_CANT_CREATE;
 		}
-		production_curve_lut_zero_buffer = created;
+		r_slot = created;
 	}
-	const Error worker_settled = _native_settle_transfer_worker(production_curve_lut_zero_buffer);
+	const Error worker_settled = _native_settle_transfer_worker(r_slot);
 	if (worker_settled != OK) {
 		return worker_settled;
 	}
 	{
 		MutexLock lock(_thread_safe_);
-		Buffer *buf = storage_buffer_owner.owns(production_curve_lut_zero_buffer) ? storage_buffer_owner.get_or_null(production_curve_lut_zero_buffer) : nullptr;
-		if (!buf || buf->size != GDExtensionDeviceExit::CURVE_LUT_READONLY_BYTES) {
+		Buffer *buf = storage_buffer_owner.owns(r_slot) ? storage_buffer_owner.get_or_null(r_slot) : nullptr;
+		if (!buf || buf->size != p_bytes) {
 			return ERR_CANT_CREATE;
 		}
 		const Error settled = _check_transfer_worker_buffer(buf);
 		if (settled != OK) {
 			return settled;
 		}
-		_buffer_make_mutable(buf, production_curve_lut_zero_buffer);
+		_buffer_make_mutable(buf, r_slot);
 		if (buf->draw_tracker == nullptr || buf->transfer_worker_index >= 0) {
 			return ERR_BUSY;
 		}
 	}
-	r_buffer = production_curve_lut_zero_buffer;
+	r_buffer = r_slot;
+	return OK;
+}
+
+Error RenderingDevice::_production_get_or_create_curve_lut_zero_buffer(RID &r_buffer) {
+	return _production_get_or_create_zero_scratch_buffer(
+			production_curve_lut_zero_buffer,
+			GDExtensionDeviceExit::CURVE_LUT_READONLY_BYTES,
+			r_buffer);
+}
+
+Error RenderingDevice::_production_get_or_create_record_ring_scratch_buffers(RID &r_stats_buffer, RID &r_payload_buffer) {
+	r_stats_buffer = RID();
+	r_payload_buffer = RID();
+	RID stats_buffer;
+	const Error stats_err = _production_get_or_create_zero_scratch_buffer(
+			production_record_ring_stats_scratch_buffer,
+			GDExtensionDeviceExit::RECORD_RING_STATS_BYTES,
+			stats_buffer);
+	if (stats_err != OK) {
+		return stats_err;
+	}
+	RID payload_buffer;
+	const Error payload_err = _production_get_or_create_zero_scratch_buffer(
+			production_record_ring_payload_scratch_buffer,
+			GDExtensionDeviceExit::RECORD_RING_PAYLOAD_BYTES,
+			payload_buffer);
+	if (payload_err != OK) {
+		return payload_err;
+	}
+	r_stats_buffer = stats_buffer;
+	r_payload_buffer = payload_buffer;
 	return OK;
 }
 

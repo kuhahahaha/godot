@@ -17118,6 +17118,14 @@ void RenderingDevice::finalize() {
 		free_rid(production_curve_lut_zero_buffer);
 		production_curve_lut_zero_buffer = RID();
 	}
+	if (production_record_ring_stats_scratch_buffer.is_valid()) {
+		free_rid(production_record_ring_stats_scratch_buffer);
+		production_record_ring_stats_scratch_buffer = RID();
+	}
+	if (production_record_ring_payload_scratch_buffer.is_valid()) {
+		free_rid(production_record_ring_payload_scratch_buffer);
+		production_record_ring_payload_scratch_buffer = RID();
+	}
 	_free_rids(texture_buffer_owner, "TextureBuffer");
 	_free_rids(storage_buffer_owner, "StorageBuffer");
 	_free_rids(uniform_buffer_owner, "UniformBuffer");

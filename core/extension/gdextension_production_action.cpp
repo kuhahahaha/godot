@@ -137,7 +137,8 @@ Error Registry::production_incoming_readbacks_validate_locked(const ProductionRe
 					for (uint32_t set_index = 0; set_index < dispatch.set_count; ++set_index) {
 						const auto &set = request.resources[dispatch.first_set_slot + set_index];
 						const uint32_t b_start = (set.scene_depth_set1 ? set.scene_depth_lease_count : 0u) +
-								(set.curve_lut_set1 ? set.curve_lut_count : 0u);
+								(set.curve_lut_set1 ? set.curve_lut_count : 0u) +
+								(set.record_ring_set1 ? 2u * set.record_ring_count : 0u);
 						for (uint32_t b = b_start; b < set.binding_count; ++b) {
 							const auto &binding = request.uses[set.first_binding + b].binding;
 							for (const auto &uniform : shader->uniform_sets[set_index]) {
@@ -200,20 +201,23 @@ Error Registry::production_dispatch_closure_locked(const ProductionRequest &requ
 	for (uint32_t i = 0; i < dispatch.set_count; ++i) {
 		const auto &slot = request.resources[dispatch.first_set_slot + i];
 		const auto *set = rd.uniform_set_owner.get_or_null(slot.primary);
-		if (slot.scene_depth_set1 || slot.curve_lut_set1) {
+		if (slot.scene_depth_set1 || slot.curve_lut_set1 || slot.record_ring_set1) {
 			const uint32_t pair_count = slot.scene_depth_set1 ? slot.scene_depth_lease_count : 0u;
 			const uint32_t lut_count = slot.curve_lut_set1 ? slot.curve_lut_count : 0u;
-			const uint32_t prefix_count = pair_count + lut_count;
+			const uint32_t ring_count = slot.record_ring_set1 ? slot.record_ring_count : 0u;
+			const uint32_t prefix_count = pair_count + lut_count + 2u * ring_count;
 			const uint32_t storage_count = slot.binding_count >= prefix_count ? (slot.binding_count - prefix_count) : 0u;
 			if (i != 1u || slot.output_set_deferred || !slot.imported || slot.creating || slot.retiring || slot.returned ||
 					!set || !set->driver_id || set->shader_id != pipeline->shader || set->shader_set != 1u ||
 					set->format != pipeline->set_formats[1] || !set->shared_textures_to_update.is_empty() ||
-					!set->pending_clear_textures.is_empty() || (storage_count == 0u && !set->writable_resources.is_empty()) ||
+					!set->pending_clear_textures.is_empty() ||
+					(storage_count == 0u && ring_count == 0u && !set->writable_resources.is_empty()) ||
 					slot.imported_unit_slot != dispatch.unit_slot || slot.shader_set != 1u ||
 					(slot.scene_depth_set1 ? (pair_count < 1u || pair_count > MAX_SCENE_DEPTH_SET1_PAIRS) : (pair_count != 0u)) ||
 					(slot.curve_lut_set1 ? (lut_count < 1u || lut_count > MAX_CURVE_LUT_SET1_SLOTS) : (lut_count != 0u)) ||
+					(slot.record_ring_set1 ? (ring_count < 1u || ring_count > MAX_RECORD_RING_SET1_SLOTS) : (ring_count != 0u)) ||
 					slot.binding_count < prefix_count ||
-					uint32_t(shader->uniform_sets[1].size()) != 2u * pair_count + lut_count + storage_count ||
+					uint32_t(shader->uniform_sets[1].size()) != 2u * pair_count + lut_count + 2u * ring_count + storage_count ||
 					slot.first_binding > request.capacity.resource_uses ||
 					slot.binding_count > request.capacity.resource_uses - slot.first_binding ||
 					slot.use_count != 1u || !slot.uses[0].linked() || !slot.uses[0].same_physical() ||
@@ -303,12 +307,71 @@ Error Registry::production_dispatch_closure_locked(const ProductionRequest &requ
 					}
 				}
 			}
+			if (ring_count > 0u) {
+				const RID ring_stats = rd.production_record_ring_stats_scratch_buffer;
+				const RID ring_payload = rd.production_record_ring_payload_scratch_buffer;
+				if (ring_stats.is_null() || ring_payload.is_null()) {
+					return ERR_INVALID_DATA;
+				}
+				const auto *stats_buf = rd.storage_buffer_owner.get_or_null(ring_stats);
+				const auto *payload_buf = rd.storage_buffer_owner.get_or_null(ring_payload);
+				if (!stats_buf || !stats_buf->driver_id || stats_buf->size != RECORD_RING_STATS_BYTES ||
+						!payload_buf || !payload_buf->driver_id || payload_buf->size != RECORD_RING_PAYLOAD_BYTES) {
+					return ERR_INVALID_DATA;
+				}
+				if (storage_count == 0u) {
+					for (RID writable : set->writable_resources) {
+						if (writable != ring_stats && writable != ring_payload) {
+							return ERR_INVALID_DATA;
+						}
+					}
+				}
+				const uint32_t ring_base = pair_count + lut_count;
+				for (uint32_t r = 0; r < ring_count; ++r) {
+					const uint32_t stats_binding_idx = 2u * pair_count + lut_count + 2u * r;
+					const uint32_t payload_binding_idx = stats_binding_idx + 1u;
+					const auto &stats_binding = request.uses[slot.first_binding + ring_base + 2u * r].binding;
+					const auto &payload_binding = request.uses[slot.first_binding + ring_base + 2u * r + 1u].binding;
+					if (!production_dto_valid(stats_binding) || stats_binding.set != 1u || stats_binding.binding != stats_binding_idx ||
+							stats_binding.array_element != 0u || stats_binding.resource_slot != RECORD_RING_STATS_RESOURCE_SLOT ||
+							stats_binding.offset != r || stats_binding.bytes != RECORD_RING_STATS_BYTES ||
+							!production_dto_valid(payload_binding) || payload_binding.set != 1u || payload_binding.binding != payload_binding_idx ||
+							payload_binding.array_element != 0u || payload_binding.resource_slot != RECORD_RING_PAYLOAD_RESOURCE_SLOT ||
+							payload_binding.offset != r || payload_binding.bytes != RECORD_RING_PAYLOAD_BYTES) {
+						return ERR_INVALID_DATA;
+					}
+					uint32_t stats_matches = 0;
+					uint32_t payload_matches = 0;
+					for (const auto &uniform : shader->uniform_sets[1]) {
+						if (uniform.binding == stats_binding_idx) {
+							if (uniform.type != RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER ||
+									uniform.length < 0 ||
+									(uniform.length > 0 && uint32_t(uniform.length) != RECORD_RING_STATS_BYTES)) {
+								return ERR_INVALID_DATA;
+							}
+							++stats_matches;
+						} else if (uniform.binding == payload_binding_idx) {
+							if (uniform.type != RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER ||
+									uniform.length < 0 ||
+									(uniform.length > 0 && uint32_t(uniform.length) != RECORD_RING_PAYLOAD_BYTES)) {
+								return ERR_INVALID_DATA;
+							}
+							++payload_matches;
+						}
+					}
+					if (stats_matches != 1u || payload_matches != 1u) {
+						return ERR_INVALID_DATA;
+					}
+				}
+			}
 			for (uint32_t s = 0; s < storage_count; ++s) {
 				const auto &binding = request.uses[slot.first_binding + prefix_count + s].binding;
 				if (binding.resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
 						binding.resource_slot == CURVE_LUT_READONLY_RESOURCE_SLOT ||
+						binding.resource_slot == RECORD_RING_STATS_RESOURCE_SLOT ||
+						binding.resource_slot == RECORD_RING_PAYLOAD_RESOURCE_SLOT ||
 						binding.resource_slot >= request.resource_count || binding.set != 1u ||
-						binding.array_element || binding.binding < 2u * pair_count + lut_count ||
+						binding.array_element || binding.binding < 2u * pair_count + lut_count + 2u * ring_count ||
 						(s > 0 && request.uses[slot.first_binding + prefix_count + s - 1].binding.binding >= binding.binding)) {
 					return ERR_INVALID_DATA;
 				}
@@ -404,7 +467,8 @@ Error Registry::production_dispatch_closure_locked(const ProductionRequest &requ
 		for (uint32_t i = 0; i < dispatch.set_count; ++i) {
 			const auto &slot = request.resources[dispatch.first_set_slot + i];
 			const uint32_t b_start = (slot.scene_depth_set1 ? slot.scene_depth_lease_count : 0u) +
-					(slot.curve_lut_set1 ? slot.curve_lut_count : 0u);
+					(slot.curve_lut_set1 ? slot.curve_lut_count : 0u) +
+					(slot.record_ring_set1 ? 2u * slot.record_ring_count : 0u);
 			for (uint32_t b = b_start; b < slot.binding_count; ++b) {
 				const auto &binding = request.uses[slot.first_binding + b].binding;
 				for (const auto &uniform : shader->uniform_sets[i]) {
@@ -821,7 +885,8 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 		for (uint32_t set_index = 0; set_index < dispatch.set_count; ++set_index) {
 			const auto &set = request.resources[dispatch.first_set_slot + set_index];
 			const uint32_t b_start = (set.scene_depth_set1 ? set.scene_depth_lease_count : 0u) +
-					(set.curve_lut_set1 ? set.curve_lut_count : 0u);
+					(set.curve_lut_set1 ? set.curve_lut_count : 0u) +
+					(set.record_ring_set1 ? 2u * set.record_ring_count : 0u);
 			for (uint32_t b = b_start; b < set.binding_count; ++b) {
 				if (check_transfer_resource(request.uses[set.first_binding + b].binding.resource_slot) == ERR_BUSY) {
 					observed.error = ERR_BUSY;
