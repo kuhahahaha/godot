@@ -185,6 +185,7 @@ public:
 	}
 	static uint32_t arrays(RenderingDevice &p_device) { return p_device.vertex_array_owner.get_owned_list().size(); }
 	static bool owns(RenderingDevice &p_device, RID p_buffer) { return p_device.vertex_buffer_owner.owns(p_buffer); }
+	static void set_draining(RenderingDevice &p_device, bool p_draining) { p_device.frame_wait_draining.store(p_draining); }
 	static void begin_native(RenderingDevice &device, Indexed144FormatDriver &driver) {
 		device.driver = &driver;
 		device.is_main_instance = true;
@@ -1263,6 +1264,124 @@ public:
 		memfree(mesh.surfaces);
 		TestIndexed144DeviceAccess::end_native(device);
 	}
+	static void bug180a_surface_hardening_during_rd_suspension() {
+		struct FailAfterNDriver : FallbackTransferDriver {
+			uint32_t fail_on_call = 0; // 1-based; 0 = never fail.
+			uint32_t calls = 0;
+			BufferID buffer_create(uint64_t bytes, BitField<BufferUsageBits> usage, MemoryAllocationType alloc, uint64_t frames) override {
+				++calls;
+				if (fail_on_call && calls == fail_on_call) {
+					return BufferID();
+				}
+				return FallbackTransferDriver::buffer_create(bytes, usage, alloc, frames);
+			}
+		};
+
+		RenderingDevice device;
+		FailAfterNDriver driver;
+		TestIndexed144DeviceAccess::begin_fallback_transfers(device, driver);
+		const uint32_t baseline_allocs = driver.allocations;
+		const uint32_t baseline_frees = driver.frees;
+		auto *previous_storage = MeshStorage::get_singleton();
+		auto *storage = memnew(MeshStorage(MeshStorage::NativeHoldTestTag{}));
+
+		const RID mesh_rid = storage->mesh_allocate();
+		storage->mesh_initialize(mesh_rid);
+
+		RenderingServerTypes::SurfaceData sd;
+		sd.primitive = RSE::PRIMITIVE_TRIANGLES;
+		sd.format = uint64_t(RSE::ARRAY_FLAG_FORMAT_CURRENT_VERSION) | RSE::ARRAY_FORMAT_VERTEX | RSE::ARRAY_FORMAT_INDEX;
+		sd.vertex_count = 3;
+		sd.vertex_data.resize_initialized(3 * 12);
+		sd.index_count = 3;
+		sd.index_data.resize_initialized(3 * 2);
+		sd.aabb = AABB(Vector3(-1, -1, -1), Vector3(2, 2, 2));
+
+		struct ErrorCapture {
+			uint32_t count = 0;
+			bool saw_owns_error = false;
+			ErrorHandlerList handler = {};
+			static void on_error(void *p_ud, const char *, const char *, int, const char *p_err, const char *p_msg, bool, ErrorHandlerType p_type) {
+				if (p_type != ERR_HANDLER_ERROR) {
+					return;
+				}
+				auto *self = static_cast<ErrorCapture *>(p_ud);
+				++self->count;
+				const String combined = String::utf8(p_err ? p_err : "") + " " + String::utf8(p_msg ? p_msg : "");
+				if (combined.contains("index_buffer_owner.owns")) {
+					self->saw_owns_error = true;
+				}
+			}
+			ErrorCapture() {
+				handler.errfunc = on_error;
+				handler.userdata = this;
+				add_error_handler(&handler);
+			}
+			~ErrorCapture() { remove_error_handler(&handler); }
+		} errors;
+
+		// 1. Full RD transient suspension: vertex_buffer_create fails -> no index_array_create cascade,
+		//    no poisoned surface appended, zero leaked buffers.
+		TestIndexed144DeviceAccess::set_draining(device, true);
+		ERR_PRINT_OFF;
+		storage->mesh_add_surface(mesh_rid, sd);
+		ERR_PRINT_ON;
+		TestIndexed144DeviceAccess::set_draining(device, false);
+		CHECK(storage->mesh_get_surface_count(mesh_rid) == 0);
+		CHECK_FALSE(errors.saw_owns_error);
+		CHECK(driver.allocations == baseline_allocs);
+
+		// 2. Partial failure: vertex_buffer succeeds (call 1), index_buffer fails (call 2) ->
+		//    vertex_buffer is cleanly freed, no index_array_create cascade, no surface appended.
+		errors.count = 0;
+		errors.saw_owns_error = false;
+		driver.calls = 0;
+		driver.fail_on_call = 2;
+		ERR_PRINT_OFF;
+		storage->mesh_add_surface(mesh_rid, sd);
+		ERR_PRINT_ON;
+		driver.fail_on_call = 0;
+		CHECK(storage->mesh_get_surface_count(mesh_rid) == 0);
+		CHECK_FALSE(errors.saw_owns_error);
+		driver.completed = true;
+		CHECK(TestIndexed144DeviceAccess::poll_fallback_transfers(device));
+		TestIndexed144DeviceAccess::dispose(device);
+		CHECK(driver.allocations == baseline_allocs + 1);
+		CHECK(driver.frees == baseline_frees + 1);
+
+		// 3. mesh_get_surface() defends against invalid index_buffer / LOD index_buffer RIDs
+		//    without calling RD::buffer_get_data(RID()).
+		auto *mesh = storage->mesh_owner.get_or_null(mesh_rid);
+		REQUIRE(mesh != nullptr);
+		auto *s = memnew(MeshStorage::Mesh::Surface);
+		s->format = uint64_t(RSE::ARRAY_FLAG_FORMAT_CURRENT_VERSION) | RSE::ARRAY_FORMAT_VERTEX | RSE::ARRAY_FORMAT_NORMAL | RSE::ARRAY_FORMAT_INDEX;
+		s->primitive = RSE::PRIMITIVE_TRIANGLES;
+		s->vertex_count = 3;
+		s->index_count = 3;
+		s->lod_count = 1;
+		s->lods = memnew_arr(MeshStorage::Mesh::Surface::LOD, 1);
+		s->lods[0].edge_length = 1.0f;
+		s->lods[0].index_count = 3;
+		mesh->surfaces = static_cast<MeshStorage::Mesh::Surface **>(memalloc(sizeof(MeshStorage::Mesh::Surface *)));
+		mesh->surfaces[0] = s;
+		mesh->surface_count = 1;
+
+		errors.count = 0;
+		const MeshStorage *const_storage = storage;
+		const RenderingServerTypes::SurfaceData got = const_storage->mesh_get_surface(mesh_rid, 0);
+		CHECK(errors.count == 0);
+		CHECK(got.index_count == 3u);
+		CHECK(got.index_data.is_empty());
+		REQUIRE(got.lods.size() == 1);
+		CHECK(got.lods[0].index_data.is_empty());
+
+		storage->mesh_free(mesh_rid);
+		memdelete(storage);
+		MeshStorage::singleton = previous_storage;
+		TestIndexed144DeviceAccess::dispose(device);
+		TestIndexed144DeviceAccess::end_fallback_transfers(device);
+		CHECK(driver.frees == driver.allocations);
+	}
 	static void no_motion_indexed_source() {
 		RenderingDevice device;
 		Indexed144FormatDriver driver;
@@ -2115,4 +2234,8 @@ TEST_CASE("[B4][NativePipelineFactory] Mobile refuses before factory with explic
 
 TEST_CASE("[B4][ProspectiveMaterialGraph] original finite symbols validate typed future dependencies without factories") {
 	TestIndexed144DeviceAccess::prospective_material_graph();
+}
+
+TEST_CASE("[RenderingDevice][MeshStorage][BUG-180A] mesh_add_surface and mesh_get_surface handle invalid RIDs during transient RD suspension without cascading or leaking") {
+	RendererRD::TestMeshStorageExternalAccess::bug180a_surface_hardening_during_rd_suspension();
 }
