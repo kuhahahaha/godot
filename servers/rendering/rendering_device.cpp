@@ -16783,7 +16783,7 @@ void RenderingDevice::update_pipeline_cache(bool p_closing) {
 	{
 		size_t new_pipelines_cache_size = driver->pipeline_cache_query_size();
 		ERR_FAIL_COND(!new_pipelines_cache_size);
-		size_t difference = new_pipelines_cache_size - pipeline_cache_size;
+		size_t difference = new_pipelines_cache_size > pipeline_cache_size ? (new_pipelines_cache_size - pipeline_cache_size) : 0;
 
 		bool must_save = false;
 

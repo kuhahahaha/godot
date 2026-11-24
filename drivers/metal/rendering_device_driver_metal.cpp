@@ -2248,6 +2248,7 @@ void RenderingDeviceDriverMetal::_serialize_archive_to_path(MTL::BinaryArchive *
 		return;
 	}
 	MutexLock serialize_lock(archive_serialize_mutex);
+	++archive_serialize_calls;
 	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 	DirAccess::make_dir_recursive_absolute(p_cache_path.get_base_dir());
 	String tmp_path = p_cache_path + ".tmp";
@@ -2430,7 +2431,12 @@ size_t RenderingDeviceDriverMetal::pipeline_cache_query_size() {
 }
 
 Vector<uint8_t> RenderingDeviceDriverMetal::pipeline_cache_serialize() {
-	if (archive_tearing_down.load(std::memory_order_acquire)) {
+	// BUG-155B: In RELEASE_AFTER_WARMUP mode, binary archive persistence is owned
+	// by background post-warmup release (_maybe_release_pipeline_archive). Running
+	// MTLBinaryArchive::serializeToURL synchronously during RenderingDevice::finalize()
+	// materializes the full archive on top of the live heap (+1.2 GB exit RSS spike).
+	if (archive_tearing_down.load(std::memory_order_acquire) ||
+			pipeline_cache_mode != PipelineCacheMode::PERSIST) {
 		return Vector<uint8_t>();
 	}
 	NS::SharedPtr<MTL::BinaryArchive> local_archive;

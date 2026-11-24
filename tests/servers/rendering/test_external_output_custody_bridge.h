@@ -235,6 +235,7 @@ public:
 	void withdraw();
 	bool history_cleared() const;
 	bool released() const;
+	static void bug155a_cross_capture_sealed_replay();
 };
 // Actual native mismatch injection and exact test-only undo, on the original RT.
 Error external_storage_poison_and_free(RenderingDevice &, NativeDisposalWitness &, NativeDisposalWitness::Report &);

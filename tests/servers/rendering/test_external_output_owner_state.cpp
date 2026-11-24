@@ -34,6 +34,7 @@
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_data_rd.h"
+#include "servers/rendering/renderer_scene_cull.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_globals.h"
 #include "servers/rendering/rendering_method.h"
@@ -1991,6 +1992,115 @@ public:
 		CHECK(o.state == ExternalOutputOwner::GenerationState::WITHDRAWING);
 	}
 };
+
+void ExternalLinkedOwnerTest::bug155a_cross_capture_sealed_replay() {
+	RenderingServer *rs = RenderingServer::get_singleton();
+	REQUIRE(rs != nullptr);
+	REQUIRE(RSG::viewport != nullptr);
+	REQUIRE(RSG::scene != nullptr);
+
+	const RID viewport = RSG::viewport->viewport_allocate();
+	REQUIRE(viewport.is_valid());
+	RSG::viewport->viewport_initialize(viewport);
+	const RID camera = RSG::scene->camera_allocate();
+	REQUIRE(camera.is_valid());
+	RSG::scene->camera_initialize(camera);
+	RSG::viewport->viewport_set_size(viewport, 64, 48, 1);
+	RSG::viewport->viewport_attach_camera(viewport, camera);
+	auto *native_vp = RSG::viewport->viewport_owner.get_or_null(viewport);
+	REQUIRE(native_vp != nullptr);
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, { 4099, 1, 7 }));
+	native_vp->render_buffers = Ref<RenderSceneBuffers>(memnew(ReadCaptureTestBuffers));
+
+	// Capture K (slot sealed here) and Capture K+1 (next orbiting camera frame on same view_id/epoch).
+	RendererSceneRender::CameraData cam_data{};
+	cam_data.set_camera(Transform3D(Basis(), Vector3(0, 1, 5)), Projection(), false, false, Vector2(), 0, 1);
+	cam_data.source_viewport = viewport;
+	const auto tok_k = RSG::viewport->viewport_begin_camera_capture(viewport, cam_data, camera, native_vp->render_buffers);
+	REQUIRE(tok_k.is_valid());
+	Ref<RendererViewport::Viewport::CameraCapture> cap_k;
+	REQUIRE(RSG::viewport->viewport_get_camera_capture_ref(viewport, tok_k, cap_k));
+	REQUIRE(cap_k.is_valid());
+
+	cam_data.set_camera(Transform3D(Basis(), Vector3(1, 1, 5)), Projection(), false, false, Vector2(), 0, 1);
+	const auto tok_k1 = RSG::viewport->viewport_begin_camera_capture(viewport, cam_data, camera, native_vp->render_buffers);
+	REQUIRE(tok_k1.is_valid());
+	CHECK(tok_k1.view_id == tok_k.view_id);
+	CHECK(tok_k1.view_epoch == tok_k.view_epoch);
+	CHECK(tok_k1.capture_ordinal != tok_k.capture_ordinal);
+	Ref<RendererViewport::Viewport::CameraCapture> cap_k1;
+	REQUIRE(RSG::viewport->viewport_get_camera_capture_ref(viewport, tok_k1, cap_k1));
+	REQUIRE(cap_k1.is_valid());
+
+	// Set up an INDEXED_144 PASS_TRANSPARENT owner with a SEALED_RECORDED slot bound to cap_k.
+	RenderingDevice rd;
+	ExternalLinkedOwnerTest fixture(rd, true);
+	auto *ps = ParticlesStorage::get_singleton();
+	REQUIRE(ps != nullptr);
+	const RID particles = ps->particles_allocate();
+	ps->particles_initialize(particles);
+	auto *p_data = ps->particles_owner.get_or_null(particles);
+	REQUIRE(p_data != nullptr);
+
+	ExternalOutputConfig cfg;
+	cfg.profile = ExternalOutputConfig::INDEXED_144;
+	cfg.motion = ExternalOutputConfig::DISABLED;
+	cfg.pass_mask = ExternalOutputConfig::PASS_TRANSPARENT;
+	cfg.capacity = 1;
+	cfg.max_views = 1;
+	cfg.max_inflight = 2;
+	ExternalOutputOwner owner(cfg, 1);
+	owner.device = &rd;
+	owner.state = ExternalOutputOwner::GenerationState::ACTIVE;
+	owner.views[0].occupied = true;
+	owner.views[0].epoch = tok_k.view_epoch;
+
+	auto &slot = owner.slots[0];
+	slot.state = ExternalOutputOwner::LeaseState::SEALED_RECORDED;
+	slot.generated_indexed_mesh = RID::from_uint64(1);
+	slot.scene_cull_bound = true;
+	slot.guard_resources_ready = true;
+	slot.retained_host_snapshot = true;
+	slot.native_camera_source = cap_k;
+	slot.request.common.generation = 1;
+	slot.request.common.present_seq = 1;
+	slot.request.view_epoch = tok_k.view_epoch;
+	slot.request.common.current_camera_token = tok_k;
+	p_data->external = &owner;
+
+	// 1. Exact capture match returns OK.
+	uint32_t matched = UINT32_MAX;
+	CHECK(owner.find_generated_slot_for_capture(cap_k, matched) == OK);
+	CHECK(matched == 0u);
+
+	// 2. Cross-capture (orbiting camera cap_k1 != cap_k) MUST return ERR_UNAVAILABLE from
+	// find_generated_slot_for_capture so particles_external_generated_surfaces_for_view
+	// routes through its cross-capture replay path (setting replayed_across_capture = true
+	// and honoring p_allow_adopted_replay / p_defer_transparent_replay).
+	matched = UINT32_MAX;
+	CHECK(owner.find_generated_slot_for_capture(cap_k1, matched) == ERR_UNAVAILABLE);
+	CHECK(matched == UINT32_MAX);
+
+	// 3. particles_external_generated_surfaces_for_view honors p_allow_adopted_replay and
+	// p_defer_transparent_replay for cross-capture cap_k1 (previously bypassed!).
+	RenderDataRD render_data;
+	REQUIRE(render_data.set_camera_source(tok_k1.view_id, tok_k1.view_epoch, tok_k1.capture_ordinal));
+	REQUIRE(render_data.retain_native_camera_source(*RSG::viewport, cap_k1->get_camera_data(), native_vp->render_buffers));
+	uint32_t out_slot = UINT32_MAX;
+	uint32_t out_count = 0;
+	CHECK(ps->particles_external_generated_surfaces_for_view(particles, render_data, out_slot, out_count, false, false) == ERR_UNAVAILABLE);
+	CHECK(ps->particles_external_generated_surfaces_for_view(particles, render_data, out_slot, out_count, true, true) == ERR_UNAVAILABLE);
+
+	// Clean teardown.
+	p_data->external = nullptr;
+	ps->particles_free(particles);
+	slot.generated_indexed_mesh = RID();
+	slot.guard_resources_ready = false;
+	slot.native_camera_source.unref();
+	owner.state = ExternalOutputOwner::GenerationState::RELEASED;
+	RSG::viewport->free(viewport);
+	RSG::scene->free(camera);
+}
 void external_custody_issued_pin_test(GDExtensionDeviceExit::Registry &registry, GDExtensionProductionRequestRefV1 ref,
 		GDExtensionDeviceExit::ProductionOutputPin &pin, ExternalCustodyTestMode mode,
 		MeshStorage::NativeSurfaceHold *geometry) {
@@ -2045,4 +2155,8 @@ TEST_CASE("[B4][SceneOnlyRouting] original metadata profile is distinct from zer
 
 TEST_CASE("[B4][ReadReceiptLayout] original read graph and transfer bookkeeping is paid and slot scans are independent") {
 	RendererRD::TestExternalOutputOwnerStateAccess::read_receipt_layout();
+}
+
+TEST_CASE("[SceneTree][ExternalOutput][BUG-155A] cross-capture SEALED_RECORDED replay does not silently bypass replayed_across_capture and passes validate_scene_cull") {
+	RendererRD::ExternalLinkedOwnerTest::bug155a_cross_capture_sealed_replay();
 }

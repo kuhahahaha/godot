@@ -2198,34 +2198,6 @@ Error ExternalOutputOwner::find_generated_slot_for_capture(const Ref<RendererVie
 		matched = i;
 	}
 	if (matched == UINT32_MAX) {
-		const auto &camera_token = p_capture->get_token();
-		if (camera_token.is_valid()) {
-			uint64_t best_present_seq = 0;
-			for (uint32_t i = 0; i < slot_count; ++i) {
-				const auto &slot = slots[i];
-				if ((slot.state != LeaseState::SEALED_RECORDED && slot.state != LeaseState::ADOPTED) ||
-						slot.publication_closed || slot.pass_uses_closed || slot.generated_indexed_mesh.is_null() ||
-						!slot.scene_cull_bound || !slot.guard_resources_ready) {
-					continue;
-				}
-				const uint32_t view_idx = i / config.max_inflight;
-				if (view_idx >= config.max_views || !views[view_idx].occupied || views[view_idx].closed) {
-					continue;
-				}
-				if (slot.request.common.generation != generation || views[view_idx].epoch != slot.request.view_epoch ||
-						slot.request.view_epoch != camera_token.view_epoch ||
-						slot.request.common.current_camera_token.view_id != camera_token.view_id ||
-						slot.request.common.current_camera_token.view_epoch != camera_token.view_epoch) {
-					continue;
-				}
-				if (matched == UINT32_MAX || slot.request.common.present_seq >= best_present_seq) {
-					matched = i;
-					best_present_seq = slot.request.common.present_seq;
-				}
-			}
-		}
-	}
-	if (matched == UINT32_MAX) {
 		return ERR_UNAVAILABLE;
 	}
 	r_slot = matched;

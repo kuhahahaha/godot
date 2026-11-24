@@ -157,6 +157,7 @@ protected:
 	bool archive_activity_this_frame = false;
 	uint32_t archive_idle_frames = 0;
 	uint32_t archive_open_frames = 0;
+	std::atomic<uint64_t> archive_serialize_calls{ 0 };
 	PipelineCacheMode pipeline_cache_mode = PipelineCacheMode::RELEASE_AFTER_WARMUP;
 	WorkerThreadPool::TaskID archive_release_task = WorkerThreadPool::INVALID_TASK_ID;
 	// DEV: When true, attempting to create a pipeline will fail if it cannot use the archive.
@@ -815,6 +816,9 @@ public:
 		}
 		_record_pipeline_archive_addition(local_archive.get(), p_is_compute);
 		return true;
+	}
+	uint64_t test_get_pipeline_archive_serialize_calls() const {
+		return archive_serialize_calls.load(std::memory_order_acquire);
 	}
 #endif
 

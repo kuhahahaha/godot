@@ -825,6 +825,22 @@ TEST_CASE("[ExternalOutput][Metal][BUG-82][BUG-83][BUG-86] binary archive bounds
 	metal_driver->test_step_pipeline_archive_frame(1, true);
 	CHECK_FALSE(metal_driver->is_pipeline_archive_active());
 
+	// BUG-155B: Under default RELEASE_AFTER_WARMUP mode, calling pipeline_cache_serialize()
+	// (invoked synchronously by RenderingDevice::finalize() -> update_pipeline_cache(true))
+	// MUST skip MTLBinaryArchive::serializeToURL() so shutdown never triggers a +1.2 GB RSS spike.
+	REQUIRE(metal_driver->pipeline_cache_create(Vector<uint8_t>()));
+	CHECK(metal_driver->is_pipeline_archive_active());
+	CHECK(metal_driver->test_record_pipeline_archive_addition(true));
+	CHECK(metal_driver->test_record_pipeline_archive_addition(false));
+	CHECK(metal_driver->pipeline_cache_query_size() == 3u * 1024u);
+	const uint64_t serialize_calls_before = metal_driver->test_get_pipeline_archive_serialize_calls();
+	const Vector<uint8_t> serialized_blob = metal_driver->pipeline_cache_serialize();
+	CHECK(serialized_blob.is_empty());
+	CHECK(metal_driver->test_get_pipeline_archive_serialize_calls() == serialize_calls_before);
+	metal_driver->pipeline_cache_free();
+	CHECK_FALSE(metal_driver->is_pipeline_archive_active());
+	CHECK(metal_driver->pipeline_cache_query_size() == 1024u);
+
 	// BUG-83.2: MetalHeapAllocator must NEVER recycle Kind::DEDICATED buffers,
 	// and must evict recycled buffers from spill POOL blocks so extra placement heaps
 	// are reclaimed rather than pinned.
