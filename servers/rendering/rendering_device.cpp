@@ -13164,7 +13164,8 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 		// An ordinary advance already issued its old frame. Resume only this
 		// exact target, never execute the preceding graph again.
 		cursor.phase = qualification_frame_advance_pending ? 3 : 0;
-		native_disposal_active = true;
+		native_disposal_production_owned.store(p_production_owner != nullptr, std::memory_order_release);
+		native_disposal_active.store(true, std::memory_order_release);
 	}
 	if (cursor.phase == 0) {
 		if (failed_wait_frame >= 0 && uint32_t(failed_wait_frame) != cursor.target) {
@@ -13468,7 +13469,8 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 			frame_wait_error = OK;
 			failed_wait_frame = -1;
 			qualification_frame_advance_pending = false;
-			native_disposal_active = false;
+			native_disposal_active.store(false, std::memory_order_release);
+			native_disposal_production_owned.store(false, std::memory_order_release);
 			cursor = {};
 		}
 	}
@@ -14765,9 +14767,16 @@ RenderingDevice::DriverWorkarounds RenderingDevice::get_driver_workarounds() con
 }
 
 bool RenderingDevice::has_pending_production_frame_maintenance() const {
-	return is_main_instance && render_thread_id == Thread::get_caller_id() &&
-			native_disposal_active.load(std::memory_order_acquire) && native_disposal_continuation.production_owner &&
-			frame_issue_error.load() == OK && frame_wait_error.load() == OK && !frame_wait_native_code_valid.load();
+	if (!is_main_instance || !native_disposal_active.load(std::memory_order_acquire) ||
+			frame_issue_error.load(std::memory_order_acquire) != OK ||
+			frame_wait_error.load(std::memory_order_acquire) != OK ||
+			frame_wait_native_code_valid.load(std::memory_order_acquire)) {
+		return false;
+	}
+	if (render_thread_id == Thread::get_caller_id()) {
+		return native_disposal_production_owned.load(std::memory_order_acquire) || native_disposal_continuation.production_owner != nullptr;
+	}
+	return native_disposal_production_owned.load(std::memory_order_acquire);
 }
 
 bool RenderingDevice::has_pending_ordinary_frame_advance() const {

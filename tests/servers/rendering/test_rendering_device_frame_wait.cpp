@@ -1752,6 +1752,128 @@ public:
 		device.present_queue = RenderingDeviceDriver::CommandQueueID();
 		device.driver = nullptr;
 	}
+	static void bug174_thread_safe_pending_production_maintenance() {
+		struct Bug174Driver final : TransferTestDriverBase {
+			bool native_call_observation_supported() const override { return false; }
+			bool native_issue_bound(NativeIssueKind, uint32_t, uint32_t &r_bound) const override {
+				r_bound = 1;
+				return true;
+			}
+			Error qualification_prepare_segment(QueueCallReport &r_report, bool) override {
+				r_report = {};
+				return OK;
+			}
+			FencePollResult fence_poll(FenceID, uint64_t p_serial) override {
+				FencePollResult ok;
+				ok.completed = true;
+				ok.completed_serial = p_serial;
+				ok.resolved_issue = IssueFact::KnownAccepted;
+				return ok;
+			}
+			Error fence_wait(FenceID) override { return OK; }
+			Error fence_recycle(FenceID, uint64_t) override { return OK; }
+			bool command_pool_reset(CommandPoolID) override { return true; }
+			bool command_buffer_begin(CommandBufferID) override { return true; }
+			void command_buffer_end(CommandBufferID) override {}
+			void begin_segment(uint32_t, uint32_t) override {}
+			void end_segment() override {}
+			Error end_segment_checked(bool) override { return OK; }
+			Error command_queue_execute_and_present(CommandQueueID, VectorView<SemaphoreID>, VectorView<CommandBufferID>, VectorView<SemaphoreID>, FenceID, VectorView<SwapChainID>) override {
+				QueueCallReport report;
+				report.issued = true;
+				record_queue_call_report(report);
+				return OK;
+			}
+		} driver;
+
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.is_main_instance = true;
+		device.main_queue = RenderingDeviceDriver::CommandQueueID(11);
+		device.present_queue = device.main_queue;
+		device.frames.resize(2);
+		for (uint32_t i = 0; i < 2; ++i) {
+			device.frames[i].fence = RenderingDeviceDriver::FenceID(41 + i);
+			device.frames[i].command_buffer = RenderingDeviceDriver::CommandBufferID(31 + i);
+			device.frames[i].command_pool = RenderingDeviceDriver::CommandPoolID(21 + i);
+			device.frames[i].fence_signaled = false;
+			device.frames[i].primary_command_buffer_begun = false;
+		}
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 2, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+
+		auto query_from_other_thread = [&device]() -> bool {
+			struct Probe {
+				const RenderingDevice *rd = nullptr;
+				std::atomic<bool> observed{ false };
+				std::atomic<bool> different_thread{ false };
+			} probe{ &device };
+			Thread worker;
+			worker.start([](void *p_ud) {
+				auto *p = static_cast<Probe *>(p_ud);
+				p->different_thread.store(p->rd->render_thread_id != Thread::get_caller_id(), std::memory_order_release);
+				p->observed.store(p->rd->has_pending_production_frame_maintenance(), std::memory_order_release);
+			}, &probe);
+			worker.wait_to_finish();
+			REQUIRE(probe.different_thread.load(std::memory_order_acquire));
+			return probe.observed.load(std::memory_order_acquire);
+		};
+
+		// 1. Idle -> false on both RT and non-RT threads.
+		CHECK_FALSE(device.has_pending_production_frame_maintenance());
+		CHECK_FALSE(query_from_other_thread());
+
+		// 2. Ordinary (non-production) maintenance paused on tight budget -> false on both threads.
+		RenderingDevice::NativeDisposalBudget tight_budget;
+		tight_budget.passes = 1;
+		tight_budget.receipts = 1;
+		tight_budget.deadline_usec = OS::get_singleton()->get_ticks_usec() + 1000000;
+		RenderingDevice::NativeDisposalBudget generous_budget;
+		generous_budget.passes = 64;
+		generous_budget.receipts = 128;
+		generous_budget.deadline_usec = OS::get_singleton()->get_ticks_usec() + 5000000;
+		device.frames[device.frame].primary_command_buffer_begun = true;
+		RenderingDevice::NativeDisposalUsage usage;
+		CHECK(device._native_disposal_maintenance_step(tight_budget, usage, nullptr, nullptr, Ref<NativeHeightRange>(), false) == ERR_BUSY);
+		CHECK(device.native_disposal_active.load(std::memory_order_acquire));
+		CHECK_FALSE(device.has_pending_production_frame_maintenance());
+		CHECK_FALSE(query_from_other_thread());
+
+		// Finish ordinary maintenance.
+		usage = {};
+		CHECK(device._native_disposal_maintenance_step(generous_budget, usage, nullptr, nullptr, Ref<NativeHeightRange>(), false) == OK);
+		CHECK_FALSE(device.native_disposal_active.load(std::memory_order_acquire));
+
+		// 3. Production-owned maintenance paused on tight budget -> true on BOTH RT and non-RT threads!
+		const auto *fake_owner = reinterpret_cast<const GDExtensionDeviceExit::ProductionRequest *>(uintptr_t(0x1));
+		device.frames[0].fence_signaled = false;
+		device.frames[1].fence_signaled = false;
+		device.frames[device.frame].primary_command_buffer_begun = true;
+		usage = {};
+		CHECK(device._native_disposal_maintenance_step(tight_budget, usage, fake_owner, nullptr, Ref<NativeHeightRange>(), false) == ERR_BUSY);
+		CHECK(device.native_disposal_active.load(std::memory_order_acquire));
+		CHECK(device.has_pending_production_frame_maintenance());
+		CHECK(query_from_other_thread());
+
+		// 4. Fatal frame error suppresses pending-maintenance deferral on both threads.
+		device.frame_wait_error.store(FAILED, std::memory_order_release);
+		CHECK_FALSE(device.has_pending_production_frame_maintenance());
+		CHECK_FALSE(query_from_other_thread());
+		device.frame_wait_error.store(OK, std::memory_order_release);
+		CHECK(query_from_other_thread());
+
+		// 5. Completing production-owned maintenance clears both threads back to false.
+		usage = {};
+		CHECK(device._native_disposal_maintenance_step(generous_budget, usage, fake_owner, nullptr, Ref<NativeHeightRange>(), false) == OK);
+		CHECK_FALSE(device.native_disposal_active.load(std::memory_order_acquire));
+		CHECK_FALSE(device.has_pending_production_frame_maintenance());
+		CHECK_FALSE(query_from_other_thread());
+
+		device.frames.clear();
+		device.main_queue = RenderingDeviceDriver::CommandQueueID();
+		device.present_queue = RenderingDeviceDriver::CommandQueueID();
+		device.driver = nullptr;
+	}
 	static void attach_native_source(RenderingDevice &device, RenderingDeviceDriver &driver) {
 		device.driver = &driver;
 		device.frames.resize(1);
@@ -2921,4 +3043,8 @@ TEST_CASE("[SceneTree][RenderingDevice][BUG-128A] flush_command_queue_only skips
 
 TEST_CASE("[RenderingDevice][BUG-175A] transient ERR_BUSY propagates cleanly without false fatal fence errors and ordinary entrypoints resume ready") {
 	TestFrameWaitAccess::bug175a_transient_busy_uniform_set_and_ensure_ready();
+}
+
+TEST_CASE("[RenderingDevice][BUG-174] has_pending_production_frame_maintenance reports accurate atomic state cross-thread") {
+	TestFrameWaitAccess::bug174_thread_safe_pending_production_maintenance();
 }

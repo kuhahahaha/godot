@@ -351,13 +351,24 @@ Error Registry::production_output_preparation_validate_locked(ProductionOutputPi
 			control.output.control_serial == control.serial && control.output.result.native_error == OK && control.record_history.control_append_entered &&
 			segment.segment && segment.segment == request.segment.segment && segment.segment_revision == request.segment.segment_revision &&
 			segment.end_action_ordinal == request.action_count && segment.incomplete_upload_action_ordinal == UINT64_MAX;
+	// Pipeline preparation against a completely recorded, immutable output slot
+	// only builds read-only graphics state and may proceed while a non-mutating
+	// OBSERVE poll is PENDING/QUEUED/RETURNED (never while EXECUTING or mutating).
+	const bool non_mutating_observe = request.next_action == request.action_count &&
+			control.input.kind == ProductionControlKind::OBSERVE &&
+			control.input.request_serial == request.serial &&
+			!control.input.consumed_operation && !control.input.predecessor_bind &&
+			!control.output.output_generation.native_released &&
+			(control.state == ProductionControlState::PENDING ||
+					control.state == ProductionControlState::QUEUED ||
+					control.state == ProductionControlState::RETURNED);
 	if (phase != Phase::RUNNING || !request.frozen || request.cancelled || request.release_started || request.source_device_lost || request.effects_pending || request.capture_inflight ||
 			attachment.closing || !attachment.opened || !attachment.holder || attachment.holder->pending ||
 			attachment.holder->generation != attachment.library_generation || attachment.holder->handle_serial != record.producer_code_holder ||
 			!record.occupied || !record.attached || record.quiescing || record.close_started || record.close_error != OK ||
 			record.guard_enrollment != GuardEnrollment::QUALIFIED || record.snapshot.library_generation != attachment.library_generation ||
 			record.producer_registration_serial != attachment.producer_serial || !record.producer_attachment_identity || !native.live || rd.production_finalization_started.load(std::memory_order_acquire) ||
-			(control.state != ProductionControlState::OWNER_CONSUMED && !staged_return) ||
+			(control.state != ProductionControlState::OWNER_CONSUMED && !staged_return && !non_mutating_observe) ||
 			request.draw_list_open || request.compute_list_open) {
 		return ERR_BUSY;
 	}
@@ -513,10 +524,20 @@ bool Registry::production_output_slot_cross_capture_preparable(const ProductionO
 		return false;
 	}
 	const auto &request = *pin.request;
-	return phase == Phase::RUNNING && request.frozen && !request.cancelled && !request.release_started &&
-			!request.source_device_lost && !request.effects_pending && !request.capture_inflight &&
+	const auto &control = request.control;
+	const bool non_mutating_observe = request.next_action == request.action_count &&
+			control.input.kind == ProductionControlKind::OBSERVE &&
+			control.input.request_serial == request.serial &&
+			!control.input.consumed_operation && !control.input.predecessor_bind &&
+			!control.output.output_generation.native_released &&
+			(control.state == ProductionControlState::PENDING ||
+					control.state == ProductionControlState::QUEUED ||
+					control.state == ProductionControlState::RETURNED);
+	return phase == Phase::RUNNING && !production_physical_frame && request.frozen && !request.cancelled && !request.release_started &&
+			!request.source_device_lost && !request.effects_pending && !request.capture_inflight && !request.continuation_inflight &&
 			!request.draw_list_open && !request.compute_list_open &&
-			request.control.state == ProductionControlState::OWNER_CONSUMED;
+			!rd.production_finalization_started.load(std::memory_order_acquire) &&
+			(control.state == ProductionControlState::OWNER_CONSUMED || non_mutating_observe);
 }
 Error Registry::production_output_preparation_begin_internal(ProductionOutputPin &pin, RenderingDevice &rd, uint32_t action_ordinal, uint32_t surface_ordinal, uint64_t group, ProductionOutputPreparationScope &scope, uint32_t preparation_index, const RendererRD::ExternalPacketViewLease *selected_view) {
 	Lock lock(*this);

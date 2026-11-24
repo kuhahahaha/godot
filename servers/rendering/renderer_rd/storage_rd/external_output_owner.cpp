@@ -1492,6 +1492,26 @@ Error ExternalOutputOwner::acquire_camera_view(const ExternalSurfaceSelection &p
 					!slot.original_registry->production_output_pin_matches(slot.original_pin, slot.original_request, *rd)) {
 				continue;
 			}
+			if (is_instance192) {
+				bool has_ready_row = false;
+				if (preparation_rows && preparation_capacity) {
+					for (uint32_t r = 0; r < preparation_capacity; ++r) {
+						const auto &row = preparation_rows[r];
+						if (row.owner == this && row.owner_slot == s &&
+								(row.tuple_surface == UINT32_MAX || row.tuple_surface == p_surface.flattened_surface) &&
+								row.tuple_state == ExternalPipelinePreparation::TupleState::READY &&
+								row.finish_complete && row.finish_error == OK && row.backend_error == OK && row.pipeline_sealed) {
+							has_ready_row = true;
+							break;
+						}
+					}
+				}
+				if (!has_ready_row &&
+						!slot.original_registry->production_output_slot_cross_capture_preparable(
+								slot.original_pin, slot.original_request, *rd)) {
+					continue;
+				}
+			}
 			if (matched_slot == UINT32_MAX || slot.request.common.present_seq >= best_present_seq) {
 				matched_slot = s;
 				best_present_seq = slot.request.common.present_seq;

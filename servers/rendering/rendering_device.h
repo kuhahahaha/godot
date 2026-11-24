@@ -2130,6 +2130,7 @@ private:
 		RECYCLE,
 		WORK };
 	std::atomic<bool> native_disposal_active = false;
+	std::atomic<bool> native_disposal_production_owned = false;
 	uint64_t next_native_disposal_serial = 1;
 	struct NativeDisposalContinuation {
 		uint64_t serial = 0;

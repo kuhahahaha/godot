@@ -6997,7 +6997,7 @@ struct Access {
 		auto &device = registry.device_records[0];
 		const uint32_t private_before = record.private_refs, device_before = device.refs;
 
-		const GDExtensionProductionCapacityV1 whole = { production_dto_abi<GDExtensionProductionCapacityV1>(), 2, 2, 2, 8, 2, 64, 0, 2, 128, 0 };
+		const GDExtensionProductionCapacityV1 whole = { production_dto_abi<GDExtensionProductionCapacityV1>(), 2, 2, 2, 16, 2, 64, 0, 2, 128, 0 };
 		const auto attachment = fixture.accept(whole);
 
 		struct PinProbe {
@@ -7013,7 +7013,7 @@ struct Access {
 		REQUIRE(registry.production_install_record_receiver({ Enrollment::INSTANCE, 5 }, attachment, pin_receiver, &probe, nullptr) == OK);
 		REQUIRE(registry.production_open({ Enrollment::INSTANCE, 5 }, attachment).native_error == OK);
 
-		GDExtensionProductionCapacityV1 single = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 1, 1, 4, 1, 32, 0, 1, 64, 0 };
+		GDExtensionProductionCapacityV1 single = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 1, 1, 8, 1, 32, 0, 1, 64, 0 };
 		Request *r0 = nullptr;
 		Request *r1 = nullptr;
 		REQUIRE(fixture.reserve(attachment, single, 1620, r0) == OK);
@@ -7151,6 +7151,236 @@ struct Access {
 		fixture.driver.mesh_directory_factory = false;
 
 		// Unpin root pins and release both requests cleanly.
+		CHECK(registry.production_output_unpin(pin0) == OK);
+		CHECK(registry.production_output_unpin(pin1) == OK);
+		r0->frozen = false;
+		r0->control.state = ProductionControlState::OWNER_CONSUMED;
+		r1->frozen = false;
+		r1->control.state = ProductionControlState::OWNER_CONSUMED;
+		r1->next_action = 0;
+		REQUIRE(registry.production_cancel(ref0).native_error == OK);
+		REQUIRE(registry.production_release(ref0).native_error == OK);
+		REQUIRE(registry.production_cancel(ref1).native_error == OK);
+		REQUIRE(registry.production_release(ref1).native_error == OK);
+		REQUIRE(registry.production_close(attachment).native_error == OK);
+		CHECK(record.private_refs == private_before);
+		CHECK(device.refs == device_before);
+		CHECK(fixture.holder.production_children == 0);
+		CHECK(record.cleanup_reservations == 0);
+	}
+
+	static void bug174_observe_preparation_and_instance192_selection() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment fixture;
+		auto &registry = *fixture.registry;
+		auto &record = registry.records[0];
+		auto &device = registry.device_records[0];
+		const uint32_t private_before = record.private_refs, device_before = device.refs;
+
+		const GDExtensionProductionCapacityV1 whole = { production_dto_abi<GDExtensionProductionCapacityV1>(), 2, 2, 2, 16, 2, 64, 0, 2, 128, 0 };
+		const auto attachment = fixture.accept(whole);
+
+		struct PinProbe {
+			Registry *registry = nullptr;
+			RenderingDevice *rd = nullptr;
+			ProductionOutputPin *target = nullptr;
+			Error err = ERR_UNCONFIGURED;
+		} probe{ &registry, &fixture.rd, nullptr, ERR_UNCONFIGURED };
+		auto pin_receiver = +[](void *userdata, GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *) {
+			auto &p = *static_cast<PinProbe *>(userdata);
+			p.err = p.registry->production_output_pin_current(*p.rd, *p.target);
+		};
+		REQUIRE(registry.production_install_record_receiver({ Enrollment::INSTANCE, 5 }, attachment, pin_receiver, &probe, nullptr) == OK);
+		REQUIRE(registry.production_open({ Enrollment::INSTANCE, 5 }, attachment).native_error == OK);
+
+		GDExtensionProductionCapacityV1 single = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 1, 1, 8, 1, 32, 0, 1, 64, 0 };
+		Request *r0 = nullptr;
+		Request *r1 = nullptr;
+		REQUIRE(fixture.reserve(attachment, single, 1740, r0) == OK);
+		REQUIRE(fixture.reserve(attachment, single, 1741, r1) == OK);
+		REQUIRE(r0 != nullptr);
+		REQUIRE(r1 != nullptr);
+		fixture.driver.execution_thread = Thread::get_caller_id();
+		registry.device_records[0].execution_thread = Thread::get_caller_id();
+		registry.phase = Registry::Phase::RUNNING;
+		fixture.rd.render_thread_id = Thread::get_caller_id();
+		fixture.rd.is_main_instance = true;
+
+		auto issue_pin = [&](Request &req, ProductionOutputPin &pin) {
+			probe.target = &pin;
+			probe.err = ERR_UNCONFIGURED;
+			MutexLock lock(registry.mutex);
+			req.frozen = true;
+			req.next_action = 0;
+			req.graph_count = 0;
+			req.control.state = ProductionControlState::EXECUTING;
+			req.control.serial = 1;
+			req.control.input.kind = ProductionControlKind::RECORD;
+			req.control.input.request_serial = req.serial;
+			req.control.input.output_cancel = false;
+			REQUIRE(registry.production_record_receive_locked(req, fixture.rd, nullptr) == OK);
+			REQUIRE(probe.err == OK);
+			REQUIRE_FALSE(pin.is_empty());
+		};
+		ProductionOutputPin gen_pin;
+		ProductionOutputPin pin0;
+		ProductionOutputPin pin1;
+		const GDExtensionProductionRequestRefV1 ref0 = { Enrollment::INSTANCE, r0->serial };
+		const GDExtensionProductionRequestRefV1 ref1 = { Enrollment::INSTANCE, r1->serial };
+		issue_pin(*r0, gen_pin);
+		issue_pin(*r0, pin0);
+		issue_pin(*r1, pin1);
+		r0->next_action = r0->action_count;
+		r1->next_action = r1->action_count;
+		r0->control.state = ProductionControlState::OWNER_CONSUMED;
+
+		auto check_validate_passes_control_gate = [&](ProductionOutputPin &pin) {
+			MutexLock lock(registry.mutex);
+			RID *root = nullptr;
+			RendererRD::ExternalPipelinePreparation *prep = nullptr;
+			// action_ordinal=UINT32_MAX triggers ERR_INVALID_PARAMETER right AFTER the control-state gate.
+			return registry.production_output_preparation_validate_locked(pin, fixture.rd, UINT32_MAX, 0, 1, root, prep);
+		};
+
+		// (1) Non-mutating OBSERVE in PENDING/QUEUED/RETURNED is preparable and passes the control-state gate.
+		r1->control = {};
+		r1->control.serial = 2;
+		r1->control.input.kind = ProductionControlKind::OBSERVE;
+		r1->control.input.request_serial = r1->serial;
+		for (ProductionControlState st : { ProductionControlState::PENDING, ProductionControlState::QUEUED, ProductionControlState::RETURNED }) {
+			r1->control.state = st;
+			CHECK(registry.production_output_slot_cross_capture_preparable(pin1, ref1, fixture.rd));
+			CHECK(check_validate_passes_control_gate(pin1) == ERR_INVALID_PARAMETER);
+		}
+
+		// (2) EXECUTING, mutating OBSERVE (consumed_operation / predecessor_bind / native_released),
+		// incomplete recording (next_action < action_count), RELEASE, and non-staged RECORD remain ERR_BUSY.
+		r1->control.state = ProductionControlState::EXECUTING;
+		CHECK_FALSE(registry.production_output_slot_cross_capture_preparable(pin1, ref1, fixture.rd));
+		CHECK(check_validate_passes_control_gate(pin1) == ERR_BUSY);
+
+		r1->control.state = ProductionControlState::QUEUED;
+		r1->control.input.consumed_operation = 1;
+		CHECK_FALSE(registry.production_output_slot_cross_capture_preparable(pin1, ref1, fixture.rd));
+		CHECK(check_validate_passes_control_gate(pin1) == ERR_BUSY);
+		r1->control.input.consumed_operation = 0;
+
+		r1->control.input.predecessor_bind = true;
+		CHECK_FALSE(registry.production_output_slot_cross_capture_preparable(pin1, ref1, fixture.rd));
+		CHECK(check_validate_passes_control_gate(pin1) == ERR_BUSY);
+		r1->control.input.predecessor_bind = false;
+
+		r1->control.state = ProductionControlState::RETURNED;
+		r1->control.output.output_generation.native_released = true;
+		CHECK_FALSE(registry.production_output_slot_cross_capture_preparable(pin1, ref1, fixture.rd));
+		CHECK(check_validate_passes_control_gate(pin1) == ERR_BUSY);
+		r1->control.output.output_generation.native_released = false;
+
+		r1->control.state = ProductionControlState::QUEUED;
+		const uint32_t saved_action_count = r1->action_count;
+		r1->action_count = 1;
+		r1->next_action = 0;
+		CHECK_FALSE(registry.production_output_slot_cross_capture_preparable(pin1, ref1, fixture.rd));
+		CHECK(check_validate_passes_control_gate(pin1) == ERR_BUSY);
+		r1->action_count = saved_action_count;
+		r1->next_action = r1->action_count;
+
+		r1->control.input.kind = ProductionControlKind::RELEASE;
+		r1->control.state = ProductionControlState::QUEUED;
+		CHECK_FALSE(registry.production_output_slot_cross_capture_preparable(pin1, ref1, fixture.rd));
+		CHECK(check_validate_passes_control_gate(pin1) == ERR_BUSY);
+
+		r1->control.input.kind = ProductionControlKind::RECORD;
+		r1->control.state = ProductionControlState::RETURNED;
+		CHECK_FALSE(registry.production_output_slot_cross_capture_preparable(pin1, ref1, fixture.rd));
+		CHECK(check_validate_passes_control_gate(pin1) == ERR_BUSY);
+
+		// (3) INSTANCE_192 ExternalOutputOwner::acquire_camera_view prefers ready ADOPTED Slot 0 over
+		// unpreparable SEALED_RECORDED Slot 1, and switches to Slot 1 once OBSERVE QUEUED or OWNER_CONSUMED.
+		fixture.driver.mesh_directory_factory = true;
+		struct Bug174Ctx {
+			Request *r1 = nullptr;
+			RenderingDevice *rd = nullptr;
+			RID vbuf;
+			RID ibuf;
+			RendererRD::MeshStorage::Mesh::Surface *mesh_surf = nullptr;
+		} bug174_ctx{ r1, &fixture.rd, RID(), RID(), nullptr };
+		auto set_r1_mode = +[](void *p_ctx, int p_mode) {
+			auto *req = static_cast<Bug174Ctx *>(p_ctx)->r1;
+			req->control = {};
+			req->control.serial = 3;
+			req->control.input.request_serial = req->serial;
+			if (p_mode == 0) {
+				req->control.input.kind = ProductionControlKind::RECORD;
+				req->control.state = ProductionControlState::RETURNED;
+			} else if (p_mode == 1) {
+				req->control.input.kind = ProductionControlKind::OBSERVE;
+				req->control.state = ProductionControlState::EXECUTING;
+			} else if (p_mode == 2) {
+				req->control.input.kind = ProductionControlKind::OBSERVE;
+				req->control.state = ProductionControlState::QUEUED;
+			} else {
+				req->control.input.kind = ProductionControlKind::OBSERVE;
+				req->control.state = ProductionControlState::OWNER_CONSUMED;
+			}
+		};
+		auto acquire_geom = +[](void *p_ctx, RendererRD::MeshStorage::NativeSurfaceHold &r_hold) {
+			auto &c = *static_cast<Bug174Ctx *>(p_ctx);
+			Vector<RD::VertexAttribute> attrs;
+			RD::VertexAttribute attr;
+			attr.location = 0;
+			attr.format = RD::DATA_FORMAT_R32G32B32_SFLOAT;
+			attr.stride = 12;
+			attrs.push_back(attr);
+			const RD::VertexFormatID vfmt = c.rd->vertex_format_create(attrs);
+			REQUIRE(vfmt != 0);
+			c.vbuf = c.rd->vertex_buffer_create(36);
+			REQUIRE(c.vbuf.is_valid());
+			c.ibuf = c.rd->index_buffer_create(3, RD::INDEX_BUFFER_FORMAT_UINT32);
+			REQUIRE(c.ibuf.is_valid());
+			Vector<RID> vbufs;
+			vbufs.push_back(c.vbuf);
+			c.mesh_surf = memnew(RendererRD::MeshStorage::Mesh::Surface);
+			c.mesh_surf->external = false;
+			c.mesh_surf->format = RSE::ARRAY_FORMAT_VERTEX;
+			c.mesh_surf->vertex_count = 3;
+			c.mesh_surf->vertex_buffer = c.vbuf;
+			c.mesh_surf->index_buffer = c.ibuf;
+			c.mesh_surf->version_count = 1;
+			c.mesh_surf->versions = static_cast<RendererRD::MeshStorage::Mesh::Surface::Version *>(memalloc(sizeof(RendererRD::MeshStorage::Mesh::Surface::Version)));
+			new (&c.mesh_surf->versions[0]) RendererRD::MeshStorage::Mesh::Surface::Version;
+			c.mesh_surf->versions[0].input_mask = 1;
+			c.mesh_surf->versions[0].vertex_format = vfmt;
+			c.mesh_surf->versions[0].vertex_array = c.rd->vertex_array_create(3, vfmt, vbufs);
+			REQUIRE(c.mesh_surf->versions[0].vertex_array.is_valid());
+			REQUIRE(RendererRD::MeshStorage::_mesh_surface_hold_acquire(c.mesh_surf, 1, false, false, 0, r_hold) == OK);
+		};
+		auto release_geom = +[](void *p_ctx, RendererRD::MeshStorage::NativeSurfaceHold &r_hold) {
+			auto &c = *static_cast<Bug174Ctx *>(p_ctx);
+			CHECK(RendererRD::MeshStorage::mesh_surface_hold_release(r_hold) == OK);
+			c.rd->free_rid(c.mesh_surf->versions[0].vertex_array);
+			c.mesh_surf->versions[0].~Version();
+			memfree(c.mesh_surf->versions);
+			c.mesh_surf->versions = nullptr;
+			c.mesh_surf->version_count = 0;
+			c.rd->free_rid(c.ibuf);
+			c.rd->free_rid(c.vbuf);
+			memdelete(c.mesh_surf);
+			c.mesh_surf = nullptr;
+		};
+		uint64_t gen_root_serial = 0;
+		for (uint32_t i = 0; i < r0->capacity.resource_uses; ++i) {
+			if (r0->uses[i].output_consumer == &gen_pin) {
+				gen_root_serial = r0->uses[i].output_pin_serial;
+				break;
+			}
+		}
+		REQUIRE(gen_root_serial != 0);
+		RendererRD::ExternalLinkedOwnerTest::bug174_instance192_cross_capture_selection(
+				registry, fixture.rd, gen_pin, gen_root_serial, pin0, ref0, pin1, ref1, set_r1_mode, acquire_geom, release_geom, &bug174_ctx);
+		fixture.driver.mesh_directory_factory = false;
+
+		CHECK(registry.production_output_unpin(gen_pin) == OK);
 		CHECK(registry.production_output_unpin(pin0) == OK);
 		CHECK(registry.production_output_unpin(pin1) == OK);
 		r0->frozen = false;
@@ -23792,4 +24022,8 @@ TEST_CASE("[ProductionRequest][BUG-115] material qualification observe returns E
 
 TEST_CASE("[SceneTree][ExternalOutput][BUG-162] cross-frame recorded ordering, pre-scope preparation rollback, and ADOPTED-over-unpreparable-SEALED selection") {
 	TestProductionRequest::Access::bug162_cross_capture_ordered_and_slot_selection();
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][BUG-174] non-mutating OBSERVE allows pipeline preparation and INSTANCE_192 cross-capture prefers ready ADOPTED slot") {
+	TestProductionRequest::Access::bug174_observe_preparation_and_instance192_selection();
 }
