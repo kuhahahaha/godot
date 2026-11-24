@@ -1634,6 +1634,124 @@ public:
 		device.frames.clear();
 		device.driver = nullptr;
 	}
+	static void bug175a_transient_busy_uniform_set_and_ensure_ready() {
+		struct Bug175ADriver final : TransferTestDriverBase {
+			uint32_t begin_segments = 0;
+			uint32_t end_segments = 0;
+			uint32_t executes = 0;
+			FencePollResult fence_poll(FenceID, uint64_t p_serial) override {
+				FencePollResult ok;
+				ok.completed = true;
+				ok.completed_serial = p_serial;
+				ok.resolved_issue = IssueFact::KnownAccepted;
+				return ok;
+			}
+			bool native_call_observation_supported() const override { return false; }
+			bool native_issue_bound(NativeIssueKind, uint32_t, uint32_t &r_bound) const override {
+				r_bound = 1;
+				return true;
+			}
+			Error fence_wait(FenceID) override { return OK; }
+			Error fence_recycle(FenceID, uint64_t) override { return OK; }
+			bool command_pool_reset(CommandPoolID) override { return true; }
+			void begin_segment(uint32_t, uint32_t) override { ++begin_segments; }
+			void end_segment() override { ++end_segments; }
+			Error end_segment_checked(bool) override {
+				++end_segments;
+				return OK;
+			}
+			bool command_buffer_begin(CommandBufferID) override { return true; }
+			void command_buffer_end(CommandBufferID) override {}
+			Error command_queue_execute_and_present(CommandQueueID, VectorView<SemaphoreID>, VectorView<CommandBufferID>, VectorView<SemaphoreID>, FenceID, VectorView<SwapChainID>) override {
+				++executes;
+				QueueCallReport report;
+				report.issued = true;
+				record_queue_call_report(report);
+				return OK;
+			}
+		} driver;
+
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.is_main_instance = true;
+		device.main_queue = RenderingDeviceDriver::CommandQueueID(11);
+		device.present_queue = device.main_queue;
+		device.frames.resize(2);
+		for (uint32_t i = 0; i < 2; ++i) {
+			device.frames[i].fence = RenderingDeviceDriver::FenceID(41 + i);
+			device.frames[i].command_buffer = RenderingDeviceDriver::CommandBufferID(31 + i);
+			device.frames[i].command_pool = RenderingDeviceDriver::CommandPoolID(21 + i);
+			device.frames[i].fence_signaled = false;
+			device.frames[i].primary_command_buffer_begun = false;
+			device.frames[i].qualification_epoch = 1 + i;
+		}
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 2, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+
+		// 1. Transient qualification_graph_closed must NOT claim a fatal fence failure,
+		//    and _uniform_set_create_qualification for a managed caller must propagate
+		//    ERR_BUSY to last_uniform_set_create_error with ZERO errors logged.
+		device.frames[0].qualification_graph_closed = true;
+		device.frames[0].primary_command_buffer_begun = true;
+		CHECK(device._recording_fatal_error() == OK);
+		CHECK(device._recording_error() == ERR_BUSY);
+		const String transient_msg = device._recording_suspended_message(ERR_BUSY);
+		CHECK(transient_msg.contains("graph_closed=1"));
+		CHECK_FALSE(transient_msg.contains("frame fence wait failure"));
+
+		FrameErrors errors;
+		GDExtensionDeviceExit::QualificationPhysicalReturn fake_cell;
+		ERR_PRINT_OFF;
+		const RID busy_set = device._uniform_set_create_qualification(VectorView<RenderingDevice::Uniform>(), RID(), 0, false, &fake_cell, nullptr);
+		ERR_PRINT_ON;
+		CHECK(busy_set.is_null());
+		CHECK(device.last_uniform_set_create_error == ERR_BUSY);
+		CHECK(errors.count == 0);
+
+		// 2. Ordinary compute_list_begin() resumes qualification_graph_closed via
+		//    _ensure_recording_ready() cleanly without logging any error.
+		errors.count = 0;
+		const RenderingDevice::ComputeListID cl = device.compute_list_begin();
+		CHECK(cl != RenderingDevice::ComputeListID(RenderingDevice::INVALID_ID));
+		CHECK(errors.count == 0);
+		CHECK(device._recording_error() == OK);
+		CHECK(driver.executes == 1);
+		CHECK(driver.begin_segments == 1);
+		device.compute_list_end();
+
+		// 3. ensure_ordinary_draw_ready() pumps ordinary (non-production) native disposal
+		//    and returns OK, while returning ERR_BUSY cleanly during frame_wait_draining.
+		device.frames[device.frame].fence_signaled = false;
+		device.qualification_frame_advance_pending = true;
+		device.native_disposal_continuation = {};
+		device.native_disposal_continuation.serial = 1;
+		device.native_disposal_continuation.phase = 4;
+		device.native_disposal_continuation.target = uint32_t(device.frame);
+		device.native_disposal_active.store(true, std::memory_order_release);
+		errors.count = 0;
+		CHECK(device.ensure_ordinary_draw_ready() == OK);
+		CHECK(errors.count == 0);
+		CHECK_FALSE(device.native_disposal_active.load());
+		CHECK_FALSE(device.qualification_frame_advance_pending.load());
+
+		device.frame_wait_draining.store(true);
+		CHECK(device.ensure_ordinary_draw_ready() == ERR_BUSY);
+		device.frame_wait_draining.store(false);
+
+		// 4. Actual fatal frame_wait_error reports the fatal fence-wait message.
+		device.frame_wait_error.store(FAILED);
+		CHECK(device._recording_fatal_error() == FAILED);
+		CHECK(device._recording_suspended_message(FAILED).contains("frame fence wait failure"));
+		CHECK(device.ensure_ordinary_draw_ready() == FAILED);
+		device.frame_wait_error.store(OK);
+
+		device.native_disposal_continuation = {};
+		device.native_disposal_active.store(false, std::memory_order_release);
+		device.frames.clear();
+		device.main_queue = RenderingDeviceDriver::CommandQueueID();
+		device.present_queue = RenderingDeviceDriver::CommandQueueID();
+		device.driver = nullptr;
+	}
 	static void attach_native_source(RenderingDevice &device, RenderingDeviceDriver &driver) {
 		device.driver = &driver;
 		device.frames.resize(1);
@@ -2799,4 +2917,8 @@ TEST_CASE("[RenderingDevice][BUG-125] fence_recycle marks chain_reports source_o
 
 TEST_CASE("[SceneTree][RenderingDevice][BUG-128A] flush_command_queue_only skips pump_qualification_frame_if_idle while sync triggers it") {
 	TestFrameWaitAccess::bug128a_flush_command_queue_only_skips_qualification_pump();
+}
+
+TEST_CASE("[RenderingDevice][BUG-175A] transient ERR_BUSY propagates cleanly without false fatal fence errors and ordinary entrypoints resume ready") {
+	TestFrameWaitAccess::bug175a_transient_busy_uniform_set_and_ensure_ready();
 }

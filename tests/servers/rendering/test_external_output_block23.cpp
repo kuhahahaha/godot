@@ -905,6 +905,94 @@ TEST_CASE("[ExternalOutput][Metal][BUG-82][BUG-83][BUG-86] binary archive bounds
 	metal_driver->pipeline_cache_free();
 	context.driver_free(driver_base);
 }
+
+TEST_CASE("[ExternalOutput][Metal][BUG-175B] compute_pso_cache evicts entries in O(k) when the last shader owning an MDLibrary is freed") {
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDevice rd;
+	REQUIRE(rd.initialize(&context) == OK);
+	struct FinalizeGuard {
+		RenderingDevice &rd;
+		~FinalizeGuard() { rd.finalize(); }
+	} guard{ rd };
+
+	const char *kComputeGlslA = R"(#version 450
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout(set = 0, binding = 0, std430) buffer Buf { uint v[]; };
+void main() { v[0] += 11u; }
+)";
+	const char *kComputeGlslB = R"(#version 450
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout(set = 0, binding = 0, std430) buffer Buf { uint v[]; };
+void main() { v[0] += 23u; }
+)";
+
+	auto compile_compute_bytecode = [&](const char *p_src, const char *p_name) -> Vector<uint8_t> {
+		RD::ShaderStageSPIRVData cs;
+		cs.shader_stage = RD::SHADER_STAGE_COMPUTE;
+		String err;
+		cs.spirv = rd.shader_compile_spirv_from_source(RD::SHADER_STAGE_COMPUTE, String(p_src), RD::SHADER_LANGUAGE_GLSL, &err);
+		REQUIRE(err.is_empty());
+		REQUIRE(!cs.spirv.is_empty());
+		Vector<RD::ShaderStageSPIRVData> stages;
+		stages.push_back(cs);
+		const Vector<uint8_t> bytecode = rd.shader_compile_binary_from_spirv(stages, String(p_name));
+		REQUIRE(!bytecode.is_empty());
+		return bytecode;
+	};
+
+	const Vector<uint8_t> bytecode_a = compile_compute_bytecode(kComputeGlslA, "bug175b_a");
+	const Vector<uint8_t> bytecode_b = compile_compute_bytecode(kComputeGlslB, "bug175b_b");
+
+	const uint64_t misses_before = RenderingDeviceDriverMetal::get_total_compute_pso_cache_misses();
+	const uint64_t evictions_before = RenderingDeviceDriverMetal::get_total_compute_pso_cache_evictions();
+
+	const RID shader_a1 = rd.shader_create_from_bytecode(bytecode_a);
+	const RID shader_a2 = rd.shader_create_from_bytecode(bytecode_a);
+	const RID shader_b = rd.shader_create_from_bytecode(bytecode_b);
+	REQUIRE(shader_a1.is_valid());
+	REQUIRE(shader_a2.is_valid());
+	REQUIRE(shader_b.is_valid());
+
+	const RID pipe_a1 = rd.compute_pipeline_create(shader_a1);
+	const RID pipe_a2 = rd.compute_pipeline_create(shader_a2);
+	const RID pipe_b = rd.compute_pipeline_create(shader_b);
+	REQUIRE(pipe_a1.is_valid());
+	REQUIRE(pipe_a2.is_valid());
+	REQUIRE(pipe_b.is_valid());
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_misses() == misses_before + 2u);
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_evictions() == evictions_before);
+
+	// Freeing shader_a1 while shader_a2 still owns the shared MDLibrary keeps its cached PSO alive.
+	rd.free_rid(pipe_a1);
+	rd.free_rid(shader_a1);
+	rd.submit();
+	rd.sync();
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_evictions() == evictions_before);
+
+	// Freeing shader_b (sole owner of bytecode_b's MDLibrary) immediately evicts its compute PSO entry in O(k).
+	rd.free_rid(pipe_b);
+	rd.free_rid(shader_b);
+	rd.submit();
+	rd.sync();
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_evictions() == evictions_before + 1u);
+
+	// Recreating shader_b2 + pipe_b2 MUST miss compute_pso_cache, proving genuine eviction.
+	const RID shader_b2 = rd.shader_create_from_bytecode(bytecode_b);
+	REQUIRE(shader_b2.is_valid());
+	const RID pipe_b2 = rd.compute_pipeline_create(shader_b2);
+	REQUIRE(pipe_b2.is_valid());
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_misses() == misses_before + 3u);
+
+	// Freeing all remaining shaders immediately evicts both remaining entries.
+	rd.free_rid(pipe_b2);
+	rd.free_rid(shader_b2);
+	rd.free_rid(pipe_a2);
+	rd.free_rid(shader_a2);
+	rd.submit();
+	rd.sync();
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_evictions() == evictions_before + 3u);
+}
 #endif
 
 } // namespace TestExternalOutputBlock23

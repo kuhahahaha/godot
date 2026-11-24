@@ -172,23 +172,19 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 			redraw_request();
 			return;
 		}
-		if (device->is_main_instance && device->qualification_frame_advance_pending.load() && !device->native_disposal_active.load(std::memory_order_acquire)) {
-			// Resume this exact recording slot before advancing renderer state.
-			// Existing native failures must not be cleared by a fresh wait attempt.
-			Error resume_error = device->frame_issue_error.load();
-			if (resume_error == OK) {
-				resume_error = device->frame_wait_error.load();
-			}
-			if (resume_error == OK) {
-				resume_error = device->frame_wait_native_code_valid.load() ? FAILED : device->_begin_frame(true);
-			}
-			if (resume_error != OK) {
+		if (device->is_main_instance) {
+			// Unify pre-draw readiness across all resumable transient states
+			// (ordinary disposal continuation, closed qualification graph, pending
+			// ordinary frame advance) before entering begin_frame() / draw_viewports().
+			const Error ready_error = device->ensure_ordinary_draw_ready();
+			if (ready_error != OK) {
 				redraw_request();
-				if (resume_error == ERR_BUSY && device->frame_issue_error.load() == OK && device->frame_wait_error.load() == OK && !device->frame_wait_native_code_valid.load()) {
-					return; // Native source contention retains callbacks and redraw demand.
+				if (ready_error == ERR_BUSY && device->frame_issue_error.load() == OK &&
+						device->frame_wait_error.load() == OK && !device->frame_wait_native_code_valid.load()) {
+					return; // Transient contention retains callbacks and redraw demand.
 				}
 				ERR_FAIL_MSG(vformat("Failed to resume pending rendering frame: error=%d issue=%d wait=%d native_code_valid=%d native_code=%d.",
-						int(resume_error), int(device->frame_issue_error.load()), int(device->frame_wait_error.load()),
+						int(ready_error), int(device->frame_issue_error.load()), int(device->frame_wait_error.load()),
 						int(device->frame_wait_native_code_valid.load()), device->frame_wait_native_code.load()));
 			}
 		}
@@ -554,11 +550,26 @@ void RenderingServerDefault::_thread_exit() {
 	exit = true;
 }
 
+#if defined(__APPLE__)
+extern "C" {
+void *objc_autoreleasePoolPush(void);
+void objc_autoreleasePoolPop(void *p_pool);
+}
+struct ScopedAppleAutoreleasePool {
+	void *pool = nullptr;
+	ScopedAppleAutoreleasePool() : pool(objc_autoreleasePoolPush()) {}
+	~ScopedAppleAutoreleasePool() { objc_autoreleasePoolPop(pool); }
+};
+#endif
+
 void RenderingServerDefault::_thread_loop() {
 	DisplayServer::get_singleton()->gl_window_make_current(DisplayServerEnums::MAIN_WINDOW_ID); // Move GL to this thread.
 
 	while (!exit) {
 		WorkerThreadPool::get_singleton()->yield();
+#if defined(__APPLE__)
+		ScopedAppleAutoreleasePool autorelease_pool;
+#endif
 		command_queue.flush_all();
 	}
 

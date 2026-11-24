@@ -55,6 +55,10 @@
 #include "core/io/file_access.h"
 #include "core/os/os.h"
 
+#ifdef MACOS_ENABLED
+#include <malloc/malloc.h>
+#endif
+
 thread_local LocalVector<RenderingDeviceDriverMetal::CompletionRecord *> *RenderingDeviceDriverMetal::active_completion_records = nullptr;
 thread_local uint64_t RenderingDeviceDriverMetal::active_native_serial = 0;
 thread_local uint32_t RenderingDeviceDriverMetal::active_native_serial_count = 0;
@@ -500,6 +504,7 @@ bool RenderingDeviceDriverMetal::buffer_set_texel_format(BufferID p_buffer, Data
 }
 
 void RenderingDeviceDriverMetal::buffer_free(BufferID p_buffer) {
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 	BufferInfo *buf_info = (BufferInfo *)p_buffer.id;
 
 	allocator->free_buffer(*buf_info);
@@ -964,6 +969,7 @@ RDD::TextureID RenderingDeviceDriverMetal::texture_create_shared_from_slice(Text
 }
 
 void RenderingDeviceDriverMetal::texture_free(TextureID p_texture) {
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 	TextureInfo *tex_info = (TextureInfo *)p_texture.id;
 	if (tex_info->imported) {
 		MutexLock lock(imported_textures_mutex);
@@ -1514,15 +1520,41 @@ void RenderingDeviceDriverMetal::framebuffer_free(FramebufferID p_framebuffer) {
 
 #pragma mark - Shader
 
-void RenderingDeviceDriverMetal::shader_cache_free_entry(ShaderCacheEntry *p_entry) {
-	MutexLock lock(_shader_cache_lock);
-	// Only remove the map slot if it still refers to this exact entry. A concurrent
-	// creation for the same hash may have replaced it, in which case that newer entry
-	// (and its library) must be left untouched.
-	if (ShaderCacheEntry **pentry = _shader_cache.getptr(p_entry->key); pentry != nullptr && *pentry == p_entry) {
-		_shader_cache.erase(p_entry->key);
+void RenderingDeviceDriverMetal::evict_compute_pso_for_library(const SHA256Digest &p_library_key) {
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+	MutexLock lock(pipeline_state_cache_mutex);
+	if (LocalVector<ComputePipelineCacheKey> *keys = compute_pso_keys_by_library.getptr(p_library_key)) {
+		uint64_t evicted = 0;
+		for (const ComputePipelineCacheKey &key : *keys) {
+			if (compute_pso_cache.erase(key)) {
+				++evicted;
+			}
+		}
+		compute_pso_keys_by_library.erase(p_library_key);
+		if (evicted) {
+			total_compute_pso_cache_evictions.fetch_add(evicted, std::memory_order_relaxed);
+		}
 	}
-	memdelete(p_entry);
+}
+
+void RenderingDeviceDriverMetal::shader_cache_free_entry(ShaderCacheEntry *p_entry) {
+	SHA256Digest evicted_key;
+	bool should_evict_compute_pso = false;
+	{
+		MutexLock lock(_shader_cache_lock);
+		// Only remove the map slot if it still refers to this exact entry. A concurrent
+		// creation for the same hash may have replaced it, in which case that newer entry
+		// (and its library) must be left untouched.
+		if (ShaderCacheEntry **pentry = _shader_cache.getptr(p_entry->key); pentry != nullptr && *pentry == p_entry) {
+			evicted_key = p_entry->key;
+			should_evict_compute_pso = true;
+			_shader_cache.erase(p_entry->key);
+		}
+		memdelete(p_entry);
+	}
+	if (should_evict_compute_pso) {
+		evict_compute_pso_for_library(evicted_key);
+	}
 }
 
 std::optional<std::shared_ptr<MDLibrary>> RenderingDeviceDriverMetal::shader_cache_get_library(const SHA256Digest &key) {
@@ -1851,6 +1883,7 @@ bool RenderingDeviceDriverMetal::shader_retire_ready_nonblocking(ShaderID p_shad
 }
 
 void RenderingDeviceDriverMetal::shader_free(ShaderID p_shader) {
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 	{
 		MutexLock lock(pipeline_state_cache_mutex);
 		LocalVector<RenderPipelineCacheKey> stale_render_keys;
@@ -1862,11 +1895,6 @@ void RenderingDeviceDriverMetal::shader_free(ShaderID p_shader) {
 		for (const RenderPipelineCacheKey &key : stale_render_keys) {
 			render_pso_cache.erase(key);
 		}
-		// compute_pso_cache is content-addressed by MDLibrary SHA-256 + descriptor
-		// mutability + specialization constants and stores self-contained
-		// NS::SharedPtr<MTL::ComputePipelineState> (no raw MDComputeShader pointers),
-		// so entries remain valid across shader_free and are bounded by
-		// MAX_COMPUTE_PSO_CACHE_ENTRIES and cleared in ~RenderingDeviceDriverMetal().
 	}
 	MDShader *obj = (MDShader *)p_shader.id;
 	delete obj;
@@ -2175,6 +2203,7 @@ void RenderingDeviceDriverMetal::command_copy_texture_to_buffer(CommandBufferID 
 #pragma mark - Pipeline
 
 void RenderingDeviceDriverMetal::pipeline_free(PipelineID p_pipeline_id) {
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 	MDPipeline *obj = (MDPipeline *)(p_pipeline_id.id);
 	delete obj;
 }
@@ -2757,6 +2786,7 @@ std::atomic<uint64_t> RenderingDeviceDriverMetal::total_render_pso_cache_hits{ 0
 std::atomic<uint64_t> RenderingDeviceDriverMetal::total_render_pso_cache_misses{ 0 };
 std::atomic<uint64_t> RenderingDeviceDriverMetal::total_compute_pso_cache_hits{ 0 };
 std::atomic<uint64_t> RenderingDeviceDriverMetal::total_compute_pso_cache_misses{ 0 };
+std::atomic<uint64_t> RenderingDeviceDriverMetal::total_compute_pso_cache_evictions{ 0 };
 
 static _FORCE_INLINE_ uint32_t _metal_float_bits(float p_val) {
 	uint32_t bits = 0;
@@ -3496,10 +3526,19 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 		MutexLock lock(pipeline_state_cache_mutex);
 		if (compute_pso_cache.size() >= MAX_COMPUTE_PSO_CACHE_ENTRIES) {
 			compute_pso_cache.clear();
+			compute_pso_keys_by_library.clear();
 		}
 		ComputePipelineCacheEntry entry;
 		entry.state = state;
+		const bool inserted_new = !compute_pso_cache.has(cache_key);
+		ComputePipelineCacheKey key_copy;
+		if (inserted_new) {
+			key_copy = cache_key;
+		}
 		compute_pso_cache.insert(std::move(cache_key), std::move(entry));
+		if (inserted_new) {
+			compute_pso_keys_by_library[key_copy.library_key].push_back(std::move(key_copy));
+		}
 	}
 
 	MDComputePipeline *pipeline = new MDComputePipeline(state);
@@ -4154,15 +4193,75 @@ RenderingDeviceDriverMetal::RenderingDeviceDriverMetal(RenderingContextDriverMet
 }
 
 RenderingDeviceDriverMetal::~RenderingDeviceDriverMetal() {
+	auto relief = []() {
+#ifdef MACOS_ENABLED
+		malloc_zone_pressure_relief(nullptr, 0);
+#endif
+	};
+	constexpr uint32_t TEARDOWN_BATCH = 16u;
 	{
 		MutexLock lock(pipeline_state_cache_mutex);
+		LocalVector<RenderPipelineCacheKey> render_keys;
+		render_keys.reserve(render_pso_cache.size());
+		for (const KeyValue<RenderPipelineCacheKey, RenderPipelineCacheEntry> &kv : render_pso_cache) {
+			render_keys.push_back(kv.key);
+		}
+		for (uint32_t i = 0; i < render_keys.size(); i += TEARDOWN_BATCH) {
+			{
+				NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+				const uint32_t end = MIN(i + TEARDOWN_BATCH, render_keys.size());
+				for (uint32_t j = i; j < end; ++j) {
+					render_pso_cache.erase(render_keys[j]);
+				}
+			}
+			relief();
+		}
 		render_pso_cache.clear();
+
+		LocalVector<ComputePipelineCacheKey> compute_keys;
+		compute_keys.reserve(compute_pso_cache.size());
+		for (const KeyValue<ComputePipelineCacheKey, ComputePipelineCacheEntry> &kv : compute_pso_cache) {
+			compute_keys.push_back(kv.key);
+		}
+		for (uint32_t i = 0; i < compute_keys.size(); i += TEARDOWN_BATCH) {
+			{
+				NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+				const uint32_t end = MIN(i + TEARDOWN_BATCH, compute_keys.size());
+				for (uint32_t j = i; j < end; ++j) {
+					compute_pso_cache.erase(compute_keys[j]);
+				}
+			}
+			relief();
+		}
 		compute_pso_cache.clear();
+		compute_pso_keys_by_library.clear();
 	}
-	pipeline_cache_free();
-	drain_completion_records();
-	for (KeyValue<SHA256Digest, ShaderCacheEntry *> &kv : _shader_cache) {
-		memdelete(kv.value);
+	{
+		NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+		pipeline_cache_free();
+		drain_completion_records();
+	}
+	relief();
+	{
+		LocalVector<ShaderCacheEntry *> shader_entries;
+		{
+			MutexLock lock(_shader_cache_lock);
+			shader_entries.reserve(_shader_cache.size());
+			for (KeyValue<SHA256Digest, ShaderCacheEntry *> &kv : _shader_cache) {
+				shader_entries.push_back(kv.value);
+			}
+			_shader_cache.clear();
+		}
+		for (uint32_t i = 0; i < shader_entries.size(); i += TEARDOWN_BATCH) {
+			{
+				NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+				const uint32_t end = MIN(i + TEARDOWN_BATCH, shader_entries.size());
+				for (uint32_t j = i; j < end; ++j) {
+					memdelete(shader_entries[j]);
+				}
+			}
+			relief();
+		}
 	}
 
 	memdelete(shader_container_format);
@@ -4170,24 +4269,28 @@ RenderingDeviceDriverMetal::~RenderingDeviceDriverMetal() {
 	memdelete(device_properties);
 
 	if (allocator != nullptr) {
-		allocator->free_buffer(copy_queue_buffer);
+		{
+			NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+			allocator->free_buffer(copy_queue_buffer);
 
 #ifdef DEBUG_ENABLED
-		if (OS::get_singleton()->is_stdout_verbose()) {
-			MetalAllocatorStats stats;
-			allocator->get_stats(stats);
-			const char *pool_names[3] = { "private", "shared", "shared_wc" };
-			for (uint32_t i = 0; i < 3; i++) {
-				const MetalAllocatorStats::Pool &p = stats.pools[i];
-				print_verbose(vformat("Metal allocator pool %s: %d blocks, %s reserved, %s used, %d live allocations, %d dedicated (%s).",
-						pool_names[i], p.block_count, String::humanize_size(p.reserved_bytes), String::humanize_size(p.used_bytes),
-						p.allocation_count, p.dedicated_count, String::humanize_size(p.dedicated_bytes)));
+			if (OS::get_singleton()->is_stdout_verbose()) {
+				MetalAllocatorStats stats;
+				allocator->get_stats(stats);
+				const char *pool_names[3] = { "private", "shared", "shared_wc" };
+				for (uint32_t i = 0; i < 3; i++) {
+					const MetalAllocatorStats::Pool &p = stats.pools[i];
+					print_verbose(vformat("Metal allocator pool %s: %d blocks, %s reserved, %s used, %d live allocations, %d dedicated (%s).",
+							pool_names[i], p.block_count, String::humanize_size(p.reserved_bytes), String::humanize_size(p.used_bytes),
+							p.allocation_count, p.dedicated_count, String::humanize_size(p.dedicated_bytes)));
+				}
 			}
-		}
 #endif
 
-		memdelete(allocator);
-		allocator = nullptr;
+			memdelete(allocator);
+			allocator = nullptr;
+		}
+		relief();
 	}
 }
 

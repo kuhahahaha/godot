@@ -281,6 +281,8 @@ protected:
 	Mutex pipeline_state_cache_mutex;
 	HashMap<RenderPipelineCacheKey, RenderPipelineCacheEntry, RenderPipelineCacheKeyHasher> render_pso_cache;
 	HashMap<ComputePipelineCacheKey, ComputePipelineCacheEntry, ComputePipelineCacheKeyHasher> compute_pso_cache;
+	HashMap<SHA256Digest, LocalVector<ComputePipelineCacheKey>> compute_pso_keys_by_library;
+	void evict_compute_pso_for_library(const SHA256Digest &p_library_key);
 	std::atomic<uint64_t> render_pso_cache_hits{ 0 };
 	std::atomic<uint64_t> render_pso_cache_misses{ 0 };
 	std::atomic<uint64_t> compute_pso_cache_hits{ 0 };
@@ -289,6 +291,7 @@ protected:
 	static std::atomic<uint64_t> total_render_pso_cache_misses;
 	static std::atomic<uint64_t> total_compute_pso_cache_hits;
 	static std::atomic<uint64_t> total_compute_pso_cache_misses;
+	static std::atomic<uint64_t> total_compute_pso_cache_evictions;
 
 #pragma mark - Copy Queue
 
@@ -801,6 +804,7 @@ public:
 	static uint64_t get_total_render_pso_cache_misses() { return total_render_pso_cache_misses.load(std::memory_order_relaxed); }
 	static uint64_t get_total_compute_pso_cache_hits() { return total_compute_pso_cache_hits.load(std::memory_order_relaxed); }
 	static uint64_t get_total_compute_pso_cache_misses() { return total_compute_pso_cache_misses.load(std::memory_order_relaxed); }
+	static uint64_t get_total_compute_pso_cache_evictions() { return total_compute_pso_cache_evictions.load(std::memory_order_relaxed); }
 	bool is_pipeline_archive_active() const { return archive_active.load(std::memory_order_acquire); }
 #ifdef TESTS_ENABLED
 	void test_step_pipeline_archive_frame(uint32_t p_frames_drawn, bool p_simulate_activity) {
@@ -819,6 +823,10 @@ public:
 	}
 	uint64_t test_get_pipeline_archive_serialize_calls() const {
 		return archive_serialize_calls.load(std::memory_order_acquire);
+	}
+	uint32_t test_get_compute_pso_cache_size() {
+		MutexLock lock(pipeline_state_cache_mutex);
+		return compute_pso_cache.size();
 	}
 #endif
 

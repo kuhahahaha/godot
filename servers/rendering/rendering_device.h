@@ -2964,6 +2964,13 @@ private:
 	std::atomic<Error> frame_issue_error = OK;
 	int failed_wait_frame = -1;
 	std::atomic<bool> frame_wait_draining = false;
+	Error _recording_fatal_error() const {
+		const Error issue_error = frame_issue_error.load();
+		if (issue_error != OK) {
+			return issue_error;
+		}
+		return frame_wait_error.load();
+	}
 	Error _recording_error() const {
 		const Error issue_error = frame_issue_error.load();
 		if (issue_error != OK) {
@@ -2974,6 +2981,15 @@ private:
 		}
 		const Error wait_error = frame_wait_error.load();
 		return wait_error != OK ? wait_error : ((frame_wait_draining.load() || qualification_frame_advance_pending.load() || native_disposal_active.load()) ? ERR_BUSY : OK);
+	}
+	String _recording_suspended_message(Error p_error) const {
+		if (_recording_fatal_error() != OK || frame_wait_native_code_valid.load()) {
+			return "Recording is suspended after a frame fence wait failure.";
+		}
+		const bool graph_closed = !frames.is_empty() && uint32_t(frame) < frames.size() && frames[frame].qualification_graph_closed;
+		return vformat("Recording is transiently busy (error=%d graph_closed=%d draining=%d advance_pending=%d disposal_active=%d).",
+				int(p_error), int(graph_closed), int(frame_wait_draining.load()),
+				int(qualification_frame_advance_pending.load()), int(native_disposal_active.load()));
 	}
 	Error _prepare_synchronous_readback();
 	Error _ensure_recording_ready();
@@ -3051,6 +3067,7 @@ public:
 
 	bool has_pending_production_frame_maintenance() const;
 	bool has_pending_ordinary_frame_advance() const;
+	Error ensure_ordinary_draw_ready();
 	void swap_buffers(bool p_present);
 
 	uint32_t get_frame_delay() const;
