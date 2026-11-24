@@ -1037,7 +1037,15 @@ class ProductionAttachment {
 	uint32_t idle_reclaim_frames = 0;
 	uint64_t arena_reclaimed_bytes_total = 0;
 	bool has_reclaimable_arena_pages() const {
-		return (payload && payload_reclaim_hwm > scene_prefix_bytes) ||
+		return (actions && actions_hwm > 0) ||
+				(resources && resources_hwm > 0) ||
+				(uses && uses_hwm > 0) ||
+				(readbacks && readbacks_hwm > 0) ||
+				(graphs && graphs_hwm > 0) ||
+				(returns && returns_hwm > 0) ||
+				(commands && commands_hwm > 0) ||
+				(frames && frames_hwm > 0) ||
+				(payload && payload_reclaim_hwm > scene_prefix_bytes) ||
 				(readback_bytes && readback_reclaim_hwm > 0) ||
 				(natives && natives_reclaim_hwm > 0) ||
 				(material_qualifications && material_qualifications_live == 0 && mq_reclaim_hwm > 0);

@@ -51,7 +51,7 @@
 #include <optional>
 #include <type_traits>
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(__linux__)
 #include <sys/mman.h>
 #include <unistd.h>
 #endif
@@ -62,7 +62,7 @@ size_t reclaim_arena_pod_pages(void *p_base, size_t p_byte_len) {
 	if (!p_base || p_byte_len == 0) {
 		return 0;
 	}
-#if defined(__APPLE__) && defined(MADV_FREE_REUSABLE)
+#if (defined(__APPLE__) && defined(MADV_FREE_REUSABLE)) || (defined(__linux__) && defined(MADV_DONTNEED))
 	const long raw_page = sysconf(_SC_PAGESIZE);
 	if (raw_page <= 0) {
 		return 0;
@@ -80,7 +80,12 @@ size_t reclaim_arena_pod_pages(void *p_base, size_t p_byte_len) {
 		return 0;
 	}
 	const size_t aligned_len = size_t(aligned_end - aligned_start);
-	if (madvise(reinterpret_cast<void *>(aligned_start), aligned_len, MADV_FREE_REUSABLE) == 0) {
+#if defined(__APPLE__) && defined(MADV_FREE_REUSABLE)
+	constexpr int advice = MADV_FREE_REUSABLE;
+#else
+	constexpr int advice = MADV_DONTNEED;
+#endif
+	if (madvise(reinterpret_cast<void *>(aligned_start), aligned_len, advice) == 0) {
 		return aligned_len;
 	}
 #endif
@@ -4454,7 +4459,31 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 	return result(OK);
 }
 void ProductionAttachment::reclaim_pod_pages() {
+	if (children != 0) {
+		return;
+	}
 	uint64_t advised = 0;
+	auto reclaim_hwm_cells = [&advised](auto *cells, uint32_t &hwm, uint64_t cap) {
+		using T = std::remove_pointer_t<decltype(cells)>;
+		if (!cells || hwm == 0) {
+			hwm = 0;
+			return;
+		}
+		const uint32_t end = uint32_t(MIN(uint64_t(hwm), cap));
+		for (uint32_t i = 0; i < end; ++i) {
+			cells[i].~T();
+		}
+		advised += reclaim_arena_pod_pages(cells, size_t(end) * sizeof(T));
+		hwm = 0;
+	};
+	reclaim_hwm_cells(actions, actions_hwm, quote.capacity.suboperations);
+	reclaim_hwm_cells(resources, resources_hwm, quote.capacity.resources);
+	reclaim_hwm_cells(uses, uses_hwm, quote.capacity.resource_uses);
+	reclaim_hwm_cells(readbacks, readbacks_hwm, quote.capacity.readbacks);
+	reclaim_hwm_cells(graphs, graphs_hwm, quote.capacity.graph_memberships);
+	reclaim_hwm_cells(returns, returns_hwm, quote.capacity.return_cells);
+	reclaim_hwm_cells(commands, commands_hwm, quote.graph_slots);
+	reclaim_hwm_cells(frames, frames_hwm, quote.graph_frames);
 	if (payload && payload_reclaim_hwm > scene_prefix_bytes) {
 		const uint64_t end = MIN(payload_reclaim_hwm, quote.capacity.retained_payload_bytes);
 		if (end > scene_prefix_bytes) {
@@ -4472,12 +4501,12 @@ void ProductionAttachment::reclaim_pod_pages() {
 	if (material_qualifications && material_qualifications_live == 0 && mq_reclaim_hwm > 0) {
 		const uint32_t end = MIN(mq_reclaim_hwm, quote.capacity.suboperations);
 		advised += reclaim_arena_pod_pages(material_qualifications, size_t(end) * sizeof(MaterialQualificationState));
+		mq_reclaim_hwm = 0;
 	}
 	arena_reclaimed_bytes_total += advised;
 	payload_reclaim_hwm = 0;
 	readback_reclaim_hwm = 0;
 	natives_reclaim_hwm = 0;
-	mq_reclaim_hwm = 0;
 	idle_reclaim_frames = 0;
 }
 GDExtensionDeviceSessionResultV1 Registry::production_installation_observe(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionServiceBudgetV1 *budget, GDExtensionProductionInstallationReportV1 *out) {

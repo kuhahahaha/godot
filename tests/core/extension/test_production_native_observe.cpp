@@ -7196,6 +7196,150 @@ struct Access {
 		// Closing while idle reclaims immediately before freeing the arena.
 		REQUIRE(e.registry->production_close(att_ref).native_error == OK);
 	}
+	static void bug183b_reclaim_all_hwm_cell_subarenas_and_reacquire() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		auto pool_cap = capacity(64);
+		pool_cap.requests = 2;
+		pool_cap.suboperations = 128;
+		pool_cap.resources = 128;
+		pool_cap.resource_uses = 512;
+		pool_cap.readbacks = 128;
+		pool_cap.graph_memberships = 128;
+		pool_cap.return_cells = 1024;
+		// Keep the 4 previously-reclaimed pools small so we can prove reclaimed bytes
+		// exceed their combined byte span by >256 KiB from the 8 HWM cell sub-arenas.
+		pool_cap.native_memberships = 128;
+		pool_cap.retained_payload_bytes = 64;
+		pool_cap.readback_bytes = 64;
+		const auto att_ref = e.accept(pool_cap);
+		REQUIRE(att_ref.handle_serial != 0);
+
+		ProductionAttachment *att = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			RenderingDevice *rd = nullptr;
+			REQUIRE(e.registry->production_attachment_locked(att_ref, true, att, rd) == OK);
+		}
+		REQUIRE(att != nullptr);
+
+		auto req_cap = pool_cap;
+		req_cap.requests = 1;
+		const GDExtensionProductionActionV2 actions[2] = {
+			{ 0, 10, 0, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 0, 1, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX },
+			{ 1, 11, 0, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 1, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+		};
+		const GDExtensionProductionResourceV1 resources[2] = {
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 0, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 64, 0 },
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 64, 0 },
+		};
+		const GDExtensionProductionUseV1 uses[2] = {
+			{ 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 64, 0 },
+			{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 64, 0 },
+		};
+
+		Request *r1 = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			const GDExtensionProductionOperationV1 op1{ production_dto_abi<GDExtensionProductionOperationV1>(), 18301, 1, 10, 12 };
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op1, req_cap, { nullptr, actions }, 2, resources, 2, uses, 2, {}, 0, r1, 2) == OK);
+		}
+		REQUIRE(r1 != nullptr);
+		CHECK(att->children == 1);
+		CHECK(att->actions_hwm == req_cap.suboperations);
+		CHECK(att->resources_hwm == req_cap.resources);
+		CHECK(att->uses_hwm == req_cap.resource_uses);
+		CHECK(att->readbacks_hwm == req_cap.readbacks);
+		CHECK(att->graphs_hwm == req_cap.graph_memberships);
+		CHECK(att->returns_hwm == req_cap.return_cells);
+		CHECK(att->commands_hwm == r1->command_count);
+		CHECK(att->frames_hwm == r1->frame_count);
+
+		// Defensive guard: reclaim_pod_pages() must be a strict no-op while children > 0.
+		{
+			MutexLock lock(e.registry->mutex);
+			att->reclaim_pod_pages();
+		}
+		CHECK(att->actions_hwm == req_cap.suboperations);
+		CHECK(att->uses_hwm == req_cap.resource_uses);
+		CHECK(att->arena_reclaimed_bytes_total == 0);
+
+		// Mutate touched cells across pools before releasing r1.
+		{
+			MutexLock lock(e.registry->mutex);
+			r1->actions[0].prepared = true;
+			r1->resources[0].imported = true;
+			r1->uses[2].binding.binding = 77;
+			r1->binding_used = 1;
+			r1->note_use_touched_end(r1->use_count + r1->binding_used);
+			r1->graphs[0].fact.action_ordinal = 99;
+			r1->graph_count = 1;
+			r1->returns[0].serial = 18301;
+		}
+		const GDExtensionProductionRequestRefV1 ref1{ Enrollment::INSTANCE, r1->serial };
+		REQUIRE(e.registry->production_cancel(ref1).native_error == OK);
+		REQUIRE(e.registry->production_release(ref1).native_error == OK);
+		CHECK(att->children == 0);
+		CHECK(att->has_reclaimable_arena_pages());
+		CHECK(att->arena_reclaimed_bytes_total == 0);
+
+		// Idle frames below cooldown must not reclaim yet.
+		for (uint32_t f = 0; f + 1 < ProductionAttachment::ARENA_IDLE_RECLAIM_FRAMES; ++f) {
+			e.registry->production_observe_completed_frames_rt(e.rd);
+		}
+		CHECK(att->arena_reclaimed_bytes_total == 0);
+		CHECK(att->uses_hwm == req_cap.resource_uses);
+
+		// Cooldown boundary destroys all 8 HWM cell pools, advises their pages, and resets HWMs to 0.
+		e.registry->production_observe_completed_frames_rt(e.rd);
+		CHECK(att->actions_hwm == 0);
+		CHECK(att->resources_hwm == 0);
+		CHECK(att->uses_hwm == 0);
+		CHECK(att->readbacks_hwm == 0);
+		CHECK(att->graphs_hwm == 0);
+		CHECK(att->returns_hwm == 0);
+		CHECK(att->commands_hwm == 0);
+		CHECK(att->frames_hwm == 0);
+		CHECK_FALSE(att->has_reclaimable_arena_pages());
+#if defined(__APPLE__) || defined(__linux__)
+		const uint64_t old_pod_upper_bound = pool_cap.retained_payload_bytes + pool_cap.readback_bytes + uint64_t(pool_cap.native_memberships) * sizeof(ProductionNativeCell);
+		CHECK(att->arena_reclaimed_bytes_total > old_pod_upper_bound + 256u * 1024u);
+#endif
+		const uint64_t reclaimed_after_idle = att->arena_reclaimed_bytes_total;
+		// Subsequent idle tick must be a no-op.
+		e.registry->production_observe_completed_frames_rt(e.rd);
+		CHECK(att->arena_reclaimed_bytes_total == reclaimed_after_idle);
+
+		// Re-reserve a fresh request on the same attachment after full HWM reclaim.
+		Request *r2 = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			const GDExtensionProductionOperationV1 op2{ production_dto_abi<GDExtensionProductionOperationV1>(), 18302, 1, 10, 12 };
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op2, req_cap, { nullptr, actions }, 2, resources, 2, uses, 2, {}, 0, r2, 2) == OK);
+		}
+		REQUIRE(r2 != nullptr);
+		CHECK(att->children == 1);
+		CHECK(att->actions_hwm == req_cap.suboperations);
+		CHECK(att->resources_hwm == req_cap.resources);
+		CHECK(att->uses_hwm == req_cap.resource_uses);
+		CHECK(att->readbacks_hwm == req_cap.readbacks);
+		CHECK(att->graphs_hwm == req_cap.graph_memberships);
+		CHECK(att->returns_hwm == req_cap.return_cells);
+		CHECK(att->commands_hwm == r2->command_count);
+		CHECK(att->frames_hwm == r2->frame_count);
+		CHECK_FALSE(r2->actions[0].prepared);
+		CHECK_FALSE(r2->resources[0].imported);
+		CHECK(r2->uses[2].binding.binding == 0);
+		CHECK(r2->graphs[0].fact.action_ordinal == 0);
+		CHECK(r2->returns[0].serial == 0);
+
+		const GDExtensionProductionRequestRefV1 ref2{ Enrollment::INSTANCE, r2->serial };
+		REQUIRE(e.registry->production_cancel(ref2).native_error == OK);
+		REQUIRE(e.registry->production_release(ref2).native_error == OK);
+		CHECK(att->children == 0);
+		CHECK(att->has_reclaimable_arena_pages());
+		REQUIRE(e.registry->production_close(att_ref).native_error == OK);
+	}
 };
 TEST_CASE("[ProductionNativeObserve][PreparedNativeRecordV2] cancel rejects transferred native wait before consume without erasing actual prefix") {
 	Access::native_record_wait_rejection(false);
@@ -7496,4 +7640,8 @@ TEST_CASE("[ProductionNativeObserve][BUG-166] distinct native owners beyond inde
 
 TEST_CASE("[ProductionNativeObserve][BUG-170] prefix-only reset leaves zero stale state across waves and avoids per-wave MADV_FREE_REUSABLE thrash") {
 	TestProductionNativeObserve::Access::bug170_prefix_reset_and_no_per_wave_madvise_thrash();
+}
+
+TEST_CASE("[ProductionNativeObserve][BUG-183B] idle reclaim destroys and advises all 8 HWM cell sub-arenas and re-acquires cleanly") {
+	TestProductionNativeObserve::Access::bug183b_reclaim_all_hwm_cell_subarenas_and_reacquire();
 }
