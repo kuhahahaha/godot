@@ -830,7 +830,7 @@ NS::SharedPtr<MTL::CompileOptions> make_shader_compile_options(uint32_t p_msl_ve
 
 class MDLazyLibrary final : public MDLibrary {
 	NS::SharedPtr<MTL::Library> _library;
-	NS::Error *_error = nullptr;
+	NS::SharedPtr<NS::Error> _error;
 	std::shared_mutex _mu;
 	bool _loaded = false;
 	MTL::Device *_device = nullptr;
@@ -877,6 +877,7 @@ void MDLazyLibrary::_load() {
 		return;
 	}
 
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 	os_signpost_id_t compile_id = (os_signpost_id_t)(uintptr_t)this;
 	os_signpost_interval_begin(LOG_INTERVALS, compile_id, "shader_compile",
 			"shader_name=%{public}s stage=%{public}s hash=%X",
@@ -887,7 +888,7 @@ void MDLazyLibrary::_load() {
 #endif
 	_library = NS::TransferPtr(_device->newLibrary(_source.get(), _options.get(), &error));
 	os_signpost_interval_end(LOG_INTERVALS, compile_id, "shader_compile");
-	_error = error;
+	_error = error ? NS::RetainPtr(error) : NS::SharedPtr<NS::Error>();
 	_device = nullptr;
 	_source.reset();
 	_options.reset();
@@ -901,7 +902,7 @@ MTL::Library *MDLazyLibrary::get_library() {
 
 NS::Error *MDLazyLibrary::get_error() {
 	_load();
-	return _error;
+	return _error.get();
 }
 
 #pragma mark - MDImmediateLibrary
@@ -909,7 +910,7 @@ NS::Error *MDLazyLibrary::get_error() {
 /// Loads the MTLLibrary immediately on initialization, using Metal's async compilation API.
 class MDImmediateLibrary final : public MDLibrary {
 	NS::SharedPtr<MTL::Library> _library;
-	NS::Error *_error = nullptr;
+	NS::SharedPtr<NS::Error> _error;
 	mutable std::mutex _cv_mutex;
 	std::condition_variable _cv;
 	bool _complete = false;
@@ -944,6 +945,7 @@ MDImmediateLibrary::MDImmediateLibrary(ShaderCacheEntry *p_entry,
 				p_source
 #endif
 		) {
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 	os_signpost_id_t compile_id = (os_signpost_id_t)(uintptr_t)this;
 	os_signpost_interval_begin(LOG_INTERVALS, compile_id, "shader_compile",
 			"shader_name=%{public}s stage=%{public}s hash=%X",
@@ -954,11 +956,12 @@ MDImmediateLibrary::MDImmediateLibrary(ShaderCacheEntry *p_entry,
 	audit_runtime_compile(p_entry, p_options);
 #endif
 	p_device->newLibrary(p_source, p_options, [this, compile_id, p_entry](MTL::Library *library, NS::Error *error) {
+		NS::SharedPtr<NS::AutoreleasePool> cb_pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 		os_signpost_interval_end(LOG_INTERVALS, compile_id, "shader_compile");
 		if (library) {
 			_library = NS::RetainPtr(library);
 		}
-		_error = error;
+		_error = error ? NS::RetainPtr(error) : NS::SharedPtr<NS::Error>();
 		if (error) {
 			ERR_PRINT(vformat(U"Error compiling shader %s: %s", p_entry->name.get_data(), error->localizedDescription()->utf8String()));
 		}
@@ -981,7 +984,7 @@ MTL::Library *MDImmediateLibrary::get_library() {
 
 NS::Error *MDImmediateLibrary::get_error() {
 	_check_and_wait();
-	return _error;
+	return _error.get();
 }
 
 #pragma mark - MDBinaryLibrary
@@ -989,7 +992,7 @@ NS::Error *MDImmediateLibrary::get_error() {
 /// Loads the MTLLibrary from pre-compiled binary data.
 class MDBinaryLibrary final : public MDLibrary {
 	NS::SharedPtr<MTL::Library> _library;
-	NS::Error *_error = nullptr;
+	NS::SharedPtr<NS::Error> _error;
 
 public:
 	MDBinaryLibrary(ShaderCacheEntry *p_entry,
@@ -1015,10 +1018,11 @@ MDBinaryLibrary::MDBinaryLibrary(ShaderCacheEntry *p_entry,
 				p_source
 #endif
 		) {
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 	NS::Error *error = nullptr;
 	_library = NS::TransferPtr(p_device->newLibrary(p_data, &error));
 	if (error != nullptr) {
-		_error = error;
+		_error = NS::RetainPtr(error);
 		ERR_PRINT(vformat("Unable to load shader library: %s", error->localizedDescription()->utf8String()));
 	}
 }
@@ -1028,7 +1032,7 @@ MTL::Library *MDBinaryLibrary::get_library() {
 }
 
 NS::Error *MDBinaryLibrary::get_error() {
-	return _error;
+	return _error.get();
 }
 
 #pragma mark - MDLibrary Factory Methods

@@ -6923,6 +6923,159 @@ struct Access {
 		RSG::viewport->free(viewport);
 		RSG::scene->free(camera_rid);
 	}
+
+	static void bug166_distinct_native_owners_skip_alias_rows() {
+		using namespace GDExtensionDeviceExit;
+		// Part A: Production capture path with 220 native cells where distinct
+		// submission owners live at indices 0 and 180 (179 alias rows between,
+		// 39 alias rows after). OBSERVE, passive RT harvest, and RELEASE must
+		// each complete in 1 single pass without charging alias rows.
+		{
+			Enrollment e;
+			e.driver.complete = false;
+			constexpr uint32_t TOTAL_CELLS = 220;
+			constexpr uint32_t SECOND_OWNER = 180;
+			const auto c = capacity(TOTAL_CELLS);
+			const auto att_ref = e.accept(c);
+			Request *r = nullptr;
+			{
+				MutexLock lock(e.registry->mutex);
+				ProductionAttachment *attachment = nullptr;
+				RenderingDevice *rd = nullptr;
+				REQUIRE(e.registry->production_attachment_locked(att_ref, true, attachment, rd) == OK);
+				const GDExtensionProductionOperationV1 operation{ production_dto_abi<GDExtensionProductionOperationV1>(), 8660, 1, 10, 11 };
+				const GDExtensionProductionActionV2 action{ 0, 10, 0, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
+				const GDExtensionProductionResourceV1 resource{ GDEXTENSION_PRODUCTION_STORAGE_V1, 0, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 16, 0 };
+				const GDExtensionProductionUseV1 use{ 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 4, 0 };
+				REQUIRE(e.registry->production_reserve_metadata_rows_locked(*attachment, operation, c, { nullptr, &action }, 1, &resource, 1, &use, 1, {}, 0, r, 2) == OK);
+			}
+			REQUIRE(r != nullptr);
+			const GDExtensionProductionRequestRefV1 ref{ Enrollment::INSTANCE, r->serial };
+
+			{
+				MutexLock lock(e.registry->mutex);
+				const uint64_t frame_epoch = e.rd.frames[0].qualification_epoch;
+				for (uint32_t g = 0; g < TOTAL_CELLS; ++g) {
+					auto &graph = r->graphs[g];
+					new (&graph) ProductionGraphCell();
+					graph.request = r;
+					graph.device_frame = 0;
+					graph.device_epoch = frame_epoch;
+					graph.pending = true;
+					graph.fact.phase = 2;
+					graph.fact.command_slot = g < SECOND_OWNER ? 0u : 1u;
+					graph.fact.action_ordinal = g;
+				}
+				r->graph_count = TOTAL_CELLS;
+
+				RDD::QueueCallReport report0;
+				report0.calls.push_back(e.driver.issue());
+				e.registry->production_capture_issue_locked(e.rd, 0, NativeSourceIssueView{ report0 }, OK);
+
+				RDD::QueueCallReport report1;
+				report1.calls.push_back(e.driver.issue());
+				e.registry->production_capture_issue_locked(e.rd, 1, NativeSourceIssueView{ report1 }, OK);
+			}
+
+			REQUIRE(r->native_count == TOTAL_CELLS);
+			REQUIRE(r->native_owner_count == 2);
+			CHECK(r->native_owner_indices[0] == 0);
+			CHECK(r->native_owner_indices[1] == SECOND_OWNER);
+			CHECK_FALSE(r->native_owners_overflowed);
+			CHECK(r->natives[0].owner_index == 0);
+			CHECK(r->natives[SECOND_OWNER - 1].owner_index == 0);
+			CHECK(r->natives[SECOND_OWNER].owner_index == SECOND_OWNER);
+			CHECK(r->natives[TOTAL_CELLS - 1].owner_index == SECOND_OWNER);
+
+			// 1) production_poll_native_locked() retains and polls BOTH distinct
+			//    owners (0 and 180) in ONE single pass, skipping all 218 alias rows.
+			const auto obs = turn(e, *r, ProductionControlKind::OBSERVE, budget());
+			CHECK(obs.service_usage.passes == 2);
+			CHECK(obs.service_usage.receipts == 4);
+			CHECK(e.driver.retains[1] == 1);
+			CHECK(e.driver.retains[2] == 1);
+			CHECK(e.driver.polls[1] == 1);
+			CHECK(e.driver.polls[2] == 1);
+			CHECK(r->natives[0].member.retained);
+			CHECK(r->natives[SECOND_OWNER].member.retained);
+			CHECK_FALSE(r->natives[1].member.retained);
+			CHECK_FALSE(r->natives[SECOND_OWNER + 1].member.retained);
+
+			// 2) production_observe_completed_frames_rt() harvests BOTH distinct
+			//    owners (including index 180 >= 64) in ONE single RT pass.
+			e.driver.complete = true;
+			e.registry->production_observe_completed_frames_rt(e.rd);
+			CHECK(r->natives[0].observation.state == NativeSourceObservation::State::Complete);
+			CHECK(r->natives[SECOND_OWNER].observation.state == NativeSourceObservation::State::Complete);
+			CHECK(e.driver.polls[1] == 2);
+			CHECK(e.driver.polls[2] == 2);
+
+			// 3) production_release_v2() qualifies for zero-RT-hop Main fast-path
+			//    despite native_count == 220 > 64 and releases BOTH distinct owners
+			//    in ONE single pass without charging alias rows.
+			{
+				MutexLock lock(e.registry->mutex);
+				r->next_action = r->action_count;
+				r->segment.segment = 1;
+				r->acknowledged_segment = 1;
+				e.rd.is_main_instance = true;
+				GDExtensionProductionReportV2 snap = {};
+				REQUIRE(e.registry->production_report_contents_locked(*r, snap) == OK);
+				CHECK(snap.known_obligations == 2);
+				CHECK(snap.complete_obligations == 2);
+				CHECK(e.registry->production_release_main_fast_path_eligible_locked(*r, budget(), snap));
+			}
+			const auto offered = budget();
+			GDExtensionProductionServiceBudgetV1 remaining = {};
+			GDExtensionProductionReportV2 rel_report = {};
+			REQUIRE(e.registry->production_release_v2(ref, &offered, &remaining, &rel_report).native_error == OK);
+			CHECK(r->serial == 0);
+			CHECK(rel_report.service_control_serial == 0);
+			CHECK(rel_report.service_pending == 0);
+			CHECK(offered.passes - remaining.passes == 2);
+			CHECK(offered.receipts - remaining.receipts == 2);
+			CHECK(e.driver.releases[1] == 1);
+			CHECK(e.driver.releases[2] == 1);
+		}
+
+		// Part B: Unindexed fallback path (e.g. >64 owners overflow / direct cell
+		// setup) with 220 rows and distinct owners at 0 and 180 still completes
+		// production_poll_native_locked() and production_observe_completed_frames_rt()
+		// in 1 single pass.
+		{
+			Enrollment e;
+			e.driver.complete = false;
+			constexpr uint32_t TOTAL_CELLS = 220;
+			constexpr uint32_t SECOND_OWNER = 180;
+			auto *r = setup(e, TOTAL_CELLS);
+			REQUIRE(r != nullptr);
+			const auto src0 = e.driver.issue();
+			const auto src1 = e.driver.issue();
+			for (uint32_t i = 0; i < TOTAL_CELLS; ++i) {
+				auto &cell = r->natives[i];
+				cell.request = r;
+				cell.owner_index = i < SECOND_OWNER ? 0u : SECOND_OWNER;
+				cell.member.source = i < SECOND_OWNER ? src0 : src1;
+			}
+			r->native_count = TOTAL_CELLS;
+			REQUIRE(r->native_owner_count == 0);
+
+			const auto obs = turn(e, *r, ProductionControlKind::OBSERVE, budget());
+			CHECK(obs.service_usage.passes == 2);
+			CHECK(obs.service_usage.receipts == 4);
+			CHECK(e.driver.retains[1] == 1);
+			CHECK(e.driver.retains[2] == 1);
+			CHECK(e.driver.polls[1] == 1);
+			CHECK(e.driver.polls[2] == 1);
+
+			e.driver.complete = true;
+			e.registry->production_observe_completed_frames_rt(e.rd);
+			CHECK(r->natives[0].observation.state == NativeSourceObservation::State::Complete);
+			CHECK(r->natives[SECOND_OWNER].observation.state == NativeSourceObservation::State::Complete);
+			CHECK(e.driver.polls[1] == 2);
+			CHECK(e.driver.polls[2] == 2);
+		}
+	}
 };
 TEST_CASE("[ProductionNativeObserve][PreparedNativeRecordV2] cancel rejects transferred native wait before consume without erasing actual prefix") {
 	Access::native_record_wait_rejection(false);
@@ -7215,4 +7368,8 @@ TEST_CASE("[SceneTree][ProductionNativeObserve][Pillar1][BUG-145] OutputState::R
 
 TEST_CASE("[SceneTree][ProductionNativeObserve][Pillar1][BUG-145] staged production_prepare_native_record_v2 deferred inline RT subscribe on RECORD dispatch") {
 	TestProductionNativeObserve::Access::bug145_staged_prepare_native_record_v2_and_deferred_rt_subscribe_on_dispatch();
+}
+
+TEST_CASE("[ProductionNativeObserve][BUG-166] distinct native owners beyond index 64 complete OBSERVE, passive RT harvest, and RELEASE in 1 pass") {
+	TestProductionNativeObserve::Access::bug166_distinct_native_owners_skip_alias_rows();
 }

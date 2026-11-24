@@ -814,6 +814,17 @@ class ProductionRequest {
 	uint32_t command_count = 0, frame_count = 0;
 	uint64_t revision = 1;
 	uint32_t graph_count = 0, native_count = 0;
+	static constexpr uint32_t NATIVE_OWNER_INLINE_CAP = 64;
+	uint32_t native_owner_indices[NATIVE_OWNER_INLINE_CAP] = {};
+	uint32_t native_owner_count = 0;
+	bool native_owners_overflowed = false;
+	void note_native_owner(uint32_t index) {
+		if (native_owner_count < NATIVE_OWNER_INLINE_CAP) {
+			native_owner_indices[native_owner_count++] = index;
+		} else {
+			native_owners_overflowed = true;
+		}
+	}
 	uint32_t observe_cursor = 0, release_cursor = 0;
 	// Original request's RT readiness fact, not completion of owner references.
 	struct ReleaseReady {

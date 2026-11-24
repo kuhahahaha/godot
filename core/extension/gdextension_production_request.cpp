@@ -2457,14 +2457,28 @@ Error Registry::production_poll_native_locked(ProductionRequest &r, RDD &driver,
 	}
 	const auto origin = NativeSourceOrigin::production();
 	// Fixed Core ceiling; caller values only reduce this maintenance turn.
-	const uint32_t visits = MIN(r.native_count, 64u);
+	// Distinct submission owners are bounded at 64 visits per turn; alias rows
+	// never consume the owner visit cap or service passes.
+	const bool use_owner_index = r.native_owner_count > 0 && !r.native_owners_overflowed;
+	uint32_t owner_start = 0;
+	if (use_owner_index) {
+		const uint32_t cursor = r.observe_cursor % r.native_count;
+		while (owner_start < r.native_owner_count && r.native_owner_indices[owner_start] < cursor) {
+			++owner_start;
+		}
+		if (owner_start == r.native_owner_count) {
+			owner_start = 0;
+		}
+	}
+	const uint32_t scan_limit = use_owner_index ? MIN(r.native_owner_count, 64u) : r.native_count;
 	uint32_t scanned = 0;
+	uint32_t owner_visits = 0;
 	const uint32_t receipts = MIN(budget.receipts, 128u);
-	while (scanned < visits && used.passes < MIN(budget.passes, 64u) && used.receipts < receipts && before_service_deadline(budget)) {
+	while (scanned < scan_limit && owner_visits < 64u && used.passes < MIN(budget.passes, 64u) && used.receipts < receipts && before_service_deadline(budget)) {
 		if (r.revision > UINT64_MAX - uint64_t(r.capacity.graph_memberships) * 2 - uint64_t(r.capacity.native_memberships) * 2 - r.capacity.readbacks - r.capacity.resources - 8) {
 			return ERR_PARAMETER_RANGE_ERROR;
 		}
-		const uint32_t index = r.observe_cursor % r.native_count;
+		const uint32_t index = use_owner_index ? r.native_owner_indices[(owner_start + scanned) % r.native_owner_count] : (r.observe_cursor % r.native_count);
 		const ProductionNativeCell *owner = nullptr;
 		Error error = production_native_owner_locked(r, index, owner);
 		if (error != OK) {
@@ -2473,10 +2487,14 @@ Error Registry::production_poll_native_locked(ProductionRequest &r, RDD &driver,
 		++scanned;
 		r.observe_cursor = (index + 1) % r.native_count;
 		auto &cell = r.natives[index];
-		if (cell.owner_index != index || cell.member.owner_released || cell.member.source.issue == RDD::IssueFact::NotIssued || cell.observation.state == NativeSourceObservation::State::Complete) {
+		if (cell.owner_index != index) {
 			continue;
 		}
-		// Terminal and alias rows consume only the fixed metadata scan bound.
+		++owner_visits;
+		if (cell.member.owner_released || cell.member.source.issue == RDD::IssueFact::NotIssued || cell.observation.state == NativeSourceObservation::State::Complete) {
+			continue;
+		}
+		// Terminal and alias rows do not consume a service pass.
 		// Preserve this turn's service pass for actual observation or disposal.
 		++used.passes;
 		const auto old = cell.observation;
@@ -2632,10 +2650,20 @@ void Registry::production_observe_completed_frames_rt(RenderingDevice &p_rd) {
 					r.revision > UINT64_MAX - uint64_t(r.capacity.graph_memberships) * 2 - uint64_t(r.capacity.native_memberships) * 2 - r.capacity.readbacks - r.capacity.resources - 8) {
 				continue;
 			}
-			const uint32_t visits = MIN(r.native_count, 64u);
-			for (uint32_t i = 0; i < visits; ++i) {
+			const bool use_owner_index = r.native_owner_count > 0 && !r.native_owners_overflowed;
+			const uint32_t scan_limit = use_owner_index ? r.native_owner_count : r.native_count;
+			uint32_t owner_visits = 0;
+			for (uint32_t k = 0; k < scan_limit && owner_visits < 64u; ++k) {
+				const uint32_t i = use_owner_index ? r.native_owner_indices[k] : k;
+				if (i >= r.native_count) {
+					continue;
+				}
 				auto &cell = r.natives[i];
-				if (cell.owner_index != i || cell.member.owner_released || !cell.member.retained ||
+				if (cell.owner_index != i) {
+					continue;
+				}
+				++owner_visits;
+				if (cell.member.owner_released || !cell.member.retained ||
 						cell.member.source.issue == RDD::IssueFact::NotIssued ||
 						cell.observation.state == NativeSourceObservation::State::Complete) {
 					continue;
@@ -3699,7 +3727,11 @@ bool Registry::production_release_main_fast_path_eligible_locked(const Productio
 			r.segment.segment == 0 || r.acknowledged_segment != r.segment.segment ||
 			report.possible_obligations != 0 || report.known_obligations != report.complete_obligations ||
 			report.physical_returns_pending != 0 ||
-			!offered.controls || MIN(offered.passes, 64u) < r.native_count || MIN(offered.receipts, 128u) < r.native_count) {
+			!offered.controls) {
+		return false;
+	}
+	const uint32_t required_native_steps = (r.native_owner_count > 0 && !r.native_owners_overflowed) ? r.native_owner_count : r.native_count;
+	if (MIN(offered.passes, 64u) < required_native_steps || MIN(offered.receipts, 128u) < required_native_steps) {
 		return false;
 	}
 	for (uint32_t i = 0; i < r.resource_count; ++i) {
@@ -4212,22 +4244,12 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 		}
 		ProductionServiceUsage used = { 1, 0, 0 };
 		r->release_started = true;
-		const uint32_t visits = MIN(MIN(budget->passes, r->native_count), 64u);
 		const uint32_t receipts = MIN(budget->receipts, 128u);
-		while (used.passes < visits && used.receipts < receipts && before_service_deadline(*budget)) {
-			if (r->revision > UINT64_MAX - 2) {
-				e = ERR_PARAMETER_RANGE_ERROR;
-				break;
-			}
-			const uint32_t index = r->release_cursor % r->native_count;
-			r->release_cursor = (index + 1) % r->native_count;
-			++used.passes;
+		const bool use_owner_index = r->native_owner_count > 0 && !r->native_owners_overflowed;
+		auto release_owner_cell = [&](uint32_t index) -> bool {
 			auto &cell = r->natives[index];
-			if (cell.owner_index != index || !cell.member.retained || cell.member.owner_released) {
-				continue;
-			}
 			if (!before_service_deadline(*budget)) {
-				break;
+				return false;
 			}
 			++used.receipts; // Exactly one original driver reference-return attempt.
 			auto returned_member = cell.member;
@@ -4247,14 +4269,97 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 			if (e == OK && returned != OK) {
 				e = returned;
 			}
+			return true;
+		};
+		if (use_owner_index) {
+			uint32_t owner_start = 0;
+			const uint32_t cursor = r->release_cursor % r->native_count;
+			while (owner_start < r->native_owner_count && r->native_owner_indices[owner_start] < cursor) {
+				++owner_start;
+			}
+			if (owner_start == r->native_owner_count) {
+				owner_start = 0;
+			}
+			const uint32_t visits = MIN(MIN(budget->passes, r->native_owner_count), 64u);
+			uint32_t owner_steps = 0;
+			while (owner_steps < r->native_owner_count && used.passes < visits && used.receipts < receipts && before_service_deadline(*budget)) {
+				if (r->revision > UINT64_MAX - 2) {
+					e = ERR_PARAMETER_RANGE_ERROR;
+					break;
+				}
+				const uint32_t index = r->native_owner_indices[(owner_start + owner_steps) % r->native_owner_count];
+				++owner_steps;
+				if (index >= r->native_count) {
+					continue;
+				}
+				r->release_cursor = (index + 1) % r->native_count;
+				auto &cell = r->natives[index];
+				if (cell.owner_index != index || !cell.member.retained || cell.member.owner_released) {
+					continue;
+				}
+				++used.passes;
+				if (!release_owner_cell(index)) {
+					break;
+				}
+			}
+		} else if (r->native_owners_overflowed) {
+			const uint32_t visits = MIN(budget->passes, 64u);
+			uint32_t scanned = 0;
+			while (scanned < r->native_count && used.passes < visits && used.receipts < receipts && before_service_deadline(*budget)) {
+				if (r->revision > UINT64_MAX - 2) {
+					e = ERR_PARAMETER_RANGE_ERROR;
+					break;
+				}
+				const uint32_t index = r->release_cursor % r->native_count;
+				r->release_cursor = (index + 1) % r->native_count;
+				++scanned;
+				auto &cell = r->natives[index];
+				if (cell.owner_index != index || !cell.member.retained || cell.member.owner_released) {
+					continue;
+				}
+				++used.passes;
+				if (!release_owner_cell(index)) {
+					break;
+				}
+			}
+		} else {
+			const uint32_t visits = MIN(MIN(budget->passes, r->native_count), 64u);
+			while (used.passes < visits && used.receipts < receipts && before_service_deadline(*budget)) {
+				if (r->revision > UINT64_MAX - 2) {
+					e = ERR_PARAMETER_RANGE_ERROR;
+					break;
+				}
+				const uint32_t index = r->release_cursor % r->native_count;
+				r->release_cursor = (index + 1) % r->native_count;
+				++used.passes;
+				auto &cell = r->natives[index];
+				if (cell.owner_index != index || !cell.member.retained || cell.member.owner_released) {
+					continue;
+				}
+				if (!release_owner_cell(index)) {
+					break;
+				}
+			}
 		}
 		if (usage) {
 			*usage = used;
 		}
-		for (uint32_t i = 0; i < r->native_count; ++i) {
-			const auto &cell = r->natives[i];
-			if (cell.owner_index == i && cell.member.retained && !cell.member.owner_released && e == OK) {
-				e = ERR_BUSY;
+		if (use_owner_index) {
+			for (uint32_t k = 0; k < r->native_owner_count; ++k) {
+				const uint32_t i = r->native_owner_indices[k];
+				if (i < r->native_count) {
+					const auto &cell = r->natives[i];
+					if (cell.owner_index == i && cell.member.retained && !cell.member.owner_released && e == OK) {
+						e = ERR_BUSY;
+					}
+				}
+			}
+		} else {
+			for (uint32_t i = 0; i < r->native_count; ++i) {
+				const auto &cell = r->natives[i];
+				if (cell.owner_index == i && cell.member.retained && !cell.member.owner_released && e == OK) {
+					e = ERR_BUSY;
+				}
 			}
 		}
 		if (e != OK) {

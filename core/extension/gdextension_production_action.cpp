@@ -525,6 +525,9 @@ void Registry::production_capture_issue_locked(RenderingDevice &rd, uint32_t slo
 					new (&native) ProductionNativeCell();
 					native.request = &request;
 					native.owner_index = owner == UINT32_MAX ? index : owner;
+					if (owner == UINT32_MAX) {
+						request.note_native_owner(index);
+					}
 					native.member.source = source;
 					native.member.frame = uint32_t(rd.frame);
 					native.member.epoch = read_transfer ? rd.frames[rd.frame].qualification_epoch : graph.device_epoch;
@@ -589,7 +592,13 @@ Error Registry::production_retain_sources_locked(RenderingDevice &rd, uint32_t f
 					}
 				}
 			}
-			for (uint32_t n = 0; n < request.native_count; ++n) {
+			const bool use_owner_index = request.native_owner_count > 0 && !request.native_owners_overflowed;
+			const uint32_t scan_limit = use_owner_index ? request.native_owner_count : request.native_count;
+			for (uint32_t k = 0; k < scan_limit; ++k) {
+				const uint32_t n = use_owner_index ? request.native_owner_indices[k] : k;
+				if (n >= request.native_count) {
+					continue;
+				}
 				auto &native = request.natives[n];
 				if (native.owner_index != n || native.member.retained || native.member.owner_released || native.member.source.issue == RDD::IssueFact::NotIssued) {
 					continue;
