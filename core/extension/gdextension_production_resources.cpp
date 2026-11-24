@@ -235,6 +235,8 @@ Error Registry::production_unpin_resources_locked(ProductionRequest &p_request) 
 		slot.imported = false;
 		slot.cached_persistent_set = false;
 		slot.scene_depth_set1 = false;
+		slot.curve_lut_set1 = false;
+		slot.curve_lut_count = 0;
 		slot.first_binding = UINT32_MAX;
 		slot.binding_count = 0;
 		slot.imported_unit_slot = UINT32_MAX;

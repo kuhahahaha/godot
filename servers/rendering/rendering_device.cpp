@@ -17114,6 +17114,10 @@ void RenderingDevice::finalize() {
 	_free_rids(acceleration_structure_owner, "AccelerationStructure");
 	_free_rids(hit_sbt_owner, "HitShaderBindingTable");
 	_free_rids(uniform_set_owner, "UniformSet");
+	if (production_curve_lut_zero_buffer.is_valid()) {
+		free_rid(production_curve_lut_zero_buffer);
+		production_curve_lut_zero_buffer = RID();
+	}
 	_free_rids(texture_buffer_owner, "TextureBuffer");
 	_free_rids(storage_buffer_owner, "StorageBuffer");
 	_free_rids(uniform_buffer_owner, "UniformBuffer");

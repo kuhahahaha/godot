@@ -354,12 +354,14 @@ private:
 	GDExtensionDeviceExit::ProductionRequest *production_recording_request = nullptr;
 	RID production_mq_permitted_framebuffer;
 	RID production_mq_permitted_readback_ssbo;
+	RID production_curve_lut_zero_buffer;
 	bool _production_resource_permitted(RID);
 	bool _production_resource_slot_permitted(const GDExtensionDeviceExit::ProductionResourceSlot &p_slot, RID p_rid);
 	Error _native_settle_transfer_worker(RID p_rid);
 	Error _production_disposal_attach_owned(GDExtensionDeviceExit::ProductionDisposalUse &r_use, GDExtensionDeviceExit::ProductionRequest &p_request, RID p_rid);
 	Error _production_mq_prepare_readback_buffer(RID p_buffer);
 	Error _production_prepare_static_sentinel_buffer(RID p_buffer, uint32_t p_expected_bytes);
+	Error _production_get_or_create_curve_lut_zero_buffer(RID &r_buffer);
 	bool _shader_reflects_readonly_storage_binding(RID p_shader, uint32_t p_set, uint32_t p_binding);
 	Error _production_mq_record_depth_copy(RID p_depth_tex, RID p_dst_ssbo, RDG::RecordHandle &r_handle);
 	bool _production_output_raster_permitted(RID);

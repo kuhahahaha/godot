@@ -150,6 +150,9 @@ bool production_dto_valid(const T &value) {
 
 inline constexpr uint32_t SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT = 0xFFFFFFFEu;
 inline constexpr uint32_t MAX_SCENE_DEPTH_SET1_PAIRS = 8u;
+inline constexpr uint32_t CURVE_LUT_READONLY_RESOURCE_SLOT = 0xFFFFFFFDu;
+inline constexpr uint32_t CURVE_LUT_READONLY_BYTES = 65568u;
+inline constexpr uint32_t MAX_CURVE_LUT_SET1_SLOTS = 16u;
 
 inline bool decode_scene_depth_pair_params(uint64_t p_packed_bytes, float &r_slab_thickness_m, float &r_silhouette_jump_m) {
 	const uint32_t slab_bits = uint32_t(p_packed_bytes >> 32u);
@@ -359,6 +362,8 @@ class ProductionResourceSlot {
 	bool scene_depth_set1 = false;
 	uint32_t scene_depth_lease_count = 0;
 	Ref<SceneReadContent> scene_depth_leases[MAX_SCENE_DEPTH_SET1_PAIRS];
+	bool curve_lut_set1 = false;
+	uint32_t curve_lut_count = 0;
 	// Nonowning alias of an actual output DISPOSAL_MEMBER. The native group
 	// remains the sole free owner; owned_physical is never populated for this.
 	NativeDisposalWitness output_witness;

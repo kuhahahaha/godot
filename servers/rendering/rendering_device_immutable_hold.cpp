@@ -3424,6 +3424,52 @@ Error RenderingDevice::_production_prepare_static_sentinel_buffer(RID p_buffer, 
 	return (buf->draw_tracker != nullptr && buf->transfer_worker_index < 0) ? OK : ERR_CANT_CREATE;
 }
 
+Error RenderingDevice::_production_get_or_create_curve_lut_zero_buffer(RID &r_buffer) {
+	r_buffer = RID();
+	if (!native_immutable_is_render_thread() || !driver || native_finalization_returned || production_finalization_started.load(std::memory_order_acquire) || qualification_retiring) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (frames.is_empty() || uint32_t(frame) >= frames.size() || draw_list.active || compute_list.active || raytracing_list.active) {
+		return ERR_BUSY;
+	}
+	const Error rec_err = _recording_error();
+	if (rec_err != OK) {
+		return rec_err;
+	}
+	if (production_curve_lut_zero_buffer.is_null()) {
+		Vector<uint8_t> zero_bytes;
+		if (zero_bytes.resize_initialized(GDExtensionDeviceExit::CURVE_LUT_READONLY_BYTES) != OK) {
+			return ERR_OUT_OF_MEMORY;
+		}
+		const RID created = storage_buffer_create(GDExtensionDeviceExit::CURVE_LUT_READONLY_BYTES, zero_bytes);
+		if (created.is_null()) {
+			return ERR_CANT_CREATE;
+		}
+		production_curve_lut_zero_buffer = created;
+	}
+	const Error worker_settled = _native_settle_transfer_worker(production_curve_lut_zero_buffer);
+	if (worker_settled != OK) {
+		return worker_settled;
+	}
+	{
+		MutexLock lock(_thread_safe_);
+		Buffer *buf = storage_buffer_owner.owns(production_curve_lut_zero_buffer) ? storage_buffer_owner.get_or_null(production_curve_lut_zero_buffer) : nullptr;
+		if (!buf || buf->size != GDExtensionDeviceExit::CURVE_LUT_READONLY_BYTES) {
+			return ERR_CANT_CREATE;
+		}
+		const Error settled = _check_transfer_worker_buffer(buf);
+		if (settled != OK) {
+			return settled;
+		}
+		_buffer_make_mutable(buf, production_curve_lut_zero_buffer);
+		if (buf->draw_tracker == nullptr || buf->transfer_worker_index >= 0) {
+			return ERR_BUSY;
+		}
+	}
+	r_buffer = production_curve_lut_zero_buffer;
+	return OK;
+}
+
 bool RenderingDevice::_shader_reflects_readonly_storage_binding(RID p_shader, uint32_t p_set, uint32_t p_binding) {
 	_THREAD_SAFE_METHOD_
 	const Shader *shader = shader_owner.owns(p_shader) ? shader_owner.get_or_null(p_shader) : nullptr;

@@ -346,7 +346,7 @@ bool Registry::production_persistent_set_build_key_locked(const ProductionReques
 }
 
 bool Registry::production_persistent_set_build_key_from_slot_locked(const ProductionRequest &p_request, const ProductionResourceSlot &p_slot, PersistentSetKey &r_key) const {
-	if (p_slot.scene_depth_set1 || p_slot.output_set_deferred || !p_slot.binding_count ||
+	if (p_slot.scene_depth_set1 || p_slot.curve_lut_set1 || p_slot.output_set_deferred || !p_slot.binding_count ||
 			p_slot.first_binding > p_request.capacity.resource_uses ||
 			p_slot.binding_count > p_request.capacity.resource_uses - p_slot.first_binding ||
 			p_slot.imported_unit_slot >= p_request.resource_count) {
@@ -723,14 +723,28 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 				// Copy the complete finite binding origin before queue publication.
 				// Native shader reflection is checked on RT before the first effect.
 				// Set 1 may combine leading scene-depth sentinel pairs (0xFFFFFFFE)
-				// with trailing GDEXTENSION_PRODUCTION_STORAGE_V1 SSBOs (e.g. neighbor_grid).
-				const bool scene_depth_set1 = (shader_set == 1u && bindings[0].resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT);
-				if (scene_depth_set1) {
+				// and/or curve/gradient LUT sentinels (0xFFFFFFFD) with trailing
+				// GDEXTENSION_PRODUCTION_STORAGE_V1 SSBOs (e.g. PAR / neighbor_grid).
+				const bool special_set1 = (shader_set == 1u &&
+						(bindings[0].resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
+								bindings[0].resource_slot == CURVE_LUT_READONLY_RESOURCE_SLOT));
+				bool scene_depth_set1 = false;
+				bool curve_lut_set1 = false;
+				if (special_set1) {
 					uint32_t sd_pair_count = 0;
 					while (sd_pair_count < count && bindings[sd_pair_count].resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT) {
 						++sd_pair_count;
 					}
-					if (sd_pair_count < 1u || sd_pair_count > MAX_SCENE_DEPTH_SET1_PAIRS) {
+					uint32_t curve_lut_count = 0;
+					while (sd_pair_count + curve_lut_count < count &&
+							bindings[sd_pair_count + curve_lut_count].resource_slot == CURVE_LUT_READONLY_RESOURCE_SLOT) {
+						++curve_lut_count;
+					}
+					scene_depth_set1 = (sd_pair_count > 0u);
+					curve_lut_set1 = (curve_lut_count > 0u);
+					if (sd_pair_count > MAX_SCENE_DEPTH_SET1_PAIRS ||
+							curve_lut_count > MAX_CURVE_LUT_SET1_SLOTS ||
+							(!scene_depth_set1 && !curve_lut_set1)) {
 						return result(ERR_INVALID_DATA);
 					}
 					for (uint32_t i = 0; i < sd_pair_count; ++i) {
@@ -743,13 +757,23 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 							return result(ERR_INVALID_DATA);
 						}
 					}
-					for (uint32_t i = sd_pair_count; i < count; ++i) {
+					for (uint32_t l = 0; l < curve_lut_count; ++l) {
+						const auto &binding = bindings[sd_pair_count + l];
+						if (!production_dto_valid(binding) || binding.set != 1u || binding.binding != 2u * sd_pair_count + l ||
+								binding.array_element != 0u || binding.resource_slot != CURVE_LUT_READONLY_RESOURCE_SLOT ||
+								binding.offset != l || binding.bytes != CURVE_LUT_READONLY_BYTES) {
+							return result(ERR_INVALID_DATA);
+						}
+					}
+					const uint32_t trailing_start = sd_pair_count + curve_lut_count;
+					for (uint32_t i = trailing_start; i < count; ++i) {
 						const auto &binding = bindings[i];
 						if (!production_dto_valid(binding) || binding.set != 1u || binding.array_element || binding.offset ||
 								binding.resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
+								binding.resource_slot == CURVE_LUT_READONLY_RESOURCE_SLOT ||
 								binding.resource_slot >= request->resource_count ||
-								binding.binding < 2u * sd_pair_count ||
-								(i > sd_pair_count && bindings[i - 1].binding >= binding.binding)) {
+								binding.binding < 2u * sd_pair_count + curve_lut_count ||
+								(i > trailing_start && bindings[i - 1].binding >= binding.binding)) {
 							return result(ERR_INVALID_DATA);
 						}
 						const auto &resource = request->resources[binding.resource_slot];
@@ -774,7 +798,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 				}
 				PersistentSetKey cache_key;
 				bool cache_eligible = false;
-				if (!scene_depth_set1) {
+				if (!special_set1) {
 					bool has_output_alias = false;
 					for (uint32_t i = 0; i < count; ++i) {
 						has_output_alias |= request->resources[bindings[i].resource_slot].output_alias_prepared;
@@ -793,6 +817,8 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 								slot.imported_unit_slot = unit_index;
 								slot.shader_set = shader_set;
 								slot.scene_depth_set1 = false;
+								slot.curve_lut_set1 = false;
+								slot.curve_lut_count = 0;
 								slot.first_binding = request->use_count + request->binding_used;
 								slot.binding_count = count;
 								for (uint32_t i = 0; i < count; ++i) {
@@ -822,12 +848,14 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 				slot.imported_unit_slot = unit_index;
 				slot.shader_set = shader_set;
 				slot.scene_depth_set1 = scene_depth_set1;
+				slot.curve_lut_set1 = curve_lut_set1;
+				slot.curve_lut_count = 0;
 				slot.cached_persistent_set = cache_eligible;
 				for (uint32_t i = 0; i < count; ++i) {
 					request->uses[slot.first_binding + i].binding = bindings[i];
 				}
 				request->binding_used += count;
-				if (!scene_depth_set1) {
+				if (!special_set1) {
 					for (uint32_t i = 0; i < count; ++i) {
 						slot.output_set_deferred |= request->resources[bindings[i].resource_slot].output_alias_prepared;
 					}
@@ -1203,17 +1231,24 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 		}
 		const auto &unit = request.resources[slot.imported_unit_slot];
 		const auto *shader = rd.shader_owner.get_or_null(unit.secondary);
-		if (slot.scene_depth_set1) {
+		if (slot.scene_depth_set1 || slot.curve_lut_set1) {
 			uint32_t pair_count = 0;
 			while (pair_count < slot.binding_count &&
 					request.uses[slot.first_binding + pair_count].binding.resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT) {
 				++pair_count;
 			}
-			const uint32_t storage_count = slot.binding_count - pair_count;
+			uint32_t curve_lut_count = 0;
+			while (pair_count + curve_lut_count < slot.binding_count &&
+					request.uses[slot.first_binding + pair_count + curve_lut_count].binding.resource_slot == CURVE_LUT_READONLY_RESOURCE_SLOT) {
+				++curve_lut_count;
+			}
+			const uint32_t prefix_count = pair_count + curve_lut_count;
+			const uint32_t storage_count = slot.binding_count - prefix_count;
 			if (!unit.imported || unit.use_count != 2 || !shader || slot.shader_set != 1u ||
-					pair_count < 1u || pair_count > MAX_SCENE_DEPTH_SET1_PAIRS ||
+					(slot.scene_depth_set1 ? (pair_count < 1u || pair_count > MAX_SCENE_DEPTH_SET1_PAIRS) : (pair_count != 0u)) ||
+					(slot.curve_lut_set1 ? (curve_lut_count < 1u || curve_lut_count > MAX_CURVE_LUT_SET1_SLOTS) : (curve_lut_count != 0u)) ||
 					uint32_t(shader->uniform_sets.size()) <= 1u ||
-					uint32_t(shader->uniform_sets[1].size()) != 2u * pair_count + storage_count) {
+					uint32_t(shader->uniform_sets[1].size()) != 2u * pair_count + curve_lut_count + storage_count) {
 				return finish(ERR_INVALID_DATA);
 			}
 			struct SceneDepthPairSpec {
@@ -1250,18 +1285,40 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 					return finish(ERR_INVALID_DATA);
 				}
 			}
+			for (uint32_t l = 0; l < curve_lut_count; ++l) {
+				const auto &binding = request.uses[slot.first_binding + pair_count + l].binding;
+				if (!production_dto_valid(binding) || binding.set != 1u || binding.binding != 2u * pair_count + l ||
+						binding.array_element != 0u || binding.resource_slot != CURVE_LUT_READONLY_RESOURCE_SLOT ||
+						binding.offset != l || binding.bytes != CURVE_LUT_READONLY_BYTES) {
+					return finish(ERR_INVALID_DATA);
+				}
+				uint32_t lut_matches = 0;
+				for (const auto &uniform : shader->uniform_sets[1]) {
+					if (uniform.binding == 2u * pair_count + l) {
+						if (uniform.type != RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER || uniform.writable ||
+								(uniform.length > 0 && uint32_t(uniform.length) != CURVE_LUT_READONLY_BYTES)) {
+							return finish(ERR_INVALID_DATA);
+						}
+						++lut_matches;
+					}
+				}
+				if (lut_matches != 1u) {
+					return finish(ERR_INVALID_DATA);
+				}
+			}
 			LocalVector<RenderingDevice::Uniform> trailing_uniforms;
 			LocalVector<QualificationPhysicalReturn *> dependencies;
 			trailing_uniforms.resize(storage_count);
 			dependencies.reserve(storage_count + 1);
 			dependencies.push_back(unit.uses[0].physical);
 			for (uint32_t s = 0; s < storage_count; ++s) {
-				const auto &binding = request.uses[slot.first_binding + pair_count + s].binding;
+				const auto &binding = request.uses[slot.first_binding + prefix_count + s].binding;
 				if (!production_dto_valid(binding) || binding.set != 1u || binding.array_element || binding.offset ||
 						binding.resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
+						binding.resource_slot == CURVE_LUT_READONLY_RESOURCE_SLOT ||
 						binding.resource_slot >= request.resource_count ||
-						binding.binding < 2u * pair_count ||
-						(s > 0 && request.uses[slot.first_binding + pair_count + s - 1].binding.binding >= binding.binding)) {
+						binding.binding < 2u * pair_count + curve_lut_count ||
+						(s > 0 && request.uses[slot.first_binding + prefix_count + s - 1].binding.binding >= binding.binding)) {
 					return finish(ERR_INVALID_DATA);
 				}
 				const auto &resource = request.resources[binding.resource_slot];
@@ -1297,12 +1354,12 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 			rd._thread_safe_.unlock();
 			unlock_mutex_for_call();
 			{
-				RendererRD::ParticlesCollisionSceneRD *collision_scene = RendererRD::ParticlesCollisionSceneRD::get_for_device(&rd);
-				if (!collision_scene || !collision_scene->is_initialized()) {
+				RendererRD::ParticlesCollisionSceneRD *collision_scene = pair_count > 0u ? RendererRD::ParticlesCollisionSceneRD::get_for_device(&rd) : nullptr;
+				if (pair_count > 0u && (!collision_scene || !collision_scene->is_initialized())) {
 					acq_err = ERR_UNAVAILABLE;
 				} else {
 					LocalVector<RenderingDevice::Uniform> uniforms;
-					uniforms.resize(2u * pair_count + storage_count);
+					uniforms.resize(2u * pair_count + curve_lut_count + storage_count);
 					for (uint32_t d = 0; d < pair_count; ++d) {
 						GDExtensionSceneOpaque32V1 sample_token = {};
 						acq_err = collision_scene->acquire_depth_snapshot_read_lease(
@@ -1329,16 +1386,28 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 						uniforms[2u * d + 1u].binding = 2u * d + 1u;
 						uniforms[2u * d + 1u].append_id(gen->depth_texture);
 					}
-					for (uint32_t s = 0; s < storage_count; ++s) {
-						uniforms[2u * pair_count + s] = trailing_uniforms[s];
+					RID curve_lut_zero_buffer;
+					if (acq_err == OK && curve_lut_count > 0u) {
+						acq_err = rd._production_get_or_create_curve_lut_zero_buffer(curve_lut_zero_buffer);
+						if (acq_err == OK && curve_lut_zero_buffer.is_null()) {
+							acq_err = ERR_CANT_CREATE;
+						}
 					}
 					if (acq_err == OK) {
+						for (uint32_t l = 0; l < curve_lut_count; ++l) {
+							uniforms[2u * pair_count + l].uniform_type = RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER;
+							uniforms[2u * pair_count + l].binding = 2u * pair_count + l;
+							uniforms[2u * pair_count + l].append_id(curve_lut_zero_buffer);
+						}
+						for (uint32_t s = 0; s < storage_count; ++s) {
+							uniforms[2u * pair_count + curve_lut_count + s] = trailing_uniforms[s];
+						}
 						rid = rd._uniform_set_create_qualification(uniforms, unit_shader_rid, 1u, false, &slot.owned_physical, &dependencies, nullptr, &request);
 						if (rid.is_null()) {
 							acq_err = rd.get_last_uniform_set_create_error() == ERR_BUSY ? ERR_BUSY : ERR_CANT_CREATE;
 						}
 					}
-					if (acq_err != OK) {
+					if (acq_err != OK && collision_scene) {
 						for (uint32_t d = 0; d < pair_count; ++d) {
 							if (acquired_leases[d].is_valid()) {
 								(void)collision_scene->release_depth_snapshot_read_lease(acquired_leases[d]);
@@ -1361,6 +1430,7 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 			for (uint32_t d = 0; d < pair_count; ++d) {
 				slot.scene_depth_leases[d] = acquired_leases[d];
 			}
+			slot.curve_lut_count = curve_lut_count;
 		} else {
 			if (!unit.imported || unit.use_count != 2 || !shader || slot.shader_set >= uint32_t(shader->uniform_sets.size()) || shader->uniform_sets[slot.shader_set].size() != slot.binding_count) {
 				return finish(ERR_INVALID_DATA);
