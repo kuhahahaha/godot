@@ -526,6 +526,18 @@ bool Registry::production_output_slot_cross_capture_preparable(const ProductionO
 	}
 	const auto &request = *pin.request;
 	const auto &control = request.control;
+	const auto &segment = control.output.segment;
+	// Match production_output_preparation_validate_locked() staged_return parity:
+	// a completed staged RECORD in RETURNED is preparable before receipt consumption.
+	const bool staged_return = control.state == ProductionControlState::RETURNED &&
+			!production_physical_frame && request.native_prepared_executor && request.native_static_sealed &&
+			request.native_staged_anchor < request.action_count &&
+			control.serial && control.serial == request.native_stage_control && (!request.native_batch_enabled || control.serial == request.native_batch_control) &&
+			control.input.kind == ProductionControlKind::RECORD && !control.input.output_cancel && control.input.request_serial == request.serial &&
+			control.input.record_generation == request.operation.record_generation && control.output.request_serial == request.serial &&
+			control.output.control_serial == control.serial && control.output.result.native_error == OK && control.record_history.control_append_entered &&
+			segment.segment && segment.segment == request.segment.segment && segment.segment_revision == request.segment.segment_revision &&
+			segment.end_action_ordinal == request.action_count && segment.incomplete_upload_action_ordinal == UINT64_MAX;
 	const bool non_mutating_observe = request.next_action == request.action_count &&
 			control.input.kind == ProductionControlKind::OBSERVE &&
 			control.input.request_serial == request.serial &&
@@ -538,7 +550,7 @@ bool Registry::production_output_slot_cross_capture_preparable(const ProductionO
 			!request.source_device_lost && !request.effects_pending && !request.capture_inflight && !request.continuation_inflight &&
 			!request.draw_list_open && !request.compute_list_open &&
 			!rd.production_finalization_started.load(std::memory_order_acquire) &&
-			(control.state == ProductionControlState::OWNER_CONSUMED || non_mutating_observe);
+			(control.state == ProductionControlState::OWNER_CONSUMED || staged_return || non_mutating_observe);
 }
 Error Registry::production_output_preparation_begin_internal(ProductionOutputPin &pin, RenderingDevice &rd, uint32_t action_ordinal, uint32_t surface_ordinal, uint64_t group, ProductionOutputPreparationScope &scope, uint32_t preparation_index, const RendererRD::ExternalPacketViewLease *selected_view) {
 	Lock lock(*this);

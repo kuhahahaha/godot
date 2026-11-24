@@ -7498,6 +7498,133 @@ struct Access {
 		CHECK(record.cleanup_reservations == 0);
 	}
 
+	static void bug179c_staged_return_cross_capture_preparable() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment fixture;
+		auto &registry = *fixture.registry;
+		auto &record = registry.records[0];
+		auto &device = registry.device_records[0];
+		const uint32_t private_before = record.private_refs, device_before = device.refs;
+
+		const GDExtensionProductionCapacityV1 whole = { production_dto_abi<GDExtensionProductionCapacityV1>(), 2, 2, 2, 16, 2, 64, 0, 2, 128, 0 };
+		const auto attachment = fixture.accept(whole);
+
+		struct PinProbe {
+			Registry *registry = nullptr;
+			RenderingDevice *rd = nullptr;
+			ProductionOutputPin *target = nullptr;
+			Error err = ERR_UNCONFIGURED;
+		} probe{ &registry, &fixture.rd, nullptr, ERR_UNCONFIGURED };
+		auto pin_receiver = +[](void *userdata, GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *) {
+			auto &p = *static_cast<PinProbe *>(userdata);
+			p.err = p.registry->production_output_pin_current(*p.rd, *p.target);
+		};
+		REQUIRE(registry.production_install_record_receiver({ Enrollment::INSTANCE, 5 }, attachment, pin_receiver, &probe, nullptr) == OK);
+		REQUIRE(registry.production_open({ Enrollment::INSTANCE, 5 }, attachment).native_error == OK);
+
+		const GDExtensionProductionCapacityV1 single = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 1, 1, 8, 1, 32, 0, 1, 64, 0 };
+		Request *r = nullptr;
+		REQUIRE(fixture.reserve(attachment, single, 1790, r) == OK);
+		REQUIRE(r != nullptr);
+		fixture.driver.execution_thread = Thread::get_caller_id();
+		registry.device_records[0].execution_thread = Thread::get_caller_id();
+		registry.phase = Registry::Phase::RUNNING;
+		fixture.rd.render_thread_id = Thread::get_caller_id();
+		fixture.rd.is_main_instance = true;
+
+		ProductionOutputPin pin;
+		{
+			probe.target = &pin;
+			probe.err = ERR_UNCONFIGURED;
+			MutexLock lock(registry.mutex);
+			r->frozen = true;
+			r->next_action = 0;
+			r->graph_count = 0;
+			r->control.state = ProductionControlState::EXECUTING;
+			r->control.serial = 1;
+			r->control.input.kind = ProductionControlKind::RECORD;
+			r->control.input.request_serial = r->serial;
+			REQUIRE(registry.production_record_receive_locked(*r, fixture.rd, nullptr) == OK);
+			REQUIRE(probe.err == OK);
+			REQUIRE_FALSE(pin.is_empty());
+		}
+		const GDExtensionProductionRequestRefV1 ref = { Enrollment::INSTANCE, r->serial };
+
+		// Populate a valid staged RECORD in RETURNED state matching production_output_preparation_validate_locked().
+		const uint32_t saved_action_count = r->action_count;
+		r->action_count = 1;
+		r->next_action = 1;
+		r->native_prepared_executor = true;
+		r->native_static_sealed = true;
+		r->native_staged_anchor = 0;
+		r->native_stage_control = 7;
+		r->native_batch_enabled = false;
+		r->segment.segment = 3;
+		r->segment.segment_revision = 1;
+		r->control = {};
+		r->control.state = ProductionControlState::RETURNED;
+		r->control.serial = 7;
+		r->control.input.kind = ProductionControlKind::RECORD;
+		r->control.input.output_cancel = false;
+		r->control.input.request_serial = r->serial;
+		r->control.input.record_generation = r->operation.record_generation;
+		r->control.output.request_serial = r->serial;
+		r->control.output.control_serial = 7;
+		r->control.output.result.native_error = OK;
+		r->control.record_history.control_append_entered = true;
+		r->control.output.segment.segment = 3;
+		r->control.output.segment.segment_revision = 1;
+		r->control.output.segment.end_action_ordinal = 1;
+		r->control.output.segment.incomplete_upload_action_ordinal = UINT64_MAX;
+
+		// (1) Valid staged RETURNED RECORD is preparable cross-capture.
+		CHECK(registry.production_output_slot_cross_capture_preparable(pin, ref, fixture.rd));
+
+		// (2) Incomplete segment, failed native_error, output_cancel, or unsealed request MUST refuse.
+		r->control.output.segment.end_action_ordinal = 0;
+		CHECK_FALSE(registry.production_output_slot_cross_capture_preparable(pin, ref, fixture.rd));
+		r->control.output.segment.end_action_ordinal = 1;
+
+		r->control.output.segment.incomplete_upload_action_ordinal = 0;
+		CHECK_FALSE(registry.production_output_slot_cross_capture_preparable(pin, ref, fixture.rd));
+		r->control.output.segment.incomplete_upload_action_ordinal = UINT64_MAX;
+
+		r->control.output.result.native_error = ERR_BUSY;
+		CHECK_FALSE(registry.production_output_slot_cross_capture_preparable(pin, ref, fixture.rd));
+		r->control.output.result.native_error = OK;
+
+		r->control.input.output_cancel = true;
+		CHECK_FALSE(registry.production_output_slot_cross_capture_preparable(pin, ref, fixture.rd));
+		r->control.input.output_cancel = false;
+
+		r->native_static_sealed = false;
+		CHECK_FALSE(registry.production_output_slot_cross_capture_preparable(pin, ref, fixture.rd));
+		r->native_static_sealed = true;
+
+		r->control.output.segment.segment_revision = 2;
+		CHECK_FALSE(registry.production_output_slot_cross_capture_preparable(pin, ref, fixture.rd));
+		r->control.output.segment.segment_revision = 1;
+
+		CHECK(registry.production_output_slot_cross_capture_preparable(pin, ref, fixture.rd));
+
+		// Clean teardown.
+		CHECK(registry.production_output_unpin(pin) == OK);
+		r->action_count = saved_action_count;
+		r->next_action = 0;
+		r->native_prepared_executor = false;
+		r->native_static_sealed = false;
+		r->native_staged_anchor = UINT64_MAX;
+		r->frozen = false;
+		r->control.state = ProductionControlState::OWNER_CONSUMED;
+		REQUIRE(registry.production_cancel(ref).native_error == OK);
+		REQUIRE(registry.production_release(ref).native_error == OK);
+		REQUIRE(registry.production_close(attachment).native_error == OK);
+		CHECK(record.private_refs == private_before);
+		CHECK(device.refs == device_before);
+		CHECK(fixture.holder.production_children == 0);
+		CHECK(record.cleanup_reservations == 0);
+	}
+
 	static void aux_pre_append_rt_authorization() {
 		using namespace GDExtensionDeviceExit;
 		Enrollment fixture;
@@ -24129,4 +24256,8 @@ TEST_CASE("[SceneTree][ProductionRequest][BUG-174] non-mutating OBSERVE allows p
 
 TEST_CASE("[ProductionRequest][BUG-176] read-only consumed-proof BORROW permits pipeline preparation while RETURN and EXECUTING refuse") {
 	TestProductionRequest::Access::bug176_consumed_borrow_allows_preparation_return_refuses();
+}
+
+TEST_CASE("[ProductionRequest][BUG-179C] staged RETURNED RECORD matches preparation_validate parity in cross_capture_preparable") {
+	TestProductionRequest::Access::bug179c_staged_return_cross_capture_preparable();
 }
