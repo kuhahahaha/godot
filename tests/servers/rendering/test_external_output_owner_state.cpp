@@ -34,6 +34,8 @@
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_data_rd.h"
+#include "servers/rendering/dummy/rasterizer_scene_dummy.h"
+#include "servers/rendering/renderer_rd/storage_rd/utilities.h"
 #include "servers/rendering/renderer_scene_cull.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_globals.h"
@@ -2097,6 +2099,365 @@ void ExternalLinkedOwnerTest::bug155a_cross_capture_sealed_replay() {
 	slot.generated_indexed_mesh = RID();
 	slot.guard_resources_ready = false;
 	slot.native_camera_source.unref();
+	owner.state = ExternalOutputOwner::GenerationState::RELEASED;
+	RSG::viewport->free(viewport);
+	RSG::scene->free(camera);
+}
+
+void ExternalLinkedOwnerTest::bug162_cross_capture_selection_and_rollback(
+		GDExtensionDeviceExit::Registry &p_registry, RenderingDevice &p_rd,
+		GDExtensionDeviceExit::ProductionOutputPin &p_slot0_pin, GDExtensionProductionRequestRefV1 p_slot0_ref,
+		GDExtensionDeviceExit::ProductionOutputPin &p_slot1_pin, GDExtensionProductionRequestRefV1 p_slot1_ref,
+		void (*p_toggle_slot1_consumed)(void *, bool),
+		void (*p_acquire_geom)(void *, MeshStorage::NativeSurfaceHold &),
+		void (*p_release_geom)(void *, MeshStorage::NativeSurfaceHold &),
+		void *p_ctx) {
+	REQUIRE(RSG::viewport != nullptr);
+	REQUIRE(RSG::scene != nullptr);
+	REQUIRE(RSG::rasterizer != nullptr);
+	REQUIRE(RSG::utilities != nullptr);
+	REQUIRE(RSG::particles_storage != nullptr);
+
+	ExternalLinkedOwnerTest fixture(p_rd, true);
+	auto *ps = ParticlesStorage::get_singleton();
+	REQUIRE(ps != nullptr);
+	const RID particles = ps->particles_allocate();
+	ps->particles_initialize(particles);
+	auto *p_data = ps->particles_owner.get_or_null(particles);
+	REQUIRE(p_data != nullptr);
+
+	MeshStorage::NativeSurfaceHold geom_hold;
+	p_acquire_geom(p_ctx, geom_hold);
+	REQUIRE(geom_hold.is_valid());
+	REQUIRE(geom_hold.is_external());
+
+	// Scoped headless SceneCull adapter so instance_get_committed_particle_scene_facts
+	// commits real facts for the external ParticlesStorage RID.
+	class Bug162Utilities : public Utilities {
+		RendererUtilities &fallback;
+		ParticlesStorage &storage;
+		const RID particles_rid;
+
+	public:
+		Bug162Utilities(RendererUtilities &p_fallback, ParticlesStorage &p_storage, RID p_particles) :
+				fallback(p_fallback), storage(p_storage), particles_rid(p_particles) {}
+		RSE::InstanceType get_base_type(RID p_rid) const override {
+			return p_rid == particles_rid && storage.owns_particles(p_rid) ? RSE::INSTANCE_PARTICLES : fallback.get_base_type(p_rid);
+		}
+		void base_update_dependency(RID p_rid, DependencyTracker *p_tracker) override {
+			if (p_rid == particles_rid) {
+				storage.particles_update_dependency(p_rid, p_tracker);
+			} else {
+				fallback.base_update_dependency(p_rid, p_tracker);
+			}
+		}
+		bool free(RID p_rid) override { return fallback.free(p_rid); }
+		void update_dirty_resources() override { fallback.update_dirty_resources(); }
+	};
+	class Bug162Scene : public RasterizerSceneDummy {
+		class Geometry : public GeometryInstanceDummy {
+			Transform3D transform;
+			AABB aabb;
+
+		public:
+			void set_transform(const Transform3D &p_transform, const AABB &p_aabb, const AABB &) override {
+				transform = p_transform;
+				aabb = p_aabb;
+			}
+			Transform3D get_transform() override { return transform; }
+			AABB get_aabb() override { return aabb; }
+		};
+		Geometry geometry;
+
+	public:
+		RendererSceneRender *fallback = nullptr;
+		RID particles_rid;
+		RenderGeometryInstance *geometry_instance_create(RID p_base) override {
+			return p_base == particles_rid ? &geometry : fallback->geometry_instance_create(p_base);
+		}
+		void geometry_instance_free(RenderGeometryInstance *p_instance) override {
+			if (p_instance != &geometry) {
+				fallback->geometry_instance_free(p_instance);
+			}
+		}
+	};
+
+	const RID viewport = RSG::viewport->viewport_allocate();
+	RSG::viewport->viewport_initialize(viewport);
+	RSG::viewport->viewport_set_size(viewport, 64, 64);
+	const RID camera = RSG::scene->camera_allocate();
+	RSG::scene->camera_initialize(camera);
+	RSG::viewport->viewport_attach_camera(viewport, camera);
+	auto *native_vp = RSG::viewport->viewport_owner.get_or_null(viewport);
+	REQUIRE(native_vp != nullptr);
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, { 4162, 1, 7 }));
+	native_vp->render_buffers = Ref<RenderSceneBuffers>(memnew(ReadCaptureTestBuffers));
+
+	RendererSceneRender::CameraData cam_data{};
+	cam_data.set_camera(Transform3D(Basis(), Vector3(0, 1, 5)), Projection(), false, false, Vector2(), 0, 1);
+	cam_data.source_viewport = viewport;
+	const auto tok_k = RSG::viewport->viewport_begin_camera_capture(viewport, cam_data, camera, native_vp->render_buffers);
+	REQUIRE(tok_k.is_valid());
+	Ref<RendererViewport::Viewport::CameraCapture> cap_k;
+	REQUIRE(RSG::viewport->viewport_get_camera_capture_ref(viewport, tok_k, cap_k));
+	REQUIRE(cap_k.is_valid());
+
+	cam_data.set_camera(Transform3D(Basis(), Vector3(1, 1, 5)), Projection(), false, false, Vector2(), 0, 1);
+	const auto tok_k1 = RSG::viewport->viewport_begin_camera_capture(viewport, cam_data, camera, native_vp->render_buffers);
+	REQUIRE(tok_k1.is_valid());
+	Ref<RendererViewport::Viewport::CameraCapture> cap_k1;
+	REQUIRE(RSG::viewport->viewport_get_camera_capture_ref(viewport, tok_k1, cap_k1));
+	REQUIRE(cap_k1.is_valid());
+
+	ExternalOutputConfig cfg;
+	cfg.profile = ExternalOutputConfig::INDEXED_144;
+	cfg.motion = ExternalOutputConfig::DISABLED;
+	cfg.pass_mask = ExternalOutputConfig::PASS_TRANSPARENT;
+	cfg.capacity = 1;
+	cfg.max_views = 1;
+	cfg.max_inflight = 2;
+	cfg.geometry_bounds = AABB(Vector3(-1, -1, -1), Vector3(2, 2, 2));
+	ExternalOutputOwner owner(cfg, 1);
+	owner.device = &p_rd;
+	owner.state = ExternalOutputOwner::GenerationState::ACTIVE;
+	owner.generation_registry = &p_registry;
+	owner.generation_selection_complete = true;
+	owner.generation_surfaces_complete = true;
+	owner.views[0].occupied = true;
+	owner.views[0].epoch = tok_k.view_epoch;
+	p_data->external = &owner;
+
+	auto *scene = static_cast<RendererSceneCull *>(RSG::scene);
+	RendererUtilities *prev_utilities = RSG::utilities;
+	RendererParticlesStorage *prev_particles = RSG::particles_storage;
+	RendererSceneRender *prev_scene_render = RSG::rasterizer->get_scene();
+	Bug162Utilities *bug162_utilities = memnew(Bug162Utilities(*prev_utilities, *ps, particles));
+	Bug162Scene bug162_scene;
+	bug162_scene.fallback = prev_scene_render;
+	bug162_scene.particles_rid = particles;
+	RSG::utilities = bug162_utilities;
+	RSG::particles_storage = ps;
+	scene->set_scene_render(&bug162_scene);
+
+	const RID scenario = scene->scenario_allocate();
+	scene->scenario_initialize(scenario);
+	const RID scene_instance = scene->instance_allocate();
+	scene->instance_initialize(scene_instance);
+	scene->instance_set_base(scene_instance, particles);
+	scene->instance_set_transform(scene_instance, Transform3D());
+	scene->instance_set_custom_aabb(scene_instance, AABB(Vector3(-1, -1, -1), Vector3(2, 2, 2)));
+	scene->instance_set_scenario(scene_instance, scenario);
+	scene->update_dirty_instances();
+	RendererSceneCull::NativeParticleSceneFacts committed_facts;
+	REQUIRE(scene->instance_get_committed_particle_scene_facts(scene_instance, particles, committed_facts) == OK);
+
+	ExternalOutputOwner::GenerationMaterialSelection gen_mat;
+	gen_mat.material = RID::from_uint64(777);
+	gen_mat.generation = 1;
+	owner.generation_materials = &gen_mat;
+	owner.generation_material_count = 1;
+
+	ExternalOutputStorage storages[2] = { ExternalOutputStorage(p_rd), ExternalOutputStorage(p_rd) };
+	ExternalOutputOwner::SurfaceBinding slot0_surfaces[1];
+	ExternalOutputOwner::SurfaceBinding slot1_surfaces[1];
+	slot1_surfaces[0].geometry = std::move(geom_hold);
+
+	ExternalPipelinePreparation rows[2];
+	owner.preparation_rows = rows;
+	owner.preparation_capacity = 2;
+
+	// Slot 0: older ADOPTED slot with a sealed READY preparation row.
+	auto &slot0 = owner.slots[0];
+	slot0.state = ExternalOutputOwner::LeaseState::ADOPTED;
+	slot0.storage = &storages[0];
+	slot0.surfaces = slot0_surfaces;
+	slot0.surface_count = 1;
+	slot0.lease_serial = 1;
+	slot0.generated_indexed_mesh = RID::from_uint64(101);
+	slot0.scene_cull_bound = true;
+	slot0.scene_cull_instance = scene_instance;
+	slot0.scene_cull_particles = particles;
+	slot0.scene_cull_scenario = scenario;
+	slot0.scene_cull_viewport = viewport;
+	slot0.scene_cull_version = committed_facts.version;
+	slot0.guard_resources_ready = true;
+	slot0.retained_host_snapshot = true;
+	slot0.native_camera_source = cap_k;
+	slot0.request.common.generation = 1;
+	slot0.request.common.present_seq = 1;
+	slot0.request.pass_mask = ExternalOutputConfig::PASS_TRANSPARENT;
+	slot0.request.view_epoch = tok_k.view_epoch;
+	slot0.request.common.current_camera_token = tok_k;
+	slot0.original_registry = &p_registry;
+	slot0.original_request = p_slot0_ref;
+	slot0.original_pin = std::move(p_slot0_pin);
+	slot0.preparation_reserved_count = 1;
+	rows[0].owner = &owner;
+	rows[0].owner_slot = 0;
+	rows[0].generation = 1;
+	rows[0].serial = slot0.lease_serial;
+	rows[0].tuple_state = ExternalPipelinePreparation::TupleState::READY;
+	rows[0].finish_complete = true;
+	rows[0].finish_error = OK;
+	rows[0].backend_error = OK;
+	rows[0].pipeline_sealed = true;
+
+	// Slot 1: newer SEALED_RECORDED slot (present_seq=2 > 1), no ready preparation row yet.
+	auto &slot1 = owner.slots[1];
+	slot1.state = ExternalOutputOwner::LeaseState::SEALED_RECORDED;
+	slot1.storage = &storages[1];
+	slot1.surfaces = slot1_surfaces;
+	slot1.surface_count = 1;
+	slot1.lease_serial = 2;
+	slot1.generated_indexed_mesh = RID::from_uint64(102);
+	slot1.scene_cull_bound = true;
+	slot1.scene_cull_instance = scene_instance;
+	slot1.scene_cull_particles = particles;
+	slot1.scene_cull_scenario = scenario;
+	slot1.scene_cull_viewport = viewport;
+	slot1.scene_cull_version = committed_facts.version;
+	slot1.guard_resources_ready = true;
+	slot1.retained_host_snapshot = true;
+	slot1.native_camera_source = cap_k;
+	slot1.request.common.generation = 1;
+	slot1.request.common.present_seq = 2;
+	slot1.request.pass_mask = ExternalOutputConfig::PASS_TRANSPARENT;
+	slot1.request.view_epoch = tok_k.view_epoch;
+	slot1.request.common.current_camera_token = tok_k;
+	slot1.original_registry = &p_registry;
+	slot1.original_request = p_slot1_ref;
+	slot1.original_action_ordinal = 0;
+	slot1.original_pin = std::move(p_slot1_pin);
+	slot1.preparation_reserved_count = 1;
+	rows[1].owner = &owner;
+	rows[1].owner_slot = 1;
+	rows[1].generation = 1;
+	rows[1].serial = slot1.lease_serial;
+	rows[1].bank_groups_reserved = true;
+	rows[1].source_sealed = true;
+
+	RenderDataRD render_data_k1;
+	REQUIRE(render_data_k1.set_camera_source(tok_k1.view_id, tok_k1.view_epoch, tok_k1.capture_ordinal));
+	REQUIRE(render_data_k1.retain_native_camera_source(*RSG::viewport, cap_k1->get_camera_data(), native_vp->render_buffers));
+
+	// (c.1) Slot 1 is SEALED_RECORDED with control.state == RETURNED (unpreparable cross-capture):
+	// must prefer ready ADOPTED slot 0 instead of picking unpreparable slot 1.
+	p_toggle_slot1_consumed(p_ctx, false);
+	uint32_t out_slot = UINT32_MAX;
+	uint32_t out_count = 0;
+	CHECK(ps->particles_external_generated_surfaces_for_view(particles, render_data_k1, out_slot, out_count, true, false) == OK);
+	CHECK(out_slot == 0u);
+	CHECK(out_count == 1u);
+
+	// (c.2) Once slot 1's producer request becomes OWNER_CONSUMED, cross-capture replay
+	// seamlessly switches to the newer SEALED_RECORDED slot 1.
+	p_toggle_slot1_consumed(p_ctx, true);
+	out_slot = UINT32_MAX;
+	out_count = 0;
+	CHECK(ps->particles_external_generated_surfaces_for_view(particles, render_data_k1, out_slot, out_count, true, false) == OK);
+	CHECK(out_slot == 1u);
+	CHECK(out_count == 1u);
+
+	// (b.1) Direct unselect_preparation_tuple rollback and post-scope guard.
+	const RID saved_mesh1 = slot1.generated_indexed_mesh;
+	slot1.generated_indexed_mesh = RID();
+	ExternalPacketPipelineRequest pipe_req;
+	pipe_req.pass = ExternalPacketPass::TRANSPARENT;
+	uint32_t sel_idx = UINT32_MAX;
+	bool reused = false;
+	CHECK(owner.select_preparation_tuple(1, 0, pipe_req, sel_idx, reused) == OK);
+	CHECK(sel_idx == 1u);
+	CHECK_FALSE(reused);
+	CHECK(rows[1].tuple_state == ExternalPipelinePreparation::TupleState::SELECTED);
+	CHECK(slot1.preparation_selected_count == 1u);
+	owner.unselect_preparation_tuple(1, sel_idx);
+	CHECK(rows[1].tuple_state == ExternalPipelinePreparation::TupleState::UNSELECTED);
+	CHECK(slot1.preparation_selected_count == 0u);
+	CHECK(rows[1].tuple_surface == UINT32_MAX);
+	CHECK(rows[1].source_geometry == nullptr);
+
+	CHECK(owner.select_preparation_tuple(1, 0, pipe_req, sel_idx, reused) == OK);
+	CHECK_FALSE(reused);
+	rows[1].native_cache_queried = true;
+	owner.unselect_preparation_tuple(1, sel_idx);
+	CHECK(rows[1].tuple_state == ExternalPipelinePreparation::TupleState::SELECTED);
+	CHECK(slot1.preparation_selected_count == 1u);
+	rows[1].native_cache_queried = false;
+	owner.unselect_preparation_tuple(1, sel_idx);
+	CHECK(rows[1].tuple_state == ExternalPipelinePreparation::TupleState::UNSELECTED);
+	CHECK(slot1.preparation_selected_count == 0u);
+
+	// (b.2) End-to-end particles_external_prepare_pipeline pre-scope begin_row refusal (ERR_BUSY
+	// while slot 1 request is RETURNED) MUST roll back row 1 to UNSELECTED (never poison FAILED).
+	p_toggle_slot1_consumed(p_ctx, false);
+	ExternalOutputOwner::SurfaceCell surf_cells[2];
+	ExternalOutputOwner::ViewCell view_cells[2];
+	owner.surface_cells = surf_cells;
+	owner.surface_capacity = 2;
+	owner.view_cells = view_cells;
+	owner.view_capacity = 2;
+
+	ExternalSurfaceSelection surface_sel;
+	REQUIRE(owner.slot_surface_acquire(1, 0, surface_sel) == OK);
+	ExternalPacketViewLease view_lease;
+	REQUIRE(owner.acquire_camera_view(surface_sel, render_data_k1, view_lease) == OK);
+
+	const ExternalPipelinePreparation *out_prep = reinterpret_cast<const ExternalPipelinePreparation *>(uintptr_t(1));
+	const Error prep_err = ps->particles_external_prepare_pipeline(
+			surface_sel, view_lease, pipe_req,
+			+[](void *, const ExternalSurfaceSelection &, ExternalPipelinePreparation &) -> Error { return OK; },
+			nullptr, out_prep, true);
+	CHECK(prep_err == ERR_BUSY);
+	CHECK(out_prep == nullptr);
+	CHECK(rows[1].tuple_state == ExternalPipelinePreparation::TupleState::UNSELECTED);
+	CHECK(slot1.preparation_selected_count == 0u);
+	CHECK(rows[1].backend_error == ERR_UNCONFIGURED);
+
+	// Subsequent selection succeeds cleanly with reused == false (zero permanent poisoning).
+	CHECK(owner.select_preparation_tuple(1, 0, pipe_req, sel_idx, reused) == OK);
+	CHECK_FALSE(reused);
+	owner.unselect_preparation_tuple(1, sel_idx);
+
+	// Clean teardown of test leases, pins, scene adapter, geometry hold, and owner.
+	CHECK(owner.view_return(view_lease) == OK);
+	CHECK(owner.surface_return(surface_sel) == OK);
+	slot1.generated_indexed_mesh = saved_mesh1;
+	owner.surface_cells = nullptr;
+	owner.surface_capacity = 0;
+	owner.view_cells = nullptr;
+	owner.view_capacity = 0;
+
+	scene->free(scene_instance);
+	scene->free(scenario);
+	scene->set_scene_render(prev_scene_render);
+	RSG::particles_storage = prev_particles;
+	RSG::utilities = prev_utilities;
+	memdelete(bug162_utilities);
+
+	p_data->external = nullptr;
+	ps->particles_free(particles);
+	p_slot0_pin = std::move(slot0.original_pin);
+	p_slot1_pin = std::move(slot1.original_pin);
+	p_release_geom(p_ctx, slot1_surfaces[0].geometry);
+
+	slot0.surfaces = nullptr;
+	slot0.surface_count = 0;
+	slot0.storage = nullptr;
+	slot0.generated_indexed_mesh = RID();
+	slot0.guard_resources_ready = false;
+	slot0.native_camera_source.unref();
+	slot1.surfaces = nullptr;
+	slot1.surface_count = 0;
+	slot1.storage = nullptr;
+	slot1.generated_indexed_mesh = RID();
+	slot1.guard_resources_ready = false;
+	slot1.native_camera_source.unref();
+	owner.preparation_rows = nullptr;
+	owner.preparation_capacity = 0;
+	owner.generation_materials = nullptr;
+	owner.generation_material_count = 0;
+	owner.generation_selection_complete = false;
+	owner.generation_surfaces_complete = false;
 	owner.state = ExternalOutputOwner::GenerationState::RELEASED;
 	RSG::viewport->free(viewport);
 	RSG::scene->free(camera);

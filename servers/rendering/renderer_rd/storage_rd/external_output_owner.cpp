@@ -775,6 +775,32 @@ Error ExternalOutputOwner::select_preparation_tuple(uint32_t p_slot, uint32_t p_
 	return OK;
 }
 
+void ExternalOutputOwner::unselect_preparation_tuple(uint32_t p_slot, uint32_t p_index) {
+	if (p_slot >= slot_count || !preparation_rows || p_index >= preparation_capacity) {
+		return;
+	}
+	auto &slot = slots[p_slot];
+	auto &row = preparation_rows[p_index];
+	if (!preparation_bank_row_matches(p_slot, p_index, row) ||
+			row.tuple_state != ExternalPipelinePreparation::TupleState::SELECTED ||
+			row.pipeline_scope || row.finish_complete || row.geometry_adopted || row.material_adopted ||
+			row.pipeline_sealed || row.owned_pipeline_root.is_valid() || row.native_cache_queried ||
+			row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
+		return;
+	}
+	row.selection = ExternalPacketPipelineRequest();
+	row.tuple_surface = UINT32_MAX;
+	row.tuple_native_surface = UINT32_MAX;
+	row.tuple_mesh = RID();
+	row.source_geometry = nullptr;
+	row.source_material = RID();
+	row.source_material_generation = 0;
+	row.tuple_state = ExternalPipelinePreparation::TupleState::UNSELECTED;
+	if (slot.preparation_selected_count) {
+		--slot.preparation_selected_count;
+	}
+}
+
 bool ExternalOutputOwner::preparation_bank_row_matches(uint32_t p_slot, uint32_t p_index, const ExternalPipelinePreparation &p_row) const {
 	return p_slot < slot_count && preparation_rows && p_index < preparation_capacity && &p_row == &preparation_rows[p_index] &&
 			p_row.owner == this && p_row.owner_slot == p_slot && p_row.generation == generation && slots[p_slot].lease_serial && p_row.serial == slots[p_slot].lease_serial;

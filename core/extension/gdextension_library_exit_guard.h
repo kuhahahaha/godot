@@ -1085,6 +1085,7 @@ private:
 	Error production_output_reads_settle(::RendererRD::ExternalOutputOwner &, uint32_t, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
 	Error production_output_owner_context_locked(const ProductionOutputPin &, RenderingDevice &);
 	bool production_output_pin_matches(const ProductionOutputPin &, GDExtensionProductionRequestRefV1, RenderingDevice &);
+	bool production_output_slot_cross_capture_preparable(const ProductionOutputPin &, GDExtensionProductionRequestRefV1, RenderingDevice &);
 	// Historical identity comparison under existing custody only. It grants no
 	// append/NewWork, color coverage, adoption/ACK or completion authority.
 	bool production_output_pin_matches_operation(const ProductionOutputPin &, GDExtensionProductionRequestRefV1, RenderingDevice &, const OriginalOperationIdentity &);

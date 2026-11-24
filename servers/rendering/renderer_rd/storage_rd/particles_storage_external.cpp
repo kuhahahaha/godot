@@ -1448,7 +1448,8 @@ Error ParticlesStorage::particles_external_generated_surfaces_for_view(RID p_par
 			owner.admits_work() && owner.config.profile == ExternalOutputConfig::INDEXED_144 &&
 			owner.config.motion == ExternalOutputConfig::DISABLED && owner.config.capacity > 0) {
 		const auto &camera_token = capture->get_token();
-		uint64_t best_present_seq = 0;
+		uint32_t best_ready_slot = UINT32_MAX;
+		uint64_t best_ready_present_seq = 0;
 		for (uint32_t s = 0; s < owner.slot_count; ++s) {
 			const auto &cand_slot = owner.slots[s];
 			if ((cand_slot.state != ExternalOutputOwner::LeaseState::SEALED_RECORDED &&
@@ -1473,27 +1474,34 @@ Error ParticlesStorage::particles_external_generated_surfaces_for_view(RID p_par
 					!cand_slot.original_registry->production_output_pin_matches(cand_slot.original_pin, cand_slot.original_request, *rd)) {
 				continue;
 			}
-			if (cand_slot.state == ExternalOutputOwner::LeaseState::ADOPTED) {
-				bool has_ready_row = false;
-				for (uint32_t r = 0; r < owner.preparation_capacity; ++r) {
-					const auto &row = owner.preparation_rows[r];
-					if (row.owner == &owner && row.owner_slot == s &&
-							row.tuple_state == ExternalPipelinePreparation::TupleState::READY &&
-							row.finish_complete && row.finish_error == OK && row.backend_error == OK && row.pipeline_sealed) {
-						has_ready_row = true;
-						break;
-					}
+			bool has_ready_row = false;
+			for (uint32_t r = 0; r < owner.preparation_capacity; ++r) {
+				const auto &row = owner.preparation_rows[r];
+				if (row.owner == &owner && row.owner_slot == s &&
+						row.tuple_state == ExternalPipelinePreparation::TupleState::READY &&
+						row.finish_complete && row.finish_error == OK && row.backend_error == OK && row.pipeline_sealed) {
+					has_ready_row = true;
+					break;
 				}
+			}
+			if (cand_slot.state == ExternalOutputOwner::LeaseState::ADOPTED) {
 				if (!has_ready_row) {
 					continue;
 				}
+			} else if (!has_ready_row &&
+					!cand_slot.original_registry->production_output_slot_cross_capture_preparable(
+							cand_slot.original_pin, cand_slot.original_request, *rd)) {
+				continue;
 			}
-			if (slot == UINT32_MAX || cand_slot.request.common.present_seq >= best_present_seq) {
-				slot = s;
-				best_present_seq = cand_slot.request.common.present_seq;
-				selected = OK;
-				replayed_across_capture = true;
+			if (best_ready_slot == UINT32_MAX || cand_slot.request.common.present_seq >= best_ready_present_seq) {
+				best_ready_slot = s;
+				best_ready_present_seq = cand_slot.request.common.present_seq;
 			}
+		}
+		if (best_ready_slot != UINT32_MAX) {
+			slot = best_ready_slot;
+			selected = OK;
+			replayed_across_capture = true;
 		}
 	}
 	if (selected != OK) {
@@ -1603,9 +1611,15 @@ Error ParticlesStorage::particles_external_prepare_pipeline(const ExternalSurfac
 	GDExtensionDeviceExit::ProductionOutputPreparationScope scope;
 	Error error = slot.original_registry->production_output_preparation_begin_row(slot.original_pin, *device, slot.original_action_ordinal, surface.flattened_surface, index, row.pipeline_owned_group, scope, &view);
 	if (error != OK) {
-		row.backend_error = error;
-		row.tuple_state = ExternalPipelinePreparation::TupleState::FAILED;
-		out = &row;
+		// Pre-scope refusal touched no RD/pipeline/disposal state: release the freshly
+		// selected bank row back to UNSELECTED so transient refusals (e.g. ERR_BUSY while
+		// awaiting OWNER_CONSUMED or cross-capture staged_return mismatch) never permanently
+		// poison this (slot, surface, selection) tuple to FAILED on future frames.
+		{
+			GDExtensionDeviceExit::Registry::Lock lock(*slot.original_registry);
+			owner.unselect_preparation_tuple(view.slot, index);
+		}
+		out = nullptr;
 		return error;
 	}
 	// Synchronous real backend body; it cannot retain this stack scope. Every

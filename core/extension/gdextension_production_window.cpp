@@ -1720,7 +1720,11 @@ bool Registry::production_output_recorded_ordered_locked(const ProductionRequest
 	}
 	for (uint32_t i = 0; i < request.graph_count; ++i) {
 		uint32_t command = UINT32_MAX;
-		if (!device.draw_graph._resolve_record_command_index(request.graphs[i].handle, command)) {
+		// Require every still-pending producer graph ordered in the active draw graph;
+		// graphs already submitted on prior frames (pending == false) are already ordered
+		// before any subsequent frame's draw list, and output_read graphs carry no recipe.
+		if (!request.graphs[i].output_read && request.graphs[i].pending &&
+				!device.draw_graph._resolve_record_command_index(request.graphs[i].handle, command)) {
 			return false;
 		}
 	}

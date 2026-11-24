@@ -667,7 +667,8 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 			prev_xforms_uniform_set = RID();
 			prev_material_uniform_set = RID();
 			if (external_error != OK && external_error != ERR_UNAVAILABLE) {
-				return;
+				i += element_info.repeat - 1;
+				continue;
 			}
 			i += element_info.repeat - 1;
 			continue;

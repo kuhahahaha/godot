@@ -310,6 +310,7 @@ class ExternalOutputOwner {
 	uint64_t preparation_request_serial(uint32_t p_slot) const { return p_slot < slot_count ? slots[p_slot].original_pin.request_serial : 0; }
 	uint64_t preparation_pin_serial(uint32_t p_slot) const { return p_slot < slot_count ? slots[p_slot].original_pin.serial : 0; }
 	Error select_preparation_tuple(uint32_t, uint32_t, const ExternalPacketPipelineRequest &, uint32_t &, bool &);
+	void unselect_preparation_tuple(uint32_t, uint32_t);
 	bool preparation_view_matches(const ExternalPacketViewLease &, uint32_t, bool p_cleanup = false) const;
 	Error return_preparation_row(uint32_t, uint32_t);
 	bool generation_selection_attempted = false;

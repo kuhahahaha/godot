@@ -6989,6 +6989,186 @@ struct Access {
 		CHECK(record.cleanup_reservations == 0);
 	}
 
+	static void bug162_cross_capture_ordered_and_slot_selection() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment fixture;
+		auto &registry = *fixture.registry;
+		auto &record = registry.records[0];
+		auto &device = registry.device_records[0];
+		const uint32_t private_before = record.private_refs, device_before = device.refs;
+
+		const GDExtensionProductionCapacityV1 whole = { production_dto_abi<GDExtensionProductionCapacityV1>(), 2, 2, 2, 8, 2, 64, 0, 2, 128, 0 };
+		const auto attachment = fixture.accept(whole);
+
+		struct PinProbe {
+			Registry *registry = nullptr;
+			RenderingDevice *rd = nullptr;
+			ProductionOutputPin *target = nullptr;
+			Error err = ERR_UNCONFIGURED;
+		} probe{ &registry, &fixture.rd, nullptr, ERR_UNCONFIGURED };
+		auto pin_receiver = +[](void *userdata, GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *) {
+			auto &p = *static_cast<PinProbe *>(userdata);
+			p.err = p.registry->production_output_pin_current(*p.rd, *p.target);
+		};
+		REQUIRE(registry.production_install_record_receiver({ Enrollment::INSTANCE, 5 }, attachment, pin_receiver, &probe, nullptr) == OK);
+		REQUIRE(registry.production_open({ Enrollment::INSTANCE, 5 }, attachment).native_error == OK);
+
+		GDExtensionProductionCapacityV1 single = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 1, 1, 4, 1, 32, 0, 1, 64, 0 };
+		Request *r0 = nullptr;
+		Request *r1 = nullptr;
+		REQUIRE(fixture.reserve(attachment, single, 1620, r0) == OK);
+		REQUIRE(fixture.reserve(attachment, single, 1621, r1) == OK);
+		REQUIRE(r0 != nullptr);
+		REQUIRE(r1 != nullptr);
+		fixture.driver.execution_thread = Thread::get_caller_id();
+		registry.device_records[0].execution_thread = Thread::get_caller_id();
+		registry.phase = Registry::Phase::RUNNING;
+		fixture.rd.render_thread_id = Thread::get_caller_id();
+		fixture.rd.is_main_instance = true;
+
+		// (a) production_output_recorded_ordered_locked MUST accept prior-frame already-submitted
+		// producer graphs (pending == false) even after draw_graph has advanced, while still
+		// rejecting unsubmitted pending producer graphs not present in the active draw_graph.
+		r1->next_action = r1->action_count;
+		r1->graph_count = 1;
+		r1->graphs[0].request = r1;
+		r1->graphs[0].output_read = false;
+		r1->graphs[0].handle = RenderingDeviceGraph::RecordHandle();
+		r1->graphs[0].handle.graph_frame = 999999; // Stale prior-frame graph handle.
+		{
+			MutexLock lock(registry.mutex);
+			r1->graphs[0].pending = true;
+			CHECK_FALSE(registry.production_output_recorded_ordered_locked(*r1, fixture.rd));
+			r1->graphs[0].pending = false;
+			CHECK(registry.production_output_recorded_ordered_locked(*r1, fixture.rd));
+			r1->graphs[0].output_read = true;
+			r1->graphs[0].pending = true;
+			CHECK(registry.production_output_recorded_ordered_locked(*r1, fixture.rd));
+		}
+		r1->graphs[0].pending = false;
+		r1->graphs[0].output_read = false;
+		r1->graph_count = 0;
+
+		// Issue real pins through production_record_receive_locked -> production_output_pin_current for r0 and r1.
+		auto issue_pin = [&](Request &req, ProductionOutputPin &pin) {
+			probe.target = &pin;
+			probe.err = ERR_UNCONFIGURED;
+			MutexLock lock(registry.mutex);
+			req.frozen = true;
+			req.next_action = 0;
+			req.graph_count = 0;
+			req.control.state = ProductionControlState::EXECUTING;
+			req.control.serial = 1;
+			req.control.input.kind = ProductionControlKind::RECORD;
+			req.control.input.output_cancel = false;
+			REQUIRE(registry.production_record_receive_locked(req, fixture.rd, nullptr) == OK);
+			REQUIRE(probe.err == OK);
+			REQUIRE_FALSE(pin.is_empty());
+		};
+		ProductionOutputPin pin0;
+		ProductionOutputPin pin1;
+		const GDExtensionProductionRequestRefV1 ref0 = { Enrollment::INSTANCE, r0->serial };
+		const GDExtensionProductionRequestRefV1 ref1 = { Enrollment::INSTANCE, r1->serial };
+		issue_pin(*r0, pin0);
+		issue_pin(*r1, pin1);
+		r0->control.state = ProductionControlState::OWNER_CONSUMED;
+		r1->control.state = ProductionControlState::RETURNED;
+
+		// (b) production_output_slot_cross_capture_preparable gates on OWNER_CONSUMED & clean request state.
+		CHECK(registry.production_output_slot_cross_capture_preparable(pin0, ref0, fixture.rd));
+		CHECK_FALSE(registry.production_output_slot_cross_capture_preparable(pin1, ref1, fixture.rd));
+		r1->control.state = ProductionControlState::OWNER_CONSUMED;
+		CHECK(registry.production_output_slot_cross_capture_preparable(pin1, ref1, fixture.rd));
+		r1->effects_pending = true;
+		CHECK_FALSE(registry.production_output_slot_cross_capture_preparable(pin1, ref1, fixture.rd));
+		r1->effects_pending = false;
+
+		// (c) Ready ADOPTED slot preferred over unpreparable SEALED_RECORDED + pre-scope begin_row rollback.
+		fixture.driver.mesh_directory_factory = true;
+		struct Bug162Ctx {
+			Request *r1 = nullptr;
+			RenderingDevice *rd = nullptr;
+			RID vbuf;
+			RID ibuf;
+			RendererRD::MeshStorage::Mesh::Surface *mesh_surf = nullptr;
+		} bug162_ctx{ r1, &fixture.rd, RID(), RID(), nullptr };
+		auto toggle_r1 = +[](void *p_ctx, bool p_consumed) {
+			static_cast<Bug162Ctx *>(p_ctx)->r1->control.state = p_consumed ? ProductionControlState::OWNER_CONSUMED : ProductionControlState::RETURNED;
+		};
+		auto acquire_geom = +[](void *p_ctx, RendererRD::MeshStorage::NativeSurfaceHold &r_hold) {
+			auto &c = *static_cast<Bug162Ctx *>(p_ctx);
+			Vector<RD::VertexAttribute> dummy_attrs;
+			RD::VertexAttribute dummy_attr;
+			dummy_attr.location = 0;
+			dummy_attr.format = RD::DATA_FORMAT_R32G32B32A32_SFLOAT;
+			dummy_attr.stride = 16;
+			dummy_attrs.push_back(dummy_attr);
+			(void)c.rd->vertex_format_create(dummy_attrs);
+			Vector<RD::VertexAttribute> attrs;
+			RD::VertexAttribute attr;
+			attr.location = 0;
+			attr.format = RD::DATA_FORMAT_R32G32B32_SFLOAT;
+			attr.stride = 12;
+			attrs.push_back(attr);
+			const RD::VertexFormatID vfmt = c.rd->vertex_format_create(attrs);
+			REQUIRE(vfmt != 0);
+			c.vbuf = c.rd->vertex_buffer_create(36);
+			REQUIRE(c.vbuf.is_valid());
+			c.ibuf = c.rd->index_buffer_create(3, RD::INDEX_BUFFER_FORMAT_UINT32);
+			REQUIRE(c.ibuf.is_valid());
+			Vector<RID> vbufs;
+			vbufs.push_back(c.vbuf);
+			c.mesh_surf = memnew(RendererRD::MeshStorage::Mesh::Surface);
+			c.mesh_surf->external = true;
+			c.mesh_surf->format = RSE::ARRAY_FORMAT_VERTEX;
+			c.mesh_surf->vertex_count = 3;
+			c.mesh_surf->vertex_buffer = c.vbuf;
+			c.mesh_surf->index_buffer = c.ibuf;
+			c.mesh_surf->version_count = 1;
+			c.mesh_surf->versions = static_cast<RendererRD::MeshStorage::Mesh::Surface::Version *>(memalloc(sizeof(RendererRD::MeshStorage::Mesh::Surface::Version)));
+			new (&c.mesh_surf->versions[0]) RendererRD::MeshStorage::Mesh::Surface::Version;
+			c.mesh_surf->versions[0].input_mask = 1;
+			c.mesh_surf->versions[0].vertex_format = vfmt;
+			c.mesh_surf->versions[0].vertex_array = c.rd->vertex_array_create(3, vfmt, vbufs);
+			REQUIRE(c.mesh_surf->versions[0].vertex_array.is_valid());
+			REQUIRE(RendererRD::MeshStorage::_mesh_surface_hold_acquire(c.mesh_surf, 1, false, false, 0, r_hold) == OK);
+		};
+		auto release_geom = +[](void *p_ctx, RendererRD::MeshStorage::NativeSurfaceHold &r_hold) {
+			auto &c = *static_cast<Bug162Ctx *>(p_ctx);
+			CHECK(RendererRD::MeshStorage::mesh_surface_hold_release(r_hold) == OK);
+			c.rd->free_rid(c.mesh_surf->versions[0].vertex_array);
+			c.mesh_surf->versions[0].~Version();
+			memfree(c.mesh_surf->versions);
+			c.mesh_surf->versions = nullptr;
+			c.mesh_surf->version_count = 0;
+			c.rd->free_rid(c.ibuf);
+			c.rd->free_rid(c.vbuf);
+			memdelete(c.mesh_surf);
+			c.mesh_surf = nullptr;
+		};
+		RendererRD::ExternalLinkedOwnerTest::bug162_cross_capture_selection_and_rollback(
+				registry, fixture.rd, pin0, ref0, pin1, ref1, toggle_r1, acquire_geom, release_geom, &bug162_ctx);
+		fixture.driver.mesh_directory_factory = false;
+
+		// Unpin root pins and release both requests cleanly.
+		CHECK(registry.production_output_unpin(pin0) == OK);
+		CHECK(registry.production_output_unpin(pin1) == OK);
+		r0->frozen = false;
+		r0->control.state = ProductionControlState::OWNER_CONSUMED;
+		r1->frozen = false;
+		r1->control.state = ProductionControlState::OWNER_CONSUMED;
+		r1->next_action = 0;
+		REQUIRE(registry.production_cancel(ref0).native_error == OK);
+		REQUIRE(registry.production_release(ref0).native_error == OK);
+		REQUIRE(registry.production_cancel(ref1).native_error == OK);
+		REQUIRE(registry.production_release(ref1).native_error == OK);
+		REQUIRE(registry.production_close(attachment).native_error == OK);
+		CHECK(record.private_refs == private_before);
+		CHECK(device.refs == device_before);
+		CHECK(fixture.holder.production_children == 0);
+		CHECK(record.cleanup_reservations == 0);
+	}
+
 	static void aux_pre_append_rt_authorization() {
 		using namespace GDExtensionDeviceExit;
 		Enrollment fixture;
@@ -23608,4 +23788,8 @@ TEST_CASE("[ProductionRequest][BUG-111] byte-arena reservation separates permane
 
 TEST_CASE("[ProductionRequest][BUG-115] material qualification observe returns ERR_BUSY when RD recording is suspended without latching recipe_failed") {
 	TestProductionRequest::Access::mq_observe_guards_recording_error();
+}
+
+TEST_CASE("[SceneTree][ExternalOutput][BUG-162] cross-frame recorded ordering, pre-scope preparation rollback, and ADOPTED-over-unpreparable-SEALED selection") {
+	TestProductionRequest::Access::bug162_cross_capture_ordered_and_slot_selection();
 }

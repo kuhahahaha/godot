@@ -236,6 +236,14 @@ public:
 	bool history_cleared() const;
 	bool released() const;
 	static void bug155a_cross_capture_sealed_replay();
+	static void bug162_cross_capture_selection_and_rollback(
+			GDExtensionDeviceExit::Registry &p_registry, RenderingDevice &p_rd,
+			GDExtensionDeviceExit::ProductionOutputPin &p_slot0_pin, GDExtensionProductionRequestRefV1 p_slot0_ref,
+			GDExtensionDeviceExit::ProductionOutputPin &p_slot1_pin, GDExtensionProductionRequestRefV1 p_slot1_ref,
+			void (*p_toggle_slot1_consumed)(void *, bool),
+			void (*p_acquire_geom)(void *, MeshStorage::NativeSurfaceHold &),
+			void (*p_release_geom)(void *, MeshStorage::NativeSurfaceHold &),
+			void *p_ctx);
 };
 // Actual native mismatch injection and exact test-only undo, on the original RT.
 Error external_storage_poison_and_free(RenderingDevice &, NativeDisposalWitness &, NativeDisposalWitness::Report &);
