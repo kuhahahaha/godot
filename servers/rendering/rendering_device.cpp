@@ -17126,6 +17126,7 @@ Error RenderingDevice::_begin_production_finalization() {
 
 void RenderingDevice::finalize() {
 	ERR_RENDER_THREAD_GUARD();
+	production_resource_validation_cache.invalidate();
 	native_height_finalization_started = true;
 	const Error entity_return = _begin_production_finalization();
 	ERR_FAIL_COND_MSG(entity_return != OK, "RenderingDevice native finalization is blocked by an original production entity obligation.");
@@ -18941,18 +18942,16 @@ bool RenderingDevice::_production_resource_permitted(RID rid) {
 			}
 		}
 	}
-	for (uint32_t i = 0; i < request->resource_count; ++i) {
-		const auto &slot = request->resources[i];
+	auto slot_permits_rid = [&](const GDExtensionDeviceExit::ProductionResourceSlot &slot) -> bool {
 		if (!slot.imported || (slot.primary != rid && slot.secondary != rid)) {
-			continue;
+			return false;
 		}
 		// The original capture_inflight pin and RD recording lock stabilize
 		// these rows on RT while Registry is unlocked for the native call.
 		// Recheck owner closure as well as the exact actual factory witness.
 		if (slot.output_guard_readonly) {
-			if ((slot.output_guard_history ? GDExtensionDeviceExit::Registry::get_singleton().production_output_history_guard_uses_locked(*request, slot, request->next_action) : request->next_action == slot.output_guard_consumer) &&
-					GDExtensionDeviceExit::Registry::get_singleton().production_output_guard_matches_locked(*request, slot, *this)) { return true; }
-			continue;
+			return (slot.output_guard_history ? GDExtensionDeviceExit::Registry::get_singleton().production_output_history_guard_uses_locked(*request, slot, request->next_action) : request->next_action == slot.output_guard_consumer) &&
+					GDExtensionDeviceExit::Registry::get_singleton().production_output_guard_matches_locked(*request, slot, *this);
 		}
 		if ((!slot.output_predecessor_view.is_empty() && GDExtensionDeviceExit::Registry::get_singleton().production_output_predecessor_matches_locked(*request, slot, *this)) ||
 				(slot.output_alias_prepared && GDExtensionDeviceExit::Registry::get_singleton().production_output_alias_matches_locked(*request, slot, *this))) {
@@ -18963,6 +18962,32 @@ bool RenderingDevice::_production_resource_permitted(RID rid) {
 			if (use.rid == rid.get_id() && use.request == request && use.request_serial == request->serial && use.same_physical() && use.linked() && !use.physical->use_closed.load()) {
 				return true;
 			}
+		}
+		return false;
+	};
+	const auto &cache = production_resource_validation_cache;
+	if (rid.is_valid() && cache.rid_index_active && cache.rid_index_valid &&
+			cache.request == request && cache.request_serial == request->serial &&
+			cache.resource_count == request->resource_count && !cache.rid_to_slot.is_empty()) {
+		const uint64_t rid_id = rid.get_id();
+		uint64_t h = rid_id;
+		h ^= h >> 33;
+		h *= 0xff51afd7ed558ccdULL;
+		h ^= h >> 33;
+		uint32_t pos = uint32_t(h) & cache.rid_mask;
+		while (cache.rid_to_slot[pos].rid_id != 0) {
+			if (cache.rid_to_slot[pos].rid_id == rid_id) {
+				if (slot_permits_rid(request->resources[cache.rid_to_slot[pos].slot_index])) {
+					return true;
+				}
+			}
+			pos = (pos + 1u) & cache.rid_mask;
+		}
+		return false;
+	}
+	for (uint32_t i = 0; i < request->resource_count; ++i) {
+		if (slot_permits_rid(request->resources[i])) {
+			return true;
 		}
 	}
 	return false;

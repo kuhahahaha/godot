@@ -352,6 +352,32 @@ private:
 	bool qualification_retiring = false;
 	bool qualification_recording = false;
 	GDExtensionDeviceExit::ProductionRequest *production_recording_request = nullptr;
+	struct ProductionResourceValidationCache {
+		const GDExtensionDeviceExit::ProductionRequest *request = nullptr;
+		uint64_t request_serial = 0;
+		uint64_t frame_serial = 0;
+		uint64_t permission_epoch = 0;
+		uint64_t anchor_ordinal = UINT64_MAX;
+		uint32_t resource_count = 0;
+		uint8_t anchor_output_state = 0;
+		bool prepared_upload_before_acquire = false;
+		bool valid = false;
+		LocalVector<uint32_t> index_dependent_slots;
+		struct SlotEntry {
+			uint64_t rid_id = 0;
+			uint32_t slot_index = 0;
+		};
+		LocalVector<SlotEntry> rid_to_slot;
+		uint32_t rid_mask = 0;
+		bool rid_index_valid = false;
+		bool rid_index_active = false;
+		void invalidate() {
+			valid = false;
+			rid_index_valid = false;
+			rid_index_active = false;
+		}
+	};
+	ProductionResourceValidationCache production_resource_validation_cache;
 	RID production_mq_permitted_framebuffer;
 	RID production_mq_permitted_readback_ssbo;
 	bool _production_resource_permitted(RID);

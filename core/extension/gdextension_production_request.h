@@ -365,6 +365,7 @@ class ProductionResourceSlot {
 	uint64_t output_action_ordinal = UINT64_MAX;
 	uint64_t output_group_serial = 0, output_root_serial = 0;
 	uint32_t output_member_ordinal = UINT32_MAX;
+	uint32_t output_member_use_index = UINT32_MAX;
 	// Readonly predecessor custody; distinct from writable current-slot aliases.
 	// The original paid ViewCell pins both its arena and slot incarnation.
 	RendererRD::ExternalPacketViewLease output_predecessor_view;
@@ -991,6 +992,7 @@ class ProductionAttachment {
 	uint64_t terminal_action = 0;
 	GDExtensionProductionMetadataQuoteV1 quote = {};
 	void *arena = nullptr;
+	size_t arena_mmap_bytes = 0;
 	ProductionRequest *requests = nullptr;
 	ProductionActionCell *actions = nullptr;
 	MaterialQualificationState *material_qualifications = nullptr;

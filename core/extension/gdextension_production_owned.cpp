@@ -218,6 +218,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_storage_retire(GDExtension
 		++request->revision;
 		slot.retiring = true;
 		slot.owned_physical.use_closed.store(true);
+		bump_resource_permission_epoch();
 		slot.retire_origin = origin;
 		auto &state = slot.retire_report;
 		state.abi = ABI;
@@ -480,6 +481,7 @@ void Registry::production_persistent_sets_reap_and_retire_rt(RenderingDevice *p_
 						p_rd->_qualification_free_event_available(entry->physical.event_capacity_reserved) &&
 						(attachment->closing || to_free.size() < 256u)) {
 					entry->physical.use_closed.store(true);
+					bump_resource_permission_epoch();
 					entry->retire_enqueued = true;
 					to_free.push_back(entry->rid);
 				}
@@ -1490,6 +1492,7 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 	if (error == OK) {
 		slot.use_count = 1;
 		slot.imported = true;
+		bump_resource_permission_epoch();
 	}
 	++request.revision;
 	return finish(error != OK ? error : request.source_device_lost ? ERR_UNAVAILABLE
@@ -1676,6 +1679,7 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 		}
 		slot.retiring = true;
 		slot.owned_physical.use_closed.store(true);
+		bump_resource_permission_epoch();
 		if (!slot.owned_physical.enqueued) {
 			if (set) {
 				if (!set_pass_charged) {

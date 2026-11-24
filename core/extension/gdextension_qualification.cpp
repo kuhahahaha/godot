@@ -1481,6 +1481,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_retire(GDExtens
 		child->retirement = *request;
 		child->retiring = true;
 		child->physical.use_closed.store(true);
+		bump_resource_permission_epoch();
 		auto &r = child->report;
 		r.abi = { 1, sizeof(GDExtensionDeviceExitAbi), 0 };
 		r.rid = request->rid;
@@ -1538,6 +1539,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_retire(GDEx
 		child->retiring = true;
 		child->shader.use_closed.store(true);
 		child->pipeline.use_closed.store(true);
+		bump_resource_permission_epoch();
 		auto &r = child->report;
 		r.abi = { 1, sizeof(GDExtensionDeviceExitAbi), 0 };
 		r.unit = request->unit;

@@ -1019,7 +1019,16 @@ private:
 	Error scene_phase_call_relay(NormalRelayToken, const GDExtensionNativeScenePhaseV1 &, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 &);
 	struct ProductionPhysicalFrame;
 	static thread_local ProductionPhysicalFrame *production_physical_frame;
+	uint64_t production_physical_frame_serial() const;
+#ifdef TESTS_ENABLED
+	void test_push_production_physical_frame(uint64_t p_serial, void *&r_saved);
+	void test_pop_production_physical_frame(void *p_saved);
+#endif
 	static thread_local ProductionOutputPreparationScope *production_output_preparation_scope;
+	std::atomic<uint64_t> resource_permission_epoch{ 1 };
+	void bump_resource_permission_epoch() {
+		resource_permission_epoch.fetch_add(1, std::memory_order_release);
+	}
 	Error production_output_preparation_begin(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint64_t, ProductionOutputPreparationScope &);
 	Error production_output_preparation_begin_row(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint32_t, uint64_t, ProductionOutputPreparationScope &, const ::RendererRD::ExternalPacketViewLease * = nullptr);
 	Error production_output_preparation_begin_internal(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint64_t, ProductionOutputPreparationScope &, uint32_t, const ::RendererRD::ExternalPacketViewLease *);

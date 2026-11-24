@@ -91,6 +91,45 @@ size_t reclaim_arena_pod_pages(void *p_base, size_t p_byte_len) {
 #endif
 	return 0;
 }
+void *alloc_production_arena(size_t p_bytes, size_t &r_mmap_bytes) {
+	r_mmap_bytes = 0;
+	if (p_bytes == 0) {
+		return nullptr;
+	}
+#if (defined(__APPLE__) || defined(__linux__)) && (defined(MAP_ANONYMOUS) || defined(MAP_ANON))
+	const long raw_page = sysconf(_SC_PAGESIZE);
+	if (raw_page > 0) {
+		const size_t page_size = size_t(raw_page);
+		if (p_bytes <= SIZE_MAX - (page_size - 1)) {
+			const size_t mapped_bytes = (p_bytes + page_size - 1) & ~(page_size - 1);
+#if defined(MAP_ANONYMOUS)
+			constexpr int anon_flag = MAP_ANONYMOUS;
+#else
+			constexpr int anon_flag = MAP_ANON;
+#endif
+			void *mapped = mmap(nullptr, mapped_bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | anon_flag, -1, 0);
+			if (mapped != MAP_FAILED) {
+				r_mmap_bytes = mapped_bytes;
+				return mapped;
+			}
+			return nullptr;
+		}
+	}
+#endif
+	return Memory::alloc_static_zeroed(p_bytes);
+}
+void free_production_arena(void *p_arena, size_t p_mmap_bytes) {
+	if (!p_arena) {
+		return;
+	}
+#if (defined(__APPLE__) || defined(__linux__)) && (defined(MAP_ANONYMOUS) || defined(MAP_ANON))
+	if (p_mmap_bytes > 0) {
+		munmap(p_arena, p_mmap_bytes);
+		return;
+	}
+#endif
+	Memory::free_static(p_arena);
+}
 GDExtensionDeviceSessionResultV1 result(Error e, uint32_t reason = 0) {
 	return { int32_t(e), reason, 0, 0 };
 }
@@ -641,12 +680,13 @@ GDExtensionDeviceSessionResultV1 Registry::production_accept(const GDExtensionDe
 	if (slot == INVALID_SLOT || production_serials.exhausted || frame_serials.exhausted || record.private_refs >= private_limit || d.refs == UINT32_MAX || holder->production_children == UINT32_MAX || quote.cleanup_slots > UINT32_MAX - record.cleanup_reservations || uint64_t(record.active_callbacks) + record.cleanup_reservations + quote.cleanup_slots > UINT32_MAX || quote.cleanup_slots > UINT32_MAX - record.cleanup_by_phase[uint8_t(CleanupPhase::BINDING)]) {
 		return result(ERR_PARAMETER_RANGE_ERROR, 19);
 	}
-	// Allocate zero-initialized demand-paged virtual memory (calloc) so large
-	// contiguous production arenas do not pre-fault hundreds of MiB of RSS at
-	// SceneReady. Only ProductionAttachment and the small requests table are
-	// eagerly constructed; all other cell pools construct lazily via per-pool
-	// high-water marks (BUG-76 / RAM-2).
-	void *arena = Memory::alloc_static_zeroed(quote.allocation_bytes);
+	// Allocate demand-paged anonymous virtual memory (mmap on macOS/Linux, calloc
+	// fallback elsewhere) so large contiguous production arenas do not pre-fault
+	// RSS or bloat DefaultMallocZone Malloc Large. Only ProductionAttachment and
+	// the small requests table are eagerly constructed; all other cell pools
+	// construct lazily via per-pool high-water marks (BUG-76 / BUG-183B-2).
+	size_t arena_mmap_bytes = 0;
+	void *arena = alloc_production_arena(size_t(quote.allocation_bytes), arena_mmap_bytes);
 	if (!arena) {
 		return result(ERR_OUT_OF_MEMORY, 19);
 	}
@@ -692,6 +732,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_accept(const GDExtensionDe
 	CRASH_COND(!frame_serials.take(attachment->metadata_frame));
 	attachment->quote = quote;
 	attachment->arena = arena;
+	attachment->arena_mmap_bytes = arena_mmap_bytes;
 	attachment->held_device = Object::cast_to<RenderingDevice>(d.object);
 	attachment->terminal_action = holder->terminal_action;
 	attachment->entity_next = attachment->held_device->production_entity_holds;
@@ -4691,8 +4732,9 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 	destroy(a->commands, a->commands_hwm);
 	destroy(a->frames, a->frames_hwm);
 	void *arena = a->arena;
+	const size_t arena_mmap_bytes = a->arena_mmap_bytes;
 	a->~ProductionAttachment();
-	Memory::free_static(arena);
+	free_production_arena(arena, arena_mmap_bytes);
 	reclaim_device_locked(device);
 	reclaim(library);
 	try_finalize();

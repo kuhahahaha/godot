@@ -1924,6 +1924,7 @@ Error Registry::production_material_qualification_release_locked(ProductionReque
 					{
 						MutexLock fb_lock(mq->framebuffer_physical.mutex);
 						mq->framebuffer_physical.use_closed.store(true, std::memory_order_release);
+						bump_resource_permission_epoch();
 					}
 					MutexLock rd_lock(rd._thread_safe_);
 					rd.qualification_retiring = true;

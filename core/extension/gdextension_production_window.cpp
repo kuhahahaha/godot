@@ -70,6 +70,27 @@ struct Registry::ProductionPhysicalFrame {
 };
 thread_local Registry::ProductionPhysicalFrame *Registry::production_physical_frame = nullptr;
 
+uint64_t Registry::production_physical_frame_serial() const {
+	return (production_physical_frame && production_physical_frame->registry == this) ? production_physical_frame->serial : 0;
+}
+#ifdef TESTS_ENABLED
+void Registry::test_push_production_physical_frame(uint64_t p_serial, void *&r_saved) {
+	ProductionPhysicalFrame *frame = memnew(ProductionPhysicalFrame);
+	frame->previous = production_physical_frame;
+	frame->registry = this;
+	frame->serial = p_serial;
+	production_physical_frame = frame;
+	r_saved = frame;
+}
+void Registry::test_pop_production_physical_frame(void *p_saved) {
+	ProductionPhysicalFrame *frame = static_cast<ProductionPhysicalFrame *>(p_saved);
+	if (frame) {
+		production_physical_frame = frame->previous;
+		memdelete(frame);
+	}
+}
+#endif
+
 Error Registry::production_output_native_append_enter_locked() {
 	auto *frame = production_physical_frame;
 	if (!frame || frame->registry != this || !frame->request) {

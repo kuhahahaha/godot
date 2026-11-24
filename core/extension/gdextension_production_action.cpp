@@ -716,6 +716,7 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 		auto &resource = request.resources[declaration.resource_slot];
 		if (declaration.source_kind == GDEXTENSION_PRODUCTION_READBACK_NATIVE_OUTPUT_GUARD_V1) {
 			observed.error = production_output_guard_bind_locked(request, resource, rd);
+			rd.production_resource_validation_cache.invalidate();
 			if (observed.error != OK || resource.output_guard_consumer != index) { return observed; }
 		}
 		if (resource.output_alias_prepared) {
@@ -745,7 +746,11 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 		readback->count = 0;
 	}
 	bool transfer_effect_entered = false;
+	bool any_transfer_staged = false;
 	auto finish_transfer_staging = [&]() {
+		if (!any_transfer_staged) {
+			return;
+		}
 		for (uint32_t i = 0; i < request.resource_count; ++i) {
 			auto &resource = request.resources[i];
 			if (resource.transfer_staged) {
@@ -780,6 +785,9 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 				return OK;
 			}
 			resource.transfer_staged = !resource.transfer_pending;
+			if (resource.transfer_staged) {
+				any_transfer_staged = true;
+			}
 			resource.transfer_worker = uint32_t(buffer->transfer_worker_index);
 			resource.transfer_operation = buffer->transfer_worker_operation;
 			resource.transfer_action_ordinal = action.declaration.action_ordinal;
@@ -851,14 +859,17 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 		}
 		return waits;
 	};
-	for (uint32_t i = 0; i < request.resource_count; ++i) {
+	auto validate_slot = [&](uint32_t i) -> bool {
+		if (i >= request.resource_count) {
+			return true;
+		}
 		const auto &resource = request.resources[i];
 		// CPU metadata has no RD backing or physical use; reserve forbids it
 		// in action use rows. Actual resources retain the permission checks below.
-		if (resource.declaration.resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1) { continue; }
+		if (resource.declaration.resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1) { return true; }
 		// An unbound current guard is not a resource of earlier actions. Its
 		// sole declared READBACK row resolves and admits it after Finalize.
-		if (resource.output_guard_readonly && (resource.output_guard_history ? !production_output_history_guard_uses_locked(request, resource, index) : resource.output_guard_consumer != index)) { continue; }
+		if (resource.output_guard_readonly && (resource.output_guard_history ? !production_output_history_guard_uses_locked(request, resource, index) : resource.output_guard_consumer != index)) { return true; }
 		// A sealed output prefix can upload camera, control and reset data
 		// before Acquire provides output aliases and their dependent sets.
 		// Each upload's actual destination and declared uses still require permission.
@@ -868,16 +879,137 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 				used |= request.uses[action.declaration.first_use + u].declaration.resource_slot == i;
 			}
 			if (!used) {
-				continue;
+				return true;
 			}
 		}
-		if (!rd._production_resource_slot_permitted(resource, resource.primary) || (resource.secondary.is_valid() && !rd._production_resource_slot_permitted(resource, resource.secondary))) {
-			rd.production_recording_request = nullptr;
-			--request.capture_inflight;
-			observed.error = ERR_UNAUTHORIZED;
-			return observed;
+		return rd._production_resource_slot_permitted(resource, resource.primary) &&
+				(!resource.secondary.is_valid() || rd._production_resource_slot_permitted(resource, resource.secondary));
+	};
+	// BUG-184A: Cache whole-table static resource validation per physical frame
+	// while frozen with unchanged permission epoch and anchor output state, and
+	// build an O(1) RID->slot index for RD::_production_resource_permitted().
+	auto &val_cache = rd.production_resource_validation_cache;
+	val_cache.rid_index_active = false;
+	const uint64_t active_frame_serial = production_physical_frame_serial();
+	const uint64_t current_permission_epoch = resource_permission_epoch.load(std::memory_order_acquire);
+	const uint8_t current_anchor_output_state = anchor < request.action_count ? uint8_t(request.actions[anchor].output_state) : 0u;
+	const bool cache_hit = active_frame_serial != 0 &&
+			val_cache.valid &&
+			val_cache.request == &request &&
+			val_cache.request_serial == serial &&
+			val_cache.frame_serial == active_frame_serial &&
+			val_cache.permission_epoch == current_permission_epoch &&
+			val_cache.anchor_ordinal == anchor &&
+			val_cache.anchor_output_state == current_anchor_output_state &&
+			val_cache.prepared_upload_before_acquire == prepared_upload_before_acquire &&
+			val_cache.resource_count == request.resource_count;
+	auto fail_unauthorized = [&]() {
+		val_cache.invalidate();
+		rd.production_recording_request = nullptr;
+		--request.capture_inflight;
+		observed.error = ERR_UNAUTHORIZED;
+		return observed;
+	};
+	if (cache_hit) {
+		for (uint32_t k = 0; k < val_cache.index_dependent_slots.size(); ++k) {
+			if (!validate_slot(val_cache.index_dependent_slots[k])) {
+				return fail_unauthorized();
+			}
+		}
+		for (uint32_t u = 0; u < action.declaration.use_count; ++u) {
+			if (!validate_slot(request.uses[action.declaration.first_use + u].declaration.resource_slot)) {
+				return fail_unauthorized();
+			}
+		}
+		if (action.declaration.action_kind == GDEXTENSION_PRODUCTION_DISPATCH_V1) {
+			const auto &dispatch = action.dispatch;
+			if (!validate_slot(dispatch.unit_slot)) {
+				return fail_unauthorized();
+			}
+			for (uint32_t s = 0; s < dispatch.set_count; ++s) {
+				if (!validate_slot(dispatch.first_set_slot + s)) {
+					return fail_unauthorized();
+				}
+			}
+		} else if (action.declaration.action_kind == GDEXTENSION_PRODUCTION_UPLOAD_V1) {
+			if (!validate_slot(action.upload.destination_slot)) {
+				return fail_unauthorized();
+			}
+		} else if (action.declaration.action_kind == GDEXTENSION_PRODUCTION_COPY_V1) {
+			if (!validate_slot(action.copy.source_slot) || !validate_slot(action.copy.destination_slot)) {
+				return fail_unauthorized();
+			}
+		} else if (action.declaration.action_kind == GDEXTENSION_PRODUCTION_READBACK_V1) {
+			if (!validate_slot(request.readbacks[action.readback_slot].declaration.resource_slot)) {
+				return fail_unauthorized();
+			}
+		}
+	} else {
+		val_cache.invalidate();
+		val_cache.index_dependent_slots.clear();
+		for (uint32_t i = 0; i < request.resource_count; ++i) {
+			const auto &resource = request.resources[i];
+			if (resource.output_guard_readonly ||
+					(prepared_upload_before_acquire && (awaits_output(resource) || awaits_output_set(resource)))) {
+				val_cache.index_dependent_slots.push_back(i);
+			}
+			if (!validate_slot(i)) {
+				return fail_unauthorized();
+			}
+		}
+		if (active_frame_serial != 0) {
+			val_cache.request = &request;
+			val_cache.request_serial = serial;
+			val_cache.frame_serial = active_frame_serial;
+			val_cache.permission_epoch = current_permission_epoch;
+			val_cache.anchor_ordinal = anchor;
+			val_cache.anchor_output_state = current_anchor_output_state;
+			val_cache.prepared_upload_before_acquire = prepared_upload_before_acquire;
+			val_cache.resource_count = request.resource_count;
+			val_cache.valid = true;
+			if (request.resource_count >= 16) {
+				uint32_t table_cap = 64;
+				const uint64_t target_cap = uint64_t(request.resource_count) * 4u;
+				while (uint64_t(table_cap) < target_cap && table_cap <= (1u << 24)) {
+					table_cap <<= 1;
+				}
+				if (uint64_t(table_cap) >= target_cap) {
+					val_cache.rid_to_slot.resize(table_cap);
+					std::memset(val_cache.rid_to_slot.ptr(), 0, sizeof(RenderingDevice::ProductionResourceValidationCache::SlotEntry) * table_cap);
+					val_cache.rid_mask = table_cap - 1u;
+					auto insert_rid = [&](uint64_t rid_id, uint32_t slot_index) {
+						if (!rid_id) {
+							return;
+						}
+						uint64_t h = rid_id;
+						h ^= h >> 33;
+						h *= 0xff51afd7ed558ccdULL;
+						h ^= h >> 33;
+						uint32_t pos = uint32_t(h) & val_cache.rid_mask;
+						while (val_cache.rid_to_slot[pos].rid_id != 0) {
+							pos = (pos + 1u) & val_cache.rid_mask;
+						}
+						val_cache.rid_to_slot[pos].rid_id = rid_id;
+						val_cache.rid_to_slot[pos].slot_index = slot_index;
+					};
+					for (uint32_t i = 0; i < request.resource_count; ++i) {
+						const auto &resource = request.resources[i];
+						if (!resource.imported) {
+							continue;
+						}
+						if (resource.primary.is_valid()) {
+							insert_rid(resource.primary.get_id(), i);
+						}
+						if (resource.secondary.is_valid() && resource.secondary != resource.primary) {
+							insert_rid(resource.secondary.get_id(), i);
+						}
+					}
+					val_cache.rid_index_valid = true;
+				}
+			}
 		}
 	}
+	val_cache.rid_index_active = val_cache.rid_index_valid;
 	production_append_effect_enter_locked(request);
 	transfer_effect_entered = true;
 	bool list_open = request.compute_list_open;
@@ -1002,6 +1134,7 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 			observed.state = CheckedRecordAppend::State::KnownPrefix;
 		}
 	}
+	val_cache.rid_index_active = false;
 	rd.production_recording_request = nullptr;
 	relock_mutex_after_call();
 	CRASH_COND(request.serial != serial || !request.capture_inflight);

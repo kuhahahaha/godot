@@ -322,6 +322,7 @@ Error Registry::qualification_raster_begin_retire_locked(QualificationBridge *br
 		child->shader.use_closed.store(true);
 		child->pipeline.use_closed.store(true);
 		raster.framebuffer.use_closed.store(true);
+		bump_resource_permission_epoch();
 		raster.retirement = { { 1, sizeof(GDExtensionDeviceExitAbi), 0 }, { instance, serial }, operation, 0 };
 		auto &r = raster.report;
 		r.abi = { 1, sizeof(GDExtensionDeviceExitAbi), 0 };

@@ -1407,6 +1407,7 @@ Error Registry::production_output_guard_bind_locked(ProductionRequest &request, 
 	resource.primary = source.buffer; resource.backing_serial = source.backing; resource.output_witness = *source.witness;
 	resource.output_root_serial = source.root; resource.output_group_serial = source.group; resource.output_member_ordinal = source.member;
 	resource.imported = true;
+	bump_resource_permission_epoch();
 	return OK;
 }
 
@@ -1437,12 +1438,22 @@ bool Registry::production_output_alias_matches_locked(const ProductionRequest &r
 			!physical.matches(slot.primary.get_id(), buffer->backing_serial, buffer->driver_id.id) || slot.backing_serial != buffer->backing_serial || buffer->size != slot.declaration.physical_bytes || (slot.declaration.required_usage & ~uint64_t(buffer->usage))) {
 		return false;
 	}
+	const uint32_t begin = request.use_count + request.binding_used;
 	const uint32_t end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
-	for (uint32_t i = request.use_count + request.binding_used; i < end; ++i) {
+	auto member_matches = [&](const ProductionUseCell &member) -> bool {
+		return member.disposal.owned && member.disposal.request == &request && member.disposal.request_serial == request.serial &&
+				member.disposal.rid == slot.primary.get_id() && member.disposal.serial == slot.backing_serial && member.disposal.state.load(std::memory_order_acquire) == 1;
+	};
+	if (slot.output_member_use_index >= begin && slot.output_member_use_index < end) {
+		const auto &member = request.uses[slot.output_member_use_index];
+		if (member.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && member.disposal_group_serial == slot.output_group_serial && member.disposal_ordinal == slot.output_member_ordinal) {
+			return member_matches(member);
+		}
+	}
+	for (uint32_t i = begin; i < end; ++i) {
 		const auto &member = request.uses[i];
 		if (member.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && member.disposal_group_serial == slot.output_group_serial && member.disposal_ordinal == slot.output_member_ordinal) {
-			return member.disposal.owned && member.disposal.request == &request && member.disposal.request_serial == request.serial &&
-					member.disposal.rid == slot.primary.get_id() && member.disposal.serial == slot.backing_serial && member.disposal.state.load(std::memory_order_acquire) == 1;
+			return member_matches(member);
 		}
 	}
 	return false;
@@ -1477,7 +1488,20 @@ Error Registry::production_output_alias_bind_locked(ProductionRequest &request, 
 	slot.output_group_serial = group;
 	slot.output_root_serial = pin.serial;
 	slot.output_member_ordinal = ordinal;
+	slot.output_member_use_index = UINT32_MAX;
+	{
+		const uint32_t begin = request.use_count + request.binding_used;
+		const uint32_t end = MIN(request.disposal_use_high_water, request.capacity.resource_uses);
+		for (uint32_t i = begin; i < end; ++i) {
+			const auto &member = request.uses[i];
+			if (member.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER && member.disposal_group_serial == group && member.disposal_ordinal == ordinal) {
+				slot.output_member_use_index = i;
+				break;
+			}
+		}
+	}
 	slot.imported = true;
+	bump_resource_permission_epoch();
 	if (!production_output_alias_matches_locked(request, slot, rd)) {
 		// Keep the exact association for cleanup; never discard a factory prefix.
 		action.output_state = ProductionActionCell::OutputState::UNKNOWN;

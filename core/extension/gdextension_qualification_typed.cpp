@@ -887,6 +887,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_resource_retire(GDExten
 		c->retirement = *q;
 		c->retiring = true;
 		c->physical.use_closed.store(true);
+		bump_resource_permission_epoch();
 		auto &r = c->report;
 		r.abi = { 1, 16, 0 };
 		r.resource = q->resource;

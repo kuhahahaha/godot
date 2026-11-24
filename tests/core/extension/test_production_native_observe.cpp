@@ -7340,6 +7340,286 @@ struct Access {
 		CHECK(att->has_reclaimable_arena_pages());
 		REQUIRE(e.registry->production_close(att_ref).native_error == OK);
 	}
+	static void bug183b2_mmap_backed_arena_reclaim_and_unmap() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		auto pool_cap = capacity(64);
+		pool_cap.requests = 2;
+		pool_cap.suboperations = 64;
+		pool_cap.resources = 64;
+		pool_cap.resource_uses = 256;
+		pool_cap.readbacks = 32;
+		pool_cap.graph_memberships = 64;
+		pool_cap.native_memberships = 64;
+		pool_cap.return_cells = 256;
+		pool_cap.retained_payload_bytes = 64u * 1024u;
+		pool_cap.readback_bytes = 32u * 1024u;
+		const auto att_ref = e.accept(pool_cap);
+		REQUIRE(att_ref.handle_serial != 0);
+
+		ProductionAttachment *att = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			RenderingDevice *rd = nullptr;
+			REQUIRE(e.registry->production_attachment_locked(att_ref, true, att, rd) == OK);
+		}
+		REQUIRE(att != nullptr);
+		REQUIRE(att->arena != nullptr);
+#if (defined(__APPLE__) || defined(__linux__))
+		CHECK(att->arena_mmap_bytes >= att->quote.allocation_bytes);
+		CHECK((att->arena_mmap_bytes & 4095u) == 0u);
+		CHECK((uintptr_t(att->arena) & 4095u) == 0u);
+#endif
+		auto req_cap = pool_cap;
+		req_cap.requests = 1;
+		const GDExtensionProductionActionV2 actions[2] = {
+			{ 0, 10, 0, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 0, 1, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX },
+			{ 1, 11, 0, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 1, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+		};
+		const GDExtensionProductionResourceV1 resources[2] = {
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 0, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 64, 0 },
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 64, 0 },
+		};
+		const GDExtensionProductionUseV1 uses[2] = {
+			{ 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 64, 0 },
+			{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 64, 0 },
+		};
+		Request *r1 = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			const GDExtensionProductionOperationV1 op1{ production_dto_abi<GDExtensionProductionOperationV1>(), 18321, 1, 10, 12 };
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op1, req_cap, { nullptr, actions }, 2, resources, 2, uses, 2, {}, 0, r1, 2) == OK);
+		}
+		REQUIRE(r1 != nullptr);
+		memset(att->payload + r1->payload_offset, 0x7E, 32u * 1024u);
+		const GDExtensionProductionRequestRefV1 ref1{ Enrollment::INSTANCE, r1->serial };
+		REQUIRE(e.registry->production_cancel(ref1).native_error == OK);
+		REQUIRE(e.registry->production_release(ref1).native_error == OK);
+		for (uint32_t f = 0; f < ProductionAttachment::ARENA_IDLE_RECLAIM_FRAMES; ++f) {
+			e.registry->production_observe_completed_frames_rt(e.rd);
+		}
+#if defined(__APPLE__) || defined(__linux__)
+		CHECK(att->arena_reclaimed_bytes_total > 0);
+#endif
+		CHECK(att->actions_hwm == 0);
+		CHECK(att->uses_hwm == 0);
+
+		Request *r2 = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			const GDExtensionProductionOperationV1 op2{ production_dto_abi<GDExtensionProductionOperationV1>(), 18322, 1, 10, 12 };
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op2, req_cap, { nullptr, actions }, 2, resources, 2, uses, 2, {}, 0, r2, 2) == OK);
+		}
+		REQUIRE(r2 != nullptr);
+		memset(att->payload + r2->payload_offset, 0x3D, 4096);
+		CHECK(att->payload[r2->payload_offset + 4095] == 0x3D);
+		const GDExtensionProductionRequestRefV1 ref2{ Enrollment::INSTANCE, r2->serial };
+		REQUIRE(e.registry->production_cancel(ref2).native_error == OK);
+		REQUIRE(e.registry->production_release(ref2).native_error == OK);
+		REQUIRE(e.registry->production_close(att_ref).native_error == OK);
+	}
+	static void bug184a_per_frame_validation_cache_and_rid_index() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		constexpr uint32_t kStorageCount = 20;
+		constexpr uint32_t kGuardSlot = kStorageCount;
+		constexpr uint32_t kTotalResources = kStorageCount + 1;
+		auto c = capacity(32);
+		c.resources = 32;
+		c.resource_uses = 64;
+		c.return_cells = 32;
+		c.retained_payload_bytes = 256;
+		c.readback_bytes = 64;
+		const auto att_ref = e.accept(c);
+		REQUIRE(att_ref.handle_serial != 0);
+
+		ProductionAttachment *attachment = nullptr;
+		RenderingDevice *rd = nullptr;
+		Request *r = nullptr;
+		const GDExtensionProductionOperationV1 operation = { production_dto_abi<GDExtensionProductionOperationV1>(), 18401, 1, 10, 14 };
+		const GDExtensionProductionActionV1 actions[] = {
+			{ 10, GDEXTENSION_PRODUCTION_UPLOAD_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+			{ 11, GDEXTENSION_PRODUCTION_COPY_V1, 0, 1, 2, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+			{ 12, GDEXTENSION_PRODUCTION_UPLOAD_V1, 0, 3, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+			{ 13, GDEXTENSION_PRODUCTION_COPY_V1, 0, 4, 2, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+		};
+		GDExtensionProductionResourceV1 resources[kTotalResources] = {};
+		for (uint32_t i = 0; i < kStorageCount; ++i) {
+			resources[i] = { GDEXTENSION_PRODUCTION_STORAGE_V1, i, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 128, 0 };
+		}
+		resources[kGuardSlot] = { GDEXTENSION_PRODUCTION_STORAGE_V1, kGuardSlot, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 32, 0 };
+		const GDExtensionProductionUseV1 uses[] = {
+			{ 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 32, 0 },
+			{ 0, GDEXTENSION_PRODUCTION_READ_V1, 0, 32, 0 },
+			{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 32, 0 },
+			{ 2, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 32, 0 },
+			{ 2, GDEXTENSION_PRODUCTION_READ_V1, 0, 32, 0 },
+			{ 3, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 32, 0 },
+		};
+		{
+			MutexLock lock(e.registry->mutex);
+			REQUIRE(e.registry->production_attachment_locked(att_ref, true, attachment, rd) == OK);
+			REQUIRE(e.registry->production_reserve_metadata_locked(*attachment, operation, c, actions, 4, resources, kTotalResources, uses, 6, nullptr, 0, r) == OK);
+		}
+		REQUIRE(r != nullptr);
+		graph_initialize(e);
+		const GDExtensionProductionRequestRefV1 ref = { Enrollment::INSTANCE, r->serial };
+		for (uint32_t i = 0; i < kTotalResources; ++i) {
+			GDExtensionStorageCreateRequestV1 origin = { Enrollment::ABI, i == kGuardSlot ? 32u : 128u, i, 0, 1, 1, 0 };
+			GDExtensionStorageBackingV1 backing = {};
+			REQUIRE(create_storage(e, ref, i, &origin, &backing).native_error == OK);
+			REQUIRE(backing.rid != 0);
+		}
+		uint8_t payload[32] = {};
+		for (uint32_t i = 0; i < 32; ++i) {
+			payload[i] = uint8_t(0xA0 + i);
+		}
+		const GDExtensionProductionUploadV1 up0 = { production_dto_abi<GDExtensionProductionUploadV1>(), 10, 0, 0, 0, 32 };
+		const GDExtensionProductionCopyV1 cp1 = { production_dto_abi<GDExtensionProductionCopyV1>(), 11, 0, 1, 0, 0, 32 };
+		const GDExtensionProductionUploadV1 up2 = { production_dto_abi<GDExtensionProductionUploadV1>(), 12, 2, 0, 0, 32 };
+		const GDExtensionProductionCopyV1 cp3 = { production_dto_abi<GDExtensionProductionCopyV1>(), 13, 2, 3, 0, 0, 32 };
+		REQUIRE(e.registry->production_prepare_upload(ref, &up0, payload, 32).native_error == OK);
+		REQUIRE(e.registry->production_prepare_copy(ref, &cp1).native_error == OK);
+		REQUIRE(e.registry->production_prepare_upload(ref, &up2, payload, 32).native_error == OK);
+		REQUIRE(e.registry->production_prepare_copy(ref, &cp3).native_error == OK);
+		e.rd.upload_staging_buffers.block_size = 256;
+		e.rd.upload_staging_buffers.max_size = 512;
+		e.rd.upload_staging_buffers.usage_bits = RDD::BUFFER_USAGE_TRANSFER_FROM_BIT;
+		REQUIRE(e.rd._insert_staging_block(e.rd.upload_staging_buffers) == OK);
+		{
+			MutexLock rd_lock(e.rd._thread_safe_);
+			MutexLock lock(e.registry->mutex);
+			REQUIRE(e.registry->production_freeze_rd_locked(*r, &e.rd) == OK);
+			// Mark slot kGuardSlot as an unmatched output_guard_readonly whose consumer is action index 2.
+			r->resources[kGuardSlot].output_guard_readonly = true;
+			r->resources[kGuardSlot].output_guard_history = false;
+			r->resources[kGuardSlot].output_guard_consumer = 2;
+		}
+
+		void *saved_frame = nullptr;
+		e.registry->test_push_production_physical_frame(7001, saved_frame);
+
+		// Action 0: cache miss -> full scan validates all 20 slots, caches frame & builds O(1) rid_to_slot.
+		const auto obs0 = effect(e, *r, 0);
+		REQUIRE(obs0.error == OK);
+		REQUIRE(obs0.state == CheckedRecordAppend::State::Appended);
+		CHECK(e.rd.production_resource_validation_cache.valid);
+		CHECK(e.rd.production_resource_validation_cache.rid_index_valid);
+		CHECK_FALSE(e.rd.production_resource_validation_cache.rid_index_active);
+		CHECK(e.rd.production_resource_validation_cache.frame_serial == 7001);
+		REQUIRE(e.rd.production_resource_validation_cache.index_dependent_slots.size() == 1);
+		CHECK(e.rd.production_resource_validation_cache.index_dependent_slots[0] == kGuardSlot);
+
+		// Action 1 (COPY 0 -> 1): cache HIT + O(1) rid_to_slot lookup in buffer_copy.
+		const auto obs1 = effect(e, *r, 1);
+		REQUIRE(obs1.error == OK);
+		REQUIRE(obs1.state == CheckedRecordAppend::State::Appended);
+		CHECK(e.rd.production_resource_validation_cache.valid);
+		CHECK(e.rd.production_resource_validation_cache.frame_serial == 7001);
+
+		// Action 2: cache HIT MUST still reject unbound output_guard_readonly slot when index == output_guard_consumer!
+		const auto obs2_denied = effect(e, *r, 2);
+		CHECK(obs2_denied.error == ERR_UNAUTHORIZED);
+		CHECK(obs2_denied.state == CheckedRecordAppend::State::Rejected);
+		CHECK_FALSE(e.rd.production_resource_validation_cache.valid);
+		CHECK(r->next_action == 2);
+
+		// Re-target guard consumer past action 3 so action 2 succeeds and rebuilds cache.
+		{
+			MutexLock lock(e.registry->mutex);
+			r->resources[kGuardSlot].output_guard_consumer = 99;
+		}
+		const auto obs2_ok = effect(e, *r, 2);
+		REQUIRE(obs2_ok.error == OK);
+		REQUIRE(obs2_ok.state == CheckedRecordAppend::State::Appended);
+		CHECK(e.rd.production_resource_validation_cache.valid);
+		CHECK(e.rd.production_resource_validation_cache.rid_index_valid);
+
+		// Close an unrelated background slot (slot 15) + bump epoch: action 3 (COPY 2 -> 3) MUST reject!
+		{
+			MutexLock lock(e.registry->mutex);
+			r->resources[15].owned_physical.use_closed.store(true);
+			e.registry->bump_resource_permission_epoch();
+		}
+		const auto obs3_bg_closed = effect(e, *r, 3);
+		CHECK(obs3_bg_closed.error == ERR_UNAUTHORIZED);
+		CHECK(r->next_action == 3);
+
+		// Restore slot 15, verify O(1) rid_to_slot lookup handles duplicate RIDs (first closed, second valid).
+		{
+			MutexLock lock(e.registry->mutex);
+			r->resources[15].owned_physical.use_closed.store(false);
+			e.registry->bump_resource_permission_epoch();
+		}
+		// Close action 3's own destination slot (slot 3) WITHOUT bumping epoch -> action 3 STILL rejects!
+		{
+			MutexLock lock(e.registry->mutex);
+			// Re-warm cache validity for frame 7001 to prove cache-hit checks action-owned slots live.
+			e.rd.production_resource_validation_cache.valid = true;
+			e.rd.production_resource_validation_cache.permission_epoch = e.registry->resource_permission_epoch.load(std::memory_order_acquire);
+			r->resources[3].owned_physical.use_closed.store(true);
+		}
+		const auto obs3_dst_closed = effect(e, *r, 3);
+		CHECK(obs3_dst_closed.error == ERR_UNAUTHORIZED);
+		CHECK(r->next_action == 3);
+
+		// Restore slot 3 -> action 3 succeeds cleanly!
+		{
+			MutexLock lock(e.registry->mutex);
+			r->resources[3].owned_physical.use_closed.store(false);
+		}
+		const auto obs3_ok = effect(e, *r, 3);
+		REQUIRE(obs3_ok.error == OK);
+		REQUIRE(obs3_ok.state == CheckedRecordAppend::State::Appended);
+		CHECK(e.rd.production_resource_validation_cache.valid);
+		CHECK(e.rd.production_resource_validation_cache.rid_index_valid);
+
+		// Verify O(1) rid_to_slot lookup directly with rid_index_active = true on valid + unknown RIDs.
+		{
+			MutexLock rd_lock(e.rd._thread_safe_);
+			e.rd.production_recording_request = r;
+			++r->capture_inflight;
+			e.rd.production_resource_validation_cache.rid_index_active = true;
+			CHECK(e.rd._production_resource_permitted(r->resources[0].primary));
+			CHECK(e.rd._production_resource_permitted(r->resources[19].primary));
+			CHECK_FALSE(e.rd._production_resource_permitted(RID::from_uint64(0xDEADBEEFull)));
+			r->resources[19].owned_physical.use_closed.store(true);
+			CHECK_FALSE(e.rd._production_resource_permitted(r->resources[19].primary));
+			r->resources[19].owned_physical.use_closed.store(false);
+			e.rd.production_resource_validation_cache.rid_index_active = false;
+			--r->capture_inflight;
+			e.rd.production_recording_request = nullptr;
+		}
+
+		e.registry->test_pop_production_physical_frame(saved_frame);
+		{
+			MutexLock lock(e.registry->mutex);
+			r->resources[kGuardSlot].output_guard_readonly = false;
+		}
+		REQUIRE(e.registry->production_cancel(ref).native_error == OK);
+		e.driver.complete = true;
+		execute_transfers(e, *r, true);
+		const auto observed_done = turn(e, *r, ProductionControlKind::OBSERVE, budget());
+		CHECK(observed_done.report.known_obligations > 0);
+		CHECK(observed_done.report.complete_obligations == observed_done.report.known_obligations);
+		const auto full_budget = budget();
+		for (uint32_t i = 0; i < kTotalResources; ++i) {
+			GDExtensionStorageRetireRefV1 retire = {};
+			REQUIRE(retire_storage(e, *r, i, retire));
+			GDExtensionStorageRetireReportV1 report = {};
+			for (uint32_t t = 0; t < 16 && report.state != 1; ++t) {
+				const auto err = observe_storage(e, ref, retire, &full_budget, &report).native_error;
+				REQUIRE((err == OK || err == ERR_BUSY));
+			}
+			REQUIRE(report.state == 1);
+			REQUIRE(e.registry->production_storage_release(ref, retire).native_error == OK);
+		}
+		REQUIRE(finish_owned_maintenance(e, *r, full_budget));
+		const auto released = turn(e, *r, ProductionControlKind::RELEASE, budget());
+		CHECK(released.owner_return.native_error == OK);
+		CHECK(r->serial == 0);
+		REQUIRE(e.registry->production_close(att_ref).native_error == OK);
+	}
 };
 TEST_CASE("[ProductionNativeObserve][PreparedNativeRecordV2] cancel rejects transferred native wait before consume without erasing actual prefix") {
 	Access::native_record_wait_rejection(false);
@@ -7644,4 +7924,12 @@ TEST_CASE("[ProductionNativeObserve][BUG-170] prefix-only reset leaves zero stal
 
 TEST_CASE("[ProductionNativeObserve][BUG-183B] idle reclaim destroys and advises all 8 HWM cell sub-arenas and re-acquires cleanly") {
 	TestProductionNativeObserve::Access::bug183b_reclaim_all_hwm_cell_subarenas_and_reacquire();
+}
+
+TEST_CASE("[ProductionNativeObserve][BUG-183B-2] ProductionAttachment arena uses page-aligned anonymous mmap and unmaps cleanly") {
+	TestProductionNativeObserve::Access::bug183b2_mmap_backed_arena_reclaim_and_unmap();
+}
+
+TEST_CASE("[ProductionNativeObserve][BUG-184A] per-frame resource validation cache and O(1) RID slot index preserve output_guard_readonly and closure rejections") {
+	TestProductionNativeObserve::Access::bug184a_per_frame_validation_cache_and_rid_index();
 }
