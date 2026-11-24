@@ -51,8 +51,41 @@
 #include <optional>
 #include <type_traits>
 
+#if defined(__APPLE__)
+#include <sys/mman.h>
+#include <unistd.h>
+#endif
+
 namespace GDExtensionDeviceExit {
 namespace {
+size_t reclaim_arena_pod_pages(void *p_base, size_t p_byte_len) {
+	if (!p_base || p_byte_len == 0) {
+		return 0;
+	}
+#if defined(__APPLE__) && defined(MADV_FREE_REUSABLE)
+	const long raw_page = sysconf(_SC_PAGESIZE);
+	if (raw_page <= 0) {
+		return 0;
+	}
+	const uintptr_t page_size = uintptr_t(raw_page);
+	const uintptr_t start = reinterpret_cast<uintptr_t>(p_base);
+	if (UINTPTR_MAX - start < p_byte_len) {
+		return 0;
+	}
+	const uintptr_t end = start + p_byte_len;
+	const uintptr_t rem = start % page_size;
+	const uintptr_t aligned_start = rem == 0 ? start : (start <= UINTPTR_MAX - (page_size - rem) ? start + (page_size - rem) : end);
+	const uintptr_t aligned_end = end - (end % page_size);
+	if (aligned_end <= aligned_start) {
+		return 0;
+	}
+	const size_t aligned_len = size_t(aligned_end - aligned_start);
+	if (madvise(reinterpret_cast<void *>(aligned_start), aligned_len, MADV_FREE_REUSABLE) == 0) {
+		return aligned_len;
+	}
+#endif
+	return 0;
+}
 GDExtensionDeviceSessionResultV1 result(Error e, uint32_t reason = 0) {
 	return { int32_t(e), reason, 0, 0 };
 }
@@ -603,35 +636,45 @@ GDExtensionDeviceSessionResultV1 Registry::production_accept(const GDExtensionDe
 	if (slot == INVALID_SLOT || production_serials.exhausted || frame_serials.exhausted || record.private_refs >= private_limit || d.refs == UINT32_MAX || holder->production_children == UINT32_MAX || quote.cleanup_slots > UINT32_MAX - record.cleanup_reservations || uint64_t(record.active_callbacks) + record.cleanup_reservations + quote.cleanup_slots > UINT32_MAX || quote.cleanup_slots > UINT32_MAX - record.cleanup_by_phase[uint8_t(CleanupPhase::BINDING)]) {
 		return result(ERR_PARAMETER_RANGE_ERROR, 19);
 	}
-	void *arena = Memory::alloc_static(quote.allocation_bytes);
+	// Allocate zero-initialized demand-paged virtual memory (calloc) so large
+	// contiguous production arenas do not pre-fault hundreds of MiB of RSS at
+	// SceneReady. Only ProductionAttachment and the small requests table are
+	// eagerly constructed; all other cell pools construct lazily via per-pool
+	// high-water marks (BUG-76 / RAM-2).
+	void *arena = Memory::alloc_static_zeroed(quote.allocation_bytes);
 	if (!arena) {
 		return result(ERR_OUT_OF_MEMORY, 19);
 	}
 	uint64_t offset = 0;
-	auto allocate = [&](auto *type, uint64_t count) {
+	auto reserve_lazy = [&](auto *type, uint64_t count) {
 		using T = std::remove_pointer_t<decltype(type)>;
 		offset += (alignof(T) - offset % alignof(T)) % alignof(T);
 		T *p = reinterpret_cast<T *>(static_cast<uint8_t *>(arena) + offset);
-		for (uint64_t i = 0; i < count; ++i) {
-			new (&p[i]) T();
-		}
 		offset += count * sizeof(T);
 		return p;
 	};
-	auto *attachment = allocate(static_cast<ProductionAttachment *>(nullptr), 1);
-	attachment->requests = allocate(static_cast<ProductionRequest *>(nullptr), quote.capacity.requests);
-	attachment->actions = allocate(static_cast<ProductionActionCell *>(nullptr), quote.capacity.suboperations);
-	attachment->material_qualifications = allocate(static_cast<MaterialQualificationState *>(nullptr), quote.capacity.suboperations);
-	attachment->resources = allocate(static_cast<ProductionResourceSlot *>(nullptr), quote.capacity.resources);
-	attachment->uses = allocate(static_cast<ProductionUseCell *>(nullptr), quote.capacity.resource_uses);
-	attachment->readbacks = allocate(static_cast<ProductionReadbackCell *>(nullptr), quote.capacity.readbacks);
-	attachment->graphs = allocate(static_cast<ProductionGraphCell *>(nullptr), quote.capacity.graph_memberships);
-	attachment->natives = allocate(static_cast<ProductionNativeCell *>(nullptr), quote.capacity.native_memberships);
-	attachment->returns = allocate(static_cast<ProductionReturnCell *>(nullptr), quote.capacity.return_cells);
-	attachment->commands = allocate(static_cast<ProductionCaptureCell *>(nullptr), quote.graph_slots);
-	attachment->frames = allocate(static_cast<ProductionCaptureCell *>(nullptr), quote.graph_frames);
-	attachment->payload = allocate(static_cast<uint8_t *>(nullptr), quote.capacity.retained_payload_bytes);
-	attachment->readback_bytes = allocate(static_cast<uint8_t *>(nullptr), quote.capacity.readback_bytes);
+	auto allocate_eager = [&](auto *type, uint64_t count) {
+		using T = std::remove_pointer_t<decltype(type)>;
+		T *p = reserve_lazy(type, count);
+		for (uint64_t i = 0; i < count; ++i) {
+			new (&p[i]) T();
+		}
+		return p;
+	};
+	auto *attachment = allocate_eager(static_cast<ProductionAttachment *>(nullptr), 1);
+	attachment->requests = allocate_eager(static_cast<ProductionRequest *>(nullptr), quote.capacity.requests);
+	attachment->actions = reserve_lazy(static_cast<ProductionActionCell *>(nullptr), quote.capacity.suboperations);
+	attachment->material_qualifications = reserve_lazy(static_cast<MaterialQualificationState *>(nullptr), quote.capacity.suboperations);
+	attachment->resources = reserve_lazy(static_cast<ProductionResourceSlot *>(nullptr), quote.capacity.resources);
+	attachment->uses = reserve_lazy(static_cast<ProductionUseCell *>(nullptr), quote.capacity.resource_uses);
+	attachment->readbacks = reserve_lazy(static_cast<ProductionReadbackCell *>(nullptr), quote.capacity.readbacks);
+	attachment->graphs = reserve_lazy(static_cast<ProductionGraphCell *>(nullptr), quote.capacity.graph_memberships);
+	attachment->natives = reserve_lazy(static_cast<ProductionNativeCell *>(nullptr), quote.capacity.native_memberships);
+	attachment->returns = reserve_lazy(static_cast<ProductionReturnCell *>(nullptr), quote.capacity.return_cells);
+	attachment->commands = reserve_lazy(static_cast<ProductionCaptureCell *>(nullptr), quote.graph_slots);
+	attachment->frames = reserve_lazy(static_cast<ProductionCaptureCell *>(nullptr), quote.graph_frames);
+	attachment->payload = reserve_lazy(static_cast<uint8_t *>(nullptr), quote.capacity.retained_payload_bytes);
+	attachment->readback_bytes = reserve_lazy(static_cast<uint8_t *>(nullptr), quote.capacity.readback_bytes);
 	CRASH_COND(offset != quote.allocation_bytes);
 	production_serials.take(attachment->serial);
 	attachment->library = library;
@@ -852,7 +895,7 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 		if (v.physical_unit < resource_count && resources[v.physical_unit].resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1) {
 			return ERR_INVALID_DATA;
 		}
-		if (v.action_ordinal != i || v.source_recipe_reserved || v.canonical_suboperation < op.canonical_begin || v.canonical_suboperation >= op.canonical_end || (i && v.canonical_suboperation < actions[i - 1].canonical_suboperation) || (contract_version == 1 && v.canonical_suboperation != op.canonical_begin + i) || v.action_kind < GDEXTENSION_PRODUCTION_DISPATCH_V1 || (v.action_kind > GDEXTENSION_PRODUCTION_READBACK_V1 && (contract_version != 2 || (v.action_kind != GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1 && v.action_kind != GDEXTENSION_PRODUCTION_MATERIAL_QUALIFICATION_V1))) || v.list_boundary > GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1 || v.first_use > use_count || v.use_count > use_count - v.first_use) {
+		if (v.action_ordinal != i || v.source_recipe_reserved || v.canonical_suboperation < op.canonical_begin || v.canonical_suboperation >= op.canonical_end || (contract_version == 1 && v.canonical_suboperation != op.canonical_begin + i) || v.action_kind < GDEXTENSION_PRODUCTION_DISPATCH_V1 || (v.action_kind > GDEXTENSION_PRODUCTION_READBACK_V1 && (contract_version != 2 || (v.action_kind != GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1 && v.action_kind != GDEXTENSION_PRODUCTION_MATERIAL_QUALIFICATION_V1))) || v.list_boundary > GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1 || v.first_use > use_count || v.use_count > use_count - v.first_use) {
 			return ERR_INVALID_DATA;
 		}
 		if (v.action_kind == GDEXTENSION_PRODUCTION_MATERIAL_QUALIFICATION_V1 && (v.physical_unit != UINT32_MAX || v.readback_slot != UINT32_MAX || v.use_count != 0)) {
@@ -988,34 +1031,78 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	if (!r) {
 		return ERR_BUSY;
 	}
-	auto free_cells = [](auto *cells, uint32_t total, uint32_t count) {
+	auto find_free_cells = [](auto *cells, uint32_t total, uint32_t hwm, uint32_t count, uint32_t &out_need_hwm) {
 		using T = std::remove_pointer_t<decltype(cells)>;
+		out_need_hwm = hwm;
 		if (!count) {
 			return cells;
 		}
+		if (count > total) {
+			return static_cast<T *>(nullptr);
+		}
 		uint32_t run = 0;
-		for (uint32_t i = 0; i < total; ++i) {
+		for (uint32_t i = 0; i < hwm; ++i) {
 			run = cells[i].request ? 0 : run + 1;
 			if (run == count) {
 				return &cells[i + 1 - count];
 			}
 		}
-		return static_cast<T *>(nullptr);
+		const uint32_t start = hwm - run;
+		if (count > total - start) {
+			return static_cast<T *>(nullptr);
+		}
+		out_need_hwm = start + count;
+		return &cells[start];
 	};
-	auto *ac = free_cells(a.actions, a.quote.capacity.suboperations, c.suboperations);
-	auto *rc = free_cells(a.resources, a.quote.capacity.resources, c.resources);
-	auto *uc = free_cells(a.uses, a.quote.capacity.resource_uses, c.resource_uses);
-	auto *bc = free_cells(a.readbacks, a.quote.capacity.readbacks, c.readbacks);
-	auto *gc = free_cells(a.graphs, a.quote.capacity.graph_memberships, c.graph_memberships);
-	auto *nc = free_cells(a.natives, a.quote.capacity.native_memberships, c.native_memberships);
-	auto *tc = free_cells(a.returns, a.quote.capacity.return_cells, c.return_cells);
+	auto free_natives = [&](uint32_t count, uint32_t total, uint32_t &offset) {
+		offset = 0;
+		if (!count) {
+			return true;
+		}
+		for (;;) {
+			if (count > total || offset > total - count) {
+				return false;
+			}
+			bool moved = false;
+			for (uint32_t i = 0; i < a.quote.capacity.requests; ++i) {
+				const auto &q = a.requests[i];
+				if (!q.serial || !q.capacity.native_memberships) {
+					continue;
+				}
+				const uint64_t start = q.natives_offset;
+				const uint64_t end = start + q.capacity.native_memberships;
+				if (uint64_t(offset) < end && start < uint64_t(offset) + count) {
+					if (end > total) {
+						return false;
+					}
+					offset = uint32_t(end);
+					moved = true;
+					break;
+				}
+			}
+			if (!moved) {
+				return true;
+			}
+		}
+	};
+	uint32_t need_actions_hwm = a.actions_hwm, need_resources_hwm = a.resources_hwm, need_uses_hwm = a.uses_hwm;
+	uint32_t need_readbacks_hwm = a.readbacks_hwm, need_graphs_hwm = a.graphs_hwm, need_returns_hwm = a.returns_hwm;
+	uint32_t need_commands_hwm = a.commands_hwm, need_frames_hwm = a.frames_hwm;
+	auto *ac = find_free_cells(a.actions, a.quote.capacity.suboperations, a.actions_hwm, c.suboperations, need_actions_hwm);
+	auto *rc = find_free_cells(a.resources, a.quote.capacity.resources, a.resources_hwm, c.resources, need_resources_hwm);
+	auto *uc = find_free_cells(a.uses, a.quote.capacity.resource_uses, a.uses_hwm, c.resource_uses, need_uses_hwm);
+	auto *bc = find_free_cells(a.readbacks, a.quote.capacity.readbacks, a.readbacks_hwm, c.readbacks, need_readbacks_hwm);
+	auto *gc = find_free_cells(a.graphs, a.quote.capacity.graph_memberships, a.graphs_hwm, c.graph_memberships, need_graphs_hwm);
+	uint32_t natives_offset = 0;
+	auto *nc = free_natives(c.native_memberships, a.quote.capacity.native_memberships, natives_offset) ? (c.native_memberships ? &a.natives[natives_offset] : a.natives) : nullptr;
+	auto *tc = find_free_cells(a.returns, a.quote.capacity.return_cells, a.returns_hwm, c.return_cells, need_returns_hwm);
 	GDExtensionProductionMetadataQuoteV1 request_quote = {};
 	e = production_device_quote_locked(*rd, c, request_quote, worker_bound);
 	if (e != OK) {
 		return e;
 	}
-	auto *cc = free_cells(a.commands, uint32_t(a.quote.graph_slots), uint32_t(request_quote.graph_slots));
-	auto *fc = free_cells(a.frames, uint32_t(a.quote.graph_frames), uint32_t(request_quote.graph_frames));
+	auto *cc = find_free_cells(a.commands, uint32_t(a.quote.graph_slots), a.commands_hwm, uint32_t(request_quote.graph_slots), need_commands_hwm);
+	auto *fc = find_free_cells(a.frames, uint32_t(a.quote.graph_frames), a.frames_hwm, uint32_t(request_quote.graph_frames), need_frames_hwm);
 	if ((c.suboperations && !ac) || (c.resources && !rc) || (c.resource_uses && !uc) || (c.readbacks && !bc) || (c.graph_memberships && !gc) || (c.native_memberships && !nc) || (c.return_cells && !tc) || (request_quote.graph_slots && !cc) || (request_quote.graph_frames && !fc)) {
 		// Declared cell counts already fit the accepted pool. A changed RD
 		// prefix can still make this request's derived capture slice too large.
@@ -1048,11 +1135,33 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 			}
 		}
 	};
-	uint64_t payload = 0, readback = 0;
-	if (!free_bytes(c.retained_payload_bytes, a.quote.capacity.retained_payload_bytes, false, payload) || !free_bytes(c.readback_bytes, a.quote.capacity.readback_bytes, true, readback)) {
+	const uint64_t avail_payload = a.quote.capacity.retained_payload_bytes >= a.scene_prefix_bytes
+			? (a.quote.capacity.retained_payload_bytes - a.scene_prefix_bytes)
+			: 0u;
+	if (c.retained_payload_bytes > avail_payload || c.readback_bytes > a.quote.capacity.readback_bytes) {
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
+	uint64_t payload = 0, readback = 0;
+	if (!free_bytes(c.retained_payload_bytes, a.quote.capacity.retained_payload_bytes, false, payload) ||
+			!free_bytes(c.readback_bytes, a.quote.capacity.readback_bytes, true, readback)) {
+		return ERR_BUSY;
+	}
 	// All validation and every finite slice succeed before publishing any cell.
+	auto extend_hwm = [](auto *cells, uint32_t &hwm, uint32_t need_hwm) {
+		using T = std::remove_pointer_t<decltype(cells)>;
+		for (uint32_t i = hwm; i < need_hwm; ++i) {
+			new (&cells[i]) T();
+		}
+		hwm = need_hwm;
+	};
+	extend_hwm(a.actions, a.actions_hwm, need_actions_hwm);
+	extend_hwm(a.resources, a.resources_hwm, need_resources_hwm);
+	extend_hwm(a.uses, a.uses_hwm, need_uses_hwm);
+	extend_hwm(a.readbacks, a.readbacks_hwm, need_readbacks_hwm);
+	extend_hwm(a.graphs, a.graphs_hwm, need_graphs_hwm);
+	extend_hwm(a.returns, a.returns_hwm, need_returns_hwm);
+	extend_hwm(a.commands, a.commands_hwm, need_commands_hwm);
+	extend_hwm(a.frames, a.frames_hwm, need_frames_hwm);
 	a.request_reserved_once = true;
 	production_serials.take(r->serial);
 	r->attachment = &a;
@@ -1067,6 +1176,7 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	r->readbacks = bc;
 	r->graphs = gc;
 	r->natives = nc;
+	r->natives_offset = natives_offset;
 	r->returns = tc;
 	r->commands = cc;
 	r->frames = fc;
@@ -1078,6 +1188,15 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	r->readback_count = readback_count;
 	r->payload_offset = payload;
 	r->readback_offset = readback;
+	if (c.retained_payload_bytes) {
+		a.payload_reclaim_hwm = MAX(a.payload_reclaim_hwm, payload + c.retained_payload_bytes);
+	}
+	if (c.readback_bytes) {
+		a.readback_reclaim_hwm = MAX(a.readback_reclaim_hwm, readback + c.readback_bytes);
+	}
+	if (c.native_memberships) {
+		a.natives_reclaim_hwm = MAX(a.natives_reclaim_hwm, uint64_t(natives_offset) + c.native_memberships);
+	}
 	auto claim = [&](auto *cells, uint32_t count) { for(uint32_t i=0;i<count;++i){cells[i].request=r;
 } };
 	claim(ac, c.suboperations);
@@ -1085,12 +1204,20 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	claim(uc, c.resource_uses);
 	claim(bc, c.readbacks);
 	claim(gc, c.graph_memberships);
-	claim(nc, c.native_memberships);
+	// natives uses interval-tracked zero-backed allocation; avoid touching headroom pages.
 	claim(tc, c.return_cells);
 	claim(cc, r->command_count);
 	claim(fc, r->frame_count);
 	for (uint32_t i = 0; i < action_count; ++i) {
 		ac[i].declaration = actions[i];
+		if (actions[i].action_kind == GDEXTENSION_PRODUCTION_MATERIAL_QUALIFICATION_V1) {
+			new (&r->material_qualifications[i]) MaterialQualificationState();
+			ac[i].material_qualification_constructed = true;
+			++a.material_qualifications_live;
+			++a.material_qualifications_constructed_total;
+			const uint32_t mq_end = uint32_t((ac - a.actions) + i + 1);
+			a.mq_reclaim_hwm = MAX(a.mq_reclaim_hwm, mq_end);
+		}
 	}
 	for (uint32_t i = 0; i < resource_count; ++i) {
 		rc[i].declaration = resources[i];
@@ -1692,6 +1819,54 @@ Error Registry::production_observe_service(GDExtensionProductionRequestRefV1 ref
 				// may consume it. The current public observe DTO has no such field.
 				return ERR_UNAVAILABLE;
 			}
+		} else if (!request->capture_inflight && !request->continuation_inflight &&
+				!request->effects_pending && !request->source_device_lost &&
+				!request->compute_list_open && !request->draw_list_open &&
+				!request->maintenance_serial &&
+				request->disposal_group_head == UINT32_MAX &&
+				request->output_owner_cursor == UINT32_MAX &&
+				request->output_owner_head == UINT32_MAX &&
+				!request->native_prepared_unread && !request->native_batch_pending_ack &&
+				!request->attachment->closing &&
+				device_records[request->attachment->device].live &&
+				!production_material_qualification_needs_maintenance_locked(*request)
+#ifdef TESTS_ENABLED
+				&& !test_production_before_maintenance
+#endif
+		) {
+			bool extra_rt_work = false;
+			if (!request->cancelled && !request->release_started) {
+				for (uint32_t i = 0; i < request->action_count; ++i) {
+					const auto &observer = request->actions[i].camera_ready_subscriber;
+					if (observer.registry && !observer.released && !observer.subscribed) {
+						extra_rt_work = true;
+						break;
+					}
+				}
+			}
+			if (!extra_rt_work) {
+				for (uint32_t i = 0; i < request->resource_count; ++i) {
+					if (request->resources[i].retiring && !request->resources[i].returned) {
+						extra_rt_work = true;
+						break;
+					}
+				}
+			}
+			if (!extra_rt_work) {
+				GDExtensionProductionReportV2 snap = {};
+				production_report_locked(*request, snap);
+				if (snap.cause.native_error == OK &&
+						request->action_count > 0 &&
+						snap.recorded_action_end == request->action_count &&
+						snap.captured_segment > 0 &&
+						snap.possible_obligations == 0 &&
+						snap.known_obligations == snap.complete_obligations &&
+						snap.physical_returns_pending == 0 &&
+						snap.ready_readbacks == request->readback_count &&
+						snap.captured_segment == snap.acknowledged_segment) {
+					return OK;
+				}
+			}
 		}
 	}
 	if (returned) {
@@ -2066,6 +2241,143 @@ Error Registry::production_output_predecessor_return_after_reads_locked(Producti
 	return returned;
 }
 
+Error Registry::production_output_action_custody_return_after_slot_retire_locked(ProductionRequest &request, RenderingDevice &rd, const GDExtensionProductionServiceBudgetV1 &budget, ProductionServiceUsage &usage) {
+	if (!request.frozen || request.cancelled || request.release_started || request.source_device_lost ||
+			request.effects_pending || request.capture_inflight || request.continuation_inflight ||
+			request.compute_list_open || request.draw_list_open ||
+			request.next_action != request.action_count || !request.segment.segment ||
+			request.acknowledged_segment != request.segment.segment ||
+			request.native_prepared_unread || request.native_batch_pending_ack ||
+			request.output_owner_head != UINT32_MAX || request.output_owner_cursor != UINT32_MAX ||
+			request.disposal_group_head != UINT32_MAX || !service_budget_active(budget)) {
+		return OK;
+	}
+	if (!Lock::owns(*this) || !rd.native_immutable_is_render_thread() || request.control.state != ProductionControlState::EXECUTING ||
+			request.control.input.kind != ProductionControlKind::OBSERVE || request.control.input.request_serial != request.serial ||
+			&budget != &request.control.input.budget || &usage != &request.control.output.service_usage ||
+			!request.attachment || request.attachment->held_device != &rd) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!RSG::viewport || RSG::viewport->is_camera_invocation_active()) {
+		return OK;
+	}
+	const auto &device = device_records[request.attachment->device];
+	if (!device.live || device.epoch != request.attachment->epoch || device.object != &rd) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (request.action_count > request.capacity.suboperations || (request.action_count && !request.actions)) {
+		return ERR_INVALID_DATA;
+	}
+	bool has_custody = false;
+	for (uint32_t i = 0; i < request.action_count; ++i) {
+		const auto &action = request.actions[i];
+		if (action.output_state != ProductionActionCell::OutputState::RETURNED) {
+			continue;
+		}
+		if ((action.preinput_host_prepared && !action.preinput_host_returned) ||
+				(action.camera_ready_subscriber.registry && !action.camera_ready_subscriber.released) ||
+				action.preinput_camera_source.is_valid() || action.scene_cull_capture.is_valid()) {
+			has_custody = true;
+			break;
+		}
+	}
+	if (!has_custody) {
+		return OK;
+	}
+	GDExtensionProductionReportV2 snap;
+	Error native_cause = OK;
+	const Error projected = production_report_contents_locked(request, snap, &native_cause);
+	if (projected != OK) {
+		return projected;
+	}
+	if (native_cause != OK || snap.possible_obligations || snap.known_obligations != snap.complete_obligations ||
+			snap.physical_returns_pending || snap.ready_readbacks != request.readback_count) {
+		return OK;
+	}
+	if (request.revision == UINT64_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	const uint64_t request_serial = request.serial;
+	ProductionAttachment *const attachment = request.attachment;
+	const uint64_t control_serial = request.control.serial;
+	bool mutated = false;
+	for (uint32_t i = 0; i < request.action_count; ++i) {
+		auto &action = request.actions[i];
+		if (action.output_state != ProductionActionCell::OutputState::RETURNED) {
+			continue;
+		}
+		if (action.preinput_host_prepared && !action.preinput_host_returned) {
+			action.output_scene = {};
+			action.output_scene_prepared = false;
+			action.preinput_host_transform = {};
+			action.preinput_host_returned = true;
+			mutated = true;
+		}
+		if (action.camera_ready_subscriber.registry && !action.camera_ready_subscriber.released) {
+			auto *returning = &action.camera_ready_subscriber;
+			if (!returning->is_camera_source_detaching() &&
+					usage.passes < MIN(budget.passes, 64u) &&
+					usage.receipts < MIN(budget.receipts, 128u) &&
+					before_service_deadline(budget)) {
+				const RID viewport = action.camera_ready_viewport;
+				++request.capture_inflight;
+				usage.controls = 1;
+				++usage.passes;
+				++usage.receipts;
+				unlock_mutex_for_call();
+				rd._thread_safe_.unlock();
+				RSG::viewport->viewport_unsubscribe_camera_source(viewport, returning);
+				if (!returning->subscribed) {
+					returning->camera_source_closed();
+				}
+				rd._thread_safe_.lock();
+				relock_mutex_after_call();
+				CRASH_COND(request.serial != request_serial || request.attachment != attachment ||
+						!request.capture_inflight || request.control.serial != control_serial ||
+						request.control.state != ProductionControlState::EXECUTING);
+				if (returning->closed) {
+					returning->subscribed = false;
+					returning->released = true;
+					action.camera_ready_viewport = RID();
+					mutated = true;
+				}
+				--request.capture_inflight;
+			}
+		}
+		if ((action.preinput_camera_source.is_valid() || action.scene_cull_capture.is_valid()) &&
+				usage.passes < MIN(budget.passes, 64u) &&
+				usage.receipts < MIN(budget.receipts, 128u) &&
+				before_service_deadline(budget)) {
+			++request.capture_inflight;
+			usage.controls = 1;
+			++usage.passes;
+			++usage.receipts;
+			Ref<RendererViewport::Viewport::CameraCapture> returning = action.preinput_camera_source;
+			Ref<RendererViewport::Viewport::CameraCapture> returning_cull = action.scene_cull_capture;
+			action.preinput_camera_source.unref();
+			action.scene_cull_capture.unref();
+			action.scene_cull_attempted = false;
+			action.scene_cull_attempted_camera = {};
+			action.preinput_camera_returned = true;
+			mutated = true;
+			unlock_mutex_for_call();
+			rd._thread_safe_.unlock();
+			returning.unref();
+			returning_cull.unref();
+			rd._thread_safe_.lock();
+			relock_mutex_after_call();
+			CRASH_COND(request.serial != request_serial || request.attachment != attachment ||
+					!request.capture_inflight || request.control.serial != control_serial ||
+					request.control.state != ProductionControlState::EXECUTING);
+			--request.capture_inflight;
+		}
+	}
+	if (mutated) {
+		++request.revision;
+	}
+	return OK;
+}
+
 Error Registry::production_native_owner_locked(const ProductionRequest &r, uint32_t index, const ProductionNativeCell *&out) const {
 	out = nullptr;
 	if (r.native_count > r.capacity.native_memberships || r.graph_count > r.capacity.graph_memberships || index >= r.native_count || !r.natives) {
@@ -2080,7 +2392,8 @@ Error Registry::production_native_owner_locked(const ProductionRequest &r, uint3
 			(cell.owner_index != index && (cell.member.retained || cell.member.owner_released))) {
 		return ERR_INVALID_DATA;
 	}
-	if (cell.fact.membership_parent != UINT32_MAX && (cell.fact.membership_parent >= r.graph_count || !r.graphs || r.graphs[cell.fact.membership_parent].request != &r)) {
+	const bool has_parent = (cell.fact.membership_parent != UINT32_MAX) && !(cell.fact.phase == 0 && cell.fact.membership_parent == 0 && r.graph_count == 0);
+	if (has_parent && (cell.fact.membership_parent >= r.graph_count || !r.graphs || r.graphs[cell.fact.membership_parent].request != &r)) {
 		return ERR_INVALID_DATA;
 	}
 	out = &owner;
@@ -2095,6 +2408,9 @@ Error Registry::production_native_fact_locked(const ProductionRequest &r, uint32
 	}
 	const auto &member = r.natives[index].member;
 	out = r.natives[index].fact;
+	if (out.phase == 0 && out.membership_parent == 0 && r.graph_count == 0) {
+		out.membership_parent = UINT32_MAX;
+	}
 	out.native_serial = member.source.serial;
 	out.completion_serial = member.source.completion_serial;
 	out.backend_queue = member.source.queue_index;
@@ -2243,6 +2559,117 @@ Error Registry::production_poll_native_locked(ProductionRequest &r, RDD &driver,
 		}
 	}
 	return OK;
+}
+
+void Registry::production_observe_completed_frames_rt(RenderingDevice &p_rd) {
+	production_persistent_sets_reap_and_retire_rt(&p_rd, false);
+	if (!p_rd.driver || p_rd.native_disposal_active || p_rd.frame_wait_draining || p_rd.render_thread_id != Thread::get_caller_id()) {
+		return;
+	}
+	// Passively deliver production readbacks on any OTHER already-completed GPU frame slot
+	// without blocking, so readbacks do not wait frames.size()-1 swaps to be harvested.
+	if (p_rd.frames.size() > 1 && p_rd.failed_wait_frame < 0 && p_rd.frame_wait_error == OK && p_rd.frame_issue_error == OK) {
+		for (uint32_t f = 0; f < p_rd.frames.size(); ++f) {
+			if (f == uint32_t(p_rd.frame)) {
+				continue;
+			}
+			const auto &slot = p_rd.frames[f];
+			if (slot.download_buffer_get_data_requests.is_empty() || slot.disposal.active ||
+					!slot.download_texture_get_data_requests.is_empty() || !slot.qualification_tickets.is_empty() ||
+					!slot.fence_signaled || slot.chain_reports.is_empty() ||
+					!slot.chain_reports[slot.chain_reports.size() - 1].submission_serial) {
+				continue;
+			}
+			bool eligible = true;
+			{
+				Lock lock(*this);
+				for (const auto &rb : slot.download_buffer_get_data_requests) {
+					if (!rb.capture || rb.capture->registry != this || !rb.capture->state ||
+							rb.result_offset > 0 || rb.result_offset != rb.capture->state->returned) {
+						eligible = false;
+						break;
+					}
+					for (uint32_t other_f = 0; other_f < p_rd.frames.size() && eligible; ++other_f) {
+						if (other_f == f) {
+							continue;
+						}
+						for (const auto &other_rb : p_rd.frames[other_f].download_buffer_get_data_requests) {
+							if (other_rb.capture == rb.capture) {
+								eligible = false;
+								break;
+							}
+						}
+					}
+					if (!eligible) {
+						break;
+					}
+				}
+			}
+			if (eligible) {
+				(void)p_rd._stall_for_frame(int(f), true);
+			}
+		}
+	}
+	const auto origin = NativeSourceOrigin::production();
+	Lock lock(*this);
+	for (uint32_t a_idx = 0; a_idx < RECORD_CAPACITY; ++a_idx) {
+		ProductionAttachment *attachment = production_attachments[a_idx];
+		if (!attachment || attachment->held_device != &p_rd || attachment->closing || !device_records[attachment->device].live) {
+			continue;
+		}
+		const uint64_t attachment_serial = attachment->serial;
+		const uint32_t req_cap = attachment->quote.capacity.requests;
+		bool device_lost = false;
+		for (uint32_t r_idx = 0; r_idx < req_cap && !device_lost; ++r_idx) {
+			if (production_attachments[a_idx] != attachment || attachment->serial != attachment_serial || attachment->closing) {
+				break;
+			}
+			auto &r = attachment->requests[r_idx];
+			if (!r.serial || r.source_device_lost || r.capture_inflight || r.continuation_inflight ||
+					r.effects_pending ||
+					r.control.state == ProductionControlState::EXECUTING ||
+					!r.native_count || !r.natives || r.native_count > r.capacity.native_memberships ||
+					r.revision > UINT64_MAX - uint64_t(r.capacity.graph_memberships) * 2 - uint64_t(r.capacity.native_memberships) * 2 - r.capacity.readbacks - r.capacity.resources - 8) {
+				continue;
+			}
+			const uint32_t visits = MIN(r.native_count, 64u);
+			for (uint32_t i = 0; i < visits; ++i) {
+				auto &cell = r.natives[i];
+				if (cell.owner_index != i || cell.member.owner_released || !cell.member.retained ||
+						cell.member.source.issue == RDD::IssueFact::NotIssued ||
+						cell.observation.state == NativeSourceObservation::State::Complete) {
+					continue;
+				}
+				const auto old = cell.observation;
+				const uint64_t request_serial = r.serial;
+				auto local_member = cell.member;
+				++r.capture_inflight;
+				unlock_mutex_for_call();
+				NativeSourceObservation local_observation = poll_native_source(*p_rd.driver, local_member, origin);
+				relock_mutex_after_call();
+				CRASH_COND(!r.capture_inflight || r.serial != request_serial || r.attachment != attachment ||
+						cell.request != &r || cell.owner_index != i);
+				--r.capture_inflight;
+				const bool lost = !device_records[attachment->device].live;
+				if (lost) {
+					r.source_device_lost = true;
+					local_observation.state = NativeSourceObservation::State::Unknown;
+					if (local_observation.error == OK) {
+						local_observation.error = ERR_UNAVAILABLE;
+					}
+					device_lost = true;
+				}
+				cell.member = local_member;
+				cell.observation = local_observation;
+				if (lost || !same_native_observation(old, cell.observation)) {
+					++r.revision;
+				}
+				if (lost) {
+					break;
+				}
+			}
+		}
+	}
 }
 
 GDExtensionDeviceSessionResultV1 Registry::production_facts(GDExtensionProductionRequestRefV1 ref, uint64_t revision, uint32_t first, GDExtensionProductionFactV1 *out, uint32_t capacity, uint32_t *written) {
@@ -2437,7 +2864,17 @@ GDExtensionDeviceSessionResultV1 Registry::production_cancel(GDExtensionProducti
 	if (e != OK) {
 		return result(e, 16);
 	}
-	production_native_record_reject_wait_locked(*r);
+	if (!production_native_record_reject_wait_locked(*r)) {
+		auto &cell = r->control;
+		if (!r->native_prepared_executor && r->attachment && r->attachment->scene_registration &&
+				cell.serial && cell.state == ProductionControlState::QUEUED && cell.scene_waiting &&
+				cell.input.kind == ProductionControlKind::RECORD && !cell.input.output_cancel &&
+				cell.input.request_serial == r->serial && cell.input.record_generation == r->operation.record_generation &&
+				cell.record_history.admitted && !r->capture_inflight && !r->continuation_inflight) {
+			cell.scene_waiting = false;
+			production_control_execute_locked(*r, nullptr);
+		}
+	}
 	if (r->control.state != ProductionControlState::OWNER_CONSUMED) {
 		return result(ERR_BUSY, 16);
 	}
@@ -2452,6 +2889,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_cancel_locked(ProductionRe
 		r->cancelled = true;
 		++r->revision;
 	}
+	production_set_create_cancel_batched_locked(*r, ERR_UNAVAILABLE);
 	return result(r->effects_pending ? ERR_BUSY : OK);
 }
 GDExtensionDeviceSessionResultV1 Registry::production_release_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionServiceBudgetV1 *input, GDExtensionProductionServiceBudgetV1 *remaining, GDExtensionProductionReportV2 *report, uint32_t expected_contract) {
@@ -2599,6 +3037,37 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_v2(GDExtensionProd
 				if (ready.native_error != ERR_BUSY || (!own_tail && !mq_tail) || request->capture_inflight || request->continuation_inflight || (request->compute_list_open || request->draw_list_open) || (report->cause.native_error != OK && !returned_map_failure && !mq_tail) || (!request->cancelled && request->next_action != request->action_count)) {
 					if (ready.native_error == ERR_BUSY) { trace_release_busy(5, "ready_refused"); }
 					return ready;
+				}
+			} else if (production_release_main_fast_path_eligible_locked(*request, offered, *report)) {
+				GDExtensionProductionServiceBudgetV1 fast_budget = offered;
+				fast_budget.passes = MIN(offered.passes, 64u);
+				fast_budget.receipts = MIN(offered.receipts, 128u);
+				ProductionServiceUsage fast_usage = {};
+				const auto fast_released = production_release_locked(*request, rd, true, &fast_budget, &fast_usage);
+				if (fast_released.native_error == OK) {
+					*remaining = offered;
+					remaining->controls = offered.controls >= fast_usage.controls ? offered.controls - fast_usage.controls : 0;
+					remaining->passes = offered.passes >= fast_usage.passes ? offered.passes - fast_usage.passes : 0;
+					remaining->receipts = offered.receipts >= fast_usage.receipts ? offered.receipts - fast_usage.receipts : 0;
+					report->service_control_serial = 0;
+					report->service_pending = 0;
+					report->cause = result(OK);
+					return result(OK);
+				}
+				if (fast_released.native_error != ERR_BUSY) {
+					report->service_control_serial = 0;
+					report->service_pending = 0;
+					report->cause = fast_released;
+					return fast_released;
+				}
+				if (fast_usage.controls || fast_usage.passes || fast_usage.receipts) {
+					*remaining = offered;
+					remaining->controls = offered.controls >= fast_usage.controls ? offered.controls - fast_usage.controls : 0;
+					remaining->passes = offered.passes >= fast_usage.passes ? offered.passes - fast_usage.passes : 0;
+					remaining->receipts = offered.receipts >= fast_usage.receipts ? offered.receipts - fast_usage.receipts : 0;
+					report->service_control_serial = 0;
+					report->service_pending = 0;
+					return fast_released;
 				}
 			}
 			accept = publish = true;
@@ -3203,12 +3672,60 @@ GDExtensionDeviceSessionResultV1 Registry::production_release(GDExtensionProduct
 	if (e != OK) {
 		return result(e, 16);
 	}
-	production_native_record_reject_wait_locked(*r);
+	if (!production_native_record_reject_wait_locked(*r)) {
+		auto &cell = r->control;
+		if (!r->native_prepared_executor && r->attachment && r->attachment->scene_registration &&
+				cell.serial && cell.state == ProductionControlState::QUEUED && cell.scene_waiting &&
+				cell.input.kind == ProductionControlKind::RECORD && !cell.input.output_cancel &&
+				cell.input.request_serial == r->serial && cell.input.record_generation == r->operation.record_generation &&
+				cell.record_history.admitted && !r->capture_inflight && !r->continuation_inflight) {
+			cell.scene_waiting = false;
+			production_control_execute_locked(*r, nullptr);
+		}
+	}
 	if (r->control.state != ProductionControlState::OWNER_CONSUMED) {
 		return result(ERR_BUSY, 16);
 	}
 	return production_release_locked(*r, rd, true);
 }
+bool Registry::production_release_main_fast_path_eligible_locked(const ProductionRequest &r, const GDExtensionProductionServiceBudgetV1 &offered, const GDExtensionProductionReportV2 &report) const {
+	if (!r.serial || !r.attachment || r.control.state != ProductionControlState::OWNER_CONSUMED ||
+			r.capture_inflight || r.continuation_inflight || r.effects_pending || r.source_device_lost ||
+			r.maintenance_serial || r.compute_list_open || r.draw_list_open ||
+			r.native_prepared_unread || r.native_batch_pending_ack ||
+			r.release_ready.control_serial != 0 ||
+			r.disposal_group_head != UINT32_MAX || r.output_owner_cursor != UINT32_MAX || r.output_owner_head != UINT32_MAX ||
+			r.action_count == 0 || r.next_action != r.action_count ||
+			r.segment.segment == 0 || r.acknowledged_segment != r.segment.segment ||
+			report.possible_obligations != 0 || report.known_obligations != report.complete_obligations ||
+			report.physical_returns_pending != 0 ||
+			!offered.controls || MIN(offered.passes, 64u) < r.native_count || MIN(offered.receipts, 128u) < r.native_count) {
+		return false;
+	}
+	for (uint32_t i = 0; i < r.resource_count; ++i) {
+		const auto &slot = r.resources[i];
+		if (slot.transfer_pending || slot.metadata_data || slot.metadata_consumer ||
+				!slot.output_predecessor_view.is_empty() || slot.scene_depth_lease_count != 0 ||
+				slot.retiring || slot.material_pipeline_shader_hold.is_active() || slot.material_pipeline_reservation.is_valid()) {
+			return false;
+		}
+		if (slot.declaration.ownership == GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 &&
+				!slot.cached_persistent_set && !slot.returned && slot.primary.is_valid()) {
+			return false;
+		}
+	}
+	for (uint32_t i = 0; i < r.action_count; ++i) {
+		const auto &action = r.actions[i];
+		if (action.material_qualification || action.scene_attempt.content.is_valid() ||
+				action.preinput_camera_source.is_valid() || action.scene_cull_capture.is_valid() ||
+				(action.camera_ready_subscriber.registry && !action.camera_ready_subscriber.released) ||
+				(action.preinput_host_prepared && !action.preinput_host_returned)) {
+			return false;
+		}
+	}
+	return true;
+}
+
 bool Registry::production_release_owner_tail_locked(const ProductionRequest &r, RenderingDevice *rd, bool require_proof) const {
 	if (!r.serial || !r.attachment || !rd || !rd->driver || r.attachment->held_device != rd || r.capture_inflight || r.continuation_inflight || r.effects_pending || r.source_device_lost || r.maintenance_serial || r.compute_list_open || r.draw_list_open || (!r.cancelled && r.next_action != r.action_count)) {
 		return false;
@@ -3639,7 +4156,9 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 			returning->released = true;
 			action.camera_ready_viewport = RID();
 			--r->capture_inflight;
-			return result(ERR_BUSY, 16); // One original charged owner return.
+			if (usage->passes >= MIN(budget->passes, 64u) || usage->receipts >= MIN(budget->receipts, 128u) || !before_service_deadline(*budget)) {
+				return result(ERR_BUSY, 16);
+			}
 		}
 		if (action.preinput_camera_source.is_null() && action.scene_cull_capture.is_null()) {
 			continue;
@@ -3660,13 +4179,17 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 		Ref<RendererViewport::Viewport::CameraCapture> returning_cull = action.scene_cull_capture;
 		action.preinput_camera_source.unref(); // returning pins final destruction.
 		action.scene_cull_capture.unref();
+		action.scene_cull_attempted = false;
+		action.scene_cull_attempted_camera = {};
 		action.preinput_camera_returned = true;
 		unlock_mutex_for_call();
 		returning.unref();
 		returning_cull.unref();
 		relock_mutex_after_call();
 		--r->capture_inflight;
-		return result(ERR_BUSY, 16); // Exactly one charged original source return.
+		if (usage->passes >= MIN(budget->passes, 64u) || usage->receipts >= MIN(budget->receipts, 128u) || !before_service_deadline(*budget)) {
+			return result(ERR_BUSY, 16);
+		}
 	}
 	// Native observer references may only be dropped in the original owner's
 	// final-release phase. RT readiness neither releases them nor signs R01 ACK.
@@ -3754,21 +4277,61 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 	if (!reclaim) {
 		return result(OK);
 	}
+	static_assert(std::is_trivially_copyable_v<ProductionNativeCell>);
+	static_assert(std::is_trivially_destructible_v<ProductionNativeCell>);
+	if (r->material_qualifications) {
+		for (uint32_t i = 0; i < r->action_count; ++i) {
+			if (r->actions[i].material_qualification_constructed) {
+				r->material_qualifications[i].~MaterialQualificationState();
+				r->actions[i].material_qualification_constructed = false;
+				CRASH_COND(!r->attachment->material_qualifications_live);
+				--r->attachment->material_qualifications_live;
+			}
+		}
+	}
 	auto reset = [](auto *cells, uint32_t count) { using T=std::remove_pointer_t<decltype(cells)>;for(uint32_t i=0;i<count;++i){cells[i].~T();new (&cells[i]) T();} };
 	reset(r->actions, r->capacity.suboperations);
-	reset(r->material_qualifications, r->capacity.suboperations);
 	reset(r->resources, r->capacity.resources);
 	reset(r->uses, r->capacity.resource_uses);
 	reset(r->readbacks, r->capacity.readbacks);
 	reset(r->graphs, r->capacity.graph_memberships);
-	reset(r->natives, r->capacity.native_memberships);
+	if (r->native_count) {
+		std::memset(r->natives, 0, sizeof(ProductionNativeCell) * r->native_count);
+	}
 	reset(r->returns, r->capacity.return_cells);
 	reset(r->commands, r->command_count);
 	reset(r->frames, r->frame_count);
-	CRASH_COND(!r->attachment->children);
-	--r->attachment->children;
+	auto *attachment = r->attachment;
+	CRASH_COND(!attachment->children);
+	--attachment->children;
 	r->~ProductionRequest();
 	new (r) ProductionRequest();
+	if (attachment->children == 0) {
+		uint64_t advised = 0;
+		if (attachment->payload && attachment->payload_reclaim_hwm > attachment->scene_prefix_bytes) {
+			const uint64_t end = MIN(attachment->payload_reclaim_hwm, attachment->quote.capacity.retained_payload_bytes);
+			if (end > attachment->scene_prefix_bytes) {
+				advised += reclaim_arena_pod_pages(attachment->payload + attachment->scene_prefix_bytes, size_t(end - attachment->scene_prefix_bytes));
+			}
+		}
+		if (attachment->readback_bytes && attachment->readback_reclaim_hwm > 0) {
+			const uint64_t end = MIN(attachment->readback_reclaim_hwm, attachment->quote.capacity.readback_bytes);
+			advised += reclaim_arena_pod_pages(attachment->readback_bytes, size_t(end));
+		}
+		if (attachment->natives && attachment->natives_reclaim_hwm > 0) {
+			const uint64_t end = MIN(attachment->natives_reclaim_hwm, uint64_t(attachment->quote.capacity.native_memberships));
+			advised += reclaim_arena_pod_pages(attachment->natives, size_t(end) * sizeof(ProductionNativeCell));
+		}
+		if (attachment->material_qualifications && attachment->material_qualifications_live == 0 && attachment->mq_reclaim_hwm > 0) {
+			const uint32_t end = MIN(attachment->mq_reclaim_hwm, attachment->quote.capacity.suboperations);
+			advised += reclaim_arena_pod_pages(attachment->material_qualifications, size_t(end) * sizeof(MaterialQualificationState));
+		}
+		attachment->arena_reclaimed_bytes_total += advised;
+		attachment->payload_reclaim_hwm = 0;
+		attachment->readback_reclaim_hwm = 0;
+		attachment->natives_reclaim_hwm = 0;
+		attachment->mq_reclaim_hwm = 0;
+	}
 	return result(OK);
 }
 GDExtensionDeviceSessionResultV1 Registry::production_installation_observe(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionServiceBudgetV1 *budget, GDExtensionProductionInstallationReportV1 *out) {
@@ -3848,9 +4411,12 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 	scene_owner_close_locked(*a); // Only an accepted close revokes Scene admission.
 	for (uint32_t i = 0; i < a->quote.capacity.requests; ++i) {
 		auto &request = a->requests[i];
-		if (request.serial && !request.cancelled) {
-			request.cancelled = true;
-			++request.revision;
+		if (request.serial) {
+			if (!request.cancelled) {
+				request.cancelled = true;
+				++request.revision;
+			}
+			production_set_create_cancel_batched_locked(request, ERR_UNAVAILABLE);
 		}
 	}
 	if (rd && rd->render_thread_id == Thread::get_caller_id() && rd->_thread_safe_.try_lock()) {
@@ -3863,6 +4429,53 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 	}
 	if (a->children) {
 		return result(ERR_BUSY, 16);
+	}
+	if (!a->persistent_sets.is_empty()) {
+		a->persistent_set_lookup.clear();
+		uint32_t i = 0;
+		while (i < a->persistent_sets.size()) {
+			PersistentSetEntry *entry = a->persistent_sets[i];
+			if (!entry) {
+				a->persistent_sets.remove_at_unordered(i);
+				continue;
+			}
+			entry->evicted = true;
+			uint64_t free_event = 0;
+			{
+				MutexLock phys_lock(entry->physical.mutex);
+				free_event = entry->physical.free_event;
+			}
+			if (entry->physical.production_uses == nullptr && free_event != 0) {
+				production_persistent_set_unindex_deps_locked(*a, *entry);
+				a->persistent_sets.remove_at_unordered(i);
+				memdelete(entry);
+				continue;
+			}
+			++i;
+		}
+		if (!a->persistent_sets.is_empty()) {
+			if (rd && rd->render_thread_id == Thread::get_caller_id()) {
+				RenderingDevice *target_rd = rd;
+				unlock_mutex_for_call();
+				if (target_rd->_thread_safe_.try_lock()) {
+					MutexScopeUnlock<Mutex> rd_unlock(target_rd->_thread_safe_);
+					production_persistent_sets_reap_and_retire_rt(target_rd, true);
+				}
+				relock_mutex_after_call();
+				e = production_attachment_locked(ref, false, a, rd);
+				if (e != OK) {
+					return result(e, 16);
+				}
+			} else if (!a->persistent_set_close_drain_queued) {
+				auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
+				if (server && this == &get_singleton() && server->_try_production_persistent_sets_drain(instance, a->serial)) {
+					a->persistent_set_close_drain_queued = true;
+				}
+			}
+			if (!a->persistent_sets.is_empty()) {
+				return result(ERR_BUSY, 16);
+			}
+		}
 	}
 	e = production_entity_return_locked(*a);
 	if (e != OK) {
@@ -3886,17 +4499,19 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 	}
 	auto destroy = [](auto *cells, uint32_t count) { using T=std::remove_pointer_t<decltype(cells)>;for(uint32_t i=0;i<count;++i){cells[i].~T();
 } };
+	CRASH_COND(a->material_qualifications_live != 0);
+	CRASH_COND(!a->persistent_sets.is_empty());
+	CRASH_COND(!a->persistent_set_lookup.is_empty());
+	CRASH_COND(!a->persistent_sets_by_dep.is_empty());
 	destroy(a->requests, a->quote.capacity.requests);
-	destroy(a->actions, a->quote.capacity.suboperations);
-	destroy(a->material_qualifications, a->quote.capacity.suboperations);
-	destroy(a->resources, a->quote.capacity.resources);
-	destroy(a->uses, a->quote.capacity.resource_uses);
-	destroy(a->readbacks, a->quote.capacity.readbacks);
-	destroy(a->graphs, a->quote.capacity.graph_memberships);
-	destroy(a->natives, a->quote.capacity.native_memberships);
-	destroy(a->returns, a->quote.capacity.return_cells);
-	destroy(a->commands, uint32_t(a->quote.graph_slots));
-	destroy(a->frames, uint32_t(a->quote.graph_frames));
+	destroy(a->actions, a->actions_hwm);
+	destroy(a->resources, a->resources_hwm);
+	destroy(a->uses, a->uses_hwm);
+	destroy(a->readbacks, a->readbacks_hwm);
+	destroy(a->graphs, a->graphs_hwm);
+	destroy(a->returns, a->returns_hwm);
+	destroy(a->commands, a->commands_hwm);
+	destroy(a->frames, a->frames_hwm);
 	void *arena = a->arena;
 	a->~ProductionAttachment();
 	Memory::free_static(arena);
@@ -4231,6 +4846,9 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 				if (error == OK) {
 					error = production_output_predecessor_return_after_reads_locked(request, *rd, cell.input.budget, cell.output.service_usage);
 				}
+				if (error == OK) {
+					error = production_output_action_custody_return_after_slot_retire_locked(request, *rd, cell.input.budget, cell.output.service_usage);
+				}
 			}
 			cell.output.result = result(error);
 		} break;
@@ -4238,8 +4856,20 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 			cell.output.result = result(rd ? production_raster_prepare_execute_locked(request, *rd) : production_raster_prepare_finish_locked(request, ERR_UNAVAILABLE));
 			break;
 		case ProductionControlKind::STORAGE_CREATE:
+			if (rd) {
+				cell.output.result = result(production_create_execute_locked(request, *rd, cell.input.kind, cell.input.resource_slot));
+			} else {
+				production_set_create_cancel_batched_locked(request, ERR_UNAVAILABLE);
+				cell.output.result = result(ERR_UNAVAILABLE);
+			}
+			break;
 		case ProductionControlKind::SET_CREATE:
-			cell.output.result = result(rd ? production_create_execute_locked(request, *rd, cell.input.kind, cell.input.resource_slot) : ERR_UNAVAILABLE);
+			if (rd) {
+				cell.output.result = result(production_set_create_execute_batch_locked(request, *rd, cell.input.resource_slot));
+			} else {
+				production_set_create_cancel_batched_locked(request, ERR_UNAVAILABLE);
+				cell.output.result = result(ERR_UNAVAILABLE);
+			}
 			break;
 		case ProductionControlKind::CANCEL:
 			cell.output.result = production_cancel_locked(request);
@@ -4348,6 +4978,8 @@ void Registry::production_control_dispatch(uint64_t registry, uint64_t attachmen
 				cell.output.control_serial = cell.serial;
 				if (cell.input.kind == ProductionControlKind::RASTER_CREATE) {
 					production_raster_prepare_finish_locked(r, ERR_INVALID_DATA);
+				} else if (cell.input.kind == ProductionControlKind::SET_CREATE || cell.input.kind == ProductionControlKind::STORAGE_CREATE) {
+					production_set_create_cancel_batched_locked(r, ERR_INVALID_DATA);
 				}
 				cell.output.result = result(ERR_INVALID_DATA, 16);
 				cell.state = ProductionControlState::RETURNED;
@@ -4367,6 +4999,42 @@ void Registry::production_control_dispatch(uint64_t registry, uint64_t attachmen
 					cell.scene_waiting = false;
 					production_control_execute_locked(r, nullptr); // Original CQMT admission rejection, no native frame/body.
 					return;
+				}
+				if (r.native_staged_anchor < r.action_count) {
+					auto &anchor = r.actions[r.native_staged_anchor];
+					auto *observer = &anchor.camera_ready_subscriber;
+					if (anchor.host_view_prepared && observer->registry == this && !observer->subscribed && !observer->closed && !observer->released) {
+						if (!RSG::viewport || r.capture_inflight || r.continuation_inflight) {
+							cell.scene_waiting = false;
+							production_control_execute_locked(r, nullptr);
+							return;
+						}
+						const RID viewport = anchor.camera_ready_viewport;
+						const RID camera = anchor.host_view_camera;
+						++r.capture_inflight;
+						unlock_mutex_for_call();
+						RendererViewport::Viewport::ViewPresentationKey native_key;
+						const Error received = RSG::viewport->viewport_receive_host_view(viewport, camera, native_key);
+						const bool subscribed = received == OK && RSG::viewport->viewport_subscribe_camera_source(viewport, observer);
+						relock_mutex_after_call();
+						CRASH_COND(r.serial != request || !r.capture_inflight || &anchor.camera_ready_subscriber != observer);
+						--r.capture_inflight;
+						if (subscribed) {
+							anchor.host_view_key = native_key;
+							anchor.host_view_received = true;
+							observer->subscribed = true;
+						}
+						if (cell.serial != serial || cell.state != ProductionControlState::QUEUED) {
+							return;
+						}
+						const auto &owner_after = records[a->library];
+						const auto &device_after = device_records[a->device];
+						if (!subscribed || a->closing || owner_after.natural_close_draining || a->camera_ready_closed || a->scene_closed || !device_after.live || r.cancelled || r.release_started || r.source_device_lost || observer->is_closed()) {
+							cell.scene_waiting = false;
+							production_control_execute_locked(r, nullptr);
+							return;
+						}
+					}
 				}
 				cell.scene_waiting = true;
 				return; // Genuine camera invocation owns native execution; never CQMT.

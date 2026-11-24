@@ -262,6 +262,7 @@ public:
 	static void compute_begin(RenderingDevice &p_device) {
 		p_device.draw_graph.add_compute_list_begin();
 		p_device.compute_list.active = true;
+		p_device.compute_list.state.pipeline_shader_driver_id = RenderingDeviceDriver::ShaderID(77);
 #ifdef DEBUG_ENABLED
 		p_device.compute_list.validation.pipeline_active = true;
 #endif

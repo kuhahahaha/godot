@@ -699,6 +699,7 @@ Error Registry::production_record_receive_locked(ProductionRequest &request, Ren
 	void *userdata = attachment.record_receiver_userdata;
 	const auto operation = request.operation;
 	const uint64_t serial = request.serial, control = request.control.serial;
+	const bool allow_aux_pre_append = !cleanup && request.frozen && !request.cancelled;
 	++record.private_refs;
 	RecordRef reference(this, attachment.library);
 	unlock_mutex_for_call();
@@ -719,12 +720,26 @@ Error Registry::production_record_receive_locked(ProductionRequest &request, Ren
 			frame.serial = RegistrationContext::current->frame_id;
 			frame.control = control;
 			production_physical_frame = &frame;
+			struct AuxPreAppendScope {
+				RenderingDevice &rd;
+				bool previous = false;
+				AuxPreAppendScope(RenderingDevice &p_rd, bool p_enable) :
+						rd(p_rd), previous(p_rd.production_output_fast_refresh.aux_pre_append_active) {
+					if (p_enable) {
+						rd.production_output_fast_refresh.aux_pre_append_active = true;
+					}
+				}
+				~AuxPreAppendScope() {
+					rd.production_output_fast_refresh.aux_pre_append_active = previous;
+				}
+			};
 			if (cleanup) {
 				receiver(userdata, { instance, frame.serial }, { instance, serial }, &operation);
 			} else if (request.native_prepared_executor) {
 				frame.scene_occurrence = attachment.scene_occurrence;
 				error = production_prepared_record_body(request, device, { instance, frame.serial }, *p_native_invocation);
 			} else if (attachment.scene_registration) {
+				AuxPreAppendScope aux_scope(device, allow_aux_pre_append);
 				frame.scene_occurrence = attachment.scene_occurrence;
 				GDExtensionNativeScenePhaseV1 phase{};
 				phase.abi = { 1, sizeof(phase), 0 };
@@ -735,6 +750,7 @@ Error Registry::production_record_receive_locked(ProductionRequest &request, Ren
 				phase.expiry_serial = frame.serial;
 				error = scene_phase_call_relay(attachment.scene_relay, phase, { instance, serial }, operation);
 			} else {
+				AuxPreAppendScope aux_scope(device, allow_aux_pre_append);
 				receiver(userdata, { instance, frame.serial }, { instance, serial }, &operation);
 			}
 			// Actual protected frame return is a physical cutoff, not a caller
@@ -1704,7 +1720,11 @@ bool Registry::production_output_recorded_ordered_locked(const ProductionRequest
 	}
 	for (uint32_t i = 0; i < request.graph_count; ++i) {
 		uint32_t command = UINT32_MAX;
-		if (!device.draw_graph._resolve_record_command_index(request.graphs[i].handle, command)) {
+		// Require every still-pending producer graph ordered in the active draw graph;
+		// graphs already submitted on prior frames (pending == false) are already ordered
+		// before any subsequent frame's draw list, and output_read graphs carry no recipe.
+		if (!request.graphs[i].output_read && request.graphs[i].pending &&
+				!device.draw_graph._resolve_record_command_index(request.graphs[i].handle, command)) {
 			return false;
 		}
 	}
@@ -2148,6 +2168,20 @@ Error Registry::production_prepared_record_body(ProductionRequest &request, Rend
 			graph_begin = request.graph_count;
 			ordinal = request.next_action; serial = request.serial; control_serial = request.control.serial; revision = request.revision;
 			auto &action = request.actions[ordinal];
+			if (request.native_static_sealed && !request.frozen && request.native_staged_anchor < request.action_count) {
+				const auto &anchor = request.actions[request.native_staged_anchor];
+				const auto &capture = invocation.get_capture();
+				if (anchor.output_camera_pending && (!anchor.scene_cull_prepared || anchor.scene_cull_capture != capture)) {
+					const auto &token = capture->get_token();
+					if (anchor.scene_cull_attempted &&
+							anchor.scene_cull_attempted_camera.view_id == token.view_id &&
+							anchor.scene_cull_attempted_camera.view_epoch == token.view_epoch &&
+							anchor.scene_cull_attempted_camera.capture_ordinal == token.capture_ordinal &&
+							anchor.scene_cull_error != OK && anchor.scene_cull_error != ERR_BUSY) {
+						return anchor.scene_cull_error;
+					}
+				}
+			}
 			if (request.native_history_fallback && !request.frozen) {
 				const Error selected = production_complete_staged_camera_locked(request, request.actions[request.native_staged_anchor], borrow);
 				if (selected != OK) { return selected; }
@@ -2297,7 +2331,9 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_native_record_v2(G
 	if (request->native_staged_anchor != UINT64_MAX) {
 		if (anchors != 1 || request->native_staged_anchor >= request->action_count || !request->actions[request->native_staged_anchor].output_camera_pending) { return window_result(ERR_UNAVAILABLE); }
 		const auto &anchor = request->actions[request->native_staged_anchor];
-		if (!anchor.host_view_received || !anchor.camera_ready_subscriber.subscribed || anchor.camera_ready_subscriber.closed || anchor.camera_ready_subscriber.released) { return window_result(ERR_UNCONFIGURED); }
+		const bool already_subscribed = anchor.host_view_received && anchor.camera_ready_subscriber.subscribed;
+		const bool deferred_subscribe_ready = anchor.host_view_prepared && anchor.camera_ready_viewport.is_valid() && anchor.host_view_camera.is_valid() && anchor.camera_ready_subscriber.registry == this;
+		if ((!already_subscribed && !deferred_subscribe_ready) || anchor.camera_ready_subscriber.closed || anchor.camera_ready_subscriber.released) { return window_result(ERR_UNCONFIGURED); }
 		if (!request->native_stage_budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= request->native_stage_budget.deadline_micros) { return window_result(ERR_BUSY); }
 		if (!rd || !rd->_thread_safe_.try_lock()) { return window_result(ERR_BUSY); }
 		const Error sealed = production_freeze_rd_locked(*request, rd, true);

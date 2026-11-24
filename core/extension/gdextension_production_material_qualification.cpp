@@ -731,7 +731,7 @@ Error Registry::production_material_qualification_observe_locked(ProductionReque
 	if (request.cancelled || request.release_started || request.source_device_lost || request.capture_inflight || request.continuation_inflight) {
 		return OK;
 	}
-	if (!rd.native_immutable_is_render_thread() || rd.draw_list.active || rd.compute_list.active || rd.raytracing_list.active || rd.draw_graph.has_driver_callbacks()) {
+	if (!rd.native_immutable_is_render_thread() || rd.draw_list.active || rd.compute_list.active || rd.raytracing_list.active || rd.draw_graph.has_driver_callbacks() || rd._recording_error() != OK) {
 		return ERR_BUSY;
 	}
 
@@ -1362,6 +1362,9 @@ GDExtensionDeviceSessionResultV1 Registry::production_record_material_qualificat
 
 	if (request->contract_version != 2 || request->effects_pending || request->draw_list_open || rd->production_recording_request || rd->draw_list.active || rd->raytracing_list.active || rd->draw_graph.has_driver_callbacks()) {
 		return mq_result(ERR_BUSY, 16);
+	}
+	if (const Error rec_err = rd->_recording_error(); rec_err != OK) {
+		return mq_result(rec_err, 16);
 	}
 	if (action_ordinal >= request->action_count) {
 		return mq_result(ERR_INVALID_DATA, 4);

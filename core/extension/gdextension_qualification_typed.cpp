@@ -167,6 +167,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_texture_create(GDExtens
 		}
 		c->origin = *q;
 		b->textures[slot] = c;
+		b->track_unacknowledged_child_locked(c);
 	}
 	RenderingDevice::TextureFormat f;
 	f.texture_type = q->texture_type == 1 ? RenderingDevice::TEXTURE_TYPE_1D : q->texture_type == 2 ? RenderingDevice::TEXTURE_TYPE_2D
@@ -193,6 +194,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_texture_create(GDExtens
 	if (rid.is_null()) {
 		CRASH_COND(!c->cleanup_serial_reserved || !qualification_cleanup_serial_reservations);
 		--qualification_cleanup_serial_reservations;
+		b->untrack_unacknowledged_child_locked(c);
 		b->textures[slot] = nullptr;
 		--b->children;
 		--records[b->library].private_refs;
@@ -266,6 +268,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_sampler_create(GDExtens
 		}
 		c->origin = *q;
 		b->samplers[slot] = c;
+		b->track_unacknowledged_child_locked(c);
 	}
 	RenderingDevice::SamplerState state;
 	state.mag_filter = RenderingDevice::SamplerFilter(q->mag_filter);
@@ -279,6 +282,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_sampler_create(GDExtens
 	if (rid.is_null()) {
 		CRASH_COND(!c->cleanup_serial_reserved || !qualification_cleanup_serial_reservations);
 		--qualification_cleanup_serial_reservations;
+		b->untrack_unacknowledged_child_locked(c);
 		b->samplers[slot] = nullptr;
 		--b->children;
 		--records[b->library].private_refs;
@@ -459,12 +463,14 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_set_create(GDExtensionQ
 		c->bindings.resize(count);
 		memcpy(c->bindings.ptr(), bindings, count * sizeof(*bindings));
 		b->sets[slot] = c;
+		b->track_unacknowledged_child_locked(c);
 	}
 	RID rid = rd->_qualification_uniform_set_create(uniforms, RID::from_uint64(q->shader_rid), q->shader_set, &c->physical, children);
 	Lock lock(*this);
 	if (rid.is_null()) {
 		CRASH_COND(!c->cleanup_serial_reserved || !qualification_cleanup_serial_reservations);
 		--qualification_cleanup_serial_reservations;
+		b->untrack_unacknowledged_child_locked(c);
 		b->sets[slot] = nullptr;
 		--b->children;
 		--records[b->library].private_refs;
@@ -962,7 +968,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_resource_retire_release
 		--qualification_cleanup_serial_reservations;
 		c->cleanup_serial_reserved = false;
 	}
-	c->acknowledged = true;
+	b->acknowledge_child_locked(c);
 	--b->children;
 	--records[b->library].private_refs;
 	qualification_trim_cleanup_ref_credits_locked(b);

@@ -351,6 +351,10 @@ class ProductionResourceSlot {
 	uint32_t imported_unit_slot = UINT32_MAX;
 	uint32_t shader_set = UINT32_MAX;
 	uint32_t first_binding = UINT32_MAX, binding_count = 0;
+	// Per-resource O(1) last-writer hazard tracker within the active compute list.
+	uint32_t last_dispatch_write_epoch = 0;
+	uint64_t last_dispatch_write_begin = 0;
+	uint64_t last_dispatch_write_end = 0;
 	bool imported = false;
 	bool scene_depth_set1 = false;
 	uint32_t scene_depth_lease_count = 0;
@@ -393,7 +397,7 @@ class ProductionResourceSlot {
 	GDExtensionStorageRetireRequestV1 retire_origin = {};
 	GDExtensionStorageRetireReportV1 retire_report = {};
 	uint64_t owned_serial = 0, retire_serial = 0;
-	bool creating = false, retiring = false, returned = false;
+	bool creating = false, batched_set_create = false, cached_persistent_set = false, retiring = false, returned = false;
 	// Independent CPU allocation, not a GPU storage backing or return fact.
 	ProductionOutputMetadataLease *metadata_consumer = nullptr;
 	void *metadata_data = nullptr;
@@ -505,10 +509,12 @@ class ProductionActionCell {
 	// Original selected-view pre-cull observation, paid by the ActionCell quote.
 	// SceneCull owns the synchronous window. This Ref retains only its capture.
 	Ref<RendererViewport::Viewport::CameraCapture> scene_cull_capture;
+	GDExtensionOutputCameraV1 scene_cull_attempted_camera = {};
 	uint64_t scene_cull_version = 0;
 	AABB scene_cull_local, scene_cull_world, scene_cull_required_world;
 	Error scene_cull_error = ERR_UNCONFIGURED;
 	bool scene_cull_prepared = false;
+	bool scene_cull_attempted = false;
 	GDExtensionProductionOutputPlanV1 output_plan = {};
 	bool output_plan_prepared = false;
 	bool output_roles_pending_v3 = false;
@@ -535,6 +541,7 @@ class ProductionActionCell {
 	bool output_source_prepared = false;
 	uint32_t camera_payload_kind = 0; // Explicit staged upload codec: 1 view24, 2 sort18, 3 control3.
 	bool output_camera_pending = false; // Only explicit staged preparation may leave camera fields unresolved.
+	bool material_qualification_constructed = false;
 	MaterialQualificationState *material_qualification = nullptr;
 };
 struct ProductionOutputDemandSnapshot {
@@ -610,7 +617,7 @@ class ProductionGraphCell {
 	friend struct ::TestProductionNativeObserve::Access;
 #endif
 public:
-	static constexpr uint32_t MAX_OUTPUT_READ_TRANSFERS = 16;
+	static constexpr uint32_t MAX_OUTPUT_READ_TRANSFERS = 32;
 private:
 	ProductionGraphCell() = default;
 	ProductionNativeBatchCell native_batch;
@@ -802,6 +809,7 @@ class ProductionRequest {
 	ProductionCaptureCell *commands = nullptr, *frames = nullptr;
 	uint32_t action_count = 0, resource_count = 0, use_count = 0, readback_count = 0;
 	uint32_t binding_used = 0;
+	uint32_t natives_offset = 0;
 	uint64_t payload_offset = 0, readback_offset = 0, payload_used = 0;
 	uint32_t command_count = 0, frame_count = 0;
 	uint64_t revision = 1;
@@ -858,6 +866,7 @@ class ProductionRequest {
 	}
 	bool frozen = false, cancelled = false, effects_pending = false;
 	bool compute_list_open = false;
+	uint32_t dispatch_barrier_epoch = 1;
 	bool draw_list_open = false;
 	bool raster_started = false;
 	// Monotonic across every control; empty later RECORDs cannot erase effects.
@@ -881,6 +890,59 @@ class ProductionRequest {
 	RID scene_target_viewport;
 	// No numeric field or DTO populates original scope/window/K03 authority.
 };
+struct PersistentSetBindingKey {
+	uint32_t binding = 0;
+	uint64_t rid = 0;
+	uint64_t backing_serial = 0;
+	bool operator==(const PersistentSetBindingKey &p_other) const {
+		return binding == p_other.binding && rid == p_other.rid && backing_serial == p_other.backing_serial;
+	}
+};
+
+struct PersistentSetKey {
+	uint64_t shader_rid = 0;
+	uint64_t shader_serial = 0;
+	uint32_t shader_set = 0;
+	LocalVector<PersistentSetBindingKey> bindings; // Sorted ascending by binding.
+	bool operator==(const PersistentSetKey &p_other) const {
+		if (shader_rid != p_other.shader_rid || shader_serial != p_other.shader_serial || shader_set != p_other.shader_set || bindings.size() != p_other.bindings.size()) {
+			return false;
+		}
+		for (uint32_t i = 0; i < bindings.size(); ++i) {
+			if (!(bindings[i] == p_other.bindings[i])) {
+				return false;
+			}
+		}
+		return true;
+	}
+};
+
+struct PersistentSetKeyHasher {
+	static uint32_t hash(const PersistentSetKey &p_key) {
+		uint32_t h = hash_murmur3_one_64(p_key.shader_rid);
+		h = hash_murmur3_one_64(p_key.shader_serial, h);
+		h = hash_murmur3_one_32(p_key.shader_set, h);
+		h = hash_murmur3_one_32(p_key.bindings.size(), h);
+		for (uint32_t i = 0; i < p_key.bindings.size(); ++i) {
+			h = hash_murmur3_one_32(p_key.bindings[i].binding, h);
+			h = hash_murmur3_one_64(p_key.bindings[i].rid, h);
+			h = hash_murmur3_one_64(p_key.bindings[i].backing_serial, h);
+		}
+		return hash_fmix32(h);
+	}
+};
+
+struct PersistentSetEntry {
+	uint64_t serial = 0;
+	RID rid;
+	PersistentSetKey key;
+	QualificationPhysicalReturn physical;
+	LocalVector<QualificationPhysicalReturn *> dependencies;
+	uint64_t last_used_tick = 0;
+	bool evicted = false;
+	bool retire_enqueued = false;
+};
+
 class ProductionAttachment {
 	friend class Registry;
 	friend class ::RenderingDevice;
@@ -937,6 +999,19 @@ class ProductionAttachment {
 	bool camera_ready_closed = false, camera_ready_relay_closed = false, camera_ready_close_active = false;
 	bool opened = false;
 	bool closing = false;
+	uint32_t actions_hwm = 0, resources_hwm = 0, uses_hwm = 0, readbacks_hwm = 0;
+	uint32_t graphs_hwm = 0, returns_hwm = 0, commands_hwm = 0, frames_hwm = 0;
+	uint32_t material_qualifications_live = 0, material_qualifications_constructed_total = 0;
+	uint64_t payload_reclaim_hwm = 0, readback_reclaim_hwm = 0, natives_reclaim_hwm = 0;
+	uint32_t mq_reclaim_hwm = 0;
+	uint64_t arena_reclaimed_bytes_total = 0;
+	// Attachment-scoped persistent UniformSet cache for long-lived retained storage bindings.
+	static constexpr uint32_t PERSISTENT_SET_MAX_LIVE = 2048u;
+	HashMap<PersistentSetKey, PersistentSetEntry *, PersistentSetKeyHasher> persistent_set_lookup;
+	HashMap<QualificationPhysicalReturn *, LocalVector<PersistentSetEntry *>> persistent_sets_by_dep;
+	LocalVector<PersistentSetEntry *> persistent_sets;
+	uint64_t persistent_set_tick = 0;
+	bool persistent_set_close_drain_queued = false;
 	// Open must acquire the original device holder and operation-window receiver.
 	// Metadata reservations do not satisfy those two obligations.
 };

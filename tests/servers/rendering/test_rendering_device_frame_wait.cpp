@@ -32,7 +32,9 @@
 
 TEST_FORCE_LINK(test_rendering_device_frame_wait)
 
+#include "core/extension/gdextension_qualification_internal.h"
 #include "core/object/callable_mp.h"
+#include "core/os/os.h"
 #include "core/os/thread.h"
 #include "servers/rendering/renderer_compositor.h"
 #include "servers/rendering/rendering_device.h"
@@ -290,6 +292,1345 @@ public:
 		CHECK(device.frame_wait_error == OK);
 		CHECK_FALSE(device.qualification_frame_advance_pending);
 		CHECK(driver.resets == 1);
+		device.frames.clear();
+		device.driver = nullptr;
+	}
+	static void synchronous_readback_resumes_pending_frame() {
+		struct CapturedErrors {
+			uint32_t count = 0;
+			Vector<String> messages;
+			static void capture(void *p_data, const char *, const char *, int, const char *p_error, const char *p_rationale, bool, ErrorHandlerType p_type) {
+				if (p_type == ERR_HANDLER_ERROR) {
+					auto *self = static_cast<CapturedErrors *>(p_data);
+					++self->count;
+					String msg;
+					if (p_error && *p_error) {
+						msg += String::utf8(p_error);
+					}
+					if (p_rationale && *p_rationale) {
+						if (!msg.is_empty()) {
+							msg += " ";
+						}
+						msg += String::utf8(p_rationale);
+					}
+					self->messages.push_back(msg);
+				}
+			}
+			ErrorHandlerList handler{ &CapturedErrors::capture, this };
+			CapturedErrors() { add_error_handler(&handler); }
+			~CapturedErrors() { remove_error_handler(&handler); }
+			void reset() {
+				count = 0;
+				messages.clear();
+			}
+			bool has_substring(const String &p_sub) const {
+				for (const String &m : messages) {
+					if (m.contains(p_sub)) {
+						return true;
+					}
+				}
+				return false;
+			}
+		};
+
+		struct ReadbackDriver : TransferTestDriverBase {
+			bool native_observation = false;
+			bool native_ready = true;
+			Error fence_wait_result = OK;
+			uint32_t fence_waits = 0;
+			uint32_t resets = 0;
+			uint32_t begins = 0;
+			uint32_t copies = 0;
+			uint32_t submissions = 0;
+			uint32_t freed_buffers = 0;
+			uint8_t staging_bytes[4] = { 0x11, 0x22, 0x33, 0x44 };
+			uint8_t tex_bytes[4] = { 0x55, 0x66, 0x77, 0x88 };
+
+			bool native_call_observation_supported() const override { return native_observation; }
+			FencePollResult native_call_wait(uint64_t serial) override {
+				FencePollResult result;
+				if (native_ready) {
+					result.completed = true;
+					result.completed_serial = serial;
+				}
+				return result;
+			}
+			Error native_call_recycle_wait(uint64_t) override { return OK; }
+			Error fence_wait(FenceID) override {
+				++fence_waits;
+				return fence_wait_result;
+			}
+			bool command_pool_reset(CommandPoolID) override {
+				++resets;
+				return true;
+			}
+			bool command_buffer_begin(CommandBufferID) override { return true; }
+			void begin_segment(uint32_t, uint32_t) override { ++begins; }
+			void command_buffer_end(CommandBufferID) override {}
+			void end_segment() override {}
+			void command_pipeline_barrier(CommandBufferID, BitField<PipelineStageBits>, BitField<PipelineStageBits>, VectorView<MemoryAccessBarrier>, VectorView<BufferBarrier>, VectorView<TextureBarrier>, VectorView<AccelerationStructureBarrier>) override {}
+			void command_copy_buffer(CommandBufferID, BufferID, BufferID, VectorView<BufferCopyRegion>) override { ++copies; }
+			Error command_queue_execute_and_present(CommandQueueID, VectorView<SemaphoreID>, VectorView<CommandBufferID>, VectorView<SemaphoreID>, FenceID, VectorView<SwapChainID>) override {
+				++submissions;
+				QueueCallReport report;
+				report.issued = true;
+				record_queue_call_report(report);
+				return OK;
+			}
+			BufferID buffer_create(uint64_t, BitField<BufferUsageBits>, MemoryAllocationType, uint64_t) override { return BufferID(91); }
+			uint8_t *buffer_map(BufferID) override { return staging_bytes; }
+			void buffer_unmap(BufferID) override {}
+			void buffer_free(BufferID) override { ++freed_buffers; }
+			Vector<uint8_t> texture_get_data(TextureID, uint32_t) override {
+				Vector<uint8_t> out;
+				out.resize(4);
+				memcpy(out.ptrw(), tex_bytes, 4);
+				return out;
+			}
+		} driver;
+
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.is_main_instance = true;
+		device.main_queue = RenderingDeviceDriver::CommandQueueID(1);
+		device.present_queue = device.main_queue;
+		device.frames.resize(2);
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 2, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		for (uint32_t i = 0; i < 2; ++i) {
+			auto &f = device.frames[i];
+			f.command_pool = RenderingDeviceDriver::CommandPoolID(21 + i);
+			f.command_buffer = RenderingDeviceDriver::CommandBufferID(31 + i);
+			f.fence = RenderingDeviceDriver::FenceID(41 + i);
+			f.fence_signaled = false;
+			f.primary_command_buffer_begun = false;
+		}
+		device.frame = 1;
+		device.frames[1].fence_signaled = true;
+
+		RenderingDevice::Buffer src_buf;
+		src_buf.driver_id = RenderingDeviceDriver::BufferID(71);
+		src_buf.size = 4;
+		src_buf.usage = RenderingDeviceDriver::BUFFER_USAGE_VERTEX_BIT | RenderingDeviceDriver::BUFFER_USAGE_TRANSFER_FROM_BIT;
+		const RID buf_rid = device.vertex_buffer_owner.make_rid(src_buf);
+
+		RenderingDevice::Texture src_tex;
+		src_tex.driver_id = RenderingDeviceDriver::TextureID(81);
+		src_tex.width = 1;
+		src_tex.height = 1;
+		src_tex.depth = 1;
+		src_tex.layers = 1;
+		src_tex.mipmaps = 1;
+		src_tex.usage_flags = RenderingDevice::TEXTURE_USAGE_CAN_COPY_FROM_BIT | RenderingDevice::TEXTURE_USAGE_CPU_READ_BIT;
+		const RID tex_rid = device.texture_owner.make_rid(src_tex);
+
+		CapturedErrors errors;
+
+		// 1. Pending ordinary frame advance (post _native_disposal_maintenance ERR_BUSY)
+		//    must cleanly resume _begin_frame(true) and return real buffer & texture data with 0 errors.
+		device.qualification_frame_advance_pending = true;
+		ERR_PRINT_OFF;
+		const Vector<uint8_t> buf_data = device.buffer_get_data(buf_rid, 0, 4);
+		ERR_PRINT_ON;
+		CHECK(errors.count == 0);
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+		CHECK(device._recording_error() == OK);
+		CHECK(driver.copies == 1);
+		CHECK(driver.submissions == 1);
+		CHECK(driver.fence_waits == 2);
+		CHECK(driver.freed_buffers == 1);
+		REQUIRE(buf_data.size() == 4);
+		CHECK(buf_data[0] == 0x11);
+		CHECK(buf_data[1] == 0x22);
+		CHECK(buf_data[2] == 0x33);
+		CHECK(buf_data[3] == 0x44);
+
+		// Same resumption path for texture_get_data().
+		device.qualification_frame_advance_pending = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		const Vector<uint8_t> tex_data = device.texture_get_data(tex_rid, 0);
+		ERR_PRINT_ON;
+		CHECK(errors.count == 0);
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+		CHECK(device._recording_error() == OK);
+		REQUIRE(tex_data.size() == 4);
+		CHECK(tex_data[0] == 0x55);
+		CHECK(tex_data[1] == 0x66);
+		CHECK(tex_data[2] == 0x77);
+		CHECK(tex_data[3] == 0x88);
+
+		// 2. Transient non-fatal busy during _begin_frame(true) must emit an accurate
+		//    non-fence busy diagnostic (never "A frame fence wait failed").
+		driver.native_observation = true;
+		driver.native_ready = false;
+		RenderingDeviceDriver::QueueCallReport report;
+		RenderingDeviceDriver::NativeCallFact fact;
+		fact.serial = fact.completion_serial = 19;
+		report.calls.push_back(fact);
+		device.frames[1].chain_reports.clear();
+		device.frames[1].chain_reports.push_back(report);
+		device.qualification_frame_advance_pending = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		CHECK(device.buffer_get_data(buf_rid, 0, 4).is_empty());
+		CHECK(device.texture_get_data(tex_rid, 0).is_empty());
+		ERR_PRINT_ON;
+		CHECK(errors.count == 2);
+		CHECK_FALSE(errors.has_substring("frame fence wait failed"));
+		CHECK(errors.has_substring("temporarily busy"));
+		CHECK(device.qualification_frame_advance_pending);
+		CHECK(device.frame_wait_error == OK);
+		CHECK(device.frame_issue_error == OK);
+		CHECK_FALSE(device.frame_wait_native_code_valid);
+
+		// Transient production-owned native_disposal_active busy before _begin_frame(true).
+		driver.native_observation = false;
+		device.frames[1].chain_reports.clear();
+		device.qualification_frame_advance_pending = false;
+		device.native_disposal_active = true;
+		device.native_disposal_continuation = {};
+		device.native_disposal_continuation.production_owner = reinterpret_cast<const GDExtensionDeviceExit::ProductionRequest *>(uintptr_t(0x1));
+		const uint32_t resets_before_disposal = driver.resets;
+		errors.reset();
+		ERR_PRINT_OFF;
+		CHECK(device.buffer_get_data(buf_rid, 0, 4).is_empty());
+		ERR_PRINT_ON;
+		CHECK(driver.resets == resets_before_disposal);
+		CHECK(errors.count == 1);
+		CHECK_FALSE(errors.has_substring("frame fence wait failed"));
+		CHECK(errors.has_substring("temporarily busy"));
+		device.native_disposal_continuation = {};
+		device.native_disposal_active = false;
+
+		// 3a. Pre-existing genuine fence wait failure must STILL fail closed with the fence error
+		//     without attempting _begin_frame(true).
+		device.qualification_frame_advance_pending = true;
+		device.frame_wait_error = ERR_TIMEOUT;
+		const uint32_t resets_before_fatal = driver.resets;
+		errors.reset();
+		ERR_PRINT_OFF;
+		CHECK(device.buffer_get_data(buf_rid, 0, 4).is_empty());
+		CHECK(device.texture_get_data(tex_rid, 0).is_empty());
+		ERR_PRINT_ON;
+		CHECK(driver.resets == resets_before_fatal);
+		CHECK(errors.count == 2);
+		CHECK(errors.has_substring("A frame fence wait failed; readback recording is suspended."));
+		CHECK(device.qualification_frame_advance_pending);
+
+		// 3b. Genuine fence wait failure occurring DURING _begin_frame(true) must STILL fail closed
+		//     with the fence error and record frame_wait_error.
+		device.frame_wait_error = OK;
+		device.frame_wait_native_code_valid = false;
+		device.frames[1].fence_signaled = true;
+		driver.fence_wait_result = ERR_TIMEOUT;
+		errors.reset();
+		ERR_PRINT_OFF;
+		CHECK(device.buffer_get_data(buf_rid, 0, 4).is_empty());
+		ERR_PRINT_ON;
+		CHECK(errors.count == 1);
+		CHECK(errors.has_substring("A frame fence wait failed; readback recording is suspended."));
+		CHECK(device.frame_wait_error == ERR_TIMEOUT);
+		CHECK(device.qualification_frame_advance_pending);
+
+		// Teardown: clean up mock RIDs and detach fake driver.
+		device.vertex_buffer_owner.free(buf_rid);
+		device.texture_owner.free(tex_rid);
+		device.frames.clear();
+		device.main_queue = RenderingDeviceDriver::CommandQueueID();
+		device.present_queue = RenderingDeviceDriver::CommandQueueID();
+		device.driver = nullptr;
+	}
+	static void synchronous_readback_bug110_gaps() {
+		struct CapturedErrors {
+			uint32_t count = 0;
+			Vector<String> messages;
+			static void capture(void *p_data, const char *, const char *, int, const char *p_error, const char *p_rationale, bool, ErrorHandlerType p_type) {
+				if (p_type == ERR_HANDLER_ERROR) {
+					auto *self = static_cast<CapturedErrors *>(p_data);
+					++self->count;
+					String msg;
+					if (p_error && *p_error) {
+						msg += String::utf8(p_error);
+					}
+					if (p_rationale && *p_rationale) {
+						if (!msg.is_empty()) {
+							msg += " ";
+						}
+						msg += String::utf8(p_rationale);
+					}
+					self->messages.push_back(msg);
+				}
+			}
+			ErrorHandlerList handler{ &CapturedErrors::capture, this };
+			CapturedErrors() { add_error_handler(&handler); }
+			~CapturedErrors() { remove_error_handler(&handler); }
+			void reset() {
+				count = 0;
+				messages.clear();
+			}
+			bool has_substring(const String &p_sub) const {
+				for (const String &m : messages) {
+					if (m.contains(p_sub)) {
+						return true;
+					}
+				}
+				return false;
+			}
+		};
+
+		struct Bug110Driver : TransferTestDriverBase {
+			bool native_observation = false;
+			Error end_segment_result = OK;
+			uint32_t end_segment_calls = 0;
+			uint32_t fence_waits = 0;
+			uint32_t resets = 0;
+			uint32_t begins = 0;
+			uint32_t copies = 0;
+			uint32_t submissions = 0;
+			uint32_t freed_buffers = 0;
+			uint8_t staging_bytes[4] = { 0xA1, 0xB2, 0xC3, 0xD4 };
+			uint8_t tex_bytes[4] = { 0x1A, 0x2B, 0x3C, 0x4D };
+
+			bool native_call_observation_supported() const override { return native_observation; }
+			bool native_issue_bound(NativeIssueKind, uint32_t, uint32_t &r_bound) const override {
+				r_bound = 1;
+				return true;
+			}
+			Error fence_wait(FenceID) override {
+				++fence_waits;
+				return OK;
+			}
+			bool command_pool_reset(CommandPoolID) override {
+				++resets;
+				return true;
+			}
+			bool command_buffer_begin(CommandBufferID) override { return true; }
+			void begin_segment(uint32_t, uint32_t) override { ++begins; }
+			void command_buffer_end(CommandBufferID) override {}
+			void end_segment() override {}
+			Error end_segment_checked(bool) override {
+				++end_segment_calls;
+				return end_segment_result;
+			}
+			void command_pipeline_barrier(CommandBufferID, BitField<PipelineStageBits>, BitField<PipelineStageBits>, VectorView<MemoryAccessBarrier>, VectorView<BufferBarrier>, VectorView<TextureBarrier>, VectorView<AccelerationStructureBarrier>) override {}
+			void command_copy_buffer(CommandBufferID, BufferID, BufferID, VectorView<BufferCopyRegion>) override { ++copies; }
+			Error command_queue_execute_and_present(CommandQueueID, VectorView<SemaphoreID>, VectorView<CommandBufferID>, VectorView<SemaphoreID>, FenceID, VectorView<SwapChainID>) override {
+				++submissions;
+				QueueCallReport report;
+				report.issued = true;
+				record_queue_call_report(report);
+				return OK;
+			}
+			BufferID buffer_create(uint64_t, BitField<BufferUsageBits>, MemoryAllocationType, uint64_t) override { return BufferID(95); }
+			uint64_t buffer_get_allocation_size(BufferID) override { return 16; }
+			uint8_t *buffer_map(BufferID) override { return staging_bytes; }
+			void buffer_unmap(BufferID) override {}
+			void buffer_free(BufferID) override { ++freed_buffers; }
+			bool has_feature(Features) override { return false; }
+			uint64_t limit_get(Limit) override { return 1024; }
+			Vector<uint8_t> texture_get_data(TextureID, uint32_t) override {
+				Vector<uint8_t> out;
+				out.resize(4);
+				memcpy(out.ptrw(), tex_bytes, 4);
+				return out;
+			}
+		} driver;
+
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.is_main_instance = true;
+		device.main_queue = RenderingDeviceDriver::CommandQueueID(1);
+		device.present_queue = device.main_queue;
+		device.frames.resize(2);
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 2, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		for (uint32_t i = 0; i < 2; ++i) {
+			auto &f = device.frames[i];
+			f.command_pool = RenderingDeviceDriver::CommandPoolID(21 + i);
+			f.command_buffer = RenderingDeviceDriver::CommandBufferID(31 + i);
+			f.fence = RenderingDeviceDriver::FenceID(41 + i);
+			f.fence_signaled = false;
+			f.primary_command_buffer_begun = false;
+		}
+
+		RenderingDevice::Buffer src_buf;
+		src_buf.driver_id = RenderingDeviceDriver::BufferID(71);
+		src_buf.size = 4;
+		src_buf.usage = RenderingDeviceDriver::BUFFER_USAGE_VERTEX_BIT | RenderingDeviceDriver::BUFFER_USAGE_TRANSFER_FROM_BIT;
+		const RID buf_rid = device.vertex_buffer_owner.make_rid(src_buf);
+
+		RenderingDevice::Texture src_tex;
+		src_tex.driver_id = RenderingDeviceDriver::TextureID(81);
+		src_tex.width = 1;
+		src_tex.height = 1;
+		src_tex.depth = 1;
+		src_tex.layers = 1;
+		src_tex.mipmaps = 1;
+		src_tex.usage_flags = RenderingDevice::TEXTURE_USAGE_CAN_COPY_FROM_BIT | RenderingDevice::TEXTURE_USAGE_CPU_READ_BIT;
+		const RID tex_rid = device.texture_owner.make_rid(src_tex);
+
+		CapturedErrors errors;
+
+		// Gap 1: Ordinary (non-production, non-selected) native_disposal_active continuation
+		// must be completed by _prepare_synchronous_readback() so buffer_get_data() succeeds.
+		device.frame = 1;
+		device.frames[1].fence_signaled = false;
+		device.qualification_frame_advance_pending = true;
+		device.native_disposal_continuation = {};
+		device.native_disposal_continuation.serial = 1;
+		device.native_disposal_continuation.phase = 4;
+		device.native_disposal_continuation.target = 1;
+		device.native_disposal_active = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		const Vector<uint8_t> gap1_data = device.buffer_get_data(buf_rid, 0, 4);
+		ERR_PRINT_ON;
+		CHECK(errors.count == 0);
+		CHECK_FALSE(device.native_disposal_active);
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+		CHECK(device._recording_error() == OK);
+		REQUIRE(gap1_data.size() == 4);
+		CHECK(gap1_data[0] == 0xA1);
+		CHECK(gap1_data[1] == 0xB2);
+		CHECK(gap1_data[2] == 0xC3);
+		CHECK(gap1_data[3] == 0xD4);
+
+		// Gap 2a: Closed qualification graph without qualification_frame_advance_pending
+		// must synchronously finish (_end_frame(false) -> _execute_frame(false) -> rotate -> _begin_frame(true)).
+		device.frame = 0;
+		device.frames[0].primary_command_buffer_begun = true;
+		device.frames[0].fence_signaled = false;
+		device.frames[0].qualification_graph_closed = true;
+		device.frames[0].qualification_segment_closed = false;
+		device.frames[1].fence_signaled = true;
+		device.qualification_frame_advance_pending = false;
+		device.native_disposal_active = false;
+		const uint32_t end_seg_before = driver.end_segment_calls;
+		const uint32_t sub_before = driver.submissions;
+		errors.reset();
+		ERR_PRINT_OFF;
+		const Vector<uint8_t> gap2_buf = device.buffer_get_data(buf_rid, 0, 4);
+		ERR_PRINT_ON;
+		CHECK(errors.count == 0);
+		CHECK(device.frame == 1);
+		CHECK_FALSE(device.frames[1].qualification_graph_closed);
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+		CHECK(device._recording_error() == OK);
+		CHECK(driver.end_segment_calls > end_seg_before);
+		CHECK(driver.submissions >= sub_before + 2); // 1 for closed frame 0 + 1 for readback flush
+		REQUIRE(gap2_buf.size() == 4);
+		CHECK(gap2_buf[0] == 0xA1);
+		CHECK(gap2_buf[3] == 0xD4);
+
+		// Gap 2b: Same closed-graph resumption for texture_get_data().
+		device.frames[1].primary_command_buffer_begun = true;
+		device.frames[1].fence_signaled = false;
+		device.frames[1].qualification_graph_closed = true;
+		device.frames[1].qualification_segment_closed = false;
+		device.frames[0].fence_signaled = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		const Vector<uint8_t> gap2_tex = device.texture_get_data(tex_rid, 0);
+		ERR_PRINT_ON;
+		CHECK(errors.count == 0);
+		CHECK(device.frame == 0);
+		CHECK_FALSE(device.frames[0].qualification_graph_closed);
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+		REQUIRE(gap2_tex.size() == 4);
+		CHECK(gap2_tex[0] == 0x1A);
+		CHECK(gap2_tex[3] == 0x4D);
+
+		// Gap 2c: Transient ERR_BUSY from end_segment_checked() during closed-graph flush
+		// fails closed with non-fence busy diagnostic and preserves frame + closed state.
+		device.frames[0].primary_command_buffer_begun = true;
+		device.frames[0].fence_signaled = false;
+		device.frames[0].qualification_graph_closed = true;
+		device.frames[0].qualification_segment_closed = false;
+		driver.end_segment_result = ERR_BUSY;
+		errors.reset();
+		ERR_PRINT_OFF;
+		CHECK(device.buffer_get_data(buf_rid, 0, 4).is_empty());
+		ERR_PRINT_ON;
+		CHECK(errors.count == 1);
+		CHECK_FALSE(errors.has_substring("frame fence wait failed"));
+		CHECK(errors.has_substring("temporarily busy"));
+		CHECK(device.frame == 0);
+		CHECK(device.frames[0].qualification_graph_closed);
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+		driver.end_segment_result = OK;
+		device.frames[0].qualification_graph_closed = false;
+
+		// Non-theft invariants: production-owned, scene-selected, and height-selected
+		// native_disposal_active continuations MUST remain fail-closed without stealing!
+		// Prepare real witness & height range via RD's own factories while idle.
+		RID tmp_witness_storage;
+		NativeDisposalWitness scene_witness;
+		REQUIRE(device._native_disposal_storage_create(16, {}, tmp_witness_storage, scene_witness) == OK);
+		Ref<NativeHeightRange> height_range;
+		driver.native_observation = true;
+		REQUIRE(device._native_height_range_prepare(height_range) == OK);
+		driver.native_observation = false;
+		REQUIRE(height_range.is_valid());
+
+		const uint32_t resets_before_owned = driver.resets;
+		// (a) Production-owned continuation
+		device.native_disposal_continuation = {};
+		device.native_disposal_continuation.serial = 2;
+		device.native_disposal_continuation.phase = 4;
+		device.native_disposal_continuation.target = 0;
+		device.native_disposal_continuation.production_owner = reinterpret_cast<const GDExtensionDeviceExit::ProductionRequest *>(uintptr_t(0x1));
+		device.native_disposal_active = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		CHECK(device.buffer_get_data(buf_rid, 0, 4).is_empty());
+		CHECK(device.texture_get_data(tex_rid, 0).is_empty());
+		ERR_PRINT_ON;
+		CHECK(device.native_disposal_active);
+		CHECK(driver.resets == resets_before_owned);
+		CHECK(errors.count == 2);
+		CHECK_FALSE(errors.has_substring("frame fence wait failed"));
+		CHECK(errors.has_substring("temporarily busy"));
+
+		// (b) Scene-selected continuation
+		device.native_disposal_continuation = {};
+		device.native_disposal_continuation.serial = 3;
+		device.native_disposal_continuation.phase = 4;
+		device.native_disposal_continuation.target = 0;
+		device.native_disposal_continuation.scene_selection = scene_witness;
+		device.native_disposal_active = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		CHECK(device.buffer_get_data(buf_rid, 0, 4).is_empty());
+		ERR_PRINT_ON;
+		CHECK(device.native_disposal_active);
+		CHECK(driver.resets == resets_before_owned);
+		CHECK(errors.count == 1);
+		CHECK_FALSE(errors.has_substring("frame fence wait failed"));
+		CHECK(errors.has_substring("temporarily busy"));
+
+		// (c) Height-selected continuation
+		device.native_disposal_continuation = {};
+		device.native_disposal_continuation.serial = 4;
+		device.native_disposal_continuation.phase = 4;
+		device.native_disposal_continuation.target = 0;
+		device.native_disposal_continuation.height_selection = height_range;
+		device.native_disposal_active = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		CHECK(device.buffer_get_data(buf_rid, 0, 4).is_empty());
+		ERR_PRINT_ON;
+		CHECK(device.native_disposal_active);
+		CHECK(driver.resets == resets_before_owned);
+		CHECK(errors.count == 1);
+		CHECK_FALSE(errors.has_substring("frame fence wait failed"));
+		CHECK(errors.has_substring("temporarily busy"));
+
+		// Teardown
+		device.native_disposal_continuation = {};
+		device.native_disposal_active = false;
+		device.native_height_ranges.clear();
+		device.storage_buffer_owner.free(tmp_witness_storage);
+		device.vertex_buffer_owner.free(buf_rid);
+		device.texture_owner.free(tex_rid);
+		device.frames.clear();
+		device.main_queue = RenderingDeviceDriver::CommandQueueID();
+		device.present_queue = RenderingDeviceDriver::CommandQueueID();
+		device.driver = nullptr;
+	}
+	static void bug115_blocking_stall_and_resource_creation() {
+		struct CapturedErrors {
+			uint32_t count = 0;
+			Vector<String> messages;
+			static void capture(void *p_data, const char *, const char *, int, const char *p_error, const char *p_rationale, bool, ErrorHandlerType p_type) {
+				if (p_type == ERR_HANDLER_ERROR) {
+					auto *self = static_cast<CapturedErrors *>(p_data);
+					++self->count;
+					String msg;
+					if (p_error && *p_error) {
+						msg += String::utf8(p_error);
+					}
+					if (p_rationale && *p_rationale) {
+						if (!msg.is_empty()) {
+							msg += " ";
+						}
+						msg += String::utf8(p_rationale);
+					}
+					self->messages.push_back(msg);
+				}
+			}
+			ErrorHandlerList handler{ &CapturedErrors::capture, this };
+			CapturedErrors() { add_error_handler(&handler); }
+			~CapturedErrors() { remove_error_handler(&handler); }
+			void reset() {
+				count = 0;
+				messages.clear();
+			}
+			bool has_substring(const String &p_sub) const {
+				for (const String &m : messages) {
+					if (m.contains(p_sub)) {
+						return true;
+					}
+				}
+				return false;
+			}
+		};
+
+		struct Bug115Driver : TransferTestDriverBase {
+			bool hidden_completed = false;
+			bool ticket_completed = false;
+			uint32_t wait_calls = 0;
+			uint32_t hidden_waits = 0;
+			uint32_t ticket_waits = 0;
+			uint32_t hidden_releases = 0;
+			uint32_t fence_waits = 0;
+			uint32_t resets = 0;
+			uint32_t begins = 0;
+			uint64_t next_buf_id = 500;
+			uint32_t freed_buffers = 0;
+
+			bool native_call_observation_supported() const override { return true; }
+			Error native_call_retain(uint64_t) override { return OK; }
+			Error native_call_release(uint64_t serial) override {
+				if (serial == 701) {
+					++hidden_releases;
+				}
+				return OK;
+			}
+			FencePollResult native_call_poll(uint64_t serial) override {
+				FencePollResult out;
+				out.completed_serial = serial;
+				if ((serial == 701 && hidden_completed) || (serial == 702 && ticket_completed)) {
+					out.completed = true;
+					out.resolved_issue = IssueFact::KnownAccepted;
+				}
+				return out;
+			}
+			FencePollResult native_call_wait(uint64_t serial) override {
+				++wait_calls;
+				FencePollResult out;
+				out.completed_serial = serial;
+				if (serial == 701) {
+					++hidden_waits;
+					hidden_completed = true;
+					out.completed = true;
+					out.resolved_issue = IssueFact::KnownAccepted;
+				} else if (serial == 702) {
+					++ticket_waits;
+					ticket_completed = true;
+					out.completed = true;
+					out.resolved_issue = IssueFact::KnownAccepted;
+				}
+				return out;
+			}
+			Error native_call_recycle_wait(uint64_t) override { return OK; }
+			Error fence_wait(FenceID) override {
+				++fence_waits;
+				return OK;
+			}
+			bool command_pool_reset(CommandPoolID) override {
+				++resets;
+				return true;
+			}
+			bool command_buffer_begin(CommandBufferID) override { return true; }
+			void begin_segment(uint32_t, uint32_t) override { ++begins; }
+			void command_buffer_end(CommandBufferID) override {}
+			void end_segment() override {}
+			BufferID buffer_create(uint64_t, BitField<BufferUsageBits>, MemoryAllocationType, uint64_t) override {
+				return BufferID(next_buf_id++);
+			}
+			uint64_t buffer_get_allocation_size(BufferID) override { return 16; }
+			void buffer_free(BufferID) override { ++freed_buffers; }
+			bool has_feature(Features) override { return false; }
+			uint64_t limit_get(Limit) override { return 1024; }
+		} driver;
+
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.is_main_instance = true;
+		device.main_queue = RenderingDeviceDriver::CommandQueueID(1);
+		device.present_queue = device.main_queue;
+		device.frames.resize(2);
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 2, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		for (uint32_t i = 0; i < 2; ++i) {
+			auto &f = device.frames[i];
+			f.command_pool = RenderingDeviceDriver::CommandPoolID(21 + i);
+			f.command_buffer = RenderingDeviceDriver::CommandBufferID(31 + i);
+			f.fence = RenderingDeviceDriver::FenceID(41 + i);
+			f.fence_signaled = false;
+			f.primary_command_buffer_begun = false;
+		}
+		device.frame = 1;
+		device.frames[1].fence_signaled = true;
+
+		// Attach BOTH an in-flight hidden copy-queue report (serial 701) AND an in-flight
+		// qualification ticket native member (serial 702).
+		RenderingDeviceDriver::QueueCallReport hidden_report;
+		RenderingDeviceDriver::NativeCallFact hidden_call;
+		hidden_call.serial = hidden_call.completion_serial = 701;
+		hidden_call.frame_observer_owned = true;
+		hidden_report.calls.push_back(hidden_call);
+		device.frames[1].qualification_hidden_reports.push_back(hidden_report);
+
+		GDExtensionDeviceExit::QualificationTicket ticket;
+		ticket.report.revision = 1;
+		ticket.frame_refs = 1;
+		GDExtensionDeviceExit::NativeSourceMember ticket_member;
+		ticket_member.source.serial = ticket_member.source.completion_serial = 702;
+		ticket_member.source.queue_index = 1;
+		ticket_member.source.issue = RenderingDeviceDriver::IssueFact::KnownAccepted;
+		ticket_member.source.completion = RenderingDeviceDriver::CompletionCapability::Fence;
+		ticket_member.fact = 0;
+		ticket.natives.push_back(ticket_member);
+		ticket.facts.push_back({});
+		device.frames[1].qualification_tickets.push_back(&ticket);
+
+		// Part (a.1): Non-blocking poll must STILL return ERR_BUSY without calling native_call_wait().
+		CHECK(device._qualification_poll_tickets(1, true) == ERR_BUSY);
+		CHECK(driver.wait_calls == 0);
+		CHECK_FALSE(driver.hidden_completed);
+		CHECK_FALSE(driver.ticket_completed);
+
+		// Part (a.2): Blocking _begin_frame(true) must wait on hidden reports (701) AND
+		// ticket native members (702) + fence_wait, succeeding without spurious ERR_BUSY!
+		device.qualification_frame_advance_pending = true;
+		CapturedErrors errors;
+		ERR_PRINT_OFF;
+		CHECK(device._begin_frame(true) == OK);
+		ERR_PRINT_ON;
+		CHECK(errors.count == 0);
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+		CHECK(driver.hidden_completed);
+		CHECK(driver.ticket_completed);
+		CHECK(driver.hidden_waits >= 1);
+		CHECK(driver.ticket_waits == 1);
+		CHECK(driver.hidden_releases == 1);
+		CHECK(driver.fence_waits == 1);
+		CHECK(ticket.facts[0].completion == 2); // Complete
+		CHECK(device.frames[1].qualification_hidden_reports.is_empty());
+		CHECK(device.frames[1].qualification_tickets.is_empty());
+
+		// Part (c.1): Resource creation (vertex, index, storage, uniform buffers) cleanly
+		// resumes a pending ordinary frame advance via _ensure_recording_ready().
+		device.qualification_frame_advance_pending = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		const RID vb = device.vertex_buffer_create(16);
+		ERR_PRINT_ON;
+		CHECK(errors.count == 0);
+		CHECK(vb.is_valid());
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+
+		device.qualification_frame_advance_pending = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		const RID ib = device.index_buffer_create(4, RenderingDevice::INDEX_BUFFER_FORMAT_UINT32);
+		ERR_PRINT_ON;
+		CHECK(errors.count == 0);
+		CHECK(ib.is_valid());
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+
+		device.qualification_frame_advance_pending = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		const RID sb = device.storage_buffer_create(16);
+		ERR_PRINT_ON;
+		CHECK(errors.count == 0);
+		CHECK(sb.is_valid());
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+
+		device.qualification_frame_advance_pending = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		const RID ub = device.uniform_buffer_create(16);
+		ERR_PRINT_ON;
+		CHECK(errors.count == 0);
+		CHECK(ub.is_valid());
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+
+		// Part (c.2): Fail-closed invariants preserved on genuine fence error,
+		// readback callback draining, and production-owned disposal continuation!
+		const uint32_t resets_before_fail_closed = driver.resets;
+		device.frame_wait_error = ERR_TIMEOUT;
+		errors.reset();
+		ERR_PRINT_OFF;
+		CHECK_FALSE(device.vertex_buffer_create(16).is_valid());
+		ERR_PRINT_ON;
+		CHECK(driver.resets == resets_before_fail_closed);
+		CHECK(errors.count == 1);
+		CHECK(errors.has_substring("Resource recording is suspended during frame fence recovery or readback callbacks."));
+		device.frame_wait_error = OK;
+
+		device.frame_wait_draining = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		CHECK_FALSE(device.storage_buffer_create(16).is_valid());
+		ERR_PRINT_ON;
+		CHECK(driver.resets == resets_before_fail_closed);
+		CHECK(errors.count == 1);
+		CHECK(errors.has_substring("Resource recording is suspended during frame fence recovery or readback callbacks."));
+		device.frame_wait_draining = false;
+
+		device.native_disposal_continuation = {};
+		device.native_disposal_continuation.production_owner = reinterpret_cast<const GDExtensionDeviceExit::ProductionRequest *>(uintptr_t(0x1));
+		device.native_disposal_active = true;
+		errors.reset();
+		ERR_PRINT_OFF;
+		CHECK_FALSE(device.uniform_buffer_create(16).is_valid());
+		ERR_PRINT_ON;
+		CHECK(device.native_disposal_active);
+		CHECK(driver.resets == resets_before_fail_closed);
+		CHECK(errors.count == 1);
+		CHECK(errors.has_substring("Resource recording is suspended during frame fence recovery or readback callbacks."));
+		device.native_disposal_continuation = {};
+		device.native_disposal_active = false;
+
+		// Teardown
+		device.vertex_buffer_owner.free(vb);
+		device.index_buffer_owner.free(ib);
+		device.storage_buffer_owner.free(sb);
+		device.uniform_buffer_owner.free(ub);
+		device.frames.clear();
+		device.main_queue = RenderingDeviceDriver::CommandQueueID();
+		device.present_queue = RenderingDeviceDriver::CommandQueueID();
+		device.driver = nullptr;
+	}
+	static void bug118_transfer_worker_hidden_report_retains_observer() {
+		struct Bug118Driver : TransferTestDriverBase {
+			uint32_t observers_801 = 0;
+			bool retired_801 = false;
+			bool alive_801 = true;
+			bool fail_retain_802 = false;
+			bool retain_saw_blocking = false;
+			bool release_saw_blocking = false;
+			bool wait_saw_blocking = false;
+			uint32_t fence_waits = 0;
+
+			bool native_call_observation_supported() const override { return true; }
+			Error native_call_retain(uint64_t serial) override {
+				if (serial == 801) {
+					if (!alive_801) {
+						return ERR_DOES_NOT_EXIST;
+					}
+					retain_saw_blocking = retain_saw_blocking || native_call_blocking_allowed();
+					++observers_801;
+					return OK;
+				}
+				if (serial == 802 && fail_retain_802) {
+					return ERR_BUSY;
+				}
+				return OK;
+			}
+			Error native_call_release(uint64_t serial) override {
+				if (serial == 801) {
+					if (!alive_801 || observers_801 == 0) {
+						return ERR_DOES_NOT_EXIST;
+					}
+					release_saw_blocking = release_saw_blocking || native_call_blocking_allowed();
+					--observers_801;
+					if (observers_801 == 0 && retired_801) {
+						alive_801 = false;
+					}
+					return OK;
+				}
+				return OK;
+			}
+			FencePollResult native_call_poll(uint64_t serial) override {
+				FencePollResult out;
+				if (serial == 801 && alive_801) {
+					out.completed = true;
+					out.completed_serial = 801;
+					out.resolved_issue = IssueFact::KnownAccepted;
+				}
+				return out;
+			}
+			FencePollResult native_call_wait(uint64_t serial) override {
+				wait_saw_blocking = wait_saw_blocking || native_call_blocking_allowed();
+				return native_call_poll(serial);
+			}
+			Error native_call_recycle_wait(uint64_t) override { return OK; }
+			Error fence_recycle(FenceID, uint64_t) override {
+				// Mirrors Metal's retire_completion_records(): erases record immediately if observers == 0!
+				retired_801 = true;
+				if (observers_801 == 0) {
+					alive_801 = false;
+				}
+				return OK;
+			}
+			Error fence_wait(FenceID) override {
+				++fence_waits;
+				return OK;
+			}
+		} driver;
+
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.is_main_instance = true;
+		device.frames.resize(1);
+		device.frames[0].command_buffer = RenderingDeviceDriver::CommandBufferID(31);
+		device.frames[0].fence = RenderingDeviceDriver::FenceID(41);
+		device.frames[0].fence_signaled = true;
+		device.frames[0].qualification_epoch = 1;
+		device.frames[0].transfer_worker_semaphores.push_back(RenderingDeviceDriver::SemaphoreID(51));
+
+		RenderingDevice::TransferWorker worker;
+		worker.index = 0;
+		worker.submitted = true;
+		worker.recording = false;
+		worker.submission_pending = false;
+		worker.operations_processed = 0;
+		worker.operations_submitted = 1;
+		worker.operations_counter = 1;
+		worker.command_fence = RenderingDeviceDriver::FenceID(901);
+
+		RenderingDeviceDriver::NativeCallFact call_801;
+		call_801.serial = call_801.completion_serial = 801;
+		call_801.queue_index = 3;
+		call_801.issue = RenderingDeviceDriver::IssueFact::KnownAccepted;
+		call_801.completion = RenderingDeviceDriver::CompletionCapability::Fence;
+		call_801.frame_observer_owned = false;
+
+		RenderingDeviceDriver::NativeCallFact call_802 = call_801;
+		call_802.serial = call_802.completion_serial = 802;
+
+		worker.last_submission.submission_serial = 55;
+		worker.last_submission.issued = true;
+		worker.last_submission.calls.push_back(call_801);
+		worker.last_submission.calls.push_back(call_802);
+
+		device.transfer_worker_pool.push_back(&worker);
+		device.transfer_worker_pool_size = 1;
+		device.transfer_worker_operation_used_by_draw.push_back(1);
+
+		GDExtensionDeviceExit::QualificationTicket ticket;
+		REQUIRE(ticket.credits.initialize(8, 1, 1, 1, 2) == OK);
+		ticket.report.revision = 1;
+		ticket.frame_refs = 1;
+		device.frames[0].qualification_tickets.push_back(&ticket);
+
+		// 1. Rollback safety: if retaining the second call fails with ERR_BUSY,
+		//    the first call's frame observer is cleanly released and qualification_hidden_reports stays empty.
+		driver.fail_retain_802 = true;
+		CHECK(device._submit_transfer_workers(device.frames[0].command_buffer, true) == ERR_BUSY);
+		CHECK(driver.observers_801 == 0);
+		CHECK(device.frames[0].qualification_hidden_reports.is_empty());
+
+		// 2. Primary BUG-118 fix: retaining worker->last_submission sets frame_observer_owned = true
+		//    and keeps CompletionRecord alive across worker fence_recycle() until Frame 0 retires!
+		driver.fail_retain_802 = false;
+		worker.last_submission.calls.resize(1); // Keep only call_801
+		REQUIRE(device._submit_transfer_workers(device.frames[0].command_buffer, true) == OK);
+		CHECK(driver.retain_saw_blocking);
+		REQUIRE(device.frames[0].qualification_hidden_reports.size() == 1);
+		CHECK(device.frames[0].qualification_hidden_reports[0].calls[0].frame_observer_owned);
+		CHECK_FALSE(worker.last_submission.calls[0].frame_observer_owned); // Original worker report not mutated.
+		// Frame observer + ticket observer both retained 801.
+		CHECK(driver.observers_801 >= 1);
+
+		// Simulate ticket finishing its own release while Frame 0 still owns its hidden report observer.
+		for (auto &member : ticket.natives) {
+			if (member.retained && !member.owner_released) {
+				REQUIRE(driver.native_call_release(member.source.serial) == OK);
+				member.owner_released = true;
+			}
+		}
+		CHECK(driver.observers_801 == 1); // Frame 0's frame_observer_owned still holds 801!
+
+		// Next frame's _wait_for_transfer_worker recycles worker->fence (Metal retire_completion_records).
+		// With BUG-118 fixed, observers_801 == 1 keeps alive_801 == true!
+		REQUIRE(driver.fence_recycle(worker.command_fence, 55) == OK);
+		CHECK(driver.retired_801);
+		CHECK(driver.alive_801);
+
+		// Frame 0 rotates back around and runs blocking _stall_for_frame(0, false):
+		// Must complete with OK (not permanent ERR_BUSY!) and release 801 so CompletionRecord frees cleanly!
+		driver.release_saw_blocking = false;
+		driver.wait_saw_blocking = false;
+		CHECK(device._stall_for_frame(0, false) == OK);
+		CHECK(driver.wait_saw_blocking);
+		CHECK(driver.release_saw_blocking);
+		CHECK(device.frames[0].qualification_hidden_reports.is_empty());
+		CHECK(driver.observers_801 == 0);
+		CHECK_FALSE(driver.alive_801); // Cleanly deleted on frame observer release (zero leak!).
+		CHECK(driver.fence_waits == 1);
+
+		// Teardown
+		device.frames[0].qualification_tickets.clear();
+		device.transfer_worker_pool.clear();
+		device.transfer_worker_pool_size = 0;
+		device.transfer_worker_operation_used_by_draw.clear();
+		device.frames.clear();
+		device.driver = nullptr;
+	}
+	static void bug119a_draw_list_end_blocks_on_thread_safe() {
+		TransferTestDriverBase driver;
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.is_main_instance = true;
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		device.draw_graph.begin(true);
+		device.draw_list.active = true;
+		device.production_output_list_head_owner = reinterpret_cast<::RendererRD::ExternalOutputOwner *>(uintptr_t(0x1));
+		device.production_output_list_head_read = UINT32_MAX;
+		device.production_output_list_reads = 0;
+
+		struct LockHolder {
+			RenderingDevice *device = nullptr;
+			std::atomic<bool> acquired{ false };
+			std::atomic<bool> released{ false };
+		} holder;
+		holder.device = &device;
+
+		Thread worker;
+		worker.start(
+				[](void *p_userdata) {
+					auto *h = static_cast<LockHolder *>(p_userdata);
+					h->device->_thread_safe_.lock();
+					h->acquired.store(true, std::memory_order_release);
+					OS::get_singleton()->delay_usec(8000);
+					h->released.store(true, std::memory_order_release);
+					h->device->_thread_safe_.unlock();
+				},
+				&holder);
+
+		while (!holder.acquired.load(std::memory_order_acquire)) {
+			OS::get_singleton()->delay_usec(50);
+		}
+		// Non-blocking path (used by particles_storage_external.cpp) still refuses cleanly when contended.
+		CHECK(device._production_output_reads_close(false) == ERR_UNAVAILABLE);
+		CHECK(device.draw_list.active);
+		CHECK(device.production_output_list_head_owner != nullptr);
+
+		// Blocking draw_list_end() must wait for _thread_safe_ and close the draw list cleanly.
+		ERR_PRINT_OFF;
+		device.draw_list_end();
+		ERR_PRINT_ON;
+		CHECK(holder.released.load(std::memory_order_acquire));
+		CHECK_FALSE(device.draw_list.active);
+		CHECK(device.production_output_list_head_owner == nullptr);
+
+		worker.wait_to_finish();
+		device.draw_graph.finalize();
+		device.driver = nullptr;
+	}
+	static void bug119b_unknown_ticket_known_hidden_and_unsubmitted_worker() {
+		struct Bug119BDriver final : TransferTestDriverBase {
+			uint32_t observers_901 = 0;
+			bool return_unknown_serial = true;
+			bool native_call_observation_supported() const override { return true; }
+			Error native_call_retain(uint64_t p_serial) override {
+				if (p_serial == 901) {
+					++observers_901;
+					return OK;
+				}
+				return ERR_DOES_NOT_EXIST;
+			}
+			Error native_call_release(uint64_t p_serial) override {
+				if (p_serial == 901 && observers_901 > 0) {
+					--observers_901;
+					return OK;
+				}
+				return ERR_DOES_NOT_EXIST;
+			}
+			FencePollResult native_call_poll(uint64_t p_serial) override {
+				if (p_serial == 901) {
+					FencePollResult out;
+					out.completed = true;
+					out.completed_serial = 901;
+					out.resolved_issue = IssueFact::KnownAccepted;
+					return out;
+				}
+				if (return_unknown_serial && p_serial == 999) {
+					FencePollResult out;
+					out.completed = true;
+					out.completed_serial = 999;
+					out.resolved_issue = IssueFact::IssuedUnknown; // Unrefined IssuedUnknown -> poll_native_source returns OK + State::Unknown!
+					return out;
+				}
+				return {};
+			}
+			FencePollResult native_call_wait(uint64_t p_serial) override {
+				return native_call_poll(p_serial);
+			}
+		} driver;
+
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.is_main_instance = true;
+		device.frames.resize(1);
+		device.frames[0].command_buffer = RenderingDeviceDriver::CommandBufferID(31);
+		device.frames[0].fence = RenderingDeviceDriver::FenceID(41);
+		device.frames[0].qualification_epoch = 1;
+		device.frames[0].transfer_worker_semaphores.push_back(RenderingDeviceDriver::SemaphoreID(51));
+
+		// 1. State::Unknown in blocking _qualification_poll_tickets must return FAILED (not infinite ERR_BUSY).
+		GDExtensionDeviceExit::QualificationTicket unknown_ticket;
+		REQUIRE(unknown_ticket.credits.initialize(8, 1, 1, 1, 2) == OK);
+		unknown_ticket.report.revision = 1;
+		unknown_ticket.frame_refs = 1;
+		unknown_ticket.facts.push_back(GDExtensionQualificationFactV1{});
+		GDExtensionDeviceExit::QualificationTicket::NativeMember mem;
+		mem.source.serial = 999;
+		mem.source.completion_serial = 999;
+		mem.source.queue_index = 1;
+		mem.source.issue = RenderingDeviceDriver::IssueFact::IssuedUnknown;
+		mem.source.completion = RenderingDeviceDriver::CompletionCapability::CommandBuffer;
+		mem.retained = true;
+		mem.fact = 0;
+		unknown_ticket.natives.push_back(mem);
+		device.frames[0].qualification_tickets.push_back(&unknown_ticket);
+
+		CHECK(device._qualification_poll_tickets(0, true) == ERR_BUSY);
+		CHECK(device._qualification_poll_tickets(0, false) == FAILED);
+		device.frames[0].qualification_tickets.clear();
+
+		// 2. Unsubmitted worker with stale last_submission must be rejected with ERR_UNAVAILABLE
+		//    in _qualification_admit_frame_ticket and _check_transfer_worker_operation.
+		RenderingDevice::TransferWorker worker;
+		worker.index = 0;
+		worker.submitted = false;
+		worker.recording = false;
+		worker.submission_pending = false;
+		worker.operations_processed = 0;
+		worker.operations_submitted = 0;
+		worker.operations_counter = 1;
+		RenderingDeviceDriver::NativeCallFact call_901;
+		call_901.serial = call_901.completion_serial = 901;
+		call_901.queue_index = 3;
+		call_901.issue = RenderingDeviceDriver::IssueFact::KnownAccepted;
+		call_901.completion = RenderingDeviceDriver::CompletionCapability::Fence;
+		call_901.frame_observer_owned = false;
+		worker.last_submission.submission_serial = 66;
+		worker.last_submission.issued = true;
+		worker.last_submission.calls.push_back(call_901);
+
+		device.transfer_worker_pool.push_back(&worker);
+		device.transfer_worker_pool_size = 1;
+		device.transfer_worker_operation_used_by_draw.push_back(1);
+
+		GDExtensionDeviceExit::QualificationTicket admit_ticket;
+		REQUIRE(admit_ticket.credits.initialize(8, 1, 1, 1, 2) == OK);
+		CHECK(device._qualification_admit_frame_ticket(&admit_ticket) == ERR_UNAVAILABLE);
+
+		// 3. Pre-existing known hidden report missing frame_observer_owned gets retained in _submit_transfer_workers.
+		worker.submitted = true;
+		worker.operations_submitted = 1;
+		device.frames[0].qualification_hidden_reports.push_back(worker.last_submission);
+		REQUIRE_FALSE(device.frames[0].qualification_hidden_reports[0].calls[0].frame_observer_owned);
+		device.frames[0].qualification_tickets.push_back(&admit_ticket);
+		admit_ticket.frame_refs = 1;
+		REQUIRE(device._submit_transfer_workers(device.frames[0].command_buffer, true) == OK);
+		REQUIRE(device.frames[0].qualification_hidden_reports.size() == 1);
+		CHECK(device.frames[0].qualification_hidden_reports[0].calls[0].frame_observer_owned);
+		CHECK(driver.observers_901 >= 1);
+
+		// Clean release via _stall_for_frame
+		for (auto &nm : admit_ticket.natives) {
+			if (nm.retained && !nm.owner_released) {
+				(void)driver.native_call_release(nm.source.serial);
+				nm.owner_released = true;
+			}
+		}
+		CHECK(device._stall_for_frame(0, false) == OK);
+		CHECK(driver.observers_901 == 0);
+
+		device.frames[0].qualification_tickets.clear();
+		device.transfer_worker_pool.clear();
+		device.transfer_worker_pool_size = 0;
+		device.transfer_worker_operation_used_by_draw.clear();
+		device.frames.clear();
+		device.driver = nullptr;
+	}
+	static void bug125_fence_recycle_marks_chain_reports_returned_before_phase4_busy() {
+		struct Bug125Driver final : TransferTestDriverBase {
+			bool record_701_alive = true;
+			uint32_t wait_calls_on_erased = 0;
+			uint32_t poll_calls_on_erased = 0;
+			uint8_t staging_bytes[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+
+			bool native_call_observation_supported() const override { return true; }
+			FencePollResult native_call_poll(uint64_t p_serial) override {
+				if (p_serial == 701) {
+					if (!record_701_alive) {
+						++poll_calls_on_erased;
+						FencePollResult missing;
+						missing.native_error = true;
+						missing.native_code = ERR_DOES_NOT_EXIST;
+						return missing;
+					}
+					FencePollResult ok;
+					ok.completed = true;
+					ok.completed_serial = 701;
+					ok.resolved_issue = IssueFact::KnownAccepted;
+					return ok;
+				}
+				return {};
+			}
+			FencePollResult native_call_wait(uint64_t p_serial) override {
+				if (p_serial == 701 && !record_701_alive) {
+					++wait_calls_on_erased;
+					FencePollResult missing;
+					missing.native_error = true;
+					missing.native_code = ERR_DOES_NOT_EXIST;
+					return missing;
+				}
+				return native_call_poll(p_serial);
+			}
+			FencePollResult fence_poll(FenceID, uint64_t p_serial) override {
+				FencePollResult ok;
+				ok.completed = true;
+				ok.completed_serial = p_serial;
+				ok.resolved_issue = IssueFact::KnownAccepted;
+				return ok;
+			}
+			Error fence_recycle(FenceID, uint64_t) override {
+				// Mirror Metal retire_completion_records(): 0-observer record is immediately erased!
+				record_701_alive = false;
+				return OK;
+			}
+			Error fence_wait(FenceID) override {
+				record_701_alive = false;
+				return OK;
+			}
+			uint8_t *buffer_map_observed(BufferID, int64_t &r_native_code) override {
+				r_native_code = 0;
+				return staging_bytes;
+			}
+			void buffer_unmap(BufferID) override {}
+		} driver;
+
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.is_main_instance = true;
+		device.frames.resize(1);
+		device.frames[0].fence = RenderingDeviceDriver::FenceID(41);
+		device.frames[0].fence_signaled = true;
+		device.frames[0].primary_command_buffer_begun = true;
+		device.frames[0].qualification_epoch = 1;
+
+		RenderingDeviceDriver::QueueCallReport rep;
+		rep.submission_serial = 701;
+		rep.issued = true;
+		RenderingDeviceDriver::NativeCallFact call_701;
+		call_701.serial = call_701.completion_serial = 701;
+		call_701.queue_index = 1;
+		call_701.issue = RenderingDeviceDriver::IssueFact::KnownAccepted;
+		call_701.completion = RenderingDeviceDriver::CompletionCapability::Fence;
+		call_701.source_owner_returned = false;
+		rep.calls.push_back(call_701);
+		device.frames[0].chain_reports.push_back(rep);
+
+		Ref<RenderingDevice::BufferGetDataResult> res;
+		res.instantiate();
+		res->qualification_owned = true;
+		res->bytes.resize(8);
+		res->issued_size = 8;
+		RenderingDevice::BufferGetDataRequest req;
+		req.result = res;
+		req.result_offset = 0;
+		req.size = 8;
+		req.frame_local_index = 0;
+		req.frame_local_count = 1;
+		req.final_segment = true;
+		device.frames[0].download_buffer_staging_buffers.push_back(RenderingDeviceDriver::BufferID(88));
+		device.frames[0].download_buffer_copy_regions.push_back({ 0, 0, 8 });
+		device.frames[0].download_buffer_get_data_requests.push_back(req);
+
+		// Budget of 3 passes/receipts: Phase 0 poll(701) [1], Phase 3 fence_poll [2], Phase 3 fence_recycle [3] ->
+		// erases record 701, then hits ERR_BUSY at Phase 4 readback WORK admission (pass 4)!
+		RenderingDevice::NativeDisposalBudget b;
+		b.receipts = 3;
+		b.passes = 3;
+		b.deadline_usec = OS::get_singleton()->get_ticks_usec() + 60000000ull;
+		RenderingDevice::NativeDisposalUsage u;
+		device.native_disposal_budget = &b;
+		device.native_disposal_usage = &u;
+		CHECK(device._native_disposal_stall_step(0) == ERR_BUSY);
+		device.native_disposal_budget = nullptr;
+		device.native_disposal_usage = nullptr;
+
+		CHECK_FALSE(driver.record_701_alive);
+		CHECK_FALSE(device.frames[0].fence_signaled);
+		CHECK(device.frames[0].chain_reports[0].calls[0].source_owner_returned);
+		CHECK(device.frames[0].download_buffer_get_data_requests.size() == 1);
+
+		// Subsequent blocking _stall_for_frame(0, false) must NOT call native_call_wait(701)
+		// on the erased completion record, and must deliver the pending readback cleanly with OK!
+		CHECK(device._stall_for_frame(0, false) == OK);
+		CHECK(driver.wait_calls_on_erased == 0);
+		CHECK(driver.poll_calls_on_erased == 0);
+		CHECK(res->delivered);
+		CHECK(res->error == OK);
+		CHECK(res->completed_size == 8);
+		CHECK(device.frames[0].download_buffer_get_data_requests.is_empty());
+
+		device.frames.clear();
+		device.driver = nullptr;
+	}
+	static void bug128a_flush_command_queue_only_skips_qualification_pump() {
+		RenderingServer *rs = RenderingServer::get_singleton();
+		REQUIRE(rs != nullptr);
+		CHECK(rs->has_method("flush_command_queue_only"));
+
+		struct Bug128ADriver final : TransferTestDriverBase {
+			uint32_t fence_polls = 0;
+			uint32_t fence_waits = 0;
+			uint32_t begin_segments = 0;
+			FencePollResult fence_poll(FenceID, uint64_t p_serial) override {
+				++fence_polls;
+				FencePollResult ok;
+				ok.completed = true;
+				ok.completed_serial = p_serial;
+				ok.resolved_issue = IssueFact::KnownAccepted;
+				return ok;
+			}
+			Error fence_wait(FenceID) override {
+				++fence_waits;
+				return OK;
+			}
+			Error fence_recycle(FenceID, uint64_t) override { return OK; }
+			bool command_pool_reset(CommandPoolID) override { return true; }
+			void begin_segment(uint32_t, uint32_t) override { ++begin_segments; }
+			bool command_buffer_begin(CommandBufferID) override { return true; }
+		} driver;
+
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.is_main_instance = true;
+		device.frames.resize(1);
+		device.frames[0].fence = RenderingDeviceDriver::FenceID(41);
+		device.frames[0].command_buffer = RenderingDeviceDriver::CommandBufferID(31);
+		device.frames[0].command_pool = RenderingDeviceDriver::CommandPoolID(21);
+		device.frames[0].qualification_epoch = 1;
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		device.qualification_frame_advance_pending = true;
+
+		RenderingDevice *prev_rd = RenderingDevice::singleton;
+		RenderingDevice::singleton = &device;
+
+		// 1. Dynamic call("flush_command_queue_only") and direct flush_command_queue_only()
+		//    must NOT invoke pump_qualification_frame_if_idle() / _native_disposal_maintenance().
+		rs->call("flush_command_queue_only");
+		rs->flush_command_queue_only();
+		CHECK(device.qualification_frame_advance_pending.load());
+		CHECK(driver.begin_segments == 0);
+		CHECK(driver.fence_polls == 0);
+		CHECK(driver.fence_waits == 0);
+
+		// 2. By contrast, rs->sync() DOES invoke pump_qualification_frame_if_idle(), which
+		//    advances the pending qualification frame.
+		rs->sync();
+		CHECK_FALSE(device.qualification_frame_advance_pending.load());
+		CHECK(driver.begin_segments == 1);
+
+		RenderingDevice::singleton = prev_rd;
+		device.draw_graph.finalize();
 		device.frames.clear();
 		device.driver = nullptr;
 	}
@@ -1426,4 +2767,36 @@ TEST_CASE("[SceneTree][R01][FrameWait] pending ordinary draw preserves real issu
 
 TEST_CASE("[R01][FrameWait] actual fence Busy remains an error during ordinary frame advance") {
 	TestFrameWaitAccess::ordinary_fence_busy_reports_error();
+}
+
+TEST_CASE("[RenderingDevice][BUG-92] synchronous readback resumes pending frame advance and distinguishes transient busy from real fence errors") {
+	TestFrameWaitAccess::synchronous_readback_resumes_pending_frame();
+}
+
+TEST_CASE("[RenderingDevice][BUG-110] synchronous readback closes ordinary disposal and closed-graph gaps without stealing owned continuations") {
+	TestFrameWaitAccess::synchronous_readback_bug110_gaps();
+}
+
+TEST_CASE("[RenderingDevice][BUG-115] blocking _stall_for_frame waits on hidden reports and ticket serials and resource creation resumes pending frame advance") {
+	TestFrameWaitAccess::bug115_blocking_stall_and_resource_creation();
+}
+
+TEST_CASE("[RenderingDevice][BUG-118] transfer worker hidden reports retain frame observer across worker fence recycle") {
+	TestFrameWaitAccess::bug118_transfer_worker_hidden_report_retains_observer();
+}
+
+TEST_CASE("[RenderingDevice][BUG-119A] draw_list_end blocks on _thread_safe_ and closes production output reads cleanly") {
+	TestFrameWaitAccess::bug119a_draw_list_end_blocks_on_thread_safe();
+}
+
+TEST_CASE("[RenderingDevice][BUG-119B] unknown ticket fails blocking poll, unsubmitted worker returns unavailable, and known hidden report retains observer") {
+	TestFrameWaitAccess::bug119b_unknown_ticket_known_hidden_and_unsubmitted_worker();
+}
+
+TEST_CASE("[RenderingDevice][BUG-125] fence_recycle marks chain_reports source_owner_returned before Phase 4 ERR_BUSY") {
+	TestFrameWaitAccess::bug125_fence_recycle_marks_chain_reports_returned_before_phase4_busy();
+}
+
+TEST_CASE("[SceneTree][RenderingDevice][BUG-128A] flush_command_queue_only skips pump_qualification_frame_if_idle while sync triggers it") {
+	TestFrameWaitAccess::bug128a_flush_command_queue_only_skips_qualification_pump();
 }

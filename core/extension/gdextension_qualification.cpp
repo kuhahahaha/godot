@@ -94,9 +94,24 @@ void Registry::QualificationBridge::trace_storage_child(Storage &child, const ch
 		event_reserved = child.physical.event_capacity_reserved;
 		returned = rid ? closed && enqueued && free_event && free_event == reserved_event && !event_reserved : !event_reserved;
 	}
-	const bool rt_cleanup = rt && rt->occupied && rt->cleanup_child_serial == child.serial;
+	const QualificationRtCell *trace_rt = nullptr;
+	bool rt_cleanup = false;
+	for (uint32_t i = 0; i < rt_cells.size(); ++i) {
+		const QualificationRtCell *cell = rt_cells[i];
+		if (!cell || !cell->occupied) {
+			continue;
+		}
+		if (!trace_rt) {
+			trace_rt = cell;
+		}
+		if (cell->cleanup_child_serial == child.serial) {
+			trace_rt = cell;
+			rt_cleanup = true;
+			break;
+		}
+	}
 	print_line(vformat("QCHILD_STORAGE v=1 stage=%s bridge=%d library=%d device=%d epoch=%d cell_slot=%d child=%d history=%d origin_slot=%d generation=%d part=%d attempt=%d bytes=%d backing_rid=%d backing_serial=%d acknowledged=%d retiring=%d creating=%d queued=%d queue_credit=%d cleanup_credit=%d maintenance_error=%d rt_cleanup=%d rt_operation=%d rt_kind=%d rt_child=%d reverse_edges=%d forward_edges=%d production_use=%d dependents=%d returned=%d physical_rid=%d closed=%d enqueued=%d event_reserved=%d reserved_event=%d free_event=%d",
-			stage, serial, library, device, epoch, slot, child.serial, child.history_index, child.origin.allocation_slot, child.origin.allocation_generation, child.origin.part, child.origin.create_attempt, child.origin.bytes, child.backing.rid, child.backing.backing_serial, int(child.acknowledged), int(child.retiring), int(child.creating), int(child.queued), int(child.queue_ref_credit), int(child.cleanup_serial_reserved), int(child.maintenance_error), int(rt_cleanup), rt && rt->occupied ? rt->header.operation_serial : 0, rt && rt->occupied ? rt->header.kind : 0, rt && rt->occupied ? rt->cleanup_child_serial : 0, child.physical.uses.size(), forward_edges, int(child.physical.production_uses != nullptr), child.physical.dependent_children.load(), int(returned), rid, int(closed), int(enqueued), int(event_reserved), reserved_event, free_event));
+			stage, serial, library, device, epoch, slot, child.serial, child.history_index, child.origin.allocation_slot, child.origin.allocation_generation, child.origin.part, child.origin.create_attempt, child.origin.bytes, child.backing.rid, child.backing.backing_serial, int(child.acknowledged), int(child.retiring), int(child.creating), int(child.queued), int(child.queue_ref_credit), int(child.cleanup_serial_reserved), int(child.maintenance_error), int(rt_cleanup), trace_rt ? trace_rt->header.operation_serial : 0, trace_rt ? trace_rt->header.kind : 0, trace_rt ? trace_rt->cleanup_child_serial : 0, child.physical.uses.size(), forward_edges, int(child.physical.production_uses != nullptr), child.physical.dependent_children.load(), int(returned), rid, int(closed), int(enqueued), int(event_reserved), reserved_event, free_event));
 #endif
 }
 Error Registry::qualification_bridge_locked(GDExtensionQualificationBridgeRefV1 ref, bool execution, bool admit, QualificationBridge *&out, RenderingDevice *&rd, uint32_t accepted_kind) {
@@ -255,41 +270,27 @@ void Registry::qualification_trim_cleanup_ref_credits_locked(QualificationBridge
 	if (!bridge->cleanup_refs_reserved || bridge->cleanup_slot_in_use || bridge->cleanup_queue_in_use) {
 		return;
 	}
-	for (auto *ticket : bridge->tickets) {
-		if (ticket && !ticket->acknowledged) {
+	// O(1) check across all 7 bridge child arrays (BUG-149D).
+	// Eliminates 270,848-pointer (2.17 MB) sweep on every retire/release.
+	if (bridge->unacknowledged_children != 0) {
+		return;
+	}
+#ifdef TESTS_ENABLED
+	// Synthetic unit tests may install a child directly into bridge arrays
+	// (e.g. fixture_sampler_child / fixture_texture_child) without using the
+	// create API, leaving unacknowledged_children == 0 while slot 0..1 is live.
+	for (uint32_t i = 0; i < 2; ++i) {
+		if ((bridge->tickets[i] && !bridge->tickets[i]->acknowledged) ||
+				(bridge->scene_depth[i] && !bridge->scene_depth[i]->acknowledged) ||
+				(bridge->storage[i] && !bridge->storage[i]->acknowledged) ||
+				(bridge->textures[i] && !bridge->textures[i]->acknowledged) ||
+				(bridge->samplers[i] && !bridge->samplers[i]->acknowledged) ||
+				(bridge->sets[i] && !bridge->sets[i]->acknowledged) ||
+				(bridge->units[i] && !bridge->units[i]->acknowledged)) {
 			return;
 		}
 	}
-	for (auto *child : bridge->scene_depth) {
-		if (child && !child->acknowledged) {
-			return;
-		}
-	}
-	for (auto *child : bridge->storage) {
-		if (child && !child->acknowledged) {
-			return;
-		}
-	}
-	for (auto *child : bridge->textures) {
-		if (child && !child->acknowledged) {
-			return;
-		}
-	}
-	for (auto *child : bridge->samplers) {
-		if (child && !child->acknowledged) {
-			return;
-		}
-	}
-	for (auto *child : bridge->sets) {
-		if (child && !child->acknowledged) {
-			return;
-		}
-	}
-	for (auto *child : bridge->units) {
-		if (child && !child->acknowledged) {
-			return;
-		}
-	}
+#endif
 	auto &refs = records[bridge->library].private_refs;
 	CRASH_COND(refs < 2);
 	refs -= 2;
@@ -340,12 +341,16 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_close(GDExtensionQualif
 			memdelete(child);
 		}
 	}
-	for (auto *child : bridge->storage) {
-		if (child) {
+	for (uint32_t i = 0; i < QualificationBridge::STORAGE_CHILD_CAPACITY; ++i) {
+		if (auto *child = bridge->storage[i]) {
 			CRASH_COND(!child->acknowledged);
+			bridge->unindex_storage_slot_locked(i, child);
 			memdelete(child);
 		}
 	}
+	CRASH_COND(!bridge->storage_by_serial.is_empty());
+	CRASH_COND(!bridge->storage_by_retire_serial.is_empty());
+	CRASH_COND(!bridge->storage_by_origin.is_empty());
 	for (auto *child : bridge->textures) {
 		if (child) {
 			CRASH_COND(!child->acknowledged);
@@ -380,10 +385,16 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_close(GDExtensionQualif
 			memdelete(ticket);
 		}
 	}
-	if (bridge->rt) {
-		CRASH_COND(bridge->rt->occupied || bridge->rt->queued);
-		memdelete(bridge->rt);
+	CRASH_COND(bridge->unacknowledged_children != 0);
+	CRASH_COND(!bridge->live_tickets.is_empty());
+	for (uint32_t i = 0; i < bridge->rt_cells.size(); ++i) {
+		QualificationRtCell *cell = bridge->rt_cells[i];
+		if (cell) {
+			CRASH_COND(cell->occupied || cell->queued);
+			memdelete(cell);
+		}
 	}
+	bridge->rt_cells.clear();
 	memdelete(bridge);
 	reclaim_device_locked(device);
 	reclaim(library);
@@ -447,13 +458,16 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_generation_fina
 		return result(ERR_INVALID_DATA, 16);
 	}
 	if (generation > frontier.closed) {
-		// One original QRT cell includes reserved, queued, executing and unread
-		// completed create delivery. Never cancel or reinterpret its admission.
-		if (bridge->rt && bridge->rt->occupied && bridge->rt->header.kind == 2) {
-			GDExtensionStorageCreateRequestV1 origin;
-			memcpy(&origin, bridge->rt->request.ptr(), sizeof(origin));
-			if (origin.allocation_slot == request->allocation_slot && origin.allocation_generation <= generation) {
-				return result(ERR_BUSY, 16);
+		// Original QRT cells include reserved, queued, executing and unread
+		// completed create deliveries. Never cancel or reinterpret their admission.
+		for (uint32_t i = 0; i < bridge->rt_cells.size(); ++i) {
+			const QualificationRtCell *cell = bridge->rt_cells[i];
+			if (cell && cell->occupied && cell->header.kind == 2) {
+				GDExtensionStorageCreateRequestV1 origin;
+				memcpy(&origin, cell->request.ptr(), sizeof(origin));
+				if (origin.allocation_slot == request->allocation_slot && origin.allocation_generation <= generation) {
+					return result(ERR_BUSY, 16);
+				}
 			}
 		}
 		for (auto *child : bridge->storage) {
@@ -522,21 +536,21 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_create(GDExtens
 		if (bridge->storage_generation_closed(*request)) {
 			return result(ERR_DOES_NOT_EXIST, GDEXTENSION_DEVICE_SESSION_REASON_STORAGE_STALE_GENERATION_V1);
 		}
-		bridge->collect_retired_children_locked();
-		for (auto *existing : bridge->storage) {
-			if (existing && existing->origin.allocation_slot == request->allocation_slot && existing->origin.allocation_generation == request->allocation_generation && existing->origin.part == request->part && existing->origin.create_attempt == request->create_attempt) {
-				if (memcmp(&existing->origin, request, sizeof(*request))) {
-					return result(ERR_INVALID_DATA, 16);
-				}
-				if (existing->acknowledged) {
-					return result(ERR_DOES_NOT_EXIST, 17);
-				}
-				if (existing->creating) {
-					return result(ERR_BUSY, 16);
-				}
-				*out = existing->backing;
-				return result(OK);
+		if (bridge->storage_acknowledged_count > 0) {
+			bridge->collect_retired_children_locked();
+		}
+		if (auto *existing = bridge->find_storage_by_origin_locked(*request)) {
+			if (memcmp(&existing->origin, request, sizeof(*request))) {
+				return result(ERR_INVALID_DATA, 16);
 			}
+			if (existing->acknowledged) {
+				return result(ERR_DOES_NOT_EXIST, 17);
+			}
+			if (existing->creating) {
+				return result(ERR_BUSY, 16);
+			}
+			*out = existing->backing;
+			return result(OK);
 		}
 		if (const auto *old = bridge->storage_origins.find_retired([&](const auto &origin) {
 				return origin.allocation_slot == request->allocation_slot && origin.allocation_generation == request->allocation_generation && origin.part == request->part && origin.create_attempt == request->create_attempt;
@@ -550,8 +564,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_create(GDExtens
 			// Same-origin scan found no child; this call has not allocated anything.
 			return result(ERR_BUSY, GDEXTENSION_DEVICE_SESSION_REASON_STORAGE_CREATE_DEFERRED_V1);
 		}
-		for (; slot < QualificationBridge::STORAGE_CHILD_CAPACITY && bridge->storage[slot]; ++slot) {
-		}
+		slot = bridge->alloc_storage_slot_locked();
 		// A published backing must retain the two original identities needed for
 		// retirement even if unrelated admissions later exhaust the sequence.
 		const uint32_t refs_needed = bridge->cleanup_refs_reserved ? 1 : 3;
@@ -608,7 +621,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_create(GDExtens
 		bridge->storage_origins.begin(history_index, *request, child->serial);
 		child->physical.bridge = bridge->serial;
 		child->physical.child = child->serial;
-		bridge->storage[slot] = child;
+		bridge->index_storage_slot_locked(slot, child);
 		++bridge->children;
 		++records[bridge->library].private_refs;
 		trace_child_metadata(*bridge, "storage", "pre_native_reserved");
@@ -623,7 +636,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_create(GDExtens
 		CRASH_COND(!child->cleanup_serial_reserved || !qualification_cleanup_serial_reservations);
 		--qualification_cleanup_serial_reservations;
 		bridge->storage_origins.discard(child->history_index, child->serial);
-		bridge->storage[slot] = nullptr;
+		bridge->unindex_storage_slot_locked(slot, child);
 		--bridge->children;
 		--records[bridge->library].private_refs;
 		memdelete(child);
@@ -795,6 +808,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_create(GDEx
 			return result(ERR_CANT_CREATE, 19);
 		}
 		bridge->units[slot] = child;
+		bridge->track_unacknowledged_child_locked(child);
 		++bridge->children;
 		++records[bridge->library].private_refs;
 		trace_child_metadata(*bridge, "unit", "pre_native_reserved");
@@ -811,6 +825,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_create(GDEx
 		CRASH_COND(!child->cleanup_serial_reserved || !qualification_cleanup_serial_reservations);
 		--qualification_cleanup_serial_reservations;
 		bridge->unit_origins.discard(child->history_index, child->serial);
+		bridge->untrack_unacknowledged_child_locked(child);
 		bridge->units[slot] = nullptr;
 		--bridge->children;
 		--records[bridge->library].private_refs;
@@ -871,6 +886,9 @@ void Registry::qualification_retire_step(QualificationBridge *bridge, RenderingD
 				return 3;
 			}
 		}
+		if (cell.dependent_children.load()) {
+			production_persistent_sets_evict_for_dependency_rt(rd, &cell);
+		}
 		if (cell.dependent_children.load() || !no_dependents(RID::from_uint64(cell.rid))) {
 			return 4;
 		}
@@ -928,18 +946,13 @@ void Registry::qualification_retire_step(QualificationBridge *bridge, RenderingD
 	}
 	if (kind == 1) {
 		QualificationBridge::Storage *child = nullptr;
-		for (auto *entry : bridge->storage) {
-			if (entry && entry->serial == serial) {
-				child = entry;
-				break;
-			}
-		}
-		if (!child || !child->retiring) {
-			return;
-		}
 		bool failed = false;
 		{
 			Lock lock(*this);
+			child = bridge->find_storage_by_serial_locked(serial);
+			if (!child || !child->retiring) {
+				return;
+			}
 			failed = child->maintenance_error != OK;
 		}
 		uint32_t reason = failed ? 0 : enqueue(child->physical, 1);
@@ -1065,15 +1078,12 @@ Error Registry::qualification_schedule(GDExtensionQualificationBridgeRefV1 ref, 
 			return error;
 		}
 		if (kind == 1) {
-			for (auto *child : bridge->storage) {
-				if (child && child->serial == serial && child->retiring) {
-					if (child->report.state == 1) {
-						return OK;
-					}
-					queued = &child->queued;
-					queue_credit = &child->queue_ref_credit;
-					break;
+			if (auto *child = bridge->find_storage_by_serial_locked(serial); child && child->retiring) {
+				if (child->report.state == 1) {
+					return OK;
 				}
+				queued = &child->queued;
+				queue_credit = &child->queue_ref_credit;
 			}
 		}
 		if (kind == 2) {
@@ -1164,12 +1174,9 @@ void Registry::qualification_service(uint64_t bridge_serial, uint64_t serial, ui
 		}
 		CRASH_COND(!bridge);
 		if (kind == 1) {
-			for (auto *child : bridge->storage) {
-				if (child && child->serial == serial) {
-					queued = &child->queued;
-					queue_credit = &child->queue_ref_credit;
-					break;
-				}
+			if (auto *child = bridge->find_storage_by_serial_locked(serial)) {
+				queued = &child->queued;
+				queue_credit = &child->queue_ref_credit;
 			}
 		}
 		if (kind == 2) {
@@ -1233,10 +1240,8 @@ void Registry::qualification_service(uint64_t bridge_serial, uint64_t serial, ui
 					}
 				}
 				if (kind == 1) {
-					for (auto *child : bridge->storage) {
-						if (child && child->serial == serial) {
-							returned = child->report.state == 1;
-						}
+					if (auto *child = bridge->find_storage_by_serial_locked(serial)) {
+						returned = child->report.state == 1;
 					}
 				}
 				if (kind == 2) {
@@ -1278,14 +1283,12 @@ void Registry::qualification_service(uint64_t bridge_serial, uint64_t serial, ui
 			if (error != OK && error != ERR_BUSY && kind != 3) {
 				Lock lock(*this);
 				if (kind == 1) {
-					for (auto *child : bridge->storage) {
-						if (child && child->serial == serial && child->report.state != 1 && child->maintenance_error == OK) {
-							child->maintenance_error = error;
-							child->report.state = 2;
-							child->report.return_status = 0;
-							child->report.reason = 5;
-							child->report.native_error = error;
-						}
+					if (auto *child = bridge->find_storage_by_serial_locked(serial); child && child->report.state != 1 && child->maintenance_error == OK) {
+						child->maintenance_error = error;
+						child->report.state = 2;
+						child->report.return_status = 0;
+						child->report.reason = 5;
+						child->report.native_error = error;
 					}
 				}
 				if (kind == 4) {
@@ -1396,15 +1399,7 @@ Error Registry::qualification_cleanup_retire_matches_original_child_locked(Quali
 	if (kind == 3) {
 		GDExtensionStorageRetireRequestV1 request;
 		memcpy(&request, bytes, sizeof(request));
-		QualificationBridge::Storage *child = nullptr;
-		if (request.backing.registry_instance == instance) {
-			for (auto *entry : bridge->storage) {
-				if (entry && entry->serial == request.backing.handle_serial) {
-					child = entry;
-					break;
-				}
-			}
-		}
+		QualificationBridge::Storage *child = request.backing.registry_instance == instance ? bridge->find_storage_by_serial_locked(request.backing.handle_serial) : nullptr;
 		if (!child || child->creating || child->acknowledged) {
 			return ERR_DOES_NOT_EXIST;
 		}
@@ -1475,12 +1470,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_retire(GDExtens
 			return result(error, error == ERR_DOES_NOT_EXIST ? 17 : 16);
 		}
 		if (request->backing.registry_instance == instance) {
-			for (auto *entry : bridge->storage) {
-				if (entry && entry->serial == request->backing.handle_serial) {
-					child = entry;
-					break;
-				}
-			}
+			child = bridge->find_storage_by_serial_locked(request->backing.handle_serial);
 		}
 		if (child->retiring) {
 			*out = { instance, child->retire_serial };
@@ -1585,11 +1575,8 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_retire_observe(
 			return result(error, 17);
 		}
 		if (retire.registry_instance == instance) {
-			for (auto *child : bridge->storage) {
-				if (child && child->retiring && !child->acknowledged && child->retire_serial && child->retire_serial == retire.handle_serial) {
-					serial = child->serial;
-					break;
-				}
+			if (auto *child = bridge->find_storage_by_retire_serial_locked(retire.handle_serial); child && child->retiring && !child->acknowledged && child->retire_serial == retire.handle_serial) {
+				serial = child->serial;
 			}
 		}
 		if (!serial) {
@@ -1607,11 +1594,9 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_retire_observe(
 	if (error != OK) {
 		return result(error, 17);
 	}
-	for (auto *child : bridge->storage) {
-		if (child && child->serial == serial) {
-			*out = child->report;
-			return result(OK);
-		}
+	if (auto *child = bridge->find_storage_by_serial_locked(serial)) {
+		*out = child->report;
+		return result(OK);
 	}
 	return result(ERR_DOES_NOT_EXIST, 17);
 }
@@ -1674,29 +1659,28 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_retire_release(
 	if (retire.registry_instance != instance || !retire.handle_serial) {
 		return result(ERR_INVALID_DATA, 17);
 	}
-	for (auto *&child : bridge->storage) {
-		if (child && child->retiring && !child->acknowledged && child->retire_serial == retire.handle_serial) {
-			if (child->maintenance_error != OK || child->report.state != 1 || child->report.return_status != 1 || child->report.reason || child->report.native_error || child->report.native_code || !child->physical.free_event) {
-				return result(ERR_BUSY, 16);
-			}
-			if (child->queued) {
-				return result(ERR_BUSY, 19);
-			}
-			if (child->physical.production_uses) {
-				return result(ERR_BUSY, 16);
-			}
-			if (child->cleanup_serial_reserved) {
-				CRASH_COND(!qualification_cleanup_serial_reservations);
-				--qualification_cleanup_serial_reservations;
-				child->cleanup_serial_reserved = false;
-			}
-			child->acknowledged = true;
-			bridge->trace_storage_child(*child, "acknowledged");
-			--bridge->children;
-			--records[bridge->library].private_refs;
-			qualification_trim_cleanup_ref_credits_locked(bridge);
-			return result(OK);
+	if (auto *child = bridge->find_storage_by_retire_serial_locked(retire.handle_serial); child && child->retiring && !child->acknowledged && child->retire_serial == retire.handle_serial) {
+		if (child->maintenance_error != OK || child->report.state != 1 || child->report.return_status != 1 || child->report.reason || child->report.native_error || child->report.native_code || !child->physical.free_event) {
+			return result(ERR_BUSY, 16);
 		}
+		if (child->queued) {
+			return result(ERR_BUSY, 19);
+		}
+		if (child->physical.production_uses) {
+			return result(ERR_BUSY, 16);
+		}
+		if (child->cleanup_serial_reserved) {
+			CRASH_COND(!qualification_cleanup_serial_reservations);
+			--qualification_cleanup_serial_reservations;
+			child->cleanup_serial_reserved = false;
+		}
+		bridge->acknowledge_child_locked(child);
+		++bridge->storage_acknowledged_count;
+		bridge->trace_storage_child(*child, "acknowledged");
+		--bridge->children;
+		--records[bridge->library].private_refs;
+		qualification_trim_cleanup_ref_credits_locked(bridge);
+		return result(OK);
 	}
 	return result(ERR_DOES_NOT_EXIST, 17);
 }
@@ -1755,7 +1739,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_retire_rele
 				--qualification_cleanup_serial_reservations;
 				child->cleanup_serial_reserved = false;
 			}
-			child->acknowledged = true;
+			bridge->acknowledge_child_locked(child);
 			--bridge->children;
 			--records[bridge->library].private_refs;
 			qualification_trim_cleanup_ref_credits_locked(bridge);

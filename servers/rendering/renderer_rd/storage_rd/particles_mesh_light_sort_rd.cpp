@@ -845,7 +845,8 @@ bool ParticlesMeshLightSortRD::update_external_light_slot_present_seq(
 		uint64_t p_generation,
 		uint32_t p_slot_index,
 		uint64_t p_lease_serial,
-		uint64_t p_next_present_seq) {
+		uint64_t p_next_present_seq,
+		const AABB *p_world_bounds) {
 	if (p_owner_key == 0 || p_next_present_seq == 0) {
 		return false;
 	}
@@ -859,6 +860,9 @@ bool ParticlesMeshLightSortRD::update_external_light_slot_present_seq(
 		return false;
 	}
 	reg.present_seq = p_next_present_seq;
+	if (p_world_bounds && p_world_bounds->is_finite() && p_world_bounds->get_end().is_finite() && p_world_bounds->has_volume()) {
+		reg.world_bounds = *p_world_bounds;
+	}
 	return true;
 }
 
@@ -884,6 +888,9 @@ uint32_t ParticlesMeshLightSortRD::update_external_light_slots_present_seq_batch
 			continue;
 		}
 		reg.present_seq = u.next_present_seq;
+		if (u.has_world_bounds && u.world_bounds.is_finite() && u.world_bounds.get_end().is_finite() && u.world_bounds.has_volume()) {
+			reg.world_bounds = u.world_bounds;
+		}
 		++updated;
 	}
 	return updated;
@@ -1212,6 +1219,9 @@ layout(set = 0, binding = 3, std140) uniform EmitParams {
 	vec4 cluster_view_row0;
 	vec4 cluster_view_row1;
 	vec4 cluster_view_row2;
+	vec4 cluster_ortho_row0; // xyz=orthonormalized basis row0, w=cluster_scale
+	vec4 cluster_ortho_row1; // xyz=orthonormalized basis row1
+	vec4 cluster_ortho_row2; // xyz=orthonormalized basis row2
 	vec4 misc_floats; // x=exposure_norm, y=z_near, z=z_far, w=sphere_overfit
 	uvec4 counts;     // x=base_omni_index, y=reserved_count, z=max_staged, w=camera_orthogonal
 } params;
@@ -1335,14 +1345,15 @@ void main() {
 					dot(params.cluster_view_row0.xyz, world_pos) + params.cluster_view_row0.w,
 					dot(params.cluster_view_row1.xyz, world_pos) + params.cluster_view_row1.w,
 					dot(params.cluster_view_row2.xyz, world_pos) + params.cluster_view_row2.w);
-			float overfit = params.misc_floats.w;
-			float r_elem = radius * overfit;
+			float sphere_overfit = params.misc_floats.w;
+			float cluster_scale = params.cluster_ortho_row0.w;
+			float r_elem = radius * cluster_scale * sphere_overfit;
 			float depth = -cluster_pos.z;
 			bool touches_near = false;
 			if (params.counts.w != 0u) {
 				touches_near = (depth - r_elem) < params.misc_floats.y;
 			} else {
-				float r2 = r_elem * overfit;
+				float r2 = r_elem * sphere_overfit;
 				touches_near = dot(cluster_pos, cluster_pos) < (r2 * r2);
 			}
 			bool touches_far = (depth + r_elem) > params.misc_floats.z;
@@ -1352,17 +1363,17 @@ void main() {
 			cluster_elements.words[ebase + 1u] = touches_near ? 1u : 0u;
 			cluster_elements.words[ebase + 2u] = touches_far ? 1u : 0u;
 			cluster_elements.words[ebase + 3u] = omni_idx;
-			cluster_elements.words[ebase + 4u] = floatBitsToUint(params.cluster_view_row0.x);
-			cluster_elements.words[ebase + 5u] = floatBitsToUint(params.cluster_view_row0.y);
-			cluster_elements.words[ebase + 6u] = floatBitsToUint(params.cluster_view_row0.z);
+			cluster_elements.words[ebase + 4u] = floatBitsToUint(params.cluster_ortho_row0.x);
+			cluster_elements.words[ebase + 5u] = floatBitsToUint(params.cluster_ortho_row0.y);
+			cluster_elements.words[ebase + 6u] = floatBitsToUint(params.cluster_ortho_row0.z);
 			cluster_elements.words[ebase + 7u] = floatBitsToUint(cluster_pos.x);
-			cluster_elements.words[ebase + 8u] = floatBitsToUint(params.cluster_view_row1.x);
-			cluster_elements.words[ebase + 9u] = floatBitsToUint(params.cluster_view_row1.y);
-			cluster_elements.words[ebase + 10u] = floatBitsToUint(params.cluster_view_row1.z);
+			cluster_elements.words[ebase + 8u] = floatBitsToUint(params.cluster_ortho_row1.x);
+			cluster_elements.words[ebase + 9u] = floatBitsToUint(params.cluster_ortho_row1.y);
+			cluster_elements.words[ebase + 10u] = floatBitsToUint(params.cluster_ortho_row1.z);
 			cluster_elements.words[ebase + 11u] = floatBitsToUint(cluster_pos.y);
-			cluster_elements.words[ebase + 12u] = floatBitsToUint(params.cluster_view_row2.x);
-			cluster_elements.words[ebase + 13u] = floatBitsToUint(params.cluster_view_row2.y);
-			cluster_elements.words[ebase + 14u] = floatBitsToUint(params.cluster_view_row2.z);
+			cluster_elements.words[ebase + 12u] = floatBitsToUint(params.cluster_ortho_row2.x);
+			cluster_elements.words[ebase + 13u] = floatBitsToUint(params.cluster_ortho_row2.y);
+			cluster_elements.words[ebase + 14u] = floatBitsToUint(params.cluster_ortho_row2.z);
 			cluster_elements.words[ebase + 15u] = floatBitsToUint(cluster_pos.z);
 			cluster_elements.words[ebase + 16u] = floatBitsToUint(r_elem);
 			cluster_elements.words[ebase + 17u] = floatBitsToUint(r_elem);
@@ -1430,10 +1441,13 @@ struct LightEmitParamsStd140 {
 	float cluster_view_row0[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
 	float cluster_view_row1[4] = { 0.0f, 1.0f, 0.0f, 0.0f };
 	float cluster_view_row2[4] = { 0.0f, 0.0f, 1.0f, 0.0f };
+	float cluster_ortho_row0[4] = { 1.0f, 0.0f, 0.0f, 1.0f };
+	float cluster_ortho_row1[4] = { 0.0f, 1.0f, 0.0f, 0.0f };
+	float cluster_ortho_row2[4] = { 0.0f, 0.0f, 1.0f, 0.0f };
 	float misc_floats[4] = { 1.0f, 0.05f, 4000.0f, 1.05f };
 	uint32_t counts[4] = { 0u, 0u, 0u, 0u };
 };
-static_assert(sizeof(LightEmitParamsStd140) == 128, "LightEmitParamsStd140 ABI");
+static_assert(sizeof(LightEmitParamsStd140) == 176, "LightEmitParamsStd140 ABI");
 
 } // namespace
 
@@ -1778,9 +1792,6 @@ uint32_t ParticlesMeshLightSortRD::dispatch_registered_external_lights_gpu(
 	}
 
 	LightEmitParamsStd140 emit_params;
-	for (int r = 0; r < 3; ++r) {
-		emit_params.light_view_row0[r] = (r == 0) ? p_view_inv_transform.basis.rows[0][0] : emit_params.light_view_row0[r];
-	}
 	emit_params.light_view_row0[0] = p_view_inv_transform.basis.rows[0][0];
 	emit_params.light_view_row0[1] = p_view_inv_transform.basis.rows[0][1];
 	emit_params.light_view_row0[2] = p_view_inv_transform.basis.rows[0][2];
@@ -1800,24 +1811,41 @@ uint32_t ParticlesMeshLightSortRD::dispatch_registered_external_lights_gpu(
 	if (cluster_scale < 0.98f || cluster_scale > 1.02f) {
 		cluster_ortho.basis.orthonormalize();
 	}
-	emit_params.cluster_view_row0[0] = cluster_ortho.basis.rows[0][0];
-	emit_params.cluster_view_row0[1] = cluster_ortho.basis.rows[0][1];
-	emit_params.cluster_view_row0[2] = cluster_ortho.basis.rows[0][2];
+	// Preserve un-orthonormalized cluster_view for cluster_pos (matching
+	// ClusterBuilderRD::add_light's xform = view_xform * p_transform) while
+	// storing the orthonormalized basis in cluster_ortho_row0..2 and keeping
+	// cluster_scale separate from sphere_overfit so r2 = r_elem * sphere_overfit.
+	emit_params.cluster_view_row0[0] = cluster_view.basis.rows[0][0];
+	emit_params.cluster_view_row0[1] = cluster_view.basis.rows[0][1];
+	emit_params.cluster_view_row0[2] = cluster_view.basis.rows[0][2];
 	emit_params.cluster_view_row0[3] = cluster_view.origin.x;
-	emit_params.cluster_view_row1[0] = cluster_ortho.basis.rows[1][0];
-	emit_params.cluster_view_row1[1] = cluster_ortho.basis.rows[1][1];
-	emit_params.cluster_view_row1[2] = cluster_ortho.basis.rows[1][2];
+	emit_params.cluster_view_row1[0] = cluster_view.basis.rows[1][0];
+	emit_params.cluster_view_row1[1] = cluster_view.basis.rows[1][1];
+	emit_params.cluster_view_row1[2] = cluster_view.basis.rows[1][2];
 	emit_params.cluster_view_row1[3] = cluster_view.origin.y;
-	emit_params.cluster_view_row2[0] = cluster_ortho.basis.rows[2][0];
-	emit_params.cluster_view_row2[1] = cluster_ortho.basis.rows[2][1];
-	emit_params.cluster_view_row2[2] = cluster_ortho.basis.rows[2][2];
+	emit_params.cluster_view_row2[0] = cluster_view.basis.rows[2][0];
+	emit_params.cluster_view_row2[1] = cluster_view.basis.rows[2][1];
+	emit_params.cluster_view_row2[2] = cluster_view.basis.rows[2][2];
 	emit_params.cluster_view_row2[3] = cluster_view.origin.z;
 
-	const float overfit = (active_cluster_context.active ? active_cluster_context.sphere_overfit : 1.05f) * cluster_scale;
+	emit_params.cluster_ortho_row0[0] = cluster_ortho.basis.rows[0][0];
+	emit_params.cluster_ortho_row0[1] = cluster_ortho.basis.rows[0][1];
+	emit_params.cluster_ortho_row0[2] = cluster_ortho.basis.rows[0][2];
+	emit_params.cluster_ortho_row0[3] = cluster_scale;
+	emit_params.cluster_ortho_row1[0] = cluster_ortho.basis.rows[1][0];
+	emit_params.cluster_ortho_row1[1] = cluster_ortho.basis.rows[1][1];
+	emit_params.cluster_ortho_row1[2] = cluster_ortho.basis.rows[1][2];
+	emit_params.cluster_ortho_row1[3] = 0.0f;
+	emit_params.cluster_ortho_row2[0] = cluster_ortho.basis.rows[2][0];
+	emit_params.cluster_ortho_row2[1] = cluster_ortho.basis.rows[2][1];
+	emit_params.cluster_ortho_row2[2] = cluster_ortho.basis.rows[2][2];
+	emit_params.cluster_ortho_row2[3] = 0.0f;
+
+	const float sphere_overfit = active_cluster_context.active ? active_cluster_context.sphere_overfit : 1.05f;
 	emit_params.misc_floats[0] = p_exposure_norm;
 	emit_params.misc_floats[1] = active_cluster_context.active ? active_cluster_context.z_near : 0.05f;
 	emit_params.misc_floats[2] = active_cluster_context.active ? active_cluster_context.z_far : 4000.0f;
-	emit_params.misc_floats[3] = overfit;
+	emit_params.misc_floats[3] = sphere_overfit;
 	emit_params.counts[0] = p_base_omni_index;
 	emit_params.counts[1] = reserved_lights;
 	emit_params.counts[2] = MAX_PARTICLE_LIGHTS;

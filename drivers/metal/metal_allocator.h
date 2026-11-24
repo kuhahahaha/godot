@@ -97,7 +97,7 @@ struct MetalAllocatorStats {
 /// single instance selected by sync mode.
 class API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0)) MetalAllocator {
 public:
-	static MetalAllocator *create(MTL::Device *p_device, bool p_use_heaps);
+	static MetalAllocator *create(MTL::Device *p_device, bool p_use_heaps, bool p_local_device = false);
 	virtual ~MetalAllocator() = default;
 
 	virtual MetalBuffer new_buffer(NS::UInteger p_length, MTL::ResourceOptions p_options) = 0;
@@ -178,27 +178,44 @@ private:
 	struct Block {
 		NS::SharedPtr<MTL::Heap> heap;
 		OffsetAllocator::Allocator *metadata = nullptr;
-		// The number of live allocations in this block.
+		// The number of live allocations in this block (including recycled buffers).
 		uint32_t live = 0;
+		// Subset of `live` currently sitting idle in pool.recycled_buffers.
+		uint32_t recycled_count = 0;
 	};
+
+	struct RecycledBuffer {
+		uint64_t length = 0;
+		MTL::ResourceOptions options = 0;
+		MetalBuffer buffer;
+	};
+
+	static constexpr uint32_t MAX_RECYCLED_BUFFERS_PER_POOL = 64;
+	uint64_t _max_recycled_bytes(uint32_t p_pool) const;
 
 	struct Pool {
 		SpinLock mutex;
 		LocalVector<Block> blocks;
 		LocalVector<MTL::Heap *> dedicated_heaps; // Owned (+1) refs, for get_heaps enumeration.
+		LocalVector<RecycledBuffer> recycled_buffers;
+		uint64_t recycled_bytes = 0;
 #ifdef DEBUG_ENABLED
 		MetalAllocatorStats::Pool stats;
 #endif
 		uint32_t empty_blocks = 0;
 	};
 
+	std::atomic<uint64_t> buffer_recycle_hits{ 0 };
+	static std::atomic<uint64_t> total_buffer_recycle_hits;
+
 	MTL::Device *device = nullptr;
+	bool local_device = false;
 	Pool pools[POOL_COUNT];
 	/// Incremented each time a heap is created or destroyed so clients know when to update
 	/// their own state and refresh residency.
 	std::atomic<uint64_t> generation = 1;
 
-	static uint64_t _preferred_block_size(uint32_t p_pool);
+	uint64_t _preferred_block_size(uint32_t p_pool) const;
 	static bool _pool_allocation_units(uint64_t p_size, uint64_t p_align, uint32_t &r_units);
 	static uint32_t _pool_for_options(MTL::ResourceOptions p_options);
 	static uint32_t _pool_for_texture(const MTL::TextureDescriptor *p_desc);
@@ -211,9 +228,10 @@ private:
 	void _free_allocation(MetalAllocation &p_allocation);
 
 public:
-	explicit MetalHeapAllocator(MTL::Device *p_device) :
-			device(p_device) {}
+	explicit MetalHeapAllocator(MTL::Device *p_device, bool p_local_device = false) :
+			device(p_device), local_device(p_local_device) {}
 	~MetalHeapAllocator() override;
+	uint64_t preferred_block_size_for_pool(uint32_t p_pool) const { return _preferred_block_size(p_pool); }
 
 	MetalBuffer new_buffer(NS::UInteger p_length, MTL::ResourceOptions p_options) override;
 	bool texture_allocation_quote(const MTL::TextureDescriptor *p_desc, TextureAllocationQuote &r_quote) override;
@@ -222,6 +240,8 @@ public:
 	void free_texture(MetalTexture &p_texture) override;
 	uint64_t get_heaps(LocalVector<MTL::Heap *> &r_heaps) override;
 	uint64_t get_heap_generation() const override;
+	uint64_t get_buffer_recycle_hits() const { return buffer_recycle_hits.load(std::memory_order_relaxed); }
+	static uint64_t get_total_buffer_recycle_hits() { return total_buffer_recycle_hits.load(std::memory_order_relaxed); }
 #ifdef DEBUG_ENABLED
 	void get_stats(MetalAllocatorStats &r_stats) override;
 #endif

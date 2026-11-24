@@ -714,6 +714,11 @@ RID SceneShaderForwardMobile::ShaderData::create_native_pipeline_checked(Pipelin
 		r_factory_error = ERR_CANT_CREATE;
 	}
 
+	// BUG-129: Transient ERR_BUSY from production pipeline factory is retried by caller.
+	if (unlikely(pipeline.is_null() && r_factory_error == ERR_BUSY)) {
+		return RID();
+	}
+
 	// Don't print error when it's expected.
 	if (unlikely(pipeline.is_null() && RD::get_singleton()->get_driver_workarounds().dont_print_on_render_pipeline_creation_failure)) {
 		return RID();
@@ -780,6 +785,11 @@ RID SceneShaderForwardMobile::ShaderData::create_native_pipeline(PipelineKey p_p
 	ERR_FAIL_COND_V(shader_rid.is_null(), RID());
 
 	RID pipeline = p_output ? p_output->_create_pipeline(shader_rid, p_pipeline_key.framebuffer_format_id, p_pipeline_key.vertex_format_id, primitive_rd, raster_state, multisample_state, depth_stencil_state, blend_state, 0, p_pipeline_key.render_pass, specialization_constants) : RD::get_singleton()->render_pipeline_create(shader_rid, p_pipeline_key.framebuffer_format_id, p_pipeline_key.vertex_format_id, primitive_rd, raster_state, multisample_state, depth_stencil_state, blend_state, 0, p_pipeline_key.render_pass, specialization_constants);
+
+	// BUG-129: Transient ERR_BUSY from production pipeline factory is retried by caller.
+	if (unlikely(pipeline.is_null() && p_output && p_output->last_error == ERR_BUSY)) {
+		return RID();
+	}
 
 	// Don't print error when it's expected.
 	if (unlikely(pipeline.is_null() && RD::get_singleton()->get_driver_workarounds().dont_print_on_render_pipeline_creation_failure)) {
@@ -857,7 +867,7 @@ RID SceneShaderForwardMobile::ShaderData::warm_native_recipe_shader_variant() co
 		const int group_idx = SceneShaderForwardMobile::singleton->native_recipe_shader_groups[fp16_idx];
 		const int variant_idx = SceneShaderForwardMobile::singleton->native_recipe_shader_variants[fp16_idx];
 		ERR_FAIL_COND_V(group_idx < 0 || variant_idx < 0, RID());
-		SceneShaderForwardMobile::singleton->shader.enable_group(group_idx);
+		SceneShaderForwardMobile::singleton->shader.version_enable_group(version, group_idx);
 		return SceneShaderForwardMobile::singleton->shader.version_get_shader(version, variant_idx);
 	}
 	return RID();
@@ -871,11 +881,11 @@ RID SceneShaderForwardMobile::ShaderData::get_shader_variant(ShaderVersion p_sha
 		ERR_FAIL_NULL_V(SceneShaderForwardMobile::singleton, RID());
 		uint32_t shader_index = p_shader_version + (SceneShaderForwardMobile::singleton->use_fp16 ? SHADER_VERSION_MAX * 2 : 0) + (p_ubershader ? SHADER_VERSION_MAX : 0);
 		if (p_instance192) {
-			SceneShaderForwardMobile::singleton->shader.enable_group(SceneShaderForwardMobile::singleton->instance192_shader_groups[shader_index]);
+			SceneShaderForwardMobile::singleton->shader.version_enable_group(version, SceneShaderForwardMobile::singleton->instance192_shader_groups[shader_index]);
 			shader_index += INSTANCE192_VARIANT_OFFSET;
 		}
 		if (p_indexed144) {
-			SceneShaderForwardMobile::singleton->shader.enable_group(SceneShaderForwardMobile::singleton->indexed144_shader_groups[shader_index]);
+			SceneShaderForwardMobile::singleton->shader.version_enable_group(version, SceneShaderForwardMobile::singleton->indexed144_shader_groups[shader_index]);
 			shader_index += INDEXED144_VARIANT_OFFSET;
 		}
 		return SceneShaderForwardMobile::singleton->shader.version_get_shader(version, shader_index);

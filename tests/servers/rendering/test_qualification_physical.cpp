@@ -256,7 +256,7 @@ public:
 			GDExtensionQualificationRtRequestV1 header{ { 1, 56, 0 }, 2, 0, 1, 0, sizeof(origin), sizeof(backing), 0, 0 };
 			REQUIRE(registry->qualification_rt_reserve(ref, &header, &origin, nullptr, &pending_rt).native_error == OK);
 			CHECK(registry->qualification_storage_generation_finalize(ref, &q).native_error == ERR_BUSY);
-			auto *cell = bridge->rt;
+			auto *cell = bridge->rt_slot0();
 			cell->active = true;
 			cell->state = 1;
 			cell->queued = true;
@@ -508,7 +508,7 @@ public:
 							retained_ticket->physical_uses.clear();
 						}
 						if (pending_rt.handle_serial) {
-							bridge->rt->cleanup_child_serial = 0;
+							bridge->rt_slot0()->cleanup_child_serial = 0;
 						}
 						return;
 					}
@@ -1541,9 +1541,12 @@ public:
 				memdelete(c);
 			}
 		}
-		if (bridge->rt) {
-			memdelete(bridge->rt);
+		for (auto *cell : bridge->rt_cells) {
+			if (cell) {
+				memdelete(cell);
+			}
 		}
+		bridge->rt_cells.clear();
 		memdelete(bridge);
 	}
 
@@ -3586,9 +3589,9 @@ public:
 			// The original dispatch fails admission before calling retirement. The
 			// queue pin is a fixture enrollment, not a fabricated dispatch result.
 			d.execution_thread = Thread::UNASSIGNED_ID;
-			bridge->rt->active = true;
-			bridge->rt->state = 1;
-			bridge->rt->queued = true;
+			bridge->rt_slot0()->active = true;
+			bridge->rt_slot0()->state = 1;
+			bridge->rt_slot0()->queued = true;
 			++bridge->children;
 			++record.private_refs;
 			registry->qualification_rt_dispatch(bridge->serial, rt.handle_serial);
@@ -3603,11 +3606,11 @@ public:
 			CHECK(registry->qualification_rt_release(ref, rt).native_error == ERR_BUSY);
 			child->retiring = true;
 			CHECK(registry->qualification_rt_activate(ref, rt).native_error == ERR_BUSY);
-			CHECK(bridge->rt->observed);
+			CHECK(bridge->rt_slot0()->observed);
 			child->retiring = false;
 			child->physical.use_closed = true;
 			CHECK(registry->qualification_rt_activate(ref, rt).native_error == ERR_BUSY);
-			CHECK(bridge->rt->observed);
+			CHECK(bridge->rt_slot0()->observed);
 			child->physical.use_closed = false;
 			const uint32_t old_limit = registry->private_limit;
 			registry->private_limit = record.private_refs;
@@ -3638,9 +3641,9 @@ public:
 		}
 		// Fixture-only dispatch enrollment; the following call executes the original
 		// typed dispatch and physical-free path, not a synthetic success reply.
-		bridge->rt->active = true;
-		bridge->rt->state = 1;
-		bridge->rt->queued = true;
+		bridge->rt_slot0()->active = true;
+		bridge->rt_slot0()->state = 1;
+		bridge->rt_slot0()->queued = true;
 		++bridge->children;
 		++record.private_refs;
 		registry->qualification_rt_dispatch(bridge->serial, rt.handle_serial);
@@ -3751,7 +3754,7 @@ public:
 		if (live.handle_serial) {
 			auto released = registry->qualification_rt_release(ref, live);
 			if (released.native_error != OK) {
-				auto *cell = bridge->rt;
+				auto *cell = bridge->rt_slot0();
 				REQUIRE((cell && cell->occupied && !cell->active && !cell->queued && !cell->executing && !cell->ticket));
 				cell->occupied = false;
 				--bridge->children;
@@ -3827,9 +3830,9 @@ public:
 		GDExtensionStorageRetireReportV1 report = {};
 		REQUIRE(registry->qualification_storage_retire(ref, &direct, &direct_ref, &report).native_error == OK);
 		// Fixture-only queue enrollment; dispatch and both owner retirements are real.
-		bridge->rt->active = true;
-		bridge->rt->state = 1;
-		bridge->rt->queued = true;
+		bridge->rt_slot0()->active = true;
+		bridge->rt_slot0()->state = 1;
+		bridge->rt_slot0()->queued = true;
 		++bridge->children;
 		++record.private_refs;
 		registry->qualification_rt_dispatch(bridge->serial, first.handle_serial);
@@ -3857,9 +3860,9 @@ public:
 		REQUIRE(registry->qualification_rt_reserve(ref, &header, &request[1], nullptr, &second).native_error == OK);
 		CHECK(second.handle_serial == UINT64_MAX);
 		CHECK(registry->qualification_rt_release(ref, first).native_error != OK);
-		bridge->rt->active = true;
-		bridge->rt->state = 1;
-		bridge->rt->queued = true;
+		bridge->rt_slot0()->active = true;
+		bridge->rt_slot0()->state = 1;
+		bridge->rt_slot0()->queued = true;
 		++bridge->children;
 		++record.private_refs;
 		registry->qualification_rt_dispatch(bridge->serial, second.handle_serial);
@@ -3934,7 +3937,7 @@ public:
 		GDExtensionStorageRetireRefV1 qrt_retired = {};
 		if (admitted.native_error == OK) {
 			CHECK(record.private_refs == registry->private_limit);
-			auto *cell = bridge->rt;
+			auto *cell = bridge->rt_slot0();
 			cell->active = true;
 			cell->state = 1;
 			// Exercise the original queue-credit claim and refused-queue rollback at
@@ -4340,7 +4343,7 @@ public:
 			}
 		}
 #ifdef THREADS_ENABLED
-		else if (bridge->rt && bridge->tickets[0]) {
+		else if (bridge->rt_slot0() && bridge->tickets[0]) {
 			// Fill the real bounded server queue while the main render thread waits.
 			// The worker retries ticket and RT service only after each actual drain.
 			struct Filler : Object {
@@ -4371,7 +4374,7 @@ public:
 				rt_pending = registry.qualification_rt_observe(ref, rt, &initial, &output, sizeof(output), &segment, 1);
 				{
 					MutexLock lock(registry.mutex);
-					initially_queued = bridge->rt->queued || bridge->tickets[0]->queued;
+					initially_queued = bridge->rt_slot0()->queued || bridge->tickets[0]->queued;
 					credit_in_use = bridge->cleanup_queue_in_use;
 					initial_refs = record.private_refs;
 				}
@@ -4436,9 +4439,12 @@ public:
 				memdelete(entry);
 			}
 		}
-		if (bridge->rt) {
-			memdelete(bridge->rt);
+		for (auto *cell : bridge->rt_cells) {
+			if (cell) {
+				memdelete(cell);
+			}
 		}
+		bridge->rt_cells.clear();
 		memdelete(bridge);
 		device.storage_buffer_owner.free(rid);
 	}

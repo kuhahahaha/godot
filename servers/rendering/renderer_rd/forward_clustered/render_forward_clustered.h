@@ -189,6 +189,10 @@ private:
 	virtual void setup_render_buffer_data(Ref<RenderSceneBuffersRD> p_render_buffers) override;
 
 	RID render_base_uniform_set;
+	// Fixed zero-initialized Set-0 buffers used only for native material qualification
+	// so live per-frame mutable renderer buffers are never pinned immutable.
+	RID native_qualification_zero_storage_buffer;
+	RID native_qualification_zero_uniform_buffer;
 
 	uint64_t lightmap_texture_array_version = 0xFFFFFFFF;
 

@@ -110,7 +110,7 @@ Error Registry::production_create_service(GDExtensionProductionRequestRefV1 ref,
 		if (kind == ProductionControlKind::SET_CREATE && cell.state == ProductionControlState::PENDING && rd && rd->render_thread_id == Thread::get_caller_id()) {
 			auto &mcell = request->control;
 			mcell.state = ProductionControlState::EXECUTING;
-			const Error exec_err = production_create_execute_locked(*request, *rd, kind, index);
+			const Error exec_err = production_set_create_execute_batch_locked(*request, *rd, index);
 			mcell.output.result = result(exec_err);
 			mcell.state = ProductionControlState::RETURNED;
 		}
@@ -308,10 +308,297 @@ GDExtensionDeviceSessionResultV1 Registry::production_storage_release(GDExtensio
 	return result(ERR_DOES_NOT_EXIST);
 }
 
+bool Registry::production_persistent_set_build_key_locked(const ProductionRequest &p_request, uint32_t p_unit_index, uint32_t p_shader_set, const GDExtensionProductionSetBindingV1 *p_bindings, uint32_t p_count, PersistentSetKey &r_key) const {
+	if (!p_bindings || !p_count || p_unit_index >= p_request.resource_count) {
+		return false;
+	}
+	const auto &unit = p_request.resources[p_unit_index];
+	if (unit.declaration.resource_kind != GDEXTENSION_PRODUCTION_UNIT_V1 || !unit.imported || unit.retiring ||
+			unit.use_count != 2 || !unit.uses[0].same_physical() || !unit.uses[0].linked() ||
+			!unit.uses[0].physical || unit.uses[0].physical->use_closed.load() ||
+			unit.secondary.is_null() || !unit.uses[0].physical->serial) {
+		return false;
+	}
+	r_key.shader_rid = unit.secondary.get_id();
+	r_key.shader_serial = unit.uses[0].physical->serial;
+	r_key.shader_set = p_shader_set;
+	r_key.bindings.resize(p_count);
+	for (uint32_t i = 0; i < p_count; ++i) {
+		const auto &binding = p_bindings[i];
+		if (binding.resource_slot >= p_request.resource_count) {
+			r_key.bindings.clear();
+			return false;
+		}
+		const auto &resource = p_request.resources[binding.resource_slot];
+		if (resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 ||
+				resource.declaration.ownership != GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1 ||
+				!resource.imported || resource.retiring || resource.output_alias_prepared ||
+				!resource.output_predecessor_view.is_empty() || resource.output_guard_readonly || resource.output_guard_history ||
+				resource.use_count != 1 || !resource.uses[0].same_physical() || !resource.uses[0].linked() ||
+				!resource.uses[0].physical || resource.uses[0].physical->use_closed.load() ||
+				resource.primary.is_null() || !resource.backing_serial) {
+			r_key.bindings.clear();
+			return false;
+		}
+		r_key.bindings[i] = { binding.binding, resource.primary.get_id(), resource.backing_serial };
+	}
+	return true;
+}
+
+bool Registry::production_persistent_set_build_key_from_slot_locked(const ProductionRequest &p_request, const ProductionResourceSlot &p_slot, PersistentSetKey &r_key) const {
+	if (p_slot.scene_depth_set1 || p_slot.output_set_deferred || !p_slot.binding_count ||
+			p_slot.first_binding > p_request.capacity.resource_uses ||
+			p_slot.binding_count > p_request.capacity.resource_uses - p_slot.first_binding ||
+			p_slot.imported_unit_slot >= p_request.resource_count) {
+		return false;
+	}
+	const auto &unit = p_request.resources[p_slot.imported_unit_slot];
+	if (unit.declaration.resource_kind != GDEXTENSION_PRODUCTION_UNIT_V1 || !unit.imported || unit.retiring ||
+			unit.use_count != 2 || !unit.uses[0].same_physical() || !unit.uses[0].linked() ||
+			!unit.uses[0].physical || unit.uses[0].physical->use_closed.load() ||
+			unit.secondary.is_null() || !unit.uses[0].physical->serial) {
+		return false;
+	}
+	r_key.shader_rid = unit.secondary.get_id();
+	r_key.shader_serial = unit.uses[0].physical->serial;
+	r_key.shader_set = p_slot.shader_set;
+	r_key.bindings.resize(p_slot.binding_count);
+	for (uint32_t i = 0; i < p_slot.binding_count; ++i) {
+		const auto &binding = p_request.uses[p_slot.first_binding + i].binding;
+		if (binding.resource_slot >= p_request.resource_count) {
+			r_key.bindings.clear();
+			return false;
+		}
+		const auto &resource = p_request.resources[binding.resource_slot];
+		if (resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 ||
+				resource.declaration.ownership != GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1 ||
+				!resource.imported || resource.retiring || resource.output_alias_prepared ||
+				!resource.output_predecessor_view.is_empty() || resource.output_guard_readonly || resource.output_guard_history ||
+				resource.use_count != 1 || !resource.uses[0].same_physical() || !resource.uses[0].linked() ||
+				!resource.uses[0].physical || resource.uses[0].physical->use_closed.load() ||
+				resource.primary.is_null() || !resource.backing_serial) {
+			r_key.bindings.clear();
+			return false;
+		}
+		r_key.bindings[i] = { binding.binding, resource.primary.get_id(), resource.backing_serial };
+	}
+	return true;
+}
+
+void Registry::production_persistent_set_index_deps_locked(ProductionAttachment &p_attachment, PersistentSetEntry &p_entry) {
+	for (uint32_t i = 0; i < p_entry.dependencies.size(); ++i) {
+		QualificationPhysicalReturn *dep = p_entry.dependencies[i];
+		if (!dep) {
+			continue;
+		}
+		LocalVector<PersistentSetEntry *> &bucket = p_attachment.persistent_sets_by_dep[dep];
+		if (!bucket.has(&p_entry)) {
+			bucket.push_back(&p_entry);
+		}
+	}
+}
+
+void Registry::production_persistent_set_unindex_deps_locked(ProductionAttachment &p_attachment, PersistentSetEntry &p_entry) {
+	for (uint32_t i = 0; i < p_entry.dependencies.size(); ++i) {
+		QualificationPhysicalReturn *dep = p_entry.dependencies[i];
+		if (!dep) {
+			continue;
+		}
+		LocalVector<PersistentSetEntry *> *bucket = p_attachment.persistent_sets_by_dep.getptr(dep);
+		if (!bucket) {
+			continue;
+		}
+		for (uint32_t j = 0; j < bucket->size();) {
+			if ((*bucket)[j] == &p_entry) {
+				bucket->remove_at_unordered(j);
+			} else {
+				++j;
+			}
+		}
+		if (bucket->is_empty()) {
+			p_attachment.persistent_sets_by_dep.erase(dep);
+		}
+	}
+}
+
+void Registry::production_persistent_sets_evict_lru_locked(ProductionAttachment &p_attachment) {
+	while (p_attachment.persistent_set_lookup.size() > ProductionAttachment::PERSISTENT_SET_MAX_LIVE) {
+		PersistentSetEntry *victim = nullptr;
+		for (uint32_t i = 0; i < p_attachment.persistent_sets.size(); ++i) {
+			PersistentSetEntry *entry = p_attachment.persistent_sets[i];
+			if (!entry || entry->evicted || entry->physical.production_uses != nullptr) {
+				continue;
+			}
+			if (!victim || entry->last_used_tick < victim->last_used_tick) {
+				victim = entry;
+			}
+		}
+		if (!victim) {
+			break;
+		}
+		victim->evicted = true;
+		p_attachment.persistent_set_lookup.erase(victim->key);
+	}
+}
+
+void Registry::production_persistent_sets_reap_and_retire_rt(RenderingDevice *p_rd, bool p_unlock_rd_around_free) {
+	if (!p_rd || p_rd->render_thread_id != Thread::get_caller_id()) {
+		return;
+	}
+	const bool can_free = p_rd->driver && !p_rd->frames.is_empty() && p_rd->_recording_error() == OK &&
+			!p_rd->draw_list.active && !p_rd->compute_list.active && !p_rd->raytracing_list.active &&
+			!p_rd->frame_wait_draining && !p_rd->draw_graph.has_driver_callbacks() &&
+			p_rd->frames[p_rd->frame].qualification_epoch != 0;
+	LocalVector<RID> to_free;
+	{
+		Lock lock(*this);
+		for (auto *attachment : production_attachments) {
+			if (!attachment || attachment->held_device != p_rd || attachment->persistent_sets.is_empty()) {
+				continue;
+			}
+			uint32_t i = 0;
+			while (i < attachment->persistent_sets.size()) {
+				PersistentSetEntry *entry = attachment->persistent_sets[i];
+				if (!entry) {
+					attachment->persistent_sets.remove_at_unordered(i);
+					continue;
+				}
+				uint64_t free_event = 0;
+				{
+					MutexLock phys_lock(entry->physical.mutex);
+					free_event = entry->physical.free_event;
+				}
+				if (entry->evicted && entry->physical.production_uses == nullptr && free_event != 0) {
+					attachment->persistent_set_lookup.erase(entry->key);
+					production_persistent_set_unindex_deps_locked(*attachment, *entry);
+					attachment->persistent_sets.remove_at_unordered(i);
+					memdelete(entry);
+					continue;
+				}
+				if (can_free && entry->evicted && !entry->retire_enqueued &&
+						entry->physical.production_uses == nullptr &&
+						p_rd->_qualification_free_event_available(entry->physical.event_capacity_reserved) &&
+						(attachment->closing || to_free.size() < 256u)) {
+					entry->physical.use_closed.store(true);
+					entry->retire_enqueued = true;
+					to_free.push_back(entry->rid);
+				}
+				++i;
+			}
+		}
+	}
+	if (to_free.is_empty()) {
+		return;
+	}
+	const bool previous_retiring = p_rd->qualification_retiring;
+	p_rd->qualification_retiring = true;
+	if (p_unlock_rd_around_free) {
+		p_rd->_thread_safe_.unlock();
+	}
+	for (uint32_t i = 0; i < to_free.size(); ++i) {
+		p_rd->free_rid(to_free[i]);
+	}
+	if (p_unlock_rd_around_free) {
+		p_rd->_thread_safe_.lock();
+	}
+	p_rd->qualification_retiring = previous_retiring;
+	{
+		Lock lock(*this);
+		for (auto *attachment : production_attachments) {
+			if (!attachment || attachment->held_device != p_rd || attachment->persistent_sets.is_empty()) {
+				continue;
+			}
+			uint32_t i = 0;
+			while (i < attachment->persistent_sets.size()) {
+				PersistentSetEntry *entry = attachment->persistent_sets[i];
+				if (!entry) {
+					attachment->persistent_sets.remove_at_unordered(i);
+					continue;
+				}
+				bool enqueued = false;
+				uint64_t free_event = 0;
+				{
+					MutexLock phys_lock(entry->physical.mutex);
+					enqueued = entry->physical.enqueued;
+					free_event = entry->physical.free_event;
+				}
+				if (entry->evicted && entry->physical.production_uses == nullptr && free_event != 0) {
+					attachment->persistent_set_lookup.erase(entry->key);
+					production_persistent_set_unindex_deps_locked(*attachment, *entry);
+					attachment->persistent_sets.remove_at_unordered(i);
+					memdelete(entry);
+					continue;
+				}
+				if (entry->retire_enqueued && !enqueued && free_event == 0) {
+					entry->retire_enqueued = false;
+				}
+				++i;
+			}
+		}
+	}
+}
+
+void Registry::production_persistent_sets_evict_for_dependency_rt(RenderingDevice *p_rd, QualificationPhysicalReturn *p_dep) {
+	if (!p_rd || !p_dep || p_rd->render_thread_id != Thread::get_caller_id()) {
+		return;
+	}
+	bool any_evicted = false;
+	{
+		Lock lock(*this);
+		for (auto *attachment : production_attachments) {
+			if (!attachment || attachment->held_device != p_rd || attachment->persistent_sets_by_dep.is_empty()) {
+				continue;
+			}
+			LocalVector<PersistentSetEntry *> *bucket = attachment->persistent_sets_by_dep.getptr(p_dep);
+			if (!bucket || bucket->is_empty()) {
+				continue;
+			}
+			for (uint32_t i = 0; i < bucket->size(); ++i) {
+				PersistentSetEntry *entry = (*bucket)[i];
+				if (!entry) {
+					continue;
+				}
+				if (!entry->evicted) {
+					entry->evicted = true;
+					attachment->persistent_set_lookup.erase(entry->key);
+				}
+				any_evicted = true;
+			}
+		}
+	}
+	if (any_evicted) {
+		production_persistent_sets_reap_and_retire_rt(p_rd, true);
+	}
+}
+
+void Registry::production_persistent_sets_close_drain_rt(uint64_t p_registry_instance, uint64_t p_attachment_serial) {
+	if (p_registry_instance != instance) {
+		return;
+	}
+	RenderingDevice *rd = nullptr;
+	{
+		Lock lock(*this);
+		for (auto *attachment : production_attachments) {
+			if (attachment && attachment->serial == p_attachment_serial) {
+				attachment->persistent_set_close_drain_queued = false;
+				rd = attachment->held_device;
+				break;
+			}
+		}
+	}
+	if (!rd || rd->render_thread_id != Thread::get_caller_id() || !rd->_thread_safe_.try_lock()) {
+		return;
+	}
+	MutexScopeUnlock<Mutex> unlock(rd->_thread_safe_);
+	production_persistent_sets_reap_and_retire_rt(rd, true);
+}
+
 GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProductionRequestRefV1 ref, uint32_t index, uint32_t unit_index, uint32_t shader_set, const GDExtensionProductionSetBindingV1 *bindings, uint32_t count) {
 	if (!count || !valid(bindings)) {
 		return result(ERR_INVALID_PARAMETER);
 	}
+	uint64_t schedule_leader_serial = 0;
+	uint64_t drain_returned_serial = 0;
 	{
 		Lock lock(*this);
 		ProductionRequest *request = nullptr;
@@ -328,6 +615,23 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 		if (slot.declaration.resource_kind != GDEXTENSION_PRODUCTION_SET_V1 || slot.declaration.ownership != GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || !unit.imported || unit.declaration.resource_kind != GDEXTENSION_PRODUCTION_UNIT_V1 || unit.use_count != 2 || slot.declaration.original_part != shader_set) {
 			return result(ERR_INVALID_DATA);
 		}
+		auto has_earlier_creating_set = [&]() {
+			for (uint32_t j = 0; j < index; ++j) {
+				const auto &prior = request->resources[j];
+				if (prior.declaration.resource_kind == GDEXTENSION_PRODUCTION_SET_V1 && prior.creating && !prior.primary.is_valid()) {
+					return true;
+				}
+			}
+			return false;
+		};
+		const bool mismatched_returned_set_create =
+				request->control.state == ProductionControlState::RETURNED &&
+				request->control.input.kind == ProductionControlKind::SET_CREATE &&
+				request->control.input.resource_slot != index;
+		const bool can_batch_with_leader =
+				(request->control.state == ProductionControlState::PENDING || request->control.state == ProductionControlState::QUEUED) &&
+				request->control.input.kind == ProductionControlKind::SET_CREATE &&
+				rd && rd->render_thread_id != Thread::get_caller_id();
 		if (slot.owned_serial) {
 			if (slot.imported_unit_slot != unit_index || slot.shader_set != shader_set || slot.binding_count != count) {
 				return result(ERR_INVALID_DATA);
@@ -340,74 +644,225 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 			if (slot.output_set_deferred) {
 				return result(OK);
 			}
-		} else {
-			if ((error = production_request_locked(ref, true, request, rd)) != OK) {
-				return result(error);
-			}
-			if (request->frozen || request->capture_inflight || request->binding_used > request->capacity.resource_uses - request->use_count || count > request->capacity.resource_uses - request->use_count - request->binding_used || request->revision > UINT64_MAX - uint64_t(request->capacity.graph_memberships) * 2 - uint64_t(request->capacity.native_memberships) * 2 - request->capacity.readbacks - request->capacity.resources - 8 || production_serials.exhausted || production_serials.next > UINT64_MAX - 2 || !request->next_control_serial) {
-				return result(ERR_INVALID_DATA);
-			}
-			// Copy the complete finite binding origin before queue publication.
-			// Native shader reflection is checked on RT before the first effect.
-			const bool scene_depth_set1 = (shader_set == 1u && bindings[0].resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT);
-			if (scene_depth_set1) {
-				if (count > MAX_SCENE_DEPTH_SET1_PAIRS) {
-					return result(ERR_INVALID_DATA);
+			const bool is_active_leader =
+					request->control.state != ProductionControlState::OWNER_CONSUMED &&
+					request->control.input.kind == ProductionControlKind::SET_CREATE &&
+					request->control.input.resource_slot == index;
+			if (!is_active_leader) {
+				if (!slot.creating && !slot.batched_set_create) {
+					return result(slot.handoff_error);
 				}
-				for (uint32_t i = 0; i < count; ++i) {
-					const auto &binding = bindings[i];
-					float slab_m = 0.0f;
-					float jump_m = 0.0f;
-					if (!production_dto_valid(binding) || binding.set != 1u || binding.binding != 2u * i ||
-							binding.array_element > 1u || binding.resource_slot != SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
-							!decode_scene_depth_pair_params(binding.bytes, slab_m, jump_m)) {
-						return result(ERR_INVALID_DATA);
+				// BUG-77A: If another SET_CREATE leader finished in RETURNED while
+				// this slot is still creating, consume that completed control cell
+				// back to OWNER_CONSUMED so neither retry nor production_cancel can wedge.
+				if (mismatched_returned_set_create) {
+					drain_returned_serial = request->control.serial;
+				} else if (slot.batched_set_create && slot.creating) {
+					if (request->control.state == ProductionControlState::OWNER_CONSUMED) {
+						slot.batched_set_create = false;
+						if (has_earlier_creating_set()) {
+							return result(ERR_BUSY);
+						}
+					} else if (request->control.state == ProductionControlState::PENDING && request->control.input.kind == ProductionControlKind::SET_CREATE) {
+						schedule_leader_serial = request->control.serial;
+					} else {
+						return result(ERR_BUSY);
 					}
+				} else if (slot.creating && can_batch_with_leader) {
+					ProductionAttachment *checked = nullptr;
+					if ((error = production_attachment_locked({ instance, request->attachment->serial }, true, checked, rd)) != OK) {
+						slot.creating = false;
+						slot.handoff_error = error;
+						request->returns[index].pending = false;
+						return result(error);
+					}
+					if (request->cancelled || request->release_started || (request->native_static_sealed && !request->frozen) || request->continuation_inflight) {
+						slot.creating = false;
+						slot.handoff_error = ERR_BUSY;
+						request->returns[index].pending = false;
+						return result(ERR_BUSY);
+					}
+					slot.batched_set_create = true;
+					if (request->control.state == ProductionControlState::PENDING) {
+						schedule_leader_serial = request->control.serial;
+					} else {
+						return result(ERR_BUSY);
+					}
+				} else if (slot.creating && has_earlier_creating_set()) {
+					// BUG-77A: Never let a later follower hijack SET_CREATE leadership
+					// while an earlier slot is still creating (e.g. right after the
+					// leader consumed a transient ERR_BUSY control back to OWNER_CONSUMED).
+					return result(ERR_BUSY);
+				}
+			}
+		} else {
+			if (mismatched_returned_set_create) {
+				drain_returned_serial = request->control.serial;
+			} else if (can_batch_with_leader) {
+				ProductionAttachment *checked = nullptr;
+				if ((error = production_attachment_locked({ instance, request->attachment->serial }, true, checked, rd)) != OK) {
+					return result(error);
+				}
+				if (request->cancelled || request->release_started || (request->native_static_sealed && !request->frozen) || request->continuation_inflight) {
+					return result(ERR_BUSY);
 				}
 			} else {
-				for (uint32_t i = 0; i < count; ++i) {
-					const auto &binding = bindings[i];
-					if (!production_dto_valid(binding) || binding.set != shader_set || binding.array_element || binding.offset || binding.resource_slot >= request->resource_count || (i && bindings[i - 1].binding >= binding.binding)) {
-						return result(ERR_INVALID_DATA);
-					}
-					const auto &resource = request->resources[binding.resource_slot];
-					const bool original_physical = resource.imported && ((resource.use_count == 1 && resource.uses[0].same_physical() && resource.uses[0].linked()) || !resource.output_predecessor_view.is_empty() || (resource.output_guard_readonly && resource.output_guard_history));
-					const bool deferred_alias = resource.output_alias_prepared && !resource.imported && resource.output_action_ordinal < request->action_count && request->actions[resource.output_action_ordinal].prepared;
-					if ((!original_physical && !deferred_alias) || resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || resource.retiring || binding.bytes != resource.declaration.physical_bytes) {
-						return result(ERR_INVALID_DATA);
-					}
+				if ((error = production_request_locked(ref, true, request, rd)) != OK) {
+					return result(error);
+				}
+				// BUG-77A: Do not promote a later follower to active SET_CREATE leader
+				// while an earlier SET_V1 slot is still creating.
+				if (has_earlier_creating_set()) {
+					return result(ERR_BUSY);
 				}
 			}
-			production_serials.take(slot.owned_serial);
-			production_serials.take(slot.retire_serial);
-			production_serials.take(slot.owned_physical.serial);
-			slot.owned_physical.bridge = request->attachment->serial;
-			slot.owned_physical.child = slot.owned_serial;
-			slot.first_binding = request->use_count + request->binding_used;
-			slot.binding_count = count;
-			slot.imported_unit_slot = unit_index;
-			slot.shader_set = shader_set;
-			slot.scene_depth_set1 = scene_depth_set1;
-			for (uint32_t i = 0; i < count; ++i) {
-				request->uses[slot.first_binding + i].binding = bindings[i];
-			}
-			request->binding_used += count;
-			if (!scene_depth_set1) {
+			if (!drain_returned_serial) {
+				if (request->frozen || request->capture_inflight || request->binding_used > request->capacity.resource_uses - request->use_count || count > request->capacity.resource_uses - request->use_count - request->binding_used || request->revision > UINT64_MAX - uint64_t(request->capacity.graph_memberships) * 2 - uint64_t(request->capacity.native_memberships) * 2 - request->capacity.readbacks - request->capacity.resources - 8 || production_serials.exhausted || production_serials.next > UINT64_MAX - 2 || !request->next_control_serial) {
+					return result(ERR_INVALID_DATA);
+				}
+				// Copy the complete finite binding origin before queue publication.
+				// Native shader reflection is checked on RT before the first effect.
+				// Set 1 may combine leading scene-depth sentinel pairs (0xFFFFFFFE)
+				// with trailing GDEXTENSION_PRODUCTION_STORAGE_V1 SSBOs (e.g. neighbor_grid).
+				const bool scene_depth_set1 = (shader_set == 1u && bindings[0].resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT);
+				if (scene_depth_set1) {
+					uint32_t sd_pair_count = 0;
+					while (sd_pair_count < count && bindings[sd_pair_count].resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT) {
+						++sd_pair_count;
+					}
+					if (sd_pair_count < 1u || sd_pair_count > MAX_SCENE_DEPTH_SET1_PAIRS) {
+						return result(ERR_INVALID_DATA);
+					}
+					for (uint32_t i = 0; i < sd_pair_count; ++i) {
+						const auto &binding = bindings[i];
+						float slab_m = 0.0f;
+						float jump_m = 0.0f;
+						if (!production_dto_valid(binding) || binding.set != 1u || binding.binding != 2u * i ||
+								binding.array_element > 1u || binding.resource_slot != SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
+								!decode_scene_depth_pair_params(binding.bytes, slab_m, jump_m)) {
+							return result(ERR_INVALID_DATA);
+						}
+					}
+					for (uint32_t i = sd_pair_count; i < count; ++i) {
+						const auto &binding = bindings[i];
+						if (!production_dto_valid(binding) || binding.set != 1u || binding.array_element || binding.offset ||
+								binding.resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
+								binding.resource_slot >= request->resource_count ||
+								binding.binding < 2u * sd_pair_count ||
+								(i > sd_pair_count && bindings[i - 1].binding >= binding.binding)) {
+							return result(ERR_INVALID_DATA);
+						}
+						const auto &resource = request->resources[binding.resource_slot];
+						const bool original_physical = resource.imported && ((resource.use_count == 1 && resource.uses[0].same_physical() && resource.uses[0].linked()) || !resource.output_predecessor_view.is_empty() || (resource.output_guard_readonly && resource.output_guard_history));
+						if (!original_physical || resource.output_alias_prepared || resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || resource.retiring || binding.bytes != resource.declaration.physical_bytes) {
+							return result(ERR_INVALID_DATA);
+						}
+					}
+				} else {
+					for (uint32_t i = 0; i < count; ++i) {
+						const auto &binding = bindings[i];
+						if (!production_dto_valid(binding) || binding.set != shader_set || binding.array_element || binding.offset || binding.resource_slot >= request->resource_count || (i && bindings[i - 1].binding >= binding.binding)) {
+							return result(ERR_INVALID_DATA);
+						}
+						const auto &resource = request->resources[binding.resource_slot];
+						const bool original_physical = resource.imported && ((resource.use_count == 1 && resource.uses[0].same_physical() && resource.uses[0].linked()) || !resource.output_predecessor_view.is_empty() || (resource.output_guard_readonly && resource.output_guard_history));
+						const bool deferred_alias = resource.output_alias_prepared && !resource.imported && resource.output_action_ordinal < request->action_count && request->actions[resource.output_action_ordinal].prepared;
+						if ((!original_physical && !deferred_alias) || resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || resource.retiring || binding.bytes != resource.declaration.physical_bytes) {
+							return result(ERR_INVALID_DATA);
+						}
+					}
+				}
+				PersistentSetKey cache_key;
+				bool cache_eligible = false;
+				if (!scene_depth_set1) {
+					bool has_output_alias = false;
+					for (uint32_t i = 0; i < count; ++i) {
+						has_output_alias |= request->resources[bindings[i].resource_slot].output_alias_prepared;
+					}
+					if (!has_output_alias && !request->attachment->closing &&
+							production_persistent_set_build_key_locked(*request, unit_index, shader_set, bindings, count, cache_key)) {
+						cache_eligible = true;
+						PersistentSetEntry **found = request->attachment->persistent_set_lookup.getptr(cache_key);
+						if (found && *found && !(*found)->evicted && !(*found)->physical.use_closed.load()) {
+							PersistentSetEntry *entry = *found;
+							const Error attach_err = slot.uses[0].attach(entry->physical, *request, request->serial);
+							if (attach_err == OK) {
+								slot.owned_serial = entry->serial;
+								slot.primary = entry->rid;
+								slot.backing_serial = entry->physical.serial;
+								slot.imported_unit_slot = unit_index;
+								slot.shader_set = shader_set;
+								slot.scene_depth_set1 = false;
+								slot.first_binding = request->use_count + request->binding_used;
+								slot.binding_count = count;
+								for (uint32_t i = 0; i < count; ++i) {
+									request->uses[slot.first_binding + i].binding = bindings[i];
+								}
+								request->binding_used += count;
+								slot.use_count = 1;
+								slot.imported = true;
+								slot.cached_persistent_set = true;
+								slot.creating = false;
+								slot.handoff_error = OK;
+								request->returns[index].pending = false;
+								request->returns[index].serial = 0;
+								entry->last_used_tick = ++request->attachment->persistent_set_tick;
+								return result(OK);
+							}
+						}
+					}
+				}
+				production_serials.take(slot.owned_serial);
+				production_serials.take(slot.retire_serial);
+				production_serials.take(slot.owned_physical.serial);
+				slot.owned_physical.bridge = request->attachment->serial;
+				slot.owned_physical.child = slot.owned_serial;
+				slot.first_binding = request->use_count + request->binding_used;
+				slot.binding_count = count;
+				slot.imported_unit_slot = unit_index;
+				slot.shader_set = shader_set;
+				slot.scene_depth_set1 = scene_depth_set1;
+				slot.cached_persistent_set = cache_eligible;
 				for (uint32_t i = 0; i < count; ++i) {
-					slot.output_set_deferred |= request->resources[bindings[i].resource_slot].output_alias_prepared;
+					request->uses[slot.first_binding + i].binding = bindings[i];
+				}
+				request->binding_used += count;
+				if (!scene_depth_set1) {
+					for (uint32_t i = 0; i < count; ++i) {
+						slot.output_set_deferred |= request->resources[bindings[i].resource_slot].output_alias_prepared;
+					}
+				}
+				if (slot.output_set_deferred) {
+					slot.cached_persistent_set = false;
+					// Preparation only. The original output action creates this exact
+					// set after its actual aliases exist, inside the same RECORD.
+					return result(OK);
+				}
+				slot.creating = true;
+				request->returns[index].pending = true;
+				request->returns[index].serial = slot.retire_serial;
+				if (can_batch_with_leader) {
+					slot.batched_set_create = true;
+					if (request->control.state == ProductionControlState::PENDING) {
+						schedule_leader_serial = request->control.serial;
+					} else {
+						return result(ERR_BUSY);
+					}
+				} else {
+					error = production_create_accept_locked(*request, ProductionControlKind::SET_CREATE, index);
+					CRASH_COND(error != OK);
 				}
 			}
-			if (slot.output_set_deferred) {
-				// Preparation only. The original output action creates this exact
-				// set after its actual aliases exist, inside the same RECORD.
-				return result(OK);
-			}
-			slot.creating = true;
-			request->returns[index].pending = true;
-			request->returns[index].serial = slot.retire_serial;
-			error = production_create_accept_locked(*request, ProductionControlKind::SET_CREATE, index);
-			CRASH_COND(error != OK);
 		}
+	}
+	if (drain_returned_serial) {
+		ProductionControlOutput drained = {};
+		(void)production_control_consume(ref, drain_returned_serial, &drained);
+		return result(ERR_BUSY);
+	}
+	if (schedule_leader_serial) {
+		const Error scheduled = production_control_schedule(ref, schedule_leader_serial);
+		return result(scheduled == OK ? ERR_BUSY : scheduled);
 	}
 	return result(production_create_service(ref, ProductionControlKind::SET_CREATE, index));
 }
@@ -749,10 +1204,16 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 		const auto &unit = request.resources[slot.imported_unit_slot];
 		const auto *shader = rd.shader_owner.get_or_null(unit.secondary);
 		if (slot.scene_depth_set1) {
+			uint32_t pair_count = 0;
+			while (pair_count < slot.binding_count &&
+					request.uses[slot.first_binding + pair_count].binding.resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT) {
+				++pair_count;
+			}
+			const uint32_t storage_count = slot.binding_count - pair_count;
 			if (!unit.imported || unit.use_count != 2 || !shader || slot.shader_set != 1u ||
-					slot.binding_count < 1u || slot.binding_count > MAX_SCENE_DEPTH_SET1_PAIRS ||
+					pair_count < 1u || pair_count > MAX_SCENE_DEPTH_SET1_PAIRS ||
 					uint32_t(shader->uniform_sets.size()) <= 1u ||
-					uint32_t(shader->uniform_sets[1].size()) != 2u * slot.binding_count) {
+					uint32_t(shader->uniform_sets[1].size()) != 2u * pair_count + storage_count) {
 				return finish(ERR_INVALID_DATA);
 			}
 			struct SceneDepthPairSpec {
@@ -761,7 +1222,7 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 				float jump_m = 0.50f;
 			};
 			SceneDepthPairSpec specs[MAX_SCENE_DEPTH_SET1_PAIRS];
-			for (uint32_t d = 0; d < slot.binding_count; ++d) {
+			for (uint32_t d = 0; d < pair_count; ++d) {
 				const auto &binding = request.uses[slot.first_binding + d].binding;
 				if (!production_dto_valid(binding) || binding.set != 1u || binding.binding != 2u * d ||
 						binding.array_element > 1u || binding.resource_slot != SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
@@ -789,14 +1250,45 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 					return finish(ERR_INVALID_DATA);
 				}
 			}
+			LocalVector<RenderingDevice::Uniform> trailing_uniforms;
+			LocalVector<QualificationPhysicalReturn *> dependencies;
+			trailing_uniforms.resize(storage_count);
+			dependencies.reserve(storage_count + 1);
+			dependencies.push_back(unit.uses[0].physical);
+			for (uint32_t s = 0; s < storage_count; ++s) {
+				const auto &binding = request.uses[slot.first_binding + pair_count + s].binding;
+				if (!production_dto_valid(binding) || binding.set != 1u || binding.array_element || binding.offset ||
+						binding.resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
+						binding.resource_slot >= request.resource_count ||
+						binding.binding < 2u * pair_count ||
+						(s > 0 && request.uses[slot.first_binding + pair_count + s - 1].binding.binding >= binding.binding)) {
+					return finish(ERR_INVALID_DATA);
+				}
+				const auto &resource = request.resources[binding.resource_slot];
+				const bool predecessor = production_output_predecessor_matches_locked(request, resource, rd) ||
+						(resource.output_guard_history && production_output_guard_matches_locked(request, resource, rd));
+				if (!resource.imported || resource.retiring || resource.output_alias_prepared ||
+						(!predecessor && (resource.use_count != 1 || !resource.uses[0].same_physical() || !resource.uses[0].linked()))) {
+					return finish(ERR_INVALID_DATA);
+				}
+				bool reflected = false;
+				for (const auto &uniform : shader->uniform_sets[1]) {
+					reflected |= uniform.binding == binding.binding && uniform.type == RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER && (!predecessor || !uniform.writable);
+				}
+				if (!reflected) {
+					return finish(ERR_INVALID_DATA);
+				}
+				trailing_uniforms[s].uniform_type = RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER;
+				trailing_uniforms[s].binding = binding.binding;
+				trailing_uniforms[s].append_id(resource.primary);
+				if (!predecessor && !dependencies.has(resource.uses[0].physical)) {
+					dependencies.push_back(resource.uses[0].physical);
+				}
+			}
 			if (!rd._qualification_reserve_free_event(&slot.owned_physical)) {
 				return finish(ERR_PARAMETER_RANGE_ERROR);
 			}
-			const uint32_t pair_count = slot.binding_count;
 			const RID unit_shader_rid = unit.secondary;
-			LocalVector<QualificationPhysicalReturn *> dependencies;
-			dependencies.reserve(1);
-			dependencies.push_back(unit.uses[0].physical);
 
 			Ref<RendererRD::ParticlesCollisionSceneRD::DepthReadLease> acquired_leases[MAX_SCENE_DEPTH_SET1_PAIRS];
 			Error acq_err = OK;
@@ -810,7 +1302,7 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 					acq_err = ERR_UNAVAILABLE;
 				} else {
 					LocalVector<RenderingDevice::Uniform> uniforms;
-					uniforms.resize(2u * pair_count);
+					uniforms.resize(2u * pair_count + storage_count);
 					for (uint32_t d = 0; d < pair_count; ++d) {
 						GDExtensionSceneOpaque32V1 sample_token = {};
 						acq_err = collision_scene->acquire_depth_snapshot_read_lease(
@@ -837,6 +1329,9 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 						uniforms[2u * d + 1u].binding = 2u * d + 1u;
 						uniforms[2u * d + 1u].append_id(gen->depth_texture);
 					}
+					for (uint32_t s = 0; s < storage_count; ++s) {
+						uniforms[2u * pair_count + s] = trailing_uniforms[s];
+					}
 					if (acq_err == OK) {
 						rid = rd._uniform_set_create_qualification(uniforms, unit_shader_rid, 1u, false, &slot.owned_physical, &dependencies, nullptr, &request);
 						if (rid.is_null()) {
@@ -858,7 +1353,8 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 			--request.capture_inflight;
 			if (acq_err != OK || rid.is_null()) {
 				rd._qualification_release_free_event(&slot.owned_physical);
-				return finish(acq_err != OK ? acq_err : ERR_CANT_CREATE);
+				const Error fail_err = acq_err != OK ? acq_err : ERR_CANT_CREATE;
+				return fail_err == ERR_BUSY ? ERR_BUSY : finish(fail_err);
 			}
 			slot.backing_serial = slot.owned_physical.serial;
 			slot.scene_depth_lease_count = pair_count;
@@ -896,6 +1392,79 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 					dependencies.push_back(resource.uses[0].physical);
 				}
 			}
+			if (slot.cached_persistent_set) {
+				PersistentSetKey cache_key;
+				if (production_persistent_set_build_key_from_slot_locked(request, slot, cache_key)) {
+					PersistentSetEntry **existing = request.attachment->persistent_set_lookup.getptr(cache_key);
+					if (existing && *existing && !(*existing)->evicted && !(*existing)->physical.use_closed.load()) {
+						PersistentSetEntry *entry = *existing;
+						slot.owned_serial = entry->serial;
+						slot.primary = entry->rid;
+						slot.backing_serial = entry->physical.serial;
+						const Error attach_err = slot.uses[0].attach(entry->physical, request, request.serial);
+						if (attach_err == OK) {
+							slot.use_count = 1;
+							slot.imported = true;
+							request.returns[index].pending = false;
+							entry->last_used_tick = ++request.attachment->persistent_set_tick;
+						}
+						++request.revision;
+						return finish(attach_err != OK ? attach_err : request.source_device_lost ? ERR_UNAVAILABLE
+																								 : OK);
+					}
+					if (production_serials.exhausted || production_serials.next > UINT64_MAX - 2) {
+						return finish(ERR_PARAMETER_RANGE_ERROR);
+					}
+					PersistentSetEntry *entry = memnew(PersistentSetEntry);
+					production_serials.take(entry->serial);
+					production_serials.take(entry->physical.serial);
+					entry->physical.bridge = request.attachment->serial;
+					entry->physical.child = entry->serial;
+					entry->key = cache_key;
+					entry->dependencies = dependencies;
+					if (!rd._qualification_reserve_free_event(&entry->physical)) {
+						memdelete(entry);
+						return finish(ERR_PARAMETER_RANGE_ERROR);
+					}
+					production_native_effect_enter_locked(request);
+					++request.capture_inflight;
+					unlock_mutex_for_call();
+					rid = rd._uniform_set_create_qualification(uniforms, unit.secondary, slot.shader_set, false, &entry->physical, &dependencies, nullptr, &request);
+					relock_mutex_after_call();
+					CRASH_COND(!request.capture_inflight);
+					--request.capture_inflight;
+					if (rid.is_null()) {
+						rd._qualification_release_free_event(&entry->physical);
+						memdelete(entry);
+						const Error fail_err = rd.get_last_uniform_set_create_error() == ERR_BUSY ? ERR_BUSY : ERR_CANT_CREATE;
+						return fail_err == ERR_BUSY ? ERR_BUSY : finish(fail_err);
+					}
+					entry->rid = rid;
+					entry->physical.rid = rid.get_id();
+					entry->last_used_tick = ++request.attachment->persistent_set_tick;
+					request.attachment->persistent_sets.push_back(entry);
+					production_persistent_set_index_deps_locked(*request.attachment, *entry);
+					if (!request.attachment->closing && !request.attachment->persistent_set_lookup.has(entry->key)) {
+						request.attachment->persistent_set_lookup.insert(entry->key, entry);
+						production_persistent_sets_evict_lru_locked(*request.attachment);
+					} else {
+						entry->evicted = true;
+					}
+					slot.owned_serial = entry->serial;
+					slot.primary = entry->rid;
+					slot.backing_serial = entry->physical.serial;
+					const Error attach_err = slot.uses[0].attach(entry->physical, request, request.serial);
+					if (attach_err == OK) {
+						slot.use_count = 1;
+						slot.imported = true;
+						request.returns[index].pending = false;
+					}
+					++request.revision;
+					return finish(attach_err != OK ? attach_err : request.source_device_lost ? ERR_UNAVAILABLE
+																							 : OK);
+				}
+				slot.cached_persistent_set = false;
+			}
 			if (!rd._qualification_reserve_free_event(&slot.owned_physical)) {
 				return finish(ERR_PARAMETER_RANGE_ERROR);
 			}
@@ -908,7 +1477,8 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 			--request.capture_inflight;
 			if (rid.is_null()) {
 				rd._qualification_release_free_event(&slot.owned_physical);
-				return finish(rd.get_last_uniform_set_create_error() == ERR_BUSY ? ERR_BUSY : ERR_CANT_CREATE);
+				const Error fail_err = rd.get_last_uniform_set_create_error() == ERR_BUSY ? ERR_BUSY : ERR_CANT_CREATE;
+				return fail_err == ERR_BUSY ? ERR_BUSY : finish(fail_err);
 			}
 			slot.backing_serial = slot.owned_physical.serial;
 		}
@@ -922,6 +1492,42 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 	++request.revision;
 	return finish(error != OK ? error : request.source_device_lost ? ERR_UNAVAILABLE
 																   : OK);
+}
+
+void Registry::production_set_create_cancel_batched_locked(ProductionRequest &request, Error p_error) {
+	for (uint32_t i = 0; i < request.resource_count; ++i) {
+		auto &slot = request.resources[i];
+		if (!slot.creating && !slot.batched_set_create) {
+			continue;
+		}
+		const bool is_create_slot = slot.declaration.resource_kind == GDEXTENSION_PRODUCTION_SET_V1 ||
+				slot.declaration.resource_kind == GDEXTENSION_PRODUCTION_STORAGE_V1;
+		slot.batched_set_create = false;
+		if (is_create_slot && slot.creating && !slot.primary.is_valid()) {
+			slot.creating = false;
+			slot.cached_persistent_set = false;
+			slot.handoff_error = p_error;
+			if (i < request.capacity.return_cells) {
+				request.returns[i].pending = false;
+			}
+		}
+	}
+}
+
+Error Registry::production_set_create_execute_batch_locked(ProductionRequest &request, RenderingDevice &rd, uint32_t leader_index) {
+	const Error leader_err = production_create_execute_locked(request, rd, ProductionControlKind::SET_CREATE, leader_index);
+	for (uint32_t other = 0; other < request.resource_count; ++other) {
+		if (other == leader_index) {
+			continue;
+		}
+		auto &other_slot = request.resources[other];
+		if (!other_slot.batched_set_create || !other_slot.creating) {
+			continue;
+		}
+		other_slot.batched_set_create = false;
+		(void)production_create_execute_locked(request, rd, ProductionControlKind::SET_CREATE, other);
+	}
+	return leader_err;
 }
 
 bool Registry::production_maintenance_budget_ready_locked(const ProductionRequest &request, const GDExtensionProductionServiceBudgetV1 &budget, const ProductionServiceUsage &usage) const {
@@ -1000,7 +1606,7 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 		const bool storage = slot.declaration.resource_kind == GDEXTENSION_PRODUCTION_STORAGE_V1;
 		const bool raster = request.raster_reserved && slot.declaration.resource_kind == GDEXTENSION_PRODUCTION_RASTER_PHYSICAL_V1;
 		const bool raster_retire = raster && request.raster_prepare_origin.create_attempt && !request.resources[0].creating && (request.cancelled || request.next_action == request.action_count || request.resources[0].handoff_error != OK);
-		if (slot.declaration.ownership != GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || !slot.primary.is_valid() || slot.returned ||
+		if (slot.declaration.ownership != GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || !slot.primary.is_valid() || slot.returned || slot.cached_persistent_set ||
 				(!set && !storage && !raster) || (raster && !raster_retire) || (storage && !slot.retiring) || (set && !request.cancelled && request.next_action != request.action_count)) {
 			continue;
 		}
@@ -1192,7 +1798,7 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 	}
 	for (uint32_t i = 0; i < request.resource_count; ++i) {
 		auto &slot = request.resources[i];
-		if (slot.declaration.resource_kind == GDEXTENSION_PRODUCTION_SET_V1 && slot.declaration.ownership == GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 && !slot.returned) {
+		if (slot.declaration.resource_kind == GDEXTENSION_PRODUCTION_SET_V1 && slot.declaration.ownership == GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 && !slot.returned && !slot.cached_persistent_set) {
 			MutexLock physical(slot.owned_physical.mutex);
 			if (slot.owned_physical.free_event) {
 				slot.returned = true;
@@ -1288,19 +1894,46 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	if (own_or_idle_disposal && (mq_in_place_early || request.graph_count > 0)) {
 		if (!any_graph_pending) {
 			// Godot's normal _end_frame() already submitted this request's GPU work + readback.
-			// Poll/deliver the exact frame holding this request's readback capture directly
-			// instead of rejecting on live scene/UI work in rd.draw_graph or rd.frame.
+			// Poll/deliver the earliest frame holding this request's readback capture (matching
+			// returned offset) only when every capture on that frame is in-order, avoiding
+			// out-of-order segment delivery on split multi-frame readbacks (BUG-120).
+			auto frame_readbacks_in_order = [&](uint32_t fi) -> bool {
+				for (const auto &other_rb : rd.frames[fi].download_buffer_get_data_requests) {
+					if (!other_rb.capture) {
+						continue;
+					}
+					if (!other_rb.capture->state || other_rb.result_offset != other_rb.capture->state->returned) {
+						return false;
+					}
+				}
+				return true;
+			};
 			uint32_t rb_frame = UINT32_MAX;
 			for (uint32_t f = 0; f < rd.frames.size() && rb_frame == UINT32_MAX; ++f) {
 				for (const auto &rb : rd.frames[f].download_buffer_get_data_requests) {
-					if (rb.capture && rb.capture->registry == this && rb.capture->request_serial == request.serial) {
+					if (rb.capture && rb.capture->registry == this && rb.capture->request_serial == request.serial &&
+							rb.capture->state && rb.result_offset == rb.capture->state->returned) {
 						rb_frame = f;
 						break;
 					}
 				}
 			}
 			if (rb_frame != UINT32_MAX) {
+				if (!frame_readbacks_in_order(rb_frame)) {
+					return drain_trace.result(ERR_BUSY, "split_readback_order");
+				}
 				if (!rd.frames[rb_frame].fence_signaled && !rd.frame_wait_draining) {
+					if (!rd.frames[rb_frame].primary_command_buffer_begun && !rd.frames[rb_frame].disposal.active) {
+						usage.controls = 1;
+						production_native_effect_enter_locked(request);
+						++request.capture_inflight;
+						unlock_mutex_for_call();
+						const Error delivered = rd._stall_for_frame(rb_frame, true);
+						relock_mutex_after_call();
+						CRASH_COND(!request.capture_inflight);
+						--request.capture_inflight;
+						return delivered;
+					}
 					return drain_trace.result(ERR_BUSY, "rb_frame_not_submitted");
 				}
 				RenderingDevice::NativeDisposalBudget slice;
@@ -1434,13 +2067,34 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 					}
 				}
 			}
+			for (uint32_t p = 0; p < attachment->persistent_sets.size(); ++p) {
+				if (attachment->persistent_sets[p] && &attachment->persistent_sets[p]->physical == physical) {
+					return true;
+				}
+			}
 		}
 		return false;
 	};
 	auto exact_closure = [&](const ProductionDisposalUse *node, uint32_t kind, uint64_t native_driver_id, uint64_t backing = 0) {
 		for (; node; node = node->next) {
-			if (node->request == &request && node->request_serial == request.serial && node->kind == kind && node->rid && node->serial && node->native_driver_id == native_driver_id && (!backing || node->serial == backing) && node->state.load(std::memory_order_acquire) == 2) {
+			if (!node->request || !node->request_serial || node->kind != kind || !node->rid || !node->serial || node->native_driver_id != native_driver_id || (backing && node->serial != backing) || node->state.load(std::memory_order_acquire) != 2) {
+				continue;
+			}
+			if (node->request == &request && node->request_serial == request.serial) {
 				return true;
+			}
+			// Mirror owned_physical: admit live sibling production requests on this same RD
+			// so concurrent slots do not mutually starve on each other's output closures (BUG-120).
+			for (auto *attachment : production_attachments) {
+				if (!attachment || attachment->held_device != &rd) {
+					continue;
+				}
+				for (uint32_t r = 0; r < attachment->quote.capacity.requests; ++r) {
+					const auto &owner = attachment->requests[r];
+					if (owner.serial && node->request == &owner && node->request_serial == owner.serial) {
+						return true;
+					}
+				}
 			}
 		}
 		return false;
@@ -1463,6 +2117,21 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 		for (const auto &readback : frame.download_buffer_get_data_requests) {
 			if (!readback.capture || readback.capture->registry != this) {
 				return drain_trace.result(ERR_BUSY, "foreign_readback");
+			}
+			// Forbid in-place stall if this frame carries a non-initial segment of a split
+			// readback or a capture that also has an undelivered segment on another frame (BUG-120).
+			if (readback.result_offset > 0 || !readback.capture->state || readback.result_offset != readback.capture->state->returned) {
+				return drain_trace.result(ERR_BUSY, "split_readback_order");
+			}
+			for (uint32_t other_f = 0; other_f < rd.frames.size(); ++other_f) {
+				if (other_f == target_frame) {
+					continue;
+				}
+				for (const auto &other_rb : rd.frames[other_f].download_buffer_get_data_requests) {
+					if (other_rb.capture == readback.capture) {
+						return drain_trace.result(ERR_BUSY, "split_readback_other_frame");
+					}
+				}
 			}
 		}
 	} else {

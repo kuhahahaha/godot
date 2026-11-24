@@ -90,8 +90,12 @@ protected:
 		uint64_t serial = 0;
 		std::atomic<bool> fence_owned{ false };
 		uint32_t observers = 0;
+		// 1 ref for completion_records ownership + 1 ref for Metal's async addCompletedHandler.
+		std::atomic<uint32_t> live_refs{ 2 };
 		NS::SharedPtr<MTL::CommandBuffer> command_buffer;
 	};
+	static void publish_command_buffer_status(CompletionRecord *p_record, MTL::CommandBuffer *p_command_buffer);
+	static void release_completion_record(CompletionRecord *p_record);
 
 	std::atomic<uint64_t> next_native_call_serial{ 1 };
 	uint64_t reserve_native_call_serials(uint32_t p_count);
@@ -134,26 +138,162 @@ protected:
 		RELEASE_AFTER_WARMUP,
 		PERSIST,
 	};
-	static constexpr uint32_t ARCHIVE_WARMUP_IDLE_FRAMES_DEFAULT = 8;
-	static constexpr uint32_t ARCHIVE_WARMUP_MIN_FRAMES_DEFAULT = 8;
+	static constexpr uint32_t ARCHIVE_WARMUP_IDLE_FRAMES = 30;
+	static constexpr uint32_t ARCHIVE_WARMUP_MIN_FRAMES = 30;
+	static constexpr uint32_t ARCHIVE_WARMUP_MAX_FRAMES = 90;
+	static constexpr uint32_t ARCHIVE_WARMUP_MAX_PIPELINES = 64;
+	static constexpr uint32_t ARCHIVE_WARMUP_MAX_COMPUTE_PIPELINES = 16;
 	static constexpr uint64_t ARCHIVE_MAX_BYTES_DEFAULT = 64ull * 1024ull * 1024ull;
+	static constexpr uint64_t ARCHIVE_MAX_DISK_BYTES = ARCHIVE_MAX_BYTES_DEFAULT;
 	static constexpr uint32_t ARCHIVE_MAX_ENTRIES = 4096;
 
 	Mutex archive_mutex;
 	Mutex archive_serialize_mutex;
 	NS::SharedPtr<MTL::BinaryArchive> archive;
 	std::atomic<bool> archive_active{ false };
+	std::atomic<bool> archive_tearing_down{ false };
 	uint32_t archive_count = 0;
+	uint32_t archive_added_pipelines = 0;
+	uint32_t archive_added_compute_pipelines = 0;
 	bool archive_dirty = false;
 	bool archive_activity_this_frame = false;
 	uint32_t archive_idle_frames = 0;
-	uint32_t archive_warmup_idle_frames = ARCHIVE_WARMUP_IDLE_FRAMES_DEFAULT;
-	uint32_t archive_warmup_min_frames = ARCHIVE_WARMUP_MIN_FRAMES_DEFAULT;
+	uint32_t archive_warmup_idle_frames = ARCHIVE_WARMUP_IDLE_FRAMES;
+	uint32_t archive_warmup_min_frames = ARCHIVE_WARMUP_MIN_FRAMES;
 	uint64_t archive_max_bytes = ARCHIVE_MAX_BYTES_DEFAULT;
+	uint32_t archive_open_frames = 0;
+	std::atomic<uint64_t> archive_serialize_calls{ 0 };
 	PipelineCacheMode pipeline_cache_mode = PipelineCacheMode::RELEASE_AFTER_WARMUP;
 	WorkerThreadPool::TaskID archive_release_task = WorkerThreadPool::INVALID_TASK_ID;
 	// DEV: When true, attempting to create a pipeline will fail if it cannot use the archive.
 	bool archive_fail_on_miss = false;
+
+	// In-memory PSO caches keyed by immutable pipeline state so repeated
+	// render_pipeline_create / compute_pipeline_create calls (e.g. per-frame
+	// external particle output slot leases) reuse compiled MTL::*PipelineState
+	// and MTL::DepthStencilState objects without invoking Metal compilation or
+	// binary archive serialization. Evicted deterministically on shader_free,
+	// vertex_format_free, and driver teardown.
+	struct PipelineSpecConstKey {
+		uint32_t constant_id = 0;
+		uint32_t type = 0;
+		uint32_t bits = 0;
+
+		bool operator==(const PipelineSpecConstKey &p_rhs) const {
+			return constant_id == p_rhs.constant_id && type == p_rhs.type && bits == p_rhs.bits;
+		}
+	};
+
+	struct RenderPipelineBlendAttachmentKey {
+		int32_t slot = -1;
+		uint8_t enable_blend = 0;
+		uint8_t src_color = 0;
+		uint8_t dst_color = 0;
+		uint8_t color_op = 0;
+		uint8_t src_alpha = 0;
+		uint8_t dst_alpha = 0;
+		uint8_t alpha_op = 0;
+		uint8_t write_mask = 0;
+
+		bool operator==(const RenderPipelineBlendAttachmentKey &p_rhs) const {
+			return slot == p_rhs.slot && enable_blend == p_rhs.enable_blend &&
+					src_color == p_rhs.src_color && dst_color == p_rhs.dst_color && color_op == p_rhs.color_op &&
+					src_alpha == p_rhs.src_alpha && dst_alpha == p_rhs.dst_alpha && alpha_op == p_rhs.alpha_op &&
+					write_mask == p_rhs.write_mask;
+		}
+	};
+
+	struct RenderPipelineCacheKey {
+		uint64_t shader_id = 0;
+		uint64_t vertex_format_id = 0;
+		uint32_t render_primitive = 0;
+		uint32_t dynamic_state = 0;
+		uint32_t color_format_count = 0;
+		uint16_t color_formats[MAX_COLOR_ATTACHMENT_COUNT] = {};
+		uint16_t depth_format = 0;
+		uint16_t stencil_format = 0;
+		uint32_t raster_flags = 0;
+		uint32_t cull_mode = 0;
+		uint32_t front_face = 0;
+		uint32_t depth_bias_constant_bits = 0;
+		uint32_t depth_bias_slope_bits = 0;
+		uint32_t depth_bias_clamp_bits = 0;
+		uint32_t patch_control_points = 0;
+		uint32_t sample_count = 1;
+		uint32_t msaa_flags = 0;
+		uint32_t depth_stencil_flags = 0;
+		uint32_t depth_compare_op = 0;
+		uint32_t front_fail = 0;
+		uint32_t front_pass = 0;
+		uint32_t front_depth_fail = 0;
+		uint32_t front_compare = 0;
+		uint32_t front_compare_mask = 0;
+		uint32_t front_write_mask = 0;
+		uint32_t front_reference = 0;
+		uint32_t back_fail = 0;
+		uint32_t back_pass = 0;
+		uint32_t back_depth_fail = 0;
+		uint32_t back_compare = 0;
+		uint32_t back_compare_mask = 0;
+		uint32_t back_write_mask = 0;
+		uint32_t back_reference = 0;
+		uint32_t blend_const_bits[4] = {};
+		LocalVector<RenderPipelineBlendAttachmentKey> blend_attachments;
+		LocalVector<PipelineSpecConstKey> spec_constants;
+		uint32_t cached_hash = 0;
+
+		uint32_t hash() const { return cached_hash; }
+		bool operator==(const RenderPipelineCacheKey &p_rhs) const;
+	};
+
+	struct RenderPipelineCacheKeyHasher {
+		static _FORCE_INLINE_ uint32_t hash(const RenderPipelineCacheKey &p_key) {
+			return p_key.cached_hash;
+		}
+	};
+
+	struct RenderPipelineCacheEntry {
+		NS::SharedPtr<MTL::RenderPipelineState> state;
+		NS::SharedPtr<MTL::DepthStencilState> depth_stencil;
+		SampleCount sample_count = SampleCount1;
+		MDRenderPipeline::RasterState raster_state;
+	};
+
+	struct ComputePipelineCacheKey {
+		SHA256Digest library_key;
+		bool uses_argument_buffers = false;
+		uint32_t argument_buffer_count = 0;
+		uint64_t dynamic_buffer_mask = 0;
+		LocalVector<PipelineSpecConstKey> spec_constants;
+		uint32_t cached_hash = 0;
+
+		uint32_t hash() const { return cached_hash; }
+		bool operator==(const ComputePipelineCacheKey &p_rhs) const;
+	};
+
+	struct ComputePipelineCacheKeyHasher {
+		static _FORCE_INLINE_ uint32_t hash(const ComputePipelineCacheKey &p_key) {
+			return p_key.cached_hash;
+		}
+	};
+
+	struct ComputePipelineCacheEntry {
+		NS::SharedPtr<MTL::ComputePipelineState> state;
+	};
+
+	static constexpr uint32_t MAX_RENDER_PSO_CACHE_ENTRIES = 1024;
+	static constexpr uint32_t MAX_COMPUTE_PSO_CACHE_ENTRIES = 512;
+	Mutex pipeline_state_cache_mutex;
+	HashMap<RenderPipelineCacheKey, RenderPipelineCacheEntry, RenderPipelineCacheKeyHasher> render_pso_cache;
+	HashMap<ComputePipelineCacheKey, ComputePipelineCacheEntry, ComputePipelineCacheKeyHasher> compute_pso_cache;
+	std::atomic<uint64_t> render_pso_cache_hits{ 0 };
+	std::atomic<uint64_t> render_pso_cache_misses{ 0 };
+	std::atomic<uint64_t> compute_pso_cache_hits{ 0 };
+	std::atomic<uint64_t> compute_pso_cache_misses{ 0 };
+	static std::atomic<uint64_t> total_render_pso_cache_hits;
+	static std::atomic<uint64_t> total_render_pso_cache_misses;
+	static std::atomic<uint64_t> total_compute_pso_cache_hits;
+	static std::atomic<uint64_t> total_compute_pso_cache_misses;
 
 #pragma mark - Copy Queue
 
@@ -234,6 +374,7 @@ public:
 	FencePollResult native_call_poll(uint64_t p_native_serial) override;
 	FencePollResult native_call_wait(uint64_t p_native_serial) override;
 	Error native_call_recycle(uint64_t p_native_serial) override;
+	Error native_call_recycle_wait(uint64_t p_native_serial) override;
 	Error native_call_retain(uint64_t p_native_serial) override;
 	Error native_call_release(uint64_t p_native_serial) override;
 	void encode_imported_resources(MTL::RenderCommandEncoder *p_enc);
@@ -485,7 +626,8 @@ private:
 		return !archive_fail_on_miss && pipeline_cache_mode != PipelineCacheMode::PERSIST;
 	}
 	NS::SharedPtr<MTL::BinaryArchive> _acquire_pipeline_archive();
-	void _record_pipeline_archive_addition(MTL::BinaryArchive *p_archive);
+	bool _can_add_to_pipeline_archive(MTL::BinaryArchive *p_archive, bool p_is_compute);
+	void _record_pipeline_archive_addition(MTL::BinaryArchive *p_archive, bool p_is_compute);
 	void _serialize_archive_to_path(MTL::BinaryArchive *p_archive, const String &p_cache_path, uint32_t p_archive_count);
 	void _wait_archive_release_task();
 	void _maybe_release_pipeline_archive(uint32_t p_frames_drawn);
@@ -658,6 +800,35 @@ public:
 	_FORCE_INLINE_ uint32_t frame_count() const { return _frame_count; }
 	_FORCE_INLINE_ uint32_t frame_index() const { return _frame_index; }
 	_FORCE_INLINE_ uint32_t frames_drawn() const { return _frames_drawn; }
+
+	uint64_t get_render_pso_cache_hits() const { return render_pso_cache_hits.load(std::memory_order_relaxed); }
+	uint64_t get_render_pso_cache_misses() const { return render_pso_cache_misses.load(std::memory_order_relaxed); }
+	uint64_t get_compute_pso_cache_hits() const { return compute_pso_cache_hits.load(std::memory_order_relaxed); }
+	uint64_t get_compute_pso_cache_misses() const { return compute_pso_cache_misses.load(std::memory_order_relaxed); }
+	static uint64_t get_total_render_pso_cache_hits() { return total_render_pso_cache_hits.load(std::memory_order_relaxed); }
+	static uint64_t get_total_render_pso_cache_misses() { return total_render_pso_cache_misses.load(std::memory_order_relaxed); }
+	static uint64_t get_total_compute_pso_cache_hits() { return total_compute_pso_cache_hits.load(std::memory_order_relaxed); }
+	static uint64_t get_total_compute_pso_cache_misses() { return total_compute_pso_cache_misses.load(std::memory_order_relaxed); }
+	bool is_pipeline_archive_active() const { return archive_active.load(std::memory_order_acquire); }
+#ifdef TESTS_ENABLED
+	void test_step_pipeline_archive_frame(uint32_t p_frames_drawn, bool p_simulate_activity) {
+		if (p_simulate_activity) {
+			(void)_acquire_pipeline_archive();
+		}
+		_maybe_release_pipeline_archive(p_frames_drawn);
+	}
+	bool test_record_pipeline_archive_addition(bool p_is_compute) {
+		NS::SharedPtr<MTL::BinaryArchive> local_archive = _acquire_pipeline_archive();
+		if (!local_archive || !_can_add_to_pipeline_archive(local_archive.get(), p_is_compute)) {
+			return false;
+		}
+		_record_pipeline_archive_addition(local_archive.get(), p_is_compute);
+		return true;
+	}
+	uint64_t test_get_pipeline_archive_serialize_calls() const {
+		return archive_serialize_calls.load(std::memory_order_acquire);
+	}
+#endif
 
 private:
 	/*********************/

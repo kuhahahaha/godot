@@ -238,24 +238,6 @@ inline Error compose(const AABB &current_world, const AABB *authenticated_candid
 	if (!Detail::pack(world_low, world_high, candidate.world)) {
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
-	// Use the outward native world envelope's endpoints, not an inward
-	// float inverse/xform. Each corner multiply and addition is widened.
-	double local_low[3] = { INFINITY, INFINITY, INFINITY };
-	double local_high[3] = { -INFINITY, -INFINITY, -INFINITY };
-	for (int corner = 0; corner < 8; ++corner) {
-		for (int row = 0; row < 3; ++row) {
-			Detail::Interval value{ qualified_current_host_inverse12[row * 4 + 3], qualified_current_host_inverse12[row * 4 + 3] };
-			for (int axis = 0; axis < 3; ++axis) {
-				const double coordinate = (corner & (1 << axis)) ? candidate.world.position[axis] + candidate.world.size[axis] : candidate.world.position[axis];
-				value = Detail::add(value, Detail::multiply(qualified_current_host_inverse12[row * 4 + axis], coordinate));
-			}
-			local_low[row] = value.low < local_low[row] ? value.low : local_low[row];
-			local_high[row] = value.high > local_high[row] ? value.high : local_high[row];
-		}
-	}
-	if (!Detail::pack(local_low, local_high, candidate.local)) {
-		return ERR_PARAMETER_RANGE_ERROR;
-	}
 	Transform3D host;
 	for (int row = 0; row < 3; ++row) {
 		for (int column = 0; column < 3; ++column) {
@@ -263,19 +245,90 @@ inline Error compose(const AABB &current_world, const AABB *authenticated_candid
 		}
 		host.origin[row] = current_host_affine12[row * 4 + 3];
 	}
-	// This is the exact ordinary native cull calculation. A conservative
-	// inverse interval alone does not prove the actual f32 result encloses.
-	const AABB reapplied = host.xform(candidate.local);
-	if (!Detail::valid_box(reapplied)) {
-		return ERR_PARAMETER_RANGE_ERROR;
-	}
+	// Use the outward native world envelope's endpoints, not an inward
+	// float inverse/xform. Each corner multiply and addition is widened.
+	// If the exact ordinary f32 host.xform(candidate.local) falls short of
+	// candidate.world due to f32 rounding (e.g. large host.origin magnitude
+	// or tmax - tmin subtraction rounding), iteratively widen the inverse
+	// target outward until the hard zero-epsilon native containment holds.
+	double target_low[3];
+	double target_high[3];
 	for (int axis = 0; axis < 3; ++axis) {
-		if (reapplied.position[axis] > candidate.world.position[axis] ||
-				reapplied.position[axis] + reapplied.size[axis] < candidate.world.position[axis] + candidate.world.size[axis]) {
-			return ERR_INVALID_DATA;
+		const double native_end = double(candidate.world.position[axis] + candidate.world.size[axis]);
+		const double math_end = double(candidate.world.position[axis]) + double(candidate.world.size[axis]);
+		target_low[axis] = double(candidate.world.position[axis]);
+		target_high[axis] = native_end > math_end ? native_end : math_end;
+	}
+	bool reapplied_valid = false;
+	for (int attempt = 0; attempt < 8; ++attempt) {
+		double local_low[3] = { INFINITY, INFINITY, INFINITY };
+		double local_high[3] = { -INFINITY, -INFINITY, -INFINITY };
+		for (int corner = 0; corner < 8; ++corner) {
+			for (int row = 0; row < 3; ++row) {
+				Detail::Interval value{ qualified_current_host_inverse12[row * 4 + 3], qualified_current_host_inverse12[row * 4 + 3] };
+				for (int axis = 0; axis < 3; ++axis) {
+					const double coordinate = (corner & (1 << axis)) ? target_high[axis] : target_low[axis];
+					value = Detail::add(value, Detail::multiply(qualified_current_host_inverse12[row * 4 + axis], coordinate));
+				}
+				local_low[row] = value.low < local_low[row] ? value.low : local_low[row];
+				local_high[row] = value.high > local_high[row] ? value.high : local_high[row];
+			}
+		}
+		if (!Detail::pack(local_low, local_high, candidate.local)) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+		// This is the exact ordinary native cull calculation. A conservative
+		// inverse interval alone does not prove the actual f32 result encloses.
+		const AABB reapplied = host.xform(candidate.local);
+		for (int axis = 0; axis < 3; ++axis) {
+			const real_t reapplied_end = reapplied.position[axis] + reapplied.size[axis];
+			if (!std::isfinite(double(reapplied.position[axis])) || !std::isfinite(double(reapplied.size[axis])) || !std::isfinite(double(reapplied_end))) {
+				return ERR_PARAMETER_RANGE_ERROR;
+			}
+		}
+		reapplied_valid = Detail::valid_box(reapplied);
+		bool encloses = reapplied_valid;
+		for (int axis = 0; axis < 3; ++axis) {
+			const real_t reapplied_end = reapplied.position[axis] + reapplied.size[axis];
+			const real_t world_end = candidate.world.position[axis] + candidate.world.size[axis];
+			const bool miss_low = reapplied.position[axis] > candidate.world.position[axis];
+			const bool miss_high = reapplied_end < world_end;
+			if (!miss_low && !miss_high && reapplied_valid) {
+				continue;
+			}
+			encloses = false;
+			double scale = std::abs(double(reapplied.position[axis]));
+			const double candidates[] = {
+				std::abs(double(reapplied_end)),
+				std::abs(double(host.origin[axis])),
+				std::abs(double(reapplied.size[axis])),
+				std::abs(target_low[axis]),
+				std::abs(target_high[axis]),
+			};
+			for (double v : candidates) {
+				if (v > scale) {
+					scale = v;
+				}
+			}
+			const double step = scale * double(std::numeric_limits<float>::epsilon()) * double(1u << attempt);
+			if (miss_low || !reapplied_valid) {
+				const double deficit = miss_low ? (double(reapplied.position[axis]) - double(candidate.world.position[axis])) : 0.0;
+				const double delta = deficit > step ? deficit : step;
+				const double next_low = target_low[axis] - delta;
+				target_low[axis] = next_low < Detail::down(target_low[axis]) ? next_low : Detail::down(target_low[axis]);
+			}
+			if (miss_high || !reapplied_valid) {
+				const double deficit = miss_high ? (double(world_end) - double(reapplied_end)) : 0.0;
+				const double delta = deficit > step ? deficit : step;
+				const double next_high = target_high[axis] + delta;
+				target_high[axis] = next_high > Detail::up(target_high[axis]) ? next_high : Detail::up(target_high[axis]);
+			}
+		}
+		if (encloses) {
+			out = candidate;
+			return OK;
 		}
 	}
-	out = candidate;
-	return OK;
+	return reapplied_valid ? ERR_INVALID_DATA : ERR_PARAMETER_RANGE_ERROR;
 }
 } // namespace NativeOutputCull

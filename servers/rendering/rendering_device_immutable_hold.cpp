@@ -3934,7 +3934,9 @@ Error RenderingDevice::_production_mq_drain_owned_disposals_step(const GDExtensi
 		return OK;
 	}
 	for (uint32_t fi = 0; fi < frames.size(); ++fi) {
-		if (frames[fi].fence_signaled) {
+		if (frames[fi].fence_signaled ||
+				(frames[fi].maintenance_wait.phase == 4 && frames[fi].maintenance_wait.fence_returned &&
+						!frames[fi].download_buffer_get_data_requests.is_empty())) {
 			const Error poll_err = _native_disposal_stall_step(fi);
 			if (poll_err != OK) {
 				return poll_err;

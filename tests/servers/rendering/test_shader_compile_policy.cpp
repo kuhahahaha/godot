@@ -42,7 +42,10 @@ TEST_FORCE_LINK(test_shader_compile_policy)
 #include "core/io/marshalls.h"
 #include "core/object/class_db.h"
 #include "core/os/os.h"
+#include "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h"
+#include "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h"
 #include "servers/rendering/renderer_rd/shader_rd.h"
+#include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "servers/rendering/rendering_device_binds.h"
 #include "servers/rendering/rendering_shader_container.h"
 #include "servers/rendering/shader_compile_test_bridge.h"
@@ -53,6 +56,8 @@ TEST_FORCE_LINK(test_shader_compile_policy)
 #include <thread>
 
 #ifdef METAL_ENABLED
+#include "drivers/metal/metal_allocator.h"
+#include "drivers/metal/metal_objects_shared.h"
 #include "drivers/metal/rendering_shader_container_metal.h"
 
 #include <Metal/Metal.hpp>
@@ -135,6 +140,264 @@ public:
 
 	static void rollback(Vector<RID> &p_variants, Vector<Vector<uint8_t>> &p_bytes, const LocalVector<int> &p_group, const LocalVector<int> &p_loaded, Vector<RID> &p_freed) {
 		ShaderRD::_rollback_cache_load(p_variants, p_bytes, p_group, p_loaded, [](RID p_rid, void *p_context) { static_cast<Vector<RID> *>(p_context)->push_back(p_rid); }, &p_freed);
+	}
+
+	static void check_bug129_pipeline_busy_suppresses_err_fail() {
+		using MobileScene = RendererSceneRenderImplementation::SceneShaderForwardMobile;
+		using ClusteredScene = RendererSceneRenderImplementation::SceneShaderForwardClustered;
+
+		struct ErrorCounter {
+			uint32_t count = 0;
+			static void handler(void *p_data, const char *, const char *, int, const char *, const char *, bool, ErrorHandlerType p_type) {
+				if (p_type == ERR_HANDLER_ERROR) {
+					++static_cast<ErrorCounter *>(p_data)->count;
+				}
+			}
+		} errors;
+		ErrorHandlerList ehl;
+		ehl.errfunc = &ErrorCounter::handler;
+		ehl.userdata = &errors;
+
+		struct Bug129Driver final : TransferTestDriverBase {
+			DriverWorkarounds get_driver_workarounds() const override { return DriverWorkarounds(); }
+		} driver;
+		RenderingDevice rd;
+		rd.driver = &driver;
+		rd.render_thread_id = Thread::get_caller_id();
+		RenderingDevice::Shader native_shader_obj;
+		native_shader_obj.driver_id = RenderingDeviceDriver::ShaderID(42);
+		native_shader_obj.vertex_input_mask = 0x5;
+		const RID native_shader = rd.shader_owner.make_rid(native_shader_obj);
+		Vector<uint8_t> dummy_bytes;
+		dummy_bytes.push_back(1);
+
+		RenderingDevice *prev_rd = RenderingDevice::singleton;
+		RenderingDevice::singleton = &rd;
+
+		// 1. Mobile create_native_pipeline_checked: ERR_BUSY emits 0 errors; ERR_CANT_CREATE emits 1 error.
+		{
+			alignas(MobileScene) uint8_t raw[sizeof(MobileScene)];
+			MobileScene *mobile = new (raw) MobileScene();
+			Vector<String> variants;
+			variants.resize(MobileScene::SHADER_VERSION_MAX);
+			mobile->shader.initialize(variants, "");
+			const RID ver_rid = mobile->shader.version_create(false);
+			REQUIRE(ver_rid.is_valid());
+			auto *ver = mobile->shader.version_owner.get_or_null(ver_rid);
+			REQUIRE(ver != nullptr);
+			ver->dirty = false;
+			ver->valid = true;
+			ver->initialize_needed = false;
+			ver->variants.resize(MobileScene::SHADER_VERSION_MAX);
+			ver->variant_data.resize(MobileScene::SHADER_VERSION_MAX);
+			ver->variants.write[MobileScene::SHADER_VERSION_COLOR_PASS] = native_shader;
+			ver->variant_data.write[MobileScene::SHADER_VERSION_COLOR_PASS] = dummy_bytes;
+
+			{
+				MobileScene::ShaderData owner(MobileScene::ShaderData::NativeValuePlanTestTag{});
+				owner.version = ver_rid;
+				MobileScene::ShaderData::PipelineKey key = {};
+				key.version = MobileScene::SHADER_VERSION_COLOR_PASS;
+				MobileScene::ShaderData::NativePipelineValuePlan observed;
+				observed.key = key;
+				observed.native_shader = native_shader;
+				observed.input_mask = 0x5;
+
+				const RendererRD::NativePipelineFactorySink busy_sink{ nullptr,
+					+[](void *, const RendererRD::NativePipelineFactoryInput &, Error &r_err) -> RID {
+						r_err = ERR_BUSY;
+						return RID();
+					} };
+				const RendererRD::NativePipelineFactorySink fail_sink{ nullptr,
+					+[](void *, const RendererRD::NativePipelineFactoryInput &, Error &r_err) -> RID {
+						r_err = ERR_CANT_CREATE;
+						return RID();
+					} };
+
+				add_error_handler(&ehl);
+				Error err = OK;
+				errors.count = 0;
+				CHECK(owner.create_native_pipeline_checked(key, observed, busy_sink, err).is_null());
+				CHECK(err == ERR_BUSY);
+				CHECK(errors.count == 0);
+
+				err = OK;
+				errors.count = 0;
+				ERR_PRINT_OFF;
+				CHECK(owner.create_native_pipeline_checked(key, observed, fail_sink, err).is_null());
+				ERR_PRINT_ON;
+				CHECK(err == ERR_CANT_CREATE);
+				CHECK(errors.count == 1);
+				remove_error_handler(&ehl);
+				owner.version = RID();
+			}
+
+			ver->variants.clear();
+			ver->variant_data.clear();
+			CHECK(mobile->shader.version_free(ver_rid));
+			mobile->compiler.~ShaderCompiler();
+			mobile->shader.~SceneForwardMobileShaderRD();
+		}
+
+		// 2. Clustered create_native_pipeline_checked: ERR_BUSY emits 0 errors; ERR_CANT_CREATE emits 1 error.
+		{
+			alignas(ClusteredScene) uint8_t raw[sizeof(ClusteredScene)];
+			ClusteredScene *clustered = new (raw) ClusteredScene();
+			const int variant_count = 1;
+			Vector<String> variants;
+			variants.resize(variant_count);
+			clustered->shader.initialize(variants, "");
+			const RID ver_rid = clustered->shader.version_create(false);
+			REQUIRE(ver_rid.is_valid());
+			auto *ver = clustered->shader.version_owner.get_or_null(ver_rid);
+			REQUIRE(ver != nullptr);
+			ver->dirty = false;
+			ver->valid = true;
+			ver->initialize_needed = false;
+			ver->variants.resize(variant_count);
+			ver->variant_data.resize(variant_count);
+			ver->variants.write[0] = native_shader;
+			ver->variant_data.write[0] = dummy_bytes;
+
+			{
+				ClusteredScene::ShaderData owner(ClusteredScene::ShaderData::NativeValuePlanTestTag{});
+				owner.version = ver_rid;
+				ClusteredScene::ShaderData::PipelineKey key = {};
+				key.version = ClusteredScene::PIPELINE_VERSION_DEPTH_PASS;
+				ClusteredScene::ShaderData::NativePipelineValuePlan observed;
+				observed.key = key;
+				observed.native_shader = native_shader;
+				observed.input_mask = 0x5;
+
+				const RendererRD::NativePipelineFactorySink busy_sink{ nullptr,
+					+[](void *, const RendererRD::NativePipelineFactoryInput &, Error &r_err) -> RID {
+						r_err = ERR_BUSY;
+						return RID();
+					} };
+				const RendererRD::NativePipelineFactorySink fail_sink{ nullptr,
+					+[](void *, const RendererRD::NativePipelineFactoryInput &, Error &r_err) -> RID {
+						r_err = ERR_CANT_CREATE;
+						return RID();
+					} };
+
+				add_error_handler(&ehl);
+				Error err = OK;
+				errors.count = 0;
+				CHECK(owner.create_native_pipeline_checked(key, observed, busy_sink, err).is_null());
+				CHECK(err == ERR_BUSY);
+				CHECK(errors.count == 0);
+
+				err = OK;
+				errors.count = 0;
+				ERR_PRINT_OFF;
+				CHECK(owner.create_native_pipeline_checked(key, observed, fail_sink, err).is_null());
+				ERR_PRINT_ON;
+				CHECK(err == ERR_CANT_CREATE);
+				CHECK(errors.count == 1);
+				remove_error_handler(&ehl);
+				owner.version = RID();
+			}
+
+			ver->variants.clear();
+			ver->variant_data.clear();
+			CHECK(clustered->shader.version_free(ver_rid));
+			clustered->compiler.~ShaderCompiler();
+			clustered->shader.~SceneForwardClusteredShaderRD();
+		}
+
+		rd.shader_owner.free(native_shader);
+		rd.driver = nullptr;
+		RenderingDevice::singleton = prev_rd;
+	}
+
+	static void check_bug139_per_version_group_and_variant_data_free() {
+		struct DummyDriver : TransferTestDriverBase {};
+		DummyDriver driver;
+		RenderingDevice *prev_rd = RenderingDevice::get_singleton();
+		RenderingDevice rd;
+		rd.driver = &driver;
+		rd.is_main_instance = true;
+		rd.render_thread_id = Thread::get_caller_id();
+		RenderingDevice::singleton = &rd;
+
+		RenderingDevice::Shader sh;
+		sh.driver_id = RDD::ShaderID(77);
+		sh.vertex_input_mask = 0x7;
+		const RID native_shader = rd.shader_owner.make_rid(sh);
+
+		struct TestShader : ShaderRD {
+			TestShader() {
+				setup("void main() {}", "void main() {}", nullptr, "Bug139Shader");
+				Vector<VariantDefine> defs;
+				defs.push_back(VariantDefine(0, "", true));
+				defs.push_back(VariantDefine(1, "#define PARTICLE_GROUP\n", false));
+				initialize(defs, "");
+			}
+		} shader;
+
+		const RID v_particle = shader.version_create(false);
+		const RID v_static = shader.version_create(false);
+		REQUIRE(v_particle.is_valid());
+		REQUIRE(v_static.is_valid());
+
+		// Enable group 1 ONLY on v_particle (simulating INDEXED144 / INSTANCE192 / native_recipe).
+		CHECK_FALSE(shader.is_group_enabled(1));
+		CHECK_FALSE(shader.version_is_group_enabled(v_particle, 1));
+		CHECK_FALSE(shader.version_is_group_enabled(v_static, 1));
+
+		shader.version_enable_group(v_particle, 1);
+		CHECK_FALSE(shader.is_group_enabled(1));
+		CHECK(shader.version_is_group_enabled(v_particle, 1));
+		CHECK_FALSE(shader.version_is_group_enabled(v_static, 1));
+
+		// Simulate post-compile state where variant_compiled[1] == 1 and variant_data[1] is freed (empty).
+		auto *vp = shader.version_owner.get_or_null(v_particle);
+		auto *vs = shader.version_owner.get_or_null(v_static);
+		REQUIRE(vp != nullptr);
+		REQUIRE(vs != nullptr);
+		vp->dirty = false;
+		vp->valid = true;
+		vp->initialize_needed = false;
+		vp->variants.resize_initialized(2);
+		vp->variant_data.resize(2);
+		vp->variant_compiled.resize_initialized(2);
+		vp->variants.write[1] = native_shader;
+		vp->variant_compiled.write[1] = 1;
+		CHECK(vp->variant_data[1].is_empty());
+
+		vs->dirty = false;
+		vs->valid = true;
+		vs->initialize_needed = false;
+		vs->variants.resize_initialized(2);
+		vs->variant_data.resize(2);
+		vs->variant_compiled.resize_initialized(2);
+		vs->variants.write[1] = native_shader;
+		vs->variant_compiled.write[1] = 0;
+
+		RID out_shader;
+		uint64_t out_mask = 0;
+		CHECK(shader.version_get_native_shader_if_ready(v_particle, 1, out_shader, out_mask) == OK);
+		CHECK(out_shader == native_shader);
+		CHECK(out_mask == 0x7);
+
+		// Non-particle version still has group 1 disabled and refuses lookup cleanly.
+		out_shader = RID();
+		out_mask = 0;
+		CHECK(shader.version_get_native_shader_if_ready(v_static, 1, out_shader, out_mask) == ERR_UNAVAILABLE);
+		CHECK(out_shader.is_null());
+
+		// Also verify uncompiled placeholder on v_particle (variant_compiled == 0 && variant_data empty) refuses.
+		vp->variants.write[0] = native_shader;
+		vp->variant_compiled.write[0] = 0;
+		CHECK(shader.version_get_native_shader_if_ready(v_particle, 0, out_shader, out_mask) == ERR_UNAVAILABLE);
+
+		vp->variants.clear();
+		vs->variants.clear();
+		CHECK(shader.version_free(v_particle));
+		CHECK(shader.version_free(v_static));
+		rd.shader_owner.free(native_shader);
+		rd.driver = nullptr;
+		RenderingDevice::singleton = prev_rd;
 	}
 };
 #endif
@@ -1674,5 +1937,27 @@ TEST_CASE("policy_options [ShaderCompilePolicy]") {
 		}
 	}
 }
+
+TEST_CASE("[RenderingDevice][BUG-129] Mobile and Clustered create_native_pipeline_checked return null RID cleanly on ERR_BUSY without logging ERR_FAIL_COND_V") {
+	TestShaderCompilePolicyAccess::check_bug129_pipeline_busy_suppresses_err_fail();
+}
+
+TEST_CASE("[RenderingDevice][BUG-139] ShaderRD per-version particle group enable isolates non-particle versions and retains compiled readiness after freeing variant_data") {
+	TestShaderCompilePolicyAccess::check_bug139_per_version_group_and_variant_data_free();
+}
+
+#ifdef METAL_ENABLED
+TEST_CASE("[RenderingDevice][BUG-139] Metal defaults to LAZY shader load strategy and scales local-RD MetalHeapAllocator pools down") {
+	CHECK(ShaderLoadStrategy::DEFAULT == ShaderLoadStrategy::LAZY);
+	MetalHeapAllocator main_alloc(nullptr, false);
+	MetalHeapAllocator local_alloc(nullptr, true);
+	CHECK(main_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_PRIVATE) == 64ull * 1024 * 1024);
+	CHECK(main_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_SHARED) == 16ull * 1024 * 1024);
+	CHECK(main_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_SHARED_WC) == 16ull * 1024 * 1024);
+	CHECK(local_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_PRIVATE) == 8ull * 1024 * 1024);
+	CHECK(local_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_SHARED) == 4ull * 1024 * 1024);
+	CHECK(local_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_SHARED_WC) == 4ull * 1024 * 1024);
+}
+#endif
 
 } // namespace TestShaderCompilePolicy

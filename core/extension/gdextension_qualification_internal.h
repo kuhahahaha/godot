@@ -33,6 +33,7 @@
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "core/extension/gdextension_qualification_child_history.h"
 #include "core/extension/gdextension_record_source.h"
+#include "core/templates/hash_map.h"
 #include "core/templates/local_vector.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/renderer_rd/storage_rd/height_frame_resources.h"
@@ -199,7 +200,8 @@ struct QualificationTicket {
 	LocalVector<QualificationPhysicalReturn *> physical_uses;
 	RDG::RecordHandle capture, body;
 	uint32_t frame_refs = 0, readback_copies_joined = 0, accepted_rt_refs = 0;
-	bool prepared = false, recorded = false, recording = false, queued = false, acknowledged = false, queue_ref_credit = false;
+	uint32_t live_ticket_index = UINT32_MAX;
+	bool prepared = false, recorded = false, recording = false, queued = false, acknowledged = false, queue_ref_credit = false, unacknowledged_tracked = false;
 	std::atomic<bool> admission_closed{ false };
 	bool stop_requested = false, continuation_pending = false;
 	uint32_t ordering_path_length = 0;
@@ -329,7 +331,7 @@ struct QualificationResource {
 	GDExtensionQualificationResourceRetireReportV1 report = {};
 	QualificationPhysicalReturn physical;
 	Error maintenance_error = OK;
-	bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false;
+	bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false, unacknowledged_tracked = false;
 	uint64_t upload_ticket = 0, last_upload_revision = 0;
 	GDExtensionQualificationTextureUploadV1 upload_origin = {};
 	RenderingDevice::QualificationUploadProgress upload;
@@ -377,7 +379,59 @@ struct Registry::QualificationBridge {
 	uint32_t device = 0;
 	uint64_t epoch = 0;
 	HolderRetirement *holder = nullptr;
-	QualificationRtCell *rt = nullptr;
+	static constexpr uint32_t MAX_RT_SLOTS = 64;
+	LocalVector<QualificationRtCell *> rt_cells;
+	GDExtensionQualificationRtConfigV1 rt_config = {};
+	bool rt_ever_accepted = false;
+	uint64_t rt_retired_highwater = 0;
+	QualificationRtCell *rt_slot0() const {
+		return rt_cells.is_empty() ? nullptr : rt_cells[0];
+	}
+	QualificationRtCell *find_rt_by_serial(uint64_t p_serial) const {
+		if (!p_serial) {
+			return nullptr;
+		}
+		for (uint32_t i = 0; i < rt_cells.size(); ++i) {
+			QualificationRtCell *cell = rt_cells[i];
+			if (cell && cell->occupied && cell->serial == p_serial) {
+				return cell;
+			}
+		}
+		return nullptr;
+	}
+	QualificationRtCell *find_rt_by_operation(uint64_t p_operation_serial) const {
+		if (!p_operation_serial) {
+			return nullptr;
+		}
+		for (uint32_t i = 0; i < rt_cells.size(); ++i) {
+			QualificationRtCell *cell = rt_cells[i];
+			if (cell && cell->occupied &&
+					((cell->height_service_v2 && cell->height_request.operation_serial == p_operation_serial) ||
+							(!cell->height_service_v2 && cell->header.operation_serial == p_operation_serial))) {
+				return cell;
+			}
+		}
+		return nullptr;
+	}
+	QualificationRtCell *find_free_rt_cell() const {
+		for (uint32_t i = 0; i < rt_cells.size(); ++i) {
+			QualificationRtCell *cell = rt_cells[i];
+			if (cell && !cell->occupied) {
+				return cell;
+			}
+		}
+		return nullptr;
+	}
+	template <typename Pred>
+	bool any_rt_occupied_matching(Pred &&p_pred) const {
+		for (uint32_t i = 0; i < rt_cells.size(); ++i) {
+			const QualificationRtCell *cell = rt_cells[i];
+			if (cell && cell->occupied && p_pred(*cell)) {
+				return true;
+			}
+		}
+		return false;
+	}
 	struct StorageFrontier {
 		uint64_t closed = 0, completed = 0;
 		uint32_t cursor = 0, reserved = 0;
@@ -454,7 +508,7 @@ struct Registry::QualificationBridge {
 		// Native operation in flight is distinct from retirement having started.
 		bool native_operation = false;
 		SceneHeightPublication publication;
-		bool quoting = true, create_attempted = false, retiring = false, acknowledged = false, cleanup_serial_reserved = false;
+		bool quoting = true, create_attempted = false, retiring = false, acknowledged = false, cleanup_serial_reserved = false, unacknowledged_tracked = false;
 	};
 	SceneDepth *scene_depth[CHILD_CAPACITY] = {};
 	struct Storage {
@@ -466,7 +520,7 @@ struct Registry::QualificationBridge {
 		GDExtensionStorageRetireReportV1 report = {};
 		QualificationPhysicalReturn physical;
 		Error maintenance_error = OK;
-		bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false;
+		bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false, unacknowledged_tracked = false;
 	};
 	// Original bridge child for a method texture. The producer and typed
 	// retire transaction must bind this cell before it can be admitted by wire.
@@ -504,7 +558,7 @@ struct Registry::QualificationBridge {
 		GDExtensionNativeUnitRetireReportV1 report = {};
 		QualificationPhysicalReturn shader, pipeline;
 		Error maintenance_error = OK;
-		bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false;
+		bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false, unacknowledged_tracked = false;
 	};
 	void collect_retired_children_locked();
 	// Additive TESTS_ENABLED diagnostics; callers hold Registry::mutex.
@@ -520,6 +574,230 @@ struct Registry::QualificationBridge {
 		uint64_t tracked_request_bytes() const { return bridge_request_bytes + origin_arena_request_bytes + hot_cell_request_bytes + physical_pin_request_bytes; }
 	};
 	ChildMetadataStats child_metadata_stats() const;
+	struct StorageOriginKey {
+		uint32_t allocation_slot = 0;
+		uint32_t part = 0;
+		uint64_t allocation_generation = 0;
+		uint64_t create_attempt = 0;
+		bool operator==(const StorageOriginKey &p_other) const {
+			return allocation_slot == p_other.allocation_slot &&
+					part == p_other.part &&
+					allocation_generation == p_other.allocation_generation &&
+					create_attempt == p_other.create_attempt;
+		}
+	};
+	struct StorageOriginKeyHasher {
+		static uint32_t hash(const StorageOriginKey &p_key) {
+			uint32_t h = hash_murmur3_one_32(p_key.allocation_slot);
+			h = hash_murmur3_one_32(p_key.part, h);
+			h = hash_murmur3_one_64(p_key.allocation_generation, h);
+			h = hash_murmur3_one_64(p_key.create_attempt, h);
+			return hash_fmix32(h);
+		}
+	};
+	HashMap<uint64_t, uint32_t> storage_by_serial;
+	HashMap<uint64_t, uint32_t> storage_by_retire_serial;
+	HashMap<StorageOriginKey, uint32_t, StorageOriginKeyHasher> storage_by_origin;
+	LocalVector<uint32_t> storage_free_slots;
+	uint32_t storage_next_fresh_slot = 0;
+	uint32_t storage_acknowledged_count = 0;
+	// O(1) unacknowledged child counter across all 7 bridge child arrays (BUG-149D).
+	// Always mutated under Registry::mutex. Eliminates 270,848-pointer sweep in
+	// qualification_trim_cleanup_ref_credits_locked.
+	uint32_t unacknowledged_children = 0;
+	// Compact list of active (unacknowledged) tickets for O(live_tickets) scan
+	// inside collect_retired_children_locked instead of sweeping tickets[65536].
+	LocalVector<QualificationTicket *> live_tickets;
+
+	template <typename T>
+	void track_unacknowledged_child_locked(T *p_child) {
+		CRASH_COND(!p_child || p_child->acknowledged || p_child->unacknowledged_tracked);
+		p_child->unacknowledged_tracked = true;
+		++unacknowledged_children;
+	}
+	template <typename T>
+	void untrack_unacknowledged_child_locked(T *p_child) {
+		if (p_child && p_child->unacknowledged_tracked) {
+			CRASH_COND(unacknowledged_children == 0);
+			--unacknowledged_children;
+			p_child->unacknowledged_tracked = false;
+		}
+	}
+	template <typename T>
+	void acknowledge_child_locked(T *p_child) {
+		CRASH_COND(!p_child || p_child->acknowledged);
+		p_child->acknowledged = true;
+		if (p_child->unacknowledged_tracked) {
+			CRASH_COND(unacknowledged_children == 0);
+			--unacknowledged_children;
+			p_child->unacknowledged_tracked = false;
+		}
+	}
+	void track_ticket_locked(uint32_t p_slot, QualificationTicket *p_ticket) {
+		CRASH_COND(p_slot >= TICKET_CAPACITY || !p_ticket || tickets[p_slot] != nullptr || p_ticket->live_ticket_index != UINT32_MAX);
+		tickets[p_slot] = p_ticket;
+		p_ticket->live_ticket_index = live_tickets.size();
+		live_tickets.push_back(p_ticket);
+		track_unacknowledged_child_locked(p_ticket);
+	}
+	void remove_live_ticket_locked(QualificationTicket *p_ticket) {
+		if (!p_ticket || p_ticket->live_ticket_index == UINT32_MAX) {
+			return;
+		}
+		const uint32_t idx = p_ticket->live_ticket_index;
+		CRASH_COND(idx >= live_tickets.size() || live_tickets[idx] != p_ticket);
+		const uint32_t last = live_tickets.size() - 1;
+		if (idx != last) {
+			QualificationTicket *moved = live_tickets[last];
+			live_tickets[idx] = moved;
+			moved->live_ticket_index = idx;
+		}
+		live_tickets.resize(last);
+		p_ticket->live_ticket_index = UINT32_MAX;
+	}
+	void untrack_ticket_locked(uint32_t p_slot, QualificationTicket *p_ticket) {
+		CRASH_COND(p_slot >= TICKET_CAPACITY || !p_ticket);
+		remove_live_ticket_locked(p_ticket);
+		untrack_unacknowledged_child_locked(p_ticket);
+		if (tickets[p_slot] == p_ticket) {
+			tickets[p_slot] = nullptr;
+		}
+	}
+	void acknowledge_ticket_locked(QualificationTicket *p_ticket) {
+		acknowledge_child_locked(p_ticket);
+		remove_live_ticket_locked(p_ticket);
+	}
+
+	uint32_t alloc_storage_slot_locked() {
+		while (!storage_free_slots.is_empty()) {
+			const uint32_t slot = storage_free_slots[storage_free_slots.size() - 1];
+			storage_free_slots.resize(storage_free_slots.size() - 1);
+			if (slot < STORAGE_CHILD_CAPACITY && storage[slot] == nullptr) {
+				return slot;
+			}
+		}
+		while (storage_next_fresh_slot < STORAGE_CHILD_CAPACITY) {
+			const uint32_t slot = storage_next_fresh_slot++;
+			if (storage[slot] == nullptr) {
+				return slot;
+			}
+		}
+		for (uint32_t i = 0; i < STORAGE_CHILD_CAPACITY; ++i) {
+			if (storage[i] == nullptr) {
+				return i;
+			}
+		}
+		return STORAGE_CHILD_CAPACITY;
+	}
+	void index_storage_slot_locked(uint32_t p_slot, Storage *p_child) {
+		CRASH_COND(p_slot >= STORAGE_CHILD_CAPACITY || !p_child || storage[p_slot] != nullptr);
+		storage[p_slot] = p_child;
+		track_unacknowledged_child_locked(p_child);
+		if (p_child->serial) {
+			storage_by_serial.insert(p_child->serial, p_slot);
+		}
+		if (p_child->retire_serial) {
+			storage_by_retire_serial.insert(p_child->retire_serial, p_slot);
+		}
+		const StorageOriginKey key{ p_child->origin.allocation_slot, p_child->origin.part, p_child->origin.allocation_generation, p_child->origin.create_attempt };
+		storage_by_origin.insert(key, p_slot);
+	}
+	void unindex_storage_slot_locked(uint32_t p_slot, Storage *p_child) {
+		CRASH_COND(p_slot >= STORAGE_CHILD_CAPACITY || !p_child);
+		untrack_unacknowledged_child_locked(p_child);
+		if (p_child->serial) {
+			const uint32_t *found = storage_by_serial.getptr(p_child->serial);
+			if (found && *found == p_slot) {
+				storage_by_serial.erase(p_child->serial);
+			}
+		}
+		if (p_child->retire_serial) {
+			const uint32_t *found = storage_by_retire_serial.getptr(p_child->retire_serial);
+			if (found && *found == p_slot) {
+				storage_by_retire_serial.erase(p_child->retire_serial);
+			}
+		}
+		const StorageOriginKey key{ p_child->origin.allocation_slot, p_child->origin.part, p_child->origin.allocation_generation, p_child->origin.create_attempt };
+		const uint32_t *found_origin = storage_by_origin.getptr(key);
+		if (found_origin && *found_origin == p_slot) {
+			storage_by_origin.erase(key);
+		}
+		if (p_child->acknowledged && storage_acknowledged_count) {
+			--storage_acknowledged_count;
+		}
+		storage[p_slot] = nullptr;
+		storage_free_slots.push_back(p_slot);
+	}
+	Storage *find_storage_by_serial_locked(uint64_t p_serial) const {
+		if (!p_serial) {
+			return nullptr;
+		}
+		if (const uint32_t *slot = storage_by_serial.getptr(p_serial)) {
+			if (*slot < STORAGE_CHILD_CAPACITY) {
+				Storage *child = storage[*slot];
+				if (child && child->serial == p_serial) {
+					return child;
+				}
+			}
+		}
+#ifdef TESTS_ENABLED
+		for (uint32_t i = 0; i < STORAGE_CHILD_CAPACITY; ++i) {
+			Storage *child = storage[i];
+			if (child && child->serial == p_serial) {
+				return child;
+			}
+		}
+#endif
+		return nullptr;
+	}
+	Storage *find_storage_by_retire_serial_locked(uint64_t p_retire_serial) const {
+		if (!p_retire_serial) {
+			return nullptr;
+		}
+		if (const uint32_t *slot = storage_by_retire_serial.getptr(p_retire_serial)) {
+			if (*slot < STORAGE_CHILD_CAPACITY) {
+				Storage *child = storage[*slot];
+				if (child && child->retire_serial == p_retire_serial) {
+					return child;
+				}
+			}
+		}
+#ifdef TESTS_ENABLED
+		for (uint32_t i = 0; i < STORAGE_CHILD_CAPACITY; ++i) {
+			Storage *child = storage[i];
+			if (child && child->retire_serial == p_retire_serial) {
+				return child;
+			}
+		}
+#endif
+		return nullptr;
+	}
+	Storage *find_storage_by_origin_locked(const GDExtensionStorageCreateRequestV1 &p_req) const {
+		const StorageOriginKey key{ p_req.allocation_slot, p_req.part, p_req.allocation_generation, p_req.create_attempt };
+		if (const uint32_t *slot = storage_by_origin.getptr(key)) {
+			if (*slot < STORAGE_CHILD_CAPACITY) {
+				Storage *child = storage[*slot];
+				if (child && child->origin.allocation_slot == p_req.allocation_slot &&
+						child->origin.allocation_generation == p_req.allocation_generation &&
+						child->origin.part == p_req.part &&
+						child->origin.create_attempt == p_req.create_attempt) {
+					return child;
+				}
+			}
+		}
+#ifdef TESTS_ENABLED
+		for (uint32_t i = 0; i < STORAGE_CHILD_CAPACITY; ++i) {
+			Storage *child = storage[i];
+			if (child && child->origin.allocation_slot == p_req.allocation_slot &&
+					child->origin.allocation_generation == p_req.allocation_generation &&
+					child->origin.part == p_req.part &&
+					child->origin.create_attempt == p_req.create_attempt) {
+				return child;
+			}
+		}
+#endif
+		return nullptr;
+	}
 	QualificationTicket *tickets[TICKET_CAPACITY] = {};
 	Storage *storage[STORAGE_CHILD_CAPACITY] = {};
 	Texture *textures[RESOURCE_CAPACITY] = {};
@@ -536,7 +814,7 @@ inline void Registry::QualificationBridge::collect_retired_children_locked() {
 		if (!cell.uses.is_empty() || cell.production_uses || cell.dependent_children.load()) {
 			return true;
 		}
-		for (const auto *ticket : bridge->tickets) {
+		for (const auto *ticket : bridge->live_tickets) {
 			if (ticket) {
 				for (const auto *forward : ticket->physical_uses) {
 					if (forward == &cell) {
@@ -545,6 +823,20 @@ inline void Registry::QualificationBridge::collect_retired_children_locked() {
 				}
 			}
 		}
+#ifdef TESTS_ENABLED
+		// Synthetic unit tests may install a ticket directly into tickets[0..1]
+		// without going through track_ticket_locked.
+		for (uint32_t i = 0; i < 2; ++i) {
+			const auto *ticket = bridge->tickets[i];
+			if (ticket && ticket->live_ticket_index == UINT32_MAX) {
+				for (const auto *forward : ticket->physical_uses) {
+					if (forward == &cell) {
+						return true;
+					}
+				}
+			}
+		}
+#endif
 		return false;
 	};
 	const auto returned = [](const QualificationPhysicalReturn &cell) {
@@ -552,18 +844,19 @@ inline void Registry::QualificationBridge::collect_retired_children_locked() {
 	};
 	for (auto *&child : bridge->scene_depth) {
 		if (!child || !child->acknowledged || child->quoting || child->native_operation || child->native_frame.is_valid() || child->accepted_rt_refs || child->cleanup_serial_reserved ||
-				(bridge->rt && bridge->rt->occupied && bridge->rt->scene_depth_serial == child->serial)) {
+				bridge->any_rt_occupied_matching([&](const QualificationRtCell &p_cell) { return p_cell.scene_depth_serial == child->serial; })) {
 			continue;
 		}
 		bridge->scene_depth_origins.archive_retired_origin(child->history_index, child->serial, child->retire_serial);
 		memdelete(child);
 		child = nullptr;
 	}
-	for (auto *&child : bridge->storage) {
+	for (uint32_t s = 0; s < QualificationBridge::STORAGE_CHILD_CAPACITY; ++s) {
+		auto *child = bridge->storage[s];
 		if (child && child->acknowledged) {
 			trace_storage_child(*child, "collect_candidate");
 		}
-		if (!child || !child->acknowledged || child->history_index == UINT32_MAX || (bridge->rt && bridge->rt->occupied && bridge->rt->cleanup_child_serial == child->serial) || child->creating || child->queued || child->queue_ref_credit || child->cleanup_serial_reserved || child->maintenance_error != OK || referenced(child->physical)) {
+		if (!child || !child->acknowledged || child->history_index == UINT32_MAX || bridge->any_rt_occupied_matching([&](const QualificationRtCell &p_cell) { return p_cell.cleanup_child_serial == child->serial; }) || child->creating || child->queued || child->queue_ref_credit || child->cleanup_serial_reserved || child->maintenance_error != OK || referenced(child->physical)) {
 			continue;
 		}
 		{
@@ -578,11 +871,11 @@ inline void Registry::QualificationBridge::collect_retired_children_locked() {
 		} else {
 			bridge->storage_origins.archive_retired_origin(child->history_index, child->serial, child->retire_serial);
 		}
+		bridge->unindex_storage_slot_locked(s, child);
 		memdelete(child);
-		child = nullptr;
 	}
 	for (auto *&child : bridge->units) {
-		if (!child || !child->acknowledged || child->history_index == UINT32_MAX || (bridge->rt && bridge->rt->occupied && bridge->rt->cleanup_child_serial == child->serial) || child->creating || child->queued || child->queue_ref_credit || child->cleanup_serial_reserved || child->maintenance_error != OK || child->accepted_rt_refs || referenced(child->shader) || referenced(child->pipeline) || (child->raster && referenced(child->raster->framebuffer))) {
+		if (!child || !child->acknowledged || child->history_index == UINT32_MAX || bridge->any_rt_occupied_matching([&](const QualificationRtCell &p_cell) { return p_cell.cleanup_child_serial == child->serial; }) || child->creating || child->queued || child->queue_ref_credit || child->cleanup_serial_reserved || child->maintenance_error != OK || child->accepted_rt_refs || referenced(child->shader) || referenced(child->pipeline) || (child->raster && referenced(child->raster->framebuffer))) {
 			continue;
 		}
 		{

@@ -822,8 +822,9 @@ enum class ShaderLoadStrategy {
 	IMMEDIATE,
 	LAZY,
 
-	/// The default strategy is to load the shader immediately.
-	DEFAULT = IMMEDIATE,
+	/// Default to lazy shader library compilation so unused variants do not
+	/// eagerly compile Metal AIR / resident MTLLibrary objects at startup.
+	DEFAULT = LAZY,
 };
 
 NS::SharedPtr<MTL::CompileOptions> make_shader_compile_options(uint32_t p_msl_version, bool p_logging, bool p_invariance, bool p_disable_fast_math);
@@ -854,6 +855,7 @@ public:
 #endif
 
 	virtual bool retire_ready_nonblocking() const { return true; }
+	const SHA256Digest *get_cache_key() const;
 	virtual MTL::Library *get_library() = 0;
 	virtual NS::Error *get_error() = 0;
 	virtual void set_label(NS::String *p_label);
@@ -1001,7 +1003,7 @@ public:
 	NS::SharedPtr<MTL::DepthStencilState> depth_stencil;
 	SampleCount sample_count = SampleCount1;
 
-	struct {
+	struct RasterState {
 		MTL::CullMode cull_mode = MTL::CullModeNone;
 		MTL::TriangleFillMode fill_mode = MTL::TriangleFillModeFill;
 		MTL::DepthClipMode clip_mode = MTL::DepthClipModeClip;

@@ -113,6 +113,8 @@ struct CheckedRecordAppend;
 struct OriginalOperationIdentity;
 struct BufferReadbackSourceCapture;
 struct NativeSourceIssueView;
+struct PersistentSetKey;
+struct PersistentSetEntry;
 // Core physical call-frame identity only. Its serial is issued by the actual
 // protected RT entry and expires on return; no Runtime/source authority.
 using ProductionPhysicalContextRef = GDExtensionProductionPhysicalContextRefV1;
@@ -704,6 +706,8 @@ private:
 	friend struct TestDeviceExitEntry::Access;
 #endif
 	void production_control_dispatch(uint64_t, uint64_t, uint64_t, uint64_t);
+	void production_persistent_sets_close_drain_rt(uint64_t, uint64_t);
+	void production_observe_completed_frames_rt(RenderingDevice &);
 	static constexpr uint32_t RECORD_CAPACITY = MAX_LIVE_GENERATIONS;
 	static constexpr uint32_t VIEW_CAPACITY = 8192;
 	static constexpr uint32_t NORMAL_RELAY_CAPACITY = 4096;
@@ -1000,7 +1004,7 @@ private:
 	static thread_local QualificationBridge *active_qualification_bridge;
 	static thread_local uint64_t active_qualification_serial;
 	bool qualification_accepted_call_locked(QualificationBridge *, uint32_t);
-	Error qualification_rt_schedule(GDExtensionQualificationBridgeRefV1);
+	Error qualification_rt_schedule(GDExtensionQualificationBridgeRefV1, uint64_t);
 	Error qualification_cleanup_retire_matches_original_child_locked(QualificationBridge *, uint32_t, const void *);
 	void qualification_trim_cleanup_ref_credits_locked(QualificationBridge *);
 	Error qualification_rt_ticket_locked(QualificationBridge *, const GDExtensionQualificationRtRequestV1 &, const uint8_t *, const uint8_t *, QualificationTicket *&);
@@ -1081,6 +1085,7 @@ private:
 	Error production_output_reads_settle(::RendererRD::ExternalOutputOwner &, uint32_t, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
 	Error production_output_owner_context_locked(const ProductionOutputPin &, RenderingDevice &);
 	bool production_output_pin_matches(const ProductionOutputPin &, GDExtensionProductionRequestRefV1, RenderingDevice &);
+	bool production_output_slot_cross_capture_preparable(const ProductionOutputPin &, GDExtensionProductionRequestRefV1, RenderingDevice &);
 	// Historical identity comparison under existing custody only. It grants no
 	// append/NewWork, color coverage, adoption/ACK or completion authority.
 	bool production_output_pin_matches_operation(const ProductionOutputPin &, GDExtensionProductionRequestRefV1, RenderingDevice &, const OriginalOperationIdentity &);
@@ -1142,6 +1147,15 @@ private:
 	Error production_create_service(GDExtensionProductionRequestRefV1, ProductionControlKind, uint32_t);
 	Error production_create_accept_locked(ProductionRequest &, ProductionControlKind, uint32_t);
 	Error production_create_execute_locked(ProductionRequest &, RenderingDevice &, ProductionControlKind, uint32_t);
+	Error production_set_create_execute_batch_locked(ProductionRequest &, RenderingDevice &, uint32_t);
+	void production_set_create_cancel_batched_locked(ProductionRequest &, Error);
+	bool production_persistent_set_build_key_locked(const ProductionRequest &, uint32_t, uint32_t, const GDExtensionProductionSetBindingV1 *, uint32_t, PersistentSetKey &) const;
+	bool production_persistent_set_build_key_from_slot_locked(const ProductionRequest &, const ProductionResourceSlot &, PersistentSetKey &) const;
+	void production_persistent_set_index_deps_locked(ProductionAttachment &, PersistentSetEntry &);
+	void production_persistent_set_unindex_deps_locked(ProductionAttachment &, PersistentSetEntry &);
+	void production_persistent_sets_evict_lru_locked(ProductionAttachment &);
+	void production_persistent_sets_evict_for_dependency_rt(RenderingDevice *, QualificationPhysicalReturn *);
+	void production_persistent_sets_reap_and_retire_rt(RenderingDevice *, bool p_unlock_rd_around_free);
 	Error production_observe_service(GDExtensionProductionRequestRefV1, const GDExtensionProductionServiceBudgetV1 &);
 	Error production_sets_step_locked(ProductionRequest &, RenderingDevice &, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
 	Error production_readback_delivery(BufferReadbackSourceCapture &, bool);
@@ -1176,6 +1190,7 @@ private:
 	Error production_entity_return_locked(ProductionAttachment &);
 	GDExtensionDeviceSessionResultV1 production_cancel_locked(ProductionRequest &);
 	GDExtensionDeviceSessionResultV1 production_release_locked(ProductionRequest &, RenderingDevice *, bool, const GDExtensionProductionServiceBudgetV1 * = nullptr, ProductionServiceUsage * = nullptr, bool = false);
+	bool production_release_main_fast_path_eligible_locked(const ProductionRequest &, const GDExtensionProductionServiceBudgetV1 &, const GDExtensionProductionReportV2 &) const;
 	bool production_release_owner_tail_locked(const ProductionRequest &, RenderingDevice *, bool) const;
 	void production_release_owner_execute_locked(ProductionRequest &, RenderingDevice *);
 	Error production_native_owner_locked(const ProductionRequest &, uint32_t, const ProductionNativeCell *&) const;
@@ -1287,6 +1302,7 @@ public:
 	Error production_output_predecessor_control(GDExtensionProductionRequestRefV1, const GDExtensionProductionOutputPrepareV1 &, const GDExtensionProductionOutputPredecessorV2 &, const GDExtensionProductionServiceBudgetV1 &, bool = false);
 	Error production_output_predecessor_service_locked(ProductionRequest &, RenderingDevice &);
 	Error production_output_predecessor_return_after_reads_locked(ProductionRequest &, RenderingDevice &, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
+	Error production_output_action_custody_return_after_slot_retire_locked(ProductionRequest &, RenderingDevice &, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
 	void production_finalize_output(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint64_t, GDExtensionProductionOutputFinalizeResultV1 *);
 	GDExtensionDeviceSessionResultV1 production_prepare_host_view(GDExtensionProductionRequestRefV1, uint64_t, const GDExtensionProductionHostViewInputV1 *);
 	GDExtensionDeviceSessionResultV1 production_read_host_view(GDExtensionProductionRequestRefV1, uint64_t, GDExtensionProductionHostViewAssociationV1 *);

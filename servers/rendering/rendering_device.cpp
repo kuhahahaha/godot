@@ -715,7 +715,7 @@ void RenderingDevice::_hit_sbt_add_dirty_range(HitShaderBindingTable *p_hit_sbt,
 }
 
 RID RenderingDevice::hit_sbt_create(RID p_raytracing_pipeline, uint32_t p_initial_hit_group_capacity) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V_MSG(_ensure_recording_ready() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V_MSG(!has_feature(SUPPORTS_RAYTRACING_PIPELINE) && !has_feature(SUPPORTS_RAY_QUERY), RID(), "The current rendering device has neither raytracing pipeline nor ray query support.");
 
 	RaytracingPipeline *raytracing_pipeline = raytracing_pipeline_owner.get_or_null(p_raytracing_pipeline);
@@ -995,6 +995,94 @@ Error RenderingDevice::_insert_staging_block(StagingBuffers &p_staging_buffers) 
 
 	p_staging_buffers.blocks.insert(p_staging_buffers.current, block);
 	return OK;
+}
+
+void RenderingDevice::_trim_idle_staging_buffers() {
+	if (!driver || frames.is_empty() || native_disposal_active || frame_wait_draining) {
+		return;
+	}
+	constexpr uint64_t STAGING_IDLE_FRAMES = 8;
+	constexpr uint64_t STAGING_FLOOR_BYTES = 8u * 1024u * 1024u;
+	constexpr uint32_t TRANSFER_WORKER_TRIM_BYTES = 4u * 1024u * 1024u;
+
+	auto trim_pool = [&](StagingBuffers &p_staging) {
+		if (p_staging.blocks.size() <= 1 || p_staging.block_size == 0) {
+			return;
+		}
+		const int max_floor_by_bytes = int(MAX<uint64_t>(1u, STAGING_FLOOR_BYTES / p_staging.block_size));
+		const int keep_blocks = MAX(1, MIN(int(MAX<uint32_t>(2u, frames.size())), max_floor_by_bytes));
+		if (p_staging.blocks.size() <= keep_blocks) {
+			return;
+		}
+		const uint64_t safe_age = uint64_t(frames.size()) + STAGING_IDLE_FRAMES;
+		for (int i = p_staging.blocks.size() - 1; i >= 0 && p_staging.blocks.size() > keep_blocks; --i) {
+			if (i == p_staging.current) {
+				continue;
+			}
+			const StagingBufferBlock &block = p_staging.blocks[i];
+			if (block.frame_used != 0 && (block.frame_used >= frames_drawn || frames_drawn - block.frame_used < safe_age)) {
+				continue;
+			}
+			if (block.driver_id) {
+				driver->buffer_unmap(block.driver_id);
+				driver->buffer_free(block.driver_id);
+			}
+			p_staging.blocks.remove_at(i);
+			if (i < p_staging.current) {
+				--p_staging.current;
+			}
+		}
+		if (p_staging.current >= p_staging.blocks.size()) {
+			p_staging.current = 0;
+		}
+	};
+
+	if (!upload_staging_buffers.used) {
+		trim_pool(upload_staging_buffers);
+	}
+
+	if (!download_staging_buffers.used) {
+		bool any_download_pending = false;
+		for (uint32_t f = 0; f < frames.size(); ++f) {
+			if (frames[f].maintenance_wait.mapped != nullptr ||
+					!frames[f].download_buffer_staging_buffers.is_empty() ||
+					!frames[f].download_texture_staging_buffers.is_empty() ||
+					!frames[f].download_buffer_get_data_requests.is_empty() ||
+					!frames[f].download_texture_get_data_requests.is_empty()) {
+				any_download_pending = true;
+				break;
+			}
+		}
+		if (!any_download_pending) {
+			trim_pool(download_staging_buffers);
+		}
+	}
+
+	if (transfer_worker_pool_size > 0 && transfer_worker_pool_mutex.try_lock()) {
+		MutexScopeUnlock<BinaryMutex> pool_unlock(transfer_worker_pool_mutex);
+		for (uint32_t i = 0; i < transfer_worker_pool_size; ++i) {
+			TransferWorker *worker = transfer_worker_pool[i];
+			if (!worker || !worker->thread_mutex.try_lock()) {
+				continue;
+			}
+			MutexScopeUnlock<BinaryMutex> worker_unlock(worker->thread_mutex);
+			if (!worker->submitted && !worker->recording && !worker->submission_pending &&
+					!worker->qualification_batch_sealed && !worker->qualification_observer_pending &&
+					!worker->height_observer_pending && !worker->production_observer_pending &&
+					!worker->poisoned && worker->staging_buffer_size_in_use == 0 &&
+					worker->staging_buffer.id != 0 && worker->staging_buffer_size_allocated > TRANSFER_WORKER_TRIM_BYTES) {
+				if (worker->idle_frames < uint32_t(STAGING_IDLE_FRAMES)) {
+					++worker->idle_frames;
+				} else {
+					driver->buffer_free(worker->staging_buffer);
+					worker->staging_buffer = RDD::BufferID();
+					worker->staging_buffer_size_allocated = 0;
+					worker->max_transfer_size = 0;
+					worker->idle_frames = 0;
+				}
+			}
+		}
+	}
 }
 
 Error RenderingDevice::_staging_buffer_allocate(StagingBuffers &p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, uint32_t &r_alloc_offset, uint32_t &r_alloc_size, StagingRequiredAction &r_required_action, bool p_can_segment) {
@@ -1584,9 +1672,133 @@ Error RenderingDevice::buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_
 	return OK;
 }
 
+Error RenderingDevice::_prepare_synchronous_readback() {
+	const auto report_readback_suspension = [this](Error p_error, const char *p_busy_label) -> Error {
+		const bool has_fatal_error = frame_issue_error.load() != OK ||
+				frame_wait_error.load() != OK ||
+				frame_wait_native_code_valid.load();
+		if (has_fatal_error) {
+			ERR_PRINT("A frame fence wait failed; readback recording is suspended.");
+		} else {
+			ERR_PRINT(vformat("%s (error=%d); readback recording is temporarily busy.", p_busy_label, int(p_error)));
+		}
+		return p_error;
+	};
+
+	const bool can_resume_frame = !frame_wait_draining.load() &&
+			frame_issue_error.load() == OK &&
+			frame_wait_error.load() == OK &&
+			!frame_wait_native_code_valid.load() &&
+			!draw_list.active && !compute_list.active && !raytracing_list.active &&
+			driver != nullptr && !frames.is_empty() && uint32_t(frame) < frames.size();
+
+	if (can_resume_frame) {
+		// Gap 1 (BUG-110): Finish an ordinary (non-production, non-selected) disposal continuation.
+		// Never steal a continuation owned by a production request, scene selection, or height selection.
+		if (native_disposal_active.load(std::memory_order_acquire) &&
+				!native_disposal_continuation.production_owner &&
+				!native_disposal_continuation.in_place_no_disposal &&
+				native_disposal_continuation.scene_selection.cell.is_null() &&
+				native_disposal_continuation.height_selection.is_null()) {
+			const Error maint_err = _native_disposal_maintenance();
+			if (maint_err != OK) {
+				return report_readback_suspension(maint_err, "Ordinary disposal maintenance is still pending");
+			}
+		}
+
+		// Gap 2 (BUG-110): Synchronously finish an already-closed qualification graph
+		// before rotating to the next frame and resuming _begin_frame(true).
+		if (!native_disposal_active.load(std::memory_order_acquire) &&
+				!qualification_frame_advance_pending.load() &&
+				frames[frame].qualification_graph_closed) {
+			Error end_err = _end_frame(false);
+			if (end_err == OK) {
+				end_err = _execute_frame(false);
+			}
+			if (end_err != OK) {
+				return report_readback_suspension(end_err, "Closed qualification frame flush is still pending");
+			}
+			frame = (frame + 1) % frames.size();
+			qualification_frame_advance_pending = true;
+		}
+
+		// BUG-92: Resume a pending ordinary frame advance via blocking _begin_frame(true).
+		if (qualification_frame_advance_pending.load() &&
+				!native_disposal_active.load(std::memory_order_acquire)) {
+			const Error begin_error = _begin_frame(true);
+			if (begin_error != OK) {
+				return report_readback_suspension(begin_error, "Frame advance is still pending");
+			}
+		}
+	}
+
+	const Error recording_error = _recording_error();
+	if (recording_error != OK) {
+		return report_readback_suspension(recording_error, "Frame advance or disposal maintenance is active");
+	}
+	return OK;
+}
+
+Error RenderingDevice::_ensure_recording_ready() {
+	const Error initial_error = _recording_error();
+	if (initial_error == OK) {
+		return OK;
+	}
+	const bool can_resume_frame = render_thread_id == Thread::get_caller_id() &&
+			!production_recording_request &&
+			!frame_wait_draining.load() &&
+			frame_issue_error.load() == OK &&
+			frame_wait_error.load() == OK &&
+			!frame_wait_native_code_valid.load() &&
+			!draw_list.active && !compute_list.active && !raytracing_list.active &&
+			driver != nullptr && !frames.is_empty() && uint32_t(frame) < frames.size();
+
+	if (can_resume_frame) {
+		// Finish ordinary (non-production, non-selected) disposal continuation without theft.
+		if (native_disposal_active.load(std::memory_order_acquire) &&
+				!native_disposal_continuation.production_owner &&
+				!native_disposal_continuation.in_place_no_disposal &&
+				native_disposal_continuation.scene_selection.cell.is_null() &&
+				native_disposal_continuation.height_selection.is_null()) {
+			const Error maint_err = _native_disposal_maintenance();
+			if (maint_err != OK) {
+				return maint_err;
+			}
+		}
+
+		// Finish an already-closed qualification graph before rotating to the next frame.
+		if (!native_disposal_active.load(std::memory_order_acquire) &&
+				!qualification_frame_advance_pending.load() &&
+				frames[frame].qualification_graph_closed) {
+			Error end_err = _end_frame(false);
+			if (end_err == OK) {
+				end_err = _execute_frame(false);
+			}
+			if (end_err != OK) {
+				return end_err;
+			}
+			frame = (frame + 1) % frames.size();
+			qualification_frame_advance_pending = true;
+		}
+
+		// Resume a pending ordinary frame advance via blocking _begin_frame(true).
+		if (qualification_frame_advance_pending.load() &&
+				!native_disposal_active.load(std::memory_order_acquire)) {
+			const Error begin_error = _begin_frame(true);
+			if (begin_error != OK) {
+				return begin_error;
+			}
+		}
+	}
+
+	return _recording_error();
+}
+
 Vector<uint8_t> RenderingDevice::buffer_get_data(RID p_buffer, uint32_t p_offset, uint32_t p_size) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, Vector<uint8_t>(), "A frame fence wait failed; readback recording is suspended.");
 	ERR_RENDER_THREAD_GUARD_V(Vector<uint8_t>());
+	if (_prepare_synchronous_readback() != OK) {
+		return Vector<uint8_t>();
+	}
 
 	Buffer *buffer = _get_buffer_from_owner(p_buffer);
 	if (!buffer) {
@@ -1897,7 +2109,8 @@ RID RenderingDevice::storage_buffer_create(uint32_t p_size_bytes, Span<uint8_t> 
 }
 
 RID RenderingDevice::_storage_buffer_create_internal(uint32_t p_size_bytes, Span<uint8_t> p_data, BitField<StorageBufferUsage> p_usage, BitField<BufferCreationBits> p_creation_bits, const NativeDisposalWitness *p_native_disposal) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	const Error rec_err = p_native_disposal ? _recording_error() : _ensure_recording_ready();
+	ERR_FAIL_COND_V_MSG(rec_err != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V(p_data.size() && (uint32_t)p_data.size() != p_size_bytes, RID());
 
 	const uint64_t backing_serial = _reserve_backing_serial();
@@ -2005,7 +2218,7 @@ RID RenderingDevice::_storage_buffer_create_internal(uint32_t p_size_bytes, Span
 }
 
 RID RenderingDevice::texture_buffer_create(uint32_t p_size_elements, DataFormat p_format, Span<uint8_t> p_data) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V_MSG(_ensure_recording_ready() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	uint32_t element_size = get_format_vertex_size(p_format);
 	ERR_FAIL_COND_V_MSG(element_size == 0, RID(), "Format requested is not supported for texture buffers");
 	uint64_t size_bytes = uint64_t(element_size) * p_size_elements;
@@ -2083,7 +2296,8 @@ RID RenderingDevice::_qualification_texture_create(const TextureFormat &p_format
 
 RID RenderingDevice::_texture_create_internal(const TextureFormat &p_format, const TextureView &p_view, const Vector<Vector<uint8_t>> &p_data, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved, const NativeDisposalWitness *p_native_disposal) {
 	ERR_FAIL_COND_V(p_native_disposal && (p_cell || p_reserved.is_null() || !p_data.is_empty()), RID());
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	const Error rec_err = (p_cell || p_native_disposal) ? _recording_error() : _ensure_recording_ready();
+	ERR_FAIL_COND_V_MSG(rec_err != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	// Check the stored enum representation before copying or reading it.
 	static_assert(sizeof(p_format.format) == sizeof(uint32_t));
 	uint32_t format_value = 0;
@@ -2362,7 +2576,7 @@ RID RenderingDevice::_texture_create_internal(const TextureFormat &p_format, con
 }
 
 RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with_texture) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V_MSG(_ensure_recording_ready() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_with_texture), RID());
 	Texture *src_texture = texture_owner.get_or_null(p_with_texture);
 	ERR_FAIL_NULL_V(src_texture, RID());
@@ -2471,7 +2685,7 @@ RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with
 }
 
 RID RenderingDevice::texture_create_from_extension(TextureType p_type, DataFormat p_format, TextureSamples p_samples, BitField<RenderingDevice::TextureUsageBits> p_usage, uint64_t p_image, uint64_t p_width, uint64_t p_height, uint64_t p_depth, uint64_t p_layers, uint64_t p_mipmaps) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V_MSG(_ensure_recording_ready() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	// This method creates a texture object using a VkImage created by an extension, module or other external source (OpenXR uses this).
 
 	Texture texture;
@@ -2515,7 +2729,7 @@ RID RenderingDevice::texture_create_from_extension(TextureType p_type, DataForma
 }
 
 RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view, RID p_with_texture, uint32_t p_layer, uint32_t p_mipmap, uint32_t p_mipmaps, TextureSliceType p_slice_type, uint32_t p_layers) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V_MSG(_ensure_recording_ready() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_with_texture), RID());
 	Texture *src_texture = texture_owner.get_or_null(p_with_texture);
 	ERR_FAIL_NULL_V(src_texture, RID());
@@ -3458,8 +3672,10 @@ Error RenderingDevice::_texture_clear_depth_stencil(RID p_texture_rid, Texture *
 }
 
 Vector<uint8_t> RenderingDevice::texture_get_data(RID p_texture, uint32_t p_layer) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, Vector<uint8_t>(), "A frame fence wait failed; readback recording is suspended.");
 	ERR_RENDER_THREAD_GUARD_V(Vector<uint8_t>());
+	if (_prepare_synchronous_readback() != OK) {
+		return Vector<uint8_t>();
+	}
 
 	Texture *tex = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL_V(tex, Vector<uint8_t>());
@@ -4918,7 +5134,7 @@ bool RenderingDevice::sampler_is_format_supported_for_filter(DataFormat p_format
 /***********************/
 
 RID RenderingDevice::vertex_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p_data, BitField<BufferCreationBits> p_creation_bits) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V_MSG(_ensure_recording_ready() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V(p_data.size() && (uint32_t)p_data.size() != p_size_bytes, RID());
 
 	Buffer buffer;
@@ -5315,7 +5531,7 @@ uint64_t RenderingDevice::_generated_indexed144_backing_serial(RID p_rid, const 
 }
 
 RID RenderingDevice::index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, Span<uint8_t> p_data, bool p_use_restart_indices, BitField<BufferCreationBits> p_creation_bits) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V_MSG(_ensure_recording_ready() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V(p_index_count == 0, RID());
 
 	IndexBuffer index_buffer;
@@ -5679,7 +5895,7 @@ Error RenderingDevice::shader_get_native_vertex_input_mask_if_ready(RID p_shader
 /******************/
 
 RID RenderingDevice::uniform_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p_data, BitField<BufferCreationBits> p_creation_bits) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V_MSG(_ensure_recording_ready() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V(p_data.size() && (uint32_t)p_data.size() != p_size_bytes, RID());
 
 	Buffer buffer;
@@ -8760,7 +8976,8 @@ void RenderingDevice::_draw_list_end(Rect2i *r_last_viewport) {
 
 void RenderingDevice::draw_list_end() {
 	if (production_output_list_head_owner) {
-		_production_output_reads_close();
+		const Error err = _production_output_reads_close(true);
+		ERR_FAIL_COND_MSG(err != OK, vformat("Failed to close production output reads draw list (error=%d).", int(err)));
 		return;
 	}
 	_draw_list_end_recorded(false);
@@ -9345,6 +9562,16 @@ RDG::RecordHandle RenderingDevice::_compute_list_dispatch_recorded(ComputeListID
 		}
 	}
 #endif
+	ERR_FAIL_COND_V_MSG(!compute_list.state.pipeline_shader_driver_id, RDG::RecordHandle(), "No compute pipeline was set before attempting to dispatch.");
+	for (uint32_t i = 0; i < compute_list.state.set_count; i++) {
+		if (compute_list.state.sets[i].pipeline_expected_format == 0) {
+			continue;
+		}
+		ERR_FAIL_COND_V_MSG(compute_list.state.sets[i].pipeline_expected_format != compute_list.state.sets[i].uniform_set_format,
+				RDG::RecordHandle(), "Uniform set (" + itos(i) + ") was not supplied or does not match compute pipeline format.");
+		ERR_FAIL_NULL_V_MSG(uniform_set_owner.get_or_null(compute_list.state.sets[i].uniform_set),
+				RDG::RecordHandle(), "Uniform set (" + itos(i) + ") is invalid or was freed before compute dispatch.");
+	}
 	// Reserve pending-clear worker dependencies before descriptor graph prefixes.
 	for (uint32_t i = 0; i < compute_list.state.set_count; ++i) {
 		if (!compute_list.state.sets[i].pipeline_expected_format || compute_list.state.sets[i].bound) {
@@ -9533,6 +9760,16 @@ void RenderingDevice::compute_list_dispatch_indirect(ComputeListID p_list, RID p
 		}
 	}
 #endif
+	ERR_FAIL_COND_MSG(!compute_list.state.pipeline_shader_driver_id, "No compute pipeline was set before attempting to dispatch.");
+	for (uint32_t i = 0; i < compute_list.state.set_count; i++) {
+		if (compute_list.state.sets[i].pipeline_expected_format == 0) {
+			continue;
+		}
+		ERR_FAIL_COND_MSG(compute_list.state.sets[i].pipeline_expected_format != compute_list.state.sets[i].uniform_set_format,
+				"Uniform set (" + itos(i) + ") was not supplied or does not match compute pipeline format.");
+		ERR_FAIL_NULL_MSG(uniform_set_owner.get_or_null(compute_list.state.sets[i].uniform_set),
+				"Uniform set (" + itos(i) + ") is invalid or was freed before compute dispatch.");
+	}
 	// Reserve pending-clear worker dependencies before descriptor graph prefixes.
 	for (uint32_t i = 0; i < compute_list.state.set_count; ++i) {
 		if (!compute_list.state.sets[i].pipeline_expected_format || compute_list.state.sets[i].bound) {
@@ -9904,6 +10141,7 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 	// Store the offset to return and increment the current size.
 	r_staging_offset = transfer_worker->staging_buffer_size_in_use;
 	transfer_worker->staging_buffer_size_in_use += p_transfer_size;
+	transfer_worker->idle_frames = 0;
 
 	if (!transfer_worker->recording) {
 		// Begin the command buffer if the worker wasn't recording yet.
@@ -10214,6 +10452,7 @@ bool RenderingDevice::_wait_for_transfer_worker(TransferWorker *p_transfer_worke
 	p_transfer_worker->height_observer_pending = false;
 	p_transfer_worker->submitted = false;
 	p_transfer_worker->submission_serial = 0;
+	p_transfer_worker->idle_frames = 0;
 
 	{
 		MutexLock lock(p_transfer_worker->operations_mutex);
@@ -10329,8 +10568,10 @@ Error RenderingDevice::_check_transfer_worker_operation(uint32_t index, uint64_t
 				if (error != OK) {
 					return error;
 				}
-			} else {
+			} else if (worker->submitted && operation <= worker->operations_submitted) {
 				prefix = worker->last_submission;
+			} else {
+				return ERR_UNAVAILABLE;
 			}
 			const Error admission = _qualification_admit_worker(index, worker->operations_counter, prefix, future);
 			if (admission != OK) {
@@ -10528,15 +10769,57 @@ Error RenderingDevice::_submit_transfer_workers(RDD::CommandBufferID p_draw_comm
 				// A failed worker may still have an actual native prefix. Join that exact
 				// report before retaining the worker as failed; never lose its callbacks.
 				const bool operation_covered = worker->operations_submitted >= transfer_worker_operation_used_by_draw[worker->index];
-				bool known = false;
-				for (const auto &report : frames[frame].qualification_hidden_reports) {
-					if (report.submission_serial == worker->last_submission.submission_serial && !report.calls.is_empty() && report.calls[0].serial == worker->last_submission.calls[0].serial) {
-						known = true;
+				int64_t known_index = -1;
+				for (uint32_t r = 0; r < frames[frame].qualification_hidden_reports.size(); ++r) {
+					const auto &report = frames[frame].qualification_hidden_reports[r];
+					if (report.submission_serial == worker->last_submission.submission_serial && !report.calls.is_empty() && !worker->last_submission.calls.is_empty() && report.calls[0].serial == worker->last_submission.calls[0].serial) {
+						known_index = int64_t(r);
 						break;
 					}
 				}
-				if (!known) {
-					frames[frame].qualification_hidden_reports.push_back(worker->last_submission);
+				auto retain_hidden_report_calls = [&](RDD::QueueCallReport &report) -> Error {
+					if (!driver->native_call_observation_supported()) {
+						return OK;
+					}
+					RDD::NativeCallBlockingScope blocking_scope(!native_disposal_budget);
+					LocalVector<uint32_t> newly_retained;
+					for (uint32_t c = 0; c < report.calls.size(); ++c) {
+						auto &call = report.calls.write[c];
+						if (call.presentation_only || call.source_owner_returned || call.frame_observer_owned || !call.serial) {
+							continue;
+						}
+						if (!_native_disposal_admit(NativeDisposalWork::RETAIN)) {
+							for (uint32_t idx : newly_retained) {
+								(void)driver->native_call_release(report.calls[idx].serial);
+								report.calls.write[idx].frame_observer_owned = false;
+							}
+							return ERR_BUSY;
+						}
+						const Error retain_err = driver->native_call_retain(call.serial);
+						if (retain_err != OK) {
+							for (uint32_t idx : newly_retained) {
+								(void)driver->native_call_release(report.calls[idx].serial);
+								report.calls.write[idx].frame_observer_owned = false;
+							}
+							return retain_err;
+						}
+						call.frame_observer_owned = true;
+						newly_retained.push_back(c);
+					}
+					return OK;
+				};
+				if (known_index < 0) {
+					RDD::QueueCallReport hidden = worker->last_submission;
+					const Error retain_err = retain_hidden_report_calls(hidden);
+					if (retain_err != OK) {
+						return retain_err;
+					}
+					frames[frame].qualification_hidden_reports.push_back(hidden);
+				} else {
+					const Error retain_err = retain_hidden_report_calls(frames[frame].qualification_hidden_reports[uint32_t(known_index)]);
+					if (retain_err != OK) {
+						return retain_err;
+					}
 				}
 				{
 					auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
@@ -13516,6 +13799,16 @@ Error RenderingDevice::_native_disposal_stall_step(uint32_t p_frame) {
 			f.fence_signaled = false;
 			cursor.fence_returned = true;
 			f.primary_command_buffer_begun = false;
+			// BUG-125: fence_recycle() above already retired/erased 0-observer driver completion
+			// records for this frame's chain_reports. Mark source_owner_returned immediately so
+			// any subsequent ERR_BUSY in Phase 4 cannot re-poll erased records in _stall_for_frame.
+			for (auto &report : f.chain_reports) {
+				for (auto &call : report.calls) {
+					if (!call.presentation_only) {
+						call.source_owner_returned = true;
+					}
+				}
+			}
 		}
 		cursor.ready = false;
 		cursor.phase = 4;
@@ -13529,8 +13822,12 @@ Error RenderingDevice::_native_disposal_stall_step(uint32_t p_frame) {
 			cursor.phase = 5;
 			return OK;
 		}
-		while (cursor.request < f.download_buffer_get_data_requests.size()) {
-			const auto &request = f.download_buffer_get_data_requests[cursor.request];
+		// BUG-124: Always process and pop front entry [0] on completion so an ERR_BUSY
+		// on a later entry never leaves already-delivered requests to be re-processed by
+		// _stall_for_frame(). Staging/region vectors stay intact until requests empty.
+		cursor.request = 0;
+		while (!f.download_buffer_get_data_requests.is_empty()) {
+			const auto &request = f.download_buffer_get_data_requests[0];
 			const auto result = request.result;
 			auto *capture = request.capture;
 			if (capture && (!capture->registry || capture->registry->production_readback_delivery(*capture, true) != OK)) {
@@ -13555,13 +13852,29 @@ Error RenderingDevice::_native_disposal_stall_step(uint32_t p_frame) {
 			const uint64_t capacity = capture ? capture->byte_capacity : uint64_t(result->bytes.size());
 			uint8_t *bytes = capture ? capture->bytes : result->bytes.ptrw();
 			const uint64_t completed = capture ? capture->state->completed : result->completed_size;
+			auto log_readback_invalid_data = [&](const char *p_site) {
+#ifndef TESTS_ENABLED
+				static std::atomic<uint32_t> rb_invalid_diag_count{ 0 };
+				const uint32_t n = rb_invalid_diag_count.fetch_add(1, std::memory_order_relaxed);
+				if (n < 16 || (n % 128) == 0) {
+					const uint64_t ret = capture ? capture->state->returned : 0;
+					const uint64_t iss = capture ? capture->state->issued : uint64_t(result->issued_size);
+					print_error(vformat("[BUG-120] readback ERR_INVALID_DATA site=%s frame=%d offset=%d returned=%d issued=%d completed=%d size=%d capacity=%d final=%d (occ=%d)",
+							p_site, int64_t(p_frame), int64_t(request.result_offset), int64_t(ret), int64_t(iss), int64_t(completed), int64_t(request.size), int64_t(capacity), int(request.final_segment), int64_t(n + 1)));
+				}
+#else
+				(void)p_site;
+#endif
+			};
 			if (!cursor.request_started) {
 				if (capture) {
 					if (capture->state->returned > capture->state->issued || request.result_offset != capture->state->returned || request.size > capture->state->issued - capture->state->returned) {
+						log_readback_invalid_data("disposal_stall.returned_bounds");
 						error = ERR_INVALID_DATA;
 					}
 				}
 				if (request.result_offset != completed || request.result_offset > capacity || request.size > capacity - request.result_offset) {
+					log_readback_invalid_data("disposal_stall.completed_bounds");
 					error = ERR_INVALID_DATA;
 				}
 				cursor.request_started = true;
@@ -13571,6 +13884,7 @@ Error RenderingDevice::_native_disposal_stall_step(uint32_t p_frame) {
 				const auto &region = f.download_buffer_copy_regions[local];
 				if (!cursor.mapped) {
 					if (cursor.offset > request.size || region.size > request.size - cursor.offset) {
+						log_readback_invalid_data("disposal_stall.region_bounds");
 						error = ERR_INVALID_DATA;
 						break;
 					}
@@ -13600,6 +13914,7 @@ Error RenderingDevice::_native_disposal_stall_step(uint32_t p_frame) {
 			}
 			if (error == OK && !delivered) {
 				if (cursor.offset != request.size) {
+					log_readback_invalid_data("disposal_stall.array_offset");
 					error = ERR_INVALID_DATA;
 				} else {
 					const uint64_t total = completed + cursor.offset;
@@ -13610,6 +13925,7 @@ Error RenderingDevice::_native_disposal_stall_step(uint32_t p_frame) {
 					}
 					if (request.final_segment) {
 						if (total != capacity) {
+							log_readback_invalid_data("disposal_stall.final_capacity");
 							error = ERR_INVALID_DATA;
 						} else {
 							delivered = true;
@@ -13627,18 +13943,11 @@ Error RenderingDevice::_native_disposal_stall_step(uint32_t p_frame) {
 					capture->state->returned += request.size;
 				}
 			}
-			++cursor.request;
+			f.download_buffer_get_data_requests.remove_at(0);
+			cursor.request = 0;
 		}
-		f.download_buffer_get_data_requests.clear();
 		f.download_buffer_copy_regions.clear();
 		f.download_buffer_staging_buffers.clear();
-		for (auto &report : f.chain_reports) {
-			for (auto &call : report.calls) {
-				if (!call.presentation_only) {
-					call.source_owner_returned = true;
-				}
-			}
-		}
 		cursor.phase = 5;
 	}
 	return OK;
@@ -15151,7 +15460,6 @@ Error RenderingDevice::_begin_frame(bool p_presented, bool p_nonblocking) {
 	if (native_disposal_active) {
 		return ERR_BUSY;
 	}
-	frames[frame].maintenance_wait = {};
 	if (!next_qualification_frame_epoch) {
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
@@ -15180,6 +15488,9 @@ Error RenderingDevice::_begin_frame(bool p_presented, bool p_nonblocking) {
 #endif
 		return wait_error;
 	}
+	// BUG-124: Reset maintenance_wait only AFTER _stall_for_frame() succeeds so an
+	// ERR_BUSY return never clobbers an interrupted Phase-4 cursor or leaks cursor.mapped.
+	frames[frame].maintenance_wait = {};
 	if (p_nonblocking) {
 		for (const Shader &shader : frames[frame].shaders_to_dispose_of) {
 			if (!driver->shader_retire_ready_nonblocking(shader.driver_id)) {
@@ -15255,6 +15566,8 @@ Error RenderingDevice::_begin_frame(bool p_presented, bool p_nonblocking) {
 		download_staging_buffers.used = false;
 	}
 
+	_trim_idle_staging_buffers();
+
 	if (frames[frame].timestamp_count) {
 		driver->timestamp_query_pool_get_results(frames[frame].timestamp_pool, frames[frame].timestamp_count, frames[frame].timestamp_result_values.ptr());
 		driver->command_timestamp_query_pool_reset(frames[frame].command_buffer, frames[frame].timestamp_pool, frames[frame].timestamp_count);
@@ -15268,6 +15581,11 @@ Error RenderingDevice::_begin_frame(bool p_presented, bool p_nonblocking) {
 	frame_wait_error = OK;
 	failed_wait_frame = -1;
 	qualification_frame_advance_pending = false;
+	if (!native_disposal_active && !frame_wait_draining) {
+		if (auto *registry = production_entity_registry.load(std::memory_order_acquire)) {
+			registry->production_observe_completed_frames_rt(*this);
+		}
+	}
 	return OK;
 }
 
@@ -15613,12 +15931,35 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 	if (frame_wait_draining) {
 		return ERR_BUSY;
 	}
+	RDD::NativeCallBlockingScope blocking_scope(!p_nonblocking);
 	const Error height_retain = _native_height_retain_frame_sources(p_frame);
 	if (height_retain != OK) {
 		return height_retain;
 	}
+	const Error production_retain = _production_retain_frame_sources(p_frame);
+	if (production_retain != OK) {
+		return production_retain;
+	}
 	frame_wait_native_code = 0;
 	frame_wait_native_code_valid = false;
+	auto log_blocking_stall_busy = [&](const char *p_branch, uint64_t p_serial, bool p_completed, uint64_t p_completed_serial, Error p_err) {
+#ifndef TESTS_ENABLED
+		if (!p_nonblocking && p_err == ERR_BUSY) {
+			static std::atomic<uint32_t> stall_busy_diag_count{ 0 };
+			const uint32_t n = stall_busy_diag_count.fetch_add(1, std::memory_order_relaxed);
+			if (n < 16 || (n % 256) == 0) {
+				print_error(vformat("[BUG-119B] blocking _stall_for_frame ERR_BUSY branch=%s frame=%d serial=%d completed=%d completed_serial=%d (occ=%d)",
+						p_branch, int64_t(p_frame), int64_t(p_serial), int(p_completed), int64_t(p_completed_serial), int64_t(n + 1)));
+			}
+		}
+#else
+		(void)p_branch;
+		(void)p_serial;
+		(void)p_completed;
+		(void)p_completed_serial;
+		(void)p_err;
+#endif
+	};
 	// Original Frame ownership covers every actual slot call, including slots
 	// without the final fence. Qualification only polls; ordinary frame waits may
 	// use the original native wait, then recycle the same sources independently.
@@ -15635,13 +15976,38 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 					return FAILED;
 				}
 				if (!completion.matches(call.completion_serial)) {
+					log_blocking_stall_busy("chain_reports", call.serial, completion.completed, completion.completed_serial, ERR_BUSY);
 					return ERR_BUSY;
 				}
 			}
 		}
 	}
-	const Error ticket_poll = _qualification_poll_tickets(p_frame);
+	// BUG-115 Part (a): In blocking mode, wait on hidden native reports (e.g., copy-queue flushes)
+	// WITHOUT releasing their observers yet before polling qualification tickets, and allow
+	// _qualification_poll_tickets to wait on any remaining in-flight retained ticket serials so
+	// blocking _begin_frame(true) does not return spurious ERR_BUSY while GPU work is finishing.
+	if (!p_nonblocking) {
+		for (auto &report : frames[p_frame].qualification_hidden_reports) {
+			for (auto &call : report.calls) {
+				if (call.presentation_only || call.source_owner_returned) {
+					continue;
+				}
+				const auto completion = driver->native_call_wait(call.serial);
+				if (completion.native_error) {
+					frame_wait_native_code = completion.native_code;
+					frame_wait_native_code_valid = true;
+					return FAILED;
+				}
+				if (!completion.matches(call.completion_serial)) {
+					log_blocking_stall_busy("hidden_reports_pre", call.serial, completion.completed, completion.completed_serial, ERR_BUSY);
+					return ERR_BUSY;
+				}
+			}
+		}
+	}
+	const Error ticket_poll = _qualification_poll_tickets(p_frame, p_nonblocking);
 	if (ticket_poll != OK) {
+		log_blocking_stall_busy("tickets", 0, false, 0, ticket_poll);
 		return ticket_poll;
 	}
 	if (driver->native_call_observation_supported()) {
@@ -15653,6 +16019,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 					}
 					const Error recycled = p_nonblocking ? driver->native_call_recycle(call.serial) : driver->native_call_recycle_wait(call.serial);
 					if (recycled != OK) {
+						log_blocking_stall_busy("recycle_wait", call.serial, false, 0, recycled);
 						return recycled;
 					}
 					call.source_owner_returned = true;
@@ -15673,11 +16040,13 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 				return FAILED;
 			}
 			if (!completion.matches(call.completion_serial)) {
+				log_blocking_stall_busy("hidden_reports_post", call.serial, completion.completed, completion.completed_serial, ERR_BUSY);
 				return ERR_BUSY;
 			}
 			if (call.frame_observer_owned) {
 				const Error released = driver->native_call_release(call.serial);
 				if (released != OK) {
+					log_blocking_stall_busy("hidden_reports_post_release", call.serial, completion.completed, completion.completed_serial, released);
 					return released;
 				}
 			}
@@ -15686,7 +16055,8 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 	}
 	frames[p_frame].qualification_hidden_reports.clear();
 
-	if (frames[p_frame].fence_signaled) {
+	const bool had_signaled_fence = frames[p_frame].fence_signaled;
+	if (had_signaled_fence) {
 		GodotProfileZoneGroupedFirst(_profile_zone, "driver->fence_wait");
 
 		Error wait_error = OK;
@@ -15737,18 +16107,100 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 		}
 		frames[p_frame].fence_signaled = false;
 		frames[p_frame].primary_command_buffer_begun = false;
+		// BUG-125: fence_wait()/fence_recycle() above already retired/erased 0-observer driver
+		// completion records for this frame's chain_reports. Mark source_owner_returned immediately
+		// so any deferred ERR_BUSY readback retry cannot re-wait on erased completion records.
+		for (auto &report : frames[p_frame].chain_reports) {
+			for (auto &call : report.calls) {
+				if (!call.presentation_only) {
+					call.source_owner_returned = true;
+				}
+			}
+		}
+	}
+	bool retry_deferred_captures = false;
+	if (!had_signaled_fence && !frames[p_frame].fence_signaled && !frames[p_frame].primary_command_buffer_begun && !frames[p_frame].disposal.active) {
+		const bool interrupted_phase4 = frames[p_frame].maintenance_wait.phase == 4 && frames[p_frame].maintenance_wait.fence_returned;
+		for (const auto &request : frames[p_frame].download_buffer_get_data_requests) {
+			if (request.capture != nullptr || interrupted_phase4) {
+				retry_deferred_captures = true;
+				break;
+			}
+		}
+		if (retry_deferred_captures && p_nonblocking) {
+			if (!frames[p_frame].download_texture_get_data_requests.is_empty()) {
+				return ERR_BUSY;
+			}
+			for (const auto &request : frames[p_frame].download_buffer_get_data_requests) {
+				if (!request.capture && (request.result.is_null() || !request.result->qualification_owned)) {
+					return ERR_BUSY;
+				}
+			}
+		}
+	}
+	if (had_signaled_fence || retry_deferred_captures) {
 		frame_wait_draining = true;
+		struct FrameWaitDrainingGuard {
+			std::atomic<bool> &draining;
+			~FrameWaitDrainingGuard() { draining = false; }
+		} draining_guard{ frame_wait_draining };
+
+		// BUG-124: If a prior _native_disposal_stall_step() returned ERR_BUSY mid-map,
+		// cleanly unmap its staging buffer before _stall_for_frame() maps the front request.
+		{
+			auto &mw = frames[p_frame].maintenance_wait;
+			if (mw.mapped != nullptr) {
+				if (!frames[p_frame].download_buffer_get_data_requests.is_empty()) {
+					const auto &front = frames[p_frame].download_buffer_get_data_requests[0];
+					const uint32_t local = front.frame_local_index + mw.region;
+					if (local < frames[p_frame].download_buffer_staging_buffers.size()) {
+						driver->buffer_unmap(frames[p_frame].download_buffer_staging_buffers[local]);
+					}
+				}
+				mw.mapped = nullptr;
+				mw.region = 0;
+				mw.offset = 0;
+				mw.request_started = false;
+			}
+		}
 
 		// Flush any pending requests for asynchronous buffer downloads.
 		if (!frames[p_frame].download_buffer_get_data_requests.is_empty()) {
 			GodotProfileZoneGrouped(_profile_zone, "flush asynchronous buffer downloads");
 			const LocalVector<BufferGetDataRequest> requests = std::move(frames[p_frame].download_buffer_get_data_requests);
+			LocalVector<BufferGetDataRequest> remaining_requests;
+			Error deferred_error = OK;
 			for (uint32_t i = 0; i < requests.size(); i++) {
 				const BufferGetDataRequest &request = requests[i];
 				const Ref<BufferGetDataResult> result = request.result;
 				auto *capture = request.capture;
-				if (capture && (!capture->registry || capture->registry->production_readback_delivery(*capture, true) != OK)) {
-					continue;
+				if (capture) {
+					if (!capture->registry) {
+						continue;
+					}
+					bool capture_already_deferred = false;
+					for (const auto &pending : remaining_requests) {
+						if (pending.capture == capture) {
+							capture_already_deferred = true;
+							break;
+						}
+					}
+					if (capture_already_deferred) {
+						remaining_requests.push_back(request);
+						continue;
+					}
+					// BUG-120: Never drop a production readback segment if delivery is transiently ERR_BUSY.
+					// Preserve undelivered requests + staging buffers/regions on this frame for retry.
+					const Error delivery_err = capture->registry->production_readback_delivery(*capture, true);
+					if (delivery_err != OK) {
+						if (delivery_err == ERR_BUSY) {
+							remaining_requests.push_back(request);
+							if (deferred_error == OK) {
+								deferred_error = ERR_BUSY;
+							}
+						}
+						continue;
+					}
 				}
 				auto finish_delivery = [&]() {
 					if (capture) {
@@ -15765,8 +16217,25 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 				if (!capture && result.is_null()) {
 					continue;
 				}
+				auto log_readback_invalid_data = [&](const char *p_site, uint64_t p_completed, uint64_t p_capacity) {
+#ifndef TESTS_ENABLED
+					static std::atomic<uint32_t> rb_invalid_diag_count{ 0 };
+					const uint32_t n = rb_invalid_diag_count.fetch_add(1, std::memory_order_relaxed);
+					if (n < 16 || (n % 128) == 0) {
+						const uint64_t ret = capture ? capture->state->returned : 0;
+						const uint64_t iss = capture ? capture->state->issued : uint64_t(result->issued_size);
+						print_error(vformat("[BUG-120] readback ERR_INVALID_DATA site=%s frame=%d offset=%d returned=%d issued=%d completed=%d size=%d capacity=%d final=%d (occ=%d)",
+								p_site, int64_t(p_frame), int64_t(request.result_offset), int64_t(ret), int64_t(iss), int64_t(p_completed), int64_t(request.size), int64_t(p_capacity), int(request.final_segment), int64_t(n + 1)));
+					}
+#else
+					(void)p_site;
+					(void)p_completed;
+					(void)p_capacity;
+#endif
+				};
 				if (capture) {
 					if (request.result_offset != capture->state->returned || request.size > capture->state->issued - capture->state->returned) {
+						log_readback_invalid_data("stall_for_frame.returned_bounds", capture->state->completed, capture->byte_capacity);
 						capture->state->error = ERR_INVALID_DATA;
 						continue;
 					}
@@ -15780,6 +16249,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 					continue;
 				}
 				if (request.result_offset != completed || request.result_offset > byte_size || request.size > byte_size - request.result_offset) {
+					log_readback_invalid_data("stall_for_frame.completed_bounds", completed, byte_size);
 					result_error = ERR_INVALID_DATA;
 					continue;
 				}
@@ -15789,6 +16259,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 					uint32_t local_index = request.frame_local_index + j;
 					const RDD::BufferCopyRegion &region = frames[p_frame].download_buffer_copy_regions[local_index];
 					if (region.size > request.size - array_offset) {
+						log_readback_invalid_data("stall_for_frame.region_bounds", completed, byte_size);
 						result_error = ERR_INVALID_DATA;
 						break;
 					}
@@ -15812,6 +16283,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 					continue;
 				}
 				if (array_offset != request.size) {
+					log_readback_invalid_data("stall_for_frame.array_offset", completed, byte_size);
 					result_error = ERR_INVALID_DATA;
 					continue;
 				}
@@ -15825,6 +16297,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 					continue;
 				}
 				if (completed != byte_size) {
+					log_readback_invalid_data("stall_for_frame.final_capacity", completed, byte_size);
 					result_error = ERR_INVALID_DATA;
 					continue;
 				}
@@ -15838,9 +16311,14 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 				}
 			}
 
-			frames[p_frame].download_buffer_staging_buffers.clear();
-			frames[p_frame].download_buffer_copy_regions.clear();
-			frames[p_frame].download_buffer_get_data_requests.clear();
+			if (remaining_requests.is_empty()) {
+				frames[p_frame].download_buffer_staging_buffers.clear();
+				frames[p_frame].download_buffer_copy_regions.clear();
+				frames[p_frame].download_buffer_get_data_requests.clear();
+			} else {
+				frames[p_frame].download_buffer_get_data_requests = std::move(remaining_requests);
+				return deferred_error;
+			}
 		}
 
 		// Flush any pending requests for asynchronous texture downloads.
@@ -15917,13 +16395,6 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 			frames[p_frame].download_texture_get_data_requests.clear();
 		}
 		_qualification_return_frame_tickets(p_frame);
-		for (auto &report : frames[p_frame].chain_reports) {
-			for (auto &call : report.calls) {
-				if (!call.presentation_only) {
-					call.source_owner_returned = true;
-				}
-			}
-		}
 		frame_wait_draining = false;
 	}
 	return OK;
@@ -15998,6 +16469,7 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 	context = p_context;
 	driver = context->driver_create();
 	driver->session_owner = this;
+	driver->is_local_device = !is_main_instance;
 
 	print_verbose("Devices:");
 	int32_t device_index = Engine::get_singleton()->get_gpu_index();
@@ -16311,7 +16783,7 @@ void RenderingDevice::update_pipeline_cache(bool p_closing) {
 	{
 		size_t new_pipelines_cache_size = driver->pipeline_cache_query_size();
 		ERR_FAIL_COND(!new_pipelines_cache_size);
-		size_t difference = new_pipelines_cache_size - pipeline_cache_size;
+		size_t difference = new_pipelines_cache_size > pipeline_cache_size ? (new_pipelines_cache_size - pipeline_cache_size) : 0;
 
 		bool must_save = false;
 
@@ -18301,6 +18773,47 @@ bool RenderingDevice::_production_resource_permitted(RID rid) {
 		if (_production_output_fast_refresh_buffer_permitted(rid)) {
 			return true;
 		}
+		if (Buffer *buffer = _get_buffer_from_owner(rid)) {
+			if (buffer->qualification_return && !buffer->qualification_return->use_closed.load()) {
+				return true;
+			}
+		}
+		if (compute_pipeline_owner.owns(rid)) {
+			if (ComputePipeline *pipe = compute_pipeline_owner.get_or_null(rid)) {
+				if (pipe->qualification_return && !pipe->qualification_return->use_closed.load()) {
+					return true;
+				}
+			}
+		}
+		if (shader_owner.owns(rid)) {
+			if (Shader *sh = shader_owner.get_or_null(rid)) {
+				if (sh->qualification_return && !sh->qualification_return->use_closed.load()) {
+					return true;
+				}
+			}
+		}
+		if (uniform_set_owner.owns(rid)) {
+			if (UniformSet *us = uniform_set_owner.get_or_null(rid)) {
+				bool closed = us->qualification_return && us->qualification_return->use_closed.load();
+				for (auto *cell : us->qualification_dependencies) {
+					if (!cell || cell->use_closed.load()) {
+						closed = true;
+						break;
+					}
+				}
+				if (!closed) {
+					return true;
+				}
+			}
+		}
+	}
+	// BUG-85B: During a non-cleanup frozen production record callback before/between
+	// production_append_rt_v2 calls (when production_recording_request == nullptr),
+	// authorize live !use_closed qualification-owned auxiliary buffers, pipelines,
+	// shaders, and uniform sets (e.g. NG3D build, CurveLUT uploads, GAP-02 record
+	// resets). Once production_record_effect_locked sets production_recording_request,
+	// this branch deactivates so strict per-slot request validation runs unchanged.
+	if (production_output_fast_refresh.aux_pre_append_active && !production_recording_request && render_thread_id == Thread::get_caller_id() && rid.is_valid()) {
 		if (Buffer *buffer = _get_buffer_from_owner(rid)) {
 			if (buffer->qualification_return && !buffer->qualification_return->use_closed.load()) {
 				return true;

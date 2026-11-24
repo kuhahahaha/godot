@@ -32,10 +32,10 @@ class TestQualificationRtAccess {
   void queue() {
    // Fixture-only queue enrollment: the private Registry is not the server's
    // singleton. The original dispatch consumes the slot's retained queue pin.
-   bridge->rt->queued=true;++bridge->children;if(!bridge->rt->queue_ref_reserved)++registry->records[0].private_refs;
+   bridge->rt_slot0()->queued=true;++bridge->children;if(!bridge->rt_slot0()->queue_ref_reserved)++registry->records[0].private_refs;
   }
-  void dispatch() {registry->qualification_rt_dispatch(bridge->serial,bridge->rt->serial);}
-  ~Fixture(){RenderingDevice::singleton=previous;device.is_main_instance=false;device.storage_buffer_owner.free(buffer);registry->qualification_bridges[0]=nullptr;for(auto *ticket:bridge->tickets)if(ticket)memdelete(ticket);for(auto *child:bridge->storage)if(child)memdelete(child);for(auto *child:bridge->units)if(child)memdelete(child);if(bridge->rt)memdelete(bridge->rt);memdelete(bridge);memdelete(registry);}
+  void dispatch() {registry->qualification_rt_dispatch(bridge->serial,bridge->rt_slot0()->serial);}
+  ~Fixture(){RenderingDevice::singleton=previous;device.is_main_instance=false;device.storage_buffer_owner.free(buffer);registry->qualification_bridges[0]=nullptr;for(auto *ticket:bridge->tickets)if(ticket)memdelete(ticket);for(auto *child:bridge->storage)if(child)memdelete(child);for(auto *child:bridge->units)if(child)memdelete(child);for(auto *cell:bridge->rt_cells)if(cell)memdelete(cell);bridge->rt_cells.clear();memdelete(bridge);memdelete(registry);}
  };
  static GDExtensionQualificationRtConfigV1 config(){return {{1,40,0},1,312,200,2,256};}
  static GDExtensionQualificationRtRequestV1 query(uint64_t operation){return {{1,56,0},1,0,operation,0,8,48,0,0};}
@@ -64,17 +64,17 @@ public:
 		GDExtensionQualificationRtRefV1 accepted{};
 		REQUIRE(f.registry->qualification_rt_reserve(f.ref, &h, &q, nullptr, &accepted).native_error == OK);
 		CHECK(f.registry->records[0].private_refs == f.registry->private_limit);
-		CHECK(f.bridge->rt->slot_ref_credit);
-		CHECK_FALSE(f.bridge->rt->queue_ref_reserved);
+		CHECK(f.bridge->rt_slot0()->slot_ref_credit);
+		CHECK_FALSE(f.bridge->rt_slot0()->queue_ref_reserved);
 		// Original occupied cleanup queue refuses scheduling with no new ref.
 		f.bridge->cleanup_queue_in_use = true;
 		REQUIRE(f.registry->qualification_rt_activate(f.ref, accepted).native_error == OK);
-		CHECK_FALSE(f.bridge->rt->queued);
+		CHECK_FALSE(f.bridge->rt_slot0()->queued);
 		CHECK(f.bridge->storage_frontiers[0].closed == 0);
 		f.bridge->cleanup_queue_in_use = false;
-		REQUIRE(f.bridge->claim_cleanup_queue(f.bridge->rt->queued, f.bridge->rt->queue_ref_credit));
+		REQUIRE(f.bridge->claim_cleanup_queue(f.bridge->rt_slot0()->queued, f.bridge->rt_slot0()->queue_ref_credit));
 		f.dispatch();
-		CHECK(f.bridge->rt->admission_consumed);
+		CHECK(f.bridge->rt_slot0()->admission_consumed);
 		CHECK_FALSE(f.bridge->cleanup_queue_in_use);
 		GDExtensionQualificationRtObservationV1 observed{};
 		uint64_t acknowledged = 99;
@@ -108,7 +108,7 @@ public:
  static void paid_known_pending_no_work(bool cleanup_refusal, bool queued_preflight_refusal=false) {
   Fixture f;auto c=config();c.max_result_bytes=sizeof(GDExtensionStorageSceneDepthReportV1);
   REQUIRE(f.registry->qualification_rt_configure(f.ref,&c).native_error==OK);
-  auto *cell=f.bridge->rt;auto &paid=cell->height_paid;
+  auto *cell=f.bridge->rt_slot0();auto &paid=cell->height_paid;
   const uint64_t now=OS::get_singleton()->get_ticks_usec();
   const uint64_t deadline=now+100000; // Explicit fixture native grant, not a production default.
   GDExtensionQualificationServiceGrantV2 grant{{2,sizeof(grant),0},7,deadline,4,4,4,0};
@@ -164,7 +164,7 @@ public:
  static void paid_expired_accepted_cell_metadata() {
   Fixture f;auto c=config();c.max_result_bytes=sizeof(GDExtensionStorageSceneDepthReportV1);
   REQUIRE(f.registry->qualification_rt_configure(f.ref,&c).native_error==OK);
-  auto *cell=f.bridge->rt;
+  auto *cell=f.bridge->rt_slot0();
   // Transport-only retained-cell fixture: no actual Scene producer or range
   // is fabricated and no native executor is called. This models an original
   // accepted cell whose independent native service deadline elapsed in transit.
@@ -232,9 +232,9 @@ public:
 		}
 		q = {};
 		payload[0] = payload[1] = payload[2] = 999;
-		CHECK(memcmp(f.bridge->rt->request.ptr(), &original, sizeof(original)) == 0);
+		CHECK(memcmp(f.bridge->rt_slot0()->request.ptr(), &original, sizeof(original)) == 0);
 		const uint64_t expected[] = { 13, 17, 19 };
-		CHECK(memcmp(f.bridge->rt->payload.ptr(), expected, sizeof(expected)) == 0);
+		CHECK(memcmp(f.bridge->rt_slot0()->payload.ptr(), expected, sizeof(expected)) == 0);
 		f.queue();
 		status = f.registry->qualification_rt_activate(f.ref, ref);
 		CHECK(status.native_error == OK);
@@ -267,10 +267,10 @@ public:
 		CHECK(f.registry->qualification_rt_reserve(f.ref, &fresh, &original, expected, &denied).native_error == ERR_BUSY);
 		CHECK(denied.handle_serial == 0);
 		f.dispatch();
-		CHECK(f.bridge->rt->admission_consumed);
-		CHECK(f.bridge->rt->state == 2);
-		CHECK_FALSE(f.bridge->rt->executing);
-		CHECK_FALSE(f.bridge->rt->queued);
+		CHECK(f.bridge->rt_slot0()->admission_consumed);
+		CHECK(f.bridge->rt_slot0()->state == 2);
+		CHECK_FALSE(f.bridge->rt_slot0()->executing);
+		CHECK_FALSE(f.bridge->rt_slot0()->queued);
 		status = f.registry->qualification_rt_observe(f.ref, ref, &observation, &output, sizeof(output), nullptr, 0);
 		CHECK(status.native_error == OK);
 		if (status.native_error != OK) {
@@ -294,11 +294,11 @@ public:
 			return;
 		}
 		CHECK(f.bridge->children == 0);
-		CHECK_FALSE(f.bridge->rt->occupied);
+		CHECK_FALSE(f.bridge->rt_slot0()->occupied);
 		denied = {};
 		CHECK(f.registry->qualification_rt_reserve(f.ref, &fresh, &original, expected, &denied).native_error == ERR_BUSY);
 		CHECK(denied.handle_serial == 0);
-		CHECK_FALSE(f.bridge->rt->occupied);
+		CHECK_FALSE(f.bridge->rt_slot0()->occupied);
 	}
  static void metadata_query_capacity() {
   for(unsigned dimension=0;dimension<3;++dimension) {
@@ -309,7 +309,7 @@ public:
    uint64_t payload[]={13,17,19};GDExtensionQualificationRtRequestV1 h{{1,sizeof(h),0},GDEXTENSION_QUALIFICATION_RT_OUTPUT_METADATA_QUERY_V1,0,1,sizeof(payload),sizeof(q),sizeof(GDExtensionOutputMetadataQueryRtResultV1),0,0};
    const auto refs=f.registry->records[0].private_refs;const auto serial=f.registry->qualification_serials.next;GDExtensionQualificationRtRefV1 ref{};
    const auto refused=f.registry->qualification_rt_reserve(f.ref,&h,&q,payload,&ref);
-   CHECK(refused.native_error==ERR_PARAMETER_RANGE_ERROR);CHECK(refused.reason==19);CHECK(ref.handle_serial==0);CHECK_FALSE(f.bridge->rt->occupied);CHECK(f.bridge->children==0);CHECK(f.registry->records[0].private_refs==refs);CHECK(f.registry->qualification_serials.next==serial);
+   CHECK(refused.native_error==ERR_PARAMETER_RANGE_ERROR);CHECK(refused.reason==19);CHECK(ref.handle_serial==0);CHECK_FALSE(f.bridge->rt_slot0()->occupied);CHECK(f.bridge->children==0);CHECK(f.registry->records[0].private_refs==refs);CHECK(f.registry->qualification_serials.next==serial);
   }
  }
 #ifdef THREADS_ENABLED
@@ -399,11 +399,11 @@ public:
 			f.registry->records[0].owner_thread = main_thread;
 			return;
 		}
-		CHECK(memcmp(f.bridge->rt->request.ptr(), &original, sizeof(original)) == 0);
-		CHECK(memcmp(f.bridge->rt->payload.ptr(), expected, sizeof(expected)) == 0);
+		CHECK(memcmp(f.bridge->rt_slot0()->request.ptr(), &original, sizeof(original)) == 0);
+		CHECK(memcmp(f.bridge->rt_slot0()->payload.ptr(), expected, sizeof(expected)) == 0);
 		f.dispatch();
-		CHECK(f.bridge->rt->admission_consumed);
-		CHECK(f.bridge->rt->state == 2);
+		CHECK(f.bridge->rt_slot0()->admission_consumed);
+		CHECK(f.bridge->rt_slot0()->state == 2);
 		dispatched = true;
 		returned.post();
 		owner.join();
@@ -419,7 +419,7 @@ public:
 			return;
 		}
 		CHECK(fresh_status.native_error == ERR_BUSY);
-		CHECK_FALSE(f.bridge->rt->occupied);
+		CHECK_FALSE(f.bridge->rt_slot0()->occupied);
 		CHECK(f.bridge->children == 0);
 	}
 #endif
@@ -513,7 +513,7 @@ public:
    if(observation.state==2){CHECK(observation.call_result.native_error==OK);CHECK(backing.rid==raw);CHECK(backing.backing_serial==17);CHECK(registry.qualification_rt_release(ref,rt).native_error==OK);CHECK(registry.records[library].private_refs==1);}
   }
 #ifdef THREADS_ENABLED
-  if(bridge->rt && !bridge->rt->occupied){
+  if(bridge->rt_slot0() && !bridge->rt_slot0()->occupied){
    // Owner runs on a worker; the real RenderingServer enqueues to the main
    // render thread. Drain that queue before removing the singleton fixture.
    Semaphore queued,drained,retried,retry_drained;GDExtensionDeviceSessionResultV1 a_reserve={},a_activate={},a_pending={},a_release_pending={},a_close={},a_retry={},a_observe={},a_release={};
@@ -528,7 +528,7 @@ public:
      a_activate=registry.qualification_rt_activate(ref,async_ref);
      a_pending=registry.qualification_rt_observe(ref,async_ref,&pending,&pending_backing,sizeof(pending_backing),nullptr,0);
      a_release_pending=registry.qualification_rt_release(ref,async_ref);a_close=registry.qualification_close(ref);
-     {MutexLock lock(registry.mutex);queued_before_drain=bridge->rt->queued;refs_before_drain=registry.records[library].private_refs;}
+     {MutexLock lock(registry.mutex);queued_before_drain=bridge->rt_slot0()->queued;refs_before_drain=registry.records[library].private_refs;}
     }
     queued.post();drained.wait();
     if(a_reserve.native_error==OK)a_retry=registry.qualification_rt_observe(ref,async_ref,&retry,&retry_backing,sizeof(retry_backing),nullptr,0);
@@ -546,7 +546,7 @@ public:
   }
 #endif
   {MutexLock lock(registry.mutex);auto &r=registry.records[library];registry.qualification_bridges[slot]=nullptr;r.owner_thread=saved_owner;r.snapshot.library_generation=saved_generation;r.guard_enrollment=saved_guard;r.private_refs=saved_refs;registry.private_limit=saved_limit;registry.device_records[native]=saved_device;RenderingDevice::singleton=previous;device.is_main_instance=false;}
-  if(bridge->rt)memdelete(bridge->rt);memdelete(bridge);device.storage_buffer_owner.free(rid);
+  for(auto *cell:bridge->rt_cells)if(cell)memdelete(cell);bridge->rt_cells.clear();memdelete(bridge);device.storage_buffer_owner.free(rid);
  }
  static void cleanup(bool malformed, bool duplicate) {
   for(uint32_t kind:{3u,5u}) {
@@ -559,7 +559,7 @@ public:
    GDExtensionQualificationRtRequestV1 h{{1,56,0},kind,0,1,0,kind==3?80u:48u,kind==3?136u:184u,0,0};
    f.registry->records[0].quiescing=true;
    const auto counter=f.registry->qualification_serials.next;const auto refs=f.registry->records[0].private_refs;const auto children=f.bridge->children;
-   auto reserve=[&](const void *q){GDExtensionQualificationRtRefV1 out{};auto result=f.registry->qualification_rt_reserve(f.ref,&h,q,nullptr,&out);CHECK(out.handle_serial==0);CHECK_FALSE(f.bridge->rt->occupied);CHECK(f.registry->qualification_serials.next==counter);CHECK(f.registry->records[0].private_refs==refs);CHECK(f.bridge->children==children);return result;};
+   auto reserve=[&](const void *q){GDExtensionQualificationRtRefV1 out{};auto result=f.registry->qualification_rt_reserve(f.ref,&h,q,nullptr,&out);CHECK(out.handle_serial==0);CHECK_FALSE(f.bridge->rt_slot0()->occupied);CHECK(f.registry->qualification_serials.next==counter);CHECK(f.registry->records[0].private_refs==refs);CHECK(f.bridge->children==children);return result;};
    if(malformed) {
     if(kind==3){
      for(int variant=0;variant<12;++variant){auto q=sr;switch(variant){case 0:q.backing.registry_instance++;break;case 1:q.backing.handle_serial++;break;case 2:q.rid++;break;case 3:q.observed_backing_serial++;break;case 4:q.allocation_slot++;break;case 5:q.part++;break;case 6:q.allocation_generation++;break;case 7:storage->creating=true;break;case 8:storage->acknowledged=true;break;case 9:storage->retiring=true;storage->retirement=sr;storage->retirement.retire_attempt++;break;case 10:f.bridge->storage[0]=nullptr;break;case 11:q.retire_attempt=0;break;}
@@ -596,7 +596,7 @@ public:
    if(kind==6 || kind==9){GDExtensionQualificationRecordV1 q{};q.abi={1,16,0};q.record_generation=37;q.request_nonce=39;q.library_generation=1;q.qualification_session_serial=7;q.attempt=1;q.range_end=q.sample_count=4;q.body_groups_x=1;q.readback_size=16;memcpy(request,&q,sizeof(q));if(kind==9){ticket->uploads[0].attempted=true;ticket->uploads[0].progress.consumed=plan.byte_size;ticket->uploads[0].report.state=1;GDExtensionQualificationTicketRefV1 ref{71,23};memcpy(payload,&ref,sizeof(ref));h.payload_bytes=16;}}
    if(kind==7){GDExtensionQualificationUploadPrepareV1 q{};q.abi={1,16,0};q.record_generation=37;q.request_nonce=39;q.library_generation=1;q.qualification_session_serial=7;q.parent_serial=31;q.reservation_serial=97;q.attempt=q.upload_count=1;q.max_segments=2;q.expected_result_bytes=16;memcpy(request,&q,sizeof(q));memcpy(payload,&plan,sizeof(plan));h.payload_bytes=sizeof(plan);}
    if(kind==8){GDExtensionQualificationUploadRequestV1 q{};q.abi={1,16,0};q.record_generation=37;q.parent_serial=31;q.rid=plan.rid;q.backing_serial=17;q.byte_size=32;q.role=7;q.owner_kind=2;q.expected_revision=5;memcpy(request,&q,sizeof(q));GDExtensionQualificationTicketRefV1 ref{71,23};memcpy(payload,&ref,sizeof(ref));h.payload_bytes=48;}
-   GDExtensionQualificationRtRefV1 out{};CHECK(f.registry->qualification_rt_reserve(f.ref,&h,request,h.payload_bytes?payload:nullptr,&out).native_error==ERR_BUSY);CHECK(out.handle_serial==0);CHECK_FALSE(f.bridge->rt->occupied);CHECK(f.bridge->children==0);CHECK(f.registry->records[0].private_refs==refs);CHECK(f.registry->qualification_serials.next==serial);CHECK(ticket->accepted_rt_refs==0);
+   GDExtensionQualificationRtRefV1 out{};CHECK(f.registry->qualification_rt_reserve(f.ref,&h,request,h.payload_bytes?payload:nullptr,&out).native_error==ERR_BUSY);CHECK(out.handle_serial==0);CHECK_FALSE(f.bridge->rt_slot0()->occupied);CHECK(f.bridge->children==0);CHECK(f.registry->records[0].private_refs==refs);CHECK(f.registry->qualification_serials.next==serial);CHECK(ticket->accepted_rt_refs==0);
    // The identical original POD/ticket must be reservable before quiescing;
    // an unrelated shape/identity refusal cannot make the closed gate pass.
    f.registry->records[0].quiescing=false;GDExtensionQualificationRtRefV1 admitted{};
@@ -629,8 +629,8 @@ public:
   const auto children=f.bridge->children;
   GDExtensionQualificationRtRefV1 accepted{},same{};
   REQUIRE(f.registry->qualification_rt_reserve(f.ref,&header,&request,&child,&accepted).native_error==OK);
-  CHECK(accepted.handle_serial!=0);CHECK(ticket->accepted_rt_refs==1);CHECK(f.bridge->rt->ticket==ticket);
-  CHECK(f.bridge->rt->header.kind==17);CHECK(memcmp(f.bridge->rt->request.ptr(),&request,sizeof(request))==0);
+  CHECK(accepted.handle_serial!=0);CHECK(ticket->accepted_rt_refs==1);CHECK(f.bridge->rt_slot0()->ticket==ticket);
+  CHECK(f.bridge->rt_slot0()->header.kind==17);CHECK(memcmp(f.bridge->rt_slot0()->request.ptr(),&request,sizeof(request))==0);
   REQUIRE(f.registry->qualification_rt_reserve(f.ref,&header,&request,&child,&same).native_error==OK);
   CHECK(same.handle_serial==accepted.handle_serial);CHECK(ticket->accepted_rt_refs==1);
   REQUIRE(f.registry->qualification_rt_release(f.ref,accepted).native_error==OK);
@@ -648,7 +648,7 @@ public:
    GDExtensionQualificationRtRefV1 refused{};
    const auto result=f.registry->qualification_rt_reserve(f.ref,&header,&changed,&child,&refused);
    CHECK(result.native_error==ERR_INVALID_DATA);CHECK(result.reason==16);
-   CHECK(refused.registry_instance==0);CHECK(refused.handle_serial==0);CHECK_FALSE(f.bridge->rt->occupied);
+   CHECK(refused.registry_instance==0);CHECK(refused.handle_serial==0);CHECK_FALSE(f.bridge->rt_slot0()->occupied);
    CHECK(ticket->accepted_rt_refs==0);CHECK_FALSE(ticket->recorded);CHECK(ticket->graphs.is_empty());
    CHECK(f.bridge->children==children);CHECK(f.registry->records[0].private_refs==refs);CHECK(f.registry->qualification_serials.next==serial);
    CHECK(ticket->operation.owner_request_nonce==39);CHECK(ticket->operation.record_range_begin==0);CHECK(ticket->operation.record_range_end==8);
@@ -661,8 +661,8 @@ public:
   CHECK(out.handle_serial==0);CHECK(ticket->accepted_rt_refs==0);CHECK(f.registry->qualification_serials.next==serial);
   ticket->operation_bound=false;
   REQUIRE(f.registry->qualification_rt_reserve(f.ref,&legacy,&q,&child,&out).native_error==OK);
-  CHECK(f.bridge->rt->header.kind==10);CHECK(f.bridge->rt->header.request_bytes==sizeof(GDExtensionQualificationRecordV2));
-  CHECK(memcmp(f.bridge->rt->request.ptr(),&q,sizeof(q))==0);CHECK(q.abi.abi_version==2);CHECK(q.abi.struct_size==sizeof(GDExtensionDeviceExitAbi));
+  CHECK(f.bridge->rt_slot0()->header.kind==10);CHECK(f.bridge->rt_slot0()->header.request_bytes==sizeof(GDExtensionQualificationRecordV2));
+  CHECK(memcmp(f.bridge->rt_slot0()->request.ptr(),&q,sizeof(q))==0);CHECK(q.abi.abi_version==2);CHECK(q.abi.struct_size==sizeof(GDExtensionDeviceExitAbi));
   REQUIRE(f.registry->qualification_rt_release(f.ref,out).native_error==OK);
   ticket->operation_bound=true;++header.operation_serial;
   REQUIRE(f.registry->qualification_rt_reserve(f.ref,&header,&request,&child,&out).native_error==OK);
@@ -673,15 +673,15 @@ public:
  static void one_accepted_call() {
   Fixture f;auto c=config();REQUIRE(f.registry->qualification_rt_configure(f.ref,&c).native_error==OK);
   auto header=query(1);uint64_t rid=f.buffer.get_id();GDExtensionQualificationRtRefV1 ref={};REQUIRE(f.registry->qualification_rt_reserve(f.ref,&header,&rid,nullptr,&ref).native_error==OK);
-  auto *cell=f.bridge->rt;cell->active=cell->queued=cell->executing=true;cell->state=1;f.bridge->closing=true;
+  auto *cell=f.bridge->rt_slot0();cell->active=cell->queued=cell->executing=true;cell->state=1;f.bridge->closing=true;
   auto *previous=Registry::active_qualification_bridge;const auto previous_serial=Registry::active_qualification_serial;Registry::active_qualification_bridge=f.bridge;Registry::active_qualification_serial=cell->serial;
   GDExtensionQualificationBackingV1 out={};CHECK(f.registry->qualification_backing(f.ref,rid,&out).native_error==OK);CHECK(out.backing_serial==17);
   const auto second=f.registry->qualification_backing(f.ref,rid,&out);CHECK(second.native_error==ERR_BUSY);CHECK(second.reason==16);CHECK(out.rid==0);
   Registry::active_qualification_bridge=previous;Registry::active_qualification_serial=previous_serial;cell->active=cell->queued=cell->executing=false;
  }
  static void carrier() {
-  Fixture f;auto c=config();auto wrong=c;wrong.abi.struct_size=16;CHECK(f.registry->qualification_rt_configure(f.ref,&wrong).native_error==ERR_INVALID_PARAMETER);CHECK(f.bridge->rt==nullptr);
-  wrong=c;wrong.max_payload_bytes=67108865;CHECK(f.registry->qualification_rt_configure(f.ref,&wrong).native_error==ERR_INVALID_PARAMETER);CHECK(f.bridge->rt==nullptr);
+  Fixture f;auto c=config();auto wrong=c;wrong.abi.struct_size=16;CHECK(f.registry->qualification_rt_configure(f.ref,&wrong).native_error==ERR_INVALID_PARAMETER);CHECK(f.bridge->rt_slot0()==nullptr);
+  wrong=c;wrong.max_payload_bytes=67108865;CHECK(f.registry->qualification_rt_configure(f.ref,&wrong).native_error==ERR_INVALID_PARAMETER);CHECK(f.bridge->rt_slot0()==nullptr);
   REQUIRE(f.registry->qualification_rt_configure(f.ref,&c).native_error==OK);
 #ifdef THREADS_ENABLED
   GDExtensionDeviceSessionResultV1 foreign={};std::thread other([&]{foreign=f.registry->qualification_rt_configure(f.ref,&c);});other.join();CHECK(foreign.native_error==ERR_UNAUTHORIZED);CHECK(foreign.reason==15);
@@ -691,15 +691,15 @@ public:
   REQUIRE(f.registry->qualification_rt_reserve(f.ref,&header,&rid,nullptr,&repeat).native_error==OK);CHECK(repeat.handle_serial==first.handle_serial);CHECK(f.bridge->children==1);
   uint64_t changed=rid+1;repeat={};CHECK(f.registry->qualification_rt_reserve(f.ref,&header,&changed,nullptr,&repeat).native_error!=OK);CHECK(repeat.handle_serial==0);
   rid=0; // The accepted request is the original owned copy.
-  f.queue();REQUIRE(f.registry->qualification_rt_activate(f.ref,first).native_error==OK);CHECK(f.bridge->rt->queued);CHECK(f.bridge->rt->state==1);CHECK(f.registry->qualification_rt_activate(f.ref,first).native_error==ERR_BUSY);
+  f.queue();REQUIRE(f.registry->qualification_rt_activate(f.ref,first).native_error==OK);CHECK(f.bridge->rt_slot0()->queued);CHECK(f.bridge->rt_slot0()->state==1);CHECK(f.registry->qualification_rt_activate(f.ref,first).native_error==ERR_BUSY);
   GDExtensionQualificationRtObservationV1 observation={};GDExtensionQualificationBackingV1 backing={};
   REQUIRE(f.registry->qualification_rt_observe(f.ref,first,&observation,&backing,sizeof(backing),nullptr,0).native_error==OK);CHECK(observation.state==1);CHECK(observation.result_bytes==0);CHECK(backing.rid==0);CHECK(f.registry->qualification_rt_release(f.ref,first).native_error==ERR_BUSY);
   CHECK(f.registry->qualification_close(f.ref).native_error==ERR_BUSY);CHECK(f.bridge->closing);
   CHECK(f.registry->qualification_backing(f.ref,f.buffer.get_id(),&backing).native_error==ERR_BUSY);
-  f.dispatch();CHECK(f.bridge->rt->state==2);CHECK_FALSE(f.bridge->rt->queued);CHECK_FALSE(f.bridge->rt->executing);CHECK(f.bridge->children==1);
+  f.dispatch();CHECK(f.bridge->rt_slot0()->state==2);CHECK_FALSE(f.bridge->rt_slot0()->queued);CHECK_FALSE(f.bridge->rt_slot0()->executing);CHECK(f.bridge->children==1);
   CHECK(f.registry->qualification_rt_release(f.ref,first).native_error==ERR_BUSY);
   alignas(8) uint8_t oversized[200];memset(oversized,0xa5,sizeof(oversized));
-  CHECK(f.registry->qualification_rt_observe(f.ref,first,&observation,oversized,sizeof(oversized),nullptr,0).native_error==ERR_INVALID_PARAMETER);CHECK(observation.state==0);CHECK(oversized[0]==0);CHECK(oversized[199]==0);CHECK_FALSE(f.bridge->rt->observed);
+  CHECK(f.registry->qualification_rt_observe(f.ref,first,&observation,oversized,sizeof(oversized),nullptr,0).native_error==ERR_INVALID_PARAMETER);CHECK(observation.state==0);CHECK(oversized[0]==0);CHECK(oversized[199]==0);CHECK_FALSE(f.bridge->rt_slot0()->observed);
   REQUIRE(f.registry->qualification_rt_observe(f.ref,first,&observation,&backing,sizeof(backing),nullptr,0).native_error==OK);CHECK(observation.state==2);CHECK(observation.call_result.native_error==OK);CHECK(observation.result_bytes==48);CHECK(backing.rid==f.buffer.get_id());CHECK(backing.backing_serial==17);CHECK(backing.byte_size==64);
   CHECK(f.registry->qualification_backing(f.ref,f.buffer.get_id(),&backing).native_error==ERR_BUSY); // private accepted-call scope ended.
   REQUIRE(f.registry->qualification_rt_release(f.ref,first).native_error==OK);CHECK(f.bridge->children==0);CHECK(f.registry->qualification_rt_release(f.ref,first).reason==17);
@@ -713,15 +713,15 @@ public:
   GDExtensionQualificationUploadRequestV1 request={};request.abi={1,16,0};request.record_generation=37;request.parent_serial=31;request.rid=plan.rid;request.backing_serial=17;request.byte_size=64;request.role=7;request.owner_kind=2;request.expected_revision=5;
   alignas(8) uint8_t payload[80]={};const GDExtensionQualificationTicketRefV1 child{71,23};memcpy(payload,&child,sizeof(child));payload[16]=9;
   GDExtensionQualificationRtRequestV1 header{{1,56,0},8,0,1,80,136,120,2,0};GDExtensionQualificationRtRefV1 ref={},same={};
-  auto malformed=header;malformed.payload_bytes=64;CHECK(f.registry->qualification_rt_reserve(f.ref,&malformed,&request,payload,&ref).native_error!=OK);CHECK(ref.handle_serial==0);CHECK(ticket->accepted_rt_refs==0);CHECK_FALSE(f.bridge->rt->occupied);
+  auto malformed=header;malformed.payload_bytes=64;CHECK(f.registry->qualification_rt_reserve(f.ref,&malformed,&request,payload,&ref).native_error!=OK);CHECK(ref.handle_serial==0);CHECK(ticket->accepted_rt_refs==0);CHECK_FALSE(f.bridge->rt_slot0()->occupied);
   malformed=header;malformed.payload_bytes=UINT64_MAX;CHECK(f.registry->qualification_rt_reserve(f.ref,&malformed,&request,payload,&ref).native_error!=OK);CHECK(ref.handle_serial==0);CHECK(ticket->accepted_rt_refs==0);
   REQUIRE(f.registry->qualification_rt_reserve(f.ref,&header,&request,payload,&ref).native_error==OK);CHECK(ticket->accepted_rt_refs==1);CHECK(f.registry->qualification_release(f.ref,child).native_error==ERR_BUSY);
   REQUIRE(f.registry->qualification_rt_reserve(f.ref,&header,&request,payload,&same).native_error==OK);CHECK(same.handle_serial==ref.handle_serial);CHECK(ticket->accepted_rt_refs==1);
   payload[8]++;same={};CHECK(f.registry->qualification_rt_reserve(f.ref,&header,&request,payload,&same).native_error!=OK);CHECK(ticket->accepted_rt_refs==1);payload[8]--;
-  payload[16]=99;CHECK(f.bridge->rt->payload[16]==9);
+  payload[16]=99;CHECK(f.bridge->rt_slot0()->payload[16]==9);
   if(cancel) {
    REQUIRE(f.registry->qualification_cancel(f.ref,child).native_error==OK);CHECK(ticket->stop_requested);CHECK(ticket->accepted_rt_refs==1);
-   f.queue();REQUIRE(f.registry->qualification_rt_activate(f.ref,ref).native_error==OK);CHECK(f.bridge->rt->queued);
+   f.queue();REQUIRE(f.registry->qualification_rt_activate(f.ref,ref).native_error==OK);CHECK(f.bridge->rt_slot0()->queued);
    f.dispatch();GDExtensionQualificationRtObservationV1 observation={};GDExtensionQualificationUploadReportV1 returned={};GDExtensionQualificationUploadSegmentV1 segments[2]={};
    REQUIRE(f.registry->qualification_rt_observe(f.ref,ref,&observation,&returned,sizeof(returned),segments,2).native_error==OK);CHECK(observation.state==2);CHECK(observation.call_result.native_error==ERR_BUSY);CHECK(observation.call_result.reason==16);CHECK(returned.revision==0);CHECK(observation.segment_count==0);CHECK(ticket->graphs.is_empty());CHECK(ticket->accepted_rt_refs==1);
   }

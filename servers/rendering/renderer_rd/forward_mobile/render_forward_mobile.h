@@ -251,6 +251,10 @@ private:
 	void _setup_lightmaps(const RenderDataRD *p_render_data, const PagedArray<RID> &p_lightmaps, const Transform3D &p_cam_transform);
 
 	RID render_base_uniform_set;
+	// Fixed zero-initialized Set-0 buffers used only for native material qualification
+	// so live per-frame mutable renderer buffers are never pinned immutable.
+	RID native_qualification_zero_storage_buffer;
+	RID native_qualification_zero_uniform_buffer;
 
 	/* Light map */
 

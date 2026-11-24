@@ -336,6 +336,42 @@ public:
 		r_step = "ok";
 		return OK;
 	}
+
+	static void external_indexed144_mirror_reverse_cull() {
+		using Renderer = RenderForwardClustered;
+		Renderer::GeometryInstanceForwardClustered owner;
+		Renderer::GeometryInstanceSurfaceDataCache surface;
+		surface.owner = &owner;
+		Renderer::RenderListParameters params(nullptr, nullptr, 0, false, Renderer::PASS_MODE_COLOR, 0, true, false, RID());
+		params.native_pass.pass_mode = Renderer::PASS_MODE_COLOR;
+		params.view_count = 1;
+		Renderer::NativeSurfacePipelineSelection selected;
+
+		// BUG-84: external_particles uploads Identity (store_transform=false) and
+		// ANGE's ribbon exporter already canonicalizes world-space CCW winding for
+		// det(H) < 0, so INDEXED_144 must preserve params.reverse_cull regardless
+		// of host owner->mirror (avoiding double-flip backface culling):
+		surface.external_surface.profile = RendererRD::ExternalOutputConfig::INDEXED_144;
+		for (bool mirror : { false, true }) {
+			for (bool reverse_cull : { false, true }) {
+				owner.mirror = mirror;
+				params.reverse_cull = reverse_cull;
+				const auto req = Renderer::_external_pipeline_request(params, surface, selected);
+				CHECK(req.reverse_cull == reverse_cull);
+			}
+		}
+
+		// INSTANCE_192 keeps params.reverse_cull unchanged regardless of owner->mirror:
+		surface.external_surface.profile = RendererRD::ExternalOutputConfig::INSTANCE_192;
+		for (bool mirror : { false, true }) {
+			for (bool reverse_cull : { false, true }) {
+				owner.mirror = mirror;
+				params.reverse_cull = reverse_cull;
+				const auto req = Renderer::_external_pipeline_request(params, surface, selected);
+				CHECK(req.reverse_cull == reverse_cull);
+			}
+		}
+	}
 };
 
 } // namespace RendererSceneRenderImplementation
@@ -370,4 +406,8 @@ TEST_CASE("[B4][ClusteredNativePassSelection] frozen native color flags control 
 
 TEST_CASE("[B4][ClusteredNativePassSelection] invalid native selection leaves the previous output unchanged") {
 	RendererSceneRenderImplementation::TestClusteredNativePassSelection::failure_preserves_selection();
+}
+
+TEST_CASE("[ExternalOutput][ClusteredNativePassSelection] BUG-84 INDEXED_144 preserves hardware face culling on mirrored host scale") {
+	RendererSceneRenderImplementation::TestClusteredNativePassSelection::external_indexed144_mirror_reverse_cull();
 }

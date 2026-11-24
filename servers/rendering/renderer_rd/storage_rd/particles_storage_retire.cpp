@@ -35,6 +35,7 @@
 #include <cstdlib>
 #include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_mesh_light_sort_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 
 namespace RendererRD {
@@ -754,6 +755,9 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 	if (owner.device && owner.device == RenderingDevice::get_singleton() && owner.device->native_immutable_is_render_thread()) {
 		owner.device->production_output_fast_refresh.remove_owner(&owner, p_slot);
 		slot.release_fast_refresh_resources(owner.device);
+		if (storage->mesh_light_sort_rd) {
+			storage->mesh_light_sort_rd->unregister_external_light_slot(p_particles.get_id(), p_generation, p_slot);
+		}
 	}
 	auto spend = [&]() {
 		if (r_usage.passes >= MIN(p_budget.passes, 64u) || r_usage.receipts >= MIN(p_budget.receipts, 128u) ||

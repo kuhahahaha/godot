@@ -164,6 +164,7 @@ RenderingDeviceDriver::FencePollResult RenderingDeviceDriverMetal::fence_wait_ob
 	}
 	for (CompletionRecord *record : fence->completion_records) {
 		record->command_buffer->waitUntilCompleted();
+		publish_command_buffer_status(record, record->command_buffer.get());
 	}
 	return fence_poll(p_fence, p_expected_submission_serial);
 }
@@ -184,6 +185,16 @@ Error RenderingDeviceDriverMetal::fence_recycle(FenceID p_fence, uint64_t p_comp
 
 void RenderingDeviceDriverMetal::fence_free(FenceID p_fence) {
 	Fence *fence = (Fence *)(p_fence.id);
+	if (!fence->completion_records.is_empty()) {
+		for (CompletionRecord *record : fence->completion_records) {
+			if (record && record->command_buffer) {
+				record->command_buffer->waitUntilCompleted();
+				publish_command_buffer_status(record, record->command_buffer.get());
+			}
+		}
+		retire_completion_records(fence->completion_records);
+		fence->completion_records.clear();
+	}
 	memdelete(fence);
 }
 

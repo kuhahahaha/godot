@@ -136,10 +136,8 @@ Error Registry::production_incoming_readbacks_validate_locked(const ProductionRe
 					const auto *shader = rd.shader_owner.get_or_null(request.resources[dispatch.unit_slot].secondary);
 					for (uint32_t set_index = 0; set_index < dispatch.set_count; ++set_index) {
 						const auto &set = request.resources[dispatch.first_set_slot + set_index];
-						if (set.scene_depth_set1) {
-							continue;
-						}
-						for (uint32_t b = 0; b < set.binding_count; ++b) {
+						const uint32_t b_start = set.scene_depth_set1 ? set.scene_depth_lease_count : 0u;
+						for (uint32_t b = b_start; b < set.binding_count; ++b) {
 							const auto &binding = request.uses[set.first_binding + b].binding;
 							for (const auto &uniform : shader->uniform_sets[set_index]) {
 								if (uniform.binding != binding.binding || uniform.type != RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER || !uniform.writable) {
@@ -202,23 +200,26 @@ Error Registry::production_dispatch_closure_locked(const ProductionRequest &requ
 		const auto &slot = request.resources[dispatch.first_set_slot + i];
 		const auto *set = rd.uniform_set_owner.get_or_null(slot.primary);
 		if (slot.scene_depth_set1) {
+			const uint32_t pair_count = slot.scene_depth_lease_count;
+			const uint32_t storage_count = slot.binding_count >= pair_count ? (slot.binding_count - pair_count) : 0u;
 			if (i != 1u || slot.output_set_deferred || !slot.imported || slot.creating || slot.retiring || slot.returned ||
 					!set || !set->driver_id || set->shader_id != pipeline->shader || set->shader_set != 1u ||
 					set->format != pipeline->set_formats[1] || !set->shared_textures_to_update.is_empty() ||
-					!set->pending_clear_textures.is_empty() || !set->writable_resources.is_empty() ||
+					!set->pending_clear_textures.is_empty() || (storage_count == 0u && !set->writable_resources.is_empty()) ||
 					slot.imported_unit_slot != dispatch.unit_slot || slot.shader_set != 1u ||
-					slot.binding_count < 1u || slot.binding_count > MAX_SCENE_DEPTH_SET1_PAIRS ||
-					slot.scene_depth_lease_count != slot.binding_count ||
-					uint32_t(shader->uniform_sets[1].size()) != 2u * slot.binding_count ||
+					pair_count < 1u || pair_count > MAX_SCENE_DEPTH_SET1_PAIRS ||
+					slot.binding_count < pair_count ||
+					uint32_t(shader->uniform_sets[1].size()) != 2u * pair_count + storage_count ||
 					slot.first_binding > request.capacity.resource_uses ||
 					slot.binding_count > request.capacity.resource_uses - slot.first_binding ||
 					slot.use_count != 1u || !slot.uses[0].linked() || !slot.uses[0].same_physical() ||
 					set->qualification_return != &slot.owned_physical ||
 					unit.use_count != 2u || !set->qualification_dependencies.has(unit.uses[0].physical) ||
-					set->qualification_dependencies.size() != 1u) {
+					(storage_count == 0u && set->qualification_dependencies.size() != 1u) ||
+					set->qualification_dependencies.size() > 1u + storage_count) {
 				return ERR_INVALID_DATA;
 			}
-			for (uint32_t d = 0; d < slot.binding_count; ++d) {
+			for (uint32_t d = 0; d < pair_count; ++d) {
 				const auto &binding = request.uses[slot.first_binding + d].binding;
 				float slab_m = 0.0f;
 				float jump_m = 0.0f;
@@ -257,10 +258,47 @@ Error Registry::production_dispatch_closure_locked(const ProductionRequest &requ
 				if (gen.is_null() || gen->meta_buffer.is_null() || gen->depth_texture.is_null()) {
 					return ERR_INVALID_DATA;
 				}
+				if (set->writable_resources.has(gen->meta_buffer) || set->writable_resources.has(gen->depth_texture)) {
+					return ERR_INVALID_DATA;
+				}
 				const auto *meta_buf = rd.storage_buffer_owner.get_or_null(gen->meta_buffer);
 				const auto *depth_tex = rd.texture_owner.get_or_null(gen->depth_texture);
 				if (!meta_buf || !meta_buf->driver_id || meta_buf->size != sizeof(RendererRD::SceneDepthSnapshotMeta256) ||
 						!depth_tex || !depth_tex->driver_id || depth_tex->format != RenderingDevice::DATA_FORMAT_R32_SFLOAT) {
+					return ERR_INVALID_DATA;
+				}
+			}
+			for (uint32_t s = 0; s < storage_count; ++s) {
+				const auto &binding = request.uses[slot.first_binding + pair_count + s].binding;
+				if (binding.resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
+						binding.resource_slot >= request.resource_count || binding.set != 1u ||
+						binding.array_element || binding.binding < 2u * pair_count) {
+					return ERR_INVALID_DATA;
+				}
+				const auto &storage = request.resources[binding.resource_slot];
+				bool physical_dependency = storage.use_count == 1 && storage.uses[0].linked() && storage.uses[0].same_physical() && set->qualification_dependencies.has(storage.uses[0].physical);
+				const bool history_guard = storage.output_guard_history && production_output_history_guard_uses_locked(request, storage, action.declaration.action_ordinal) && production_output_guard_matches_locked(request, storage, rd);
+				if (storage.output_guard_readonly && !history_guard) { return ERR_UNAUTHORIZED; }
+				const bool predecessor = production_output_predecessor_matches_locked(request, storage, rd) || history_guard;
+				if (predecessor) {
+					physical_dependency = false;
+					for (const auto &dependency : set->production_output_dependencies) {
+						physical_dependency |= dependency.cell == (history_guard ? storage.output_witness.cell : storage.output_predecessor_witness.cell);
+					}
+					for (const auto &uniform : shader->uniform_sets[1]) {
+						if (uniform.binding == binding.binding && uniform.writable) { return ERR_UNAUTHORIZED; }
+					}
+				}
+				if (!storage.imported || storage.retiring || storage.output_alias_prepared || storage.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || !physical_dependency) {
+					return ERR_INVALID_DATA;
+				}
+				bool covered = false;
+				for (const auto &uniform : shader->uniform_sets[1]) {
+					for (uint32_t u = 0; u < declaration.use_count; ++u) {
+						covered |= compatible(binding, uniform, request.uses[declaration.first_use + u].declaration);
+					}
+				}
+				if (!covered) {
 					return ERR_INVALID_DATA;
 				}
 			}
@@ -328,10 +366,8 @@ Error Registry::production_dispatch_closure_locked(const ProductionRequest &requ
 		bool covered = false;
 		for (uint32_t i = 0; i < dispatch.set_count; ++i) {
 			const auto &slot = request.resources[dispatch.first_set_slot + i];
-			if (slot.scene_depth_set1) {
-				continue;
-			}
-			for (uint32_t b = 0; b < slot.binding_count; ++b) {
+			const uint32_t b_start = slot.scene_depth_set1 ? slot.scene_depth_lease_count : 0u;
+			for (uint32_t b = b_start; b < slot.binding_count; ++b) {
 				const auto &binding = request.uses[slot.first_binding + b].binding;
 				for (const auto &uniform : shader->uniform_sets[i]) {
 					covered |= compatible(binding, uniform, use);
@@ -486,6 +522,8 @@ void Registry::production_capture_issue_locked(RenderingDevice &rd, uint32_t slo
 					}
 					const uint32_t index = request.native_count++;
 					auto &native = request.natives[index];
+					new (&native) ProductionNativeCell();
+					native.request = &request;
 					native.owner_index = owner == UINT32_MAX ? index : owner;
 					native.member.source = source;
 					native.member.frame = uint32_t(rd.frame);
@@ -744,10 +782,8 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 		const auto &dispatch = action.dispatch;
 		for (uint32_t set_index = 0; set_index < dispatch.set_count; ++set_index) {
 			const auto &set = request.resources[dispatch.first_set_slot + set_index];
-			if (set.scene_depth_set1) {
-				continue;
-			}
-			for (uint32_t b = 0; b < set.binding_count; ++b) {
+			const uint32_t b_start = set.scene_depth_set1 ? set.scene_depth_lease_count : 0u;
+			for (uint32_t b = b_start; b < set.binding_count; ++b) {
 				if (check_transfer_resource(request.uses[set.first_binding + b].binding.resource_slot) == ERR_BUSY) {
 					observed.error = ERR_BUSY;
 					return observed;
@@ -855,40 +891,72 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 			// one compute list.  The graph does not infer a storage dependency
 			// from the sealed ANGE use rows, so a write in an earlier dispatch can
 			// otherwise remain invisible to a later read (the initial admission
-			// dispatch is the first real instance of this).  Insert the native
-			// barrier only for an actual overlapping storage write->use edge; do
-			// not split unrelated dispatches or alter the request's list contract.
-			auto has_prior_storage_write = [&](uint32_t resource_slot, uint64_t offset, uint64_t bytes) {
-				auto overlaps = [](uint64_t lhs_offset, uint64_t lhs_bytes, uint64_t rhs_offset, uint64_t rhs_bytes) {
-					return lhs_bytes && rhs_bytes && (lhs_offset <= rhs_offset ? rhs_offset - lhs_offset < lhs_bytes : lhs_offset - rhs_offset < rhs_bytes);
-				};
-				for (uint32_t prior_index = 0; prior_index < index; ++prior_index) {
-					const auto &prior = request.actions[prior_index];
-					if (prior.request != &request || prior.declaration.action_kind != GDEXTENSION_PRODUCTION_DISPATCH_V1 || !prior.prepared) {
+			// dispatch is the first real instance of this).  Track the last-writer
+			// byte span per resource slot in O(1) for the active barrier epoch and
+			// insert the native barrier only on an overlapping write->use edge.
+			auto range_end = [](uint64_t p_offset, uint64_t p_bytes) -> uint64_t {
+				return p_bytes > UINT64_MAX - p_offset ? UINT64_MAX : p_offset + p_bytes;
+			};
+			auto bump_dispatch_epoch = [&]() {
+				if (++request.dispatch_barrier_epoch == 0) {
+					for (uint32_t r = 0; r < request.resource_count; ++r) {
+						request.resources[r].last_dispatch_write_epoch = 0;
+					}
+					request.dispatch_barrier_epoch = 1;
+				}
+			};
+			if (!continuing_compute_list) {
+				bump_dispatch_epoch();
+			} else {
+				bool needs_barrier = false;
+				const uint32_t epoch = request.dispatch_barrier_epoch;
+				for (uint32_t use_index = 0; use_index < action.declaration.use_count; ++use_index) {
+					const auto &use = request.uses[action.declaration.first_use + use_index].declaration;
+					if (!use.byte_size || use.resource_slot >= request.resource_count) {
 						continue;
 					}
-					for (uint32_t use_index = 0; use_index < prior.declaration.use_count; ++use_index) {
-						const auto &use = request.uses[prior.declaration.first_use + use_index].declaration;
-						if (use.resource_slot != resource_slot ||
-							(use.access != GDEXTENSION_PRODUCTION_WRITE_V1 && use.access != GDEXTENSION_PRODUCTION_READ_WRITE_V1 && use.access != GDEXTENSION_PRODUCTION_ATOMIC_V1) ||
-							!overlaps(use.byte_offset, use.byte_size, offset, bytes)) {
-							continue;
-						}
-						return true;
+					const auto &res = request.resources[use.resource_slot];
+					if (res.last_dispatch_write_epoch != epoch) {
+						continue;
+					}
+					const uint64_t use_begin = use.byte_offset;
+					const uint64_t use_end = range_end(use.byte_offset, use.byte_size);
+					if (res.last_dispatch_write_begin < use_end && use_begin < res.last_dispatch_write_end) {
+						needs_barrier = true;
+						break;
 					}
 				}
-				return false;
-			};
-			bool needs_barrier = false;
-			for (uint32_t use_index = 0; use_index < action.declaration.use_count; ++use_index) {
-				const auto &use = request.uses[action.declaration.first_use + use_index].declaration;
-				if (has_prior_storage_write(use.resource_slot, use.byte_offset, use.byte_size)) {
-					needs_barrier = true;
-					break;
+				if (needs_barrier) {
+					rd.compute_list_add_barrier(list);
+					bump_dispatch_epoch();
 				}
 			}
-			if (needs_barrier && continuing_compute_list) {
-				rd.compute_list_add_barrier(list);
+			{
+				const uint32_t epoch = request.dispatch_barrier_epoch;
+				for (uint32_t use_index = 0; use_index < action.declaration.use_count; ++use_index) {
+					const auto &use = request.uses[action.declaration.first_use + use_index].declaration;
+					if (!use.byte_size || use.resource_slot >= request.resource_count ||
+							(use.access != GDEXTENSION_PRODUCTION_WRITE_V1 &&
+									use.access != GDEXTENSION_PRODUCTION_READ_WRITE_V1 &&
+									use.access != GDEXTENSION_PRODUCTION_ATOMIC_V1)) {
+						continue;
+					}
+					auto &res = request.resources[use.resource_slot];
+					const uint64_t write_begin = use.byte_offset;
+					const uint64_t write_end = range_end(use.byte_offset, use.byte_size);
+					if (res.last_dispatch_write_epoch != epoch) {
+						res.last_dispatch_write_epoch = epoch;
+						res.last_dispatch_write_begin = write_begin;
+						res.last_dispatch_write_end = write_end;
+					} else {
+						if (write_begin < res.last_dispatch_write_begin) {
+							res.last_dispatch_write_begin = write_begin;
+						}
+						if (write_end > res.last_dispatch_write_end) {
+							res.last_dispatch_write_end = write_end;
+						}
+					}
+				}
 			}
 			rd.compute_list_bind_compute_pipeline(list, pipeline);
 			for (uint32_t i = 0; i < dispatch.set_count; ++i) {
@@ -1069,8 +1137,10 @@ bool Registry::production_readback_ready_to_pump(const BufferReadbackSourceCaptu
 				!target->capture_inflight && !target->continuation_inflight)) {
 		return false;
 	}
-	// Do not advance the RD frame while any sibling request on this device is
-	// actively mid-recording an unclosed action plan.
+	// Do not advance the RD frame while any sibling request on this device has an
+	// actively open compute/draw list or an in-flight RT recording call. Idle siblings
+	// with closed lists (even mid-plan or with a queued/returned RECORD control) must
+	// not starve a completed sibling's readback pump (BUG-120).
 	for (auto *attachment : production_attachments) {
 		if (!attachment || attachment->held_device != target_rd) {
 			continue;
@@ -1081,9 +1151,9 @@ bool Registry::production_readback_ready_to_pump(const BufferReadbackSourceCaptu
 				continue;
 			}
 			if (other.compute_list_open || other.draw_list_open ||
-					(other.control.state != ProductionControlState::OWNER_CONSUMED &&
-							other.control.input.kind == ProductionControlKind::RECORD) ||
-					(!other.cancelled && other.next_action > 0 && other.next_action < other.action_count)) {
+					other.capture_inflight || other.continuation_inflight ||
+					(other.control.state == ProductionControlState::EXECUTING &&
+							other.control.input.kind == ProductionControlKind::RECORD)) {
 				return false;
 			}
 		}

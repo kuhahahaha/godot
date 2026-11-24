@@ -653,8 +653,17 @@ Error RenderingDevice::_production_output_empty_read_record(RendererRD::External
 }
 
 Error RenderingDevice::_production_output_reads_close() {
+	return _production_output_reads_close(false);
+}
+
+Error RenderingDevice::_production_output_reads_close(bool p_blocking) {
 	using namespace GDExtensionDeviceExit;
-	if (!native_immutable_is_render_thread() || !draw_list.active || production_output_raster_recording.owner || !_thread_safe_.try_lock()) {
+	if (!native_immutable_is_render_thread() || !draw_list.active || production_output_raster_recording.owner) {
+		return ERR_UNAVAILABLE;
+	}
+	if (p_blocking) {
+		_thread_safe_.lock();
+	} else if (!_thread_safe_.try_lock()) {
 		return ERR_UNAVAILABLE;
 	}
 	MutexScopeUnlock<Mutex> rd_unlock(_thread_safe_);

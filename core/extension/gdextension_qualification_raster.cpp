@@ -228,6 +228,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_raster_unit_create(GDEx
 			return result(ERR_CANT_CREATE, 19);
 		}
 		bridge->units[slot] = child;
+		bridge->track_unacknowledged_child_locked(child);
 		++bridge->children;
 		++records[bridge->library].private_refs;
 		target->physical.dependent_children.fetch_add(1);
@@ -249,6 +250,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_raster_unit_create(GDEx
 		CRASH_COND(!child->cleanup_serial_reserved || !qualification_cleanup_serial_reservations);
 		--qualification_cleanup_serial_reservations;
 		bridge->raster_origins.discard(child->history_index, child->serial);
+		bridge->untrack_unacknowledged_child_locked(child);
 		bridge->units[slot] = nullptr;
 		--bridge->children;
 		--records[bridge->library].private_refs;
@@ -605,7 +607,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_raster_unit_retire_rele
 			--qualification_cleanup_serial_reservations;
 			child->cleanup_serial_reserved = false;
 		}
-		child->acknowledged = true;
+		bridge->acknowledge_child_locked(child);
 		--bridge->children;
 		--records[bridge->library].private_refs;
 		qualification_trim_cleanup_ref_credits_locked(bridge);

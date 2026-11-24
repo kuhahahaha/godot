@@ -1449,7 +1449,8 @@ Error ParticlesStorage::particles_external_generated_surfaces_for_view(RID p_par
 			owner.admits_work() && owner.config.profile == ExternalOutputConfig::INDEXED_144 &&
 			owner.config.motion == ExternalOutputConfig::DISABLED && owner.config.capacity > 0) {
 		const auto &camera_token = capture->get_token();
-		uint64_t best_present_seq = 0;
+		uint32_t best_ready_slot = UINT32_MAX;
+		uint64_t best_ready_present_seq = 0;
 		for (uint32_t s = 0; s < owner.slot_count; ++s) {
 			const auto &cand_slot = owner.slots[s];
 			if ((cand_slot.state != ExternalOutputOwner::LeaseState::SEALED_RECORDED &&
@@ -1474,27 +1475,34 @@ Error ParticlesStorage::particles_external_generated_surfaces_for_view(RID p_par
 					!cand_slot.original_registry->production_output_pin_matches(cand_slot.original_pin, cand_slot.original_request, *rd)) {
 				continue;
 			}
-			if (cand_slot.state == ExternalOutputOwner::LeaseState::ADOPTED) {
-				bool has_ready_row = false;
-				for (uint32_t r = 0; r < owner.preparation_capacity; ++r) {
-					const auto &row = owner.preparation_rows[r];
-					if (row.owner == &owner && row.owner_slot == s &&
-							row.tuple_state == ExternalPipelinePreparation::TupleState::READY &&
-							row.finish_complete && row.finish_error == OK && row.backend_error == OK && row.pipeline_sealed) {
-						has_ready_row = true;
-						break;
-					}
+			bool has_ready_row = false;
+			for (uint32_t r = 0; r < owner.preparation_capacity; ++r) {
+				const auto &row = owner.preparation_rows[r];
+				if (row.owner == &owner && row.owner_slot == s &&
+						row.tuple_state == ExternalPipelinePreparation::TupleState::READY &&
+						row.finish_complete && row.finish_error == OK && row.backend_error == OK && row.pipeline_sealed) {
+					has_ready_row = true;
+					break;
 				}
+			}
+			if (cand_slot.state == ExternalOutputOwner::LeaseState::ADOPTED) {
 				if (!has_ready_row) {
 					continue;
 				}
+			} else if (!has_ready_row &&
+					!cand_slot.original_registry->production_output_slot_cross_capture_preparable(
+							cand_slot.original_pin, cand_slot.original_request, *rd)) {
+				continue;
 			}
-			if (slot == UINT32_MAX || cand_slot.request.common.present_seq >= best_present_seq) {
-				slot = s;
-				best_present_seq = cand_slot.request.common.present_seq;
-				selected = OK;
-				replayed_across_capture = true;
+			if (best_ready_slot == UINT32_MAX || cand_slot.request.common.present_seq >= best_ready_present_seq) {
+				best_ready_slot = s;
+				best_ready_present_seq = cand_slot.request.common.present_seq;
 			}
+		}
+		if (best_ready_slot != UINT32_MAX) {
+			slot = best_ready_slot;
+			selected = OK;
+			replayed_across_capture = true;
 		}
 	}
 	if (selected != OK) {
@@ -1604,9 +1612,15 @@ Error ParticlesStorage::particles_external_prepare_pipeline(const ExternalSurfac
 	GDExtensionDeviceExit::ProductionOutputPreparationScope scope;
 	Error error = slot.original_registry->production_output_preparation_begin_row(slot.original_pin, *device, slot.original_action_ordinal, surface.flattened_surface, index, row.pipeline_owned_group, scope, &view);
 	if (error != OK) {
-		row.backend_error = error;
-		row.tuple_state = ExternalPipelinePreparation::TupleState::FAILED;
-		out = &row;
+		// Pre-scope refusal touched no RD/pipeline/disposal state: release the freshly
+		// selected bank row back to UNSELECTED so transient refusals (e.g. ERR_BUSY while
+		// awaiting OWNER_CONSUMED or cross-capture staged_return mismatch) never permanently
+		// poison this (slot, surface, selection) tuple to FAILED on future frames.
+		{
+			GDExtensionDeviceExit::Registry::Lock lock(*slot.original_registry);
+			owner.unselect_preparation_tuple(view.slot, index);
+		}
+		out = nullptr;
 		return error;
 	}
 	// Synchronous real backend body; it cannot retain this stack scope. Every
@@ -1810,9 +1824,7 @@ void ParticlesStorage::particles_external_create_typed_v3(GDExtensionProductionP
 	}
 }
 
-namespace {
-
-bool fast_refresh_invert_affine_f32(const float p_affine[12], float r_inverse[12]) {
+bool ParticlesStorage::fast_refresh_invert_affine_f32(const float p_affine[12], float r_inverse[12]) {
 	for (uint32_t i = 0; i < 12; ++i) {
 		if (!Math::is_finite(p_affine[i])) {
 			return false;
@@ -1870,16 +1882,34 @@ bool fast_refresh_invert_affine_f32(const float p_affine[12], float r_inverse[12
 				return true;
 			}
 			const float val = float(inverse[row][column]);
-			if (!Math::is_finite(val) || (val != 0.0f && Math::abs(val) < std::numeric_limits<float>::min())) {
+			if (!Math::is_finite(val)) {
 				write_fallback_inverse();
 				return true;
 			}
-			candidate[row * 4 + column] = val;
+			// Flush individual subnormal components to 0.0f rather than discarding
+			// the entire valid inverse matrix.
+			candidate[row * 4 + column] = (Math::abs(val) < std::numeric_limits<float>::min()) ? 0.0f : val;
 		}
 	}
 	memcpy(r_inverse, candidate, sizeof(candidate));
 	return true;
 }
+
+void ParticlesStorage::fast_refresh_encode_light64_guard_status(uint64_t p_present_seq, uint32_t r_words[8]) {
+	// Canonical GUARD_STATUS ABI layout matching gdextension_production_output.cpp
+	// and ANGE validate_output_guard_status32:
+	// [0..3] = fault/status/reserved zeros, [4..5] = present_seq (lo, hi), [6] = finalized (1), [7] = 0.
+	r_words[0] = 0u;
+	r_words[1] = 0u;
+	r_words[2] = 0u;
+	r_words[3] = 0u;
+	r_words[4] = uint32_t(p_present_seq);
+	r_words[5] = uint32_t(p_present_seq >> 32);
+	r_words[6] = 1u;
+	r_words[7] = 0u;
+}
+
+namespace {
 
 Transform3D fast_refresh_decode_transform(const float p_affine[12]) {
 	Transform3D xf;
@@ -1970,6 +2000,22 @@ int32_t ParticlesStorage::particles_external_begin_fast_refresh_v1(const GDExten
 		}
 		slot.current_host = fast_refresh_decode_transform(p_input->current_host_affine);
 		slot.previous_host = fast_refresh_decode_transform(p_input->previous_host_affine);
+		// Refresh committed scene cull bounds for ALL profiles (including PARTICLE_LIGHT_64,
+		// which has no GEOMETRY_PROOF buffer) so moving light emitters keep fresh world_bounds.
+		bool cull_updated = false;
+		if (slot.scene_cull_bound) {
+			if (auto *scene = static_cast<RendererSceneCull *>(RSG::scene)) {
+				RendererSceneCull::NativeParticleSceneFacts actual;
+				if (scene->instance_get_committed_particle_scene_facts(slot.scene_cull_instance, slot.scene_cull_particles, actual) == OK &&
+						actual.scenario == slot.scene_cull_scenario &&
+						actual.world_aabb.is_finite() && actual.world_aabb.get_end().is_finite() && actual.world_aabb.has_volume()) {
+					slot.scene_cull_version = actual.version;
+					slot.scene_cull_local = actual.local_aabb;
+					slot.scene_cull_world = actual.world_aabb;
+					cull_updated = true;
+				}
+			}
+		}
 		const RID proof_rid = slot.storage->resources[ExternalOutputStorage::GEOMETRY_PROOF].rid;
 		if (slot.guard_proof_payload != nullptr &&
 				slot.guard_proof_bytes >= sizeof(ParticlesExternalGuard::GeometryProofHeader) &&
@@ -1978,21 +2024,11 @@ int32_t ParticlesStorage::particles_external_begin_fast_refresh_v1(const GDExten
 			memcpy(&header, slot.guard_proof_payload, sizeof(header));
 			memcpy(header.current_host_inverse_rows, cur_inv, sizeof(cur_inv));
 			memcpy(header.previous_host_inverse_rows, prev_inv, sizeof(prev_inv));
-			if (slot.scene_cull_bound) {
-				if (auto *scene = static_cast<RendererSceneCull *>(RSG::scene)) {
-					RendererSceneCull::NativeParticleSceneFacts actual;
-					if (scene->instance_get_committed_particle_scene_facts(slot.scene_cull_instance, slot.scene_cull_particles, actual) == OK &&
-							actual.scenario == slot.scene_cull_scenario &&
-							actual.world_aabb.is_finite() && actual.world_aabb.get_end().is_finite() && actual.world_aabb.has_volume()) {
-						slot.scene_cull_version = actual.version;
-						slot.scene_cull_local = actual.local_aabb;
-						slot.scene_cull_world = actual.world_aabb;
-						const Vector3 end = actual.world_aabb.get_end();
-						for (uint32_t axis = 0; axis < 3; ++axis) {
-							header.cull_min[axis] = float(actual.world_aabb.position[axis]);
-							header.cull_max[axis] = float(end[axis]);
-						}
-					}
+			if (cull_updated) {
+				const Vector3 end = slot.scene_cull_world.get_end();
+				for (uint32_t axis = 0; axis < 3; ++axis) {
+					header.cull_min[axis] = float(slot.scene_cull_world.position[axis]);
+					header.cull_max[axis] = float(end[axis]);
 				}
 			}
 			memcpy(slot.guard_proof_payload, &header, sizeof(header));
@@ -2091,16 +2127,8 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_v1(const GDExtensi
 	if (owner.config.profile == ExternalOutputConfig::PARTICLE_LIGHT_64) {
 		const RID status_rid = slot.storage->resources[ExternalOutputStorage::GUARD_STATUS].rid;
 		if (status_rid.is_valid()) {
-			const uint32_t light64_status_words[8] = {
-				0u,
-				0u,
-				0u,
-				1u,
-				owner.config.capacity,
-				uint32_t(ExternalOutputConfig::PARTICLE_LIGHT_64),
-				uint32_t(p_input->next_present_seq),
-				uint32_t(p_input->next_present_seq >> 32),
-			};
+			uint32_t light64_status_words[8] = {};
+			fast_refresh_encode_light64_guard_status(p_input->next_present_seq, light64_status_words);
 			const Error upd = rd->buffer_update(status_rid, 0, sizeof(light64_status_words), light64_status_words);
 			if (upd != OK) {
 				return int32_t(upd);
@@ -2110,9 +2138,25 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_v1(const GDExtensi
 		if (view_idx < owner.config.max_views && owner.views[view_idx].occupied) {
 			owner.views[view_idx].last_present = MAX(owner.views[view_idx].last_present, p_input->next_present_seq);
 		}
+		if (slot.scene_cull_bound) {
+			if (auto *scene = static_cast<RendererSceneCull *>(RSG::scene)) {
+				RendererSceneCull::NativeParticleSceneFacts actual;
+				if (scene->instance_get_committed_particle_scene_facts(slot.scene_cull_instance, slot.scene_cull_particles, actual) == OK &&
+						actual.scenario == slot.scene_cull_scenario &&
+						actual.world_aabb.is_finite() && actual.world_aabb.get_end().is_finite() && actual.world_aabb.has_volume()) {
+					slot.scene_cull_version = actual.version;
+					slot.scene_cull_local = actual.local_aabb;
+					slot.scene_cull_world = actual.world_aabb;
+				}
+			}
+		}
 		if (mesh_light_sort_rd) {
+			const AABB *updated_bounds = (slot.scene_cull_bound && slot.scene_cull_world.is_finite() &&
+													 slot.scene_cull_world.get_end().is_finite() && slot.scene_cull_world.has_volume())
+					? &slot.scene_cull_world
+					: nullptr;
 			mesh_light_sort_rd->update_external_light_slot_present_seq(
-					p_input->particles_rid, owner.generation, p_input->slot_index, slot.lease_serial, p_input->next_present_seq);
+					p_input->particles_rid, owner.generation, p_input->slot_index, slot.lease_serial, p_input->next_present_seq, updated_bounds);
 		}
 		slot.fast_refresh_active = true;
 		return int32_t(OK);
@@ -2708,6 +2752,22 @@ int32_t ParticlesStorage::particles_external_begin_fast_refresh_batch_v1(
 		if (in.has_host_affine) {
 			slot.current_host = fast_refresh_decode_transform(in.current_host_affine);
 			slot.previous_host = fast_refresh_decode_transform(in.previous_host_affine);
+			// Refresh committed scene cull bounds for ALL profiles (including PARTICLE_LIGHT_64,
+			// which has no GEOMETRY_PROOF buffer) so moving light emitters keep fresh world_bounds.
+			bool cull_updated = false;
+			if (slot.scene_cull_bound) {
+				if (auto *scene = static_cast<RendererSceneCull *>(RSG::scene)) {
+					RendererSceneCull::NativeParticleSceneFacts actual;
+					if (scene->instance_get_committed_particle_scene_facts(slot.scene_cull_instance, slot.scene_cull_particles, actual) == OK &&
+							actual.scenario == slot.scene_cull_scenario &&
+							actual.world_aabb.is_finite() && actual.world_aabb.get_end().is_finite() && actual.world_aabb.has_volume()) {
+						slot.scene_cull_version = actual.version;
+						slot.scene_cull_local = actual.local_aabb;
+						slot.scene_cull_world = actual.world_aabb;
+						cull_updated = true;
+					}
+				}
+			}
 			const RID proof_rid = slot.storage->resources[ExternalOutputStorage::GEOMETRY_PROOF].rid;
 			if (slot.guard_proof_payload != nullptr &&
 					slot.guard_proof_bytes >= sizeof(ParticlesExternalGuard::GeometryProofHeader) &&
@@ -2716,21 +2776,11 @@ int32_t ParticlesStorage::particles_external_begin_fast_refresh_batch_v1(
 				memcpy(&header, slot.guard_proof_payload, sizeof(header));
 				memcpy(header.current_host_inverse_rows, cur_inv, sizeof(cur_inv));
 				memcpy(header.previous_host_inverse_rows, prev_inv, sizeof(prev_inv));
-				if (slot.scene_cull_bound) {
-					if (auto *scene = static_cast<RendererSceneCull *>(RSG::scene)) {
-						RendererSceneCull::NativeParticleSceneFacts actual;
-						if (scene->instance_get_committed_particle_scene_facts(slot.scene_cull_instance, slot.scene_cull_particles, actual) == OK &&
-								actual.scenario == slot.scene_cull_scenario &&
-								actual.world_aabb.is_finite() && actual.world_aabb.get_end().is_finite() && actual.world_aabb.has_volume()) {
-							slot.scene_cull_version = actual.version;
-							slot.scene_cull_local = actual.local_aabb;
-							slot.scene_cull_world = actual.world_aabb;
-							const Vector3 end = actual.world_aabb.get_end();
-							for (uint32_t axis = 0; axis < 3; ++axis) {
-								header.cull_min[axis] = float(actual.world_aabb.position[axis]);
-								header.cull_max[axis] = float(end[axis]);
-							}
-						}
+				if (cull_updated) {
+					const Vector3 end = slot.scene_cull_world.get_end();
+					for (uint32_t axis = 0; axis < 3; ++axis) {
+						header.cull_min[axis] = float(slot.scene_cull_world.position[axis]);
+						header.cull_max[axis] = float(end[axis]);
 					}
 				}
 				memcpy(slot.guard_proof_payload, &header, sizeof(header));
@@ -2920,16 +2970,8 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 		if (owner.config.profile == ExternalOutputConfig::PARTICLE_LIGHT_64) {
 			const RID status_rid = slot.storage->resources[ExternalOutputStorage::GUARD_STATUS].rid;
 			if (status_rid.is_valid()) {
-				const uint32_t light64_status_words[8] = {
-					0u,
-					0u,
-					0u,
-					1u,
-					owner.config.capacity,
-					uint32_t(ExternalOutputConfig::PARTICLE_LIGHT_64),
-					uint32_t(in.next_present_seq),
-					uint32_t(in.next_present_seq >> 32),
-				};
+				uint32_t light64_status_words[8] = {};
+				fast_refresh_encode_light64_guard_status(in.next_present_seq, light64_status_words);
 				const Error upd = rd->buffer_update(status_rid, 0, sizeof(light64_status_words), light64_status_words);
 				if (upd != OK) {
 					set_item_result(idx, upd);
@@ -2940,6 +2982,18 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 			if (view_idx < owner.config.max_views && owner.views[view_idx].occupied) {
 				owner.views[view_idx].last_present = MAX(owner.views[view_idx].last_present, in.next_present_seq);
 			}
+			if (slot.scene_cull_bound) {
+				if (auto *scene = static_cast<RendererSceneCull *>(RSG::scene)) {
+					RendererSceneCull::NativeParticleSceneFacts actual;
+					if (scene->instance_get_committed_particle_scene_facts(slot.scene_cull_instance, slot.scene_cull_particles, actual) == OK &&
+							actual.scenario == slot.scene_cull_scenario &&
+							actual.world_aabb.is_finite() && actual.world_aabb.get_end().is_finite() && actual.world_aabb.has_volume()) {
+						slot.scene_cull_version = actual.version;
+						slot.scene_cull_local = actual.local_aabb;
+						slot.scene_cull_world = actual.world_aabb;
+					}
+				}
+			}
 			if (mesh_light_sort_rd) {
 				ParticlesMeshLightSortRD::ExternalLightSlotPresentSeqUpdate upd;
 				upd.owner_key = in.particles_rid;
@@ -2947,6 +3001,11 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 				upd.slot_index = in.slot_index;
 				upd.lease_serial = slot.lease_serial;
 				upd.next_present_seq = in.next_present_seq;
+				if (slot.scene_cull_bound && slot.scene_cull_world.is_finite() &&
+						slot.scene_cull_world.get_end().is_finite() && slot.scene_cull_world.has_volume()) {
+					upd.world_bounds = slot.scene_cull_world;
+					upd.has_world_bounds = true;
+				}
 				push_light_update(upd);
 			}
 			slot.fast_refresh_active = true;

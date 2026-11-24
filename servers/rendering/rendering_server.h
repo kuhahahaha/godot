@@ -1086,6 +1086,8 @@ public:
 	void fix_surface_compatibility(RenderingServerTypes::SurfaceData &p_surface, const String &p_path = "");
 #endif
 
+	virtual void flush_command_queue_only() {}
+
 private:
 	// Binder helpers
 	RID _texture_2d_layered_create(const TypedArray<Image> &p_layers, RSE::TextureLayeredType p_layered_type);

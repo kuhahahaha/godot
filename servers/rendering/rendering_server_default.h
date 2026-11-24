@@ -116,6 +116,8 @@ class RenderingServerDefault : public RenderingServer {
 	void _qualification_rt_dispatch(uint64_t, uint64_t);
 	bool _try_production_control_dispatch(uint64_t, uint64_t, uint64_t, uint64_t);
 	void _production_control_dispatch(uint64_t, uint64_t, uint64_t, uint64_t);
+	bool _try_production_persistent_sets_drain(uint64_t, uint64_t);
+	void _production_persistent_sets_drain(uint64_t, uint64_t);
 	void _qualification_service(uint64_t, uint64_t, uint32_t, uint32_t, uint32_t);
 
 	void _free(RID p_rid);
@@ -1255,6 +1257,7 @@ public:
 
 	virtual void draw(bool p_present, double frame_step) override;
 	virtual void sync() override;
+	virtual void flush_command_queue_only() override;
 	virtual bool has_changed() const override;
 	virtual void init() override;
 	virtual void finish() override;

@@ -365,9 +365,11 @@ public:
 		uint32_t slot_index = UINT32_MAX;
 		uint64_t lease_serial = 0;
 		uint64_t next_present_seq = 0;
+		AABB world_bounds;
+		bool has_world_bounds = false;
 	};
 	void register_sealed_external_light_slot(const ExternalLightSlotRegistration &p_slot);
-	bool update_external_light_slot_present_seq(uint64_t p_owner_key, uint64_t p_generation, uint32_t p_slot_index, uint64_t p_lease_serial, uint64_t p_next_present_seq);
+	bool update_external_light_slot_present_seq(uint64_t p_owner_key, uint64_t p_generation, uint32_t p_slot_index, uint64_t p_lease_serial, uint64_t p_next_present_seq, const AABB *p_world_bounds = nullptr);
 	uint32_t update_external_light_slots_present_seq_batch(const ExternalLightSlotPresentSeqUpdate *p_updates, uint32_t p_count);
 	void unregister_external_light_slot(uint64_t p_owner_key, uint64_t p_generation, uint32_t p_slot_index);
 	void unregister_external_light_owner(uint64_t p_owner_key);
@@ -411,6 +413,7 @@ public:
 	RID get_light_candidate_staging_buffer() const { return light_candidate_staging_buffer; }
 	void release_light_gpu_bridge(RenderingDevice *p_rd) { _release_light_gpu_bridge(p_rd); }
 	void clear_active_particle_lights();
+	RID get_light_cluster_elements_buffer() const { return light_cluster_elements_buffer; }
 	void get_active_particle_lights(LocalVector<ParticleLightRecord64> &r_out) const;
 	uint32_t get_active_particle_light_count() const;
 };

@@ -588,6 +588,18 @@ void RenderingServerDefault::sync() {
 	}
 }
 
+void RenderingServerDefault::flush_command_queue_only() {
+	if (create_thread) {
+		if (Thread::get_caller_id() == server_thread) {
+			command_queue.flush_all();
+		} else {
+			command_queue.sync();
+		}
+	} else {
+		command_queue.flush_all();
+	}
+}
+
 void RenderingServerDefault::draw(bool p_present, double frame_step) {
 	ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "Manually triggering the draw function from the RenderingServer can only be done on the main thread. Call this function from the main thread or use call_deferred().");
 	_update_particles_screen_refresh_rate();
@@ -679,4 +691,10 @@ bool RenderingServerDefault::_try_production_control_dispatch(uint64_t registry,
 	// Always join the original FIFO, including a call already on the RT.
 	// A single attempt cannot requeue itself while flush_all is consuming it.
 	return command_queue.try_push_bounded(65536, this, &RenderingServerDefault::_production_control_dispatch, registry, attachment, request, control);
+}
+void RenderingServerDefault::_production_persistent_sets_drain(uint64_t registry, uint64_t attachment) {
+	GDExtensionDeviceExit::Registry::get_singleton().production_persistent_sets_close_drain_rt(registry, attachment);
+}
+bool RenderingServerDefault::_try_production_persistent_sets_drain(uint64_t registry, uint64_t attachment) {
+	return command_queue.try_push_bounded(65536, this, &RenderingServerDefault::_production_persistent_sets_drain, registry, attachment);
 }

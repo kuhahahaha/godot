@@ -39,6 +39,10 @@
 #include "core/version.h"
 #include "servers/rendering/shader_include_db.h"
 
+#if defined(__APPLE__)
+#include <malloc/malloc.h>
+#endif
+
 #define ENABLE_SHADER_CACHE 1
 
 void ShaderRD::_add_stage(const char *p_code, StageType p_stage_type) {
@@ -233,6 +237,8 @@ RID ShaderRD::version_create(bool p_embedded) {
 	version.embedded = p_embedded;
 	version.variants.clear();
 	version.variant_data.clear();
+	version.variant_compiled.clear();
+	version.groups_enabled.clear();
 
 	version.mutex = memnew(Mutex);
 	RID rid = version_owner.make_rid(version);
@@ -257,7 +263,11 @@ void ShaderRD::_initialize_version(Version *p_version) {
 
 	p_version->variants.resize_initialized(variant_defines.size());
 	p_version->variant_data.resize(variant_defines.size());
+	p_version->variant_compiled.resize_initialized(variant_defines.size());
 	p_version->group_compilation_tasks.resize_initialized(group_enabled.size());
+	if (p_version->groups_enabled.size() < group_enabled.size()) {
+		p_version->groups_enabled.resize_initialized(group_enabled.size());
+	}
 }
 
 void ShaderRD::_clear_version(Version *p_version) {
@@ -273,6 +283,7 @@ void ShaderRD::_clear_version(Version *p_version) {
 
 		p_version->variants.clear();
 		p_version->variant_data.clear();
+		p_version->variant_compiled.clear();
 	}
 }
 
@@ -418,8 +429,14 @@ void ShaderRD::_compile_variant(uint32_t p_variant, CompileData p_data) {
 	ERR_FAIL_COND(shader_data.is_empty());
 
 	{
-		p_data.version->variants.write[variant] = RD::get_singleton()->shader_create_from_bytecode_with_samplers(shader_data, p_data.version->variants[variant], immutable_samplers);
-		p_data.version->variant_data.write[variant] = shader_data;
+		RID shader = RD::get_singleton()->shader_create_from_bytecode_with_samplers(shader_data, p_data.version->variants[variant], immutable_samplers);
+		p_data.version->variants.write[variant] = shader;
+		p_data.version->variant_compiled.write[variant] = shader.is_valid() ? 1 : 0;
+#if ENABLE_SHADER_CACHE
+		if (shader_cache_user_dir_valid && shader.is_valid()) {
+			p_data.version->variant_data.write[variant] = shader_data;
+		}
+#endif
 	}
 }
 
@@ -688,11 +705,20 @@ bool ShaderRD::_load_from_cache(Version *p_version, int p_group) {
 		{
 			RID shader = RD::get_singleton()->shader_create_from_bytecode_with_samplers(p_version->variant_data[variant_id], p_version->variants[variant_id], immutable_samplers);
 			if (shader.is_null()) {
+				for (int idx : loaded_indices) {
+					if (idx < p_version->variant_compiled.size()) {
+						p_version->variant_compiled.write[idx] = 0;
+					}
+				}
 				_rollback_cache_load(p_version->variants, p_version->variant_data, group_to_variant_map[p_group], loaded_indices, [](RID p_shader, void *) { RD::get_singleton()->free_rid(p_shader); }, nullptr);
 				ERR_FAIL_COND_V(shader.is_null(), false);
 			}
 
 			p_version->variants.write[variant_id] = shader;
+			if (variant_id < p_version->variant_compiled.size()) {
+				p_version->variant_compiled.write[variant_id] = 1;
+			}
+			p_version->variant_data.write[variant_id].clear();
 			loaded_indices.push_back(variant_id);
 		}
 	}
@@ -727,7 +753,7 @@ void ShaderRD::_allocate_placeholders(Version *p_version, int p_group) {
 // Try to compile all variants for a given group.
 // Will skip variants that are disabled.
 void ShaderRD::_compile_version_start(Version *p_version, int p_group) {
-	if (!group_enabled[p_group]) {
+	if (!_version_group_enabled(p_version, p_group)) {
 		return;
 	}
 
@@ -773,7 +799,7 @@ void ShaderRD::_compile_version_end(Version *p_version, int p_group) {
 	if (!all_valid) {
 		// Clear versions if they exist.
 		for (int i = 0; i < variant_defines.size(); i++) {
-			if (!variants_enabled[i] || !group_enabled[variant_defines[i].group]) {
+			if (!variants_enabled[i] || !_version_group_enabled(p_version, variant_defines[i].group)) {
 				continue; // Disabled.
 			}
 			if (!p_version->variants[i].is_null()) {
@@ -783,6 +809,10 @@ void ShaderRD::_compile_version_end(Version *p_version, int p_group) {
 
 		p_version->variants.clear();
 		p_version->variant_data.clear();
+		p_version->variant_compiled.clear();
+#if defined(__APPLE__)
+		malloc_zone_pressure_relief(nullptr, 0);
+#endif
 		return;
 	}
 #if ENABLE_SHADER_CACHE
@@ -791,7 +821,17 @@ void ShaderRD::_compile_version_end(Version *p_version, int p_group) {
 	}
 #endif
 
+	for (uint32_t i = 0; i < group_to_variant_map[p_group].size(); i++) {
+		int variant_id = group_to_variant_map[p_group][i];
+		if (variant_id < p_version->variant_data.size()) {
+			p_version->variant_data.write[variant_id].clear();
+		}
+	}
+
 	p_version->valid = true;
+#if defined(__APPLE__)
+	malloc_zone_pressure_relief(nullptr, 0);
+#endif
 }
 
 void ShaderRD::_compile_ensure_finished(Version *p_version) {
@@ -816,7 +856,7 @@ void ShaderRD::_version_set(Version *p_version, const HashMap<String, String> &p
 	if (p_version->initialize_needed) {
 		_initialize_version(p_version);
 		for (int i = 0; i < group_enabled.size(); i++) {
-			if (!group_enabled[i]) {
+			if (!_version_group_enabled(p_version, i)) {
 				_allocate_placeholders(p_version, i);
 				continue;
 			}
@@ -886,7 +926,7 @@ Error ShaderRD::version_get_native_shader_if_ready(RID p_version, int p_variant,
 	if (p_variant < 0 || p_variant >= variant_defines.size()) {
 		return ERR_INVALID_PARAMETER;
 	}
-	if (!variants_enabled[p_variant] || !group_enabled[variant_to_group[p_variant]]) {
+	if (!variants_enabled[p_variant]) {
 		return ERR_UNAVAILABLE;
 	}
 	Version *version = version_owner.get_or_null(p_version);
@@ -894,6 +934,9 @@ Error ShaderRD::version_get_native_shader_if_ready(RID p_version, int p_variant,
 		return ERR_INVALID_PARAMETER;
 	}
 	MutexLock lock(*version->mutex);
+	if (!_version_group_enabled(version, variant_to_group[p_variant])) {
+		return ERR_UNAVAILABLE;
+	}
 	if (version->dirty || !version->valid || version->initialize_needed) {
 		return ERR_BUSY;
 	}
@@ -902,12 +945,14 @@ Error ShaderRD::version_get_native_shader_if_ready(RID p_version, int p_variant,
 			return ERR_BUSY;
 		}
 	}
-	if (p_variant >= version->variants.size() || p_variant >= version->variant_data.size()) {
+	if (p_variant >= version->variants.size()) {
 		return ERR_UNAVAILABLE;
 	}
 	const RID shader = version->variants[p_variant];
+	const bool has_compiled_variant = (p_variant < version->variant_compiled.size() && version->variant_compiled[p_variant] != 0) ||
+			(p_variant < version->variant_data.size() && !version->variant_data[p_variant].is_empty());
 	// Disabled groups own placeholders; failed compilation can leave one behind.
-	if (shader.is_null() || version->variant_data[p_variant].is_empty()) {
+	if (shader.is_null() || !has_compiled_variant) {
 		return ERR_UNAVAILABLE;
 	}
 	uint64_t input_mask = 0;
@@ -960,7 +1005,7 @@ bool ShaderRD::version_is_valid(RID p_version) {
 	if (version->dirty) {
 		_initialize_version(version);
 		for (int i = 0; i < group_enabled.size(); i++) {
-			if (!group_enabled[i]) {
+			if (!_version_group_enabled(version, i)) {
 				_allocate_placeholders(version, i);
 				continue;
 			}
@@ -1034,14 +1079,41 @@ void ShaderRD::enable_group(int p_group) {
 	for (const RID &version_rid : version_owner.get_owned_list()) {
 		Version *version = version_owner.get_or_null(version_rid);
 		version->mutex->lock();
+		const bool already_enabled = p_group < version->groups_enabled.size() && version->groups_enabled[p_group];
 		// A pending code change must refresh every enabled group together on
 		// the next version access. Compiling only this group would clear dirty
 		// and leave the existing groups on their previous source.
-		if (!version->dirty) {
+		if (!version->dirty && !already_enabled) {
 			_compile_version_start(version, p_group);
 		}
 		version->mutex->unlock();
 	}
+}
+
+void ShaderRD::version_enable_group(RID p_version, int p_group) {
+	ERR_FAIL_INDEX(p_group, group_enabled.size());
+	Version *version = version_owner.get_or_null(p_version);
+	ERR_FAIL_NULL(version);
+
+	MutexLock lock(*version->mutex);
+	if (version->groups_enabled.size() < group_enabled.size()) {
+		version->groups_enabled.resize_initialized(group_enabled.size());
+	}
+	if (group_enabled[p_group] || version->groups_enabled[p_group]) {
+		return;
+	}
+	version->groups_enabled.write[p_group] = true;
+	if (!version->dirty) {
+		_compile_version_start(version, p_group);
+	}
+}
+
+bool ShaderRD::version_is_group_enabled(RID p_version, int p_group) {
+	ERR_FAIL_INDEX_V(p_group, group_enabled.size(), false);
+	Version *version = version_owner.get_or_null(p_version);
+	ERR_FAIL_NULL_V(version, false);
+	MutexLock lock(*version->mutex);
+	return _version_group_enabled(version, p_group);
 }
 
 bool ShaderRD::is_group_enabled(int p_group) const {

@@ -2261,6 +2261,7 @@ struct LiveMetalMaterialQualificationHarness {
 					bool icon_ok = false;
 					bool icon_gate_exact = false;
 					bool aux_set2_binding2_found = false;
+					bool no_mutable_base_buffers_held = true;
 					bool inverted_rejected = false;
 					bool vtx_rejected = false;
 				} rp;
@@ -2322,6 +2323,18 @@ struct LiveMetalMaterialQualificationHarness {
 						Error pe = sr->plan_native_material_recipe(p_mat, p->mesh, 0, fb_fmt, roster, 256, kAllowedTransparentAuxMask);
 						if (pe == OK) {
 							r_has_set2_b2 = roster.has_binding(2u, 2u, RD::UNIFORM_TYPE_STORAGE_BUFFER);
+							if (auto *ls = RendererRD::LightStorage::get_singleton()) {
+								auto *ts = RendererRD::TextureStorage::get_singleton();
+								const bool any_mutable_held =
+										rd->native_immutable_resource_is_held(ls->get_omni_light_buffer()) ||
+										rd->native_immutable_resource_is_held(ls->get_spot_light_buffer()) ||
+										rd->native_immutable_resource_is_held(ls->get_area_light_buffer()) ||
+										rd->native_immutable_resource_is_held(ls->get_reflection_probe_buffer()) ||
+										rd->native_immutable_resource_is_held(ls->get_directional_light_buffer()) ||
+										(ts && rd->native_immutable_resource_is_held(ts->get_decal_buffer())) ||
+										rd->native_immutable_resource_is_held(mats->global_shader_uniforms_get_storage_buffer());
+								p->no_mutable_base_buffers_held = p->no_mutable_base_buffers_held && !any_mutable_held;
+							}
 							(void)roster.release();
 						}
 						return pe;
@@ -2343,6 +2356,7 @@ struct LiveMetalMaterialQualificationHarness {
 				record_check("role9_refract_roster_ok", rp.refract_ok);
 				record_check("role9_depth_test_disabled_icon_roster_ok", rp.icon_ok && rp.icon_gate_exact);
 				record_check("role9_set2_binding2_reflected_in_roster", rp.aux_set2_binding2_found);
+				record_check("role9_no_mutable_set0_buffers_pinned_immutable", rp.no_mutable_base_buffers_held);
 				record_check("role9_depth_test_inverted_rejected_32", rp.inverted_rejected);
 				record_check("role9_vertex_write_custom0_rejected_1", rp.vtx_rejected);
 			}

@@ -206,4 +206,42 @@ TEST_CASE("[Rendering][NativeOutputCull] Local outward conversion rejects invali
 	CHECK(NativeOutputCull::transform_bounds(AABB(Vector3(2, -1, -1), Vector3(2, 2, 2)), overflow, out) != OK);
 	CHECK(out == sentinel);
 }
+
+TEST_CASE("[Rendering][NativeOutputCull][BUG-137] far world host origin preserves exact zero-epsilon native xform containment") {
+	// Reproduces UE_STRESS_11 world-space emitter at (240, 1.5, -180) where
+	// float32 origin+local and tmax-tmin rounding in Transform3D::xform(AABB)
+	// previously caused NativeOutputCull::compose() to fail with ERR_INVALID_DATA.
+	const float host_id[12] = { 1, 0, 0, 240.0f, 0, 1, 0, 1.5f, 0, 0, 1, -180.0f };
+	const float inv_id[12] = { 1, 0, 0, -240.0f, 0, 1, 0, -1.5f, 0, 0, 1, 180.0f };
+	const AABB failing_cases[] = {
+		AABB(Vector3(235.0f, 0.45084056f, -185.0f), Vector3(10.0f, 21.335474f, 10.0f)),
+		AABB(Vector3(239.7f, -0.18922964f, -180.3f), Vector3(0.6f, 41.474525f, 0.6f)),
+		AABB(Vector3(238.0f, -11.570315f, -182.0f), Vector3(4.0f, 41.166733f, 4.0f)),
+		AABB(Vector3(220.0f, 0.01557095f, -200.0f), Vector3(40.0f, 2.255747f, 40.0f)),
+	};
+	for (const AABB &world : failing_cases) {
+		NativeOutputCull::Envelope env;
+		REQUIRE(NativeOutputCull::compose(world, nullptr, nullptr, host_id, inv_id, env) == OK);
+		contains(env.world, world);
+		contains(transform(host_id).xform(env.local), env.world);
+	}
+	// Also test rotated Y basis at (240, 1.5, -180).
+	const float angles[] = { 0.5799f, 1.0753f, 1.3976f, 3.2544f, 4.0176f };
+	for (float ang : angles) {
+		const float c = std::cos(ang);
+		const float s = std::sin(ang);
+		const float host[12] = { c, 0, s, 240.0f, 0, 1, 0, 1.5f, -s, 0, c, -180.0f };
+		const float inv[12] = {
+			c, 0, -s, -(c * 240.0f - s * (-180.0f)),
+			0, 1, 0, -1.5f,
+			s, 0, c, -(s * 240.0f + c * (-180.0f)),
+		};
+		for (const AABB &world : failing_cases) {
+			NativeOutputCull::Envelope env;
+			REQUIRE(NativeOutputCull::compose(world, nullptr, nullptr, host, inv, env) == OK);
+			contains(env.world, world);
+			contains(transform(host).xform(env.local), env.world);
+		}
+	}
+}
 } // namespace TestNativeOutputCull

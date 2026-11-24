@@ -119,7 +119,7 @@ GDExtensionDeviceSessionResultV1 Registry::system_scalar_record(GDExtensionQuali
 		r.source_offset = q->output_offset;
 		r.source_size = bytes;
 		if (!bridge->cleanup_refs_reserved) { records[bridge->library].private_refs += 2; bridge->cleanup_refs_reserved = true; }
-		bridge->tickets[slot] = ticket;
+		bridge->track_ticket_locked(slot, ticket);
 		++bridge->children;
 		++records[bridge->library].private_refs;
 		ticket->system_set_physical.bridge = bridge->serial;
@@ -136,7 +136,7 @@ GDExtensionDeviceSessionResultV1 Registry::system_scalar_record(GDExtensionQuali
 		children.push_back(&output->physical);
 		ticket->system_set = rd->_qualification_uniform_set_create(uniforms, RID::from_uint64(q->unit.shader_rid), 0, &ticket->system_set_physical, children);
 		if (ticket->system_set.is_null()) {
-			bridge->tickets[slot] = nullptr;
+			bridge->untrack_ticket_locked(slot, ticket);
 			--bridge->children;
 			--records[bridge->library].private_refs;
 			memdelete(ticket);

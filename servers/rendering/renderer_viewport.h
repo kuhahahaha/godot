@@ -545,6 +545,7 @@ public:
 	void handle_timestamp(String p_timestamp, uint64_t p_cpu_time, uint64_t p_gpu_time);
 
 	void viewport_prepare_native_output_cull(const Ref<Viewport::CameraCapture> &p_capture);
+	bool is_camera_invocation_active() const { return camera_invocation_stack_depth != 0; }
 
 	void draw_viewports(bool p_swap_buffers);
 

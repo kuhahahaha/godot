@@ -506,6 +506,18 @@ Error Registry::production_output_preparation_begin(ProductionOutputPin &pin, Re
 Error Registry::production_output_preparation_begin_row(ProductionOutputPin &pin, RenderingDevice &rd, uint32_t action_ordinal, uint32_t source_surface, uint32_t preparation_index, uint64_t group, ProductionOutputPreparationScope &scope, const RendererRD::ExternalPacketViewLease *view) {
 	return production_output_preparation_begin_internal(pin, rd, action_ordinal, source_surface, group, scope, preparation_index, view);
 }
+bool Registry::production_output_slot_cross_capture_preparable(const ProductionOutputPin &pin, GDExtensionProductionRequestRefV1 ref, RenderingDevice &rd) {
+	Lock lock(*this);
+	if (!rd.is_main_instance || RenderingDevice::get_singleton() != &rd || rd.render_thread_id != Thread::get_caller_id() ||
+			!production_output_pin_matches_locked(pin, ref, rd)) {
+		return false;
+	}
+	const auto &request = *pin.request;
+	return phase == Phase::RUNNING && request.frozen && !request.cancelled && !request.release_started &&
+			!request.source_device_lost && !request.effects_pending && !request.capture_inflight &&
+			!request.draw_list_open && !request.compute_list_open &&
+			request.control.state == ProductionControlState::OWNER_CONSUMED;
+}
 Error Registry::production_output_preparation_begin_internal(ProductionOutputPin &pin, RenderingDevice &rd, uint32_t action_ordinal, uint32_t surface_ordinal, uint64_t group, ProductionOutputPreparationScope &scope, uint32_t preparation_index, const RendererRD::ExternalPacketViewLease *selected_view) {
 	Lock lock(*this);
 	if (!rd.native_immutable_is_render_thread()) {

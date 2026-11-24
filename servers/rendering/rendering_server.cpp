@@ -3595,6 +3595,7 @@ void RenderingServer::_bind_methods() {
 	ADD_SIGNAL(MethodInfo("frame_post_draw"));
 
 	ClassDB::bind_method(D_METHOD("force_sync"), &RenderingServer::sync);
+	ClassDB::bind_method(D_METHOD("flush_command_queue_only"), &RenderingServer::flush_command_queue_only);
 	ClassDB::bind_method(D_METHOD("force_draw", "swap_buffers", "frame_step"), &RenderingServer::draw, DEFVAL(true), DEFVAL(0.0));
 	ClassDB::bind_method(D_METHOD("get_rendering_device"), &RenderingServer::get_rendering_device);
 	ClassDB::bind_method(D_METHOD("create_local_rendering_device"), &RenderingServer::create_local_rendering_device);

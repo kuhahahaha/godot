@@ -147,6 +147,7 @@ void RenderingDeviceDriver::notify_session_device_lost(uint64_t registry, uint64
 }
 
 thread_local RenderingDeviceDriver::NativeFactWriteRange *RenderingDeviceDriver::active_native_fact_range = nullptr;
+thread_local uint32_t RenderingDeviceDriver::native_call_blocking_depth = 0;
 Error RenderingDeviceDriver::command_queue_execute_recorded(CommandQueueID queue, VectorView<SemaphoreID> waits, VectorView<CommandBufferID> commands, VectorView<SemaphoreID> signals, FenceID fence, NativeFactWriteRange &range) {
 	if (!record_native_call_bound(1) || !range.data || range.written || range.capacity < record_native_call_bound(1) || active_native_fact_range) {
 		return ERR_UNAVAILABLE;

@@ -338,6 +338,7 @@ private:
 	Error _staging_buffer_allocate(StagingBuffers &p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, uint32_t &r_alloc_offset, uint32_t &r_alloc_size, StagingRequiredAction &r_required_action, bool p_can_segment = true);
 	Error _staging_buffer_execute_required_action(StagingBuffers &p_staging_buffers, StagingRequiredAction p_required_action);
 	Error _insert_staging_block(StagingBuffers &p_staging_buffers);
+	void _trim_idle_staging_buffers();
 
 	StagingBuffers upload_staging_buffers;
 	StagingBuffers download_staging_buffers;
@@ -366,6 +367,7 @@ private:
 	Error _production_output_replay_adopted_record(::RendererRD::ExternalOutputOwner &, uint32_t, const ::RendererRD::ExternalPipelinePreparation &, uint32_t, DrawListID, const void *, uint32_t);
 	Error _production_output_empty_read_record(::RendererRD::ExternalPacketBinding &, DrawListID);
 	Error _production_output_reads_close();
+	Error _production_output_reads_close(bool p_blocking);
 	struct ProductionOutputRasterRecording {
 		::RendererRD::ExternalOutputOwner *owner = nullptr;
 		uint32_t read = UINT32_MAX;
@@ -391,6 +393,11 @@ private:
 		LocalVector<ProductionOutputFastRefreshEntry> overflow_entries;
 		uint32_t count = 0;
 		bool active = false;
+		// BUG-85B: Narrow RT-only flag authorizing live !use_closed auxiliary
+		// qualification resources inside a non-cleanup frozen record callback
+		// while production_recording_request == nullptr. Placed in trailing
+		// padding to preserve exact RenderingDevice layout.
+		bool aux_pre_append_active = false;
 
 		void clear() {
 			count = 0;
@@ -507,6 +514,7 @@ private:
 	void _qualification_issue_tickets_locked(uint32_t p_slot, const RDD::QueueCallReport &p_report, Error p_error);
 	Error _qualification_retain_tickets(uint32_t p_frame);
 	Error _qualification_poll_tickets(uint32_t p_frame);
+	Error _qualification_poll_tickets(uint32_t p_frame, bool p_nonblocking);
 	void _qualification_return_frame_tickets(uint32_t p_frame);
 	std::atomic<bool> qualification_frame_advance_pending{ false };
 	Error _qualification_enqueue(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
@@ -2748,6 +2756,7 @@ private:
 		uint64_t operations_processed = 0;
 		uint64_t operations_submitted = 0;
 		uint64_t operations_counter = 0;
+		uint32_t idle_frames = 0;
 		BinaryMutex operations_mutex;
 	};
 
@@ -2966,6 +2975,8 @@ private:
 		const Error wait_error = frame_wait_error.load();
 		return wait_error != OK ? wait_error : ((frame_wait_draining.load() || qualification_frame_advance_pending.load() || native_disposal_active.load()) ? ERR_BUSY : OK);
 	}
+	Error _prepare_synchronous_readback();
+	Error _ensure_recording_ready();
 
 	// Whenever logic/physics request a graphics operation (not just deleting a resource) that requires
 	// us to flush all graphics commands, we must set frames_pending_resources_for_processing = frames.size().
