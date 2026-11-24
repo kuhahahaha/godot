@@ -846,11 +846,29 @@ class ProductionRequest {
 	uint32_t output_owner_head = UINT32_MAX, output_owner_cursor = UINT32_MAX;
 	uint32_t disposal_group_head = UINT32_MAX;
 	uint32_t disposal_use_high_water = 0;
+	uint32_t uses_touched_hwm = 0;
 	uint64_t next_disposal_group_serial = 1;
+	void note_use_touched(uint32_t index) {
+		if (index + 1 > uses_touched_hwm) {
+			uses_touched_hwm = index + 1;
+		}
+	}
+	void note_use_touched_end(uint32_t end) {
+		if (end > uses_touched_hwm) {
+			uses_touched_hwm = end;
+		}
+	}
+	uint32_t uses_touched_end() const {
+		const uint32_t base_end = (use_count <= capacity.resource_uses && binding_used <= capacity.resource_uses - use_count)
+				? (use_count + binding_used)
+				: capacity.resource_uses;
+		return MIN(MAX(base_end, MAX(disposal_use_high_water, uses_touched_hwm)), capacity.resource_uses);
+	}
 	void note_disposal_use_index(uint32_t index) {
 		if (index + 1 > disposal_use_high_water) {
 			disposal_use_high_water = index + 1;
 		}
+		note_use_touched(index);
 	}
 	void link_disposal_group(uint32_t index) {
 		auto &g = uses[index];
@@ -1015,7 +1033,16 @@ class ProductionAttachment {
 	uint32_t material_qualifications_live = 0, material_qualifications_constructed_total = 0;
 	uint64_t payload_reclaim_hwm = 0, readback_reclaim_hwm = 0, natives_reclaim_hwm = 0;
 	uint32_t mq_reclaim_hwm = 0;
+	static constexpr uint32_t ARENA_IDLE_RECLAIM_FRAMES = 120u;
+	uint32_t idle_reclaim_frames = 0;
 	uint64_t arena_reclaimed_bytes_total = 0;
+	bool has_reclaimable_arena_pages() const {
+		return (payload && payload_reclaim_hwm > scene_prefix_bytes) ||
+				(readback_bytes && readback_reclaim_hwm > 0) ||
+				(natives && natives_reclaim_hwm > 0) ||
+				(material_qualifications && material_qualifications_live == 0 && mq_reclaim_hwm > 0);
+	}
+	void reclaim_pod_pages();
 	// Attachment-scoped persistent UniformSet cache for long-lived retained storage bindings.
 	static constexpr uint32_t PERSISTENT_SET_MAX_LIVE = 2048u;
 	HashMap<PersistentSetKey, PersistentSetEntry *, PersistentSetKeyHasher> persistent_set_lookup;

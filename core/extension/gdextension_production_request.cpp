@@ -1185,6 +1185,7 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	r->action_count = action_count;
 	r->resource_count = resource_count;
 	r->use_count = use_count;
+	r->uses_touched_hwm = use_count;
 	r->readback_count = readback_count;
 	r->payload_offset = payload;
 	r->readback_offset = readback;
@@ -1239,6 +1240,7 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 		rb += readbacks[i].byte_size;
 	}
 	++a.children;
+	a.idle_reclaim_frames = 0;
 	out = r;
 	return OK;
 }
@@ -2632,7 +2634,21 @@ void Registry::production_observe_completed_frames_rt(RenderingDevice &p_rd) {
 	Lock lock(*this);
 	for (uint32_t a_idx = 0; a_idx < RECORD_CAPACITY; ++a_idx) {
 		ProductionAttachment *attachment = production_attachments[a_idx];
-		if (!attachment || attachment->held_device != &p_rd || attachment->closing || !device_records[attachment->device].live) {
+		if (!attachment || attachment->held_device != &p_rd || !device_records[attachment->device].live) {
+			continue;
+		}
+		if (attachment->children == 0) {
+			if (attachment->has_reclaimable_arena_pages()) {
+				if (attachment->closing || ++attachment->idle_reclaim_frames >= ProductionAttachment::ARENA_IDLE_RECLAIM_FRAMES) {
+					attachment->reclaim_pod_pages();
+				}
+			} else {
+				attachment->idle_reclaim_frames = 0;
+			}
+			continue;
+		}
+		attachment->idle_reclaim_frames = 0;
+		if (attachment->closing) {
 			continue;
 		}
 		const uint64_t attachment_serial = attachment->serial;
@@ -3289,6 +3305,7 @@ Error Registry::production_output_pin_borrow_locked(const ProductionOutputPin &s
 		cell.output_role = ProductionUseCell::OutputRole::NATIVE_CONSUMER;
 		cell.output_consumer = &pin;
 		cell.output_pin_serial = serial;
+		request.note_use_touched(i);
 		return OK;
 	}
 	return ERR_OUT_OF_MEMORY; // Only original UNUSED quoted cells can retain metadata.
@@ -3773,7 +3790,7 @@ bool Registry::production_release_owner_tail_locked(const ProductionRequest &r, 
 	if (r.resource_count > r.capacity.resources || r.action_count > r.capacity.suboperations || r.graph_count > r.capacity.graph_memberships || r.native_count > r.capacity.native_memberships || r.readback_count > r.capacity.readbacks) {
 		return false;
 	}
-	for (uint32_t i = 0; i < r.capacity.resource_uses; ++i) {
+	for (uint32_t i = 0, end = r.uses_touched_end(); i < end; ++i) {
 		if (r.uses[i].output_consumer) {
 			return false;
 		}
@@ -3788,7 +3805,7 @@ bool Registry::production_release_owner_tail_locked(const ProductionRequest &r, 
 			return false;
 		}
 	}
-	for (uint32_t i = 0; i < r.capacity.return_cells; ++i) {
+	for (uint32_t i = 0, end = MIN(r.resource_count, r.capacity.return_cells); i < end; ++i) {
 		if (r.returns[i].pending) {
 			return false;
 		}
@@ -3889,7 +3906,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 		}
 	}
 	if (r->uses) {
-		for (uint32_t i = 0; i < r->capacity.resource_uses; ++i) {
+		for (uint32_t i = 0, end = r->uses_touched_end(); i < end; ++i) {
 			if (r->uses[i].output_consumer) {
 				trace_release_busy(3, "output_consumer", i, &r->uses[i]); return result(ERR_BUSY, 16); // Actual consumer last-use still owns this arena.
 			}
@@ -4005,7 +4022,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 	if (native_issued && (!rd || !r->attachment || !device_records[r->attachment->device].live)) {
 		return result(ERR_UNAVAILABLE, 16);
 	}
-	for (uint32_t i = 0; i < r->capacity.return_cells; ++i) {
+	for (uint32_t i = 0, end = MIN(r->resource_count, r->capacity.return_cells); i < end; ++i) {
 		if (r->returns[i].pending) {
 			trace_release_busy(14, "return_cell_pending", i); return result(ERR_BUSY, 16);
 		}
@@ -4394,16 +4411,33 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 			}
 		}
 	}
-	auto reset = [](auto *cells, uint32_t count) { using T=std::remove_pointer_t<decltype(cells)>;for(uint32_t i=0;i<count;++i){cells[i].~T();new (&cells[i]) T();} };
-	reset(r->actions, r->capacity.suboperations);
-	reset(r->resources, r->capacity.resources);
-	reset(r->uses, r->capacity.resource_uses);
-	reset(r->readbacks, r->capacity.readbacks);
-	reset(r->graphs, r->capacity.graph_memberships);
+	auto reset_prefix = [](auto *cells, uint32_t used_count, uint32_t capacity_count) {
+		using T = std::remove_pointer_t<decltype(cells)>;
+		const uint32_t end = MIN(used_count, capacity_count);
+		for (uint32_t i = 0; i < end; ++i) {
+			cells[i].~T();
+			new (&cells[i]) T();
+		}
+		for (uint32_t i = end; i < capacity_count; ++i) {
+			cells[i].request = nullptr;
+		}
+	};
+	auto reset = [](auto *cells, uint32_t count) {
+		using T = std::remove_pointer_t<decltype(cells)>;
+		for (uint32_t i = 0; i < count; ++i) {
+			cells[i].~T();
+			new (&cells[i]) T();
+		}
+	};
+	reset_prefix(r->actions, r->action_count, r->capacity.suboperations);
+	reset_prefix(r->resources, r->resource_count, r->capacity.resources);
+	reset_prefix(r->uses, r->uses_touched_end(), r->capacity.resource_uses);
+	reset_prefix(r->readbacks, r->readback_count, r->capacity.readbacks);
+	reset_prefix(r->graphs, r->graph_count, r->capacity.graph_memberships);
 	if (r->native_count) {
 		std::memset(r->natives, 0, sizeof(ProductionNativeCell) * r->native_count);
 	}
-	reset(r->returns, r->capacity.return_cells);
+	reset_prefix(r->returns, r->resource_count, r->capacity.return_cells);
 	reset(r->commands, r->command_count);
 	reset(r->frames, r->frame_count);
 	auto *attachment = r->attachment;
@@ -4412,32 +4446,39 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 	r->~ProductionRequest();
 	new (r) ProductionRequest();
 	if (attachment->children == 0) {
-		uint64_t advised = 0;
-		if (attachment->payload && attachment->payload_reclaim_hwm > attachment->scene_prefix_bytes) {
-			const uint64_t end = MIN(attachment->payload_reclaim_hwm, attachment->quote.capacity.retained_payload_bytes);
-			if (end > attachment->scene_prefix_bytes) {
-				advised += reclaim_arena_pod_pages(attachment->payload + attachment->scene_prefix_bytes, size_t(end - attachment->scene_prefix_bytes));
-			}
+		attachment->idle_reclaim_frames = 0;
+		if (attachment->closing) {
+			attachment->reclaim_pod_pages();
 		}
-		if (attachment->readback_bytes && attachment->readback_reclaim_hwm > 0) {
-			const uint64_t end = MIN(attachment->readback_reclaim_hwm, attachment->quote.capacity.readback_bytes);
-			advised += reclaim_arena_pod_pages(attachment->readback_bytes, size_t(end));
-		}
-		if (attachment->natives && attachment->natives_reclaim_hwm > 0) {
-			const uint64_t end = MIN(attachment->natives_reclaim_hwm, uint64_t(attachment->quote.capacity.native_memberships));
-			advised += reclaim_arena_pod_pages(attachment->natives, size_t(end) * sizeof(ProductionNativeCell));
-		}
-		if (attachment->material_qualifications && attachment->material_qualifications_live == 0 && attachment->mq_reclaim_hwm > 0) {
-			const uint32_t end = MIN(attachment->mq_reclaim_hwm, attachment->quote.capacity.suboperations);
-			advised += reclaim_arena_pod_pages(attachment->material_qualifications, size_t(end) * sizeof(MaterialQualificationState));
-		}
-		attachment->arena_reclaimed_bytes_total += advised;
-		attachment->payload_reclaim_hwm = 0;
-		attachment->readback_reclaim_hwm = 0;
-		attachment->natives_reclaim_hwm = 0;
-		attachment->mq_reclaim_hwm = 0;
 	}
 	return result(OK);
+}
+void ProductionAttachment::reclaim_pod_pages() {
+	uint64_t advised = 0;
+	if (payload && payload_reclaim_hwm > scene_prefix_bytes) {
+		const uint64_t end = MIN(payload_reclaim_hwm, quote.capacity.retained_payload_bytes);
+		if (end > scene_prefix_bytes) {
+			advised += reclaim_arena_pod_pages(payload + scene_prefix_bytes, size_t(end - scene_prefix_bytes));
+		}
+	}
+	if (readback_bytes && readback_reclaim_hwm > 0) {
+		const uint64_t end = MIN(readback_reclaim_hwm, quote.capacity.readback_bytes);
+		advised += reclaim_arena_pod_pages(readback_bytes, size_t(end));
+	}
+	if (natives && natives_reclaim_hwm > 0) {
+		const uint64_t end = MIN(natives_reclaim_hwm, uint64_t(quote.capacity.native_memberships));
+		advised += reclaim_arena_pod_pages(natives, size_t(end) * sizeof(ProductionNativeCell));
+	}
+	if (material_qualifications && material_qualifications_live == 0 && mq_reclaim_hwm > 0) {
+		const uint32_t end = MIN(mq_reclaim_hwm, quote.capacity.suboperations);
+		advised += reclaim_arena_pod_pages(material_qualifications, size_t(end) * sizeof(MaterialQualificationState));
+	}
+	arena_reclaimed_bytes_total += advised;
+	payload_reclaim_hwm = 0;
+	readback_reclaim_hwm = 0;
+	natives_reclaim_hwm = 0;
+	mq_reclaim_hwm = 0;
+	idle_reclaim_frames = 0;
 }
 GDExtensionDeviceSessionResultV1 Registry::production_installation_observe(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionServiceBudgetV1 *budget, GDExtensionProductionInstallationReportV1 *out) {
 	if (!aligned(budget) || !production_dto_valid(*budget) || budget->reserved || !aligned(out)) {
@@ -4534,6 +4575,9 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 	}
 	if (a->children) {
 		return result(ERR_BUSY, 16);
+	}
+	if (a->has_reclaimable_arena_pages()) {
+		a->reclaim_pod_pages();
 	}
 	if (!a->persistent_sets.is_empty()) {
 		a->persistent_set_lookup.clear();

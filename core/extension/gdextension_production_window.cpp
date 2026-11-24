@@ -1704,6 +1704,7 @@ Error Registry::production_output_pin(ProductionPhysicalContextRef context, GDEx
 		cell.output_role = ProductionUseCell::OutputRole::NATIVE_CONSUMER;
 		cell.output_consumer = &pin;
 		cell.output_pin_serial = serial;
+		request->note_use_touched(i);
 		return OK;
 	}
 	return ERR_OUT_OF_MEMORY; // No spare prequoted use cell; never allocate or borrow payload.

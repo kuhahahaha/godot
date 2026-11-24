@@ -799,6 +799,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 									request->uses[slot.first_binding + i].binding = bindings[i];
 								}
 								request->binding_used += count;
+								request->note_use_touched_end(request->use_count + request->binding_used);
 								slot.use_count = 1;
 								slot.imported = true;
 								slot.cached_persistent_set = true;
@@ -827,6 +828,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 					request->uses[slot.first_binding + i].binding = bindings[i];
 				}
 				request->binding_used += count;
+				request->note_use_touched_end(request->use_count + request->binding_used);
 				if (!scene_depth_set1) {
 					for (uint32_t i = 0; i < count; ++i) {
 						slot.output_set_deferred |= request->resources[bindings[i].resource_slot].output_alias_prepared;

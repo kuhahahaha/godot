@@ -5779,10 +5779,23 @@ struct Access {
 		CHECK(att->children == 1);
 		CHECK(att->arena_reclaimed_bytes_total == 0);
 
-		// Releasing r2 drops children to 0 and triggers POD/MQ page reclaim.
+		// Releasing r2 drops children to 0. Under BUG-170, transient wave
+		// boundaries must NOT immediately call MADV_FREE_REUSABLE while active.
 		REQUIRE(e.registry->production_cancel(ref2).native_error == OK);
 		REQUIRE(e.registry->production_release(ref2).native_error == OK);
 		CHECK(att->children == 0);
+		CHECK(att->arena_reclaimed_bytes_total == 0);
+		CHECK(att->payload_reclaim_hwm > att->scene_prefix_bytes);
+		CHECK(att->readback_reclaim_hwm > 0);
+		CHECK(att->natives_reclaim_hwm > 0);
+		CHECK(att->mq_reclaim_hwm > 0);
+
+		// Sustained idle cooldown (ARENA_IDLE_RECLAIM_FRAMES) triggers POD/MQ reclaim.
+		for (uint32_t f = 0; f + 1 < ProductionAttachment::ARENA_IDLE_RECLAIM_FRAMES; ++f) {
+			e.registry->production_observe_completed_frames_rt(e.rd);
+		}
+		CHECK(att->arena_reclaimed_bytes_total == 0);
+		e.registry->production_observe_completed_frames_rt(e.rd);
 		CHECK(att->payload_reclaim_hwm == 0);
 		CHECK(att->readback_reclaim_hwm == 0);
 		CHECK(att->natives_reclaim_hwm == 0);
@@ -7076,6 +7089,113 @@ struct Access {
 			CHECK(e.driver.polls[2] == 2);
 		}
 	}
+
+	static void bug170_prefix_reset_and_no_per_wave_madvise_thrash() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		auto pool_cap = capacity(64);
+		pool_cap.requests = 2;
+		pool_cap.suboperations = 64;
+		pool_cap.resources = 64;
+		pool_cap.resource_uses = 512;
+		pool_cap.graph_memberships = 128;
+		pool_cap.native_memberships = 128;
+		pool_cap.return_cells = 64;
+		pool_cap.readbacks = 16;
+		pool_cap.retained_payload_bytes = 128u * 1024u;
+		pool_cap.readback_bytes = 64u * 1024u;
+		const auto att_ref = e.accept(pool_cap);
+		REQUIRE(att_ref.handle_serial != 0);
+
+		ProductionAttachment *att = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			RenderingDevice *rd = nullptr;
+			REQUIRE(e.registry->production_attachment_locked(att_ref, true, att, rd) == OK);
+		}
+		REQUIRE(att != nullptr);
+
+		auto req_cap = pool_cap;
+		req_cap.requests = 1;
+		const GDExtensionProductionActionV2 actions[2] = {
+			{ 0, 10, 0, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 0, 1, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX },
+			{ 1, 11, 0, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 1, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+		};
+		const GDExtensionProductionResourceV1 resources[2] = {
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 0, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 64, 0 },
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 64, 0 },
+		};
+		const GDExtensionProductionUseV1 uses[2] = {
+			{ 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 64, 0 },
+			{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 64, 0 },
+		};
+
+		// Run 6 consecutive single-request waves where children drops to 0 every wave.
+		// Verify: (a) ZERO per-wave MADV_FREE_REUSABLE thrash, (b) prefix-only reset
+		// clears all touched cells (actions, resources, uses including bindings/spares,
+		// graphs, returns) and releases tail .request pointers so subsequent reserves
+		// reuse slot 0 cleanly with zero stale state.
+		for (uint32_t wave = 0; wave < 6; ++wave) {
+			Request *r = nullptr;
+			{
+				MutexLock lock(e.registry->mutex);
+				const GDExtensionProductionOperationV1 op{ production_dto_abi<GDExtensionProductionOperationV1>(), 9170 + wave, 1, 10, 12 };
+				REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op, req_cap, { nullptr, actions }, 2, resources, 2, uses, 2, {}, 0, r, 2) == OK);
+			}
+			REQUIRE(r != nullptr);
+			CHECK(r->action_count == 2);
+			CHECK(r->resource_count == 2);
+			CHECK(r->use_count == 2);
+			CHECK(r->uses_touched_end() == 2);
+			// Verify zero stale fields from prior wave across touched prefix.
+			CHECK_FALSE(r->actions[0].prepared);
+			CHECK_FALSE(r->actions[1].prepared);
+			CHECK_FALSE(r->resources[0].imported);
+			CHECK(r->uses[2].binding.binding == 0);
+			CHECK(r->uses[2].output_role == ProductionUseCell::OutputRole::UNUSED);
+			CHECK(r->uses[3].output_role == ProductionUseCell::OutputRole::UNUSED);
+			CHECK_FALSE(r->graphs[0].pending);
+			CHECK_FALSE(r->returns[0].pending);
+			CHECK(r->returns[0].serial == 0);
+			// Verify headroom tail cells are claimed for this request.
+			CHECK(r->uses[req_cap.resource_uses - 1].request == r);
+			CHECK(r->actions[req_cap.suboperations - 1].request == r);
+
+			// Mutate touched prefix cells + binding slot [2] + spare slot [3] + graph [0] + return [0].
+			{
+				MutexLock lock(e.registry->mutex);
+				r->actions[0].prepared = true;
+				r->actions[1].prepared = true;
+				r->resources[0].imported = true;
+				r->uses[2].binding.binding = 42 + wave;
+				r->binding_used = 1;
+				r->note_use_touched_end(r->use_count + r->binding_used);
+				r->uses[3].output_role = ProductionUseCell::OutputRole::DISPOSAL_RESERVED;
+				r->note_disposal_use_index(3);
+				CHECK(r->uses_touched_end() == 4);
+				r->graphs[0].pending = false;
+				r->graphs[0].fact.action_ordinal = 77;
+				r->graph_count = 1;
+				r->returns[0].serial = 555 + wave;
+				r->returns[0].pending = false;
+			}
+
+			const GDExtensionProductionRequestRefV1 ref{ Enrollment::INSTANCE, r->serial };
+			REQUIRE(e.registry->production_cancel(ref).native_error == OK);
+			REQUIRE(e.registry->production_release(ref).native_error == OK);
+			CHECK(att->children == 0);
+			// Active per-wave releases must NOT invoke MADV_FREE_REUSABLE.
+			CHECK(att->arena_reclaimed_bytes_total == 0);
+			// Tail cells must have .request cleared so next reserve finds slot 0.
+			CHECK(att->uses[req_cap.resource_uses - 1].request == nullptr);
+			CHECK(att->actions[req_cap.suboperations - 1].request == nullptr);
+			// Simulate 1 active frame between waves (well below ARENA_IDLE_RECLAIM_FRAMES).
+			e.registry->production_observe_completed_frames_rt(e.rd);
+			CHECK(att->arena_reclaimed_bytes_total == 0);
+		}
+		// Closing while idle reclaims immediately before freeing the arena.
+		REQUIRE(e.registry->production_close(att_ref).native_error == OK);
+	}
 };
 TEST_CASE("[ProductionNativeObserve][PreparedNativeRecordV2] cancel rejects transferred native wait before consume without erasing actual prefix") {
 	Access::native_record_wait_rejection(false);
@@ -7372,4 +7492,8 @@ TEST_CASE("[SceneTree][ProductionNativeObserve][Pillar1][BUG-145] staged product
 
 TEST_CASE("[ProductionNativeObserve][BUG-166] distinct native owners beyond index 64 complete OBSERVE, passive RT harvest, and RELEASE in 1 pass") {
 	TestProductionNativeObserve::Access::bug166_distinct_native_owners_skip_alias_rows();
+}
+
+TEST_CASE("[ProductionNativeObserve][BUG-170] prefix-only reset leaves zero stale state across waves and avoids per-wave MADV_FREE_REUSABLE thrash") {
+	TestProductionNativeObserve::Access::bug170_prefix_reset_and_no_per_wave_madvise_thrash();
 }

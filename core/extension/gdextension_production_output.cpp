@@ -1500,6 +1500,7 @@ Error Registry::production_output_action_pin_locked(ProductionRequest &request, 
 		cell.output_role = ProductionUseCell::OutputRole::NATIVE_CONSUMER;
 		cell.output_consumer = &pin;
 		cell.output_pin_serial = serial;
+		request.note_use_touched(i);
 		action.output_root = serial;
 		action.output_state = ProductionActionCell::OutputState::RESERVING;
 		return OK;
