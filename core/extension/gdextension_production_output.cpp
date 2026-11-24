@@ -1596,10 +1596,11 @@ Error Registry::production_output_demand_publish(ProductionPhysicalContextRef co
 }
 
 // Decouple material/geometry preparation closure budget (max_resources) from the
-// per-read RDG graph budget (output_read_graph_capacity), keeping at least 64
-// ordinary closure entries when the request/attachment use-cell pool affords it.
+// per-read RDG graph budget (output_read_graph_capacity), keeping at least 192
+// ordinary closure entries when the request/attachment use-cell pool affords it
+// (complex UE5 emitters can touch 85+ Shader/Texture/Sampler/Buffer entries).
 static uint32_t resolve_preparation_resource_capacity(uint32_t p_graph_cap, uint32_t p_read_cap, uint32_t p_bank_rows, bool p_inline_config, uint64_t p_fixed_uses, uint64_t p_available_uses) {
-	const uint32_t desired = MAX(p_graph_cap, 64u);
+	const uint32_t desired = MAX(p_graph_cap, 192u);
 	if (!p_read_cap || p_graph_cap >= desired) {
 		return desired;
 	}
