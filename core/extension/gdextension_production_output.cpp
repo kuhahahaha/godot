@@ -353,11 +353,12 @@ Error Registry::production_output_preparation_validate_locked(ProductionOutputPi
 			segment.end_action_ordinal == request.action_count && segment.incomplete_upload_action_ordinal == UINT64_MAX;
 	// Pipeline preparation against a completely recorded, immutable output slot
 	// only builds read-only graphics state and may proceed while a non-mutating
-	// OBSERVE poll is PENDING/QUEUED/RETURNED (never while EXECUTING or mutating).
+	// OBSERVE poll (0) or read-only consumed-proof BORROW (1) is
+	// PENDING/QUEUED/RETURNED (never while EXECUTING, RETURN (2), or mutating).
 	const bool non_mutating_observe = request.next_action == request.action_count &&
 			control.input.kind == ProductionControlKind::OBSERVE &&
 			control.input.request_serial == request.serial &&
-			!control.input.consumed_operation && !control.input.predecessor_bind &&
+			control.input.consumed_operation <= 1 && !control.input.predecessor_bind &&
 			!control.output.output_generation.native_released &&
 			(control.state == ProductionControlState::PENDING ||
 					control.state == ProductionControlState::QUEUED ||
@@ -528,7 +529,7 @@ bool Registry::production_output_slot_cross_capture_preparable(const ProductionO
 	const bool non_mutating_observe = request.next_action == request.action_count &&
 			control.input.kind == ProductionControlKind::OBSERVE &&
 			control.input.request_serial == request.serial &&
-			!control.input.consumed_operation && !control.input.predecessor_bind &&
+			control.input.consumed_operation <= 1 && !control.input.predecessor_bind &&
 			!control.output.output_generation.native_released &&
 			(control.state == ProductionControlState::PENDING ||
 					control.state == ProductionControlState::QUEUED ||
