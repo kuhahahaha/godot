@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "core/extension/gdextension_external_output_interface.h"
 #include "core/extension/gdextension_scene_phase.h"
 #include "core/math/projection.h"
 #include "core/math/transform_3d.h"
@@ -362,6 +363,12 @@ public:
 	bool has_pending_depth_snapshot_request(RID p_viewport, uint64_t p_frame_number) const;
 	RID find_viewport_by_render_target(RID p_render_target);
 	bool has_viewport_depth_snapshot(RID p_viewport) const;
+	Error query_and_arm_viewport_depth_pair(
+			RID p_viewport,
+			bool p_arm_capture,
+			float p_slab_thickness_m,
+			float p_silhouette_jump_m,
+			GDExtensionDeviceExit::GDExtensionViewportDepthPairResultV1 &r_out);
 	uint32_t get_retired_depth_snapshot_count() const;
 	uint32_t get_fb_first_free_count() const { return fb_first_free_counter.get(); }
 	void set_simulate_framebuffer_create_failure_once(bool p_enable) { simulate_fb_fail_once.set(p_enable ? 1u : 0u); }

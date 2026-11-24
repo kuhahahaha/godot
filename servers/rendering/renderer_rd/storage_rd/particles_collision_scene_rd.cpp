@@ -689,6 +689,75 @@ bool ParticlesCollisionSceneRD::has_viewport_depth_snapshot(RID p_viewport) cons
 	return depth_snapshots_by_viewport.has(p_viewport.get_id());
 }
 
+Error ParticlesCollisionSceneRD::query_and_arm_viewport_depth_pair(
+		RID p_viewport,
+		bool p_arm_capture,
+		float p_slab_thickness_m,
+		float p_silhouette_jump_m,
+		GDExtensionDeviceExit::GDExtensionViewportDepthPairResultV1 &r_out) {
+	r_out = {};
+	r_out.abi_version = 1;
+	r_out.struct_size = sizeof(GDExtensionDeviceExit::GDExtensionViewportDepthPairResultV1);
+	r_out.native_error = int32_t(OK);
+
+	LocalVector<Ref<DepthSnapshotGeneration>> to_release;
+	Error result_err = OK;
+	{
+		MutexLock lock(snapshot_mutex);
+		if (!device || GDExtensionDeviceExit::scene_opaque32_is_zero(device_capability)) {
+			result_err = ERR_UNAVAILABLE;
+		} else if (!is_on_device_owner_thread(device, live_device_guard.ptr())) {
+			result_err = ERR_UNAUTHORIZED;
+		} else {
+			reap_retired_depth_snapshots_locked(to_release);
+
+			if (!p_viewport.is_valid()) {
+				result_err = ERR_INVALID_PARAMETER;
+			} else {
+				ViewportDepthSlot *slot = depth_snapshots_by_viewport.getptr(p_viewport.get_id());
+				if (!slot && p_arm_capture) {
+					ViewportDepthSlot &created = depth_snapshots_by_viewport[p_viewport.get_id()];
+					created.viewport = p_viewport;
+					slot = &created;
+				}
+				if (slot) {
+					slot->viewport = p_viewport;
+					if (p_arm_capture) {
+						if (std::isfinite(p_slab_thickness_m) && p_slab_thickness_m > 0.0f) {
+							slot->default_slab_thickness_m = p_slab_thickness_m;
+						}
+						if (std::isfinite(p_silhouette_jump_m) && p_silhouette_jump_m > 0.0f) {
+							slot->default_silhouette_jump_m = p_silhouette_jump_m;
+						}
+						slot->pending_capture = true;
+						if (!slot->render_target.is_valid() && RSG::viewport != nullptr && RSG::viewport->viewport_owner.owns(p_viewport)) {
+							slot->render_target = RSG::viewport->viewport_get_render_target(p_viewport);
+						}
+					}
+					if (slot->current_snapshot.is_valid() &&
+							(slot->current_snapshot->meta.flags & SceneDepthSnapshotMeta256::FLAG_PRESENT) != 0u &&
+							slot->current_snapshot->meta_buffer.is_valid() &&
+							slot->current_snapshot->depth_texture.is_valid()) {
+						r_out.populated = 1u;
+						r_out.width = slot->current_snapshot->meta.width;
+						r_out.height = slot->current_snapshot->meta.height;
+						r_out.flags = slot->current_snapshot->meta.flags;
+						r_out.snapshot_generation = slot->current_snapshot->meta.snapshot_generation;
+						r_out.meta_ssbo_rid = slot->current_snapshot->meta_buffer.get_id();
+						r_out.depth_texture_rid = slot->current_snapshot->depth_texture.get_id();
+					}
+				}
+			}
+		}
+	}
+
+	for (uint32_t i = 0; i < to_release.size(); ++i) {
+		to_release[i]->release_gpu_resources();
+	}
+	r_out.native_error = int32_t(result_err);
+	return result_err;
+}
+
 uint32_t ParticlesCollisionSceneRD::get_retired_depth_snapshot_count() const {
 	MutexLock lock(snapshot_mutex);
 	return retired_depth_snapshots.size();

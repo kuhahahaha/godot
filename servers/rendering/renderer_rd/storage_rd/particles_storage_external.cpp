@@ -32,6 +32,7 @@
 #include "core/math/affine_f32.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_collision_scene_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_mesh_light_sort_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_data_rd.h"
@@ -3597,6 +3598,42 @@ int32_t ange_external_output_end_fast_refresh_batch_v1(uint32_t p_count, const G
 		return int32_t(ERR_UNAVAILABLE);
 	}
 	return storage->particles_external_end_fast_refresh_batch_v1(p_count, p_inputs, p_flags, p_out_errors);
+}
+
+int32_t ange_external_output_query_viewport_depth_pair_v1(const GDExtensionViewportDepthPairQueryInputV1 *p_input, GDExtensionViewportDepthPairResultV1 *p_out_result) {
+	if (p_out_result) {
+		*p_out_result = {};
+		p_out_result->abi_version = 1;
+		p_out_result->struct_size = sizeof(GDExtensionViewportDepthPairResultV1);
+		p_out_result->native_error = int32_t(ERR_INVALID_PARAMETER);
+	}
+	auto fail = [&](Error p_err) -> int32_t {
+		if (p_out_result) {
+			p_out_result->native_error = int32_t(p_err);
+		}
+		return int32_t(p_err);
+	};
+	if (!p_input || !p_out_result ||
+			p_input->abi_version != 1 ||
+			p_input->struct_size != sizeof(GDExtensionViewportDepthPairQueryInputV1) ||
+			p_input->arm_capture > 1 ||
+			p_input->reserved != 0 ||
+			p_input->viewport_rid == 0) {
+		return fail(ERR_INVALID_PARAMETER);
+	}
+	RendererRD::ParticlesStorage *storage = RendererRD::ParticlesStorage::get_singleton();
+	RendererRD::ParticlesCollisionSceneRD *collision_scene = storage ? storage->get_collision_scene_rd() : nullptr;
+	if (!collision_scene) {
+		return fail(ERR_UNAVAILABLE);
+	}
+	const Error err = collision_scene->query_and_arm_viewport_depth_pair(
+			RID::from_uint64(p_input->viewport_rid),
+			p_input->arm_capture != 0,
+			p_input->slab_thickness_m,
+			p_input->silhouette_jump_m,
+			*p_out_result);
+	p_out_result->native_error = int32_t(err);
+	return int32_t(err);
 }
 
 } // namespace GDExtensionDeviceExit

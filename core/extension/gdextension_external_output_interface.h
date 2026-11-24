@@ -90,11 +90,35 @@ enum {
 };
 
 namespace GDExtensionDeviceExit {
+typedef struct {
+	uint32_t abi_version; // 1
+	uint32_t struct_size; // sizeof(GDExtensionViewportDepthPairQueryInputV1)
+	uint32_t arm_capture; // 1 = keep slot.pending_capture armed for next render
+	uint32_t reserved;
+	uint64_t viewport_rid;
+	float slab_thickness_m; // > 0 overrides slot default; <= 0 keeps existing/0.50f
+	float silhouette_jump_m;
+} GDExtensionViewportDepthPairQueryInputV1;
+
+typedef struct {
+	uint32_t abi_version; // 1
+	uint32_t struct_size; // sizeof(GDExtensionViewportDepthPairResultV1)
+	int32_t native_error;
+	uint32_t populated; // 1 iff current_snapshot is valid & FLAG_PRESENT
+	uint32_t width;
+	uint32_t height;
+	uint32_t flags;
+	uint64_t snapshot_generation;
+	uint64_t meta_ssbo_rid;
+	uint64_t depth_texture_rid;
+} GDExtensionViewportDepthPairResultV1;
+
 int32_t ange_external_output_begin_fast_refresh_v1(const GDExtensionFastRefreshBeginInputV1 *p_input, GDExtensionFastRefreshTargetsV1 *p_out_targets);
 int32_t ange_external_output_end_fast_refresh_v1(const GDExtensionFastRefreshEndInputV1 *p_input);
 int32_t ange_external_output_release_fast_refresh_v1(uint64_t p_particles_rid, uint32_t p_slot_index);
 int32_t ange_external_output_begin_fast_refresh_batch_v1(uint32_t p_count, const GDExtensionFastRefreshBeginInputV1 *p_inputs, GDExtensionFastRefreshTargetsV1 *p_out_targets);
 int32_t ange_external_output_end_fast_refresh_batch_v1(uint32_t p_count, const GDExtensionFastRefreshEndInputV1 *p_inputs, uint32_t p_flags, int32_t *p_out_errors);
+int32_t ange_external_output_query_viewport_depth_pair_v1(const GDExtensionViewportDepthPairQueryInputV1 *p_input, GDExtensionViewportDepthPairResultV1 *p_out_result);
 GDExtensionDeviceSessionResultV1 device_session_output_selection_facts_v2(GDExtensionProductionAttachmentRefV1, GDExtensionOutputMetadataSelectionRefV2, const GDExtensionOutputSelectionFactsInputV2 *, GDExtensionOutputSelectionFactsV2 *);
 GDExtensionDeviceSessionResultV1 device_session_output_metadata_selection_query_v2(const GDExtensionOutputMetadataSelectionQueryV2*, GDExtensionOutputMetadataSelectionRequirementsV2*);
 GDExtensionDeviceSessionResultV1 device_session_output_metadata_selection_prepare_v2(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputMetadataSelectionPrepareV2*, GDExtensionOutputMetadataSelectionResultV2*);
