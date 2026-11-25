@@ -172,10 +172,10 @@ struct Access {
 			++set_frees;
 		}
 		void command_uniform_set_prepare_for_use(CommandBufferID, UniformSetID set, ShaderID shader, uint32_t index) override {
-			CHECK(set == UniformSetID(82));
+			CHECK((set == UniformSetID(82) || (allow_second_set && set == UniformSetID(83))));
 			CHECK(shader == ShaderID(80));
 			CHECK(index == 0);
-			CHECK(set_live);
+			CHECK((set == UniformSetID(83) ? second_set_live : set_live));
 			++set_prepares;
 		}
 		uint32_t uniform_sets_get_dynamic_offsets(VectorView<UniformSetID> sets, ShaderID shader, uint32_t first, uint32_t count) const override {
@@ -184,7 +184,7 @@ struct Access {
 			CHECK(first == 0);
 			CHECK(count == 1);
 			if (sets.size() == 1) {
-				CHECK(sets[0] == UniformSetID(82));
+				CHECK((sets[0] == UniformSetID(82) || (allow_second_set && sets[0] == UniformSetID(83))));
 			}
 			return 0;
 		}
@@ -194,9 +194,9 @@ struct Access {
 			CHECK(first == 0);
 			CHECK(count == 1);
 			CHECK(dynamic == 0);
-			CHECK(set_live);
 			if (sets.size() == 1) {
-				CHECK(sets[0] == UniformSetID(82));
+				CHECK((sets[0] == UniformSetID(82) || (allow_second_set && sets[0] == UniformSetID(83))));
+				CHECK((sets[0] == UniformSetID(83) ? second_set_live : set_live));
 			}
 			++set_binds;
 		}
@@ -385,12 +385,15 @@ struct Access {
 			++fence_recycles;
 			return OK;
 		}
-		uint32_t dispatches = 0, pushed[4] = {};
+		uint32_t dispatches = 0, pipeline_binds = 0, pushed[4] = {};
 		uint64_t limit_get(Limit limit) override {
 			CHECK((limit == LIMIT_MAX_PUSH_CONSTANT_SIZE || limit == LIMIT_MAX_BOUND_UNIFORM_SETS || limit == LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_X || limit == LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_Y || limit == LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_Z));
 			return limit == LIMIT_MAX_PUSH_CONSTANT_SIZE ? 128 : 64;
 		}
-		void command_bind_compute_pipeline(CommandBufferID, PipelineID id) override { CHECK(id == PipelineID(81)); }
+		void command_bind_compute_pipeline(CommandBufferID, PipelineID id) override {
+			CHECK(id == PipelineID(81));
+			++pipeline_binds;
+		}
 		void command_bind_push_constants(CommandBufferID, ShaderID id, uint32_t first, VectorView<uint32_t> data) override {
 			CHECK(id == ShaderID(80));
 			CHECK(first == 0);
@@ -8208,6 +8211,202 @@ struct Access {
 			e.rd._free_pending_resources(0);
 		}
 	}
+
+	static void bug195a_dispatch_war_raw_waw_clean_split_and_alias_canonicalization() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		e.driver.allow_second_set = true;
+		constexpr uint32_t kActions = 11;
+		// Slots: 0 = unit, 1 = S0, 2 = S1, 3 = S0_alias (same physical RID as slot 1),
+		//        4 = set(S0), 5 = set(S1), 6 = set(S0_alias).
+		constexpr uint32_t kResources = 7;
+		auto c = capacity(16);
+		c.suboperations = 16;
+		c.resources = 8;
+		c.resource_uses = 32;
+		c.graph_memberships = 32;
+		c.native_memberships = 64;
+		c.return_cells = 8;
+		c.retained_payload_bytes = 512;
+		const auto att_ref = e.accept(c);
+		REQUIRE(att_ref.handle_serial != 0);
+		graph_initialize(e);
+
+		ProductionAttachment *att = nullptr;
+		RenderingDevice *rd = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			REQUIRE(e.registry->production_attachment_locked(att_ref, true, att, rd) == OK);
+		}
+		REQUIRE(att != nullptr);
+
+		const GDExtensionProductionOperationV1 op = { production_dto_abi<GDExtensionProductionOperationV1>(), 19501, 1, 10, 10 + kActions };
+		GDExtensionProductionActionV2 actions[kActions] = {};
+		for (uint32_t i = 0; i < kActions; ++i) {
+			actions[i] = {
+				i,
+				10 + i,
+				0,
+				0,
+				GDEXTENSION_PRODUCTION_DISPATCH_V1,
+				0,
+				i, // first_use (1 use per dispatch)
+				1, // use_count
+				uint32_t(i + 1 == kActions ? GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1 : GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1),
+				UINT32_MAX,
+			};
+		}
+		const GDExtensionProductionResourceV1 resources[kResources] = {
+			{ GDEXTENSION_PRODUCTION_UNIT_V1, 4, 5, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 6, 0, 0 },
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 128, 0 },
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 2, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 128, 0 },
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 128, 0 },
+			{ GDEXTENSION_PRODUCTION_SET_V1, 4, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 0, 0 },
+			{ GDEXTENSION_PRODUCTION_SET_V1, 5, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 0, 0 },
+			{ GDEXTENSION_PRODUCTION_SET_V1, 6, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 0, 0 },
+		};
+		const GDExtensionProductionUseV1 uses[kActions] = {
+			{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 32, 0 },  // 0: S0 W[0,32)  -> open list (E0)
+			{ 2, GDEXTENSION_PRODUCTION_READ_V1, 0, 32, 0 },   // 1: S1 R[0,32)  -> disjoint resource (no split)
+			{ 2, GDEXTENSION_PRODUCTION_READ_V1, 0, 32, 0 },   // 2: S1 R[0,32)  -> RAR same span (no split)
+			{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 64, 32, 0 }, // 3: S0 W[64,96) -> non-overlapping span on S0 (no split)
+			{ 2, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 32, 0 },  // 4: S1 W[0,32)  -> WAR on S1! (split -> E0+1)
+			{ 2, GDEXTENSION_PRODUCTION_READ_V1, 0, 32, 0 },   // 5: S1 R[0,32)  -> RAW on S1! (split -> E0+2)
+			{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 32, 0 },  // 6: S0 W[0,32)  -> disjoint in E0+2 (no split)
+			{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 16, 32, 0 }, // 7: S0 W[16,48) -> WAW on S0! (split -> E0+3)
+			{ 3, GDEXTENSION_PRODUCTION_READ_V1, 16, 32, 0 },  // 8: S0_alias R[16,48) -> aliased RAW! (split -> E0+4)
+			{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 16, 32, 0 }, // 9: S0 W[16,48) -> aliased WAR! (split -> E0+5)
+			{ 3, GDEXTENSION_PRODUCTION_WRITE_V1, 16, 32, 0 }, // 10: S0_alias W[16,48) -> aliased WAW! (split -> E0+6)
+		};
+
+		Request *r = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op, c, { nullptr, actions }, kActions, resources, kResources, uses, kActions, { nullptr, nullptr, 0, nullptr }, 0, r, 2) == OK);
+		}
+		REQUIRE(r != nullptr);
+		const GDExtensionProductionRequestRefV1 ref{ Enrollment::INSTANCE, r->serial };
+		REQUIRE(import_original_unit(e, *r, true, false));
+
+		auto make_storage = [&](uint64_t serial, uint32_t identity) -> Registry::QualificationBridge::Storage * {
+			auto *st = memnew(Registry::QualificationBridge::Storage);
+			st->serial = serial;
+			st->creating = false;
+			st->origin = { Enrollment::ABI, 128, identity, 0, 1, 1, 0 };
+			st->physical.bridge = e.original_bridge->serial;
+			st->physical.child = st->serial;
+			const RID srid = e.rd._qualification_storage_create(128, &st->physical);
+			REQUIRE(srid.is_valid());
+			const auto *sbuf = e.rd.storage_buffer_owner.get_or_null(srid);
+			REQUIRE(sbuf != nullptr);
+			st->physical.rid = srid.get_id();
+			st->backing = { Enrollment::ABI, { Enrollment::INSTANCE, st->serial }, srid.get_id(), sbuf->backing_serial, sbuf->size, uint64_t(sbuf->usage), OK, 1 };
+			return st;
+		};
+
+		Registry::QualificationBridge::Storage *s0 = make_storage(1951, 1);
+		Registry::QualificationBridge::Storage *s1 = make_storage(1952, 2);
+		e.original_bridge->storage[0] = s0;
+		e.original_bridge->storage[1] = s1;
+		e.original_storage = s0;
+
+		REQUIRE(e.registry->production_import_storage(ref, 1, &s0->backing).native_error == OK);
+		REQUIRE(e.registry->production_import_storage(ref, 2, &s1->backing).native_error == OK);
+		REQUIRE(e.registry->production_import_storage(ref, 3, &s0->backing).native_error == OK);
+		const GDExtensionProductionSetBindingV1 bind_s0 = { production_dto_abi<GDExtensionProductionSetBindingV1>(), 0, 0, 0, 1, 0, 128 };
+		const GDExtensionProductionSetBindingV1 bind_s1 = { production_dto_abi<GDExtensionProductionSetBindingV1>(), 0, 0, 0, 2, 0, 128 };
+		const GDExtensionProductionSetBindingV1 bind_alias = { production_dto_abi<GDExtensionProductionSetBindingV1>(), 0, 0, 0, 3, 0, 128 };
+		REQUIRE(e.registry->production_set_create(ref, 4, 0, 0, &bind_s0, 1).native_error == OK);
+		REQUIRE(e.registry->production_set_create(ref, 5, 0, 0, &bind_s1, 1).native_error == OK);
+		REQUIRE(e.registry->production_set_create(ref, 6, 0, 0, &bind_alias, 1).native_error == OK);
+
+		const uint32_t push[4] = { 1, 2, 3, 4 };
+		for (uint32_t i = 0; i < kActions; ++i) {
+			const uint32_t set_slot = (uses[i].resource_slot == 1u) ? 4u : (uses[i].resource_slot == 2u ? 5u : 6u);
+			const GDExtensionProductionDispatchV2 disp = {
+				production_dto_abi<GDExtensionProductionDispatchV2>(),
+				i,
+				10 + i,
+				0,
+				0,
+				0,
+				set_slot,
+				1,
+				2,
+				3,
+				4,
+				sizeof(push),
+				0,
+			};
+			REQUIRE(e.registry->production_prepare_dispatch_v2(ref, &disp, push, sizeof(push)).native_error == OK);
+		}
+		{
+			MutexLock rd_lock(e.rd._thread_safe_);
+			MutexLock lock(e.registry->mutex);
+			REQUIRE(e.registry->production_freeze_rd_locked(*r, &e.rd) == OK);
+		}
+
+		void *saved_frame = nullptr;
+		e.registry->test_push_production_physical_frame(19501, saved_frame);
+		const uint32_t initial_epoch = r->dispatch_barrier_epoch;
+		const uint32_t expected_epoch_delta[kActions] = {
+			1u, // 0: fresh open
+			1u, // 1: disjoint resource
+			1u, // 2: RAR
+			1u, // 3: non-overlapping span on S0
+			2u, // 4: WAR on S1
+			3u, // 5: RAW on S1
+			3u, // 6: disjoint in new epoch
+			4u, // 7: WAW on S0
+			5u, // 8: aliased RAW (slot 3 -> canon slot 1)
+			6u, // 9: aliased WAR (slot 1 vs canon slot 1 read by slot 3)
+			7u, // 10: aliased WAW (slot 3 vs canon slot 1 written by slot 1)
+		};
+
+		for (uint32_t i = 0; i < kActions; ++i) {
+			const auto obs = effect(e, *r, i);
+			REQUIRE(obs.error == OK);
+			REQUIRE(obs.state == CheckedRecordAppend::State::Appended);
+			CHECK(r->dispatch_barrier_epoch == initial_epoch + expected_epoch_delta[i]);
+			if (i == 0) {
+				// Canonical alias slot verification: slot 3 (alias of S0) maps to slot 1!
+				CHECK(r->resources[1].hazard_canonical_slot == 1u);
+				CHECK(r->resources[2].hazard_canonical_slot == 2u);
+				CHECK(r->resources[3].hazard_canonical_slot == 1u);
+			}
+			CHECK(r->compute_list_open == (i + 1u < kActions));
+		}
+		e.registry->test_pop_production_physical_frame(saved_frame);
+
+		// Flush RDG via execute_transfers to verify TRAP #2:
+		// - Exactly 11 dispatches executed,
+		// - Exactly 7 compute lists / pipeline binds (1 initial + 6 genuine hazard splits, ZERO false splits),
+		// - Exactly 11 uniform-set binds (ZERO dead rebinds from compute_list_add_barrier!).
+		REQUIRE(e.registry->production_cancel(ref).native_error == OK);
+		e.driver.complete = true;
+		execute_transfers(e, *r, true);
+		CHECK(e.driver.dispatches == kActions);
+		CHECK(e.driver.pipeline_binds == 7u);
+		CHECK(e.driver.set_binds == kActions);
+
+		const auto observed_done = turn(e, *r, ProductionControlKind::OBSERVE, budget());
+		CHECK(observed_done.report.known_obligations > 0);
+		CHECK(observed_done.report.complete_obligations == observed_done.report.known_obligations);
+		REQUIRE(finish_owned_maintenance(e, *r, budget()));
+		const auto released = turn(e, *r, ProductionControlKind::RELEASE, budget());
+		CHECK(released.owner_return.native_error == OK);
+		CHECK(r->serial == 0);
+		CHECK(e.registry->production_close(att_ref).native_error == ERR_BUSY);
+		e.rd._free_pending_resources(0);
+		CHECK(e.registry->production_close(att_ref).native_error == OK);
+		for (auto *st : { s0, s1 }) {
+			st->physical.use_closed.store(true);
+			e.rd.qualification_retiring = true;
+			e.rd.free_rid(RID::from_uint64(st->backing.rid));
+			e.rd.qualification_retiring = false;
+			e.rd._free_pending_resources(0);
+		}
+	}
 };
 TEST_CASE("[ProductionNativeObserve][PreparedNativeRecordV2] cancel rejects transferred native wait before consume without erasing actual prefix") {
 	Access::native_record_wait_rejection(false);
@@ -8536,4 +8735,8 @@ TEST_CASE("[ProductionNativeObserve][BUG-186C] bi-directional top-down NATIVE_OU
 
 TEST_CASE("[ProductionNativeObserve][BUG-195D-1] PersistentSetCache O(1) LRU touch/eviction, 4096 cap, and O(evicted) zero-scan steady-state RT reap") {
 	TestProductionNativeObserve::Access::bug195d_persistent_set_lru_and_steady_state_reap();
+}
+
+TEST_CASE("[ProductionAction][BUG-195A] compute-list hazard tracker splits cleanly on WAR/RAW/WAW and canonicalized aliases with zero dead rebinds") {
+	TestProductionNativeObserve::Access::bug195a_dispatch_war_raw_waw_clean_split_and_alias_canonicalization();
 }

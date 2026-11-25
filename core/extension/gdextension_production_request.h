@@ -351,10 +351,14 @@ class ProductionResourceSlot {
 	uint32_t imported_unit_slot = UINT32_MAX;
 	uint32_t shader_set = UINT32_MAX;
 	uint32_t first_binding = UINT32_MAX, binding_count = 0;
-	// Per-resource O(1) last-writer hazard tracker within the active compute list.
+	// Per-resource O(1) RAW/WAW/WAR hazard tracker within the active compute list (BUG-195A).
 	uint32_t last_dispatch_write_epoch = 0;
 	uint64_t last_dispatch_write_begin = 0;
 	uint64_t last_dispatch_write_end = 0;
+	uint32_t last_dispatch_read_epoch = 0;
+	uint64_t last_dispatch_read_begin = 0;
+	uint64_t last_dispatch_read_end = 0;
+	uint32_t hazard_canonical_slot = UINT32_MAX;
 	bool imported = false;
 	bool scene_depth_set1 = false;
 	uint32_t scene_depth_lease_count = 0;
