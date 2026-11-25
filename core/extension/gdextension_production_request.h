@@ -1032,8 +1032,12 @@ class ProductionAttachment {
 	bool closing = false;
 	uint32_t actions_hwm = 0, resources_hwm = 0, uses_hwm = 0, readbacks_hwm = 0;
 	uint32_t graphs_hwm = 0, returns_hwm = 0, commands_hwm = 0, frames_hwm = 0;
+	uint32_t actions_free_cursor = 0, resources_free_cursor = 0, uses_free_cursor = 0, readbacks_free_cursor = 0;
+	uint32_t graphs_free_cursor = 0, returns_free_cursor = 0, commands_free_cursor = 0, frames_free_cursor = 0;
+	uint32_t registry_slot = UINT32_MAX;
 	uint32_t material_qualifications_live = 0, material_qualifications_constructed_total = 0;
 	uint64_t payload_reclaim_hwm = 0, readback_reclaim_hwm = 0, natives_reclaim_hwm = 0;
+	uint64_t readback_reclaim_top_lwm = UINT64_MAX, natives_reclaim_top_lwm = UINT64_MAX;
 	uint32_t mq_reclaim_hwm = 0;
 	static constexpr uint32_t ARENA_IDLE_RECLAIM_FRAMES = 120u;
 	uint32_t idle_reclaim_frames = 0;
@@ -1048,8 +1052,8 @@ class ProductionAttachment {
 				(commands && commands_hwm > 0) ||
 				(frames && frames_hwm > 0) ||
 				(payload && payload_reclaim_hwm > scene_prefix_bytes) ||
-				(readback_bytes && readback_reclaim_hwm > 0) ||
-				(natives && natives_reclaim_hwm > 0) ||
+				(readback_bytes && (readback_reclaim_hwm > 0 || readback_reclaim_top_lwm < quote.capacity.readback_bytes)) ||
+				(natives && (natives_reclaim_hwm > 0 || natives_reclaim_top_lwm < quote.capacity.native_memberships)) ||
 				(material_qualifications && material_qualifications_live == 0 && mq_reclaim_hwm > 0);
 	}
 	void reclaim_pod_pages();
@@ -1063,4 +1067,9 @@ class ProductionAttachment {
 	// Open must acquire the original device holder and operation-window receiver.
 	// Metadata reservations do not satisfy those two obligations.
 };
+
+bool production_serial_index_has_attachment(const Registry &p_registry, uint64_t p_serial);
+bool production_serial_index_has_request(const Registry &p_registry, uint64_t p_serial);
+uint32_t production_serial_index_attachment_count(const Registry &p_registry);
+uint32_t production_serial_index_request_count(const Registry &p_registry);
 } // namespace GDExtensionDeviceExit

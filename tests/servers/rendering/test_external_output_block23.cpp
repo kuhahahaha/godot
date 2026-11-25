@@ -848,9 +848,9 @@ TEST_CASE("[ExternalOutput][Metal][BUG-82][BUG-83][BUG-86] binary archive bounds
 		MetalHeapAllocator heap_alloc(metal_driver->get_device());
 		const MTL::ResourceOptions shared_opts = MTL::ResourceStorageModeShared;
 
-		// 10 MiB > POOL_SHARED preferred block/2 (8 MiB), <= max_recycled_bytes (16 MiB):
+		// 6 MiB > POOL_SHARED preferred block/2 (4 MiB), <= max_recycled_bytes (8 MiB):
 		// lands in DEDICATED and MUST be freed immediately (dedicated_count -> 0).
-		MetalBuffer dedicated = heap_alloc.new_buffer(10u * 1024u * 1024u, shared_opts);
+		MetalBuffer dedicated = heap_alloc.new_buffer(6u * 1024u * 1024u, shared_opts);
 		REQUIRE(dedicated.buffer.get() != nullptr);
 		CHECK(dedicated.allocation.kind == MetalAllocation::Kind::DEDICATED);
 		MetalAllocatorStats stats = {};
@@ -861,15 +861,14 @@ TEST_CASE("[ExternalOutput][Metal][BUG-82][BUG-83][BUG-86] binary archive bounds
 		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].dedicated_count == 0u);
 		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].dedicated_bytes == 0u);
 
-		// Spill POOL_SHARED (16 MiB blocks) across 3 blocks using 3x 7 MiB POOL buffers
-		// (each <= 8 MiB -> Kind::POOL, two fit per block -> 2 blocks; add 3rd -> 2 blocks,
-		// 5x 7 MiB -> 3 blocks). Freeing the 3rd block's sole buffer MUST NOT leave it
-		// pinned in recycled_buffers once there are > 1 blocks + empty block!
-		MetalBuffer b0 = heap_alloc.new_buffer(7u * 1024u * 1024u, shared_opts);
-		MetalBuffer b1 = heap_alloc.new_buffer(7u * 1024u * 1024u, shared_opts);
-		MetalBuffer b2 = heap_alloc.new_buffer(7u * 1024u * 1024u, shared_opts);
-		MetalBuffer b3 = heap_alloc.new_buffer(7u * 1024u * 1024u, shared_opts);
-		MetalBuffer b4 = heap_alloc.new_buffer(7u * 1024u * 1024u, shared_opts);
+		// Spill POOL_SHARED (8 MiB blocks under BUG-185A) across 3 blocks using 5x 3.5 MiB POOL buffers
+		// (each <= 4 MiB -> Kind::POOL, two fit per block -> 2 blocks; 5x 3.5 MiB -> 3 blocks).
+		// Freeing the 3rd block's sole buffer MUST NOT leave it pinned in recycled_buffers once there are > 1 blocks + empty block!
+		MetalBuffer b0 = heap_alloc.new_buffer(3584u * 1024u, shared_opts);
+		MetalBuffer b1 = heap_alloc.new_buffer(3584u * 1024u, shared_opts);
+		MetalBuffer b2 = heap_alloc.new_buffer(3584u * 1024u, shared_opts);
+		MetalBuffer b3 = heap_alloc.new_buffer(3584u * 1024u, shared_opts);
+		MetalBuffer b4 = heap_alloc.new_buffer(3584u * 1024u, shared_opts);
 		REQUIRE(b4.buffer.get() != nullptr);
 		CHECK(b4.allocation.kind == MetalAllocation::Kind::POOL);
 		heap_alloc.get_stats(stats);
@@ -992,6 +991,111 @@ void main() { v[0] += 23u; }
 	rd.submit();
 	rd.sync();
 	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_evictions() == evictions_before + 3u);
+}
+
+TEST_CASE("[ExternalOutput][Metal][BUG-185A] unspecialized compute shader releases MDLibrary after PSO creation, preserves fast-path reuse, and sizes heaps to 16MiB/8MiB") {
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDevice rd;
+	REQUIRE(rd.initialize(&context) == OK);
+	struct FinalizeGuard {
+		RenderingDevice &rd;
+		~FinalizeGuard() { rd.finalize(); }
+	} guard{ rd };
+
+	MTL::Device *mtl_device = reinterpret_cast<MTL::Device *>(rd.get_driver_resource(RD::DRIVER_RESOURCE_LOGICAL_DEVICE, RID(), 0));
+	REQUIRE(mtl_device != nullptr);
+
+	const char *kComputeUnspec = R"(#version 450
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout(set = 0, binding = 0, std430) buffer Buf { uint v[]; };
+void main() { v[0] += 185u; }
+)";
+	const char *kComputeSpec = R"(#version 450
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout(constant_id = 0) const uint K = 1u;
+layout(set = 0, binding = 0, std430) buffer Buf { uint v[]; };
+void main() { v[0] += K; }
+)";
+
+	auto compile_compute = [&](const char *p_src, const char *p_name) -> Vector<uint8_t> {
+		RD::ShaderStageSPIRVData cs;
+		cs.shader_stage = RD::SHADER_STAGE_COMPUTE;
+		String err;
+		cs.spirv = rd.shader_compile_spirv_from_source(RD::SHADER_STAGE_COMPUTE, String(p_src), RD::SHADER_LANGUAGE_GLSL, &err);
+		REQUIRE(err.is_empty());
+		REQUIRE(!cs.spirv.is_empty());
+		Vector<RD::ShaderStageSPIRVData> stages;
+		stages.push_back(cs);
+		const Vector<uint8_t> bytecode = rd.shader_compile_binary_from_spirv(stages, String(p_name));
+		REQUIRE(!bytecode.is_empty());
+		return bytecode;
+	};
+
+	const Vector<uint8_t> bc_unspec = compile_compute(kComputeUnspec, "bug185a_unspec");
+	const Vector<uint8_t> bc_spec = compile_compute(kComputeSpec, "bug185a_spec");
+
+	const uint64_t hits_before = RenderingDeviceDriverMetal::get_total_compute_pso_cache_hits();
+	const uint64_t misses_before = RenderingDeviceDriverMetal::get_total_compute_pso_cache_misses();
+	const uint64_t released_before = RenderingDeviceDriverMetal::get_total_compute_libraries_released();
+
+	const RID sh_unspec = rd.shader_create_from_bytecode(bc_unspec);
+	REQUIRE(sh_unspec.is_valid());
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_libraries_released() == released_before);
+
+	// First compute_pipeline_create compiles PSO and immediately releases MDLibrary / MTL::Library.
+	const RID p1 = rd.compute_pipeline_create(sh_unspec);
+	REQUIRE(p1.is_valid());
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_libraries_released() == released_before + 1u);
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_misses() == misses_before + 1u);
+
+	// Setting resource name after kernel drop must be null-safe.
+	rd.set_resource_name(sh_unspec, "bug185a_named_after_drop");
+
+	// Second compute_pipeline_create on same shader hits cached_unspecialized_pso fast path!
+	const RID p2 = rd.compute_pipeline_create(sh_unspec);
+	REQUIRE(p2.is_valid());
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_hits() == hits_before + 1u);
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_misses() == misses_before + 1u);
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_libraries_released() == released_before + 1u);
+	CHECK(rd.get_driver_resource(RD::DRIVER_RESOURCE_COMPUTE_PIPELINE, p2, 0) == rd.get_driver_resource(RD::DRIVER_RESOURCE_COMPUTE_PIPELINE, p1, 0));
+
+	// Specialized compute shader retains MDLibrary until shader_destroy_modules().
+	const RID sh_spec = rd.shader_create_from_bytecode(bc_spec);
+	REQUIRE(sh_spec.is_valid());
+	const RID p_spec = rd.compute_pipeline_create(sh_spec);
+	REQUIRE(p_spec.is_valid());
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_libraries_released() == released_before + 1u);
+	rd.shader_destroy_modules(sh_spec);
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_libraries_released() == released_before + 2u);
+
+	// MetalHeapAllocator non-local preferred block sizing: POOL_PRIVATE=16 MiB, POOL_SHARED=8 MiB.
+	{
+		MetalHeapAllocator heap_alloc(mtl_device);
+		MetalBuffer priv_small = heap_alloc.new_buffer(4096u, MTL::ResourceStorageModePrivate);
+		MetalBuffer shared_small = heap_alloc.new_buffer(4096u, MTL::ResourceStorageModeShared);
+		REQUIRE(priv_small.buffer.get() != nullptr);
+		REQUIRE(shared_small.buffer.get() != nullptr);
+		MetalAllocatorStats stats = {};
+		heap_alloc.get_stats(stats);
+		CHECK(stats.pools[MetalHeapAllocator::POOL_PRIVATE].reserved_bytes == 16ull * 1024u * 1024u);
+		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].reserved_bytes == 8ull * 1024u * 1024u);
+		// Allocations > preferred block size still succeed cleanly via dedicated heap.
+		MetalBuffer priv_big = heap_alloc.new_buffer(20u * 1024u * 1024u, MTL::ResourceStorageModePrivate);
+		REQUIRE(priv_big.buffer.get() != nullptr);
+		CHECK(priv_big.allocation.kind == MetalAllocation::Kind::DEDICATED);
+		heap_alloc.free_buffer(priv_big);
+		heap_alloc.free_buffer(shared_small);
+		heap_alloc.free_buffer(priv_small);
+	}
+
+	rd.free_rid(p_spec);
+	rd.free_rid(sh_spec);
+	rd.free_rid(p2);
+	rd.free_rid(p1);
+	rd.free_rid(sh_unspec);
+	rd.submit();
+	rd.sync();
 }
 #endif
 

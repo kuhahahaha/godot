@@ -713,7 +713,7 @@ Error Registry::production_record_receive_locked(ProductionRequest &request, Ren
 	if (record.private_refs >= private_limit || record.active_callbacks >= UINT32_MAX - record.cleanup_reservations || frame_serials.exhausted) {
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
-	if (device.draw_list.active || device.raytracing_list.active || device.compute_list.active != request.compute_list_open || device.draw_graph.has_driver_callbacks()) {
+	if (device.draw_list.active || device.raytracing_list.active || device.compute_list.active != request.compute_list_open || device.draw_graph.has_driver_callbacks() || (!cleanup && device._recording_error() != OK)) {
 		return ERR_BUSY;
 	}
 	const auto receiver = attachment.record_receiver;

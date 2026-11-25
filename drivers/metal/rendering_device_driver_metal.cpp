@@ -1523,6 +1523,9 @@ void RenderingDeviceDriverMetal::framebuffer_free(FramebufferID p_framebuffer) {
 void RenderingDeviceDriverMetal::evict_compute_pso_for_library(const SHA256Digest &p_library_key) {
 	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 	MutexLock lock(pipeline_state_cache_mutex);
+	if (compute_shader_owners_by_library.has(p_library_key)) {
+		return;
+	}
 	if (LocalVector<ComputePipelineCacheKey> *keys = compute_pso_keys_by_library.getptr(p_library_key)) {
 		uint64_t evicted = 0;
 		for (const ComputePipelineCacheKey &key : *keys) {
@@ -1847,6 +1850,14 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 				libraries[RDD::ShaderStage::SHADER_STAGE_COMPUTE]);
 
 		cs->local = MTL::Size(refl.compute_local_size[0], refl.compute_local_size[1], refl.compute_local_size[2]);
+		cs->has_specialization_constants = !refl.specialization_constants.is_empty();
+		if (cs->kernel && cs->kernel->get_cache_key() != nullptr) {
+			cs->library_key = *cs->kernel->get_cache_key();
+			cs->has_library_key = true;
+			MutexLock lock(pipeline_state_cache_mutex);
+			uint32_t &owners = compute_shader_owners_by_library[cs->library_key];
+			++owners;
+		}
 		shader = cs;
 	} else {
 		MDRenderShader *rs = new MDRenderShader(
@@ -1873,17 +1884,24 @@ bool RenderingDeviceDriverMetal::shader_retire_ready_nonblocking(ShaderID p_shad
 	}
 	const auto *shader = reinterpret_cast<MDShader *>(p_shader.id);
 	if (const auto *compute_shader = dynamic_cast<const MDComputeShader *>(shader)) {
-		return compute_shader->kernel && compute_shader->kernel->retire_ready_nonblocking();
+		MutexLock lock(pipeline_state_cache_mutex);
+		return compute_shader->cached_unspecialized_pso.get() != nullptr ||
+				(compute_shader->kernel && compute_shader->kernel->retire_ready_nonblocking());
 	}
 	if (const auto *render_shader = dynamic_cast<const MDRenderShader *>(shader)) {
-		return render_shader->vert && render_shader->frag &&
-				render_shader->vert->retire_ready_nonblocking() && render_shader->frag->retire_ready_nonblocking();
+		MutexLock lock(pipeline_state_cache_mutex);
+		return render_shader->modules_destroyed ||
+				(render_shader->vert && render_shader->frag &&
+						render_shader->vert->retire_ready_nonblocking() && render_shader->frag->retire_ready_nonblocking());
 	}
 	return false;
 }
 
 void RenderingDeviceDriverMetal::shader_free(ShaderID p_shader) {
 	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+	MDShader *obj = (MDShader *)p_shader.id;
+	SHA256Digest evicted_compute_key;
+	bool should_evict_compute_pso = false;
 	{
 		MutexLock lock(pipeline_state_cache_mutex);
 		LocalVector<RenderPipelineCacheKey> stale_render_keys;
@@ -1895,13 +1913,52 @@ void RenderingDeviceDriverMetal::shader_free(ShaderID p_shader) {
 		for (const RenderPipelineCacheKey &key : stale_render_keys) {
 			render_pso_cache.erase(key);
 		}
+		if (MDComputeShader *cs = dynamic_cast<MDComputeShader *>(obj); cs != nullptr && cs->has_library_key) {
+			if (uint32_t *owners = compute_shader_owners_by_library.getptr(cs->library_key)) {
+				if (*owners <= 1u) {
+					compute_shader_owners_by_library.erase(cs->library_key);
+					evicted_compute_key = cs->library_key;
+					should_evict_compute_pso = true;
+				} else {
+					--(*owners);
+				}
+			}
+		}
 	}
-	MDShader *obj = (MDShader *)p_shader.id;
+	if (should_evict_compute_pso) {
+		evict_compute_pso_for_library(evicted_compute_key);
+	}
 	delete obj;
 }
 
 void RenderingDeviceDriverMetal::shader_destroy_modules(ShaderID p_shader) {
-	// TODO.
+	if (!p_shader) {
+		return;
+	}
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+	MDShader *shader = reinterpret_cast<MDShader *>(p_shader.id);
+	if (MDComputeShader *cs = dynamic_cast<MDComputeShader *>(shader); cs != nullptr) {
+		std::shared_ptr<MDLibrary> dropped_kernel;
+		{
+			MutexLock lock(pipeline_state_cache_mutex);
+			dropped_kernel = std::move(cs->kernel);
+		}
+		if (dropped_kernel) {
+			dropped_kernel.reset();
+			total_compute_libraries_released.fetch_add(1, std::memory_order_relaxed);
+		}
+	} else if (MDRenderShader *rs = dynamic_cast<MDRenderShader *>(shader); rs != nullptr) {
+		std::shared_ptr<MDLibrary> dropped_vert;
+		std::shared_ptr<MDLibrary> dropped_frag;
+		{
+			MutexLock lock(pipeline_state_cache_mutex);
+			dropped_vert = std::move(rs->vert);
+			dropped_frag = std::move(rs->frag);
+			rs->modules_destroyed = true;
+		}
+		dropped_vert.reset();
+		dropped_frag.reset();
+	}
 }
 
 /*********************/
@@ -2787,6 +2844,7 @@ std::atomic<uint64_t> RenderingDeviceDriverMetal::total_render_pso_cache_misses{
 std::atomic<uint64_t> RenderingDeviceDriverMetal::total_compute_pso_cache_hits{ 0 };
 std::atomic<uint64_t> RenderingDeviceDriverMetal::total_compute_pso_cache_misses{ 0 };
 std::atomic<uint64_t> RenderingDeviceDriverMetal::total_compute_pso_cache_evictions{ 0 };
+std::atomic<uint64_t> RenderingDeviceDriverMetal::total_compute_libraries_released{ 0 };
 
 static _FORCE_INLINE_ uint32_t _metal_float_bits(float p_val) {
 	uint32_t bits = 0;
@@ -3422,7 +3480,23 @@ void RenderingDeviceDriverMetal::command_compute_dispatch_indirect(CommandBuffer
 RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) {
 	MDComputeShader *shader = (MDComputeShader *)(p_shader.id);
 
-	const SHA256Digest *lib_key = shader->kernel ? shader->kernel->get_cache_key() : nullptr;
+	// Fast path: unspecialized compute shaders retain their compiled PSO after
+	// releasing MDLibrary / MTL::Library LLVM bitcode (BUG-185A).
+	std::shared_ptr<MDLibrary> local_kernel;
+	{
+		MutexLock lock(pipeline_state_cache_mutex);
+		if (p_specialization_constants.size() == 0 && shader->cached_unspecialized_pso) {
+			MDComputePipeline *pipeline = new MDComputePipeline(shader->cached_unspecialized_pso);
+			pipeline->compute_state.local = shader->local;
+			pipeline->shader = shader;
+			compute_pso_cache_hits.fetch_add(1, std::memory_order_relaxed);
+			total_compute_pso_cache_hits.fetch_add(1, std::memory_order_relaxed);
+			return PipelineID(pipeline);
+		}
+		local_kernel = shader->kernel;
+	}
+
+	const SHA256Digest *lib_key = shader->has_library_key ? &shader->library_key : (local_kernel ? local_kernel->get_cache_key() : nullptr);
 	const bool can_cache = (lib_key != nullptr) && (!shader->uses_argument_buffers || shader->sets.size() <= 64);
 	ComputePipelineCacheKey cache_key;
 	if (can_cache) {
@@ -3452,9 +3526,28 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 			cache_key.spec_constants.push_back(sk);
 		}
 		cache_key.cached_hash = hash_fmix32(h);
-		MutexLock lock(pipeline_state_cache_mutex);
-		if (const ComputePipelineCacheEntry *cached = compute_pso_cache.getptr(cache_key)) {
-			MDComputePipeline *pipeline = new MDComputePipeline(cached->state);
+		NS::SharedPtr<MTL::ComputePipelineState> hit_state;
+		std::shared_ptr<MDLibrary> dropped_kernel;
+		{
+			MutexLock lock(pipeline_state_cache_mutex);
+			if (const ComputePipelineCacheEntry *cached = compute_pso_cache.getptr(cache_key)) {
+				hit_state = cached->state;
+				if (!shader->has_specialization_constants && p_specialization_constants.size() == 0) {
+					shader->cached_unspecialized_pso = hit_state;
+					dropped_kernel = std::move(shader->kernel);
+				}
+			}
+		}
+		if (hit_state) {
+			if (dropped_kernel || local_kernel) {
+				NS::SharedPtr<NS::AutoreleasePool> drop_pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+				if (dropped_kernel) {
+					dropped_kernel.reset();
+					total_compute_libraries_released.fetch_add(1, std::memory_order_relaxed);
+				}
+				local_kernel.reset();
+			}
+			MDComputePipeline *pipeline = new MDComputePipeline(hit_state);
 			pipeline->compute_state.local = shader->local;
 			pipeline->shader = shader;
 			compute_pso_cache_hits.fetch_add(1, std::memory_order_relaxed);
@@ -3462,6 +3555,8 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 			return PipelineID(pipeline);
 		}
 	}
+
+	ERR_FAIL_NULL_V_MSG(local_kernel.get(), PipelineID(), "Compute shader module has already been destroyed.");
 
 	os_signpost_id_t reflect_id = os_signpost_id_make_with_pointer(LOG_INTERVALS, shader);
 	os_signpost_interval_begin(LOG_INTERVALS, reflect_id, "compute_pipeline_create", "shader_name=%{public}s", shader->name.get_data());
@@ -3472,7 +3567,7 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 	os_signpost_event_emit(LOG_DRIVER, OS_SIGNPOST_ID_EXCLUSIVE, "create_pipeline");
 
 	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
-	Result<NS::SharedPtr<MTL::Function>> function_or_err = _create_function(shader->kernel.get(), MTLSTR("main0"), p_specialization_constants);
+	Result<NS::SharedPtr<MTL::Function>> function_or_err = _create_function(local_kernel.get(), MTLSTR("main0"), p_specialization_constants);
 	ERR_FAIL_COND_V(std::holds_alternative<Error>(function_or_err), PipelineID());
 	NS::SharedPtr<MTL::Function> function = std::get<NS::SharedPtr<MTL::Function>>(function_or_err);
 
@@ -3522,24 +3617,37 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 
 	compute_pso_cache_misses.fetch_add(1, std::memory_order_relaxed);
 	total_compute_pso_cache_misses.fetch_add(1, std::memory_order_relaxed);
-	if (can_cache) {
+	std::shared_ptr<MDLibrary> dropped_kernel;
+	{
 		MutexLock lock(pipeline_state_cache_mutex);
-		if (compute_pso_cache.size() >= MAX_COMPUTE_PSO_CACHE_ENTRIES) {
-			compute_pso_cache.clear();
-			compute_pso_keys_by_library.clear();
+		if (can_cache) {
+			if (compute_pso_cache.size() >= MAX_COMPUTE_PSO_CACHE_ENTRIES) {
+				compute_pso_cache.clear();
+				compute_pso_keys_by_library.clear();
+			}
+			ComputePipelineCacheEntry entry;
+			entry.state = state;
+			const bool inserted_new = !compute_pso_cache.has(cache_key);
+			ComputePipelineCacheKey key_copy;
+			if (inserted_new) {
+				key_copy = cache_key;
+			}
+			compute_pso_cache.insert(std::move(cache_key), std::move(entry));
+			if (inserted_new) {
+				compute_pso_keys_by_library[key_copy.library_key].push_back(std::move(key_copy));
+			}
 		}
-		ComputePipelineCacheEntry entry;
-		entry.state = state;
-		const bool inserted_new = !compute_pso_cache.has(cache_key);
-		ComputePipelineCacheKey key_copy;
-		if (inserted_new) {
-			key_copy = cache_key;
-		}
-		compute_pso_cache.insert(std::move(cache_key), std::move(entry));
-		if (inserted_new) {
-			compute_pso_keys_by_library[key_copy.library_key].push_back(std::move(key_copy));
+		if (!shader->has_specialization_constants && p_specialization_constants.size() == 0) {
+			shader->cached_unspecialized_pso = state;
+			dropped_kernel = std::move(shader->kernel);
 		}
 	}
+	// Release MDLibrary / MTL::Library LLVM bitcode outside the lock inside pool.
+	if (dropped_kernel) {
+		dropped_kernel.reset();
+		total_compute_libraries_released.fetch_add(1, std::memory_order_relaxed);
+	}
+	local_kernel.reset();
 
 	MDComputePipeline *pipeline = new MDComputePipeline(state);
 	pipeline->compute_state.local = shader->local;
@@ -3700,10 +3808,28 @@ void RenderingDeviceDriverMetal::set_object_name(ObjectType p_type, ID p_driver_
 		case OBJECT_TYPE_SHADER: {
 			MDShader *shader = (MDShader *)(p_driver_id.id);
 			if (MDRenderShader *rs = dynamic_cast<MDRenderShader *>(shader); rs != nullptr) {
-				rs->vert->set_label(label);
-				rs->frag->set_label(label);
+				std::shared_ptr<MDLibrary> vert_lib;
+				std::shared_ptr<MDLibrary> frag_lib;
+				{
+					MutexLock lock(pipeline_state_cache_mutex);
+					vert_lib = rs->vert;
+					frag_lib = rs->frag;
+				}
+				if (vert_lib) {
+					vert_lib->set_label(label);
+				}
+				if (frag_lib) {
+					frag_lib->set_label(label);
+				}
 			} else if (MDComputeShader *cs = dynamic_cast<MDComputeShader *>(shader); cs != nullptr) {
-				cs->kernel->set_label(label);
+				std::shared_ptr<MDLibrary> kernel_lib;
+				{
+					MutexLock lock(pipeline_state_cache_mutex);
+					kernel_lib = cs->kernel;
+				}
+				if (kernel_lib) {
+					kernel_lib->set_label(label);
+				}
 			} else {
 				DEV_ASSERT(false);
 			}
@@ -4235,6 +4361,7 @@ RenderingDeviceDriverMetal::~RenderingDeviceDriverMetal() {
 		}
 		compute_pso_cache.clear();
 		compute_pso_keys_by_library.clear();
+		compute_shader_owners_by_library.clear();
 	}
 	{
 		NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());

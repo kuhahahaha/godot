@@ -922,6 +922,10 @@ public:
 	MTL::Size local = {};
 
 	std::shared_ptr<MDLibrary> kernel;
+	bool has_specialization_constants = false;
+	bool has_library_key = false;
+	SHA256Digest library_key = {};
+	NS::SharedPtr<MTL::ComputePipelineState> cached_unspecialized_pso;
 
 	MDComputeShader(CharString p_name, Vector<UniformSet> p_sets, bool p_uses_argument_buffers, std::shared_ptr<MDLibrary> p_kernel);
 };
@@ -929,6 +933,7 @@ public:
 class API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0), visionos(2.0)) MDRenderShader final : public MDShader {
 public:
 	bool needs_view_mask_buffer = false;
+	bool modules_destroyed = false;
 
 	std::shared_ptr<MDLibrary> vert;
 	std::shared_ptr<MDLibrary> frag;

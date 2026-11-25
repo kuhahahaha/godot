@@ -118,12 +118,12 @@ uint64_t MetalHeapAllocator::_preferred_block_size(uint32_t p_pool) const {
 	}
 	switch (p_pool) {
 		case POOL_PRIVATE:
-			return 64ull * 1024 * 1024;
-		case POOL_SHARED:
 			return 16ull * 1024 * 1024;
+		case POOL_SHARED:
+			return 8ull * 1024 * 1024;
 		case POOL_SHARED_WC:
 		default:
-			return 16ull * 1024 * 1024;
+			return 8ull * 1024 * 1024;
 	}
 }
 
@@ -140,11 +140,11 @@ uint64_t MetalHeapAllocator::_max_recycled_bytes(uint32_t p_pool) const {
 	}
 	switch (p_pool) {
 		case POOL_PRIVATE:
-			return 64ull * 1024 * 1024;
+			return 16ull * 1024 * 1024;
 		case POOL_SHARED:
 		case POOL_SHARED_WC:
 		default:
-			return 16ull * 1024 * 1024;
+			return 8ull * 1024 * 1024;
 	}
 }
 
