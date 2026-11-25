@@ -1364,6 +1364,163 @@ TEST_CASE("[ExternalOutput][Metal][BUG-189B] Dedicated compute MTLBinaryArchive 
 	rd.submit();
 	rd.sync();
 }
+
+TEST_CASE("[ExternalOutput][Metal][BUG-195D-2] PARTICLE_LIGHT_64 single-encoder atomic harvest uses 1 barrier across 8 emitters and emits tight per-emitter bounds") {
+	REQUIRE(RenderingDevice::get_singleton() == nullptr);
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDevice rd;
+	REQUIRE(rd.initialize(&context) == OK);
+	struct FinalizeGuard {
+		RenderingDevice &rd;
+		~FinalizeGuard() { rd.finalize(); }
+	} guard{ rd };
+
+	using Lane = RendererRD::ParticlesMeshLightSortRD;
+	Lane lane;
+	const RID vp_rid = RID::from_uint64(0x1951u);
+	const RID scen_rid = RID::from_uint64(0x1952u);
+
+	constexpr uint32_t kEmitters = 8u;
+	constexpr uint32_t kCapPerEmitter = 4u;
+	RID meta_rids[kEmitters];
+	RID rec_rids[kEmitters];
+	AABB emitter_bounds[kEmitters];
+
+	for (uint32_t ei = 0; ei < kEmitters; ++ei) {
+		const float cx = -100.0f + float(ei) * 30.0f;
+		emitter_bounds[ei] = AABB(Vector3(cx - 3.0f, -3.0f, -3.0f), Vector3(6.0f, 6.0f, 6.0f));
+
+		const uint32_t meta_words[8] = {
+			2u, 0u, 0u, 0u, kCapPerEmitter, uint32_t(RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64), 10u + ei, 0u
+		};
+		Vector<uint8_t> meta_bytes;
+		meta_bytes.resize(32);
+		memcpy(meta_bytes.ptrw(), meta_words, 32);
+		meta_rids[ei] = rd.storage_buffer_create(32, meta_bytes);
+		REQUIRE(meta_rids[ei].is_valid());
+
+		RendererRD::ParticleLightRecord64 recs[kCapPerEmitter] = {};
+		// Light 0: lower importance, Light 1: higher importance (must sort to local rank 0!).
+		recs[0].position_world[0] = cx - 1.0f;
+		recs[0].radius = 2.0f;
+		recs[0].color_hdr[0] = 1.0f;
+		recs[0].attenuation_exp = 1.0f;
+		recs[0].id_index = 10u;
+		recs[0].id_acquire_tag = 1u;
+		recs[0].flags = RendererRD::ParticleLightRecord64::FLAG_ACTIVE;
+		recs[0].screen_importance_q16 = 100u + ei * 10u;
+		recs[0].diffuse_scale = 1.0f;
+
+		recs[1].position_world[0] = cx + 1.0f;
+		recs[1].radius = 2.5f;
+		recs[1].color_hdr[0] = 2.0f;
+		recs[1].attenuation_exp = 1.0f;
+		recs[1].id_index = 11u;
+		recs[1].id_acquire_tag = 1u;
+		recs[1].flags = RendererRD::ParticleLightRecord64::FLAG_ACTIVE;
+		recs[1].screen_importance_q16 = (ei == kEmitters - 1u) ? 60000u : (500u + ei * 10u);
+		recs[1].diffuse_scale = 1.0f;
+
+		Vector<uint8_t> rec_bytes;
+		rec_bytes.resize(sizeof(recs));
+		memcpy(rec_bytes.ptrw(), recs, sizeof(recs));
+		rec_rids[ei] = rd.storage_buffer_create(sizeof(recs), rec_bytes);
+		REQUIRE(rec_rids[ei].is_valid());
+
+		Lane::ExternalLightSlotRegistration reg;
+		reg.owner_key = 0x19500u + ei;
+		reg.generation = 1u;
+		reg.slot_index = 0u;
+		reg.viewport_rid = vp_rid;
+		reg.scenario_rid = scen_rid;
+		reg.world_bounds = emitter_bounds[ei];
+		reg.meta_rid = meta_rids[ei];
+		reg.records_rid = rec_rids[ei];
+		reg.capacity = kCapPerEmitter;
+		reg.present_seq = 10u + ei;
+		lane.register_sealed_external_light_slot(reg);
+	}
+
+	const RID omni_buf = rd.storage_buffer_create(kEmitters * kCapPerEmitter * 224u);
+	REQUIRE(omni_buf.is_valid());
+	rd.buffer_clear(omni_buf, 0, kEmitters * kCapPerEmitter * 224u);
+
+	// 1. Non-overflowing partitioned mode: 8 emitters x 4 = 32 <= 32.
+	LocalVector<Lane::ReservedGpuLightBounds> bounds;
+	const uint32_t reserved = lane.dispatch_registered_external_lights_gpu(&rd, vp_rid, scen_rid, false, Transform3D(), 1.0f, omni_buf, 0u, 32u, bounds);
+	REQUIRE(reserved == 32u);
+	CHECK(lane.get_last_dispatch_barrier_count() == 1u);
+	REQUIRE(bounds.size() == kEmitters);
+
+	rd.submit();
+	rd.sync();
+
+	const Vector<uint8_t> omni_rb = rd.buffer_get_data(omni_buf);
+	REQUIRE(omni_rb.size() == int(32u * 224u));
+	const float *omni_f = reinterpret_cast<const float *>(omni_rb.ptr());
+	const uint32_t *omni_u = reinterpret_cast<const uint32_t *>(omni_rb.ptr());
+
+	for (uint32_t ei = 0; ei < kEmitters; ++ei) {
+		const float cx = -100.0f + float(ei) * 30.0f;
+		const uint32_t base = ei * kCapPerEmitter;
+		CHECK(bounds[ei].first_buffer_index == base);
+		CHECK(bounds[ei].count == kCapPerEmitter);
+		CHECK(bounds[ei].world_bounds.position.is_equal_approx(emitter_bounds[ei].position));
+		CHECK(bounds[ei].world_bounds.size.is_equal_approx(emitter_bounds[ei].size));
+		// Higher-importance light (cx + 1) lands at base + 0, lower-importance (cx - 1) at base + 1, unused zeroed.
+		CHECK(Math::is_equal_approx(omni_f[(base + 0u) * 56u + 0u], cx + 1.0f));
+		CHECK(omni_u[(base + 0u) * 56u + 49u] == 0xFFFFFFFFu);
+		CHECK(Math::is_equal_approx(omni_f[(base + 1u) * 56u + 0u], cx - 1.0f));
+		CHECK(omni_u[(base + 1u) * 56u + 49u] == 0xFFFFFFFFu);
+		CHECK(omni_u[(base + 2u) * 56u + 49u] == 0u);
+		CHECK(omni_u[(base + 3u) * 56u + 49u] == 0u);
+	}
+
+	// Verify per-emitter bounds accurately cull distant emitters (mirrors LightStorage::count_intersecting_particle_omni_lights).
+	auto count_intersecting = [&](const AABB &p_mesh_aabb) -> uint32_t {
+		const Vector3 aabb_min = p_mesh_aabb.position;
+		const Vector3 aabb_max = p_mesh_aabb.position + p_mesh_aabb.size;
+		uint32_t hits = 0u;
+		for (uint32_t bi = 0; bi < bounds.size(); ++bi) {
+			const Vector3 center = bounds[bi].world_bounds.get_center();
+			const float radius = MAX(0.001f, bounds[bi].world_bounds.size.length() * 0.5f);
+			const Vector3 closest = center.clamp(aabb_min, aabb_max);
+			if (center.distance_squared_to(closest) <= radius * radius) {
+				hits += bounds[bi].count;
+			}
+		}
+		return hits;
+	};
+	CHECK(count_intersecting(AABB(Vector3(-101.0f, -1.0f, -1.0f), Vector3(2.0f, 2.0f, 2.0f))) == kCapPerEmitter);
+	CHECK(count_intersecting(AABB(Vector3(109.0f, -1.0f, -1.0f), Vector3(2.0f, 2.0f, 2.0f))) == kCapPerEmitter);
+	CHECK(count_intersecting(AABB(Vector3(0.0f, 200.0f, 0.0f), Vector3(2.0f, 2.0f, 2.0f))) == 0u);
+
+	// 2. Overflow global Top-K mode: max_omni_lights = 4 (< 32) -> 1 barrier, conservative union bounds, emitter 7's 60000-importance light wins slot 0!
+	rd.buffer_clear(omni_buf, 0, 4u * 224u);
+	LocalVector<Lane::ReservedGpuLightBounds> overflow_bounds;
+	const uint32_t reserved_ovf = lane.dispatch_registered_external_lights_gpu(&rd, vp_rid, scen_rid, false, Transform3D(), 1.0f, omni_buf, 0u, 4u, overflow_bounds);
+	REQUIRE(reserved_ovf == 4u);
+	CHECK(lane.get_last_dispatch_barrier_count() == 1u);
+	REQUIRE(overflow_bounds.size() == 1u);
+	CHECK(overflow_bounds[0].first_buffer_index == 0u);
+	CHECK(overflow_bounds[0].count == 4u);
+
+	rd.submit();
+	rd.sync();
+
+	const Vector<uint8_t> ovf_rb = rd.buffer_get_data(omni_buf, 0u, 4u * 224u);
+	const float *ovf_f = reinterpret_cast<const float *>(ovf_rb.ptr());
+	CHECK(Math::is_equal_approx(ovf_f[0 * 56 + 0], 111.0f)); // Emitter 7 (cx=110, pos.x=111, importance=60000) wins global rank 0!
+
+	for (uint32_t ei = 0; ei < kEmitters; ++ei) {
+		lane.unregister_external_light_owner(0x19500u + ei);
+		rd.free_rid(rec_rids[ei]);
+		rd.free_rid(meta_rids[ei]);
+	}
+	lane.release_light_gpu_bridge(&rd);
+	rd.free_rid(omni_buf);
+}
 #endif
 
 } // namespace TestExternalOutputBlock23

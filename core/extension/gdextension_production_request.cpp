@@ -4948,9 +4948,12 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 			PersistentSetEntry *entry = a->persistent_sets[i];
 			if (!entry) {
 				a->persistent_sets.remove_at_unordered(i);
+				if (i < a->persistent_sets.size() && a->persistent_sets[i]) {
+					a->persistent_sets[i]->list_index = i;
+				}
 				continue;
 			}
-			entry->evicted = true;
+			a->persistent_set_mark_evicted(entry);
 			uint64_t free_event = 0;
 			{
 				MutexLock phys_lock(entry->physical.mutex);
@@ -4958,7 +4961,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 			}
 			if (entry->physical.production_uses == nullptr && free_event != 0) {
 				production_persistent_set_unindex_deps_locked(*a, *entry);
-				a->persistent_sets.remove_at_unordered(i);
+				a->persistent_set_remove_owned(entry);
 				memdelete(entry);
 				continue;
 			}
@@ -5016,6 +5019,8 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 } };
 	CRASH_COND(a->material_qualifications_live != 0);
 	CRASH_COND(!a->persistent_sets.is_empty());
+	CRASH_COND(!a->persistent_sets_pending_reap.is_empty());
+	CRASH_COND(a->persistent_set_lru_head != nullptr || a->persistent_set_lru_tail != nullptr);
 	CRASH_COND(!a->persistent_set_lookup.is_empty());
 	CRASH_COND(!a->persistent_sets_by_dep.is_empty());
 	destroy(a->requests, a->quote.capacity.requests);

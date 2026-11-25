@@ -2446,7 +2446,7 @@ struct Access {
 			GDExtensionProductionCapacityV1 whole = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionCapacityV1>(), 2, 2, owned_set ? 3u : 2u, owned_set ? 3u : 2u, 2, 32, 0, owned_set ? 3u : 2u, 8, 0 };
 			if (record_actions > 1) {
 				whole.suboperations = whole.graph_memberships = record_actions + 1;
-				whole.native_memberships = 2048;
+				whole.native_memberships = MAX(2048u, record_actions * 8u);
 			}
 			if (upload_prefix) {
 				whole.graph_memberships = 5;
@@ -2530,7 +2530,7 @@ struct Access {
 			single.retained_payload_bytes = 4;
 			if (record_actions > 1) {
 				single.suboperations = single.graph_memberships = record_actions;
-				single.native_memberships = 2048;
+				single.native_memberships = MAX(2048u, record_actions * 8u);
 			}
 			if (upload_prefix) {
 				single.graph_memberships = 4;
@@ -3635,7 +3635,7 @@ struct Access {
 					GDExtensionProductionAppendV1 part = {};
 					const Error error = Error(test.append(context, ref, 10 + request.next_action, request.revision, &part).native_error);
 					if (error == ERR_BUSY) {
-						test.check(__LINE__, request.next_action == 64 && !request.cancelled && !request.effects_pending);
+						test.check(__LINE__, request.next_action == GDExtensionDeviceExit::SCENE_PHASE_MAX_OPERATIONS && !request.cancelled && !request.effects_pending);
 						return;
 					}
 					test.check(__LINE__, error == OK && part.state == GDEXTENSION_PRODUCTION_APPENDED_V1);
@@ -3888,7 +3888,7 @@ struct Access {
 			using namespace GDExtensionDeviceExit;
 			fixture.driver.upload_mode = test.upload_prefix;
 			fixture.public_port = test.public_port;
-			test.initialized = fixture.initialize_owner(1, false, true, test.record_window ? &record_receiver : nullptr, &test, test.keep_list, test.budget_pause ? 65u : 1u, test.upload_prefix, (test.close_before_ack || test.public_port) ? &metadata_receiver : nullptr, test.output_closure, test.output_borrow, test.mesh_directory && !test.directory_capacity_failure, test.directory_external);
+			test.initialized = fixture.initialize_owner(1, false, true, test.record_window ? &record_receiver : nullptr, &test, test.keep_list, test.budget_pause ? (GDExtensionDeviceExit::SCENE_PHASE_MAX_OPERATIONS + 1u) : 1u, test.upload_prefix, (test.close_before_ack || test.public_port) ? &metadata_receiver : nullptr, test.output_closure, test.output_borrow, test.mesh_directory && !test.directory_capacity_failure, test.directory_external);
 			if (test.initialized != OK) {
 				fixture.cleanup_owner();
 				test.done = true;
@@ -4101,8 +4101,9 @@ struct Access {
 					test.check(__LINE__, test.recorded_segment.first_canonical == 10 && test.recorded_segment.end_canonical == 11 && test.recorded_segment.incomplete_upload_parent == UINT64_MAX && !request.cancelled);
 					test.check(__LINE__, owner_ack(fixture, ref, test.recorded_segment).native_error == OK);
 				} else if (test.budget_pause) {
+					constexpr uint32_t kAppendLimit = GDExtensionDeviceExit::SCENE_PHASE_MAX_OPERATIONS;
 					test.check(__LINE__, returned.pause == uint32_t(ProductionRecordPause::APPEND_LIMIT) && returned.append.state == GDEXTENSION_PRODUCTION_APPENDED_V1);
-					test.check(__LINE__, request.next_action == 64 && test.recorded_segment.end_canonical == 74 && !request.cancelled);
+					test.check(__LINE__, request.next_action == kAppendLimit && test.recorded_segment.end_canonical == 10u + kAppendLimit && !request.cancelled);
 					// Typed public entry must preserve the actual recorded prefix, pins,
 					// current cursor and the complete original source/error cause.
 					const auto release = reinterpret_cast<GDExtensionInterfaceDeviceSessionProductionReleaseV1>(GDExtension::get_interface_function("device_session_production_release_v1"));
@@ -4120,7 +4121,7 @@ struct Access {
 						const auto offered = GDExtensionProductionServiceBudgetV1{ production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
 						GDExtensionProductionServiceBudgetV1 remaining = {};
 						test.check(__LINE__, release(ref, &offered, &remaining, &rejected).native_error == ERR_BUSY);
-						test.check(__LINE__, request.serial == ref.handle_serial && request.next_action == 64 && !request.cancelled && !request.release_started && request.revision == revision && request.maintenance_serial == maintenance && request.attachment->children == children);
+						test.check(__LINE__, request.serial == ref.handle_serial && request.next_action == kAppendLimit && !request.cancelled && !request.release_started && request.revision == revision && request.maintenance_serial == maintenance && request.attachment->children == children);
 						test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED && request.control.serial == control_serial && request.next_control_serial == next_control && request.resources[0].use_count == pins[0] && request.resources[1].use_count == pins[1] && request.resources[2].use_count == pins[2]);
 						const auto &after_cursor = fixture.rd.native_disposal_continuation;
 						test.check(__LINE__, fixture.rd.native_disposal_active.load() == active && after_cursor.serial == cursor.serial && after_cursor.production_owner == cursor.production_owner && after_cursor.phase == cursor.phase && after_cursor.target == cursor.target && after_cursor.end_phase == cursor.end_phase && after_cursor.begin_phase == cursor.begin_phase && after_cursor.slot == cursor.slot && after_cursor.slot_count == cursor.slot_count && after_cursor.command_buffer == cursor.command_buffer);
@@ -4132,7 +4133,7 @@ struct Access {
 					test.rendezvous(9);
 					test.check(__LINE__, test.consume(ref, control, &returned).native_error == OK && returned.result.native_error == OK && test.receiver_calls == 2);
 					test.recorded_segment = returned.segment;
-					test.check(__LINE__, request.next_action == 65 && test.recorded_segment.first_canonical == 74 && test.recorded_segment.end_canonical == 75 && !request.cancelled && !request.compute_list_open && !fixture.rd.compute_list.active);
+					test.check(__LINE__, request.next_action == kAppendLimit + 1u && test.recorded_segment.first_canonical == 10u + kAppendLimit && test.recorded_segment.end_canonical == 11u + kAppendLimit && !request.cancelled && !request.compute_list_open && !fixture.rd.compute_list.active);
 					test.check(__LINE__, owner_ack(fixture, ref, test.recorded_segment).native_error == OK);
 				} else if (test.close_before_ack) {
 					fixture.frame.leave();
@@ -9952,7 +9953,7 @@ struct Access {
 		memcpy(overlap, untouched, sizeof(overlap));
 		CHECK(query(probe.requests[0], 0, reinterpret_cast<const GDExtensionSceneOperationKeyV1 *>(overlap + 1), reinterpret_cast<GDExtensionSceneReadOutcomeV1 *>(overlap + sizeof(GDExtensionSceneOperationKeyV1))).native_error == ERR_INVALID_PARAMETER);
 		CHECK(memcmp(overlap, untouched, sizeof(overlap)) == 0);
-		for (uint32_t bad_budget : { 0u, 65u }) {
+		for (uint32_t bad_budget : { 0u, GDExtensionDeviceExit::SCENE_PHASE_MAX_OPERATIONS + 1u }) {
 			auto invalid = config;
 			invalid.max_operations = bad_budget;
 			GDExtensionScenePhaseRegistrationRefV1 rejected{};

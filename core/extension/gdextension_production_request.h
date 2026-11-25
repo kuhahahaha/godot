@@ -969,6 +969,11 @@ struct PersistentSetEntry {
 	QualificationPhysicalReturn physical;
 	LocalVector<QualificationPhysicalReturn *> dependencies;
 	uint64_t last_used_tick = 0;
+	PersistentSetEntry *lru_prev = nullptr;
+	PersistentSetEntry *lru_next = nullptr;
+	uint32_t list_index = UINT32_MAX;
+	uint32_t pending_reap_index = UINT32_MAX;
+	bool in_lru = false;
 	bool evicted = false;
 	bool retire_enqueued = false;
 };
@@ -1057,13 +1062,98 @@ class ProductionAttachment {
 				(material_qualifications && material_qualifications_live == 0 && mq_reclaim_hwm > 0);
 	}
 	void reclaim_pod_pages();
-	// Attachment-scoped persistent UniformSet cache for long-lived retained storage bindings.
-	static constexpr uint32_t PERSISTENT_SET_MAX_LIVE = 2048u;
+	// Attachment-scoped persistent UniformSet cache for long-lived retained storage bindings (BUG-195D-1).
+	static constexpr uint32_t PERSISTENT_SET_MAX_LIVE = 4096u;
 	HashMap<PersistentSetKey, PersistentSetEntry *, PersistentSetKeyHasher> persistent_set_lookup;
 	HashMap<QualificationPhysicalReturn *, LocalVector<PersistentSetEntry *>> persistent_sets_by_dep;
 	LocalVector<PersistentSetEntry *> persistent_sets;
+	LocalVector<PersistentSetEntry *> persistent_sets_pending_reap;
+	PersistentSetEntry *persistent_set_lru_head = nullptr; // Most recently used.
+	PersistentSetEntry *persistent_set_lru_tail = nullptr; // Least recently used (O(1) eviction tail).
 	uint64_t persistent_set_tick = 0;
+	uint64_t persistent_set_reap_entries_scanned = 0;
 	bool persistent_set_close_drain_queued = false;
+	void persistent_set_lru_unlink(PersistentSetEntry *p_entry) {
+		if (!p_entry || !p_entry->in_lru) {
+			return;
+		}
+		if (p_entry->lru_prev) {
+			p_entry->lru_prev->lru_next = p_entry->lru_next;
+		} else {
+			persistent_set_lru_head = p_entry->lru_next;
+		}
+		if (p_entry->lru_next) {
+			p_entry->lru_next->lru_prev = p_entry->lru_prev;
+		} else {
+			persistent_set_lru_tail = p_entry->lru_prev;
+		}
+		p_entry->lru_prev = nullptr;
+		p_entry->lru_next = nullptr;
+		p_entry->in_lru = false;
+	}
+	void persistent_set_lru_touch(PersistentSetEntry *p_entry) {
+		if (!p_entry || p_entry->evicted) {
+			return;
+		}
+		if (p_entry->in_lru && persistent_set_lru_head == p_entry) {
+			return;
+		}
+		if (p_entry->in_lru) {
+			persistent_set_lru_unlink(p_entry);
+		}
+		p_entry->lru_prev = nullptr;
+		p_entry->lru_next = persistent_set_lru_head;
+		if (persistent_set_lru_head) {
+			persistent_set_lru_head->lru_prev = p_entry;
+		} else {
+			persistent_set_lru_tail = p_entry;
+		}
+		persistent_set_lru_head = p_entry;
+		p_entry->in_lru = true;
+	}
+	void persistent_set_push_live(PersistentSetEntry *p_entry) {
+		if (!p_entry) {
+			return;
+		}
+		p_entry->list_index = persistent_sets.size();
+		persistent_sets.push_back(p_entry);
+	}
+	void persistent_set_mark_evicted(PersistentSetEntry *p_entry) {
+		if (!p_entry) {
+			return;
+		}
+		if (!p_entry->evicted) {
+			p_entry->evicted = true;
+			persistent_set_lookup.erase(p_entry->key);
+		}
+		persistent_set_lru_unlink(p_entry);
+		if (p_entry->pending_reap_index == UINT32_MAX) {
+			p_entry->pending_reap_index = persistent_sets_pending_reap.size();
+			persistent_sets_pending_reap.push_back(p_entry);
+		}
+	}
+	void persistent_set_remove_owned(PersistentSetEntry *p_entry) {
+		if (!p_entry) {
+			return;
+		}
+		persistent_set_lru_unlink(p_entry);
+		if (p_entry->pending_reap_index < persistent_sets_pending_reap.size() && persistent_sets_pending_reap[p_entry->pending_reap_index] == p_entry) {
+			const uint32_t idx = p_entry->pending_reap_index;
+			persistent_sets_pending_reap.remove_at_unordered(idx);
+			if (idx < persistent_sets_pending_reap.size() && persistent_sets_pending_reap[idx]) {
+				persistent_sets_pending_reap[idx]->pending_reap_index = idx;
+			}
+			p_entry->pending_reap_index = UINT32_MAX;
+		}
+		if (p_entry->list_index < persistent_sets.size() && persistent_sets[p_entry->list_index] == p_entry) {
+			const uint32_t idx = p_entry->list_index;
+			persistent_sets.remove_at_unordered(idx);
+			if (idx < persistent_sets.size() && persistent_sets[idx]) {
+				persistent_sets[idx]->list_index = idx;
+			}
+			p_entry->list_index = UINT32_MAX;
+		}
+	}
 	// Open must acquire the original device holder and operation-window receiver.
 	// Metadata reservations do not satisfy those two obligations.
 };

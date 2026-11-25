@@ -993,18 +993,16 @@ layout(set = 0, binding = 2, std430) buffer CandidateStaging {
 } staging;
 
 layout(push_constant, std430) uniform PushParams {
-	uint slot_capacity;
-	uint max_staged;
+	uint slot_cap_and_offset; // low 16 = slot_capacity (<= 256), high 16 = emitter_offset (partitioned) or 0 (global)
+	uint max_staged_and_ord;  // low 16 = max_staged (<= 8192), high 16 = emitter_ordinal
 	uint seq_lo;
 	uint seq_hi;
 } push_params;
 
 shared uint s_active_count;
-shared uint s_prev_count;
+shared uint s_base_offset;
 shared uint s_slot_valid;
 shared uint s_prefix[256];
-shared uint s_winner_src[256];
-shared uvec4 s_keys[512];
 
 bool is_finite_u32(uint u) {
 	return (u & 0x7F800000u) != 0x7F800000u;
@@ -1019,21 +1017,13 @@ float clean_f32(uint u) {
 	return uintBitsToFloat(flush_subnormal_u32(u));
 }
 
-bool beats(uvec4 b, uvec4 a) {
-	if (b.x != a.x) {
-		return b.x > a.x;
-	}
-	if (b.y != a.y) {
-		return b.y < a.y;
-	}
-	if (b.z != a.z) {
-		return b.z < a.z;
-	}
-	return b.w < a.w;
-}
-
 void main() {
 	uint tid = gl_LocalInvocationID.x;
+	uint slot_capacity = push_params.slot_cap_and_offset & 0xFFFFu;
+	uint emitter_offset = (push_params.slot_cap_and_offset >> 16u) & 0xFFu;
+	uint max_staged = push_params.max_staged_and_ord & 0xFFFFu;
+	uint emitter_ordinal = push_params.max_staged_and_ord >> 16u;
+
 	if (tid == 0u) {
 		uint active_count = slot_meta.words[0];
 		uint res1 = slot_meta.words[1];
@@ -1044,13 +1034,12 @@ void main() {
 		uint meta_seq_lo = slot_meta.words[6];
 		uint meta_seq_hi = slot_meta.words[7];
 		if (res1 == 0u && res2 == 0u && fault_bits == 0u && schema_id == 4u &&
-				meta_cap == push_params.slot_capacity && active_count <= push_params.slot_capacity &&
+				meta_cap == slot_capacity && active_count <= slot_capacity &&
 				meta_seq_lo == push_params.seq_lo && meta_seq_hi == push_params.seq_hi) {
 			s_active_count = active_count;
 		} else {
 			s_active_count = 0u;
 		}
-		s_prev_count = min(staging.words[0], 256u);
 	}
 	barrier();
 
@@ -1113,6 +1102,11 @@ void main() {
 			sum += v;
 		}
 		s_slot_valid = sum;
+		if (sum > 0u) {
+			s_base_offset = atomicAdd(staging.words[0], sum);
+		} else {
+			s_base_offset = 0u;
+		}
 	}
 	barrier();
 
@@ -1121,78 +1115,17 @@ void main() {
 	}
 
 	if (valid) {
-		uint dst = s_prev_count + s_prefix[tid];
-		if (dst < push_params.max_staged) {
+		uint dst = s_base_offset + s_prefix[tid];
+		if (dst < max_staged) {
 			uint dst_base = 4u + dst * 16u;
-			for (uint i = 0u; i < 16u; ++i) {
+			for (uint i = 0u; i < 15u; ++i) {
 				staging.words[dst_base + i] = w[i];
 			}
+			// Deterministic provenance word (BUG-195D-2):
+			// Partitioned mode: bits [23:16]=emitter_offset, [15:8]=emitter_ordinal, [7:0]=tid.
+			// Global Top-K mode: emitter_offset==0, bits [23:8]=emitter_ordinal, [7:0]=tid.
+			staging.words[dst_base + 15u] = (emitter_offset << 16u) | (emitter_ordinal << 8u) | tid;
 		}
-	}
-	memoryBarrierBuffer();
-	barrier();
-
-	uint total = min(s_prev_count + s_slot_valid, push_params.max_staged);
-	uint new_count = min(total, 256u);
-
-	if (tid < total) {
-		uint b0 = 4u + tid * 16u;
-		s_keys[tid] = uvec4(staging.words[b0 + 11u], staging.words[b0 + 9u], staging.words[b0 + 8u], tid);
-	} else {
-		s_keys[tid] = uvec4(0u, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu);
-	}
-	uint idx1 = 256u + tid;
-	if (idx1 < total) {
-		uint b1 = 4u + idx1 * 16u;
-		s_keys[idx1] = uvec4(staging.words[b1 + 11u], staging.words[b1 + 9u], staging.words[b1 + 8u], idx1);
-	} else {
-		s_keys[idx1] = uvec4(0u, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu);
-	}
-	barrier();
-
-	if (tid < total) {
-		uvec4 k0 = s_keys[tid];
-		uint r0 = 0u;
-		for (uint j = 0u; j < total; ++j) {
-			if (beats(s_keys[j], k0)) {
-				r0++;
-			}
-		}
-		if (r0 < new_count) {
-			s_winner_src[r0] = tid;
-		}
-	}
-	if (idx1 < total) {
-		uvec4 k1 = s_keys[idx1];
-		uint r1 = 0u;
-		for (uint j = 0u; j < total; ++j) {
-			if (beats(s_keys[j], k1)) {
-				r1++;
-			}
-		}
-		if (r1 < new_count) {
-			s_winner_src[r1] = idx1;
-		}
-	}
-	barrier();
-
-	uint win_w[16];
-	if (tid < new_count) {
-		uint win_base = 4u + s_winner_src[tid] * 16u;
-		for (uint i = 0u; i < 16u; ++i) {
-			win_w[i] = staging.words[win_base + i];
-		}
-	}
-	barrier();
-
-	if (tid < new_count) {
-		uint out_base = 4u + tid * 16u;
-		for (uint i = 0u; i < 16u; ++i) {
-			staging.words[out_base + i] = win_w[i];
-		}
-	}
-	if (tid == 0u) {
-		staging.words[0] = new_count;
 	}
 }
 )GLSL";
@@ -1273,20 +1206,23 @@ void main() {
 	if (N == 0u || reserved == 0u) {
 		return;
 	}
+	bool camera_orthogonal = (params.counts.w & 1u) != 0u;
+	bool partitioned_mode = (params.counts.w & 2u) != 0u;
 
 	for (uint outer_base = 0u; outer_base < N; outer_base += 256u) {
 		uint my_idx = outer_base + tid;
 		uvec4 my_key = uvec4(0u, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu);
 		if (my_idx < N) {
 			uint cbase = 4u + my_idx * 16u;
-			my_key = uvec4(staging.words[cbase + 11u], staging.words[cbase + 9u], staging.words[cbase + 8u], my_idx);
+			my_key = uvec4(staging.words[cbase + 11u], staging.words[cbase + 9u], staging.words[cbase + 8u], staging.words[cbase + 15u]);
 		}
+		uint my_owner = (my_key.w >> 8u) & 0xFFu;
 		uint rank = 0u;
 		for (uint tile_base = 0u; tile_base < N; tile_base += 256u) {
 			uint load_idx = tile_base + tid;
 			if (load_idx < N) {
 				uint lbase = 4u + load_idx * 16u;
-				s_keys[tid] = uvec4(staging.words[lbase + 11u], staging.words[lbase + 9u], staging.words[lbase + 8u], load_idx);
+				s_keys[tid] = uvec4(staging.words[lbase + 11u], staging.words[lbase + 9u], staging.words[lbase + 8u], staging.words[lbase + 15u]);
 			} else {
 				s_keys[tid] = uvec4(0u, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu);
 			}
@@ -1294,16 +1230,25 @@ void main() {
 
 			if (my_idx < N) {
 				uint tile_cnt = min(256u, N - tile_base);
-				for (uint j = 0u; j < tile_cnt; ++j) {
-					if (beats(s_keys[j], my_key)) {
-						rank++;
+				if (partitioned_mode) {
+					for (uint j = 0u; j < tile_cnt; ++j) {
+						if (((s_keys[j].w >> 8u) & 0xFFu) == my_owner && beats(s_keys[j], my_key)) {
+							rank++;
+						}
+					}
+				} else {
+					for (uint j = 0u; j < tile_cnt; ++j) {
+						if (beats(s_keys[j], my_key)) {
+							rank++;
+						}
 					}
 				}
 			}
 			barrier();
 		}
 
-		if (my_idx < N && rank < reserved) {
+		uint out_slot = partitioned_mode ? (((my_key.w >> 16u) & 0xFFu) + rank) : rank;
+		if (my_idx < N && out_slot < reserved) {
 			uint cbase = 4u + my_idx * 16u;
 			vec3 world_pos = vec3(
 					uintBitsToFloat(staging.words[cbase + 0u]),
@@ -1327,7 +1272,7 @@ void main() {
 					dot(params.light_view_row2.xyz, world_pos) + params.light_view_row2.w);
 			vec3 final_col = color_hdr * (diff_scale * exposure);
 
-			uint omni_idx = base_omni + rank;
+			uint omni_idx = base_omni + out_slot;
 			uint obase = omni_idx * 56u;
 			omni_lights.words[obase + 0u] = floatBitsToUint(light_view_pos.x);
 			omni_lights.words[obase + 1u] = floatBitsToUint(light_view_pos.y);
@@ -1350,7 +1295,7 @@ void main() {
 			float r_elem = radius * cluster_scale * sphere_overfit;
 			float depth = -cluster_pos.z;
 			bool touches_near = false;
-			if (params.counts.w != 0u) {
+			if (camera_orthogonal) {
 				touches_near = (depth - r_elem) < params.misc_floats.y;
 			} else {
 				float r2 = r_elem * sphere_overfit;
@@ -1358,7 +1303,7 @@ void main() {
 			}
 			bool touches_far = (depth + r_elem) > params.misc_floats.z;
 
-			uint ebase = rank * 20u;
+			uint ebase = out_slot * 20u;
 			cluster_elements.words[ebase + 0u] = 0u;
 			cluster_elements.words[ebase + 1u] = touches_near ? 1u : 0u;
 			cluster_elements.words[ebase + 2u] = touches_far ? 1u : 0u;
@@ -1656,6 +1601,7 @@ uint32_t ParticlesMeshLightSortRD::dispatch_registered_external_lights_gpu(
 		uint32_t p_max_omni_lights,
 		LocalVector<ReservedGpuLightBounds> &r_mobile_bounds_out) {
 	r_mobile_bounds_out.clear();
+	last_dispatch_barrier_count = 0u;
 	if (active_cluster_context.active) {
 		active_cluster_context.pending_gpu_omni_count = 0u;
 	}
@@ -1716,18 +1662,13 @@ uint32_t ParticlesMeshLightSortRD::dispatch_registered_external_lights_gpu(
 				return a.owner_key < b.owner_key;
 			});
 
-	uint32_t total_requested_cap = 0u;
-	for (uint32_t i = 0; i < matched_slots.size(); ++i) {
-		total_requested_cap = MIN(MAX_PARTICLE_LIGHTS, total_requested_cap + matched_slots[i].capacity);
-	}
 	uint32_t avail_omni = p_max_omni_lights - p_base_omni_index;
 	if (active_cluster_context.active && active_cluster_context.max_elements_by_type > p_base_omni_index) {
 		avail_omni = MIN(avail_omni, active_cluster_context.max_elements_by_type - p_base_omni_index);
 	} else if (active_cluster_context.active) {
 		return 0u;
 	}
-	const uint32_t reserved_lights = MIN(total_requested_cap, MIN(MAX_PARTICLE_LIGHTS, avail_omni));
-	if (reserved_lights == 0u) {
+	if (avail_omni == 0u) {
 		return 0u;
 	}
 
@@ -1735,59 +1676,69 @@ uint32_t ParticlesMeshLightSortRD::dispatch_registered_external_lights_gpu(
 		return 0u;
 	}
 
-	p_rd->buffer_clear(light_candidate_staging_buffer, 0, 16u);
-
-	uint32_t harvested_slots = 0u;
-	AABB union_world_bounds;
-	bool has_bounds = false;
-	{
-		RD::ComputeListID cl = p_rd->compute_list_begin();
-		p_rd->compute_list_bind_compute_pipeline(cl, light_harvest_pipeline);
-		for (uint32_t i = 0; i < matched_slots.size(); ++i) {
-			const ExternalLightSlotRegistration &reg = matched_slots[i];
-			RID uset;
-			if (reg.harvest_uniform_set.is_valid()) {
-				if (p_rd->uniform_set_is_valid(reg.harvest_uniform_set)) {
-					uset = reg.harvest_uniform_set;
-				}
-			} else {
-				RD::Uniform u[3];
-				u[0].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-				u[0].binding = 0;
-				u[0].append_id(reg.meta_rid);
-				u[1].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-				u[1].binding = 1;
-				u[1].append_id(reg.records_rid);
-				u[2].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-				u[2].binding = 2;
-				u[2].append_id(light_candidate_staging_buffer);
-				uset = _acquire_cached_uniform_set(p_rd, light_harvest_shader, u, 3u);
+	// Pre-resolve uniform sets before opening the single compute encoder (BUG-195D-2).
+	struct ValidHarvestSlot {
+		ExternalLightSlotRegistration reg;
+		RID uset;
+		uint32_t emitter_offset = 0u;
+	};
+	LocalVector<ValidHarvestSlot> valid_slots;
+	valid_slots.reserve(matched_slots.size());
+	uint32_t total_valid_cap = 0u;
+	for (uint32_t i = 0; i < matched_slots.size(); ++i) {
+		const ExternalLightSlotRegistration &reg = matched_slots[i];
+		RID uset;
+		if (reg.harvest_uniform_set.is_valid()) {
+			if (p_rd->uniform_set_is_valid(reg.harvest_uniform_set)) {
+				uset = reg.harvest_uniform_set;
 			}
-			if (uset.is_null()) {
-				continue;
-			}
-			if (harvested_slots > 0u) {
-				p_rd->compute_list_add_barrier(cl);
-			}
-			const uint32_t push[4] = {
-				reg.capacity,
-				MAX_STAGED_LIGHT_CANDIDATES,
-				uint32_t(reg.present_seq & 0xFFFFFFFFull),
-				uint32_t(reg.present_seq >> 32u),
-			};
-			p_rd->compute_list_bind_uniform_set(cl, uset, 0);
-			p_rd->compute_list_set_push_constant(cl, push, sizeof(push));
-			p_rd->compute_list_dispatch(cl, 1u, 1u, 1u);
-			if (reg.world_bounds.size != Vector3()) {
-				union_world_bounds = has_bounds ? union_world_bounds.merge(reg.world_bounds) : reg.world_bounds;
-				has_bounds = true;
-			}
-			++harvested_slots;
+		} else {
+			RD::Uniform u[3];
+			u[0].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+			u[0].binding = 0;
+			u[0].append_id(reg.meta_rid);
+			u[1].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+			u[1].binding = 1;
+			u[1].append_id(reg.records_rid);
+			u[2].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+			u[2].binding = 2;
+			u[2].append_id(light_candidate_staging_buffer);
+			uset = _acquire_cached_uniform_set(p_rd, light_harvest_shader, u, 3u);
 		}
-		p_rd->compute_list_end();
+		if (uset.is_null()) {
+			continue;
+		}
+		valid_slots.push_back({ reg, uset, total_valid_cap });
+		total_valid_cap += reg.capacity;
+	}
+	if (valid_slots.is_empty() || total_valid_cap == 0u) {
+		return 0u;
 	}
 
-	if (harvested_slots == 0u) {
+	const uint32_t reserved_lights = MIN(total_valid_cap, MIN(MAX_PARTICLE_LIGHTS, avail_omni));
+	if (reserved_lights == 0u) {
+		return 0u;
+	}
+	// When all visible emitters' capacities fit within reserved_lights, partition the omni buffer into
+	// exact per-emitter contiguous sub-ranges so Forward Mobile light culling uses tight per-emitter bounds.
+	// When total capacity overflows reserved_lights, run global Top-K across all candidates with conservative union bounds.
+	const bool partitioned_mode = (total_valid_cap <= reserved_lights) && (valid_slots.size() <= 256u);
+
+	RD::Uniform emit_u[4];
+	emit_u[0].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+	emit_u[0].binding = 0;
+	emit_u[0].append_id(light_candidate_staging_buffer);
+	emit_u[1].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+	emit_u[1].binding = 1;
+	emit_u[1].append_id(p_omni_light_buffer);
+	emit_u[2].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+	emit_u[2].binding = 2;
+	emit_u[2].append_id(light_cluster_elements_buffer);
+	emit_u[3].uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
+	emit_u[3].binding = 3;
+	emit_u[3].append_id(light_emit_params_ubo);
+	const RID emit_uset = _acquire_cached_uniform_set(p_rd, light_topk_emit_shader, emit_u, 4u);
+	if (emit_uset.is_null()) {
 		return 0u;
 	}
 
@@ -1848,31 +1799,31 @@ uint32_t ParticlesMeshLightSortRD::dispatch_registered_external_lights_gpu(
 	emit_params.misc_floats[3] = sphere_overfit;
 	emit_params.counts[0] = p_base_omni_index;
 	emit_params.counts[1] = reserved_lights;
-	emit_params.counts[2] = MAX_PARTICLE_LIGHTS;
-	emit_params.counts[3] = (active_cluster_context.active && active_cluster_context.camera_orthogonal) ? 1u : 0u;
+	emit_params.counts[2] = MAX_STAGED_LIGHT_CANDIDATES;
+	emit_params.counts[3] = ((active_cluster_context.active && active_cluster_context.camera_orthogonal) ? 1u : 0u) | (partitioned_mode ? 2u : 0u);
 
+	p_rd->buffer_clear(light_candidate_staging_buffer, 0, 16u);
 	p_rd->buffer_update(light_emit_params_ubo, 0, sizeof(emit_params), &emit_params);
 
-	RD::Uniform emit_u[4];
-	emit_u[0].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-	emit_u[0].binding = 0;
-	emit_u[0].append_id(light_candidate_staging_buffer);
-	emit_u[1].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-	emit_u[1].binding = 1;
-	emit_u[1].append_id(p_omni_light_buffer);
-	emit_u[2].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-	emit_u[2].binding = 2;
-	emit_u[2].append_id(light_cluster_elements_buffer);
-	emit_u[3].uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
-	emit_u[3].binding = 3;
-	emit_u[3].append_id(light_emit_params_ubo);
-	const RID emit_uset = _acquire_cached_uniform_set(p_rd, light_topk_emit_shader, emit_u, 4u);
-	if (emit_uset.is_null()) {
-		return 0u;
-	}
-
+	// Single-encoder atomic harvest across all emitters + ONE barrier before top-K/partitioned emit (BUG-195D-2).
 	{
 		RD::ComputeListID cl = p_rd->compute_list_begin();
+		p_rd->compute_list_bind_compute_pipeline(cl, light_harvest_pipeline);
+		for (uint32_t i = 0; i < valid_slots.size(); ++i) {
+			const ValidHarvestSlot &vs = valid_slots[i];
+			const uint32_t offset_u16 = partitioned_mode ? vs.emitter_offset : 0u;
+			const uint32_t push[4] = {
+				(vs.reg.capacity & 0xFFFFu) | ((offset_u16 & 0xFFFFu) << 16u),
+				(MAX_STAGED_LIGHT_CANDIDATES & 0xFFFFu) | ((i & 0xFFFFu) << 16u),
+				uint32_t(vs.reg.present_seq & 0xFFFFFFFFull),
+				uint32_t(vs.reg.present_seq >> 32u),
+			};
+			p_rd->compute_list_bind_uniform_set(cl, vs.uset, 0);
+			p_rd->compute_list_set_push_constant(cl, push, sizeof(push));
+			p_rd->compute_list_dispatch(cl, 1u, 1u, 1u);
+		}
+		p_rd->compute_list_add_barrier(cl);
+		last_dispatch_barrier_count = 1u;
 		p_rd->compute_list_bind_compute_pipeline(cl, light_topk_emit_pipeline);
 		p_rd->compute_list_bind_uniform_set(cl, emit_uset, 0);
 		p_rd->compute_list_dispatch(cl, 1u, 1u, 1u);
@@ -1882,8 +1833,25 @@ uint32_t ParticlesMeshLightSortRD::dispatch_registered_external_lights_gpu(
 	if (active_cluster_context.active) {
 		active_cluster_context.pending_gpu_omni_count = reserved_lights;
 	}
-	if (has_bounds) {
-		r_mobile_bounds_out.push_back({ union_world_bounds, p_base_omni_index, reserved_lights });
+	if (partitioned_mode) {
+		for (uint32_t i = 0; i < valid_slots.size(); ++i) {
+			const ValidHarvestSlot &vs = valid_slots[i];
+			if (vs.reg.world_bounds.size != Vector3()) {
+				r_mobile_bounds_out.push_back({ vs.reg.world_bounds, p_base_omni_index + vs.emitter_offset, vs.reg.capacity });
+			}
+		}
+	} else {
+		AABB union_world_bounds;
+		bool has_bounds = false;
+		for (uint32_t i = 0; i < valid_slots.size(); ++i) {
+			if (valid_slots[i].reg.world_bounds.size != Vector3()) {
+				union_world_bounds = has_bounds ? union_world_bounds.merge(valid_slots[i].reg.world_bounds) : valid_slots[i].reg.world_bounds;
+				has_bounds = true;
+			}
+		}
+		if (has_bounds) {
+			r_mobile_bounds_out.push_back({ union_world_bounds, p_base_omni_index, reserved_lights });
+		}
 	}
 	return reserved_lights;
 }

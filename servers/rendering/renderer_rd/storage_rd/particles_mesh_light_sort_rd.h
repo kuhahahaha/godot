@@ -154,7 +154,7 @@ class ParticlesMeshLightSortRD {
 public:
 	static constexpr uint32_t MAX_VIEWS = 8u;
 	static constexpr uint32_t MAX_PARTICLE_LIGHTS = 256u;
-	static constexpr uint32_t MAX_STAGED_LIGHT_CANDIDATES = 512u;
+	static constexpr uint32_t MAX_STAGED_LIGHT_CANDIDATES = 8192u;
 	static constexpr uint32_t MAX_SUBUV_AXIS = 64u;
 	static constexpr uint32_t MAX_SUBUV_FRAMES = 4096u;
 
@@ -206,7 +206,7 @@ public:
 private:
 	static constexpr uint32_t LIGHT_DATA_WORD_STRIDE = 56u; // sizeof(LightStorage::LightData) == 224B
 	static constexpr uint32_t CLUSTER_ELEMENT_WORD_STRIDE = 20u; // sizeof(ClusterBuilderRD::RenderElementData) == 80B
-	static constexpr uint32_t UNIFORM_SET_CACHE_CAPACITY = 32u;
+	static constexpr uint32_t UNIFORM_SET_CACHE_CAPACITY = 64u;
 
 	struct SortKey {
 		float view_depth = 0.0f;
@@ -259,6 +259,7 @@ private:
 	RID light_emit_params_ubo;
 	CachedLightUniformSet light_uniform_set_cache[UNIFORM_SET_CACHE_CAPACITY];
 	uint64_t light_uniform_set_tick = 0;
+	uint32_t last_dispatch_barrier_count = 0;
 	ClusterFrameContext active_cluster_context;
 	ParticlesTranslucentSeedUnlitShaderRD *translucent_shader = nullptr;
 	RID translucent_shader_version;
@@ -414,6 +415,7 @@ public:
 	void release_light_gpu_bridge(RenderingDevice *p_rd) { _release_light_gpu_bridge(p_rd); }
 	void clear_active_particle_lights();
 	RID get_light_cluster_elements_buffer() const { return light_cluster_elements_buffer; }
+	uint32_t get_last_dispatch_barrier_count() const { return last_dispatch_barrier_count; }
 	void get_active_particle_lights(LocalVector<ParticleLightRecord64> &r_out) const;
 	uint32_t get_active_particle_light_count() const;
 };

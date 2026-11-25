@@ -8047,6 +8047,167 @@ struct Access {
 
 		REQUIRE(e.registry->production_close(att_ref).native_error == OK);
 	}
+
+	static void bug195d_persistent_set_lru_and_steady_state_reap() {
+		using namespace GDExtensionDeviceExit;
+		static_assert(ProductionAttachment::PERSISTENT_SET_MAX_LIVE == 4096u, "BUG-195D-1 cap");
+		Enrollment e;
+		e.driver.allow_second_set = true;
+		auto c = capacity(4);
+		c.resources = 4;
+		c.resource_uses = 8;
+		c.graph_memberships = 4;
+		c.native_memberships = 8;
+		c.return_cells = 4;
+		auto pool = c;
+		pool.requests = 4;
+		pool.suboperations *= 4;
+		pool.resources *= 4;
+		pool.resource_uses *= 4;
+		pool.graph_memberships *= 4;
+		pool.native_memberships *= 4;
+		pool.return_cells *= 4;
+		pool.retained_payload_bytes *= 4;
+		const auto attachment_ref = e.accept(pool);
+		REQUIRE(attachment_ref.handle_serial != 0);
+		graph_initialize(e);
+
+		ProductionAttachment *att = nullptr;
+		RenderingDevice *rd = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			REQUIRE(e.registry->production_attachment_locked(attachment_ref, true, att, rd) == OK);
+		}
+		REQUIRE(att != nullptr);
+
+		auto make_storage = [&](uint64_t serial) -> Registry::QualificationBridge::Storage * {
+			auto *st = memnew(Registry::QualificationBridge::Storage);
+			st->serial = serial;
+			st->creating = false;
+			st->origin = { Enrollment::ABI, 128, 1, 0, 1, 1, 0 };
+			st->physical.bridge = e.original_bridge->serial;
+			st->physical.child = st->serial;
+			const RID srid = e.rd._qualification_storage_create(128, &st->physical);
+			REQUIRE(srid.is_valid());
+			const auto *sbuf = e.rd.storage_buffer_owner.get_or_null(srid);
+			REQUIRE(sbuf != nullptr);
+			st->physical.rid = srid.get_id();
+			st->backing = { Enrollment::ABI, { Enrollment::INSTANCE, st->serial }, srid.get_id(), sbuf->backing_serial, sbuf->size, uint64_t(sbuf->usage), OK, 1 };
+			return st;
+		};
+		Registry::QualificationBridge::Storage *storage_a = nullptr;
+		Registry::QualificationBridge::Storage *storage_b = nullptr;
+
+		auto use_set = [&](uint64_t op_serial, Registry::QualificationBridge::Storage *&st, bool init_unit, uint64_t st_serial) -> RID {
+			const GDExtensionProductionOperationV1 op = { production_dto_abi<GDExtensionProductionOperationV1>(), op_serial, 1, 10, 11 };
+			const GDExtensionProductionActionV2 action = { 0, 10, 0, 0, GDEXTENSION_PRODUCTION_DISPATCH_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
+			const GDExtensionProductionResourceV1 resources[] = {
+				{ GDEXTENSION_PRODUCTION_UNIT_V1, 4, 5, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 6, 0, 0 },
+				{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 128, 0 },
+				{ GDEXTENSION_PRODUCTION_SET_V1, 2, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 0, 0 },
+			};
+			const GDExtensionProductionUseV1 use = { 1, GDEXTENSION_PRODUCTION_READ_WRITE_V1, 0, 128, 0 };
+			Request *r = nullptr;
+			{
+				MutexLock lock(e.registry->mutex);
+				REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op, c, { nullptr, &action }, 1, resources, 3, &use, 1, { nullptr, nullptr, 0, nullptr }, 0, r, 2) == OK);
+			}
+			REQUIRE(r != nullptr);
+			const GDExtensionProductionRequestRefV1 ref{ Enrollment::INSTANCE, r->serial };
+			if (init_unit) {
+				REQUIRE(import_original_unit(e, *r));
+			} else {
+				REQUIRE(e.registry->production_import_unit(ref, 0, &e.original_unit->backing).native_error == OK);
+			}
+			if (!st) {
+				st = make_storage(st_serial);
+				if (init_unit) {
+					e.original_bridge->storage[0] = st;
+					e.original_storage = st;
+				} else {
+					e.original_bridge->storage[1] = st;
+				}
+			}
+			REQUIRE(e.registry->production_import_storage(ref, 1, &st->backing).native_error == OK);
+			const GDExtensionProductionSetBindingV1 binding = { production_dto_abi<GDExtensionProductionSetBindingV1>(), 0, 0, 0, 1, 0, 128 };
+			REQUIRE(e.registry->production_set_create(ref, 2, 0, 0, &binding, 1).native_error == OK);
+			REQUIRE(r->resources[2].cached_persistent_set);
+			const RID rid = r->resources[2].primary;
+			REQUIRE(e.registry->production_cancel(ref).native_error == OK);
+			REQUIRE(e.registry->production_release(ref).native_error == OK);
+			return rid;
+		};
+
+		const RID rid_a = use_set(9501, storage_a, true, 951);
+		const RID rid_b = use_set(9502, storage_b, false, 952);
+		REQUIRE(rid_a != rid_b);
+
+		// Verify O(1) intrusive LRU order: B is MRU head, A is LRU tail.
+		{
+			MutexLock lock(e.registry->mutex);
+			REQUIRE(att->persistent_sets.size() == 2);
+			REQUIRE(att->persistent_sets_pending_reap.is_empty());
+			REQUIRE(att->persistent_set_lru_head != nullptr);
+			REQUIRE(att->persistent_set_lru_tail != nullptr);
+			CHECK(att->persistent_set_lru_head->rid == rid_b);
+			CHECK(att->persistent_set_lru_tail->rid == rid_a);
+		}
+
+		// Main-thread cache hit on A must promote A to MRU head and demote B to LRU tail in O(1).
+		const RID rid_a_hit = use_set(9503, storage_a, false, 951);
+		CHECK(rid_a_hit == rid_a);
+		{
+			MutexLock lock(e.registry->mutex);
+			CHECK(att->persistent_set_lru_head->rid == rid_a);
+			CHECK(att->persistent_set_lru_tail->rid == rid_b);
+		}
+
+		// Steady-state RT reap with 0 evicted sets MUST scan 0 entries (zero per-entry mutex locks!).
+		const uint64_t scanned_before = att->persistent_set_reap_entries_scanned;
+		{
+			MutexLock rd_lock(e.rd._thread_safe_);
+			e.registry->production_persistent_sets_reap_and_retire_rt(&e.rd, true);
+			e.registry->production_persistent_sets_reap_and_retire_rt(&e.rd, true);
+		}
+		CHECK(att->persistent_set_reap_entries_scanned == scanned_before);
+
+		// Evicting ONLY storage_b places ONLY B on persistent_sets_pending_reap; reap touches ONLY B.
+		{
+			MutexLock rd_lock(e.rd._thread_safe_);
+			e.registry->production_persistent_sets_evict_for_dependency_rt(&e.rd, &storage_b->physical);
+		}
+		CHECK(att->persistent_set_lru_head != nullptr);
+		CHECK(att->persistent_set_lru_head->rid == rid_a);
+		CHECK(att->persistent_set_lru_tail == att->persistent_set_lru_head);
+		e.rd._free_pending_resources(0);
+		{
+			MutexLock rd_lock(e.rd._thread_safe_);
+			e.registry->production_persistent_sets_reap_and_retire_rt(&e.rd, true);
+		}
+		CHECK(att->persistent_sets.size() == 1);
+		CHECK(att->persistent_sets_pending_reap.is_empty());
+		const uint64_t scanned_after_evict = att->persistent_set_reap_entries_scanned;
+		CHECK(scanned_after_evict > scanned_before);
+		// Subsequent steady-state reap with A still live again scans 0 entries!
+		{
+			MutexLock rd_lock(e.rd._thread_safe_);
+			e.registry->production_persistent_sets_reap_and_retire_rt(&e.rd, true);
+		}
+		CHECK(att->persistent_set_reap_entries_scanned == scanned_after_evict);
+
+		// Clean attachment close drains A and clears all LRU & pending_reap invariants.
+		CHECK(e.registry->production_close(attachment_ref).native_error == ERR_BUSY);
+		e.rd._free_pending_resources(0);
+		CHECK(e.registry->production_close(attachment_ref).native_error == OK);
+
+		for (auto *st : { storage_a, storage_b }) {
+			st->physical.use_closed.store(true);
+			e.rd.qualification_retiring = true;
+			e.rd.free_rid(RID::from_uint64(st->backing.rid));
+			e.rd.qualification_retiring = false;
+			e.rd._free_pending_resources(0);
+		}
+	}
 };
 TEST_CASE("[ProductionNativeObserve][PreparedNativeRecordV2] cancel rejects transferred native wait before consume without erasing actual prefix") {
 	Access::native_record_wait_rejection(false);
@@ -8371,4 +8532,8 @@ TEST_CASE("[ProductionNativeObserve][BUG-186A] production_record_receive_locked 
 
 TEST_CASE("[ProductionNativeObserve][BUG-186C] bi-directional top-down NATIVE_OUTPUT placement eliminates readback/natives bisection and reclaims both ends on idle") {
 	TestProductionNativeObserve::Access::bug186c_bidirectional_readback_and_natives_placement_and_reclaim();
+}
+
+TEST_CASE("[ProductionNativeObserve][BUG-195D-1] PersistentSetCache O(1) LRU touch/eviction, 4096 cap, and O(evicted) zero-scan steady-state RT reap") {
+	TestProductionNativeObserve::Access::bug195d_persistent_set_lru_and_steady_state_reap();
 }

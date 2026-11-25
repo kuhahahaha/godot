@@ -423,22 +423,13 @@ void Registry::production_persistent_set_unindex_deps_locked(ProductionAttachmen
 }
 
 void Registry::production_persistent_sets_evict_lru_locked(ProductionAttachment &p_attachment) {
-	while (p_attachment.persistent_set_lookup.size() > ProductionAttachment::PERSISTENT_SET_MAX_LIVE) {
-		PersistentSetEntry *victim = nullptr;
-		for (uint32_t i = 0; i < p_attachment.persistent_sets.size(); ++i) {
-			PersistentSetEntry *entry = p_attachment.persistent_sets[i];
-			if (!entry || entry->evicted || entry->physical.production_uses != nullptr) {
-				continue;
-			}
-			if (!victim || entry->last_used_tick < victim->last_used_tick) {
-				victim = entry;
-			}
+	PersistentSetEntry *cursor = p_attachment.persistent_set_lru_tail;
+	while (p_attachment.persistent_set_lookup.size() > ProductionAttachment::PERSISTENT_SET_MAX_LIVE && cursor != nullptr) {
+		PersistentSetEntry *prev = cursor->lru_prev;
+		if (!cursor->evicted && cursor->physical.production_uses == nullptr) {
+			p_attachment.persistent_set_mark_evicted(cursor);
 		}
-		if (!victim) {
-			break;
-		}
-		victim->evicted = true;
-		p_attachment.persistent_set_lookup.erase(victim->key);
+		cursor = prev;
 	}
 }
 
@@ -454,16 +445,20 @@ void Registry::production_persistent_sets_reap_and_retire_rt(RenderingDevice *p_
 	{
 		Lock lock(*this);
 		for (auto *attachment : production_attachments) {
-			if (!attachment || attachment->held_device != p_rd || attachment->persistent_sets.is_empty()) {
+			if (!attachment || attachment->held_device != p_rd || attachment->persistent_sets_pending_reap.is_empty()) {
 				continue;
 			}
 			uint32_t i = 0;
-			while (i < attachment->persistent_sets.size()) {
-				PersistentSetEntry *entry = attachment->persistent_sets[i];
+			while (i < attachment->persistent_sets_pending_reap.size()) {
+				PersistentSetEntry *entry = attachment->persistent_sets_pending_reap[i];
 				if (!entry) {
-					attachment->persistent_sets.remove_at_unordered(i);
+					attachment->persistent_sets_pending_reap.remove_at_unordered(i);
+					if (i < attachment->persistent_sets_pending_reap.size() && attachment->persistent_sets_pending_reap[i]) {
+						attachment->persistent_sets_pending_reap[i]->pending_reap_index = i;
+					}
 					continue;
 				}
+				++attachment->persistent_set_reap_entries_scanned;
 				uint64_t free_event = 0;
 				{
 					MutexLock phys_lock(entry->physical.mutex);
@@ -472,7 +467,7 @@ void Registry::production_persistent_sets_reap_and_retire_rt(RenderingDevice *p_
 				if (entry->evicted && entry->physical.production_uses == nullptr && free_event != 0) {
 					attachment->persistent_set_lookup.erase(entry->key);
 					production_persistent_set_unindex_deps_locked(*attachment, *entry);
-					attachment->persistent_sets.remove_at_unordered(i);
+					attachment->persistent_set_remove_owned(entry);
 					memdelete(entry);
 					continue;
 				}
@@ -507,16 +502,20 @@ void Registry::production_persistent_sets_reap_and_retire_rt(RenderingDevice *p_
 	{
 		Lock lock(*this);
 		for (auto *attachment : production_attachments) {
-			if (!attachment || attachment->held_device != p_rd || attachment->persistent_sets.is_empty()) {
+			if (!attachment || attachment->held_device != p_rd || attachment->persistent_sets_pending_reap.is_empty()) {
 				continue;
 			}
 			uint32_t i = 0;
-			while (i < attachment->persistent_sets.size()) {
-				PersistentSetEntry *entry = attachment->persistent_sets[i];
+			while (i < attachment->persistent_sets_pending_reap.size()) {
+				PersistentSetEntry *entry = attachment->persistent_sets_pending_reap[i];
 				if (!entry) {
-					attachment->persistent_sets.remove_at_unordered(i);
+					attachment->persistent_sets_pending_reap.remove_at_unordered(i);
+					if (i < attachment->persistent_sets_pending_reap.size() && attachment->persistent_sets_pending_reap[i]) {
+						attachment->persistent_sets_pending_reap[i]->pending_reap_index = i;
+					}
 					continue;
 				}
+				++attachment->persistent_set_reap_entries_scanned;
 				bool enqueued = false;
 				uint64_t free_event = 0;
 				{
@@ -527,7 +526,7 @@ void Registry::production_persistent_sets_reap_and_retire_rt(RenderingDevice *p_
 				if (entry->evicted && entry->physical.production_uses == nullptr && free_event != 0) {
 					attachment->persistent_set_lookup.erase(entry->key);
 					production_persistent_set_unindex_deps_locked(*attachment, *entry);
-					attachment->persistent_sets.remove_at_unordered(i);
+					attachment->persistent_set_remove_owned(entry);
 					memdelete(entry);
 					continue;
 				}
@@ -561,8 +560,7 @@ void Registry::production_persistent_sets_evict_for_dependency_rt(RenderingDevic
 					continue;
 				}
 				if (!entry->evicted) {
-					entry->evicted = true;
-					attachment->persistent_set_lookup.erase(entry->key);
+					attachment->persistent_set_mark_evicted(entry);
 				}
 				any_evicted = true;
 			}
@@ -810,6 +808,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 								request->returns[index].pending = false;
 								request->returns[index].serial = 0;
 								entry->last_used_tick = ++request->attachment->persistent_set_tick;
+								request->attachment->persistent_set_lru_touch(entry);
 								return result(OK);
 							}
 						}
@@ -1411,6 +1410,7 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 							slot.imported = true;
 							request.returns[index].pending = false;
 							entry->last_used_tick = ++request.attachment->persistent_set_tick;
+							request.attachment->persistent_set_lru_touch(entry);
 						}
 						++request.revision;
 						return finish(attach_err != OK ? attach_err : request.source_device_lost ? ERR_UNAVAILABLE
@@ -1446,13 +1446,14 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 					entry->rid = rid;
 					entry->physical.rid = rid.get_id();
 					entry->last_used_tick = ++request.attachment->persistent_set_tick;
-					request.attachment->persistent_sets.push_back(entry);
+					request.attachment->persistent_set_push_live(entry);
 					production_persistent_set_index_deps_locked(*request.attachment, *entry);
 					if (!request.attachment->closing && !request.attachment->persistent_set_lookup.has(entry->key)) {
 						request.attachment->persistent_set_lookup.insert(entry->key, entry);
+						request.attachment->persistent_set_lru_touch(entry);
 						production_persistent_sets_evict_lru_locked(*request.attachment);
 					} else {
-						entry->evicted = true;
+						request.attachment->persistent_set_mark_evicted(entry);
 					}
 					slot.owned_serial = entry->serial;
 					slot.primary = entry->rid;

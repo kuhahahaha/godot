@@ -57,8 +57,9 @@ inline constexpr uint64_t SCENE_RELAY_KIND = 0x4b303652454c4159ull;
 inline constexpr uint64_t SCENE_REGISTRATION_KIND = 0x4b303653494e4b31ull;
 inline constexpr uint32_t SCENE_PHASE_BEFORE_PARTICLES = 1u;
 inline constexpr uint32_t SCENE_PHASE_LATE_TRANSPARENT_DEPTH = 2u;
+inline constexpr uint32_t SCENE_PHASE_MAX_OPERATIONS = 512u;
 inline bool scene_phase_config_valid(const GDExtensionScenePhaseSinkConfigV1 &c) {
-	return c.abi.abi_version == 1 && c.abi.struct_size == sizeof(c) && !c.abi.reserved && (c.phase == SCENE_PHASE_BEFORE_PARTICLES || c.phase == SCENE_PHASE_LATE_TRANSPARENT_DEPTH) && c.max_operations >= 1 && c.max_operations <= 64;
+	return c.abi.abi_version == 1 && c.abi.struct_size == sizeof(c) && !c.abi.reserved && (c.phase == SCENE_PHASE_BEFORE_PARTICLES || c.phase == SCENE_PHASE_LATE_TRANSPARENT_DEPTH) && c.max_operations >= 1 && c.max_operations <= SCENE_PHASE_MAX_OPERATIONS;
 }
 struct SceneConnectionRow {
 	uint64_t serial, receiver, base, generation;

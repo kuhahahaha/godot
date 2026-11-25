@@ -804,8 +804,9 @@ Error Registry::production_record_receive_locked(ProductionRequest &request, Ren
 				}
 			}
 			if (error == OK && !request.effects_pending && request.next_action < request.action_count) {
-				request.control.output.record_pause = request.control.output.append.state == GDEXTENSION_PRODUCTION_KNOWN_PREFIX_V1 ? ProductionRecordPause::UPLOAD_PREFIX : frame.append_calls >= 64 ? ProductionRecordPause::APPEND_LIMIT
-																																																	  : ProductionRecordPause::SCOPE_RETURN;
+				const uint32_t append_limit = request.attachment->scene_registration ? request.attachment->scene_config.max_operations : SCENE_PHASE_MAX_OPERATIONS;
+				request.control.output.record_pause = request.control.output.append.state == GDEXTENSION_PRODUCTION_KNOWN_PREFIX_V1 ? ProductionRecordPause::UPLOAD_PREFIX : frame.append_calls >= append_limit ? ProductionRecordPause::APPEND_LIMIT
+																																																				: ProductionRecordPause::SCOPE_RETURN;
 			}
 			unlock_mutex_for_call();
 			if (frame.scene_occurrence) {
@@ -1767,7 +1768,7 @@ Error Registry::production_physical_request_locked(ProductionPhysicalContextRef 
 	if (!record.occupied || record.snapshot.library_generation != attachment.library_generation || record.producer_registration_serial != attachment.producer_serial || !attachment.holder || attachment.holder->generation != attachment.library_generation || attachment.holder->handle_serial != record.producer_code_holder || request.control.state != ProductionControlState::EXECUTING || request.control.serial != frame->control || request.control.input.kind != ProductionControlKind::RECORD || native.epoch != attachment.epoch || native.object != frame->device || native.execution_thread != Thread::get_caller_id() || frame->device->render_thread_id != Thread::get_caller_id()) {
 		return ERR_INVALID_DATA;
 	}
-	if (append && (request.control.input.output_cancel || attachment.holder->pending || !record.attached || record.guard_enrollment != GuardEnrollment::QUALIFIED || attachment.closing || record.quiescing || record.close_started || request.cancelled || request.release_started || !native.live || frame->device->production_finalization_started.load(std::memory_order_acquire) || frame->append_calls >= (attachment.scene_registration ? attachment.scene_config.max_operations : 64u))) {
+	if (append && (request.control.input.output_cancel || attachment.holder->pending || !record.attached || record.guard_enrollment != GuardEnrollment::QUALIFIED || attachment.closing || record.quiescing || record.close_started || request.cancelled || request.release_started || !native.live || frame->device->production_finalization_started.load(std::memory_order_acquire) || frame->append_calls >= (attachment.scene_registration ? attachment.scene_config.max_operations : SCENE_PHASE_MAX_OPERATIONS))) {
 		return ERR_BUSY;
 	}
 	out = &request;
@@ -2184,7 +2185,7 @@ Error Registry::production_prepared_record_body(ProductionRequest &request, Rend
 			if (request.cancelled || request.release_started || request.source_device_lost || request.effects_pending) { return ERR_BUSY; }
 			if (request.native_static_sealed && (!request.native_stage_budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= request.native_stage_budget.deadline_micros)) { return OK; }
 			if (request.next_action >= request.action_count) { return OK; }
-			const uint32_t limit = request.attachment->scene_registration ? request.attachment->scene_config.max_operations : 64u;
+			const uint32_t limit = request.attachment->scene_registration ? request.attachment->scene_config.max_operations : SCENE_PHASE_MAX_OPERATIONS;
 			if (production_physical_frame->append_calls >= limit) { request.native_batch_continue = request.native_batch_enabled; return OK; }
 			if (request.segment.segment != request.acknowledged_segment && !production_native_batch_frame_locked(request)) { return OK; }
 			graph_begin = request.graph_count;
