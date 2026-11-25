@@ -449,6 +449,7 @@ public:
 	SceneForwardMobileShaderRD shader;
 	static constexpr uint32_t INDEXED144_VARIANT_OFFSET = SHADER_VERSION_MAX * 4;
 	static constexpr uint32_t INSTANCE192_VARIANT_OFFSET = INDEXED144_VARIANT_OFFSET * 2;
+	Vector<int> ordinary_shader_groups;
 	Vector<int> indexed144_shader_groups;
 	Vector<int> instance192_shader_groups;
 	int native_recipe_shader_groups[2] = { -1, -1 };

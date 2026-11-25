@@ -807,6 +807,13 @@ class ProductionRequest {
 	uint64_t native_camera_uploads[3] = { UINT64_MAX, UINT64_MAX, UINT64_MAX };
 	uint32_t native_camera_needs_inverse = 0;
 	GDExtensionProductionServiceBudgetV1 native_stage_budget = {};
+	uint64_t native_stage_latched_deadline_micros = 0;
+	uint64_t native_stage_budget_duration_us = 0;
+	uint64_t native_stage_slice_deadline_micros = 0;
+	uint64_t native_stage_slice_capture_ordinal = 0;
+	uint32_t native_stage_slice_view_id = 0;
+	uint64_t native_stage_slice_view_epoch = 0;
+	uint32_t native_stage_deferral_count = 0;
 	uint64_t native_stage_control = 0;
 	uint32_t native_stage_controls_used = 0, native_stage_passes_used = 0, native_stage_receipts_used = 0;
 	uint32_t native_prepared_unread = 0;

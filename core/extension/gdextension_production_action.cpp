@@ -1175,13 +1175,7 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 					}
 				}
 				if (needs_barrier) {
-					rd.compute_list_end();
-					list = rd.compute_list_begin();
-					if (list == RenderingDevice::INVALID_ID) {
-						list_open = false;
-						observed.error = ERR_CANT_CREATE;
-						break;
-					}
+					rd._compute_list_add_intra_pass_barrier(list);
 					bump_dispatch_epoch();
 				}
 			}

@@ -166,6 +166,9 @@ void RenderingServerDefault::request_frame_drawn_callback(const Callable &p_call
 void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 	if (RenderingDevice *device = RenderingDevice::get_singleton()) {
 		if (device->has_pending_production_frame_maintenance()) {
+			GDExtensionDeviceExit::Registry::get_singleton().try_complete_pending_production_frame_maintenance(*device);
+		}
+		if (device->has_pending_production_frame_maintenance()) {
 			// Only the original FIFO owner may spend its bounded continuation.
 			// Keep renderer state and drawn callbacks pending until that owner
 			// returns the frame; a real issue/wait error keeps its existing path.

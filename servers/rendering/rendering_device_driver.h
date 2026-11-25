@@ -1002,6 +1002,7 @@ public:
 
 	virtual void command_begin_compute_pass(CommandBufferID p_cmd_buffer);
 	virtual void command_end_compute_pass(CommandBufferID p_cmd_buffer);
+	virtual void command_compute_memory_barrier(CommandBufferID p_cmd_buffer);
 
 	// Binding.
 	virtual void command_bind_compute_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) = 0;
@@ -1196,6 +1197,7 @@ public:
 		API_TRAIT_SHADER_GROUP_HANDLE_SIZE,
 		API_TRAIT_SHADER_GROUP_BASE_ALIGNMENT,
 		API_TRAIT_SHADER_GROUP_HANDLE_ALIGNMENT,
+		API_TRAIT_COALESCE_COMPUTE_PASSES,
 	};
 
 	enum ShaderChangeInvalidation {

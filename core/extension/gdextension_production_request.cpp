@@ -423,7 +423,26 @@ GDExtensionDeviceSessionResultV1 Registry::production_request_requirements_inter
 				return result(ERR_INVALID_DATA);
 			}
 		}
-		error = production_output_demand_locked(*attachment, *rd, input, projected.write[i], uint64_t(pool.resource_uses - capacity.resource_uses));
+		uint32_t occupied_uses = 0;
+		for (uint32_t r_idx = 0; r_idx < pool.requests; ++r_idx) {
+			const auto &live_req = attachment->requests[r_idx];
+			if (live_req.serial) {
+				occupied_uses += live_req.capacity.resource_uses;
+			}
+		}
+		const uint32_t remaining_pool_uses = pool.resource_uses > occupied_uses ? (pool.resource_uses - occupied_uses) : 0u;
+		const uint64_t avail_use_cells = remaining_pool_uses > capacity.resource_uses ? uint64_t(remaining_pool_uses - capacity.resource_uses) : 0ull;
+		uint32_t acquire_alias_uses = 0;
+		const auto &acquire_action = actions[input.acquire_action_ordinal];
+		if (acquire_action.first_use <= use_count && acquire_action.use_count <= use_count - acquire_action.first_use) {
+			for (uint32_t u = 0; u < acquire_action.use_count; ++u) {
+				const auto &use = uses[acquire_action.first_use + u];
+				if (use.resource_slot < resource_count && resources[use.resource_slot].ownership == GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1) {
+					++acquire_alias_uses;
+				}
+			}
+		}
+		error = production_output_demand_locked(*attachment, *rd, input, projected.write[i], avail_use_cells, acquire_alias_uses >= 4u);
 		if (error != OK) {
 			return result(error);
 		}
@@ -5412,6 +5431,8 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 					RdUnlock unlock{ rd->_thread_safe_ };
 					if (rd->native_disposal_active && request.maintenance_serial == rd->native_disposal_continuation.serial && rd->native_disposal_continuation.production_owner == &request) {
 						maintenance = production_maintenance_locked(request, *rd, cell.input.budget, cell.output.service_usage);
+					} else if (!rd->native_disposal_active || request.maintenance_serial != rd->native_disposal_continuation.serial) {
+						request.maintenance_serial = 0;
 					}
 				}
 			}

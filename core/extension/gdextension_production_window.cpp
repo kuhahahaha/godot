@@ -622,7 +622,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_record_consume_v2(GDExtens
 		if (request->native_static_sealed && !request->control.input.output_cancel &&
 				(request->native_stage_controls_used >= request->native_stage_budget.controls || request->native_stage_passes_used >= request->native_stage_budget.passes ||
 				request->native_stage_receipts_used >= request->native_stage_budget.receipts || !request->native_stage_budget.deadline_micros ||
-				OS::get_singleton()->get_ticks_usec() >= request->native_stage_budget.deadline_micros)) {
+				(!production_native_stage_budget_is_latched_locked(*request) && OS::get_singleton()->get_ticks_usec() >= request->native_stage_budget.deadline_micros))) {
 			production_native_record_reject_wait_locked(*request);
 		}
 	}
@@ -664,7 +664,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_record_consume_v3(GDExtens
 		if (request->native_static_sealed && !request->control.input.output_cancel &&
 				(request->native_stage_controls_used >= request->native_stage_budget.controls || request->native_stage_passes_used >= request->native_stage_budget.passes ||
 				request->native_stage_receipts_used >= request->native_stage_budget.receipts || !request->native_stage_budget.deadline_micros ||
-				OS::get_singleton()->get_ticks_usec() >= request->native_stage_budget.deadline_micros)) { production_native_record_reject_wait_locked(*request); }
+				(!production_native_stage_budget_is_latched_locked(*request) && OS::get_singleton()->get_ticks_usec() >= request->native_stage_budget.deadline_micros))) { production_native_record_reject_wait_locked(*request); }
 		if (request->control.state != ProductionControlState::RETURNED) { return window_result(ERR_BUSY); }
 		usage = request->control.output.service_usage;
 		// Native offered/remaining consistently describe the ONE original stage
@@ -713,7 +713,8 @@ Error Registry::production_record_receive_locked(ProductionRequest &request, Ren
 	if (record.private_refs >= private_limit || record.active_callbacks >= UINT32_MAX - record.cleanup_reservations || frame_serials.exhausted) {
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
-	if (device.draw_list.active || device.raytracing_list.active || device.compute_list.active != request.compute_list_open || device.draw_graph.has_driver_callbacks() || (!cleanup && request.action_count > 0 && request.frozen && device._recording_error() != OK)) {
+	const bool gate_recording_error = !cleanup && request.frozen && request.next_action < request.action_count && request.output_owner_head == UINT32_MAX;
+	if (device.draw_list.active || device.raytracing_list.active || device.compute_list.active != request.compute_list_open || device.draw_graph.has_driver_callbacks() || (gate_recording_error && device._recording_error() != OK)) {
 		return ERR_BUSY;
 	}
 	const auto receiver = attachment.record_receiver;
@@ -2170,6 +2171,7 @@ void Registry::production_metadata_pump() {
 // inside the original physical frame and invokes no DSO receiver/Callable.
 Error Registry::production_prepared_record_body(ProductionRequest &request, RenderingDevice &device, ProductionPhysicalContextRef context, const ProductionCameraInvocationBorrow &borrow) {
 	const auto &invocation = borrow.get_scope();
+	uint32_t actions_at_entry = UINT32_MAX;
 	for (;;) {
 		uint32_t ordinal = 0, kind = 0, output_kind = 0, graph_begin = 0;
 		uint64_t revision = 0, serial = 0, control_serial = 0;
@@ -2183,7 +2185,28 @@ Error Registry::production_prepared_record_body(ProductionRequest &request, Rend
 			if (authenticated != OK || original != &request || rd != &device || !request.native_prepared_executor || (!request.frozen && !request.native_static_sealed) ||
 					request.control.input.kind != ProductionControlKind::RECORD || request.control.state != ProductionControlState::EXECUTING) { return ERR_UNAUTHORIZED; }
 			if (request.cancelled || request.release_started || request.source_device_lost || request.effects_pending) { return ERR_BUSY; }
-			if (request.native_static_sealed && (!request.native_stage_budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= request.native_stage_budget.deadline_micros)) { return OK; }
+			if (actions_at_entry == UINT32_MAX) {
+				actions_at_entry = request.next_action;
+			}
+			if (request.native_static_sealed) {
+				const uint64_t effective_deadline = production_native_stage_effective_deadline_locked(request);
+				const uint64_t now_us = OS::get_singleton()->get_ticks_usec();
+				if (!effective_deadline) { return OK; }
+				if (now_us >= effective_deadline) {
+					if (!production_native_stage_budget_is_latched_locked(request)) {
+						return OK;
+					}
+					// Once admitted onto the render thread, guarantee unconditional forward
+					// progress (and finish any already-frozen capture-bound writer) instead
+					// of returning OK with zero actions forever (BUG-199A).
+					if (request.frozen || request.next_action == actions_at_entry) {
+						const uint64_t slice_us = MAX(request.native_stage_budget_duration_us, uint64_t(16000));
+						request.native_stage_slice_deadline_micros = now_us + slice_us;
+					} else {
+						return OK;
+					}
+				}
+			}
 			if (request.next_action >= request.action_count) { return OK; }
 			const uint32_t limit = request.attachment->scene_registration ? request.attachment->scene_config.max_operations : SCENE_PHASE_MAX_OPERATIONS;
 			if (production_physical_frame->append_calls >= limit) { request.native_batch_continue = request.native_batch_enabled; return OK; }
@@ -2357,7 +2380,16 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_native_record_v2(G
 		const bool already_subscribed = anchor.host_view_received && anchor.camera_ready_subscriber.subscribed;
 		const bool deferred_subscribe_ready = anchor.host_view_prepared && anchor.camera_ready_viewport.is_valid() && anchor.host_view_camera.is_valid() && anchor.camera_ready_subscriber.registry == this;
 		if ((!already_subscribed && !deferred_subscribe_ready) || anchor.camera_ready_subscriber.closed || anchor.camera_ready_subscriber.released) { return window_result(ERR_UNCONFIGURED); }
-		if (!request->native_stage_budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= request->native_stage_budget.deadline_micros) { return window_result(ERR_BUSY); }
+		const uint64_t now_us = OS::get_singleton()->get_ticks_usec();
+		const uint64_t effective_deadline = production_native_stage_effective_deadline_locked(*request);
+		if (!effective_deadline) { return window_result(ERR_BUSY); }
+		if (now_us >= effective_deadline) {
+			if (!production_native_stage_budget_is_latched_locked(*request)) {
+				return window_result(ERR_BUSY);
+			}
+			const uint64_t slice_us = MAX(request->native_stage_budget_duration_us, uint64_t(16000));
+			request->native_stage_slice_deadline_micros = now_us + slice_us;
+		}
 		if (!rd || !rd->_thread_safe_.try_lock()) { return window_result(ERR_BUSY); }
 		const Error sealed = production_freeze_rd_locked(*request, rd, true);
 		rd->_thread_safe_.unlock();

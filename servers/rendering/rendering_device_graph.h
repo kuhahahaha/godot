@@ -96,6 +96,7 @@ public:
 	bool is_draw_list_closed_by(const RecordHandle &p_begin, const RecordHandle &p_close) const;
 	bool has_driver_callbacks() const;
 	uint32_t qualification_command_count() const { return command_count; }
+	bool is_initialized() const { return !frames.is_empty(); }
 	bool has_synchronization_edge(const RecordHandle &p_before, const RecordHandle &p_after) const;
 	enum class DependencyPathResult : uint8_t {
 		Found,
@@ -136,7 +137,8 @@ public:
 			TYPE_DISPATCH,
 			TYPE_DISPATCH_INDIRECT,
 			TYPE_SET_PUSH_CONSTANT,
-			TYPE_UNIFORM_SET_PREPARE_FOR_USE
+			TYPE_UNIFORM_SET_PREPARE_FOR_USE,
+			TYPE_MEMORY_BARRIER
 		};
 
 		Type type = TYPE_NONE;
@@ -940,6 +942,7 @@ private:
 	bool driver_honors_barriers : 1;
 	bool driver_clears_with_copy_engine : 1;
 	bool driver_buffers_require_transitions : 1;
+	bool driver_coalesce_compute_passes : 1;
 	WorkaroundsState workarounds_state;
 	TightLocalVector<Frame> frames;
 	uint32_t frame = 0;
@@ -979,7 +982,9 @@ private:
 	RecordHandle _add_draw_list_begin(FramebufferCache *p_framebuffer_cache, RDD::RenderPassID p_render_pass, RDD::FramebufferID p_framebuffer, Rect2i p_region, VectorView<AttachmentOperation> p_attachment_operations, VectorView<RDD::RenderPassClearValue> p_attachment_clear_values, BitField<RDD::PipelineStageBits> p_stages, uint32_t p_breadcrumb, bool p_split_cmd_buffer);
 	void _run_secondary_command_buffer_task(const SecondaryCommandBuffer *p_secondary);
 	void _wait_for_secondary_command_buffer_tasks();
-	void _run_render_commands(int32_t p_level, const RecordedCommandSort *p_sorted_commands, uint32_t p_sorted_commands_count, RDD::CommandBufferID &r_command_buffer, CommandBufferPool &r_command_buffer_pool, int32_t &r_current_label_index, int32_t &r_current_label_level);
+	bool _level_is_all_compute_lists(const RecordedCommandSort *p_sorted_commands, uint32_t p_sorted_commands_count) const;
+	bool _can_coalesce_next_compute_level(const RecordedCommandSort *p_sorted_commands, uint32_t p_sorted_commands_count) const;
+	void _run_render_commands(int32_t p_level, const RecordedCommandSort *p_sorted_commands, uint32_t p_sorted_commands_count, RDD::CommandBufferID &r_command_buffer, CommandBufferPool &r_command_buffer_pool, int32_t &r_current_label_index, int32_t &r_current_label_level, bool &r_compute_pass_open, bool p_keep_compute_pass_open, bool p_skip_group_begin);
 	void _run_label_command_change(RDD::CommandBufferID p_command_buffer, int32_t p_new_label_index, int32_t p_new_level, bool p_ignore_previous_value, bool p_use_label_for_empty, const RecordedCommandSort *p_sorted_commands, uint32_t p_sorted_commands_count, int32_t &r_current_label_index, int32_t &r_current_label_level);
 	void _boost_priority_for_render_commands(RecordedCommandSort *p_sorted_commands, uint32_t p_sorted_commands_count, uint32_t &r_boosted_priority);
 	void _group_barriers_for_render_commands(RDD::CommandBufferID p_command_buffer, const RecordedCommandSort *p_sorted_commands, uint32_t p_sorted_commands_count, bool p_full_memory_barrier);
@@ -1018,6 +1023,7 @@ public:
 	RecordHandle add_compute_list_dispatch_indirect(RDD::BufferID p_buffer, uint32_t p_offset);
 	void add_compute_list_set_push_constant(RDD::ShaderID p_shader, const void *p_data, uint32_t p_data_size);
 	void add_compute_list_uniform_set_prepare_for_use(RDD::ShaderID p_shader, RDD::UniformSetID p_uniform_set, uint32_t set_index);
+	void add_compute_list_memory_barrier();
 	void add_compute_list_usage(ResourceTracker *p_tracker, ResourceUsage p_usage);
 	void add_compute_list_usages(VectorView<ResourceTracker *> p_trackers, VectorView<ResourceUsage> p_usages);
 	RecordHandle add_compute_list_end();

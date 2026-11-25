@@ -10109,6 +10109,20 @@ void RenderingDevice::compute_list_add_barrier(ComputeListID p_list) {
 	}
 }
 
+void RenderingDevice::_compute_list_add_intra_pass_barrier(ComputeListID p_list) {
+	ERR_RENDER_THREAD_GUARD();
+	if (native_height_active_checked_range.is_valid() && native_height_active_checked_range->reader_scope) {
+		if (native_height_active_checked_range->append_error == OK) {
+			native_height_active_checked_range->append_error = ERR_UNAVAILABLE;
+		}
+		return;
+	}
+	ERR_FAIL_COND_MSG(_recording_error() != OK, _recording_suspended_message(_recording_error()));
+	ERR_FAIL_COND(p_list != ID_TYPE_COMPUTE_LIST);
+	ERR_FAIL_COND(!compute_list.active);
+	draw_graph.add_compute_list_memory_barrier();
+}
+
 void RenderingDevice::compute_list_end() {
 	_compute_list_end_recorded();
 }
@@ -14174,6 +14188,9 @@ Error RenderingDevice::_native_disposal_maintenance() {
 	if (draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining) {
 		return ERR_BUSY;
 	}
+	if (!draw_graph.is_initialized()) {
+		return ERR_UNCONFIGURED;
+	}
 	if (!_thread_safe_.try_lock()) {
 		return ERR_BUSY;
 	}
@@ -14235,10 +14252,10 @@ Error RenderingDevice::_native_disposal_maintenance() {
 }
 
 void RenderingDevice::pump_qualification_frame_if_idle() {
-	if (!is_main_instance || render_thread_id != Thread::get_caller_id() || frames.is_empty() || uint32_t(frame) >= frames.size()) {
+	if (!is_main_instance || render_thread_id != Thread::get_caller_id() || frames.is_empty() || uint32_t(frame) >= frames.size() || !draw_graph.is_initialized()) {
 		return;
 	}
-	if (draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining || !frames[frame].swap_chains_to_present.is_empty()) {
+	if (draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining || !frames[frame].swap_chains_to_present.is_empty() || has_pending_production_frame_maintenance()) {
 		return;
 	}
 	bool has_production_readbacks = false;

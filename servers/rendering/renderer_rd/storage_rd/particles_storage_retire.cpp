@@ -641,11 +641,15 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		return ERR_UNAUTHORIZED;
 	}
 	GDExtensionDeviceExit::ProductionDisposalObservation observation;
+	const uint32_t passes_at_entry = r_usage.passes;
 	// Temporary first failed return per authenticated SLOT phase. The selector
 	// is only a diagnostic lease, independently joined to original Registry logs.
 	auto trace_failure = [&](uint32_t phase, const char *site, Error outcome, uint64_t group = 0,
 			const GDExtensionDeviceExit::ProductionDisposalObservation *native = nullptr, uint32_t witness = UINT32_MAX) {
 		if (outcome == OK) { return outcome; }
+		if (outcome == ERR_BUSY && p_budget.passes <= 1 && r_usage.passes > passes_at_entry) {
+			return OK;
+		}
 		const char *enabled = std::getenv("ANGE_TRACE_OUTPUT_RELEASE_BUSY");
 		const char *target = std::getenv("ANGE_TRACE_OUTPUT_RETIRE_LEASE");
 		if (!enabled || enabled[0] != '1' || !target || target[0] < '0' || target[0] > '9') { return outcome; }

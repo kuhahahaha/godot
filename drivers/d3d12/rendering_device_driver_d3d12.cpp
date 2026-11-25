@@ -5614,6 +5614,20 @@ void RenderingDeviceDriverD3D12::command_compute_dispatch(CommandBufferID p_cmd_
 	cmd_buf_info->cmd_list->Dispatch(p_x_groups, p_y_groups, p_z_groups);
 }
 
+void RenderingDeviceDriverD3D12::command_compute_memory_barrier(CommandBufferID p_cmd_buffer) {
+	MemoryAccessBarrier barrier;
+	barrier.src_access = BARRIER_ACCESS_SHADER_READ_BIT | BARRIER_ACCESS_SHADER_WRITE_BIT;
+	barrier.dst_access = BARRIER_ACCESS_SHADER_READ_BIT | BARRIER_ACCESS_SHADER_WRITE_BIT | BARRIER_ACCESS_INDIRECT_COMMAND_READ_BIT;
+	command_pipeline_barrier(
+			p_cmd_buffer,
+			PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+			PIPELINE_STAGE_COMPUTE_SHADER_BIT | PIPELINE_STAGE_DRAW_INDIRECT_BIT,
+			VectorView<MemoryAccessBarrier>(&barrier, 1),
+			VectorView<BufferBarrier>(),
+			VectorView<TextureBarrier>(),
+			VectorView<AccelerationStructureBarrier>());
+}
+
 void RenderingDeviceDriverD3D12::command_compute_dispatch_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset) {
 	CommandBufferInfo *cmd_buf_info = (CommandBufferInfo *)p_cmd_buffer.id;
 	BufferInfo *indirect_buf_info = (BufferInfo *)p_indirect_buffer.id;

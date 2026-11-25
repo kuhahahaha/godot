@@ -2413,9 +2413,18 @@ NS::SharedPtr<MTL::BinaryArchive> RenderingDeviceDriverMetal::_ensure_compute_ar
 	if (pipeline_cache_mode == PipelineCacheMode::DISABLED || archive_tearing_down.load(std::memory_order_acquire) || device == nullptr) {
 		return nullptr;
 	}
+	if (pipeline_cache_mode == PipelineCacheMode::RELEASE_AFTER_WARMUP && !p_enable_disk &&
+			compute_archive_released_after_warmup.load(std::memory_order_acquire)) {
+		return nullptr;
+	}
 	{
 		MutexLock lock(compute_archive_mutex);
+		if (pipeline_cache_mode == PipelineCacheMode::RELEASE_AFTER_WARMUP && !p_enable_disk &&
+				compute_archive_released_after_warmup.load(std::memory_order_acquire)) {
+			return nullptr;
+		}
 		if (compute_archive && (!p_enable_disk || compute_archive_disk_backed)) {
+			compute_archive_activity_this_frame = true;
 			return compute_archive;
 		}
 	}
@@ -2463,7 +2472,12 @@ NS::SharedPtr<MTL::BinaryArchive> RenderingDeviceDriverMetal::_ensure_compute_ar
 		if (archive_tearing_down.load(std::memory_order_acquire)) {
 			return nullptr;
 		}
+		if (pipeline_cache_mode == PipelineCacheMode::RELEASE_AFTER_WARMUP && !p_enable_disk &&
+				compute_archive_released_after_warmup.load(std::memory_order_acquire)) {
+			return nullptr;
+		}
 		if (compute_archive && (!p_enable_disk || compute_archive_disk_backed)) {
+			compute_archive_activity_this_frame = true;
 			return compute_archive;
 		}
 		replaced = std::move(compute_archive);
@@ -2471,9 +2485,13 @@ NS::SharedPtr<MTL::BinaryArchive> RenderingDeviceDriverMetal::_ensure_compute_ar
 		compute_archive_known_keys.clear();
 		compute_archive_added_pipelines = 0;
 		compute_archive_idle_frames = 0;
+		compute_archive_open_frames = 0;
+		compute_archive_activity_this_frame = !p_enable_disk;
 		compute_archive_dirty = false;
 		compute_archive_loaded_from_disk = loaded_from_disk;
 		compute_archive_disk_backed = p_enable_disk;
+		compute_archive_released_after_warmup.store(false, std::memory_order_release);
+		compute_archive_active.store(true, std::memory_order_release);
 	}
 	replaced.reset();
 	return loaded_archive;
@@ -2481,6 +2499,65 @@ NS::SharedPtr<MTL::BinaryArchive> RenderingDeviceDriverMetal::_ensure_compute_ar
 
 void RenderingDeviceDriverMetal::_maybe_flush_compute_archive() {
 	if (pipeline_cache_mode == PipelineCacheMode::DISABLED || archive_tearing_down.load(std::memory_order_acquire)) {
+		return;
+	}
+	if (pipeline_cache_mode == PipelineCacheMode::RELEASE_AFTER_WARMUP) {
+		if (!compute_archive_active.load(std::memory_order_acquire)) {
+			return;
+		}
+		NS::SharedPtr<MTL::BinaryArchive> to_release;
+		bool need_serialize = false;
+		{
+			MutexLock lock(compute_archive_mutex);
+			if (!compute_archive) {
+				compute_archive_active.store(false, std::memory_order_release);
+				return;
+			}
+			++compute_archive_open_frames;
+			if (compute_archive_activity_this_frame) {
+				compute_archive_activity_this_frame = false;
+				compute_archive_idle_frames = 0;
+			} else {
+				++compute_archive_idle_frames;
+			}
+			const bool idle_ready = compute_archive_idle_frames >= COMPUTE_ARCHIVE_FLUSH_IDLE_FRAMES;
+			const bool ceiling_reached = compute_archive_open_frames >= ARCHIVE_WARMUP_MAX_FRAMES;
+			const bool pipeline_cap_reached = compute_archive_added_pipelines >= COMPUTE_ARCHIVE_MAX_PIPELINES;
+			if (!idle_ready && !ceiling_reached && !pipeline_cap_reached) {
+				return;
+			}
+			to_release = std::move(compute_archive);
+			need_serialize = compute_archive_disk_backed && compute_archive_dirty;
+			compute_archive_known_keys.clear();
+			compute_archive_added_pipelines = 0;
+			compute_archive_idle_frames = 0;
+			compute_archive_open_frames = 0;
+			compute_archive_activity_this_frame = false;
+			compute_archive_dirty = false;
+			compute_archive_loaded_from_disk = false;
+			compute_archive_disk_backed = false;
+			compute_archive_released_after_warmup.store(true, std::memory_order_release);
+			compute_archive_active.store(false, std::memory_order_release);
+		}
+		if (!to_release) {
+			return;
+		}
+		print_verbose("Metal: releasing compute binary pipeline archive after warmup to reclaim host memory.");
+		if (need_serialize && !archive_tearing_down.load(std::memory_order_acquire)) {
+			String cache_path = _pipeline_get_compute_cache_path();
+			if (WorkerThreadPool *wtp = WorkerThreadPool::get_singleton()) {
+				_wait_compute_archive_flush_task();
+				MetalArchiveReleaseJob *job = memnew(MetalArchiveReleaseJob);
+				job->driver = this;
+				job->archive = std::move(to_release);
+				job->cache_path = cache_path;
+				compute_archive_flush_task = wtp->add_native_task(&_flush_compute_archive_task_func, job, false, "MetalComputeArchiveRelease");
+				return;
+			}
+			_serialize_compute_archive_to_path(to_release.get(), cache_path);
+		}
+		NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+		to_release.reset();
 		return;
 	}
 	NS::SharedPtr<MTL::BinaryArchive> to_flush;
@@ -2611,7 +2688,9 @@ bool RenderingDeviceDriverMetal::pipeline_cache_create(const Vector<uint8_t> &p_
 		return false;
 	}
 	_wait_archive_release_task();
+	_wait_compute_archive_flush_task();
 	archive_tearing_down.store(false, std::memory_order_release);
+	compute_archive_released_after_warmup.store(false, std::memory_order_release);
 
 	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 	String cache_path = _pipeline_get_cache_path();
@@ -2686,9 +2765,13 @@ void RenderingDeviceDriverMetal::pipeline_cache_free() {
 		compute_archive_known_keys.clear();
 		compute_archive_added_pipelines = 0;
 		compute_archive_idle_frames = 0;
+		compute_archive_open_frames = 0;
+		compute_archive_activity_this_frame = false;
 		compute_archive_dirty = false;
 		compute_archive_loaded_from_disk = false;
 		compute_archive_disk_backed = false;
+		compute_archive_released_after_warmup.store(false, std::memory_order_release);
+		compute_archive_active.store(false, std::memory_order_release);
 	}
 	if (to_release || compute_to_release) {
 		NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
@@ -3672,6 +3755,11 @@ void RenderingDeviceDriverMetal::command_end_compute_pass(CommandBufferID p_cmd_
 	cb->compute_end_pass();
 }
 
+void RenderingDeviceDriverMetal::command_compute_memory_barrier(CommandBufferID p_cmd_buffer) {
+	MDCommandBufferBase *cb = (MDCommandBufferBase *)(p_cmd_buffer.id);
+	cb->compute_memory_barrier();
+}
+
 void RenderingDeviceDriverMetal::command_bind_compute_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) {
 	MDCommandBufferBase *cb = (MDCommandBufferBase *)(p_cmd_buffer.id);
 	cb->bind_pipeline(p_pipeline);
@@ -3887,6 +3975,7 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 							++compute_archive_added_pipelines;
 							compute_archive_dirty = true;
 							compute_archive_idle_frames = 0;
+							compute_archive_activity_this_frame = true;
 							total_compute_archive_additions.fetch_add(1, std::memory_order_relaxed);
 						}
 					} else if (arc_err != nullptr) {
@@ -4505,6 +4594,8 @@ uint64_t RenderingDeviceDriverMetal::api_trait_get(ApiTrait p_trait) {
 			return false;
 		case API_TRAIT_TEXTURES_REQUIRE_LAYOUT_TRANSITIONS:
 			return false;
+		case API_TRAIT_COALESCE_COMPUTE_PASSES:
+			return sync_mode == Barriers;
 		default:
 			return RenderingDeviceDriver::api_trait_get(p_trait);
 	}
@@ -4706,8 +4797,8 @@ RenderingDeviceDriverMetal::~RenderingDeviceDriverMetal() {
 			if (OS::get_singleton()->is_stdout_verbose()) {
 				MetalAllocatorStats stats;
 				allocator->get_stats(stats);
-				const char *pool_names[3] = { "private", "shared", "shared_wc" };
-				for (uint32_t i = 0; i < 3; i++) {
+				const char *pool_names[MetalAllocatorStats::POOL_COUNT] = { "private", "shared", "shared_wc", "private_small", "shared_small", "shared_wc_small" };
+				for (uint32_t i = 0; i < MetalAllocatorStats::POOL_COUNT; i++) {
 					const MetalAllocatorStats::Pool &p = stats.pools[i];
 					print_verbose(vformat("Metal allocator pool %s: %d blocks, %s reserved, %s used, %d live allocations, %d dedicated (%s).",
 							pool_names[i], p.block_count, String::humanize_size(p.reserved_bytes), String::humanize_size(p.used_bytes),

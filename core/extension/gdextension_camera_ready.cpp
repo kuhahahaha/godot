@@ -117,6 +117,7 @@ Error Registry::camera_ready_native_pre_cull(ProductionCameraReadySubscriber &ob
 			return ERR_BUSY;
 		}
 		const auto &token = capture->get_token();
+		production_native_stage_refresh_slice_locked(*request, token.view_id, token.view_epoch, token.capture_ordinal);
 		action.scene_cull_attempted = true;
 		action.scene_cull_attempted_camera = { token.view_id, token.view_epoch, token.capture_ordinal };
 		action.scene_cull_error = production_prepare_staged_cull_locked(*request, action, *device, borrow);
@@ -229,7 +230,9 @@ Error Registry::camera_ready_native_invocation(ProductionCameraReadySubscriber &
 				// the stage budget so a stuck ERR_BUSY terminates deterministically instead
 				// of spinning uncharged until deadline_micros.
 				const auto &budget = request->native_stage_budget;
-				if (!budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros ||
+				const bool latched = production_native_stage_budget_is_latched_locked(*request);
+				const uint64_t effective_deadline = production_native_stage_effective_deadline_locked(*request);
+				if (!effective_deadline || (!latched && OS::get_singleton()->get_ticks_usec() >= effective_deadline) ||
 						request->native_stage_controls_used >= budget.controls ||
 						request->native_stage_passes_used >= budget.passes ||
 						request->native_stage_receipts_used >= budget.receipts) {
@@ -253,6 +256,8 @@ Error Registry::camera_ready_native_invocation(ProductionCameraReadySubscriber &
 	// slice, including continuation controls after the current camera was bound.
 	if (request->native_static_sealed) {
 		if (request->native_staged_anchor != observer.action_ordinal) { return ERR_INVALID_DATA; }
+		const auto &token = capture->get_token();
+		production_native_stage_refresh_slice_locked(*request, token.view_id, token.view_epoch, token.capture_ordinal);
 		if (production_native_stage_charge_locked(*request, true) != OK) {
 			production_native_record_reject_wait_locked(*request); return ERR_BUSY;
 		}
@@ -267,12 +272,67 @@ Error Registry::camera_ready_native_invocation(ProductionCameraReadySubscriber &
 	return Error(request->control.output.result.native_error);
 }
 
+void Registry::production_native_stage_latch_budget_locked(ProductionRequest &p_request, const GDExtensionProductionServiceBudgetV1 &p_budget) {
+	const uint64_t now_us = OS::get_singleton()->get_ticks_usec();
+	const bool same_latched = p_request.native_stage_latched_deadline_micros != 0 &&
+			p_request.native_stage_latched_deadline_micros == p_budget.deadline_micros;
+	p_request.native_stage_budget = p_budget;
+	if (!same_latched) {
+		p_request.native_stage_latched_deadline_micros = p_budget.deadline_micros;
+		p_request.native_stage_budget_duration_us = p_budget.deadline_micros > now_us ? (p_budget.deadline_micros - now_us) : 0;
+		p_request.native_stage_slice_deadline_micros = p_budget.deadline_micros;
+		p_request.native_stage_slice_capture_ordinal = 0;
+		p_request.native_stage_slice_view_id = 0;
+		p_request.native_stage_slice_view_epoch = 0;
+		p_request.native_stage_deferral_count = 0;
+	}
+}
+
+bool Registry::production_native_stage_budget_is_latched_locked(const ProductionRequest &p_request) const {
+	return p_request.native_stage_budget.deadline_micros != 0 &&
+			p_request.native_stage_latched_deadline_micros == p_request.native_stage_budget.deadline_micros &&
+			p_request.native_stage_budget_duration_us > 0;
+}
+
+uint64_t Registry::production_native_stage_effective_deadline_locked(const ProductionRequest &p_request) const {
+	if (!p_request.native_stage_budget.deadline_micros) {
+		return 0;
+	}
+	if (!production_native_stage_budget_is_latched_locked(p_request)) {
+		return p_request.native_stage_budget.deadline_micros;
+	}
+	return MAX(p_request.native_stage_budget.deadline_micros, p_request.native_stage_slice_deadline_micros);
+}
+
+void Registry::production_native_stage_refresh_slice_locked(ProductionRequest &p_request, uint32_t p_view_id, uint64_t p_view_epoch, uint64_t p_capture_ordinal) {
+	if (!production_native_stage_budget_is_latched_locked(p_request)) {
+		return;
+	}
+	const uint64_t now_us = OS::get_singleton()->get_ticks_usec();
+	const bool new_capture = p_capture_ordinal != 0 &&
+			(p_request.native_stage_slice_capture_ordinal != p_capture_ordinal ||
+					p_request.native_stage_slice_view_id != p_view_id ||
+					p_request.native_stage_slice_view_epoch != p_view_epoch);
+	if (new_capture) {
+		p_request.native_stage_slice_view_id = p_view_id;
+		p_request.native_stage_slice_view_epoch = p_view_epoch;
+		p_request.native_stage_slice_capture_ordinal = p_capture_ordinal;
+		const uint64_t current_deadline = MAX(p_request.native_stage_budget.deadline_micros, p_request.native_stage_slice_deadline_micros);
+		if (now_us >= current_deadline) {
+			++p_request.native_stage_deferral_count;
+			const uint64_t slice_us = MAX(p_request.native_stage_budget_duration_us, uint64_t(16000));
+			p_request.native_stage_slice_deadline_micros = now_us + slice_us;
+		}
+	}
+}
+
 Error Registry::production_native_stage_charge_locked(ProductionRequest &request, bool control) {
 	if (!Lock::owns(*this) || !request.native_static_sealed || request.control.input.kind != ProductionControlKind::RECORD ||
 			(control ? request.control.state != ProductionControlState::QUEUED : request.control.state != ProductionControlState::EXECUTING)) { return ERR_UNAUTHORIZED; }
 	const auto &budget = request.native_stage_budget;
+	const uint64_t effective_deadline = production_native_stage_effective_deadline_locked(request);
 	if ((control && request.native_stage_controls_used >= budget.controls) || request.native_stage_passes_used >= budget.passes ||
-			request.native_stage_receipts_used >= budget.receipts || !budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) { return ERR_BUSY; }
+			request.native_stage_receipts_used >= budget.receipts || !effective_deadline || OS::get_singleton()->get_ticks_usec() >= effective_deadline) { return ERR_BUSY; }
 	if (control) { ++request.native_stage_controls_used; request.native_stage_control = request.control.serial; }
 	++request.native_stage_passes_used; ++request.native_stage_receipts_used;
 	return OK;

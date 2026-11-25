@@ -89,7 +89,8 @@ struct MetalAllocatorStats {
 		// Total size of dedicated heaps.
 		uint64_t dedicated_bytes = 0;
 	};
-	Pool pools[3];
+	static constexpr uint32_t POOL_COUNT = 6;
+	Pool pools[POOL_COUNT];
 };
 #endif
 
@@ -113,11 +114,16 @@ public:
 	virtual void free_buffer(MetalBuffer &p_buffer) = 0;
 	virtual void free_texture(MetalTexture &p_texture) = 0;
 
-	/// Appends all live heaps to r_heaps and returns the generation the
-	/// snapshot corresponds to. The generation increments whenever a heap is
-	/// created or destroyed; callers cache their heap arrays against it.
+	/// Appends all active live heaps to r_heaps and returns the generation the
+	/// snapshot corresponds to. The generation increments whenever an active heap
+	/// is created, destroyed, or transitions between active and idle; callers
+	/// cache their heap arrays against it.
 	virtual uint64_t get_heaps(LocalVector<MTL::Heap *> &r_heaps) = 0;
 	virtual uint64_t get_heap_generation() const = 0;
+
+	/// Advances the idle-eviction epoch (e.g. at command-buffer frame boundaries)
+	/// and reclaims stale recycled buffers and idle empty placement heaps.
+	virtual void trim_idle() {}
 
 #ifdef DEBUG_ENABLED
 	virtual void get_stats(MetalAllocatorStats &r_stats) = 0;
@@ -145,19 +151,32 @@ public:
 #endif
 };
 
-/// Placement-heap suballocator for barriers mode. Three pools keyed by
-/// storage mode (+ CPU cache mode for the write-combined pool); blocks are
-/// placement heaps with OffsetAllocator metadata in 256-byte units;
-/// resources larger than half a pool's preferred block size get a dedicated
-/// single-resource heap.
+/// Placement-heap suballocator for barriers mode. Six pools keyed by storage
+/// mode (+ CPU cache mode for the write-combined pool) and size class:
+/// allocations <= 64 KiB route to dedicated 2 MiB small-object sub-pools so
+/// tiny long-lived buffers never pin 8-16 MiB transient heaps; resources larger
+/// than half a pool's preferred block size get a dedicated single-resource heap.
 class API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0)) MetalHeapAllocator final : public MetalAllocator {
 public:
 	enum PoolIndex : uint32_t {
-		POOL_PRIVATE = 0, // StorageModePrivate; memoryless textures also land here.
-		POOL_SHARED = 1, // StorageModeShared, default CPU cache.
-		POOL_SHARED_WC = 2, // StorageModeShared, write-combined CPU cache.
-		POOL_COUNT = 3,
+		POOL_PRIVATE = 0, // StorageModePrivate (> 64 KiB); memoryless textures also land here.
+		POOL_SHARED = 1, // StorageModeShared, default CPU cache (> 64 KiB).
+		POOL_SHARED_WC = 2, // StorageModeShared, write-combined CPU cache (> 64 KiB).
+		POOL_PRIVATE_SMALL = 3, // StorageModePrivate (<= 64 KiB).
+		POOL_SHARED_SMALL = 4, // StorageModeShared, default CPU cache (<= 64 KiB).
+		POOL_SHARED_WC_SMALL = 5, // StorageModeShared, write-combined CPU cache (<= 64 KiB).
+		POOL_COUNT = 6,
 	};
+
+	/// Allocations up to this size (in bytes) route to the small-object sub-pools
+	/// (2 MiB blocks on main device, 1 MiB on local device) instead of regular
+	/// 8-16 MiB blocks.
+	static constexpr uint64_t SMALL_ALLOC_THRESHOLD = 64ull * 1024;
+	/// Number of idle trim epochs before stale recycled buffers are evicted.
+	static constexpr uint64_t RECYCLE_IDLE_EPOCHS = 24;
+	/// Number of idle trim epochs before empty regular blocks are released and
+	/// empty small blocks are marked MTL::PurgeableStateEmpty.
+	static constexpr uint64_t EMPTY_BLOCK_IDLE_EPOCHS = 12;
 
 	/// The smallest allocation the allocator works in, in bytes. OffsetAllocator
 	/// hands out ranges in whole units, so every offset is a multiple of 256,
@@ -182,11 +201,16 @@ private:
 		uint32_t live = 0;
 		// Subset of `live` currently sitting idle in pool.recycled_buffers.
 		uint32_t recycled_count = 0;
+		// Monotonic idle epoch recorded when `live` reached 0.
+		uint64_t empty_epoch = 0;
+		// True when an empty cached block has been marked MTL::PurgeableStateEmpty.
+		bool purgeable_empty = false;
 	};
 
 	struct RecycledBuffer {
 		uint64_t length = 0;
 		MTL::ResourceOptions options = 0;
+		uint64_t recycle_epoch = 0;
 		MetalBuffer buffer;
 	};
 
@@ -211,14 +235,17 @@ private:
 	MTL::Device *device = nullptr;
 	bool local_device = false;
 	Pool pools[POOL_COUNT];
-	/// Incremented each time a heap is created or destroyed so clients know when to update
-	/// their own state and refresh residency.
+	/// Incremented each time an active heap is created, destroyed, or transitions
+	/// between active and idle so clients know when to refresh residency.
 	std::atomic<uint64_t> generation = 1;
+	/// Monotonic epoch incremented on trim_idle() for idle-age eviction.
+	std::atomic<uint64_t> idle_epoch{ 0 };
 
 	uint64_t _preferred_block_size(uint32_t p_pool) const;
+	static bool _is_small_pool(uint32_t p_pool);
 	static bool _pool_allocation_units(uint64_t p_size, uint64_t p_align, uint32_t &r_units);
 	static uint32_t _pool_for_options(MTL::ResourceOptions p_options);
-	static uint32_t _pool_for_texture(const MTL::TextureDescriptor *p_desc);
+	static uint32_t _pool_for_texture(const MTL::TextureDescriptor *p_desc, uint64_t p_size);
 	NS::SharedPtr<MTL::Heap> _create_heap(uint32_t p_pool, uint64_t p_size);
 	/// Allocates p_size bytes aligned to p_align from pool p_pool.
 	/// On success fills r_allocation (Kind::POOL), r_heap and r_offset.
@@ -231,6 +258,7 @@ public:
 	explicit MetalHeapAllocator(MTL::Device *p_device, bool p_local_device = false) :
 			device(p_device), local_device(p_local_device) {}
 	~MetalHeapAllocator() override;
+	static uint32_t select_pool(MTL::ResourceOptions p_options, uint64_t p_length);
 	uint64_t preferred_block_size_for_pool(uint32_t p_pool) const { return _preferred_block_size(p_pool); }
 
 	MetalBuffer new_buffer(NS::UInteger p_length, MTL::ResourceOptions p_options) override;
@@ -240,6 +268,7 @@ public:
 	void free_texture(MetalTexture &p_texture) override;
 	uint64_t get_heaps(LocalVector<MTL::Heap *> &r_heaps) override;
 	uint64_t get_heap_generation() const override;
+	void trim_idle() override;
 	uint64_t get_buffer_recycle_hits() const { return buffer_recycle_hits.load(std::memory_order_relaxed); }
 	static uint64_t get_total_buffer_recycle_hits() { return total_buffer_recycle_hits.load(std::memory_order_relaxed); }
 #ifdef DEBUG_ENABLED

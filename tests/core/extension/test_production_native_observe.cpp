@@ -343,10 +343,17 @@ struct Access {
 		void command_insert_breadcrumb(CommandBufferID, uint32_t) override {}
 		void command_pipeline_barrier(CommandBufferID, BitField<PipelineStageBits>, BitField<PipelineStageBits>, VectorView<MemoryAccessBarrier>, VectorView<BufferBarrier>, VectorView<TextureBarrier>, VectorView<AccelerationStructureBarrier>) override {}
 		bool honors_pipeline_barriers = true;
+		bool coalesce_compute_passes = false;
+		uint32_t compute_pass_begins = 0, compute_pass_ends = 0, compute_memory_barriers = 0;
+		void command_begin_compute_pass(CommandBufferID) override { ++compute_pass_begins; }
+		void command_end_compute_pass(CommandBufferID) override { ++compute_pass_ends; }
+		void command_compute_memory_barrier(CommandBufferID) override { ++compute_memory_barriers; }
 		uint64_t api_trait_get(ApiTrait trait) override {
 			switch (trait) {
 				case API_TRAIT_HONORS_PIPELINE_BARRIERS:
 					return honors_pipeline_barriers;
+				case API_TRAIT_COALESCE_COMPUTE_PASSES:
+					return coalesce_compute_passes;
 				case API_TRAIT_BUFFER_CLEARS_WITH_COPY_ENGINE:
 				case API_TRAIT_BUFFERS_REQUIRE_TRANSITIONS:
 					return 0;
@@ -946,6 +953,15 @@ struct Access {
 		const auto creates = e.driver.set_creates;
 		const auto receipts = e.driver.receipt_calls();
 		const auto accepted = e.registry->production_set_create(ref, slot, unit, set, bindings, count);
+		if (e.rd.render_thread_id == Thread::get_caller_id()) {
+			REQUIRE(accepted.native_error == OK);
+			CHECK(e.driver.set_creates == creates + 1);
+			CHECK(e.driver.receipt_calls() == receipts);
+			const auto retry_creates = e.driver.set_creates;
+			const auto result = e.registry->production_set_create(ref, slot, unit, set, bindings, count);
+			CHECK(e.driver.set_creates == retry_creates);
+			return result;
+		}
 		REQUIRE(accepted.native_error == ERR_UNAVAILABLE);
 		CHECK(e.driver.set_creates == creates);
 		CHECK(e.driver.receipt_calls() == receipts);
@@ -1583,7 +1599,24 @@ struct Access {
 		const GDExtensionProductionRequestRefV1 ref{ Enrollment::INSTANCE, r->serial };
 		const GDExtensionProductionAttachmentRefV1 attachment{ Enrollment::INSTANCE, r->attachment->serial };
 		const GDExtensionProductionSetBindingV1 binding{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 0, 0, 0, 1, 0, 128 };
+		const Thread::ID rt_id = e.rd.render_thread_id;
+		const auto set_rt = [&](Thread::ID p_id) {
+			e.rd.render_thread_id = p_id;
+			e.registry->device_records[0].execution_thread = p_id;
+		};
+		struct RenderThreadRestore {
+			RenderingDevice &rd;
+			Registry *registry;
+			Thread::ID id;
+			~RenderThreadRestore() {
+				rd.render_thread_id = id;
+				registry->device_records[0].execution_thread = id;
+			}
+		} rt_restore{ e.rd, e.registry, rt_id };
+		// Exercise the off-render-thread async SET_CREATE control handoff & resume path.
+		set_rt(Thread::UNASSIGNED_ID);
 		const auto accepted = e.registry->production_set_create(ref, 2, 0, 0, &binding, 1);
+		set_rt(rt_id);
 		REQUIRE(accepted.native_error == ERR_UNAVAILABLE); // The local fixture has no singleton FIFO.
 		auto &slot = r->resources[2];
 		const uint64_t owner = slot.owned_serial;
@@ -1615,7 +1648,9 @@ struct Access {
 		// A changed origin cannot reuse the accepted control/resource.
 		auto different = binding;
 		different.bytes = 64;
+		set_rt(Thread::UNASSIGNED_ID);
 		CHECK(e.registry->production_set_create(ref, 2, 0, 0, &different, 1).native_error == ERR_INVALID_DATA);
+		set_rt(rt_id);
 		CHECK(r->control.serial == first_control);
 		CHECK(e.driver.set_creates == 0);
 		e.rd.qualification_frame_advance_pending = false;
@@ -1627,7 +1662,9 @@ struct Access {
 			REQUIRE((closed == OK || closed == ERR_BUSY));
 			REQUIRE(e.registry->records[0].quiescing);
 		}
+		set_rt(Thread::UNASSIGNED_ID);
 		const auto next = e.registry->production_set_create(ref, 2, 0, 0, &binding, 1);
+		set_rt(rt_id);
 		CHECK(slot.owned_serial == owner);
 		CHECK(slot.retire_serial == retirement);
 		CHECK(slot.owned_physical.serial == physical);
@@ -1800,10 +1837,10 @@ struct Access {
 		const uint32_t pass_paid = (offered.passes - logical_passes) / pass_price;
 		const uint32_t source_paid_returns = MIN(enqueued, MIN(receipt_paid, pass_paid));
 		CHECK(e.driver.set_frees == source_paid_returns);
-		CHECK_FALSE(r->resources[2].returned);
-		CHECK_FALSE(r->resources[3].returned);
-		CHECK(r->returns[2].pending);
-		CHECK(r->returns[3].pending);
+		CHECK(r->resources[2].returned == (source_paid_returns >= 1));
+		CHECK(r->resources[3].returned == (source_paid_returns >= 2));
+		CHECK(r->returns[2].pending == (source_paid_returns < 1));
+		CHECK(r->returns[3].pending == (source_paid_returns < 2));
 		CHECK(e.registry->production_release(ref).native_error == ERR_BUSY);
 		if (receipts >= 2) {
 			CHECK(r->resources[2].owned_physical.frame_slot == r->resources[3].owned_physical.frame_slot);
@@ -3724,7 +3761,8 @@ struct Access {
 		};
 		e.driver.expected_set_bindings = alias ? 2 : 1;
 		REQUIRE(create_set(e, ref, 2, 0, 0, bindings, e.driver.expected_set_bindings).native_error == OK);
-		e.driver.set_cell = &r->resources[2].owned_physical;
+		const bool persistent_set = r->resources[2].cached_persistent_set && !attachment.persistent_sets.is_empty() && attachment.persistent_sets[0] != nullptr;
+		e.driver.set_cell = persistent_set ? &attachment.persistent_sets[0]->physical : &r->resources[2].owned_physical;
 		const uint32_t push[] = { 7, 11, 13, 17 };
 		const GDExtensionProductionDispatchV2 dispatch{ production_dto_abi<GDExtensionProductionDispatchV2>(), 0, 10, 0, 0, 0, 2, 1, 2, 3, 4, sizeof(push), 0 };
 		REQUIRE(e.registry->production_prepare_dispatch_v2(ref, &dispatch, push, sizeof(push)).native_error == OK);
@@ -3761,11 +3799,13 @@ struct Access {
 			}
 		}
 		CHECK(e.registry->production_cancel(ref).native_error == OK);
-		for (uint32_t i = 0; i < 128 && !r->resources[2].returned; ++i) {
-			turn(e, *r, ProductionControlKind::OBSERVE, budget());
+		if (!persistent_set) {
+			for (uint32_t i = 0; i < 128 && !r->resources[2].returned; ++i) {
+				turn(e, *r, ProductionControlKind::OBSERVE, budget());
+			}
+			REQUIRE(r->resources[2].returned);
+			CHECK(e.driver.set_frees == 1);
 		}
-		REQUIRE(r->resources[2].returned);
-		CHECK(e.driver.set_frees == 1);
 		REQUIRE(finish_owned_maintenance(e, *r, budget()));
 		REQUIRE(turn(e, *r, ProductionControlKind::RELEASE, budget()).owner_return.native_error == OK);
 		CHECK(r->serial == 0);
@@ -3775,7 +3815,14 @@ struct Access {
 		REQUIRE(turn(e, *producer, ProductionControlKind::RELEASE, budget()).owner_return.native_error == OK);
 		CHECK(producer->serial == 0);
 		CHECK(e.original_storage->physical.production_uses == nullptr);
-		CHECK(e.registry->production_close(attachment_ref).native_error == OK);
+		if (persistent_set) {
+			CHECK(e.registry->production_close(attachment_ref).native_error == ERR_BUSY);
+			e.rd._free_pending_resources(0);
+			CHECK(e.driver.set_frees == 1);
+			CHECK(e.registry->production_close(attachment_ref).native_error == OK);
+		} else {
+			CHECK(e.registry->production_close(attachment_ref).native_error == OK);
+		}
 		auto &physical = e.original_storage->physical;
 		physical.use_closed.store(true);
 		e.rd.qualification_retiring = true;
@@ -8379,15 +8426,19 @@ struct Access {
 		}
 		e.registry->test_pop_production_physical_frame(saved_frame);
 
-		// Flush RDG via execute_transfers to verify TRAP #2:
+		// Flush RDG via execute_transfers to verify BUG-195A + BUG-199B:
 		// - Exactly 11 dispatches executed,
-		// - Exactly 7 compute lists / pipeline binds (1 initial + 6 genuine hazard splits, ZERO false splits),
-		// - Exactly 11 uniform-set binds (ZERO dead rebinds from compute_list_add_barrier!).
+		// - Exactly 1 compute pass / 1 pipeline bind (ZERO encoder splits or dead rebinds!),
+		// - Exactly 6 intra-pass compute memory barriers (6 genuine hazards, ZERO false barriers),
+		// - Exactly 11 uniform-set binds.
 		REQUIRE(e.registry->production_cancel(ref).native_error == OK);
 		e.driver.complete = true;
 		execute_transfers(e, *r, true);
 		CHECK(e.driver.dispatches == kActions);
-		CHECK(e.driver.pipeline_binds == 7u);
+		CHECK(e.driver.pipeline_binds == 1u);
+		CHECK(e.driver.compute_pass_begins == 1u);
+		CHECK(e.driver.compute_pass_ends == 1u);
+		CHECK(e.driver.compute_memory_barriers == 6u);
 		CHECK(e.driver.set_binds == kActions);
 
 		const auto observed_done = turn(e, *r, ProductionControlKind::OBSERVE, budget());
@@ -8741,7 +8792,10 @@ struct Access {
 		e.driver.complete = true;
 		execute_transfers(e, *r, true);
 		CHECK(e.driver.dispatches == kActions);
-		CHECK(e.driver.pipeline_binds == 5u);
+		CHECK(e.driver.pipeline_binds == 1u);
+		CHECK(e.driver.compute_pass_begins == 1u);
+		CHECK(e.driver.compute_pass_ends == 1u);
+		CHECK(e.driver.compute_memory_barriers == 4u);
 		CHECK(e.driver.set_binds == kActions);
 
 		const auto observed_done = turn(e, *r, ProductionControlKind::OBSERVE, budget());
@@ -8759,6 +8813,272 @@ struct Access {
 		e.rd.free_rid(RID::from_uint64(s0->backing.rid));
 		e.rd.qualification_retiring = false;
 		e.rd._free_pending_resources(0);
+	}
+
+	static void bug199a_expired_latched_stage_budget_slice_refresh_and_intra_frame_throttling() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		auto *r = setup_v2(e);
+		REQUIRE(r != nullptr);
+		const GDExtensionProductionRequestRefV1 ref{ Enrollment::INSTANCE, r->serial };
+
+		// 1. Latch a genuine future stage budget (short 2ms window).
+		auto staged_budget = budget(8, 8);
+		staged_budget.controls = 4;
+		staged_budget.deadline_micros = OS::get_singleton()->get_ticks_usec() + 2000ull;
+		{
+			Registry::Lock lock(*e.registry);
+			r->native_prepared_executor = true;
+			r->native_static_sealed = true;
+			e.registry->production_native_stage_latch_budget_locked(*r, staged_budget);
+			CHECK(e.registry->production_native_stage_budget_is_latched_locked(*r));
+			CHECK(r->native_stage_budget_duration_us > 0);
+			r->control = {};
+			r->control.serial = 21;
+			r->control.input.request_serial = r->serial;
+			r->control.input.record_generation = r->operation.record_generation;
+			r->control.input.kind = ProductionControlKind::RECORD;
+			r->control.input.budget = r->native_stage_budget;
+			r->control.state = ProductionControlState::QUEUED;
+			r->control.scene_waiting = true;
+			r->control.record_history.admitted = true;
+		}
+
+		// Wait past the original cached wall-clock deadline_micros.
+		while (OS::get_singleton()->get_ticks_usec() < staged_budget.deadline_micros) {
+			OS::get_singleton()->delay_usec(200);
+		}
+
+		// 2. Owner polling consume_v3 must NOT prematurely kill a live latched request.
+		GDExtensionProductionRecordReportV3 report{};
+		CHECK(e.registry->production_record_consume_v3(ref, 21, &report).native_error == ERR_BUSY);
+		CHECK(r->control.state == ProductionControlState::QUEUED);
+
+		// 3. On capture #1, refreshing the per-frame slice grants forward progress
+		//    instead of livelocking forever, while keeping native_stage_budget immutable.
+		{
+			Registry::Lock lock(*e.registry);
+			e.registry->production_native_stage_refresh_slice_locked(*r, 1, 1, 100);
+			CHECK(r->native_stage_deferral_count == 1u);
+			CHECK(r->native_stage_budget.deadline_micros == staged_budget.deadline_micros);
+			CHECK(e.registry->production_native_stage_effective_deadline_locked(*r) > OS::get_singleton()->get_ticks_usec());
+			CHECK(e.registry->production_native_stage_charge_locked(*r, true) == OK);
+			CHECK(r->native_stage_controls_used == 1u);
+		}
+
+		// 4. Intra-frame throttling: if the slice expires within the SAME capture #1,
+		//    refresh does NOT extend within the same capture -> ERR_BUSY!
+		{
+			Registry::Lock lock(*e.registry);
+			r->native_stage_slice_deadline_micros = 1;
+			e.registry->production_native_stage_refresh_slice_locked(*r, 1, 1, 100);
+			CHECK(r->native_stage_deferral_count == 1u);
+			CHECK(e.registry->production_native_stage_charge_locked(*r, true) == ERR_BUSY);
+
+			// 5. On the NEXT capture #2, slice refreshes again -> forward progress!
+			e.registry->production_native_stage_refresh_slice_locked(*r, 1, 1, 101);
+			CHECK(r->native_stage_deferral_count == 2u);
+			CHECK(e.registry->production_native_stage_charge_locked(*r, true) == OK);
+			CHECK(r->native_stage_controls_used == 2u);
+
+			// 6. Explicit unlatched test expiry (mutating deadline_micros directly) still fails closed.
+			r->native_stage_budget.deadline_micros = 1;
+			CHECK_FALSE(e.registry->production_native_stage_budget_is_latched_locked(*r));
+			CHECK(e.registry->production_native_stage_charge_locked(*r, true) == ERR_BUSY);
+		}
+		CHECK(e.registry->production_record_consume_v3(ref, 21, &report).native_error == OK);
+		CHECK(report.record.result.native_error == ERR_UNAVAILABLE);
+		CHECK(e.registry->production_cancel(ref).native_error == OK);
+	}
+
+	static void bug199b_rdg_compute_pass_coalescing_and_barriers() {
+		struct CoalesceDriver final : TransferTestDriverBase {
+			uint32_t pass_begins = 0, pass_ends = 0, mem_barriers = 0, group_begins = 0, group_ends = 0, pipe_barriers = 0;
+			uint32_t dispatches = 0, copies = 0;
+			bool pass_open = false;
+			uint64_t api_trait_get(ApiTrait p_trait) override {
+				switch (p_trait) {
+					case API_TRAIT_HONORS_PIPELINE_BARRIERS:
+					case API_TRAIT_COALESCE_COMPUTE_PASSES:
+						return 1;
+					case API_TRAIT_BUFFER_CLEARS_WITH_COPY_ENGINE:
+					case API_TRAIT_BUFFERS_REQUIRE_TRANSITIONS:
+						return 0;
+					default:
+						return TransferTestDriverBase::api_trait_get(p_trait);
+				}
+			}
+			void command_group_begin(CommandBufferID) override {
+				CHECK_FALSE(pass_open);
+				++group_begins;
+			}
+			void command_group_end(CommandBufferID) override {
+				CHECK_FALSE(pass_open);
+				++group_ends;
+			}
+			void command_begin_compute_pass(CommandBufferID) override {
+				CHECK_FALSE(pass_open);
+				pass_open = true;
+				++pass_begins;
+			}
+			void command_end_compute_pass(CommandBufferID) override {
+				CHECK(pass_open);
+				pass_open = false;
+				++pass_ends;
+			}
+			void command_compute_memory_barrier(CommandBufferID) override {
+				CHECK(pass_open);
+				++mem_barriers;
+			}
+			void command_pipeline_barrier(CommandBufferID, BitField<PipelineStageBits>, BitField<PipelineStageBits>, VectorView<MemoryAccessBarrier>, VectorView<BufferBarrier>, VectorView<TextureBarrier>, VectorView<AccelerationStructureBarrier>) override {
+				CHECK_FALSE(pass_open);
+				++pipe_barriers;
+			}
+			void command_compute_dispatch(CommandBufferID, uint32_t, uint32_t, uint32_t) override {
+				CHECK(pass_open);
+				++dispatches;
+			}
+			void command_copy_buffer(CommandBufferID, BufferID, BufferID, VectorView<BufferCopyRegion>) override {
+				CHECK_FALSE(pass_open);
+				++copies;
+			}
+			void reset_counts() {
+				pass_begins = pass_ends = mem_barriers = group_begins = group_ends = pipe_barriers = dispatches = copies = 0;
+				pass_open = false;
+			}
+		} drv;
+
+		RenderingDeviceGraph graph;
+		graph.initialize(&drv, [](RDD *, VectorView<RDD::AttachmentLoadOp>, VectorView<RDD::AttachmentStoreOp>, void *) { return RDD::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+		RenderingDeviceGraph::ResourceTracker b0, b1, b2, b3;
+		b0.buffer_driver_id = RDD::BufferID(1);
+		b1.buffer_driver_id = RDD::BufferID(2);
+		b2.buffer_driver_id = RDD::BufferID(3);
+		b3.buffer_driver_id = RDD::BufferID(4);
+		RenderingDeviceGraph::CommandBufferPool pool;
+		RDD::CommandBufferID cb(10);
+
+		// Part A: 4 independent compute lists (L0) -> 2 dependent compute lists (L1) -> 1 dependent compute list (L2).
+		// All 7 compute lists across 3 levels coalesce into 1 compute pass + 2 intra-pass memory barriers!
+		graph.begin(true);
+		for (RenderingDeviceGraph::ResourceTracker *t : { &b0, &b1, &b2, &b3 }) {
+			graph.add_compute_list_begin();
+			graph.add_compute_list_usage(t, RenderingDeviceGraph::RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE);
+			graph.add_compute_list_dispatch(1, 1, 1);
+			graph.add_compute_list_end();
+		}
+		// Level 1: depends on b0 and b1 (2 independent lists).
+		graph.add_compute_list_begin();
+		graph.add_compute_list_usage(&b0, RenderingDeviceGraph::RESOURCE_USAGE_STORAGE_BUFFER_READ);
+		graph.add_compute_list_usage(&b2, RenderingDeviceGraph::RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE);
+		graph.add_compute_list_dispatch(1, 1, 1);
+		graph.add_compute_list_end();
+		graph.add_compute_list_begin();
+		graph.add_compute_list_usage(&b1, RenderingDeviceGraph::RESOURCE_USAGE_STORAGE_BUFFER_READ);
+		graph.add_compute_list_usage(&b3, RenderingDeviceGraph::RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE);
+		graph.add_compute_list_dispatch(1, 1, 1);
+		graph.add_compute_list_end();
+		// Level 2: depends on b2 and b3 + includes an explicit intra-list memory barrier.
+		graph.add_compute_list_begin();
+		graph.add_compute_list_usage(&b2, RenderingDeviceGraph::RESOURCE_USAGE_STORAGE_BUFFER_READ);
+		graph.add_compute_list_usage(&b3, RenderingDeviceGraph::RESOURCE_USAGE_STORAGE_BUFFER_READ);
+		graph.add_compute_list_dispatch(1, 1, 1);
+		graph.add_compute_list_memory_barrier();
+		graph.add_compute_list_dispatch(1, 1, 1);
+		graph.add_compute_list_end();
+
+		graph.end(true, false, cb, pool);
+		CHECK_FALSE(drv.pass_open);
+		CHECK(drv.dispatches == 8u);
+		CHECK(drv.pass_begins == 1u);
+		CHECK(drv.pass_ends == 1u);
+		CHECK(drv.group_begins == 1u);
+		CHECK(drv.group_ends == 1u);
+		CHECK(drv.mem_barriers == 3u); // 2 cross-level + 1 intra-list
+
+		// Part B: Compute (L0) -> BufferCopy (L1) -> Compute (L2) -> Compute (L3).
+		// Must close compute pass before BufferCopy, then coalesce L2 + L3 into a 2nd compute pass!
+		drv.reset_counts();
+		graph.begin(true);
+		graph.add_compute_list_begin();
+		graph.add_compute_list_usage(&b0, RenderingDeviceGraph::RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE);
+		graph.add_compute_list_dispatch(1, 1, 1);
+		graph.add_compute_list_end();
+
+		RDD::BufferCopyRegion reg{};
+		reg.size = 64;
+		graph.add_buffer_copy(b0.buffer_driver_id, &b0, b1.buffer_driver_id, &b1, reg);
+
+		graph.add_compute_list_begin();
+		graph.add_compute_list_usage(&b1, RenderingDeviceGraph::RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE);
+		graph.add_compute_list_dispatch(1, 1, 1);
+		graph.add_compute_list_end();
+
+		graph.add_compute_list_begin();
+		graph.add_compute_list_usage(&b1, RenderingDeviceGraph::RESOURCE_USAGE_STORAGE_BUFFER_READ);
+		graph.add_compute_list_dispatch(1, 1, 1);
+		graph.add_compute_list_end();
+
+		graph.end(true, false, cb, pool);
+		CHECK_FALSE(drv.pass_open);
+		CHECK(drv.copies == 1u);
+		CHECK(drv.dispatches == 3u);
+		CHECK(drv.pass_begins == 2u);
+		CHECK(drv.pass_ends == 2u);
+		CHECK(drv.mem_barriers == 1u);
+		CHECK(drv.group_ends == 3u); // L0 compute, L1 copy, L2+L3 coalesced compute
+	}
+
+	static void bug199b_inline_production_maintenance_drain_avoids_draw_drop() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		auto *r = setup(e, 1);
+		REQUIRE(r != nullptr);
+		graph_initialize(e);
+		e.rd.is_main_instance = true;
+		e.rd.frames[0].primary_command_buffer_begun = true;
+
+		// Pause production-owned maintenance on a tight budget while GPU fence is still unsignaled.
+		e.driver.complete = false;
+		RenderingDevice::NativeDisposalBudget tight_budget;
+		tight_budget.passes = 1;
+		tight_budget.receipts = 1;
+		tight_budget.deadline_usec = OS::get_singleton()->get_ticks_usec() + 1000000;
+		RenderingDevice::NativeDisposalUsage usage;
+		CHECK(e.rd._native_disposal_maintenance_step(tight_budget, usage, r, nullptr, Ref<NativeHeightRange>(), false) == ERR_BUSY);
+		REQUIRE(e.rd.native_disposal_active.load(std::memory_order_acquire));
+		REQUIRE(e.rd.has_pending_production_frame_maintenance());
+		r->maintenance_serial = e.rd.native_disposal_continuation.serial;
+
+		// While GPU fence is still unsignaled, inline drain keeps cursor intact (no stall or theft).
+		e.registry->try_complete_pending_production_frame_maintenance(e.rd);
+		CHECK(e.rd.has_pending_production_frame_maintenance());
+		CHECK(r->maintenance_serial == e.rd.native_disposal_continuation.serial);
+
+		// Once GPU fence signals, inline drain completes maintenance before _draw() so the frame is NOT dropped!
+		e.driver.complete = true;
+		e.registry->try_complete_pending_production_frame_maintenance(e.rd);
+		CHECK_FALSE(e.rd.has_pending_production_frame_maintenance());
+		CHECK_FALSE(e.rd.native_disposal_active.load(std::memory_order_acquire));
+		CHECK(r->maintenance_serial == 0);
+		CHECK(e.rd.ensure_ordinary_draw_ready() == OK);
+
+		// Foreign / unregistered owner pointer is never stolen.
+		const auto *fake_owner = reinterpret_cast<const ProductionRequest *>(uintptr_t(0x1));
+		e.rd.frames[0].primary_command_buffer_begun = true;
+		usage = {};
+		CHECK(e.rd._native_disposal_maintenance_step(tight_budget, usage, fake_owner, nullptr, Ref<NativeHeightRange>(), false) == ERR_BUSY);
+		REQUIRE(e.rd.has_pending_production_frame_maintenance());
+		e.registry->try_complete_pending_production_frame_maintenance(e.rd);
+		CHECK(e.rd.has_pending_production_frame_maintenance());
+
+		RenderingDevice::NativeDisposalBudget finish_budget;
+		finish_budget.passes = 64;
+		finish_budget.receipts = 128;
+		finish_budget.deadline_usec = OS::get_singleton()->get_ticks_usec() + 5000000;
+		usage = {};
+		CHECK(e.rd._native_disposal_maintenance_step(finish_budget, usage, fake_owner, nullptr, Ref<NativeHeightRange>(), false) == OK);
+		CHECK_FALSE(e.rd.has_pending_production_frame_maintenance());
 	}
 };
 TEST_CASE("[ProductionNativeObserve][PreparedNativeRecordV2] cancel rejects transferred native wait before consume without erasing actual prefix") {
@@ -9100,4 +9420,16 @@ TEST_CASE("[ProductionNativeObserve][BUG-196A] O(1) RDG record command resolutio
 
 TEST_CASE("[ProductionAction][BUG-196A] disjoint multi-span hazard tracker eliminates false bounding-hull splits and falls back safely past 8 spans") {
 	TestProductionNativeObserve::Access::bug196a_disjoint_multispan_hazard_tracker_and_overflow_fallback();
+}
+
+TEST_CASE("[ProductionNativeObserve][BUG-199A] expired latched native_stage_budget refreshes per-capture slice and honors intra-frame throttling") {
+	TestProductionNativeObserve::Access::bug199a_expired_latched_stage_budget_slice_refresh_and_intra_frame_throttling();
+}
+
+TEST_CASE("[RenderingDeviceGraph][BUG-199B] compute pass coalescing merges intra-level and cross-level compute lists with intra-pass memory barriers") {
+	TestProductionNativeObserve::Access::bug199b_rdg_compute_pass_coalescing_and_barriers();
+}
+
+TEST_CASE("[ProductionNativeObserve][BUG-199B] try_complete_pending_production_frame_maintenance drains signaled disposal inline without dropping draw") {
+	TestProductionNativeObserve::Access::bug199b_inline_production_maintenance_drain_avoids_draw_drop();
 }

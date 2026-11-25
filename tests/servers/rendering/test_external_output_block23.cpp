@@ -1070,15 +1070,21 @@ void main() { v[0] += K; }
 	rd.shader_destroy_modules(sh_spec);
 	CHECK(RenderingDeviceDriverMetal::get_total_compute_libraries_released() == released_before + 2u);
 
-	// MetalHeapAllocator non-local preferred block sizing: POOL_PRIVATE=16 MiB, POOL_SHARED=8 MiB.
+	// MetalHeapAllocator non-local preferred block sizing: SMALL (<=64 KiB)=2 MiB, REGULAR (>64 KiB): POOL_PRIVATE=16 MiB, POOL_SHARED=8 MiB.
 	{
 		MetalHeapAllocator heap_alloc(mtl_device);
 		MetalBuffer priv_small = heap_alloc.new_buffer(4096u, MTL::ResourceStorageModePrivate);
 		MetalBuffer shared_small = heap_alloc.new_buffer(4096u, MTL::ResourceStorageModeShared);
+		MetalBuffer priv_reg = heap_alloc.new_buffer(128u * 1024u, MTL::ResourceStorageModePrivate);
+		MetalBuffer shared_reg = heap_alloc.new_buffer(128u * 1024u, MTL::ResourceStorageModeShared);
 		REQUIRE(priv_small.buffer.get() != nullptr);
 		REQUIRE(shared_small.buffer.get() != nullptr);
+		REQUIRE(priv_reg.buffer.get() != nullptr);
+		REQUIRE(shared_reg.buffer.get() != nullptr);
 		MetalAllocatorStats stats = {};
 		heap_alloc.get_stats(stats);
+		CHECK(stats.pools[MetalHeapAllocator::POOL_PRIVATE_SMALL].reserved_bytes == 2ull * 1024u * 1024u);
+		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED_SMALL].reserved_bytes == 2ull * 1024u * 1024u);
 		CHECK(stats.pools[MetalHeapAllocator::POOL_PRIVATE].reserved_bytes == 16ull * 1024u * 1024u);
 		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].reserved_bytes == 8ull * 1024u * 1024u);
 		// Allocations > preferred block size still succeed cleanly via dedicated heap.
@@ -1086,6 +1092,8 @@ void main() { v[0] += K; }
 		REQUIRE(priv_big.buffer.get() != nullptr);
 		CHECK(priv_big.allocation.kind == MetalAllocation::Kind::DEDICATED);
 		heap_alloc.free_buffer(priv_big);
+		heap_alloc.free_buffer(shared_reg);
+		heap_alloc.free_buffer(priv_reg);
 		heap_alloc.free_buffer(shared_small);
 		heap_alloc.free_buffer(priv_small);
 	}

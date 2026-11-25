@@ -168,15 +168,19 @@ protected:
 	// DEV: When true, attempting to create a pipeline will fail if it cannot use the archive.
 	bool archive_fail_on_miss = false;
 
-	// Dedicated, lean, bounded compute MTL::BinaryArchive (BUG-189B):
-	// Stays active past engine render warmup so high-churn one-shot waves, Cycle-2
-	// restarts, and cross-run launches hit compiled AGX compute PSOs (~0.05ms vs ~75ms)
-	// while keeping compute_pso_cache O(k) eviction (BUG-175B) and zero exit RSS spike (BUG-155B).
+	// Dedicated, lean, bounded compute MTL::BinaryArchive (BUG-189B / BUG-200):
+	// Accelerates warmup compute PSOs and honors PipelineCacheMode::RELEASE_AFTER_WARMUP
+	// by serializing and releasing the in-memory MTL::BinaryArchive after warmup while
+	// keeping compute_pso_cache O(k) eviction (BUG-175B) and zero exit RSS spike (BUG-155B).
 	Mutex compute_archive_mutex;
 	std::shared_mutex compute_archive_serialize_mutex;
 	NS::SharedPtr<MTL::BinaryArchive> compute_archive;
+	std::atomic<bool> compute_archive_active{ false };
+	std::atomic<bool> compute_archive_released_after_warmup{ false };
 	uint32_t compute_archive_added_pipelines = 0;
 	uint32_t compute_archive_idle_frames = 0;
+	uint32_t compute_archive_open_frames = 0;
+	bool compute_archive_activity_this_frame = false;
 	bool compute_archive_dirty = false;
 	bool compute_archive_loaded_from_disk = false;
 	bool compute_archive_disk_backed = false;
@@ -725,6 +729,7 @@ public:
 
 	virtual void command_begin_compute_pass(CommandBufferID p_cmd_buffer) override final;
 	virtual void command_end_compute_pass(CommandBufferID p_cmd_buffer) override final;
+	virtual void command_compute_memory_barrier(CommandBufferID p_cmd_buffer) override final;
 
 	// Binding.
 	virtual void command_bind_compute_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) override final;
@@ -843,12 +848,19 @@ public:
 	static uint64_t get_total_compute_archive_hits() { return total_compute_archive_hits.load(std::memory_order_relaxed); }
 	static uint64_t get_total_compute_archive_additions() { return total_compute_archive_additions.load(std::memory_order_relaxed); }
 	bool is_pipeline_archive_active() const { return archive_active.load(std::memory_order_acquire); }
+	bool is_compute_archive_active() const { return compute_archive_active.load(std::memory_order_acquire); }
 #ifdef TESTS_ENABLED
 	void test_step_pipeline_archive_frame(uint32_t p_frames_drawn, bool p_simulate_activity) {
 		if (p_simulate_activity) {
 			(void)_acquire_pipeline_archive();
 		}
 		_maybe_release_pipeline_archive(p_frames_drawn);
+	}
+	void test_step_compute_archive_frame(bool p_simulate_activity) {
+		if (p_simulate_activity) {
+			(void)_ensure_compute_archive(false);
+		}
+		_maybe_flush_compute_archive();
 	}
 	bool test_record_pipeline_archive_addition(bool p_is_compute) {
 		NS::SharedPtr<MTL::BinaryArchive> local_archive = _acquire_pipeline_archive();

@@ -136,6 +136,7 @@ public:
 	static constexpr uint32_t DEFAULT_BUFFER_SIZE = 512 * 1024;
 	static constexpr uint32_t MIN_BLOCK_SIZE = 16;
 	static constexpr uint32_t ALIGNMENT = 16;
+	static constexpr uint32_t IDLE_RESET_SHRINK_THRESHOLD = 8;
 
 	struct Allocation {
 		void *ptr = nullptr;
@@ -153,6 +154,8 @@ private:
 	LocalVector<uint32_t> heads;
 	uint32_t current_segment = 0;
 	uint32_t buffer_size = DEFAULT_BUFFER_SIZE;
+	uint32_t idle_resets = 0;
+	uint32_t max_used_during_idle = 1;
 
 	_FORCE_INLINE_ uint32_t alloc_segment() {
 		MetalBuffer segment = allocator->new_buffer(buffer_size, MTL::ResourceStorageModeShared | MTL::ResourceHazardTrackingModeUntracked);
@@ -171,10 +174,14 @@ public:
 			allocator(p_allocator), buffer_size(p_buffer_size) {}
 
 	~MDRingBuffer() {
-		for (MetalBuffer &segment : segments) {
-			allocator->free_buffer(segment);
+		if (allocator != nullptr) {
+			for (MetalBuffer &segment : segments) {
+				allocator->free_buffer(segment);
+			}
 		}
 	}
+
+	_FORCE_INLINE_ uint32_t get_segment_count() const { return segments.size(); }
 
 	/// Allocates a block of memory from the ring buffer.
 	/// Returns an Allocation with the pointer, buffer, and offset.
@@ -220,10 +227,45 @@ public:
 
 	/// Resets all segments for reuse. Call at frame boundaries when GPU work is complete.
 	_FORCE_INLINE_ void reset() {
+		if (segments.size() > 1) {
+			uint32_t used_count = 1;
+			for (uint32_t i = heads.size(); i > 1; --i) {
+				if (heads[i - 1] > 0) {
+					used_count = i;
+					break;
+				}
+			}
+			if (used_count >= segments.size()) {
+				idle_resets = 0;
+				max_used_during_idle = 1;
+			} else {
+				max_used_during_idle = MAX(max_used_during_idle, used_count);
+				idle_resets++;
+				if (idle_resets >= IDLE_RESET_SHRINK_THRESHOLD) {
+					const uint32_t keep = MIN(max_used_during_idle, segments.size());
+					if (allocator != nullptr) {
+						for (uint32_t i = segments.size(); i > keep; --i) {
+							allocator->free_buffer(segments[i - 1]);
+						}
+					}
+					segments.resize(keep);
+					cached_buffers.resize(keep);
+					heads.resize(keep);
+					idle_resets = 0;
+					max_used_during_idle = 1;
+				}
+			}
+		} else {
+			idle_resets = 0;
+			max_used_during_idle = 1;
+		}
 		for (uint32_t &head : heads) {
 			head = 0;
 		}
 		current_segment = 0;
+		if (allocator != nullptr) {
+			allocator->trim_idle();
+		}
 	}
 };
 
@@ -706,6 +748,7 @@ public:
 
 	virtual void compute_begin_pass() = 0;
 	virtual void compute_end_pass() = 0;
+	virtual void compute_memory_barrier() = 0;
 	virtual void compute_bind_uniform_sets(VectorView<RDD::UniformSetID> p_uniform_sets, RDD::ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) = 0;
 	virtual void compute_dispatch(uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups) = 0;
 	virtual void compute_dispatch_indirect(RDD::BufferID p_indirect_buffer, uint64_t p_offset) = 0;

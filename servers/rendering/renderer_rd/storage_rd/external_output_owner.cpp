@@ -1579,6 +1579,9 @@ Error ExternalOutputOwner::acquire_camera_view(const ExternalSurfaceSelection &p
 	}
 	const uint64_t serial = next_view_serial;
 	next_view_serial = serial == UINT64_MAX ? 0 : serial + 1;
+	if (slot.state == LeaseState::SEALED_RECORDED) {
+		slot.state = LeaseState::ADOPTED;
+	}
 	if (slot.native_camera_source.is_valid()) {
 		cell.camera_source = slot.native_camera_source;
 	}

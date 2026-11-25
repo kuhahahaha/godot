@@ -437,7 +437,8 @@ Error Registry::production_output_preparation_validate_locked(ProductionOutputPi
 				!seal.original_append.operation_bound || !same_original_operation_identity(seal.original_append.operation, operation)) {
 			return ERR_UNAUTHORIZED;
 		}
-		if (!request.native_stage_budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= request.native_stage_budget.deadline_micros) {
+		if (!request.native_stage_budget.deadline_micros ||
+				(!production_native_stage_budget_is_latched_locked(request) && OS::get_singleton()->get_ticks_usec() >= request.native_stage_budget.deadline_micros)) {
 			return ERR_BUSY;
 		}
 		// Compare the already cached Ref without creating a new camera source.
@@ -1684,7 +1685,7 @@ static uint32_t resolve_preparation_resource_capacity(uint32_t p_graph_cap, uint
 }
 
 // Registry and this exact RD are held. No admission/selection or ownership is created.
-Error Registry::production_output_demand_locked(ProductionAttachment &attachment, RenderingDevice &rd, const GDExtensionProductionOutputDemandInputV1 &input, GDExtensionProductionOutputGuardDemandV1 &out, uint64_t available_use_cells) {
+Error Registry::production_output_demand_locked(ProductionAttachment &attachment, RenderingDevice &rd, const GDExtensionProductionOutputDemandInputV1 &input, GDExtensionProductionOutputGuardDemandV1 &out, uint64_t available_use_cells, bool aux_params_enabled) {
 	if (!production_dto_valid(input) || input.reserved || !input.particles || !input.generation || (input.source_space != 1 && input.source_space != 2) || ((!input.read_capacity) != (!input.read_graph_capacity))) {
 		return ERR_INVALID_PARAMETER;
 	}
@@ -1754,7 +1755,7 @@ Error Registry::production_output_demand_locked(ProductionAttachment &attachment
 		}
 	} else {
 		RendererRD::ExternalOutputStorage::Instance192Layout layout;
-		error = RendererRD::ExternalOutputStorage::plan_instance192(facts.capacity, surfaces, layout, true, true);
+		error = RendererRD::ExternalOutputStorage::plan_instance192(facts.capacity, surfaces, layout, true, aux_params_enabled);
 		if (error != OK) {
 			return error;
 		}
@@ -2130,7 +2131,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_stage_output_plan_with_his
 					!action.output_plan_prepared && output_input_equal(action.output_input, input->plan.acquire.input);
 			if ((action.prepared && !allow_v3_preprepared) || request->native_staged_anchor != UINT64_MAX || OS::get_singleton()->get_ticks_usec() >= stage_budget->deadline_micros) { return predecessor_result(ERR_BUSY); }
 			action.staged_predecessor_intent = true; action.output_plan = input->plan; action.staged_history_guard = guard_slot;
-			request->native_staged_anchor = ordinal; request->native_stage_budget = *stage_budget;
+			request->native_staged_anchor = ordinal; production_native_stage_latch_budget_locked(*request, *stage_budget);
 		}
 	}
 	// An already accepted predecessor OBSERVE must remain consumable even
@@ -2585,7 +2586,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_stage_output_plan_v2(GDExt
 	const auto prepared = production_prepare_output_plan_internal(ref, input, true);
 	if (prepared.native_error == OK) {
 		request->native_staged_anchor = input->acquire.action_ordinal;
-		request->native_stage_budget = *budget;
+		production_native_stage_latch_budget_locked(*request, *budget);
 	}
 	return prepared;
 }
@@ -4579,7 +4580,8 @@ Error Registry::production_prepare_staged_cull_locked(ProductionRequest &request
 					capture->get_presentation_key().view_epoch != action.host_view_key.view_epoch))) {
 		return ERR_UNAUTHORIZED;
 	}
-	if (staged && (!budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros ||
+	const uint64_t effective_deadline = production_native_stage_effective_deadline_locked(request);
+	if (staged && (!effective_deadline || OS::get_singleton()->get_ticks_usec() >= effective_deadline ||
 			request.native_stage_controls_used >= budget.controls || request.native_stage_passes_used >= budget.passes ||
 			request.native_stage_receipts_used >= budget.receipts)) {
 		return ERR_BUSY;
@@ -4613,7 +4615,7 @@ Error Registry::production_prepare_staged_cull_locked(ProductionRequest &request
 	}
 	auto *scene = static_cast<RendererSceneCull *>(RSG::scene);
 	if (!scene) { return ERR_UNAVAILABLE; }
-	if (staged && OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) { return ERR_BUSY; }
+	if (staged && OS::get_singleton()->get_ticks_usec() >= effective_deadline) { return ERR_BUSY; }
 	RendererSceneCull::NativeParticleSceneFacts facts;
 	const Error committed = scene->instance_commit_particle_output_cull(RID::from_uint64(action.output_scene.instance),
 			RID::from_uint64(action.output_scene.particles), RID::from_uint64(action.output_scene.scenario), owner->generation,

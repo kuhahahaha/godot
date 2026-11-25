@@ -830,15 +830,28 @@ Error SceneShaderForwardMobile::ShaderData::get_native_shader_if_ready(ShaderVer
 	if (p_shader_version < 0 || p_shader_version >= SHADER_VERSION_MAX || (p_indexed144 && p_instance192)) {
 		return ERR_INVALID_PARAMETER;
 	}
-	if (p_instance192 && !instance192_shader_supported()) {
-		return ERR_UNAVAILABLE;
+	if (p_instance192) {
+		if (p_ubershader) {
+			return ERR_INVALID_PARAMETER;
+		}
+		if (!instance192_shader_supported()) {
+			return ERR_UNAVAILABLE;
+		}
 	}
 	MutexLock lock(SceneShaderForwardMobile::singleton_mutex);
 	if (!SceneShaderForwardMobile::singleton || version.is_null()) {
 		return ERR_UNAVAILABLE;
 	}
-	uint32_t shader_index = p_shader_version + (SceneShaderForwardMobile::singleton->use_fp16 ? SHADER_VERSION_MAX * 2 : 0) + (p_ubershader ? SHADER_VERSION_MAX : 0);
-	shader_index += p_instance192 ? INSTANCE192_VARIANT_OFFSET : p_indexed144 ? INDEXED144_VARIANT_OFFSET : 0;
+	const uint32_t fp16_idx = SceneShaderForwardMobile::singleton->use_fp16 ? 1u : 0u;
+	uint32_t shader_index = 0;
+	if (p_instance192) {
+		shader_index = INSTANCE192_VARIANT_OFFSET + p_shader_version + fp16_idx * SHADER_VERSION_MAX;
+	} else {
+		shader_index = p_shader_version + (fp16_idx ? SHADER_VERSION_MAX * 2 : 0) + (p_ubershader ? SHADER_VERSION_MAX : 0);
+		if (p_indexed144) {
+			shader_index += INDEXED144_VARIANT_OFFSET;
+		}
+	}
 	return SceneShaderForwardMobile::singleton->shader.version_get_native_shader_if_ready(version, shader_index, r_shader, r_input_mask);
 }
 
@@ -874,19 +887,26 @@ RID SceneShaderForwardMobile::ShaderData::warm_native_recipe_shader_variant() co
 }
 
 RID SceneShaderForwardMobile::ShaderData::get_shader_variant(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144, bool p_instance192) const {
+	ERR_FAIL_COND_V(p_shader_version < 0 || p_shader_version >= SHADER_VERSION_MAX, RID());
 	ERR_FAIL_COND_V(p_indexed144 && p_instance192, RID());
-	ERR_FAIL_COND_V(p_instance192 && !instance192_shader_supported(), RID());
+	ERR_FAIL_COND_V(p_instance192 && (p_ubershader || !instance192_shader_supported()), RID());
 	if (version.is_valid()) {
 		MutexLock lock(SceneShaderForwardMobile::singleton_mutex);
 		ERR_FAIL_NULL_V(SceneShaderForwardMobile::singleton, RID());
-		uint32_t shader_index = p_shader_version + (SceneShaderForwardMobile::singleton->use_fp16 ? SHADER_VERSION_MAX * 2 : 0) + (p_ubershader ? SHADER_VERSION_MAX : 0);
+		const uint32_t fp16_idx = SceneShaderForwardMobile::singleton->use_fp16 ? 1u : 0u;
 		if (p_instance192) {
-			SceneShaderForwardMobile::singleton->shader.version_enable_group(version, SceneShaderForwardMobile::singleton->instance192_shader_groups[shader_index]);
-			shader_index += INSTANCE192_VARIANT_OFFSET;
+			const uint32_t instance_slot = p_shader_version + fp16_idx * SHADER_VERSION_MAX;
+			ERR_FAIL_COND_V(int64_t(instance_slot) >= SceneShaderForwardMobile::singleton->instance192_shader_groups.size(), RID());
+			SceneShaderForwardMobile::singleton->shader.version_enable_group(version, SceneShaderForwardMobile::singleton->instance192_shader_groups[instance_slot]);
+			return SceneShaderForwardMobile::singleton->shader.version_get_shader(version, INSTANCE192_VARIANT_OFFSET + instance_slot);
 		}
+		uint32_t shader_index = p_shader_version + (fp16_idx ? SHADER_VERSION_MAX * 2 : 0) + (p_ubershader ? SHADER_VERSION_MAX : 0);
 		if (p_indexed144) {
+			ERR_FAIL_COND_V(int64_t(shader_index) >= SceneShaderForwardMobile::singleton->indexed144_shader_groups.size(), RID());
 			SceneShaderForwardMobile::singleton->shader.version_enable_group(version, SceneShaderForwardMobile::singleton->indexed144_shader_groups[shader_index]);
 			shader_index += INDEXED144_VARIANT_OFFSET;
+		} else if (int64_t(shader_index) < SceneShaderForwardMobile::singleton->ordinary_shader_groups.size()) {
+			SceneShaderForwardMobile::singleton->shader.version_enable_group(version, SceneShaderForwardMobile::singleton->ordinary_shader_groups[shader_index]);
 		}
 		return SceneShaderForwardMobile::singleton->shader.version_get_shader(version, shader_index);
 	} else {
@@ -1007,29 +1027,41 @@ void SceneShaderForwardMobile::init(const String p_defines) {
 
 	{
 		Vector<ShaderRD::VariantDefine> shader_versions;
+		ordinary_shader_groups.clear();
+		indexed144_shader_groups.clear();
+		instance192_shader_groups.clear();
+		int next_lazy_group = SHADER_GROUP_MAX;
+
+		auto push_ordinary_variant = [&](int p_group, const String &p_define, bool p_default_enabled) {
+			ordinary_shader_groups.push_back(p_group);
+			shader_versions.push_back(ShaderRD::VariantDefine(p_group, p_define, p_default_enabled));
+		};
+
 		for (uint32_t fp16 = 0; fp16 < 2; fp16++) {
 			for (uint32_t ubershader = 0; ubershader < 2; ubershader++) {
 				String base_define = fp16 ? "\n#define EXPLICIT_FP16\n" : "";
-				int shader_group = fp16 ? SHADER_GROUP_FP16 : SHADER_GROUP_FP32;
-				int shader_group_multiview = fp16 ? SHADER_GROUP_FP16_MULTIVIEW : SHADER_GROUP_FP32_MULTIVIEW;
+				int base_color_group = fp16 ? SHADER_GROUP_FP16 : SHADER_GROUP_FP32;
+				int base_multiview_group = fp16 ? SHADER_GROUP_FP16_MULTIVIEW : SHADER_GROUP_FP32_MULTIVIEW;
 				base_define += ubershader ? "\n#define UBERSHADER\n" : "";
 
-				bool default_enabled = (uint32_t(use_fp16) == fp16);
-				shader_versions.push_back(ShaderRD::VariantDefine(shader_group, base_define + "", default_enabled)); // SHADER_VERSION_COLOR_PASS
-				shader_versions.push_back(ShaderRD::VariantDefine(shader_group, base_define + "\n#define USE_LIGHTMAP\n", default_enabled)); // SHADER_VERSION_LIGHTMAP_COLOR_PASS
-				shader_versions.push_back(ShaderRD::VariantDefine(shader_group, base_define + "\n#define MODE_RENDER_DEPTH\n#define SHADOW_PASS\n", default_enabled)); // SHADER_VERSION_SHADOW_PASS, should probably change this to MODE_RENDER_SHADOW because we don't have a depth pass here...
-				shader_versions.push_back(ShaderRD::VariantDefine(shader_group, base_define + "\n#define MODE_RENDER_DEPTH\n#define MODE_DUAL_PARABOLOID\n#define SHADOW_PASS\n", default_enabled)); // SHADER_VERSION_SHADOW_PASS_DP
-				shader_versions.push_back(ShaderRD::VariantDefine(shader_group, base_define + "\n#define MODE_RENDER_DEPTH\n#define MODE_RENDER_MATERIAL\n", default_enabled)); // SHADER_VERSION_DEPTH_PASS_WITH_MATERIAL
+				// Only non-ubershader COLOR_PASS belongs to the eager default group; all other passes
+				// and ubershader variants live in 1-variant on-demand groups enabled by get_shader_variant().
+				bool default_enabled = (uint32_t(use_fp16) == fp16) && !ubershader;
+				push_ordinary_variant(ubershader ? next_lazy_group++ : base_color_group, base_define + "", default_enabled); // SHADER_VERSION_COLOR_PASS
+				push_ordinary_variant(next_lazy_group++, base_define + "\n#define USE_LIGHTMAP\n", false); // SHADER_VERSION_LIGHTMAP_COLOR_PASS
+				push_ordinary_variant(next_lazy_group++, base_define + "\n#define MODE_RENDER_DEPTH\n#define SHADOW_PASS\n", false); // SHADER_VERSION_SHADOW_PASS, should probably change this to MODE_RENDER_SHADOW because we don't have a depth pass here...
+				push_ordinary_variant(next_lazy_group++, base_define + "\n#define MODE_RENDER_DEPTH\n#define MODE_DUAL_PARABOLOID\n#define SHADOW_PASS\n", false); // SHADER_VERSION_SHADOW_PASS_DP
+				push_ordinary_variant(next_lazy_group++, base_define + "\n#define MODE_RENDER_DEPTH\n#define MODE_RENDER_MATERIAL\n", false); // SHADER_VERSION_DEPTH_PASS_WITH_MATERIAL
 
 				// Multiview versions of our shaders.
-				shader_versions.push_back(ShaderRD::VariantDefine(shader_group_multiview, base_define + "\n#define USE_MULTIVIEW\n", false)); // SHADER_VERSION_COLOR_PASS_MULTIVIEW
-				shader_versions.push_back(ShaderRD::VariantDefine(shader_group_multiview, base_define + "\n#define USE_MULTIVIEW\n#define USE_LIGHTMAP\n", false)); // SHADER_VERSION_LIGHTMAP_COLOR_PASS_MULTIVIEW
-				shader_versions.push_back(ShaderRD::VariantDefine(shader_group_multiview, base_define + "\n#define USE_MULTIVIEW\n#define MODE_RENDER_DEPTH\n#define SHADOW_PASS\n", false)); // SHADER_VERSION_SHADOW_PASS_MULTIVIEW
-				shader_versions.push_back(ShaderRD::VariantDefine(shader_group_multiview, base_define + "\n#define USE_MULTIVIEW\n#define MODE_RENDER_MOTION_VECTORS\n", false)); // SHADER_VERSION_MOTION_VECTORS_MULTIVIEW
-				shader_versions.push_back(ShaderRD::VariantDefine(shader_group, base_define + "\n#define DEFER_OPAQUE_FOG\n", default_enabled));
-				shader_versions.push_back(ShaderRD::VariantDefine(shader_group, base_define + "\n#define DEFER_OPAQUE_FOG\n#define USE_LIGHTMAP\n", default_enabled));
-				shader_versions.push_back(ShaderRD::VariantDefine(shader_group_multiview, base_define + "\n#define DEFER_OPAQUE_FOG\n#define USE_MULTIVIEW\n", false));
-				shader_versions.push_back(ShaderRD::VariantDefine(shader_group_multiview, base_define + "\n#define DEFER_OPAQUE_FOG\n#define USE_MULTIVIEW\n#define USE_LIGHTMAP\n", false));
+				push_ordinary_variant(ubershader ? next_lazy_group++ : base_multiview_group, base_define + "\n#define USE_MULTIVIEW\n", false); // SHADER_VERSION_COLOR_PASS_MULTIVIEW
+				push_ordinary_variant(next_lazy_group++, base_define + "\n#define USE_MULTIVIEW\n#define USE_LIGHTMAP\n", false); // SHADER_VERSION_LIGHTMAP_COLOR_PASS_MULTIVIEW
+				push_ordinary_variant(next_lazy_group++, base_define + "\n#define USE_MULTIVIEW\n#define MODE_RENDER_DEPTH\n#define SHADOW_PASS\n", false); // SHADER_VERSION_SHADOW_PASS_MULTIVIEW
+				push_ordinary_variant(next_lazy_group++, base_define + "\n#define USE_MULTIVIEW\n#define MODE_RENDER_MOTION_VECTORS\n", false); // SHADER_VERSION_MOTION_VECTORS_MULTIVIEW
+				push_ordinary_variant(next_lazy_group++, base_define + "\n#define DEFER_OPAQUE_FOG\n", false);
+				push_ordinary_variant(next_lazy_group++, base_define + "\n#define DEFER_OPAQUE_FOG\n#define USE_LIGHTMAP\n", false);
+				push_ordinary_variant(next_lazy_group++, base_define + "\n#define DEFER_OPAQUE_FOG\n#define USE_MULTIVIEW\n", false);
+				push_ordinary_variant(next_lazy_group++, base_define + "\n#define DEFER_OPAQUE_FOG\n#define USE_MULTIVIEW\n#define USE_LIGHTMAP\n", false);
 			}
 		}
 
@@ -1043,22 +1075,31 @@ void SceneShaderForwardMobile::init(const String p_defines) {
 		DEV_ASSERT(ordinary_variant_count == INDEXED144_VARIANT_OFFSET);
 		for (uint32_t i = 0; i < ordinary_variant_count; ++i) {
 			const ShaderRD::VariantDefine ordinary = shader_versions[i];
-			const int indexed_group = ordinary.group + SHADER_GROUP_MAX;
+			const int indexed_group = next_lazy_group++;
 			indexed144_shader_groups.push_back(indexed_group);
 			shader_versions.push_back(ShaderRD::VariantDefine(indexed_group, String::utf8(ordinary.text.get_data()) + "\n#define USE_INDEXED144_VERTEX_INPUT\n", false));
 		}
 
-		for (uint32_t i = 0; i < ordinary_variant_count; ++i) {
-			const ShaderRD::VariantDefine ordinary = shader_versions[i];
-			const int instance_group = ordinary.group + SHADER_GROUP_MAX * 2;
-			instance192_shader_groups.push_back(instance_group);
-			shader_versions.push_back(ShaderRD::VariantDefine(instance_group, String::utf8(ordinary.text.get_data()) + "\n#define USE_INSTANCE192_OUTPUT\n", false));
+		DEV_ASSERT(uint32_t(shader_versions.size()) == INSTANCE192_VARIANT_OFFSET);
+		// ExternalOutput INSTANCE_192 always disables ubershader; register only non-ubershader
+		// variants, each in its own 1-variant on-demand group.
+		for (uint32_t fp16_idx = 0; fp16_idx < 2; ++fp16_idx) {
+			const uint32_t fp_base = fp16_idx ? SHADER_VERSION_MAX * 2 : 0;
+			for (uint32_t version_idx = 0; version_idx < SHADER_VERSION_MAX; ++version_idx) {
+				const ShaderRD::VariantDefine ordinary = shader_versions[fp_base + version_idx];
+				const int instance_group = next_lazy_group++;
+				instance192_shader_groups.push_back(instance_group);
+				shader_versions.push_back(ShaderRD::VariantDefine(instance_group, String::utf8(ordinary.text.get_data()) + "\n#define USE_INSTANCE192_OUTPUT\n", false));
+			}
 		}
 
+		// Native material qualification requires static set 1 (use_dynamic_buffers = false),
+		// whereas live RenderForwardMobile draws bind dynamic set-1 ring buffers, so
+		// native_recipe keeps its own dedicated 1-variant group per precision.
 		for (uint32_t fp16_idx = 0; fp16_idx < 2; ++fp16_idx) {
 			const uint32_t base_idx = SHADER_VERSION_COLOR_PASS + (fp16_idx ? SHADER_VERSION_MAX * 2 : 0);
 			const ShaderRD::VariantDefine ordinary = shader_versions[base_idx];
-			const int recipe_group = SHADER_GROUP_MAX * 3 + int(fp16_idx);
+			const int recipe_group = next_lazy_group++;
 			native_recipe_shader_groups[fp16_idx] = recipe_group;
 			native_recipe_shader_variants[fp16_idx] = shader_versions.size();
 			shader_versions.push_back(ShaderRD::VariantDefine(recipe_group, String::utf8(ordinary.text.get_data()) + "\n#define USE_INSTANCE192_OUTPUT\n", false, false));

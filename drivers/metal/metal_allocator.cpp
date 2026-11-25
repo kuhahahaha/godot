@@ -112,6 +112,11 @@ uint64_t MetalHeapAllocator::_preferred_block_size(uint32_t p_pool) const {
 				return 8ull * 1024 * 1024;
 			case POOL_SHARED:
 			case POOL_SHARED_WC:
+				return 4ull * 1024 * 1024;
+			case POOL_PRIVATE_SMALL:
+			case POOL_SHARED_SMALL:
+			case POOL_SHARED_WC_SMALL:
+				return 1ull * 1024 * 1024;
 			default:
 				return 4ull * 1024 * 1024;
 		}
@@ -120,11 +125,19 @@ uint64_t MetalHeapAllocator::_preferred_block_size(uint32_t p_pool) const {
 		case POOL_PRIVATE:
 			return 16ull * 1024 * 1024;
 		case POOL_SHARED:
-			return 8ull * 1024 * 1024;
 		case POOL_SHARED_WC:
+			return 8ull * 1024 * 1024;
+		case POOL_PRIVATE_SMALL:
+		case POOL_SHARED_SMALL:
+		case POOL_SHARED_WC_SMALL:
+			return 2ull * 1024 * 1024;
 		default:
 			return 8ull * 1024 * 1024;
 	}
+}
+
+bool MetalHeapAllocator::_is_small_pool(uint32_t p_pool) {
+	return p_pool == POOL_PRIVATE_SMALL || p_pool == POOL_SHARED_SMALL || p_pool == POOL_SHARED_WC_SMALL;
 }
 
 uint64_t MetalHeapAllocator::_max_recycled_bytes(uint32_t p_pool) const {
@@ -134,6 +147,11 @@ uint64_t MetalHeapAllocator::_max_recycled_bytes(uint32_t p_pool) const {
 				return 8ull * 1024 * 1024;
 			case POOL_SHARED:
 			case POOL_SHARED_WC:
+				return 4ull * 1024 * 1024;
+			case POOL_PRIVATE_SMALL:
+			case POOL_SHARED_SMALL:
+			case POOL_SHARED_WC_SMALL:
+				return 1ull * 1024 * 1024;
 			default:
 				return 4ull * 1024 * 1024;
 		}
@@ -143,6 +161,11 @@ uint64_t MetalHeapAllocator::_max_recycled_bytes(uint32_t p_pool) const {
 			return 16ull * 1024 * 1024;
 		case POOL_SHARED:
 		case POOL_SHARED_WC:
+			return 8ull * 1024 * 1024;
+		case POOL_PRIVATE_SMALL:
+		case POOL_SHARED_SMALL:
+		case POOL_SHARED_WC_SMALL:
+			return 2ull * 1024 * 1024;
 		default:
 			return 8ull * 1024 * 1024;
 	}
@@ -158,18 +181,40 @@ uint32_t MetalHeapAllocator::_pool_for_options(MTL::ResourceOptions p_options) {
 	return POOL_PRIVATE;
 }
 
-uint32_t MetalHeapAllocator::_pool_for_texture(const MTL::TextureDescriptor *p_desc) {
+uint32_t MetalHeapAllocator::select_pool(MTL::ResourceOptions p_options, uint64_t p_length) {
+	const uint32_t base = _pool_for_options(p_options);
+	if (p_length <= SMALL_ALLOC_THRESHOLD) {
+		switch (base) {
+			case POOL_PRIVATE:
+				return POOL_PRIVATE_SMALL;
+			case POOL_SHARED:
+				return POOL_SHARED_SMALL;
+			case POOL_SHARED_WC:
+			default:
+				return POOL_SHARED_WC_SMALL;
+		}
+	}
+	return base;
+}
+
+uint32_t MetalHeapAllocator::_pool_for_texture(const MTL::TextureDescriptor *p_desc, uint64_t p_size) {
 	// Memoryless textures may be placed into any heap:
 	// newTextureWithDescriptor:offset: permits StorageModeMemoryless
 	// regardless of the heap's storage mode.
-	return p_desc->storageMode() == MTL::StorageModeShared ? POOL_SHARED : POOL_PRIVATE;
+	const bool is_shared = p_desc->storageMode() == MTL::StorageModeShared;
+	if (p_size <= SMALL_ALLOC_THRESHOLD) {
+		return is_shared ? POOL_SHARED_SMALL : POOL_PRIVATE_SMALL;
+	}
+	return is_shared ? POOL_SHARED : POOL_PRIVATE;
 }
 
 NS::SharedPtr<MTL::Heap> MetalHeapAllocator::_create_heap(uint32_t p_pool, uint64_t p_size) {
 	NS::SharedPtr<MTL::HeapDescriptor> desc = NS::TransferPtr(MTL::HeapDescriptor::alloc()->init());
 	desc->setType(MTL::HeapTypePlacement);
-	desc->setStorageMode(p_pool == POOL_PRIVATE ? MTL::StorageModePrivate : MTL::StorageModeShared);
-	desc->setCpuCacheMode(p_pool == POOL_SHARED_WC ? MTL::CPUCacheModeWriteCombined : MTL::CPUCacheModeDefaultCache);
+	const bool is_private = (p_pool == POOL_PRIVATE || p_pool == POOL_PRIVATE_SMALL);
+	const bool is_wc = (p_pool == POOL_SHARED_WC || p_pool == POOL_SHARED_WC_SMALL);
+	desc->setStorageMode(is_private ? MTL::StorageModePrivate : MTL::StorageModeShared);
+	desc->setCpuCacheMode(is_wc ? MTL::CPUCacheModeWriteCombined : MTL::CPUCacheModeDefaultCache);
 	desc->setHazardTrackingMode(MTL::HazardTrackingModeUntracked);
 	desc->setSize(p_size);
 	return NS::TransferPtr(device->newHeap(desc.get()));
@@ -214,14 +259,18 @@ bool MetalHeapAllocator::_pool_allocate(uint32_t p_pool, uint64_t p_size, uint64
 		}
 	}
 
+	bool is_new_block = false;
 	if (block_index == UINT32_MAX) {
+		is_new_block = true;
 		uint64_t block_size = MAX(_preferred_block_size(p_pool), uint64_t(units) * UNIT);
 		NS::SharedPtr<MTL::Heap> heap = _create_heap(p_pool, block_size);
 		ERR_FAIL_NULL_V_MSG(heap.get(), false, "Unable to create placement heap.");
 
+		const uint32_t block_units = (uint32_t)(block_size / UNIT);
+		const uint32_t max_allocs = MAX(1u, MIN(MAX_ALLOCS_PER_BLOCK, block_units));
 		Block block;
 		block.heap = heap;
-		block.metadata = memnew(OffsetAllocator::Allocator((uint32_t)(block_size / UNIT), MAX_ALLOCS_PER_BLOCK));
+		block.metadata = memnew(OffsetAllocator::Allocator(block_units, max_allocs));
 
 		// Reuse a reclaimed slot if one exists, else append. Block indices
 		// stored in live handles must stay stable, so blocks are never erased.
@@ -241,17 +290,27 @@ bool MetalHeapAllocator::_pool_allocate(uint32_t p_pool, uint64_t p_size, uint64
 		pool.stats.block_count++;
 		pool.stats.reserved_bytes += heap->size();
 #endif
-		generation.fetch_add(1, std::memory_order_relaxed);
 
 		alloc = pool.blocks[block_index].metadata->allocate(units);
 		ERR_FAIL_COND_V(alloc.offset == OffsetAllocator::Allocation::NO_SPACE, false);
 	}
 
 	Block &block = pool.blocks[block_index];
-	if (block.live == 0 && pool.empty_blocks > 0) {
-		pool.empty_blocks--;
+	const bool was_active = (block.live > block.recycled_count);
+	if (block.live == 0) {
+		if (!is_new_block && pool.empty_blocks > 0) {
+			pool.empty_blocks--;
+		}
+		block.empty_epoch = 0;
+		if (block.purgeable_empty) {
+			block.heap->setPurgeableState(MTL::PurgeableStateNonVolatile);
+			block.purgeable_empty = false;
+		}
 	}
 	block.live++;
+	if (!was_active) {
+		generation.fetch_add(1, std::memory_order_release);
+	}
 #ifdef DEBUG_ENABLED
 	pool.stats.allocation_count++;
 	pool.stats.used_bytes += (uint64_t)units * UNIT;
@@ -279,7 +338,7 @@ bool MetalHeapAllocator::_dedicated_allocate(uint32_t p_pool, uint64_t p_size, M
 	pool.stats.dedicated_count++;
 	pool.stats.dedicated_bytes += heap->size();
 #endif
-	generation.fetch_add(1, std::memory_order_relaxed);
+	generation.fetch_add(1, std::memory_order_release);
 
 	r_heap = heap.get();
 	r_allocation.kind = MetalAllocation::Kind::DEDICATED;
@@ -301,6 +360,7 @@ void MetalHeapAllocator::_free_allocation(MetalAllocation &p_allocation) {
 			Pool &pool = pools[p_allocation.pool];
 			SpinLockGuard lock(pool.mutex);
 			Block &block = pool.blocks[p_allocation.block];
+			const bool was_active = (block.live > block.recycled_count);
 #ifdef DEBUG_ENABLED
 			uint64_t freed_bytes = (uint64_t)block.metadata->allocationSize(p_allocation.alloc) * UNIT;
 			pool.stats.allocation_count--;
@@ -310,7 +370,10 @@ void MetalHeapAllocator::_free_allocation(MetalAllocation &p_allocation) {
 			block.live--;
 			if (block.live == 0) {
 				pool.empty_blocks++;
-				// Keep one empty block cached; reclaim beyond that.
+				// Keep at most one empty block cached per pool; reclaim beyond that
+				// immediately. The remaining empty block is omitted from get_heaps()
+				// right away and reclaimed (regular pools) or purged (small pools)
+				// by trim_idle().
 				if (pool.empty_blocks > 1) {
 #ifdef DEBUG_ENABLED
 					pool.stats.block_count--;
@@ -319,10 +382,20 @@ void MetalHeapAllocator::_free_allocation(MetalAllocation &p_allocation) {
 					memdelete(block.metadata);
 					block.metadata = nullptr;
 					old_heap = std::move(block.heap);
+					block.empty_epoch = 0;
+					block.purgeable_empty = false;
 					pool.empty_blocks--;
-					generation.fetch_add(1, std::memory_order_relaxed);
+					generation.fetch_add(1, std::memory_order_release);
+				} else {
+					block.empty_epoch = idle_epoch.load(std::memory_order_relaxed);
+					if (was_active) {
+						generation.fetch_add(1, std::memory_order_release);
+					}
 				}
 			} else if (block.live == block.recycled_count) {
+				if (was_active) {
+					generation.fetch_add(1, std::memory_order_release);
+				}
 				uint32_t live_blocks = 0;
 				for (const Block &b : pool.blocks) {
 					if (b.heap.get() != nullptr) {
@@ -364,7 +437,7 @@ void MetalHeapAllocator::_free_allocation(MetalAllocation &p_allocation) {
 			}
 			old_heap = NS::TransferPtr(p_allocation.heap);
 			p_allocation.heap = nullptr;
-			generation.fetch_add(1, std::memory_order_relaxed);
+			generation.fetch_add(1, std::memory_order_release);
 		} break;
 	}
 	p_allocation.invalidate();
@@ -376,7 +449,10 @@ void MetalHeapAllocator::_free_allocation(MetalAllocation &p_allocation) {
 }
 
 MetalBuffer MetalHeapAllocator::new_buffer(NS::UInteger p_length, MTL::ResourceOptions p_options) {
-	uint32_t pool_index = _pool_for_options(p_options);
+	// On local devices the regular shared/private pools are already compact
+	// (4-8 MiB) and pre-warmed by RD init; avoid splitting <= 64 KiB scratch
+	// buffers into extra 1 MiB sub-pool heaps.
+	uint32_t pool_index = local_device ? _pool_for_options(p_options) : select_pool(p_options, p_length);
 	// Placement-heap resources inherit the heap's hazard tracking; strip
 	// hazard bits and pass storage/cache + untracked only.
 	MTL::ResourceOptions heap_options = (p_options & (RESOURCE_STORAGE_MODE_MASK | RESOURCE_CPU_CACHE_MODE_MASK)) | MTL::ResourceHazardTrackingModeUntracked;
@@ -389,8 +465,13 @@ MetalBuffer MetalHeapAllocator::new_buffer(NS::UInteger p_length, MTL::ResourceO
 			if (entry.length == p_length && entry.options == heap_options) {
 				MetalBuffer recycled = std::move(entry.buffer);
 				if (recycled.allocation.kind == MetalAllocation::Kind::POOL && recycled.allocation.block < pool.blocks.size()) {
-					DEV_ASSERT(pool.blocks[recycled.allocation.block].recycled_count > 0);
-					pool.blocks[recycled.allocation.block].recycled_count--;
+					Block &block = pool.blocks[recycled.allocation.block];
+					DEV_ASSERT(block.recycled_count > 0);
+					const bool was_active = (block.live > block.recycled_count);
+					block.recycled_count--;
+					if (!was_active) {
+						generation.fetch_add(1, std::memory_order_release);
+					}
 				}
 				pool.recycled_bytes -= entry.length;
 				const uint32_t last = pool.recycled_buffers.size() - 1;
@@ -433,10 +514,13 @@ bool MetalHeapAllocator::texture_allocation_quote(const MTL::TextureDescriptor *
 	if (!sa.size || !sa.align || (sa.align & (sa.align - 1))) {
 		return false;
 	}
+	const uint32_t pool_index = local_device
+			? (p_desc->storageMode() == MTL::StorageModeShared ? POOL_SHARED : POOL_PRIVATE)
+			: _pool_for_texture(p_desc, sa.size);
 	TextureAllocationQuote quote;
 	quote.native_requirement = sa.size;
 	quote.alignment = sa.align;
-	quote.dedicated = sa.size > _preferred_block_size(_pool_for_texture(p_desc)) / 2;
+	quote.dedicated = sa.size > _preferred_block_size(pool_index) / 2;
 	if (quote.dedicated) {
 		quote.owner_reservation = sa.size;
 	} else {
@@ -451,12 +535,14 @@ bool MetalHeapAllocator::texture_allocation_quote(const MTL::TextureDescriptor *
 }
 
 MetalTexture MetalHeapAllocator::new_texture(const MTL::TextureDescriptor *p_desc) {
-	uint32_t pool_index = _pool_for_texture(p_desc);
 	TextureAllocationQuote quote;
 	MetalTexture result;
 	if (!texture_allocation_quote(p_desc, quote)) {
 		return result;
 	}
+	uint32_t pool_index = local_device
+			? (p_desc->storageMode() == MTL::StorageModeShared ? POOL_SHARED : POOL_PRIVATE)
+			: _pool_for_texture(p_desc, quote.native_requirement);
 	MTL::Heap *heap = nullptr;
 	if (quote.dedicated) {
 		if (!_dedicated_allocate(pool_index, quote.native_requirement, result.allocation, heap)) {
@@ -486,6 +572,7 @@ void MetalHeapAllocator::free_buffer(MetalBuffer &p_buffer) {
 		const uint64_t max_bytes = _max_recycled_bytes(pool_index);
 		if (length > 0 && length <= max_bytes) {
 			const MTL::ResourceOptions heap_options = (p_buffer.buffer->resourceOptions() & (RESOURCE_STORAGE_MODE_MASK | RESOURCE_CPU_CACHE_MODE_MASK)) | MTL::ResourceHazardTrackingModeUntracked;
+			const uint64_t epoch = idle_epoch.load(std::memory_order_relaxed);
 			LocalVector<MetalBuffer> evicted;
 			{
 				Pool &pool = pools[pool_index];
@@ -504,13 +591,18 @@ void MetalHeapAllocator::free_buffer(MetalBuffer &p_buffer) {
 				RecycledBuffer entry;
 				entry.length = length;
 				entry.options = heap_options;
+				entry.recycle_epoch = epoch;
 				entry.buffer = std::move(p_buffer);
 				pool.recycled_bytes += length;
 				pool.recycled_buffers.push_back(std::move(entry));
 				if (block_index < pool.blocks.size()) {
 					Block &block = pool.blocks[block_index];
+					const bool was_active = (block.live > block.recycled_count);
 					block.recycled_count++;
 					if (block.live > 0 && block.live == block.recycled_count) {
+						if (was_active) {
+							generation.fetch_add(1, std::memory_order_release);
+						}
 						uint32_t live_blocks = 0;
 						for (const Block &b : pool.blocks) {
 							if (b.heap.get() != nullptr) {
@@ -556,12 +648,12 @@ void MetalHeapAllocator::free_texture(MetalTexture &p_texture) {
 }
 
 uint64_t MetalHeapAllocator::get_heaps(LocalVector<MTL::Heap *> &r_heaps) {
-	uint64_t gen = generation.load(std::memory_order_relaxed);
+	uint64_t gen = generation.load(std::memory_order_acquire);
 	for (uint32_t p = 0; p < POOL_COUNT; p++) {
 		Pool &pool = pools[p];
 		SpinLockGuard lock(pool.mutex);
 		for (const Block &block : pool.blocks) {
-			if (block.heap.get() != nullptr) {
+			if (block.heap.get() != nullptr && block.live > block.recycled_count) {
 				r_heaps.push_back(block.heap.get());
 			}
 		}
@@ -573,7 +665,76 @@ uint64_t MetalHeapAllocator::get_heaps(LocalVector<MTL::Heap *> &r_heaps) {
 }
 
 uint64_t MetalHeapAllocator::get_heap_generation() const {
-	return generation.load(std::memory_order_relaxed);
+	return generation.load(std::memory_order_acquire);
+}
+
+void MetalHeapAllocator::trim_idle() {
+	const uint64_t epoch = idle_epoch.fetch_add(1, std::memory_order_relaxed) + 1;
+	LocalVector<MetalBuffer> evicted_buffers;
+	LocalVector<NS::SharedPtr<MTL::Heap>> evicted_heaps;
+
+	for (uint32_t p = 0; p < POOL_COUNT; p++) {
+		Pool &pool = pools[p];
+		SpinLockGuard lock(pool.mutex);
+		if (pool.recycled_buffers.is_empty() && pool.empty_blocks == 0) {
+			continue;
+		}
+
+		if (!pool.recycled_buffers.is_empty()) {
+			uint32_t write_idx = 0;
+			for (uint32_t i = 0; i < pool.recycled_buffers.size(); i++) {
+				RecycledBuffer &entry = pool.recycled_buffers[i];
+				if (epoch >= entry.recycle_epoch && (epoch - entry.recycle_epoch) >= RECYCLE_IDLE_EPOCHS) {
+					if (entry.buffer.allocation.kind == MetalAllocation::Kind::POOL && entry.buffer.allocation.block < pool.blocks.size()) {
+						DEV_ASSERT(pool.blocks[entry.buffer.allocation.block].recycled_count > 0);
+						pool.blocks[entry.buffer.allocation.block].recycled_count--;
+					}
+					pool.recycled_bytes -= entry.length;
+					evicted_buffers.push_back(std::move(entry.buffer));
+				} else {
+					if (write_idx != i) {
+						pool.recycled_buffers[write_idx] = std::move(entry);
+					}
+					write_idx++;
+				}
+			}
+			pool.recycled_buffers.resize(write_idx);
+		}
+
+		if (pool.empty_blocks > 0) {
+			const bool is_small = _is_small_pool(p);
+			for (Block &block : pool.blocks) {
+				if (block.heap.get() == nullptr || block.live != 0) {
+					continue;
+				}
+				if (epoch < block.empty_epoch || (epoch - block.empty_epoch) < EMPTY_BLOCK_IDLE_EPOCHS) {
+					continue;
+				}
+				if (!is_small) {
+#ifdef DEBUG_ENABLED
+					pool.stats.block_count--;
+					pool.stats.reserved_bytes -= block.heap->size();
+#endif
+					memdelete(block.metadata);
+					block.metadata = nullptr;
+					evicted_heaps.push_back(std::move(block.heap));
+					block.empty_epoch = 0;
+					block.purgeable_empty = false;
+					pool.empty_blocks--;
+					generation.fetch_add(1, std::memory_order_release);
+				} else if (!block.purgeable_empty) {
+					block.heap->setPurgeableState(MTL::PurgeableStateEmpty);
+					block.purgeable_empty = true;
+				}
+			}
+		}
+	}
+
+	evicted_heaps.clear();
+	for (MetalBuffer &old : evicted_buffers) {
+		old.buffer.reset();
+		_free_allocation(old.allocation);
+	}
 }
 
 #ifdef DEBUG_ENABLED
