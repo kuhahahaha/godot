@@ -503,6 +503,9 @@ bool RenderingDeviceDriverMetal::buffer_set_texel_format(BufferID p_buffer, Data
 
 void RenderingDeviceDriverMetal::buffer_free(BufferID p_buffer) {
 	BufferInfo *buf_info = (BufferInfo *)p_buffer.id;
+	if (!buf_info) {
+		return;
+	}
 
 	allocator->free_buffer(*buf_info);
 
