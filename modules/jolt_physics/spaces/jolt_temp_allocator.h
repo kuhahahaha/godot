@@ -34,12 +34,14 @@
 
 #include <Jolt/Core/TempAllocator.h>
 
+#include <cstddef>
 #include <cstdint>
 
 class JoltTempAllocator final : public JPH::TempAllocator {
 	uint64_t capacity = 0;
 	uint64_t top = 0;
 	uint8_t *base = nullptr;
+	size_t mmap_bytes = 0;
 
 public:
 	explicit JoltTempAllocator();
@@ -47,4 +49,8 @@ public:
 
 	virtual void *Allocate(JPH::uint p_size) override;
 	virtual void Free(void *p_ptr, JPH::uint p_size) override;
+
+	uint64_t get_capacity() const { return capacity; }
+	uint64_t get_top() const { return top; }
+	size_t get_mmap_bytes() const { return mmap_bytes; }
 };

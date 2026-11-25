@@ -294,6 +294,8 @@ protected:
 	static std::atomic<uint64_t> total_compute_pso_cache_misses;
 	static std::atomic<uint64_t> total_compute_pso_cache_evictions;
 	static std::atomic<uint64_t> total_compute_libraries_released;
+	static std::atomic<uint64_t> total_render_libraries_released;
+	static std::atomic<uint64_t> total_lazy_libraries_unloaded;
 
 #pragma mark - Copy Queue
 
@@ -808,6 +810,8 @@ public:
 	static uint64_t get_total_compute_pso_cache_misses() { return total_compute_pso_cache_misses.load(std::memory_order_relaxed); }
 	static uint64_t get_total_compute_pso_cache_evictions() { return total_compute_pso_cache_evictions.load(std::memory_order_relaxed); }
 	static uint64_t get_total_compute_libraries_released() { return total_compute_libraries_released.load(std::memory_order_relaxed); }
+	static uint64_t get_total_render_libraries_released() { return total_render_libraries_released.load(std::memory_order_relaxed); }
+	static uint64_t get_total_lazy_libraries_unloaded() { return total_lazy_libraries_unloaded.load(std::memory_order_relaxed); }
 	bool is_pipeline_archive_active() const { return archive_active.load(std::memory_order_acquire); }
 #ifdef TESTS_ENABLED
 	void test_step_pipeline_archive_frame(uint32_t p_frames_drawn, bool p_simulate_activity) {

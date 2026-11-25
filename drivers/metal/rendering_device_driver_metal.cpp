@@ -1747,8 +1747,6 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 		cd->name = shader_name;
 		cd->stage = shader.shader_stage;
 
-		NS::SharedPtr<NS::String> source = NS::TransferPtr(NS::String::alloc()->init((void *)decompressed_code.ptr(), shader_data.source_size, NS::UTF8StringEncoding));
-
 		std::shared_ptr<MDLibrary> library;
 		if (shader_data.library_size > 0) {
 			if (mtl_reflection_data.os_min_version > device_properties->os_version) {
@@ -1759,6 +1757,9 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 			audit["phase"] = "binary_load";
 			cd->creation_seq = ShaderCompileAudit::emit(audit);
 #endif
+#if DEV_ENABLED
+			NS::SharedPtr<NS::String> source = NS::TransferPtr(NS::String::alloc()->init((void *)decompressed_code.ptr(), shader_data.source_size, NS::UTF8StringEncoding));
+#endif
 			dispatch_data_t binary = dispatch_data_create(decompressed_code.ptr() + shader_data.source_size, shader_data.library_size, dispatch_get_main_queue(), DISPATCH_DATA_DESTRUCTOR_DEFAULT);
 			library = MDLibrary::create(cd, device,
 #if DEV_ENABLED
@@ -1766,7 +1767,13 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 #endif
 					binary);
 			dispatch_release(binary);
+		} else if (_shader_load_strategy == ShaderLoadStrategy::LAZY) {
+			// Retain compact zstd-compressed MSL bytes instead of an eagerly decompressed NS::String
+			// (BUG-188B). Decompressed transiently inside MDLazyLibrary::_load_locked().
+			const uint32_t decomp_size = shader.code_decompressed_size ? shader.code_decompressed_size : uint32_t(shader.code_compressed_bytes.size());
+			library = MDLibrary::create_lazy_compressed(cd, device, shader.code_compressed_bytes, decomp_size, shader_data.source_size, shader.code_compression_flags, options.get());
 		} else {
+			NS::SharedPtr<NS::String> source = NS::TransferPtr(NS::String::alloc()->init((void *)decompressed_code.ptr(), shader_data.source_size, NS::UTF8StringEncoding));
 			library = MDLibrary::create(cd, device, source.get(), options.get(), _shader_load_strategy);
 		}
 
@@ -2722,7 +2729,7 @@ void RenderingDeviceDriverMetal::command_render_set_line_width(CommandBufferID p
 // ----- PIPELINE -----
 
 RenderingDeviceDriverMetal::Result<NS::SharedPtr<MTL::Function>> RenderingDeviceDriverMetal::_create_function(MDLibrary *p_library, NS::String *p_name, VectorView<PipelineSpecializationConstant> &p_specialization_constants) {
-	MTL::Library *library = p_library->get_library();
+	NS::SharedPtr<MTL::Library> library = p_library->acquire_library();
 	if (!library) {
 		ERR_FAIL_V_MSG(ERR_CANT_CREATE, "Failed to compile Metal library");
 	}
@@ -2845,6 +2852,8 @@ std::atomic<uint64_t> RenderingDeviceDriverMetal::total_compute_pso_cache_hits{ 
 std::atomic<uint64_t> RenderingDeviceDriverMetal::total_compute_pso_cache_misses{ 0 };
 std::atomic<uint64_t> RenderingDeviceDriverMetal::total_compute_pso_cache_evictions{ 0 };
 std::atomic<uint64_t> RenderingDeviceDriverMetal::total_compute_libraries_released{ 0 };
+std::atomic<uint64_t> RenderingDeviceDriverMetal::total_render_libraries_released{ 0 };
+std::atomic<uint64_t> RenderingDeviceDriverMetal::total_lazy_libraries_unloaded{ 0 };
 
 static _FORCE_INLINE_ uint32_t _metal_float_bits(float p_val) {
 	uint32_t bits = 0;
@@ -3379,14 +3388,25 @@ RDD::PipelineID RenderingDeviceDriverMetal::render_pipeline_create(
 		pipeline->raster_state.stencil.enabled = true;
 	}
 
-	if (shader->vert) {
-		Result<NS::SharedPtr<MTL::Function>> function_or_err = _create_function(shader->vert.get(), MTLSTR("main0"), p_specialization_constants);
+	std::shared_ptr<MDLibrary> local_vert;
+	std::shared_ptr<MDLibrary> local_frag;
+	{
+		MutexLock lock(pipeline_state_cache_mutex);
+		if (shader->modules_destroyed) {
+			ERR_FAIL_V_MSG(PipelineID(), "Render shader modules have already been destroyed.");
+		}
+		local_vert = shader->vert;
+		local_frag = shader->frag;
+	}
+
+	if (local_vert) {
+		Result<NS::SharedPtr<MTL::Function>> function_or_err = _create_function(local_vert.get(), MTLSTR("main0"), p_specialization_constants);
 		ERR_FAIL_COND_V(std::holds_alternative<Error>(function_or_err), PipelineID());
 		desc->setVertexFunction(std::get<NS::SharedPtr<MTL::Function>>(function_or_err).get());
 	}
 
-	if (shader->frag) {
-		Result<NS::SharedPtr<MTL::Function>> function_or_err = _create_function(shader->frag.get(), MTLSTR("main0"), p_specialization_constants);
+	if (local_frag) {
+		Result<NS::SharedPtr<MTL::Function>> function_or_err = _create_function(local_frag.get(), MTLSTR("main0"), p_specialization_constants);
 		ERR_FAIL_COND_V(std::holds_alternative<Error>(function_or_err), PipelineID());
 		desc->setFragmentFunction(std::get<NS::SharedPtr<MTL::Function>>(function_or_err).get());
 	}
@@ -3436,6 +3456,18 @@ RDD::PipelineID RenderingDeviceDriverMetal::render_pipeline_create(
 		entry.sample_count = pipeline->sample_count;
 		entry.raster_state = pipeline->raster_state;
 		render_pso_cache.insert(std::move(cache_key), std::move(entry));
+	}
+
+	// Release MTL::Function refs on descriptor, then unload MTL::Library LLVM AIR
+	// bitcode while preserving compact zstd MSL for transparent re-hydration (BUG-188B).
+	desc.reset();
+	if (local_vert && local_vert->release_loaded_library()) {
+		total_render_libraries_released.fetch_add(1, std::memory_order_relaxed);
+		total_lazy_libraries_unloaded.fetch_add(1, std::memory_order_relaxed);
+	}
+	if (local_frag && local_frag->release_loaded_library()) {
+		total_render_libraries_released.fetch_add(1, std::memory_order_relaxed);
+		total_lazy_libraries_unloaded.fetch_add(1, std::memory_order_relaxed);
 	}
 
 	return PipelineID(pipeline.release());
@@ -3642,10 +3674,14 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 			dropped_kernel = std::move(shader->kernel);
 		}
 	}
-	// Release MDLibrary / MTL::Library LLVM bitcode outside the lock inside pool.
+	// Drop descriptor & MTL::Function refs before releasing MDLibrary / MTL::Library LLVM bitcode.
+	desc.reset();
+	function.reset();
 	if (dropped_kernel) {
 		dropped_kernel.reset();
 		total_compute_libraries_released.fetch_add(1, std::memory_order_relaxed);
+	} else if (local_kernel && local_kernel->release_loaded_library()) {
+		total_lazy_libraries_unloaded.fetch_add(1, std::memory_order_relaxed);
 	}
 	local_kernel.reset();
 

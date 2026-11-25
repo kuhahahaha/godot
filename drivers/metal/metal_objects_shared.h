@@ -857,6 +857,10 @@ public:
 	virtual bool retire_ready_nonblocking() const { return true; }
 	const SHA256Digest *get_cache_key() const;
 	virtual MTL::Library *get_library() = 0;
+	virtual NS::SharedPtr<MTL::Library> acquire_library();
+	virtual bool release_loaded_library() { return false; }
+	virtual bool is_library_loaded() const { return true; }
+	virtual uint32_t get_stored_source_bytes() const { return 0; }
 	virtual NS::Error *get_error() = 0;
 	virtual void set_label(NS::String *p_label);
 #ifdef DEV_ENABLED
@@ -868,6 +872,14 @@ public:
 			NS::String *p_source,
 			MTL::CompileOptions *p_options,
 			ShaderLoadStrategy p_strategy);
+
+	static std::shared_ptr<MDLibrary> create_lazy_compressed(ShaderCacheEntry *p_entry,
+			MTL::Device *p_device,
+			const Vector<uint8_t> &p_compressed_bytes,
+			uint32_t p_decompressed_size,
+			uint32_t p_source_size,
+			uint32_t p_compression_flags,
+			MTL::CompileOptions *p_options);
 
 	static std::shared_ptr<MDLibrary> create(ShaderCacheEntry *p_entry,
 			MTL::Device *p_device,

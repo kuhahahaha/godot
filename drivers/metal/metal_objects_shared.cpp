@@ -30,6 +30,7 @@
 
 #include "metal_objects_shared.h"
 
+#include "core/io/compression.h"
 #include "drivers/metal/rendering_device_driver_metal.h"
 #include "servers/rendering/rendering_shader_container.h"
 
@@ -754,12 +755,16 @@ MDLibrary::MDLibrary(ShaderCacheEntry *p_entry
 		) :
 		_entry(p_entry) {
 #ifdef DEV_ENABLED
-	_original_source = NS::RetainPtr(p_source);
+	if (p_source != nullptr) {
+		_original_source = NS::RetainPtr(p_source);
+	}
 #endif
 }
 
 MDLibrary::~MDLibrary() {
-	_entry->notify_free();
+	if (_entry != nullptr) {
+		_entry->notify_free();
+	}
 }
 
 void MDLibrary::set_label(NS::String *p_label) {
@@ -767,6 +772,11 @@ void MDLibrary::set_label(NS::String *p_label) {
 
 const SHA256Digest *MDLibrary::get_cache_key() const {
 	return _entry ? &_entry->key : nullptr;
+}
+
+NS::SharedPtr<MTL::Library> MDLibrary::acquire_library() {
+	MTL::Library *lib = get_library();
+	return lib ? NS::RetainPtr(lib) : NS::SharedPtr<MTL::Library>();
 }
 
 #pragma mark - MDLazyLibrary
@@ -831,13 +841,20 @@ NS::SharedPtr<MTL::CompileOptions> make_shader_compile_options(uint32_t p_msl_ve
 class MDLazyLibrary final : public MDLibrary {
 	NS::SharedPtr<MTL::Library> _library;
 	NS::SharedPtr<NS::Error> _error;
-	std::shared_mutex _mu;
+	mutable std::shared_mutex _mu;
 	bool _loaded = false;
+#ifdef TESTS_ENABLED
+	bool _audited_compile = false;
+#endif
 	MTL::Device *_device = nullptr;
-	NS::SharedPtr<NS::String> _source;
 	NS::SharedPtr<MTL::CompileOptions> _options;
+	Vector<uint8_t> _compressed_source;
+	uint32_t _decompressed_size = 0;
+	uint32_t _source_size = 0;
+	uint32_t _compression_flags = 0;
 
-	void _load();
+	void _store_uncompressed_bytes(const uint8_t *p_bytes, uint32_t p_size);
+	void _load_locked();
 
 public:
 	MDLazyLibrary(ShaderCacheEntry *p_entry,
@@ -845,9 +862,47 @@ public:
 			NS::String *p_source,
 			MTL::CompileOptions *p_options);
 
+	MDLazyLibrary(ShaderCacheEntry *p_entry,
+			MTL::Device *p_device,
+			const Vector<uint8_t> &p_compressed_bytes,
+			uint32_t p_decompressed_size,
+			uint32_t p_source_size,
+			uint32_t p_compression_flags,
+			MTL::CompileOptions *p_options);
+
 	MTL::Library *get_library() override;
+	NS::SharedPtr<MTL::Library> acquire_library() override;
+	bool release_loaded_library() override;
+	bool is_library_loaded() const override;
+	uint32_t get_stored_source_bytes() const override;
 	NS::Error *get_error() override;
 };
+
+void MDLazyLibrary::_store_uncompressed_bytes(const uint8_t *p_bytes, uint32_t p_size) {
+	_decompressed_size = p_size;
+	_source_size = p_size;
+	_compression_flags = 0;
+	_compressed_source.clear();
+	if (p_bytes == nullptr || p_size == 0) {
+		return;
+	}
+	if (p_size >= 512u) {
+		const int64_t max_dst = Compression::get_max_compressed_buffer_size(p_size, Compression::MODE_ZSTD);
+		if (max_dst > 0) {
+			Vector<uint8_t> tmp;
+			tmp.resize(max_dst);
+			const int64_t comp_size = Compression::compress(tmp.ptrw(), p_bytes, p_size, Compression::MODE_ZSTD);
+			if (comp_size > 0 && uint64_t(comp_size) < uint64_t(p_size)) {
+				tmp.resize(comp_size);
+				_compressed_source = std::move(tmp);
+				_compression_flags = RenderingShaderContainer::COMPRESSION_FLAG_ZSTD;
+				return;
+			}
+		}
+	}
+	_compressed_source.resize(p_size);
+	memcpy(_compressed_source.ptrw(), p_bytes, p_size);
+}
 
 MDLazyLibrary::MDLazyLibrary(ShaderCacheEntry *p_entry,
 		MTL::Device *p_device,
@@ -860,48 +915,159 @@ MDLazyLibrary::MDLazyLibrary(ShaderCacheEntry *p_entry,
 #endif
 				),
 		_device(p_device),
-		_source(NS::RetainPtr(p_source)),
 		_options(NS::RetainPtr(p_options)) {
-}
-
-void MDLazyLibrary::_load() {
-	{
-		std::shared_lock<std::shared_mutex> lock(_mu);
-		if (_loaded) {
-			return;
+	if (p_source != nullptr) {
+		const char *utf8 = p_source->utf8String();
+		if (utf8 != nullptr) {
+			const size_t len = strlen(utf8);
+			if (len <= UINT32_MAX) {
+				_store_uncompressed_bytes(reinterpret_cast<const uint8_t *>(utf8), uint32_t(len));
+			}
 		}
 	}
+}
 
-	std::unique_lock<std::shared_mutex> lock(_mu);
+MDLazyLibrary::MDLazyLibrary(ShaderCacheEntry *p_entry,
+		MTL::Device *p_device,
+		const Vector<uint8_t> &p_compressed_bytes,
+		uint32_t p_decompressed_size,
+		uint32_t p_source_size,
+		uint32_t p_compression_flags,
+		MTL::CompileOptions *p_options) :
+		MDLibrary(p_entry
+#ifdef DEV_ENABLED
+				,
+				nullptr
+#endif
+				),
+		_device(p_device),
+		_options(NS::RetainPtr(p_options)) {
+	if ((p_compression_flags & RenderingShaderContainer::COMPRESSION_FLAG_ZSTD) != 0) {
+		_compressed_source = p_compressed_bytes;
+		_decompressed_size = p_decompressed_size;
+		_source_size = p_source_size;
+		_compression_flags = p_compression_flags;
+	} else if (p_source_size <= uint32_t(p_compressed_bytes.size())) {
+		_store_uncompressed_bytes(p_compressed_bytes.ptr(), p_source_size);
+	}
+}
+
+void MDLazyLibrary::_load_locked() {
 	if (_loaded) {
+		return;
+	}
+	if (_device == nullptr || _source_size == 0 || _compressed_source.is_empty()) {
+		_loaded = true;
 		return;
 	}
 
 	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+	LocalVector<uint8_t> decompressed_scratch;
+	const uint8_t *source_ptr = nullptr;
+	if ((_compression_flags & RenderingShaderContainer::COMPRESSION_FLAG_ZSTD) != 0) {
+		if (_decompressed_size == 0 || _source_size > _decompressed_size) {
+			_loaded = true;
+			return;
+		}
+		decompressed_scratch.resize(_decompressed_size);
+		const int64_t written = Compression::decompress(decompressed_scratch.ptr(), _decompressed_size, _compressed_source.ptr(), _compressed_source.size(), Compression::MODE_ZSTD);
+		if (written != int64_t(_decompressed_size)) {
+			ERR_PRINT("MDLazyLibrary: failed to decompress zstd Metal shader source.");
+			_loaded = true;
+			return;
+		}
+		source_ptr = decompressed_scratch.ptr();
+	} else {
+		if (_source_size > uint32_t(_compressed_source.size())) {
+			_loaded = true;
+			return;
+		}
+		source_ptr = _compressed_source.ptr();
+	}
+
+	NS::SharedPtr<NS::String> source_str = NS::TransferPtr(NS::String::alloc()->init((void *)source_ptr, _source_size, NS::UTF8StringEncoding));
+	// Release decompressed scratch buffer before invoking Metal compiler to keep peak RAM minimal.
+	decompressed_scratch.reset();
+
 	os_signpost_id_t compile_id = (os_signpost_id_t)(uintptr_t)this;
-	os_signpost_interval_begin(LOG_INTERVALS, compile_id, "shader_compile",
-			"shader_name=%{public}s stage=%{public}s hash=%X",
-			_entry->name.get_data(), SHADER_STAGE_NAMES[_entry->stage], _entry->key.short_sha());
+	if (_entry != nullptr) {
+		os_signpost_interval_begin(LOG_INTERVALS, compile_id, "shader_compile",
+				"shader_name=%{public}s stage=%{public}s hash=%X",
+				_entry->name.get_data(), SHADER_STAGE_NAMES[_entry->stage], _entry->key.short_sha());
+	}
 	NS::Error *error = nullptr;
 #ifdef TESTS_ENABLED
-	audit_runtime_compile(_entry, _options.get());
+	if (_entry != nullptr && !_audited_compile) {
+		audit_runtime_compile(_entry, _options.get());
+		_audited_compile = true;
+	}
 #endif
-	_library = NS::TransferPtr(_device->newLibrary(_source.get(), _options.get(), &error));
-	os_signpost_interval_end(LOG_INTERVALS, compile_id, "shader_compile");
+	_library = NS::TransferPtr(_device->newLibrary(source_str.get(), _options.get(), &error));
+	if (_entry != nullptr) {
+		os_signpost_interval_end(LOG_INTERVALS, compile_id, "shader_compile");
+	}
 	_error = error ? NS::RetainPtr(error) : NS::SharedPtr<NS::Error>();
-	_device = nullptr;
-	_source.reset();
-	_options.reset();
 	_loaded = true;
 }
 
+NS::SharedPtr<MTL::Library> MDLazyLibrary::acquire_library() {
+	{
+		std::shared_lock<std::shared_mutex> lock(_mu);
+		if (_loaded) {
+			return _library ? NS::RetainPtr(_library.get()) : NS::SharedPtr<MTL::Library>();
+		}
+	}
+	std::unique_lock<std::shared_mutex> lock(_mu);
+	_load_locked();
+	return _library ? NS::RetainPtr(_library.get()) : NS::SharedPtr<MTL::Library>();
+}
+
+bool MDLazyLibrary::release_loaded_library() {
+	NS::SharedPtr<MTL::Library> dropped;
+	{
+		std::unique_lock<std::shared_mutex> lock(_mu);
+		if (!_library || _compressed_source.is_empty() || _device == nullptr || !_options) {
+			return false;
+		}
+		dropped = std::move(_library);
+		_loaded = false;
+	}
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+	dropped.reset();
+	return true;
+}
+
+bool MDLazyLibrary::is_library_loaded() const {
+	std::shared_lock<std::shared_mutex> lock(_mu);
+	return _library.get() != nullptr;
+}
+
+uint32_t MDLazyLibrary::get_stored_source_bytes() const {
+	std::shared_lock<std::shared_mutex> lock(_mu);
+	return uint32_t(_compressed_source.size());
+}
+
 MTL::Library *MDLazyLibrary::get_library() {
-	_load();
+	{
+		std::shared_lock<std::shared_mutex> lock(_mu);
+		if (_loaded) {
+			return _library.get();
+		}
+	}
+	std::unique_lock<std::shared_mutex> lock(_mu);
+	_load_locked();
 	return _library.get();
 }
 
 NS::Error *MDLazyLibrary::get_error() {
-	_load();
+	{
+		std::shared_lock<std::shared_mutex> lock(_mu);
+		if (_loaded) {
+			return _error.get();
+		}
+	}
+	std::unique_lock<std::shared_mutex> lock(_mu);
+	_load_locked();
 	return _error.get();
 }
 
@@ -1053,7 +1219,23 @@ std::shared_ptr<MDLibrary> MDLibrary::create(ShaderCacheEntry *p_entry,
 			lib = std::make_shared<MDLazyLibrary>(p_entry, p_device, p_source, p_options);
 			break;
 	}
-	p_entry->library = lib;
+	if (p_entry != nullptr) {
+		p_entry->library = lib;
+	}
+	return lib;
+}
+
+std::shared_ptr<MDLibrary> MDLibrary::create_lazy_compressed(ShaderCacheEntry *p_entry,
+		MTL::Device *p_device,
+		const Vector<uint8_t> &p_compressed_bytes,
+		uint32_t p_decompressed_size,
+		uint32_t p_source_size,
+		uint32_t p_compression_flags,
+		MTL::CompileOptions *p_options) {
+	std::shared_ptr<MDLibrary> lib = std::make_shared<MDLazyLibrary>(p_entry, p_device, p_compressed_bytes, p_decompressed_size, p_source_size, p_compression_flags, p_options);
+	if (p_entry != nullptr) {
+		p_entry->library = lib;
+	}
 	return lib;
 }
 

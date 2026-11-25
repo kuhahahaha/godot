@@ -1097,6 +1097,145 @@ void main() { v[0] += K; }
 	rd.submit();
 	rd.sync();
 }
+
+TEST_CASE("[ExternalOutput][Metal][BUG-188B] MDLazyLibrary retains zstd-compressed MSL, releases MTL::Library after render_pipeline_create, and transparently re-hydrates") {
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDevice rd;
+	REQUIRE(rd.initialize(&context) == OK);
+	struct FinalizeGuard {
+		RenderingDevice &rd;
+		~FinalizeGuard() { rd.finalize(); }
+	} guard{ rd };
+
+	MTL::Device *mtl_device = reinterpret_cast<MTL::Device *>(rd.get_driver_resource(RD::DRIVER_RESOURCE_LOGICAL_DEVICE, RID(), 0));
+	REQUIRE(mtl_device != nullptr);
+
+	// Part A: Direct MDLazyLibrary compressed source storage + unload + transparent re-hydration.
+	{
+		NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+		std::string big_msl = "#include <metal_stdlib>\nusing namespace metal;\n";
+		for (int i = 0; i < 64; ++i) {
+			big_msl += "// Repeated padding comment line for zstd compression verification in BUG-188B.\n";
+		}
+		big_msl += "kernel void main0(device uint *buf [[buffer(0)]]) { buf[0] += 188u; }\n";
+		NS::SharedPtr<NS::String> ns_src = NS::TransferPtr(NS::String::alloc()->init((void *)big_msl.data(), big_msl.size(), NS::UTF8StringEncoding));
+		NS::SharedPtr<MTL::CompileOptions> opts = make_shader_compile_options(20300, false, false, false);
+
+		std::shared_ptr<MDLibrary> lazy = MDLibrary::create(nullptr, mtl_device, ns_src.get(), opts.get(), ShaderLoadStrategy::LAZY);
+		REQUIRE(lazy != nullptr);
+		CHECK_FALSE(lazy->is_library_loaded());
+		const uint32_t stored_bytes = lazy->get_stored_source_bytes();
+		CHECK(stored_bytes > 0u);
+		CHECK(stored_bytes < uint32_t(big_msl.size() / 4u));
+
+		// First acquire compiles MTL::Library on demand.
+		NS::SharedPtr<MTL::Library> lib1 = lazy->acquire_library();
+		REQUIRE(lib1.get() != nullptr);
+		CHECK(lazy->is_library_loaded());
+		{
+			NS::SharedPtr<MTL::Function> fn1 = NS::TransferPtr(lib1->newFunction(MTLSTR("main0")));
+			CHECK(fn1.get() != nullptr);
+		}
+		lib1.reset();
+
+		// Release drops MTL::Library LLVM AIR bitcode while preserving compact zstd source.
+		CHECK(lazy->release_loaded_library());
+		CHECK_FALSE(lazy->is_library_loaded());
+		CHECK_FALSE(lazy->release_loaded_library());
+		CHECK(lazy->get_stored_source_bytes() == stored_bytes);
+
+		// Second acquire transparently re-hydrates MTL::Library from zstd bytes.
+		NS::SharedPtr<MTL::Library> lib2 = lazy->acquire_library();
+		REQUIRE(lib2.get() != nullptr);
+		CHECK(lazy->is_library_loaded());
+		{
+			NS::SharedPtr<MTL::Function> fn2 = NS::TransferPtr(lib2->newFunction(MTLSTR("main0")));
+			CHECK(fn2.get() != nullptr);
+		}
+		lib2.reset();
+		CHECK(lazy->release_loaded_library());
+		CHECK_FALSE(lazy->is_library_loaded());
+	}
+
+	// Part B: End-to-end MDRenderShader pipeline creation releases both vert & frag MTL::Library
+	// objects immediately, serves repeat PSOs from cache, and transparently re-hydrates for new variants.
+	static constexpr const char *kVertGlsl =
+			"#version 450\n"
+			"void main() {\n"
+			"    vec2 p = vec2(gl_VertexIndex == 1 ? 3.0 : -1.0, gl_VertexIndex == 2 ? 3.0 : -1.0);\n"
+			"    gl_Position = vec4(p, 0.0, 1.0);\n"
+			"}\n";
+	static constexpr const char *kFragGlsl =
+			"#version 450\n"
+			"layout(location = 0) out vec4 out_color;\n"
+			"void main() {\n"
+			"    out_color = vec4(0.188, 0.5, 0.75, 1.0);\n"
+			"}\n";
+
+	String err;
+	RD::ShaderStageSPIRVData vs;
+	vs.shader_stage = RD::SHADER_STAGE_VERTEX;
+	vs.spirv = rd.shader_compile_spirv_from_source(RD::SHADER_STAGE_VERTEX, String::utf8(kVertGlsl), RD::SHADER_LANGUAGE_GLSL, &err, false);
+	REQUIRE(err.is_empty());
+	REQUIRE(!vs.spirv.is_empty());
+
+	RD::ShaderStageSPIRVData fs;
+	fs.shader_stage = RD::SHADER_STAGE_FRAGMENT;
+	fs.spirv = rd.shader_compile_spirv_from_source(RD::SHADER_STAGE_FRAGMENT, String::utf8(kFragGlsl), RD::SHADER_LANGUAGE_GLSL, &err, false);
+	REQUIRE(err.is_empty());
+	REQUIRE(!fs.spirv.is_empty());
+
+	Vector<RD::ShaderStageSPIRVData> stages;
+	stages.push_back(vs);
+	stages.push_back(fs);
+	const Vector<uint8_t> bytecode = rd.shader_compile_binary_from_spirv(stages, "bug188b_render");
+	REQUIRE(!bytecode.is_empty());
+	const RID render_shader = rd.shader_create_from_bytecode(bytecode);
+	REQUIRE(render_shader.is_valid());
+
+	Vector<RD::AttachmentFormat> attachments;
+	RD::AttachmentFormat color_att;
+	color_att.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
+	color_att.samples = RD::TEXTURE_SAMPLES_1;
+	color_att.usage_flags = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
+	attachments.push_back(color_att);
+	const RD::FramebufferFormatID fb_fmt = rd.framebuffer_format_create(attachments);
+	REQUIRE(fb_fmt != RD::INVALID_FORMAT_ID);
+
+	RD::PipelineRasterizationState raster;
+	const RD::PipelineMultisampleState msaa;
+	const RD::PipelineDepthStencilState ds;
+	const RD::PipelineColorBlendState blend = RD::PipelineColorBlendState::create_disabled(1);
+
+	const uint64_t render_rel_before = RenderingDeviceDriverMetal::get_total_render_libraries_released();
+	const uint64_t hits_before = RenderingDeviceDriverMetal::get_total_render_pso_cache_hits();
+
+	// 1. First pipeline compiles vert + frag and immediately releases BOTH MTL::Library objects.
+	const RID p1 = rd.render_pipeline_create(render_shader, fb_fmt, RD::INVALID_FORMAT_ID, RD::RENDER_PRIMITIVE_TRIANGLES, raster, msaa, ds, blend);
+	REQUIRE(p1.is_valid());
+	CHECK(RenderingDeviceDriverMetal::get_total_render_libraries_released() == render_rel_before + 2u);
+
+	// 2. Identical pipeline hits render_pso_cache with zero re-hydration.
+	const RID p2 = rd.render_pipeline_create(render_shader, fb_fmt, RD::INVALID_FORMAT_ID, RD::RENDER_PRIMITIVE_TRIANGLES, raster, msaa, ds, blend);
+	REQUIRE(p2.is_valid());
+	CHECK(RenderingDeviceDriverMetal::get_total_render_pso_cache_hits() == hits_before + 1u);
+	CHECK(RenderingDeviceDriverMetal::get_total_render_libraries_released() == render_rel_before + 2u);
+
+	// 3. New pipeline state variant transparently re-hydrates vert + frag and releases both again!
+	raster.cull_mode = RD::POLYGON_CULL_BACK;
+	const RID p3 = rd.render_pipeline_create(render_shader, fb_fmt, RD::INVALID_FORMAT_ID, RD::RENDER_PRIMITIVE_TRIANGLES, raster, msaa, ds, blend);
+	REQUIRE(p3.is_valid());
+	CHECK(RenderingDeviceDriverMetal::get_total_render_libraries_released() == render_rel_before + 4u);
+
+	rd.shader_destroy_modules(render_shader);
+	rd.free_rid(p3);
+	rd.free_rid(p2);
+	rd.free_rid(p1);
+	rd.free_rid(render_shader);
+	rd.submit();
+	rd.sync();
+}
 #endif
 
 } // namespace TestExternalOutputBlock23
