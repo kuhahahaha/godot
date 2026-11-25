@@ -118,12 +118,12 @@ uint64_t MetalHeapAllocator::_preferred_block_size(uint32_t p_pool) const {
 	}
 	switch (p_pool) {
 		case POOL_PRIVATE:
-			return 64ull * 1024 * 1024;
+			return 32ull * 1024 * 1024;
 		case POOL_SHARED:
-			return 16ull * 1024 * 1024;
+			return 8ull * 1024 * 1024;
 		case POOL_SHARED_WC:
 		default:
-			return 16ull * 1024 * 1024;
+			return 8ull * 1024 * 1024;
 	}
 }
 
@@ -140,11 +140,11 @@ uint64_t MetalHeapAllocator::_max_recycled_bytes(uint32_t p_pool) const {
 	}
 	switch (p_pool) {
 		case POOL_PRIVATE:
-			return 64ull * 1024 * 1024;
+			return 16ull * 1024 * 1024;
 		case POOL_SHARED:
 		case POOL_SHARED_WC:
 		default:
-			return 16ull * 1024 * 1024;
+			return 4ull * 1024 * 1024;
 	}
 }
 
@@ -310,8 +310,8 @@ void MetalHeapAllocator::_free_allocation(MetalAllocation &p_allocation) {
 			block.live--;
 			if (block.live == 0) {
 				pool.empty_blocks++;
-				// Keep one empty block cached; reclaim beyond that.
-				if (pool.empty_blocks > 1) {
+				// Release empty blocks down to 0 so idle pools do not pin empty heaps.
+				if (pool.empty_blocks > 0) {
 #ifdef DEBUG_ENABLED
 					pool.stats.block_count--;
 					pool.stats.reserved_bytes -= block.heap->size();

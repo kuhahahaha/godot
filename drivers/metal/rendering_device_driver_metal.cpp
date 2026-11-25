@@ -55,6 +55,8 @@
 #include "core/io/file_access.h"
 #include "core/os/os.h"
 
+#include <algorithm>
+
 thread_local LocalVector<RenderingDeviceDriverMetal::CompletionRecord *> *RenderingDeviceDriverMetal::active_completion_records = nullptr;
 thread_local uint64_t RenderingDeviceDriverMetal::active_native_serial = 0;
 thread_local uint32_t RenderingDeviceDriverMetal::active_native_serial_count = 0;
@@ -3449,7 +3451,8 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 		}
 		cache_key.cached_hash = hash_fmix32(h);
 		MutexLock lock(pipeline_state_cache_mutex);
-		if (const ComputePipelineCacheEntry *cached = compute_pso_cache.getptr(cache_key)) {
+		if (ComputePipelineCacheEntry *cached = compute_pso_cache.getptr(cache_key)) {
+			cached->last_used_tick = ++compute_pso_cache_tick;
 			MDComputePipeline *pipeline = new MDComputePipeline(cached->state);
 			pipeline->compute_state.local = shader->local;
 			pipeline->shader = shader;
@@ -3520,12 +3523,39 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 	total_compute_pso_cache_misses.fetch_add(1, std::memory_order_relaxed);
 	if (can_cache) {
 		MutexLock lock(pipeline_state_cache_mutex);
-		if (compute_pso_cache.size() >= MAX_COMPUTE_PSO_CACHE_ENTRIES) {
-			compute_pso_cache.clear();
+		if (ComputePipelineCacheEntry *existing = compute_pso_cache.getptr(cache_key)) {
+			existing->state = state;
+			existing->last_used_tick = ++compute_pso_cache_tick;
+		} else {
+			if (compute_pso_cache.size() >= MAX_COMPUTE_PSO_CACHE_ENTRIES) {
+				struct EvictCandidate {
+					uint64_t tick;
+					const ComputePipelineCacheKey *key;
+				};
+				LocalVector<EvictCandidate> candidates;
+				candidates.reserve(compute_pso_cache.size());
+				for (const KeyValue<ComputePipelineCacheKey, ComputePipelineCacheEntry> &kv : compute_pso_cache) {
+					candidates.push_back({ kv.value.last_used_tick, &kv.key });
+				}
+				const uint32_t evict_count = MIN(COMPUTE_PSO_CACHE_EVICT_COUNT, candidates.size());
+				if (evict_count > 0) {
+					std::nth_element(candidates.ptr(), candidates.ptr() + evict_count, candidates.ptr() + candidates.size(),
+							[](const EvictCandidate &a, const EvictCandidate &b) { return a.tick < b.tick; });
+					LocalVector<ComputePipelineCacheKey> keys_to_erase;
+					keys_to_erase.reserve(evict_count);
+					for (uint32_t i = 0; i < evict_count; ++i) {
+						keys_to_erase.push_back(*candidates[i].key);
+					}
+					for (const ComputePipelineCacheKey &key : keys_to_erase) {
+						compute_pso_cache.erase(key);
+					}
+				}
+			}
+			ComputePipelineCacheEntry entry;
+			entry.state = state;
+			entry.last_used_tick = ++compute_pso_cache_tick;
+			compute_pso_cache.insert(std::move(cache_key), std::move(entry));
 		}
-		ComputePipelineCacheEntry entry;
-		entry.state = state;
-		compute_pso_cache.insert(std::move(cache_key), std::move(entry));
 	}
 
 	MDComputePipeline *pipeline = new MDComputePipeline(state);

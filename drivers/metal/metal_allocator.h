@@ -190,7 +190,7 @@ private:
 		MetalBuffer buffer;
 	};
 
-	static constexpr uint32_t MAX_RECYCLED_BUFFERS_PER_POOL = 64;
+	static constexpr uint32_t MAX_RECYCLED_BUFFERS_PER_POOL = 32;
 	uint64_t _max_recycled_bytes(uint32_t p_pool) const;
 
 	struct Pool {

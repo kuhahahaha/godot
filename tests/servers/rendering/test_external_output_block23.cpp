@@ -848,7 +848,7 @@ TEST_CASE("[ExternalOutput][Metal][BUG-82][BUG-83][BUG-86] binary archive bounds
 		MetalHeapAllocator heap_alloc(metal_driver->get_device());
 		const MTL::ResourceOptions shared_opts = MTL::ResourceStorageModeShared;
 
-		// 10 MiB > POOL_SHARED preferred block/2 (8 MiB), <= max_recycled_bytes (16 MiB):
+		// 10 MiB > POOL_SHARED preferred block/2 (4 MiB):
 		// lands in DEDICATED and MUST be freed immediately (dedicated_count -> 0).
 		MetalBuffer dedicated = heap_alloc.new_buffer(10u * 1024u * 1024u, shared_opts);
 		REQUIRE(dedicated.buffer.get() != nullptr);
@@ -861,27 +861,27 @@ TEST_CASE("[ExternalOutput][Metal][BUG-82][BUG-83][BUG-86] binary archive bounds
 		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].dedicated_count == 0u);
 		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].dedicated_bytes == 0u);
 
-		// Spill POOL_SHARED (16 MiB blocks) across 3 blocks using 3x 7 MiB POOL buffers
-		// (each <= 8 MiB -> Kind::POOL, two fit per block -> 2 blocks; add 3rd -> 2 blocks,
-		// 5x 7 MiB -> 3 blocks). Freeing the 3rd block's sole buffer MUST NOT leave it
-		// pinned in recycled_buffers once there are > 1 blocks + empty block!
-		MetalBuffer b0 = heap_alloc.new_buffer(7u * 1024u * 1024u, shared_opts);
-		MetalBuffer b1 = heap_alloc.new_buffer(7u * 1024u * 1024u, shared_opts);
-		MetalBuffer b2 = heap_alloc.new_buffer(7u * 1024u * 1024u, shared_opts);
-		MetalBuffer b3 = heap_alloc.new_buffer(7u * 1024u * 1024u, shared_opts);
-		MetalBuffer b4 = heap_alloc.new_buffer(7u * 1024u * 1024u, shared_opts);
+		// Spill POOL_SHARED (8 MiB blocks) across 3 blocks using 5x 3 MiB POOL buffers
+		// (each <= 4 MiB -> Kind::POOL, two fit per block -> 2 blocks;
+		// 5x 3 MiB -> 3 blocks). Freeing b2, b3, b4 empties blocks 1 and 2, which
+		// MUST be reclaimed down to 0 empty blocks (block_count drops from 3 to 1).
+		MetalBuffer b0 = heap_alloc.new_buffer(3u * 1024u * 1024u, shared_opts);
+		MetalBuffer b1 = heap_alloc.new_buffer(3u * 1024u * 1024u, shared_opts);
+		MetalBuffer b2 = heap_alloc.new_buffer(3u * 1024u * 1024u, shared_opts);
+		MetalBuffer b3 = heap_alloc.new_buffer(3u * 1024u * 1024u, shared_opts);
+		MetalBuffer b4 = heap_alloc.new_buffer(3u * 1024u * 1024u, shared_opts);
 		REQUIRE(b4.buffer.get() != nullptr);
 		CHECK(b4.allocation.kind == MetalAllocation::Kind::POOL);
 		heap_alloc.get_stats(stats);
 		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].block_count == 3u);
 
-		// Free b2, b3, b4 (emptying blocks 1 and 2) -> spill block 2 MUST be reclaimed
-		// (block_count drops from 3 to 2, keeping at most 1 empty cached block!).
+		// Free b2, b3, b4 (emptying blocks 1 and 2) -> both empty blocks MUST be reclaimed
+		// (block_count drops from 3 to 1, 0 empty cached blocks pinned).
 		heap_alloc.free_buffer(b2);
 		heap_alloc.free_buffer(b3);
 		heap_alloc.free_buffer(b4);
 		heap_alloc.get_stats(stats);
-		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].block_count == 2u);
+		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].block_count == 1u);
 
 		// Small POOL buffer in block 0 still recycles cleanly.
 		const uint64_t hits_before = heap_alloc.get_buffer_recycle_hits();

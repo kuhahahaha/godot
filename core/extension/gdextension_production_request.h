@@ -1018,7 +1018,7 @@ class ProductionAttachment {
 	uint32_t mq_reclaim_hwm = 0;
 	uint64_t arena_reclaimed_bytes_total = 0;
 	// Attachment-scoped persistent UniformSet cache for long-lived retained storage bindings.
-	static constexpr uint32_t PERSISTENT_SET_MAX_LIVE = 2048u;
+	static constexpr uint32_t PERSISTENT_SET_MAX_LIVE = 512u;
 	HashMap<PersistentSetKey, PersistentSetEntry *, PersistentSetKeyHasher> persistent_set_lookup;
 	HashMap<QualificationPhysicalReturn *, LocalVector<PersistentSetEntry *>> persistent_sets_by_dep;
 	LocalVector<PersistentSetEntry *> persistent_sets;

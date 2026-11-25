@@ -4326,6 +4326,22 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 			const uint32_t end = MIN(attachment->mq_reclaim_hwm, attachment->quote.capacity.suboperations);
 			advised += reclaim_arena_pod_pages(attachment->material_qualifications, size_t(end) * sizeof(MaterialQualificationState));
 		}
+		auto reclaim_cells = [&](auto *cells, uint32_t &hwm) {
+			using T = std::remove_pointer_t<decltype(cells)>;
+			if (cells && hwm > 0) {
+				for (uint32_t i = 0; i < hwm; ++i) {
+					cells[i].~T();
+				}
+				advised += reclaim_arena_pod_pages(cells, size_t(hwm) * sizeof(T));
+				hwm = 0;
+			}
+		};
+		reclaim_cells(attachment->actions, attachment->actions_hwm);
+		reclaim_cells(attachment->uses, attachment->uses_hwm);
+		reclaim_cells(attachment->graphs, attachment->graphs_hwm);
+		reclaim_cells(attachment->returns, attachment->returns_hwm);
+		reclaim_cells(attachment->commands, attachment->commands_hwm);
+		reclaim_cells(attachment->frames, attachment->frames_hwm);
 		attachment->arena_reclaimed_bytes_total += advised;
 		attachment->payload_reclaim_hwm = 0;
 		attachment->readback_reclaim_hwm = 0;

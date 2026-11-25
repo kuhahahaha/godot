@@ -1951,9 +1951,9 @@ TEST_CASE("[RenderingDevice][BUG-139] Metal defaults to LAZY shader load strateg
 	CHECK(ShaderLoadStrategy::DEFAULT == ShaderLoadStrategy::LAZY);
 	MetalHeapAllocator main_alloc(nullptr, false);
 	MetalHeapAllocator local_alloc(nullptr, true);
-	CHECK(main_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_PRIVATE) == 64ull * 1024 * 1024);
-	CHECK(main_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_SHARED) == 16ull * 1024 * 1024);
-	CHECK(main_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_SHARED_WC) == 16ull * 1024 * 1024);
+	CHECK(main_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_PRIVATE) == 32ull * 1024 * 1024);
+	CHECK(main_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_SHARED) == 8ull * 1024 * 1024);
+	CHECK(main_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_SHARED_WC) == 8ull * 1024 * 1024);
 	CHECK(local_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_PRIVATE) == 8ull * 1024 * 1024);
 	CHECK(local_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_SHARED) == 4ull * 1024 * 1024);
 	CHECK(local_alloc.preferred_block_size_for_pool(MetalHeapAllocator::POOL_SHARED_WC) == 4ull * 1024 * 1024);

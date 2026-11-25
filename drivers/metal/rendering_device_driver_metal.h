@@ -279,13 +279,16 @@ protected:
 
 	struct ComputePipelineCacheEntry {
 		NS::SharedPtr<MTL::ComputePipelineState> state;
+		uint64_t last_used_tick = 0;
 	};
 
 	static constexpr uint32_t MAX_RENDER_PSO_CACHE_ENTRIES = 1024;
-	static constexpr uint32_t MAX_COMPUTE_PSO_CACHE_ENTRIES = 512;
+	static constexpr uint32_t MAX_COMPUTE_PSO_CACHE_ENTRIES = 4096;
+	static constexpr uint32_t COMPUTE_PSO_CACHE_EVICT_COUNT = 256;
 	Mutex pipeline_state_cache_mutex;
 	HashMap<RenderPipelineCacheKey, RenderPipelineCacheEntry, RenderPipelineCacheKeyHasher> render_pso_cache;
 	HashMap<ComputePipelineCacheKey, ComputePipelineCacheEntry, ComputePipelineCacheKeyHasher> compute_pso_cache;
+	uint64_t compute_pso_cache_tick = 0;
 	std::atomic<uint64_t> render_pso_cache_hits{ 0 };
 	std::atomic<uint64_t> render_pso_cache_misses{ 0 };
 	std::atomic<uint64_t> compute_pso_cache_hits{ 0 };
