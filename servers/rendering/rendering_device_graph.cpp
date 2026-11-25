@@ -1527,20 +1527,36 @@ void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedC
 			} break;
 			case RecordedCommand::TYPE_BUFFER_CLEAR: {
 				const RecordedBufferClearCommand *buffer_clear_command = reinterpret_cast<const RecordedBufferClearCommand *>(command);
+				if (unlikely(!buffer_clear_command->buffer.id)) {
+					ERR_PRINT("RDG: Skipping TYPE_BUFFER_CLEAR with null buffer ID.");
+					break;
+				}
 				driver->command_clear_buffer(r_command_buffer, buffer_clear_command->buffer, buffer_clear_command->offset, buffer_clear_command->size);
 			} break;
 			case RecordedCommand::TYPE_BUFFER_COPY: {
 				const RecordedBufferCopyCommand *buffer_copy_command = reinterpret_cast<const RecordedBufferCopyCommand *>(command);
+				if (unlikely(!buffer_copy_command->source.id || !buffer_copy_command->destination.id)) {
+					ERR_PRINT("RDG: Skipping TYPE_BUFFER_COPY with null buffer ID.");
+					break;
+				}
 				driver->command_copy_buffer(r_command_buffer, buffer_copy_command->source, buffer_copy_command->destination, buffer_copy_command->region);
 			} break;
 			case RecordedCommand::TYPE_BUFFER_GET_DATA: {
 				const RecordedBufferGetDataCommand *buffer_get_data_command = reinterpret_cast<const RecordedBufferGetDataCommand *>(command);
+				if (unlikely(!buffer_get_data_command->source.id || !buffer_get_data_command->destination.id)) {
+					ERR_PRINT("RDG: Skipping TYPE_BUFFER_GET_DATA with null buffer ID.");
+					break;
+				}
 				driver->command_copy_buffer(r_command_buffer, buffer_get_data_command->source, buffer_get_data_command->destination, buffer_get_data_command->region);
 			} break;
 			case RecordedCommand::TYPE_BUFFER_UPDATE: {
 				const RecordedBufferUpdateCommand *buffer_update_command = reinterpret_cast<const RecordedBufferUpdateCommand *>(command);
 				const RecordedBufferCopy *command_buffer_copies = buffer_update_command->buffer_copies();
 				for (uint32_t j = 0; j < buffer_update_command->buffer_copies_count; j++) {
+					if (unlikely(!command_buffer_copies[j].source.id || !buffer_update_command->destination.id)) {
+						ERR_PRINT("RDG: Skipping TYPE_BUFFER_UPDATE with null buffer ID.");
+						continue;
+					}
 					driver->command_copy_buffer(r_command_buffer, command_buffer_copies[j].source, buffer_update_command->destination, command_buffer_copies[j].region);
 				}
 			} break;
