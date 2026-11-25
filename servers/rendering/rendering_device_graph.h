@@ -55,6 +55,9 @@ class Registry;
 namespace TestRenderingDeviceGraphFramebuffer {
 struct Access;
 }
+namespace TestProductionNativeObserve {
+struct Access;
+}
 #endif
 
 class RenderingDeviceGraph {
@@ -62,6 +65,7 @@ class RenderingDeviceGraph {
 	friend class GDExtensionDeviceExit::Registry;
 #ifdef TESTS_ENABLED
 	friend struct TestRenderingDeviceGraphFramebuffer::Access;
+	friend struct TestProductionNativeObserve::Access;
 #endif
 
 public:
@@ -906,6 +910,9 @@ private:
 	// Exact append boundaries, not opcode-shaped words inside instruction payloads.
 	HashSet<uint64_t> compute_record_offsets;
 	HashSet<uint64_t> draw_record_offsets;
+	// O(1) maps from closed list_index -> command_index (UINT32_MAX if not closed, BUG-196A).
+	LocalVector<uint32_t> compute_list_command_indices;
+	LocalVector<uint32_t> draw_list_command_indices;
 	LocalVector<bool> command_buffer_begun;
 	bool primary_command_buffer_begun = true;
 	bool command_buffer_begin_failed = false;

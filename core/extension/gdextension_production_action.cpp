@@ -1077,11 +1077,73 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 						p_access == GDEXTENSION_PRODUCTION_READ_WRITE_V1 ||
 						p_access == GDEXTENSION_PRODUCTION_ATOMIC_V1;
 			};
+			auto spans_overlap = [](const ProductionResourceSlot::HazardSpan *p_spans, uint32_t p_count, uint64_t p_begin, uint64_t p_end) -> bool {
+				for (uint32_t i = 0; i < p_count; ++i) {
+					if (p_spans[i].begin < p_end && p_begin < p_spans[i].end) {
+						return true;
+					}
+					if (p_spans[i].begin >= p_end) {
+						break;
+					}
+				}
+				return false;
+			};
+			auto record_span = [](uint32_t &r_epoch, uint32_t &r_count, ProductionResourceSlot::HazardSpan *p_spans, uint32_t p_epoch, uint64_t p_begin, uint64_t p_end) {
+				if (r_epoch != p_epoch || r_count == 0) {
+					r_epoch = p_epoch;
+					r_count = 1;
+					p_spans[0] = { p_begin, p_end };
+					return;
+				}
+				// Maintain sorted disjoint spans, coalescing overlapping or adjacent ranges.
+				uint32_t first = 0;
+				while (first < r_count && p_spans[first].end < p_begin) {
+					++first;
+				}
+				uint32_t last = first;
+				uint64_t merged_begin = p_begin;
+				uint64_t merged_end = p_end;
+				while (last < r_count && p_spans[last].begin <= merged_end) {
+					if (p_spans[last].begin < merged_begin) {
+						merged_begin = p_spans[last].begin;
+					}
+					if (p_spans[last].end > merged_end) {
+						merged_end = p_spans[last].end;
+					}
+					++last;
+				}
+				const uint32_t merged_removed = last - first;
+				if (merged_removed > 0) {
+					p_spans[first] = { merged_begin, merged_end };
+					if (merged_removed > 1) {
+						const uint32_t tail = r_count - last;
+						for (uint32_t i = 0; i < tail; ++i) {
+							p_spans[first + 1 + i] = p_spans[last + i];
+						}
+						r_count -= (merged_removed - 1);
+					}
+					return;
+				}
+				if (r_count < ProductionResourceSlot::MAX_HAZARD_SPANS) {
+					for (uint32_t i = r_count; i > first; --i) {
+						p_spans[i] = p_spans[i - 1];
+					}
+					p_spans[first] = { merged_begin, merged_end };
+					++r_count;
+					return;
+				}
+				// Overflow past MAX_HAZARD_SPANS disjoint spans: conservatively collapse
+				// to a single bounding hull covering all recorded spans plus the new span.
+				p_spans[0] = { MIN(p_spans[0].begin, merged_begin), MAX(p_spans[r_count - 1].end, merged_end) };
+				r_count = 1;
+			};
 			auto bump_dispatch_epoch = [&]() {
 				if (++request.dispatch_barrier_epoch == 0) {
 					for (uint32_t r = 0; r < request.resource_count; ++r) {
 						request.resources[r].last_dispatch_write_epoch = 0;
+						request.resources[r].last_dispatch_write_span_count = 0;
 						request.resources[r].last_dispatch_read_epoch = 0;
+						request.resources[r].last_dispatch_read_span_count = 0;
 					}
 					request.dispatch_barrier_epoch = 1;
 				}
@@ -1099,15 +1161,15 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 					const auto &res = request.resources[canonical_slot(use.resource_slot)];
 					const uint64_t use_begin = use.byte_offset;
 					const uint64_t use_end = range_end(use.byte_offset, use.byte_size);
-					// RAW / WAW: any use overlapping a prior write in this epoch.
+					// RAW / WAW: any use overlapping a prior write span in this epoch.
 					if (res.last_dispatch_write_epoch == epoch &&
-							res.last_dispatch_write_begin < use_end && use_begin < res.last_dispatch_write_end) {
+							spans_overlap(res.last_dispatch_write_spans, res.last_dispatch_write_span_count, use_begin, use_end)) {
 						needs_barrier = true;
 						break;
 					}
-					// WAR: any write overlapping a prior read in this epoch.
+					// WAR: any write overlapping a prior read span in this epoch.
 					if (is_write_access(use.access) && res.last_dispatch_read_epoch == epoch &&
-							res.last_dispatch_read_begin < use_end && use_begin < res.last_dispatch_read_end) {
+							spans_overlap(res.last_dispatch_read_spans, res.last_dispatch_read_span_count, use_begin, use_end)) {
 						needs_barrier = true;
 						break;
 					}
@@ -1139,32 +1201,10 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 					const uint64_t span_begin = use.byte_offset;
 					const uint64_t span_end = range_end(use.byte_offset, use.byte_size);
 					if (use_writes) {
-						if (res.last_dispatch_write_epoch != epoch) {
-							res.last_dispatch_write_epoch = epoch;
-							res.last_dispatch_write_begin = span_begin;
-							res.last_dispatch_write_end = span_end;
-						} else {
-							if (span_begin < res.last_dispatch_write_begin) {
-								res.last_dispatch_write_begin = span_begin;
-							}
-							if (span_end > res.last_dispatch_write_end) {
-								res.last_dispatch_write_end = span_end;
-							}
-						}
+						record_span(res.last_dispatch_write_epoch, res.last_dispatch_write_span_count, res.last_dispatch_write_spans, epoch, span_begin, span_end);
 					}
 					if (use_reads) {
-						if (res.last_dispatch_read_epoch != epoch) {
-							res.last_dispatch_read_epoch = epoch;
-							res.last_dispatch_read_begin = span_begin;
-							res.last_dispatch_read_end = span_end;
-						} else {
-							if (span_begin < res.last_dispatch_read_begin) {
-								res.last_dispatch_read_begin = span_begin;
-							}
-							if (span_end > res.last_dispatch_read_end) {
-								res.last_dispatch_read_end = span_end;
-							}
-						}
+						record_span(res.last_dispatch_read_epoch, res.last_dispatch_read_span_count, res.last_dispatch_read_spans, epoch, span_begin, span_end);
 					}
 				}
 			}

@@ -1553,25 +1553,51 @@ Error Registry::production_maintenance_frame_admission_locked(ProductionRequest 
 	// Every graph command must be covered by an actual original production
 	// capture. Other renderer/qualification work waits for its original lane;
 	// this owner service cannot turn that work into a production receipt.
-	for (uint32_t command = 0; command < rd.draw_graph.qualification_command_count(); ++command) {
-		bool captured = false;
+	// Invert the check from O(C^2 * R * G) to O(C + R_active * G) by marking
+	// covered command indices in a single pass across active requests (BUG-196A).
+	const uint32_t cmd_count = rd.draw_graph.qualification_command_count();
+	if (cmd_count > 0) {
+		uint8_t stack_covered[1024];
+		LocalVector<uint8_t> heap_covered;
+		uint8_t *covered = stack_covered;
+		if (cmd_count > sizeof(stack_covered)) {
+			heap_covered.resize(cmd_count);
+			covered = heap_covered.ptr();
+		}
+		memset(covered, 0, cmd_count);
+		uint32_t covered_count = 0;
 		for (auto *attachment : production_attachments) {
-			if (!attachment || attachment->held_device != &rd) {
+			if (!attachment || attachment->held_device != &rd || attachment->children == 0) {
 				continue;
 			}
-			for (uint32_t r = 0; r < attachment->quote.capacity.requests && !captured; ++r) {
+			uint32_t seen_children = 0;
+			for (uint32_t r = 0; r < attachment->quote.capacity.requests && covered_count < cmd_count && seen_children < attachment->children; ++r) {
 				const auto &owner = attachment->requests[r];
-				if (!owner.serial || (owner.compute_list_open || owner.draw_list_open) || owner.capture_inflight) {
+				if (!owner.serial) {
 					continue;
 				}
-				for (uint32_t g = 0; g < owner.graph_count && !captured; ++g) {
+				++seen_children;
+				if (owner.compute_list_open || owner.draw_list_open || owner.capture_inflight) {
+					continue;
+				}
+				for (uint32_t g = 0; g < owner.graph_count && covered_count < cmd_count; ++g) {
 					uint32_t actual = UINT32_MAX;
-					captured = rd.draw_graph._resolve_record_command_index(owner.graphs[g].handle, actual) && actual == command;
+					if (rd.draw_graph._resolve_record_command_index(owner.graphs[g].handle, actual) && actual < cmd_count && !covered[actual]) {
+						covered[actual] = 1;
+						++covered_count;
+					}
 				}
 			}
+			if (covered_count == cmd_count) {
+				break;
+			}
 		}
-		if (!captured) {
-			drain_trace.state(request.serial, request.control.serial, rd.frame, command, rd.draw_graph.qualification_command_count(), 0);
+		if (covered_count < cmd_count) {
+			uint32_t first_uncovered = 0;
+			while (first_uncovered < cmd_count && covered[first_uncovered]) {
+				++first_uncovered;
+			}
+			drain_trace.state(request.serial, request.control.serial, rd.frame, first_uncovered, cmd_count, 0);
 			return drain_trace.result(ERR_BUSY, "uncaptured_graph");
 		}
 	}

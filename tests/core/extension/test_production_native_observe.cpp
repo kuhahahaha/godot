@@ -30,6 +30,7 @@
 
 #include "core/extension/gdextension_production_request.h"
 #include "core/extension/gdextension_qualification_internal.h"
+#include "core/io/native_drain_diagnostic.h"
 #include "core/object/callable_mp.h"
 #include "core/os/os.h"
 #include "core/os/thread.h"
@@ -8407,6 +8408,358 @@ struct Access {
 			e.rd._free_pending_resources(0);
 		}
 	}
+
+	static void bug196a_rdg_o1_record_lookup_and_inverted_frame_admission() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		auto pool_cap = capacity(16);
+		pool_cap.requests = 4;
+		pool_cap.graph_memberships = 16;
+		const auto att_ref = e.accept(pool_cap);
+		REQUIRE(att_ref.handle_serial != 0);
+		graph_initialize(e);
+
+		// Part 1: Verify O(1) compute_list_command_indices / draw_list_command_indices
+		// parity across interleaved closed compute & draw lists plus active open lists.
+		e.rd.draw_graph.begin(true);
+		constexpr uint32_t kTotalClosed = 8;
+		RenderingDeviceGraph::RecordHandle closed_instr[kTotalClosed] = {};
+		RenderingDeviceGraph::RecordHandle closed_end[kTotalClosed] = {};
+		RenderingDeviceGraph::RecordHandle draw_begin_handles[kTotalClosed] = {};
+		uint32_t expected_cmd_idx[kTotalClosed] = {};
+
+		for (uint32_t i = 0; i < kTotalClosed; ++i) {
+			if (i % 3 == 2) {
+				draw_begin_handles[i] = e.rd.draw_graph.add_draw_list_begin(
+						RDD::RenderPassID(1),
+						RDD::FramebufferID(1),
+						Rect2i(0, 0, 16, 16),
+						VectorView<RenderingDeviceGraph::AttachmentOperation>(),
+						VectorView<RDD::RenderPassClearValue>(),
+						RDD::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+				closed_instr[i] = e.rd.draw_graph.add_draw_list_draw(3, 1);
+				// Open draw list: contains_record == true, _resolve_record_command_index == false.
+				CHECK(e.rd.draw_graph.contains_record(draw_begin_handles[i]));
+				CHECK(e.rd.draw_graph.contains_record(closed_instr[i]));
+				uint32_t open_idx = UINT32_MAX;
+				CHECK_FALSE(e.rd.draw_graph._resolve_record_command_index(draw_begin_handles[i], open_idx));
+				CHECK_FALSE(e.rd.draw_graph._resolve_record_command_index(closed_instr[i], open_idx));
+				closed_end[i] = e.rd.draw_graph.add_draw_list_end();
+			} else {
+				e.rd.draw_graph.add_compute_list_begin();
+				closed_instr[i] = e.rd.draw_graph.add_compute_list_dispatch(1, 1, 1);
+				CHECK(e.rd.draw_graph.contains_record(closed_instr[i]));
+				uint32_t open_idx = UINT32_MAX;
+				CHECK_FALSE(e.rd.draw_graph._resolve_record_command_index(closed_instr[i], open_idx));
+				closed_end[i] = e.rd.draw_graph.add_compute_list_end();
+			}
+			expected_cmd_idx[i] = i;
+		}
+
+		// Also leave one compute list actively open while querying all closed lists.
+		e.rd.draw_graph.add_compute_list_begin();
+		const auto active_open_dispatch = e.rd.draw_graph.add_compute_list_dispatch(2, 1, 1);
+		CHECK(e.rd.draw_graph.contains_record(active_open_dispatch));
+		uint32_t resolved = UINT32_MAX;
+		CHECK_FALSE(e.rd.draw_graph._resolve_record_command_index(active_open_dispatch, resolved));
+
+		for (uint32_t i = 0; i < kTotalClosed; ++i) {
+			CHECK(e.rd.draw_graph.contains_record(closed_instr[i]));
+			CHECK(e.rd.draw_graph.contains_record(closed_end[i]));
+			resolved = UINT32_MAX;
+			CHECK(e.rd.draw_graph._resolve_record_command_index(closed_instr[i], resolved));
+			CHECK(resolved == expected_cmd_idx[i]);
+			resolved = UINT32_MAX;
+			CHECK(e.rd.draw_graph._resolve_record_command_index(closed_end[i], resolved));
+			CHECK(resolved == expected_cmd_idx[i]);
+			if (draw_begin_handles[i].is_valid()) {
+				CHECK(e.rd.draw_graph.contains_record(draw_begin_handles[i]));
+				resolved = UINT32_MAX;
+				CHECK(e.rd.draw_graph._resolve_record_command_index(draw_begin_handles[i], resolved));
+				CHECK(resolved == expected_cmd_idx[i]);
+			}
+		}
+
+		// Invalid / out-of-range handles return false safely without OOB.
+		RenderingDeviceGraph::RecordHandle bogus_compute = closed_instr[0];
+		bogus_compute.index = 9999;
+		CHECK_FALSE(e.rd.draw_graph.contains_record(bogus_compute));
+		CHECK_FALSE(e.rd.draw_graph._resolve_record_command_index(bogus_compute, resolved));
+		RenderingDeviceGraph::RecordHandle bogus_draw = draw_begin_handles[2];
+		bogus_draw.index = 9999;
+		CHECK_FALSE(e.rd.draw_graph.contains_record(bogus_draw));
+		CHECK_FALSE(e.rd.draw_graph._resolve_record_command_index(bogus_draw, resolved));
+
+		// Close the open compute list and verify begin() clears O(1) index tables.
+		const auto final_closed = e.rd.draw_graph.add_compute_list_end();
+		CHECK(e.rd.draw_graph._resolve_record_command_index(active_open_dispatch, resolved));
+		CHECK(resolved == kTotalClosed);
+		CHECK(e.rd.draw_graph._resolve_record_command_index(final_closed, resolved));
+		CHECK(resolved == kTotalClosed);
+
+		e.rd.draw_graph.begin(true);
+		CHECK_FALSE(e.rd.draw_graph.contains_record(closed_instr[0]));
+		CHECK_FALSE(e.rd.draw_graph._resolve_record_command_index(closed_instr[0], resolved));
+		CHECK_FALSE(e.rd.draw_graph.contains_record(draw_begin_handles[2]));
+
+		// Part 2: Verify inverted linear production_maintenance_frame_admission_locked
+		// accepts exact multi-request coverage and rejects any uncovered command with ERR_BUSY.
+		ProductionAttachment *att = nullptr;
+		RenderingDevice *rd = nullptr;
+		Request *r0 = nullptr;
+		Request *r1 = nullptr;
+		auto req_cap = capacity(4);
+		req_cap.requests = 1;
+		req_cap.graph_memberships = 4;
+		const GDExtensionProductionActionV2 dummy_action{ 0, 10, 0, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
+		{
+			MutexLock lock(e.registry->mutex);
+			REQUIRE(e.registry->production_attachment_locked(att_ref, true, att, rd) == OK);
+			const GDExtensionProductionOperationV1 op0{ production_dto_abi<GDExtensionProductionOperationV1>(), 19601, 1, 10, 11 };
+			const GDExtensionProductionOperationV1 op1{ production_dto_abi<GDExtensionProductionOperationV1>(), 19602, 1, 10, 11 };
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op0, req_cap, { nullptr, &dummy_action }, 1, nullptr, 0, nullptr, 0, {}, 0, r0, 2) == OK);
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op1, req_cap, { nullptr, &dummy_action }, 1, nullptr, 0, nullptr, 0, {}, 0, r1, 2) == OK);
+		}
+		if (!r0 || !r1) {
+			return;
+		}
+
+		RenderingDeviceGraph::RecordHandle h[4] = {};
+		for (uint32_t i = 0; i < 3; ++i) {
+			e.rd.draw_graph.add_compute_list_begin();
+			h[i] = e.rd.draw_graph.add_compute_list_dispatch(1, 1, 1);
+			(void)e.rd.draw_graph.add_compute_list_end();
+		}
+		REQUIRE(e.rd.draw_graph.qualification_command_count() == 3u);
+
+		// Partial coverage: commands 0 and 2 covered, command 1 uncovered -> ERR_BUSY.
+		r0->graphs[0].handle = h[0];
+		r0->graph_count = 1;
+		r1->graphs[0].handle = h[2];
+		r1->graph_count = 1;
+		{
+			MutexLock lock(e.registry->mutex);
+			NativeDrainDiagnostic::Span trace("bug196a.partial", r0->serial, 0, 0, e.rd.frame, 0, 3);
+			CHECK(e.registry->production_maintenance_frame_admission_locked(*r0, e.rd, trace) == ERR_BUSY);
+		}
+
+		// Complete coverage across r0 (cmd 0) and r1 (cmds 2, 1) -> OK!
+		r1->graphs[1].handle = h[1];
+		r1->graph_count = 2;
+		{
+			MutexLock lock(e.registry->mutex);
+			NativeDrainDiagnostic::Span trace("bug196a.full", r0->serial, 0, 0, e.rd.frame, 0, 3);
+			CHECK(e.registry->production_maintenance_frame_admission_locked(*r0, e.rd, trace) == OK);
+		}
+
+		// Add an uncaptured 4th command (cmd 3) -> ERR_BUSY again.
+		e.rd.draw_graph.add_compute_list_begin();
+		h[3] = e.rd.draw_graph.add_compute_list_dispatch(1, 1, 1);
+		(void)e.rd.draw_graph.add_compute_list_end();
+		{
+			MutexLock lock(e.registry->mutex);
+			NativeDrainDiagnostic::Span trace("bug196a.uncaptured", r0->serial, 0, 0, e.rd.frame, 0, 4);
+			CHECK(e.registry->production_maintenance_frame_admission_locked(*r0, e.rd, trace) == ERR_BUSY);
+		}
+
+		r0->graph_count = 0;
+		r1->graph_count = 0;
+		e.rd.draw_graph.begin(true);
+		const GDExtensionProductionRequestRefV1 ref0{ Enrollment::INSTANCE, r0->serial };
+		const GDExtensionProductionRequestRefV1 ref1{ Enrollment::INSTANCE, r1->serial };
+		REQUIRE(e.registry->production_cancel(ref0).native_error == OK);
+		REQUIRE(e.registry->production_release(ref0).native_error == OK);
+		REQUIRE(e.registry->production_cancel(ref1).native_error == OK);
+		REQUIRE(e.registry->production_release(ref1).native_error == OK);
+		CHECK(e.registry->production_close(att_ref).native_error == OK);
+	}
+
+	static void bug196a_disjoint_multispan_hazard_tracker_and_overflow_fallback() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		e.driver.expected_set_bindings = 1;
+
+		constexpr uint32_t kActions = 18;
+		constexpr uint32_t kResources = 3; // 0 = unit, 1 = S0 (128B), 2 = set(S0)
+		constexpr uint32_t kStorageBytes = 128;
+		auto c = capacity(32);
+		c.suboperations = 32;
+		c.resources = 4;
+		c.resource_uses = 32;
+		c.graph_memberships = 64;
+		c.native_memberships = 64;
+		c.return_cells = 8;
+		c.retained_payload_bytes = 1024;
+		const auto att_ref = e.accept(c);
+		REQUIRE(att_ref.handle_serial != 0);
+		graph_initialize(e);
+
+		ProductionAttachment *att = nullptr;
+		RenderingDevice *rd = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			REQUIRE(e.registry->production_attachment_locked(att_ref, true, att, rd) == OK);
+		}
+		REQUIRE(att != nullptr);
+
+		const GDExtensionProductionOperationV1 op = { production_dto_abi<GDExtensionProductionOperationV1>(), 19610, 1, 10, 10 + kActions };
+		GDExtensionProductionActionV2 actions[kActions] = {};
+		for (uint32_t i = 0; i < kActions; ++i) {
+			actions[i] = {
+				i,
+				10 + i,
+				0,
+				0,
+				GDEXTENSION_PRODUCTION_DISPATCH_V1,
+				0,
+				i,
+				1,
+				uint32_t(i + 1 == kActions ? GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1 : GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1),
+				UINT32_MAX,
+			};
+		}
+		const GDExtensionProductionResourceV1 resources[kResources] = {
+			{ GDEXTENSION_PRODUCTION_UNIT_V1, 4, 5, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 6, 0, 0 },
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, kStorageBytes, 0 },
+			{ GDEXTENSION_PRODUCTION_SET_V1, 2, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 0, 0 },
+		};
+		const GDExtensionProductionUseV1 uses[kActions] = {
+			{ 1, GDEXTENSION_PRODUCTION_READ_V1, 0, 8, 0 },   // 0: R[0,8)      -> open list (E0+1), read_spans=1
+			{ 1, GDEXTENSION_PRODUCTION_READ_V1, 64, 8, 0 },  // 1: R[64,72)    -> RAR (no split), read_spans=2
+			{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 16, 8, 0 }, // 2: W[16,24)    -> disjoint gap between reads! ZERO split!
+			{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 24, 8, 0 }, // 3: W[24,32)    -> adjacent write coalesces to [16,32), ZERO split!
+			{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 4, 8, 0 },  // 4: W[4,12)     -> overlaps R[0,8) -> WAR split (E0+2)
+			{ 1, GDEXTENSION_PRODUCTION_READ_V1, 0, 8, 0 },   // 5: R[0,8)      -> overlaps W[4,12) -> RAW split (E0+3)
+			{ 1, GDEXTENSION_PRODUCTION_READ_V1, 64, 8, 0 },  // 6: R[64,72)    -> RAR (no split), read_spans=2
+			{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 68, 8, 0 }, // 7: W[68,76)    -> overlaps R[64,72) -> WAR split (E0+4)
+			// 8..15: 8 disjoint READ spans in epoch E0+4 (all disjoint from W[68,76)):
+			{ 1, GDEXTENSION_PRODUCTION_READ_V1, 0, 4, 0 },   // 8:  span 1
+			{ 1, GDEXTENSION_PRODUCTION_READ_V1, 8, 4, 0 },   // 9:  span 2
+			{ 1, GDEXTENSION_PRODUCTION_READ_V1, 16, 4, 0 },  // 10: span 3
+			{ 1, GDEXTENSION_PRODUCTION_READ_V1, 24, 4, 0 },  // 11: span 4
+			{ 1, GDEXTENSION_PRODUCTION_READ_V1, 32, 4, 0 },  // 12: span 5
+			{ 1, GDEXTENSION_PRODUCTION_READ_V1, 40, 4, 0 },  // 13: span 6
+			{ 1, GDEXTENSION_PRODUCTION_READ_V1, 48, 4, 0 },  // 14: span 7
+			{ 1, GDEXTENSION_PRODUCTION_READ_V1, 56, 4, 0 },  // 15: span 8 (MAX_HAZARD_SPANS)
+			{ 1, GDEXTENSION_PRODUCTION_READ_V1, 112, 4, 0 }, // 16: 9th disjoint READ -> overflow collapses to hull [0,116), no split!
+			{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 88, 4, 0 }, // 17: W[88,92) inside collapsed hull [0,116) -> conservative WAR split (E0+5)
+		};
+
+		Request *r = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op, c, { nullptr, actions }, kActions, resources, kResources, uses, kActions, { nullptr, nullptr, 0, nullptr }, 0, r, 2) == OK);
+		}
+		REQUIRE(r != nullptr);
+		const GDExtensionProductionRequestRefV1 ref{ Enrollment::INSTANCE, r->serial };
+		REQUIRE(import_original_unit(e, *r, true, false));
+
+		auto *s0 = memnew(Registry::QualificationBridge::Storage);
+		s0->serial = 1961;
+		s0->creating = false;
+		s0->origin = { Enrollment::ABI, kStorageBytes, 1, 0, 1, 1, 0 };
+		s0->physical.bridge = e.original_bridge->serial;
+		s0->physical.child = s0->serial;
+		const RID srid = e.rd._qualification_storage_create(kStorageBytes, &s0->physical);
+		REQUIRE(srid.is_valid());
+		const auto *sbuf = e.rd.storage_buffer_owner.get_or_null(srid);
+		REQUIRE(sbuf != nullptr);
+		s0->physical.rid = srid.get_id();
+		s0->backing = { Enrollment::ABI, { Enrollment::INSTANCE, s0->serial }, srid.get_id(), sbuf->backing_serial, sbuf->size, uint64_t(sbuf->usage), OK, 1 };
+		e.original_bridge->storage[0] = s0;
+		e.original_storage = s0;
+
+		REQUIRE(e.registry->production_import_storage(ref, 1, &s0->backing).native_error == OK);
+		const GDExtensionProductionSetBindingV1 bind_s0 = { production_dto_abi<GDExtensionProductionSetBindingV1>(), 0, 0, 0, 1, 0, kStorageBytes };
+		REQUIRE(e.registry->production_set_create(ref, 2, 0, 0, &bind_s0, 1).native_error == OK);
+
+		const uint32_t push[4] = { 1, 2, 3, 4 };
+		for (uint32_t i = 0; i < kActions; ++i) {
+			const GDExtensionProductionDispatchV2 disp = {
+				production_dto_abi<GDExtensionProductionDispatchV2>(),
+				i,
+				10 + i,
+				0,
+				0,
+				0,
+				2,
+				1,
+				2,
+				3,
+				4,
+				sizeof(push),
+				0,
+			};
+			REQUIRE(e.registry->production_prepare_dispatch_v2(ref, &disp, push, sizeof(push)).native_error == OK);
+		}
+		{
+			MutexLock rd_lock(e.rd._thread_safe_);
+			MutexLock lock(e.registry->mutex);
+			REQUIRE(e.registry->production_freeze_rd_locked(*r, &e.rd) == OK);
+		}
+
+		void *saved_frame = nullptr;
+		e.registry->test_push_production_physical_frame(19610, saved_frame);
+		const uint32_t initial_epoch = r->dispatch_barrier_epoch;
+		const uint32_t expected_epoch_delta[kActions] = {
+			1u, 1u, 1u, 1u,
+			2u, 3u, 3u, 4u,
+			4u, 4u, 4u, 4u, 4u, 4u, 4u, 4u,
+			4u, 5u,
+		};
+
+		for (uint32_t i = 0; i < kActions; ++i) {
+			const auto obs = effect(e, *r, i);
+			REQUIRE(obs.error == OK);
+			REQUIRE(obs.state == CheckedRecordAppend::State::Appended);
+			CHECK(r->dispatch_barrier_epoch == initial_epoch + expected_epoch_delta[i]);
+			const auto &slot = r->resources[1];
+			if (i == 1) {
+				CHECK(slot.last_dispatch_read_span_count == 2u);
+				CHECK(slot.last_dispatch_read_spans[0].begin == 0u);
+				CHECK(slot.last_dispatch_read_spans[0].end == 8u);
+				CHECK(slot.last_dispatch_read_spans[1].begin == 64u);
+				CHECK(slot.last_dispatch_read_spans[1].end == 72u);
+			} else if (i == 3) {
+				// Adjacent writes [16,24) + [24,32) coalesce into [16,32).
+				CHECK(slot.last_dispatch_write_span_count == 1u);
+				CHECK(slot.last_dispatch_write_spans[0].begin == 16u);
+				CHECK(slot.last_dispatch_write_spans[0].end == 32u);
+			} else if (i == 15) {
+				CHECK(slot.last_dispatch_read_span_count == ProductionResourceSlot::MAX_HAZARD_SPANS);
+			} else if (i == 16) {
+				// 9th disjoint span overflows to conservative bounding hull [0, 116).
+				CHECK(slot.last_dispatch_read_span_count == 1u);
+				CHECK(slot.last_dispatch_read_spans[0].begin == 0u);
+				CHECK(slot.last_dispatch_read_spans[0].end == 116u);
+			}
+			CHECK(r->compute_list_open == (i + 1u < kActions));
+		}
+		e.registry->test_pop_production_physical_frame(saved_frame);
+
+		REQUIRE(e.registry->production_cancel(ref).native_error == OK);
+		e.driver.complete = true;
+		execute_transfers(e, *r, true);
+		CHECK(e.driver.dispatches == kActions);
+		CHECK(e.driver.pipeline_binds == 5u);
+		CHECK(e.driver.set_binds == kActions);
+
+		const auto observed_done = turn(e, *r, ProductionControlKind::OBSERVE, budget());
+		CHECK(observed_done.report.known_obligations > 0);
+		CHECK(observed_done.report.complete_obligations == observed_done.report.known_obligations);
+		REQUIRE(finish_owned_maintenance(e, *r, budget()));
+		const auto released = turn(e, *r, ProductionControlKind::RELEASE, budget());
+		CHECK(released.owner_return.native_error == OK);
+		CHECK(r->serial == 0);
+		CHECK(e.registry->production_close(att_ref).native_error == ERR_BUSY);
+		e.rd._free_pending_resources(0);
+		CHECK(e.registry->production_close(att_ref).native_error == OK);
+		s0->physical.use_closed.store(true);
+		e.rd.qualification_retiring = true;
+		e.rd.free_rid(RID::from_uint64(s0->backing.rid));
+		e.rd.qualification_retiring = false;
+		e.rd._free_pending_resources(0);
+	}
 };
 TEST_CASE("[ProductionNativeObserve][PreparedNativeRecordV2] cancel rejects transferred native wait before consume without erasing actual prefix") {
 	Access::native_record_wait_rejection(false);
@@ -8739,4 +9092,12 @@ TEST_CASE("[ProductionNativeObserve][BUG-195D-1] PersistentSetCache O(1) LRU tou
 
 TEST_CASE("[ProductionAction][BUG-195A] compute-list hazard tracker splits cleanly on WAR/RAW/WAW and canonicalized aliases with zero dead rebinds") {
 	TestProductionNativeObserve::Access::bug195a_dispatch_war_raw_waw_clean_split_and_alias_canonicalization();
+}
+
+TEST_CASE("[ProductionNativeObserve][BUG-196A] O(1) RDG record command resolution and inverted linear frame admission preserve exact parity") {
+	TestProductionNativeObserve::Access::bug196a_rdg_o1_record_lookup_and_inverted_frame_admission();
+}
+
+TEST_CASE("[ProductionAction][BUG-196A] disjoint multi-span hazard tracker eliminates false bounding-hull splits and falls back safely past 8 spans") {
+	TestProductionNativeObserve::Access::bug196a_disjoint_multispan_hazard_tracker_and_overflow_fallback();
 }

@@ -62,14 +62,16 @@ bool RenderingDeviceGraph::contains_record(const RecordHandle &p_handle) const {
 		return false;
 	}
 	if (p_handle.kind == 5 || p_handle.kind == 6) {
-		for (uint32_t i = 0; i < command_count; ++i) {
-			const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[i]]);
-			if (command->type != RecordedCommand::TYPE_DRAW_LIST) {
-				continue;
-			}
-			const auto *list = static_cast<const RecordedDrawListCommand *>(command);
-			if (list->list_index == p_handle.index) {
-				return p_handle.kind == 5 ? p_handle.offset == 0 : p_handle.offset < list->clear_values_count && p_handle.offset < list->trackers_count && list->load_ops()[p_handle.offset] == RDD::ATTACHMENT_LOAD_OP_CLEAR;
+		if (p_handle.index < draw_list_command_indices.size()) {
+			const uint32_t cmd_idx = draw_list_command_indices[p_handle.index];
+			if (cmd_idx < command_count && cmd_idx < command_data_offsets.size() && command_data_offsets[cmd_idx] < command_data.size()) {
+				const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[cmd_idx]]);
+				if (command->type == RecordedCommand::TYPE_DRAW_LIST) {
+					const auto *list = static_cast<const RecordedDrawListCommand *>(command);
+					if (list->list_index == p_handle.index) {
+						return p_handle.kind == 5 ? p_handle.offset == 0 : p_handle.offset < list->clear_values_count && p_handle.offset < list->trackers_count && list->load_ops()[p_handle.offset] == RDD::ATTACHMENT_LOAD_OP_CLEAR;
+					}
+				}
 			}
 		}
 		if (p_handle.index != uint32_t(draw_instruction_list.index) || draw_instruction_list.index <= 0) {
@@ -102,22 +104,27 @@ bool RenderingDeviceGraph::contains_record(const RecordHandle &p_handle) const {
 	} else if (p_handle.kind == 3 && p_handle.index == uint32_t(draw_instruction_list.index)) {
 		data = draw_instruction_list.data.ptr();
 		size = draw_instruction_list.data.size();
-	} else {
-		for (uint32_t i = 0; i < command_count; i++) {
-			const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[i]]);
-			if (p_handle.kind == 2 && command->type == RecordedCommand::TYPE_COMPUTE_LIST) {
+	} else if (p_handle.kind == 2 && p_handle.index < compute_list_command_indices.size()) {
+		const uint32_t cmd_idx = compute_list_command_indices[p_handle.index];
+		if (cmd_idx < command_count && cmd_idx < command_data_offsets.size() && command_data_offsets[cmd_idx] < command_data.size()) {
+			const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[cmd_idx]]);
+			if (command->type == RecordedCommand::TYPE_COMPUTE_LIST) {
 				const auto *list = static_cast<const RecordedComputeListCommand *>(command);
 				if (list->list_index == p_handle.index) {
 					data = list->instruction_data();
 					size = list->instruction_data_size;
-					break;
 				}
-			} else if (p_handle.kind == 3 && command->type == RecordedCommand::TYPE_DRAW_LIST) {
+			}
+		}
+	} else if (p_handle.kind == 3 && p_handle.index < draw_list_command_indices.size()) {
+		const uint32_t cmd_idx = draw_list_command_indices[p_handle.index];
+		if (cmd_idx < command_count && cmd_idx < command_data_offsets.size() && command_data_offsets[cmd_idx] < command_data.size()) {
+			const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[cmd_idx]]);
+			if (command->type == RecordedCommand::TYPE_DRAW_LIST) {
 				const auto *list = static_cast<const RecordedDrawListCommand *>(command);
 				if (list->list_index == p_handle.index) {
 					data = list->instruction_data();
 					size = list->instruction_data_size;
-					break;
 				}
 			}
 		}
@@ -187,17 +194,35 @@ bool RenderingDeviceGraph::_resolve_record_command_index(const RecordHandle &p_h
 	if (!contains_record(p_handle)) {
 		return false;
 	}
-	if ((p_handle.kind == 1 || p_handle.kind == 4 || p_handle.kind == 7)) {
+	if (p_handle.kind == 1 || p_handle.kind == 4 || p_handle.kind == 7) {
 		r_index = p_handle.index;
 		return true;
 	}
-	for (uint32_t i = 0; i < command_count; i++) {
-		const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[i]]);
-		if ((p_handle.kind == 2 && command->type == RecordedCommand::TYPE_COMPUTE_LIST && static_cast<const RecordedComputeListCommand *>(command)->list_index == p_handle.index) ||
-				((p_handle.kind == 3 || p_handle.kind == 5 || p_handle.kind == 6) && command->type == RecordedCommand::TYPE_DRAW_LIST && static_cast<const RecordedDrawListCommand *>(command)->list_index == p_handle.index)) {
-			r_index = i;
-			return true;
+	if (p_handle.kind == 2) {
+		if (p_handle.index < compute_list_command_indices.size()) {
+			const uint32_t cmd_idx = compute_list_command_indices[p_handle.index];
+			if (cmd_idx < command_count && cmd_idx < command_data_offsets.size() && command_data_offsets[cmd_idx] < command_data.size()) {
+				const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[cmd_idx]]);
+				if (command->type == RecordedCommand::TYPE_COMPUTE_LIST && static_cast<const RecordedComputeListCommand *>(command)->list_index == p_handle.index) {
+					r_index = cmd_idx;
+					return true;
+				}
+			}
 		}
+		return false;
+	}
+	if (p_handle.kind == 3 || p_handle.kind == 5 || p_handle.kind == 6) {
+		if (p_handle.index < draw_list_command_indices.size()) {
+			const uint32_t cmd_idx = draw_list_command_indices[p_handle.index];
+			if (cmd_idx < command_count && cmd_idx < command_data_offsets.size() && command_data_offsets[cmd_idx] < command_data.size()) {
+				const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[cmd_idx]]);
+				if (command->type == RecordedCommand::TYPE_DRAW_LIST && static_cast<const RecordedDrawListCommand *>(command)->list_index == p_handle.index) {
+					r_index = cmd_idx;
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 	return false;
 }
@@ -233,11 +258,16 @@ bool RenderingDeviceGraph::is_latest_buffer_writer(const ResourceTracker *p_trac
 	}
 	// add_compute_list_usage changes compute_list_index before list closure;
 	// the old writer field alone must not certify an open later source use.
-	for (uint32_t i = 0; i < command_count; ++i) {
-		const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[i]]);
-		if (command->type == RecordedCommand::TYPE_COMPUTE_LIST &&
-				static_cast<const RecordedComputeListCommand *>(command)->list_index == uint32_t(p_tracker->compute_list_index)) {
-			return true;
+	if (p_tracker->compute_list_index < 0) {
+		return false;
+	}
+	const uint32_t list_idx = uint32_t(p_tracker->compute_list_index);
+	if (list_idx < compute_list_command_indices.size()) {
+		const uint32_t cmd_idx = compute_list_command_indices[list_idx];
+		if (cmd_idx < command_count && cmd_idx < command_data_offsets.size() && command_data_offsets[cmd_idx] < command_data.size()) {
+			const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[cmd_idx]]);
+			return command->type == RecordedCommand::TYPE_COMPUTE_LIST &&
+					static_cast<const RecordedComputeListCommand *>(command)->list_index == list_idx;
 		}
 	}
 	return false;
@@ -2222,6 +2252,8 @@ void RenderingDeviceGraph::begin(bool p_primary_command_buffer_begun) {
 	command_buffer_ids.clear();
 	compute_record_offsets.clear();
 	draw_record_offsets.clear();
+	compute_list_command_indices.clear();
+	draw_list_command_indices.clear();
 	command_buffer_begun.clear();
 	command_normalization_barriers.clear();
 	command_transition_barriers.clear();
@@ -2601,6 +2633,15 @@ RenderingDeviceGraph::RecordHandle RenderingDeviceGraph::add_compute_list_end() 
 		memcpy(command->instruction_data(), compute_instruction_list.data.ptr(), instruction_data_size);
 	}
 	_add_command_to_graph(compute_instruction_list.command_trackers.ptr(), compute_instruction_list.command_tracker_usages.ptr(), compute_instruction_list.command_trackers.size(), command_index, command);
+	const uint32_t list_idx = uint32_t(compute_instruction_list.index);
+	if (list_idx >= compute_list_command_indices.size()) {
+		const uint32_t prev_size = compute_list_command_indices.size();
+		compute_list_command_indices.resize(list_idx + 1u);
+		for (uint32_t k = prev_size; k < list_idx; ++k) {
+			compute_list_command_indices[k] = UINT32_MAX;
+		}
+	}
+	compute_list_command_indices[list_idx] = uint32_t(command_index);
 	return { graph_instance, uint64_t(tracking_frame), 4, uint32_t(command_index), 0 };
 }
 
@@ -2910,6 +2951,15 @@ RenderingDeviceGraph::RecordHandle RenderingDeviceGraph::add_draw_list_end() {
 		memcpy(command->instruction_data(), draw_instruction_list.data.ptr(), instruction_data_size);
 	}
 	_add_command_to_graph(draw_instruction_list.command_trackers.ptr(), draw_instruction_list.command_tracker_usages.ptr(), draw_instruction_list.command_trackers.size(), command_index, command);
+	const uint32_t list_idx = uint32_t(draw_instruction_list.index);
+	if (list_idx >= draw_list_command_indices.size()) {
+		const uint32_t prev_size = draw_list_command_indices.size();
+		draw_list_command_indices.resize(list_idx + 1u);
+		for (uint32_t k = prev_size; k < list_idx; ++k) {
+			draw_list_command_indices[k] = UINT32_MAX;
+		}
+	}
+	draw_list_command_indices[list_idx] = uint32_t(command_index);
 	return { graph_instance, uint64_t(tracking_frame), 7, uint32_t(command_index), 0 };
 }
 

@@ -351,13 +351,21 @@ class ProductionResourceSlot {
 	uint32_t imported_unit_slot = UINT32_MAX;
 	uint32_t shader_set = UINT32_MAX;
 	uint32_t first_binding = UINT32_MAX, binding_count = 0;
-	// Per-resource O(1) RAW/WAW/WAR hazard tracker within the active compute list (BUG-195A).
+	// Per-resource bounded disjoint multi-span RAW/WAW/WAR hazard tracker within
+	// the active compute list (BUG-195A, BUG-196A). Storing up to MAX_HAZARD_SPANS
+	// sorted disjoint spans avoids false-positive bounding-hull splits across
+	// independent sub-allocations in a shared storage buffer.
+	static constexpr uint32_t MAX_HAZARD_SPANS = 8u;
+	struct HazardSpan {
+		uint64_t begin = 0;
+		uint64_t end = 0;
+	};
 	uint32_t last_dispatch_write_epoch = 0;
-	uint64_t last_dispatch_write_begin = 0;
-	uint64_t last_dispatch_write_end = 0;
+	uint32_t last_dispatch_write_span_count = 0;
+	HazardSpan last_dispatch_write_spans[MAX_HAZARD_SPANS] = {};
 	uint32_t last_dispatch_read_epoch = 0;
-	uint64_t last_dispatch_read_begin = 0;
-	uint64_t last_dispatch_read_end = 0;
+	uint32_t last_dispatch_read_span_count = 0;
+	HazardSpan last_dispatch_read_spans[MAX_HAZARD_SPANS] = {};
 	uint32_t hazard_canonical_slot = UINT32_MAX;
 	bool imported = false;
 	bool scene_depth_set1 = false;
