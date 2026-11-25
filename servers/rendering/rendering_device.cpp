@@ -41,6 +41,7 @@
 
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
+#include "core/crypto/crypto_core.h"
 #include "core/extension/gdextension_external_output_interface.h"
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "core/extension/gdextension_production_request.h"
@@ -277,13 +278,184 @@ bool RenderingDevice::_free_dependencies(RID p_id, const MutexLock<Mutex> &p_out
 /**** SHADER INFRASTRUCTURE ****/
 /*******************************/
 
+namespace {
+
+struct Sha256Key {
+	uint8_t data[32] = {};
+
+	bool operator==(const Sha256Key &p_rhs) const {
+		return memcmp(data, p_rhs.data, sizeof(data)) == 0;
+	}
+};
+
+struct Sha256KeyHasher {
+	static _FORCE_INLINE_ uint32_t hash(const Sha256Key &p_key) {
+		return hash_murmur3_buffer(p_key.data, sizeof(p_key.data));
+	}
+};
+
+struct BoundedShaderByteCache {
+	static constexpr uint32_t MAX_SPIRV_ENTRIES = 128;
+	static constexpr uint64_t MAX_SPIRV_BYTES = 8ull * 1024u * 1024u;
+	static constexpr uint32_t MAX_CONTAINER_ENTRIES = 128;
+	static constexpr uint64_t MAX_CONTAINER_BYTES = 4ull * 1024u * 1024u;
+
+	struct Entry {
+		Vector<uint8_t> bytes;
+		const RenderingDevice *owner = nullptr;
+	};
+
+	Mutex mutex;
+	HashMap<Sha256Key, Entry, Sha256KeyHasher> entries;
+	List<Sha256Key> fifo;
+	uint64_t total_bytes = 0;
+	uint32_t max_entries = MAX_SPIRV_ENTRIES;
+	uint64_t max_bytes = MAX_SPIRV_BYTES;
+
+	BoundedShaderByteCache(uint32_t p_max_entries, uint64_t p_max_bytes) :
+			max_entries(p_max_entries), max_bytes(p_max_bytes) {}
+
+	bool lookup(const Sha256Key &p_key, Vector<uint8_t> &r_out) {
+		MutexLock lock(mutex);
+		if (const Entry *e = entries.getptr(p_key)) {
+			r_out = e->bytes;
+			return true;
+		}
+		return false;
+	}
+
+	void insert(const Sha256Key &p_key, const Vector<uint8_t> &p_bytes, const RenderingDevice *p_owner = nullptr) {
+		const uint64_t sz = uint64_t(p_bytes.size());
+		if (sz == 0 || sz > max_bytes) {
+			return;
+		}
+		MutexLock lock(mutex);
+		if (entries.has(p_key)) {
+			return;
+		}
+		while ((!fifo.is_empty()) && (entries.size() >= max_entries || total_bytes + sz > max_bytes)) {
+			const Sha256Key oldest = fifo.front()->get();
+			fifo.pop_front();
+			if (const Entry *old = entries.getptr(oldest)) {
+				total_bytes -= uint64_t(old->bytes.size());
+				entries.erase(oldest);
+			}
+		}
+		Entry e;
+		e.bytes = p_bytes;
+		e.owner = p_owner;
+		entries.insert(p_key, std::move(e));
+		fifo.push_back(p_key);
+		total_bytes += sz;
+	}
+
+	void erase_owner(const RenderingDevice *p_owner) {
+		MutexLock lock(mutex);
+		List<Sha256Key>::Element *el = fifo.front();
+		while (el != nullptr) {
+			List<Sha256Key>::Element *next = el->next();
+			const Sha256Key &key = el->get();
+			if (const Entry *e = entries.getptr(key); e != nullptr && e->owner == p_owner) {
+				total_bytes -= uint64_t(e->bytes.size());
+				entries.erase(key);
+				fifo.erase(el);
+			}
+			el = next;
+		}
+	}
+
+	void clear() {
+		MutexLock lock(mutex);
+		entries.clear();
+		fifo.clear();
+		total_bytes = 0;
+	}
+};
+
+static BoundedShaderByteCache &get_spirv_compile_cache() {
+	static BoundedShaderByteCache cache(BoundedShaderByteCache::MAX_SPIRV_ENTRIES, BoundedShaderByteCache::MAX_SPIRV_BYTES);
+	return cache;
+}
+
+static BoundedShaderByteCache &get_container_compile_cache() {
+	static BoundedShaderByteCache cache(BoundedShaderByteCache::MAX_CONTAINER_ENTRIES, BoundedShaderByteCache::MAX_CONTAINER_BYTES);
+	return cache;
+}
+
+static bool compute_spirv_cache_key(RenderingDevice::ShaderStage p_stage, RenderingDevice::ShaderLanguage p_language, RenderingDevice::ShaderLanguageVersion p_lang_ver, RenderingDevice::ShaderSpirvVersion p_spv_ver, const CharString &p_expanded_utf8, Sha256Key &r_key) {
+	CryptoCore::SHA256Context ctx;
+	if (ctx.start() != OK) {
+		return false;
+	}
+	const uint32_t header[4] = { uint32_t(p_stage), uint32_t(p_language), uint32_t(p_lang_ver), uint32_t(p_spv_ver) };
+	if (ctx.update(reinterpret_cast<const uint8_t *>(header), sizeof(header)) != OK) {
+		return false;
+	}
+	if (p_expanded_utf8.length() > 0 && ctx.update(reinterpret_cast<const uint8_t *>(p_expanded_utf8.get_data()), size_t(p_expanded_utf8.length())) != OK) {
+		return false;
+	}
+	return ctx.finish(r_key.data) == OK;
+}
+
+static bool compute_container_cache_key(const RenderingDevice *p_rd, const Vector<RenderingDevice::ShaderStageSPIRVData> &p_spirv, const String &p_shader_name, uint64_t p_flags, Sha256Key &r_key) {
+	CryptoCore::SHA256Context ctx;
+	if (ctx.start() != OK) {
+		return false;
+	}
+	const uintptr_t rd_addr = reinterpret_cast<uintptr_t>(p_rd);
+	const uint64_t meta[3] = { uint64_t(rd_addr), p_flags, uint64_t(p_spirv.size()) };
+	if (ctx.update(reinterpret_cast<const uint8_t *>(meta), sizeof(meta)) != OK) {
+		return false;
+	}
+	const CharString name_utf8 = p_shader_name.utf8();
+	const uint32_t name_len = uint32_t(name_utf8.length());
+	if (ctx.update(reinterpret_cast<const uint8_t *>(&name_len), sizeof(name_len)) != OK) {
+		return false;
+	}
+	if (name_len > 0 && ctx.update(reinterpret_cast<const uint8_t *>(name_utf8.get_data()), name_len) != OK) {
+		return false;
+	}
+	for (int i = 0; i < p_spirv.size(); ++i) {
+		const uint32_t st_meta[2] = { uint32_t(p_spirv[i].shader_stage), uint32_t(p_spirv[i].spirv.size()) };
+		if (ctx.update(reinterpret_cast<const uint8_t *>(st_meta), sizeof(st_meta)) != OK) {
+			return false;
+		}
+		if (!p_spirv[i].spirv.is_empty() && ctx.update(p_spirv[i].spirv.ptr(), size_t(p_spirv[i].spirv.size())) != OK) {
+			return false;
+		}
+	}
+	return ctx.finish(r_key.data) == OK;
+}
+
+} // namespace
+
 Vector<uint8_t> RenderingDevice::shader_compile_spirv_from_source(ShaderStage p_stage, const String &p_source_code, ShaderLanguage p_language, String *r_error, bool p_allow_cache) {
 	switch (p_language) {
 #ifdef MODULE_GLSLANG_ENABLED
 		case ShaderLanguage::SHADER_LANGUAGE_GLSL: {
 			ShaderLanguageVersion language_version = driver->get_shader_container_format().get_shader_language_version();
 			ShaderSpirvVersion spirv_version = driver->get_shader_container_format().get_shader_spirv_version();
-			return compile_glslang_shader(p_stage, ShaderIncludeDB::parse_include_files(p_source_code), language_version, spirv_version, r_error);
+			const String expanded = ShaderIncludeDB::parse_include_files(p_source_code);
+			Sha256Key cache_key;
+			bool key_valid = false;
+			if (p_allow_cache) {
+				const CharString utf8 = expanded.utf8();
+				key_valid = compute_spirv_cache_key(p_stage, p_language, language_version, spirv_version, utf8, cache_key);
+				if (key_valid) {
+					Vector<uint8_t> cached;
+					if (get_spirv_compile_cache().lookup(cache_key, cached)) {
+						if (r_error != nullptr) {
+							r_error->clear();
+						}
+						return cached;
+					}
+				}
+			}
+			Vector<uint8_t> compiled = compile_glslang_shader(p_stage, expanded, language_version, spirv_version, r_error);
+			if (p_allow_cache && key_valid && !compiled.is_empty() && (r_error == nullptr || r_error->is_empty())) {
+				get_spirv_compile_cache().insert(cache_key, compiled);
+			}
+			return compiled;
 		}
 #endif
 		default:
@@ -5698,6 +5870,16 @@ Vector<uint8_t> RenderingDevice::shader_compile_binary_from_spirv_with_options(c
 	ERR_FAIL_COND_V(!ShaderCompilePolicy::flags_valid(p_flags, SHADER_COMPILE_FLAG_DISABLE_FAST_MATH), Vector<uint8_t>());
 	const RenderingShaderContainerFormat &container_format = driver->get_shader_container_format();
 	ERR_FAIL_COND_V(!ShaderCompilePolicy::flags_valid(p_flags, container_format.supported_compile_flags()), Vector<uint8_t>());
+
+	Sha256Key cache_key;
+	const bool key_valid = compute_container_cache_key(this, p_spirv, p_shader_name, uint64_t(p_flags), cache_key);
+	if (key_valid) {
+		Vector<uint8_t> cached;
+		if (get_container_compile_cache().lookup(cache_key, cached)) {
+			return cached;
+		}
+	}
+
 	Ref<RenderingShaderContainer> shader_container = container_format.create_container();
 	ERR_FAIL_COND_V(shader_container.is_null(), Vector<uint8_t>());
 
@@ -5705,7 +5887,11 @@ Vector<uint8_t> RenderingDevice::shader_compile_binary_from_spirv_with_options(c
 	bool code_compiled = shader_container->set_code_from_spirv(p_shader_name, p_spirv, p_flags);
 	ERR_FAIL_COND_V_MSG(!code_compiled, Vector<uint8_t>(), vformat("Failed to compile code to native for SPIR-V."));
 
-	return shader_container->to_bytes();
+	Vector<uint8_t> bytes = shader_container->to_bytes();
+	if (key_valid && !bytes.is_empty()) {
+		get_container_compile_cache().insert(cache_key, bytes, this);
+	}
+	return bytes;
 }
 
 RID RenderingDevice::shader_create_from_bytecode(const Vector<uint8_t> &p_shader_binary, RID p_placeholder) {
@@ -17251,6 +17437,10 @@ void RenderingDevice::finalize() {
 	if (pipeline_cache_enabled) {
 		update_pipeline_cache(true);
 		driver->pipeline_cache_free();
+	}
+	get_container_compile_cache().erase_owner(this);
+	if (is_main_instance) {
+		get_spirv_compile_cache().clear();
 	}
 
 	frames.clear();

@@ -64,6 +64,7 @@ public:
 		uint8_t metallib_sha256[32] = {};
 	};
 	static PackedByteArray library_key(const LibraryKeyInput &p_input);
+	static PackedByteArray library_key_with_source(const LibraryKeyInput &p_input, const uint8_t *p_source_ptr, uint64_t p_source_size);
 	static bool flags_valid(BitField<RDC::ShaderCompileFlags> p_requested, BitField<RDC::ShaderCompileFlags> p_supported);
 	static bool effective_disable(BitField<RDC::ShaderCompileFlags> p_requested, bool p_supports_fast_math);
 };

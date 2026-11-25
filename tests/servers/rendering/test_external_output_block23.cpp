@@ -39,6 +39,7 @@
 #include "servers/rendering/renderer_scene_cull.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_globals.h"
+#include "servers/rendering/rendering_shader_container.h"
 #include "tests/test_macros.h"
 
 #include <limits>
@@ -1233,6 +1234,133 @@ TEST_CASE("[ExternalOutput][Metal][BUG-188B] MDLazyLibrary retains zstd-compress
 	rd.free_rid(p2);
 	rd.free_rid(p1);
 	rd.free_rid(render_shader);
+	rd.submit();
+	rd.sync();
+}
+
+TEST_CASE("[ExternalOutput][Metal][BUG-189B] Dedicated compute MTLBinaryArchive accelerates cross-lifecycle shader recreation while bounded SPIR-V/container caches and streaming library_key preserve parity") {
+	// Part A: Streaming ShaderCompilePolicy::library_key_with_source() matches library_key() byte-for-byte.
+	{
+		ShaderCompilePolicy::LibraryKeyInput input;
+		input.compile_path_version = 2;
+		input.stage = RD::SHADER_STAGE_COMPUTE;
+		input.requested_flags = RD::SHADER_COMPILE_FLAG_DISABLE_FAST_MATH;
+		input.effective_disable = 1;
+		input.math_floating_point_functions = 2;
+		input.msl_version = 20400;
+		input.position_invariance = 1;
+		input.enable_logging = 0;
+		input.compiled_platform = 1;
+		input.compiled_gpu_family = 8;
+		input.profile_min_os_version = 130000;
+		input.binary_os_min_version = 140000;
+		input.actual_platform = 1;
+		input.actual_gpu_family = 9;
+		input.actual_os_version = 150000;
+		input.origin = 1;
+		input.library_size = 4096;
+		for (uint32_t i = 0; i < 32; ++i) {
+			input.metallib_sha256[i] = uint8_t(0xA0u + i);
+		}
+
+		const String sample_src = "#include <metal_stdlib>\nkernel void main0(device uint *b [[buffer(0)]]) { b[0] += 189u; }\n";
+		const PackedByteArray src_bytes = sample_src.to_utf8_buffer();
+		input.source = src_bytes;
+		const PackedByteArray key_packed = ShaderCompilePolicy::library_key(input);
+		REQUIRE(key_packed.size() == 32);
+
+		ShaderCompilePolicy::LibraryKeyInput streaming_input = input;
+		streaming_input.source.clear();
+		const PackedByteArray key_streamed = ShaderCompilePolicy::library_key_with_source(streaming_input, src_bytes.ptr(), uint64_t(src_bytes.size()));
+		CHECK(key_streamed == key_packed);
+
+		// Empty-source parity.
+		input.source.clear();
+		CHECK(ShaderCompilePolicy::library_key_with_source(input, nullptr, 0) == ShaderCompilePolicy::library_key(input));
+	}
+
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDevice rd;
+	REQUIRE(rd.initialize(&context) == OK);
+	struct FinalizeGuard {
+		RenderingDevice &rd;
+		~FinalizeGuard() { rd.finalize(); }
+	} guard{ rd };
+
+	// Part B: Bounded GLSL->SPIR-V (p_allow_cache) and SPIR-V->container caches return bit-identical output
+	// and respect distinct compile option flags.
+	static constexpr const char *kComputeGlsl =
+			"#version 450\n"
+			"layout(local_size_x = 16, local_size_y = 1, local_size_z = 1) in;\n"
+			"layout(set = 0, binding = 0, std430) buffer Buf { uint v[]; } buf;\n"
+			"void main() {\n"
+			"    uint idx = gl_GlobalInvocationID.x;\n"
+			"    buf.v[idx] = (buf.v[idx] * 189u) ^ (idx + 7u);\n"
+			"}\n";
+
+	String err;
+	const PackedByteArray spirv_cached_1 = rd.shader_compile_spirv_from_source(RD::SHADER_STAGE_COMPUTE, String::utf8(kComputeGlsl), RD::SHADER_LANGUAGE_GLSL, &err, true);
+	REQUIRE(err.is_empty());
+	REQUIRE(!spirv_cached_1.is_empty());
+
+	const PackedByteArray spirv_cached_2 = rd.shader_compile_spirv_from_source(RD::SHADER_STAGE_COMPUTE, String::utf8(kComputeGlsl), RD::SHADER_LANGUAGE_GLSL, &err, true);
+	REQUIRE(err.is_empty());
+	CHECK(spirv_cached_2 == spirv_cached_1);
+
+	const PackedByteArray spirv_uncached = rd.shader_compile_spirv_from_source(RD::SHADER_STAGE_COMPUTE, String::utf8(kComputeGlsl), RD::SHADER_LANGUAGE_GLSL, &err, false);
+	REQUIRE(err.is_empty());
+	CHECK(spirv_uncached == spirv_cached_1);
+
+	RD::ShaderStageSPIRVData cs;
+	cs.shader_stage = RD::SHADER_STAGE_COMPUTE;
+	cs.spirv = spirv_cached_1;
+	Vector<RD::ShaderStageSPIRVData> stages;
+	stages.push_back(cs);
+
+	const Vector<uint8_t> bc_default_1 = rd.shader_compile_binary_from_spirv_with_options(stages, "bug189b_compute", 0);
+	REQUIRE(!bc_default_1.is_empty());
+	const Vector<uint8_t> bc_default_2 = rd.shader_compile_binary_from_spirv_with_options(stages, "bug189b_compute", 0);
+	CHECK(bc_default_2 == bc_default_1);
+
+	const Vector<uint8_t> bc_safe_math = rd.shader_compile_binary_from_spirv_with_options(stages, "bug189b_compute", RD::SHADER_COMPILE_FLAG_DISABLE_FAST_MATH);
+	REQUIRE(!bc_safe_math.is_empty());
+	CHECK(bc_safe_math != bc_default_1);
+
+	// Part C: Dedicated compute MTLBinaryArchive survives shader_free() + compute_pso_cache eviction (BUG-175B),
+	// accelerating recreated shaders while preserving compute_pso_cache miss semantics and avoiding duplicate adds.
+	const uint64_t archive_adds_before = RenderingDeviceDriverMetal::get_total_compute_archive_additions();
+	const uint64_t archive_hits_before = RenderingDeviceDriverMetal::get_total_compute_archive_hits();
+	const uint64_t pso_misses_before = RenderingDeviceDriverMetal::get_total_compute_pso_cache_misses();
+	const uint64_t pso_evictions_before = RenderingDeviceDriverMetal::get_total_compute_pso_cache_evictions();
+
+	const RID s1 = rd.shader_create_from_bytecode(bc_default_1);
+	REQUIRE(s1.is_valid());
+	const RID p1 = rd.compute_pipeline_create(s1);
+	REQUIRE(p1.is_valid());
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_misses() == pso_misses_before + 1u);
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_archive_additions() == archive_adds_before + 1u);
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_archive_hits() == archive_hits_before);
+
+	// Freeing p1 + s1 + submit/sync evicts compute_pso_cache (BUG-175B), simulating high-churn one-shot / Cycle-2 teardown.
+	rd.free_rid(p1);
+	rd.free_rid(s1);
+	rd.submit();
+	rd.sync();
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_evictions() == pso_evictions_before + 1u);
+
+	// Recreating the same compute shader misses compute_pso_cache (BUG-175B preserved)
+	// AND hits the dedicated compute MTLBinaryArchive directly with zero duplicate addition!
+	const RID s2 = rd.shader_create_from_bytecode(bc_default_1);
+	REQUIRE(s2.is_valid());
+	const RID p2 = rd.compute_pipeline_create(s2);
+	REQUIRE(p2.is_valid());
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_pso_cache_misses() == pso_misses_before + 2u);
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_archive_hits() == archive_hits_before + 1u);
+	CHECK(RenderingDeviceDriverMetal::get_total_compute_archive_additions() == archive_adds_before + 1u);
+
+	rd.free_rid(p2);
+	rd.free_rid(s2);
 	rd.submit();
 	rd.sync();
 }

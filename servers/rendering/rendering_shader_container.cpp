@@ -37,13 +37,13 @@
 
 #include <thirdparty/spirv-reflect/spirv_reflect.h>
 
-PackedByteArray ShaderCompilePolicy::library_key(const LibraryKeyInput &p_input) {
-	PackedByteArray encoded;
-	auto append = [&encoded](const uint8_t *p_bytes, uint64_t p_size) {
-		const int64_t offset = encoded.size();
-		encoded.resize(offset + p_size);
-		if (p_size) {
-			memcpy(encoded.ptrw() + offset, p_bytes, p_size);
+PackedByteArray ShaderCompilePolicy::library_key_with_source(const LibraryKeyInput &p_input, const uint8_t *p_source_ptr, uint64_t p_source_size) {
+	CryptoCore::SHA256Context ctx;
+	ERR_FAIL_COND_V(ctx.start() != OK, PackedByteArray());
+	bool ok = true;
+	auto append = [&ctx, &ok](const uint8_t *p_bytes, uint64_t p_size) {
+		if (ok && p_size) {
+			ok = (ctx.update(p_bytes, size_t(p_size)) == OK);
 		}
 	};
 	auto u32 = [&append](uint32_t p_value) {
@@ -62,8 +62,8 @@ PackedByteArray ShaderCompilePolicy::library_key(const LibraryKeyInput &p_input)
 	u32(1);
 	u32(p_input.compile_path_version);
 	u32(p_input.stage);
-	u64(p_input.source.size());
-	append(p_input.source.ptr(), p_input.source.size());
+	u64(p_source_size);
+	append(p_source_ptr, p_source_size);
 	u32(p_input.requested_flags);
 	u32(p_input.effective_disable);
 	u32(p_input.math_floating_point_functions);
@@ -80,10 +80,15 @@ PackedByteArray ShaderCompilePolicy::library_key(const LibraryKeyInput &p_input)
 	u32(p_input.origin);
 	u64(p_input.library_size);
 	append(p_input.metallib_sha256, sizeof(p_input.metallib_sha256));
+	ERR_FAIL_COND_V(!ok, PackedByteArray());
 	PackedByteArray result;
 	result.resize(32);
-	ERR_FAIL_COND_V(CryptoCore::sha256(encoded.ptr(), encoded.size(), result.ptrw()) != OK, PackedByteArray());
+	ERR_FAIL_COND_V(ctx.finish(result.ptrw()) != OK, PackedByteArray());
 	return result;
+}
+
+PackedByteArray ShaderCompilePolicy::library_key(const LibraryKeyInput &p_input) {
+	return library_key_with_source(p_input, p_input.source.ptr(), uint64_t(p_input.source.size()));
 }
 
 bool ShaderCompilePolicy::flags_valid(BitField<RDC::ShaderCompileFlags> p_requested, BitField<RDC::ShaderCompileFlags> p_supported) {
