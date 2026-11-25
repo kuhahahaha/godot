@@ -7783,12 +7783,20 @@ struct Access {
 	static void bug186a_record_receive_gates_transient_disposal_busy() {
 		using namespace GDExtensionDeviceExit;
 		Enrollment e;
-		const auto c = capacity(4);
+		auto c = capacity(4);
+		c.requests = 2;
 		const auto att_ref = e.accept(c);
 		REQUIRE(att_ref.handle_serial != 0);
 
 		Request *r = nullptr;
+		Request *r_ctrl = nullptr;
+		auto c_req = capacity(4);
+		c_req.requests = 1;
+		GDExtensionProductionCapacityV1 c_ctrl = {};
+		c_ctrl.abi = production_dto_abi<GDExtensionProductionCapacityV1>();
+		c_ctrl.requests = 1;
 		const GDExtensionProductionOperationV1 op{ production_dto_abi<GDExtensionProductionOperationV1>(), 18601, 1, 10, 11 };
+		const GDExtensionProductionOperationV1 op_ctrl{ production_dto_abi<GDExtensionProductionOperationV1>(), 18602, 1, 10, 11 };
 		const GDExtensionProductionActionV2 row{ 0, 10, 0, 0, GDEXTENSION_PRODUCTION_MATERIAL_QUALIFICATION_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
 		struct ReceiverState {
 			uint32_t calls = 0;
@@ -7803,12 +7811,17 @@ struct Access {
 				++static_cast<ReceiverState *>(p_userdata)->calls;
 			};
 			a->record_receiver_userdata = &state;
-			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*a, op, c, { nullptr, &row }, 1, nullptr, 0, nullptr, 0, {}, 0, r, 2) == OK);
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*a, op, c_req, { nullptr, &row }, 1, nullptr, 0, nullptr, 0, {}, 0, r, 2) == OK);
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*a, op_ctrl, c_ctrl, {}, 0, nullptr, 0, nullptr, 0, {}, 0, r_ctrl, 2) == OK);
 		}
 		REQUIRE(r != nullptr);
+		REQUIRE(r->action_count == 1);
+		REQUIRE(r_ctrl != nullptr);
+		REQUIRE(r_ctrl->action_count == 0);
 		const GDExtensionProductionRequestRefV1 ref{ Enrollment::INSTANCE, r->serial };
+		const GDExtensionProductionRequestRefV1 ctrl_ref{ Enrollment::INSTANCE, r_ctrl->serial };
 
-		// 1. Transient disposal_active=1 with request.frozen=true (actual RD recording receiver)
+		// 1. Transient disposal_active=1 with action_count > 0 && request.frozen=true (actual RD recording)
 		//    returns ERR_BUSY BEFORE invoking record_receiver (eliminating ERROR: Recording is transiently busy spam).
 		e.rd.native_disposal_active.store(true);
 		{
@@ -7822,8 +7835,21 @@ struct Access {
 		}
 		CHECK(state.calls == 0);
 
-		// 2. Non-recording owner control (request.frozen=false, e.g., Create/Withdraw/Poll) MUST still
-		//    execute cleanly during transient disposal_active=1 (BUG-186A v41b).
+		// 2. Frozen control-plane RECORD (action_count == 0 && request.frozen == true, e.g., Create/Withdraw/Poll/Seal
+		//    frozen by production_record_schedule) MUST execute cleanly during transient disposal_active=1 (BUG-187A).
+		{
+			Registry::Lock lock(*e.registry);
+			REQUIRE(e.registry->production_freeze_locked(*r_ctrl) == OK);
+			REQUIRE(r_ctrl->frozen);
+			r_ctrl->control.serial = 10;
+			r_ctrl->control.state = ProductionControlState::EXECUTING;
+			r_ctrl->control.input.output_cancel = false;
+			CHECK(e.registry->production_record_receive_locked(*r_ctrl, e.rd) == OK);
+			r_ctrl->control.state = ProductionControlState::OWNER_CONSUMED;
+		}
+		CHECK(state.calls == 1);
+
+		// 3. Unfrozen request (request.frozen=false) MUST also execute cleanly during transient disposal_active=1.
 		{
 			Registry::Lock lock(*e.registry);
 			r->frozen = false;
@@ -7833,9 +7859,9 @@ struct Access {
 			CHECK(e.registry->production_record_receive_locked(*r, e.rd) == OK);
 			r->control.state = ProductionControlState::OWNER_CONSUMED;
 		}
-		CHECK(state.calls == 1);
+		CHECK(state.calls == 2);
 
-		// 3. Cleanup (output_cancel=true) is STILL permitted even when frozen during transient disposal_active=1.
+		// 4. Cleanup (output_cancel=true) is STILL permitted even when frozen with actions during disposal_active=1.
 		{
 			Registry::Lock lock(*e.registry);
 			r->frozen = true;
@@ -7846,9 +7872,9 @@ struct Access {
 			r->control.input.output_cancel = false;
 			r->control.state = ProductionControlState::OWNER_CONSUMED;
 		}
-		CHECK(state.calls == 2);
+		CHECK(state.calls == 3);
 
-		// 4. Clearing native_disposal_active restores normal frozen non-cleanup RECORD dispatch.
+		// 5. Clearing native_disposal_active restores normal frozen action-recording RECORD dispatch.
 		e.rd.native_disposal_active.store(false);
 		{
 			Registry::Lock lock(*e.registry);
@@ -7859,8 +7885,10 @@ struct Access {
 			r->control.state = ProductionControlState::OWNER_CONSUMED;
 			r->frozen = false;
 		}
-		CHECK(state.calls == 3);
+		CHECK(state.calls == 4);
 
+		REQUIRE(e.registry->production_cancel(ctrl_ref).native_error == OK);
+		REQUIRE(e.registry->production_release(ctrl_ref).native_error == OK);
 		REQUIRE(e.registry->production_cancel(ref).native_error == OK);
 		REQUIRE(e.registry->production_release(ref).native_error == OK);
 		REQUIRE(e.registry->production_close(att_ref).native_error == OK);
