@@ -32,6 +32,19 @@ public:
 	static void mode(MTL3::RenderingDeviceDriverMetal &p_driver, bool p_barriers) {
 		p_driver.sync_mode = p_barriers ? RenderingDeviceDriverMetal::Barriers : RenderingDeviceDriverMetal::HazardTracking;
 	}
+	static bool has_queue_order_event(const MTL3::RenderingDeviceDriverMetal &p_driver) {
+		return p_driver.queue_order_event.get() != nullptr;
+	}
+	static uint64_t committed_order_value(const MTL3::RenderingDeviceDriverMetal &p_driver) {
+		return p_driver.committed_order_value.load(std::memory_order_acquire);
+	}
+	static uint64_t command_wait_value(RenderingDeviceDriver::CommandBufferID p_cmd) {
+		return reinterpret_cast<const MTL3::MDCommandBuffer *>(p_cmd.id)->get_queue_order_wait_value();
+	}
+	static bool is_untracked_buffer(RenderingDeviceDriver::BufferID p_buffer) {
+		const auto *info = reinterpret_cast<const RenderingDeviceDriverMetal::BufferInfo *>(p_buffer.id);
+		return info != nullptr && info->buffer.get() != nullptr && (info->buffer->resourceOptions() & MTL::ResourceHazardTrackingModeUntracked) != 0;
+	}
 };
 
 TEST_CASE("[K03][MetalCompletion] native batches retire through typed and legacy owners") {
@@ -302,6 +315,198 @@ TEST_CASE("[K03][MetalCompletion] separate native batch owners retain a terminal
 		CHECK(TestMetalCompletionAccess::records(driver) == 0);
 	}
 	driver.buffer_free(buffer);
+	driver.command_pool_free(pool);
+}
+
+TEST_CASE("[K03][MetalCompletion][BUG-211] queue-order event serializes untracked command buffers without CPU stalls") {
+	using RDD = RenderingDeviceDriver;
+	NS::SharedPtr<MTL::Device> available_device = NS::TransferPtr(MTL::CreateSystemDefaultDevice());
+	REQUIRE_MESSAGE(available_device.get() != nullptr, "Native Metal device unavailable; this is not a dummy-renderer control.");
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	MTL3::RenderingDeviceDriverMetal driver(&context);
+	REQUIRE(driver.initialize(0, 3) == OK);
+	TestMetalCompletionAccess::mode(driver, true);
+	REQUIRE(TestMetalCompletionAccess::has_queue_order_event(driver));
+	CHECK(TestMetalCompletionAccess::committed_order_value(driver) == 0);
+
+	const auto queue = driver.command_queue_create(RDD::CommandQueueFamilyID(1));
+	const auto pool = driver.command_pool_create(RDD::CommandQueueFamilyID(1), RDD::COMMAND_BUFFER_TYPE_PRIMARY);
+
+	// 1. Empty command buffers (with and without fence) must not advance committed_order_value.
+	const auto empty_cmd = driver.command_buffer_create(pool);
+	REQUIRE(driver.command_buffer_begin(empty_cmd));
+	driver.command_buffer_end(empty_cmd);
+	REQUIRE(driver.command_queue_execute_and_present(queue, {}, empty_cmd, {}, {}, {}) == OK);
+	CHECK(TestMetalCompletionAccess::committed_order_value(driver) == 0);
+	{
+		const auto report = driver.get_last_queue_call_report();
+		for (const auto &fact : report.calls) {
+			REQUIRE(driver.native_call_wait(fact.serial).matches(fact.serial));
+			REQUIRE(driver.native_call_recycle(fact.serial) == OK);
+		}
+	}
+
+	const auto empty_fence = driver.fence_create();
+	REQUIRE(driver.command_buffer_begin(empty_cmd));
+	driver.command_buffer_end(empty_cmd);
+	REQUIRE(driver.command_queue_execute_and_present(queue, {}, empty_cmd, {}, empty_fence, {}) == OK);
+	CHECK(TestMetalCompletionAccess::committed_order_value(driver) == 0);
+	REQUIRE(driver.fence_wait(empty_fence) == OK);
+	driver.fence_free(empty_fence);
+
+	// 2. HazardTracking mode must not advance committed_order_value.
+	const auto small_buf = driver.buffer_create(64, RDD::BUFFER_USAGE_TRANSFER_TO_BIT, RDD::MEMORY_ALLOCATION_TYPE_CPU, 0);
+	REQUIRE(bool(small_buf));
+	TestMetalCompletionAccess::mode(driver, false);
+	{
+		const auto ht_fence = driver.fence_create();
+		REQUIRE(driver.command_buffer_begin(empty_cmd));
+		driver.command_clear_buffer(empty_cmd, small_buf, 0, 64);
+		driver.command_buffer_end(empty_cmd);
+		REQUIRE(driver.command_queue_execute_and_present(queue, {}, empty_cmd, {}, ht_fence, {}) == OK);
+		CHECK(TestMetalCompletionAccess::committed_order_value(driver) == 0);
+		REQUIRE(driver.fence_wait(ht_fence) == OK);
+		driver.fence_free(ht_fence);
+	}
+	TestMetalCompletionAccess::mode(driver, true);
+
+	// 3. Rejected submission (exhausted fence) must not advance committed_order_value.
+	{
+		const auto rejected_cmd = driver.command_buffer_create(pool);
+		const auto exhausted_fence = driver.fence_create();
+		TestMetalCompletionAccess::exhaust(exhausted_fence);
+		REQUIRE(driver.command_buffer_begin(rejected_cmd));
+		driver.command_clear_buffer(rejected_cmd, small_buf, 0, 64);
+		driver.command_buffer_end(rejected_cmd);
+		CHECK(driver.command_queue_execute_and_present(queue, {}, rejected_cmd, {}, exhausted_fence, {}) == ERR_UNAVAILABLE);
+		CHECK(TestMetalCompletionAccess::committed_order_value(driver) == 0);
+		driver.fence_free(exhausted_fence);
+	}
+
+	// 4. Non-empty no-fence submission in Barriers mode advances committed_order_value.
+	REQUIRE(driver.command_buffer_begin(empty_cmd));
+	driver.command_clear_buffer(empty_cmd, small_buf, 0, 64);
+	driver.command_buffer_end(empty_cmd);
+	REQUIRE(driver.command_queue_execute_and_present(queue, {}, empty_cmd, {}, {}, {}) == OK);
+	CHECK(TestMetalCompletionAccess::committed_order_value(driver) == 1);
+	{
+		const auto report = driver.get_last_queue_call_report();
+		for (const auto &fact : report.calls) {
+			REQUIRE(driver.native_call_wait(fact.serial).matches(fact.serial));
+			REQUIRE(driver.native_call_recycle(fact.serial) == OK);
+		}
+	}
+	driver.buffer_free(small_buf);
+
+	// 5. Three distinct command buffers writing, reading, and clearing the same Untracked GPU
+	//    storage buffer back-to-back with zero CPU waits between submissions (frame_queue_size=3 shape).
+	constexpr uint32_t WORD_COUNT = 65536;
+	constexpr uint64_t BUFFER_BYTES = uint64_t(WORD_COUNT) * sizeof(uint32_t);
+	const auto src_buf = driver.buffer_create(BUFFER_BYTES, RDD::BUFFER_USAGE_TRANSFER_FROM_BIT, RDD::MEMORY_ALLOCATION_TYPE_CPU, 0);
+	const auto untracked_gpu_buf = driver.buffer_create(BUFFER_BYTES, RDD::BUFFER_USAGE_STORAGE_BIT | RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT, RDD::MEMORY_ALLOCATION_TYPE_GPU, 0);
+	const auto readback_buf = driver.buffer_create(BUFFER_BYTES, RDD::BUFFER_USAGE_TRANSFER_TO_BIT, RDD::MEMORY_ALLOCATION_TYPE_CPU, 0);
+	REQUIRE(bool(src_buf));
+	REQUIRE(bool(untracked_gpu_buf));
+	REQUIRE(bool(readback_buf));
+	REQUIRE(TestMetalCompletionAccess::is_untracked_buffer(untracked_gpu_buf));
+
+	const auto cb1 = driver.command_buffer_create(pool);
+	const auto cb2 = driver.command_buffer_create(pool);
+	const auto cb3 = driver.command_buffer_create(pool);
+	const auto f1 = driver.fence_create();
+	const auto f2 = driver.fence_create();
+	const auto f3 = driver.fence_create();
+	const RDD::BufferCopyRegion full_copy = { 0, 0, BUFFER_BYTES };
+
+	for (uint32_t iter = 0; iter < 16; ++iter) {
+		uint32_t *src_words = reinterpret_cast<uint32_t *>(driver.buffer_map(src_buf));
+		uint32_t *dst_words = reinterpret_cast<uint32_t *>(driver.buffer_map(readback_buf));
+		REQUIRE(src_words != nullptr);
+		REQUIRE(dst_words != nullptr);
+		for (uint32_t w = 0; w < WORD_COUNT; ++w) {
+			src_words[w] = 0x5A000000u | ((iter & 0xFFu) << 16) | (w & 0xFFFFu);
+			dst_words[w] = 0xDEADBEEFu;
+		}
+		driver.buffer_unmap(src_buf);
+		driver.buffer_unmap(readback_buf);
+
+		const uint64_t base_order = TestMetalCompletionAccess::committed_order_value(driver);
+
+		// CB1: write pattern into Untracked GPU buffer, submit without waiting.
+		REQUIRE(driver.command_buffer_begin(cb1));
+		driver.command_copy_buffer(cb1, src_buf, untracked_gpu_buf, full_copy);
+		CHECK(TestMetalCompletionAccess::command_wait_value(cb1) == base_order);
+		driver.command_buffer_end(cb1);
+		REQUIRE(driver.command_queue_execute_and_present(queue, {}, cb1, {}, f1, {}) == OK);
+		CHECK(TestMetalCompletionAccess::committed_order_value(driver) == base_order + 1);
+
+		// CB2: read Untracked GPU buffer into readback buffer, submit without waiting.
+		REQUIRE(driver.command_buffer_begin(cb2));
+		driver.command_copy_buffer(cb2, untracked_gpu_buf, readback_buf, full_copy);
+		CHECK(TestMetalCompletionAccess::command_wait_value(cb2) == base_order + 1);
+		driver.command_buffer_end(cb2);
+		REQUIRE(driver.command_queue_execute_and_present(queue, {}, cb2, {}, f2, {}) == OK);
+		CHECK(TestMetalCompletionAccess::committed_order_value(driver) == base_order + 2);
+
+		// CB3: immediately clear Untracked GPU buffer to 0, submit without waiting on CB1/CB2.
+		REQUIRE(driver.command_buffer_begin(cb3));
+		driver.command_clear_buffer(cb3, untracked_gpu_buf, 0, BUFFER_BYTES);
+		CHECK(TestMetalCompletionAccess::command_wait_value(cb3) == base_order + 2);
+		driver.command_buffer_end(cb3);
+		REQUIRE(driver.command_queue_execute_and_present(queue, {}, cb3, {}, f3, {}) == OK);
+		CHECK(TestMetalCompletionAccess::committed_order_value(driver) == base_order + 3);
+
+		// Now wait on all three fences and verify CB2 observed exact CB1 data (no race with CB1 or CB3).
+		REQUIRE(driver.fence_wait(f3) == OK);
+		REQUIRE(driver.fence_wait(f2) == OK);
+		REQUIRE(driver.fence_wait(f1) == OK);
+		CHECK(TestMetalCompletionAccess::records(driver) == 0);
+
+		const uint32_t *verify_words = reinterpret_cast<const uint32_t *>(driver.buffer_map(readback_buf));
+		REQUIRE(verify_words != nullptr);
+		uint32_t mismatches = 0;
+		for (uint32_t w = 0; w < WORD_COUNT; ++w) {
+			const uint32_t expected = 0x5A000000u | ((iter & 0xFFu) << 16) | (w & 0xFFFFu);
+			if (verify_words[w] != expected) {
+				++mismatches;
+			}
+		}
+		driver.buffer_unmap(readback_buf);
+		REQUIRE(mismatches == 0);
+	}
+
+	// 6. Pre-recorded multi-CB batch (commands.size() == 2) maintains monotonic queue order without deadlock.
+	{
+		const uint64_t before_multi = TestMetalCompletionAccess::committed_order_value(driver);
+		RDD::CommandBufferID multi[2] = { cb1, cb2 };
+		for (auto cmd : multi) {
+			REQUIRE(driver.command_buffer_begin(cmd));
+			driver.command_clear_buffer(cmd, untracked_gpu_buf, 0, BUFFER_BYTES);
+			CHECK(TestMetalCompletionAccess::command_wait_value(cmd) == before_multi);
+			driver.command_buffer_end(cmd);
+		}
+		REQUIRE(driver.command_queue_execute_and_present(queue, {}, VectorView<RDD::CommandBufferID>(multi, 2), {}, f1, {}) == OK);
+		CHECK(TestMetalCompletionAccess::committed_order_value(driver) == before_multi + 2);
+
+		REQUIRE(driver.command_buffer_begin(cb3));
+		driver.command_clear_buffer(cb3, untracked_gpu_buf, 0, BUFFER_BYTES);
+		CHECK(TestMetalCompletionAccess::command_wait_value(cb3) == before_multi + 2);
+		driver.command_buffer_end(cb3);
+		REQUIRE(driver.command_queue_execute_and_present(queue, {}, cb3, {}, f2, {}) == OK);
+		CHECK(TestMetalCompletionAccess::committed_order_value(driver) == before_multi + 3);
+
+		REQUIRE(driver.fence_wait(f2) == OK);
+		REQUIRE(driver.fence_wait(f1) == OK);
+		CHECK(TestMetalCompletionAccess::records(driver) == 0);
+	}
+
+	driver.fence_free(f3);
+	driver.fence_free(f2);
+	driver.fence_free(f1);
+	driver.buffer_free(readback_buf);
+	driver.buffer_free(untracked_gpu_buf);
+	driver.buffer_free(src_buf);
 	driver.command_pool_free(pool);
 }
 #endif

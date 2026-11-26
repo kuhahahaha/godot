@@ -230,6 +230,7 @@ void MDCommandBuffer::_pop_active_encoder_labels() {
 
 void MDCommandBuffer::_begin() {
 	DEV_ASSERT(!commandBuffer && !state_begin);
+	queue_order_wait_value = 0;
 	state_begin = true;
 	binding_cache.clear();
 	_scratch.reset();
@@ -279,6 +280,7 @@ void MDCommandBuffer::_commit() {
 		cb->commit();
 	}
 	commandBuffer.reset();
+	queue_order_wait_value = 0;
 	state_begin = false;
 }
 
@@ -286,6 +288,9 @@ MTL::CommandBuffer *MDCommandBuffer::command_buffer() {
 	DEV_ASSERT(state_begin);
 	if (!commandBuffer) {
 		commandBuffer = NS::RetainPtr(queue->commandBuffer());
+		if (commandBuffer) {
+			queue_order_wait_value = static_cast<MTL3::RenderingDeviceDriverMetal *>(device_driver)->encode_queue_order_wait(commandBuffer.get());
+		}
 	}
 	return commandBuffer.get();
 }
