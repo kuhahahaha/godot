@@ -671,6 +671,9 @@ public:
 	Error particles_external_end_draw_list();
 	static bool fast_refresh_invert_affine_f32(const float p_affine[12], float r_inverse[12]);
 	static void fast_refresh_encode_light64_guard_status(uint64_t p_present_seq, uint32_t r_words[8]);
+	static constexpr bool fast_refresh_item_needs_validate(bool p_skip_validate, uint32_t p_capacity, uint32_t p_multi_mesh_count) {
+		return (!p_skip_validate || p_multi_mesh_count != 0u) && p_capacity > 0u;
+	}
 	int32_t particles_external_begin_fast_refresh_v1(const GDExtensionFastRefreshBeginInputV1 *p_input, GDExtensionFastRefreshTargetsV1 *p_out_targets);
 	int32_t particles_external_end_fast_refresh_v1(const GDExtensionFastRefreshEndInputV1 *p_input);
 	int32_t particles_external_release_fast_refresh_v1(uint64_t p_particles_rid, uint32_t p_slot_index);

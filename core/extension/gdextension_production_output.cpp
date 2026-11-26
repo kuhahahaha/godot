@@ -4316,7 +4316,7 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 				if (error == OK) {
 					harvest_shader = light_sort->get_light_harvest_shader();
 					staging_buf = light_sort->get_light_candidate_staging_buffer();
-					staging_bytes = 16ull + uint64_t(RendererRD::ParticlesMeshLightSortRD::MAX_STAGED_LIGHT_CANDIDATES) * sizeof(RendererRD::ParticleLightRecord64);
+					staging_bytes = RendererRD::ParticlesMeshLightSortRD::get_light_candidate_staging_bytes();
 				}
 			} else {
 				RendererRD::ParticlesDecalBridgeRD *decal_bridge = storage->get_decal_bridge_rd();
