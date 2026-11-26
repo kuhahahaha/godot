@@ -35,8 +35,11 @@
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_decal_bridge_rd.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 #include "servers/rendering/rendering_server_globals.h"
+
+#include <cstddef>
 
 using namespace RendererRD;
 
@@ -673,6 +676,10 @@ TextureStorage::TextureStorage() {
 TextureStorage::~TextureStorage() {
 #ifdef TESTS_ENABLED
 	if (native_hold_test_minimal) {
+		if (decal_bridge_rd) {
+			memdelete(decal_bridge_rd);
+			decal_bridge_rd = nullptr;
+		}
 		singleton = nullptr;
 		return;
 	}
@@ -4056,6 +4063,15 @@ void TextureStorage::decal_instance_set_sorting_offset(RID p_decal_instance, flo
 /* DECAL DATA API */
 
 void TextureStorage::free_decal_data() {
+	if (decal_bridge_rd != nullptr) {
+		if (RenderingDevice *rd = RD::get_singleton()) {
+			decal_bridge_rd->release_decal_gpu_bridge(rd);
+		}
+		memdelete(decal_bridge_rd);
+		decal_bridge_rd = nullptr;
+	}
+	frame_particle_decals.clear();
+
 	if (decal_buffer.is_valid()) {
 		RD::get_singleton()->free_rid(decal_buffer);
 		decal_buffer = RID();
@@ -4080,8 +4096,26 @@ void TextureStorage::set_max_decals(const uint32_t p_max_decals) {
 	decal_buffer = RD::get_singleton()->storage_buffer_create(decal_buffer_size);
 }
 
-void TextureStorage::update_decal_buffer(const PagedArray<RID> &p_decals, const Transform3D &p_camera_xform) {
+void TextureStorage::update_decal_buffer(const PagedArray<RID> &p_decals, const Transform3D &p_camera_xform, RID p_source_viewport, RID p_source_scenario, bool p_is_reflection_probe) {
+	static_assert(sizeof(DecalData) == 240u, "DecalData must match 60-word GPU ABI");
+	static_assert(offsetof(DecalData, xform) == 0u, "DecalData xform offset");
+	static_assert(offsetof(DecalData, inv_extents) == 16u * 4u, "DecalData inv_extents offset");
+	static_assert(offsetof(DecalData, albedo_mix) == 19u * 4u, "DecalData albedo_mix offset");
+	static_assert(offsetof(DecalData, albedo_rect) == 20u * 4u, "DecalData albedo_rect offset");
+	static_assert(offsetof(DecalData, normal_rect) == 24u * 4u, "DecalData normal_rect offset");
+	static_assert(offsetof(DecalData, orm_rect) == 28u * 4u, "DecalData orm_rect offset");
+	static_assert(offsetof(DecalData, emission_rect) == 32u * 4u, "DecalData emission_rect offset");
+	static_assert(offsetof(DecalData, modulate) == 36u * 4u, "DecalData modulate offset");
+	static_assert(offsetof(DecalData, emission_energy) == 40u * 4u, "DecalData emission_energy offset");
+	static_assert(offsetof(DecalData, mask) == 41u * 4u, "DecalData mask offset");
+	static_assert(offsetof(DecalData, upper_fade) == 42u * 4u, "DecalData upper_fade offset");
+	static_assert(offsetof(DecalData, lower_fade) == 43u * 4u, "DecalData lower_fade offset");
+	static_assert(offsetof(DecalData, normal_xform) == 44u * 4u, "DecalData normal_xform offset");
+	static_assert(offsetof(DecalData, normal) == 56u * 4u, "DecalData normal offset");
+	static_assert(offsetof(DecalData, normal_fade) == 59u * 4u, "DecalData normal_fade offset");
+
 	ForwardIDStorage *forward_id_storage = ForwardIDStorage::get_singleton();
+	frame_particle_decals.clear();
 
 	Transform3D uv_xform;
 	uv_xform.basis.scale(Vector3(2.0, 1.0, 2.0));
@@ -4255,6 +4289,62 @@ void TextureStorage::update_decal_buffer(const PagedArray<RID> &p_decals, const 
 	if (decal_count > 0) {
 		RD::get_singleton()->buffer_update(decal_buffer, 0, sizeof(DecalData) * decal_count, decals);
 	}
+
+	// Zero-CPU-readback GPU consumption of sealed PARTICLE_DECAL_128 (role 7 + role 10) slots:
+	if (decal_bridge_rd && decal_buffer.is_valid() && decal_count < max_decals) {
+		auto atlas_lookup = [](void *p_ctx, RID p_tex) -> Rect2 {
+			return static_cast<TextureStorage *>(p_ctx)->decal_atlas_get_texture_rect(p_tex);
+		};
+		LocalVector<ParticlesDecalBridgeRD::ReservedGpuDecalBounds> gpu_bounds;
+		const uint32_t gpu_reserved = decal_bridge_rd->dispatch_registered_external_decals_gpu(
+				RD::get_singleton(),
+				p_source_viewport,
+				p_source_scenario,
+				p_is_reflection_probe,
+				p_camera_xform,
+				decal_buffer,
+				decal_count,
+				max_decals,
+				atlas_lookup,
+				this,
+				gpu_bounds);
+		if (gpu_reserved > 0u) {
+			decal_count += gpu_reserved;
+			for (uint32_t bi = 0; bi < gpu_bounds.size(); ++bi) {
+				const ParticlesDecalBridgeRD::ReservedGpuDecalBounds &gb = gpu_bounds[bi];
+				for (uint32_t k = 0; k < gb.count; ++k) {
+					frame_particle_decals.push_back({ gb.world_bounds, gb.first_buffer_index + k });
+				}
+			}
+		}
+	}
+}
+
+uint32_t TextureStorage::count_intersecting_particle_decals(const AABB &p_world_aabb, uint32_t *r_out_indices, uint32_t p_max_indices) const {
+	if (frame_particle_decals.is_empty() || p_max_indices == 0) {
+		return 0;
+	}
+	uint32_t matched = 0;
+	for (uint32_t i = 0; i < frame_particle_decals.size() && matched < p_max_indices; ++i) {
+		const ParticleDecalEntry &entry = frame_particle_decals[i];
+		if (entry.buffer_index >= 255u) {
+			continue; // Mobile push-constant decals packs 8-bit indices with 0xFF sentinel.
+		}
+		if (entry.world_bounds.intersects(p_world_aabb)) {
+			if (r_out_indices != nullptr) {
+				r_out_indices[matched] = entry.buffer_index;
+			}
+			matched++;
+		}
+	}
+	return matched;
+}
+
+ParticlesDecalBridgeRD *TextureStorage::get_decal_bridge_rd() {
+	if (decal_bridge_rd == nullptr) {
+		decal_bridge_rd = memnew(ParticlesDecalBridgeRD);
+	}
+	return decal_bridge_rd;
 }
 
 /* RENDER TARGET API */

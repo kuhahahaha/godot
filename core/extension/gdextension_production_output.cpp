@@ -41,9 +41,11 @@
 #include "servers/rendering/renderer_rd/effects/particles_external_guard.h"
 #include "servers/rendering/renderer_rd/effects/particles_external_guard_indexed144.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_decal_bridge_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_mesh_light_sort_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_ribbon_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_globals.h"
 #include "servers/rendering/renderer_scene_cull.h"
@@ -1616,7 +1618,8 @@ Error Registry::production_output_demand_publish(ProductionPhysicalContextRef co
 	const auto &pin = owner.generation_pin;
 	const bool supported_render_profile = owner.config.profile == RendererRD::ExternalOutputConfig::INSTANCE_192 ||
 			owner.config.profile == RendererRD::ExternalOutputConfig::INDEXED_144 ||
-			owner.config.profile == RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64;
+			owner.config.profile == RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64 ||
+			owner.config.profile == RendererRD::ExternalOutputConfig::PARTICLE_DECAL_128;
 	if (device != &rd || !rd.native_immutable_is_render_thread() || !owner.generation_root_matches(pin) || !production_output_pin_matches_locked(pin, ref, rd) || pin.request != request || owner.device != &rd || !owner.admits_work() || !owner.metadata_directory_installed || owner.metadata_lease.is_empty() || !owner.generation_config_inline || !owner.generation_selection_complete || !owner.generation_surfaces_complete || !supported_render_profile) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -1635,6 +1638,10 @@ Error Registry::production_output_demand_publish(ProductionPhysicalContextRef co
 		error = RendererRD::ParticlesRibbonRD::plan_indexed144(owner.config.capacity, owner.config.motion == RendererRD::ExternalOutputConfig::REQUIRED, owner.generation_material_count, ribbon_layout);
 		if (error != OK) {
 			return error;
+		}
+	} else if (owner.config.profile == RendererRD::ExternalOutputConfig::PARTICLE_DECAL_128) {
+		if (owner.config.capacity > RendererRD::ParticlesDecalBridgeRD::MAX_PARTICLE_DECALS || owner.generation_material_count != 0) {
+			return ERR_INVALID_PARAMETER;
 		}
 	} else {
 		if (owner.config.capacity > RendererRD::ParticlesMeshLightSortRD::MAX_PARTICLE_LIGHTS || owner.generation_material_count != 0) {
@@ -1726,8 +1733,12 @@ Error Registry::production_output_demand_locked(ProductionAttachment &attachment
 	uint64_t proof_bytes = 0;
 	ProductionOutputGuardBound bound = {};
 	Error error = OK;
-	if (facts.profile == uint32_t(RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64)) {
-		if (surfaces != 0 || input.read_capacity != 0 || input.read_graph_capacity != 0 || facts.capacity > RendererRD::ParticlesMeshLightSortRD::MAX_PARTICLE_LIGHTS) {
+	if (facts.profile == uint32_t(RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64) ||
+			facts.profile == uint32_t(RendererRD::ExternalOutputConfig::PARTICLE_DECAL_128)) {
+		const uint32_t max_non_drawable_cap = (facts.profile == uint32_t(RendererRD::ExternalOutputConfig::PARTICLE_DECAL_128))
+				? RendererRD::ParticlesDecalBridgeRD::MAX_PARTICLE_DECALS
+				: RendererRD::ParticlesMeshLightSortRD::MAX_PARTICLE_LIGHTS;
+		if (surfaces != 0 || input.read_capacity != 0 || input.read_graph_capacity != 0 || facts.capacity > max_non_drawable_cap) {
 			return ERR_PARAMETER_RANGE_ERROR;
 		}
 		layout_resource_count = facts.capacity ? 3u : 2u;
@@ -2810,6 +2821,10 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_output_v3(GDExtens
 		GDEXTENSION_OUTPUT_ROLE_PARTICLE_LIGHTS_V2,
 		GDEXTENSION_OUTPUT_ROLE_OUTPUT_META_V1,
 	};
+	const uint32_t decal_roles[2] = {
+		GDEXTENSION_OUTPUT_ROLE_PARTICLE_DECALS_V2,
+		GDEXTENSION_OUTPUT_ROLE_OUTPUT_META_V1,
+	};
 
 	GDExtensionProductionOutputRoleV1 canonical_roles[8] = {};
 	uint32_t role_count = 0;
@@ -2835,6 +2850,12 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_output_v3(GDExtens
 	} else if (input->roles[0].role == GDEXTENSION_OUTPUT_ROLE_PARTICLE_LIGHTS_V2) {
 		role_count = 2u;
 		expected_roles = light_roles;
+		input_unused_start = 2u;
+		canonical_roles[0] = input->roles[0];
+		canonical_roles[1] = input->roles[1];
+	} else if (input->roles[0].role == GDEXTENSION_OUTPUT_ROLE_PARTICLE_DECALS_V2) {
+		role_count = 2u;
+		expected_roles = decal_roles;
 		input_unused_start = 2u;
 		canonical_roles[0] = input->roles[0];
 		canonical_roles[1] = input->roles[1];
@@ -2913,16 +2934,17 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_output_v3(GDExtens
 
 	// Enforce profile-specific stride, capacity, motion-role pairing, and read-quota invariants:
 	if (role_count == 2u) {
-		// PARTICLE_LIGHT_64: non-drawable light buffer (64B stride, max 256 lights) + 32B output meta.
+		// PARTICLE_LIGHT_64 (64B stride) or PARTICLE_DECAL_128 (128B stride), max 256 records + 32B output meta.
 		if (input->read_capacity != 0 || input->read_graph_capacity != 0) {
 			return result(ERR_INVALID_DATA);
 		}
-		const uint64_t light_bytes = canonical_roles[0].bytes;
+		const uint64_t record_stride = (canonical_roles[0].role == GDEXTENSION_OUTPUT_ROLE_PARTICLE_DECALS_V2) ? 128ull : 64ull;
+		const uint64_t record_bytes = canonical_roles[0].bytes;
 		const uint64_t meta_bytes = canonical_roles[1].bytes;
-		if (light_bytes % 64ull != 0 || light_bytes > 256ull * 64ull) {
+		if (record_bytes % record_stride != 0 || record_bytes > 256ull * record_stride) {
 			return result(ERR_INVALID_DATA);
 		}
-		if (light_bytes == 0 ? (meta_bytes != 0 && meta_bytes != 32ull) : (meta_bytes != 32ull)) {
+		if (record_bytes == 0 ? (meta_bytes != 0 && meta_bytes != 32ull) : (meta_bytes != 32ull)) {
 			return result(ERR_INVALID_DATA);
 		}
 	} else if (role_count == 5u) {
@@ -3452,7 +3474,10 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 		out->status = output_status(error, "output_original_committed_scene");
 		return;
 	}
-	if (request->next_action != ordinal || owner.generation_pin.is_empty() || owner.generation_pin.request->attachment != request->attachment || !owner.metadata_directory_installed || owner.metadata_lease.is_empty() || owner.config.profile == RendererRD::ExternalOutputConfig::INDEXED_144) {
+	if (request->next_action != ordinal || owner.generation_pin.is_empty() || owner.generation_pin.request->attachment != request->attachment || !owner.metadata_directory_installed || owner.metadata_lease.is_empty() ||
+			owner.config.profile == RendererRD::ExternalOutputConfig::INDEXED_144 ||
+			owner.config.profile == RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64 ||
+			owner.config.profile == RendererRD::ExternalOutputConfig::PARTICLE_DECAL_128) {
 		out->status = output_status(ERR_UNAVAILABLE, "output_prepared_owner_required");
 		return;
 	}
@@ -3861,12 +3886,14 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 	auto &owner = *particles->external;
 	using Owner = RendererRD::ExternalOutputOwner;
 	using Storage = RendererRD::ExternalOutputStorage;
-	const bool is_light64 = (role_count == 2);
+	const bool is_light64 = (role_count == 2 && action.output_roles[0].role == GDEXTENSION_OUTPUT_ROLE_PARTICLE_LIGHTS_V2);
+	const bool is_decal128 = (role_count == 2 && action.output_roles[0].role == GDEXTENSION_OUTPUT_ROLE_PARTICLE_DECALS_V2);
+	const bool is_non_drawable_v2 = is_light64 || is_decal128;
 	const bool is_instance192_v2 = (role_count == 4);
-	const bool motion_required = !is_light64 && (owner.config.motion == RendererRD::ExternalOutputConfig::REQUIRED);
+	const bool motion_required = !is_non_drawable_v2 && (owner.config.motion == RendererRD::ExternalOutputConfig::REQUIRED);
 	const bool allocate_previous = is_instance192_v2 ? ((motion_required && !parsed.common.history_reset) || (action.output_roles[1].bytes != 0)) : motion_required;
 	const bool allocate_aux = is_instance192_v2 && (action.output_roles[3].bytes != 0);
-	const bool generated_geometry = !is_light64 && !is_instance192_v2 && !motion_required && owner.config.capacity && request->native_static_sealed;
+	const bool generated_geometry = !is_non_drawable_v2 && !is_instance192_v2 && !motion_required && owner.config.capacity && request->native_static_sealed;
 	if (generated_geometry && (action.output_prepare_version != 3 || !action.output_plan_prepared ||
 			!action.scene_cull_prepared || action.scene_cull_capture.is_null() || action.scene_cull_capture != action.preinput_camera_source)) {
 		out->status = output_status(ERR_UNAUTHORIZED, "output_original_indexed_geometry_source");
@@ -3891,9 +3918,9 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 		if (!writable || action.output_state != ProductionActionCell::OutputState::BOUND) {
 			return;
 		}
-		if (is_light64) {
+		if (is_non_drawable_v2) {
 			out->writable_count = 0;
-			const uint32_t strides[2] = { 64u, 4u };
+			const uint32_t strides[2] = { is_decal128 ? 128u : 64u, 4u };
 			for (uint32_t i = 0; i < 2; ++i) {
 				const auto &role = action.output_roles[i];
 				if (!role.bytes || role.resource_slot >= request->resource_count) {
@@ -3981,7 +4008,8 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 		}
 	}
 	const auto expected_profile = is_light64 ? RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64
-			: (is_instance192_v2 ? RendererRD::ExternalOutputConfig::INSTANCE_192 : RendererRD::ExternalOutputConfig::INDEXED_144);
+			: (is_decal128 ? RendererRD::ExternalOutputConfig::PARTICLE_DECAL_128
+						   : (is_instance192_v2 ? RendererRD::ExternalOutputConfig::INSTANCE_192 : RendererRD::ExternalOutputConfig::INDEXED_144));
 	if (request->next_action != ordinal || owner.generation_pin.is_empty() || owner.generation_pin.request->attachment != request->attachment || !owner.metadata_directory_installed || owner.metadata_lease.is_empty() || owner.config.profile != expected_profile) {
 		out->status = output_status(ERR_UNAVAILABLE, "output_prepared_owner_required");
 		return;
@@ -4004,24 +4032,26 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 		out->status = output_status(error, "output_slot_preflight");
 		return;
 	}
-	if (owner.generation_config_inline && !is_light64 && !owner.generation_selection_complete) {
+	if (owner.generation_config_inline && !is_non_drawable_v2 && !owner.generation_selection_complete) {
 		out->status = output_status(ERR_UNAVAILABLE, "native_generation_selection_required");
 		return;
 	}
 
 	uint32_t surfaces = 0;
 	uint32_t owned_resource_count = 0;
-	if (is_light64) {
-		if (owner.config.capacity > RendererRD::ParticlesMeshLightSortRD::MAX_PARTICLE_LIGHTS || action.output_read_capacity != 0) {
-			out->status = output_status(ERR_INVALID_DATA, "output_light64_capacity");
+	if (is_non_drawable_v2) {
+		const uint32_t max_cap = is_decal128 ? RendererRD::ParticlesDecalBridgeRD::MAX_PARTICLE_DECALS : RendererRD::ParticlesMeshLightSortRD::MAX_PARTICLE_LIGHTS;
+		if (owner.config.capacity > max_cap || action.output_read_capacity != 0) {
+			out->status = is_decal128 ? output_status(ERR_INVALID_DATA, "output_decal128_capacity") : output_status(ERR_INVALID_DATA, "output_light64_capacity");
 			return;
 		}
-		const uint64_t expected_light_bytes[2] = {
-			uint64_t(owner.config.capacity) * 64ull,
+		const uint64_t record_stride = is_decal128 ? 128ull : 64ull;
+		const uint64_t expected_non_drawable_bytes[2] = {
+			uint64_t(owner.config.capacity) * record_stride,
 			32ull,
 		};
 		for (uint32_t i = 0; i < 2; ++i) {
-			if (action.output_roles[i].bytes != expected_light_bytes[i]) {
+			if (action.output_roles[i].bytes != expected_non_drawable_bytes[i]) {
 				out->status = output_status(ERR_INVALID_DATA, "output_role_extent");
 				return;
 			}
@@ -4067,7 +4097,7 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 		owned_resource_count = owner.config.capacity ? (motion_required ? 9u : 7u) : 5u;
 	}
 
-	const bool reserve_pipelines = !is_light64 && owned_resource_count && action.output_read_capacity;
+	const bool reserve_pipelines = !is_non_drawable_v2 && owned_resource_count && action.output_read_capacity;
 	if (action.consumed_proof_requested && (!reserve_pipelines || owner.view_capacity < 2)) {
 		out->status = output_status(ERR_OUT_OF_MEMORY, "consumed_proof_quoted_view_capacity");
 		return;
@@ -4082,7 +4112,7 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 		spare += cell.request == request && cell.output_role == ProductionUseCell::OutputRole::UNUSED && !cell.output_consumer && !cell.dependency.physical && !cell.output_pin_serial && !cell.disposal_group_serial;
 	}
 	const uint64_t borrower_headroom = reserve_pipelines ? uint64_t(owner.view_capacity) + owner.surface_capacity + owner.read_capacity : 0;
-	const uint32_t guard_members = action.output_plan_prepared && owned_resource_count ? (is_light64 ? (owner.config.capacity ? 1u : 0u) : (owner.config.capacity ? 3u : 2u)) : 0u;
+	const uint32_t guard_members = action.output_plan_prepared && owned_resource_count ? (is_non_drawable_v2 ? (owner.config.capacity ? 1u : 0u) : (owner.config.capacity ? 3u : 2u)) : 0u;
 	if (guard_members && action.output_plan.guard_owned_resource_limit < guard_members) {
 		out->status = output_status(ERR_PARAMETER_RANGE_ERROR, "output_guard_owned_capacity");
 		return;
@@ -4104,7 +4134,7 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 		return;
 	}
 	const uint64_t required_uses = fixed_uses + (reserve_pipelines ? uint64_t(action.output_read_capacity) * per_row_uses : 0);
-	const uint32_t preparation_count = !is_light64 && owned_resource_count ? (reserve_pipelines ? action.output_read_capacity : surfaces) : 0;
+	const uint32_t preparation_count = !is_non_drawable_v2 && owned_resource_count ? (reserve_pipelines ? action.output_read_capacity : surfaces) : 0;
 	if (preparation_count > owner.free_preparation_rows()) {
 		out->request_serial = request->serial;
 		out->action_ordinal = ordinal;
@@ -4210,6 +4240,64 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 			unlock_mutex_for_call();
 			if (is_light64) {
 				error = slot.storage->allocate_light64_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity);
+			} else if (is_decal128) {
+				auto allocate_decal128_owned = [](Storage &p_storage, GDExtensionProductionPhysicalContextRefV1 p_ctx, ProductionOutputPin &p_pin, uint64_t &p_group, uint32_t p_cap) -> Error {
+					if (p_storage.attempted || p_storage.retirement_requested || p_group) {
+						return ERR_ALREADY_IN_USE;
+					}
+					if (p_cap > RendererRD::ParticlesDecalBridgeRD::MAX_PARTICLE_DECALS) {
+						return ERR_INVALID_PARAMETER;
+					}
+					uint32_t role_bytes[Storage::RESOURCE_COUNT] = {};
+					Error alloc_err = RendererRD::ExternalOutputConfig::checked_buffer_bytes(p_cap, 128, UINT32_MAX, role_bytes[Storage::CURRENT_RECORDS]);
+					if (alloc_err != OK) {
+						return alloc_err;
+					}
+					role_bytes[Storage::OUTPUT_META] = 32;
+					role_bytes[Storage::GUARD_STATUS] = 32;
+					uint64_t planned_total = 0;
+					uint32_t res_count = 0;
+					for (uint32_t i = 0; i < Storage::RESOURCE_COUNT; ++i) {
+						planned_total += role_bytes[i];
+						res_count += role_bytes[i] != 0;
+					}
+					alloc_err = p_storage.device._production_output_owned_reserve(p_ctx, p_pin, res_count, p_group);
+					if (alloc_err != OK) {
+						return alloc_err;
+					}
+					for (uint32_t i = 0; i < Storage::RESOURCE_COUNT; ++i) {
+						p_storage.resources[i].bytes = role_bytes[i];
+					}
+					p_storage.total_bytes = planned_total;
+					p_storage.attempted = true;
+					uint32_t res_ordinal = 0;
+					for (uint32_t i = 0; i < Storage::RESOURCE_COUNT; ++i) {
+						if (!p_storage.resources[i].bytes) {
+							continue;
+						}
+						p_storage.creation_error = p_storage.device._production_output_owned_storage_create(
+								p_ctx, p_pin, p_group, res_ordinal++, p_storage.resources[i].bytes,
+								BitField<RenderingDevice::StorageBufferUsage>(), p_storage.resources[i].rid, p_storage.resources[i].witness);
+						if (p_storage.creation_error != OK) {
+							if (p_storage.creation_error == ERR_BUSY && res_ordinal == 1 && p_storage.resources[i].rid.is_null()) {
+								const Error rolled_back = p_storage.device._production_output_owned_rollback(p_ctx, p_pin, p_group);
+								if (rolled_back == OK) {
+									for (uint32_t j = 0; j < Storage::RESOURCE_COUNT; ++j) {
+										p_storage.resources[j].bytes = 0;
+									}
+									p_storage.total_bytes = 0;
+									p_storage.attempted = false;
+									p_storage.creation_error = OK;
+									return ERR_BUSY;
+								}
+							}
+							p_storage.device._production_output_owned_cancel_unbound(p_pin, p_group);
+							return p_storage.creation_error;
+						}
+					}
+					return OK;
+				};
+				error = allocate_decal128_owned(*slot.storage, context, slot.original_pin, slot.owned_group, owner.config.capacity);
 			} else if (is_instance192_v2) {
 				error = slot.storage->allocate_instance192_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity, surfaces, allocate_previous, allocate_aux);
 			} else {
@@ -4217,16 +4305,31 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 			}
 			relock_mutex_after_call();
 		}
-		if (error == OK && is_light64 && guard_members) {
+		if (error == OK && is_non_drawable_v2 && guard_members) {
 			unlock_mutex_for_call();
-			RendererRD::ParticlesMeshLightSortRD *light_sort = storage->get_mesh_light_sort_rd();
-			error = light_sort ? light_sort->ensure_light_gpu_bridge(rd) : ERR_UNAVAILABLE;
+			RID harvest_shader;
+			RID staging_buf;
+			uint64_t staging_bytes = 0;
+			if (is_light64) {
+				RendererRD::ParticlesMeshLightSortRD *light_sort = storage->get_mesh_light_sort_rd();
+				error = light_sort ? light_sort->ensure_light_gpu_bridge(rd) : ERR_UNAVAILABLE;
+				if (error == OK) {
+					harvest_shader = light_sort->get_light_harvest_shader();
+					staging_buf = light_sort->get_light_candidate_staging_buffer();
+					staging_bytes = 16ull + uint64_t(RendererRD::ParticlesMeshLightSortRD::MAX_STAGED_LIGHT_CANDIDATES) * sizeof(RendererRD::ParticleLightRecord64);
+				}
+			} else {
+				RendererRD::ParticlesDecalBridgeRD *decal_bridge = storage->get_decal_bridge_rd();
+				error = decal_bridge ? decal_bridge->ensure_decal_gpu_bridge(rd) : ERR_UNAVAILABLE;
+				if (error == OK) {
+					harvest_shader = decal_bridge->get_decal_harvest_shader();
+					staging_buf = decal_bridge->get_decal_candidate_staging_buffer();
+					staging_bytes = 16ull + uint64_t(RendererRD::ParticlesDecalBridgeRD::MAX_STAGED_DECAL_CANDIDATES) * sizeof(RendererRD::ParticleDecalRecord128);
+				}
+			}
 			if (error == OK) {
-				const RID harvest_shader = light_sort->get_light_harvest_shader();
-				const RID staging_buf = light_sort->get_light_candidate_staging_buffer();
 				const auto &meta_res = slot.storage->resources[Storage::OUTPUT_META];
 				const auto &recs_res = slot.storage->resources[Storage::CURRENT_RECORDS];
-				const uint64_t staging_bytes = 16ull + uint64_t(RendererRD::ParticlesMeshLightSortRD::MAX_STAGED_LIGHT_CANDIDATES) * sizeof(RendererRD::ParticleLightRecord64);
 				RD::Uniform harvest_uniforms[3];
 				harvest_uniforms[0].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 				harvest_uniforms[0].binding = 0;
@@ -4265,8 +4368,8 @@ void Registry::production_output_acquire_v2(ProductionPhysicalContextRef context
 			relock_mutex_after_call();
 		}
 		if (error == OK) {
-			auto storage_role_to_v2_index = [is_light64, is_instance192_v2](uint32_t s_role) -> uint32_t {
-				if (is_light64) {
+			auto storage_role_to_v2_index = [is_non_drawable_v2, is_instance192_v2](uint32_t s_role) -> uint32_t {
+				if (is_non_drawable_v2) {
 					switch (s_role) {
 						case Storage::CURRENT_RECORDS:
 							return 0u;
@@ -4462,7 +4565,8 @@ Error Registry::production_output_cull_required_locked(const ProductionActionCel
 			owner->device != action.request->attachment->held_device ||
 			(owner->config.profile != RendererRD::ExternalOutputConfig::INSTANCE_192 &&
 					owner->config.profile != RendererRD::ExternalOutputConfig::INDEXED_144 &&
-					owner->config.profile != RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64) ||
+					owner->config.profile != RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64 &&
+					owner->config.profile != RendererRD::ExternalOutputConfig::PARTICLE_DECAL_128) ||
 			(owner->config.space != RendererRD::ExternalOutputConfig::WORLD && owner->config.space != RendererRD::ExternalOutputConfig::LOCAL)) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -4787,7 +4891,8 @@ void Registry::production_finalize_output(ProductionPhysicalContextRef context, 
 		}
 	}
 	const bool is_indexed144 = owner.config.profile == RendererRD::ExternalOutputConfig::INDEXED_144;
-	const bool is_light64 = owner.config.profile == RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64;
+	const bool is_light64 = owner.config.profile == RendererRD::ExternalOutputConfig::PARTICLE_LIGHT_64 ||
+			owner.config.profile == RendererRD::ExternalOutputConfig::PARTICLE_DECAL_128;
 	const uint32_t max_groups = rd->limit_get(RD::LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_X);
 	const uint64_t chunk_records = uint64_t(max_groups) * 64;
 	const uint64_t validations = !is_light64 && owner.config.capacity && chunk_records ? (uint64_t(owner.config.capacity) + chunk_records - 1) / chunk_records : 0;
@@ -5321,6 +5426,74 @@ void Registry::production_output_seal(ProductionPhysicalContextRef context, GDEx
 			reg.capacity = owner.config.capacity;
 			reg.present_seq = slot.request.common.present_seq;
 			light_sort->register_sealed_external_light_slot(reg);
+		}
+	} else if (owner.config.profile == RendererRD::ExternalOutputConfig::PARTICLE_DECAL_128) {
+		slot.state = Owner::LeaseState::ADOPTED;
+		if (RendererRD::ParticlesDecalBridgeRD *decal_bridge = storage->get_decal_bridge_rd()) {
+			using Storage = RendererRD::ExternalOutputStorage;
+			RendererRD::ParticlesDecalBridgeRD::ExternalDecalSlotRegistration reg;
+			reg.owner_key = input->particles;
+			reg.owner_ptr = &owner;
+			reg.is_slot_live_fn = [](const RendererRD::ExternalOutputOwner *p_owner, uint64_t p_gen, uint32_t p_slot, uint64_t p_lease) -> bool {
+				if (!p_owner || !p_owner->admits_work() || p_owner->generation != p_gen || p_slot >= p_owner->slot_count) {
+					return false;
+				}
+				const auto &live_slot = p_owner->slots[p_slot];
+				if (live_slot.publication_closed || live_slot.pass_uses_closed || live_slot.lease_serial != p_lease ||
+						live_slot.storage == nullptr ||
+						(live_slot.state != RendererRD::ExternalOutputOwner::LeaseState::ADOPTED &&
+								live_slot.state != RendererRD::ExternalOutputOwner::LeaseState::SEALED_RECORDED)) {
+					return false;
+				}
+				if (live_slot.scene_cull_bound) {
+					RendererSceneCull *scene = static_cast<RendererSceneCull *>(RSG::scene);
+					RendererSceneCull::NativeParticleSceneFacts actual;
+					if (!scene || scene->instance_get_committed_particle_scene_facts(live_slot.scene_cull_instance, live_slot.scene_cull_particles, actual) != OK) {
+						return false;
+					}
+					if (actual.scenario != live_slot.scene_cull_scenario) {
+						return false;
+					}
+					const RendererViewport::Viewport *vp = (RSG::viewport && live_slot.scene_cull_viewport.is_valid())
+							? RSG::viewport->viewport_owner.get_or_null(live_slot.scene_cull_viewport)
+							: nullptr;
+					if (!vp || vp->scenario != live_slot.scene_cull_scenario) {
+						return false;
+					}
+				}
+				return true;
+			};
+			reg.is_slot_visible_fn = [](const RendererRD::ExternalOutputOwner *p_owner, uint64_t p_gen, uint32_t p_slot, uint64_t p_lease) -> bool {
+				if (!p_owner || p_owner->generation != p_gen || p_slot >= p_owner->slot_count) {
+					return false;
+				}
+				const auto &live_slot = p_owner->slots[p_slot];
+				if (live_slot.lease_serial != p_lease) {
+					return false;
+				}
+				if (live_slot.scene_cull_bound) {
+					RendererSceneCull *scene = static_cast<RendererSceneCull *>(RSG::scene);
+					if (!scene || !scene->instance_is_visible(live_slot.scene_cull_instance)) {
+						return false;
+					}
+				}
+				return true;
+			};
+			reg.generation = owner.generation;
+			reg.slot_index = slot_index;
+			reg.lease_serial = slot.lease_serial;
+			reg.scenario_rid = slot.scene_cull_bound ? slot.scene_cull_scenario : RID();
+			reg.viewport_rid = slot.scene_cull_bound ? slot.scene_cull_viewport : RID();
+			reg.world_bounds = slot.scene_cull_bound ? slot.scene_cull_world : owner.config.bounds;
+			reg.records_rid = slot.storage ? slot.storage->resources[Storage::CURRENT_RECORDS].rid : RID();
+			reg.meta_rid = slot.storage ? slot.storage->resources[Storage::OUTPUT_META].rid : RID();
+			reg.harvest_uniform_set = slot.guard_uniform_sets[0];
+			for (uint32_t ti = 0; ti < RendererRD::ParticlesDecalBridgeRD::TEXTURE_SLOT_COUNT; ++ti) {
+				reg.textures[ti] = owner.decal_textures[ti];
+			}
+			reg.capacity = owner.config.capacity;
+			reg.present_seq = slot.request.common.present_seq;
+			decal_bridge->register_sealed_external_decal_slot(reg);
 		}
 	}
 	OriginalOperationIdentity identity{ request->operation.owner_request_nonce, request->attachment->library_generation, device_records[request->attachment->device].session, request->operation.record_generation, request->operation.canonical_begin, request->operation.canonical_end };

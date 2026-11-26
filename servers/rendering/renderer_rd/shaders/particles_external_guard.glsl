@@ -112,7 +112,7 @@ struct SurfaceProof {
 	vec4 previous_mesh_max;
 	vec4 previous_displacement_min;
 	vec4 previous_displacement_max;
-	uvec4 command; // indexed (0/1), pinned native element count, reserved, reserved
+	uvec4 command; // indexed (0/1), pinned native element count, owner mesh index (0..7), reserved
 };
 
 layout(set = 0, binding = 7, std430) restrict readonly buffer GeometryProof {
@@ -128,7 +128,7 @@ layout(set = 0, binding = 7, std430) restrict readonly buffer GeometryProof {
 	uvec4 source_accessor;
 	// CountValidity, AttributesValidity, DenseIdsValidity, InstanceGate; fault==0
 	uvec4 source_gate_words;
-	uvec4 options; // history permitted (0/1), aux params enabled (0/1), two reserved zero words
+	uvec4 options; // history permitted (0/1), aux params enabled (0/1), multi-mesh count (0=legacy, 2..8=partitioned), reserved zero
 	SurfaceProof surfaces[];
 }
 proof;
@@ -152,6 +152,13 @@ const uint NUMERIC_FAULT = 16u;
 const uint HISTORY_FAULT = 32u;
 const uint BOUNDS_FAULT = 64u;
 const uint RECORD_WORDS = 48u;
+const uint MAX_MESH_VARIANTS = 8u;
+const uint MESH_FIRST_OFFSET = 16u;
+const uint MESH_COUNT_OFFSET = 24u;
+const uint BASE_FLAGS_MASK = 31u;
+const uint MULTI_MESH_FLAGS_MASK = 255u;
+const uint MESH_INDEX_SHIFT = 5u;
+const uint MESH_INDEX_MASK = 7u;
 const float ROUNDING_FLOOR = 0.00000095367431640625; // 2^-20
 
 void fault(uint bits, uint ordinal) {
@@ -281,13 +288,28 @@ uint validate_record(uint ordinal, bool previous, out uint first_failure) {
 			record_fault |= NUMERIC_FAULT;
 		}
 	}
+	bool multi_mesh = proof.options.z != 0u;
+	uint allowed_flags = multi_mesh ? MULTI_MESH_FLAGS_MASK : BASE_FLAGS_MASK;
 	uint flags = read_record(base, 46u, previous);
-	if ((flags & ~31u) != 0u || (flags & 1u) == 0u || read_record(base, 47u, previous) != 0u ||
+	uint mesh_index = (flags >> MESH_INDEX_SHIFT) & MESH_INDEX_MASK;
+	if ((flags & ~allowed_flags) != 0u || (flags & 1u) == 0u ||
+			(multi_mesh && mesh_index >= proof.options.z) ||
+			read_record(base, 47u, previous) != 0u ||
 			read_record(base, 15u, previous) != 0u || read_record(base, 19u, previous) != 0u || read_record(base, 23u, previous) != 0u) {
 		record_fault |= NUMERIC_FAULT;
 	}
+	if (multi_mesh && !previous && ordinal > 0u) {
+		uint prev_ordinal_mesh = (current_records.words[(ordinal - 1u) * RECORD_WORDS + 46u] >> MESH_INDEX_SHIFT) & MESH_INDEX_MASK;
+		if (prev_ordinal_mesh > mesh_index) {
+			record_fault |= META_FAULT;
+		}
+	}
 	if (previous && (read_record(base, 44u, true) != read_record(base, 44u, false) || read_record(base, 45u, true) != read_record(base, 45u, false))) {
 		record_fault |= HISTORY_FAULT;
+	}
+	uint bound_mesh = previous ? ((current_records.words[base + 46u] >> MESH_INDEX_SHIFT) & MESH_INDEX_MASK) : mesh_index;
+	if (multi_mesh && bound_mesh >= proof.options.z) {
+		record_fault |= NUMERIC_FAULT;
 	}
 	if (record_fault != 0u) {
 		first_failure = failure_base;
@@ -300,6 +322,9 @@ uint validate_record(uint ordinal, bool previous, out uint first_failure) {
 	vec3 declaration_max = previous ? proof.previous_decl_max.xyz : proof.current_decl_max.xyz;
 	for (uint surface = 0u; surface < params.surface_count; surface++) {
 		SurfaceProof bound = proof.surfaces[surface];
+		if (multi_mesh && bound.command.z != bound_mesh) {
+			continue;
+		}
 		vec3 mesh_min = previous ? bound.previous_mesh_min.xyz : bound.current_mesh_min.xyz;
 		vec3 mesh_max = previous ? bound.previous_mesh_max.xyz : bound.current_mesh_max.xyz;
 		vec3 displacement_min = previous ? bound.previous_displacement_min.xyz : bound.current_displacement_min.xyz;
@@ -356,6 +381,14 @@ void initialize_guard() {
 	}
 	scratch.words[9] = 0xffffffffu;
 	scratch.words[11] = params.surface_count; // Immutable physical table shape for later modes.
+	uint mesh_variant_count = proof.options.z;
+	scratch.words[12] = mesh_variant_count; // Immutable multi-mesh mode for later modes.
+	if (uint(scratch.words.length()) >= 32u) {
+		for (uint m = 0u; m < MAX_MESH_VARIANTS; m++) {
+			scratch.words[MESH_FIRST_OFFSET + m] = 0xffffffffu;
+			scratch.words[MESH_COUNT_OFFSET + m] = 0u;
+		}
+	}
 	for (uint i = 0u; i < 8u; i++) {
 		status.words[i] = 0u;
 	}
@@ -437,7 +470,11 @@ void initialize_guard() {
 		initial_fault |= META_FAULT;
 	}
 #endif
-	if (proof.source_accessor.y != 0u || proof.source_accessor.z != 0u || proof.source_accessor.w < 1u || proof.source_accessor.w > 2u || proof.options.x > 1u || proof.options.y > 1u || any(notEqual(proof.options.zw, uvec2(0u))) ||
+	bool multi_mesh_invalid = mesh_variant_count != 0u &&
+			(mesh_variant_count < 2u || mesh_variant_count > MAX_MESH_VARIANTS ||
+					params.surface_count < mesh_variant_count || uint(scratch.words.length()) < 32u);
+	if (proof.source_accessor.y != 0u || proof.source_accessor.z != 0u || proof.source_accessor.w < 1u || proof.source_accessor.w > 2u ||
+			proof.options.x > 1u || proof.options.y > 1u || multi_mesh_invalid || proof.options.w != 0u ||
 			!bounds_shape(proof.current_decl_min, proof.current_decl_max, true) ||
 			(proof.options.x != 0u && !bounds_shape(proof.previous_decl_min, proof.previous_decl_max, true)) || !bounds_shape(proof.cull_min, proof.cull_max, true)) {
 		initial_fault |= META_FAULT;
@@ -450,15 +487,22 @@ void initialize_guard() {
 			initial_fault |= NUMERIC_FAULT;
 		}
 	}
+	uint surface_mesh_mask = 0u;
 	for (uint i = 0u; i < min(min(params.surface_count, EXTERNAL_MAX_SURFACES), uint(proof.surfaces.length())); i++) {
 		SurfaceProof bound = proof.surfaces[i];
+		bool invalid_mesh_index = mesh_variant_count != 0u ? (bound.command.z >= mesh_variant_count) : (bound.command.z != 0u);
 		if (!bounds_shape(bound.current_mesh_min, bound.current_mesh_max, false) ||
 				(proof.options.x != 0u && !bounds_shape(bound.previous_mesh_min, bound.previous_mesh_max, false)) ||
 				!bounds_shape(bound.current_displacement_min, bound.current_displacement_max, false) ||
 				(proof.options.x != 0u && !bounds_shape(bound.previous_displacement_min, bound.previous_displacement_max, false)) ||
-				bound.command.x > 1u || bound.command.y == 0u || any(notEqual(bound.command.zw, uvec2(0u)))) {
+				bound.command.x > 1u || bound.command.y == 0u || invalid_mesh_index || bound.command.w != 0u) {
 			initial_fault |= META_FAULT;
+		} else if (mesh_variant_count != 0u && mesh_variant_count <= MAX_MESH_VARIANTS) {
+			surface_mesh_mask |= (1u << bound.command.z);
 		}
+	}
+	if (mesh_variant_count >= 2u && mesh_variant_count <= MAX_MESH_VARIANTS && surface_mesh_mask != ((1u << mesh_variant_count) - 1u)) {
+		initial_fault |= META_FAULT;
 	}
 	// Immutable across all validation lanes: a record failure must not cause
 	// other lanes to skip validation or race on the aggregate atomic fault.
@@ -481,7 +525,8 @@ void main() {
 #endif
 #ifdef MODE_VALIDATE
 	// A later mode cannot rely on metadata from a differently shaped INIT.
-	if (!valid_surface_span() || params.surface_count != scratch.words[11]) {
+	if (!valid_surface_span() || params.surface_count != scratch.words[11] || proof.options.z != scratch.words[12] ||
+			(proof.options.z != 0u && uint(scratch.words.length()) < 32u)) {
 		if (gl_GlobalInvocationID.x == 0u) {
 			fault(META_FAULT, 0u);
 		}
@@ -543,14 +588,38 @@ void main() {
 	}
 	if (bits != 0u) {
 		fault(bits, first_failure);
+	} else if (proof.options.z != 0u) {
+		uint mesh_index = (flags >> MESH_INDEX_SHIFT) & MESH_INDEX_MASK;
+		atomicMin(scratch.words[MESH_FIRST_OFFSET + mesh_index], ordinal);
+		atomicAdd(scratch.words[MESH_COUNT_OFFSET + mesh_index], 1u);
 	}
 #endif
 #ifdef MODE_FINALIZE
 	if (gl_GlobalInvocationID.x != 0u) {
 		return;
 	}
-	if (!valid_surface_span() || params.surface_count != scratch.words[11]) {
+	if (!valid_surface_span() || params.surface_count != scratch.words[11] || proof.options.z != scratch.words[12] ||
+			(proof.options.z != 0u && uint(scratch.words.length()) < 32u)) {
 		fault(META_FAULT, 0u);
+	}
+	if (scratch.words[8] == 0u && proof.options.z != 0u && scratch.words[0] != 0u) {
+		uint total_mesh_count = 0u;
+		uint expected_next = 0u;
+		for (uint m = 0u; m < proof.options.z; m++) {
+			uint m_cnt = scratch.words[MESH_COUNT_OFFSET + m];
+			uint m_first = scratch.words[MESH_FIRST_OFFSET + m];
+			if (m_cnt > 0u) {
+				if (m_first != expected_next || m_cnt > scratch.words[0] - expected_next) {
+					fault(META_FAULT, 0u);
+					break;
+				}
+				expected_next += m_cnt;
+			}
+			total_mesh_count += m_cnt;
+		}
+		if (total_mesh_count != scratch.words[0]) {
+			fault(META_FAULT, 0u);
+		}
 	}
 	uint bits = scratch.words[8];
 	status.words[0] = bits;
@@ -560,8 +629,18 @@ void main() {
 	// INIT wrote every slot zero. Only a fault-free nonempty packet changes it.
 	if (bits == 0u && scratch.words[0] != 0u) {
 		for (uint i = 0u; i < params.surface_count; i++) {
-			commands.words[i * 5u] = proof.surfaces[i].command.y;
-			commands.words[i * 5u + 1u] = scratch.words[0];
+			uint m = proof.surfaces[i].command.z;
+			uint cnt = (proof.options.z != 0u) ? scratch.words[MESH_COUNT_OFFSET + m] : scratch.words[0];
+			uint first = (proof.options.z != 0u) ? scratch.words[MESH_FIRST_OFFSET + m] : 0u;
+			if (cnt > 0u) {
+				commands.words[i * 5u] = proof.surfaces[i].command.y;
+				commands.words[i * 5u + 1u] = cnt;
+				if (proof.surfaces[i].command.x != 0u) {
+					commands.words[i * 5u + 4u] = first;
+				} else {
+					commands.words[i * 5u + 3u] = first;
+				}
+			}
 		}
 	}
 #endif

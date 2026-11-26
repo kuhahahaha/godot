@@ -2671,12 +2671,24 @@ void RenderingDeviceGraph::add_compute_list_usage(ResourceTracker *p_tracker, Re
 		compute_instruction_list.command_tracker_usages.push_back(p_usage);
 		p_tracker->compute_list_index = compute_instruction_list.index;
 		p_tracker->compute_list_usage = p_usage;
-	}
+	} else if (p_tracker->compute_list_usage != p_usage) {
+		if (p_tracker->compute_list_usage == RESOURCE_USAGE_STORAGE_BUFFER_READ && p_usage == RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE) {
+			p_tracker->compute_list_usage = RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE;
+			for (uint32_t i = compute_instruction_list.command_trackers.size(); i > 0; --i) {
+				if (compute_instruction_list.command_trackers[i - 1] == p_tracker) {
+					compute_instruction_list.command_tracker_usages[i - 1] = RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE;
+					break;
+				}
+			}
+		} else if (p_tracker->compute_list_usage == RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE && p_usage == RESOURCE_USAGE_STORAGE_BUFFER_READ) {
+			// Preserve READ_WRITE monotonically; do not downgrade or report an error.
+		}
 #ifdef DEV_ENABLED
-	else if (p_tracker->compute_list_usage != p_usage) {
-		ERR_FAIL_MSG(vformat("Tracker can't have more than one type of usage in the same compute list. Compute list usage is %s and the requested usage is %s.", _usage_to_string(p_tracker->compute_list_usage), _usage_to_string(p_usage)));
-	}
+		else {
+			ERR_FAIL_MSG(vformat("Tracker can't have more than one type of usage in the same compute list. Compute list usage is %s and the requested usage is %s.", _usage_to_string(p_tracker->compute_list_usage), _usage_to_string(p_usage)));
+		}
 #endif
+	}
 }
 
 void RenderingDeviceGraph::add_compute_list_usages(VectorView<ResourceTracker *> p_trackers, VectorView<ResourceUsage> p_usages) {
@@ -3380,10 +3392,14 @@ void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RD
 
 			uint32_t boosted_priority = 0;
 			bool compute_pass_open = false;
+#if PRINT_RENDER_GRAPH
 			uint32_t last_level = 0;
+#endif
 			for (uint32_t level_start = 0; level_start < command_count;) {
 				const uint32_t current_level = commands_sorted[level_start].level;
+#if PRINT_RENDER_GRAPH
 				last_level = current_level;
+#endif
 				uint32_t level_end = level_start + 1;
 				while (level_end < command_count && commands_sorted[level_end].level == current_level) {
 					level_end++;

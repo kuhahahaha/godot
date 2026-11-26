@@ -71,6 +71,7 @@ class HeightCaptureCheckedSink;
 class ParticlesExternalGuard;
 class ParticlesExternalGuardIndexed144;
 class ParticlesMeshLightSortRD;
+class ParticlesDecalBridgeRD;
 class ParticlesCollisionSceneRD;
 #ifdef TESTS_ENABLED
 class ExternalLinkedOwnerTest;
@@ -593,6 +594,8 @@ public:
 	bool is_external_guard_indexed144_prepared() const;
 	ParticlesMeshLightSortRD *get_mesh_light_sort_rd() { return mesh_light_sort_rd; }
 	const ParticlesMeshLightSortRD *get_mesh_light_sort_rd() const { return mesh_light_sort_rd; }
+	ParticlesDecalBridgeRD *get_decal_bridge_rd();
+	const ParticlesDecalBridgeRD *get_decal_bridge_rd() const;
 	ParticlesCollisionSceneRD *get_collision_scene_rd() { return collision_scene_rd; }
 	const ParticlesCollisionSceneRD *get_collision_scene_rd() const { return collision_scene_rd; }
 	RID get_external_aux_zero_sentinel_buffer() const { return external_aux_zero_sentinel_buffer; }

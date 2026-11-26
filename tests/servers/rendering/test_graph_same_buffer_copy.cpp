@@ -217,4 +217,107 @@ TEST_CASE("[R02][GraphSameBufferCopy] emitted barriers preserve incoming and out
 	}
 }
 
+TEST_CASE("[RDG][ComputeListUsage] storage buffer READ promotes to READ_WRITE and records RAW edges") {
+	for (bool require_transitions : { false, true }) {
+		INFO("buffers require transitions: ", require_transitions);
+		Fixture fixture(require_transitions);
+		ErrorCapture errors;
+
+		// Seed buffer with a prior storage-buffer READ so different_usage alone cannot mask a lost promotion.
+		fixture.graph.add_compute_list_begin();
+		fixture.graph.add_compute_list_usage(&fixture.buffer, RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ);
+		fixture.graph.add_compute_list_dispatch(1, 1, 1);
+		const auto prior_read = fixture.graph.add_compute_list_end();
+
+		// Interleave neighboring trackers so backward scan in command_trackers must locate the exact entry.
+		fixture.graph.add_compute_list_begin();
+		fixture.graph.add_compute_list_usage(&fixture.before_destination, RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ);
+		fixture.graph.add_compute_list_usage(&fixture.buffer, RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ);
+		fixture.graph.add_compute_list_usage(&fixture.after_destination, RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ);
+		fixture.graph.add_compute_list_dispatch(1, 1, 1);
+		fixture.graph.add_compute_list_memory_barrier();
+		fixture.graph.add_compute_list_usage(&fixture.buffer, RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE);
+		CHECK(fixture.buffer.compute_list_usage == RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE);
+		CHECK(fixture.before_destination.compute_list_usage == RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ);
+		CHECK(fixture.after_destination.compute_list_usage == RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ);
+		fixture.graph.add_compute_list_dispatch(1, 1, 1);
+		const auto promoted_compute = fixture.graph.add_compute_list_end();
+
+		CHECK(errors.count == 0);
+		CHECK(fixture.buffer.usage == RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE);
+		CHECK(fixture.buffer.usage_access.has_flag(RDD::BARRIER_ACCESS_SHADER_READ_BIT));
+		CHECK(fixture.buffer.usage_access.has_flag(RDD::BARRIER_ACCESS_SHADER_WRITE_BIT));
+		CHECK(fixture.buffer.write_command_or_list_index == int32_t(promoted_compute.index));
+		CHECK(fixture.before_destination.write_command_or_list_index == (require_transitions ? int32_t(promoted_compute.index) : -1));
+		CHECK(fixture.after_destination.write_command_or_list_index == (require_transitions ? int32_t(promoted_compute.index) : -1));
+		fixture.check_path(prior_read, promoted_compute);
+
+		const auto readback = fixture.graph.add_buffer_get_data(fixture.buffer.buffer_driver_id, &fixture.buffer, RDD::BufferID(75), { 0, 0, 64 });
+		fixture.check_path(promoted_compute, readback);
+
+		fixture.graph.add_compute_list_begin();
+		fixture.graph.add_compute_list_usage(&fixture.buffer, RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ);
+		fixture.graph.add_compute_list_dispatch(1, 1, 1);
+		const auto next_compute = fixture.graph.add_compute_list_end();
+		fixture.check_path(promoted_compute, next_compute);
+		if (!require_transitions) {
+			CHECK(fixture.buffer.write_command_or_list_index == int32_t(promoted_compute.index));
+		}
+		CHECK(errors.count == 0);
+	}
+}
+
+TEST_CASE("[RDG][ComputeListUsage] storage buffer READ_WRITE stays monotonic on subsequent READ") {
+	for (bool require_transitions : { false, true }) {
+		INFO("buffers require transitions: ", require_transitions);
+		Fixture fixture(require_transitions);
+		ErrorCapture errors;
+
+		// Direct READ_WRITE -> READ inside one compute list must not downgrade or error.
+		fixture.graph.add_compute_list_begin();
+		fixture.graph.add_compute_list_usage(&fixture.buffer, RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE);
+		fixture.graph.add_compute_list_dispatch(1, 1, 1);
+		fixture.graph.add_compute_list_memory_barrier();
+		fixture.graph.add_compute_list_usage(&fixture.buffer, RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ);
+		CHECK(fixture.buffer.compute_list_usage == RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE);
+		fixture.graph.add_compute_list_dispatch(1, 1, 1);
+		const auto rw_then_r = fixture.graph.add_compute_list_end();
+
+		CHECK(errors.count == 0);
+		CHECK(fixture.buffer.usage == RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE);
+		CHECK(fixture.buffer.write_command_or_list_index == int32_t(rw_then_r.index));
+
+		const auto readback1 = fixture.graph.add_buffer_get_data(fixture.buffer.buffer_driver_id, &fixture.buffer, RDD::BufferID(75), { 0, 0, 64 });
+		fixture.check_path(rw_then_r, readback1);
+
+		// READ -> READ_WRITE -> READ inside one compute list must promote and stay READ_WRITE.
+		fixture.graph.add_compute_list_begin();
+		fixture.graph.add_compute_list_usage(&fixture.buffer, RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ);
+		fixture.graph.add_compute_list_dispatch(1, 1, 1);
+		fixture.graph.add_compute_list_memory_barrier();
+		fixture.graph.add_compute_list_usage(&fixture.buffer, RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE);
+		CHECK(fixture.buffer.compute_list_usage == RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE);
+		fixture.graph.add_compute_list_dispatch(1, 1, 1);
+		fixture.graph.add_compute_list_memory_barrier();
+		fixture.graph.add_compute_list_usage(&fixture.buffer, RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ);
+		CHECK(fixture.buffer.compute_list_usage == RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE);
+		fixture.graph.add_compute_list_dispatch(1, 1, 1);
+		const auto r_rw_r = fixture.graph.add_compute_list_end();
+
+		CHECK(errors.count == 0);
+		CHECK(fixture.buffer.usage == RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE);
+		CHECK(fixture.buffer.write_command_or_list_index == int32_t(r_rw_r.index));
+
+		fixture.graph.add_compute_list_begin();
+		fixture.graph.add_compute_list_usage(&fixture.buffer, RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ);
+		fixture.graph.add_compute_list_dispatch(1, 1, 1);
+		const auto consumer = fixture.graph.add_compute_list_end();
+		fixture.check_path(r_rw_r, consumer);
+
+		const auto readback2 = fixture.graph.add_buffer_get_data(fixture.buffer.buffer_driver_id, &fixture.buffer, RDD::BufferID(76), { 0, 0, 64 });
+		fixture.check_path(r_rw_r, readback2);
+		CHECK(errors.count == 0);
+	}
+}
+
 } // namespace TestGraphSameBufferCopy

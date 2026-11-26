@@ -301,6 +301,8 @@ class ExternalOutputOwner {
 	GenerationMaterialSelection *generation_materials = nullptr;
 	uint32_t generation_mesh_count = 0, generation_material_count = 0;
 	uint32_t retained_mesh_count = 0, retained_material_count = 0, retained_surface_count = 0;
+	RID decal_textures[4];
+	bool decal_textures_registered = false;
 	bool generation_surfaces_attempted = false, generation_surfaces_complete = false;
 	bool generation_selection_unpublished = false;
 	bool generation_config_inline = false;
@@ -346,6 +348,13 @@ class ExternalOutputOwner {
 	};
 	static Error plan_metadata_layout(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, MetadataLayout &r_layout, uint32_t p_mesh_selections = 0, uint32_t p_material_selections = 0, uint32_t p_bindings = UINT32_MAX, uint32_t p_storage = UINT32_MAX, uint32_t p_preparations = UINT32_MAX);
 	static Error plan_generation_selection_layout(const ExternalOutputConfig &, uint32_t, uint32_t, uint32_t, MetadataLayout &);
+	static Error validate_decal128_selection(const ExternalOutputConfig &, uint32_t &);
+	static Error plan_decal128_selection_layout(const ExternalOutputConfig &, uint32_t, uint32_t, uint32_t, MetadataLayout &);
+	Error install_decal128_metadata_directory(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1,
+			GDExtensionDeviceExit::Registry &, const GDExtensionDeviceExit::ProductionOutputMetadataLease &,
+			uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces);
+	Error acquire_decal128_selection(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1);
+	void release_decal_atlas_registrations();
 	// One pipeline and one transforms set per other original preparation row.
 	// Their disposal observers do not expand the ordinary/held resource limit.
 	static Error plan_material_disposal_capacity(uint32_t p_graph_limit, uint32_t p_bank_rows, uint32_t &r_capacity) {
@@ -394,7 +403,8 @@ class ExternalOutputOwner {
 			CRASH_COND(p_inline_selection
 							? (p_config.profile != ExternalOutputConfig::INSTANCE_192 &&
 									  p_config.profile != ExternalOutputConfig::INDEXED_144 &&
-									  p_config.profile != ExternalOutputConfig::PARTICLE_LIGHT_64)
+									  p_config.profile != ExternalOutputConfig::PARTICLE_LIGHT_64 &&
+									  p_config.profile != ExternalOutputConfig::PARTICLE_DECAL_128)
 							: (p_config.profile != ExternalOutputConfig::SCENE_ONLY || !p_config.surfaces.is_empty() || !p_config.surface_materials.is_empty()));
 			PackedByteArray *tags[] = { &config.producer_tag, &config.device_tag, &config.layout_digest, &config.mapping_digest, &config.numeric_profile_digest };
 			for (uint32_t i = 0; i < 5; ++i) {
@@ -410,6 +420,7 @@ class ExternalOutputOwner {
 
 public:
 	~ExternalOutputOwner() {
+		release_decal_atlas_registrations();
 		CRASH_COND(surface_cells || view_cells || read_cells || generation_meshes || generation_materials || preparation_rows || preparation_capacity || has_generation_selection_custody() || !generation_pin.is_empty());
 		// No destructor fabricates native/source return or drops accepted uses.
 		CRASH_COND(state != GenerationState::RELEASED);

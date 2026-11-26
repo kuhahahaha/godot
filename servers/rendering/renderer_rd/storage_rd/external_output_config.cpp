@@ -147,7 +147,7 @@ Error ExternalOutputConfig::parse(const Dictionary &p_config, ExternalOutputConf
 	ExternalOutputConfig config;
 	uint32_t schema, profile, space, motion;
 	if (!read_u32(p_config, "schema", schema) || schema != 1 ||
-			!read_u32(p_config, "profile", profile) || profile < INSTANCE_192 || profile > PARTICLE_LIGHT_64 ||
+			!read_u32(p_config, "profile", profile) || profile < INSTANCE_192 || profile > PARTICLE_DECAL_128 ||
 			!read_u32(p_config, "space", space) || space < WORLD || space > LOCAL ||
 			!read_u32(p_config, "motion", motion) || motion > REQUIRED ||
 			!read_u32(p_config, "capacity", config.capacity) ||
@@ -214,6 +214,15 @@ Error ExternalOutputConfig::parse(const Dictionary &p_config, ExternalOutputConf
 			return ERR_INVALID_PARAMETER;
 		}
 		if (!config.surfaces.is_empty() || !config.surface_materials.is_empty() || config.pass_mask != 0 || config.motion != DISABLED) {
+			return ERR_INVALID_PARAMETER;
+		}
+	}
+	if (config.profile == PARTICLE_DECAL_128) {
+		if (config.capacity > 256) {
+			r_detail = "LIMIT";
+			return ERR_INVALID_PARAMETER;
+		}
+		if (!config.surfaces.is_empty() || config.surface_materials.size() != 4 || config.pass_mask != 0 || config.motion != DISABLED) {
 			return ERR_INVALID_PARAMETER;
 		}
 	}

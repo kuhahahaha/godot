@@ -32,9 +32,11 @@
 #include "core/math/affine_f32.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_decal_bridge_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_mesh_light_sort_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_data_rd.h"
+#include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/renderer_scene_cull.h"
 #include "servers/rendering/rendering_server.h"
 
@@ -43,6 +45,213 @@
 #include <limits>
 
 namespace RendererRD {
+
+ParticlesDecalBridgeRD *ParticlesStorage::get_decal_bridge_rd() {
+	TextureStorage *ts = TextureStorage::get_singleton();
+	return ts ? ts->get_decal_bridge_rd() : nullptr;
+}
+
+const ParticlesDecalBridgeRD *ParticlesStorage::get_decal_bridge_rd() const {
+	const TextureStorage *ts = TextureStorage::get_singleton();
+	return ts ? ts->get_decal_bridge_rd() : nullptr;
+}
+
+Error ExternalOutputOwner::validate_decal128_selection(const ExternalOutputConfig &p_config, uint32_t &r_surface_count) {
+	if (p_config.profile != ExternalOutputConfig::PARTICLE_DECAL_128 ||
+			p_config.capacity > ParticlesDecalBridgeRD::MAX_PARTICLE_DECALS ||
+			!p_config.surfaces.is_empty() || p_config.surface_materials.size() != 4 ||
+			p_config.pass_mask != 0 || p_config.motion != ExternalOutputConfig::DISABLED) {
+		return ERR_INVALID_PARAMETER;
+	}
+	TextureStorage *textures = TextureStorage::get_singleton();
+	if (!textures) {
+		return ERR_UNAVAILABLE;
+	}
+	bool has_albedo_or_emission = false;
+	for (uint32_t i = 0; i < 4; ++i) {
+		const RID tex = p_config.surface_materials[i];
+		if (tex.is_null()) {
+			continue;
+		}
+		if (!textures->owns_texture(tex)) {
+			return ERR_INVALID_PARAMETER;
+		}
+		if (i == 0 || i == 3) {
+			has_albedo_or_emission = true;
+		}
+	}
+	if (!has_albedo_or_emission) {
+		return ERR_INVALID_PARAMETER;
+	}
+	r_surface_count = 0;
+	return OK;
+}
+
+Error ExternalOutputOwner::plan_decal128_selection_layout(const ExternalOutputConfig &p_config, uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, MetadataLayout &r_layout) {
+	uint32_t flattened = 0;
+	const Error error = validate_decal128_selection(p_config, flattened);
+	if (error != OK) {
+		return error;
+	}
+	if (!p_config.max_views || p_config.max_views > MAX_VIEWS || !p_config.max_inflight || p_config.max_inflight > MAX_INFLIGHT) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const uint64_t slots = uint64_t(p_config.max_views) * p_config.max_inflight;
+	return plan_metadata_layout(p_views, p_reads, p_surfaces, r_layout, 0, 0, 0, uint32_t(slots), p_reads);
+}
+
+Error ExternalOutputOwner::install_decal128_metadata_directory(GDExtensionDeviceExit::ProductionPhysicalContextRef p_context,
+		GDExtensionProductionRequestRefV1 p_request, GDExtensionDeviceExit::Registry &p_registry,
+		const GDExtensionDeviceExit::ProductionOutputMetadataLease &p_lease,
+		uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces) {
+	if (metadata_directory_installed || view_cells || read_cells || surface_cells || preparation_rows || view_capacity || read_capacity || surface_capacity || preparation_capacity) {
+		return ERR_ALREADY_IN_USE;
+	}
+	if (state != GenerationState::CONFIGURED || has_live_slots()) {
+		return ERR_BUSY;
+	}
+	if (!device || p_lease.is_empty() || p_lease.get_data() != this ||
+			(!metadata_lease.is_empty() && (metadata_lease.get_data() != p_lease.get_data() || metadata_lease.get_size() != p_lease.get_size()))) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (generation_pin.is_empty()) {
+		if (generation_registry || generation_request.registry_instance || generation_request.handle_serial || generation_root_serial) {
+			return ERR_UNAUTHORIZED;
+		}
+	} else if (generation_registry != &p_registry || generation_request.registry_instance != p_request.registry_instance ||
+			generation_request.handle_serial != p_request.handle_serial || !generation_root_matches(generation_pin)) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (config.profile != ExternalOutputConfig::PARTICLE_DECAL_128 || !config_tags_inline) {
+		return ERR_UNAVAILABLE;
+	}
+	uint32_t material_selections = 0;
+	Error error = validate_decal128_selection(config, material_selections);
+	if (error != OK) {
+		return error;
+	}
+	MetadataLayout layout;
+	error = plan_decal128_selection_layout(config, p_views, p_reads, p_surfaces, layout);
+	if (error != OK) {
+		return error;
+	}
+	error = p_registry.production_output_metadata_validate(p_context, p_request, p_lease, *device, layout.total_bytes, layout.alignment);
+	if (error != OK) {
+		return error;
+	}
+	auto *base = static_cast<uint8_t *>(p_lease.get_data());
+	for (uint32_t i = 0; i < p_views; ++i) {
+		new (base + layout.view_offset + size_t(i) * sizeof(ViewCell)) ViewCell;
+	}
+	for (uint32_t i = 0; i < p_reads; ++i) {
+		new (base + layout.read_offset + size_t(i) * sizeof(ReadCell)) ReadCell;
+	}
+	for (uint32_t i = 0; i < p_surfaces; ++i) {
+		new (base + layout.surface_offset + size_t(i) * sizeof(SurfaceCell)) SurfaceCell;
+	}
+	for (uint32_t i = 0; i < layout.preparation_count; ++i) {
+		new (base + layout.preparation_offset + size_t(i) * sizeof(ExternalPipelinePreparation)) ExternalPipelinePreparation;
+	}
+	for (uint32_t i = 0; i < 4; ++i) {
+		decal_textures[i] = config.surface_materials[i];
+	}
+	generation_meshes = nullptr;
+	generation_materials = nullptr;
+	generation_mesh_count = 0;
+	generation_material_count = 0;
+	binding_capacity = layout.binding_count;
+	preparation_rows = layout.preparation_count ? reinterpret_cast<ExternalPipelinePreparation *>(base + layout.preparation_offset) : nullptr;
+	preparation_capacity = layout.preparation_count;
+	storage_capacity = layout.storage_count;
+	config.surfaces.clear();
+	config.surface_materials.clear();
+	generation_config_inline = true;
+	view_cells = p_views ? reinterpret_cast<ViewCell *>(base + layout.view_offset) : nullptr;
+	read_cells = p_reads ? reinterpret_cast<ReadCell *>(base + layout.read_offset) : nullptr;
+	surface_cells = p_surfaces ? reinterpret_cast<SurfaceCell *>(base + layout.surface_offset) : nullptr;
+	view_capacity = p_views;
+	read_capacity = p_reads;
+	surface_capacity = p_surfaces;
+	metadata_directory_installed = true;
+	metadata_directories_placement = true;
+	return OK;
+}
+
+Error ExternalOutputOwner::acquire_decal128_selection(GDExtensionDeviceExit::ProductionPhysicalContextRef p_context, GDExtensionProductionRequestRefV1 p_request) {
+	if (generation_selection_attempted || state != GenerationState::CONFIGURED || has_live_slots()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	if (!generation_registry || !device || !generation_root_matches(generation_pin) ||
+			p_request.registry_instance != generation_request.registry_instance || p_request.handle_serial != generation_request.handle_serial ||
+			!generation_registry->production_output_pin_matches(generation_pin, p_request, *device)) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!metadata_directories_placement || !generation_config_inline ||
+			config.profile != ExternalOutputConfig::PARTICLE_DECAL_128 ||
+			generation_meshes || generation_materials || generation_mesh_count || generation_material_count) {
+		return ERR_INVALID_DATA;
+	}
+	MetadataLayout layout;
+	Error error = plan_metadata_layout(view_capacity, read_capacity, surface_capacity, layout, 0, 0, binding_capacity, storage_capacity, preparation_capacity);
+	if (error != OK) {
+		return error;
+	}
+	error = generation_registry->production_output_metadata_validate(p_context, p_request, metadata_lease, *device, layout.total_bytes, layout.alignment);
+	if (error != OK) {
+		return error;
+	}
+	TextureStorage *textures = TextureStorage::get_singleton();
+	if (!textures) {
+		return ERR_UNAVAILABLE;
+	}
+	generation_selection_attempted = true;
+	auto fail = [&](Error p_reason) {
+		withdraw();
+		generation_selection_unpublished = true;
+		state = GenerationState::FAULTED_RETIRING;
+		return p_reason;
+	};
+	bool has_albedo_or_emission = false;
+	for (uint32_t i = 0; i < 4; ++i) {
+		if (decal_textures[i].is_null()) {
+			continue;
+		}
+		if (!textures->owns_texture(decal_textures[i])) {
+			return fail(ERR_INVALID_PARAMETER);
+		}
+		if (i == 0 || i == 3) {
+			has_albedo_or_emission = true;
+		}
+	}
+	if (!has_albedo_or_emission) {
+		return fail(ERR_INVALID_PARAMETER);
+	}
+	for (uint32_t i = 0; i < 4; ++i) {
+		if (decal_textures[i].is_valid()) {
+			textures->texture_add_to_decal_atlas(decal_textures[i]);
+		}
+	}
+	decal_textures_registered = true;
+	generation_selection_complete = true;
+	return OK;
+}
+
+void ExternalOutputOwner::release_decal_atlas_registrations() {
+	if (!decal_textures_registered) {
+		return;
+	}
+	decal_textures_registered = false;
+	TextureStorage *textures = TextureStorage::get_singleton();
+	for (uint32_t i = 0; i < 4; ++i) {
+		if (decal_textures[i].is_valid()) {
+			if (textures && textures->owns_texture(decal_textures[i])) {
+				textures->texture_remove_from_decal_atlas(decal_textures[i]);
+			}
+			decal_textures[i] = RID();
+		}
+	}
+}
+
 Error ParticlesStorage::_external_guard_copy_host_inverse(const GDExtensionProductionHostTransformV1 &p_host,
 		const PackedByteArray &p_original_token, const Transform3D &p_current_host, ParticlesExternalGuard::GeometryProofHeader &r_proof) {
 	if (!GDExtensionDeviceExit::production_dto_valid(p_host) || p_original_token.size() != 32 ||
@@ -285,6 +494,10 @@ Error ParticlesStorage::_external_guard_prepare_owned_prefix(GDExtensionProducti
 	proof.source_accessor[0] = p_source_words[0];
 	proof.source_accessor[3] = p_source_space;
 	proof.options[1] = slot.storage->resources[ExternalOutputStorage::INSTANCE_AUX_PARAMS].bytes != 0 ? 1u : 0u;
+	error = Guard::configure_multi_mesh_proof(proof, owner.generation_mesh_count);
+	if (error != OK) {
+		return error;
+	}
 	Guard::Bindings bindings;
 	Vector<RD::ProductionOutputUniformSource> sources;
 	uint32_t owned_ordinal = 0;
@@ -337,11 +550,18 @@ Error ParticlesStorage::_external_guard_prepare_owned_prefix(GDExtensionProducti
 	if (!slot.guard_proof_payload) {
 		memcpy(payload, &proof, sizeof(proof));
 	}
+	uint32_t owner_mesh_index = 0;
 	for (uint32_t surface = 0; surface < slot.surface_count; ++surface) {
 		ExternalOutputOwner::BoundMaterialContact contact;
 		error = owner.read_bound_material_contact(surface, contact);
 		if (error != OK || !contact.material.zero_displacement) {
 			return error != OK ? error : ERR_UNAVAILABLE;
+		}
+		if (surface > 0 && contact.native_surface == 0) {
+			++owner_mesh_index;
+		}
+		if (owner_mesh_index >= owner.generation_mesh_count || !owner.generation_meshes || owner.generation_meshes[owner_mesh_index].mesh != contact.mesh) {
+			return ERR_INVALID_DATA;
 		}
 		Guard::SurfaceProof surface_proof = p_history ? p_history->surfaces[surface] : Guard::SurfaceProof();
 		if (!bounds(contact.mesh_bounds, surface_proof.current_mesh_min, surface_proof.current_mesh_max, false)) {
@@ -352,6 +572,10 @@ Error ParticlesStorage::_external_guard_prepare_owned_prefix(GDExtensionProducti
 		surface_proof.command[1] = indices ? indices : contact.vertex_count;
 		if (!surface_proof.command[1]) {
 			return ERR_INVALID_DATA;
+		}
+		error = Guard::configure_surface_mesh_index(surface_proof, proof, owner.generation_mesh_count > 1u ? owner_mesh_index : 0u);
+		if (error != OK) {
+			return error;
 		}
 		auto *surface_payload = payload + sizeof(proof) + surface * sizeof(surface_proof);
 		if (slot.guard_proof_payload && memcmp(surface_payload, &surface_proof, sizeof(surface_proof))) {
@@ -830,6 +1054,11 @@ Error ParticlesStorage::_external_cancel_body(RID p_particles, const uint8_t *p_
 			if (err == OK && mesh_light_sort_rd) {
 				mesh_light_sort_rd->unregister_external_light_slot(p_particles.get_id(), owner.generation, i);
 			}
+			if (err == OK) {
+				if (ParticlesDecalBridgeRD *decal_bridge = get_decal_bridge_rd()) {
+					decal_bridge->unregister_external_decal_slot(p_particles.get_id(), owner.generation, i);
+				}
+			}
 			return err;
 		}
 	}
@@ -853,6 +1082,9 @@ Error ParticlesStorage::_external_withdraw_body(RID p_particles, uint64_t p_gene
 	particles->external->withdraw();
 	if (mesh_light_sort_rd) {
 		mesh_light_sort_rd->unregister_external_light_owner(p_particles.get_id());
+	}
+	if (ParticlesDecalBridgeRD *decal_bridge = get_decal_bridge_rd()) {
+		decal_bridge->unregister_external_decal_owner(p_particles.get_id());
 	}
 	// Explicit withdrawal runs outside Registry service locks. Return renderer
 	// cache source pins synchronously, even when no later draw or free occurs.
@@ -894,11 +1126,11 @@ void ParticlesStorage::particles_external_create_typed_v2(GDExtensionProductionP
 }
 bool ParticlesStorage::_external_decode_create(const GDExtensionOutputCreateInputV1 &p_input, ExternalOutputConfig &config, uint32_t &surface_count, GDExtensionOutputCreateResultV1 &r_result) {
 	r_result.status = output_status(ERR_INVALID_PARAMETER, "CONTRACT");
-	if (!valid_abi(p_input.abi, sizeof(p_input)) || p_input.profile < 1 || p_input.profile > 4 || p_input.space < 1 || p_input.space > 2 || p_input.motion > 1 || p_input.query_enabled > 1 || (p_input.pass_mask & ~uint32_t(0x1f)) || p_input.surfaces.reserved || p_input.surface_materials.reserved ||
+	if (!valid_abi(p_input.abi, sizeof(p_input)) || p_input.profile < 1 || p_input.profile > 5 || p_input.space < 1 || p_input.space > 2 || p_input.motion > 1 || p_input.query_enabled > 1 || (p_input.pass_mask & ~uint32_t(0x1f)) || p_input.surfaces.reserved || p_input.surface_materials.reserved ||
 			(p_input.surfaces.count && !p_input.surfaces.data) || (p_input.surface_materials.count && !p_input.surface_materials.data)) {
 		return false;
 	}
-	if (p_input.capacity > (1u << 20) || (p_input.profile == 2 && p_input.capacity > (1u << 18)) || (p_input.profile == 4 && p_input.capacity > 256) || !p_input.max_views || p_input.max_views > 8 || !p_input.max_inflight || p_input.max_inflight > 4) {
+	if (p_input.capacity > (1u << 20) || (p_input.profile == 2 && p_input.capacity > (1u << 18)) || ((p_input.profile == 4 || p_input.profile == 5) && p_input.capacity > 256) || !p_input.max_views || p_input.max_views > 8 || !p_input.max_inflight || p_input.max_inflight > 4) {
 		r_result.status = output_status(ERR_INVALID_PARAMETER, "LIMIT");
 		return false;
 	}
@@ -934,6 +1166,9 @@ bool ParticlesStorage::_external_decode_create(const GDExtensionOutputCreateInpu
 	if (p_input.profile == 4 && (p_input.surfaces.count || p_input.surface_materials.count || p_input.pass_mask || p_input.motion)) {
 		return false;
 	}
+	if (p_input.profile == 5 && (p_input.surfaces.count || p_input.surface_materials.count != 4 || p_input.pass_mask || p_input.motion)) {
+		return false;
+	}
 	config.profile = ExternalOutputConfig::Profile(p_input.profile);
 	config.capacity = p_input.capacity;
 	config.max_views = p_input.max_views;
@@ -960,7 +1195,9 @@ bool ParticlesStorage::_external_decode_create(const GDExtensionOutputCreateInpu
 	copy_tag(p_input.layout_digest, config.layout_digest);
 	copy_tag(p_input.mapping_digest, config.mapping_digest);
 	copy_tag(p_input.numeric_profile_digest, config.numeric_profile_digest);
-	const Error selection_error = ExternalOutputOwner::validate_native_selection(config, surface_count);
+	const Error selection_error = (config.profile == ExternalOutputConfig::PARTICLE_DECAL_128)
+			? ExternalOutputOwner::validate_decal128_selection(config, surface_count)
+			: ExternalOutputOwner::validate_native_selection(config, surface_count);
 	if (selection_error != OK) {
 		r_result.status = output_status(selection_error, "native_output_selection");
 		return false;
@@ -1060,6 +1297,8 @@ Error ParticlesStorage::_external_metadata_requirements(const ExternalOutputConf
 		planned = ExternalOutputOwner::plan_generation_selection_layout(config, limits.view_lease_capacity, limits.read_lease_capacity, limits.surface_lease_capacity, layout);
 	} else if (config.profile == ExternalOutputConfig::PARTICLE_LIGHT_64) {
 		planned = ExternalOutputOwner::plan_generation_selection_layout(config, limits.view_lease_capacity, limits.read_lease_capacity, limits.surface_lease_capacity, layout);
+	} else if (config.profile == ExternalOutputConfig::PARTICLE_DECAL_128) {
+		planned = ExternalOutputOwner::plan_decal128_selection_layout(config, limits.view_lease_capacity, limits.read_lease_capacity, limits.surface_lease_capacity, layout);
 	} else if (config.profile == ExternalOutputConfig::SCENE_ONLY) {
 		if (limits.view_lease_capacity || limits.read_lease_capacity || limits.surface_lease_capacity) {
 			return ERR_INVALID_PARAMETER;
@@ -1092,7 +1331,8 @@ void ParticlesStorage::_external_create_received(GDExtensionProductionPhysicalCo
 	const bool render_selection = p_generation_selection &&
 			(p_config.profile == ExternalOutputConfig::INSTANCE_192 ||
 					p_config.profile == ExternalOutputConfig::INDEXED_144 ||
-					p_config.profile == ExternalOutputConfig::PARTICLE_LIGHT_64);
+					p_config.profile == ExternalOutputConfig::PARTICLE_LIGHT_64 ||
+					p_config.profile == ExternalOutputConfig::PARTICLE_DECAL_128);
 	if (!rd || (!render_selection && p_config.profile != ExternalOutputConfig::SCENE_ONLY) || !next_external_generation) {
 		r_result.status = output_status(ERR_UNAVAILABLE, "native_generation_unavailable");
 		return;
@@ -1110,7 +1350,11 @@ void ParticlesStorage::_external_create_received(GDExtensionProductionPhysicalCo
 		}
 	}
 	ExternalOutputOwner::MetadataLayout layout;
-	const Error planned = render_selection ? ExternalOutputOwner::plan_generation_selection_layout(p_config, p_view_capacity, p_read_capacity, p_surface_capacity, layout) : ExternalOutputOwner::plan_metadata_layout(p_view_capacity, p_read_capacity, p_surface_capacity, layout);
+	const Error planned = render_selection
+			? ((p_config.profile == ExternalOutputConfig::PARTICLE_DECAL_128)
+							  ? ExternalOutputOwner::plan_decal128_selection_layout(p_config, p_view_capacity, p_read_capacity, p_surface_capacity, layout)
+							  : ExternalOutputOwner::plan_generation_selection_layout(p_config, p_view_capacity, p_read_capacity, p_surface_capacity, layout))
+			: ExternalOutputOwner::plan_metadata_layout(p_view_capacity, p_read_capacity, p_surface_capacity, layout);
 	if (planned != OK) {
 		r_result.status = output_status(planned, "native_metadata_layout");
 		return;
@@ -1124,7 +1368,9 @@ void ParticlesStorage::_external_create_received(GDExtensionProductionPhysicalCo
 	next_external_generation = generation == UINT64_MAX ? 0 : generation + 1;
 	auto *owner = new (p_metadata.get_data()) ExternalOutputOwner(p_config, generation, true, render_selection);
 	owner->device = rd;
-	const Error directory = owner->install_metadata_directory(p_context, p_request, registry, p_metadata, p_view_capacity, p_read_capacity, p_surface_capacity, render_selection);
+	const Error directory = (render_selection && p_config.profile == ExternalOutputConfig::PARTICLE_DECAL_128)
+			? owner->install_decal128_metadata_directory(p_context, p_request, registry, p_metadata, p_view_capacity, p_read_capacity, p_surface_capacity)
+			: owner->install_metadata_directory(p_context, p_request, registry, p_metadata, p_view_capacity, p_read_capacity, p_surface_capacity, render_selection);
 	if (directory != OK) {
 		owner->state = ExternalOutputOwner::GenerationState::RELEASED;
 		owner->~ExternalOutputOwner();
@@ -1156,7 +1402,9 @@ void ParticlesStorage::_external_create_received(GDExtensionProductionPhysicalCo
 	}
 	owner->metadata_lease = static_cast<GDExtensionDeviceExit::ProductionOutputMetadataLease &&>(p_metadata);
 	if (render_selection) {
-		Error selected = owner->acquire_generation_selection(p_context, p_request);
+		Error selected = (p_config.profile == ExternalOutputConfig::PARTICLE_DECAL_128)
+				? owner->acquire_decal128_selection(p_context, p_request)
+				: owner->acquire_generation_selection(p_context, p_request);
 		if (selected == OK) {
 			selected = owner->acquire_generation_surface_sources(p_context, p_request);
 		}
@@ -1313,8 +1561,11 @@ Error ParticlesStorage::particles_external_scene_material_facts(RID p_particles,
 			!owner.generation_registry->production_output_pin_matches(owner.generation_pin, owner.generation_request, *rd)) {
 		return ERR_UNAUTHORIZED;
 	}
-	if (owner.config.profile == ExternalOutputConfig::SCENE_ONLY || owner.config.profile == ExternalOutputConfig::PARTICLE_LIGHT_64) {
-		if (owner.config.profile == ExternalOutputConfig::PARTICLE_LIGHT_64 &&
+	if (owner.config.profile == ExternalOutputConfig::SCENE_ONLY ||
+			owner.config.profile == ExternalOutputConfig::PARTICLE_LIGHT_64 ||
+			owner.config.profile == ExternalOutputConfig::PARTICLE_DECAL_128) {
+		if ((owner.config.profile == ExternalOutputConfig::PARTICLE_LIGHT_64 ||
+					owner.config.profile == ExternalOutputConfig::PARTICLE_DECAL_128) &&
 				(owner.generation_material_count || owner.generation_mesh_count || owner.retained_material_count || owner.retained_mesh_count || owner.retained_surface_count)) {
 			return ERR_INVALID_DATA;
 		}
@@ -1974,7 +2225,8 @@ int32_t ParticlesStorage::particles_external_begin_fast_refresh_v1(const GDExten
 	}
 	if (owner.config.profile != ExternalOutputConfig::INSTANCE_192 &&
 			owner.config.profile != ExternalOutputConfig::INDEXED_144 &&
-			owner.config.profile != ExternalOutputConfig::PARTICLE_LIGHT_64) {
+			owner.config.profile != ExternalOutputConfig::PARTICLE_LIGHT_64 &&
+			owner.config.profile != ExternalOutputConfig::PARTICLE_DECAL_128) {
 		return fail(ERR_UNAVAILABLE);
 	}
 	uint32_t best_slot = UINT32_MAX;
@@ -2136,12 +2388,13 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_v1(const GDExtensi
 	const uint32_t view_idx = p_input->slot_index / owner.config.max_inflight;
 	const uint32_t bank = p_input->parity_bank;
 
-	if (owner.config.profile == ExternalOutputConfig::PARTICLE_LIGHT_64) {
+	if (owner.config.profile == ExternalOutputConfig::PARTICLE_LIGHT_64 ||
+			owner.config.profile == ExternalOutputConfig::PARTICLE_DECAL_128) {
 		const RID status_rid = slot.storage->resources[ExternalOutputStorage::GUARD_STATUS].rid;
 		if (status_rid.is_valid()) {
-			uint32_t light64_status_words[8] = {};
-			fast_refresh_encode_light64_guard_status(p_input->next_present_seq, light64_status_words);
-			const Error upd = rd->buffer_update(status_rid, 0, sizeof(light64_status_words), light64_status_words);
+			uint32_t status_words[8] = {};
+			fast_refresh_encode_light64_guard_status(p_input->next_present_seq, status_words);
+			const Error upd = rd->buffer_update(status_rid, 0, sizeof(status_words), status_words);
 			if (upd != OK) {
 				return int32_t(upd);
 			}
@@ -2162,12 +2415,17 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_v1(const GDExtensi
 				}
 			}
 		}
-		if (mesh_light_sort_rd) {
-			const AABB *updated_bounds = (slot.scene_cull_bound && slot.scene_cull_world.is_finite() &&
-													 slot.scene_cull_world.get_end().is_finite() && slot.scene_cull_world.has_volume())
-					? &slot.scene_cull_world
-					: nullptr;
-			mesh_light_sort_rd->update_external_light_slot_present_seq(
+		const AABB *updated_bounds = (slot.scene_cull_bound && slot.scene_cull_world.is_finite() &&
+												 slot.scene_cull_world.get_end().is_finite() && slot.scene_cull_world.has_volume())
+				? &slot.scene_cull_world
+				: nullptr;
+		if (owner.config.profile == ExternalOutputConfig::PARTICLE_LIGHT_64) {
+			if (mesh_light_sort_rd) {
+				mesh_light_sort_rd->update_external_light_slot_present_seq(
+						p_input->particles_rid, owner.generation, p_input->slot_index, slot.lease_serial, p_input->next_present_seq, updated_bounds);
+			}
+		} else if (ParticlesDecalBridgeRD *decal_bridge = get_decal_bridge_rd()) {
+			decal_bridge->update_external_decal_slot_present_seq(
 					p_input->particles_rid, owner.generation, p_input->slot_index, slot.lease_serial, p_input->next_present_seq, updated_bounds);
 		}
 		slot.fast_refresh_active = true;
@@ -2701,7 +2959,8 @@ int32_t ParticlesStorage::particles_external_begin_fast_refresh_batch_v1(
 		}
 		if (owner.config.profile != ExternalOutputConfig::INSTANCE_192 &&
 				owner.config.profile != ExternalOutputConfig::INDEXED_144 &&
-				owner.config.profile != ExternalOutputConfig::PARTICLE_LIGHT_64) {
+				owner.config.profile != ExternalOutputConfig::PARTICLE_LIGHT_64 &&
+				owner.config.profile != ExternalOutputConfig::PARTICLE_DECAL_128) {
 			record_item_error(idx, ERR_UNAVAILABLE);
 			continue;
 		}
@@ -2923,6 +3182,18 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 		}
 	};
 
+	ParticlesDecalBridgeRD::ExternalDecalSlotPresentSeqUpdate inline_decal_updates[INLINE_BATCH_CAPACITY];
+	LocalVector<ParticlesDecalBridgeRD::ExternalDecalSlotPresentSeqUpdate> overflow_decal_updates;
+	uint32_t decal_update_count = 0;
+	auto push_decal_update = [&](const ParticlesDecalBridgeRD::ExternalDecalSlotPresentSeqUpdate &p_upd) {
+		if (decal_update_count < INLINE_BATCH_CAPACITY) {
+			inline_decal_updates[decal_update_count++] = p_upd;
+		} else {
+			overflow_decal_updates.push_back(p_upd);
+			++decal_update_count;
+		}
+	};
+
 	uint32_t succeeded_count = 0;
 	Error first_error = OK;
 	auto set_item_result = [&](uint32_t p_idx, Error p_err) {
@@ -2979,12 +3250,13 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 		const uint32_t view_idx = in.slot_index / owner.config.max_inflight;
 		const uint32_t bank = in.parity_bank;
 
-		if (owner.config.profile == ExternalOutputConfig::PARTICLE_LIGHT_64) {
+		if (owner.config.profile == ExternalOutputConfig::PARTICLE_LIGHT_64 ||
+				owner.config.profile == ExternalOutputConfig::PARTICLE_DECAL_128) {
 			const RID status_rid = slot.storage->resources[ExternalOutputStorage::GUARD_STATUS].rid;
 			if (status_rid.is_valid()) {
-				uint32_t light64_status_words[8] = {};
-				fast_refresh_encode_light64_guard_status(in.next_present_seq, light64_status_words);
-				const Error upd = rd->buffer_update(status_rid, 0, sizeof(light64_status_words), light64_status_words);
+				uint32_t status_words[8] = {};
+				fast_refresh_encode_light64_guard_status(in.next_present_seq, status_words);
+				const Error upd = rd->buffer_update(status_rid, 0, sizeof(status_words), status_words);
 				if (upd != OK) {
 					set_item_result(idx, upd);
 					continue;
@@ -3006,19 +3278,34 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 					}
 				}
 			}
-			if (mesh_light_sort_rd) {
-				ParticlesMeshLightSortRD::ExternalLightSlotPresentSeqUpdate upd;
+			const bool valid_bounds = slot.scene_cull_bound && slot.scene_cull_world.is_finite() &&
+					slot.scene_cull_world.get_end().is_finite() && slot.scene_cull_world.has_volume();
+			if (owner.config.profile == ExternalOutputConfig::PARTICLE_LIGHT_64) {
+				if (mesh_light_sort_rd) {
+					ParticlesMeshLightSortRD::ExternalLightSlotPresentSeqUpdate upd;
+					upd.owner_key = in.particles_rid;
+					upd.generation = owner.generation;
+					upd.slot_index = in.slot_index;
+					upd.lease_serial = slot.lease_serial;
+					upd.next_present_seq = in.next_present_seq;
+					if (valid_bounds) {
+						upd.world_bounds = slot.scene_cull_world;
+						upd.has_world_bounds = true;
+					}
+					push_light_update(upd);
+				}
+			} else {
+				ParticlesDecalBridgeRD::ExternalDecalSlotPresentSeqUpdate upd;
 				upd.owner_key = in.particles_rid;
 				upd.generation = owner.generation;
 				upd.slot_index = in.slot_index;
 				upd.lease_serial = slot.lease_serial;
 				upd.next_present_seq = in.next_present_seq;
-				if (slot.scene_cull_bound && slot.scene_cull_world.is_finite() &&
-						slot.scene_cull_world.get_end().is_finite() && slot.scene_cull_world.has_volume()) {
+				if (valid_bounds) {
 					upd.world_bounds = slot.scene_cull_world;
 					upd.has_world_bounds = true;
 				}
-				push_light_update(upd);
+				push_decal_update(upd);
 			}
 			slot.fast_refresh_active = true;
 			set_item_result(idx, OK);
@@ -3580,7 +3867,7 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 		}
 	}
 
-	// Phase 4: Commit all PARTICLE_LIGHT_64 present_seq updates in a single lock acquisition.
+	// Phase 4: Commit all PARTICLE_LIGHT_64 & PARTICLE_DECAL_128 present_seq updates in a single lock acquisition each.
 	if (light_update_count > 0 && mesh_light_sort_rd) {
 		if (light_update_count <= INLINE_BATCH_CAPACITY) {
 			mesh_light_sort_rd->update_external_light_slots_present_seq_batch(inline_light_updates, light_update_count);
@@ -3594,6 +3881,23 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 				combined.push_back(overflow_light_updates[i]);
 			}
 			mesh_light_sort_rd->update_external_light_slots_present_seq_batch(combined.ptr(), combined.size());
+		}
+	}
+	if (decal_update_count > 0) {
+		if (ParticlesDecalBridgeRD *decal_bridge = get_decal_bridge_rd()) {
+			if (decal_update_count <= INLINE_BATCH_CAPACITY) {
+				decal_bridge->update_external_decal_slots_present_seq_batch(inline_decal_updates, decal_update_count);
+			} else {
+				LocalVector<ParticlesDecalBridgeRD::ExternalDecalSlotPresentSeqUpdate> combined;
+				combined.reserve(decal_update_count);
+				for (uint32_t i = 0; i < INLINE_BATCH_CAPACITY; ++i) {
+					combined.push_back(inline_decal_updates[i]);
+				}
+				for (uint32_t i = 0; i < overflow_decal_updates.size(); ++i) {
+					combined.push_back(overflow_decal_updates[i]);
+				}
+				decal_bridge->update_external_decal_slots_present_seq_batch(combined.ptr(), combined.size());
+			}
 		}
 	}
 

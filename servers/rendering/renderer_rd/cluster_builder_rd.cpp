@@ -30,8 +30,10 @@
 
 #include "cluster_builder_rd.h"
 
+#include "servers/rendering/renderer_rd/storage_rd/particles_decal_bridge_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_mesh_light_sort_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_globals.h" // IWYU pragma: keep. RENDER_TIMESTAMP macro uses RSG.
 
@@ -447,6 +449,11 @@ void ClusterBuilderRD::begin(const Transform3D &p_view_transform, const Projecti
 			ls->begin_cluster_builder_frame(this, view_xform, z_near, z_far, camera_orthogonal, shared ? shared->sphere_overfit : 1.05f, max_elements_by_type);
 		}
 	}
+	if (RendererRD::TextureStorage *ts = RendererRD::TextureStorage::get_singleton()) {
+		if (RendererRD::ParticlesDecalBridgeRD *db = ts->get_decal_bridge_rd()) {
+			db->begin_cluster_builder_frame(this, view_xform, z_near, z_far, camera_orthogonal, p_flip_y, max_elements_by_type);
+		}
+	}
 }
 
 void ClusterBuilderRD::bake_cluster() {
@@ -465,6 +472,10 @@ void ClusterBuilderRD::bake_cluster() {
 	if (RendererRD::ParticlesStorage *ps = RendererRD::ParticlesStorage::get_singleton()) {
 		light_sort = ps->get_mesh_light_sort_rd();
 	}
+	RendererRD::ParticlesDecalBridgeRD *decal_bridge = nullptr;
+	if (RendererRD::TextureStorage *ts = RendererRD::TextureStorage::get_singleton()) {
+		decal_bridge = ts->get_decal_bridge_rd();
+	}
 	uint32_t gpu_omni_count = light_sort ? light_sort->get_pending_cluster_gpu_omni_count(this) : 0u;
 	if (gpu_omni_count > 0u) {
 		const uint32_t rem_omni = (cluster_count_by_type[ELEMENT_TYPE_OMNI_LIGHT] < max_elements_by_type)
@@ -476,7 +487,29 @@ void ClusterBuilderRD::bake_cluster() {
 		gpu_omni_count = MIN(gpu_omni_count, MIN(rem_omni, rem_elem));
 	}
 	const uint32_t cpu_element_count = render_element_count;
-	const uint32_t total_element_count = cpu_element_count + gpu_omni_count;
+	uint32_t gpu_spot_count = light_sort ? light_sort->get_pending_cluster_gpu_spot_count(this) : 0u;
+	if (gpu_spot_count > 0u) {
+		const uint32_t rem_spot = (cluster_count_by_type[ELEMENT_TYPE_SPOT_LIGHT] < max_elements_by_type)
+				? (max_elements_by_type - cluster_count_by_type[ELEMENT_TYPE_SPOT_LIGHT])
+				: 0u;
+		const uint32_t used_elem = cpu_element_count + gpu_omni_count;
+		const uint32_t rem_elem = (used_elem < render_element_max)
+				? (render_element_max - used_elem)
+				: 0u;
+		gpu_spot_count = MIN(gpu_spot_count, MIN(rem_spot, rem_elem));
+	}
+	uint32_t gpu_decal_count = decal_bridge ? decal_bridge->get_pending_cluster_gpu_decal_count(this) : 0u;
+	if (gpu_decal_count > 0u) {
+		const uint32_t rem_decal = (cluster_count_by_type[ELEMENT_TYPE_DECAL] < max_elements_by_type)
+				? (max_elements_by_type - cluster_count_by_type[ELEMENT_TYPE_DECAL])
+				: 0u;
+		const uint32_t used_elem = cpu_element_count + gpu_omni_count + gpu_spot_count;
+		const uint32_t rem_elem = (used_elem < render_element_max)
+				? (render_element_max - used_elem)
+				: 0u;
+		gpu_decal_count = MIN(gpu_decal_count, MIN(rem_decal, rem_elem));
+	}
+	const uint32_t total_element_count = cpu_element_count + gpu_omni_count + gpu_spot_count + gpu_decal_count;
 
 	if (total_element_count > 0) {
 		// Clear render buffer.
@@ -504,6 +537,12 @@ void ClusterBuilderRD::bake_cluster() {
 		}
 		if (gpu_omni_count > 0 && light_sort) {
 			light_sort->blit_cluster_gpu_omni_elements(RD::get_singleton(), this, element_buffer, cpu_element_count, gpu_omni_count);
+		}
+		if (gpu_spot_count > 0 && light_sort) {
+			light_sort->blit_cluster_gpu_spot_elements(RD::get_singleton(), this, element_buffer, cpu_element_count + gpu_omni_count, gpu_spot_count);
+		}
+		if (gpu_decal_count > 0 && decal_bridge) {
+			decal_bridge->blit_cluster_gpu_decal_elements(RD::get_singleton(), this, element_buffer, cpu_element_count + gpu_omni_count + gpu_spot_count, gpu_decal_count);
 		}
 
 		RENDER_TIMESTAMP("Render 3D Cluster Elements");
@@ -560,6 +599,24 @@ void ClusterBuilderRD::bake_cluster() {
 				RD::get_singleton()->draw_list_set_push_constant(draw_list, &push_constant, sizeof(ClusterBuilderSharedDataRD::ClusterRender::PushConstant));
 				RD::get_singleton()->draw_list_draw(draw_list, true, gpu_omni_count);
 				cluster_count_by_type[ELEMENT_TYPE_OMNI_LIGHT] += gpu_omni_count;
+			}
+			if (gpu_spot_count > 0) {
+				push_constant.base_index = cpu_element_count + gpu_omni_count;
+				RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->sphere_vertex_array);
+				RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->sphere_index_array);
+				RD::get_singleton()->draw_list_set_push_constant(draw_list, &push_constant, sizeof(ClusterBuilderSharedDataRD::ClusterRender::PushConstant));
+				RD::get_singleton()->draw_list_draw(draw_list, true, gpu_spot_count);
+				cluster_count_by_type[ELEMENT_TYPE_SPOT_LIGHT] += gpu_spot_count;
+			}
+			if (gpu_decal_count > 0) {
+				push_constant.base_index = cpu_element_count + gpu_omni_count + gpu_spot_count;
+				RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->box_vertex_array);
+				RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->box_index_array);
+				RD::get_singleton()->draw_list_set_push_constant(draw_list, &push_constant, sizeof(ClusterBuilderSharedDataRD::ClusterRender::PushConstant));
+				RD::get_singleton()->draw_list_draw(draw_list, true, gpu_decal_count);
+				cluster_count_by_type[ELEMENT_TYPE_DECAL] += gpu_decal_count;
+			}
+			if (gpu_omni_count > 0 || gpu_spot_count > 0 || gpu_decal_count > 0) {
 				render_element_count = total_element_count;
 			}
 			RD::get_singleton()->draw_list_end();
@@ -592,6 +649,9 @@ void ClusterBuilderRD::bake_cluster() {
 	}
 	if (light_sort) {
 		light_sort->clear_cluster_builder_frame(this);
+	}
+	if (decal_bridge) {
+		decal_bridge->clear_cluster_builder_frame(this);
 	}
 	RENDER_TIMESTAMP("< Bake 3D Cluster");
 	RD::get_singleton()->draw_command_end_label();

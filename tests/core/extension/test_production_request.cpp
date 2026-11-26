@@ -19298,9 +19298,10 @@ struct Access {
 			const uint32_t expected_count = test.fail_at ? test.fail_at - 1 : (test.capacity ? 7 : 5);
 			CHECK(fixture.driver.output_storage_count == expected_count);
 			CHECK(fixture.driver.output_storage_attempts == (test.fail_at ? test.fail_at : expected_count));
-			CHECK(native.storage_total_bytes() == (test.capacity ? 1464u : 696u));
 			// Two 144-byte surface records follow the reflected 240-byte proof.
-			const uint32_t expected_bytes[7] = { test.capacity * 192, test.capacity * 192, 32, 64, 32, 40, 528 };
+			const uint32_t expected_bytes[7] = { test.capacity * 192, test.capacity * 192, 32, RendererRD::ParticlesExternalGuard::GUARD_SCRATCH_BYTES, 32, 40, 528 };
+			const uint32_t expected_total = expected_bytes[0] + expected_bytes[1] + expected_bytes[2] + expected_bytes[3] + expected_bytes[4] + expected_bytes[5] + expected_bytes[6];
+			CHECK(native.storage_total_bytes() == expected_total);
 			uint32_t ordinal = 0;
 			for (uint32_t role = 0; role < 7; ++role) {
 				CHECK(native.storage_bytes(role) == expected_bytes[role]);

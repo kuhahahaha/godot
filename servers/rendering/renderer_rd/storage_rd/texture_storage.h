@@ -44,6 +44,7 @@ namespace RendererRD {
 
 class LightStorage;
 class MaterialStorage;
+class ParticlesDecalBridgeRD;
 
 class TextureStorage : public RendererTextureStorage {
 #ifdef TESTS_ENABLED
@@ -402,6 +403,13 @@ private:
 	DecalData *decals = nullptr;
 	DecalInstanceSort *decal_sort = nullptr;
 	RID decal_buffer;
+
+	struct ParticleDecalEntry {
+		AABB world_bounds;
+		uint32_t buffer_index = 0;
+	};
+	LocalVector<ParticleDecalEntry> frame_particle_decals;
+	ParticlesDecalBridgeRD *decal_bridge_rd = nullptr;
 
 	/* RENDER TARGET API */
 
@@ -848,7 +856,10 @@ public:
 	void free_decal_data();
 	void set_max_decals(const uint32_t p_max_decals);
 	RID get_decal_buffer() { return decal_buffer; }
-	void update_decal_buffer(const PagedArray<RID> &p_decals, const Transform3D &p_camera_xform);
+	void update_decal_buffer(const PagedArray<RID> &p_decals, const Transform3D &p_camera_xform, RID p_source_viewport = RID(), RID p_source_scenario = RID(), bool p_is_reflection_probe = false);
+	uint32_t count_intersecting_particle_decals(const AABB &p_world_aabb, uint32_t *r_out_indices, uint32_t p_max_indices) const;
+	ParticlesDecalBridgeRD *get_decal_bridge_rd();
+	const ParticlesDecalBridgeRD *get_decal_bridge_rd() const { return decal_bridge_rd; }
 
 	/* RENDER TARGET API */
 

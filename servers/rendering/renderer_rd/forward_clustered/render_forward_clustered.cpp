@@ -2082,7 +2082,9 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 	uint32_t directional_light_count = 0;
 	uint32_t positional_light_count = 0;
 	light_storage->update_light_buffers(p_render_data, *p_render_data->lights, p_render_data->scene_data->cam_transform, p_render_data->shadow_atlas, using_shadows, directional_light_count, positional_light_count, p_render_data->directional_light_soft_shadows);
-	texture_storage->update_decal_buffer(*p_render_data->decals, p_render_data->scene_data->cam_transform);
+	const RendererViewport::Viewport *src_vp = (RSG::viewport && p_render_data->source_viewport.is_valid()) ? RSG::viewport->viewport_owner.get_or_null(p_render_data->source_viewport) : nullptr;
+	const RID src_scenario = src_vp ? src_vp->scenario : RID();
+	texture_storage->update_decal_buffer(*p_render_data->decals, p_render_data->scene_data->cam_transform, p_render_data->source_viewport, src_scenario, p_render_data->reflection_probe.is_valid());
 
 	p_render_data->directional_light_count = directional_light_count;
 
