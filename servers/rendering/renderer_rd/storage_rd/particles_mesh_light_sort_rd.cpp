@@ -1535,7 +1535,7 @@ Error ParticlesMeshLightSortRD::_ensure_light_gpu_bridge(RenderingDevice *p_rd) 
 		err = compile_light_bridge_compute_pipeline(*p_rd, kLightClusterBlitComputeGLSL, "particle_light64_cluster_blit", light_cluster_blit_shader, light_cluster_blit_pipeline);
 	}
 	if (err == OK) {
-		const uint32_t staging_bytes = 16u + MAX_STAGED_LIGHT_CANDIDATES * STAGING_CANDIDATE_WORD_STRIDE * uint32_t(sizeof(uint32_t));
+		const uint32_t staging_bytes = uint32_t(get_light_candidate_staging_bytes());
 		const uint32_t cluster_elem_bytes = MAX_PARTICLE_LIGHTS * CLUSTER_ELEMENT_WORD_STRIDE * uint32_t(sizeof(uint32_t));
 		light_candidate_staging_buffer = p_rd->storage_buffer_create(staging_bytes);
 		light_cluster_elements_buffer = p_rd->storage_buffer_create(cluster_elem_bytes);

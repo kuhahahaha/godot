@@ -30,6 +30,7 @@
 
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "core/extension/gdextension_production_request.h"
+#include "servers/rendering/renderer_rd/effects/particles_external_guard.h"
 #include "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h"
 #include "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_config.h"
@@ -1628,6 +1629,267 @@ void main() { x[0] += 2072u; }
 		rd.submit();
 		rd.sync();
 	}
+}
+
+TEST_CASE("[ExternalOutput][Metal][BUG-212] PARTICLE_LIGHT_64 light_candidate_staging_buffer byte_size matches ParticlesMeshLightSortRD::get_light_candidate_staging_bytes()") {
+	using Lane = RendererRD::ParticlesMeshLightSortRD;
+	// Single-source-of-truth 72-byte candidate stride (18 uint32 words: 16 record words + provenance + pad).
+	CHECK(Lane::STAGING_CANDIDATE_WORD_STRIDE == 18u);
+	CHECK(Lane::get_light_candidate_staging_bytes() == 16ull + uint64_t(Lane::MAX_STAGED_LIGHT_CANDIDATES) * 72ull);
+	CHECK(Lane::get_light_candidate_staging_bytes() == 589840ull);
+	// Regression check: must NOT match the stale 64-byte sizeof(ParticleLightRecord64) formula (524304 B).
+	CHECK(Lane::get_light_candidate_staging_bytes() != 16ull + uint64_t(Lane::MAX_STAGED_LIGHT_CANDIDATES) * sizeof(RendererRD::ParticleLightRecord64));
+
+	REQUIRE(RenderingDevice::get_singleton() == nullptr);
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDevice rd;
+	REQUIRE(rd.initialize(&context) == OK);
+	struct FinalizeGuard {
+		RenderingDevice &rd;
+		Lane &lane;
+		~FinalizeGuard() {
+			lane.release_light_gpu_bridge(&rd);
+			rd.finalize();
+		}
+	};
+
+	Lane lane;
+	FinalizeGuard guard{ rd, lane };
+	REQUIRE(lane.ensure_light_gpu_bridge(&rd) == OK);
+	const RID staging_buf = lane.get_light_candidate_staging_buffer();
+	REQUIRE(staging_buf.is_valid());
+	// Exact invariant required by rendering_device_immutable_hold.cpp (`source.byte_size == buffer->size`)
+	// during PARTICLE_LIGHT_64 AcquireV2 harvest uniform set creation.
+	REQUIRE(rd.buffer_clear(staging_buf, 0u, uint32_t(Lane::get_light_candidate_staging_bytes())) == OK);
+	rd.submit();
+	rd.sync();
+	const Vector<uint8_t> staging_data = rd.buffer_get_data(staging_buf);
+	CHECK(uint64_t(staging_data.size()) == Lane::get_light_candidate_staging_bytes());
+}
+
+TEST_CASE("[ExternalOutput][Metal][BUG-213] multi-mesh INSTANCE_192 fast-refresh with TRUSTED_TIER2 retains MODE_VALIDATE and avoids META_FAULT") {
+	// 1. Unit verification of fast_refresh_item_needs_validate truth table:
+	//    - Single-mesh (multi_mesh_count == 0) + TRUSTED_TIER2 skips MODE_VALIDATE (zero overhead).
+	//    - Multi-mesh (multi_mesh_count > 0) + TRUSTED_TIER2 MUST keep MODE_VALIDATE when capacity > 0.
+	//    - Empty capacity == 0 never runs MODE_VALIDATE.
+	CHECK_FALSE(RendererRD::ParticlesStorage::fast_refresh_item_needs_validate(true, 16u, 0u));
+	CHECK(RendererRD::ParticlesStorage::fast_refresh_item_needs_validate(false, 16u, 0u));
+	CHECK(RendererRD::ParticlesStorage::fast_refresh_item_needs_validate(true, 16u, 2u));
+	CHECK(RendererRD::ParticlesStorage::fast_refresh_item_needs_validate(true, 16u, 8u));
+	CHECK_FALSE(RendererRD::ParticlesStorage::fast_refresh_item_needs_validate(true, 0u, 2u));
+	CHECK_FALSE(RendererRD::ParticlesStorage::fast_refresh_item_needs_validate(false, 0u, 0u));
+
+	// 2. Live Metal GPU verification of multi-mesh ParticlesExternalGuard:
+	//    proof.options[2] = 2 (two mesh variants, 1 surface each) with 3 valid instances
+	//    (2 on mesh 0, 1 on mesh 1). Skipping MODE_VALIDATE triggers META_FAULT (4) and zeros
+	//    PROTECTED_COMMANDS; running MODE_VALIDATE succeeds with exact per-mesh draw ranges.
+	REQUIRE(RenderingDevice::get_singleton() == nullptr);
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDevice rd;
+	REQUIRE(rd.initialize(&context) == OK);
+
+	using Guard = RendererRD::ParticlesExternalGuard;
+	Guard guard;
+	struct CleanupGuard {
+		RenderingDevice &rd;
+		Guard &guard;
+		~CleanupGuard() {
+			guard.release_pipelines_standalone_rd();
+			rd.finalize();
+		}
+	} cleanup{ rd, guard };
+	REQUIRE(guard.prepare_pipelines_standalone_rd() == OK);
+
+	constexpr uint32_t kCapacity = 4u;
+	constexpr uint32_t kActiveCount = 3u;
+	constexpr uint32_t kSurfaceCount = 2u;
+	constexpr uint32_t kMeshCount = 2u;
+
+	RendererRD::Instance192Record records[kCapacity] = {};
+	const uint32_t mesh_assignments[kActiveCount] = { 0u, 0u, 1u };
+	for (uint32_t i = 0; i < kActiveCount; ++i) {
+		Transform3D xf;
+		xf.origin = Vector3(float(i) * 0.5f, 0.0f, 0.0f);
+		REQUIRE(RendererRD::ParticlesMeshLightSortRD::build_instance192_record_checked(
+						xf,
+						Color(1.0f, 1.0f, 1.0f, 1.0f),
+						Color(0.0f, 0.0f, 1.0f, 1.0f),
+						uint64_t(100u + i) | (1ull << 32u),
+						false,
+						false,
+						records[i]) == OK);
+		records[i].flags |= (mesh_assignments[i] << Guard::INSTANCE192_MESH_INDEX_SHIFT);
+	}
+	Vector<uint8_t> curr_bytes;
+	curr_bytes.resize(sizeof(records));
+	memcpy(curr_bytes.ptrw(), records, sizeof(records));
+
+	const uint32_t meta_words[8] = { kActiveCount, 0u, 0u, 0u, kCapacity, 1u, 77u, 0u };
+	Vector<uint8_t> meta_bytes;
+	meta_bytes.resize(sizeof(meta_words));
+	memcpy(meta_bytes.ptrw(), meta_words, sizeof(meta_words));
+
+	const uint32_t source_words[8] = { kActiveCount, 0u, 0u, 0u, 0u, 0u, 0u, 0u };
+	Vector<uint8_t> source_bytes;
+	source_bytes.resize(sizeof(source_words));
+	memcpy(source_bytes.ptrw(), source_words, sizeof(source_words));
+
+	Guard::GeometryProofHeader proof = {};
+	for (int k = 0; k < 3; ++k) {
+		proof.current_decl_min[k] = -10.0f;
+		proof.current_decl_max[k] = 10.0f;
+		proof.cull_min[k] = -10.0f;
+		proof.cull_max[k] = 10.0f;
+		proof.current_host_inverse_rows[k][k] = 1.0f;
+	}
+	proof.source_accessor[0] = 0u;
+	proof.source_accessor[3] = 1u; // WORLD
+	proof.source_gate_words[0] = 1u;
+	proof.source_gate_words[1] = 2u;
+	proof.source_gate_words[2] = 3u;
+	proof.source_gate_words[3] = 4u;
+	proof.options[0] = 0u; // no motion
+	REQUIRE(Guard::configure_multi_mesh_proof(proof, kMeshCount) == OK);
+	REQUIRE(proof.options[2] == kMeshCount);
+
+	Guard::SurfaceProof surfs[kSurfaceCount] = {};
+	const uint32_t surf_indices[kSurfaceCount] = { 36u, 24u };
+	for (uint32_t s = 0; s < kSurfaceCount; ++s) {
+		for (int k = 0; k < 3; ++k) {
+			surfs[s].current_mesh_min[k] = -0.5f;
+			surfs[s].current_mesh_max[k] = 0.5f;
+		}
+		surfs[s].command[0] = 1u; // indexed
+		surfs[s].command[1] = surf_indices[s];
+		REQUIRE(Guard::configure_surface_mesh_index(surfs[s], proof, s) == OK);
+	}
+
+	Vector<uint8_t> proof_bytes;
+	proof_bytes.resize(sizeof(proof) + sizeof(surfs));
+	memcpy(proof_bytes.ptrw(), &proof, sizeof(proof));
+	memcpy(proof_bytes.ptrw() + sizeof(proof), surfs, sizeof(surfs));
+
+	const RID curr_rid = rd.storage_buffer_create(curr_bytes.size(), curr_bytes);
+	const RID meta_rid = rd.storage_buffer_create(meta_bytes.size(), meta_bytes);
+	const RID source_rid = rd.storage_buffer_create(source_bytes.size(), source_bytes);
+	const RID scratch_rid = rd.storage_buffer_create(Guard::GUARD_SCRATCH_BYTES);
+	const RID status_rid = rd.storage_buffer_create(32u);
+	const RID cmd_rid = rd.storage_buffer_create(kSurfaceCount * 20u, Vector<uint8_t>(), RenderingDevice::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT);
+	const RID proof_rid = rd.storage_buffer_create(proof_bytes.size(), proof_bytes);
+	REQUIRE(curr_rid.is_valid());
+	REQUIRE(meta_rid.is_valid());
+	REQUIRE(source_rid.is_valid());
+	REQUIRE(scratch_rid.is_valid());
+	REQUIRE(status_rid.is_valid());
+	REQUIRE(cmd_rid.is_valid());
+	REQUIRE(proof_rid.is_valid());
+
+	Guard::Bindings bindings;
+	bindings.buffers[Guard::CURRENT_RECORDS] = { curr_rid, uint64_t(curr_bytes.size()) };
+	bindings.buffers[Guard::OUTPUT_META] = { meta_rid, 32u };
+	bindings.buffers[Guard::SOURCE_COUNT] = { source_rid, 32u };
+	bindings.buffers[Guard::GUARD_SCRATCH] = { scratch_rid, Guard::GUARD_SCRATCH_BYTES };
+	bindings.buffers[Guard::GUARD_STATUS] = { status_rid, 32u };
+	bindings.buffers[Guard::PROTECTED_COMMANDS] = { cmd_rid, kSurfaceCount * 20u };
+	bindings.buffers[Guard::GEOMETRY_PROOF] = { proof_rid, uint64_t(proof_bytes.size()) };
+	bindings.buffers[Guard::SOURCE_COUNT_VALIDITY] = { source_rid, 32u };
+	bindings.buffers[Guard::SOURCE_ATTRIBUTES_VALIDITY] = { source_rid, 32u };
+	bindings.buffers[Guard::SOURCE_DENSE_IDS_VALIDITY] = { source_rid, 32u };
+	bindings.buffers[Guard::SOURCE_INSTANCE_GATE] = { source_rid, 32u };
+
+	Guard::PushConstant req;
+	req.capacity = kCapacity;
+	req.sequence_low = 77u;
+	req.sequence_high = 0u;
+	req.surface_count = kSurfaceCount;
+	req.record_base = 0u;
+	req.record_count = kCapacity;
+
+	Guard::LayoutPlan plan;
+	REQUIRE(Guard::plan_layout(req, bindings, proof, 8u, plan) == OK);
+	const RID init_set = rd.uniform_set_create(plan.uniforms, guard.get_shader(plan.initialize_mode), 0);
+	const RID val_set = rd.uniform_set_create(plan.uniforms, guard.get_shader(plan.validate_mode), 0);
+	const RID fin_set = rd.uniform_set_create(plan.uniforms, guard.get_shader(plan.finalize_mode), 0);
+	REQUIRE(init_set.is_valid());
+	REQUIRE(val_set.is_valid());
+	REQUIRE(fin_set.is_valid());
+
+	auto run_guard = [&](bool p_run_validate, uint32_t r_status[8], uint32_t r_cmds[10]) {
+		const RD::ComputeListID cl = rd.compute_list_begin();
+		REQUIRE(cl != int64_t(RD::INVALID_ID));
+		Guard::PushConstant stage_pc = req;
+		stage_pc.record_base = 0u;
+		stage_pc.record_count = 0u;
+		rd.compute_list_bind_compute_pipeline(cl, guard.get_pipeline(plan.initialize_mode));
+		rd.compute_list_bind_uniform_set(cl, init_set, 0);
+		rd.compute_list_set_push_constant(cl, &stage_pc, sizeof(stage_pc));
+		rd.compute_list_dispatch(cl, 1, 1, 1);
+		rd.compute_list_add_barrier(cl);
+
+		if (p_run_validate) {
+			rd.compute_list_bind_compute_pipeline(cl, guard.get_pipeline(plan.validate_mode));
+			rd.compute_list_bind_uniform_set(cl, val_set, 0);
+			rd.compute_list_set_push_constant(cl, &req, sizeof(req));
+			rd.compute_list_dispatch(cl, 1, 1, 1);
+			rd.compute_list_add_barrier(cl);
+		}
+
+		rd.compute_list_bind_compute_pipeline(cl, guard.get_pipeline(plan.finalize_mode));
+		rd.compute_list_bind_uniform_set(cl, fin_set, 0);
+		rd.compute_list_set_push_constant(cl, &stage_pc, sizeof(stage_pc));
+		rd.compute_list_dispatch(cl, 1, 1, 1);
+		rd.compute_list_end();
+		rd.submit();
+		rd.sync();
+
+		const Vector<uint8_t> st_rb = rd.buffer_get_data(status_rid);
+		const Vector<uint8_t> cmd_rb = rd.buffer_get_data(cmd_rid);
+		REQUIRE(st_rb.size() == 32);
+		REQUIRE(cmd_rb.size() == int(kSurfaceCount * 20u));
+		memcpy(r_status, st_rb.ptr(), 32);
+		memcpy(r_cmds, cmd_rb.ptr(), kSurfaceCount * 20u);
+	};
+
+	// (A) Skipping MODE_VALIDATE on multi-mesh reproduces META_FAULT (4u) and zeroed indirect commands.
+	uint32_t bad_status[8] = {};
+	uint32_t bad_cmds[10] = {};
+	run_guard(false, bad_status, bad_cmds);
+	CHECK((bad_status[0] & 4u) != 0u);
+	CHECK(bad_status[1] == 0u);
+	CHECK(bad_cmds[1] == 0u);
+	CHECK(bad_cmds[6] == 0u);
+
+	// (B) With BUG-213 fix, TRUSTED_TIER2 still requires MODE_VALIDATE when proof.options[2] != 0.
+	const bool fixed_need_validate = RendererRD::ParticlesStorage::fast_refresh_item_needs_validate(true, kCapacity, proof.options[2]);
+	REQUIRE(fixed_need_validate);
+	uint32_t ok_status[8] = {};
+	uint32_t ok_cmds[10] = {};
+	run_guard(fixed_need_validate, ok_status, ok_cmds);
+	CHECK(ok_status[0] == 0u);
+	CHECK(ok_status[1] == kActiveCount);
+	// Mesh 0: index_count=36, instance_count=2, first_instance=0.
+	CHECK(ok_cmds[0] == 36u);
+	CHECK(ok_cmds[1] == 2u);
+	CHECK(ok_cmds[4] == 0u);
+	// Mesh 1: index_count=24, instance_count=1, first_instance=2.
+	CHECK(ok_cmds[5] == 24u);
+	CHECK(ok_cmds[6] == 1u);
+	CHECK(ok_cmds[9] == 2u);
+
+	rd.free_rid(init_set);
+	rd.free_rid(val_set);
+	rd.free_rid(fin_set);
+	rd.free_rid(curr_rid);
+	rd.free_rid(meta_rid);
+	rd.free_rid(source_rid);
+	rd.free_rid(scratch_rid);
+	rd.free_rid(status_rid);
+	rd.free_rid(cmd_rid);
+	rd.free_rid(proof_rid);
+	rd.submit();
+	rd.sync();
 }
 #endif
 

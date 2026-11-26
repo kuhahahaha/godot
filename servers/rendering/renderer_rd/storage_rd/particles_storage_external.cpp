@@ -2486,8 +2486,9 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_v1(const GDExtensi
 			finalize_mode = Guard::FINALIZE_AUX;
 		}
 
+		const bool need_validate = fast_refresh_item_needs_validate(false, push.capacity, proof.options[2]);
 		const uint32_t mode_count = push.capacity ? 3u : 2u;
-		const Guard::Mode modes[3] = { init_mode, push.capacity ? validate_mode : finalize_mode, finalize_mode };
+		const Guard::Mode modes[3] = { init_mode, need_validate ? validate_mode : finalize_mode, finalize_mode };
 
 		bool cache_hit = (slot.fast_refresh_source_count_rid[bank] == p_input->source_count_rid) && p_input->source_count_rid != 0;
 		for (uint32_t g = 0; g < 4 && cache_hit; ++g) {
@@ -2586,12 +2587,12 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_v1(const GDExtensi
 
 		const RID init_pipe = external_guard->get_pipeline(init_mode);
 		const RID finalize_pipe = external_guard->get_pipeline(finalize_mode);
-		const RID validate_pipe = push.capacity ? external_guard->get_pipeline(validate_mode) : RID();
+		const RID validate_pipe = need_validate ? external_guard->get_pipeline(validate_mode) : RID();
 		const RID init_set = slot.fast_refresh_guard_sets[bank][init_mode];
 		const RID finalize_set = slot.fast_refresh_guard_sets[bank][finalize_mode];
-		const RID validate_set = push.capacity ? slot.fast_refresh_guard_sets[bank][validate_mode] : RID();
+		const RID validate_set = need_validate ? slot.fast_refresh_guard_sets[bank][validate_mode] : RID();
 		if (init_pipe.is_null() || finalize_pipe.is_null() || init_set.is_null() || finalize_set.is_null() ||
-				(push.capacity && (validate_pipe.is_null() || validate_set.is_null()))) {
+				(need_validate && (validate_pipe.is_null() || validate_set.is_null()))) {
 			return int32_t(ERR_UNAVAILABLE);
 		}
 
@@ -2608,7 +2609,7 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_v1(const GDExtensi
 		rd->compute_list_dispatch(cl, 1, 1, 1);
 		rd->compute_list_add_barrier(cl);
 
-		if (push.capacity > 0) {
+		if (need_validate) {
 			const uint64_t chunk_capacity = MIN(uint64_t(max_groups_x) * 64ull, uint64_t(push.capacity));
 			for (uint32_t base = 0; base < push.capacity;) {
 				Guard::PushConstant chunk = push;
@@ -2684,8 +2685,9 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_v1(const GDExtensi
 			finalize_mode = Guard::FINALIZE_NO_MOTION;
 		}
 
+		const bool need_validate = fast_refresh_item_needs_validate(false, push.capacity, proof.options[2]);
 		const uint32_t mode_count = push.capacity ? 3u : 2u;
-		const Guard::Mode modes[3] = { init_mode, push.capacity ? validate_mode : finalize_mode, finalize_mode };
+		const Guard::Mode modes[3] = { init_mode, need_validate ? validate_mode : finalize_mode, finalize_mode };
 
 		bool cache_hit = (slot.fast_refresh_source_count_rid[bank] == p_input->source_count_rid) && p_input->source_count_rid != 0;
 		for (uint32_t g = 0; g < 4 && cache_hit; ++g) {
@@ -2809,12 +2811,12 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_v1(const GDExtensi
 
 		const RID init_pipe = external_guard_indexed144->get_pipeline(init_mode);
 		const RID finalize_pipe = external_guard_indexed144->get_pipeline(finalize_mode);
-		const RID validate_pipe = push.capacity ? external_guard_indexed144->get_pipeline(validate_mode) : RID();
+		const RID validate_pipe = need_validate ? external_guard_indexed144->get_pipeline(validate_mode) : RID();
 		const RID init_set = slot.fast_refresh_guard_sets[bank][init_mode];
 		const RID finalize_set = slot.fast_refresh_guard_sets[bank][finalize_mode];
-		const RID validate_set = push.capacity ? slot.fast_refresh_guard_sets[bank][validate_mode] : RID();
+		const RID validate_set = need_validate ? slot.fast_refresh_guard_sets[bank][validate_mode] : RID();
 		if (init_pipe.is_null() || finalize_pipe.is_null() || init_set.is_null() || finalize_set.is_null() ||
-				(push.capacity && (validate_pipe.is_null() || validate_set.is_null()))) {
+				(need_validate && (validate_pipe.is_null() || validate_set.is_null()))) {
 			return int32_t(ERR_UNAVAILABLE);
 		}
 
@@ -2831,7 +2833,7 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_v1(const GDExtensi
 		rd->compute_list_dispatch(cl, 1, 1, 1);
 		rd->compute_list_add_barrier(cl);
 
-		if (push.capacity > 0) {
+		if (need_validate) {
 			const uint64_t chunk_capacity = MIN(uint64_t(max_groups_x) * 64ull, uint64_t(push.capacity));
 			for (uint32_t base = 0; base < push.capacity;) {
 				Guard::PushConstant chunk = push;
@@ -3154,11 +3156,13 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 		RID init_set;
 		RID validate_set;
 		RID finalize_set;
+		bool need_validate = false;
 	};
 	static constexpr uint32_t INLINE_BATCH_CAPACITY = 128;
 	BatchedGuardItem inline_gpu_items[INLINE_BATCH_CAPACITY];
 	LocalVector<BatchedGuardItem> overflow_gpu_items;
 	uint32_t gpu_item_count = 0;
+	bool any_need_validate = false;
 	auto get_gpu_item = [&](uint32_t p_idx) -> BatchedGuardItem & {
 		return p_idx < INLINE_BATCH_CAPACITY ? inline_gpu_items[p_idx] : overflow_gpu_items[p_idx - INLINE_BATCH_CAPACITY];
 	};
@@ -3382,7 +3386,7 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 				finalize_mode = Guard::FINALIZE_AUX;
 			}
 
-			const bool need_validate = !skip_validate && push.capacity > 0;
+			const bool need_validate = fast_refresh_item_needs_validate(skip_validate, push.capacity, proof.options[2]);
 			const uint32_t mode_count = push.capacity ? 3u : 2u;
 			const uint32_t check_count = need_validate ? 3u : 2u;
 			const Guard::Mode check_modes[3] = { init_mode, need_validate ? validate_mode : finalize_mode, finalize_mode };
@@ -3528,6 +3532,10 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 			item.init_set = init_set;
 			item.validate_set = validate_set;
 			item.finalize_set = finalize_set;
+			item.need_validate = need_validate;
+			if (need_validate) {
+				any_need_validate = true;
+			}
 			push_gpu_item(item);
 			continue;
 		}
@@ -3579,7 +3587,7 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 				finalize_mode = Guard::FINALIZE_NO_MOTION;
 			}
 
-			const bool need_validate = !skip_validate && push.capacity > 0;
+			const bool need_validate = fast_refresh_item_needs_validate(skip_validate, push.capacity, proof.options[2]);
 			const uint32_t mode_count = push.capacity ? 3u : 2u;
 			const uint32_t check_count = need_validate ? 3u : 2u;
 			const Guard::Mode check_modes[3] = { init_mode, need_validate ? validate_mode : finalize_mode, finalize_mode };
@@ -3751,6 +3759,10 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 			item.init_set = init_set;
 			item.validate_set = validate_set;
 			item.finalize_set = finalize_set;
+			item.need_validate = need_validate;
+			if (need_validate) {
+				any_need_validate = true;
+			}
 			push_gpu_item(item);
 			continue;
 		}
@@ -3800,13 +3812,14 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 			}
 			rd->compute_list_add_barrier(cl);
 
-			// Pass 2: All VALIDATEs (skipped completely when FAST_INDIRECT_ARGS_TRUSTED_TIER2 is set).
-			if (!skip_validate) {
+			// Pass 2: All VALIDATEs required by this batch (skipped completely when every item has need_validate == false,
+			// e.g. single-mesh TRUSTED_TIER2 batches; multi-mesh INSTANCE_192 items always need VALIDATE for mesh_first/mesh_count).
+			if (any_need_validate) {
 				bool any_validated = false;
 				bound_pipe = RID();
 				for (uint32_t k = 0; k < gpu_item_count; ++k) {
 					const BatchedGuardItem &item = get_gpu_item(k);
-					if (item.capacity == 0) {
+					if (!item.need_validate || item.capacity == 0) {
 						continue;
 					}
 					any_validated = true;
