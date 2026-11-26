@@ -58,6 +58,7 @@
 #include "servers/rendering/renderer_rd/height_capture_checked_sink.h"
 #include "servers/rendering/renderer_rd/storage_rd/height_frame_resources.h"
 #include "servers/rendering/rendering_device_binds.h"
+#include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_shader_container.h"
 #include "servers/rendering/shader_include_db.h"
 
@@ -14199,9 +14200,11 @@ Error RenderingDevice::_native_disposal_maintenance() {
 	if (cleanup_credits != OK) {
 		return cleanup_credits;
 	}
+	const bool allow_settle_spin = !_is_live_presenting_loop_active() ||
+			GDExtensionDeviceExit::Registry::get_singleton().has_natural_close_pending_work(this);
 	if (qualification_frame_advance_pending) {
 		Error pending_err = _begin_frame(false, true);
-		if (pending_err == ERR_BUSY) {
+		if (pending_err == ERR_BUSY && allow_settle_spin) {
 			const uint64_t settle_deadline = OS::get_singleton()->get_ticks_usec() + 50000ull;
 			while (pending_err == ERR_BUSY && qualification_frame_advance_pending && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
 				OS::get_singleton()->delay_usec(50);
@@ -14215,7 +14218,7 @@ Error RenderingDevice::_native_disposal_maintenance() {
 	}
 	const uint32_t next = (frame + 1) % frames.size();
 	Error error = _stall_for_frame(next, true);
-	if (error == ERR_BUSY) {
+	if (error == ERR_BUSY && allow_settle_spin) {
 		const uint64_t settle_deadline = OS::get_singleton()->get_ticks_usec() + 50000ull;
 		while (error == ERR_BUSY && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
 			OS::get_singleton()->delay_usec(50);
@@ -14241,7 +14244,7 @@ Error RenderingDevice::_native_disposal_maintenance() {
 	frame = (frame + 1) % frames.size();
 	qualification_frame_advance_pending = true;
 	error = _begin_frame(false, true);
-	if (error == ERR_BUSY) {
+	if (error == ERR_BUSY && allow_settle_spin) {
 		const uint64_t settle_deadline = OS::get_singleton()->get_ticks_usec() + 50000ull;
 		while (error == ERR_BUSY && qualification_frame_advance_pending && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
 			OS::get_singleton()->delay_usec(50);
@@ -14258,6 +14261,19 @@ void RenderingDevice::pump_qualification_frame_if_idle() {
 	if (draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining || !frames[frame].swap_chains_to_present.is_empty() || has_pending_production_frame_maintenance()) {
 		return;
 	}
+	const bool natural_close_pending = GDExtensionDeviceExit::Registry::get_singleton().has_natural_close_pending_work(this);
+	if (has_presented_frame) {
+		if (idle_sync_ticks_without_draw < UINT32_MAX) {
+			++idle_sync_ticks_without_draw;
+		}
+		const bool render_loop_enabled = RenderingServer::get_singleton() && RenderingServer::get_singleton()->is_render_loop_enabled();
+		if (render_loop_enabled && !natural_close_pending && !screen_swap_chains.is_empty() && idle_sync_ticks_without_draw < 2u) {
+			if (qualification_frame_advance_pending.load() || native_disposal_active.load()) {
+				(void)_native_disposal_maintenance();
+			}
+			return;
+		}
+	}
 	bool has_production_readbacks = false;
 	for (const auto &slot : frames) {
 		for (const auto &req : slot.download_buffer_get_data_requests) {
@@ -14272,7 +14288,7 @@ void RenderingDevice::pump_qualification_frame_if_idle() {
 		}
 	}
 	if (!frames[frame].qualification_tickets.is_empty() || has_production_readbacks || qualification_frame_advance_pending.load() || native_disposal_active.load() ||
-			GDExtensionDeviceExit::Registry::get_singleton().has_natural_close_pending_work(this)) {
+			natural_close_pending) {
 		(void)_native_disposal_maintenance();
 	}
 }
@@ -16172,6 +16188,8 @@ Error RenderingDevice::_execute_frame(bool p_present) {
 			}
 		}
 
+		has_presented_frame = true;
+		idle_sync_ticks_without_draw = 0;
 		frames[frame].swap_chains_to_present.clear();
 	}
 	return OK;

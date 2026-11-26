@@ -185,7 +185,7 @@ Error RenderingDevice::_production_output_replay_adopted_record(RendererRD::Exte
 	scope.groups[0] = row.pipeline_owned_group;
 	scope.groups[1] = row.geometry_reserved_group;
 	scope.groups[2] = row.material_reserved_group;
-	scope.groups[3] = row.transforms_owned_group;
+	scope.groups[3] = row.transforms_source_group ? row.transforms_source_group : row.transforms_owned_group;
 	scope.groups[4] = slot.owned_group;
 	scope.storage_reads[0] = commands;
 	scope.storage_reads[1] = slot.storage->resources[RendererRD::ExternalOutputStorage::CURRENT_RECORDS].rid;
@@ -392,7 +392,7 @@ Error RenderingDevice::_production_output_read_record(RendererRD::ExternalPacket
 	scope.groups[0] = row.pipeline_owned_group;
 	scope.groups[1] = row.geometry_reserved_group;
 	scope.groups[2] = row.material_reserved_group;
-	scope.groups[3] = row.transforms_owned_group;
+	scope.groups[3] = row.transforms_source_group ? row.transforms_source_group : row.transforms_owned_group;
 	scope.groups[4] = slot.owned_group;
 	scope.storage_reads[0] = binding.commands;
 	scope.storage_reads[1] = slot.storage->resources[RendererRD::ExternalOutputStorage::CURRENT_RECORDS].rid;

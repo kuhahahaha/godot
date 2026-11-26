@@ -164,6 +164,22 @@ class ExternalOutputOwner {
 		RID fast_refresh_guard_sets[2][GUARD_MODE_CAPACITY];
 		uint64_t fast_refresh_source_count_rid[2] = {};
 		uint64_t fast_refresh_source_gate_rids[2][4] = {};
+		struct CachedTransformsUniformSet {
+			RID uniform_set;
+			uint64_t owned_group = 0;
+			RID buffers[3];
+			uint32_t buffer_count = 0;
+			uint32_t set_format = 0;
+		};
+		static constexpr uint32_t CACHED_TRANSFORMS_CAPACITY = 4;
+		CachedTransformsUniformSet cached_transforms_sets[CACHED_TRANSFORMS_CAPACITY];
+		uint32_t cached_transforms_count = 0;
+		void clear_cached_transforms_sets() {
+			for (uint32_t i = 0; i < CACHED_TRANSFORMS_CAPACITY; ++i) {
+				cached_transforms_sets[i] = CachedTransformsUniformSet();
+			}
+			cached_transforms_count = 0;
+		}
 		void release_fast_refresh_resources(RenderingDevice *p_rd);
 
 	};

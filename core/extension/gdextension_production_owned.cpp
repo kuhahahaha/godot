@@ -2035,7 +2035,7 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 		auto drain_receipts_spent = [](const RenderingDevice::NativeDisposalUsage &u) -> uint64_t {
 			return uint64_t(u.polls) + u.frees + u.issues + u.retains + u.releases + u.recycles;
 		};
-		if (drained == ERR_BUSY && (is_closing_exit || mq_in_place_early) && this == &get_singleton()) {
+		if (drained == ERR_BUSY && (is_closing_exit || mq_in_place_early) && (is_closing_exit || !rd._is_live_presenting_loop_active()) && this == &get_singleton()) {
 			const uint64_t settle_deadline = MIN(drain_budget.deadline_usec, OS::get_singleton()->get_ticks_usec() + 1500ull);
 			while (drained == ERR_BUSY &&
 					drain_receipts_spent(drain_usage) < avail_rec && drain_usage.passes < avail_pas &&
@@ -2258,7 +2258,7 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	auto maintenance_receipts_spent = [](const RenderingDevice::NativeDisposalUsage &u) -> uint64_t {
 		return uint64_t(u.polls) + u.frees + u.issues + u.retains + u.releases + u.recycles;
 	};
-	if (error == ERR_BUSY && rd.native_disposal_active && this == &get_singleton()) {
+	if (error == ERR_BUSY && rd.native_disposal_active && (is_closing_exit || !rd._is_live_presenting_loop_active()) && this == &get_singleton()) {
 		const uint64_t settle_deadline = MIN(service.deadline_usec, OS::get_singleton()->get_ticks_usec() + 2000ull);
 		while (error == ERR_BUSY && rd.native_disposal_active &&
 				maintenance_receipts_spent(actual) < avail_receipts && actual.passes < avail_passes &&

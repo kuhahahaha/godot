@@ -4958,31 +4958,43 @@ void Registry::production_finalize_output(ProductionPhysicalContextRef context, 
 	const auto *guard = storage->get_external_guard();
 	const auto *guard_indexed144 = storage->get_external_guard_indexed144();
 	acquire.output_guard_upload_bytes = upload.consumed;
-	for (uint32_t stage = acquire.output_guard_dispatch_cursor; stage < dispatches && observed.error == OK && observed.state == CheckedRecordAppend::State::Appended; ++stage) {
-		const uint32_t mode = is_indexed144
-				? uint32_t(stage == 0 ? guard_plan_144.initialize_mode : stage + 1 == dispatches ? guard_plan_144.finalize_mode : guard_plan_144.validate_mode)
-				: uint32_t(stage == 0 ? guard_plan.initialize_mode : stage + 1 == dispatches ? guard_plan.finalize_mode : guard_plan.validate_mode);
-		const void *push_ptr = is_indexed144
-				? static_cast<const void *>(stage == 0 ? &guard_plan_144.initialize : stage + 1 == dispatches ? &guard_plan_144.finalize : &guard_plan_144.validation_chunks[stage - 1])
-				: static_cast<const void *>(stage == 0 ? &guard_plan.initialize : stage + 1 == dispatches ? &guard_plan.finalize : &guard_plan.validation_chunks[stage - 1]);
-		const uint32_t push_bytes = is_indexed144 ? uint32_t(sizeof(RendererRD::ParticlesExternalGuardIndexed144::PushConstant)) : uint32_t(sizeof(Guard::PushConstant));
-		const uint32_t groups = stage == 0 || stage + 1 == dispatches ? 1 : (is_indexed144 ? guard_plan_144.validation_groups_x[stage - 1] : guard_plan.validation_groups_x[stage - 1]);
-		const RID pipeline = is_indexed144
-				? (guard_indexed144 ? guard_indexed144->get_pipeline(RendererRD::ParticlesExternalGuardIndexed144::Mode(mode)) : RID())
-				: (guard ? guard->get_pipeline(Guard::Mode(mode)) : RID());
-		const RID set = slot.guard_uniform_sets[mode];
+	if (acquire.output_guard_dispatch_cursor < dispatches && observed.error == OK && observed.state == CheckedRecordAppend::State::Appended) {
 		unlock_mutex_for_call();
 		const auto list = rd->compute_list_begin();
 		RDG::RecordHandle dispatch, closed;
-		if (list != RD::INVALID_ID) {
-			rd->compute_list_bind_compute_pipeline(list, pipeline);
-			rd->compute_list_bind_uniform_set(list, set, 0);
-			rd->compute_list_set_push_constant(list, push_ptr, push_bytes);
-			dispatch = rd->_compute_list_dispatch_recorded(list, groups, 1, 1);
+		uint32_t completed_stages = acquire.output_guard_dispatch_cursor;
+		bool all_dispatched = (list != RD::INVALID_ID);
+		if (all_dispatched) {
+			for (uint32_t stage = acquire.output_guard_dispatch_cursor; stage < dispatches; ++stage) {
+				if (stage > acquire.output_guard_dispatch_cursor) {
+					rd->compute_list_add_barrier(list);
+				}
+				const uint32_t mode = is_indexed144
+						? uint32_t(stage == 0 ? guard_plan_144.initialize_mode : stage + 1 == dispatches ? guard_plan_144.finalize_mode : guard_plan_144.validate_mode)
+						: uint32_t(stage == 0 ? guard_plan.initialize_mode : stage + 1 == dispatches ? guard_plan.finalize_mode : guard_plan.validate_mode);
+				const void *push_ptr = is_indexed144
+						? static_cast<const void *>(stage == 0 ? &guard_plan_144.initialize : stage + 1 == dispatches ? &guard_plan_144.finalize : &guard_plan_144.validation_chunks[stage - 1])
+						: static_cast<const void *>(stage == 0 ? &guard_plan.initialize : stage + 1 == dispatches ? &guard_plan.finalize : &guard_plan.validation_chunks[stage - 1]);
+				const uint32_t push_bytes = is_indexed144 ? uint32_t(sizeof(RendererRD::ParticlesExternalGuardIndexed144::PushConstant)) : uint32_t(sizeof(Guard::PushConstant));
+				const uint32_t groups = stage == 0 || stage + 1 == dispatches ? 1 : (is_indexed144 ? guard_plan_144.validation_groups_x[stage - 1] : guard_plan.validation_groups_x[stage - 1]);
+				const RID pipeline = is_indexed144
+						? (guard_indexed144 ? guard_indexed144->get_pipeline(RendererRD::ParticlesExternalGuardIndexed144::Mode(mode)) : RID())
+						: (guard ? guard->get_pipeline(Guard::Mode(mode)) : RID());
+				const RID set = slot.guard_uniform_sets[mode];
+				rd->compute_list_bind_compute_pipeline(list, pipeline);
+				rd->compute_list_bind_uniform_set(list, set, 0);
+				rd->compute_list_set_push_constant(list, push_ptr, push_bytes);
+				dispatch = rd->_compute_list_dispatch_recorded(list, groups, 1, 1);
+				if (!dispatch.is_valid() || rd->_recording_error() != OK) {
+					all_dispatched = false;
+					break;
+				}
+				completed_stages = stage + 1;
+			}
 			closed = rd->_compute_list_end_recorded();
 		}
 		relock_mutex_after_call();
-		if (list == RD::INVALID_ID || !dispatch.is_valid() || !closed.is_valid() || rd->compute_list.active || rd->_recording_error() != OK) {
+		if (list == RD::INVALID_ID || !all_dispatched || !dispatch.is_valid() || !closed.is_valid() || rd->compute_list.active || rd->_recording_error() != OK) {
 			observed.error = ERR_CANT_CREATE;
 			observed.state = closed.is_valid() ? CheckedRecordAppend::State::KnownPrefix : CheckedRecordAppend::State::Unknown;
 			observed.handle = closed;
@@ -4993,7 +5005,7 @@ void Registry::production_finalize_output(ProductionPhysicalContextRef context, 
 			observed.state = CheckedRecordAppend::State::Unknown;
 			observed.error = ERR_INVALID_DATA;
 		}
-		if (observed.error == OK && observed.state == CheckedRecordAppend::State::Appended) { acquire.output_guard_dispatch_cursor = stage + 1; }
+		if (observed.error == OK && observed.state == CheckedRecordAppend::State::Appended) { acquire.output_guard_dispatch_cursor = completed_stages; }
 	}
 	rd->_production_output_guard_end_locked();
 	rd->production_recording_request = nullptr;

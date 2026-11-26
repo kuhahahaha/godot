@@ -411,7 +411,7 @@ Error ParticlesStorage::_production_output_preparation_finish_row_locked(Externa
 		}
 		row.material_transferred = true;
 	}
-	if (row.transforms_uniform_set.is_valid()) {
+	if (row.transforms_uniform_set.is_valid() && !row.transforms_source_group) {
 		const Error sealed = device._production_output_owned_seal_locked(request, pin_serial, row.transforms_owned_group);
 		if (sealed != OK) {
 			return sealed;
@@ -828,6 +828,12 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 				return trace_failure(5, "preparation.L732", error, row.transforms_owned_group, &observation);
 			}
 			row.transforms_owned_group = 0;
+			row.transforms_source_group = 0;
+			row.transforms_set_format = 0;
+			row.transforms_source_count = 0;
+			for (uint32_t bi = 0; bi < 3; ++bi) {
+				row.transforms_source_buffers[bi] = RID();
+			}
 			row.transforms_uniform_set = RID();
 			row.transforms_uniform_witness = NativeDisposalWitness();
 		}

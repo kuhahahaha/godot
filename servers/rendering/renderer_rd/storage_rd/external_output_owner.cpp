@@ -156,6 +156,7 @@ void ExternalOutputOwner::Slot::release_fast_refresh_resources(RenderingDevice *
 			}
 		}
 	}
+	clear_cached_transforms_sets();
 }
 
 void ExternalOutputOwner::withdraw() {
@@ -169,6 +170,7 @@ void ExternalOutputOwner::withdraw() {
 			slots[i].release_fast_refresh_resources(rd);
 		} else {
 			slots[i].fast_refresh_active = false;
+			slots[i].clear_cached_transforms_sets();
 		}
 	}
 	if (state == GenerationState::RELEASED || state == GenerationState::FAULTED_RETIRING || state == GenerationState::WITHDRAWING || state == GenerationState::RETIRING) {
@@ -941,7 +943,7 @@ Error ExternalOutputOwner::return_preparation_bank_row(uint32_t p_slot, uint32_t
 		surface = &slot.surfaces[row.owner_surface];
 	}
 	if ((surface && surface->preparation) || !row.source_sealed || row.pipeline_scope || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group ||
-			row.geometry_reserved_group || row.material_reserved_group || row.transforms_owned_group || row.transforms_uniform_set.is_valid() || row.owned_pipeline_root.is_valid() ||
+			row.geometry_reserved_group || row.material_reserved_group || row.transforms_owned_group || row.transforms_source_group || row.transforms_uniform_set.is_valid() || row.owned_pipeline_root.is_valid() ||
 			row.created_pipeline.is_valid() || row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
 		return ERR_BUSY;
 	}
@@ -1036,7 +1038,7 @@ Error ExternalOutputOwner::return_reserved_cells() {
 	}
 	for (uint32_t i = 0; i < preparation_capacity; ++i) {
 		const auto &row = preparation_rows[i];
-		if (row.owner || row.owner_slot != UINT32_MAX || row.owner_surface != UINT32_MAX || row.serial || row.generation || !row.source_sealed || row.pipeline_scope || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group || row.geometry_reserved_group || row.material_reserved_group || row.transforms_owned_group || row.transforms_uniform_set.is_valid() || row.owned_pipeline_root.is_valid() ||
+		if (row.owner || row.owner_slot != UINT32_MAX || row.owner_surface != UINT32_MAX || row.serial || row.generation || !row.source_sealed || row.pipeline_scope || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group || row.geometry_reserved_group || row.material_reserved_group || row.transforms_owned_group || row.transforms_source_group || row.transforms_uniform_set.is_valid() || row.owned_pipeline_root.is_valid() ||
 				row.created_pipeline.is_valid() || row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
 			return ERR_BUSY;
 		}
@@ -1255,6 +1257,7 @@ Error ExternalOutputOwner::cancel_slot(uint32_t p_slot) {
 		cell.release_fast_refresh_resources(rd);
 	} else {
 		cell.fast_refresh_active = false;
+		cell.clear_cached_transforms_sets();
 	}
 	cell.publication_closed = true;
 	cell.pass_uses_closed = true;
@@ -1343,6 +1346,7 @@ Error ExternalOutputOwner::return_slot_pin(uint32_t p_slot) {
 	cell.guard_proof_payload = nullptr;
 	cell.guard_proof_bytes = 0;
 	cell.guard_resources_ready = false;
+	cell.clear_cached_transforms_sets();
 	cell.request = {};
 	cell.lease_token = {};
 	cell.record_token = {};

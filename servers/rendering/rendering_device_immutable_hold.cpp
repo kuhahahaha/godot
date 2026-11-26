@@ -3438,6 +3438,15 @@ bool RenderingDevice::_shader_reflects_readonly_storage_binding(RID p_shader, ui
 	return false;
 }
 
+uint32_t RenderingDevice::_shader_get_uniform_set_format(RID p_shader, uint32_t p_set) {
+	_THREAD_SAFE_METHOD_
+	const Shader *shader = shader_owner.owns(p_shader) ? shader_owner.get_or_null(p_shader) : nullptr;
+	if (!shader || p_set >= uint32_t(shader->set_formats.size())) {
+		return 0;
+	}
+	return shader->set_formats[p_set];
+}
+
 Error RenderingDevice::_production_mq_create_targets_and_framebuffer(const TextureFormat &p_color_fmt, const TextureFormat &p_depth_fmt, FramebufferFormatID p_expected_format, GDExtensionDeviceExit::QualificationPhysicalReturn &r_fb_physical, RID &r_color_tex, RID &r_depth_tex, RID &r_framebuffer) {
 	const Error ready = _native_disposal_preflight();
 	if (ready != OK) {

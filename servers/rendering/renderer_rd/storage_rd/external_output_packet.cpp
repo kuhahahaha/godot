@@ -130,14 +130,48 @@ Error ParticlesStorage::_external_transforms_prepare_owned_prefix(ExternalPipeli
 	if (planned != OK) {
 		return planned;
 	}
+	const uint32_t set_format = owner.device->_shader_get_uniform_set_format(shader_rid, 2);
+	if (set_format != 0) {
+		for (uint32_t c = 0; c < slot.cached_transforms_count; ++c) {
+			const auto &cached = slot.cached_transforms_sets[c];
+			if (cached.set_format == set_format && cached.buffer_count == count && cached.owned_group != 0 &&
+					cached.uniform_set.is_valid() && owner.device->uniform_set_is_valid(cached.uniform_set)) {
+				bool match = true;
+				for (uint32_t i = 0; i < count; ++i) {
+					if (cached.buffers[i] != sources[i].buffer) {
+						match = false;
+						break;
+					}
+				}
+				if (match) {
+					row.transforms_uniform_set = cached.uniform_set;
+					row.transforms_source_group = cached.owned_group;
+					row.transforms_set_format = set_format;
+					row.transforms_source_count = count;
+					for (uint32_t i = 0; i < count; ++i) {
+						row.transforms_source_buffers[i] = sources[i].buffer;
+					}
+					return OK;
+				}
+			}
+		}
+	}
 	RD::Uniform uniforms[3] = {
 		RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 0, sources[0].buffer),
 		RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 1, sources[1].buffer),
 		RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 2, sources[2].buffer),
 	};
-	return owner.device->_production_output_owned_uniform_set_create(*row.pipeline_scope, row.transforms_owned_group, 0,
+	const Error created = owner.device->_production_output_owned_uniform_set_create(*row.pipeline_scope, row.transforms_owned_group, 0,
 			VectorView<RD::Uniform>(uniforms, count), shader_rid, 2, row.transforms_uniform_set,
 			row.transforms_uniform_witness, VectorView<RD::ProductionOutputUniformSource>(sources, count));
+	if (created == OK) {
+		row.transforms_set_format = set_format;
+		row.transforms_source_count = count;
+		for (uint32_t i = 0; i < count; ++i) {
+			row.transforms_source_buffers[i] = sources[i].buffer;
+		}
+	}
+	return created;
 }
 
 Error ExternalPipelinePreparation::_material_pass_observers_locked(RenderingDevice &rd, Vector<RID> &out) const {
@@ -158,6 +192,9 @@ Error ExternalPipelinePreparation::_material_pass_observers_locked(RenderingDevi
 			continue;
 		}
 		for (bool pipeline : { true, false }) {
+			if (!pipeline && candidate.transforms_source_group) {
+				continue;
+			}
 			const RID rid = pipeline ? candidate.owned_pipeline_root : candidate.transforms_uniform_set;
 			const uint64_t group = pipeline ? candidate.pipeline_owned_group : candidate.transforms_owned_group;
 			if (rid.is_valid() && rd._production_output_pass_observer_locked(rid, *request, pin, group, pipeline) &&
@@ -529,7 +566,7 @@ Error ExternalPacketBinding::record_checked(RenderingDevice::DrawListID list, co
 
 namespace RendererRD {
 ExternalPipelinePreparation::~ExternalPipelinePreparation() {
-	CRASH_COND(pipeline_scope || pipeline_pin || pipeline_original_root || pipeline_owned_group || geometry_reserved_group || material_reserved_group || transforms_owned_group || transforms_uniform_set.is_valid() || owned_pipeline_root.is_valid() || geometry[0].is_active() || geometry[1].is_active() || material.is_active());
+	CRASH_COND(pipeline_scope || pipeline_pin || pipeline_original_root || pipeline_owned_group || geometry_reserved_group || material_reserved_group || transforms_owned_group || transforms_source_group || transforms_uniform_set.is_valid() || owned_pipeline_root.is_valid() || geometry[0].is_active() || geometry[1].is_active() || material.is_active());
 }
 Error ExternalPipelinePreparation::_material_future_pipeline_plan(RID p_shader, RID p_uniform_set, MaterialStorage::NativeMaterialFuturePipelinePlan &r_plan) {
 	return owner ? owner->material_future_pipeline_plan(*this, p_shader, p_uniform_set, r_plan) : ERR_UNAUTHORIZED;

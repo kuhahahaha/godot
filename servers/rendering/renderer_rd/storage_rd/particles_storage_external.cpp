@@ -1637,6 +1637,19 @@ Error ParticlesStorage::particles_external_prepare_pipeline(const ExternalSurfac
 		}
 	}
 	row.finish_error = slot.original_registry->production_output_preparation_finish(scope);
+	if (row.finish_error == OK && row.backend_error == OK && row.transforms_uniform_set.is_valid() &&
+			!row.transforms_source_group && row.transforms_owned_group && row.transforms_set_format &&
+			row.transforms_source_count > 0 && row.transforms_source_count <= 3 &&
+			slot.cached_transforms_count < ExternalOutputOwner::Slot::CACHED_TRANSFORMS_CAPACITY) {
+		auto &entry = slot.cached_transforms_sets[slot.cached_transforms_count++];
+		entry.uniform_set = row.transforms_uniform_set;
+		entry.owned_group = row.transforms_owned_group;
+		entry.set_format = row.transforms_set_format;
+		entry.buffer_count = row.transforms_source_count;
+		for (uint32_t i = 0; i < row.transforms_source_count; ++i) {
+			entry.buffers[i] = row.transforms_source_buffers[i];
+		}
+	}
 	out = &row;
 	return row.finish_error != OK ? row.finish_error : row.backend_error;
 }

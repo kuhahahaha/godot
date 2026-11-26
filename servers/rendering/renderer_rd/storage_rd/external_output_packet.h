@@ -330,6 +330,10 @@ class ExternalPipelinePreparation {
 	RID transforms_uniform_set;
 	NativeDisposalWitness transforms_uniform_witness;
 	uint64_t transforms_owned_group = 0;
+	uint64_t transforms_source_group = 0;
+	uint32_t transforms_set_format = 0;
+	RID transforms_source_buffers[3];
+	uint32_t transforms_source_count = 0;
 	uint64_t geometry_reserved_group = 0, material_reserved_group = 0;
 	bool bank_groups_reserved = false;
 	RID *pipeline_original_root = nullptr;

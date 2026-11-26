@@ -387,6 +387,7 @@ private:
 	Error _production_mq_prepare_readback_buffer(RID p_buffer);
 	Error _production_prepare_static_sentinel_buffer(RID p_buffer, uint32_t p_expected_bytes);
 	bool _shader_reflects_readonly_storage_binding(RID p_shader, uint32_t p_set, uint32_t p_binding);
+	uint32_t _shader_get_uniform_set_format(RID p_shader, uint32_t p_set);
 	Error _production_mq_record_depth_copy(RID p_depth_tex, RID p_dst_ssbo, RDG::RecordHandle &r_handle);
 	bool _production_output_raster_permitted(RID);
 	Error _production_output_read_record(::RendererRD::ExternalPacketBinding &, DrawListID, const void *, uint32_t);
@@ -2986,6 +2987,11 @@ private:
 	int frame = 0;
 	TightLocalVector<Frame> frames;
 	uint64_t frames_drawn = 0;
+	bool has_presented_frame = false;
+	uint32_t idle_sync_ticks_without_draw = 0;
+	bool _is_live_presenting_loop_active() const {
+		return has_presented_frame && idle_sync_ticks_without_draw < 2u && !screen_swap_chains.is_empty();
+	}
 	std::atomic<Error> frame_wait_error = OK;
 	std::atomic<int64_t> frame_wait_native_code = 0;
 	std::atomic<bool> frame_wait_native_code_valid = false;
