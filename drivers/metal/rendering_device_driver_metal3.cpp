@@ -73,6 +73,7 @@ RenderingDeviceDriverMetal::~RenderingDeviceDriverMetal() {
 	for (MDCommandBuffer *cb : command_buffers) {
 		memdelete(cb);
 	}
+	queue_order_event.reset();
 }
 
 #pragma mark - Initialization
@@ -84,6 +85,10 @@ Error RenderingDeviceDriverMetal::_create_device() {
 	device_queue = NS::TransferPtr(device->newCommandQueue());
 	ERR_FAIL_NULL_V(device_queue.get(), ERR_CANT_CREATE);
 	device_queue->setLabel(MTLSTR("Godot Main Command Queue"));
+
+	queue_order_event = NS::TransferPtr(device->newEvent());
+	ERR_FAIL_NULL_V(queue_order_event.get(), ERR_CANT_CREATE);
+	queue_order_event->setLabel(MTLSTR("Godot Queue Order Event"));
 
 	return OK;
 }
@@ -326,73 +331,94 @@ Error RenderingDeviceDriverMetal::_execute_and_present_common(CommandQueueID que
 	active_native_serial_count = first ? count : 0;
 	auto *fence = reinterpret_cast<Fence *>(fence_id.id);
 	uint64_t presented_serial = 0;
-	if (report.error == OK && barriers && waits.size() > 0) {
-		MTL::CommandBuffer *cb = device_queue->commandBuffer();
-		if (!cb) {
-			report.error = ERR_CANT_CREATE;
-		} else {
-#ifdef DEV_ENABLED
-			cb->setLabel(MTLSTR("Wait Command Buffer"));
-#endif
-			for (uint32_t i = 0; i < waits.size(); ++i) {
-				auto *sem = reinterpret_cast<Semaphore *>(waits[i].id);
-				cb->encodeWait(sem->event.get(), sem->value);
-			}
-			if (register_completion_record(cb, 0)) {
-				++report.native_issue_count;
-				cb->commit();
-			} else {
-				report.error = active_native_source_admission && active_native_source_admission->error!=OK ? active_native_source_admission->error : ERR_UNAVAILABLE;
-			}
-		}
-	}
-	for (uint32_t i = 0; report.error == OK && i < commands.size(); ++i) {
-		auto *command = reinterpret_cast<MDCommandBuffer *>(commands[i].id);
-		const bool tail = i + 1 == commands.size();
-		if (tail && fence) {
-			command->end();
-			MTL::CommandBuffer *cb = command->ensure_command_buffer();
+	const bool track_queue_order = barriers && sync_mode == Barriers && queue_order_event.get() != nullptr;
+	{
+		MutexLock queue_order_lock(queue_order_mutex);
+		if (report.error == OK && barriers && waits.size() > 0) {
+			MTL::CommandBuffer *cb = device_queue->commandBuffer();
 			if (!cb) {
 				report.error = ERR_CANT_CREATE;
+			} else {
+#ifdef DEV_ENABLED
+				cb->setLabel(MTLSTR("Wait Command Buffer"));
+#endif
+				for (uint32_t i = 0; i < waits.size(); ++i) {
+					auto *sem = reinterpret_cast<Semaphore *>(waits[i].id);
+					cb->encodeWait(sem->event.get(), sem->value);
+				}
+				if (register_completion_record(cb, 0)) {
+					++report.native_issue_count;
+					cb->commit();
+				} else {
+					report.error = active_native_source_admission && active_native_source_admission->error!=OK ? active_native_source_admission->error : ERR_UNAVAILABLE;
+				}
+			}
+		}
+		for (uint32_t i = 0; report.error == OK && i < commands.size(); ++i) {
+			auto *command = reinterpret_cast<MDCommandBuffer *>(commands[i].id);
+			const bool tail = i + 1 == commands.size();
+			const bool has_gpu_work = command->get_command_buffer() != nullptr;
+			uint64_t next_order_value = 0;
+			if (track_queue_order && has_gpu_work) {
+				command->end();
+				MTL::CommandBuffer *cb = command->get_command_buffer();
+				if (cb) {
+					const uint64_t current_committed = committed_order_value.load(std::memory_order_relaxed);
+					if (current_committed > command->queue_order_wait_value) {
+						cb->encodeWait(queue_order_event.get(), current_committed);
+					}
+					next_order_value = current_committed + 1;
+					cb->encodeSignalEvent(queue_order_event.get(), next_order_value);
+				}
+			}
+			if (tail && fence) {
+				command->end();
+				MTL::CommandBuffer *cb = command->ensure_command_buffer();
+				if (!cb) {
+					report.error = ERR_CANT_CREATE;
+					break;
+				}
+				fence->signal(cb);
+				fence->observed = false;
+			}
+			if (tail) {
+				for (uint32_t j = 0; j < swaps.size(); ++j) {
+					auto *swap = reinterpret_cast<SwapChain *>(swaps[j].id);
+					auto *surface = reinterpret_cast<RenderingContextDriverMetal::Surface *>(swap->surface);
+					surface->present(command);
+				}
+			}
+			command->commit();
+			if (command->completion_record_failed) {
+				report.error = active_native_source_admission && active_native_source_admission->error!=OK ? active_native_source_admission->error : ERR_UNAVAILABLE;
 				break;
 			}
-			fence->signal(cb);
-			fence->observed = false;
-		}
-		if (tail) {
-			for (uint32_t j = 0; j < swaps.size(); ++j) {
-				auto *swap = reinterpret_cast<SwapChain *>(swaps[j].id);
-				auto *surface = reinterpret_cast<RenderingContextDriverMetal::Surface *>(swap->surface);
-				surface->present(command);
+			if (next_order_value > 0) {
+				committed_order_value.store(next_order_value, std::memory_order_release);
+			}
+			if (tail && fence) {
+				fence->armed = true;
+			}
+			if (tail && report.present_attempted && !records.is_empty()) {
+				presented_serial = records[records.size() - 1]->serial;
 			}
 		}
-		command->commit();
-		if (command->completion_record_failed) {
-			report.error = active_native_source_admission && active_native_source_admission->error!=OK ? active_native_source_admission->error : ERR_UNAVAILABLE;
-			break;
-		}
-		if (tail && fence) {
-			fence->armed = true;
-		}
-		if (tail && report.present_attempted && !records.is_empty()) {
-			presented_serial = records[records.size() - 1]->serial;
-		}
-	}
-	if (report.error == OK && barriers && signals.size() > 0) {
-		MTL::CommandBuffer *cb = device_queue->commandBuffer();
-		if (!cb) {
-			report.error = ERR_CANT_CREATE;
-		} else {
-			for (uint32_t i = 0; i < signals.size(); ++i) {
-				auto *sem = reinterpret_cast<Semaphore *>(signals[i].id);
-				sem->value++;
-				cb->encodeSignalEvent(sem->event.get(), sem->value);
-			}
-			if (register_completion_record(cb, fence ? fence->value : 0)) {
-				++report.native_issue_count;
-				cb->commit();
+		if (report.error == OK && barriers && signals.size() > 0) {
+			MTL::CommandBuffer *cb = device_queue->commandBuffer();
+			if (!cb) {
+				report.error = ERR_CANT_CREATE;
 			} else {
-				report.error = active_native_source_admission && active_native_source_admission->error!=OK ? active_native_source_admission->error : ERR_UNAVAILABLE;
+				for (uint32_t i = 0; i < signals.size(); ++i) {
+					auto *sem = reinterpret_cast<Semaphore *>(signals[i].id);
+					sem->value++;
+					cb->encodeSignalEvent(sem->event.get(), sem->value);
+				}
+				if (register_completion_record(cb, fence ? fence->value : 0)) {
+					++report.native_issue_count;
+					cb->commit();
+				} else {
+					report.error = active_native_source_admission && active_native_source_admission->error!=OK ? active_native_source_admission->error : ERR_UNAVAILABLE;
+				}
 			}
 		}
 	}

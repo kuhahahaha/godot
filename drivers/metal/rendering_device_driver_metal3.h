@@ -49,6 +49,9 @@ class API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0)) RenderingDeviceDriverMet
 #pragma mark - Generic
 
 	NS::SharedPtr<MTL::CommandQueue> device_queue;
+	NS::SharedPtr<MTL::Event> queue_order_event;
+	std::atomic<uint64_t> committed_order_value{ 0 };
+	Mutex queue_order_mutex;
 
 	struct Fence {
 		NS::SharedPtr<MTL::SharedEvent> event;
@@ -127,6 +130,17 @@ public:
 #pragma mark - Miscellaneous
 
 	String get_api_name() const override { return "Metal"; }
+
+	uint64_t encode_queue_order_wait(MTL::CommandBuffer *p_cb) const {
+		if (sync_mode != Barriers || !queue_order_event || !p_cb) {
+			return 0;
+		}
+		const uint64_t wait_val = committed_order_value.load(std::memory_order_acquire);
+		if (wait_val > 0) {
+			p_cb->encodeWait(queue_order_event.get(), wait_val);
+		}
+		return wait_val;
+	}
 
 	RenderingDeviceDriverMetal(RenderingContextDriverMetal *p_context_driver);
 	~RenderingDeviceDriverMetal();

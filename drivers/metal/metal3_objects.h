@@ -341,6 +341,7 @@ private:
 
 	MTL::CommandQueue *queue = nullptr;
 	NS::SharedPtr<MTL::CommandBuffer> commandBuffer;
+	uint64_t queue_order_wait_value = 0;
 	bool state_begin = false;
 
 	MTL::CommandBuffer *command_buffer();
@@ -556,6 +557,9 @@ public:
 
 	_FORCE_INLINE_ MTL::CommandBuffer *get_command_buffer() const {
 		return commandBuffer.get();
+	}
+	_FORCE_INLINE_ uint64_t get_queue_order_wait_value() const {
+		return queue_order_wait_value;
 	}
 	_FORCE_INLINE_ MTL::CommandBuffer *ensure_command_buffer() {
 		return command_buffer();
