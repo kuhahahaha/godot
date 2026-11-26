@@ -48,6 +48,15 @@ public:
 		INSTANCE_AUX_PARAMS,
 		BINDING_COUNT,
 	};
+	static constexpr uint32_t GUARD_SCRATCH_WORDS = 32u;
+	static constexpr uint32_t GUARD_SCRATCH_BYTES = GUARD_SCRATCH_WORDS * 4u;
+	static constexpr uint32_t LEGACY_GUARD_SCRATCH_BYTES = 64u;
+	static constexpr uint32_t MAX_MESH_VARIANTS = 8u;
+	static constexpr uint32_t INSTANCE192_MESH_INDEX_SHIFT = 5u;
+	static constexpr uint32_t INSTANCE192_MESH_INDEX_MASK = 0xE0u;
+	static constexpr uint32_t INSTANCE192_BASE_FLAGS_MASK = 0x1Fu;
+	static constexpr uint32_t INSTANCE192_MULTI_MESH_FLAGS_MASK = 0xFFu;
+
 	struct PushConstant {
 		uint32_t capacity = 0;
 		uint32_t sequence_low = 0;
@@ -69,7 +78,7 @@ public:
 		float previous_host_inverse_rows[3][4] = {};
 		uint32_t source_accessor[4] = {}; // count word, reserved zero, reserved zero, space
 		uint32_t source_gate_words[4] = {}; // CountValidity, AttributesValidity, DenseIdsValidity, InstanceGate; fault==0
-		uint32_t options[4] = {}; // history permitted, aux params enabled, reserved zero
+		uint32_t options[4] = {}; // history permitted, aux params enabled, multi-mesh count (0=legacy, 2..8=partitioned), reserved zero
 	};
 	struct SurfaceProof {
 		float current_mesh_min[4] = {};
@@ -80,7 +89,7 @@ public:
 		float previous_mesh_max[4] = {};
 		float previous_displacement_min[4] = {};
 		float previous_displacement_max[4] = {};
-		uint32_t command[4] = {}; // indexed (0/1), native element count, reserved
+		uint32_t command[4] = {}; // indexed (0/1), native element count, owner mesh index (0..7), reserved zero
 	};
 	struct BufferBinding {
 		RID rid;
@@ -139,10 +148,13 @@ public:
 	// under that owner's recorded-use obligation (it can append synchronization).
 	// Request base/count must cover the entire capacity; chunks cover it once.
 	static Error plan_layout(const PushConstant &p_request, const Bindings &p_bindings, const GeometryProofHeader &p_proof, uint32_t p_max_groups_x, LayoutPlan &r_plan);
+	static Error configure_multi_mesh_proof(GeometryProofHeader &r_proof, uint32_t p_mesh_count);
+	static Error configure_surface_mesh_index(SurfaceProof &r_surface, const GeometryProofHeader &p_proof, uint32_t p_mesh_index);
 };
 
 static_assert(ParticlesExternalGuard::SOURCE_COUNT == 3);
 static_assert(ParticlesExternalGuard::GUARD_SCRATCH == 4 && ParticlesExternalGuard::GEOMETRY_PROOF == 7);
+static_assert(ParticlesExternalGuard::GUARD_SCRATCH_WORDS == 32u && ParticlesExternalGuard::GUARD_SCRATCH_BYTES == 128u);
 static_assert(ParticlesExternalGuard::SOURCE_COUNT_VALIDITY == 8 && ParticlesExternalGuard::SOURCE_INSTANCE_GATE == 11);
 static_assert(ParticlesExternalGuard::INSTANCE_AUX_PARAMS == 12);
 static_assert(ParticlesExternalGuard::BINDING_COUNT == 13);

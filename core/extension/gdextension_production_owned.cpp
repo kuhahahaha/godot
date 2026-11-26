@@ -218,6 +218,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_storage_retire(GDExtension
 		++request->revision;
 		slot.retiring = true;
 		slot.owned_physical.use_closed.store(true);
+		bump_resource_permission_epoch();
 		slot.retire_origin = origin;
 		auto &state = slot.retire_report;
 		state.abi = ABI;
@@ -422,22 +423,13 @@ void Registry::production_persistent_set_unindex_deps_locked(ProductionAttachmen
 }
 
 void Registry::production_persistent_sets_evict_lru_locked(ProductionAttachment &p_attachment) {
-	while (p_attachment.persistent_set_lookup.size() > ProductionAttachment::PERSISTENT_SET_MAX_LIVE) {
-		PersistentSetEntry *victim = nullptr;
-		for (uint32_t i = 0; i < p_attachment.persistent_sets.size(); ++i) {
-			PersistentSetEntry *entry = p_attachment.persistent_sets[i];
-			if (!entry || entry->evicted || entry->physical.production_uses != nullptr) {
-				continue;
-			}
-			if (!victim || entry->last_used_tick < victim->last_used_tick) {
-				victim = entry;
-			}
+	PersistentSetEntry *cursor = p_attachment.persistent_set_lru_tail;
+	while (p_attachment.persistent_set_lookup.size() > ProductionAttachment::PERSISTENT_SET_MAX_LIVE && cursor != nullptr) {
+		PersistentSetEntry *prev = cursor->lru_prev;
+		if (!cursor->evicted && cursor->physical.production_uses == nullptr) {
+			p_attachment.persistent_set_mark_evicted(cursor);
 		}
-		if (!victim) {
-			break;
-		}
-		victim->evicted = true;
-		p_attachment.persistent_set_lookup.erase(victim->key);
+		cursor = prev;
 	}
 }
 
@@ -453,16 +445,20 @@ void Registry::production_persistent_sets_reap_and_retire_rt(RenderingDevice *p_
 	{
 		Lock lock(*this);
 		for (auto *attachment : production_attachments) {
-			if (!attachment || attachment->held_device != p_rd || attachment->persistent_sets.is_empty()) {
+			if (!attachment || attachment->held_device != p_rd || attachment->persistent_sets_pending_reap.is_empty()) {
 				continue;
 			}
 			uint32_t i = 0;
-			while (i < attachment->persistent_sets.size()) {
-				PersistentSetEntry *entry = attachment->persistent_sets[i];
+			while (i < attachment->persistent_sets_pending_reap.size()) {
+				PersistentSetEntry *entry = attachment->persistent_sets_pending_reap[i];
 				if (!entry) {
-					attachment->persistent_sets.remove_at_unordered(i);
+					attachment->persistent_sets_pending_reap.remove_at_unordered(i);
+					if (i < attachment->persistent_sets_pending_reap.size() && attachment->persistent_sets_pending_reap[i]) {
+						attachment->persistent_sets_pending_reap[i]->pending_reap_index = i;
+					}
 					continue;
 				}
+				++attachment->persistent_set_reap_entries_scanned;
 				uint64_t free_event = 0;
 				{
 					MutexLock phys_lock(entry->physical.mutex);
@@ -471,7 +467,7 @@ void Registry::production_persistent_sets_reap_and_retire_rt(RenderingDevice *p_
 				if (entry->evicted && entry->physical.production_uses == nullptr && free_event != 0) {
 					attachment->persistent_set_lookup.erase(entry->key);
 					production_persistent_set_unindex_deps_locked(*attachment, *entry);
-					attachment->persistent_sets.remove_at_unordered(i);
+					attachment->persistent_set_remove_owned(entry);
 					memdelete(entry);
 					continue;
 				}
@@ -480,6 +476,7 @@ void Registry::production_persistent_sets_reap_and_retire_rt(RenderingDevice *p_
 						p_rd->_qualification_free_event_available(entry->physical.event_capacity_reserved) &&
 						(attachment->closing || to_free.size() < 256u)) {
 					entry->physical.use_closed.store(true);
+					bump_resource_permission_epoch();
 					entry->retire_enqueued = true;
 					to_free.push_back(entry->rid);
 				}
@@ -505,16 +502,20 @@ void Registry::production_persistent_sets_reap_and_retire_rt(RenderingDevice *p_
 	{
 		Lock lock(*this);
 		for (auto *attachment : production_attachments) {
-			if (!attachment || attachment->held_device != p_rd || attachment->persistent_sets.is_empty()) {
+			if (!attachment || attachment->held_device != p_rd || attachment->persistent_sets_pending_reap.is_empty()) {
 				continue;
 			}
 			uint32_t i = 0;
-			while (i < attachment->persistent_sets.size()) {
-				PersistentSetEntry *entry = attachment->persistent_sets[i];
+			while (i < attachment->persistent_sets_pending_reap.size()) {
+				PersistentSetEntry *entry = attachment->persistent_sets_pending_reap[i];
 				if (!entry) {
-					attachment->persistent_sets.remove_at_unordered(i);
+					attachment->persistent_sets_pending_reap.remove_at_unordered(i);
+					if (i < attachment->persistent_sets_pending_reap.size() && attachment->persistent_sets_pending_reap[i]) {
+						attachment->persistent_sets_pending_reap[i]->pending_reap_index = i;
+					}
 					continue;
 				}
+				++attachment->persistent_set_reap_entries_scanned;
 				bool enqueued = false;
 				uint64_t free_event = 0;
 				{
@@ -525,7 +526,7 @@ void Registry::production_persistent_sets_reap_and_retire_rt(RenderingDevice *p_
 				if (entry->evicted && entry->physical.production_uses == nullptr && free_event != 0) {
 					attachment->persistent_set_lookup.erase(entry->key);
 					production_persistent_set_unindex_deps_locked(*attachment, *entry);
-					attachment->persistent_sets.remove_at_unordered(i);
+					attachment->persistent_set_remove_owned(entry);
 					memdelete(entry);
 					continue;
 				}
@@ -559,8 +560,7 @@ void Registry::production_persistent_sets_evict_for_dependency_rt(RenderingDevic
 					continue;
 				}
 				if (!entry->evicted) {
-					entry->evicted = true;
-					attachment->persistent_set_lookup.erase(entry->key);
+					attachment->persistent_set_mark_evicted(entry);
 				}
 				any_evicted = true;
 			}
@@ -650,6 +650,9 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 					request->control.input.resource_slot == index;
 			if (!is_active_leader) {
 				if (!slot.creating && !slot.batched_set_create) {
+					if (request->cancelled && !slot.primary.is_valid() && slot.handoff_error == ERR_UNAVAILABLE) {
+						return result(ERR_BUSY);
+					}
 					return result(slot.handoff_error);
 				}
 				// BUG-77A: If another SET_CREATE leader finished in RETURNED while
@@ -860,6 +863,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 									request->uses[slot.first_binding + i].binding = bindings[i];
 								}
 								request->binding_used += count;
+								request->note_use_touched_end(request->use_count + request->binding_used);
 								slot.use_count = 1;
 								slot.imported = true;
 								slot.cached_persistent_set = true;
@@ -868,6 +872,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 								request->returns[index].pending = false;
 								request->returns[index].serial = 0;
 								entry->last_used_tick = ++request->attachment->persistent_set_tick;
+								request->attachment->persistent_set_lru_touch(entry);
 								return result(OK);
 							}
 						}
@@ -892,6 +897,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 					request->uses[slot.first_binding + i].binding = bindings[i];
 				}
 				request->binding_used += count;
+				request->note_use_touched_end(request->use_count + request->binding_used);
 				if (!special_set1) {
 					for (uint32_t i = 0; i < count; ++i) {
 						slot.output_set_deferred |= request->resources[bindings[i].resource_slot].output_alias_prepared;
@@ -1583,6 +1589,7 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 							slot.imported = true;
 							request.returns[index].pending = false;
 							entry->last_used_tick = ++request.attachment->persistent_set_tick;
+							request.attachment->persistent_set_lru_touch(entry);
 						}
 						++request.revision;
 						return finish(attach_err != OK ? attach_err : request.source_device_lost ? ERR_UNAVAILABLE
@@ -1618,13 +1625,14 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 					entry->rid = rid;
 					entry->physical.rid = rid.get_id();
 					entry->last_used_tick = ++request.attachment->persistent_set_tick;
-					request.attachment->persistent_sets.push_back(entry);
+					request.attachment->persistent_set_push_live(entry);
 					production_persistent_set_index_deps_locked(*request.attachment, *entry);
 					if (!request.attachment->closing && !request.attachment->persistent_set_lookup.has(entry->key)) {
 						request.attachment->persistent_set_lookup.insert(entry->key, entry);
+						request.attachment->persistent_set_lru_touch(entry);
 						production_persistent_sets_evict_lru_locked(*request.attachment);
 					} else {
-						entry->evicted = true;
+						request.attachment->persistent_set_mark_evicted(entry);
 					}
 					slot.owned_serial = entry->serial;
 					slot.primary = entry->rid;
@@ -1664,6 +1672,7 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 	if (error == OK) {
 		slot.use_count = 1;
 		slot.imported = true;
+		bump_resource_permission_epoch();
 	}
 	++request.revision;
 	return finish(error != OK ? error : request.source_device_lost ? ERR_UNAVAILABLE
@@ -1723,25 +1732,51 @@ Error Registry::production_maintenance_frame_admission_locked(ProductionRequest 
 	// Every graph command must be covered by an actual original production
 	// capture. Other renderer/qualification work waits for its original lane;
 	// this owner service cannot turn that work into a production receipt.
-	for (uint32_t command = 0; command < rd.draw_graph.qualification_command_count(); ++command) {
-		bool captured = false;
+	// Invert the check from O(C^2 * R * G) to O(C + R_active * G) by marking
+	// covered command indices in a single pass across active requests (BUG-196A).
+	const uint32_t cmd_count = rd.draw_graph.qualification_command_count();
+	if (cmd_count > 0) {
+		uint8_t stack_covered[1024];
+		LocalVector<uint8_t> heap_covered;
+		uint8_t *covered = stack_covered;
+		if (cmd_count > sizeof(stack_covered)) {
+			heap_covered.resize(cmd_count);
+			covered = heap_covered.ptr();
+		}
+		memset(covered, 0, cmd_count);
+		uint32_t covered_count = 0;
 		for (auto *attachment : production_attachments) {
-			if (!attachment || attachment->held_device != &rd) {
+			if (!attachment || attachment->held_device != &rd || attachment->children == 0) {
 				continue;
 			}
-			for (uint32_t r = 0; r < attachment->quote.capacity.requests && !captured; ++r) {
+			uint32_t seen_children = 0;
+			for (uint32_t r = 0; r < attachment->quote.capacity.requests && covered_count < cmd_count && seen_children < attachment->children; ++r) {
 				const auto &owner = attachment->requests[r];
-				if (!owner.serial || (owner.compute_list_open || owner.draw_list_open) || owner.capture_inflight) {
+				if (!owner.serial) {
 					continue;
 				}
-				for (uint32_t g = 0; g < owner.graph_count && !captured; ++g) {
+				++seen_children;
+				if (owner.compute_list_open || owner.draw_list_open || owner.capture_inflight) {
+					continue;
+				}
+				for (uint32_t g = 0; g < owner.graph_count && covered_count < cmd_count; ++g) {
 					uint32_t actual = UINT32_MAX;
-					captured = rd.draw_graph._resolve_record_command_index(owner.graphs[g].handle, actual) && actual == command;
+					if (rd.draw_graph._resolve_record_command_index(owner.graphs[g].handle, actual) && actual < cmd_count && !covered[actual]) {
+						covered[actual] = 1;
+						++covered_count;
+					}
 				}
 			}
+			if (covered_count == cmd_count) {
+				break;
+			}
 		}
-		if (!captured) {
-			drain_trace.state(request.serial, request.control.serial, rd.frame, command, rd.draw_graph.qualification_command_count(), 0);
+		if (covered_count < cmd_count) {
+			uint32_t first_uncovered = 0;
+			while (first_uncovered < cmd_count && covered[first_uncovered]) {
+				++first_uncovered;
+			}
+			drain_trace.state(request.serial, request.control.serial, rd.frame, first_uncovered, cmd_count, 0);
 			return drain_trace.result(ERR_BUSY, "uncaptured_graph");
 		}
 	}
@@ -1772,7 +1807,6 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 		return ERR_BUSY;
 	}
 	bool pending_set_returns = false;
-	bool set_pass_charged = false;
 	const uint32_t visits = MIN(request.resource_count, 64u);
 	for (uint32_t n = 0; n < visits; ++n) {
 		const uint32_t i = request.retire_cursor % request.resource_count;
@@ -1813,8 +1847,7 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 		if (publish_physical_return(OK)) {
 			continue;
 		}
-		const bool set_within_pass = set && (set_pass_charged || usage.passes <= MIN(budget.passes, 64u));
-		if ((!set_within_pass && (usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u))) || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) {
+		if (usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u) || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) {
 			return ERR_BUSY;
 		}
 		if (request.revision > UINT64_MAX - uint64_t(request.capacity.graph_memberships) * 2 - uint64_t(request.capacity.native_memberships) * 2 - request.capacity.readbacks - request.capacity.resources - 8) {
@@ -1850,21 +1883,10 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 		}
 		slot.retiring = true;
 		slot.owned_physical.use_closed.store(true);
+		bump_resource_permission_epoch();
 		if (!slot.owned_physical.enqueued) {
-			if (set) {
-				if (!set_pass_charged) {
-					if (usage.passes < MIN(budget.passes, 64u)) {
-						++usage.passes;
-					}
-					if (usage.receipts < MIN(budget.receipts, 128u)) {
-						++usage.receipts;
-					}
-					set_pass_charged = true;
-				}
-			} else {
-				++usage.passes;
-				++usage.receipts;
-			}
+			++usage.passes;
+			++usage.receipts;
 			usage.controls = 1;
 			production_native_effect_enter_locked(request);
 			++request.capture_inflight;
@@ -2098,7 +2120,7 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 				if (!frame_readbacks_in_order(rb_frame)) {
 					return drain_trace.result(ERR_BUSY, "split_readback_order");
 				}
-				if (!rd.frames[rb_frame].fence_signaled && !rd.frame_wait_draining) {
+				if (!rd.frames[rb_frame].fence_signaled && !rd.frames[rb_frame].maintenance_wait.fence_returned && !rd.frame_wait_draining) {
 					if (!rd.frames[rb_frame].primary_command_buffer_begun && !rd.frames[rb_frame].disposal.active) {
 						usage.controls = 1;
 						production_native_effect_enter_locked(request);
@@ -2112,9 +2134,14 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 					}
 					return drain_trace.result(ERR_BUSY, "rb_frame_not_submitted");
 				}
+				const uint32_t avail_passes = MIN(budget.passes, 64u) > usage.passes ? (MIN(budget.passes, 64u) - usage.passes) : 0u;
+				const uint32_t avail_receipts = MIN(budget.receipts, 128u) > usage.receipts ? (MIN(budget.receipts, 128u) - usage.receipts) : 0u;
+				if (!avail_passes || !avail_receipts || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) {
+					return drain_trace.result(ERR_BUSY, "rb_budget_exhausted");
+				}
 				RenderingDevice::NativeDisposalBudget slice;
-				slice.receipts = 256u;
-				slice.passes = 256u;
+				slice.receipts = avail_receipts;
+				slice.passes = avail_passes;
 				slice.deadline_usec = budget.deadline_micros;
 				RenderingDevice::NativeDisposalUsage actual;
 				usage.controls = 1;
@@ -2131,8 +2158,6 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 				relock_mutex_after_call();
 				CRASH_COND(!request.capture_inflight);
 				--request.capture_inflight;
-				const uint32_t avail_passes = MIN(budget.passes, 64u) > usage.passes ? (MIN(budget.passes, 64u) - usage.passes) : 0u;
-				const uint32_t avail_receipts = MIN(budget.receipts, 128u) > usage.receipts ? (MIN(budget.receipts, 128u) - usage.receipts) : 0u;
 				const uint64_t total_actual = uint64_t(actual.polls) + actual.frees + actual.issues + actual.retains + actual.releases + actual.recycles;
 				usage.passes += MIN(actual.passes, avail_passes);
 				usage.receipts += uint32_t(MIN(total_actual, uint64_t(avail_receipts)));
@@ -2171,8 +2196,8 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 			return fallback_err;
 		}
 		RenderingDevice::NativeDisposalBudget drain_budget;
-		drain_budget.receipts = MAX(avail_rec, 64u);
-		drain_budget.passes = MAX(avail_pas, 16u);
+		drain_budget.receipts = avail_rec;
+		drain_budget.passes = avail_pas;
 		drain_budget.deadline_usec = budget.deadline_micros;
 		RenderingDevice::NativeDisposalUsage drain_usage;
 		const uint64_t request_serial = request.serial, control_serial = request.control.serial;
@@ -2183,13 +2208,18 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 		rd._thread_safe_.unlock();
 		unlock_mutex_for_call();
 		Error drained = rd._production_mq_drain_owned_disposals_step(request, nullptr, 0, drain_budget, drain_usage);
-		if (drained == ERR_BUSY && (is_closing_exit || mq_in_place_early)) {
+		auto drain_receipts_spent = [](const RenderingDevice::NativeDisposalUsage &u) -> uint64_t {
+			return uint64_t(u.polls) + u.frees + u.issues + u.retains + u.releases + u.recycles;
+		};
+		if (drained == ERR_BUSY && (is_closing_exit || mq_in_place_early) && (is_closing_exit || !rd._is_live_presenting_loop_active()) && this == &get_singleton()) {
 			const uint64_t settle_deadline = MIN(drain_budget.deadline_usec, OS::get_singleton()->get_ticks_usec() + 1500ull);
-			while (drained == ERR_BUSY && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
+			while (drained == ERR_BUSY &&
+					drain_receipts_spent(drain_usage) < avail_rec && drain_usage.passes < avail_pas &&
+					OS::get_singleton()->get_ticks_usec() < settle_deadline) {
 				OS::get_singleton()->delay_usec(150);
 				RenderingDevice::NativeDisposalBudget retry_budget;
-				retry_budget.receipts = 64u;
-				retry_budget.passes = 16u;
+				retry_budget.receipts = uint32_t(avail_rec - drain_receipts_spent(drain_usage));
+				retry_budget.passes = avail_pas - drain_usage.passes;
 				retry_budget.deadline_usec = settle_deadline;
 				RenderingDevice::NativeDisposalUsage retry_usage;
 				drained = rd._production_mq_drain_owned_disposals_step(request, nullptr, 0, retry_budget, retry_usage);
@@ -2388,11 +2418,11 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 
 		}
 	}
-	const uint32_t avail_receipts = MIN(budget.receipts, 128u) - usage.receipts;
-	const uint32_t avail_passes = MIN(budget.passes, 64u) - usage.passes;
+	const uint32_t avail_receipts = MIN(budget.receipts, 128u) > usage.receipts ? (MIN(budget.receipts, 128u) - usage.receipts) : 0u;
+	const uint32_t avail_passes = MIN(budget.passes, 64u) > usage.passes ? (MIN(budget.passes, 64u) - usage.passes) : 0u;
 	RenderingDevice::NativeDisposalBudget service;
-	service.receipts = MAX(avail_receipts, 64u);
-	service.passes = MAX(avail_passes, 16u);
+	service.receipts = avail_receipts;
+	service.passes = avail_passes;
 	service.deadline_usec = budget.deadline_micros;
 	RenderingDevice::NativeDisposalUsage actual;
 	usage.controls = 1;
@@ -2401,13 +2431,18 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	unlock_mutex_for_call();
 	const bool starting = !rd.native_disposal_active;
 	Error error = rd._native_disposal_maintenance_step(service, actual, &request, nullptr, mq_in_place);
-	if (error == ERR_BUSY && rd.native_disposal_active) {
+	auto maintenance_receipts_spent = [](const RenderingDevice::NativeDisposalUsage &u) -> uint64_t {
+		return uint64_t(u.polls) + u.frees + u.issues + u.retains + u.releases + u.recycles;
+	};
+	if (error == ERR_BUSY && rd.native_disposal_active && (is_closing_exit || !rd._is_live_presenting_loop_active()) && this == &get_singleton()) {
 		const uint64_t settle_deadline = MIN(service.deadline_usec, OS::get_singleton()->get_ticks_usec() + 2000ull);
-		while (error == ERR_BUSY && rd.native_disposal_active && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
+		while (error == ERR_BUSY && rd.native_disposal_active &&
+				maintenance_receipts_spent(actual) < avail_receipts && actual.passes < avail_passes &&
+				OS::get_singleton()->get_ticks_usec() < settle_deadline) {
 			OS::get_singleton()->delay_usec(50);
 			RenderingDevice::NativeDisposalBudget retry_service;
-			retry_service.receipts = 64u;
-			retry_service.passes = 16u;
+			retry_service.receipts = uint32_t(avail_receipts - maintenance_receipts_spent(actual));
+			retry_service.passes = avail_passes - actual.passes;
 			retry_service.deadline_usec = settle_deadline;
 			RenderingDevice::NativeDisposalUsage step_actual;
 			error = rd._native_disposal_maintenance_step(retry_service, step_actual, &request, nullptr, mq_in_place);
@@ -2434,6 +2469,71 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	return drain_trace.result(error, "native_step_returned");
 }
 
+void Registry::try_complete_pending_production_frame_maintenance(RenderingDevice &rd) {
+	if (!rd.is_main_instance || rd.render_thread_id != Thread::get_caller_id() || !rd.driver || rd.native_finalization_returned ||
+			rd.frames.is_empty() || rd.draw_list.active || rd.compute_list.active || rd.raytracing_list.active ||
+			rd.frame_wait_draining.load(std::memory_order_acquire) || rd.production_recording_request ||
+			!rd.has_pending_production_frame_maintenance()) {
+		return;
+	}
+	const ProductionRequest *owner_ptr = nullptr;
+	uint64_t expected_serial = 0;
+	bool in_place = false;
+	if (!rd._thread_safe_.try_lock()) {
+		return;
+	}
+	const bool eligible = rd.native_disposal_active.load(std::memory_order_acquire) &&
+			rd.native_disposal_continuation.production_owner != nullptr &&
+			rd.native_disposal_continuation.scene_selection.cell.is_null() &&
+			rd.native_disposal_continuation.height_selection.is_null() &&
+			!rd.native_disposal_budget;
+	if (eligible) {
+		owner_ptr = rd.native_disposal_continuation.production_owner;
+		expected_serial = rd.native_disposal_continuation.serial;
+		in_place = rd.native_disposal_continuation.in_place_no_disposal;
+	}
+	rd._thread_safe_.unlock();
+	if (!eligible || !owner_ptr || !expected_serial) {
+		return;
+	}
+	Lock lock(*this);
+	ProductionRequest *owner = nullptr;
+	for (auto *attachment : production_attachments) {
+		if (!attachment || attachment->held_device != &rd || !attachment->requests) {
+			continue;
+		}
+		for (uint32_t i = 0; i < attachment->quote.capacity.requests; ++i) {
+			if (&attachment->requests[i] == owner_ptr) {
+				owner = &attachment->requests[i];
+				break;
+			}
+		}
+		if (owner) {
+			break;
+		}
+	}
+	if (!owner || !owner->serial || owner->maintenance_serial != expected_serial ||
+			owner->capture_inflight || owner->continuation_inflight ||
+			!owner->attachment || owner->attachment->held_device != &rd) {
+		return;
+	}
+	const uint64_t owner_serial = owner->serial;
+	++owner->capture_inflight;
+	unlock_mutex_for_call();
+	RenderingDevice::NativeDisposalBudget service;
+	service.passes = 256u;
+	service.receipts = 512u;
+	service.deadline_usec = OS::get_singleton()->get_ticks_usec() + 2000ull;
+	RenderingDevice::NativeDisposalUsage usage;
+	const Error step_err = rd._native_disposal_maintenance_step(service, usage, owner, nullptr, Ref<NativeHeightRange>(), in_place);
+	relock_mutex_after_call();
+	CRASH_COND(owner->serial != owner_serial || !owner->capture_inflight);
+	--owner->capture_inflight;
+	if ((step_err == OK || !rd.native_disposal_active.load(std::memory_order_acquire)) && owner->maintenance_serial == expected_serial) {
+		owner->maintenance_serial = 0;
+	}
+}
+
 bool Registry::has_natural_close_pending_work(const RenderingDevice *p_rd) {
 	if (!p_rd || !mutex.try_lock()) {
 		return false;
@@ -2444,7 +2544,7 @@ bool Registry::has_natural_close_pending_work(const RenderingDevice *p_rd) {
 		if (!attachment || attachment->held_device != p_rd || attachment->library >= RECORD_CAPACITY) {
 			continue;
 		}
-		if (!attachment->closing && !records[attachment->library].natural_close_draining) {
+		if (!records[attachment->library].natural_close_draining) {
 			continue;
 		}
 		has_closing_attachment = true;

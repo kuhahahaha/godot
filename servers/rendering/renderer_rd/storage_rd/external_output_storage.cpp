@@ -45,7 +45,7 @@ Error ExternalOutputStorage::plan_instance192(uint32_t p_capacity, uint32_t p_su
 	// Fixed control extents match ParticlesExternalGuard's Instance192 ABI.
 	Instance192Layout layout;
 	const uint64_t previous_count = p_motion_required ? p_capacity : 0u;
-	const uint64_t counts[INSTANCE192_RESOURCE_COUNT] = { p_capacity, previous_count, 8, 16, 8, p_surface_count, sizeof(ParticlesExternalGuard::GeometryProofHeader) + uint64_t(p_surface_count) * sizeof(ParticlesExternalGuard::SurfaceProof) };
+	const uint64_t counts[INSTANCE192_RESOURCE_COUNT] = { p_capacity, previous_count, 8, ParticlesExternalGuard::GUARD_SCRATCH_WORDS, 8, p_surface_count, sizeof(ParticlesExternalGuard::GeometryProofHeader) + uint64_t(p_surface_count) * sizeof(ParticlesExternalGuard::SurfaceProof) };
 	const uint64_t strides[INSTANCE192_RESOURCE_COUNT] = { 192, 192, 4, 4, 4, 20, 1 };
 
 	for (uint32_t i = 0; i < INSTANCE192_RESOURCE_COUNT; ++i) {

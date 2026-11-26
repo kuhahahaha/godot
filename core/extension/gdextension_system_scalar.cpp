@@ -322,6 +322,7 @@ void Registry::system_scalar_set_return_step(QualificationTicket *ticket, Render
 		auto *set = rd->uniform_set_owner.get_or_null(ticket->system_set);
 		if (!set || set->qualification_return != &ticket->system_set_physical || set->qualification_users || ticket->system_set_physical.dependent_children.load()) { ticket->remember_system_set_return_error(ERR_INVALID_DATA); return; }
 		ticket->system_set_physical.use_closed.store(true);
+		bump_resource_permission_epoch();
 	}
 	rd->qualification_retiring = true;
 	rd->free_rid(ticket->system_set);

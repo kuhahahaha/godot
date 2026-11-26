@@ -834,6 +834,7 @@ public:
 	// Dispatching.
 	virtual void command_compute_dispatch(CommandBufferID p_cmd_buffer, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups) override final;
 	virtual void command_compute_dispatch_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset) override final;
+	virtual void command_compute_memory_barrier(CommandBufferID p_cmd_buffer) override final;
 
 	// ----- PIPELINE -----
 

@@ -627,6 +627,9 @@ void Registry::production_capture_issue_locked(RenderingDevice &rd, uint32_t slo
 					new (&native) ProductionNativeCell();
 					native.request = &request;
 					native.owner_index = owner == UINT32_MAX ? index : owner;
+					if (owner == UINT32_MAX) {
+						request.note_native_owner(index);
+					}
 					native.member.source = source;
 					native.member.frame = uint32_t(rd.frame);
 					native.member.epoch = read_transfer ? rd.frames[rd.frame].qualification_epoch : graph.device_epoch;
@@ -691,7 +694,13 @@ Error Registry::production_retain_sources_locked(RenderingDevice &rd, uint32_t f
 					}
 				}
 			}
-			for (uint32_t n = 0; n < request.native_count; ++n) {
+			const bool use_owner_index = request.native_owner_count > 0 && !request.native_owners_overflowed;
+			const uint32_t scan_limit = use_owner_index ? request.native_owner_count : request.native_count;
+			for (uint32_t k = 0; k < scan_limit; ++k) {
+				const uint32_t n = use_owner_index ? request.native_owner_indices[k] : k;
+				if (n >= request.native_count) {
+					continue;
+				}
 				auto &native = request.natives[n];
 				if (native.owner_index != n || native.member.retained || native.member.owner_released || native.member.source.issue == RDD::IssueFact::NotIssued) {
 					continue;
@@ -809,6 +818,7 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 		auto &resource = request.resources[declaration.resource_slot];
 		if (declaration.source_kind == GDEXTENSION_PRODUCTION_READBACK_NATIVE_OUTPUT_GUARD_V1) {
 			observed.error = production_output_guard_bind_locked(request, resource, rd);
+			rd.production_resource_validation_cache.invalidate();
 			if (observed.error != OK || resource.output_guard_consumer != index) { return observed; }
 		}
 		if (resource.output_alias_prepared) {
@@ -838,7 +848,11 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 		readback->count = 0;
 	}
 	bool transfer_effect_entered = false;
+	bool any_transfer_staged = false;
 	auto finish_transfer_staging = [&]() {
+		if (!any_transfer_staged) {
+			return;
+		}
 		for (uint32_t i = 0; i < request.resource_count; ++i) {
 			auto &resource = request.resources[i];
 			if (resource.transfer_staged) {
@@ -873,6 +887,9 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 				return OK;
 			}
 			resource.transfer_staged = !resource.transfer_pending;
+			if (resource.transfer_staged) {
+				any_transfer_staged = true;
+			}
 			resource.transfer_worker = uint32_t(buffer->transfer_worker_index);
 			resource.transfer_operation = buffer->transfer_worker_operation;
 			resource.transfer_action_ordinal = action.declaration.action_ordinal;
@@ -946,14 +963,17 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 		}
 		return waits;
 	};
-	for (uint32_t i = 0; i < request.resource_count; ++i) {
+	auto validate_slot = [&](uint32_t i) -> bool {
+		if (i >= request.resource_count) {
+			return true;
+		}
 		const auto &resource = request.resources[i];
 		// CPU metadata has no RD backing or physical use; reserve forbids it
 		// in action use rows. Actual resources retain the permission checks below.
-		if (resource.declaration.resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1) { continue; }
+		if (resource.declaration.resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1) { return true; }
 		// An unbound current guard is not a resource of earlier actions. Its
 		// sole declared READBACK row resolves and admits it after Finalize.
-		if (resource.output_guard_readonly && (resource.output_guard_history ? !production_output_history_guard_uses_locked(request, resource, index) : resource.output_guard_consumer != index)) { continue; }
+		if (resource.output_guard_readonly && (resource.output_guard_history ? !production_output_history_guard_uses_locked(request, resource, index) : resource.output_guard_consumer != index)) { return true; }
 		// A sealed output prefix can upload camera, control and reset data
 		// before Acquire provides output aliases and their dependent sets.
 		// Each upload's actual destination and declared uses still require permission.
@@ -963,16 +983,163 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 				used |= request.uses[action.declaration.first_use + u].declaration.resource_slot == i;
 			}
 			if (!used) {
-				continue;
+				return true;
 			}
 		}
-		if (!rd._production_resource_slot_permitted(resource, resource.primary) || (resource.secondary.is_valid() && !rd._production_resource_slot_permitted(resource, resource.secondary))) {
-			rd.production_recording_request = nullptr;
-			--request.capture_inflight;
-			observed.error = ERR_UNAUTHORIZED;
-			return observed;
+		return rd._production_resource_slot_permitted(resource, resource.primary) &&
+				(!resource.secondary.is_valid() || rd._production_resource_slot_permitted(resource, resource.secondary));
+	};
+	// BUG-184A: Cache whole-table static resource validation per physical frame
+	// while frozen with unchanged permission epoch and anchor output state, and
+	// build an O(1) RID->slot index for RD::_production_resource_permitted().
+	auto &val_cache = rd.production_resource_validation_cache;
+	val_cache.rid_index_active = false;
+	const uint64_t active_frame_serial = production_physical_frame_serial();
+	const uint64_t current_permission_epoch = resource_permission_epoch.load(std::memory_order_acquire);
+	const uint8_t current_anchor_output_state = anchor < request.action_count ? uint8_t(request.actions[anchor].output_state) : 0u;
+	const bool cache_hit = active_frame_serial != 0 &&
+			val_cache.valid &&
+			val_cache.request == &request &&
+			val_cache.request_serial == serial &&
+			val_cache.frame_serial == active_frame_serial &&
+			val_cache.permission_epoch == current_permission_epoch &&
+			val_cache.anchor_ordinal == anchor &&
+			val_cache.anchor_output_state == current_anchor_output_state &&
+			val_cache.prepared_upload_before_acquire == prepared_upload_before_acquire &&
+			val_cache.resource_count == request.resource_count;
+	auto fail_unauthorized = [&]() {
+		val_cache.invalidate();
+		rd.production_recording_request = nullptr;
+		--request.capture_inflight;
+		observed.error = ERR_UNAUTHORIZED;
+		return observed;
+	};
+	if (cache_hit) {
+		for (uint32_t k = 0; k < val_cache.index_dependent_slots.size(); ++k) {
+			if (!validate_slot(val_cache.index_dependent_slots[k])) {
+				return fail_unauthorized();
+			}
+		}
+		for (uint32_t u = 0; u < action.declaration.use_count; ++u) {
+			if (!validate_slot(request.uses[action.declaration.first_use + u].declaration.resource_slot)) {
+				return fail_unauthorized();
+			}
+		}
+		if (action.declaration.action_kind == GDEXTENSION_PRODUCTION_DISPATCH_V1) {
+			const auto &dispatch = action.dispatch;
+			if (!validate_slot(dispatch.unit_slot)) {
+				return fail_unauthorized();
+			}
+			for (uint32_t s = 0; s < dispatch.set_count; ++s) {
+				if (!validate_slot(dispatch.first_set_slot + s)) {
+					return fail_unauthorized();
+				}
+			}
+		} else if (action.declaration.action_kind == GDEXTENSION_PRODUCTION_UPLOAD_V1) {
+			if (!validate_slot(action.upload.destination_slot)) {
+				return fail_unauthorized();
+			}
+		} else if (action.declaration.action_kind == GDEXTENSION_PRODUCTION_COPY_V1) {
+			if (!validate_slot(action.copy.source_slot) || !validate_slot(action.copy.destination_slot)) {
+				return fail_unauthorized();
+			}
+		} else if (action.declaration.action_kind == GDEXTENSION_PRODUCTION_READBACK_V1) {
+			if (!validate_slot(request.readbacks[action.readback_slot].declaration.resource_slot)) {
+				return fail_unauthorized();
+			}
+		}
+	} else {
+		val_cache.invalidate();
+		val_cache.index_dependent_slots.clear();
+		for (uint32_t i = 0; i < request.resource_count; ++i) {
+			const auto &resource = request.resources[i];
+			if (resource.output_guard_readonly ||
+					(prepared_upload_before_acquire && (awaits_output(resource) || awaits_output_set(resource)))) {
+				val_cache.index_dependent_slots.push_back(i);
+			}
+			if (!validate_slot(i)) {
+				return fail_unauthorized();
+			}
+		}
+		if (active_frame_serial != 0) {
+			val_cache.request = &request;
+			val_cache.request_serial = serial;
+			val_cache.frame_serial = active_frame_serial;
+			val_cache.permission_epoch = current_permission_epoch;
+			val_cache.anchor_ordinal = anchor;
+			val_cache.anchor_output_state = current_anchor_output_state;
+			val_cache.prepared_upload_before_acquire = prepared_upload_before_acquire;
+			val_cache.resource_count = request.resource_count;
+			val_cache.valid = true;
+			if (request.resource_count >= 16) {
+				uint32_t table_cap = 64;
+				const uint64_t target_cap = uint64_t(request.resource_count) * 4u;
+				while (uint64_t(table_cap) < target_cap && table_cap <= (1u << 24)) {
+					table_cap <<= 1;
+				}
+				if (uint64_t(table_cap) >= target_cap) {
+					val_cache.rid_to_slot.resize(table_cap);
+					std::memset(val_cache.rid_to_slot.ptr(), 0, sizeof(RenderingDevice::ProductionResourceValidationCache::SlotEntry) * table_cap);
+					val_cache.rid_mask = table_cap - 1u;
+					auto insert_rid = [&](uint64_t rid_id, uint32_t slot_index, bool match_primary) -> uint32_t {
+						if (!rid_id) {
+							return slot_index;
+						}
+						uint64_t h = rid_id;
+						h ^= h >> 33;
+						h *= 0xff51afd7ed558ccdULL;
+						h ^= h >> 33;
+						uint32_t pos = uint32_t(h) & val_cache.rid_mask;
+						uint32_t first_slot = slot_index;
+						while (val_cache.rid_to_slot[pos].rid_id != 0) {
+							if (match_primary && val_cache.rid_to_slot[pos].rid_id == rid_id) {
+								const uint32_t cand = val_cache.rid_to_slot[pos].slot_index;
+								if (cand < first_slot && request.resources[cand].primary.get_id() == rid_id) {
+									first_slot = cand;
+								}
+							}
+							pos = (pos + 1u) & val_cache.rid_mask;
+						}
+						val_cache.rid_to_slot[pos].rid_id = rid_id;
+						val_cache.rid_to_slot[pos].slot_index = slot_index;
+						return first_slot;
+					};
+					for (uint32_t i = 0; i < request.resource_count; ++i) {
+						auto &resource = request.resources[i];
+						resource.hazard_canonical_slot = i;
+						if (!resource.imported) {
+							continue;
+						}
+						if (resource.primary.is_valid()) {
+							resource.hazard_canonical_slot = insert_rid(resource.primary.get_id(), i, true);
+						}
+						if (resource.secondary.is_valid() && resource.secondary != resource.primary) {
+							insert_rid(resource.secondary.get_id(), i, false);
+						}
+					}
+					val_cache.rid_index_valid = true;
+				}
+			}
+		}
+		if (!val_cache.rid_index_valid) {
+			for (uint32_t i = 0; i < request.resource_count; ++i) {
+				auto &resource = request.resources[i];
+				resource.hazard_canonical_slot = i;
+				if (!resource.imported || !resource.primary.is_valid()) {
+					continue;
+				}
+				const uint64_t rid_id = resource.primary.get_id();
+				for (uint32_t j = 0; j < i; ++j) {
+					const auto &prior = request.resources[j];
+					if (prior.imported && prior.primary.is_valid() && prior.primary.get_id() == rid_id) {
+						resource.hazard_canonical_slot = j;
+						break;
+					}
+				}
+			}
 		}
 	}
+	val_cache.rid_index_active = val_cache.rid_index_valid;
 	production_append_effect_enter_locked(request);
 	transfer_effect_entered = true;
 	bool list_open = request.compute_list_open;
@@ -985,26 +1152,102 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 		case GDEXTENSION_PRODUCTION_DISPATCH_V1: {
 			const auto &dispatch = action.dispatch;
 			const bool continuing_compute_list = list_open;
-			const auto list = list_open ? RenderingDevice::ComputeListID(RenderingDevice::ID_TYPE_COMPUTE_LIST) : rd.compute_list_begin();
+			auto list = list_open ? RenderingDevice::ComputeListID(RenderingDevice::ID_TYPE_COMPUTE_LIST) : rd.compute_list_begin();
 			if (list == RenderingDevice::INVALID_ID) {
 				observed.error = ERR_CANT_CREATE;
 				break;
 			}
 			list_open = true;
 			// A production request may intentionally keep several dispatches in
-			// one compute list.  The graph does not infer a storage dependency
-			// from the sealed ANGE use rows, so a write in an earlier dispatch can
-			// otherwise remain invisible to a later read (the initial admission
-			// dispatch is the first real instance of this).  Track the last-writer
-			// byte span per resource slot in O(1) for the active barrier epoch and
-			// insert the native barrier only on an overlapping write->use edge.
+			// one compute list (MTL::DispatchTypeConcurrent runs dispatches in
+			// parallel on Apple Metal with zero implicit sync).  Track both
+			// last-writer and last-reader byte spans per canonical physical RID
+			// slot in O(1) for the active barrier epoch and split the compute
+			// list cleanly on any overlapping RAW, WAW, or WAR edge (BUG-195A).
 			auto range_end = [](uint64_t p_offset, uint64_t p_bytes) -> uint64_t {
 				return p_bytes > UINT64_MAX - p_offset ? UINT64_MAX : p_offset + p_bytes;
+			};
+			auto canonical_slot = [&](uint32_t p_slot) -> uint32_t {
+				const uint32_t c = request.resources[p_slot].hazard_canonical_slot;
+				return c < request.resource_count ? c : p_slot;
+			};
+			auto is_write_access = [](uint32_t p_access) -> bool {
+				return p_access == GDEXTENSION_PRODUCTION_WRITE_V1 ||
+						p_access == GDEXTENSION_PRODUCTION_READ_WRITE_V1 ||
+						p_access == GDEXTENSION_PRODUCTION_ATOMIC_V1;
+			};
+			auto is_read_access = [](uint32_t p_access) -> bool {
+				return p_access == GDEXTENSION_PRODUCTION_READ_V1 ||
+						p_access == GDEXTENSION_PRODUCTION_READ_WRITE_V1 ||
+						p_access == GDEXTENSION_PRODUCTION_ATOMIC_V1;
+			};
+			auto spans_overlap = [](const ProductionResourceSlot::HazardSpan *p_spans, uint32_t p_count, uint64_t p_begin, uint64_t p_end) -> bool {
+				for (uint32_t i = 0; i < p_count; ++i) {
+					if (p_spans[i].begin < p_end && p_begin < p_spans[i].end) {
+						return true;
+					}
+					if (p_spans[i].begin >= p_end) {
+						break;
+					}
+				}
+				return false;
+			};
+			auto record_span = [](uint32_t &r_epoch, uint32_t &r_count, ProductionResourceSlot::HazardSpan *p_spans, uint32_t p_epoch, uint64_t p_begin, uint64_t p_end) {
+				if (r_epoch != p_epoch || r_count == 0) {
+					r_epoch = p_epoch;
+					r_count = 1;
+					p_spans[0] = { p_begin, p_end };
+					return;
+				}
+				// Maintain sorted disjoint spans, coalescing overlapping or adjacent ranges.
+				uint32_t first = 0;
+				while (first < r_count && p_spans[first].end < p_begin) {
+					++first;
+				}
+				uint32_t last = first;
+				uint64_t merged_begin = p_begin;
+				uint64_t merged_end = p_end;
+				while (last < r_count && p_spans[last].begin <= merged_end) {
+					if (p_spans[last].begin < merged_begin) {
+						merged_begin = p_spans[last].begin;
+					}
+					if (p_spans[last].end > merged_end) {
+						merged_end = p_spans[last].end;
+					}
+					++last;
+				}
+				const uint32_t merged_removed = last - first;
+				if (merged_removed > 0) {
+					p_spans[first] = { merged_begin, merged_end };
+					if (merged_removed > 1) {
+						const uint32_t tail = r_count - last;
+						for (uint32_t i = 0; i < tail; ++i) {
+							p_spans[first + 1 + i] = p_spans[last + i];
+						}
+						r_count -= (merged_removed - 1);
+					}
+					return;
+				}
+				if (r_count < ProductionResourceSlot::MAX_HAZARD_SPANS) {
+					for (uint32_t i = r_count; i > first; --i) {
+						p_spans[i] = p_spans[i - 1];
+					}
+					p_spans[first] = { merged_begin, merged_end };
+					++r_count;
+					return;
+				}
+				// Overflow past MAX_HAZARD_SPANS disjoint spans: conservatively collapse
+				// to a single bounding hull covering all recorded spans plus the new span.
+				p_spans[0] = { MIN(p_spans[0].begin, merged_begin), MAX(p_spans[r_count - 1].end, merged_end) };
+				r_count = 1;
 			};
 			auto bump_dispatch_epoch = [&]() {
 				if (++request.dispatch_barrier_epoch == 0) {
 					for (uint32_t r = 0; r < request.resource_count; ++r) {
 						request.resources[r].last_dispatch_write_epoch = 0;
+						request.resources[r].last_dispatch_write_span_count = 0;
+						request.resources[r].last_dispatch_read_epoch = 0;
+						request.resources[r].last_dispatch_read_span_count = 0;
 					}
 					request.dispatch_barrier_epoch = 1;
 				}
@@ -1019,19 +1262,24 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 					if (!use.byte_size || use.resource_slot >= request.resource_count) {
 						continue;
 					}
-					const auto &res = request.resources[use.resource_slot];
-					if (res.last_dispatch_write_epoch != epoch) {
-						continue;
-					}
+					const auto &res = request.resources[canonical_slot(use.resource_slot)];
 					const uint64_t use_begin = use.byte_offset;
 					const uint64_t use_end = range_end(use.byte_offset, use.byte_size);
-					if (res.last_dispatch_write_begin < use_end && use_begin < res.last_dispatch_write_end) {
+					// RAW / WAW: any use overlapping a prior write span in this epoch.
+					if (res.last_dispatch_write_epoch == epoch &&
+							spans_overlap(res.last_dispatch_write_spans, res.last_dispatch_write_span_count, use_begin, use_end)) {
+						needs_barrier = true;
+						break;
+					}
+					// WAR: any write overlapping a prior read span in this epoch.
+					if (is_write_access(use.access) && res.last_dispatch_read_epoch == epoch &&
+							spans_overlap(res.last_dispatch_read_spans, res.last_dispatch_read_span_count, use_begin, use_end)) {
 						needs_barrier = true;
 						break;
 					}
 				}
 				if (needs_barrier) {
-					rd.compute_list_add_barrier(list);
+					rd._compute_list_add_intra_pass_barrier(list);
 					bump_dispatch_epoch();
 				}
 			}
@@ -1039,26 +1287,22 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 				const uint32_t epoch = request.dispatch_barrier_epoch;
 				for (uint32_t use_index = 0; use_index < action.declaration.use_count; ++use_index) {
 					const auto &use = request.uses[action.declaration.first_use + use_index].declaration;
-					if (!use.byte_size || use.resource_slot >= request.resource_count ||
-							(use.access != GDEXTENSION_PRODUCTION_WRITE_V1 &&
-									use.access != GDEXTENSION_PRODUCTION_READ_WRITE_V1 &&
-									use.access != GDEXTENSION_PRODUCTION_ATOMIC_V1)) {
+					if (!use.byte_size || use.resource_slot >= request.resource_count) {
 						continue;
 					}
-					auto &res = request.resources[use.resource_slot];
-					const uint64_t write_begin = use.byte_offset;
-					const uint64_t write_end = range_end(use.byte_offset, use.byte_size);
-					if (res.last_dispatch_write_epoch != epoch) {
-						res.last_dispatch_write_epoch = epoch;
-						res.last_dispatch_write_begin = write_begin;
-						res.last_dispatch_write_end = write_end;
-					} else {
-						if (write_begin < res.last_dispatch_write_begin) {
-							res.last_dispatch_write_begin = write_begin;
-						}
-						if (write_end > res.last_dispatch_write_end) {
-							res.last_dispatch_write_end = write_end;
-						}
+					const bool use_writes = is_write_access(use.access);
+					const bool use_reads = is_read_access(use.access);
+					if (!use_writes && !use_reads) {
+						continue;
+					}
+					auto &res = request.resources[canonical_slot(use.resource_slot)];
+					const uint64_t span_begin = use.byte_offset;
+					const uint64_t span_end = range_end(use.byte_offset, use.byte_size);
+					if (use_writes) {
+						record_span(res.last_dispatch_write_epoch, res.last_dispatch_write_span_count, res.last_dispatch_write_spans, epoch, span_begin, span_end);
+					}
+					if (use_reads) {
+						record_span(res.last_dispatch_read_epoch, res.last_dispatch_read_span_count, res.last_dispatch_read_spans, epoch, span_begin, span_end);
 					}
 				}
 			}
@@ -1097,6 +1341,7 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 			observed.state = CheckedRecordAppend::State::KnownPrefix;
 		}
 	}
+	val_cache.rid_index_active = false;
 	rd.production_recording_request = nullptr;
 	relock_mutex_after_call();
 	CRASH_COND(request.serial != serial || !request.capture_inflight);

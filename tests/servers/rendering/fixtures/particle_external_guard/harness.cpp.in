@@ -23,7 +23,7 @@ Bool2 isnan(vec2 v){return {std::isnan(v.x),std::isnan(v.y)};} Bool2 isinf(vec2 
 Bool3 lessThan(vec3 a,vec3 b){return {a.x<b.x,a.y<b.y,a.z<b.z};}
 Bool3 lessThanEqual(vec3 a,vec3 b){return {a.x<=b.x,a.y<=b.y,a.z<=b.z};}
 Bool2 notEqual(uvec2 a,uvec2 b){return {a.x!=b.x,a.y!=b.y};} Bool3 notEqual(uvec3 a,uvec3 b){return {a.x!=b.x,a.y!=b.y,a.z!=b.z};}
-void atomicOr(uint &target,uint value){target|=value;} void atomicMin(uint &target,uint value){target=min(target,value);}
+void atomicOr(uint &target,uint value){target|=value;} void atomicMin(uint &target,uint value){target=min(target,value);} void atomicAdd(uint &target,uint value){target+=value;}
 template<class T>struct Array:std::vector<T>{using std::vector<T>::operator=;int length()const{return int(this->size());}};
 struct Buffer{Array<uint>words;}current_records,previous_records,output_meta,scratch,status,commands,instance_aux_params;
 // Distinct descriptors can deliberately refer to one actual source allocation.

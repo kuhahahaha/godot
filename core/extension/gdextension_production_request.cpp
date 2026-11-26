@@ -51,40 +51,140 @@
 #include <optional>
 #include <type_traits>
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(__linux__)
 #include <sys/mman.h>
 #include <unistd.h>
 #endif
 
 namespace GDExtensionDeviceExit {
 namespace {
-size_t reclaim_arena_pod_pages(void *p_base, size_t p_byte_len) {
+bool compute_aligned_pod_page_range(void *p_base, size_t p_byte_len, uintptr_t &r_aligned_start, size_t &r_aligned_len) {
+	r_aligned_start = 0;
+	r_aligned_len = 0;
 	if (!p_base || p_byte_len == 0) {
-		return 0;
+		return false;
 	}
-#if defined(__APPLE__) && defined(MADV_FREE_REUSABLE)
+#if (defined(__APPLE__) && defined(MADV_FREE_REUSABLE)) || (defined(__linux__) && defined(MADV_DONTNEED))
 	const long raw_page = sysconf(_SC_PAGESIZE);
 	if (raw_page <= 0) {
-		return 0;
+		return false;
 	}
 	const uintptr_t page_size = uintptr_t(raw_page);
 	const uintptr_t start = reinterpret_cast<uintptr_t>(p_base);
 	if (UINTPTR_MAX - start < p_byte_len) {
-		return 0;
+		return false;
 	}
 	const uintptr_t end = start + p_byte_len;
 	const uintptr_t rem = start % page_size;
 	const uintptr_t aligned_start = rem == 0 ? start : (start <= UINTPTR_MAX - (page_size - rem) ? start + (page_size - rem) : end);
 	const uintptr_t aligned_end = end - (end % page_size);
 	if (aligned_end <= aligned_start) {
+		return false;
+	}
+	r_aligned_start = aligned_start;
+	r_aligned_len = size_t(aligned_end - aligned_start);
+	return true;
+#else
+	return false;
+#endif
+}
+size_t reclaim_arena_pod_pages(void *p_base, size_t p_byte_len) {
+	uintptr_t aligned_start = 0;
+	size_t aligned_len = 0;
+	if (!compute_aligned_pod_page_range(p_base, p_byte_len, aligned_start, aligned_len)) {
 		return 0;
 	}
-	const size_t aligned_len = size_t(aligned_end - aligned_start);
-	if (madvise(reinterpret_cast<void *>(aligned_start), aligned_len, MADV_FREE_REUSABLE) == 0) {
+#if defined(__APPLE__) && defined(MADV_FREE_REUSABLE)
+	constexpr int advice = MADV_FREE_REUSABLE;
+#elif defined(__linux__) && defined(MADV_DONTNEED)
+	constexpr int advice = MADV_DONTNEED;
+#endif
+#if (defined(__APPLE__) && defined(MADV_FREE_REUSABLE)) || (defined(__linux__) && defined(MADV_DONTNEED))
+	if (madvise(reinterpret_cast<void *>(aligned_start), aligned_len, advice) == 0) {
 		return aligned_len;
 	}
 #endif
 	return 0;
+}
+void *alloc_production_arena(size_t p_bytes, size_t &r_mmap_bytes) {
+	r_mmap_bytes = 0;
+	if (p_bytes == 0) {
+		return nullptr;
+	}
+#if (defined(__APPLE__) || defined(__linux__)) && (defined(MAP_ANONYMOUS) || defined(MAP_ANON))
+	const long raw_page = sysconf(_SC_PAGESIZE);
+	if (raw_page > 0) {
+		const size_t page_size = size_t(raw_page);
+		if (p_bytes <= SIZE_MAX - (page_size - 1)) {
+			const size_t mapped_bytes = (p_bytes + page_size - 1) & ~(page_size - 1);
+#if defined(MAP_ANONYMOUS)
+			constexpr int anon_flag = MAP_ANONYMOUS;
+#else
+			constexpr int anon_flag = MAP_ANON;
+#endif
+			void *mapped = mmap(nullptr, mapped_bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | anon_flag, -1, 0);
+			if (mapped != MAP_FAILED) {
+				r_mmap_bytes = mapped_bytes;
+				return mapped;
+			}
+			return nullptr;
+		}
+	}
+#endif
+	return Memory::alloc_static_zeroed(p_bytes);
+}
+void free_production_arena(void *p_arena, size_t p_mmap_bytes) {
+	if (!p_arena) {
+		return;
+	}
+#if (defined(__APPLE__) || defined(__linux__)) && (defined(MAP_ANONYMOUS) || defined(MAP_ANON))
+	if (p_mmap_bytes > 0) {
+		munmap(p_arena, p_mmap_bytes);
+		return;
+	}
+#endif
+	Memory::free_static(p_arena);
+}
+template <typename ActionArrayT>
+uint32_t count_max_action_storage_uses(const ActionArrayT &p_actions, uint32_t p_action_count, const GDExtensionProductionResourceV1 *p_resources, uint32_t p_resource_count, const GDExtensionProductionUseV1 *p_uses) {
+	if (!p_action_count || !p_resource_count) {
+		return 0;
+	}
+	constexpr uint32_t STACK_CAP = 512;
+	uint32_t seen_stack[STACK_CAP];
+	LocalVector<uint32_t> seen_heap;
+	uint32_t *seen = seen_stack;
+	if (p_resource_count <= STACK_CAP) {
+		std::memset(seen_stack, 0, sizeof(uint32_t) * p_resource_count);
+	} else {
+		seen_heap.resize(p_resource_count);
+		std::memset(seen_heap.ptr(), 0, sizeof(uint32_t) * p_resource_count);
+		seen = seen_heap.ptr();
+	}
+	uint32_t max_storages = 0;
+	uint32_t stamp = 0;
+	for (uint32_t i = 0; i < p_action_count; ++i) {
+		const auto &action = p_actions[i];
+		if (!action.use_count) {
+			continue;
+		}
+		if (++stamp == 0) {
+			std::memset(seen, 0, sizeof(uint32_t) * p_resource_count);
+			stamp = 1;
+		}
+		uint32_t storages = 0;
+		for (uint32_t u = 0; u < action.use_count; ++u) {
+			const uint32_t slot = p_uses[action.first_use + u].resource_slot;
+			if (p_resources[slot].resource_kind == GDEXTENSION_PRODUCTION_STORAGE_V1 && seen[slot] != stamp) {
+				seen[slot] = stamp;
+				++storages;
+			}
+		}
+		if (storages > max_storages) {
+			max_storages = storages;
+		}
+	}
+	return max_storages;
 }
 GDExtensionDeviceSessionResultV1 result(Error e, uint32_t reason = 0) {
 	return { int32_t(e), reason, 0, 0 };
@@ -296,7 +396,6 @@ GDExtensionDeviceSessionResultV1 Registry::production_request_requirements_inter
 			return result(ERR_INVALID_DATA);
 		}
 	}
-	uint32_t worker_bound = 0;
 	for (uint32_t i = 0; i < action_count; ++i) {
 		const auto &action = actions[i];
 		if (action.action_ordinal != i || action.source_recipe_reserved || action.first_use > use_count || action.use_count > use_count - action.first_use) {
@@ -311,17 +410,8 @@ GDExtensionDeviceSessionResultV1 Registry::production_request_requirements_inter
 				(action.physical_unit != UINT32_MAX || action.readback_slot != UINT32_MAX || action.use_count != 0 || action.list_boundary > GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1)) {
 			return result(ERR_INVALID_DATA);
 		}
-		uint32_t storages = 0;
-		for (uint32_t u = 0; u < action.use_count; ++u) {
-			const uint32_t slot = uses[action.first_use + u].resource_slot;
-			bool duplicate = false;
-			for (uint32_t before = 0; before < u; ++before) {
-				duplicate |= uses[action.first_use + before].resource_slot == slot;
-			}
-			storages += resources[slot].resource_kind == GDEXTENSION_PRODUCTION_STORAGE_V1 && !duplicate;
-		}
-		worker_bound = MAX(worker_bound, storages);
 	}
+	uint32_t worker_bound = count_max_action_storage_uses(actions, action_count, resources, resource_count, uses);
 	if (!rd || !rd->_thread_safe_.try_lock()) {
 		return result(ERR_BUSY);
 	}
@@ -348,7 +438,26 @@ GDExtensionDeviceSessionResultV1 Registry::production_request_requirements_inter
 				return result(ERR_INVALID_DATA);
 			}
 		}
-		error = production_output_demand_locked(*attachment, *rd, input, projected.write[i], uint64_t(pool.resource_uses - capacity.resource_uses));
+		uint32_t occupied_uses = 0;
+		for (uint32_t r_idx = 0; r_idx < pool.requests; ++r_idx) {
+			const auto &live_req = attachment->requests[r_idx];
+			if (live_req.serial) {
+				occupied_uses += live_req.capacity.resource_uses;
+			}
+		}
+		const uint32_t remaining_pool_uses = pool.resource_uses > occupied_uses ? (pool.resource_uses - occupied_uses) : 0u;
+		const uint64_t avail_use_cells = remaining_pool_uses > capacity.resource_uses ? uint64_t(remaining_pool_uses - capacity.resource_uses) : 0ull;
+		uint32_t acquire_alias_uses = 0;
+		const auto &acquire_action = actions[input.acquire_action_ordinal];
+		if (acquire_action.first_use <= use_count && acquire_action.use_count <= use_count - acquire_action.first_use) {
+			for (uint32_t u = 0; u < acquire_action.use_count; ++u) {
+				const auto &use = uses[acquire_action.first_use + u];
+				if (use.resource_slot < resource_count && resources[use.resource_slot].ownership == GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1) {
+					++acquire_alias_uses;
+				}
+			}
+		}
+		error = production_output_demand_locked(*attachment, *rd, input, projected.write[i], avail_use_cells, acquire_alias_uses >= 4u);
 		if (error != OK) {
 			return result(error);
 		}
@@ -580,6 +689,68 @@ GDExtensionDeviceSessionResultV1 Registry::production_quote(const GDExtensionDev
 	*out = quote;
 	return result(OK);
 }
+struct ProductionRequestLoc {
+	uint32_t attachment_slot = UINT32_MAX;
+	uint32_t request_index = UINT32_MAX;
+};
+
+struct ProductionSerialIndex {
+	HashMap<uint64_t, uint32_t> attachment_slot_by_serial;
+	HashMap<uint64_t, ProductionRequestLoc> request_loc_by_serial;
+};
+
+static HashMap<const Registry *, ProductionSerialIndex> &production_non_singleton_serial_indices() {
+	static HashMap<const Registry *, ProductionSerialIndex> map;
+	return map;
+}
+
+static ProductionSerialIndex &production_serial_index_for(const Registry &p_registry) {
+	static ProductionSerialIndex singleton_index;
+	if (&p_registry == &Registry::get_singleton()) {
+		return singleton_index;
+	}
+	return production_non_singleton_serial_indices()[&p_registry];
+}
+
+static ProductionSerialIndex *production_serial_index_find(const Registry &p_registry) {
+	if (&p_registry == &Registry::get_singleton()) {
+		return &production_serial_index_for(p_registry);
+	}
+	return production_non_singleton_serial_indices().getptr(&p_registry);
+}
+
+static void production_serial_index_prune_if_empty(const Registry &p_registry) {
+	if (&p_registry == &Registry::get_singleton()) {
+		return;
+	}
+	auto &map = production_non_singleton_serial_indices();
+	if (ProductionSerialIndex *idx = map.getptr(&p_registry)) {
+		if (idx->attachment_slot_by_serial.is_empty() && idx->request_loc_by_serial.is_empty()) {
+			map.erase(&p_registry);
+		}
+	}
+}
+
+bool production_serial_index_has_attachment(const Registry &p_registry, uint64_t p_serial) {
+	const ProductionSerialIndex *idx = production_serial_index_find(p_registry);
+	return idx && idx->attachment_slot_by_serial.has(p_serial);
+}
+
+bool production_serial_index_has_request(const Registry &p_registry, uint64_t p_serial) {
+	const ProductionSerialIndex *idx = production_serial_index_find(p_registry);
+	return idx && idx->request_loc_by_serial.has(p_serial);
+}
+
+uint32_t production_serial_index_attachment_count(const Registry &p_registry) {
+	const ProductionSerialIndex *idx = production_serial_index_find(p_registry);
+	return idx ? idx->attachment_slot_by_serial.size() : 0u;
+}
+
+uint32_t production_serial_index_request_count(const Registry &p_registry) {
+	const ProductionSerialIndex *idx = production_serial_index_find(p_registry);
+	return idx ? idx->request_loc_by_serial.size() : 0u;
+}
+
 GDExtensionDeviceSessionResultV1 Registry::production_accept(const GDExtensionDeviceExitAbi *a, GDExtensionDeviceExitSceneReadyContextRef frame, GDExtensionProducerRegistrationRefV1 producer, GDExtensionDeviceRegistryContextRef context, GDExtensionOriginalDeviceSessionRef session, GDExtensionDeviceExitLibraryCodeHoldRef code, const GDExtensionProductionMetadataQuoteV1 *input, GDExtensionProductionAttachmentRefV1 *out, GDExtensionProductionInstallationReportV1 *report) {
 	if (!aligned(a) || !abi(*a) || !aligned(input) || !production_dto_valid(*input) || !aligned(out) || !aligned(report) || !separate(out, sizeof(*out), report, sizeof(*report)) || out->registry_instance || out->handle_serial) {
 		return result(ERR_INVALID_PARAMETER, 2);
@@ -636,12 +807,13 @@ GDExtensionDeviceSessionResultV1 Registry::production_accept(const GDExtensionDe
 	if (slot == INVALID_SLOT || production_serials.exhausted || frame_serials.exhausted || record.private_refs >= private_limit || d.refs == UINT32_MAX || holder->production_children == UINT32_MAX || quote.cleanup_slots > UINT32_MAX - record.cleanup_reservations || uint64_t(record.active_callbacks) + record.cleanup_reservations + quote.cleanup_slots > UINT32_MAX || quote.cleanup_slots > UINT32_MAX - record.cleanup_by_phase[uint8_t(CleanupPhase::BINDING)]) {
 		return result(ERR_PARAMETER_RANGE_ERROR, 19);
 	}
-	// Allocate zero-initialized demand-paged virtual memory (calloc) so large
-	// contiguous production arenas do not pre-fault hundreds of MiB of RSS at
-	// SceneReady. Only ProductionAttachment and the small requests table are
-	// eagerly constructed; all other cell pools construct lazily via per-pool
-	// high-water marks (BUG-76 / RAM-2).
-	void *arena = Memory::alloc_static_zeroed(quote.allocation_bytes);
+	// Allocate demand-paged anonymous virtual memory (mmap on macOS/Linux, calloc
+	// fallback elsewhere) so large contiguous production arenas do not pre-fault
+	// RSS or bloat DefaultMallocZone Malloc Large. Only ProductionAttachment and
+	// the small requests table are eagerly constructed; all other cell pools
+	// construct lazily via per-pool high-water marks (BUG-76 / BUG-183B-2).
+	size_t arena_mmap_bytes = 0;
+	void *arena = alloc_production_arena(size_t(quote.allocation_bytes), arena_mmap_bytes);
 	if (!arena) {
 		return result(ERR_OUT_OF_MEMORY, 19);
 	}
@@ -687,6 +859,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_accept(const GDExtensionDe
 	CRASH_COND(!frame_serials.take(attachment->metadata_frame));
 	attachment->quote = quote;
 	attachment->arena = arena;
+	attachment->arena_mmap_bytes = arena_mmap_bytes;
 	attachment->held_device = Object::cast_to<RenderingDevice>(d.object);
 	attachment->terminal_action = holder->terminal_action;
 	attachment->entity_next = attachment->held_device->production_entity_holds;
@@ -701,7 +874,9 @@ GDExtensionDeviceSessionResultV1 Registry::production_accept(const GDExtensionDe
 	record.cleanup_reservations += uint32_t(quote.cleanup_slots);
 	record.cleanup_by_phase[uint8_t(CleanupPhase::BINDING)] += uint32_t(quote.cleanup_slots);
 	record.last_attachment_serial = attachment->serial;
+	attachment->registry_slot = slot;
 	production_attachments[slot] = attachment;
+	production_serial_index_for(*this).attachment_slot_by_serial[attachment->serial] = slot;
 	*out = { instance, attachment->serial };
 	*report = { production_dto_abi<GDExtensionProductionInstallationReportV1>(), GDEXTENSION_PRODUCTION_INSTALL_ACCEPTED_V1, 0, quote.allocation_bytes, 0, result(OK) };
 	return result(OK);
@@ -717,38 +892,54 @@ Error Registry::production_attachment_locked(GDExtensionProductionAttachmentRefV
 	if (ref.registry_instance != instance || !ref.handle_serial) {
 		return fail(ERR_INVALID_DATA, "WrongOwner");
 	}
-	for (auto *a : production_attachments) {
-		if (!a || a->serial != ref.handle_serial) {
-			continue;
+	ProductionAttachment *a = nullptr;
+	ProductionSerialIndex *idx = production_serial_index_find(*this);
+	if (idx) {
+		if (const uint32_t *slot = idx->attachment_slot_by_serial.getptr(ref.handle_serial)) {
+			if (*slot < RECORD_CAPACITY && production_attachments[*slot] && production_attachments[*slot]->serial == ref.handle_serial) {
+				a = production_attachments[*slot];
+			} else {
+				idx->attachment_slot_by_serial.erase(ref.handle_serial);
+			}
 		}
-		auto &r = records[a->library];
-		auto &d = device_records[a->device];
-		if (!r.occupied || r.snapshot.library_generation != a->library_generation || r.producer_registration_serial != a->producer_serial || !a->holder || a->holder->pending || a->holder->generation != a->library_generation || a->holder->handle_serial != r.producer_code_holder || !r.producer_attachment_identity) {
-			return fail(ERR_INVALID_DATA, "WrongOwner");
-		}
-		if (r.owner_thread != Thread::get_caller_id()) {
-			return fail(ERR_UNAUTHORIZED, "WrongOwner");
-		}
-		if (admit && is_production_metadata_entry()) {
-			return fail(ERR_UNAUTHORIZED, "WrongOwner");
-		}
-		if (admit && (a->closing || !r.attached || r.quiescing || r.close_started || r.close_error != OK || r.guard_enrollment != GuardEnrollment::QUALIFIED)) {
-			return fail(ERR_BUSY, "Revoked");
-		}
-		if (d.epoch != a->epoch) {
-			return fail(ERR_INVALID_DATA, "WrongDevice");
-		}
-		rd = Object::cast_to<RenderingDevice>(d.object);
-		if (admit && (!d.live || !rd || rd != RenderingDevice::get_singleton() || !rd->is_main_instance)) {
-			return fail(ERR_UNAVAILABLE, "WrongDevice");
-		}
-		if (admit && rd->production_finalization_started.load(std::memory_order_acquire)) {
-			return fail(ERR_BUSY, "Revoked");
-		}
-		out = a;
-		return OK;
 	}
-	return fail(ERR_DOES_NOT_EXIST, "WrongOwner");
+	if (!a) {
+		for (auto *candidate : production_attachments) {
+			if (candidate && candidate->serial == ref.handle_serial) {
+				a = candidate;
+				break;
+			}
+		}
+	}
+	if (!a) {
+		return fail(ERR_DOES_NOT_EXIST, "WrongOwner");
+	}
+	auto &r = records[a->library];
+	auto &d = device_records[a->device];
+	if (!r.occupied || r.snapshot.library_generation != a->library_generation || r.producer_registration_serial != a->producer_serial || !a->holder || a->holder->pending || a->holder->generation != a->library_generation || a->holder->handle_serial != r.producer_code_holder || !r.producer_attachment_identity) {
+		return fail(ERR_INVALID_DATA, "WrongOwner");
+	}
+	if (r.owner_thread != Thread::get_caller_id()) {
+		return fail(ERR_UNAUTHORIZED, "WrongOwner");
+	}
+	if (admit && is_production_metadata_entry()) {
+		return fail(ERR_UNAUTHORIZED, "WrongOwner");
+	}
+	if (admit && (a->closing || !r.attached || r.quiescing || r.close_started || r.close_error != OK || r.guard_enrollment != GuardEnrollment::QUALIFIED)) {
+		return fail(ERR_BUSY, "Revoked");
+	}
+	if (d.epoch != a->epoch) {
+		return fail(ERR_INVALID_DATA, "WrongDevice");
+	}
+	rd = Object::cast_to<RenderingDevice>(d.object);
+	if (admit && (!d.live || !rd || rd != RenderingDevice::get_singleton() || !rd->is_main_instance)) {
+		return fail(ERR_UNAVAILABLE, "WrongDevice");
+	}
+	if (admit && rd->production_finalization_started.load(std::memory_order_acquire)) {
+		return fail(ERR_BUSY, "Revoked");
+	}
+	out = a;
+	return OK;
 }
 Error Registry::production_request_locked(GDExtensionProductionRequestRefV1 ref, bool admit, ProductionRequest *&out, RenderingDevice *&rd, bool p_allow_static_sealed, StringName *detail) {
 	if (detail) *detail = StringName();
@@ -761,25 +952,54 @@ Error Registry::production_request_locked(GDExtensionProductionRequestRefV1 ref,
 	if (ref.registry_instance != instance || !ref.handle_serial) {
 		return fail(ERR_INVALID_DATA, "WrongOwner");
 	}
-	for (auto *a : production_attachments) {
-		if (!a) {
-			continue;
+	auto validate_match = [&](ProductionAttachment *a, ProductionRequest &r) -> Error {
+		ProductionAttachment *checked = nullptr;
+		Error e = production_attachment_locked({ instance, a->serial }, admit, checked, rd, detail);
+		if (e != OK) {
+			return e;
 		}
-		for (uint32_t i = 0; i < a->quote.capacity.requests; ++i) {
-			auto &r = a->requests[i];
-			if (r.serial != ref.handle_serial) {
+		if (checked != a || r.attachment != a || (admit && (r.cancelled || r.release_started || (r.native_static_sealed && !r.frozen && !p_allow_static_sealed) || r.continuation_inflight || r.control.state != ProductionControlState::OWNER_CONSUMED))) {
+			return fail(ERR_BUSY, (checked != a || r.attachment != a) ? "WrongOwner" : "Revoked");
+		}
+		out = &r;
+		return OK;
+	};
+	ProductionSerialIndex *idx = production_serial_index_find(*this);
+	if (idx) {
+		if (const ProductionRequestLoc *loc = idx->request_loc_by_serial.getptr(ref.handle_serial)) {
+			if (loc->attachment_slot < RECORD_CAPACITY) {
+				ProductionAttachment *cand_att = production_attachments[loc->attachment_slot];
+				if (cand_att && cand_att->requests && loc->request_index < cand_att->quote.capacity.requests) {
+					ProductionRequest &cand_req = cand_att->requests[loc->request_index];
+					if (cand_req.serial == ref.handle_serial && cand_req.attachment == cand_att) {
+						return validate_match(cand_att, cand_req);
+					}
+				}
+			}
+			idx->request_loc_by_serial.erase(ref.handle_serial);
+		}
+	}
+	bool has_live_indexed_attachment = false;
+	if (idx) {
+		for (const KeyValue<uint64_t, uint32_t> &kv : idx->attachment_slot_by_serial) {
+			if (kv.value < RECORD_CAPACITY && production_attachments[kv.value] && production_attachments[kv.value]->serial == kv.key) {
+				has_live_indexed_attachment = true;
+				break;
+			}
+		}
+	}
+	if (!has_live_indexed_attachment) {
+		for (auto *a : production_attachments) {
+			if (!a) {
 				continue;
 			}
-			ProductionAttachment *checked = nullptr;
-			Error e = production_attachment_locked({ instance, a->serial }, admit, checked, rd, detail);
-			if (e != OK) {
-				return e;
+			for (uint32_t i = 0; i < a->quote.capacity.requests; ++i) {
+				auto &r = a->requests[i];
+				if (r.serial != ref.handle_serial) {
+					continue;
+				}
+				return validate_match(a, r);
 			}
-			if (r.attachment != a || (admit && (r.cancelled || r.release_started || (r.native_static_sealed && !r.frozen && !p_allow_static_sealed) || r.continuation_inflight || r.control.state != ProductionControlState::OWNER_CONSUMED))) {
-				return fail(ERR_BUSY, r.attachment != a ? "WrongOwner" : "Revoked");
-			}
-			out = &r;
-			return OK;
 		}
 	}
 	return fail(ERR_DOES_NOT_EXIST, "WrongOwner");
@@ -911,46 +1131,67 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 			return ERR_INVALID_DATA;
 		}
 	}
+	bool has_guard_readback = false;
 	for (uint32_t i = 0; i < readback_count; ++i) {
-		const bool incoming = readbacks[i].source_kind == GDEXTENSION_PRODUCTION_READBACK_RETAINED_INCOMING_V1;
-		bool producer = false, copy = false;
-		for (uint32_t j = 0; j < action_count; ++j) {
-			if (!incoming) {
-				producer |= actions[j].action_ordinal == readbacks[i].producer_action_ordinal;
-			}
-			copy |= actions[j].action_ordinal == readbacks[i].copy_action_ordinal && actions[j].action_kind == GDEXTENSION_PRODUCTION_READBACK_V1 && actions[j].readback_slot == i;
+		if (readbacks[i].source_kind == GDEXTENSION_PRODUCTION_READBACK_NATIVE_OUTPUT_GUARD_V1) {
+			has_guard_readback = true;
+			break;
 		}
-		if ((!incoming && !producer) || !copy) {
+	}
+	LocalVector<uint32_t> guard_use_ref_count;
+	LocalVector<uint32_t> guard_action_use_ref_count;
+	LocalVector<uint32_t> guard_readback_slot_count;
+	if (has_guard_readback) {
+		guard_use_ref_count.resize(resource_count);
+		guard_action_use_ref_count.resize(resource_count);
+		guard_readback_slot_count.resize(resource_count);
+		std::memset(guard_use_ref_count.ptr(), 0, sizeof(uint32_t) * resource_count);
+		std::memset(guard_action_use_ref_count.ptr(), 0, sizeof(uint32_t) * resource_count);
+		std::memset(guard_readback_slot_count.ptr(), 0, sizeof(uint32_t) * resource_count);
+		for (uint32_t u = 0; u < use_count; ++u) {
+			++guard_use_ref_count[uses[u].resource_slot];
+		}
+		for (uint32_t a_idx = 0; a_idx < action_count; ++a_idx) {
+			const auto &act = actions[a_idx];
+			for (uint32_t u = 0; u < act.use_count; ++u) {
+				++guard_action_use_ref_count[uses[act.first_use + u].resource_slot];
+			}
+		}
+		for (uint32_t i = 0; i < readback_count; ++i) {
+			++guard_readback_slot_count[readbacks[i].resource_slot];
+		}
+	}
+	for (uint32_t i = 0; i < readback_count; ++i) {
+		const auto &readback = readbacks[i];
+		const bool incoming = readback.source_kind == GDEXTENSION_PRODUCTION_READBACK_RETAINED_INCOMING_V1;
+		// actions[j].action_ordinal == j and copy_action_ordinal < action_count are already validated above.
+		const bool producer = incoming || readback.producer_action_ordinal < action_count;
+		const auto &copy_action = actions[uint32_t(readback.copy_action_ordinal)];
+		const bool copy = copy_action.action_kind == GDEXTENSION_PRODUCTION_READBACK_V1 && copy_action.readback_slot == i;
+		if (!producer || !copy) {
 			return ERR_INVALID_DATA;
 		}
-		if (readbacks[i].source_kind == GDEXTENSION_PRODUCTION_READBACK_NATIVE_OUTPUT_GUARD_V1) {
-			const auto &readback = readbacks[i];
-			if (actions[readback.producer_action_ordinal].action_kind != GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1) { return ERR_INVALID_DATA; }
-			bool covered = false;
-			for (uint32_t a = 0; a < action_count; ++a) {
-				for (uint32_t u = 0; u < actions[a].use_count; ++u) {
-					const auto &use = uses[actions[a].first_use + u];
-					if (use.resource_slot != readback.resource_slot) { continue; }
-					if (a != readback.copy_action_ordinal || use.access != GDEXTENSION_PRODUCTION_READ_V1 || use.byte_offset || use.byte_size != 32) { return ERR_INVALID_DATA; }
-					covered = true;
-				}
+		if (readback.source_kind == GDEXTENSION_PRODUCTION_READBACK_NATIVE_OUTPUT_GUARD_V1) {
+			if (actions[uint32_t(readback.producer_action_ordinal)].action_kind != GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1) { return ERR_INVALID_DATA; }
+			if (guard_readback_slot_count[readback.resource_slot] != 1u) { return ERR_INVALID_DATA; }
+			uint32_t matching_in_copy = 0;
+			for (uint32_t u = 0; u < copy_action.use_count; ++u) {
+				const auto &use = uses[copy_action.first_use + u];
+				if (use.resource_slot != readback.resource_slot) { continue; }
+				if (use.access != GDEXTENSION_PRODUCTION_READ_V1 || use.byte_offset || use.byte_size != 32) { return ERR_INVALID_DATA; }
+				++matching_in_copy;
 			}
-			if (!covered) { return ERR_INVALID_DATA; }
-			const auto &copy_action = actions[readback.copy_action_ordinal];
-			for (uint32_t u = 0; u < use_count; ++u) {
-				if (uses[u].resource_slot == readback.resource_slot && (u < copy_action.first_use || u - copy_action.first_use >= copy_action.use_count || uses[u].access != GDEXTENSION_PRODUCTION_READ_V1 || uses[u].byte_offset || uses[u].byte_size != 32)) { return ERR_INVALID_DATA; }
-			}
-			for (uint32_t other = 0; other < readback_count; ++other) {
-				if (other != i && readbacks[other].resource_slot == readback.resource_slot) { return ERR_INVALID_DATA; }
+			if (matching_in_copy == 0 ||
+					matching_in_copy != guard_use_ref_count[readback.resource_slot] ||
+					matching_in_copy != guard_action_use_ref_count[readback.resource_slot]) {
+				return ERR_INVALID_DATA;
 			}
 			continue;
 		}
 		if (incoming) {
-			const auto &readback = readbacks[i];
-			const auto &action = actions[uint32_t(readback.copy_action_ordinal)];
 			bool covered = false;
-			for (uint32_t u = 0; u < action.use_count; ++u) {
-				const auto &use = uses[action.first_use + u];
+			for (uint32_t u = 0; u < copy_action.use_count; ++u) {
+				const auto &use = uses[copy_action.first_use + u];
 				covered |= use.resource_slot == readback.resource_slot &&
 						(use.access == GDEXTENSION_PRODUCTION_READ_V1 || use.access == GDEXTENSION_PRODUCTION_READ_WRITE_V1) &&
 						readback.byte_offset >= use.byte_offset && range(readback.byte_offset - use.byte_offset, readback.byte_size, use.byte_size);
@@ -961,7 +1202,6 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 			continue;
 		}
 		if (contract_version == 2) {
-			const auto &readback = readbacks[i];
 			const auto &writer = actions[uint32_t(readback.producer_action_ordinal)];
 			bool covered = false;
 			for (uint32_t u = 0; u < writer.use_count; ++u) {
@@ -979,33 +1219,17 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	}
 	// Check this request's own slice, not just the accepted attachment pool.
 	// Distinct declared storage uses bound exact worker dependencies per action.
-	uint32_t worker_bound = 0;
+	uint32_t worker_bound = count_max_action_storage_uses(actions, action_count, resources, resource_count, uses);
+	bool is_native_output = false;
 	for (uint32_t i = 0; i < action_count; ++i) {
-		const auto &action = actions[i];
-		uint32_t storages = 0;
-		for (uint32_t u = 0; u < action.use_count; ++u) {
-			const uint32_t slot = uses[action.first_use + u].resource_slot;
-			if (resources[slot].resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1) {
-				continue;
-			}
-			bool duplicate = false;
-			for (uint32_t before = 0; before < u; ++before) {
-				duplicate |= uses[action.first_use + before].resource_slot == slot;
-			}
-			storages += !duplicate;
-		}
-		worker_bound = MAX(worker_bound, storages);
+		is_native_output |= actions[i].action_kind == GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1;
 	}
 	if (!rd || !rd->_thread_safe_.try_lock()) {
 		return ERR_BUSY;
 	}
 	{
 		RdUnlock unlock{ rd->_thread_safe_ };
-		bool native_output = false;
-		for (uint32_t i = 0; i < action_count; ++i) {
-			native_output |= actions[i].action_kind == GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1;
-		}
-		worker_bound = native_output ? rd->transfer_worker_pool_max_size : MIN(worker_bound, rd->transfer_worker_pool_max_size);
+		worker_bound = is_native_output ? rd->transfer_worker_pool_max_size : MIN(worker_bound, rd->transfer_worker_pool_max_size);
 		uint32_t memberships = 0;
 		e = production_membership_bound_locked(*rd, c.graph_memberships, worker_bound, memberships);
 		if (e != OK) {
@@ -1031,7 +1255,7 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	if (!r) {
 		return ERR_BUSY;
 	}
-	auto find_free_cells = [](auto *cells, uint32_t total, uint32_t hwm, uint32_t count, uint32_t &out_need_hwm) {
+	auto find_free_cells = [](auto *cells, uint32_t total, uint32_t hwm, uint32_t free_cursor, uint32_t count, uint32_t &out_need_hwm) {
 		using T = std::remove_pointer_t<decltype(cells)>;
 		out_need_hwm = hwm;
 		if (!count) {
@@ -1040,8 +1264,9 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 		if (count > total) {
 			return static_cast<T *>(nullptr);
 		}
+		const uint32_t scan_begin = MIN(free_cursor, hwm);
 		uint32_t run = 0;
-		for (uint32_t i = 0; i < hwm; ++i) {
+		for (uint32_t i = scan_begin; i < hwm; ++i) {
 			run = cells[i].request ? 0 : run + 1;
 			if (run == count) {
 				return &cells[i + 1 - count];
@@ -1054,13 +1279,41 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 		out_need_hwm = start + count;
 		return &cells[start];
 	};
-	auto free_natives = [&](uint32_t count, uint32_t total, uint32_t &offset) {
+	auto free_natives = [&](uint32_t count, uint32_t total, bool top_down, uint32_t &offset) {
 		offset = 0;
 		if (!count) {
 			return true;
 		}
+		if (count > total) {
+			return false;
+		}
+		if (top_down) {
+			offset = total - count;
+			for (;;) {
+				bool moved = false;
+				for (uint32_t i = 0; i < a.quote.capacity.requests; ++i) {
+					const auto &q = a.requests[i];
+					if (!q.serial || !q.capacity.native_memberships) {
+						continue;
+					}
+					const uint64_t start = q.natives_offset;
+					const uint64_t end = start + q.capacity.native_memberships;
+					if (uint64_t(offset) < end && start < uint64_t(offset) + count) {
+						if (start < count) {
+							return false;
+						}
+						offset = uint32_t(start - count);
+						moved = true;
+						break;
+					}
+				}
+				if (!moved) {
+					return true;
+				}
+			}
+		}
 		for (;;) {
-			if (count > total || offset > total - count) {
+			if (offset > total - count) {
 				return false;
 			}
 			bool moved = false;
@@ -1088,21 +1341,21 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	uint32_t need_actions_hwm = a.actions_hwm, need_resources_hwm = a.resources_hwm, need_uses_hwm = a.uses_hwm;
 	uint32_t need_readbacks_hwm = a.readbacks_hwm, need_graphs_hwm = a.graphs_hwm, need_returns_hwm = a.returns_hwm;
 	uint32_t need_commands_hwm = a.commands_hwm, need_frames_hwm = a.frames_hwm;
-	auto *ac = find_free_cells(a.actions, a.quote.capacity.suboperations, a.actions_hwm, c.suboperations, need_actions_hwm);
-	auto *rc = find_free_cells(a.resources, a.quote.capacity.resources, a.resources_hwm, c.resources, need_resources_hwm);
-	auto *uc = find_free_cells(a.uses, a.quote.capacity.resource_uses, a.uses_hwm, c.resource_uses, need_uses_hwm);
-	auto *bc = find_free_cells(a.readbacks, a.quote.capacity.readbacks, a.readbacks_hwm, c.readbacks, need_readbacks_hwm);
-	auto *gc = find_free_cells(a.graphs, a.quote.capacity.graph_memberships, a.graphs_hwm, c.graph_memberships, need_graphs_hwm);
+	auto *ac = find_free_cells(a.actions, a.quote.capacity.suboperations, a.actions_hwm, a.actions_free_cursor, c.suboperations, need_actions_hwm);
+	auto *rc = find_free_cells(a.resources, a.quote.capacity.resources, a.resources_hwm, a.resources_free_cursor, c.resources, need_resources_hwm);
+	auto *uc = find_free_cells(a.uses, a.quote.capacity.resource_uses, a.uses_hwm, a.uses_free_cursor, c.resource_uses, need_uses_hwm);
+	auto *bc = find_free_cells(a.readbacks, a.quote.capacity.readbacks, a.readbacks_hwm, a.readbacks_free_cursor, c.readbacks, need_readbacks_hwm);
+	auto *gc = find_free_cells(a.graphs, a.quote.capacity.graph_memberships, a.graphs_hwm, a.graphs_free_cursor, c.graph_memberships, need_graphs_hwm);
 	uint32_t natives_offset = 0;
-	auto *nc = free_natives(c.native_memberships, a.quote.capacity.native_memberships, natives_offset) ? (c.native_memberships ? &a.natives[natives_offset] : a.natives) : nullptr;
-	auto *tc = find_free_cells(a.returns, a.quote.capacity.return_cells, a.returns_hwm, c.return_cells, need_returns_hwm);
+	auto *nc = free_natives(c.native_memberships, a.quote.capacity.native_memberships, is_native_output, natives_offset) ? (c.native_memberships ? &a.natives[natives_offset] : a.natives) : nullptr;
+	auto *tc = find_free_cells(a.returns, a.quote.capacity.return_cells, a.returns_hwm, a.returns_free_cursor, c.return_cells, need_returns_hwm);
 	GDExtensionProductionMetadataQuoteV1 request_quote = {};
 	e = production_device_quote_locked(*rd, c, request_quote, worker_bound);
 	if (e != OK) {
 		return e;
 	}
-	auto *cc = find_free_cells(a.commands, uint32_t(a.quote.graph_slots), a.commands_hwm, uint32_t(request_quote.graph_slots), need_commands_hwm);
-	auto *fc = find_free_cells(a.frames, uint32_t(a.quote.graph_frames), a.frames_hwm, uint32_t(request_quote.graph_frames), need_frames_hwm);
+	auto *cc = find_free_cells(a.commands, uint32_t(a.quote.graph_slots), a.commands_hwm, a.commands_free_cursor, uint32_t(request_quote.graph_slots), need_commands_hwm);
+	auto *fc = find_free_cells(a.frames, uint32_t(a.quote.graph_frames), a.frames_hwm, a.frames_free_cursor, uint32_t(request_quote.graph_frames), need_frames_hwm);
 	if ((c.suboperations && !ac) || (c.resources && !rc) || (c.resource_uses && !uc) || (c.readbacks && !bc) || (c.graph_memberships && !gc) || (c.native_memberships && !nc) || (c.return_cells && !tc) || (request_quote.graph_slots && !cc) || (request_quote.graph_frames && !fc)) {
 		// Declared cell counts already fit the accepted pool. A changed RD
 		// prefix can still make this request's derived capture slice too large.
@@ -1111,8 +1364,41 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 		}
 		return ERR_BUSY;
 	}
-	auto free_bytes = [&](uint64_t bytes, uint64_t total, bool readback, uint64_t &offset) {
-		offset = readback ? 0 : a.scene_prefix_bytes;
+	auto free_bytes = [&](uint64_t bytes, uint64_t total, bool readback, bool top_down, uint64_t &offset) {
+		const uint64_t min_offset = readback ? 0 : a.scene_prefix_bytes;
+		if (top_down) {
+			if (!bytes) {
+				offset = total;
+				return true;
+			}
+			if (total < min_offset || bytes > total - min_offset) {
+				return false;
+			}
+			offset = total - bytes;
+			for (;;) {
+				bool moved = false;
+				for (uint32_t i = 0; i < a.quote.capacity.requests; ++i) {
+					const auto &q = a.requests[i];
+					if (!q.serial) {
+						continue;
+					}
+					const uint64_t start = readback ? q.readback_offset : q.payload_offset;
+					const uint64_t size = readback ? q.capacity.readback_bytes : q.capacity.retained_payload_bytes;
+					if (size && offset < start + size && start < offset + bytes) {
+						if (start < min_offset || start - min_offset < bytes) {
+							return false;
+						}
+						offset = start - bytes;
+						moved = true;
+						break;
+					}
+				}
+				if (!moved) {
+					return true;
+				}
+			}
+		}
+		offset = min_offset;
 		for (;;) {
 			if (!range(offset, bytes, total)) {
 				return false;
@@ -1142,8 +1428,8 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
 	uint64_t payload = 0, readback = 0;
-	if (!free_bytes(c.retained_payload_bytes, a.quote.capacity.retained_payload_bytes, false, payload) ||
-			!free_bytes(c.readback_bytes, a.quote.capacity.readback_bytes, true, readback)) {
+	if (!free_bytes(c.retained_payload_bytes, a.quote.capacity.retained_payload_bytes, false, false, payload) ||
+			!free_bytes(c.readback_bytes, a.quote.capacity.readback_bytes, true, is_native_output, readback)) {
 		return ERR_BUSY;
 	}
 	// All validation and every finite slice succeed before publishing any cell.
@@ -1162,8 +1448,27 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	extend_hwm(a.returns, a.returns_hwm, need_returns_hwm);
 	extend_hwm(a.commands, a.commands_hwm, need_commands_hwm);
 	extend_hwm(a.frames, a.frames_hwm, need_frames_hwm);
+	auto advance_free_cursor = [](const auto *base, const auto *slice, uint32_t count, uint32_t &cursor) {
+		if (count && slice && base) {
+			const uint32_t start = uint32_t(slice - base);
+			if (start == cursor) {
+				cursor = start + count;
+			}
+		}
+	};
+	advance_free_cursor(a.actions, ac, c.suboperations, a.actions_free_cursor);
+	advance_free_cursor(a.resources, rc, c.resources, a.resources_free_cursor);
+	advance_free_cursor(a.uses, uc, c.resource_uses, a.uses_free_cursor);
+	advance_free_cursor(a.readbacks, bc, c.readbacks, a.readbacks_free_cursor);
+	advance_free_cursor(a.graphs, gc, c.graph_memberships, a.graphs_free_cursor);
+	advance_free_cursor(a.returns, tc, c.return_cells, a.returns_free_cursor);
+	advance_free_cursor(a.commands, cc, uint32_t(request_quote.graph_slots), a.commands_free_cursor);
+	advance_free_cursor(a.frames, fc, uint32_t(request_quote.graph_frames), a.frames_free_cursor);
 	a.request_reserved_once = true;
 	production_serials.take(r->serial);
+	if (a.registry_slot < RECORD_CAPACITY && a.requests) {
+		production_serial_index_for(*this).request_loc_by_serial[r->serial] = { a.registry_slot, uint32_t(r - a.requests) };
+	}
 	r->attachment = &a;
 	r->operation = op;
 	r->contract_version = contract_version;
@@ -1185,6 +1490,7 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	r->action_count = action_count;
 	r->resource_count = resource_count;
 	r->use_count = use_count;
+	r->uses_touched_hwm = use_count;
 	r->readback_count = readback_count;
 	r->payload_offset = payload;
 	r->readback_offset = readback;
@@ -1192,11 +1498,34 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 		a.payload_reclaim_hwm = MAX(a.payload_reclaim_hwm, payload + c.retained_payload_bytes);
 	}
 	if (c.readback_bytes) {
-		a.readback_reclaim_hwm = MAX(a.readback_reclaim_hwm, readback + c.readback_bytes);
+		if (is_native_output) {
+			a.readback_reclaim_top_lwm = MIN(a.readback_reclaim_top_lwm, readback);
+		} else {
+			a.readback_reclaim_hwm = MAX(a.readback_reclaim_hwm, readback + c.readback_bytes);
+		}
 	}
 	if (c.native_memberships) {
-		a.natives_reclaim_hwm = MAX(a.natives_reclaim_hwm, uint64_t(natives_offset) + c.native_memberships);
+		if (is_native_output) {
+			a.natives_reclaim_top_lwm = MIN(a.natives_reclaim_top_lwm, uint64_t(natives_offset));
+		} else {
+			a.natives_reclaim_hwm = MAX(a.natives_reclaim_hwm, uint64_t(natives_offset) + c.native_memberships);
+		}
 	}
+	a.tail_reclaim.note_reservation(
+			c.suboperations ? uint32_t((ac - a.actions) + c.suboperations) : 0u,
+			c.resources ? uint32_t((rc - a.resources) + c.resources) : 0u,
+			c.resource_uses ? uint32_t((uc - a.uses) + c.resource_uses) : 0u,
+			c.readbacks ? uint32_t((bc - a.readbacks) + c.readbacks) : 0u,
+			c.graph_memberships ? uint32_t((gc - a.graphs) + c.graph_memberships) : 0u,
+			c.return_cells ? uint32_t((tc - a.returns) + c.return_cells) : 0u,
+			r->command_count ? uint32_t((cc - a.commands) + r->command_count) : 0u,
+			r->frame_count ? uint32_t((fc - a.frames) + r->frame_count) : 0u,
+			c.retained_payload_bytes ? (payload + c.retained_payload_bytes) : 0u,
+			c.readback_bytes ? (readback + c.readback_bytes) : 0u,
+			c.readback_bytes ? readback : UINT64_MAX,
+			c.native_memberships ? (uint64_t(natives_offset) + c.native_memberships) : 0u,
+			c.native_memberships ? uint64_t(natives_offset) : UINT64_MAX,
+			is_native_output);
 	auto claim = [&](auto *cells, uint32_t count) { for(uint32_t i=0;i<count;++i){cells[i].request=r;
 } };
 	claim(ac, c.suboperations);
@@ -1217,6 +1546,7 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 			++a.material_qualifications_constructed_total;
 			const uint32_t mq_end = uint32_t((ac - a.actions) + i + 1);
 			a.mq_reclaim_hwm = MAX(a.mq_reclaim_hwm, mq_end);
+			a.tail_reclaim.mq_peak = MAX(a.tail_reclaim.mq_peak, mq_end);
 		}
 	}
 	for (uint32_t i = 0; i < resource_count; ++i) {
@@ -1239,6 +1569,7 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 		rb += readbacks[i].byte_size;
 	}
 	++a.children;
+	a.idle_reclaim_frames = 0;
 	out = r;
 	return OK;
 }
@@ -2457,14 +2788,28 @@ Error Registry::production_poll_native_locked(ProductionRequest &r, RDD &driver,
 	}
 	const auto origin = NativeSourceOrigin::production();
 	// Fixed Core ceiling; caller values only reduce this maintenance turn.
-	const uint32_t visits = MIN(r.native_count, 64u);
+	// Distinct submission owners are bounded at 64 visits per turn; alias rows
+	// never consume the owner visit cap or service passes.
+	const bool use_owner_index = r.native_owner_count > 0 && !r.native_owners_overflowed;
+	uint32_t owner_start = 0;
+	if (use_owner_index) {
+		const uint32_t cursor = r.observe_cursor % r.native_count;
+		while (owner_start < r.native_owner_count && r.native_owner_indices[owner_start] < cursor) {
+			++owner_start;
+		}
+		if (owner_start == r.native_owner_count) {
+			owner_start = 0;
+		}
+	}
+	const uint32_t scan_limit = use_owner_index ? MIN(r.native_owner_count, 64u) : r.native_count;
 	uint32_t scanned = 0;
+	uint32_t owner_visits = 0;
 	const uint32_t receipts = MIN(budget.receipts, 128u);
-	while (scanned < visits && used.passes < MIN(budget.passes, 64u) && used.receipts < receipts && before_service_deadline(budget)) {
+	while (scanned < scan_limit && owner_visits < 64u && used.passes < MIN(budget.passes, 64u) && used.receipts < receipts && before_service_deadline(budget)) {
 		if (r.revision > UINT64_MAX - uint64_t(r.capacity.graph_memberships) * 2 - uint64_t(r.capacity.native_memberships) * 2 - r.capacity.readbacks - r.capacity.resources - 8) {
 			return ERR_PARAMETER_RANGE_ERROR;
 		}
-		const uint32_t index = r.observe_cursor % r.native_count;
+		const uint32_t index = use_owner_index ? r.native_owner_indices[(owner_start + scanned) % r.native_owner_count] : (r.observe_cursor % r.native_count);
 		const ProductionNativeCell *owner = nullptr;
 		Error error = production_native_owner_locked(r, index, owner);
 		if (error != OK) {
@@ -2473,10 +2818,14 @@ Error Registry::production_poll_native_locked(ProductionRequest &r, RDD &driver,
 		++scanned;
 		r.observe_cursor = (index + 1) % r.native_count;
 		auto &cell = r.natives[index];
-		if (cell.owner_index != index || cell.member.owner_released || cell.member.source.issue == RDD::IssueFact::NotIssued || cell.observation.state == NativeSourceObservation::State::Complete) {
+		if (cell.owner_index != index) {
 			continue;
 		}
-		// Terminal and alias rows consume only the fixed metadata scan bound.
+		++owner_visits;
+		if (cell.member.owner_released || cell.member.source.issue == RDD::IssueFact::NotIssued || cell.observation.state == NativeSourceObservation::State::Complete) {
+			continue;
+		}
+		// Terminal and alias rows do not consume a service pass.
 		// Preserve this turn's service pass for actual observation or disposal.
 		++used.passes;
 		const auto old = cell.observation;
@@ -2614,8 +2963,25 @@ void Registry::production_observe_completed_frames_rt(RenderingDevice &p_rd) {
 	Lock lock(*this);
 	for (uint32_t a_idx = 0; a_idx < RECORD_CAPACITY; ++a_idx) {
 		ProductionAttachment *attachment = production_attachments[a_idx];
-		if (!attachment || attachment->held_device != &p_rd || attachment->closing || !device_records[attachment->device].live) {
+		if (!attachment || attachment->held_device != &p_rd || !device_records[attachment->device].live) {
 			continue;
+		}
+		if (attachment->children == 0) {
+			if (attachment->has_reclaimable_arena_pages()) {
+				if (attachment->closing || ++attachment->idle_reclaim_frames >= ProductionAttachment::ARENA_IDLE_RECLAIM_FRAMES) {
+					attachment->reclaim_pod_pages();
+				}
+			} else {
+				attachment->idle_reclaim_frames = 0;
+			}
+			continue;
+		}
+		attachment->idle_reclaim_frames = 0;
+		if (attachment->closing) {
+			continue;
+		}
+		if (++attachment->tail_reclaim.frames >= ProductionAttachment::ARENA_TAIL_RECLAIM_FRAMES) {
+			attachment->reclaim_unused_tail_pod_pages();
 		}
 		const uint64_t attachment_serial = attachment->serial;
 		const uint32_t req_cap = attachment->quote.capacity.requests;
@@ -2632,10 +2998,20 @@ void Registry::production_observe_completed_frames_rt(RenderingDevice &p_rd) {
 					r.revision > UINT64_MAX - uint64_t(r.capacity.graph_memberships) * 2 - uint64_t(r.capacity.native_memberships) * 2 - r.capacity.readbacks - r.capacity.resources - 8) {
 				continue;
 			}
-			const uint32_t visits = MIN(r.native_count, 64u);
-			for (uint32_t i = 0; i < visits; ++i) {
+			const bool use_owner_index = r.native_owner_count > 0 && !r.native_owners_overflowed;
+			const uint32_t scan_limit = use_owner_index ? r.native_owner_count : r.native_count;
+			uint32_t owner_visits = 0;
+			for (uint32_t k = 0; k < scan_limit && owner_visits < 64u; ++k) {
+				const uint32_t i = use_owner_index ? r.native_owner_indices[k] : k;
+				if (i >= r.native_count) {
+					continue;
+				}
 				auto &cell = r.natives[i];
-				if (cell.owner_index != i || cell.member.owner_released || !cell.member.retained ||
+				if (cell.owner_index != i) {
+					continue;
+				}
+				++owner_visits;
+				if (cell.member.owner_released || !cell.member.retained ||
 						cell.member.source.issue == RDD::IssueFact::NotIssued ||
 						cell.observation.state == NativeSourceObservation::State::Complete) {
 					continue;
@@ -3261,6 +3637,7 @@ Error Registry::production_output_pin_borrow_locked(const ProductionOutputPin &s
 		cell.output_role = ProductionUseCell::OutputRole::NATIVE_CONSUMER;
 		cell.output_consumer = &pin;
 		cell.output_pin_serial = serial;
+		request.note_use_touched(i);
 		return OK;
 	}
 	return ERR_OUT_OF_MEMORY; // Only original UNUSED quoted cells can retain metadata.
@@ -3699,7 +4076,11 @@ bool Registry::production_release_main_fast_path_eligible_locked(const Productio
 			r.segment.segment == 0 || r.acknowledged_segment != r.segment.segment ||
 			report.possible_obligations != 0 || report.known_obligations != report.complete_obligations ||
 			report.physical_returns_pending != 0 ||
-			!offered.controls || MIN(offered.passes, 64u) < r.native_count || MIN(offered.receipts, 128u) < r.native_count) {
+			!offered.controls) {
+		return false;
+	}
+	const uint32_t required_native_steps = (r.native_owner_count > 0 && !r.native_owners_overflowed) ? r.native_owner_count : r.native_count;
+	if (MIN(offered.passes, 64u) < required_native_steps || MIN(offered.receipts, 128u) < required_native_steps) {
 		return false;
 	}
 	for (uint32_t i = 0; i < r.resource_count; ++i) {
@@ -3741,7 +4122,7 @@ bool Registry::production_release_owner_tail_locked(const ProductionRequest &r, 
 	if (r.resource_count > r.capacity.resources || r.action_count > r.capacity.suboperations || r.graph_count > r.capacity.graph_memberships || r.native_count > r.capacity.native_memberships || r.readback_count > r.capacity.readbacks) {
 		return false;
 	}
-	for (uint32_t i = 0; i < r.capacity.resource_uses; ++i) {
+	for (uint32_t i = 0, end = r.uses_touched_end(); i < end; ++i) {
 		if (r.uses[i].output_consumer) {
 			return false;
 		}
@@ -3756,7 +4137,7 @@ bool Registry::production_release_owner_tail_locked(const ProductionRequest &r, 
 			return false;
 		}
 	}
-	for (uint32_t i = 0; i < r.capacity.return_cells; ++i) {
+	for (uint32_t i = 0, end = MIN(r.resource_count, r.capacity.return_cells); i < end; ++i) {
 		if (r.returns[i].pending) {
 			return false;
 		}
@@ -3857,7 +4238,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 		}
 	}
 	if (r->uses) {
-		for (uint32_t i = 0; i < r->capacity.resource_uses; ++i) {
+		for (uint32_t i = 0, end = r->uses_touched_end(); i < end; ++i) {
 			if (r->uses[i].output_consumer) {
 				trace_release_busy(3, "output_consumer", i, &r->uses[i]); return result(ERR_BUSY, 16); // Actual consumer last-use still owns this arena.
 			}
@@ -3973,7 +4354,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 	if (native_issued && (!rd || !r->attachment || !device_records[r->attachment->device].live)) {
 		return result(ERR_UNAVAILABLE, 16);
 	}
-	for (uint32_t i = 0; i < r->capacity.return_cells; ++i) {
+	for (uint32_t i = 0, end = MIN(r->resource_count, r->capacity.return_cells); i < end; ++i) {
 		if (r->returns[i].pending) {
 			trace_release_busy(14, "return_cell_pending", i); return result(ERR_BUSY, 16);
 		}
@@ -4212,22 +4593,12 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 		}
 		ProductionServiceUsage used = { 1, 0, 0 };
 		r->release_started = true;
-		const uint32_t visits = MIN(MIN(budget->passes, r->native_count), 64u);
 		const uint32_t receipts = MIN(budget->receipts, 128u);
-		while (used.passes < visits && used.receipts < receipts && before_service_deadline(*budget)) {
-			if (r->revision > UINT64_MAX - 2) {
-				e = ERR_PARAMETER_RANGE_ERROR;
-				break;
-			}
-			const uint32_t index = r->release_cursor % r->native_count;
-			r->release_cursor = (index + 1) % r->native_count;
-			++used.passes;
+		const bool use_owner_index = r->native_owner_count > 0 && !r->native_owners_overflowed;
+		auto release_owner_cell = [&](uint32_t index) -> bool {
 			auto &cell = r->natives[index];
-			if (cell.owner_index != index || !cell.member.retained || cell.member.owner_released) {
-				continue;
-			}
 			if (!before_service_deadline(*budget)) {
-				break;
+				return false;
 			}
 			++used.receipts; // Exactly one original driver reference-return attempt.
 			auto returned_member = cell.member;
@@ -4247,14 +4618,97 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 			if (e == OK && returned != OK) {
 				e = returned;
 			}
+			return true;
+		};
+		if (use_owner_index) {
+			uint32_t owner_start = 0;
+			const uint32_t cursor = r->release_cursor % r->native_count;
+			while (owner_start < r->native_owner_count && r->native_owner_indices[owner_start] < cursor) {
+				++owner_start;
+			}
+			if (owner_start == r->native_owner_count) {
+				owner_start = 0;
+			}
+			const uint32_t visits = MIN(MIN(budget->passes, r->native_owner_count), 64u);
+			uint32_t owner_steps = 0;
+			while (owner_steps < r->native_owner_count && used.passes < visits && used.receipts < receipts && before_service_deadline(*budget)) {
+				if (r->revision > UINT64_MAX - 2) {
+					e = ERR_PARAMETER_RANGE_ERROR;
+					break;
+				}
+				const uint32_t index = r->native_owner_indices[(owner_start + owner_steps) % r->native_owner_count];
+				++owner_steps;
+				if (index >= r->native_count) {
+					continue;
+				}
+				r->release_cursor = (index + 1) % r->native_count;
+				auto &cell = r->natives[index];
+				if (cell.owner_index != index || !cell.member.retained || cell.member.owner_released) {
+					continue;
+				}
+				++used.passes;
+				if (!release_owner_cell(index)) {
+					break;
+				}
+			}
+		} else if (r->native_owners_overflowed) {
+			const uint32_t visits = MIN(budget->passes, 64u);
+			uint32_t scanned = 0;
+			while (scanned < r->native_count && used.passes < visits && used.receipts < receipts && before_service_deadline(*budget)) {
+				if (r->revision > UINT64_MAX - 2) {
+					e = ERR_PARAMETER_RANGE_ERROR;
+					break;
+				}
+				const uint32_t index = r->release_cursor % r->native_count;
+				r->release_cursor = (index + 1) % r->native_count;
+				++scanned;
+				auto &cell = r->natives[index];
+				if (cell.owner_index != index || !cell.member.retained || cell.member.owner_released) {
+					continue;
+				}
+				++used.passes;
+				if (!release_owner_cell(index)) {
+					break;
+				}
+			}
+		} else {
+			const uint32_t visits = MIN(MIN(budget->passes, r->native_count), 64u);
+			while (used.passes < visits && used.receipts < receipts && before_service_deadline(*budget)) {
+				if (r->revision > UINT64_MAX - 2) {
+					e = ERR_PARAMETER_RANGE_ERROR;
+					break;
+				}
+				const uint32_t index = r->release_cursor % r->native_count;
+				r->release_cursor = (index + 1) % r->native_count;
+				++used.passes;
+				auto &cell = r->natives[index];
+				if (cell.owner_index != index || !cell.member.retained || cell.member.owner_released) {
+					continue;
+				}
+				if (!release_owner_cell(index)) {
+					break;
+				}
+			}
 		}
 		if (usage) {
 			*usage = used;
 		}
-		for (uint32_t i = 0; i < r->native_count; ++i) {
-			const auto &cell = r->natives[i];
-			if (cell.owner_index == i && cell.member.retained && !cell.member.owner_released && e == OK) {
-				e = ERR_BUSY;
+		if (use_owner_index) {
+			for (uint32_t k = 0; k < r->native_owner_count; ++k) {
+				const uint32_t i = r->native_owner_indices[k];
+				if (i < r->native_count) {
+					const auto &cell = r->natives[i];
+					if (cell.owner_index == i && cell.member.retained && !cell.member.owner_released && e == OK) {
+						e = ERR_BUSY;
+					}
+				}
+			}
+		} else {
+			for (uint32_t i = 0; i < r->native_count; ++i) {
+				const auto &cell = r->natives[i];
+				if (cell.owner_index == i && cell.member.retained && !cell.member.owner_released && e == OK) {
+					e = ERR_BUSY;
+				}
 			}
 		}
 		if (e != OK) {
@@ -4289,66 +4743,385 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 			}
 		}
 	}
-	auto reset = [](auto *cells, uint32_t count) { using T=std::remove_pointer_t<decltype(cells)>;for(uint32_t i=0;i<count;++i){cells[i].~T();new (&cells[i]) T();} };
-	reset(r->actions, r->capacity.suboperations);
-	reset(r->resources, r->capacity.resources);
-	reset(r->uses, r->capacity.resource_uses);
-	reset(r->readbacks, r->capacity.readbacks);
-	reset(r->graphs, r->capacity.graph_memberships);
+	auto reset_prefix = [](auto *cells, uint32_t used_count, uint32_t capacity_count) {
+		using T = std::remove_pointer_t<decltype(cells)>;
+		const uint32_t end = MIN(used_count, capacity_count);
+		for (uint32_t i = 0; i < end; ++i) {
+			cells[i].~T();
+			new (&cells[i]) T();
+		}
+		for (uint32_t i = end; i < capacity_count; ++i) {
+			cells[i].request = nullptr;
+		}
+	};
+	auto reset = [](auto *cells, uint32_t count) {
+		using T = std::remove_pointer_t<decltype(cells)>;
+		for (uint32_t i = 0; i < count; ++i) {
+			cells[i].~T();
+			new (&cells[i]) T();
+		}
+	};
+	reset_prefix(r->actions, r->action_count, r->capacity.suboperations);
+	reset_prefix(r->resources, r->resource_count, r->capacity.resources);
+	reset_prefix(r->uses, r->uses_touched_end(), r->capacity.resource_uses);
+	reset_prefix(r->readbacks, r->readback_count, r->capacity.readbacks);
+	reset_prefix(r->graphs, r->graph_count, r->capacity.graph_memberships);
 	if (r->native_count) {
 		std::memset(r->natives, 0, sizeof(ProductionNativeCell) * r->native_count);
 	}
-	reset(r->returns, r->capacity.return_cells);
+	reset_prefix(r->returns, r->resource_count, r->capacity.return_cells);
 	reset(r->commands, r->command_count);
 	reset(r->frames, r->frame_count);
 	auto *attachment = r->attachment;
+	auto rewind_free_cursor = [](const auto *base, const auto *slice, uint32_t count, uint32_t &cursor) {
+		if (count && slice && base) {
+			const uint32_t start = uint32_t(slice - base);
+			if (start < cursor) {
+				cursor = start;
+			}
+		}
+	};
+	rewind_free_cursor(attachment->actions, r->actions, r->capacity.suboperations, attachment->actions_free_cursor);
+	rewind_free_cursor(attachment->resources, r->resources, r->capacity.resources, attachment->resources_free_cursor);
+	rewind_free_cursor(attachment->uses, r->uses, r->capacity.resource_uses, attachment->uses_free_cursor);
+	rewind_free_cursor(attachment->readbacks, r->readbacks, r->capacity.readbacks, attachment->readbacks_free_cursor);
+	rewind_free_cursor(attachment->graphs, r->graphs, r->capacity.graph_memberships, attachment->graphs_free_cursor);
+	rewind_free_cursor(attachment->returns, r->returns, r->capacity.return_cells, attachment->returns_free_cursor);
+	rewind_free_cursor(attachment->commands, r->commands, r->command_count, attachment->commands_free_cursor);
+	rewind_free_cursor(attachment->frames, r->frames, r->frame_count, attachment->frames_free_cursor);
+	if (ProductionSerialIndex *idx = production_serial_index_find(*this)) {
+		idx->request_loc_by_serial.erase(r->serial);
+	}
 	CRASH_COND(!attachment->children);
 	--attachment->children;
 	r->~ProductionRequest();
 	new (r) ProductionRequest();
 	if (attachment->children == 0) {
-		uint64_t advised = 0;
-		if (attachment->payload && attachment->payload_reclaim_hwm > attachment->scene_prefix_bytes) {
-			const uint64_t end = MIN(attachment->payload_reclaim_hwm, attachment->quote.capacity.retained_payload_bytes);
-			if (end > attachment->scene_prefix_bytes) {
-				advised += reclaim_arena_pod_pages(attachment->payload + attachment->scene_prefix_bytes, size_t(end - attachment->scene_prefix_bytes));
-			}
+		attachment->actions_free_cursor = 0;
+		attachment->resources_free_cursor = 0;
+		attachment->uses_free_cursor = 0;
+		attachment->readbacks_free_cursor = 0;
+		attachment->graphs_free_cursor = 0;
+		attachment->returns_free_cursor = 0;
+		attachment->commands_free_cursor = 0;
+		attachment->frames_free_cursor = 0;
+		attachment->idle_reclaim_frames = 0;
+		if (attachment->closing) {
+			attachment->reclaim_pod_pages();
 		}
-		if (attachment->readback_bytes && attachment->readback_reclaim_hwm > 0) {
-			const uint64_t end = MIN(attachment->readback_reclaim_hwm, attachment->quote.capacity.readback_bytes);
-			advised += reclaim_arena_pod_pages(attachment->readback_bytes, size_t(end));
-		}
-		if (attachment->natives && attachment->natives_reclaim_hwm > 0) {
-			const uint64_t end = MIN(attachment->natives_reclaim_hwm, uint64_t(attachment->quote.capacity.native_memberships));
-			advised += reclaim_arena_pod_pages(attachment->natives, size_t(end) * sizeof(ProductionNativeCell));
-		}
-		if (attachment->material_qualifications && attachment->material_qualifications_live == 0 && attachment->mq_reclaim_hwm > 0) {
-			const uint32_t end = MIN(attachment->mq_reclaim_hwm, attachment->quote.capacity.suboperations);
-			advised += reclaim_arena_pod_pages(attachment->material_qualifications, size_t(end) * sizeof(MaterialQualificationState));
-		}
-		auto reclaim_cells = [&](auto *cells, uint32_t &hwm) {
-			using T = std::remove_pointer_t<decltype(cells)>;
-			if (cells && hwm > 0) {
-				for (uint32_t i = 0; i < hwm; ++i) {
-					cells[i].~T();
-				}
-				advised += reclaim_arena_pod_pages(cells, size_t(hwm) * sizeof(T));
-				hwm = 0;
-			}
-		};
-		reclaim_cells(attachment->actions, attachment->actions_hwm);
-		reclaim_cells(attachment->uses, attachment->uses_hwm);
-		reclaim_cells(attachment->graphs, attachment->graphs_hwm);
-		reclaim_cells(attachment->returns, attachment->returns_hwm);
-		reclaim_cells(attachment->commands, attachment->commands_hwm);
-		reclaim_cells(attachment->frames, attachment->frames_hwm);
-		attachment->arena_reclaimed_bytes_total += advised;
-		attachment->payload_reclaim_hwm = 0;
-		attachment->readback_reclaim_hwm = 0;
-		attachment->natives_reclaim_hwm = 0;
-		attachment->mq_reclaim_hwm = 0;
 	}
 	return result(OK);
+}
+void ProductionAttachment::reclaim_pod_pages() {
+	if (children != 0) {
+		return;
+	}
+	uint64_t advised = 0;
+	auto reclaim_hwm_cells = [&advised](auto *cells, uint32_t &hwm, uint64_t cap) {
+		using T = std::remove_pointer_t<decltype(cells)>;
+		if (!cells || hwm == 0) {
+			hwm = 0;
+			return;
+		}
+		const uint32_t end = uint32_t(MIN(uint64_t(hwm), cap));
+		for (uint32_t i = 0; i < end; ++i) {
+			cells[i].~T();
+		}
+		advised += reclaim_arena_pod_pages(cells, size_t(end) * sizeof(T));
+		hwm = 0;
+	};
+	reclaim_hwm_cells(actions, actions_hwm, quote.capacity.suboperations);
+	reclaim_hwm_cells(resources, resources_hwm, quote.capacity.resources);
+	reclaim_hwm_cells(uses, uses_hwm, quote.capacity.resource_uses);
+	reclaim_hwm_cells(readbacks, readbacks_hwm, quote.capacity.readbacks);
+	reclaim_hwm_cells(graphs, graphs_hwm, quote.capacity.graph_memberships);
+	reclaim_hwm_cells(returns, returns_hwm, quote.capacity.return_cells);
+	reclaim_hwm_cells(commands, commands_hwm, quote.graph_slots);
+	reclaim_hwm_cells(frames, frames_hwm, quote.graph_frames);
+	actions_free_cursor = 0;
+	resources_free_cursor = 0;
+	uses_free_cursor = 0;
+	readbacks_free_cursor = 0;
+	graphs_free_cursor = 0;
+	returns_free_cursor = 0;
+	commands_free_cursor = 0;
+	frames_free_cursor = 0;
+	if (payload && payload_reclaim_hwm > scene_prefix_bytes) {
+		const uint64_t end = MIN(payload_reclaim_hwm, quote.capacity.retained_payload_bytes);
+		if (end > scene_prefix_bytes) {
+			advised += reclaim_arena_pod_pages(payload + scene_prefix_bytes, size_t(end - scene_prefix_bytes));
+		}
+	}
+	if (readback_bytes) {
+		const uint64_t total = quote.capacity.readback_bytes;
+		const uint64_t low_end = MIN(readback_reclaim_hwm, total);
+		const uint64_t high_begin = readback_reclaim_top_lwm < total ? readback_reclaim_top_lwm : total;
+		if (low_end >= high_begin && total > 0) {
+			advised += reclaim_arena_pod_pages(readback_bytes, size_t(total));
+		} else {
+			if (low_end > 0) {
+				advised += reclaim_arena_pod_pages(readback_bytes, size_t(low_end));
+			}
+			if (high_begin < total) {
+				advised += reclaim_arena_pod_pages(readback_bytes + high_begin, size_t(total - high_begin));
+			}
+		}
+	}
+	if (natives) {
+		const uint64_t total = uint64_t(quote.capacity.native_memberships);
+		const uint64_t low_end = MIN(natives_reclaim_hwm, total);
+		const uint64_t high_begin = natives_reclaim_top_lwm < total ? natives_reclaim_top_lwm : total;
+		if (low_end >= high_begin && total > 0) {
+			advised += reclaim_arena_pod_pages(natives, size_t(total) * sizeof(ProductionNativeCell));
+		} else {
+			if (low_end > 0) {
+				advised += reclaim_arena_pod_pages(natives, size_t(low_end) * sizeof(ProductionNativeCell));
+			}
+			if (high_begin < total) {
+				advised += reclaim_arena_pod_pages(natives + high_begin, size_t(total - high_begin) * sizeof(ProductionNativeCell));
+			}
+		}
+	}
+	if (material_qualifications && material_qualifications_live == 0 && mq_reclaim_hwm > 0) {
+		const uint32_t end = MIN(mq_reclaim_hwm, quote.capacity.suboperations);
+		advised += reclaim_arena_pod_pages(material_qualifications, size_t(end) * sizeof(MaterialQualificationState));
+		mq_reclaim_hwm = 0;
+	}
+	arena_reclaimed_bytes_total += advised;
+	payload_reclaim_hwm = 0;
+	readback_reclaim_hwm = 0;
+	natives_reclaim_hwm = 0;
+	readback_reclaim_top_lwm = UINT64_MAX;
+	natives_reclaim_top_lwm = UINT64_MAX;
+	idle_reclaim_frames = 0;
+	tail_reclaim.reset();
+}
+void ProductionAttachment::reclaim_unused_tail_pod_pages() {
+	if (!requests) {
+		tail_reclaim.reset();
+		return;
+	}
+	uint32_t actions_peak = tail_reclaim.actions_peak;
+	uint32_t resources_peak = tail_reclaim.resources_peak;
+	uint32_t uses_peak = tail_reclaim.uses_peak;
+	uint32_t readbacks_peak = tail_reclaim.readbacks_peak;
+	uint32_t graphs_peak = tail_reclaim.graphs_peak;
+	uint32_t returns_peak = tail_reclaim.returns_peak;
+	uint32_t commands_peak = tail_reclaim.commands_peak;
+	uint32_t frames_peak = tail_reclaim.frames_peak;
+	uint32_t live_actions_end = 0;
+	uint64_t payload_peak = MAX(scene_prefix_bytes, tail_reclaim.payload_peak);
+	const uint64_t rb_total = quote.capacity.readback_bytes;
+	const uint64_t rb_low_end = MIN(readback_reclaim_hwm, rb_total);
+	const uint64_t rb_high_begin = readback_reclaim_top_lwm < rb_total ? readback_reclaim_top_lwm : rb_total;
+	uint64_t rb_low_used = tail_reclaim.readback_low_peak;
+	uint64_t rb_high_used = tail_reclaim.readback_top_valley;
+	const uint64_t nat_total = uint64_t(quote.capacity.native_memberships);
+	const uint64_t nat_low_end = MIN(natives_reclaim_hwm, nat_total);
+	const uint64_t nat_high_begin = natives_reclaim_top_lwm < nat_total ? natives_reclaim_top_lwm : nat_total;
+	uint64_t nat_low_used = tail_reclaim.natives_low_peak;
+	uint64_t nat_high_used = tail_reclaim.natives_top_valley;
+
+	// Fold every currently live request's exact slice bounds so no live cell or byte can ever be touched.
+	for (uint32_t i = 0; i < quote.capacity.requests; ++i) {
+		const auto &q = requests[i];
+		if (!q.serial) {
+			continue;
+		}
+		if (actions && q.actions && q.capacity.suboperations) {
+			const uint32_t end = uint32_t((q.actions - actions) + q.capacity.suboperations);
+			actions_peak = MAX(actions_peak, end);
+			live_actions_end = MAX(live_actions_end, end);
+		}
+		if (resources && q.resources && q.capacity.resources) {
+			resources_peak = MAX(resources_peak, uint32_t((q.resources - resources) + q.capacity.resources));
+		}
+		if (uses && q.uses && q.capacity.resource_uses) {
+			uses_peak = MAX(uses_peak, uint32_t((q.uses - uses) + q.capacity.resource_uses));
+		}
+		if (readbacks && q.readbacks && q.capacity.readbacks) {
+			readbacks_peak = MAX(readbacks_peak, uint32_t((q.readbacks - readbacks) + q.capacity.readbacks));
+		}
+		if (graphs && q.graphs && q.capacity.graph_memberships) {
+			graphs_peak = MAX(graphs_peak, uint32_t((q.graphs - graphs) + q.capacity.graph_memberships));
+		}
+		if (returns && q.returns && q.capacity.return_cells) {
+			returns_peak = MAX(returns_peak, uint32_t((q.returns - returns) + q.capacity.return_cells));
+		}
+		if (commands && q.commands && q.command_count) {
+			commands_peak = MAX(commands_peak, uint32_t((q.commands - commands) + q.command_count));
+		}
+		if (frames && q.frames && q.frame_count) {
+			frames_peak = MAX(frames_peak, uint32_t((q.frames - frames) + q.frame_count));
+		}
+		if (q.capacity.retained_payload_bytes) {
+			payload_peak = MAX(payload_peak, q.payload_offset + q.capacity.retained_payload_bytes);
+		}
+		if (q.capacity.readback_bytes) {
+			const uint64_t s = q.readback_offset;
+			const uint64_t e = s + q.capacity.readback_bytes;
+			if (s < rb_low_end) {
+				rb_low_used = MAX(rb_low_used, MIN(e, rb_low_end));
+			}
+			if (e > rb_high_begin) {
+				rb_high_used = MIN(rb_high_used, MAX(s, rb_high_begin));
+			}
+		}
+		if (q.capacity.native_memberships) {
+			const uint64_t s = uint64_t(q.natives_offset);
+			const uint64_t e = s + q.capacity.native_memberships;
+			if (s < nat_low_end) {
+				nat_low_used = MAX(nat_low_used, MIN(e, nat_low_end));
+			}
+			if (e > nat_high_begin) {
+				nat_high_used = MIN(nat_high_used, MAX(s, nat_high_begin));
+			}
+		}
+	}
+
+	uint64_t advised = 0;
+	auto reclaim_hwm_tail = [&advised](auto *cells, uint32_t &hwm, uint32_t &free_cursor, uint64_t cap, uint32_t keep_end) {
+		using T = std::remove_pointer_t<decltype(cells)>;
+		if (!cells || hwm == 0) {
+			return;
+		}
+		const uint32_t cur_end = uint32_t(MIN(uint64_t(hwm), cap));
+		const uint32_t new_end = MIN(keep_end, cur_end);
+		if (new_end >= cur_end || uint64_t(new_end) * 2u > uint64_t(cur_end)) {
+			return;
+		}
+		uintptr_t aligned_start = 0;
+		size_t aligned_len = 0;
+		if (!compute_aligned_pod_page_range(cells + new_end, size_t(cur_end - new_end) * sizeof(T), aligned_start, aligned_len)) {
+			return;
+		}
+		for (uint32_t i = new_end; i < cur_end; ++i) {
+			cells[i].~T();
+		}
+		advised += reclaim_arena_pod_pages(cells + new_end, size_t(cur_end - new_end) * sizeof(T));
+		hwm = new_end;
+		if (free_cursor > hwm) {
+			free_cursor = hwm;
+		}
+	};
+
+	reclaim_hwm_tail(actions, actions_hwm, actions_free_cursor, quote.capacity.suboperations, actions_peak);
+	reclaim_hwm_tail(resources, resources_hwm, resources_free_cursor, quote.capacity.resources, resources_peak);
+	reclaim_hwm_tail(uses, uses_hwm, uses_free_cursor, quote.capacity.resource_uses, uses_peak);
+	reclaim_hwm_tail(readbacks, readbacks_hwm, readbacks_free_cursor, quote.capacity.readbacks, readbacks_peak);
+	reclaim_hwm_tail(graphs, graphs_hwm, graphs_free_cursor, quote.capacity.graph_memberships, graphs_peak);
+	reclaim_hwm_tail(returns, returns_hwm, returns_free_cursor, quote.capacity.return_cells, returns_peak);
+	reclaim_hwm_tail(commands, commands_hwm, commands_free_cursor, quote.graph_slots, commands_peak);
+	reclaim_hwm_tail(frames, frames_hwm, frames_free_cursor, quote.graph_frames, frames_peak);
+
+	if (payload && payload_reclaim_hwm > scene_prefix_bytes) {
+		const uint64_t cur_end = MIN(payload_reclaim_hwm, quote.capacity.retained_payload_bytes);
+		const uint64_t keep_end = MAX(scene_prefix_bytes, MIN(payload_peak, cur_end));
+		const uint64_t active_span = keep_end - scene_prefix_bytes;
+		const uint64_t hwm_span = cur_end > scene_prefix_bytes ? (cur_end - scene_prefix_bytes) : 0u;
+		if (keep_end < cur_end && active_span * 2u <= hwm_span) {
+			uintptr_t aligned_start = 0;
+			size_t aligned_len = 0;
+			if (compute_aligned_pod_page_range(payload + keep_end, size_t(cur_end - keep_end), aligned_start, aligned_len)) {
+				const size_t reclaimed = reclaim_arena_pod_pages(payload + keep_end, size_t(cur_end - keep_end));
+				if (reclaimed > 0) {
+					advised += reclaimed;
+					const uint64_t new_hwm = uint64_t(aligned_start - reinterpret_cast<uintptr_t>(payload));
+					payload_reclaim_hwm = MIN(cur_end, new_hwm);
+				}
+			}
+		}
+	}
+
+	if (readback_bytes && rb_total > 0) {
+		if (rb_low_end > 0 && rb_low_used < rb_low_end && rb_low_used * 2u <= rb_low_end && tail_reclaim.readback_top_valley >= rb_low_end) {
+			uintptr_t aligned_start = 0;
+			size_t aligned_len = 0;
+			if (compute_aligned_pod_page_range(readback_bytes + rb_low_used, size_t(rb_low_end - rb_low_used), aligned_start, aligned_len)) {
+				const size_t reclaimed = reclaim_arena_pod_pages(readback_bytes + rb_low_used, size_t(rb_low_end - rb_low_used));
+				if (reclaimed > 0) {
+					advised += reclaimed;
+					const uint64_t new_hwm = uint64_t(aligned_start - reinterpret_cast<uintptr_t>(readback_bytes));
+					readback_reclaim_hwm = MIN(rb_low_end, new_hwm);
+				}
+			}
+		}
+		if (rb_high_begin < rb_total) {
+			const uint64_t keep_begin = MIN(rb_high_used, rb_total);
+			const uint64_t hwm_span = rb_total - rb_high_begin;
+			const uint64_t active_span = rb_total - keep_begin;
+			if (keep_begin > rb_high_begin && active_span * 2u <= hwm_span && tail_reclaim.readback_low_peak <= rb_high_begin) {
+				uintptr_t aligned_start = 0;
+				size_t aligned_len = 0;
+				if (compute_aligned_pod_page_range(readback_bytes + rb_high_begin, size_t(keep_begin - rb_high_begin), aligned_start, aligned_len)) {
+					const size_t reclaimed = reclaim_arena_pod_pages(readback_bytes + rb_high_begin, size_t(keep_begin - rb_high_begin));
+					if (reclaimed > 0) {
+						advised += reclaimed;
+						const uint64_t new_lwm = uint64_t((aligned_start + aligned_len) - reinterpret_cast<uintptr_t>(readback_bytes));
+						readback_reclaim_top_lwm = (keep_begin >= rb_total && new_lwm >= rb_total) ? UINT64_MAX : MAX(rb_high_begin, MIN(new_lwm, keep_begin));
+					}
+				}
+			}
+		}
+	}
+
+	if (natives && nat_total > 0) {
+		constexpr size_t elem_size = sizeof(ProductionNativeCell);
+		if (nat_low_end > 0 && nat_low_used < nat_low_end && nat_low_used * 2u <= nat_low_end && tail_reclaim.natives_top_valley >= nat_low_end) {
+			uintptr_t aligned_start = 0;
+			size_t aligned_len = 0;
+			if (compute_aligned_pod_page_range(natives + nat_low_used, size_t(nat_low_end - nat_low_used) * elem_size, aligned_start, aligned_len)) {
+				const size_t reclaimed = reclaim_arena_pod_pages(natives + nat_low_used, size_t(nat_low_end - nat_low_used) * elem_size);
+				if (reclaimed > 0) {
+					advised += reclaimed;
+					const uint64_t byte_off = uint64_t(aligned_start - reinterpret_cast<uintptr_t>(natives));
+					const uint64_t new_hwm = (byte_off + elem_size - 1u) / elem_size;
+					natives_reclaim_hwm = MIN(nat_low_end, new_hwm);
+				}
+			}
+		}
+		if (nat_high_begin < nat_total) {
+			const uint64_t keep_begin = MIN(nat_high_used, nat_total);
+			const uint64_t hwm_span = nat_total - nat_high_begin;
+			const uint64_t active_span = nat_total - keep_begin;
+			if (keep_begin > nat_high_begin && active_span * 2u <= hwm_span && tail_reclaim.natives_low_peak <= nat_high_begin) {
+				uintptr_t aligned_start = 0;
+				size_t aligned_len = 0;
+				if (compute_aligned_pod_page_range(natives + nat_high_begin, size_t(keep_begin - nat_high_begin) * elem_size, aligned_start, aligned_len)) {
+					const size_t reclaimed = reclaim_arena_pod_pages(natives + nat_high_begin, size_t(keep_begin - nat_high_begin) * elem_size);
+					if (reclaimed > 0) {
+						advised += reclaimed;
+						const uint64_t byte_end = uint64_t((aligned_start + aligned_len) - reinterpret_cast<uintptr_t>(natives));
+						const uint64_t new_lwm = byte_end / elem_size;
+						natives_reclaim_top_lwm = (keep_begin >= nat_total && new_lwm >= nat_total) ? UINT64_MAX : MAX(nat_high_begin, MIN(new_lwm, keep_begin));
+					}
+				}
+			}
+		}
+	}
+
+	if (material_qualifications && mq_reclaim_hwm > 0) {
+		const uint32_t cur_end = MIN(mq_reclaim_hwm, quote.capacity.suboperations);
+		const uint32_t mq_keep = material_qualifications_live == 0 ? tail_reclaim.mq_peak : MAX(tail_reclaim.mq_peak, live_actions_end);
+		const uint32_t new_end = MIN(mq_keep, cur_end);
+		if (new_end < cur_end && uint64_t(new_end) * 2u <= uint64_t(cur_end)) {
+			constexpr size_t elem_size = sizeof(MaterialQualificationState);
+			uintptr_t aligned_start = 0;
+			size_t aligned_len = 0;
+			if (compute_aligned_pod_page_range(material_qualifications + new_end, size_t(cur_end - new_end) * elem_size, aligned_start, aligned_len)) {
+				const size_t reclaimed = reclaim_arena_pod_pages(material_qualifications + new_end, size_t(cur_end - new_end) * elem_size);
+				if (reclaimed > 0) {
+					advised += reclaimed;
+					const uint64_t byte_off = uint64_t(aligned_start - reinterpret_cast<uintptr_t>(material_qualifications));
+					const uint32_t tracked_end = uint32_t(MIN(uint64_t(cur_end), (byte_off + elem_size - 1u) / elem_size));
+					mq_reclaim_hwm = new_end == 0 && byte_off == 0 ? 0u : tracked_end;
+				}
+			}
+		}
+	}
+
+	arena_reclaimed_bytes_total += advised;
+	tail_reclaim.reset();
 }
 GDExtensionDeviceSessionResultV1 Registry::production_installation_observe(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionServiceBudgetV1 *budget, GDExtensionProductionInstallationReportV1 *out) {
 	if (!aligned(budget) || !production_dto_valid(*budget) || budget->reserved || !aligned(out)) {
@@ -4446,6 +5219,9 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 	if (a->children) {
 		return result(ERR_BUSY, 16);
 	}
+	if (a->has_reclaimable_arena_pages()) {
+		a->reclaim_pod_pages();
+	}
 	if (!a->persistent_sets.is_empty()) {
 		a->persistent_set_lookup.clear();
 		uint32_t i = 0;
@@ -4453,9 +5229,12 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 			PersistentSetEntry *entry = a->persistent_sets[i];
 			if (!entry) {
 				a->persistent_sets.remove_at_unordered(i);
+				if (i < a->persistent_sets.size() && a->persistent_sets[i]) {
+					a->persistent_sets[i]->list_index = i;
+				}
 				continue;
 			}
-			entry->evicted = true;
+			a->persistent_set_mark_evicted(entry);
 			uint64_t free_event = 0;
 			{
 				MutexLock phys_lock(entry->physical.mutex);
@@ -4463,7 +5242,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 			}
 			if (entry->physical.production_uses == nullptr && free_event != 0) {
 				production_persistent_set_unindex_deps_locked(*a, *entry);
-				a->persistent_sets.remove_at_unordered(i);
+				a->persistent_set_remove_owned(entry);
 				memdelete(entry);
 				continue;
 			}
@@ -4507,6 +5286,10 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 	--a->holder->production_children;
 	record.cleanup_reservations -= uint32_t(a->quote.cleanup_slots);
 	record.cleanup_by_phase[uint8_t(CleanupPhase::BINDING)] -= uint32_t(a->quote.cleanup_slots);
+	if (ProductionSerialIndex *idx = production_serial_index_find(*this)) {
+		idx->attachment_slot_by_serial.erase(a->serial);
+		production_serial_index_prune_if_empty(*this);
+	}
 	for (auto *&entry : production_attachments) {
 		if (entry == a) {
 			entry = nullptr;
@@ -4517,6 +5300,8 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 } };
 	CRASH_COND(a->material_qualifications_live != 0);
 	CRASH_COND(!a->persistent_sets.is_empty());
+	CRASH_COND(!a->persistent_sets_pending_reap.is_empty());
+	CRASH_COND(a->persistent_set_lru_head != nullptr || a->persistent_set_lru_tail != nullptr);
 	CRASH_COND(!a->persistent_set_lookup.is_empty());
 	CRASH_COND(!a->persistent_sets_by_dep.is_empty());
 	destroy(a->requests, a->quote.capacity.requests);
@@ -4529,8 +5314,9 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 	destroy(a->commands, a->commands_hwm);
 	destroy(a->frames, a->frames_hwm);
 	void *arena = a->arena;
+	const size_t arena_mmap_bytes = a->arena_mmap_bytes;
 	a->~ProductionAttachment();
-	Memory::free_static(arena);
+	free_production_arena(arena, arena_mmap_bytes);
 	reclaim_device_locked(device);
 	reclaim(library);
 	try_finalize();
@@ -4907,6 +5693,8 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 					RdUnlock unlock{ rd->_thread_safe_ };
 					if (rd->native_disposal_active && request.maintenance_serial == rd->native_disposal_continuation.serial && rd->native_disposal_continuation.production_owner == &request) {
 						maintenance = production_maintenance_locked(request, *rd, cell.input.budget, cell.output.service_usage);
+					} else if (!rd->native_disposal_active || request.maintenance_serial != rd->native_disposal_continuation.serial) {
+						request.maintenance_serial = 0;
 					}
 				}
 			}

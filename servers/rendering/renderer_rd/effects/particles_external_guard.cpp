@@ -197,13 +197,39 @@ Error ParticlesExternalGuard::release_pipelines() {
 	return _release_pipelines_impl();
 }
 
+Error ParticlesExternalGuard::configure_multi_mesh_proof(GeometryProofHeader &r_proof, uint32_t p_mesh_count) {
+	if (p_mesh_count > MAX_MESH_VARIANTS) {
+		return ERR_INVALID_PARAMETER;
+	}
+	r_proof.options[2] = p_mesh_count > 1u ? p_mesh_count : 0u;
+	return OK;
+}
+
+Error ParticlesExternalGuard::configure_surface_mesh_index(SurfaceProof &r_surface, const GeometryProofHeader &p_proof, uint32_t p_mesh_index) {
+	const uint32_t mesh_variant_count = p_proof.options[2];
+	if (mesh_variant_count == 0u) {
+		if (p_mesh_index != 0u) {
+			return ERR_INVALID_PARAMETER;
+		}
+		r_surface.command[2] = 0u;
+		return OK;
+	}
+	if (mesh_variant_count < 2u || mesh_variant_count > MAX_MESH_VARIANTS || p_mesh_index >= mesh_variant_count) {
+		return ERR_INVALID_PARAMETER;
+	}
+	r_surface.command[2] = p_mesh_index;
+	return OK;
+}
+
 Error ParticlesExternalGuard::plan_layout(const PushConstant &p_request, const Bindings &p_bindings, const GeometryProofHeader &p_proof, uint32_t p_max_groups_x, LayoutPlan &r_plan) {
 	if (p_request.capacity > (1u << 20) || p_request.surface_count == 0 || p_request.surface_count > ExternalOutputConfig::MAX_FLATTENED_SURFACES ||
 			p_request.record_base != 0 || p_request.record_count != p_request.capacity || p_request.reserved0 != 0 || p_request.reserved1 != 0 || p_max_groups_x == 0) {
 		return ERR_INVALID_PARAMETER;
 	}
+	const uint32_t mesh_variant_count = p_proof.options[2];
 	if (p_proof.options[0] > 1 || p_proof.options[1] > 1 || (p_request.capacity == 0 && p_proof.options[1] != 0) ||
-			p_proof.options[2] != 0 || p_proof.options[3] != 0) {
+			(mesh_variant_count != 0 && (mesh_variant_count < 2 || mesh_variant_count > MAX_MESH_VARIANTS || p_request.surface_count < mesh_variant_count)) ||
+			p_proof.options[3] != 0) {
 		return ERR_INVALID_PARAMETER;
 	}
 	const uint64_t records_bytes = uint64_t(p_request.capacity) * 192;
@@ -212,12 +238,16 @@ Error ParticlesExternalGuard::plan_layout(const PushConstant &p_request, const B
 	const uint64_t previous_bytes = no_previous_records ? 0 : records_bytes;
 	const bool aux_enabled = p_request.capacity != 0 && p_proof.options[1] == 1;
 	const uint64_t aux_bytes = aux_enabled ? uint64_t(p_request.capacity) * 32 : 0;
-	const uint64_t expected[BINDING_COUNT] = { records_bytes, previous_bytes, 32, 0, 64, 32, uint64_t(p_request.surface_count) * 20, 240 + uint64_t(p_request.surface_count) * 144, 0, 0, 0, 0, aux_bytes };
+	const uint64_t expected[BINDING_COUNT] = { records_bytes, previous_bytes, 32, 0, GUARD_SCRATCH_BYTES, 32, uint64_t(p_request.surface_count) * 20, 240 + uint64_t(p_request.surface_count) * 144, 0, 0, 0, 0, aux_bytes };
 	auto is_source = [](uint32_t p_binding) { return p_binding == SOURCE_COUNT || (p_binding >= SOURCE_COUNT_VALIDITY && p_binding <= SOURCE_INSTANCE_GATE); };
 	for (uint32_t i = 0; i < BINDING_COUNT; i++) {
 		const BufferBinding &buffer = p_bindings.buffers[i];
-		if (buffer.byte_length > UINT32_MAX || (buffer.byte_length & 3) != 0 ||
-				(is_source(i) ? buffer.byte_length < 4 : buffer.byte_length != expected[i])) {
+		const bool valid_length = is_source(i)
+				? buffer.byte_length >= 4
+				: (i == GUARD_SCRATCH
+						  ? (buffer.byte_length == GUARD_SCRATCH_BYTES || (mesh_variant_count == 0 && buffer.byte_length == LEGACY_GUARD_SCRATCH_BYTES))
+						  : buffer.byte_length == expected[i]);
+		if (buffer.byte_length > UINT32_MAX || (buffer.byte_length & 3) != 0 || !valid_length) {
 			return ERR_INVALID_PARAMETER;
 		}
 		const bool absent_records = (p_request.capacity == 0 && (i == CURRENT_RECORDS || i == PREVIOUS_RECORDS)) ||

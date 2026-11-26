@@ -1224,6 +1224,7 @@ void Registry::qualification_service(uint64_t bridge_serial, uint64_t serial, ui
 				qualification_retire_step(bridge, rd, serial, kind);
 			}
 			bool returned = false;
+			bool blocked_on_cpu_dependents = false;
 			{
 				Lock lock(*this);
 				if (kind == 3) {
@@ -1242,6 +1243,12 @@ void Registry::qualification_service(uint64_t bridge_serial, uint64_t serial, ui
 				if (kind == 1) {
 					if (auto *child = bridge->find_storage_by_serial_locked(serial)) {
 						returned = child->report.state == 1;
+						if (!returned && child->report.reason == 4) {
+							MutexLock physical_lock(child->physical.mutex);
+							if (!child->physical.enqueued) {
+								blocked_on_cpu_dependents = true;
+							}
+						}
 					}
 				}
 				if (kind == 2) {
@@ -1252,7 +1259,7 @@ void Registry::qualification_service(uint64_t bridge_serial, uint64_t serial, ui
 					}
 				}
 			}
-			if (returned) {
+			if (returned || blocked_on_cpu_dependents) {
 				break;
 			}
 			const Error error = [&]() {
@@ -1481,6 +1488,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_retire(GDExtens
 		child->retirement = *request;
 		child->retiring = true;
 		child->physical.use_closed.store(true);
+		bump_resource_permission_epoch();
 		auto &r = child->report;
 		r.abi = { 1, sizeof(GDExtensionDeviceExitAbi), 0 };
 		r.rid = request->rid;
@@ -1538,6 +1546,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_retire(GDEx
 		child->retiring = true;
 		child->shader.use_closed.store(true);
 		child->pipeline.use_closed.store(true);
+		bump_resource_permission_epoch();
 		auto &r = child->report;
 		r.abi = { 1, sizeof(GDExtensionDeviceExitAbi), 0 };
 		r.unit = request->unit;

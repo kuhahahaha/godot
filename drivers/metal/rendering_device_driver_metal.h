@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/object/worker_thread_pool.h"
+#include "core/templates/hash_set.h"
 #include "core/templates/paged_allocator.h"
 #include "drivers/metal/metal_allocator.h"
 #include "drivers/metal/metal_device_profile.h"
@@ -41,6 +42,7 @@
 
 #include <atomic>
 #include <optional>
+#include <shared_mutex>
 #include <variant>
 
 class RenderingShaderContainerFormatMetal;
@@ -146,9 +148,13 @@ protected:
 	static constexpr uint64_t ARCHIVE_MAX_BYTES_DEFAULT = 64ull * 1024ull * 1024ull;
 	static constexpr uint64_t ARCHIVE_MAX_DISK_BYTES = ARCHIVE_MAX_BYTES_DEFAULT;
 	static constexpr uint32_t ARCHIVE_MAX_ENTRIES = 4096;
+	static constexpr uint32_t COMPUTE_ARCHIVE_MAX_PIPELINES = 128;
+	static constexpr uint64_t COMPUTE_ARCHIVE_MAX_DISK_BYTES = 16ull * 1024ull * 1024ull;
+	static constexpr uint32_t COMPUTE_ARCHIVE_FLUSH_IDLE_FRAMES = 8;
+	static constexpr uint32_t COMPUTE_ARCHIVE_WARMUP_MAX_FRAMES = 30;
 
 	Mutex archive_mutex;
-	Mutex archive_serialize_mutex;
+	std::shared_mutex archive_serialize_mutex;
 	NS::SharedPtr<MTL::BinaryArchive> archive;
 	std::atomic<bool> archive_active{ false };
 	std::atomic<bool> archive_tearing_down{ false };
@@ -167,6 +173,24 @@ protected:
 	WorkerThreadPool::TaskID archive_release_task = WorkerThreadPool::INVALID_TASK_ID;
 	// DEV: When true, attempting to create a pipeline will fail if it cannot use the archive.
 	bool archive_fail_on_miss = false;
+
+	// Dedicated, lean, bounded compute MTL::BinaryArchive (BUG-189B / BUG-200):
+	// Accelerates warmup compute PSOs and honors PipelineCacheMode::RELEASE_AFTER_WARMUP
+	// by serializing and releasing the in-memory MTL::BinaryArchive after warmup while
+	// keeping compute_pso_cache O(k) eviction (BUG-175B) and zero exit RSS spike (BUG-155B).
+	Mutex compute_archive_mutex;
+	std::shared_mutex compute_archive_serialize_mutex;
+	NS::SharedPtr<MTL::BinaryArchive> compute_archive;
+	std::atomic<bool> compute_archive_active{ false };
+	std::atomic<bool> compute_archive_released_after_warmup{ false };
+	uint32_t compute_archive_added_pipelines = 0;
+	uint32_t compute_archive_idle_frames = 0;
+	uint32_t compute_archive_open_frames = 0;
+	bool compute_archive_activity_this_frame = false;
+	bool compute_archive_dirty = false;
+	bool compute_archive_loaded_from_disk = false;
+	bool compute_archive_disk_backed = false;
+	WorkerThreadPool::TaskID compute_archive_flush_task = WorkerThreadPool::INVALID_TASK_ID;
 
 	// In-memory PSO caches keyed by immutable pipeline state so repeated
 	// render_pipeline_create / compute_pipeline_create calls (e.g. per-frame
@@ -279,16 +303,17 @@ protected:
 
 	struct ComputePipelineCacheEntry {
 		NS::SharedPtr<MTL::ComputePipelineState> state;
-		uint64_t last_used_tick = 0;
 	};
 
 	static constexpr uint32_t MAX_RENDER_PSO_CACHE_ENTRIES = 1024;
-	static constexpr uint32_t MAX_COMPUTE_PSO_CACHE_ENTRIES = 4096;
-	static constexpr uint32_t COMPUTE_PSO_CACHE_EVICT_COUNT = 256;
-	Mutex pipeline_state_cache_mutex;
+	static constexpr uint32_t MAX_COMPUTE_PSO_CACHE_ENTRIES = 512;
+	mutable Mutex pipeline_state_cache_mutex;
 	HashMap<RenderPipelineCacheKey, RenderPipelineCacheEntry, RenderPipelineCacheKeyHasher> render_pso_cache;
 	HashMap<ComputePipelineCacheKey, ComputePipelineCacheEntry, ComputePipelineCacheKeyHasher> compute_pso_cache;
-	uint64_t compute_pso_cache_tick = 0;
+	HashMap<SHA256Digest, LocalVector<ComputePipelineCacheKey>> compute_pso_keys_by_library;
+	HashMap<SHA256Digest, uint32_t> compute_shader_owners_by_library;
+	HashSet<ComputePipelineCacheKey, ComputePipelineCacheKeyHasher> compute_archive_known_keys;
+	void evict_compute_pso_for_library(const SHA256Digest &p_library_key);
 	std::atomic<uint64_t> render_pso_cache_hits{ 0 };
 	std::atomic<uint64_t> render_pso_cache_misses{ 0 };
 	std::atomic<uint64_t> compute_pso_cache_hits{ 0 };
@@ -297,6 +322,12 @@ protected:
 	static std::atomic<uint64_t> total_render_pso_cache_misses;
 	static std::atomic<uint64_t> total_compute_pso_cache_hits;
 	static std::atomic<uint64_t> total_compute_pso_cache_misses;
+	static std::atomic<uint64_t> total_compute_pso_cache_evictions;
+	static std::atomic<uint64_t> total_compute_libraries_released;
+	static std::atomic<uint64_t> total_render_libraries_released;
+	static std::atomic<uint64_t> total_lazy_libraries_unloaded;
+	static std::atomic<uint64_t> total_compute_archive_hits;
+	static std::atomic<uint64_t> total_compute_archive_additions;
 
 #pragma mark - Copy Queue
 
@@ -628,13 +659,19 @@ private:
 	bool _is_archive_cap_enforced() const {
 		return !archive_fail_on_miss && pipeline_cache_mode != PipelineCacheMode::PERSIST;
 	}
+	String _pipeline_get_compute_cache_path() const;
 	NS::SharedPtr<MTL::BinaryArchive> _acquire_pipeline_archive();
+	NS::SharedPtr<MTL::BinaryArchive> _ensure_compute_archive(bool p_enable_disk);
 	bool _can_add_to_pipeline_archive(MTL::BinaryArchive *p_archive, bool p_is_compute);
 	void _record_pipeline_archive_addition(MTL::BinaryArchive *p_archive, bool p_is_compute);
 	void _serialize_archive_to_path(MTL::BinaryArchive *p_archive, const String &p_cache_path, uint32_t p_archive_count);
+	void _serialize_compute_archive_to_path(MTL::BinaryArchive *p_archive, const String &p_cache_path);
 	void _wait_archive_release_task();
+	void _wait_compute_archive_flush_task();
 	void _maybe_release_pipeline_archive(uint32_t p_frames_drawn);
+	void _maybe_flush_compute_archive();
 	static void _release_archive_task_func(void *p_userdata);
+	static void _flush_compute_archive_task_func(void *p_userdata);
 
 public:
 	virtual bool pipeline_cache_create(const Vector<uint8_t> &p_data) override final;
@@ -701,6 +738,7 @@ public:
 
 	virtual void command_begin_compute_pass(CommandBufferID p_cmd_buffer) override final;
 	virtual void command_end_compute_pass(CommandBufferID p_cmd_buffer) override final;
+	virtual void command_compute_memory_barrier(CommandBufferID p_cmd_buffer) override final;
 
 	// Binding.
 	virtual void command_bind_compute_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) override final;
@@ -812,13 +850,26 @@ public:
 	static uint64_t get_total_render_pso_cache_misses() { return total_render_pso_cache_misses.load(std::memory_order_relaxed); }
 	static uint64_t get_total_compute_pso_cache_hits() { return total_compute_pso_cache_hits.load(std::memory_order_relaxed); }
 	static uint64_t get_total_compute_pso_cache_misses() { return total_compute_pso_cache_misses.load(std::memory_order_relaxed); }
+	static uint64_t get_total_compute_pso_cache_evictions() { return total_compute_pso_cache_evictions.load(std::memory_order_relaxed); }
+	static uint64_t get_total_compute_libraries_released() { return total_compute_libraries_released.load(std::memory_order_relaxed); }
+	static uint64_t get_total_render_libraries_released() { return total_render_libraries_released.load(std::memory_order_relaxed); }
+	static uint64_t get_total_lazy_libraries_unloaded() { return total_lazy_libraries_unloaded.load(std::memory_order_relaxed); }
+	static uint64_t get_total_compute_archive_hits() { return total_compute_archive_hits.load(std::memory_order_relaxed); }
+	static uint64_t get_total_compute_archive_additions() { return total_compute_archive_additions.load(std::memory_order_relaxed); }
 	bool is_pipeline_archive_active() const { return archive_active.load(std::memory_order_acquire); }
+	bool is_compute_archive_active() const { return compute_archive_active.load(std::memory_order_acquire); }
 #ifdef TESTS_ENABLED
 	void test_step_pipeline_archive_frame(uint32_t p_frames_drawn, bool p_simulate_activity) {
 		if (p_simulate_activity) {
 			(void)_acquire_pipeline_archive();
 		}
 		_maybe_release_pipeline_archive(p_frames_drawn);
+	}
+	void test_step_compute_archive_frame(bool p_simulate_activity) {
+		if (p_simulate_activity) {
+			(void)_ensure_compute_archive(false);
+		}
+		_maybe_flush_compute_archive();
 	}
 	bool test_record_pipeline_archive_addition(bool p_is_compute) {
 		NS::SharedPtr<MTL::BinaryArchive> local_archive = _acquire_pipeline_archive();
@@ -830,6 +881,10 @@ public:
 	}
 	uint64_t test_get_pipeline_archive_serialize_calls() const {
 		return archive_serialize_calls.load(std::memory_order_acquire);
+	}
+	uint32_t test_get_compute_pso_cache_size() {
+		MutexLock lock(pipeline_state_cache_mutex);
+		return compute_pso_cache.size();
 	}
 #endif
 

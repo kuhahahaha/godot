@@ -203,6 +203,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_import_set(GDExtensionProd
 				request->uses[first + i].binding = p_bindings[i];
 			}
 			request->binding_used += p_count;
+			request->note_use_touched_end(request->use_count + request->binding_used);
 		}
 		slot->primary = RID::from_uint64(child->rid);
 		slot->backing_serial = child->object_serial;

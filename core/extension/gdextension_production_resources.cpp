@@ -233,6 +233,7 @@ Error Registry::production_unpin_resources_locked(ProductionRequest &p_request) 
 			slot.output_witness = NativeDisposalWitness();
 		}
 		slot.imported = false;
+		bump_resource_permission_epoch();
 		slot.cached_persistent_set = false;
 		slot.scene_depth_set1 = false;
 		slot.curve_lut_set1 = false;

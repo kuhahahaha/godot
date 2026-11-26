@@ -1247,11 +1247,15 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 	}
 
 	static_assert(sizeof(LightData) == 224u, "LightData must match 56-word GPU ABI");
+	static_assert(offsetof(LightData, direction) == 4u * 4u, "LightData direction offset");
+	static_assert(offsetof(LightData, inv_spot_attenuation) == 15u * 4u, "LightData inv_spot_attenuation offset");
+	static_assert(offsetof(LightData, cos_spot_angle) == 19u * 4u, "LightData cos_spot_angle offset");
 	static_assert(offsetof(LightData, specular_amount) == 20u * 4u, "LightData specular_amount offset");
 	static_assert(offsetof(LightData, mask) == 49u * 4u, "LightData mask offset");
 	static_assert(offsetof(LightData, volumetric_fog_energy) == 50u * 4u, "LightData volumetric_fog_energy offset");
 
 	frame_particle_omni_lights.clear();
+	frame_particle_spot_lights.clear();
 	ParticlesMeshLightSortRD *particle_light_sort = nullptr;
 	float particle_exposure_norm = 1.0f;
 	if (p_render_data->camera_attributes.is_valid()) {
@@ -1263,28 +1267,31 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		if (particle_light_sort) {
 			particle_light_sort->get_active_particle_lights(particle_lights);
 		}
-		if (!particle_lights.is_empty() && omni_lights != nullptr) {
-			for (uint32_t pi = 0; pi < particle_lights.size() && omni_light_count < max_lights; pi++) {
+		if (!particle_lights.is_empty() && (omni_lights != nullptr || spot_lights != nullptr)) {
+			for (uint32_t pi = 0; pi < particle_lights.size(); pi++) {
 				const ParticleLightRecord64 &prec = particle_lights[pi];
-				if (!Math::is_finite(prec.position_world[0]) || !Math::is_finite(prec.position_world[1]) || !Math::is_finite(prec.position_world[2]) ||
-						!Math::is_finite(prec.radius) || !(prec.radius > 0.0f) ||
-						!Math::is_finite(prec.color_hdr[0]) || prec.color_hdr[0] < 0.0f ||
-						!Math::is_finite(prec.color_hdr[1]) || prec.color_hdr[1] < 0.0f ||
-						!Math::is_finite(prec.color_hdr[2]) || prec.color_hdr[2] < 0.0f ||
-						!Math::is_finite(prec.attenuation_exp) || prec.attenuation_exp < 0.0f ||
-						prec.reserved0 != 0u || (prec.flags & ~ParticleLightRecord64::FLAG_KNOWN_MASK) != 0u ||
-						(prec.flags & ParticleLightRecord64::FLAG_ACTIVE) == 0u) {
+				if (!ParticleLightRecord64::is_valid_record(prec)) {
 					continue;
+				}
+				const bool is_spot = prec.is_spot();
+				if (is_spot) {
+					if (spot_lights == nullptr || spot_light_count >= max_lights) {
+						continue;
+					}
+				} else {
+					if (omni_lights == nullptr || omni_light_count >= max_lights) {
+						continue;
+					}
 				}
 				const float diff_scale = Math::is_finite(prec.diffuse_scale) ? MAX(0.0f, prec.diffuse_scale) : 1.0f;
 				const float spec_scale = Math::is_finite(prec.specular_scale) ? MAX(0.0f, prec.specular_scale) : 1.0f;
 				const float vol_fog = Math::is_finite(prec.volumetric_scattering) ? MAX(0.0f, prec.volumetric_scattering) : 1.0f;
-				const uint32_t buf_idx = omni_light_count++;
-				LightData &ld = omni_lights[buf_idx];
-				ld = {};
 				const Vector3 world_pos(prec.position_world[0], prec.position_world[1], prec.position_world[2]);
 				const Vector3 view_pos = inverse_transform.xform(world_pos);
 				const float radius = MAX(0.001f, prec.radius);
+				const uint32_t buf_idx = is_spot ? spot_light_count++ : omni_light_count++;
+				LightData &ld = is_spot ? spot_lights[buf_idx] : omni_lights[buf_idx];
+				ld = {};
 				ld.position[0] = view_pos.x;
 				ld.position[1] = view_pos.y;
 				ld.position[2] = view_pos.z;
@@ -1298,24 +1305,51 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 				ld.mask = 0xFFFFFFFFu;
 				ld.shadow_opacity = 0.0f;
 
-				frame_particle_omni_lights.push_back({ world_pos, radius, buf_idx });
-				RendererSceneRenderRD::get_singleton()->setup_added_light(RSE::LIGHT_OMNI, Transform3D(Basis(), world_pos), radius, 0.0f, Vector2());
+				if (is_spot) {
+					const Vector3 world_dir = ParticleLightRecord64::decode_oct32(prec.get_spot_dir_oct32());
+					Vector3 view_dir = inverse_transform.basis.xform(world_dir);
+					const float vlen_sq = view_dir.length_squared();
+					view_dir = (vlen_sq > 1e-12f) ? (view_dir / Math::sqrt(vlen_sq)) : Vector3(0.0f, 0.0f, -1.0f);
+					ld.direction[0] = view_dir.x;
+					ld.direction[1] = view_dir.y;
+					ld.direction[2] = view_dir.z;
+					ParticleLightRecord64::decode_spot_params(
+							prec.get_outer_cone_q16(),
+							prec.get_inner_cone_q16(),
+							ld.cos_spot_angle,
+							ld.inv_spot_attenuation);
+
+					frame_particle_spot_lights.push_back({ world_pos, radius, buf_idx });
+					const Vector3 up = (Math::abs(world_dir.y) < 0.99f) ? Vector3(0.0f, 1.0f, 0.0f) : Vector3(1.0f, 0.0f, 0.0f);
+					const Basis spot_basis = Basis::looking_at(world_dir, up);
+					const float outer_deg = Math::rad_to_deg(ParticleLightRecord64::decode_cone_angle_rad(prec.get_outer_cone_q16()));
+					RendererSceneRenderRD::get_singleton()->setup_added_light(RSE::LIGHT_SPOT, Transform3D(spot_basis, world_pos), radius, outer_deg, Vector2());
+				} else {
+					frame_particle_omni_lights.push_back({ world_pos, radius, buf_idx });
+					RendererSceneRenderRD::get_singleton()->setup_added_light(RSE::LIGHT_OMNI, Transform3D(Basis(), world_pos), radius, 0.0f, Vector2());
+				}
 				r_positional_light_count++;
 			}
 		}
 	}
 
-	//update without barriers
+	// Upload CPU omni & spot light entries before GPU particle light bridge appends after them.
 	if (omni_light_count) {
 		RD::get_singleton()->buffer_update(omni_light_buffer, 0, sizeof(LightData) * omni_light_count, omni_lights);
 	}
+	if (spot_light_count) {
+		RD::get_singleton()->buffer_update(spot_light_buffer, 0, sizeof(LightData) * spot_light_count, spot_lights);
+	}
 
-	// Zero-CPU-readback GPU consumption of sealed PARTICLE_LIGHT_64 (role 7 + role 8) slots:
-	if (particle_light_sort && omni_light_buffer.is_valid() && omni_light_count < max_lights) {
+	// Zero-CPU-readback GPU consumption of sealed PARTICLE_LIGHT_64 (role 7 + role 8) slots (Omni + Spot):
+	if (particle_light_sort &&
+			((omni_light_buffer.is_valid() && omni_light_count < max_lights) ||
+					(spot_light_buffer.is_valid() && spot_light_count < max_lights))) {
 		const RendererViewport::Viewport *src_vp = (RSG::viewport && p_render_data->source_viewport.is_valid()) ? RSG::viewport->viewport_owner.get_or_null(p_render_data->source_viewport) : nullptr;
 		const RID src_scenario = src_vp ? src_vp->scenario : RID();
-		LocalVector<ParticlesMeshLightSortRD::ReservedGpuLightBounds> gpu_bounds;
-		const uint32_t gpu_reserved = particle_light_sort->dispatch_registered_external_lights_gpu(
+		LocalVector<ParticlesMeshLightSortRD::ReservedGpuLightBounds> gpu_omni_bounds;
+		LocalVector<ParticlesMeshLightSortRD::ReservedGpuLightBounds> gpu_spot_bounds;
+		const ParticlesMeshLightSortRD::GpuLightDispatchResult gpu_res = particle_light_sort->dispatch_registered_external_lights_gpu(
 				RD::get_singleton(),
 				p_render_data->source_viewport,
 				src_scenario,
@@ -1325,12 +1359,16 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 				omni_light_buffer,
 				omni_light_count,
 				max_lights,
-				gpu_bounds);
-		if (gpu_reserved > 0u) {
-			omni_light_count += gpu_reserved;
-			r_positional_light_count += gpu_reserved;
-			for (uint32_t bi = 0; bi < gpu_bounds.size(); ++bi) {
-				const ParticlesMeshLightSortRD::ReservedGpuLightBounds &gb = gpu_bounds[bi];
+				spot_light_buffer,
+				spot_light_count,
+				max_lights,
+				gpu_omni_bounds,
+				gpu_spot_bounds);
+		if (gpu_res.reserved_omni > 0u) {
+			omni_light_count += gpu_res.reserved_omni;
+			r_positional_light_count += gpu_res.reserved_omni;
+			for (uint32_t bi = 0; bi < gpu_omni_bounds.size(); ++bi) {
+				const ParticlesMeshLightSortRD::ReservedGpuLightBounds &gb = gpu_omni_bounds[bi];
 				const Vector3 center = gb.world_bounds.get_center();
 				const float bound_radius = MAX(0.001f, gb.world_bounds.size.length() * 0.5f);
 				for (uint32_t k = 0; k < gb.count; ++k) {
@@ -1338,10 +1376,18 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 				}
 			}
 		}
-	}
-
-	if (spot_light_count) {
-		RD::get_singleton()->buffer_update(spot_light_buffer, 0, sizeof(LightData) * spot_light_count, spot_lights);
+		if (gpu_res.reserved_spot > 0u) {
+			spot_light_count += gpu_res.reserved_spot;
+			r_positional_light_count += gpu_res.reserved_spot;
+			for (uint32_t bi = 0; bi < gpu_spot_bounds.size(); ++bi) {
+				const ParticlesMeshLightSortRD::ReservedGpuLightBounds &gb = gpu_spot_bounds[bi];
+				const Vector3 center = gb.world_bounds.get_center();
+				const float bound_radius = MAX(0.001f, gb.world_bounds.size.length() * 0.5f);
+				for (uint32_t k = 0; k < gb.count; ++k) {
+					frame_particle_spot_lights.push_back({ center, bound_radius, gb.first_buffer_index + k });
+				}
+			}
+		}
 	}
 
 	if (area_light_count) {
@@ -1364,6 +1410,29 @@ uint32_t LightStorage::count_intersecting_particle_omni_lights(const AABB &p_wor
 		const ParticleOmniLightEntry &entry = frame_particle_omni_lights[i];
 		if (entry.buffer_index >= 255u) {
 			continue; // Mobile push-constant omni_lights packs 8-bit indices with 0xFF sentinel.
+		}
+		const Vector3 closest = entry.world_position.clamp(aabb_min, aabb_max);
+		if (entry.world_position.distance_squared_to(closest) <= entry.radius * entry.radius) {
+			if (r_out_indices != nullptr) {
+				r_out_indices[matched] = entry.buffer_index;
+			}
+			matched++;
+		}
+	}
+	return matched;
+}
+
+uint32_t LightStorage::count_intersecting_particle_spot_lights(const AABB &p_world_aabb, uint32_t *r_out_indices, uint32_t p_max_indices) const {
+	if (frame_particle_spot_lights.is_empty() || p_max_indices == 0) {
+		return 0;
+	}
+	const Vector3 aabb_min = p_world_aabb.position;
+	const Vector3 aabb_max = p_world_aabb.position + p_world_aabb.size;
+	uint32_t matched = 0;
+	for (uint32_t i = 0; i < frame_particle_spot_lights.size() && matched < p_max_indices; i++) {
+		const ParticleOmniLightEntry &entry = frame_particle_spot_lights[i];
+		if (entry.buffer_index >= 255u) {
+			continue; // Mobile push-constant spot_lights packs 8-bit indices with 0xFF sentinel.
 		}
 		const Vector3 closest = entry.world_position.clamp(aabb_min, aabb_max);
 		if (entry.world_position.distance_squared_to(closest) <= entry.radius * entry.radius) {

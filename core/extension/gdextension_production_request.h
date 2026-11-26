@@ -359,10 +359,22 @@ class ProductionResourceSlot {
 	uint32_t imported_unit_slot = UINT32_MAX;
 	uint32_t shader_set = UINT32_MAX;
 	uint32_t first_binding = UINT32_MAX, binding_count = 0;
-	// Per-resource O(1) last-writer hazard tracker within the active compute list.
+	// Per-resource bounded disjoint multi-span RAW/WAW/WAR hazard tracker within
+	// the active compute list (BUG-195A, BUG-196A). Storing up to MAX_HAZARD_SPANS
+	// sorted disjoint spans avoids false-positive bounding-hull splits across
+	// independent sub-allocations in a shared storage buffer.
+	static constexpr uint32_t MAX_HAZARD_SPANS = 8u;
+	struct HazardSpan {
+		uint64_t begin = 0;
+		uint64_t end = 0;
+	};
 	uint32_t last_dispatch_write_epoch = 0;
-	uint64_t last_dispatch_write_begin = 0;
-	uint64_t last_dispatch_write_end = 0;
+	uint32_t last_dispatch_write_span_count = 0;
+	HazardSpan last_dispatch_write_spans[MAX_HAZARD_SPANS] = {};
+	uint32_t last_dispatch_read_epoch = 0;
+	uint32_t last_dispatch_read_span_count = 0;
+	HazardSpan last_dispatch_read_spans[MAX_HAZARD_SPANS] = {};
+	uint32_t hazard_canonical_slot = UINT32_MAX;
 	bool imported = false;
 	bool scene_depth_set1 = false;
 	uint32_t scene_depth_lease_count = 0;
@@ -377,6 +389,7 @@ class ProductionResourceSlot {
 	uint64_t output_action_ordinal = UINT64_MAX;
 	uint64_t output_group_serial = 0, output_root_serial = 0;
 	uint32_t output_member_ordinal = UINT32_MAX;
+	uint32_t output_member_use_index = UINT32_MAX;
 	// Readonly predecessor custody; distinct from writable current-slot aliases.
 	// The original paid ViewCell pins both its arena and slot incarnation.
 	RendererRD::ExternalPacketViewLease output_predecessor_view;
@@ -771,6 +784,7 @@ struct ProductionControlCell {
 	bool scene_waiting = false;
 };
 class ProductionRequest {
+	friend class ProductionAttachment;
 	friend class ProductionOutputPreparationScope;
 	friend class Registry;
 	friend class ::RendererRD::ExternalOutputOwner;
@@ -806,6 +820,13 @@ class ProductionRequest {
 	uint64_t native_camera_uploads[3] = { UINT64_MAX, UINT64_MAX, UINT64_MAX };
 	uint32_t native_camera_needs_inverse = 0;
 	GDExtensionProductionServiceBudgetV1 native_stage_budget = {};
+	uint64_t native_stage_latched_deadline_micros = 0;
+	uint64_t native_stage_budget_duration_us = 0;
+	uint64_t native_stage_slice_deadline_micros = 0;
+	uint64_t native_stage_slice_capture_ordinal = 0;
+	uint32_t native_stage_slice_view_id = 0;
+	uint64_t native_stage_slice_view_epoch = 0;
+	uint32_t native_stage_deferral_count = 0;
 	uint64_t native_stage_control = 0;
 	uint32_t native_stage_controls_used = 0, native_stage_passes_used = 0, native_stage_receipts_used = 0;
 	uint32_t native_prepared_unread = 0;
@@ -826,6 +847,17 @@ class ProductionRequest {
 	uint32_t command_count = 0, frame_count = 0;
 	uint64_t revision = 1;
 	uint32_t graph_count = 0, native_count = 0;
+	static constexpr uint32_t NATIVE_OWNER_INLINE_CAP = 64;
+	uint32_t native_owner_indices[NATIVE_OWNER_INLINE_CAP] = {};
+	uint32_t native_owner_count = 0;
+	bool native_owners_overflowed = false;
+	void note_native_owner(uint32_t index) {
+		if (native_owner_count < NATIVE_OWNER_INLINE_CAP) {
+			native_owner_indices[native_owner_count++] = index;
+		} else {
+			native_owners_overflowed = true;
+		}
+	}
 	uint32_t observe_cursor = 0, release_cursor = 0;
 	// Original request's RT readiness fact, not completion of owner references.
 	struct ReleaseReady {
@@ -847,11 +879,29 @@ class ProductionRequest {
 	uint32_t output_owner_head = UINT32_MAX, output_owner_cursor = UINT32_MAX;
 	uint32_t disposal_group_head = UINT32_MAX;
 	uint32_t disposal_use_high_water = 0;
+	uint32_t uses_touched_hwm = 0;
 	uint64_t next_disposal_group_serial = 1;
+	void note_use_touched(uint32_t index) {
+		if (index + 1 > uses_touched_hwm) {
+			uses_touched_hwm = index + 1;
+		}
+	}
+	void note_use_touched_end(uint32_t end) {
+		if (end > uses_touched_hwm) {
+			uses_touched_hwm = end;
+		}
+	}
+	uint32_t uses_touched_end() const {
+		const uint32_t base_end = (use_count <= capacity.resource_uses && binding_used <= capacity.resource_uses - use_count)
+				? (use_count + binding_used)
+				: capacity.resource_uses;
+		return MIN(MAX(base_end, MAX(disposal_use_high_water, uses_touched_hwm)), capacity.resource_uses);
+	}
 	void note_disposal_use_index(uint32_t index) {
 		if (index + 1 > disposal_use_high_water) {
 			disposal_use_high_water = index + 1;
 		}
+		note_use_touched(index);
 	}
 	void link_disposal_group(uint32_t index) {
 		auto &g = uses[index];
@@ -951,6 +1001,11 @@ struct PersistentSetEntry {
 	QualificationPhysicalReturn physical;
 	LocalVector<QualificationPhysicalReturn *> dependencies;
 	uint64_t last_used_tick = 0;
+	PersistentSetEntry *lru_prev = nullptr;
+	PersistentSetEntry *lru_next = nullptr;
+	uint32_t list_index = UINT32_MAX;
+	uint32_t pending_reap_index = UINT32_MAX;
+	bool in_lru = false;
 	bool evicted = false;
 	bool retire_enqueued = false;
 };
@@ -974,6 +1029,7 @@ class ProductionAttachment {
 	uint64_t terminal_action = 0;
 	GDExtensionProductionMetadataQuoteV1 quote = {};
 	void *arena = nullptr;
+	size_t arena_mmap_bytes = 0;
 	ProductionRequest *requests = nullptr;
 	ProductionActionCell *actions = nullptr;
 	MaterialQualificationState *material_qualifications = nullptr;
@@ -1013,18 +1069,164 @@ class ProductionAttachment {
 	bool closing = false;
 	uint32_t actions_hwm = 0, resources_hwm = 0, uses_hwm = 0, readbacks_hwm = 0;
 	uint32_t graphs_hwm = 0, returns_hwm = 0, commands_hwm = 0, frames_hwm = 0;
+	uint32_t actions_free_cursor = 0, resources_free_cursor = 0, uses_free_cursor = 0, readbacks_free_cursor = 0;
+	uint32_t graphs_free_cursor = 0, returns_free_cursor = 0, commands_free_cursor = 0, frames_free_cursor = 0;
+	uint32_t registry_slot = UINT32_MAX;
 	uint32_t material_qualifications_live = 0, material_qualifications_constructed_total = 0;
 	uint64_t payload_reclaim_hwm = 0, readback_reclaim_hwm = 0, natives_reclaim_hwm = 0;
+	uint64_t readback_reclaim_top_lwm = UINT64_MAX, natives_reclaim_top_lwm = UINT64_MAX;
 	uint32_t mq_reclaim_hwm = 0;
+	static constexpr uint32_t ARENA_IDLE_RECLAIM_FRAMES = 120u;
+	static constexpr uint32_t ARENA_TAIL_RECLAIM_FRAMES = 30u;
+	uint32_t idle_reclaim_frames = 0;
 	uint64_t arena_reclaimed_bytes_total = 0;
-	// Attachment-scoped persistent UniformSet cache for long-lived retained storage bindings.
-	static constexpr uint32_t PERSISTENT_SET_MAX_LIVE = 512u;
+	struct TailReclaimWindow {
+		uint32_t actions_peak = 0, resources_peak = 0, uses_peak = 0, readbacks_peak = 0;
+		uint32_t graphs_peak = 0, returns_peak = 0, commands_peak = 0, frames_peak = 0;
+		uint32_t mq_peak = 0;
+		uint64_t payload_peak = 0, readback_low_peak = 0, natives_low_peak = 0;
+		uint64_t readback_top_valley = UINT64_MAX, natives_top_valley = UINT64_MAX;
+		uint32_t frames = 0;
+		void reset() {
+			*this = TailReclaimWindow{};
+		}
+		void note_reservation(uint32_t p_actions_end, uint32_t p_resources_end, uint32_t p_uses_end, uint32_t p_readbacks_end,
+				uint32_t p_graphs_end, uint32_t p_returns_end, uint32_t p_commands_end, uint32_t p_frames_end,
+				uint64_t p_payload_end, uint64_t p_readback_end, uint64_t p_readback_start,
+				uint64_t p_natives_end, uint64_t p_natives_start, bool p_top_down) {
+			actions_peak = MAX(actions_peak, p_actions_end);
+			resources_peak = MAX(resources_peak, p_resources_end);
+			uses_peak = MAX(uses_peak, p_uses_end);
+			readbacks_peak = MAX(readbacks_peak, p_readbacks_end);
+			graphs_peak = MAX(graphs_peak, p_graphs_end);
+			returns_peak = MAX(returns_peak, p_returns_end);
+			commands_peak = MAX(commands_peak, p_commands_end);
+			frames_peak = MAX(frames_peak, p_frames_end);
+			payload_peak = MAX(payload_peak, p_payload_end);
+			if (p_top_down) {
+				readback_top_valley = MIN(readback_top_valley, p_readback_start);
+				natives_top_valley = MIN(natives_top_valley, p_natives_start);
+			} else {
+				readback_low_peak = MAX(readback_low_peak, p_readback_end);
+				natives_low_peak = MAX(natives_low_peak, p_natives_end);
+			}
+		}
+	};
+	TailReclaimWindow tail_reclaim;
+	bool has_reclaimable_arena_pages() const {
+		return (actions && actions_hwm > 0) ||
+				(resources && resources_hwm > 0) ||
+				(uses && uses_hwm > 0) ||
+				(readbacks && readbacks_hwm > 0) ||
+				(graphs && graphs_hwm > 0) ||
+				(returns && returns_hwm > 0) ||
+				(commands && commands_hwm > 0) ||
+				(frames && frames_hwm > 0) ||
+				(payload && payload_reclaim_hwm > scene_prefix_bytes) ||
+				(readback_bytes && (readback_reclaim_hwm > 0 || readback_reclaim_top_lwm < quote.capacity.readback_bytes)) ||
+				(natives && (natives_reclaim_hwm > 0 || natives_reclaim_top_lwm < quote.capacity.native_memberships)) ||
+				(material_qualifications && material_qualifications_live == 0 && mq_reclaim_hwm > 0);
+	}
+	void reclaim_pod_pages();
+	void reclaim_unused_tail_pod_pages();
+	// Attachment-scoped persistent UniformSet cache for long-lived retained storage bindings (BUG-195D-1).
+	static constexpr uint32_t PERSISTENT_SET_MAX_LIVE = 4096u;
 	HashMap<PersistentSetKey, PersistentSetEntry *, PersistentSetKeyHasher> persistent_set_lookup;
 	HashMap<QualificationPhysicalReturn *, LocalVector<PersistentSetEntry *>> persistent_sets_by_dep;
 	LocalVector<PersistentSetEntry *> persistent_sets;
+	LocalVector<PersistentSetEntry *> persistent_sets_pending_reap;
+	PersistentSetEntry *persistent_set_lru_head = nullptr; // Most recently used.
+	PersistentSetEntry *persistent_set_lru_tail = nullptr; // Least recently used (O(1) eviction tail).
 	uint64_t persistent_set_tick = 0;
+	uint64_t persistent_set_reap_entries_scanned = 0;
 	bool persistent_set_close_drain_queued = false;
+	void persistent_set_lru_unlink(PersistentSetEntry *p_entry) {
+		if (!p_entry || !p_entry->in_lru) {
+			return;
+		}
+		if (p_entry->lru_prev) {
+			p_entry->lru_prev->lru_next = p_entry->lru_next;
+		} else {
+			persistent_set_lru_head = p_entry->lru_next;
+		}
+		if (p_entry->lru_next) {
+			p_entry->lru_next->lru_prev = p_entry->lru_prev;
+		} else {
+			persistent_set_lru_tail = p_entry->lru_prev;
+		}
+		p_entry->lru_prev = nullptr;
+		p_entry->lru_next = nullptr;
+		p_entry->in_lru = false;
+	}
+	void persistent_set_lru_touch(PersistentSetEntry *p_entry) {
+		if (!p_entry || p_entry->evicted) {
+			return;
+		}
+		if (p_entry->in_lru && persistent_set_lru_head == p_entry) {
+			return;
+		}
+		if (p_entry->in_lru) {
+			persistent_set_lru_unlink(p_entry);
+		}
+		p_entry->lru_prev = nullptr;
+		p_entry->lru_next = persistent_set_lru_head;
+		if (persistent_set_lru_head) {
+			persistent_set_lru_head->lru_prev = p_entry;
+		} else {
+			persistent_set_lru_tail = p_entry;
+		}
+		persistent_set_lru_head = p_entry;
+		p_entry->in_lru = true;
+	}
+	void persistent_set_push_live(PersistentSetEntry *p_entry) {
+		if (!p_entry) {
+			return;
+		}
+		p_entry->list_index = persistent_sets.size();
+		persistent_sets.push_back(p_entry);
+	}
+	void persistent_set_mark_evicted(PersistentSetEntry *p_entry) {
+		if (!p_entry) {
+			return;
+		}
+		if (!p_entry->evicted) {
+			p_entry->evicted = true;
+			persistent_set_lookup.erase(p_entry->key);
+		}
+		persistent_set_lru_unlink(p_entry);
+		if (p_entry->pending_reap_index == UINT32_MAX) {
+			p_entry->pending_reap_index = persistent_sets_pending_reap.size();
+			persistent_sets_pending_reap.push_back(p_entry);
+		}
+	}
+	void persistent_set_remove_owned(PersistentSetEntry *p_entry) {
+		if (!p_entry) {
+			return;
+		}
+		persistent_set_lru_unlink(p_entry);
+		if (p_entry->pending_reap_index < persistent_sets_pending_reap.size() && persistent_sets_pending_reap[p_entry->pending_reap_index] == p_entry) {
+			const uint32_t idx = p_entry->pending_reap_index;
+			persistent_sets_pending_reap.remove_at_unordered(idx);
+			if (idx < persistent_sets_pending_reap.size() && persistent_sets_pending_reap[idx]) {
+				persistent_sets_pending_reap[idx]->pending_reap_index = idx;
+			}
+			p_entry->pending_reap_index = UINT32_MAX;
+		}
+		if (p_entry->list_index < persistent_sets.size() && persistent_sets[p_entry->list_index] == p_entry) {
+			const uint32_t idx = p_entry->list_index;
+			persistent_sets.remove_at_unordered(idx);
+			if (idx < persistent_sets.size() && persistent_sets[idx]) {
+				persistent_sets[idx]->list_index = idx;
+			}
+			p_entry->list_index = UINT32_MAX;
+		}
+	}
 	// Open must acquire the original device holder and operation-window receiver.
 	// Metadata reservations do not satisfy those two obligations.
 };
+
+bool production_serial_index_has_attachment(const Registry &p_registry, uint64_t p_serial);
+bool production_serial_index_has_request(const Registry &p_registry, uint64_t p_serial);
+uint32_t production_serial_index_attachment_count(const Registry &p_registry);
+uint32_t production_serial_index_request_count(const Registry &p_registry);
 } // namespace GDExtensionDeviceExit

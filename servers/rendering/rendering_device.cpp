@@ -34,10 +34,14 @@
 #ifdef TESTS_ENABLED
 #include <cstdio>
 #endif
+#ifdef MACOS_ENABLED
+#include <malloc/malloc.h>
+#endif
 #include <iterator>
 
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
+#include "core/crypto/crypto_core.h"
 #include "core/extension/gdextension_external_output_interface.h"
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "core/extension/gdextension_production_request.h"
@@ -54,6 +58,7 @@
 #include "servers/rendering/renderer_rd/height_capture_checked_sink.h"
 #include "servers/rendering/renderer_rd/storage_rd/height_frame_resources.h"
 #include "servers/rendering/rendering_device_binds.h"
+#include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_shader_container.h"
 #include "servers/rendering/shader_include_db.h"
 
@@ -274,13 +279,184 @@ bool RenderingDevice::_free_dependencies(RID p_id, const MutexLock<Mutex> &p_out
 /**** SHADER INFRASTRUCTURE ****/
 /*******************************/
 
+namespace {
+
+struct Sha256Key {
+	uint8_t data[32] = {};
+
+	bool operator==(const Sha256Key &p_rhs) const {
+		return memcmp(data, p_rhs.data, sizeof(data)) == 0;
+	}
+};
+
+struct Sha256KeyHasher {
+	static _FORCE_INLINE_ uint32_t hash(const Sha256Key &p_key) {
+		return hash_murmur3_buffer(p_key.data, sizeof(p_key.data));
+	}
+};
+
+struct BoundedShaderByteCache {
+	static constexpr uint32_t MAX_SPIRV_ENTRIES = 128;
+	static constexpr uint64_t MAX_SPIRV_BYTES = 8ull * 1024u * 1024u;
+	static constexpr uint32_t MAX_CONTAINER_ENTRIES = 128;
+	static constexpr uint64_t MAX_CONTAINER_BYTES = 4ull * 1024u * 1024u;
+
+	struct Entry {
+		Vector<uint8_t> bytes;
+		const RenderingDevice *owner = nullptr;
+	};
+
+	Mutex mutex;
+	HashMap<Sha256Key, Entry, Sha256KeyHasher> entries;
+	List<Sha256Key> fifo;
+	uint64_t total_bytes = 0;
+	uint32_t max_entries = MAX_SPIRV_ENTRIES;
+	uint64_t max_bytes = MAX_SPIRV_BYTES;
+
+	BoundedShaderByteCache(uint32_t p_max_entries, uint64_t p_max_bytes) :
+			max_entries(p_max_entries), max_bytes(p_max_bytes) {}
+
+	bool lookup(const Sha256Key &p_key, Vector<uint8_t> &r_out) {
+		MutexLock lock(mutex);
+		if (const Entry *e = entries.getptr(p_key)) {
+			r_out = e->bytes;
+			return true;
+		}
+		return false;
+	}
+
+	void insert(const Sha256Key &p_key, const Vector<uint8_t> &p_bytes, const RenderingDevice *p_owner = nullptr) {
+		const uint64_t sz = uint64_t(p_bytes.size());
+		if (sz == 0 || sz > max_bytes) {
+			return;
+		}
+		MutexLock lock(mutex);
+		if (entries.has(p_key)) {
+			return;
+		}
+		while ((!fifo.is_empty()) && (entries.size() >= max_entries || total_bytes + sz > max_bytes)) {
+			const Sha256Key oldest = fifo.front()->get();
+			fifo.pop_front();
+			if (const Entry *old = entries.getptr(oldest)) {
+				total_bytes -= uint64_t(old->bytes.size());
+				entries.erase(oldest);
+			}
+		}
+		Entry e;
+		e.bytes = p_bytes;
+		e.owner = p_owner;
+		entries.insert(p_key, std::move(e));
+		fifo.push_back(p_key);
+		total_bytes += sz;
+	}
+
+	void erase_owner(const RenderingDevice *p_owner) {
+		MutexLock lock(mutex);
+		List<Sha256Key>::Element *el = fifo.front();
+		while (el != nullptr) {
+			List<Sha256Key>::Element *next = el->next();
+			const Sha256Key &key = el->get();
+			if (const Entry *e = entries.getptr(key); e != nullptr && e->owner == p_owner) {
+				total_bytes -= uint64_t(e->bytes.size());
+				entries.erase(key);
+				fifo.erase(el);
+			}
+			el = next;
+		}
+	}
+
+	void clear() {
+		MutexLock lock(mutex);
+		entries.clear();
+		fifo.clear();
+		total_bytes = 0;
+	}
+};
+
+static BoundedShaderByteCache &get_spirv_compile_cache() {
+	static BoundedShaderByteCache cache(BoundedShaderByteCache::MAX_SPIRV_ENTRIES, BoundedShaderByteCache::MAX_SPIRV_BYTES);
+	return cache;
+}
+
+static BoundedShaderByteCache &get_container_compile_cache() {
+	static BoundedShaderByteCache cache(BoundedShaderByteCache::MAX_CONTAINER_ENTRIES, BoundedShaderByteCache::MAX_CONTAINER_BYTES);
+	return cache;
+}
+
+static bool compute_spirv_cache_key(RenderingDevice::ShaderStage p_stage, RenderingDevice::ShaderLanguage p_language, RenderingDevice::ShaderLanguageVersion p_lang_ver, RenderingDevice::ShaderSpirvVersion p_spv_ver, const CharString &p_expanded_utf8, Sha256Key &r_key) {
+	CryptoCore::SHA256Context ctx;
+	if (ctx.start() != OK) {
+		return false;
+	}
+	const uint32_t header[4] = { uint32_t(p_stage), uint32_t(p_language), uint32_t(p_lang_ver), uint32_t(p_spv_ver) };
+	if (ctx.update(reinterpret_cast<const uint8_t *>(header), sizeof(header)) != OK) {
+		return false;
+	}
+	if (p_expanded_utf8.length() > 0 && ctx.update(reinterpret_cast<const uint8_t *>(p_expanded_utf8.get_data()), size_t(p_expanded_utf8.length())) != OK) {
+		return false;
+	}
+	return ctx.finish(r_key.data) == OK;
+}
+
+static bool compute_container_cache_key(const RenderingDevice *p_rd, const Vector<RenderingDevice::ShaderStageSPIRVData> &p_spirv, const String &p_shader_name, uint64_t p_flags, Sha256Key &r_key) {
+	CryptoCore::SHA256Context ctx;
+	if (ctx.start() != OK) {
+		return false;
+	}
+	const uintptr_t rd_addr = reinterpret_cast<uintptr_t>(p_rd);
+	const uint64_t meta[3] = { uint64_t(rd_addr), p_flags, uint64_t(p_spirv.size()) };
+	if (ctx.update(reinterpret_cast<const uint8_t *>(meta), sizeof(meta)) != OK) {
+		return false;
+	}
+	const CharString name_utf8 = p_shader_name.utf8();
+	const uint32_t name_len = uint32_t(name_utf8.length());
+	if (ctx.update(reinterpret_cast<const uint8_t *>(&name_len), sizeof(name_len)) != OK) {
+		return false;
+	}
+	if (name_len > 0 && ctx.update(reinterpret_cast<const uint8_t *>(name_utf8.get_data()), name_len) != OK) {
+		return false;
+	}
+	for (int i = 0; i < p_spirv.size(); ++i) {
+		const uint32_t st_meta[2] = { uint32_t(p_spirv[i].shader_stage), uint32_t(p_spirv[i].spirv.size()) };
+		if (ctx.update(reinterpret_cast<const uint8_t *>(st_meta), sizeof(st_meta)) != OK) {
+			return false;
+		}
+		if (!p_spirv[i].spirv.is_empty() && ctx.update(p_spirv[i].spirv.ptr(), size_t(p_spirv[i].spirv.size())) != OK) {
+			return false;
+		}
+	}
+	return ctx.finish(r_key.data) == OK;
+}
+
+} // namespace
+
 Vector<uint8_t> RenderingDevice::shader_compile_spirv_from_source(ShaderStage p_stage, const String &p_source_code, ShaderLanguage p_language, String *r_error, bool p_allow_cache) {
 	switch (p_language) {
 #ifdef MODULE_GLSLANG_ENABLED
 		case ShaderLanguage::SHADER_LANGUAGE_GLSL: {
 			ShaderLanguageVersion language_version = driver->get_shader_container_format().get_shader_language_version();
 			ShaderSpirvVersion spirv_version = driver->get_shader_container_format().get_shader_spirv_version();
-			return compile_glslang_shader(p_stage, ShaderIncludeDB::parse_include_files(p_source_code), language_version, spirv_version, r_error);
+			const String expanded = ShaderIncludeDB::parse_include_files(p_source_code);
+			Sha256Key cache_key;
+			bool key_valid = false;
+			if (p_allow_cache) {
+				const CharString utf8 = expanded.utf8();
+				key_valid = compute_spirv_cache_key(p_stage, p_language, language_version, spirv_version, utf8, cache_key);
+				if (key_valid) {
+					Vector<uint8_t> cached;
+					if (get_spirv_compile_cache().lookup(cache_key, cached)) {
+						if (r_error != nullptr) {
+							r_error->clear();
+						}
+						return cached;
+					}
+				}
+			}
+			Vector<uint8_t> compiled = compile_glslang_shader(p_stage, expanded, language_version, spirv_version, r_error);
+			if (p_allow_cache && key_valid && !compiled.is_empty() && (r_error == nullptr || r_error->is_empty())) {
+				get_spirv_compile_cache().insert(cache_key, compiled);
+			}
+			return compiled;
 		}
 #endif
 		default:
@@ -3405,7 +3581,8 @@ void RenderingDevice::_texture_free_shared_fallback(Texture *p_texture) {
 }
 
 void RenderingDevice::_texture_copy_shared(RID p_src_texture_rid, Texture *p_src_texture, RID p_dst_texture_rid, Texture *p_dst_texture) {
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	const Error rec_err = (qualification_recording || production_recording_request) ? _recording_error() : _ensure_recording_ready();
+	ERR_FAIL_COND_MSG(rec_err != OK, _recording_suspended_message(rec_err));
 	// The only type of copying allowed is from the main texture to the slice texture, as slice textures are not allowed to be used for writing when using this fallback.
 	DEV_ASSERT(p_src_texture != nullptr);
 	DEV_ASSERT(p_dst_texture != nullptr);
@@ -3611,7 +3788,8 @@ Error RenderingDevice::_texture_check_pending_clear(RID p_texture_rid, Texture *
 }
 
 Error RenderingDevice::_texture_clear_color(RID p_texture_rid, Texture *p_texture, const Color &p_color, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, _recording_error(), "Recording is suspended after a frame fence wait failure.");
+	const Error rec_err = (qualification_recording || production_recording_request) ? _recording_error() : _ensure_recording_ready();
+	ERR_FAIL_COND_V_MSG(rec_err != OK, rec_err, _recording_suspended_message(rec_err));
 	{
 		const Error dependency_error = _check_transfer_worker_texture(p_texture);
 		if (dependency_error != OK) {
@@ -3639,7 +3817,8 @@ Error RenderingDevice::_texture_clear_color(RID p_texture_rid, Texture *p_textur
 }
 
 Error RenderingDevice::_texture_clear_depth_stencil(RID p_texture_rid, Texture *p_texture, float p_depth, uint8_t p_stencil, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, _recording_error(), "Recording is suspended after a frame fence wait failure.");
+	const Error rec_err = (qualification_recording || production_recording_request) ? _recording_error() : _ensure_recording_ready();
+	ERR_FAIL_COND_V_MSG(rec_err != OK, rec_err, _recording_suspended_message(rec_err));
 	{
 		const Error dependency_error = _check_transfer_worker_texture(p_texture);
 		if (dependency_error != OK) {
@@ -5692,6 +5871,16 @@ Vector<uint8_t> RenderingDevice::shader_compile_binary_from_spirv_with_options(c
 	ERR_FAIL_COND_V(!ShaderCompilePolicy::flags_valid(p_flags, SHADER_COMPILE_FLAG_DISABLE_FAST_MATH), Vector<uint8_t>());
 	const RenderingShaderContainerFormat &container_format = driver->get_shader_container_format();
 	ERR_FAIL_COND_V(!ShaderCompilePolicy::flags_valid(p_flags, container_format.supported_compile_flags()), Vector<uint8_t>());
+
+	Sha256Key cache_key;
+	const bool key_valid = compute_container_cache_key(this, p_spirv, p_shader_name, uint64_t(p_flags), cache_key);
+	if (key_valid) {
+		Vector<uint8_t> cached;
+		if (get_container_compile_cache().lookup(cache_key, cached)) {
+			return cached;
+		}
+	}
+
 	Ref<RenderingShaderContainer> shader_container = container_format.create_container();
 	ERR_FAIL_COND_V(shader_container.is_null(), Vector<uint8_t>());
 
@@ -5699,7 +5888,11 @@ Vector<uint8_t> RenderingDevice::shader_compile_binary_from_spirv_with_options(c
 	bool code_compiled = shader_container->set_code_from_spirv(p_shader_name, p_spirv, p_flags);
 	ERR_FAIL_COND_V_MSG(!code_compiled, Vector<uint8_t>(), vformat("Failed to compile code to native for SPIR-V."));
 
-	return shader_container->to_bytes();
+	Vector<uint8_t> bytes = shader_container->to_bytes();
+	if (key_valid && !bytes.is_empty()) {
+		get_container_compile_cache().insert(cache_key, bytes, this);
+	}
+	return bytes;
 }
 
 RID RenderingDevice::shader_create_from_bytecode(const Vector<uint8_t> &p_shader_binary, RID p_placeholder) {
@@ -6004,9 +6197,17 @@ RID RenderingDevice::_qualification_uniform_set_create(const VectorView<Uniform>
 	return result;
 }
 RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Uniform> &p_uniforms, RID p_shader, uint32_t p_shader_set, bool p_linear_pool, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> *p_children, const NativeDisposalWitness *p_native_disposal, const GDExtensionDeviceExit::ProductionRequest *p_production, const VectorView<ProductionOutputUniformSource> *p_sources) {
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Recording is suspended after a frame fence wait failure.");
 	_THREAD_SAFE_METHOD_
 	last_uniform_set_create_error = OK;
+	const bool managed_caller = p_cell != nullptr || p_production != nullptr || p_native_disposal != nullptr;
+	const Error rec_err = managed_caller ? _recording_error() : _ensure_recording_ready();
+	if (rec_err != OK) {
+		last_uniform_set_create_error = rec_err;
+		if (rec_err == ERR_BUSY && managed_caller && _recording_fatal_error() == OK && !frame_wait_native_code_valid.load()) {
+			return RID();
+		}
+		ERR_FAIL_V_MSG(RID(), _recording_suspended_message(rec_err));
+	}
 	QualificationSourceAdmissionScope source_admission(*this);
 	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_shader), RID());
 
@@ -7489,7 +7690,8 @@ Error RenderingDevice::screen_free(DisplayServerEnums::WindowID p_screen) {
 
 RenderingDevice::DrawListID RenderingDevice::draw_list_begin_for_screen(DisplayServerEnums::WindowID p_screen, const Color &p_clear_color) {
 	ERR_RENDER_THREAD_GUARD_V(INVALID_ID);
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, INVALID_ID, "Recording is suspended after a frame fence wait failure.");
+	const Error rec_err = _ensure_recording_ready();
+	ERR_FAIL_COND_V_MSG(rec_err != OK, INVALID_ID, _recording_suspended_message(rec_err));
 
 	ERR_FAIL_COND_V_MSG(draw_list.active, INVALID_ID, "Only one draw list can be active at the same time.");
 	ERR_FAIL_COND_V_MSG(compute_list.active, INVALID_ID, "Only one draw/compute list can be active at the same time.");
@@ -7551,7 +7753,8 @@ RenderingDevice::DrawListBeginResult RenderingDevice::_draw_list_begin_recorded(
 	DrawListBeginResult result;
 	const BitField<DrawFlags> p_draw_flags = p_draw_flags_bits;
 	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	const Error rec_err = (p_capture || qualification_recording || production_recording_request) ? _recording_error() : _ensure_recording_ready();
+	ERR_FAIL_COND_V_MSG(rec_err != OK, result.failure(rec_err), _recording_suspended_message(rec_err));
 
 	ERR_FAIL_COND_V_MSG(draw_list.active, result.failure(ERR_INVALID_PARAMETER), "Only one draw list can be active at the same time.");
 
@@ -7714,7 +7917,7 @@ Error RenderingDevice::draw_list_begin_split(RID p_framebuffer, uint32_t p_split
 
 void RenderingDevice::draw_list_set_blend_constants(DrawListID p_list, const Color &p_color) {
 	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_MSG(_recording_error() != OK, _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND(!draw_list.active);
 
@@ -7728,7 +7931,7 @@ void RenderingDevice::draw_list_bind_render_pipeline(DrawListID p_list, RID p_re
 RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_bind_render_pipeline_recorded(DrawListID p_list, RID p_render_pipeline, bool p_capture) {
 	DrawAppendResult result;
 	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), _recording_suspended_message(_recording_error()));
 	if (p_capture) {
 		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
 	}
@@ -7833,7 +8036,7 @@ void RenderingDevice::draw_list_bind_uniform_set(DrawListID p_list, RID p_unifor
 RenderingDevice::BindAppendResult RenderingDevice::_draw_list_bind_uniform_set_recorded(DrawListID p_list, RID p_uniform_set, uint32_t p_index, bool p_capture, NativeTransferDependency *p_transfers, uint32_t p_transfer_capacity) {
 	BindAppendResult result;
 	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), _recording_suspended_message(_recording_error()));
 	if (p_capture) {
 		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
 		ERR_FAIL_COND_V(p_index >= MAX_UNIFORM_SETS || p_index >= driver->limit_get(LIMIT_MAX_BOUND_UNIFORM_SETS), result.failure(ERR_INVALID_PARAMETER));
@@ -7931,7 +8134,7 @@ bool RenderingDevice::_draw_list_usage_conflicts(const RDG::ResourceTracker *p_t
 RenderingDevice::BindAppendResult RenderingDevice::_draw_list_bind_vertex_array_recorded(DrawListID p_list, RID p_vertex_array, NativeTransferDependency *p_transfers, uint32_t p_transfer_capacity, bool p_capture) {
 	BindAppendResult result;
 	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), _recording_suspended_message(_recording_error()));
 	if (p_capture) {
 		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
 	}
@@ -8000,7 +8203,7 @@ RenderingDevice::BindAppendResult RenderingDevice::_draw_list_bind_vertex_array_
 
 void RenderingDevice::draw_list_bind_vertex_buffers_format(DrawListID p_list, VertexFormatID p_vertex_format, uint32_t p_vertex_count, const Span<RID> &p_vertex_buffers, const Span<uint64_t> &p_offsets) {
 	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_MSG(_recording_error() != OK, _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND(!draw_list.active);
 
@@ -8111,7 +8314,7 @@ void RenderingDevice::draw_list_bind_index_array(DrawListID p_list, RID p_index_
 RenderingDevice::BindAppendResult RenderingDevice::_draw_list_bind_index_array_recorded(DrawListID p_list, RID p_index_array, NativeTransferDependency *p_transfers, uint32_t p_transfer_capacity, bool p_capture) {
 	BindAppendResult result;
 	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), _recording_suspended_message(_recording_error()));
 	if (p_capture) {
 		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
 	}
@@ -8174,7 +8377,7 @@ RenderingDevice::BindAppendResult RenderingDevice::_draw_list_bind_index_array_r
 
 void RenderingDevice::draw_list_set_line_width(DrawListID p_list, float p_width) {
 	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_MSG(_recording_error() != OK, _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND(!draw_list.active);
 
@@ -8188,7 +8391,7 @@ void RenderingDevice::draw_list_set_push_constant(DrawListID p_list, const void 
 RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_set_push_constant_recorded(DrawListID p_list, const void *p_data, uint32_t p_data_size, bool p_capture) {
 	DrawAppendResult result;
 	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
 
@@ -8232,7 +8435,7 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_recorded(Draw
 	const bool prepared_capture = p_capture && p_profile == DrawCaptureProfile::GeometryPrepared;
 	uint32_t expected_prefix_count = 0;
 	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
 
@@ -8666,7 +8869,7 @@ void RenderingDevice::draw_list_draw_indirect(DrawListID p_list, bool p_use_indi
 RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_indirect_recorded(DrawListID p_list, bool p_use_indices, RID p_buffer, uint32_t p_offset, uint32_t p_draw_count, uint32_t p_stride, bool p_capture) {
 	DrawAppendResult result;
 	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), _recording_suspended_message(_recording_error()));
 	if (p_capture) {
 		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
 	}
@@ -8874,7 +9077,7 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_indirect_reco
 }
 
 void RenderingDevice::draw_list_set_viewport(DrawListID p_list, const Rect2 &p_rect) {
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_MSG(_recording_error() != OK, _recording_suspended_message(_recording_error()));
 	ERR_FAIL_COND(!draw_list.active);
 
 	if (p_rect.get_area() == 0) {
@@ -8892,7 +9095,7 @@ void RenderingDevice::draw_list_enable_scissor(DrawListID p_list, const Rect2 &p
 RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_enable_scissor_recorded(DrawListID p_list, const Rect2 &p_rect, bool p_capture) {
 	DrawAppendResult result;
 	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), _recording_suspended_message(_recording_error()));
 	if (p_capture) {
 		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
 	}
@@ -8917,7 +9120,7 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_enable_scissor_rec
 
 void RenderingDevice::draw_list_disable_scissor(DrawListID p_list) {
 	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_MSG(_recording_error() != OK, _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND(!draw_list.active);
 
@@ -8932,7 +9135,7 @@ uint32_t RenderingDevice::draw_list_get_current_pass() {
 
 RenderingDevice::DrawListID RenderingDevice::draw_list_switch_to_next_pass() {
 	ERR_RENDER_THREAD_GUARD_V(INVALID_ID);
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, INVALID_ID, "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, INVALID_ID, _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND_V(!draw_list.active, INVALID_FORMAT_ID);
 	ERR_FAIL_COND_V(draw_list_current_subpass >= draw_list_subpass_count - 1, INVALID_FORMAT_ID);
@@ -8986,7 +9189,7 @@ void RenderingDevice::draw_list_end() {
 RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_end_recorded(bool p_capture) {
 	DrawAppendResult result;
 	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND_V_MSG(!draw_list.active, result.failure(ERR_INVALID_PARAMETER), "Immediate draw list is already inactive.");
 
@@ -9021,7 +9224,8 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_end_recorded(bool 
 
 RenderingDevice::RaytracingListID RenderingDevice::raytracing_list_begin() {
 	ERR_RENDER_THREAD_GUARD_V(INVALID_ID);
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, INVALID_ID, "Recording is suspended after a frame fence wait failure.");
+	const Error rec_err = (qualification_recording || production_recording_request) ? _recording_error() : _ensure_recording_ready();
+	ERR_FAIL_COND_V_MSG(rec_err != OK, INVALID_ID, _recording_suspended_message(rec_err));
 
 	ERR_FAIL_COND_V_MSG(!has_feature(SUPPORTS_RAYTRACING_PIPELINE), INVALID_ID, "The current rendering device has no raytracing pipeline support.");
 
@@ -9038,7 +9242,7 @@ RenderingDevice::RaytracingListID RenderingDevice::raytracing_list_begin() {
 
 void RenderingDevice::raytracing_list_bind_raytracing_pipeline(RaytracingListID p_list, RID p_raytracing_pipeline) {
 	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_MSG(_recording_error() != OK, _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND(p_list != ID_TYPE_RAYTRACING_LIST);
 	ERR_FAIL_COND(!raytracing_list.active);
@@ -9124,7 +9328,7 @@ void RenderingDevice::raytracing_list_bind_raytracing_pipeline(RaytracingListID 
 
 void RenderingDevice::raytracing_list_bind_uniform_set(RaytracingListID p_list, RID p_uniform_set, uint32_t p_index) {
 	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_MSG(_recording_error() != OK, _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND(p_list != ID_TYPE_RAYTRACING_LIST);
 	ERR_FAIL_COND(!raytracing_list.active);
@@ -9160,7 +9364,7 @@ void RenderingDevice::raytracing_list_bind_uniform_set(RaytracingListID p_list, 
 
 void RenderingDevice::raytracing_list_set_push_constant(RaytracingListID p_list, const void *p_data, uint32_t p_data_size) {
 	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_MSG(_recording_error() != OK, _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND(p_list != ID_TYPE_RAYTRACING_LIST);
 	ERR_FAIL_COND(!raytracing_list.active);
@@ -9185,7 +9389,7 @@ void RenderingDevice::raytracing_list_set_push_constant(RaytracingListID p_list,
 
 void RenderingDevice::raytracing_list_trace_rays(RaytracingListID p_list, uint32_t p_raygen_shader_index, RID p_hit_sbt, uint32_t p_width, uint32_t p_height, uint32_t p_depth) {
 	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_MSG(_recording_error() != OK, _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND(p_list != ID_TYPE_RAYTRACING_LIST);
 	ERR_FAIL_COND(!raytracing_list.active);
@@ -9305,7 +9509,7 @@ void RenderingDevice::raytracing_list_trace_rays(RaytracingListID p_list, uint32
 
 void RenderingDevice::raytracing_list_end() {
 	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_MSG(_recording_error() != OK, _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND(!raytracing_list.active);
 
@@ -9320,7 +9524,8 @@ void RenderingDevice::raytracing_list_end() {
 
 RenderingDevice::ComputeListID RenderingDevice::compute_list_begin() {
 	ERR_RENDER_THREAD_GUARD_V(INVALID_ID);
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, INVALID_ID, "Recording is suspended after a frame fence wait failure.");
+	const Error rec_err = (qualification_recording || production_recording_request) ? _recording_error() : _ensure_recording_ready();
+	ERR_FAIL_COND_V_MSG(rec_err != OK, INVALID_ID, _recording_suspended_message(rec_err));
 
 	ERR_FAIL_COND_V_MSG(compute_list.active, INVALID_ID, "Only one compute list can be active at the same time.");
 	ERR_FAIL_COND_V_MSG(raytracing_list.active, INVALID_ID, "Only one raytracing list can be active at the same time.");
@@ -9334,7 +9539,7 @@ RenderingDevice::ComputeListID RenderingDevice::compute_list_begin() {
 
 void RenderingDevice::compute_list_bind_compute_pipeline(ComputeListID p_list, RID p_compute_pipeline) {
 	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_MSG(_recording_error() != OK, _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND(p_list != ID_TYPE_COMPUTE_LIST);
 	ERR_FAIL_COND(!compute_list.active);
@@ -9413,7 +9618,7 @@ void RenderingDevice::compute_list_bind_compute_pipeline(ComputeListID p_list, R
 
 void RenderingDevice::compute_list_bind_uniform_set(ComputeListID p_list, RID p_uniform_set, uint32_t p_index) {
 	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_MSG(_recording_error() != OK, _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND(p_list != ID_TYPE_COMPUTE_LIST);
 	ERR_FAIL_COND(!compute_list.active);
@@ -9455,7 +9660,7 @@ void RenderingDevice::compute_list_bind_uniform_set(ComputeListID p_list, RID p_
 
 void RenderingDevice::compute_list_set_push_constant(ComputeListID p_list, const void *p_data, uint32_t p_data_size) {
 	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_MSG(_recording_error() != OK, _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND(p_list != ID_TYPE_COMPUTE_LIST);
 	ERR_FAIL_COND(!compute_list.active);
@@ -9514,7 +9719,7 @@ RDG::RecordHandle RenderingDevice::_compute_list_dispatch_recorded(ComputeListID
 			return RDG::RecordHandle();
 		}
 	}
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RDG::RecordHandle(), "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RDG::RecordHandle(), _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND_V(p_list != ID_TYPE_COMPUTE_LIST, RDG::RecordHandle());
 	ERR_FAIL_COND_V(!compute_list.active, RDG::RecordHandle());
@@ -9683,7 +9888,7 @@ RDG::RecordHandle RenderingDevice::_compute_list_dispatch_recorded(ComputeListID
 
 void RenderingDevice::compute_list_dispatch_threads(ComputeListID p_list, uint32_t p_x_threads, uint32_t p_y_threads, uint32_t p_z_threads) {
 	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_MSG(_recording_error() != OK, _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND(p_list != ID_TYPE_COMPUTE_LIST);
 	ERR_FAIL_COND(!compute_list.active);
@@ -9715,7 +9920,7 @@ void RenderingDevice::compute_list_dispatch_indirect(ComputeListID p_list, RID p
 		if (native_height_active_checked_range->append_error == OK) { native_height_active_checked_range->append_error = ERR_UNAVAILABLE; }
 		return; // Exclusive reader recipe enrolls direct dispatches only.
 	}
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_MSG(_recording_error() != OK, _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND(p_list != ID_TYPE_COMPUTE_LIST);
 	ERR_FAIL_COND(!compute_list.active);
@@ -9881,7 +10086,7 @@ void RenderingDevice::compute_list_add_barrier(ComputeListID p_list) {
 		if (native_height_active_checked_range->append_error == OK) { native_height_active_checked_range->append_error = ERR_UNAVAILABLE; }
 		return; // Later lists require their own authenticated reader.
 	}
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_MSG(_recording_error() != OK, _recording_suspended_message(_recording_error()));
 
 	ERR_FAIL_COND(p_list != ID_TYPE_COMPUTE_LIST);
 	ERR_FAIL_COND(!compute_list.active);
@@ -9905,13 +10110,27 @@ void RenderingDevice::compute_list_add_barrier(ComputeListID p_list) {
 	}
 }
 
+void RenderingDevice::_compute_list_add_intra_pass_barrier(ComputeListID p_list) {
+	ERR_RENDER_THREAD_GUARD();
+	if (native_height_active_checked_range.is_valid() && native_height_active_checked_range->reader_scope) {
+		if (native_height_active_checked_range->append_error == OK) {
+			native_height_active_checked_range->append_error = ERR_UNAVAILABLE;
+		}
+		return;
+	}
+	ERR_FAIL_COND_MSG(_recording_error() != OK, _recording_suspended_message(_recording_error()));
+	ERR_FAIL_COND(p_list != ID_TYPE_COMPUTE_LIST);
+	ERR_FAIL_COND(!compute_list.active);
+	draw_graph.add_compute_list_memory_barrier();
+}
+
 void RenderingDevice::compute_list_end() {
 	_compute_list_end_recorded();
 }
 
 RDG::RecordHandle RenderingDevice::_compute_list_end_recorded() {
 	ERR_RENDER_THREAD_GUARD_V(RDG::RecordHandle());
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RDG::RecordHandle(), "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RDG::RecordHandle(), _recording_suspended_message(_recording_error()));
 	ERR_FAIL_COND_V(!compute_list.active, RDG::RecordHandle());
 	const auto recorded = draw_graph.add_compute_list_end();
 	const Ref<NativeHeightRange> reader = native_height_active_checked_range;
@@ -13146,7 +13365,8 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 		// An ordinary advance already issued its old frame. Resume only this
 		// exact target, never execute the preceding graph again.
 		cursor.phase = qualification_frame_advance_pending ? 3 : 0;
-		native_disposal_active = true;
+		native_disposal_production_owned.store(p_production_owner != nullptr, std::memory_order_release);
+		native_disposal_active.store(true, std::memory_order_release);
 	}
 	if (cursor.phase == 0) {
 		if (failed_wait_frame >= 0 && uint32_t(failed_wait_frame) != cursor.target) {
@@ -13450,7 +13670,8 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 			frame_wait_error = OK;
 			failed_wait_frame = -1;
 			qualification_frame_advance_pending = false;
-			native_disposal_active = false;
+			native_disposal_active.store(false, std::memory_order_release);
+			native_disposal_production_owned.store(false, std::memory_order_release);
 			cursor = {};
 		}
 	}
@@ -13968,6 +14189,9 @@ Error RenderingDevice::_native_disposal_maintenance() {
 	if (draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining) {
 		return ERR_BUSY;
 	}
+	if (!draw_graph.is_initialized()) {
+		return ERR_UNCONFIGURED;
+	}
 	if (!_thread_safe_.try_lock()) {
 		return ERR_BUSY;
 	}
@@ -13976,9 +14200,11 @@ Error RenderingDevice::_native_disposal_maintenance() {
 	if (cleanup_credits != OK) {
 		return cleanup_credits;
 	}
+	const bool allow_settle_spin = !_is_live_presenting_loop_active() ||
+			GDExtensionDeviceExit::Registry::get_singleton().has_natural_close_pending_work(this);
 	if (qualification_frame_advance_pending) {
 		Error pending_err = _begin_frame(false, true);
-		if (pending_err == ERR_BUSY) {
+		if (pending_err == ERR_BUSY && allow_settle_spin) {
 			const uint64_t settle_deadline = OS::get_singleton()->get_ticks_usec() + 50000ull;
 			while (pending_err == ERR_BUSY && qualification_frame_advance_pending && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
 				OS::get_singleton()->delay_usec(50);
@@ -13992,7 +14218,7 @@ Error RenderingDevice::_native_disposal_maintenance() {
 	}
 	const uint32_t next = (frame + 1) % frames.size();
 	Error error = _stall_for_frame(next, true);
-	if (error == ERR_BUSY) {
+	if (error == ERR_BUSY && allow_settle_spin) {
 		const uint64_t settle_deadline = OS::get_singleton()->get_ticks_usec() + 50000ull;
 		while (error == ERR_BUSY && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
 			OS::get_singleton()->delay_usec(50);
@@ -14018,7 +14244,7 @@ Error RenderingDevice::_native_disposal_maintenance() {
 	frame = (frame + 1) % frames.size();
 	qualification_frame_advance_pending = true;
 	error = _begin_frame(false, true);
-	if (error == ERR_BUSY) {
+	if (error == ERR_BUSY && allow_settle_spin) {
 		const uint64_t settle_deadline = OS::get_singleton()->get_ticks_usec() + 50000ull;
 		while (error == ERR_BUSY && qualification_frame_advance_pending && OS::get_singleton()->get_ticks_usec() < settle_deadline) {
 			OS::get_singleton()->delay_usec(50);
@@ -14029,11 +14255,24 @@ Error RenderingDevice::_native_disposal_maintenance() {
 }
 
 void RenderingDevice::pump_qualification_frame_if_idle() {
-	if (!is_main_instance || render_thread_id != Thread::get_caller_id() || frames.is_empty() || uint32_t(frame) >= frames.size()) {
+	if (!is_main_instance || render_thread_id != Thread::get_caller_id() || frames.is_empty() || uint32_t(frame) >= frames.size() || !draw_graph.is_initialized()) {
 		return;
 	}
-	if (draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining || !frames[frame].swap_chains_to_present.is_empty()) {
+	if (draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining || !frames[frame].swap_chains_to_present.is_empty() || has_pending_production_frame_maintenance()) {
 		return;
+	}
+	const bool natural_close_pending = GDExtensionDeviceExit::Registry::get_singleton().has_natural_close_pending_work(this);
+	if (has_presented_frame) {
+		if (idle_sync_ticks_without_draw < UINT32_MAX) {
+			++idle_sync_ticks_without_draw;
+		}
+		const bool render_loop_enabled = RenderingServer::get_singleton() && RenderingServer::get_singleton()->is_render_loop_enabled();
+		if (render_loop_enabled && !natural_close_pending && !screen_swap_chains.is_empty() && idle_sync_ticks_without_draw < 2u) {
+			if (qualification_frame_advance_pending.load() || native_disposal_active.load()) {
+				(void)_native_disposal_maintenance();
+			}
+			return;
+		}
 	}
 	bool has_production_readbacks = false;
 	for (const auto &slot : frames) {
@@ -14049,7 +14288,7 @@ void RenderingDevice::pump_qualification_frame_if_idle() {
 		}
 	}
 	if (!frames[frame].qualification_tickets.is_empty() || has_production_readbacks || qualification_frame_advance_pending.load() || native_disposal_active.load() ||
-			GDExtensionDeviceExit::Registry::get_singleton().has_natural_close_pending_work(this)) {
+			natural_close_pending) {
 		(void)_native_disposal_maintenance();
 	}
 }
@@ -14747,9 +14986,16 @@ RenderingDevice::DriverWorkarounds RenderingDevice::get_driver_workarounds() con
 }
 
 bool RenderingDevice::has_pending_production_frame_maintenance() const {
-	return is_main_instance && render_thread_id == Thread::get_caller_id() &&
-			native_disposal_active.load(std::memory_order_acquire) && native_disposal_continuation.production_owner &&
-			frame_issue_error.load() == OK && frame_wait_error.load() == OK && !frame_wait_native_code_valid.load();
+	if (!is_main_instance || !native_disposal_active.load(std::memory_order_acquire) ||
+			frame_issue_error.load(std::memory_order_acquire) != OK ||
+			frame_wait_error.load(std::memory_order_acquire) != OK ||
+			frame_wait_native_code_valid.load(std::memory_order_acquire)) {
+		return false;
+	}
+	if (render_thread_id == Thread::get_caller_id()) {
+		return native_disposal_production_owned.load(std::memory_order_acquire) || native_disposal_continuation.production_owner != nullptr;
+	}
+	return native_disposal_production_owned.load(std::memory_order_acquire);
 }
 
 bool RenderingDevice::has_pending_ordinary_frame_advance() const {
@@ -14757,6 +15003,20 @@ bool RenderingDevice::has_pending_ordinary_frame_advance() const {
 			qualification_frame_advance_pending.load() && !native_disposal_active.load(std::memory_order_acquire) &&
 			!frame_wait_draining.load() && frame_issue_error.load() == OK && frame_wait_error.load() == OK &&
 			!frame_wait_native_code_valid.load();
+}
+
+Error RenderingDevice::ensure_ordinary_draw_ready() {
+	const Error fatal = _recording_fatal_error();
+	if (fatal != OK) {
+		return fatal;
+	}
+	if (frame_wait_native_code_valid.load()) {
+		return FAILED;
+	}
+	if (has_pending_production_frame_maintenance()) {
+		return ERR_BUSY;
+	}
+	return _ensure_recording_ready();
 }
 
 void RenderingDevice::swap_buffers(bool p_present) {
@@ -14816,7 +15076,7 @@ void RenderingDevice::swap_buffers(bool p_present) {
 
 void RenderingDevice::submit() {
 	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	ERR_FAIL_COND_MSG(_recording_error() != OK, _recording_suspended_message(_recording_error()));
 	ERR_FAIL_COND_MSG(is_main_instance, "Only local devices can submit and sync.");
 	ERR_FAIL_COND_MSG(local_device_processing, "device already submitted, call sync to wait until done.");
 
@@ -15249,6 +15509,13 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		const Error error = _free_pending_resources_step(p_frame, budget, usage);
 		ERR_FAIL_COND_MSG(error != OK, "Cannot recycle an unfinished native disposal cursor.");
 	}
+#ifdef MACOS_ENABLED
+	const uint32_t pending_total = frames[p_frame].render_pipelines_to_dispose_of.size() +
+			frames[p_frame].compute_pipelines_to_dispose_of.size() +
+			frames[p_frame].shaders_to_dispose_of.size() +
+			frames[p_frame].textures_to_dispose_of.size() +
+			frames[p_frame].buffers_to_dispose_of.size();
+#endif
 	// Free in dependency usage order, so nothing weird happens.
 	// Pipelines.
 	while (frames[p_frame].render_pipelines_to_dispose_of.front()) {
@@ -15432,6 +15699,11 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 	if (!resumed_cursor && frames_pending_resources_for_processing > 0u) {
 		--frames_pending_resources_for_processing;
 	}
+#ifdef MACOS_ENABLED
+	if (pending_total >= 32u) {
+		malloc_zone_pressure_relief(nullptr, 0);
+	}
+#endif
 }
 
 uint32_t RenderingDevice::get_frame_delay() const {
@@ -15916,6 +16188,8 @@ Error RenderingDevice::_execute_frame(bool p_present) {
 			}
 		}
 
+		has_presented_frame = true;
+		idle_sync_ticks_without_draw = 0;
 		frames[frame].swap_chains_to_present.clear();
 	}
 	return OK;
@@ -16848,7 +17122,8 @@ void RenderingDevice::_free_rids(T &p_owner, const char *p_type) {
 
 void RenderingDevice::capture_timestamp(const String &p_name) {
 	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	const Error rec_err = (qualification_recording || production_recording_request) ? _recording_error() : _ensure_recording_ready();
+	ERR_FAIL_COND_MSG(rec_err != OK, _recording_suspended_message(rec_err));
 
 	ERR_FAIL_COND_MSG(draw_list.active && draw_list.state.draw_count > 0, "Capturing timestamps during draw list creation is not allowed. Offending timestamp was: " + p_name);
 	ERR_FAIL_COND_MSG(compute_list.active && compute_list.state.dispatch_count > 0, "Capturing timestamps during compute list creation is not allowed. Offending timestamp was: " + p_name);
@@ -17072,6 +17347,7 @@ Error RenderingDevice::_begin_production_finalization() {
 
 void RenderingDevice::finalize() {
 	ERR_RENDER_THREAD_GUARD();
+	production_resource_validation_cache.invalidate();
 	native_height_finalization_started = true;
 	const Error entity_return = _begin_production_finalization();
 	ERR_FAIL_COND_MSG(entity_return != OK, "RenderingDevice native finalization is blocked by an original production entity obligation.");
@@ -17113,6 +17389,9 @@ void RenderingDevice::finalize() {
 	_free_rids(raytracing_pipeline_owner, "RaytracingPipeline");
 	_free_rids(acceleration_structure_owner, "AccelerationStructure");
 	_free_rids(hit_sbt_owner, "HitShaderBindingTable");
+#ifdef MACOS_ENABLED
+	malloc_zone_pressure_relief(nullptr, 0);
+#endif
 	_free_rids(uniform_set_owner, "UniformSet");
 	if (production_curve_lut_zero_buffer.is_valid()) {
 		free_rid(production_curve_lut_zero_buffer);
@@ -17130,6 +17409,9 @@ void RenderingDevice::finalize() {
 	_free_rids(storage_buffer_owner, "StorageBuffer");
 	_free_rids(uniform_buffer_owner, "UniformBuffer");
 	_free_rids(shader_owner, "Shader");
+#ifdef MACOS_ENABLED
+	malloc_zone_pressure_relief(nullptr, 0);
+#endif
 	_free_rids(index_array_owner, "IndexArray");
 	_free_rids(index_buffer_owner, "IndexBuffer");
 	_free_rids(vertex_array_owner, "VertexArray");
@@ -17170,6 +17452,9 @@ void RenderingDevice::finalize() {
 			}
 		}
 	}
+#ifdef MACOS_ENABLED
+	malloc_zone_pressure_relief(nullptr, 0);
+#endif
 
 	// Erase the transfer workers after all resources have been freed.
 	_free_transfer_workers();
@@ -17191,11 +17476,18 @@ void RenderingDevice::finalize() {
 		for (uint32_t j = 0; j < frames[i].transfer_worker_semaphores.size(); j++) {
 			driver->semaphore_free(frames[i].transfer_worker_semaphores[j]);
 		}
+#ifdef MACOS_ENABLED
+		malloc_zone_pressure_relief(nullptr, 0);
+#endif
 	}
 
 	if (pipeline_cache_enabled) {
 		update_pipeline_cache(true);
 		driver->pipeline_cache_free();
+	}
+	get_container_compile_cache().erase_owner(this);
+	if (is_main_instance) {
+		get_spirv_compile_cache().clear();
 	}
 
 	frames.clear();
@@ -17209,6 +17501,9 @@ void RenderingDevice::finalize() {
 		driver->buffer_unmap(download_staging_buffers.blocks[i].driver_id);
 		driver->buffer_free(download_staging_buffers.blocks[i].driver_id);
 	}
+#ifdef MACOS_ENABLED
+	malloc_zone_pressure_relief(nullptr, 0);
+#endif
 
 	while (vertex_formats.size()) {
 		HashMap<VertexFormatID, VertexDescriptionCache>::Iterator temp = vertex_formats.begin();
@@ -18884,18 +19179,16 @@ bool RenderingDevice::_production_resource_permitted(RID rid) {
 			}
 		}
 	}
-	for (uint32_t i = 0; i < request->resource_count; ++i) {
-		const auto &slot = request->resources[i];
+	auto slot_permits_rid = [&](const GDExtensionDeviceExit::ProductionResourceSlot &slot) -> bool {
 		if (!slot.imported || (slot.primary != rid && slot.secondary != rid)) {
-			continue;
+			return false;
 		}
 		// The original capture_inflight pin and RD recording lock stabilize
 		// these rows on RT while Registry is unlocked for the native call.
 		// Recheck owner closure as well as the exact actual factory witness.
 		if (slot.output_guard_readonly) {
-			if ((slot.output_guard_history ? GDExtensionDeviceExit::Registry::get_singleton().production_output_history_guard_uses_locked(*request, slot, request->next_action) : request->next_action == slot.output_guard_consumer) &&
-					GDExtensionDeviceExit::Registry::get_singleton().production_output_guard_matches_locked(*request, slot, *this)) { return true; }
-			continue;
+			return (slot.output_guard_history ? GDExtensionDeviceExit::Registry::get_singleton().production_output_history_guard_uses_locked(*request, slot, request->next_action) : request->next_action == slot.output_guard_consumer) &&
+					GDExtensionDeviceExit::Registry::get_singleton().production_output_guard_matches_locked(*request, slot, *this);
 		}
 		if ((!slot.output_predecessor_view.is_empty() && GDExtensionDeviceExit::Registry::get_singleton().production_output_predecessor_matches_locked(*request, slot, *this)) ||
 				(slot.output_alias_prepared && GDExtensionDeviceExit::Registry::get_singleton().production_output_alias_matches_locked(*request, slot, *this))) {
@@ -18906,6 +19199,32 @@ bool RenderingDevice::_production_resource_permitted(RID rid) {
 			if (use.rid == rid.get_id() && use.request == request && use.request_serial == request->serial && use.same_physical() && use.linked() && !use.physical->use_closed.load()) {
 				return true;
 			}
+		}
+		return false;
+	};
+	const auto &cache = production_resource_validation_cache;
+	if (rid.is_valid() && cache.rid_index_active && cache.rid_index_valid &&
+			cache.request == request && cache.request_serial == request->serial &&
+			cache.resource_count == request->resource_count && !cache.rid_to_slot.is_empty()) {
+		const uint64_t rid_id = rid.get_id();
+		uint64_t h = rid_id;
+		h ^= h >> 33;
+		h *= 0xff51afd7ed558ccdULL;
+		h ^= h >> 33;
+		uint32_t pos = uint32_t(h) & cache.rid_mask;
+		while (cache.rid_to_slot[pos].rid_id != 0) {
+			if (cache.rid_to_slot[pos].rid_id == rid_id) {
+				if (slot_permits_rid(request->resources[cache.rid_to_slot[pos].slot_index])) {
+					return true;
+				}
+			}
+			pos = (pos + 1u) & cache.rid_mask;
+		}
+		return false;
+	}
+	for (uint32_t i = 0; i < request->resource_count; ++i) {
+		if (slot_permits_rid(request->resources[i])) {
+			return true;
 		}
 	}
 	return false;

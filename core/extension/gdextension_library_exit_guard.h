@@ -1011,6 +1011,7 @@ private:
 
 	void production_metadata_pump();
 	void scene_phase_dispatch(RenderingDevice &);
+	void try_complete_pending_production_frame_maintenance(RenderingDevice &);
 	void scene_height_publish_recorded_locked(RenderingDevice &, uint64_t, Error = OK);
 	bool scene_phase_holder_matches_locked(const CleanupAction &, const RecordRef &, NormalRelayToken, bool);
 	uint64_t scene_phase_occurrence = 0;
@@ -1019,7 +1020,16 @@ private:
 	Error scene_phase_call_relay(NormalRelayToken, const GDExtensionNativeScenePhaseV1 &, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 &);
 	struct ProductionPhysicalFrame;
 	static thread_local ProductionPhysicalFrame *production_physical_frame;
+	uint64_t production_physical_frame_serial() const;
+#ifdef TESTS_ENABLED
+	void test_push_production_physical_frame(uint64_t p_serial, void *&r_saved);
+	void test_pop_production_physical_frame(void *p_saved);
+#endif
 	static thread_local ProductionOutputPreparationScope *production_output_preparation_scope;
+	std::atomic<uint64_t> resource_permission_epoch{ 1 };
+	void bump_resource_permission_epoch() {
+		resource_permission_epoch.fetch_add(1, std::memory_order_release);
+	}
 	Error production_output_preparation_begin(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint64_t, ProductionOutputPreparationScope &);
 	Error production_output_preparation_begin_row(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint32_t, uint64_t, ProductionOutputPreparationScope &, const ::RendererRD::ExternalPacketViewLease * = nullptr);
 	Error production_output_preparation_begin_internal(ProductionOutputPin &, RenderingDevice &, uint32_t, uint32_t, uint64_t, ProductionOutputPreparationScope &, uint32_t, const ::RendererRD::ExternalPacketViewLease *);
@@ -1120,7 +1130,7 @@ private:
 	bool production_use_matches_locked(const ProductionRequest &, const ProductionActionCell &, uint32_t, uint64_t, uint64_t, uint32_t) const;
 	Error production_freeze_locked(ProductionRequest &);
 	GDExtensionDeviceSessionResultV1 production_request_requirements_internal(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionActionV2 *actions, uint32_t action_count, const GDExtensionProductionResourceV1 *resources, uint32_t resource_count, const GDExtensionProductionUseV1 *uses, uint32_t use_count, const GDExtensionProductionUploadV2 *uploads, uint32_t upload_count, const GDExtensionProductionReadbackSourceV1 *readbacks, uint32_t readback_count, uint32_t binding_count, uint64_t payload_bytes, const GDExtensionProductionOutputDemandInputV1 *outputs, uint32_t output_count, GDExtensionProductionOutputGuardDemandV1 *demands, uint32_t demand_capacity, GDExtensionProductionMetadataQuoteV1 *out);
-	Error production_output_demand_locked(ProductionAttachment &, RenderingDevice &, const GDExtensionProductionOutputDemandInputV1 &, GDExtensionProductionOutputGuardDemandV1 &, uint64_t available_use_cells = UINT64_MAX);
+	Error production_output_demand_locked(ProductionAttachment &, RenderingDevice &, const GDExtensionProductionOutputDemandInputV1 &, GDExtensionProductionOutputGuardDemandV1 &, uint64_t available_use_cells = UINT64_MAX, bool aux_params_enabled = true);
 	Error production_schedule_locked(ProductionRequest &, RenderingDevice &, bool);
 	Error production_freeze_rd_locked(ProductionRequest &, RenderingDevice *, bool p_stage_only = false);
 	Error production_output_scene_validate_locked(const ProductionActionCell &, const GDExtensionOutputAcquireInputV1 &) const;
@@ -1130,6 +1140,10 @@ private:
 	Error production_output_history_borrow_locked(ProductionPhysicalContextRef, ProductionRequest &, uint64_t, RenderingDevice &, ProductionOutputHistoryBorrow &);
 
 	Error production_native_stage_charge_locked(ProductionRequest &, bool);
+	void production_native_stage_latch_budget_locked(ProductionRequest &, const GDExtensionProductionServiceBudgetV1 &);
+	bool production_native_stage_budget_is_latched_locked(const ProductionRequest &) const;
+	uint64_t production_native_stage_effective_deadline_locked(const ProductionRequest &) const;
+	void production_native_stage_refresh_slice_locked(ProductionRequest &, uint32_t, uint64_t, uint64_t);
 	bool production_native_batch_frame_locked(const ProductionRequest &) const;
 	ProductionNativeBatchCell *production_native_batch_cell_locked(ProductionRequest &, uint64_t);
 	Error production_native_batch_result_locked(ProductionRequest &, uint32_t, uint32_t, const GDExtensionProductionPreparedActionResultV2 &);

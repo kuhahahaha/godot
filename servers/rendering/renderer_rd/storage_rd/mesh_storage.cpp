@@ -527,15 +527,27 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 			s->vertex_buffer = RD::get_singleton()->vertex_buffer_create(new_surface.vertex_data.size(), new_surface.vertex_data, as_storage_flag);
 			s->vertex_buffer_size = new_surface.vertex_data.size();
 		}
+		if (!s->vertex_buffer.is_valid()) {
+			_mesh_surface_dispose(s);
+			return;
+		}
 	}
 
 	if (new_surface.attribute_data.size()) {
 		s->attribute_buffer = RD::get_singleton()->vertex_buffer_create(new_surface.attribute_data.size(), new_surface.attribute_data);
 		s->attribute_buffer_size = new_surface.attribute_data.size();
+		if (!s->attribute_buffer.is_valid()) {
+			_mesh_surface_dispose(s);
+			return;
+		}
 	}
 	if (new_surface.skin_data.size()) {
 		s->skin_buffer = RD::get_singleton()->vertex_buffer_create(new_surface.skin_data.size(), new_surface.skin_data, as_storage_flag);
 		s->skin_buffer_size = new_surface.skin_data.size();
+		if (!s->skin_buffer.is_valid()) {
+			_mesh_surface_dispose(s);
+			return;
+		}
 	}
 
 	s->vertex_count = new_surface.vertex_count;
@@ -544,9 +556,17 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 		bool is_index_16 = new_surface.vertex_count <= 65536 && new_surface.vertex_count > 0;
 
 		s->index_buffer = RD::get_singleton()->index_buffer_create(new_surface.index_count, is_index_16 ? RD::INDEX_BUFFER_FORMAT_UINT16 : RD::INDEX_BUFFER_FORMAT_UINT32, new_surface.index_data, false);
+		if (!s->index_buffer.is_valid()) {
+			_mesh_surface_dispose(s);
+			return;
+		}
 		s->index_buffer_size = new_surface.index_data.size();
 		s->index_count = new_surface.index_count;
 		s->index_array = RD::get_singleton()->index_array_create(s->index_buffer, 0, s->index_count);
+		if (!s->index_array.is_valid()) {
+			_mesh_surface_dispose(s);
+			return;
+		}
 		if (new_surface.lods.size()) {
 			s->lods = memnew_arr(Mesh::Surface::LOD, new_surface.lods.size());
 			s->lod_count = new_surface.lods.size();
@@ -554,8 +574,16 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 			for (int i = 0; i < new_surface.lods.size(); i++) {
 				uint32_t indices = new_surface.lods[i].index_data.size() / (is_index_16 ? 2 : 4);
 				s->lods[i].index_buffer = RD::get_singleton()->index_buffer_create(indices, is_index_16 ? RD::INDEX_BUFFER_FORMAT_UINT16 : RD::INDEX_BUFFER_FORMAT_UINT32, new_surface.lods[i].index_data);
+				if (!s->lods[i].index_buffer.is_valid()) {
+					_mesh_surface_dispose(s);
+					return;
+				}
 				s->lods[i].index_buffer_size = new_surface.lods[i].index_data.size();
 				s->lods[i].index_array = RD::get_singleton()->index_array_create(s->lods[i].index_buffer, 0, indices);
+				if (!s->lods[i].index_array.is_valid()) {
+					_mesh_surface_dispose(s);
+					return;
+				}
 				s->lods[i].edge_length = new_surface.lods[i].edge_length;
 				s->lods[i].index_count = indices;
 			}
@@ -571,6 +599,10 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 	if (mesh->blend_shape_count > 0) {
 		s->blend_shape_buffer = RD::get_singleton()->storage_buffer_create(new_surface.blend_shape_data.size(), new_surface.blend_shape_data);
 		s->blend_shape_buffer_size = new_surface.blend_shape_data.size();
+		if (new_surface.blend_shape_data.size() && !s->blend_shape_buffer.is_valid()) {
+			_mesh_surface_dispose(s);
+			return;
+		}
 	}
 
 	if (use_as_storage) {
@@ -610,6 +642,10 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 		}
 
 		s->uniform_set = RD::get_singleton()->uniform_set_create(uniforms, skeleton_shader.version_shader[0], SkeletonShader::UNIFORM_SET_SURFACE);
+		if (!s->uniform_set.is_valid()) {
+			_mesh_surface_dispose(s);
+			return;
+		}
 	}
 
 	if (mesh->surface_count == 0) {
@@ -1814,7 +1850,9 @@ void MeshStorage::_mesh_surface_dispose(Mesh::Surface *p_surface) {
 
 	if (s.lod_count) {
 		for (uint32_t j = 0; j < s.lod_count; j++) {
-			RD::get_singleton()->free_rid(s.lods[j].index_buffer);
+			if (s.lods[j].index_buffer.is_valid()) {
+				RD::get_singleton()->free_rid(s.lods[j].index_buffer);
+			}
 		}
 		memdelete_arr(s.lods);
 	}
@@ -1965,7 +2003,7 @@ RenderingServerTypes::SurfaceData MeshStorage::mesh_get_surface(RID p_mesh, int 
 	if (s.vertex_buffer.is_valid()) {
 		sd.vertex_data = RD::get_singleton()->buffer_get_data(s.vertex_buffer);
 		// When using an uncompressed buffer with normals, but without tangents, we have to trim the padding.
-		if (!(s.format & RSE::ARRAY_FLAG_COMPRESS_ATTRIBUTES) && (s.format & RSE::ARRAY_FORMAT_NORMAL) && !(s.format & RSE::ARRAY_FORMAT_TANGENT)) {
+		if (!(s.format & RSE::ARRAY_FLAG_COMPRESS_ATTRIBUTES) && (s.format & RSE::ARRAY_FORMAT_NORMAL) && !(s.format & RSE::ARRAY_FORMAT_TANGENT) && sd.vertex_data.size() >= int(sizeof(uint16_t) * 2)) {
 			sd.vertex_data.resize(sd.vertex_data.size() - sizeof(uint16_t) * 2);
 		}
 	}
@@ -1979,7 +2017,7 @@ RenderingServerTypes::SurfaceData MeshStorage::mesh_get_surface(RID p_mesh, int 
 	sd.index_count = s.index_count;
 	sd.primitive = s.primitive;
 
-	if (sd.index_count) {
+	if (sd.index_count && s.index_buffer.is_valid()) {
 		sd.index_data = RD::get_singleton()->buffer_get_data(s.index_buffer);
 	}
 	sd.aabb = s.aabb;
@@ -1987,7 +2025,9 @@ RenderingServerTypes::SurfaceData MeshStorage::mesh_get_surface(RID p_mesh, int 
 	for (uint32_t i = 0; i < s.lod_count; i++) {
 		RenderingServerTypes::SurfaceData::LOD lod;
 		lod.edge_length = s.lods[i].edge_length;
-		lod.index_data = RD::get_singleton()->buffer_get_data(s.lods[i].index_buffer);
+		if (s.lods[i].index_buffer.is_valid()) {
+			lod.index_data = RD::get_singleton()->buffer_get_data(s.lods[i].index_buffer);
+		}
 		sd.lods.push_back(lod);
 	}
 

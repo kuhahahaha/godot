@@ -352,6 +352,32 @@ private:
 	bool qualification_retiring = false;
 	bool qualification_recording = false;
 	GDExtensionDeviceExit::ProductionRequest *production_recording_request = nullptr;
+	struct ProductionResourceValidationCache {
+		const GDExtensionDeviceExit::ProductionRequest *request = nullptr;
+		uint64_t request_serial = 0;
+		uint64_t frame_serial = 0;
+		uint64_t permission_epoch = 0;
+		uint64_t anchor_ordinal = UINT64_MAX;
+		uint32_t resource_count = 0;
+		uint8_t anchor_output_state = 0;
+		bool prepared_upload_before_acquire = false;
+		bool valid = false;
+		LocalVector<uint32_t> index_dependent_slots;
+		struct SlotEntry {
+			uint64_t rid_id = 0;
+			uint32_t slot_index = 0;
+		};
+		LocalVector<SlotEntry> rid_to_slot;
+		uint32_t rid_mask = 0;
+		bool rid_index_valid = false;
+		bool rid_index_active = false;
+		void invalidate() {
+			valid = false;
+			rid_index_valid = false;
+			rid_index_active = false;
+		}
+	};
+	ProductionResourceValidationCache production_resource_validation_cache;
 	RID production_mq_permitted_framebuffer;
 	RID production_mq_permitted_readback_ssbo;
 	RID production_curve_lut_zero_buffer;
@@ -367,6 +393,7 @@ private:
 	Error _production_get_or_create_curve_lut_zero_buffer(RID &r_buffer);
 	Error _production_get_or_create_record_ring_scratch_buffers(RID &r_stats_buffer, RID &r_payload_buffer);
 	bool _shader_reflects_readonly_storage_binding(RID p_shader, uint32_t p_set, uint32_t p_binding);
+	uint32_t _shader_get_uniform_set_format(RID p_shader, uint32_t p_set);
 	Error _production_mq_record_depth_copy(RID p_depth_tex, RID p_dst_ssbo, RDG::RecordHandle &r_handle);
 	bool _production_output_raster_permitted(RID);
 	Error _production_output_read_record(::RendererRD::ExternalPacketBinding &, DrawListID, const void *, uint32_t);
@@ -2136,6 +2163,7 @@ private:
 		RECYCLE,
 		WORK };
 	std::atomic<bool> native_disposal_active = false;
+	std::atomic<bool> native_disposal_production_owned = false;
 	uint64_t next_native_disposal_serial = 1;
 	struct NativeDisposalContinuation {
 		uint64_t serial = 0;
@@ -2717,6 +2745,7 @@ public:
 	void compute_list_dispatch_threads(ComputeListID p_list, uint32_t p_x_threads, uint32_t p_y_threads, uint32_t p_z_threads);
 	void compute_list_dispatch_indirect(ComputeListID p_list, RID p_buffer, uint32_t p_offset);
 	void compute_list_add_barrier(ComputeListID p_list);
+	void _compute_list_add_intra_pass_barrier(ComputeListID p_list);
 
 	void compute_list_end();
 
@@ -2964,12 +2993,24 @@ private:
 	int frame = 0;
 	TightLocalVector<Frame> frames;
 	uint64_t frames_drawn = 0;
+	bool has_presented_frame = false;
+	uint32_t idle_sync_ticks_without_draw = 0;
+	bool _is_live_presenting_loop_active() const {
+		return has_presented_frame && idle_sync_ticks_without_draw < 2u && !screen_swap_chains.is_empty();
+	}
 	std::atomic<Error> frame_wait_error = OK;
 	std::atomic<int64_t> frame_wait_native_code = 0;
 	std::atomic<bool> frame_wait_native_code_valid = false;
 	std::atomic<Error> frame_issue_error = OK;
 	int failed_wait_frame = -1;
 	std::atomic<bool> frame_wait_draining = false;
+	Error _recording_fatal_error() const {
+		const Error issue_error = frame_issue_error.load();
+		if (issue_error != OK) {
+			return issue_error;
+		}
+		return frame_wait_error.load();
+	}
 	Error _recording_error() const {
 		const Error issue_error = frame_issue_error.load();
 		if (issue_error != OK) {
@@ -2980,6 +3021,15 @@ private:
 		}
 		const Error wait_error = frame_wait_error.load();
 		return wait_error != OK ? wait_error : ((frame_wait_draining.load() || qualification_frame_advance_pending.load() || native_disposal_active.load()) ? ERR_BUSY : OK);
+	}
+	String _recording_suspended_message(Error p_error) const {
+		if (_recording_fatal_error() != OK || frame_wait_native_code_valid.load()) {
+			return "Recording is suspended after a frame fence wait failure.";
+		}
+		const bool graph_closed = !frames.is_empty() && uint32_t(frame) < frames.size() && frames[frame].qualification_graph_closed;
+		return vformat("Recording is transiently busy (error=%d graph_closed=%d draining=%d advance_pending=%d disposal_active=%d).",
+				int(p_error), int(graph_closed), int(frame_wait_draining.load()),
+				int(qualification_frame_advance_pending.load()), int(native_disposal_active.load()));
 	}
 	Error _prepare_synchronous_readback();
 	Error _ensure_recording_ready();
@@ -3057,6 +3107,7 @@ public:
 
 	bool has_pending_production_frame_maintenance() const;
 	bool has_pending_ordinary_frame_advance() const;
+	Error ensure_ordinary_draw_ready();
 	void swap_buffers(bool p_present);
 
 	uint32_t get_frame_delay() const;

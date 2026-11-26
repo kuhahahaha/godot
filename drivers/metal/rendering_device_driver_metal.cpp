@@ -55,7 +55,9 @@
 #include "core/io/file_access.h"
 #include "core/os/os.h"
 
-#include <algorithm>
+#ifdef MACOS_ENABLED
+#include <malloc/malloc.h>
+#endif
 
 thread_local LocalVector<RenderingDeviceDriverMetal::CompletionRecord *> *RenderingDeviceDriverMetal::active_completion_records = nullptr;
 thread_local uint64_t RenderingDeviceDriverMetal::active_native_serial = 0;
@@ -502,6 +504,7 @@ bool RenderingDeviceDriverMetal::buffer_set_texel_format(BufferID p_buffer, Data
 }
 
 void RenderingDeviceDriverMetal::buffer_free(BufferID p_buffer) {
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 	BufferInfo *buf_info = (BufferInfo *)p_buffer.id;
 	if (!buf_info) {
 		return;
@@ -969,6 +972,7 @@ RDD::TextureID RenderingDeviceDriverMetal::texture_create_shared_from_slice(Text
 }
 
 void RenderingDeviceDriverMetal::texture_free(TextureID p_texture) {
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 	TextureInfo *tex_info = (TextureInfo *)p_texture.id;
 	if (tex_info->imported) {
 		MutexLock lock(imported_textures_mutex);
@@ -1519,15 +1523,44 @@ void RenderingDeviceDriverMetal::framebuffer_free(FramebufferID p_framebuffer) {
 
 #pragma mark - Shader
 
-void RenderingDeviceDriverMetal::shader_cache_free_entry(ShaderCacheEntry *p_entry) {
-	MutexLock lock(_shader_cache_lock);
-	// Only remove the map slot if it still refers to this exact entry. A concurrent
-	// creation for the same hash may have replaced it, in which case that newer entry
-	// (and its library) must be left untouched.
-	if (ShaderCacheEntry **pentry = _shader_cache.getptr(p_entry->key); pentry != nullptr && *pentry == p_entry) {
-		_shader_cache.erase(p_entry->key);
+void RenderingDeviceDriverMetal::evict_compute_pso_for_library(const SHA256Digest &p_library_key) {
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+	MutexLock lock(pipeline_state_cache_mutex);
+	if (compute_shader_owners_by_library.has(p_library_key)) {
+		return;
 	}
-	memdelete(p_entry);
+	if (LocalVector<ComputePipelineCacheKey> *keys = compute_pso_keys_by_library.getptr(p_library_key)) {
+		uint64_t evicted = 0;
+		for (const ComputePipelineCacheKey &key : *keys) {
+			if (compute_pso_cache.erase(key)) {
+				++evicted;
+			}
+		}
+		compute_pso_keys_by_library.erase(p_library_key);
+		if (evicted) {
+			total_compute_pso_cache_evictions.fetch_add(evicted, std::memory_order_relaxed);
+		}
+	}
+}
+
+void RenderingDeviceDriverMetal::shader_cache_free_entry(ShaderCacheEntry *p_entry) {
+	SHA256Digest evicted_key;
+	bool should_evict_compute_pso = false;
+	{
+		MutexLock lock(_shader_cache_lock);
+		// Only remove the map slot if it still refers to this exact entry. A concurrent
+		// creation for the same hash may have replaced it, in which case that newer entry
+		// (and its library) must be left untouched.
+		if (ShaderCacheEntry **pentry = _shader_cache.getptr(p_entry->key); pentry != nullptr && *pentry == p_entry) {
+			evicted_key = p_entry->key;
+			should_evict_compute_pso = true;
+			_shader_cache.erase(p_entry->key);
+		}
+		memdelete(p_entry);
+	}
+	if (should_evict_compute_pso) {
+		evict_compute_pso_for_library(evicted_key);
+	}
 }
 
 std::optional<std::shared_ptr<MDLibrary>> RenderingDeviceDriverMetal::shader_cache_get_library(const SHA256Digest &key) {
@@ -1612,6 +1645,7 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 	PipelineType pipeline_type = PIPELINE_TYPE_RASTERIZATION;
 	Vector<uint8_t> decompressed_code;
 	for (uint32_t shader_index = 0; shader_index < shaders.size(); shader_index++) {
+		NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 		const RenderingShaderContainer::Shader &shader = shaders[shader_index];
 		const RSCM::StageData &shader_data = mtl_shaders[shader_index];
 
@@ -1640,7 +1674,6 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 		ShaderCompilePolicy::LibraryKeyInput key_input;
 		key_input.compile_path_version = shader_data.compile_path_version;
 		key_input.stage = shader.shader_stage;
-		key_input.source = decompressed_code.slice(0, shader_data.source_size);
 		key_input.requested_flags = static_cast<uint32_t>(shader_container->get_compile_flags());
 		key_input.effective_disable = effective_disable;
 		key_input.msl_version = mtl_reflection_data.msl_version;
@@ -1670,7 +1703,7 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 			}
 		}
 #endif
-		const PackedByteArray key_bytes = ShaderCompilePolicy::library_key(key_input);
+		const PackedByteArray key_bytes = ShaderCompilePolicy::library_key_with_source(key_input, decompressed_code.ptr(), shader_data.source_size);
 		ERR_FAIL_COND_V(key_bytes.size() != 32, RDD::ShaderID());
 		const SHA256Digest library_key(reinterpret_cast<const char *>(key_bytes.ptr()));
 #ifdef TESTS_ENABLED
@@ -1716,8 +1749,6 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 		cd->name = shader_name;
 		cd->stage = shader.shader_stage;
 
-		NS::SharedPtr<NS::String> source = NS::TransferPtr(NS::String::alloc()->init((void *)decompressed_code.ptr(), shader_data.source_size, NS::UTF8StringEncoding));
-
 		std::shared_ptr<MDLibrary> library;
 		if (shader_data.library_size > 0) {
 			if (mtl_reflection_data.os_min_version > device_properties->os_version) {
@@ -1728,6 +1759,9 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 			audit["phase"] = "binary_load";
 			cd->creation_seq = ShaderCompileAudit::emit(audit);
 #endif
+#if DEV_ENABLED
+			NS::SharedPtr<NS::String> source = NS::TransferPtr(NS::String::alloc()->init((void *)decompressed_code.ptr(), shader_data.source_size, NS::UTF8StringEncoding));
+#endif
 			dispatch_data_t binary = dispatch_data_create(decompressed_code.ptr() + shader_data.source_size, shader_data.library_size, dispatch_get_main_queue(), DISPATCH_DATA_DESTRUCTOR_DEFAULT);
 			library = MDLibrary::create(cd, device,
 #if DEV_ENABLED
@@ -1735,7 +1769,13 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 #endif
 					binary);
 			dispatch_release(binary);
+		} else if (_shader_load_strategy == ShaderLoadStrategy::LAZY) {
+			// Retain compact zstd-compressed MSL bytes instead of an eagerly decompressed NS::String
+			// (BUG-188B). Decompressed transiently inside MDLazyLibrary::_load_locked().
+			const uint32_t decomp_size = shader.code_decompressed_size ? shader.code_decompressed_size : uint32_t(shader.code_compressed_bytes.size());
+			library = MDLibrary::create_lazy_compressed(cd, device, shader.code_compressed_bytes, decomp_size, shader_data.source_size, shader.code_compression_flags, options.get());
 		} else {
+			NS::SharedPtr<NS::String> source = NS::TransferPtr(NS::String::alloc()->init((void *)decompressed_code.ptr(), shader_data.source_size, NS::UTF8StringEncoding));
 			library = MDLibrary::create(cd, device, source.get(), options.get(), _shader_load_strategy);
 		}
 
@@ -1819,6 +1859,14 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 				libraries[RDD::ShaderStage::SHADER_STAGE_COMPUTE]);
 
 		cs->local = MTL::Size(refl.compute_local_size[0], refl.compute_local_size[1], refl.compute_local_size[2]);
+		cs->has_specialization_constants = !refl.specialization_constants.is_empty();
+		if (cs->kernel && cs->kernel->get_cache_key() != nullptr) {
+			cs->library_key = *cs->kernel->get_cache_key();
+			cs->has_library_key = true;
+			MutexLock lock(pipeline_state_cache_mutex);
+			uint32_t &owners = compute_shader_owners_by_library[cs->library_key];
+			++owners;
+		}
 		shader = cs;
 	} else {
 		MDRenderShader *rs = new MDRenderShader(
@@ -1845,16 +1893,24 @@ bool RenderingDeviceDriverMetal::shader_retire_ready_nonblocking(ShaderID p_shad
 	}
 	const auto *shader = reinterpret_cast<MDShader *>(p_shader.id);
 	if (const auto *compute_shader = dynamic_cast<const MDComputeShader *>(shader)) {
-		return compute_shader->kernel && compute_shader->kernel->retire_ready_nonblocking();
+		MutexLock lock(pipeline_state_cache_mutex);
+		return compute_shader->cached_unspecialized_pso.get() != nullptr ||
+				(compute_shader->kernel && compute_shader->kernel->retire_ready_nonblocking());
 	}
 	if (const auto *render_shader = dynamic_cast<const MDRenderShader *>(shader)) {
-		return render_shader->vert && render_shader->frag &&
-				render_shader->vert->retire_ready_nonblocking() && render_shader->frag->retire_ready_nonblocking();
+		MutexLock lock(pipeline_state_cache_mutex);
+		return render_shader->modules_destroyed ||
+				(render_shader->vert && render_shader->frag &&
+						render_shader->vert->retire_ready_nonblocking() && render_shader->frag->retire_ready_nonblocking());
 	}
 	return false;
 }
 
 void RenderingDeviceDriverMetal::shader_free(ShaderID p_shader) {
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+	MDShader *obj = (MDShader *)p_shader.id;
+	SHA256Digest evicted_compute_key;
+	bool should_evict_compute_pso = false;
 	{
 		MutexLock lock(pipeline_state_cache_mutex);
 		LocalVector<RenderPipelineCacheKey> stale_render_keys;
@@ -1866,18 +1922,52 @@ void RenderingDeviceDriverMetal::shader_free(ShaderID p_shader) {
 		for (const RenderPipelineCacheKey &key : stale_render_keys) {
 			render_pso_cache.erase(key);
 		}
-		// compute_pso_cache is content-addressed by MDLibrary SHA-256 + descriptor
-		// mutability + specialization constants and stores self-contained
-		// NS::SharedPtr<MTL::ComputePipelineState> (no raw MDComputeShader pointers),
-		// so entries remain valid across shader_free and are bounded by
-		// MAX_COMPUTE_PSO_CACHE_ENTRIES and cleared in ~RenderingDeviceDriverMetal().
+		if (MDComputeShader *cs = dynamic_cast<MDComputeShader *>(obj); cs != nullptr && cs->has_library_key) {
+			if (uint32_t *owners = compute_shader_owners_by_library.getptr(cs->library_key)) {
+				if (*owners <= 1u) {
+					compute_shader_owners_by_library.erase(cs->library_key);
+					evicted_compute_key = cs->library_key;
+					should_evict_compute_pso = true;
+				} else {
+					--(*owners);
+				}
+			}
+		}
 	}
-	MDShader *obj = (MDShader *)p_shader.id;
+	if (should_evict_compute_pso) {
+		evict_compute_pso_for_library(evicted_compute_key);
+	}
 	delete obj;
 }
 
 void RenderingDeviceDriverMetal::shader_destroy_modules(ShaderID p_shader) {
-	// TODO.
+	if (!p_shader) {
+		return;
+	}
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+	MDShader *shader = reinterpret_cast<MDShader *>(p_shader.id);
+	if (MDComputeShader *cs = dynamic_cast<MDComputeShader *>(shader); cs != nullptr) {
+		std::shared_ptr<MDLibrary> dropped_kernel;
+		{
+			MutexLock lock(pipeline_state_cache_mutex);
+			dropped_kernel = std::move(cs->kernel);
+		}
+		if (dropped_kernel) {
+			dropped_kernel.reset();
+			total_compute_libraries_released.fetch_add(1, std::memory_order_relaxed);
+		}
+	} else if (MDRenderShader *rs = dynamic_cast<MDRenderShader *>(shader); rs != nullptr) {
+		std::shared_ptr<MDLibrary> dropped_vert;
+		std::shared_ptr<MDLibrary> dropped_frag;
+		{
+			MutexLock lock(pipeline_state_cache_mutex);
+			dropped_vert = std::move(rs->vert);
+			dropped_frag = std::move(rs->frag);
+			rs->modules_destroyed = true;
+		}
+		dropped_vert.reset();
+		dropped_frag.reset();
+	}
 }
 
 /*********************/
@@ -2179,6 +2269,7 @@ void RenderingDeviceDriverMetal::command_copy_texture_to_buffer(CommandBufferID 
 #pragma mark - Pipeline
 
 void RenderingDeviceDriverMetal::pipeline_free(PipelineID p_pipeline_id) {
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 	MDPipeline *obj = (MDPipeline *)(p_pipeline_id.id);
 	delete obj;
 }
@@ -2194,6 +2285,17 @@ void RenderingDeviceDriverMetal::command_bind_push_constants(CommandBufferID p_c
 
 String RenderingDeviceDriverMetal::_pipeline_get_cache_path() const {
 	String path = OS::get_singleton()->get_user_data_dir() + "/metal/pipelines";
+	path += "." + context_device.name.validate_filename().replace_char(' ', '_').to_lower();
+	if (Engine::get_singleton()->is_editor_hint()) {
+		path += ".editor";
+	}
+	path += ".cache";
+
+	return path;
+}
+
+String RenderingDeviceDriverMetal::_pipeline_get_compute_cache_path() const {
+	String path = OS::get_singleton()->get_user_data_dir() + "/metal/compute_pipelines";
 	path += "." + context_device.name.validate_filename().replace_char(' ', '_').to_lower();
 	if (Engine::get_singleton()->is_editor_hint()) {
 		path += ".editor";
@@ -2258,7 +2360,7 @@ void RenderingDeviceDriverMetal::_serialize_archive_to_path(MTL::BinaryArchive *
 		WARN_PRINT(vformat("Metal binary archive serialize skipped (%d entries exceeds %d cap).", p_archive_count, ARCHIVE_MAX_ENTRIES));
 		return;
 	}
-	MutexLock serialize_lock(archive_serialize_mutex);
+	std::unique_lock<std::shared_mutex> serialize_lock(archive_serialize_mutex);
 	++archive_serialize_calls;
 	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 	DirAccess::make_dir_recursive_absolute(p_cache_path.get_base_dir());
@@ -2290,6 +2392,237 @@ void RenderingDeviceDriverMetal::_serialize_archive_to_path(MTL::BinaryArchive *
 		}
 		DirAccess::remove_absolute(tmp_path);
 	}
+}
+
+void RenderingDeviceDriverMetal::_serialize_compute_archive_to_path(MTL::BinaryArchive *p_archive, const String &p_cache_path) {
+	if (!p_archive || p_cache_path.is_empty()) {
+		return;
+	}
+	std::unique_lock<std::shared_mutex> serialize_lock(compute_archive_serialize_mutex);
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+	DirAccess::make_dir_recursive_absolute(p_cache_path.get_base_dir());
+	String tmp_path = p_cache_path + ".tmp";
+	CharString tmp_utf8 = tmp_path.utf8();
+	NS::String *ns_tmp = NS::String::string(tmp_utf8.get_data(), NS::UTF8StringEncoding);
+	NS::URL *target = NS::URL::fileURLWithPath(ns_tmp);
+	NS::Error *error = nullptr;
+	if (p_archive->serializeToURL(target, &error)) {
+		DirAccess::rename_absolute(tmp_path, p_cache_path);
+	} else if (error != nullptr) {
+		print_verbose(String("Metal compute binary archive serialize skipped: ") + error->localizedDescription()->utf8String());
+	}
+}
+
+void RenderingDeviceDriverMetal::_flush_compute_archive_task_func(void *p_userdata) {
+	MetalArchiveReleaseJob *job = static_cast<MetalArchiveReleaseJob *>(p_userdata);
+	{
+		NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+		if (job->archive) {
+			if (!job->driver->archive_tearing_down.load(std::memory_order_acquire)) {
+				job->driver->_serialize_compute_archive_to_path(job->archive.get(), job->cache_path);
+			}
+			job->archive.reset();
+		}
+	}
+	memdelete(job);
+}
+
+void RenderingDeviceDriverMetal::_wait_compute_archive_flush_task() {
+	if (compute_archive_flush_task != WorkerThreadPool::INVALID_TASK_ID) {
+		if (WorkerThreadPool::get_singleton() != nullptr) {
+			WorkerThreadPool::get_singleton()->wait_for_task_completion(compute_archive_flush_task);
+		}
+		compute_archive_flush_task = WorkerThreadPool::INVALID_TASK_ID;
+	}
+}
+
+NS::SharedPtr<MTL::BinaryArchive> RenderingDeviceDriverMetal::_ensure_compute_archive(bool p_enable_disk) {
+	if (pipeline_cache_mode == PipelineCacheMode::DISABLED || archive_tearing_down.load(std::memory_order_acquire) || device == nullptr) {
+		return nullptr;
+	}
+	if (pipeline_cache_mode == PipelineCacheMode::RELEASE_AFTER_WARMUP && !p_enable_disk &&
+			compute_archive_released_after_warmup.load(std::memory_order_acquire)) {
+		return nullptr;
+	}
+	{
+		MutexLock lock(compute_archive_mutex);
+		if (pipeline_cache_mode == PipelineCacheMode::RELEASE_AFTER_WARMUP && !p_enable_disk &&
+				compute_archive_released_after_warmup.load(std::memory_order_acquire)) {
+			return nullptr;
+		}
+		if (compute_archive && (!p_enable_disk || compute_archive_disk_backed)) {
+			compute_archive_activity_this_frame = true;
+			return compute_archive;
+		}
+	}
+
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+	NS::SharedPtr<MTL::BinaryArchiveDescriptor> desc = NS::TransferPtr(MTL::BinaryArchiveDescriptor::alloc()->init());
+	NS::SharedPtr<MTL::BinaryArchive> loaded_archive;
+	NS::Error *error = nullptr;
+	bool loaded_from_disk = false;
+
+	if (p_enable_disk && OS::get_singleton() != nullptr) {
+		String cache_path = _pipeline_get_compute_cache_path();
+		if (FileAccess::exists(cache_path)) {
+			bool skip_oversized = false;
+			Ref<FileAccess> existing = FileAccess::open(cache_path, FileAccess::READ);
+			if (existing.is_valid() && existing->get_length() > COMPUTE_ARCHIVE_MAX_DISK_BYTES) {
+				print_verbose(vformat("Metal compute binary archive on disk (%d MiB) exceeds cap; starting fresh archive.", int(existing->get_length() / (1024 * 1024))));
+				skip_oversized = true;
+			}
+			if (!skip_oversized) {
+				CharString path_utf8 = cache_path.utf8();
+				NS::String *ns_path = NS::String::string(path_utf8.get_data(), NS::UTF8StringEncoding);
+				desc->setUrl(NS::URL::fileURLWithPath(ns_path));
+				loaded_archive = NS::TransferPtr(device->newBinaryArchive(desc.get(), &error));
+				if (loaded_archive && error == nullptr) {
+					loaded_from_disk = true;
+				} else {
+					loaded_archive = nullptr;
+					error = nullptr;
+					desc->setUrl(nullptr);
+				}
+			}
+		}
+	}
+	if (!loaded_archive) {
+		loaded_archive = NS::TransferPtr(device->newBinaryArchive(desc.get(), &error));
+	}
+	if (!loaded_archive) {
+		return nullptr;
+	}
+
+	NS::SharedPtr<MTL::BinaryArchive> replaced;
+	{
+		MutexLock lock(compute_archive_mutex);
+		if (archive_tearing_down.load(std::memory_order_acquire)) {
+			return nullptr;
+		}
+		if (pipeline_cache_mode == PipelineCacheMode::RELEASE_AFTER_WARMUP && !p_enable_disk &&
+				compute_archive_released_after_warmup.load(std::memory_order_acquire)) {
+			return nullptr;
+		}
+		if (compute_archive && (!p_enable_disk || compute_archive_disk_backed)) {
+			compute_archive_activity_this_frame = true;
+			return compute_archive;
+		}
+		replaced = std::move(compute_archive);
+		compute_archive = loaded_archive;
+		compute_archive_known_keys.clear();
+		compute_archive_added_pipelines = 0;
+		compute_archive_idle_frames = 0;
+		compute_archive_open_frames = 0;
+		compute_archive_activity_this_frame = !p_enable_disk;
+		compute_archive_dirty = false;
+		compute_archive_loaded_from_disk = loaded_from_disk;
+		compute_archive_disk_backed = p_enable_disk;
+		compute_archive_released_after_warmup.store(false, std::memory_order_release);
+		compute_archive_active.store(true, std::memory_order_release);
+	}
+	replaced.reset();
+	return loaded_archive;
+}
+
+void RenderingDeviceDriverMetal::_maybe_flush_compute_archive() {
+	if (pipeline_cache_mode == PipelineCacheMode::DISABLED || archive_tearing_down.load(std::memory_order_acquire)) {
+		return;
+	}
+	if (pipeline_cache_mode == PipelineCacheMode::RELEASE_AFTER_WARMUP) {
+		if (!compute_archive_active.load(std::memory_order_acquire)) {
+			return;
+		}
+		NS::SharedPtr<MTL::BinaryArchive> to_release;
+		bool need_serialize = false;
+		{
+			MutexLock lock(compute_archive_mutex);
+			if (!compute_archive) {
+				compute_archive_active.store(false, std::memory_order_release);
+				return;
+			}
+			++compute_archive_open_frames;
+			if (compute_archive_activity_this_frame) {
+				compute_archive_activity_this_frame = false;
+				compute_archive_idle_frames = 0;
+			} else {
+				++compute_archive_idle_frames;
+			}
+			const bool idle_ready = compute_archive_idle_frames >= COMPUTE_ARCHIVE_FLUSH_IDLE_FRAMES;
+			const bool ceiling_reached = compute_archive_open_frames >= COMPUTE_ARCHIVE_WARMUP_MAX_FRAMES;
+			const bool pipeline_cap_reached = compute_archive_added_pipelines >= COMPUTE_ARCHIVE_MAX_PIPELINES;
+			if (!idle_ready && !ceiling_reached && !pipeline_cap_reached) {
+				return;
+			}
+			to_release = std::move(compute_archive);
+			need_serialize = compute_archive_disk_backed && compute_archive_dirty;
+			compute_archive_known_keys.clear();
+			compute_archive_added_pipelines = 0;
+			compute_archive_idle_frames = 0;
+			compute_archive_open_frames = 0;
+			compute_archive_activity_this_frame = false;
+			compute_archive_dirty = false;
+			compute_archive_loaded_from_disk = false;
+			compute_archive_disk_backed = false;
+			compute_archive_released_after_warmup.store(true, std::memory_order_release);
+			compute_archive_active.store(false, std::memory_order_release);
+		}
+		if (!to_release) {
+			return;
+		}
+		print_verbose("Metal: releasing compute binary pipeline archive after warmup to reclaim host memory.");
+		if (need_serialize && !archive_tearing_down.load(std::memory_order_acquire)) {
+			String cache_path = _pipeline_get_compute_cache_path();
+			if (WorkerThreadPool *wtp = WorkerThreadPool::get_singleton()) {
+				_wait_compute_archive_flush_task();
+				MetalArchiveReleaseJob *job = memnew(MetalArchiveReleaseJob);
+				job->driver = this;
+				job->archive = std::move(to_release);
+				job->cache_path = cache_path;
+				compute_archive_flush_task = wtp->add_native_task(&_flush_compute_archive_task_func, job, false, "MetalComputeArchiveRelease");
+				return;
+			}
+			_serialize_compute_archive_to_path(to_release.get(), cache_path);
+		}
+		NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+		to_release.reset();
+		return;
+	}
+	NS::SharedPtr<MTL::BinaryArchive> to_flush;
+	{
+		MutexLock lock(compute_archive_mutex);
+		if (!compute_archive || !compute_archive_disk_backed || !compute_archive_dirty) {
+			return;
+		}
+		++compute_archive_idle_frames;
+		if (compute_archive_idle_frames < COMPUTE_ARCHIVE_FLUSH_IDLE_FRAMES) {
+			return;
+		}
+		to_flush = compute_archive;
+		compute_archive_dirty = false;
+		compute_archive_idle_frames = 0;
+	}
+	if (!to_flush) {
+		return;
+	}
+	String cache_path = _pipeline_get_compute_cache_path();
+	if (WorkerThreadPool *wtp = WorkerThreadPool::get_singleton()) {
+		if (compute_archive_flush_task != WorkerThreadPool::INVALID_TASK_ID) {
+			if (!wtp->is_task_completed(compute_archive_flush_task)) {
+				MutexLock lock(compute_archive_mutex);
+				compute_archive_dirty = true;
+				return;
+			}
+			wtp->wait_for_task_completion(compute_archive_flush_task);
+			compute_archive_flush_task = WorkerThreadPool::INVALID_TASK_ID;
+		}
+		MetalArchiveReleaseJob *job = memnew(MetalArchiveReleaseJob);
+		job->driver = this;
+		job->archive = std::move(to_flush);
+		job->cache_path = cache_path;
+		compute_archive_flush_task = wtp->add_native_task(&_flush_compute_archive_task_func, job, false, "MetalComputeArchiveFlush");
+		return;
+	}
+	_serialize_compute_archive_to_path(to_flush.get(), cache_path);
 }
 
 void RenderingDeviceDriverMetal::_release_archive_task_func(void *p_userdata) {
@@ -2385,7 +2718,9 @@ bool RenderingDeviceDriverMetal::pipeline_cache_create(const Vector<uint8_t> &p_
 		return false;
 	}
 	_wait_archive_release_task();
+	_wait_compute_archive_flush_task();
 	archive_tearing_down.store(false, std::memory_order_release);
+	compute_archive_released_after_warmup.store(false, std::memory_order_release);
 
 	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 	String cache_path = _pipeline_get_cache_path();
@@ -2430,13 +2765,16 @@ bool RenderingDeviceDriverMetal::pipeline_cache_create(const Vector<uint8_t> &p_
 	archive_idle_frames = 0;
 	archive_open_frames = 0;
 	archive_active.store(true, std::memory_order_release);
+	_ensure_compute_archive(true);
 	return true;
 }
 
 void RenderingDeviceDriverMetal::pipeline_cache_free() {
 	archive_tearing_down.store(true, std::memory_order_release);
 	_wait_archive_release_task();
+	_wait_compute_archive_flush_task();
 	NS::SharedPtr<MTL::BinaryArchive> to_release;
+	NS::SharedPtr<MTL::BinaryArchive> compute_to_release;
 	{
 		MutexLock lock(archive_mutex);
 		to_release = std::move(archive);
@@ -2449,9 +2787,24 @@ void RenderingDeviceDriverMetal::pipeline_cache_free() {
 		archive_open_frames = 0;
 		archive_active.store(false, std::memory_order_release);
 	}
-	if (to_release) {
+	{
+		MutexLock lock(compute_archive_mutex);
+		compute_to_release = std::move(compute_archive);
+		compute_archive_known_keys.clear();
+		compute_archive_added_pipelines = 0;
+		compute_archive_idle_frames = 0;
+		compute_archive_open_frames = 0;
+		compute_archive_activity_this_frame = false;
+		compute_archive_dirty = false;
+		compute_archive_loaded_from_disk = false;
+		compute_archive_disk_backed = false;
+		compute_archive_released_after_warmup.store(false, std::memory_order_release);
+		compute_archive_active.store(false, std::memory_order_release);
+	}
+	if (to_release || compute_to_release) {
 		NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 		to_release.reset();
+		compute_to_release.reset();
 	}
 }
 
@@ -2667,7 +3020,7 @@ void RenderingDeviceDriverMetal::command_render_set_line_width(CommandBufferID p
 // ----- PIPELINE -----
 
 RenderingDeviceDriverMetal::Result<NS::SharedPtr<MTL::Function>> RenderingDeviceDriverMetal::_create_function(MDLibrary *p_library, NS::String *p_name, VectorView<PipelineSpecializationConstant> &p_specialization_constants) {
-	MTL::Library *library = p_library->get_library();
+	NS::SharedPtr<MTL::Library> library = p_library->acquire_library();
 	if (!library) {
 		ERR_FAIL_V_MSG(ERR_CANT_CREATE, "Failed to compile Metal library");
 	}
@@ -2788,6 +3141,12 @@ std::atomic<uint64_t> RenderingDeviceDriverMetal::total_render_pso_cache_hits{ 0
 std::atomic<uint64_t> RenderingDeviceDriverMetal::total_render_pso_cache_misses{ 0 };
 std::atomic<uint64_t> RenderingDeviceDriverMetal::total_compute_pso_cache_hits{ 0 };
 std::atomic<uint64_t> RenderingDeviceDriverMetal::total_compute_pso_cache_misses{ 0 };
+std::atomic<uint64_t> RenderingDeviceDriverMetal::total_compute_pso_cache_evictions{ 0 };
+std::atomic<uint64_t> RenderingDeviceDriverMetal::total_compute_libraries_released{ 0 };
+std::atomic<uint64_t> RenderingDeviceDriverMetal::total_render_libraries_released{ 0 };
+std::atomic<uint64_t> RenderingDeviceDriverMetal::total_lazy_libraries_unloaded{ 0 };
+std::atomic<uint64_t> RenderingDeviceDriverMetal::total_compute_archive_hits{ 0 };
+std::atomic<uint64_t> RenderingDeviceDriverMetal::total_compute_archive_additions{ 0 };
 
 static _FORCE_INLINE_ uint32_t _metal_float_bits(float p_val) {
 	uint32_t bits = 0;
@@ -3074,6 +3433,7 @@ RDD::PipelineID RenderingDeviceDriverMetal::render_pipeline_create(
 
 	os_signpost_event_emit(LOG_DRIVER, OS_SIGNPOST_ID_EXCLUSIVE, "create_pipeline");
 
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 	NS::SharedPtr<MTL::RenderPipelineDescriptor> desc = NS::TransferPtr(MTL::RenderPipelineDescriptor::alloc()->init());
 
 	{
@@ -3321,19 +3681,29 @@ RDD::PipelineID RenderingDeviceDriverMetal::render_pipeline_create(
 		pipeline->raster_state.stencil.enabled = true;
 	}
 
-	if (shader->vert) {
-		Result<NS::SharedPtr<MTL::Function>> function_or_err = _create_function(shader->vert.get(), MTLSTR("main0"), p_specialization_constants);
+	std::shared_ptr<MDLibrary> local_vert;
+	std::shared_ptr<MDLibrary> local_frag;
+	{
+		MutexLock lock(pipeline_state_cache_mutex);
+		if (shader->modules_destroyed) {
+			ERR_FAIL_V_MSG(PipelineID(), "Render shader modules have already been destroyed.");
+		}
+		local_vert = shader->vert;
+		local_frag = shader->frag;
+	}
+
+	if (local_vert) {
+		Result<NS::SharedPtr<MTL::Function>> function_or_err = _create_function(local_vert.get(), MTLSTR("main0"), p_specialization_constants);
 		ERR_FAIL_COND_V(std::holds_alternative<Error>(function_or_err), PipelineID());
 		desc->setVertexFunction(std::get<NS::SharedPtr<MTL::Function>>(function_or_err).get());
 	}
 
-	if (shader->frag) {
-		Result<NS::SharedPtr<MTL::Function>> function_or_err = _create_function(shader->frag.get(), MTLSTR("main0"), p_specialization_constants);
+	if (local_frag) {
+		Result<NS::SharedPtr<MTL::Function>> function_or_err = _create_function(local_frag.get(), MTLSTR("main0"), p_specialization_constants);
 		ERR_FAIL_COND_V(std::holds_alternative<Error>(function_or_err), PipelineID());
 		desc->setFragmentFunction(std::get<NS::SharedPtr<MTL::Function>>(function_or_err).get());
 	}
 
-	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 	NS::SharedPtr<MTL::BinaryArchive> local_archive = _acquire_pipeline_archive();
 
 	MTL::PipelineOption options = MTL::PipelineOptionNone;
@@ -3345,17 +3715,22 @@ RDD::PipelineID RenderingDeviceDriverMetal::render_pipeline_create(
 		if (archive_fail_on_miss) {
 			options |= MTL::PipelineOptionFailOnBinaryArchiveMiss;
 		}
-		// Guard archive read (newRenderPipelineState) and mutation (addRenderPipelineFunctions)
-		// against concurrent serializeToURL / add*PipelineFunctions; strict lock order is
-		// archive_serialize_mutex -> archive_mutex.
-		MutexLock serialize_lock(archive_serialize_mutex);
-		pipeline->state = NS::TransferPtr(device->newRenderPipelineState(desc.get(), options, nullptr, &error));
+		// Shared lock allows concurrent newRenderPipelineState reads across threads;
+		// exclusive lock guards addRenderPipelineFunctions & serializeToURL (BUG-189B).
+		// Strict lock order: archive_serialize_mutex -> archive_mutex.
+		{
+			std::shared_lock<std::shared_mutex> read_lock(archive_serialize_mutex);
+			pipeline->state = NS::TransferPtr(device->newRenderPipelineState(desc.get(), options, nullptr, &error));
+		}
 		if (error == nullptr && pipeline->state && _can_add_to_pipeline_archive(arc, false)) {
-			NS::Error *arc_err = nullptr;
-			if (arc->addRenderPipelineFunctions(desc.get(), &arc_err)) {
-				_record_pipeline_archive_addition(arc, false);
-			} else if (arc_err != nullptr) {
-				print_verbose(String("Metal binary archive addRenderPipelineFunctions skipped: ") + arc_err->localizedDescription()->utf8String());
+			std::unique_lock<std::shared_mutex> write_lock(archive_serialize_mutex);
+			if (_can_add_to_pipeline_archive(arc, false)) {
+				NS::Error *arc_err = nullptr;
+				if (arc->addRenderPipelineFunctions(desc.get(), &arc_err)) {
+					_record_pipeline_archive_addition(arc, false);
+				} else if (arc_err != nullptr) {
+					print_verbose(String("Metal binary archive addRenderPipelineFunctions skipped: ") + arc_err->localizedDescription()->utf8String());
+				}
 			}
 		}
 	} else {
@@ -3381,6 +3756,18 @@ RDD::PipelineID RenderingDeviceDriverMetal::render_pipeline_create(
 		render_pso_cache.insert(std::move(cache_key), std::move(entry));
 	}
 
+	// Release MTL::Function refs on descriptor, then unload MTL::Library LLVM AIR
+	// bitcode while preserving compact zstd MSL for transparent re-hydration (BUG-188B).
+	desc.reset();
+	if (local_vert && local_vert->release_loaded_library()) {
+		total_render_libraries_released.fetch_add(1, std::memory_order_relaxed);
+		total_lazy_libraries_unloaded.fetch_add(1, std::memory_order_relaxed);
+	}
+	if (local_frag && local_frag->release_loaded_library()) {
+		total_render_libraries_released.fetch_add(1, std::memory_order_relaxed);
+		total_lazy_libraries_unloaded.fetch_add(1, std::memory_order_relaxed);
+	}
+
 	return PipelineID(pipeline.release());
 }
 
@@ -3396,6 +3783,11 @@ void RenderingDeviceDriverMetal::command_begin_compute_pass(CommandBufferID p_cm
 void RenderingDeviceDriverMetal::command_end_compute_pass(CommandBufferID p_cmd_buffer) {
 	MDCommandBufferBase *cb = (MDCommandBufferBase *)(p_cmd_buffer.id);
 	cb->compute_end_pass();
+}
+
+void RenderingDeviceDriverMetal::command_compute_memory_barrier(CommandBufferID p_cmd_buffer) {
+	MDCommandBufferBase *cb = (MDCommandBufferBase *)(p_cmd_buffer.id);
+	cb->compute_memory_barrier();
 }
 
 void RenderingDeviceDriverMetal::command_bind_compute_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) {
@@ -3423,7 +3815,23 @@ void RenderingDeviceDriverMetal::command_compute_dispatch_indirect(CommandBuffer
 RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) {
 	MDComputeShader *shader = (MDComputeShader *)(p_shader.id);
 
-	const SHA256Digest *lib_key = shader->kernel ? shader->kernel->get_cache_key() : nullptr;
+	// Fast path: unspecialized compute shaders retain their compiled PSO after
+	// releasing MDLibrary / MTL::Library LLVM bitcode (BUG-185A).
+	std::shared_ptr<MDLibrary> local_kernel;
+	{
+		MutexLock lock(pipeline_state_cache_mutex);
+		if (p_specialization_constants.size() == 0 && shader->cached_unspecialized_pso) {
+			MDComputePipeline *pipeline = new MDComputePipeline(shader->cached_unspecialized_pso);
+			pipeline->compute_state.local = shader->local;
+			pipeline->shader = shader;
+			compute_pso_cache_hits.fetch_add(1, std::memory_order_relaxed);
+			total_compute_pso_cache_hits.fetch_add(1, std::memory_order_relaxed);
+			return PipelineID(pipeline);
+		}
+		local_kernel = shader->kernel;
+	}
+
+	const SHA256Digest *lib_key = shader->has_library_key ? &shader->library_key : (local_kernel ? local_kernel->get_cache_key() : nullptr);
 	const bool can_cache = (lib_key != nullptr) && (!shader->uses_argument_buffers || shader->sets.size() <= 64);
 	ComputePipelineCacheKey cache_key;
 	if (can_cache) {
@@ -3453,10 +3861,28 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 			cache_key.spec_constants.push_back(sk);
 		}
 		cache_key.cached_hash = hash_fmix32(h);
-		MutexLock lock(pipeline_state_cache_mutex);
-		if (ComputePipelineCacheEntry *cached = compute_pso_cache.getptr(cache_key)) {
-			cached->last_used_tick = ++compute_pso_cache_tick;
-			MDComputePipeline *pipeline = new MDComputePipeline(cached->state);
+		NS::SharedPtr<MTL::ComputePipelineState> hit_state;
+		std::shared_ptr<MDLibrary> dropped_kernel;
+		{
+			MutexLock lock(pipeline_state_cache_mutex);
+			if (const ComputePipelineCacheEntry *cached = compute_pso_cache.getptr(cache_key)) {
+				hit_state = cached->state;
+				if (!shader->has_specialization_constants && p_specialization_constants.size() == 0) {
+					shader->cached_unspecialized_pso = hit_state;
+					dropped_kernel = std::move(shader->kernel);
+				}
+			}
+		}
+		if (hit_state) {
+			if (dropped_kernel || local_kernel) {
+				NS::SharedPtr<NS::AutoreleasePool> drop_pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+				if (dropped_kernel) {
+					dropped_kernel.reset();
+					total_compute_libraries_released.fetch_add(1, std::memory_order_relaxed);
+				}
+				local_kernel.reset();
+			}
+			MDComputePipeline *pipeline = new MDComputePipeline(hit_state);
 			pipeline->compute_state.local = shader->local;
 			pipeline->shader = shader;
 			compute_pso_cache_hits.fetch_add(1, std::memory_order_relaxed);
@@ -3464,6 +3890,8 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 			return PipelineID(pipeline);
 		}
 	}
+
+	ERR_FAIL_NULL_V_MSG(local_kernel.get(), PipelineID(), "Compute shader module has already been destroyed.");
 
 	os_signpost_id_t reflect_id = os_signpost_id_make_with_pointer(LOG_INTERVALS, shader);
 	os_signpost_interval_begin(LOG_INTERVALS, reflect_id, "compute_pipeline_create", "shader_name=%{public}s", shader->name.get_data());
@@ -3473,7 +3901,8 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 
 	os_signpost_event_emit(LOG_DRIVER, OS_SIGNPOST_ID_EXCLUSIVE, "create_pipeline");
 
-	Result<NS::SharedPtr<MTL::Function>> function_or_err = _create_function(shader->kernel.get(), MTLSTR("main0"), p_specialization_constants);
+	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+	Result<NS::SharedPtr<MTL::Function>> function_or_err = _create_function(local_kernel.get(), MTLSTR("main0"), p_specialization_constants);
 	ERR_FAIL_COND_V(std::holds_alternative<Error>(function_or_err), PipelineID());
 	NS::SharedPtr<MTL::Function> function = std::get<NS::SharedPtr<MTL::Function>>(function_or_err);
 
@@ -3490,30 +3919,112 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 		}
 	}
 
-	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 	NS::SharedPtr<MTL::BinaryArchive> local_archive = _acquire_pipeline_archive();
+	NS::SharedPtr<MTL::BinaryArchive> local_compute_archive = can_cache ? _ensure_compute_archive(false) : nullptr;
 
 	MTL::PipelineOption options = MTL::PipelineOptionNone;
 	MTL::BinaryArchive *arc = local_archive.get();
+	MTL::BinaryArchive *compute_arc = local_compute_archive.get();
 	NS::Error *error = nullptr;
 	NS::SharedPtr<MTL::ComputePipelineState> state;
-	if (arc) {
-		NS::SharedPtr<NS::Array> archives = NS::TransferPtr(NS::Array::array(reinterpret_cast<NS::Object *const *>(&arc), 1)->retain());
+
+	bool already_in_compute_archive = false;
+	bool compute_arc_loaded_from_disk = false;
+	bool compute_arc_probed_hit = false;
+	if (compute_arc) {
+		MutexLock lock(compute_archive_mutex);
+		if (compute_archive.get() == compute_arc) {
+			already_in_compute_archive = compute_archive_known_keys.has(cache_key);
+			compute_arc_loaded_from_disk = compute_archive_loaded_from_disk;
+		}
+	}
+
+	if (arc || compute_arc) {
+		NS::Object *arc_objs[2];
+		NS::UInteger arc_count = 0;
+		if (compute_arc) {
+			arc_objs[arc_count++] = compute_arc;
+		}
+		if (arc) {
+			arc_objs[arc_count++] = arc;
+		}
+		NS::SharedPtr<NS::Array> archives = NS::TransferPtr(NS::Array::array(arc_objs, arc_count)->retain());
 		desc->setBinaryArchives(archives.get());
 		if (archive_fail_on_miss) {
 			options |= MTL::PipelineOptionFailOnBinaryArchiveMiss;
 		}
-		// Guard archive read (newComputePipelineState) and mutation (addComputePipelineFunctions)
-		// against concurrent serializeToURL / add*PipelineFunctions; strict lock order is
-		// archive_serialize_mutex -> archive_mutex.
-		MutexLock serialize_lock(archive_serialize_mutex);
-		state = NS::TransferPtr(device->newComputePipelineState(desc.get(), options, nullptr, &error));
-		if (error == nullptr && state && _can_add_to_pipeline_archive(arc, true)) {
-			NS::Error *arc_err = nullptr;
-			if (arc->addComputePipelineFunctions(desc.get(), &arc_err)) {
-				_record_pipeline_archive_addition(arc, true);
-			} else if (arc_err != nullptr) {
-				print_verbose(String("Metal binary archive addComputePipelineFunctions skipped: ") + arc_err->localizedDescription()->utf8String());
+		// Shared locks allow concurrent multi-threaded Metal PSO compilation;
+		// strict lock order: archive_serialize_mutex -> compute_archive_serialize_mutex -> *_mutex.
+		{
+			std::shared_lock<std::shared_mutex> main_read_lock(archive_serialize_mutex, std::defer_lock);
+			std::shared_lock<std::shared_mutex> compute_read_lock(compute_archive_serialize_mutex, std::defer_lock);
+			if (arc) {
+				main_read_lock.lock();
+			}
+			if (compute_arc) {
+				compute_read_lock.lock();
+			}
+			if (compute_arc && !already_in_compute_archive && compute_arc_loaded_from_disk && !archive_fail_on_miss) {
+				NS::Error *probe_err = nullptr;
+				state = NS::TransferPtr(device->newComputePipelineState(desc.get(), MTL::PipelineOptionFailOnBinaryArchiveMiss, nullptr, &probe_err));
+				if (probe_err == nullptr && state) {
+					compute_arc_probed_hit = true;
+				} else {
+					state.reset();
+				}
+			}
+			if (!state) {
+				state = NS::TransferPtr(device->newComputePipelineState(desc.get(), options, nullptr, &error));
+			}
+		}
+
+		if (error == nullptr && state) {
+			if (already_in_compute_archive || compute_arc_probed_hit) {
+				total_compute_archive_hits.fetch_add(1, std::memory_order_relaxed);
+				if (compute_arc_probed_hit && compute_arc) {
+					MutexLock lock(compute_archive_mutex);
+					if (compute_archive.get() == compute_arc) {
+						compute_archive_known_keys.insert(cache_key);
+					}
+				}
+			} else if (compute_arc && can_cache) {
+				std::unique_lock<std::shared_mutex> write_lock(compute_archive_serialize_mutex);
+				bool can_add_compute = false;
+				{
+					MutexLock lock(compute_archive_mutex);
+					can_add_compute = (compute_archive.get() == compute_arc) &&
+							!compute_archive_known_keys.has(cache_key) &&
+							compute_archive_added_pipelines < COMPUTE_ARCHIVE_MAX_PIPELINES;
+				}
+				if (can_add_compute) {
+					NS::Error *arc_err = nullptr;
+					if (compute_arc->addComputePipelineFunctions(desc.get(), &arc_err)) {
+						MutexLock lock(compute_archive_mutex);
+						if (compute_archive.get() == compute_arc) {
+							compute_archive_known_keys.insert(cache_key);
+							++compute_archive_added_pipelines;
+							compute_archive_dirty = true;
+							compute_archive_idle_frames = 0;
+							compute_archive_activity_this_frame = true;
+							total_compute_archive_additions.fetch_add(1, std::memory_order_relaxed);
+						}
+					} else if (arc_err != nullptr) {
+						print_verbose(String("Metal compute binary archive addComputePipelineFunctions skipped: ") + arc_err->localizedDescription()->utf8String());
+					}
+				}
+			}
+			const bool managed_by_compute_archive = (compute_arc != nullptr) ||
+					(can_cache && compute_archive_released_after_warmup.load(std::memory_order_acquire));
+			if (arc && !managed_by_compute_archive && _can_add_to_pipeline_archive(arc, true)) {
+				std::unique_lock<std::shared_mutex> write_lock(archive_serialize_mutex);
+				if (_can_add_to_pipeline_archive(arc, true)) {
+					NS::Error *arc_err = nullptr;
+					if (arc->addComputePipelineFunctions(desc.get(), &arc_err)) {
+						_record_pipeline_archive_addition(arc, true);
+					} else if (arc_err != nullptr) {
+						print_verbose(String("Metal binary archive addComputePipelineFunctions skipped: ") + arc_err->localizedDescription()->utf8String());
+					}
+				}
 			}
 		}
 	} else {
@@ -3524,42 +4035,41 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 
 	compute_pso_cache_misses.fetch_add(1, std::memory_order_relaxed);
 	total_compute_pso_cache_misses.fetch_add(1, std::memory_order_relaxed);
-	if (can_cache) {
+	std::shared_ptr<MDLibrary> dropped_kernel;
+	{
 		MutexLock lock(pipeline_state_cache_mutex);
-		if (ComputePipelineCacheEntry *existing = compute_pso_cache.getptr(cache_key)) {
-			existing->state = state;
-			existing->last_used_tick = ++compute_pso_cache_tick;
-		} else {
+		if (can_cache) {
 			if (compute_pso_cache.size() >= MAX_COMPUTE_PSO_CACHE_ENTRIES) {
-				struct EvictCandidate {
-					uint64_t tick;
-					const ComputePipelineCacheKey *key;
-				};
-				LocalVector<EvictCandidate> candidates;
-				candidates.reserve(compute_pso_cache.size());
-				for (const KeyValue<ComputePipelineCacheKey, ComputePipelineCacheEntry> &kv : compute_pso_cache) {
-					candidates.push_back({ kv.value.last_used_tick, &kv.key });
-				}
-				const uint32_t evict_count = MIN(COMPUTE_PSO_CACHE_EVICT_COUNT, candidates.size());
-				if (evict_count > 0) {
-					std::nth_element(candidates.ptr(), candidates.ptr() + evict_count, candidates.ptr() + candidates.size(),
-							[](const EvictCandidate &a, const EvictCandidate &b) { return a.tick < b.tick; });
-					LocalVector<ComputePipelineCacheKey> keys_to_erase;
-					keys_to_erase.reserve(evict_count);
-					for (uint32_t i = 0; i < evict_count; ++i) {
-						keys_to_erase.push_back(*candidates[i].key);
-					}
-					for (const ComputePipelineCacheKey &key : keys_to_erase) {
-						compute_pso_cache.erase(key);
-					}
-				}
+				compute_pso_cache.clear();
+				compute_pso_keys_by_library.clear();
 			}
 			ComputePipelineCacheEntry entry;
 			entry.state = state;
-			entry.last_used_tick = ++compute_pso_cache_tick;
+			const bool inserted_new = !compute_pso_cache.has(cache_key);
+			ComputePipelineCacheKey key_copy;
+			if (inserted_new) {
+				key_copy = cache_key;
+			}
 			compute_pso_cache.insert(std::move(cache_key), std::move(entry));
+			if (inserted_new) {
+				compute_pso_keys_by_library[key_copy.library_key].push_back(std::move(key_copy));
+			}
+		}
+		if (!shader->has_specialization_constants && p_specialization_constants.size() == 0) {
+			shader->cached_unspecialized_pso = state;
+			dropped_kernel = std::move(shader->kernel);
 		}
 	}
+	// Drop descriptor & MTL::Function refs before releasing MDLibrary / MTL::Library LLVM bitcode.
+	desc.reset();
+	function.reset();
+	if (dropped_kernel) {
+		dropped_kernel.reset();
+		total_compute_libraries_released.fetch_add(1, std::memory_order_relaxed);
+	} else if (local_kernel && local_kernel->release_loaded_library()) {
+		total_lazy_libraries_unloaded.fetch_add(1, std::memory_order_relaxed);
+	}
+	local_kernel.reset();
 
 	MDComputePipeline *pipeline = new MDComputePipeline(state);
 	pipeline->compute_state.local = shader->local;
@@ -3686,6 +4196,7 @@ void RenderingDeviceDriverMetal::begin_segment(uint32_t p_frame_index, uint32_t 
 	_frame_index = p_frame_index;
 	_frames_drawn = p_frames_drawn;
 	_maybe_release_pipeline_archive(p_frames_drawn);
+	_maybe_flush_compute_archive();
 }
 
 void RenderingDeviceDriverMetal::end_segment() {
@@ -3720,10 +4231,28 @@ void RenderingDeviceDriverMetal::set_object_name(ObjectType p_type, ID p_driver_
 		case OBJECT_TYPE_SHADER: {
 			MDShader *shader = (MDShader *)(p_driver_id.id);
 			if (MDRenderShader *rs = dynamic_cast<MDRenderShader *>(shader); rs != nullptr) {
-				rs->vert->set_label(label);
-				rs->frag->set_label(label);
+				std::shared_ptr<MDLibrary> vert_lib;
+				std::shared_ptr<MDLibrary> frag_lib;
+				{
+					MutexLock lock(pipeline_state_cache_mutex);
+					vert_lib = rs->vert;
+					frag_lib = rs->frag;
+				}
+				if (vert_lib) {
+					vert_lib->set_label(label);
+				}
+				if (frag_lib) {
+					frag_lib->set_label(label);
+				}
 			} else if (MDComputeShader *cs = dynamic_cast<MDComputeShader *>(shader); cs != nullptr) {
-				cs->kernel->set_label(label);
+				std::shared_ptr<MDLibrary> kernel_lib;
+				{
+					MutexLock lock(pipeline_state_cache_mutex);
+					kernel_lib = cs->kernel;
+				}
+				if (kernel_lib) {
+					kernel_lib->set_label(label);
+				}
 			} else {
 				DEV_ASSERT(false);
 			}
@@ -4097,6 +4626,8 @@ uint64_t RenderingDeviceDriverMetal::api_trait_get(ApiTrait p_trait) {
 			return false;
 		case API_TRAIT_TEXTURES_REQUIRE_LAYOUT_TRANSITIONS:
 			return false;
+		case API_TRAIT_COALESCE_COMPUTE_PASSES:
+			return sync_mode == Barriers;
 		default:
 			return RenderingDeviceDriver::api_trait_get(p_trait);
 	}
@@ -4241,15 +4772,76 @@ RenderingDeviceDriverMetal::RenderingDeviceDriverMetal(RenderingContextDriverMet
 }
 
 RenderingDeviceDriverMetal::~RenderingDeviceDriverMetal() {
+	auto relief = []() {
+#ifdef MACOS_ENABLED
+		malloc_zone_pressure_relief(nullptr, 0);
+#endif
+	};
+	constexpr uint32_t TEARDOWN_BATCH = 16u;
 	{
 		MutexLock lock(pipeline_state_cache_mutex);
+		LocalVector<RenderPipelineCacheKey> render_keys;
+		render_keys.reserve(render_pso_cache.size());
+		for (const KeyValue<RenderPipelineCacheKey, RenderPipelineCacheEntry> &kv : render_pso_cache) {
+			render_keys.push_back(kv.key);
+		}
+		for (uint32_t i = 0; i < render_keys.size(); i += TEARDOWN_BATCH) {
+			{
+				NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+				const uint32_t end = MIN(i + TEARDOWN_BATCH, render_keys.size());
+				for (uint32_t j = i; j < end; ++j) {
+					render_pso_cache.erase(render_keys[j]);
+				}
+			}
+			relief();
+		}
 		render_pso_cache.clear();
+
+		LocalVector<ComputePipelineCacheKey> compute_keys;
+		compute_keys.reserve(compute_pso_cache.size());
+		for (const KeyValue<ComputePipelineCacheKey, ComputePipelineCacheEntry> &kv : compute_pso_cache) {
+			compute_keys.push_back(kv.key);
+		}
+		for (uint32_t i = 0; i < compute_keys.size(); i += TEARDOWN_BATCH) {
+			{
+				NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+				const uint32_t end = MIN(i + TEARDOWN_BATCH, compute_keys.size());
+				for (uint32_t j = i; j < end; ++j) {
+					compute_pso_cache.erase(compute_keys[j]);
+				}
+			}
+			relief();
+		}
 		compute_pso_cache.clear();
+		compute_pso_keys_by_library.clear();
+		compute_shader_owners_by_library.clear();
 	}
-	pipeline_cache_free();
-	drain_completion_records();
-	for (KeyValue<SHA256Digest, ShaderCacheEntry *> &kv : _shader_cache) {
-		memdelete(kv.value);
+	{
+		NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+		pipeline_cache_free();
+		drain_completion_records();
+	}
+	relief();
+	{
+		LocalVector<ShaderCacheEntry *> shader_entries;
+		{
+			MutexLock lock(_shader_cache_lock);
+			shader_entries.reserve(_shader_cache.size());
+			for (KeyValue<SHA256Digest, ShaderCacheEntry *> &kv : _shader_cache) {
+				shader_entries.push_back(kv.value);
+			}
+			_shader_cache.clear();
+		}
+		for (uint32_t i = 0; i < shader_entries.size(); i += TEARDOWN_BATCH) {
+			{
+				NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+				const uint32_t end = MIN(i + TEARDOWN_BATCH, shader_entries.size());
+				for (uint32_t j = i; j < end; ++j) {
+					memdelete(shader_entries[j]);
+				}
+			}
+			relief();
+		}
 	}
 
 	memdelete(shader_container_format);
@@ -4257,24 +4849,28 @@ RenderingDeviceDriverMetal::~RenderingDeviceDriverMetal() {
 	memdelete(device_properties);
 
 	if (allocator != nullptr) {
-		allocator->free_buffer(copy_queue_buffer);
+		{
+			NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+			allocator->free_buffer(copy_queue_buffer);
 
 #ifdef DEBUG_ENABLED
-		if (OS::get_singleton()->is_stdout_verbose()) {
-			MetalAllocatorStats stats;
-			allocator->get_stats(stats);
-			const char *pool_names[3] = { "private", "shared", "shared_wc" };
-			for (uint32_t i = 0; i < 3; i++) {
-				const MetalAllocatorStats::Pool &p = stats.pools[i];
-				print_verbose(vformat("Metal allocator pool %s: %d blocks, %s reserved, %s used, %d live allocations, %d dedicated (%s).",
-						pool_names[i], p.block_count, String::humanize_size(p.reserved_bytes), String::humanize_size(p.used_bytes),
-						p.allocation_count, p.dedicated_count, String::humanize_size(p.dedicated_bytes)));
+			if (OS::get_singleton()->is_stdout_verbose()) {
+				MetalAllocatorStats stats;
+				allocator->get_stats(stats);
+				const char *pool_names[MetalAllocatorStats::POOL_COUNT] = { "private", "shared", "shared_wc", "private_small", "shared_small", "shared_wc_small" };
+				for (uint32_t i = 0; i < MetalAllocatorStats::POOL_COUNT; i++) {
+					const MetalAllocatorStats::Pool &p = stats.pools[i];
+					print_verbose(vformat("Metal allocator pool %s: %d blocks, %s reserved, %s used, %d live allocations, %d dedicated (%s).",
+							pool_names[i], p.block_count, String::humanize_size(p.reserved_bytes), String::humanize_size(p.used_bytes),
+							p.allocation_count, p.dedicated_count, String::humanize_size(p.dedicated_bytes)));
+				}
 			}
-		}
 #endif
 
-		memdelete(allocator);
-		allocator = nullptr;
+			memdelete(allocator);
+			allocator = nullptr;
+		}
+		relief();
 	}
 }
 

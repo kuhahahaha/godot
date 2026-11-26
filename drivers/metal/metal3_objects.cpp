@@ -1633,6 +1633,13 @@ void MDCommandBuffer::compute_end_pass() {
 	}
 }
 
+void MDCommandBuffer::compute_memory_barrier() {
+	DEV_ASSERT(type == MDCommandBufferStateType::Compute);
+	if (compute.encoder) {
+		compute.encoder->memoryBarrier(MTL::BarrierScopeBuffers | MTL::BarrierScopeTextures);
+	}
+}
+
 void MDCommandBuffer::_compute_set_dirty_state() {
 	if (compute.dirty.has_flag(ComputeState::DIRTY_PIPELINE)) {
 		if (!compute.encoder) {

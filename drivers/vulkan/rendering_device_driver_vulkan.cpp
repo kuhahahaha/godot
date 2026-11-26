@@ -7649,6 +7649,20 @@ void RenderingDeviceDriverVulkan::command_compute_dispatch_indirect(CommandBuffe
 	vkCmdDispatchIndirect(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset);
 }
 
+void RenderingDeviceDriverVulkan::command_compute_memory_barrier(CommandBufferID p_cmd_buffer) {
+	MemoryAccessBarrier barrier;
+	barrier.src_access = BARRIER_ACCESS_SHADER_READ_BIT | BARRIER_ACCESS_SHADER_WRITE_BIT;
+	barrier.dst_access = BARRIER_ACCESS_SHADER_READ_BIT | BARRIER_ACCESS_SHADER_WRITE_BIT | BARRIER_ACCESS_INDIRECT_COMMAND_READ_BIT;
+	command_pipeline_barrier(
+			p_cmd_buffer,
+			PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+			PIPELINE_STAGE_COMPUTE_SHADER_BIT | PIPELINE_STAGE_DRAW_INDIRECT_BIT,
+			VectorView<MemoryAccessBarrier>(&barrier, 1),
+			VectorView<BufferBarrier>(),
+			VectorView<TextureBarrier>(),
+			VectorView<AccelerationStructureBarrier>());
+}
+
 // ----- PIPELINE -----
 
 RDD::PipelineID RenderingDeviceDriverVulkan::compute_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) {

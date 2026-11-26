@@ -88,7 +88,9 @@ struct Instance192Record {
 struct ParticleLightRecord64 {
 	static constexpr uint32_t FLAG_ACTIVE = 1u;
 	static constexpr uint32_t FLAG_AFFECTS_TRANSLUCENCY = 2u;
-	static constexpr uint32_t FLAG_KNOWN_MASK = 3u;
+	static constexpr uint32_t FLAG_SPOT_LIGHT = 4u;
+	static constexpr uint32_t FLAG_KNOWN_MASK = 7u;
+	static constexpr uint32_t MAX_CONE_Q16 = 32768u; // PI/2 rad (90 deg half-angle)
 
 	float position_world[3] = {}; // words 0..2  (0..11B, world-space)
 	float radius = 0.0f; // word  3     (12..15B, world-space > 0)
@@ -96,12 +98,138 @@ struct ParticleLightRecord64 {
 	float attenuation_exp = 1.0f; // word  7     (28..31B, +2.0f when inverse_squared else >= 0)
 	uint32_t id_index = 0; // word  8     (32..35B)
 	uint32_t id_acquire_tag = 0; // word  9     (36..39B)
-	uint32_t flags = FLAG_ACTIVE; // word  10    (40..43B, bit0=active, bit1=affects_translucency)
-	uint32_t screen_importance_q16 = 0; // word  11    (44..47B, [1..65535] for active lights)
+	uint32_t flags = FLAG_ACTIVE; // word  10    (40..43B, [2:0]=flags, [15:3]=0, [31:16]=outer_cone_q16 (0 when omni))
+	uint32_t screen_importance_q16 = 0; // word  11    (44..47B, [15:0]=screen_importance_q16 [1..65535], [31:16]=inner_cone_q16 (0 when omni))
 	float specular_scale = 1.0f; // word  12    (48..51B)
 	float diffuse_scale = 1.0f; // word  13    (52..55B)
 	float volumetric_scattering = 1.0f; // word  14    (56..59B)
-	uint32_t reserved0 = 0; // word  15    (60..63B, must be 0u)
+	uint32_t reserved0 = 0; // word  15    (60..63B, 0u when omni; octahedral SNORM16x2 world unit dir when FLAG_SPOT_LIGHT)
+
+	bool is_spot() const {
+		return (flags & FLAG_SPOT_LIGHT) != 0u;
+	}
+	uint32_t get_flags_low() const {
+		return flags & 0xFFFFu;
+	}
+	uint32_t get_importance_q16() const {
+		return screen_importance_q16 & 0xFFFFu;
+	}
+	uint32_t get_outer_cone_q16() const {
+		return flags >> 16u;
+	}
+	uint32_t get_inner_cone_q16() const {
+		return screen_importance_q16 >> 16u;
+	}
+	uint32_t get_spot_dir_oct32() const {
+		return reserved0;
+	}
+
+	static uint32_t encode_cone_angle_q16(float p_angle_rad) {
+		if (!Math::is_finite(p_angle_rad)) {
+			return 0u;
+		}
+		const float norm = CLAMP(p_angle_rad / float(Math::PI), 0.0f, 0.5f);
+		return uint32_t(CLAMP(int(Math::round(norm * 65535.0f)), 0, int(MAX_CONE_Q16)));
+	}
+
+	static float decode_cone_angle_rad(uint32_t p_cone_q16) {
+		return (float(MIN(p_cone_q16, MAX_CONE_Q16)) / 65535.0f) * float(Math::PI);
+	}
+
+	static uint32_t encode_oct32(const Vector3 &p_world_dir) {
+		Vector3 d = p_world_dir;
+		const float len_sq = d.length_squared();
+		if (!Math::is_finite(d.x) || !Math::is_finite(d.y) || !Math::is_finite(d.z) || len_sq <= 1e-12f) {
+			d = Vector3(0.0f, 0.0f, -1.0f);
+		} else {
+			d /= Math::sqrt(len_sq);
+		}
+		const float l1 = Math::abs(d.x) + Math::abs(d.y) + Math::abs(d.z);
+		float px = d.x / l1;
+		float py = d.y / l1;
+		if (d.z < 0.0f) {
+			const float sx = (px >= 0.0f) ? 1.0f : -1.0f;
+			const float sy = (py >= 0.0f) ? 1.0f : -1.0f;
+			const float fx = (1.0f - Math::abs(py)) * sx;
+			const float fy = (1.0f - Math::abs(px)) * sy;
+			px = fx;
+			py = fy;
+		}
+		const int16_t ox = int16_t(CLAMP(int(Math::round(CLAMP(px, -1.0f, 1.0f) * 32767.0f)), -32767, 32767));
+		const int16_t oy = int16_t(CLAMP(int(Math::round(CLAMP(py, -1.0f, 1.0f) * 32767.0f)), -32767, 32767));
+		return uint32_t(uint16_t(ox)) | (uint32_t(uint16_t(oy)) << 16u);
+	}
+
+	static Vector3 decode_oct32(uint32_t p_oct32) {
+		const int16_t ox = int16_t(p_oct32 & 0xFFFFu);
+		const int16_t oy = int16_t((p_oct32 >> 16u) & 0xFFFFu);
+		const float fx = CLAMP(float(ox) / 32767.0f, -1.0f, 1.0f);
+		const float fy = CLAMP(float(oy) / 32767.0f, -1.0f, 1.0f);
+		float nx = fx;
+		float ny = fy;
+		const float nz = 1.0f - Math::abs(fx) - Math::abs(fy);
+		if (nz < 0.0f) {
+			const float sx = (nx >= 0.0f) ? 1.0f : -1.0f;
+			const float sy = (ny >= 0.0f) ? 1.0f : -1.0f;
+			const float ux = (1.0f - Math::abs(ny)) * sx;
+			const float uy = (1.0f - Math::abs(nx)) * sy;
+			nx = ux;
+			ny = uy;
+		}
+		const Vector3 n(nx, ny, nz);
+		const float len_sq = n.length_squared();
+		return (len_sq > 1e-12f) ? (n / Math::sqrt(len_sq)) : Vector3(0.0f, 0.0f, -1.0f);
+	}
+
+	static void decode_spot_params(uint32_t p_outer_q16, uint32_t p_inner_q16, float &r_cos_spot_angle, float &r_inv_spot_attenuation) {
+		const float outer_rad = decode_cone_angle_rad(p_outer_q16);
+		const float inner_rad = decode_cone_angle_rad(p_inner_q16);
+		const float cos_outer = CLAMP(Math::cos(outer_rad), 0.0f, 0.9999f);
+		const float cos_inner = CLAMP(Math::cos(inner_rad), cos_outer, 1.0f);
+		const float spot_rim_in = CLAMP((1.0f - cos_inner) / MAX(1.0f - cos_outer, 1e-4f), 1e-4f, 0.9999f);
+		r_cos_spot_angle = cos_outer;
+		r_inv_spot_attenuation = CLAMP(Math::log(0.1f) / Math::log(spot_rim_in), 0.125f, 64.0f);
+	}
+
+	void set_spot_cone_and_direction(const Vector3 &p_world_dir, float p_inner_rad, float p_outer_rad) {
+		const float clamped_outer = CLAMP(Math::is_finite(p_outer_rad) ? p_outer_rad : 0.610865f, 0.01745f, 1.55334f);
+		const float clamped_inner = CLAMP(Math::is_finite(p_inner_rad) ? p_inner_rad : 0.0f, 0.0f, MAX(0.0f, clamped_outer - 1e-4f));
+		uint32_t outer_q16 = MAX(1u, encode_cone_angle_q16(clamped_outer));
+		uint32_t inner_q16 = encode_cone_angle_q16(clamped_inner);
+		if (inner_q16 >= outer_q16) {
+			inner_q16 = outer_q16 - 1u;
+		}
+		flags = (flags & 0xFFFFu) | FLAG_SPOT_LIGHT | (outer_q16 << 16u);
+		screen_importance_q16 = (screen_importance_q16 & 0xFFFFu) | (inner_q16 << 16u);
+		reserved0 = encode_oct32(p_world_dir);
+	}
+
+	static bool is_valid_record(const ParticleLightRecord64 &p_rec) {
+		if (!Math::is_finite(p_rec.position_world[0]) || !Math::is_finite(p_rec.position_world[1]) || !Math::is_finite(p_rec.position_world[2]) ||
+				!Math::is_finite(p_rec.radius) || !(p_rec.radius > 0.0f) ||
+				!Math::is_finite(p_rec.color_hdr[0]) || p_rec.color_hdr[0] < 0.0f ||
+				!Math::is_finite(p_rec.color_hdr[1]) || p_rec.color_hdr[1] < 0.0f ||
+				!Math::is_finite(p_rec.color_hdr[2]) || p_rec.color_hdr[2] < 0.0f ||
+				(p_rec.color_hdr[0] <= 0.0f && p_rec.color_hdr[1] <= 0.0f && p_rec.color_hdr[2] <= 0.0f) ||
+				!Math::is_finite(p_rec.attenuation_exp) || p_rec.attenuation_exp < 0.0f ||
+				!Math::is_finite(p_rec.specular_scale) || p_rec.specular_scale < 0.0f ||
+				!Math::is_finite(p_rec.diffuse_scale) || p_rec.diffuse_scale < 0.0f ||
+				!Math::is_finite(p_rec.volumetric_scattering) || p_rec.volumetric_scattering < 0.0f) {
+			return false;
+		}
+		const uint32_t flags_lo = p_rec.get_flags_low();
+		const uint32_t importance = p_rec.get_importance_q16();
+		if ((flags_lo & ~FLAG_KNOWN_MASK) != 0u || (flags_lo & FLAG_ACTIVE) == 0u ||
+				p_rec.id_acquire_tag == 0u || importance == 0u) {
+			return false;
+		}
+		const uint32_t outer_q16 = p_rec.get_outer_cone_q16();
+		const uint32_t inner_q16 = p_rec.get_inner_cone_q16();
+		if ((flags_lo & FLAG_SPOT_LIGHT) != 0u) {
+			return outer_q16 > 0u && outer_q16 <= MAX_CONE_Q16 && inner_q16 < outer_q16;
+		}
+		return outer_q16 == 0u && inner_q16 == 0u && p_rec.reserved0 == 0u;
+	}
 };
 
 struct MeshSurfaceIndirectCommand20 {
@@ -154,7 +282,7 @@ class ParticlesMeshLightSortRD {
 public:
 	static constexpr uint32_t MAX_VIEWS = 8u;
 	static constexpr uint32_t MAX_PARTICLE_LIGHTS = 256u;
-	static constexpr uint32_t MAX_STAGED_LIGHT_CANDIDATES = 512u;
+	static constexpr uint32_t MAX_STAGED_LIGHT_CANDIDATES = 8192u;
 	static constexpr uint32_t MAX_SUBUV_AXIS = 64u;
 	static constexpr uint32_t MAX_SUBUV_FRAMES = 4096u;
 
@@ -203,10 +331,17 @@ public:
 		uint32_t count = 0;
 	};
 
+	struct GpuLightDispatchResult {
+		uint32_t reserved_omni = 0;
+		uint32_t reserved_spot = 0;
+	};
+
 private:
 	static constexpr uint32_t LIGHT_DATA_WORD_STRIDE = 56u; // sizeof(LightStorage::LightData) == 224B
 	static constexpr uint32_t CLUSTER_ELEMENT_WORD_STRIDE = 20u; // sizeof(ClusterBuilderRD::RenderElementData) == 80B
-	static constexpr uint32_t UNIFORM_SET_CACHE_CAPACITY = 32u;
+	static constexpr uint32_t STAGING_CANDIDATE_WORD_STRIDE = 18u; // 16 record words + provenance + pad (72B)
+	static constexpr uint32_t MAX_CACHED_UNIFORM_RIDS = 6u;
+	static constexpr uint32_t UNIFORM_SET_CACHE_CAPACITY = 64u;
 
 	struct SortKey {
 		float view_depth = 0.0f;
@@ -222,7 +357,7 @@ private:
 
 	struct CachedLightUniformSet {
 		RID shader;
-		RID rids[4];
+		RID rids[MAX_CACHED_UNIFORM_RIDS];
 		RID uniform_set;
 		uint64_t last_used_tick = 0;
 	};
@@ -235,6 +370,7 @@ private:
 		float sphere_overfit = 1.05f;
 		uint32_t max_elements_by_type = 0;
 		uint32_t pending_gpu_omni_count = 0;
+		uint32_t pending_gpu_spot_count = 0;
 		bool camera_orthogonal = false;
 		bool active = false;
 	};
@@ -256,9 +392,12 @@ private:
 	RID light_cluster_blit_pipeline;
 	RID light_candidate_staging_buffer;
 	RID light_cluster_elements_buffer;
+	RID light_spot_cluster_elements_buffer;
+	RID light_dummy_light_buffer;
 	RID light_emit_params_ubo;
 	CachedLightUniformSet light_uniform_set_cache[UNIFORM_SET_CACHE_CAPACITY];
 	uint64_t light_uniform_set_tick = 0;
+	uint32_t last_dispatch_barrier_count = 0;
 	ClusterFrameContext active_cluster_context;
 	ParticlesTranslucentSeedUnlitShaderRD *translucent_shader = nullptr;
 	RID translucent_shader_version;
@@ -270,6 +409,7 @@ private:
 	Error _ensure_light_gpu_bridge(RenderingDevice *p_rd);
 	void _release_light_gpu_bridge(RenderingDevice *p_rd);
 	RID _acquire_cached_uniform_set(RenderingDevice *p_rd, RID p_shader, const RD::Uniform *p_uniforms, uint32_t p_count);
+	void _blit_cluster_gpu_elements(RenderingDevice *p_rd, RID p_src_element_buffer, RID p_dst_element_buffer, uint32_t p_dst_element_offset, uint32_t p_count);
 
 public:
 	ParticlesMeshLightSortRD() = default;
@@ -392,6 +532,21 @@ public:
 			uint32_t p_base_omni_index,
 			uint32_t p_max_omni_lights,
 			LocalVector<ReservedGpuLightBounds> &r_mobile_bounds_out);
+	GpuLightDispatchResult dispatch_registered_external_lights_gpu(
+			RenderingDevice *p_rd,
+			RID p_source_viewport,
+			RID p_source_scenario,
+			bool p_is_reflection_probe,
+			const Transform3D &p_view_inv_transform,
+			float p_exposure_norm,
+			RID p_omni_light_buffer,
+			uint32_t p_base_omni_index,
+			uint32_t p_max_omni_lights,
+			RID p_spot_light_buffer,
+			uint32_t p_base_spot_index,
+			uint32_t p_max_spot_lights,
+			LocalVector<ReservedGpuLightBounds> &r_mobile_omni_bounds_out,
+			LocalVector<ReservedGpuLightBounds> &r_mobile_spot_bounds_out);
 	void begin_cluster_builder_frame(
 			const ClusterBuilderRD *p_builder,
 			const Transform3D &p_view_xform,
@@ -401,7 +556,14 @@ public:
 			float p_sphere_overfit,
 			uint32_t p_max_elements_by_type);
 	uint32_t get_pending_cluster_gpu_omni_count(const ClusterBuilderRD *p_builder) const;
+	uint32_t get_pending_cluster_gpu_spot_count(const ClusterBuilderRD *p_builder) const;
 	void blit_cluster_gpu_omni_elements(
+			RenderingDevice *p_rd,
+			const ClusterBuilderRD *p_builder,
+			RID p_dst_element_buffer,
+			uint32_t p_dst_element_offset,
+			uint32_t p_count);
+	void blit_cluster_gpu_spot_elements(
 			RenderingDevice *p_rd,
 			const ClusterBuilderRD *p_builder,
 			RID p_dst_element_buffer,
@@ -414,6 +576,8 @@ public:
 	void release_light_gpu_bridge(RenderingDevice *p_rd) { _release_light_gpu_bridge(p_rd); }
 	void clear_active_particle_lights();
 	RID get_light_cluster_elements_buffer() const { return light_cluster_elements_buffer; }
+	RID get_light_spot_cluster_elements_buffer() const { return light_spot_cluster_elements_buffer; }
+	uint32_t get_last_dispatch_barrier_count() const { return last_dispatch_barrier_count; }
 	void get_active_particle_lights(LocalVector<ParticleLightRecord64> &r_out) const;
 	uint32_t get_active_particle_light_count() const;
 };

@@ -640,6 +640,7 @@ TEST_CASE("[particle_pre_benchmark_adversarial] Cat-2 Degenerate 0/1-particle ri
 	bad_neg_hdr.color_hdr[1] = 2.0f;
 	bad_neg_hdr.color_hdr[2] = 2.0f;
 	bad_neg_hdr.attenuation_exp = 1.0f;
+	bad_neg_hdr.id_acquire_tag = 1u;
 	bad_neg_hdr.screen_importance_q16 = 500u;
 	light_candidates.push_back(bad_neg_hdr);
 
@@ -2065,6 +2066,7 @@ TEST_CASE("[particle_pre_benchmark_adversarial][WaveGGodot] Cat-6 NATIVE-S02 K03
 		RendererRD::ParticleLightRecord64 black_light = {};
 		black_light.radius = 5.0f;
 		black_light.attenuation_exp = 1.0f;
+		black_light.id_acquire_tag = 1u;
 		black_light.screen_importance_q16 = 1000u;
 		RendererRD::ParticleLightRecord64 dim_green = black_light;
 		dim_green.color_hdr[1] = 0.01f;

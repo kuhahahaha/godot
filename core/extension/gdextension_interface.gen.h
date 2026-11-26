@@ -2649,11 +2649,13 @@ typedef enum {
 	GDEXTENSION_OUTPUT_ROLE_OUTPUT_META_V1 = 7,
 	GDEXTENSION_OUTPUT_ROLE_PARTICLE_LIGHTS_V2 = 8,
 	GDEXTENSION_OUTPUT_ROLE_AUX_PARAMS_V1 = 9,
+	GDEXTENSION_OUTPUT_ROLE_PARTICLE_DECALS_V2 = 10,
 	GDEXTENSION_OUTPUT_ACCESS_INVALID_V1 = 0,
 	GDEXTENSION_OUTPUT_ACCESS_WRITE_ONLY_V1 = 1,
 	GDEXTENSION_OUTPUT_SEAL_INVALID_V1 = 0,
 	GDEXTENSION_OUTPUT_SEAL_RECORDED_ORDERED_V1 = 1,
 	GDEXTENSION_OUTPUT_PROFILE_PARTICLE_LIGHT_64_V2 = 4,
+	GDEXTENSION_OUTPUT_PROFILE_PARTICLE_DECAL_128_V2 = 5,
 } GDExtensionOutputConstantsV1;
 
 typedef enum {
@@ -3263,8 +3265,8 @@ typedef struct {
 	GDExtensionProductionOutputPredecessorV2 predecessor;
 } GDExtensionProductionOutputPrepareV2;
 
-/* V3 frozen native action preparation expanding writable role capacity from 3 to 8 for K05 INDEXED_144 ribbon/trail and ParticleLight64 outputs while retaining 100% INSTANCE_192 compatibility.
- * Active role entries carry non-zero bytes and select frozen GDExtensionOutputConstantsV1 roles (INSTANCE_192: {1, 2, 7} or {1, 7}; INDEXED_144: {3, 4, 5, 6, 7} or {3, 6, 7}; PARTICLE_LIGHT_64: {8, 7}); unused trailing entries must be zero-initialized with resource_slot/use_index = UINT32_MAX or 0.
+/* V3 frozen native action preparation expanding writable role capacity from 3 to 8 for K05 INDEXED_144 ribbon/trail, ParticleLight64, and ParticleDecal128 outputs while retaining 100% INSTANCE_192 compatibility.
+ * Active role entries carry non-zero bytes and select frozen GDExtensionOutputConstantsV1 roles (INSTANCE_192: {1, 2, 7} or {1, 7}; INDEXED_144: {3, 4, 5, 6, 7} or {3, 6, 7}; PARTICLE_LIGHT_64: {8, 7}; PARTICLE_DECAL_128: {10, 7}); unused trailing entries must be zero-initialized with resource_slot/use_index = UINT32_MAX or 0.
  * first_source_use/source_use_count select the complete contiguous source READ-use span inside this original accepted action.
  */
 typedef struct {

@@ -40,6 +40,7 @@
 
 #ifdef TESTS_ENABLED
 #include "tests/internal/test_job_system_retirement.h"
+#include "tests/internal/test_temp_allocator.h"
 #endif
 
 PhysicsServer3D *create_jolt_physics_server() {

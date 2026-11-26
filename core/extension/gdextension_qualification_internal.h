@@ -479,10 +479,10 @@ struct Registry::QualificationBridge {
 	// Finite engineering Storage table, independent of World/System/U08 grants.
 	// Original private-ref/serial/history gates still limit actual admission.
 	// ACKed-but-pinned metadata keeps its slot until original collection.
-	static constexpr uint32_t STORAGE_CHILD_CAPACITY = 4096;
+	static constexpr uint32_t STORAGE_CHILD_CAPACITY = 16384;
 	// Origins, including collected cold entries, retain their independent
 	// finite session credit until bridge close; physical refunds do not reset it.
-	static constexpr uint32_t STORAGE_HISTORY_CAPACITY = STORAGE_CHILD_CAPACITY * 10;
+	static constexpr uint32_t STORAGE_HISTORY_CAPACITY = STORAGE_CHILD_CAPACITY * 4;
 	// Preserve the legacy SceneDepth envelope; size NativeUnit hot/cold capacity for multi-system Full preparation.
 	static constexpr uint32_t SCENE_DEPTH_HISTORY_CAPACITY = CHILD_CAPACITY * 10;
 	static constexpr uint32_t UNIT_HISTORY_CAPACITY = UNIT_CHILD_CAPACITY * 8;

@@ -61,6 +61,8 @@ uint64_t RenderingDeviceDriver::api_trait_get(ApiTrait p_trait) {
 			return false;
 		case API_TRAIT_TEXTURE_OUTPUTS_REQUIRE_CLEARS:
 			return false;
+		case API_TRAIT_COALESCE_COMPUTE_PASSES:
+			return false;
 		default:
 			ERR_FAIL_V(0);
 	}
@@ -72,6 +74,9 @@ void RenderingDeviceDriver::command_begin_compute_pass(CommandBufferID p_cmd_buf
 }
 
 void RenderingDeviceDriver::command_end_compute_pass(CommandBufferID p_cmd_buffer) {
+}
+
+void RenderingDeviceDriver::command_compute_memory_barrier(CommandBufferID p_cmd_buffer) {
 }
 
 RenderingDeviceDriver::FencePollResult RenderingDeviceDriver::fence_poll(FenceID p_fence, uint64_t p_expected_submission_serial) {

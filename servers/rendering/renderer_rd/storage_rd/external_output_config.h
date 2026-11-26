@@ -51,6 +51,7 @@ struct ExternalOutputConfig {
 		INDEXED_144 = 2,
 		SCENE_ONLY = 3,
 		PARTICLE_LIGHT_64 = 4,
+		PARTICLE_DECAL_128 = 5,
 	};
 	enum Space : uint32_t {
 		WORLD = 1,

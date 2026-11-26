@@ -244,6 +244,15 @@ public:
 			void (*p_acquire_geom)(void *, MeshStorage::NativeSurfaceHold &),
 			void (*p_release_geom)(void *, MeshStorage::NativeSurfaceHold &),
 			void *p_ctx);
+	static void bug174_instance192_cross_capture_selection(
+			GDExtensionDeviceExit::Registry &p_registry, RenderingDevice &p_rd,
+			GDExtensionDeviceExit::ProductionOutputPin &p_gen_pin, uint64_t p_gen_root_serial,
+			GDExtensionDeviceExit::ProductionOutputPin &p_slot0_pin, GDExtensionProductionRequestRefV1 p_slot0_ref,
+			GDExtensionDeviceExit::ProductionOutputPin &p_slot1_pin, GDExtensionProductionRequestRefV1 p_slot1_ref,
+			void (*p_set_slot1_mode)(void *, int),
+			void (*p_acquire_geom)(void *, MeshStorage::NativeSurfaceHold &),
+			void (*p_release_geom)(void *, MeshStorage::NativeSurfaceHold &),
+			void *p_ctx);
 };
 // Actual native mismatch injection and exact test-only undo, on the original RT.
 Error external_storage_poison_and_free(RenderingDevice &, NativeDisposalWitness &, NativeDisposalWitness::Report &);

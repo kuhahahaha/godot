@@ -1300,6 +1300,42 @@ public:
 		f.closed = true;
 		CHECK(f.registry->records[0].private_refs == 0);
 	}
+
+	static void bug168a_storage_child_capacity_16384() {
+		using namespace GDExtensionDeviceExit;
+		CHECK(Registry::QualificationBridge::STORAGE_CHILD_CAPACITY == 16384u);
+		CHECK(Registry::QualificationBridge::STORAGE_HISTORY_CAPACITY == 65536u);
+		Fixture f;
+		REQUIRE(f.bridge != nullptr);
+		constexpr uint32_t TEST_COUNT = 5000u;
+		LocalVector<Registry::QualificationBridge::Storage *> children;
+		LocalVector<uint32_t> slots;
+		children.reserve(TEST_COUNT);
+		slots.reserve(TEST_COUNT);
+		for (uint32_t i = 0; i < TEST_COUNT; ++i) {
+			const uint32_t slot = f.bridge->alloc_storage_slot_locked();
+			REQUIRE(slot < Registry::QualificationBridge::STORAGE_CHILD_CAPACITY);
+			auto *child = memnew(Registry::QualificationBridge::Storage);
+			child->serial = 100000ull + i;
+			child->origin.allocation_slot = i % Registry::QualificationBridge::STORAGE_DOMAIN_MAX_SLOTS;
+			child->origin.allocation_generation = 1 + (i / Registry::QualificationBridge::STORAGE_DOMAIN_MAX_SLOTS);
+			child->origin.part = 0;
+			child->origin.create_attempt = 1;
+			f.bridge->index_storage_slot_locked(slot, child);
+			children.push_back(child);
+			slots.push_back(slot);
+		}
+		CHECK(f.bridge->find_storage_by_serial_locked(100000ull) == children[0]);
+		CHECK(f.bridge->find_storage_by_serial_locked(100000ull + 4096) == children[4096]);
+		CHECK(f.bridge->find_storage_by_serial_locked(100000ull + TEST_COUNT - 1) == children[TEST_COUNT - 1]);
+		CHECK(f.bridge->find_storage_by_origin_locked(children[TEST_COUNT - 1]->origin) == children[TEST_COUNT - 1]);
+		for (uint32_t i = 0; i < TEST_COUNT; ++i) {
+			f.bridge->unindex_storage_slot_locked(slots[i], children[i]);
+			memdelete(children[i]);
+		}
+		CHECK(f.bridge->find_storage_by_serial_locked(100000ull + 4096) == nullptr);
+		CHECK(f.bridge->unacknowledged_children == 0);
+	}
 };
 
 TEST_CASE("[SceneDepthR2] original quote exact retry and archived origin") {
@@ -1382,4 +1418,8 @@ TEST_CASE("[Qualification][BUG-149D][Pillar1] unacknowledged_children and live_t
 
 TEST_CASE("[StorageFinality] original duration observation preserves frontier and next service continuation") {
 	TestQualificationSceneDepthAccess::storage_finality_duration_observation();
+}
+
+TEST_CASE("[Qualification][BUG-168A] QualificationBridge STORAGE_CHILD_CAPACITY supports 16384 concurrent slots with O(1) index lookup") {
+	TestQualificationSceneDepthAccess::bug168a_storage_child_capacity_16384();
 }

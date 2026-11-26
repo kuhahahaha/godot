@@ -156,6 +156,7 @@ void ExternalOutputOwner::Slot::release_fast_refresh_resources(RenderingDevice *
 			}
 		}
 	}
+	clear_cached_transforms_sets();
 }
 
 void ExternalOutputOwner::withdraw() {
@@ -169,6 +170,7 @@ void ExternalOutputOwner::withdraw() {
 			slots[i].release_fast_refresh_resources(rd);
 		} else {
 			slots[i].fast_refresh_active = false;
+			slots[i].clear_cached_transforms_sets();
 		}
 	}
 	if (state == GenerationState::RELEASED || state == GenerationState::FAULTED_RETIRING || state == GenerationState::WITHDRAWING || state == GenerationState::RETIRING) {
@@ -941,7 +943,7 @@ Error ExternalOutputOwner::return_preparation_bank_row(uint32_t p_slot, uint32_t
 		surface = &slot.surfaces[row.owner_surface];
 	}
 	if ((surface && surface->preparation) || !row.source_sealed || row.pipeline_scope || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group ||
-			row.geometry_reserved_group || row.material_reserved_group || row.transforms_owned_group || row.transforms_uniform_set.is_valid() || row.owned_pipeline_root.is_valid() ||
+			row.geometry_reserved_group || row.material_reserved_group || row.transforms_owned_group || row.transforms_source_group || row.transforms_uniform_set.is_valid() || row.owned_pipeline_root.is_valid() ||
 			row.created_pipeline.is_valid() || row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
 		return ERR_BUSY;
 	}
@@ -1036,7 +1038,7 @@ Error ExternalOutputOwner::return_reserved_cells() {
 	}
 	for (uint32_t i = 0; i < preparation_capacity; ++i) {
 		const auto &row = preparation_rows[i];
-		if (row.owner || row.owner_slot != UINT32_MAX || row.owner_surface != UINT32_MAX || row.serial || row.generation || !row.source_sealed || row.pipeline_scope || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group || row.geometry_reserved_group || row.material_reserved_group || row.transforms_owned_group || row.transforms_uniform_set.is_valid() || row.owned_pipeline_root.is_valid() ||
+		if (row.owner || row.owner_slot != UINT32_MAX || row.owner_surface != UINT32_MAX || row.serial || row.generation || !row.source_sealed || row.pipeline_scope || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group || row.geometry_reserved_group || row.material_reserved_group || row.transforms_owned_group || row.transforms_source_group || row.transforms_uniform_set.is_valid() || row.owned_pipeline_root.is_valid() ||
 				row.created_pipeline.is_valid() || row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
 			return ERR_BUSY;
 		}
@@ -1255,6 +1257,7 @@ Error ExternalOutputOwner::cancel_slot(uint32_t p_slot) {
 		cell.release_fast_refresh_resources(rd);
 	} else {
 		cell.fast_refresh_active = false;
+		cell.clear_cached_transforms_sets();
 	}
 	cell.publication_closed = true;
 	cell.pass_uses_closed = true;
@@ -1343,6 +1346,7 @@ Error ExternalOutputOwner::return_slot_pin(uint32_t p_slot) {
 	cell.guard_proof_payload = nullptr;
 	cell.guard_proof_bytes = 0;
 	cell.guard_resources_ready = false;
+	cell.clear_cached_transforms_sets();
 	cell.request = {};
 	cell.lease_token = {};
 	cell.record_token = {};
@@ -1492,6 +1496,26 @@ Error ExternalOutputOwner::acquire_camera_view(const ExternalSurfaceSelection &p
 					!slot.original_registry->production_output_pin_matches(slot.original_pin, slot.original_request, *rd)) {
 				continue;
 			}
+			if (is_instance192) {
+				bool has_ready_row = false;
+				if (preparation_rows && preparation_capacity) {
+					for (uint32_t r = 0; r < preparation_capacity; ++r) {
+						const auto &row = preparation_rows[r];
+						if (row.owner == this && row.owner_slot == s &&
+								(row.tuple_surface == UINT32_MAX || row.tuple_surface == p_surface.flattened_surface) &&
+								row.tuple_state == ExternalPipelinePreparation::TupleState::READY &&
+								row.finish_complete && row.finish_error == OK && row.backend_error == OK && row.pipeline_sealed) {
+							has_ready_row = true;
+							break;
+						}
+					}
+				}
+				if (!has_ready_row &&
+						!slot.original_registry->production_output_slot_cross_capture_preparable(
+								slot.original_pin, slot.original_request, *rd)) {
+					continue;
+				}
+			}
 			if (matched_slot == UINT32_MAX || slot.request.common.present_seq >= best_present_seq) {
 				matched_slot = s;
 				best_present_seq = slot.request.common.present_seq;
@@ -1559,6 +1583,9 @@ Error ExternalOutputOwner::acquire_camera_view(const ExternalSurfaceSelection &p
 	}
 	const uint64_t serial = next_view_serial;
 	next_view_serial = serial == UINT64_MAX ? 0 : serial + 1;
+	if (slot.state == LeaseState::SEALED_RECORDED) {
+		slot.state = LeaseState::ADOPTED;
+	}
 	if (slot.native_camera_source.is_valid()) {
 		cell.camera_source = slot.native_camera_source;
 	}

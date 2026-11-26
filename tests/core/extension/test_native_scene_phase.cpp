@@ -46,6 +46,10 @@ TEST_CASE("[ScenePhase][ABI] phase wire envelope is bounded POD with exact K06 l
 	config.max_operations = 64;
 	CHECK(GDExtensionDeviceExit::scene_phase_config_valid(config));
 	config.max_operations = 65;
+	CHECK(GDExtensionDeviceExit::scene_phase_config_valid(config));
+	config.max_operations = 512;
+	CHECK(GDExtensionDeviceExit::scene_phase_config_valid(config));
+	config.max_operations = 513;
 	CHECK_FALSE(GDExtensionDeviceExit::scene_phase_config_valid(config));
 	config.max_operations = 0;
 	CHECK_FALSE(GDExtensionDeviceExit::scene_phase_config_valid(config));

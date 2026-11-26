@@ -411,7 +411,7 @@ Error ParticlesStorage::_production_output_preparation_finish_row_locked(Externa
 		}
 		row.material_transferred = true;
 	}
-	if (row.transforms_uniform_set.is_valid()) {
+	if (row.transforms_uniform_set.is_valid() && !row.transforms_source_group) {
 		const Error sealed = device._production_output_owned_seal_locked(request, pin_serial, row.transforms_owned_group);
 		if (sealed != OK) {
 			return sealed;
@@ -641,11 +641,15 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		return ERR_UNAUTHORIZED;
 	}
 	GDExtensionDeviceExit::ProductionDisposalObservation observation;
+	const uint32_t passes_at_entry = r_usage.passes;
 	// Temporary first failed return per authenticated SLOT phase. The selector
 	// is only a diagnostic lease, independently joined to original Registry logs.
 	auto trace_failure = [&](uint32_t phase, const char *site, Error outcome, uint64_t group = 0,
 			const GDExtensionDeviceExit::ProductionDisposalObservation *native = nullptr, uint32_t witness = UINT32_MAX) {
 		if (outcome == OK) { return outcome; }
+		if (outcome == ERR_BUSY && p_budget.passes <= 1 && r_usage.passes > passes_at_entry) {
+			return OK;
+		}
 		const char *enabled = std::getenv("ANGE_TRACE_OUTPUT_RELEASE_BUSY");
 		const char *target = std::getenv("ANGE_TRACE_OUTPUT_RETIRE_LEASE");
 		if (!enabled || enabled[0] != '1' || !target || target[0] < '0' || target[0] > '9') { return outcome; }
@@ -824,6 +828,12 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 				return trace_failure(5, "preparation.L732", error, row.transforms_owned_group, &observation);
 			}
 			row.transforms_owned_group = 0;
+			row.transforms_source_group = 0;
+			row.transforms_set_format = 0;
+			row.transforms_source_count = 0;
+			for (uint32_t bi = 0; bi < 3; ++bi) {
+				row.transforms_source_buffers[bi] = RID();
+			}
 			row.transforms_uniform_set = RID();
 			row.transforms_uniform_witness = NativeDisposalWitness();
 		}

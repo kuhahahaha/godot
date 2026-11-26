@@ -222,7 +222,7 @@ TEST_CASE("[RenderingDevice][ExternalOutputPrefix] zero capacity omits records a
 	driver.storage = storage;
 	REQUIRE(Access::allocate(*storage, 0, 2) == OK);
 	CHECK(driver.creates == 5);
-	const uint64_t expected[] = { 32, 64, 32, 40, 528 }; // 240-byte proof header + two 144-byte surface rows.
+	const uint64_t expected[] = { 32, 128, 32, 40, 528 }; // 240-byte proof header + two 144-byte surface rows.
 	for (uint32_t i = 0; i < 5; ++i) {
 		CHECK(driver.bytes[i] == expected[i]);
 	}
@@ -232,7 +232,7 @@ TEST_CASE("[RenderingDevice][ExternalOutputPrefix] zero capacity omits records a
 	CHECK(report.resources[1].native.state == State::EMPTY);
 	CHECK(report.resources[0].bytes == 0);
 	CHECK(report.resources[1].bytes == 0);
-	CHECK(report.total_bytes == 696);
+	CHECK(report.total_bytes == 760);
 	CHECK(report.live_count == 5);
 	CHECK(Access::destroy(storage) == ERR_BUSY);
 	CHECK(Access::retire(*storage) == OK);
@@ -287,11 +287,11 @@ TEST_CASE("[RenderingDevice][ExternalOutputPrefix] pure layout rejects surface a
 		CHECK(layout.bytes[0] == uint64_t(capacity) * 192);
 		CHECK(layout.bytes[1] == uint64_t(capacity) * 192);
 		CHECK(layout.bytes[2] == 32);
-		CHECK(layout.bytes[3] == 64);
+		CHECK(layout.bytes[3] == 128);
 		CHECK(layout.bytes[4] == 32);
 		CHECK(layout.bytes[5] == surfaces * 20);
 		CHECK(layout.bytes[6] == 240 + surfaces * 144);
-		CHECK(layout.total_bytes == uint64_t(capacity) * 384 + 368 + surfaces * 164);
+		CHECK(layout.total_bytes == uint64_t(capacity) * 384 + 432 + surfaces * 164);
 		CHECK(layout.resource_count == (capacity ? 7u : 5u));
 	}
 }

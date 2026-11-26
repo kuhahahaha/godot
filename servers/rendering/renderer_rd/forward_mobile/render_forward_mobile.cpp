@@ -143,6 +143,20 @@ void RenderForwardMobile::fill_push_constant_instance_indices(SceneState::Instan
 			idx++;
 		}
 	}
+	if (idx < uint32_t(MAX_RDL_CULL)) {
+		if (const RendererRD::LightStorage *ls = RendererRD::LightStorage::get_singleton()) {
+			uint32_t particle_indices[MAX_RDL_CULL] = {};
+			const uint32_t p_count = ls->count_intersecting_particle_spot_lights(p_instance->transformed_aabb, particle_indices, uint32_t(MAX_RDL_CULL) - idx);
+			for (uint32_t pi = 0; pi < p_count && idx < uint32_t(MAX_RDL_CULL); pi++) {
+				uint32_t ofs = idx < 4 ? 0 : 1;
+				uint32_t shift = (idx & 0x3) << 3;
+				uint32_t mask = ~(0xFF << shift);
+				p_instance_data->spot_lights[ofs] &= mask;
+				p_instance_data->spot_lights[ofs] |= (particle_indices[pi] & 0xFFu) << shift;
+				idx++;
+			}
+		}
+	}
 
 	p_instance_data->area_lights[0] = 0xFFFFFFFF;
 	p_instance_data->area_lights[1] = 0xFFFFFFFF;
@@ -171,6 +185,20 @@ void RenderForwardMobile::fill_push_constant_instance_indices(SceneState::Instan
 			p_instance_data->decals[ofs] &= mask;
 			p_instance_data->decals[ofs] |= uint32_t(forward_id_storage_mobile->forward_id_allocators[RendererRD::FORWARD_ID_TYPE_DECAL].map[p_instance->decals[i]]) << shift;
 			idx++;
+		}
+	}
+	if (idx < uint32_t(MAX_RDL_CULL)) {
+		if (const RendererRD::TextureStorage *ts = RendererRD::TextureStorage::get_singleton()) {
+			uint32_t particle_decal_indices[MAX_RDL_CULL] = {};
+			const uint32_t p_count = ts->count_intersecting_particle_decals(p_instance->transformed_aabb, particle_decal_indices, uint32_t(MAX_RDL_CULL) - idx);
+			for (uint32_t pi = 0; pi < p_count && idx < uint32_t(MAX_RDL_CULL); pi++) {
+				uint32_t ofs = idx < 4 ? 0 : 1;
+				uint32_t shift = (idx & 0x3) << 3;
+				uint32_t mask = ~(0xFF << shift);
+				p_instance_data->decals[ofs] &= mask;
+				p_instance_data->decals[ofs] |= (particle_decal_indices[pi] & 0xFFu) << shift;
+				idx++;
+			}
 		}
 	}
 
@@ -1058,7 +1086,9 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 	uint32_t directional_light_count = 0;
 	uint32_t positional_light_count = 0;
 	light_storage->update_light_buffers(p_render_data, *p_render_data->lights, p_render_data->scene_data->cam_transform, p_render_data->shadow_atlas, using_shadows, directional_light_count, positional_light_count, p_render_data->directional_light_soft_shadows);
-	texture_storage->update_decal_buffer(*p_render_data->decals, p_render_data->scene_data->cam_transform);
+	const RendererViewport::Viewport *src_vp = (RSG::viewport && p_render_data->source_viewport.is_valid()) ? RSG::viewport->viewport_owner.get_or_null(p_render_data->source_viewport) : nullptr;
+	const RID src_scenario = src_vp ? src_vp->scenario : RID();
+	texture_storage->update_decal_buffer(*p_render_data->decals, p_render_data->scene_data->cam_transform, p_render_data->source_viewport, src_scenario, p_render_data->reflection_probe.is_valid());
 
 	p_render_data->directional_light_count = directional_light_count;
 
@@ -3001,10 +3031,17 @@ bool RenderForwardMobile::_select_native_surface_pipeline(const RenderListParame
 			}
 		}
 		specialization.omni_lights = SceneShaderForwardMobile::shader_count_for(total_omni_lights);
-		specialization.spot_lights = SceneShaderForwardMobile::shader_count_for(inst->spot_light_count);
+		uint32_t total_spot_lights = MIN(uint32_t(MAX_RDL_CULL), inst->spot_light_count);
+		if (total_spot_lights < uint32_t(MAX_RDL_CULL)) {
+			if (const RendererRD::LightStorage *ls = RendererRD::LightStorage::get_singleton()) {
+				total_spot_lights += ls->count_intersecting_particle_spot_lights(inst->transformed_aabb, nullptr, uint32_t(MAX_RDL_CULL) - total_spot_lights);
+			}
+		}
+		specialization.spot_lights = SceneShaderForwardMobile::shader_count_for(total_spot_lights);
 		specialization.area_lights = SceneShaderForwardMobile::shader_count_for(inst->area_light_count);
 		specialization.reflection_probes = SceneShaderForwardMobile::shader_count_for(inst->reflection_probe_count);
-		specialization.decals = inst->decals_count > 0;
+		const RendererRD::TextureStorage *ts = RendererRD::TextureStorage::get_singleton();
+		specialization.decals = (inst->decals_count > 0) || (ts && ts->count_intersecting_particle_decals(inst->transformed_aabb, nullptr, 1) > 0);
 		selected.material_uniform_set = allow_override ? p_override.material_uniform_set : surf->material_uniform_set;
 		selected.shader = allow_override ? p_override.shader : surf->shader;
 		selected.used_material = allow_override ? nullptr : surf->material;
