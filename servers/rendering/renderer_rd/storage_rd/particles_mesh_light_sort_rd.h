@@ -336,10 +336,11 @@ public:
 		uint32_t reserved_spot = 0;
 	};
 
+	static constexpr uint32_t STAGING_CANDIDATE_WORD_STRIDE = 18u; // 16 record words + provenance + pad (72B)
+
 private:
 	static constexpr uint32_t LIGHT_DATA_WORD_STRIDE = 56u; // sizeof(LightStorage::LightData) == 224B
 	static constexpr uint32_t CLUSTER_ELEMENT_WORD_STRIDE = 20u; // sizeof(ClusterBuilderRD::RenderElementData) == 80B
-	static constexpr uint32_t STAGING_CANDIDATE_WORD_STRIDE = 18u; // 16 record words + provenance + pad (72B)
 	static constexpr uint32_t MAX_CACHED_UNIFORM_RIDS = 6u;
 	static constexpr uint32_t UNIFORM_SET_CACHE_CAPACITY = 64u;
 
