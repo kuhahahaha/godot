@@ -1903,9 +1903,177 @@ static GDExtensionDeviceSessionResultV1 height_service_observe_v2(GDExtensionQua
 static_assert(std::is_same_v<decltype(&height_service_reserve_v2),GDExtensionInterfaceDeviceSessionQualificationSceneDepthServiceReserveV2>);
 static_assert(std::is_same_v<decltype(&height_service_activate_v2),GDExtensionInterfaceDeviceSessionQualificationSceneDepthServiceActivateV2>);
 static_assert(std::is_same_v<decltype(&height_service_observe_v2),GDExtensionInterfaceDeviceSessionQualificationSceneDepthServiceObserveV2>);
+
+// BUG-215: Stateless, pure-C, thread-safe compute GLSL -> SPIR-V (+ optional
+// native shader container) compiler procedure. Uses Godot core RenderingDevice
+// C++ methods directly with zero GDExtension BindingLifetime wrappers so
+// worker std::threads outside a RegistrationContext never trigger exit(86).
+typedef void *(*GDExtensionCompileAllocFnV1)(void *p_ctx, uint64_t p_size);
+
+typedef struct {
+	uint32_t abi_version;
+	uint32_t struct_size;
+	const char *glsl_utf8;
+	uint64_t glsl_len;
+	uint64_t max_spirv_bytes;
+	uint64_t max_container_bytes;
+	uint32_t compile_flags;
+	uint32_t spirv_only;
+	GDExtensionCompileAllocFnV1 alloc_fn;
+	void *alloc_ctx;
+} GDExtensionCompileComputeGlslInputV1;
+
+typedef struct {
+	uint32_t abi_version;
+	uint32_t struct_size;
+	int32_t native_error;
+	uint32_t failed_stage;
+	void *spirv_ptr;
+	uint64_t spirv_size;
+	void *container_ptr;
+	uint64_t container_size;
+	void *error_ptr;
+	uint64_t error_size;
+} GDExtensionCompileComputeGlslOutputV1;
+
+static_assert(sizeof(GDExtensionCompileComputeGlslInputV1) == 64);
+static_assert(sizeof(GDExtensionCompileComputeGlslOutputV1) == 64);
+
+static constexpr uint32_t kCompileComputeStageNoneV1 = 0u;
+static constexpr uint32_t kCompileComputeStageValidationV1 = 1u;
+static constexpr uint32_t kCompileComputeStageSpirvCompileV1 = 2u;
+static constexpr uint32_t kCompileComputeStageSpirvLimitV1 = 3u;
+static constexpr uint32_t kCompileComputeStageContainerCompileV1 = 4u;
+static constexpr uint32_t kCompileComputeStageContainerLimitV1 = 5u;
+static constexpr uint32_t kCompileComputeStageAllocV1 = 6u;
+static constexpr uint32_t kCompileComputeStageInvalidUtf8V1 = 7u;
+static constexpr uint64_t kCompileComputeMaxOutputBytesV1 = 67108864ull;
+
+static int32_t compile_compute_glsl_v1(
+		const GDExtensionCompileComputeGlslInputV1 *p_input,
+		GDExtensionCompileComputeGlslOutputV1 *p_output) {
+	if (!aligned(p_output) || p_output->abi_version != 1u || p_output->struct_size != sizeof(*p_output)) {
+		return int32_t(ERR_INVALID_PARAMETER);
+	}
+	p_output->native_error = int32_t(OK);
+	p_output->failed_stage = kCompileComputeStageNoneV1;
+	p_output->spirv_ptr = nullptr;
+	p_output->spirv_size = 0u;
+	p_output->container_ptr = nullptr;
+	p_output->container_size = 0u;
+	p_output->error_ptr = nullptr;
+	p_output->error_size = 0u;
+
+	const auto fail_out = [&](Error p_err, uint32_t p_stage) -> int32_t {
+		p_output->native_error = int32_t(p_err);
+		p_output->failed_stage = p_stage;
+		return int32_t(p_err);
+	};
+
+	if (!aligned(p_input) || p_input->abi_version != 1u || p_input->struct_size != sizeof(*p_input) ||
+			p_input->glsl_utf8 == nullptr || p_input->glsl_len == 0u ||
+			p_input->glsl_len > uint64_t(INT32_MAX) || p_input->spirv_only > 1u ||
+			p_input->alloc_fn == nullptr ||
+			(p_input->compile_flags & ~uint32_t(RenderingDevice::SHADER_COMPILE_FLAG_DISABLE_FAST_MATH)) != 0u) {
+		return fail_out(ERR_INVALID_PARAMETER, kCompileComputeStageValidationV1);
+	}
+
+	RenderingDevice *rd = RenderingDevice::get_singleton();
+	if (rd == nullptr && RenderingServer::get_singleton() != nullptr) {
+		rd = RenderingServer::get_singleton()->get_rendering_device();
+	}
+	if (rd == nullptr) {
+		return fail_out(ERR_UNAVAILABLE, kCompileComputeStageValidationV1);
+	}
+
+	String glsl_source;
+	if (glsl_source.append_utf8(p_input->glsl_utf8, int(p_input->glsl_len)) != OK) {
+		return fail_out(ERR_INVALID_DATA, kCompileComputeStageInvalidUtf8V1);
+	}
+
+	String compile_error;
+	const Vector<uint8_t> spirv_bytes = rd->shader_compile_spirv_from_source(
+			RenderingDevice::SHADER_STAGE_COMPUTE,
+			glsl_source,
+			RenderingDevice::SHADER_LANGUAGE_GLSL,
+			&compile_error,
+			false);
+
+	if (!compile_error.is_empty()) {
+		const CharString err_utf8 = compile_error.utf8();
+		if (err_utf8.length() > 0) {
+			const uint64_t err_len = uint64_t(err_utf8.length());
+			void *err_dst = p_input->alloc_fn(p_input->alloc_ctx, err_len);
+			if (err_dst != nullptr) {
+				memcpy(err_dst, err_utf8.get_data(), size_t(err_len));
+				p_output->error_ptr = err_dst;
+				p_output->error_size = err_len;
+			}
+		}
+		return fail_out(FAILED, kCompileComputeStageSpirvCompileV1);
+	}
+
+	if (spirv_bytes.is_empty()) {
+		return fail_out(FAILED, kCompileComputeStageSpirvCompileV1);
+	}
+
+	const uint64_t spirv_len = uint64_t(spirv_bytes.size());
+	const uint64_t spirv_limit =
+			(p_input->max_spirv_bytes > 0u) ? p_input->max_spirv_bytes : kCompileComputeMaxOutputBytesV1;
+	if (spirv_len > spirv_limit) {
+		p_output->spirv_size = spirv_len;
+		return fail_out(ERR_PARAMETER_RANGE_ERROR, kCompileComputeStageSpirvLimitV1);
+	}
+
+	void *spirv_dst = p_input->alloc_fn(p_input->alloc_ctx, spirv_len);
+	if (spirv_dst == nullptr) {
+		return fail_out(ERR_OUT_OF_MEMORY, kCompileComputeStageAllocV1);
+	}
+	memcpy(spirv_dst, spirv_bytes.ptr(), size_t(spirv_len));
+	p_output->spirv_ptr = spirv_dst;
+	p_output->spirv_size = spirv_len;
+
+	if (p_input->spirv_only != 0u) {
+		return int32_t(OK);
+	}
+
+	Vector<RenderingDevice::ShaderStageSPIRVData> stages;
+	RenderingDevice::ShaderStageSPIRVData compute_stage;
+	compute_stage.shader_stage = RenderingDevice::SHADER_STAGE_COMPUTE;
+	compute_stage.spirv = spirv_bytes;
+	stages.push_back(compute_stage);
+
+	const Vector<uint8_t> container_bytes = rd->shader_compile_binary_from_spirv_with_options(
+			stages,
+			String(),
+			BitField<RenderingDevice::ShaderCompileFlags>(p_input->compile_flags));
+	if (container_bytes.is_empty()) {
+		return fail_out(FAILED, kCompileComputeStageContainerCompileV1);
+	}
+
+	const uint64_t container_len = uint64_t(container_bytes.size());
+	const uint64_t container_limit = (p_input->max_container_bytes > 0u)
+			? MIN(p_input->max_container_bytes, kCompileComputeMaxOutputBytesV1)
+			: kCompileComputeMaxOutputBytesV1;
+	if (container_len > container_limit) {
+		p_output->container_size = container_len;
+		return fail_out(ERR_PARAMETER_RANGE_ERROR, kCompileComputeStageContainerLimitV1);
+	}
+
+	void *container_dst = p_input->alloc_fn(p_input->alloc_ctx, container_len);
+	if (container_dst == nullptr) {
+		return fail_out(ERR_OUT_OF_MEMORY, kCompileComputeStageAllocV1);
+	}
+	memcpy(container_dst, container_bytes.ptr(), size_t(container_len));
+	p_output->container_ptr = container_dst;
+	p_output->container_size = container_len;
+	return int32_t(OK);
+}
+
 void register_qualification_scene_depth_interfaces();
 void register_qualification_typed_interfaces();
 void register_qualification_interfaces() {
+	GDExtension::register_interface_function("device_session_qualification_compile_compute_glsl_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&compile_compute_glsl_v1));
 	register_qualification_scene_depth_interfaces();
 	GDExtension::register_interface_function("device_session_qualification_scene_depth_service_reserve_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&height_service_reserve_v2));
 	GDExtension::register_interface_function("device_session_qualification_scene_depth_service_activate_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&height_service_activate_v2));

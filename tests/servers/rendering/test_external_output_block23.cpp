@@ -28,6 +28,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
+#include "core/extension/gdextension.h"
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "core/extension/gdextension_production_request.h"
 #include "servers/rendering/renderer_rd/effects/particles_external_guard.h"
@@ -43,7 +44,11 @@
 #include "servers/rendering/rendering_shader_container.h"
 #include "tests/test_macros.h"
 
+#include <atomic>
+#include <cstring>
 #include <limits>
+#include <thread>
+#include <vector>
 
 #if defined(METAL_ENABLED) && defined(MACOS_ENABLED)
 #include "drivers/metal/metal_allocator.h"
@@ -1888,6 +1893,135 @@ TEST_CASE("[ExternalOutput][Metal][BUG-213] multi-mesh INSTANCE_192 fast-refresh
 	rd.free_rid(proof_rid);
 	rd.submit();
 	rd.sync();
+}
+
+TEST_CASE("[ExternalOutput][BUG-215] device_session_qualification_compile_compute_glsl_v1 compiles compute GLSL off-thread safely") {
+	REQUIRE(RenderingDevice::get_singleton() == nullptr);
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDevice rd;
+	REQUIRE(rd.initialize(&context) == OK);
+
+	typedef void *(*CompileAllocFn)(void *, uint64_t);
+	typedef struct {
+		uint32_t abi_version;
+		uint32_t struct_size;
+		const char *glsl_utf8;
+		uint64_t glsl_len;
+		uint64_t max_spirv_bytes;
+		uint64_t max_container_bytes;
+		uint32_t compile_flags;
+		uint32_t spirv_only;
+		CompileAllocFn alloc_fn;
+		void *alloc_ctx;
+	} CompileInputV1;
+	typedef struct {
+		uint32_t abi_version;
+		uint32_t struct_size;
+		int32_t native_error;
+		uint32_t failed_stage;
+		void *spirv_ptr;
+		uint64_t spirv_size;
+		void *container_ptr;
+		uint64_t container_size;
+		void *error_ptr;
+		uint64_t error_size;
+	} CompileOutputV1;
+	typedef int32_t (*CompileProcV1)(const CompileInputV1 *, CompileOutputV1 *);
+
+	const auto proc = reinterpret_cast<CompileProcV1>(
+			GDExtension::get_interface_function("device_session_qualification_compile_compute_glsl_v1"));
+	REQUIRE(proc != nullptr);
+
+	struct LocalAlloc {
+		std::vector<std::vector<uint8_t>> bufs;
+		static void *alloc(void *p_ctx, uint64_t p_sz) {
+			auto *self = static_cast<LocalAlloc *>(p_ctx);
+			self->bufs.emplace_back(size_t(p_sz));
+			return self->bufs.back().data();
+		}
+	};
+
+	static constexpr const char kValidGlsl[] =
+			"#version 450\n"
+			"layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;\n"
+			"layout(set = 0, binding = 0, std430) buffer OutBuf { uint v; } u_out;\n"
+			"void main() { u_out.v = gl_GlobalInvocationID.x + 1u; }\n";
+	static constexpr const char kInvalidGlsl[] =
+			"#version 450\n"
+			"layout(local_size_x = 1) in;\n"
+			"void main() { undeclared_symbol = 123; }\n";
+
+	std::atomic<int> passed_workers{ 0 };
+	std::vector<std::thread> workers;
+	workers.reserve(4);
+	for (int i = 0; i < 4; ++i) {
+		workers.emplace_back([&, i]() {
+			LocalAlloc alloc;
+			CompileInputV1 in{};
+			in.abi_version = 1u;
+			in.struct_size = sizeof(in);
+			in.glsl_utf8 = kValidGlsl;
+			in.glsl_len = sizeof(kValidGlsl) - 1u;
+			in.max_spirv_bytes = 1024u * 1024u;
+			in.max_container_bytes = 4u * 1024u * 1024u;
+			in.compile_flags = (i & 1) ? uint32_t(RenderingDevice::SHADER_COMPILE_FLAG_DISABLE_FAST_MATH) : 0u;
+			in.spirv_only = (i == 3) ? 1u : 0u;
+			in.alloc_fn = &LocalAlloc::alloc;
+			in.alloc_ctx = &alloc;
+
+			CompileOutputV1 out{};
+			out.abi_version = 1u;
+			out.struct_size = sizeof(out);
+
+			const int32_t rc = proc(&in, &out);
+			if (rc != int32_t(OK) || out.native_error != int32_t(OK) || out.failed_stage != 0u) {
+				return;
+			}
+			if (out.spirv_ptr == nullptr || out.spirv_size < 20u || (out.spirv_size % 4u) != 0u) {
+				return;
+			}
+			uint32_t magic = 0u;
+			std::memcpy(&magic, out.spirv_ptr, sizeof(magic));
+			if (magic != 0x07230203u) {
+				return;
+			}
+			if (in.spirv_only == 0u) {
+				if (out.container_ptr == nullptr || out.container_size == 0u) {
+					return;
+				}
+			} else {
+				if (out.container_ptr != nullptr || out.container_size != 0u) {
+					return;
+				}
+			}
+			passed_workers.fetch_add(1, std::memory_order_acq_rel);
+		});
+	}
+	for (auto &t : workers) {
+		t.join();
+	}
+	CHECK(passed_workers.load(std::memory_order_acquire) == 4);
+
+	// Invalid GLSL must report stage 2 compile failure with diagnostic text.
+	LocalAlloc err_alloc;
+	CompileInputV1 bad_in{};
+	bad_in.abi_version = 1u;
+	bad_in.struct_size = sizeof(bad_in);
+	bad_in.glsl_utf8 = kInvalidGlsl;
+	bad_in.glsl_len = sizeof(kInvalidGlsl) - 1u;
+	bad_in.alloc_fn = &LocalAlloc::alloc;
+	bad_in.alloc_ctx = &err_alloc;
+	CompileOutputV1 bad_out{};
+	bad_out.abi_version = 1u;
+	bad_out.struct_size = sizeof(bad_out);
+	const int32_t bad_rc = proc(&bad_in, &bad_out);
+	CHECK(bad_rc == int32_t(FAILED));
+	CHECK(bad_out.failed_stage == 2u);
+	CHECK(bad_out.error_ptr != nullptr);
+	CHECK(bad_out.error_size > 0u);
+	CHECK(bad_out.spirv_ptr == nullptr);
+	CHECK(bad_out.container_ptr == nullptr);
 }
 #endif
 
