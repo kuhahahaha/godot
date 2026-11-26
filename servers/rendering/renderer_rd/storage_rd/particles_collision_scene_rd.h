@@ -135,6 +135,8 @@ struct alignas(16) SceneDepthSnapshotMeta256 {
 	static constexpr uint32_t VERSION = 2u;
 	static constexpr uint32_t FLAG_PRESENT = 1u;
 	static constexpr uint32_t FLAG_REVERSE_Z = 2u;
+	static constexpr uint32_t FLAG_HAS_NORMAL_BUFFER = 1u << 2; // 4u
+	static constexpr uint32_t VALID_FLAGS_MASK = FLAG_PRESENT | FLAG_REVERSE_Z | FLAG_HAS_NORMAL_BUFFER; // 0x7u
 
 	uint32_t magic = MAGIC;
 	uint32_t version = VERSION;
@@ -265,16 +267,19 @@ public:
 		Ref<LiveDeviceGuard> device_guard;
 		SafeNumeric<uint32_t> *live_rids = nullptr;
 		SafeNumeric<uint32_t> *fb_first_frees = nullptr;
+		SafeNumeric<uint32_t> *normal_fb_first_frees = nullptr;
 		SafeNumeric<uint32_t> active_leases{ 0 };
 		RID meta_buffer;
 		RID depth_texture;
 		RID framebuffer_rid;
+		RID normal_texture;
+		RID normal_framebuffer_rid;
 		uint32_t texture_width = 0;
 		uint32_t texture_height = 0;
 		SceneDepthSnapshotMeta256 meta;
 
 		~DepthSnapshotGeneration() override;
-		Error allocate_gpu_resources(uint32_t p_tex_width, uint32_t p_tex_height, bool p_simulate_fb_fail = false);
+		Error allocate_gpu_resources(uint32_t p_tex_width, uint32_t p_tex_height, bool p_simulate_fb_fail = false, bool p_want_normal = false);
 		Error upload_metadata();
 		void release_gpu_resources();
 	};
@@ -315,12 +320,15 @@ private:
 		uint64_t last_captured_frame = 0;
 		bool has_captured_frame = false;
 		bool pending_capture = false;
+		bool wants_normal_buffer = false;
 	};
 
 	struct StandaloneNearestCopyPipeline {
 		RID sampler;
 		RID shader;
 		RID pipeline;
+		RID normal_shader;
+		RID normal_pipeline;
 	};
 
 	mutable Mutex snapshot_mutex;
@@ -331,16 +339,20 @@ private:
 	uint64_t scene_epoch = 1;
 	Ref<SphereSnapshot> current_sphere_snapshot;
 	Ref<DepthSnapshotGeneration> shared_null_viewport_sentinel;
+	RID dummy_normal_texture;
 	HashMap<uint64_t, ViewportDepthSlot> depth_snapshots_by_viewport;
 	LocalVector<Ref<DepthSnapshotGeneration>> retired_depth_snapshots;
 	StandaloneNearestCopyPipeline standalone_copy;
 	SafeNumeric<uint32_t> active_lease_counter{ 0 };
 	SafeNumeric<uint32_t> live_rid_counter{ 0 };
 	SafeNumeric<uint32_t> fb_first_free_counter{ 0 };
+	SafeNumeric<uint32_t> normal_fb_first_free_counter{ 0 };
 	SafeNumeric<uint32_t> simulate_fb_fail_once{ 0 };
 
 	void reap_retired_depth_snapshots_locked(LocalVector<Ref<DepthSnapshotGeneration>> &r_to_release);
+	RID ensure_dummy_normal_texture_locked();
 	Error ensure_standalone_nearest_copy_pipeline(RenderingDevice *p_rd, int64_t p_fb_format);
+	Error ensure_standalone_normal_copy_pipeline(RenderingDevice *p_rd, int64_t p_fb_format);
 	void release_standalone_nearest_copy_pipeline(RenderingDevice *p_rd);
 
 public:
@@ -358,12 +370,16 @@ public:
 	Error update_sphere_colliders(const LocalVector<SceneSphereRecord32> &p_colliders, const Vector3 &p_bounds_min, const Vector3 &p_bounds_max);
 	Error acquire_sphere_read_lease(Ref<SphereReadLease> &r_lease, GDExtensionSceneOpaque32V1 &r_sample_token);
 
-	Error request_viewport_depth_snapshot(RID p_viewport, float p_slab_thickness_m = 0.50f, float p_silhouette_jump_m = 0.50f);
+	Error request_viewport_depth_snapshot(RID p_viewport, float p_slab_thickness_m = 0.50f, float p_silhouette_jump_m = 0.50f, bool p_want_normal = false);
 	bool has_pending_depth_snapshot_request(RID p_viewport, uint64_t p_frame_number) const;
+	bool has_pending_depth_snapshot_normal_request(RID p_viewport, uint64_t p_frame_number) const;
+	RID get_depth_snapshot_normal_texture(const Ref<DepthSnapshotGeneration> &p_gen);
+	RID get_depth_snapshot_normal_texture(RID p_viewport);
 	RID find_viewport_by_render_target(RID p_render_target);
 	bool has_viewport_depth_snapshot(RID p_viewport) const;
 	uint32_t get_retired_depth_snapshot_count() const;
 	uint32_t get_fb_first_free_count() const { return fb_first_free_counter.get(); }
+	uint32_t get_normal_fb_first_free_count() const { return normal_fb_first_free_counter.get(); }
 	void set_simulate_framebuffer_create_failure_once(bool p_enable) { simulate_fb_fail_once.set(p_enable ? 1u : 0u); }
 
 	Error acquire_depth_snapshot_read_lease(
@@ -377,7 +393,8 @@ public:
 			float p_silhouette_jump_m,
 			Ref<DepthReadLease> &r_lease,
 			GDExtensionSceneOpaque32V1 &r_sample_token,
-			const GDExtensionSceneOpaque32V1 *p_expected_device_override = nullptr);
+			const GDExtensionSceneOpaque32V1 *p_expected_device_override = nullptr,
+			bool p_want_normal = false);
 	Error release_depth_snapshot_read_lease(Ref<DepthReadLease> &r_lease);
 
 	Error prepare_viewport_depth_snapshot_target(
@@ -385,7 +402,8 @@ public:
 			uint32_t p_width,
 			uint32_t p_height,
 			RID p_render_target,
-			Ref<DepthSnapshotGeneration> &r_target_gen);
+			Ref<DepthSnapshotGeneration> &r_target_gen,
+			bool p_allow_normal_buffer = true);
 	Error finalize_viewport_depth_snapshot_target(
 			RID p_viewport,
 			const Ref<DepthSnapshotGeneration> &p_target_gen,
@@ -394,7 +412,8 @@ public:
 			float p_z_near,
 			float p_z_far,
 			uint64_t p_frame_number,
-			RID p_render_target = RID());
+			RID p_render_target = RID(),
+			bool p_has_normal_buffer = false);
 	Error capture_viewport_depth_snapshot(
 			RID p_viewport,
 			RID p_src_depth_texture,
@@ -407,7 +426,8 @@ public:
 			uint64_t p_frame_number,
 			RID p_render_target = RID(),
 			uint32_t p_view_count = 1u,
-			bool p_is_reflection_probe = false);
+			bool p_is_reflection_probe = false,
+			RID p_src_normal_texture = RID());
 
 	void invalidate_viewport_depth_snapshot(RID p_viewport, bool p_preserve_armed_request = false);
 	void invalidate_render_target_depth_snapshot(RID p_render_target, bool p_preserve_armed_request = false);
@@ -417,6 +437,7 @@ public:
 	uint32_t get_live_rid_count() const { return live_rid_counter.get(); }
 	uint64_t get_current_snapshot_generation() const;
 
+	static bool validate_scene_depth_snapshot_meta_v2(const SceneDepthSnapshotMeta256 &p_meta);
 	static void fill_depth_snapshot_matrices(
 			const Transform3D &p_cam_transform,
 			const Projection &p_cam_projection,

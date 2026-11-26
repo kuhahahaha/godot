@@ -149,7 +149,17 @@ bool production_dto_valid(const T &value) {
 }
 
 inline constexpr uint32_t SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT = 0xFFFFFFFEu;
+inline constexpr uint32_t SCENE_DEPTH_SNAPSHOT_TRIPLE_RESOURCE_SLOT = 0xFFFFFFFDu;
 inline constexpr uint32_t MAX_SCENE_DEPTH_SET1_PAIRS = 8u;
+
+inline bool is_scene_depth_snapshot_resource_slot(uint32_t p_resource_slot) {
+	return p_resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
+			p_resource_slot == SCENE_DEPTH_SNAPSHOT_TRIPLE_RESOURCE_SLOT;
+}
+
+inline uint32_t scene_depth_snapshot_slot_binding_stride(uint32_t p_resource_slot) {
+	return (p_resource_slot == SCENE_DEPTH_SNAPSHOT_TRIPLE_RESOURCE_SLOT) ? 3u : 2u;
+}
 
 inline bool decode_scene_depth_pair_params(uint64_t p_packed_bytes, float &r_slab_thickness_m, float &r_silhouette_jump_m) {
 	const uint32_t slab_bits = uint32_t(p_packed_bytes >> 32u);
@@ -371,6 +381,7 @@ class ProductionResourceSlot {
 	bool scene_depth_set1 = false;
 	uint32_t scene_depth_lease_count = 0;
 	Ref<SceneReadContent> scene_depth_leases[MAX_SCENE_DEPTH_SET1_PAIRS];
+	RID scene_depth_normal_textures[MAX_SCENE_DEPTH_SET1_PAIRS];
 	// Nonowning alias of an actual output DISPOSAL_MEMBER. The native group
 	// remains the sole free owner; owned_physical is never populated for this.
 	NativeDisposalWitness output_witness;

@@ -1276,4 +1276,275 @@ TEST_CASE("[particle_scene_k06][SceneTree] non-RD and off-thread refusal") {
 #endif
 }
 
+TEST_CASE("[particle_scene_k06][GAP-23C] SceneDepthSnapshotMeta256 FLAG_HAS_NORMAL_BUFFER mask and 256B layout") {
+	using Meta = RendererRD::SceneDepthSnapshotMeta256;
+	using SceneRD = RendererRD::ParticlesCollisionSceneRD;
+
+	CHECK(sizeof(Meta) == 256);
+	CHECK(alignof(Meta) == 16);
+	CHECK(Meta::FLAG_PRESENT == 1u);
+	CHECK(Meta::FLAG_REVERSE_Z == 2u);
+	CHECK(Meta::FLAG_HAS_NORMAL_BUFFER == 4u);
+	CHECK(Meta::VALID_FLAGS_MASK == 7u);
+
+	Projection dc;
+	dc.set_depth_correction(true);
+	Projection proj;
+	proj.set_perspective(90.0f, 1.0f, 0.1f, 100.0f, false);
+	const Projection rd_proj = dc * proj;
+
+	Meta meta;
+	meta.width = 8;
+	meta.height = 8;
+	meta.snapshot_generation = 1;
+	SceneRD::fill_depth_snapshot_matrices(Transform3D(), rd_proj, 0.1f, 100.0f, meta);
+	CHECK(meta.flags == 0x3u);
+	CHECK(SceneRD::validate_scene_depth_snapshot_meta_v2(meta));
+
+	// Flag 0x4u (FLAG_HAS_NORMAL_BUFFER) and 0x7u MUST be accepted:
+	Meta meta_only_norm_bit = meta;
+	meta_only_norm_bit.flags = Meta::FLAG_HAS_NORMAL_BUFFER;
+	CHECK(SceneRD::validate_scene_depth_snapshot_meta_v2(meta_only_norm_bit));
+
+	Meta meta_with_norm = meta;
+	meta_with_norm.flags = Meta::FLAG_PRESENT | Meta::FLAG_REVERSE_Z | Meta::FLAG_HAS_NORMAL_BUFFER;
+	CHECK(meta_with_norm.flags == 0x7u);
+	CHECK(SceneRD::validate_scene_depth_snapshot_meta_v2(meta_with_norm));
+
+	// Unknown flag bit 0x8u MUST be rejected:
+	Meta meta_bad = meta;
+	meta_bad.flags = 0x8u;
+	CHECK_FALSE(SceneRD::validate_scene_depth_snapshot_meta_v2(meta_bad));
+	meta_bad.flags = Meta::FLAG_PRESENT | Meta::FLAG_REVERSE_Z | 0x8u;
+	CHECK_FALSE(SceneRD::validate_scene_depth_snapshot_meta_v2(meta_bad));
+
+	// evaluate_depth_snapshot_v2_collision accepts 0x7u and rejects 0x8u:
+	const Vector4 c = rd_proj.xform(Vector4(0.0f, 0.0f, -5.0f, 1.0f));
+	const float raw_5m = float(c.z / c.w);
+	LocalVector<float> depth_texels;
+	depth_texels.resize(64);
+	for (int i = 0; i < 64; ++i) {
+		depth_texels[i] = raw_5m;
+	}
+	const RendererRD::CollisionContactResult hit_ok = SceneRD::evaluate_depth_snapshot_v2_collision(
+			meta_with_norm, depth_texels, Vector3(0.0f, 0.0f, -5.05f), Vector3(0.0f, 0.0f, -2.0f), 0.2f, 0.016f);
+	CHECK(hit_ok.collided);
+
+	const RendererRD::CollisionContactResult hit_rejected = SceneRD::evaluate_depth_snapshot_v2_collision(
+			meta_bad, depth_texels, Vector3(0.0f, 0.0f, -5.05f), Vector3(0.0f, 0.0f, -2.0f), 0.2f, 0.016f);
+	CHECK_FALSE(hit_rejected.collided);
+}
+
+TEST_CASE("[particle_scene_k06][GAP-23C] DepthSnapshotGeneration normal_texture FB-before-texture teardown and triple dummy fallback") {
+#if defined(METAL_ENABLED) && defined(MACOS_ENABLED)
+	using SceneRD = RendererRD::ParticlesCollisionSceneRD;
+	using Meta = RendererRD::SceneDepthSnapshotMeta256;
+
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDevice rd;
+	REQUIRE(rd.initialize(&context) == OK);
+
+	SceneRD scene_collision;
+	const GDExtensionSceneOpaque32V1 dev_cap = make_opaque32(0x4b303644ull, 23, 3, 1);
+	scene_collision.initialize(&rd, dev_cap);
+
+	Projection dc;
+	dc.set_depth_correction(true);
+	Projection proj;
+	proj.set_perspective(90.0f, 1.0f, 0.1f, 100.0f, false);
+	const Projection rd_proj = dc * proj;
+
+	// Create source R32_SFLOAT depth + R8G8B8A8_UNORM normal_roughness textures.
+	RD::TextureFormat d_tf;
+	d_tf.format = RD::DATA_FORMAT_R32_SFLOAT;
+	d_tf.width = 8;
+	d_tf.height = 8;
+	d_tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_UPDATE_BIT;
+	Vector<uint8_t> d_bytes;
+	d_bytes.resize(8 * 8 * sizeof(float));
+	for (int i = 0; i < 64; ++i) {
+		const float d = 0.25f;
+		memcpy(d_bytes.ptrw() + i * 4, &d, 4);
+	}
+	Vector<Vector<uint8_t>> d_slices;
+	d_slices.push_back(d_bytes);
+	const RID src_depth = rd.texture_create(d_tf, RD::TextureView(), d_slices);
+	REQUIRE(src_depth.is_valid());
+
+	RD::TextureFormat n_tf;
+	n_tf.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
+	n_tf.width = 8;
+	n_tf.height = 8;
+	n_tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_UPDATE_BIT;
+	Vector<uint8_t> n_bytes;
+	n_bytes.resize(8 * 8 * 4);
+	for (int i = 0; i < 64; ++i) {
+		n_bytes.write[i * 4 + 0] = 64u;
+		n_bytes.write[i * 4 + 1] = 191u;
+		n_bytes.write[i * 4 + 2] = 128u;
+		n_bytes.write[i * 4 + 3] = 96u;
+	}
+	Vector<Vector<uint8_t>> n_slices;
+	n_slices.push_back(n_bytes);
+	const RID src_normal = rd.texture_create(n_tf, RD::TextureView(), n_slices);
+	REQUIRE(src_normal.is_valid());
+
+	// 1. ForwardClustered normal capture path: wants_normal_buffer -> 5 RIDs + FLAG_HAS_NORMAL_BUFFER set.
+	const RID vp_clustered = RID::from_uint64(0x23C01ull);
+	CHECK_FALSE(scene_collision.has_pending_depth_snapshot_normal_request(vp_clustered, 0));
+	REQUIRE(scene_collision.request_viewport_depth_snapshot(vp_clustered, 0.50f, 0.50f, /*p_want_normal=*/true) == OK);
+	CHECK(scene_collision.has_pending_depth_snapshot_request(vp_clustered, 0));
+	CHECK(scene_collision.has_pending_depth_snapshot_normal_request(vp_clustered, 0));
+
+	REQUIRE(scene_collision.capture_viewport_depth_snapshot(
+				vp_clustered, src_depth, 8, 8, Transform3D(), rd_proj, 0.1f, 100.0f, 1, RID(), 1u, false, src_normal) == OK);
+	CHECK_FALSE(scene_collision.has_pending_depth_snapshot_normal_request(vp_clustered, 1));
+	CHECK(scene_collision.get_live_rid_count() == 5u);
+
+	Ref<SceneRD::DepthReadLease> lease_clustered;
+	GDExtensionSceneOpaque32V1 tok_clustered = {};
+	REQUIRE(scene_collision.acquire_depth_snapshot_read_lease(
+				vp_clustered, 0.50f, 0.50f, lease_clustered, tok_clustered, nullptr, /*p_want_normal=*/true) == OK);
+	CHECK(scene_collision.has_pending_depth_snapshot_normal_request(vp_clustered, 2));
+
+	Ref<SceneRD::DepthSnapshotGeneration> gen_clustered = lease_clustered->get_generation();
+	REQUIRE(gen_clustered.is_valid());
+	CHECK(gen_clustered->meta.flags == (Meta::FLAG_PRESENT | Meta::FLAG_REVERSE_Z | Meta::FLAG_HAS_NORMAL_BUFFER));
+	REQUIRE(gen_clustered->normal_texture.is_valid());
+	REQUIRE(gen_clustered->normal_framebuffer_rid.is_valid());
+	const RD::TextureFormat captured_n_fmt = rd.texture_get_format(gen_clustered->normal_texture);
+	CHECK(captured_n_fmt.format == RD::DATA_FORMAT_R8G8B8A8_UNORM);
+	CHECK(captured_n_fmt.width == 8u);
+	CHECK(captured_n_fmt.height == 8u);
+	CHECK(scene_collision.get_depth_snapshot_normal_texture(gen_clustered) == gen_clustered->normal_texture);
+
+	const Vector<uint8_t> read_n_bytes = rd.texture_get_data(gen_clustered->normal_texture, 0);
+	REQUIRE(read_n_bytes.size() == 8 * 8 * 4);
+	CHECK(read_n_bytes[0] == 64u);
+	CHECK(read_n_bytes[1] == 191u);
+	CHECK(read_n_bytes[2] == 128u);
+	CHECK(read_n_bytes[3] == 96u);
+
+	// 2. COW resize with normal buffer active + verify normal_framebuffer_rid freed BEFORE normal_texture!
+	REQUIRE(scene_collision.capture_viewport_depth_snapshot(
+				vp_clustered, src_depth, 16, 16, Transform3D(), rd_proj, 0.1f, 100.0f, 2, RID(), 1u, false, src_normal) == OK);
+	CHECK(scene_collision.get_retired_depth_snapshot_count() == 1u);
+	CHECK(scene_collision.get_live_rid_count() == 10u);
+
+	// 3. ForwardMobile graceful fallback: wants_normal_buffer == true but src_normal is null -> FLAG_HAS_NORMAL_BUFFER == 0 + 1x1 dummy normal!
+	const RID vp_mobile = RID::from_uint64(0x23C02ull);
+	REQUIRE(scene_collision.request_viewport_depth_snapshot(vp_mobile, 0.50f, 0.50f, /*p_want_normal=*/true) == OK);
+	REQUIRE(scene_collision.capture_viewport_depth_snapshot(
+				vp_mobile, src_depth, 8, 8, Transform3D(), rd_proj, 0.1f, 100.0f, 1, RID(), 1u, false, RID()) == OK);
+
+	Ref<SceneRD::DepthReadLease> lease_mobile;
+	GDExtensionSceneOpaque32V1 tok_mobile = {};
+	REQUIRE(scene_collision.acquire_depth_snapshot_read_lease(
+				vp_mobile, 0.50f, 0.50f, lease_mobile, tok_mobile, nullptr, /*p_want_normal=*/true) == OK);
+	Ref<SceneRD::DepthSnapshotGeneration> gen_mobile = lease_mobile->get_generation();
+	REQUIRE(gen_mobile.is_valid());
+	CHECK(gen_mobile->meta.flags == (Meta::FLAG_PRESENT | Meta::FLAG_REVERSE_Z));
+	CHECK((gen_mobile->meta.flags & Meta::FLAG_HAS_NORMAL_BUFFER) == 0u);
+	CHECK(gen_mobile->normal_texture.is_null());
+	const RID dummy_normal_rid = scene_collision.get_depth_snapshot_normal_texture(gen_mobile);
+	REQUIRE(dummy_normal_rid.is_valid());
+	const RD::TextureFormat dummy_fmt = rd.texture_get_format(dummy_normal_rid);
+	CHECK(dummy_fmt.format == RD::DATA_FORMAT_R8G8B8A8_UNORM);
+	CHECK(dummy_fmt.width == 1u);
+	CHECK(dummy_fmt.height == 1u);
+
+	// 4. Live Metal Set-1 triple layout compute dispatch (meta SSBO + depth texture2D + normal texture2D) for BOTH live & dummy fallback!
+	static constexpr const char *kTripleGlsl =
+			"#version 450\n"
+			"#extension GL_EXT_samplerless_texture_functions : enable\n"
+			"layout(local_size_x = 1) in;\n"
+			"layout(set = 0, binding = 0, std430) readonly buffer Meta { uint w[64]; } u_meta;\n"
+			"layout(set = 0, binding = 1) uniform texture2D u_depth;\n"
+			"layout(set = 0, binding = 2) uniform texture2D u_normal;\n"
+			"layout(set = 0, binding = 3, std430) writeonly buffer Out { vec4 n; uint flags; float d; } u_out;\n"
+			"void main() {\n"
+			"	u_out.flags = u_meta.w[59];\n"
+			"	u_out.d = texelFetch(u_depth, ivec2(0, 0), 0).r;\n"
+			"	u_out.n = texelFetch(u_normal, ivec2(0, 0), 0);\n"
+			"}\n";
+	String shd_err;
+	RD::ShaderStageSPIRVData cs_stage;
+	cs_stage.shader_stage = RD::SHADER_STAGE_COMPUTE;
+	cs_stage.spirv = rd.shader_compile_spirv_from_source(RD::SHADER_STAGE_COMPUTE, String::utf8(kTripleGlsl), RD::SHADER_LANGUAGE_GLSL, &shd_err, false);
+	REQUIRE_MESSAGE(!cs_stage.spirv.is_empty(), shd_err.utf8().get_data());
+	Vector<RD::ShaderStageSPIRVData> stages;
+	stages.push_back(cs_stage);
+	const RID c_shd = rd.shader_create_from_spirv(stages);
+	const RID c_pipe = rd.compute_pipeline_create(c_shd);
+	const RID out_buf = rd.storage_buffer_create(32);
+	REQUIRE(c_pipe.is_valid());
+	REQUIRE(out_buf.is_valid());
+
+	auto run_triple_probe = [&](const Ref<SceneRD::DepthSnapshotGeneration> &p_gen, uint32_t &r_flags, float &r_depth, Vector4 &r_norm) {
+		const RID n_tex = scene_collision.get_depth_snapshot_normal_texture(p_gen);
+		REQUIRE(n_tex.is_valid());
+		Vector<RD::Uniform> uniforms;
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 0, p_gen->meta_buffer));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_TEXTURE, 1, p_gen->depth_texture));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_TEXTURE, 2, n_tex));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 3, out_buf));
+		const RID uset = rd.uniform_set_create(uniforms, c_shd, 0);
+		REQUIRE(uset.is_valid());
+		const RD::ComputeListID cl = rd.compute_list_begin();
+		rd.compute_list_bind_compute_pipeline(cl, c_pipe);
+		rd.compute_list_bind_uniform_set(cl, uset, 0);
+		rd.compute_list_dispatch(cl, 1, 1, 1);
+		rd.compute_list_end();
+		const Vector<uint8_t> bytes = rd.buffer_get_data(out_buf);
+		REQUIRE(bytes.size() == 32);
+		float n_arr[4] = {};
+		memcpy(n_arr, bytes.ptr(), 16);
+		memcpy(&r_flags, bytes.ptr() + 16, 4);
+		memcpy(&r_depth, bytes.ptr() + 20, 4);
+		r_norm = Vector4(n_arr[0], n_arr[1], n_arr[2], n_arr[3]);
+		rd.free_rid(uset);
+	};
+
+	uint32_t out_flags = 0;
+	float out_depth = 0.0f;
+	Vector4 out_norm;
+	run_triple_probe(gen_clustered, out_flags, out_depth, out_norm);
+	CHECK(out_flags == 0x7u);
+	CHECK(out_depth == doctest::Approx(0.25f).epsilon(1e-5f));
+	CHECK(out_norm.x == doctest::Approx(64.0f / 255.0f).epsilon(1e-2f));
+	CHECK(out_norm.y == doctest::Approx(191.0f / 255.0f).epsilon(1e-2f));
+	CHECK(out_norm.z == doctest::Approx(128.0f / 255.0f).epsilon(1e-2f));
+
+	run_triple_probe(gen_mobile, out_flags, out_depth, out_norm);
+	CHECK(out_flags == 0x3u);
+	CHECK(out_depth == doctest::Approx(0.25f).epsilon(1e-5f));
+	CHECK(out_norm.z == doctest::Approx(1.0f).epsilon(1e-2f));
+
+	rd.free_rid(out_buf);
+	rd.free_rid(c_pipe);
+	rd.free_rid(c_shd);
+
+	// 5. Release leases + invalidate + shutdown -> strict FB-before-texture teardown & 0 RD leaks!
+	CHECK(lease_clustered->return_after_reads() == OK);
+	CHECK(lease_mobile->return_after_reads() == OK);
+	lease_clustered.unref();
+	lease_mobile.unref();
+	gen_clustered.unref();
+	gen_mobile.unref();
+
+	scene_collision.invalidate_viewport_depth_snapshot(vp_clustered);
+	scene_collision.invalidate_viewport_depth_snapshot(vp_mobile);
+	CHECK(scene_collision.get_normal_fb_first_free_count() == 2u);
+	CHECK(scene_collision.get_retired_depth_snapshot_count() == 0u);
+	CHECK(scene_collision.get_active_lease_count() == 0u);
+
+	scene_collision.shutdown();
+	CHECK(scene_collision.get_live_rid_count() == 0u);
+
+	rd.free_rid(src_normal);
+	rd.free_rid(src_depth);
+#endif
+}
+
 } // namespace TestParticleSceneK06

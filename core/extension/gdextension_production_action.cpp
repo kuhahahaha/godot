@@ -200,16 +200,15 @@ Error Registry::production_dispatch_closure_locked(const ProductionRequest &requ
 		const auto &slot = request.resources[dispatch.first_set_slot + i];
 		const auto *set = rd.uniform_set_owner.get_or_null(slot.primary);
 		if (slot.scene_depth_set1) {
-			const uint32_t pair_count = slot.scene_depth_lease_count;
-			const uint32_t storage_count = slot.binding_count >= pair_count ? (slot.binding_count - pair_count) : 0u;
+			const uint32_t sd_entry_count = slot.scene_depth_lease_count;
+			const uint32_t storage_count = slot.binding_count >= sd_entry_count ? (slot.binding_count - sd_entry_count) : 0u;
 			if (i != 1u || slot.output_set_deferred || !slot.imported || slot.creating || slot.retiring || slot.returned ||
 					!set || !set->driver_id || set->shader_id != pipeline->shader || set->shader_set != 1u ||
 					set->format != pipeline->set_formats[1] || !set->shared_textures_to_update.is_empty() ||
 					!set->pending_clear_textures.is_empty() || (storage_count == 0u && !set->writable_resources.is_empty()) ||
 					slot.imported_unit_slot != dispatch.unit_slot || slot.shader_set != 1u ||
-					pair_count < 1u || pair_count > MAX_SCENE_DEPTH_SET1_PAIRS ||
-					slot.binding_count < pair_count ||
-					uint32_t(shader->uniform_sets[1].size()) != 2u * pair_count + storage_count ||
+					sd_entry_count < 1u || sd_entry_count > MAX_SCENE_DEPTH_SET1_PAIRS ||
+					slot.binding_count < sd_entry_count ||
 					slot.first_binding > request.capacity.resource_uses ||
 					slot.binding_count > request.capacity.resource_uses - slot.first_binding ||
 					slot.use_count != 1u || !slot.uses[0].linked() || !slot.uses[0].same_physical() ||
@@ -219,32 +218,40 @@ Error Registry::production_dispatch_closure_locked(const ProductionRequest &requ
 					set->qualification_dependencies.size() > 1u + storage_count) {
 				return ERR_INVALID_DATA;
 			}
-			for (uint32_t d = 0; d < pair_count; ++d) {
+			uint32_t sd_expanded_bindings = 0u;
+			for (uint32_t d = 0; d < sd_entry_count; ++d) {
 				const auto &binding = request.uses[slot.first_binding + d].binding;
+				const bool want_normal = (binding.resource_slot == SCENE_DEPTH_SNAPSHOT_TRIPLE_RESOURCE_SLOT);
 				float slab_m = 0.0f;
 				float jump_m = 0.0f;
-				if (!production_dto_valid(binding) || binding.set != 1u || binding.binding != 2u * d ||
-						binding.array_element > 1u || binding.resource_slot != SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
+				if (!production_dto_valid(binding) || binding.set != 1u || binding.binding != sd_expanded_bindings ||
+						binding.array_element > 1u || !is_scene_depth_snapshot_resource_slot(binding.resource_slot) ||
 						!decode_scene_depth_pair_params(binding.bytes, slab_m, jump_m)) {
 					return ERR_INVALID_DATA;
 				}
 				uint32_t meta_matches = 0;
 				uint32_t tex_matches = 0;
+				uint32_t normal_matches = 0;
 				for (const auto &uniform : shader->uniform_sets[1]) {
-					if (uniform.binding == 2u * d + 0u) {
+					if (uniform.binding == sd_expanded_bindings + 0u) {
 						if (uniform.type != RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER || uniform.writable ||
 								(uniform.length > 0 && uint32_t(uniform.length) != sizeof(RendererRD::SceneDepthSnapshotMeta256))) {
 							return ERR_INVALID_DATA;
 						}
 						++meta_matches;
-					} else if (uniform.binding == 2u * d + 1u) {
+					} else if (uniform.binding == sd_expanded_bindings + 1u) {
 						if (uniform.type != RenderingDevice::UNIFORM_TYPE_TEXTURE || uniform.writable || uniform.length != 1) {
 							return ERR_INVALID_DATA;
 						}
 						++tex_matches;
+					} else if (want_normal && uniform.binding == sd_expanded_bindings + 2u) {
+						if (uniform.type != RenderingDevice::UNIFORM_TYPE_TEXTURE || uniform.writable || uniform.length != 1) {
+							return ERR_INVALID_DATA;
+						}
+						++normal_matches;
 					}
 				}
-				if (meta_matches != 1u || tex_matches != 1u) {
+				if (meta_matches != 1u || tex_matches != 1u || (want_normal && normal_matches != 1u)) {
 					return ERR_INVALID_DATA;
 				}
 				if (slot.scene_depth_leases[d].is_null()) {
@@ -267,12 +274,26 @@ Error Registry::production_dispatch_closure_locked(const ProductionRequest &requ
 						!depth_tex || !depth_tex->driver_id || depth_tex->format != RenderingDevice::DATA_FORMAT_R32_SFLOAT) {
 					return ERR_INVALID_DATA;
 				}
+				if (want_normal) {
+					const RID normal_rid = slot.scene_depth_normal_textures[d];
+					if (normal_rid.is_null() || set->writable_resources.has(normal_rid)) {
+						return ERR_INVALID_DATA;
+					}
+					const auto *normal_tex = rd.texture_owner.get_or_null(normal_rid);
+					if (!normal_tex || !normal_tex->driver_id || normal_tex->format != RenderingDevice::DATA_FORMAT_R8G8B8A8_UNORM) {
+						return ERR_INVALID_DATA;
+					}
+				}
+				sd_expanded_bindings += want_normal ? 3u : 2u;
+			}
+			if (uint32_t(shader->uniform_sets[1].size()) != sd_expanded_bindings + storage_count) {
+				return ERR_INVALID_DATA;
 			}
 			for (uint32_t s = 0; s < storage_count; ++s) {
-				const auto &binding = request.uses[slot.first_binding + pair_count + s].binding;
-				if (binding.resource_slot == SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT ||
+				const auto &binding = request.uses[slot.first_binding + sd_entry_count + s].binding;
+				if (is_scene_depth_snapshot_resource_slot(binding.resource_slot) ||
 						binding.resource_slot >= request.resource_count || binding.set != 1u ||
-						binding.array_element || binding.binding < 2u * pair_count) {
+						binding.array_element || binding.binding < sd_expanded_bindings) {
 					return ERR_INVALID_DATA;
 				}
 				const auto &storage = request.resources[binding.resource_slot];

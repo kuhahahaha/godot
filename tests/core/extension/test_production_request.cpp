@@ -508,14 +508,14 @@ struct Access {
 			shader.code_decompressed_size = shader.code_compressed_bytes.size();
 			shaders.push_back(shader);
 		}
-		void initialize_mixed_set1(uint32_t p_storage_bytes) {
+		void initialize_mixed_set1(uint32_t p_storage_bytes, bool p_triple = false) {
 			reflection_data.pipeline_type = RenderingDeviceCommons::PIPELINE_TYPE_COMPUTE;
 			reflection_data.stage_count = 1;
 			reflection_data.set_count = 2;
 			reflection_data.compute_local_size[0] = reflection_data.compute_local_size[1] = reflection_data.compute_local_size[2] = 1;
 			reflection_shader_stages.push_back(RenderingDeviceCommons::SHADER_STAGE_COMPUTE);
 			reflection_binding_set_uniforms_count.push_back(1);
-			reflection_binding_set_uniforms_count.push_back(3);
+			reflection_binding_set_uniforms_count.push_back(p_triple ? 4 : 3);
 			{
 				ReflectionBindingData b0;
 				b0.type = RenderingDeviceCommons::UNIFORM_TYPE_STORAGE_BUFFER;
@@ -543,10 +543,19 @@ struct Access {
 				tex.writable = false;
 				reflection_binding_set_uniforms_data.push_back(tex);
 			}
+			if (p_triple) {
+				ReflectionBindingData normal_tex;
+				normal_tex.type = RenderingDeviceCommons::UNIFORM_TYPE_TEXTURE;
+				normal_tex.binding = 2;
+				normal_tex.stages = 1u << RenderingDeviceCommons::SHADER_STAGE_COMPUTE;
+				normal_tex.length = 1;
+				normal_tex.writable = false;
+				reflection_binding_set_uniforms_data.push_back(normal_tex);
+			}
 			{
 				ReflectionBindingData trailing;
 				trailing.type = RenderingDeviceCommons::UNIFORM_TYPE_STORAGE_BUFFER;
-				trailing.binding = 2;
+				trailing.binding = p_triple ? 3 : 2;
 				trailing.stages = 1u << RenderingDeviceCommons::SHADER_STAGE_COMPUTE;
 				trailing.length = p_storage_bytes;
 				trailing.writable = true;
@@ -1022,9 +1031,11 @@ struct Access {
 			return err;
 		}
 		bool mixed_set1_mode = false;
+		bool mixed_set1_triple = false;
 		bool mixed_staging_live = false;
 		bool mixed_meta_live = false;
 		bool mixed_depth_tex_live = false;
+		bool mixed_normal_tex_live = false;
 		bool mixed_fb_live = false;
 		uint32_t mixed_storage_allocs = 0;
 		bool mixed_storage_live[2] = {};
@@ -1046,6 +1057,11 @@ struct Access {
 		TextureID texture_create(const TextureFormat &value, const TextureView &view) override {
 			if (mixed_set1_mode) {
 				CHECK(Thread::get_caller_id() == execution_thread);
+				if (mixed_set1_triple && value.format == DATA_FORMAT_R8G8B8A8_UNORM) {
+					CHECK((value.width == 1 && value.height == 1));
+					mixed_normal_tex_live = true;
+					return TextureID(721);
+				}
 				CHECK((value.format == DATA_FORMAT_R32_SFLOAT && value.width == 1 && value.height == 1));
 				mixed_depth_tex_live = true;
 				return TextureID(720);
@@ -1074,6 +1090,11 @@ struct Access {
 				mixed_depth_tex_live = false;
 				return;
 			}
+			if (mixed_set1_mode && mixed_set1_triple && id == TextureID(721)) {
+				CHECK(mixed_normal_tex_live);
+				mixed_normal_tex_live = false;
+				return;
+			}
 			CHECK(production_raster_factory);
 			CHECK(id == TextureID(380));
 			CHECK(production_depth_live);
@@ -1089,14 +1110,14 @@ struct Access {
 			production_free_order.push_back(1);
 		}
 		uint64_t texture_get_allocation_size(TextureID id) override {
-			if (mixed_set1_mode && id == TextureID(720)) {
+			if (mixed_set1_mode && (id == TextureID(720) || (mixed_set1_triple && id == TextureID(721)))) {
 				return 4;
 			}
 			CHECK(id == TextureID(380));
 			return 128;
 		}
 		void texture_get_copyable_layout(TextureID id, const TextureSubresource &, TextureCopyableLayout *r_layout) override {
-			CHECK((mixed_set1_mode && id == TextureID(720) && r_layout != nullptr));
+			CHECK((mixed_set1_mode && (id == TextureID(720) || (mixed_set1_triple && id == TextureID(721))) && r_layout != nullptr));
 			if (r_layout) {
 				r_layout->size = 4;
 				r_layout->row_pitch = 4;
@@ -1106,7 +1127,7 @@ struct Access {
 			CHECK(mixed_set1_mode);
 		}
 		BitField<TextureUsageBits> texture_get_usages_supported_by_format(DataFormat value, bool readable) override {
-			if (mixed_set1_mode && value == DATA_FORMAT_R32_SFLOAT) {
+			if (mixed_set1_mode && (value == DATA_FORMAT_R32_SFLOAT || (mixed_set1_triple && value == DATA_FORMAT_R8G8B8A8_UNORM))) {
 				return TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_STORAGE_BIT | TEXTURE_USAGE_CAN_COPY_FROM_BIT | TEXTURE_USAGE_CAN_COPY_TO_BIT;
 			}
 			CHECK(value == DATA_FORMAT_D32_SFLOAT);
@@ -1316,7 +1337,7 @@ struct Access {
 			CHECK(reflection.pipeline_type == PIPELINE_TYPE_COMPUTE);
 			CHECK(uint64_t(container->get_compile_flags()) == 0);
 			if (mixed_set1_mode) {
-				CHECK((reflection.uniform_sets.size() == 2 && reflection.uniform_sets[0].size() == 1 && reflection.uniform_sets[1].size() == 3));
+				CHECK((reflection.uniform_sets.size() == 2 && reflection.uniform_sets[0].size() == 1 && reflection.uniform_sets[1].size() == (mixed_set1_triple ? 4u : 3u)));
 				++shader_creates;
 				return ShaderID(80);
 			}
@@ -1440,11 +1461,21 @@ struct Access {
 					set_live = true;
 					return UniformSetID(83);
 				}
-				CHECK(uniforms.size() == 3);
-				if (uniforms.size() == 3) {
-					CHECK((uniforms[0].binding == 0 && uniforms[0].type == UNIFORM_TYPE_STORAGE_BUFFER && uniforms[0].ids.size() == 1 && uniforms[0].ids[0].id == 701));
-					CHECK((uniforms[1].binding == 1 && uniforms[1].type == UNIFORM_TYPE_TEXTURE && uniforms[1].ids.size() == 1 && uniforms[1].ids[0].id == 720));
-					CHECK((uniforms[2].binding == 2 && uniforms[2].type == UNIFORM_TYPE_STORAGE_BUFFER && uniforms[2].ids.size() == 1 && uniforms[2].ids[0].id == 703));
+				if (mixed_set1_triple) {
+					CHECK(uniforms.size() == 4);
+					if (uniforms.size() == 4) {
+						CHECK((uniforms[0].binding == 0 && uniforms[0].type == UNIFORM_TYPE_STORAGE_BUFFER && uniforms[0].ids.size() == 1 && uniforms[0].ids[0].id == 701));
+						CHECK((uniforms[1].binding == 1 && uniforms[1].type == UNIFORM_TYPE_TEXTURE && uniforms[1].ids.size() == 1 && uniforms[1].ids[0].id == 720));
+						CHECK((uniforms[2].binding == 2 && uniforms[2].type == UNIFORM_TYPE_TEXTURE && uniforms[2].ids.size() == 1 && uniforms[2].ids[0].id == 721));
+						CHECK((uniforms[3].binding == 3 && uniforms[3].type == UNIFORM_TYPE_STORAGE_BUFFER && uniforms[3].ids.size() == 1 && uniforms[3].ids[0].id == 703));
+					}
+				} else {
+					CHECK(uniforms.size() == 3);
+					if (uniforms.size() == 3) {
+						CHECK((uniforms[0].binding == 0 && uniforms[0].type == UNIFORM_TYPE_STORAGE_BUFFER && uniforms[0].ids.size() == 1 && uniforms[0].ids[0].id == 701));
+						CHECK((uniforms[1].binding == 1 && uniforms[1].type == UNIFORM_TYPE_TEXTURE && uniforms[1].ids.size() == 1 && uniforms[1].ids[0].id == 720));
+						CHECK((uniforms[2].binding == 2 && uniforms[2].type == UNIFORM_TYPE_STORAGE_BUFFER && uniforms[2].ids.size() == 1 && uniforms[2].ids[0].id == 703));
+					}
 				}
 				++set_creates;
 				++multi_set_live;
@@ -5409,10 +5440,10 @@ struct Access {
 		CHECK_MESSAGE(test.passed, "BatchedSetCreate first failure line=", test.first_failure_line, ", last failure line=", test.last_failure_line, ", failed checks=", test.failure_count, ", final phase=", test.phase);
 		CHECK(test.setup.owner_cleaned);
 	}
-	static Error create_split_mixed_set1_unit(SingletonEnrollment &fixture, GDExtensionNativeUnitBackingV1 &unit, uint32_t p_storage_bytes) {
+	static Error create_split_mixed_set1_unit(SingletonEnrollment &fixture, GDExtensionNativeUnitBackingV1 &unit, uint32_t p_storage_bytes, bool p_triple = false) {
 		Ref<UnitContainer> container;
 		container.instantiate();
-		container->initialize_mixed_set1(p_storage_bytes);
+		container->initialize_mixed_set1(p_storage_bytes, p_triple);
 		const Vector<uint8_t> bytes = container->to_bytes();
 		if (!check_step(!bytes.is_empty())) {
 			return ERR_INVALID_DATA;
@@ -5441,7 +5472,9 @@ struct Access {
 		Semaphore owner_ready, rt_returned;
 		Error initialized = ERR_UNCONFIGURED, qualification_opened = ERR_UNCONFIGURED, unit_created = ERR_UNCONFIGURED;
 		Error closure_err = ERR_UNCONFIGURED;
+		bool use_triple = false;
 		bool set1_writable_only_trailing = false;
+		bool normal_request_armed = false;
 		GDExtensionNativeUnitBackingV1 unit = {};
 		GDExtensionNativeUnitRetireRefV1 unit_retired = {};
 		RendererRD::ParticlesCollisionSceneRD collision_scene;
@@ -5470,6 +5503,7 @@ struct Access {
 			auto &registry = fixture.registry;
 			using namespace GDExtensionDeviceExit;
 			fixture.driver.mixed_set1_mode = true;
+			fixture.driver.mixed_set1_triple = test.use_triple;
 			OrdinalPlan plan;
 			plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 1, 5, 8, 1, 64, 1, 5, 32, 32 };
 			plan.attachment_requests = 1;
@@ -5550,27 +5584,31 @@ struct Access {
 			std::memcpy(&jump_bits, &jump_m, sizeof(float));
 			const uint64_t packed_sd = (uint64_t(slab_bits) << 32u) | uint64_t(jump_bits);
 
-			// Negative MT validation checks for BUG-59 mixed Set 1:
-			// 1. Trailing SSBO colliding with depth pair binding (binding=1 < 2*1) -> ERR_INVALID_DATA.
+			const uint32_t sd_slot_kind = test.use_triple ? SCENE_DEPTH_SNAPSHOT_TRIPLE_RESOURCE_SLOT : SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT;
+			const uint32_t sd_trailing_binding = test.use_triple ? 3u : 2u;
+			const uint64_t sd_viewport_rid = test.use_triple ? 0x23C99ull : 0ull;
+
+			// Negative MT validation checks for BUG-59 / GAP-23C mixed Set 1:
+			// 1. Trailing SSBO colliding with depth pair/triple binding (binding < stride) -> ERR_INVALID_DATA.
 			const GDExtensionProductionSetBindingV1 bad_overlap[2] = {
-				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, 0, 0, SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT, 0, packed_sd },
-				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, 1, 0, 2, 0, 16u },
+				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, 0, 0, sd_slot_kind, sd_viewport_rid, packed_sd },
+				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, sd_trailing_binding - 1u, 0, 2, 0, 16u },
 			};
 			test.check(__LINE__, registry.production_set_create(ref, 4, 0, 1, bad_overlap, 2).native_error == ERR_INVALID_DATA);
 
 			// 2. Interleaved sentinel after trailing SSBO -> ERR_INVALID_DATA.
 			const GDExtensionProductionSetBindingV1 bad_interleaved[3] = {
-				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, 0, 0, SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT, 0, packed_sd },
-				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, 2, 0, 2, 0, 16u },
-				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, 4, 0, SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT, 0, packed_sd },
+				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, 0, 0, sd_slot_kind, sd_viewport_rid, packed_sd },
+				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, sd_trailing_binding, 0, 2, 0, 16u },
+				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, sd_trailing_binding + 2u, 0, sd_slot_kind, sd_viewport_rid, packed_sd },
 			};
 			test.check(__LINE__, registry.production_set_create(ref, 4, 0, 1, bad_interleaved, 3).native_error == ERR_INVALID_DATA);
 
-			// Create Set 0 (SSBO slot 1 at binding 0) + mixed Set 1 (depth pair at binding 0 + trailing writable SSBO slot 2 at binding 2) in one batched RT turn!
+			// Create Set 0 (SSBO slot 1 at binding 0) + mixed Set 1 (depth pair/triple at binding 0 + trailing writable SSBO slot 2) in one batched RT turn!
 			const GDExtensionProductionSetBindingV1 set0_binding = { production_dto_abi<GDExtensionProductionSetBindingV1>(), 0, 0, 0, 1, 0, 16u };
 			const GDExtensionProductionSetBindingV1 set1_bindings[2] = {
-				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, 0, 0, SCENE_DEPTH_SNAPSHOT_PAIR_RESOURCE_SLOT, 0, packed_sd },
-				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, 2, 0, 2, 0, 16u },
+				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, 0, 0, sd_slot_kind, sd_viewport_rid, packed_sd },
+				{ production_dto_abi<GDExtensionProductionSetBindingV1>(), 1, sd_trailing_binding, 0, 2, 0, 16u },
 			};
 			test.check(__LINE__, registry.production_set_create(ref, 3, 0, 0, &set0_binding, 1).native_error == ERR_BUSY);
 			test.check(__LINE__, registry.production_set_create(ref, 4, 0, 1, set1_bindings, 2).native_error == ERR_BUSY);
@@ -5585,7 +5623,7 @@ struct Access {
 			const GDExtensionProductionDispatchV2 dispatch = { production_dto_abi<GDExtensionProductionDispatchV2>(), 0, 10, 0, 0, 0, 3, 2, 1, 1, 1, 0, 0 };
 			test.check(__LINE__, registry.production_prepare_dispatch_v2(ref, &dispatch, nullptr, 0).native_error == OK);
 			test.rendezvous(3); // RT runs production_dispatch_closure_locked + verifies writable_resources.
-			test.check(__LINE__, test.closure_err == OK && test.set1_writable_only_trailing);
+			test.check(__LINE__, test.closure_err == OK && test.set1_writable_only_trailing && (!test.use_triple || test.normal_request_armed));
 
 			// Cancel, retire both storages (freeing both sets + releasing the scene-depth lease), and release request cleanly.
 			test.check(__LINE__, registry.production_cancel(ref).native_error == OK);
@@ -5637,13 +5675,14 @@ struct Access {
 			test.owner_ready.post();
 		}
 	};
-	static void singleton_mixed_set1_scene_depth_and_storage() {
+	static void singleton_mixed_set1_scene_depth_and_storage(bool p_triple = false) {
 		auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
 		if (!check_step(server && !server->create_thread && server->server_thread == Thread::get_caller_id() && !RenderingDevice::get_singleton())) {
 			return;
 		}
 		server->sync();
 		MixedSet1SceneDepthAndStorage test;
+		test.use_triple = p_triple;
 		test.setup.server = server;
 		Thread owner;
 		owner.start(&split_owner_start<MixedSet1SceneDepthAndStorage>, &test);
@@ -5690,7 +5729,7 @@ struct Access {
 				GDExtensionSceneOpaque32V1 dev_cap = {};
 				dev_cap.bytes[0] = 0x59u;
 				test.collision_scene.initialize(&fixture.rd, dev_cap);
-				test.unit_created = create_split_mixed_set1_unit(fixture, test.unit, 16u);
+				test.unit_created = create_split_mixed_set1_unit(fixture, test.unit, 16u, test.use_triple);
 			} else if (test.phase == 3) {
 				MutexLock lock(fixture.registry.mutex);
 				auto &req = *fixture.request;
@@ -5698,10 +5737,16 @@ struct Access {
 				const auto *set1 = fixture.rd.uniform_set_owner.get_or_null(req.resources[4].primary);
 				const auto *lease = static_cast<const RendererRD::ParticlesCollisionSceneRD::DepthReadLease *>(req.resources[4].scene_depth_leases[0].ptr());
 				const Ref<RendererRD::ParticlesCollisionSceneRD::DepthSnapshotGeneration> gen = lease ? lease->get_generation() : Ref<RendererRD::ParticlesCollisionSceneRD::DepthSnapshotGeneration>();
+				const RID normal_rid = req.resources[4].scene_depth_normal_textures[0];
 				test.set1_writable_only_trailing = set1 != nullptr && gen.is_valid() &&
 						set1->writable_resources.has(req.resources[2].primary) &&
 						!set1->writable_resources.has(gen->meta_buffer) &&
-						!set1->writable_resources.has(gen->depth_texture);
+						!set1->writable_resources.has(gen->depth_texture) &&
+						(!test.use_triple || (normal_rid.is_valid() && !set1->writable_resources.has(normal_rid) &&
+													 (gen->meta.flags & RendererRD::SceneDepthSnapshotMeta256::FLAG_HAS_NORMAL_BUFFER) == 0u));
+				if (test.use_triple) {
+					test.normal_request_armed = test.collision_scene.has_pending_depth_snapshot_normal_request(RID::from_uint64(0x23C99ull), 0u);
+				}
 				for (RD::TransferWorker *tw : fixture.rd.transfer_worker_pool) {
 					tw->operations_processed = tw->operations_counter;
 					tw->recording = false;
@@ -24220,7 +24265,11 @@ TEST_CASE("[SceneTree][ProductionRequest][BatchedSetCreate] separate-RT batched 
 }
 
 TEST_CASE("[SceneTree][ProductionRequest][MixedSet1][BUG-59] Set 1 combines leading scene-depth sentinel pairs with trailing writable SSBOs through create and dispatch closure") {
-	TestProductionRequest::Access::singleton_mixed_set1_scene_depth_and_storage();
+	TestProductionRequest::Access::singleton_mixed_set1_scene_depth_and_storage(false);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][MixedSet1][GAP-23C] Set 1 SCENE_DEPTH_SNAPSHOT_TRIPLE_RESOURCE_SLOT 3-binding validation and dummy normal fallback") {
+	TestProductionRequest::Access::singleton_mixed_set1_scene_depth_and_storage(true);
 }
 
 TEST_CASE("[ProductionRequest][BUG-76] virtual zero-paged arena lazily constructs cell pools via HWM, lazy MQ state, and interval-tracked natives") {

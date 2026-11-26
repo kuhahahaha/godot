@@ -264,7 +264,8 @@ ParticlesCollisionSceneRD::DepthSnapshotGeneration::~DepthSnapshotGeneration() {
 Error ParticlesCollisionSceneRD::DepthSnapshotGeneration::allocate_gpu_resources(
 		uint32_t p_tex_width,
 		uint32_t p_tex_height,
-		bool p_simulate_fb_fail) {
+		bool p_simulate_fb_fail,
+		bool p_want_normal) {
 	if (!rd || p_tex_width == 0u || p_tex_height == 0u || p_tex_width > 16384u || p_tex_height > 16384u) {
 		return ERR_INVALID_PARAMETER;
 	}
@@ -329,6 +330,52 @@ Error ParticlesCollisionSceneRD::DepthSnapshotGeneration::allocate_gpu_resources
 		live_rids->increment();
 	}
 
+	if (p_want_normal) {
+		RD::TextureFormat ntf;
+		ntf.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
+		ntf.width = p_tex_width;
+		ntf.height = p_tex_height;
+		ntf.depth = 1u;
+		ntf.array_layers = 1u;
+		ntf.mipmaps = 1u;
+		ntf.texture_type = RD::TEXTURE_TYPE_2D;
+		ntf.samples = RD::TEXTURE_SAMPLES_1;
+		ntf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT |
+				RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT |
+				RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT |
+				RD::TEXTURE_USAGE_CAN_COPY_TO_BIT;
+
+		Vector<Vector<uint8_t>> normal_init_data;
+		if (p_tex_width == 1u && p_tex_height == 1u) {
+			Vector<uint8_t> neutral_texel;
+			neutral_texel.resize(4);
+			neutral_texel.write[0] = 128u;
+			neutral_texel.write[1] = 128u;
+			neutral_texel.write[2] = 255u;
+			neutral_texel.write[3] = 0u;
+			normal_init_data.push_back(neutral_texel);
+		}
+		normal_texture = rd->texture_create(ntf, RD::TextureView(), normal_init_data);
+		if (normal_texture.is_null()) {
+			release_gpu_resources();
+			return ERR_CANT_CREATE;
+		}
+		if (live_rids) {
+			live_rids->increment();
+		}
+
+		Vector<RID> normal_fb_attachments;
+		normal_fb_attachments.push_back(normal_texture);
+		normal_framebuffer_rid = rd->framebuffer_create(normal_fb_attachments);
+		if (normal_framebuffer_rid.is_null()) {
+			release_gpu_resources();
+			return ERR_CANT_CREATE;
+		}
+		if (live_rids) {
+			live_rids->increment();
+		}
+	}
+
 	texture_width = p_tex_width;
 	texture_height = p_tex_height;
 	return OK;
@@ -353,19 +400,23 @@ static bool is_on_device_owner_thread(const RenderingDevice *p_rd, const Particl
 }
 
 void ParticlesCollisionSceneRD::DepthSnapshotGeneration::release_gpu_resources() {
-	if (!framebuffer_rid.is_valid() && !depth_texture.is_valid() && !meta_buffer.is_valid()) {
+	if (!framebuffer_rid.is_valid() && !depth_texture.is_valid() &&
+			!normal_framebuffer_rid.is_valid() && !normal_texture.is_valid() &&
+			!meta_buffer.is_valid()) {
 		return;
 	}
 	RenderingDevice *live_rd = device_guard.is_valid() ? device_guard->get_device() : rd;
 	if (!live_rd) {
 		framebuffer_rid = RID();
 		depth_texture = RID();
+		normal_framebuffer_rid = RID();
+		normal_texture = RID();
 		meta_buffer = RID();
 		return;
 	}
 	ERR_FAIL_COND_MSG(!is_on_device_owner_thread(live_rd, device_guard.ptr()),
 			"ParticlesCollisionSceneRD::DepthSnapshotGeneration::release_gpu_resources must run on the owning render thread.");
-	// Strict RD disposal order: free framebuffer_rid BEFORE depth_texture and meta_buffer.
+	// Strict RD disposal order: free framebuffers BEFORE their attached textures and meta_buffer.
 	if (framebuffer_rid.is_valid()) {
 		const bool tex_still_live = depth_texture.is_valid() && live_rd->texture_is_valid(depth_texture);
 		live_rd->free_rid(framebuffer_rid);
@@ -380,6 +431,29 @@ void ParticlesCollisionSceneRD::DepthSnapshotGeneration::release_gpu_resources()
 	if (depth_texture.is_valid()) {
 		live_rd->free_rid(depth_texture);
 		depth_texture = RID();
+		if (live_rids) {
+			live_rids->decrement();
+		}
+	}
+	if (normal_framebuffer_rid.is_valid()) {
+		const bool normal_tex_still_live = normal_texture.is_valid() && live_rd->texture_is_valid(normal_texture);
+		live_rd->free_rid(normal_framebuffer_rid);
+		normal_framebuffer_rid = RID();
+		if (live_rids) {
+			live_rids->decrement();
+		}
+		if (normal_tex_still_live) {
+			if (fb_first_frees) {
+				fb_first_frees->increment();
+			}
+			if (normal_fb_first_frees) {
+				normal_fb_first_frees->increment();
+			}
+		}
+	}
+	if (normal_texture.is_valid()) {
+		live_rd->free_rid(normal_texture);
+		normal_texture = RID();
 		if (live_rids) {
 			live_rids->decrement();
 		}
@@ -515,6 +589,7 @@ void ParticlesCollisionSceneRD::shutdown() {
 	Ref<LiveDeviceGuard> guard_to_retire;
 	RenderingDevice *rd_to_clean = nullptr;
 	StandaloneNearestCopyPipeline copy_to_clean;
+	RID dummy_normal_to_clean;
 	{
 		MutexLock lock(snapshot_mutex);
 		snap_to_drop = current_sphere_snapshot;
@@ -523,6 +598,8 @@ void ParticlesCollisionSceneRD::shutdown() {
 			depth_to_drop.push_back(shared_null_viewport_sentinel);
 			shared_null_viewport_sentinel.unref();
 		}
+		dummy_normal_to_clean = dummy_normal_texture;
+		dummy_normal_texture = RID();
 		for (KeyValue<uint64_t, ViewportDepthSlot> &kv : depth_snapshots_by_viewport) {
 			if (kv.value.current_snapshot.is_valid()) {
 				depth_to_drop.push_back(kv.value.current_snapshot);
@@ -558,6 +635,16 @@ void ParticlesCollisionSceneRD::shutdown() {
 			depth_to_drop[i]->release_gpu_resources();
 		}
 		if (rd_to_clean) {
+			if (dummy_normal_to_clean.is_valid()) {
+				rd_to_clean->free_rid(dummy_normal_to_clean);
+				live_rid_counter.decrement();
+			}
+			if (copy_to_clean.normal_pipeline.is_valid()) {
+				rd_to_clean->free_rid(copy_to_clean.normal_pipeline);
+			}
+			if (copy_to_clean.normal_shader.is_valid()) {
+				rd_to_clean->free_rid(copy_to_clean.normal_shader);
+			}
 			if (copy_to_clean.pipeline.is_valid()) {
 				rd_to_clean->free_rid(copy_to_clean.pipeline);
 			}
@@ -626,7 +713,8 @@ void ParticlesCollisionSceneRD::reap_retired_depth_snapshots() {
 Error ParticlesCollisionSceneRD::request_viewport_depth_snapshot(
 		RID p_viewport,
 		float p_slab_thickness_m,
-		float p_silhouette_jump_m) {
+		float p_silhouette_jump_m,
+		bool p_want_normal) {
 	if (p_viewport.is_null() || !Math::is_finite(p_slab_thickness_m) || !Math::is_finite(p_silhouette_jump_m) ||
 			p_slab_thickness_m < 0.0f || p_silhouette_jump_m < 0.0f) {
 		return ERR_INVALID_PARAMETER;
@@ -640,6 +728,9 @@ Error ParticlesCollisionSceneRD::request_viewport_depth_snapshot(
 	slot.default_slab_thickness_m = (p_slab_thickness_m > 0.0f) ? p_slab_thickness_m : 0.50f;
 	slot.default_silhouette_jump_m = (p_silhouette_jump_m > 0.0f) ? p_silhouette_jump_m : 0.50f;
 	slot.pending_capture = true;
+	if (p_want_normal) {
+		slot.wants_normal_buffer = true;
+	}
 	if (slot.render_target.is_null() && is_on_device_owner_thread(device, live_device_guard.ptr()) &&
 			RSG::viewport != nullptr && RSG::viewport->viewport_owner.owns(p_viewport)) {
 		slot.render_target = RSG::viewport->viewport_get_render_target(p_viewport);
@@ -658,6 +749,71 @@ bool ParticlesCollisionSceneRD::has_pending_depth_snapshot_request(RID p_viewpor
 	}
 	const ViewportDepthSlot *slot = depth_snapshots_by_viewport.getptr(p_viewport.get_id());
 	return slot != nullptr && slot->pending_capture;
+}
+
+bool ParticlesCollisionSceneRD::has_pending_depth_snapshot_normal_request(RID p_viewport, uint64_t p_frame_number) const {
+	(void)p_frame_number;
+	if (p_viewport.is_null()) {
+		return false;
+	}
+	MutexLock lock(snapshot_mutex);
+	if (!device) {
+		return false;
+	}
+	const ViewportDepthSlot *slot = depth_snapshots_by_viewport.getptr(p_viewport.get_id());
+	return slot != nullptr && slot->pending_capture && slot->wants_normal_buffer;
+}
+
+RID ParticlesCollisionSceneRD::ensure_dummy_normal_texture_locked() {
+	if (dummy_normal_texture.is_valid()) {
+		return dummy_normal_texture;
+	}
+	if (!device || !is_on_device_owner_thread(device, live_device_guard.ptr())) {
+		return RID();
+	}
+	RD::TextureFormat tf;
+	tf.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
+	tf.width = 1u;
+	tf.height = 1u;
+	tf.depth = 1u;
+	tf.array_layers = 1u;
+	tf.mipmaps = 1u;
+	tf.texture_type = RD::TEXTURE_TYPE_2D;
+	tf.samples = RD::TEXTURE_SAMPLES_1;
+	tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
+	Vector<uint8_t> init_texel;
+	init_texel.resize(4);
+	// Neutral view-space +Z normal (0.5, 0.5, 1.0) and roughness 0.0.
+	init_texel.write[0] = 128u;
+	init_texel.write[1] = 128u;
+	init_texel.write[2] = 255u;
+	init_texel.write[3] = 0u;
+	Vector<Vector<uint8_t>> init_data;
+	init_data.push_back(init_texel);
+	dummy_normal_texture = device->texture_create(tf, RD::TextureView(), init_data);
+	if (dummy_normal_texture.is_valid()) {
+		live_rid_counter.increment();
+	}
+	return dummy_normal_texture;
+}
+
+RID ParticlesCollisionSceneRD::get_depth_snapshot_normal_texture(const Ref<DepthSnapshotGeneration> &p_gen) {
+	if (p_gen.is_valid() && p_gen->normal_texture.is_valid()) {
+		return p_gen->normal_texture;
+	}
+	MutexLock lock(snapshot_mutex);
+	return ensure_dummy_normal_texture_locked();
+}
+
+RID ParticlesCollisionSceneRD::get_depth_snapshot_normal_texture(RID p_viewport) {
+	MutexLock lock(snapshot_mutex);
+	if (p_viewport.is_valid()) {
+		const ViewportDepthSlot *slot = depth_snapshots_by_viewport.getptr(p_viewport.get_id());
+		if (slot && slot->current_snapshot.is_valid() && slot->current_snapshot->normal_texture.is_valid()) {
+			return slot->current_snapshot->normal_texture;
+		}
+	}
+	return ensure_dummy_normal_texture_locked();
 }
 
 RID ParticlesCollisionSceneRD::find_viewport_by_render_target(RID p_render_target) {
@@ -784,7 +940,8 @@ Error ParticlesCollisionSceneRD::acquire_depth_snapshot_read_lease(
 		float p_silhouette_jump_m,
 		Ref<DepthReadLease> &r_lease,
 		GDExtensionSceneOpaque32V1 &r_sample_token,
-		const GDExtensionSceneOpaque32V1 *p_expected_device_override) {
+		const GDExtensionSceneOpaque32V1 *p_expected_device_override,
+		bool p_want_normal) {
 	r_lease.unref();
 	r_sample_token = {};
 	if (!Math::is_finite(p_slab_thickness_m) || !Math::is_finite(p_silhouette_jump_m) ||
@@ -815,6 +972,7 @@ Error ParticlesCollisionSceneRD::acquire_depth_snapshot_read_lease(
 				sentinel->device_guard = live_device_guard;
 				sentinel->live_rids = &live_rid_counter;
 				sentinel->fb_first_frees = &fb_first_free_counter;
+				sentinel->normal_fb_first_frees = &normal_fb_first_free_counter;
 				sentinel->meta = SceneDepthSnapshotMeta256();
 				sentinel->meta.magic = SceneDepthSnapshotMeta256::MAGIC;
 				sentinel->meta.version = SceneDepthSnapshotMeta256::VERSION;
@@ -843,6 +1001,9 @@ Error ParticlesCollisionSceneRD::acquire_depth_snapshot_read_lease(
 			slot.default_slab_thickness_m = p_slab_thickness_m;
 			slot.default_silhouette_jump_m = p_silhouette_jump_m;
 			slot.pending_capture = true;
+			if (p_want_normal) {
+				slot.wants_normal_buffer = true;
+			}
 			if (slot.render_target.is_null() && RSG::viewport != nullptr && RSG::viewport->viewport_owner.owns(p_viewport)) {
 				slot.render_target = RSG::viewport->viewport_get_render_target(p_viewport);
 			}
@@ -856,6 +1017,7 @@ Error ParticlesCollisionSceneRD::acquire_depth_snapshot_read_lease(
 					sentinel->device_guard = live_device_guard;
 					sentinel->live_rids = &live_rid_counter;
 					sentinel->fb_first_frees = &fb_first_free_counter;
+					sentinel->normal_fb_first_frees = &normal_fb_first_free_counter;
 					sentinel->meta = SceneDepthSnapshotMeta256();
 					sentinel->meta.magic = SceneDepthSnapshotMeta256::MAGIC;
 					sentinel->meta.version = SceneDepthSnapshotMeta256::VERSION;
@@ -916,7 +1078,8 @@ Error ParticlesCollisionSceneRD::prepare_viewport_depth_snapshot_target(
 		uint32_t p_width,
 		uint32_t p_height,
 		RID p_render_target,
-		Ref<DepthSnapshotGeneration> &r_target_gen) {
+		Ref<DepthSnapshotGeneration> &r_target_gen,
+		bool p_allow_normal_buffer) {
 	r_target_gen.unref();
 	if (p_viewport.is_null() || p_width < 2u || p_height < 2u || p_width > 16384u || p_height > 16384u) {
 		return ERR_INVALID_PARAMETER;
@@ -940,12 +1103,17 @@ Error ParticlesCollisionSceneRD::prepare_viewport_depth_snapshot_target(
 			slot.render_target = p_render_target;
 		}
 
+		const bool want_normal = p_allow_normal_buffer && slot.wants_normal_buffer;
 		const bool sim_fail = (simulate_fb_fail_once.get() != 0u);
-		if (!sim_fail && slot.current_snapshot.is_valid() &&
+		const bool can_reuse_existing = !sim_fail && slot.current_snapshot.is_valid() &&
 				slot.current_snapshot->active_leases.get() == 0u &&
 				slot.current_snapshot->texture_width == p_width &&
 				slot.current_snapshot->texture_height == p_height &&
-				slot.current_snapshot->framebuffer_rid.is_valid()) {
+				slot.current_snapshot->framebuffer_rid.is_valid() &&
+				(want_normal
+						? (slot.current_snapshot->normal_texture.is_valid() && slot.current_snapshot->normal_framebuffer_rid.is_valid())
+						: (!slot.current_snapshot->normal_texture.is_valid() && !slot.current_snapshot->normal_framebuffer_rid.is_valid()));
+		if (can_reuse_existing) {
 			r_target_gen = slot.current_snapshot;
 		} else {
 			if (sim_fail) {
@@ -957,11 +1125,12 @@ Error ParticlesCollisionSceneRD::prepare_viewport_depth_snapshot_target(
 			next_gen->device_guard = live_device_guard;
 			next_gen->live_rids = &live_rid_counter;
 			next_gen->fb_first_frees = &fb_first_free_counter;
+			next_gen->normal_fb_first_frees = &normal_fb_first_free_counter;
 			next_gen->meta = SceneDepthSnapshotMeta256();
 			next_gen->meta.view_id = p_viewport.get_id();
 			next_gen->meta.slab_thickness_m = slot.default_slab_thickness_m;
 			next_gen->meta.silhouette_jump_m = slot.default_silhouette_jump_m;
-			result_err = next_gen->allocate_gpu_resources(p_width, p_height, sim_fail);
+			result_err = next_gen->allocate_gpu_resources(p_width, p_height, sim_fail, want_normal);
 			if (result_err == OK) {
 				r_target_gen = next_gen;
 			}
@@ -982,7 +1151,8 @@ Error ParticlesCollisionSceneRD::finalize_viewport_depth_snapshot_target(
 		float p_z_near,
 		float p_z_far,
 		uint64_t p_frame_number,
-		RID p_render_target) {
+		RID p_render_target,
+		bool p_has_normal_buffer) {
 	if (p_viewport.is_null() || p_target_gen.is_null()) {
 		return ERR_INVALID_PARAMETER;
 	}
@@ -1018,6 +1188,8 @@ Error ParticlesCollisionSceneRD::finalize_viewport_depth_snapshot_target(
 		if ((meta.flags & SceneDepthSnapshotMeta256::FLAG_PRESENT) == 0u) {
 			meta.width = 0u;
 			meta.height = 0u;
+		} else if (p_has_normal_buffer && p_target_gen->normal_texture.is_valid()) {
+			meta.flags |= SceneDepthSnapshotMeta256::FLAG_HAS_NORMAL_BUFFER;
 		}
 
 		p_target_gen->meta = meta;
@@ -1042,6 +1214,7 @@ Error ParticlesCollisionSceneRD::finalize_viewport_depth_snapshot_target(
 			slot.last_captured_frame = p_frame_number;
 			slot.has_captured_frame = true;
 			slot.pending_capture = false;
+			slot.wants_normal_buffer = false;
 		}
 	}
 
@@ -1123,6 +1296,78 @@ Error ParticlesCollisionSceneRD::ensure_standalone_nearest_copy_pipeline(Renderi
 	return standalone_copy.pipeline.is_valid() ? OK : ERR_CANT_CREATE;
 }
 
+Error ParticlesCollisionSceneRD::ensure_standalone_normal_copy_pipeline(RenderingDevice *p_rd, int64_t p_fb_format) {
+	if (!p_rd) {
+		return ERR_UNAVAILABLE;
+	}
+	if (standalone_copy.normal_pipeline.is_valid() && standalone_copy.normal_shader.is_valid() && standalone_copy.sampler.is_valid()) {
+		return OK;
+	}
+	if (standalone_copy.sampler.is_null()) {
+		RD::SamplerState samp;
+		samp.mag_filter = RD::SAMPLER_FILTER_NEAREST;
+		samp.min_filter = RD::SAMPLER_FILTER_NEAREST;
+		samp.mip_filter = RD::SAMPLER_FILTER_NEAREST;
+		samp.repeat_u = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+		samp.repeat_v = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+		samp.repeat_w = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+		standalone_copy.sampler = p_rd->sampler_create(samp);
+		if (standalone_copy.sampler.is_null()) {
+			return ERR_CANT_CREATE;
+		}
+	}
+	if (standalone_copy.normal_shader.is_null()) {
+		static constexpr const char *kVertGlsl =
+				"#version 450\n"
+				"layout(location = 0) out vec2 v_uv;\n"
+				"void main() {\n"
+				"	vec2 pos = (gl_VertexIndex == 0) ? vec2(-1.0, -1.0) : ((gl_VertexIndex == 1) ? vec2(3.0, -1.0) : vec2(-1.0, 3.0));\n"
+				"	v_uv = pos * 0.5 + 0.5;\n"
+				"	gl_Position = vec4(pos, 0.0, 1.0);\n"
+				"}\n";
+		static constexpr const char *kFragGlsl =
+				"#version 450\n"
+				"layout(location = 0) in vec2 v_uv;\n"
+				"layout(set = 0, binding = 0) uniform sampler2D u_src_normal;\n"
+				"layout(location = 0) out vec4 o_normal;\n"
+				"void main() {\n"
+				"	o_normal = textureLod(u_src_normal, v_uv, 0.0);\n"
+				"}\n";
+		String err_msg;
+		RD::ShaderStageSPIRVData vs;
+		vs.shader_stage = RD::SHADER_STAGE_VERTEX;
+		vs.spirv = p_rd->shader_compile_spirv_from_source(RD::SHADER_STAGE_VERTEX, String::utf8(kVertGlsl), RD::SHADER_LANGUAGE_GLSL, &err_msg, false);
+		if (vs.spirv.is_empty()) {
+			return ERR_COMPILATION_FAILED;
+		}
+		RD::ShaderStageSPIRVData fs;
+		fs.shader_stage = RD::SHADER_STAGE_FRAGMENT;
+		fs.spirv = p_rd->shader_compile_spirv_from_source(RD::SHADER_STAGE_FRAGMENT, String::utf8(kFragGlsl), RD::SHADER_LANGUAGE_GLSL, &err_msg, false);
+		if (fs.spirv.is_empty()) {
+			return ERR_COMPILATION_FAILED;
+		}
+		Vector<RD::ShaderStageSPIRVData> stages;
+		stages.push_back(vs);
+		stages.push_back(fs);
+		standalone_copy.normal_shader = p_rd->shader_create_from_spirv(stages);
+		if (standalone_copy.normal_shader.is_null()) {
+			return ERR_CANT_CREATE;
+		}
+	}
+	RD::PipelineColorBlendState bs;
+	bs.attachments.push_back(RD::PipelineColorBlendState::Attachment());
+	standalone_copy.normal_pipeline = p_rd->render_pipeline_create(
+			standalone_copy.normal_shader,
+			p_fb_format,
+			RD::INVALID_ID,
+			RD::RENDER_PRIMITIVE_TRIANGLES,
+			RD::PipelineRasterizationState(),
+			RD::PipelineMultisampleState(),
+			RD::PipelineDepthStencilState(),
+			bs);
+	return standalone_copy.normal_pipeline.is_valid() ? OK : ERR_CANT_CREATE;
+}
+
 Error ParticlesCollisionSceneRD::capture_viewport_depth_snapshot(
 		RID p_viewport,
 		RID p_src_depth_texture,
@@ -1135,7 +1380,8 @@ Error ParticlesCollisionSceneRD::capture_viewport_depth_snapshot(
 		uint64_t p_frame_number,
 		RID p_render_target,
 		uint32_t p_view_count,
-		bool p_is_reflection_probe) {
+		bool p_is_reflection_probe,
+		RID p_src_normal_texture) {
 	RenderingDevice *live_rd = nullptr;
 	{
 		MutexLock lock(snapshot_mutex);
@@ -1155,7 +1401,8 @@ Error ParticlesCollisionSceneRD::capture_viewport_depth_snapshot(
 	}
 
 	Ref<DepthSnapshotGeneration> target_gen;
-	Error err = prepare_viewport_depth_snapshot_target(p_viewport, p_width, p_height, p_render_target, target_gen);
+	Error err = prepare_viewport_depth_snapshot_target(
+			p_viewport, p_width, p_height, p_render_target, target_gen, p_src_normal_texture.is_valid());
 	if (err != OK) {
 		return err;
 	}
@@ -1212,8 +1459,37 @@ Error ParticlesCollisionSceneRD::capture_viewport_depth_snapshot(
 		live_rd->free_rid(temp_slice);
 	}
 
+	bool has_normal_buffer = false;
+	if (p_src_normal_texture.is_valid() && target_gen->normal_framebuffer_rid.is_valid()) {
+		{
+			MutexLock lock(snapshot_mutex);
+			err = ensure_standalone_normal_copy_pipeline(live_rd, live_rd->framebuffer_get_format(target_gen->normal_framebuffer_rid));
+		}
+		if (err != OK) {
+			return err;
+		}
+		RD::Uniform u_nsrc;
+		u_nsrc.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u_nsrc.binding = 0;
+		u_nsrc.append_id(standalone_copy.sampler);
+		u_nsrc.append_id(p_src_normal_texture);
+		Vector<RD::Uniform> n_uniforms;
+		n_uniforms.push_back(u_nsrc);
+		const RID n_uset = live_rd->uniform_set_create(n_uniforms, standalone_copy.normal_shader, 0u);
+		if (n_uset.is_null()) {
+			return ERR_CANT_CREATE;
+		}
+		const RD::DrawListID ndl = live_rd->draw_list_begin(target_gen->normal_framebuffer_rid, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 1.0f, 0u, Rect2i(0, 0, int(p_width), int(p_height)));
+		live_rd->draw_list_bind_render_pipeline(ndl, standalone_copy.normal_pipeline);
+		live_rd->draw_list_bind_uniform_set(ndl, n_uset, 0u);
+		live_rd->draw_list_draw(ndl, false, 1u, 3u);
+		live_rd->draw_list_end();
+		live_rd->free_rid(n_uset);
+		has_normal_buffer = true;
+	}
+
 	return finalize_viewport_depth_snapshot_target(
-			p_viewport, target_gen, p_cam_transform, p_cam_projection, p_z_near, p_z_far, p_frame_number, p_render_target);
+			p_viewport, target_gen, p_cam_transform, p_cam_projection, p_z_near, p_z_far, p_frame_number, p_render_target, has_normal_buffer);
 }
 
 void ParticlesCollisionSceneRD::invalidate_viewport_depth_snapshot(RID p_viewport, bool p_preserve_armed_request) {
@@ -1865,6 +2141,31 @@ CollisionContactResult ParticlesCollisionSceneRD::evaluate_sdf_3d_collision(
 	return out;
 }
 
+bool ParticlesCollisionSceneRD::validate_scene_depth_snapshot_meta_v2(const SceneDepthSnapshotMeta256 &p_meta) {
+	if (p_meta.magic != SceneDepthSnapshotMeta256::MAGIC ||
+			p_meta.version != SceneDepthSnapshotMeta256::VERSION ||
+			(p_meta.flags & ~SceneDepthSnapshotMeta256::VALID_FLAGS_MASK) != 0u ||
+			p_meta.width > 16384u || p_meta.height > 16384u ||
+			!Math::is_finite(p_meta.z_near) || !(p_meta.z_near > 0.0f) ||
+			!Math::is_finite(p_meta.slab_thickness_m) || !(p_meta.slab_thickness_m >= 0.0f) ||
+			!Math::is_finite(p_meta.silhouette_jump_m) || !(p_meta.silhouette_jump_m >= 0.0f)) {
+		return false;
+	}
+	if ((p_meta.flags & SceneDepthSnapshotMeta256::FLAG_PRESENT) != 0u) {
+		if (p_meta.width < 2u || p_meta.height < 2u) {
+			return false;
+		}
+		for (int i = 0; i < 16; ++i) {
+			if (!Math::is_finite(p_meta.world_to_clip[i]) ||
+					!Math::is_finite(p_meta.clip_to_world[i]) ||
+					!Math::is_finite(p_meta.view_to_world[i])) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
 void ParticlesCollisionSceneRD::fill_depth_snapshot_matrices(
 		const Transform3D &p_cam_transform,
 		const Projection &p_cam_projection,
@@ -1977,7 +2278,7 @@ CollisionContactResult ParticlesCollisionSceneRD::evaluate_depth_snapshot_v2_col
 
 	if (p_meta.magic != SceneDepthSnapshotMeta256::MAGIC ||
 			p_meta.version != SceneDepthSnapshotMeta256::VERSION ||
-			(p_meta.flags & ~3u) != 0u ||
+			(p_meta.flags & ~SceneDepthSnapshotMeta256::VALID_FLAGS_MASK) != 0u ||
 			(p_meta.flags & SceneDepthSnapshotMeta256::FLAG_PRESENT) == 0u ||
 			p_meta.width < 2u || p_meta.height < 2u ||
 			p_meta.width > 16384u || p_meta.height > 16384u ||

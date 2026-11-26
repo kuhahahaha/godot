@@ -4406,6 +4406,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 				for (uint32_t d = 0; d < count; ++d) {
 					returning[d] = slot.scene_depth_leases[d];
 					slot.scene_depth_leases[d].unref();
+					slot.scene_depth_normal_textures[d] = RID();
 				}
 				slot.scene_depth_lease_count = 0;
 				++r->capture_inflight;
@@ -4434,6 +4435,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 		for (uint32_t d = 0; d < count; ++d) {
 			returning[d] = slot.scene_depth_leases[d];
 			slot.scene_depth_leases[d].unref();
+			slot.scene_depth_normal_textures[d] = RID();
 		}
 		slot.scene_depth_lease_count = 0;
 		++r->capture_inflight;

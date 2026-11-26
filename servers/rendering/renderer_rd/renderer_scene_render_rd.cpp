@@ -2150,13 +2150,17 @@ void RendererSceneRenderRD::capture_particle_scene_depth_snapshot(RD *p_rd, cons
 		src_depth_view = cached_particle_depth_slice.slice_texture;
 	}
 
+	const bool wants_normal = collision_scene->has_pending_depth_snapshot_normal_request(viewport, frame_number);
+	const RID src_normal = wants_normal ? _render_buffers_get_normal_texture(rb) : RID();
+
 	Ref<RendererRD::ParticlesCollisionSceneRD::DepthSnapshotGeneration> dst_gen;
 	if (collision_scene->prepare_viewport_depth_snapshot_target(
 				viewport,
 				uint32_t(internal_size.x),
 				uint32_t(internal_size.y),
 				rb->get_render_target(),
-				dst_gen) != OK ||
+				dst_gen,
+				src_normal.is_valid()) != OK ||
 			dst_gen.is_null()) {
 		return;
 	}
@@ -2178,6 +2182,27 @@ void RendererSceneRenderRD::capture_particle_scene_depth_snapshot(RD *p_rd, cons
 			1.0f,
 			/*p_bilinear_filtering=*/false);
 
+	bool has_normal_buffer = false;
+	if (src_normal.is_valid() && dst_gen->normal_framebuffer_rid.is_valid()) {
+		copy_effects->copy_to_fb_rect(
+				src_normal,
+				dst_gen->normal_framebuffer_rid,
+				Rect2i(0, 0, internal_size.x, internal_size.y),
+				false,
+				false,
+				false,
+				false,
+				RID(),
+				false,
+				false,
+				/*p_linear=*/false,
+				false,
+				Rect2(),
+				1.0f,
+				/*p_bilinear_filtering=*/false);
+		has_normal_buffer = true;
+	}
+
 	Transform3D cam_transform;
 	Projection cam_projection;
 	float z_near = 0.0f;
@@ -2196,7 +2221,8 @@ void RendererSceneRenderRD::capture_particle_scene_depth_snapshot(RD *p_rd, cons
 			z_near,
 			z_far,
 			frame_number,
-			rb->get_render_target());
+			rb->get_render_target(),
+			has_normal_buffer);
 }
 
 void RendererSceneRenderRD::dispatch_late_particle_collision_phase(RD *p_rd, const RenderDataRD *p_render_data, bool p_is_reflection_probe) {

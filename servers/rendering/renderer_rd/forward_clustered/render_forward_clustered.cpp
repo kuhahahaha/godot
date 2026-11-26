@@ -2379,6 +2379,22 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 	RD::get_singleton()->draw_command_end_label();
 
+	bool particle_depth_snapshot_needs_normal = false;
+	if (!is_reflection_probe && rb.is_valid() && p_render_data->scene_data && p_render_data->scene_data->view_count == 1u) {
+		RendererRD::ParticlesStorage *ps = RendererRD::ParticlesStorage::get_singleton();
+		RendererRD::ParticlesCollisionSceneRD *collision_scene = ps ? ps->get_collision_scene_rd() : nullptr;
+		if (collision_scene) {
+			RID scene_viewport = p_render_data->source_viewport.is_valid()
+					? p_render_data->source_viewport
+					: (p_render_data->get_native_camera_source().is_valid() ? p_render_data->get_native_camera_source()->get_viewport() : RID());
+			if (scene_viewport.is_null() && rb->get_render_target().is_valid()) {
+				scene_viewport = collision_scene->find_viewport_by_render_target(rb->get_render_target());
+			}
+			const uint64_t frame_number = RSG::rasterizer ? RSG::rasterizer->get_frame_number() : 0u;
+			particle_depth_snapshot_needs_normal = collision_scene->has_pending_depth_snapshot_normal_request(scene_viewport, frame_number);
+		}
+	}
+
 	if (!is_reflection_probe) {
 		if (using_voxelgi) {
 			depth_pass_mode = PASS_MODE_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI;
@@ -2388,11 +2404,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					environment_get_ssao_enabled(p_render_data->environment) ||
 					using_ssil ||
 					ce_needs_normal_roughness ||
+					particle_depth_snapshot_needs_normal ||
 					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_NORMAL_BUFFER ||
 					scene_state.used_normal_texture) {
 				depth_pass_mode = PASS_MODE_DEPTH_NORMAL_ROUGHNESS;
 			}
-		} else if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_NORMAL_BUFFER || scene_state.used_normal_texture) {
+		} else if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_NORMAL_BUFFER || scene_state.used_normal_texture || particle_depth_snapshot_needs_normal) {
 			depth_pass_mode = PASS_MODE_DEPTH_NORMAL_ROUGHNESS;
 		}
 
@@ -2441,7 +2458,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	}
 
 	// Update the global pipeline requirements with all the features found to be in use in this scene.
-	if (depth_pass_mode == PASS_MODE_DEPTH_NORMAL_ROUGHNESS || global_surface_data.normal_texture_used) {
+	if (depth_pass_mode == PASS_MODE_DEPTH_NORMAL_ROUGHNESS || global_surface_data.normal_texture_used || particle_depth_snapshot_needs_normal) {
 		global_pipeline_data_required.use_normal_and_roughness = true;
 	}
 
@@ -2566,7 +2583,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 	bool debug_voxelgis = get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_VOXEL_GI_ALBEDO || get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_VOXEL_GI_LIGHTING || get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_VOXEL_GI_EMISSION;
 	bool debug_sdfgi_probes = get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_SDFGI_PROBES;
-	bool force_depth_pre_pass = scene_state.used_opaque_stencil;
+	bool force_depth_pre_pass = scene_state.used_opaque_stencil || particle_depth_snapshot_needs_normal;
 	bool depth_pre_pass = (force_depth_pre_pass || bool(GLOBAL_GET_CACHED(bool, "rendering/driver/depth_prepass/enable"))) && depth_framebuffer.is_valid();
 
 	SceneShaderForwardClustered::ShaderSpecialization base_specialization = scene_shader.default_specialization;
@@ -4672,6 +4689,9 @@ RID RenderForwardClustered::_setup_sdfgi_render_pass_uniform_set(RID p_albedo_te
 
 RID RenderForwardClustered::_render_buffers_get_normal_texture(Ref<RenderSceneBuffersRD> p_render_buffers) {
 	Ref<RenderBufferDataForwardClustered> rb_data = p_render_buffers->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
+	if (rb_data.is_null() || !rb_data->has_normal_roughness()) {
+		return RID();
+	}
 
 	return rb_data->get_normal_roughness();
 }

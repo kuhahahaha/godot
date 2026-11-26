@@ -236,6 +236,9 @@ Error Registry::production_unpin_resources_locked(ProductionRequest &p_request) 
 		bump_resource_permission_epoch();
 		slot.cached_persistent_set = false;
 		slot.scene_depth_set1 = false;
+		for (uint32_t d = 0; d < MAX_SCENE_DEPTH_SET1_PAIRS; ++d) {
+			slot.scene_depth_normal_textures[d] = RID();
+		}
 		slot.first_binding = UINT32_MAX;
 		slot.binding_count = 0;
 		slot.imported_unit_slot = UINT32_MAX;
