@@ -2521,7 +2521,7 @@ void RenderingDeviceDriverMetal::_maybe_flush_compute_archive() {
 				++compute_archive_idle_frames;
 			}
 			const bool idle_ready = compute_archive_idle_frames >= COMPUTE_ARCHIVE_FLUSH_IDLE_FRAMES;
-			const bool ceiling_reached = compute_archive_open_frames >= ARCHIVE_WARMUP_MAX_FRAMES;
+			const bool ceiling_reached = compute_archive_open_frames >= COMPUTE_ARCHIVE_WARMUP_MAX_FRAMES;
 			const bool pipeline_cap_reached = compute_archive_added_pipelines >= COMPUTE_ARCHIVE_MAX_PIPELINES;
 			if (!idle_ready && !ceiling_reached && !pipeline_cap_reached) {
 				return;
@@ -3983,7 +3983,9 @@ RDD::PipelineID RenderingDeviceDriverMetal::compute_pipeline_create(ShaderID p_s
 					}
 				}
 			}
-			if (arc && _can_add_to_pipeline_archive(arc, true)) {
+			const bool managed_by_compute_archive = (compute_arc != nullptr) ||
+					(can_cache && compute_archive_released_after_warmup.load(std::memory_order_acquire));
+			if (arc && !managed_by_compute_archive && _can_add_to_pipeline_archive(arc, true)) {
 				std::unique_lock<std::shared_mutex> write_lock(archive_serialize_mutex);
 				if (_can_add_to_pipeline_archive(arc, true)) {
 					NS::Error *arc_err = nullptr;

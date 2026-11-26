@@ -9080,6 +9080,211 @@ struct Access {
 		CHECK(e.rd._native_disposal_maintenance_step(finish_budget, usage, fake_owner, nullptr, Ref<NativeHeightRange>(), false) == OK);
 		CHECK_FALSE(e.rd.has_pending_production_frame_maintenance());
 	}
+
+	static void bug202_qualification_service_skips_maintenance_on_cpu_dependent_reason4() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		graph_initialize(e);
+		e.original_bridge = memnew(Registry::QualificationBridge);
+		e.original_bridge->serial = 20211;
+		e.original_bridge->epoch = e.registry->device_records[0].epoch;
+		e.original_bridge->holder = &e.holder;
+		e.original_bridge->library = 0;
+		e.original_bridge->device = 0;
+		e.registry->qualification_bridges[0] = e.original_bridge;
+
+		auto *st = memnew(Registry::QualificationBridge::Storage);
+		st->serial = 20231;
+		st->retire_serial = 20233;
+		st->retiring = true;
+		st->queued = true;
+		st->physical.bridge = e.original_bridge->serial;
+		st->physical.child = st->serial;
+		st->physical.use_closed.store(true);
+		st->physical.dependent_children.store(1);
+		const RID rid = e.rd._qualification_storage_create(128, &st->physical);
+		REQUIRE(rid.is_valid());
+		st->physical.rid = rid.get_id();
+		{
+			MutexLock lock(e.registry->mutex);
+			e.original_bridge->storage[0] = st;
+			e.original_bridge->children += 2;
+			e.registry->records[e.original_bridge->library].private_refs += 2;
+		}
+
+		// Verify _qualification_maintenance() is NOT invoked when storage is blocked on CPU dependents (reason == 4).
+		e.rd.frame_wait_error = OK;
+		const uint32_t frame_before = e.rd.frame;
+		const uint32_t issues_before = e.driver.queue_issues;
+		const uint32_t polls_before = e.driver.fence_polls;
+		const uint32_t recycles_before = e.driver.fence_recycles;
+		e.registry->qualification_service(e.original_bridge->serial, st->serial, 1, 8, 50000);
+		CHECK_FALSE(st->queued);
+		CHECK_FALSE(st->physical.enqueued);
+		CHECK(st->report.state == 0);
+		CHECK(st->report.reason == 4);
+		CHECK(st->maintenance_error == OK);
+		CHECK(e.rd.frame == frame_before);
+		CHECK(e.driver.queue_issues == issues_before);
+		CHECK(e.driver.fence_polls == polls_before);
+		CHECK(e.driver.fence_recycles == recycles_before);
+
+		// Clean up the test storage cell.
+		st->physical.dependent_children.store(0);
+		e.rd.qualification_retiring = true;
+		e.rd.free_rid(rid);
+		e.rd.qualification_retiring = false;
+		e.rd._free_pending_resources(0);
+		{
+			MutexLock lock(e.registry->mutex);
+			e.original_bridge->storage[0] = nullptr;
+			e.original_bridge->children -= 1;
+			e.registry->records[e.original_bridge->library].private_refs -= 1;
+		}
+		memdelete(st);
+	}
+
+	static void bug207_active_churn_tail_pod_page_reclaim_preserves_live_requests() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		auto pool_cap = capacity(64);
+		pool_cap.requests = 4;
+		pool_cap.suboperations = 256;
+		pool_cap.resources = 256;
+		pool_cap.resource_uses = 2048;
+		pool_cap.readbacks = 256;
+		pool_cap.graph_memberships = 256;
+		pool_cap.native_memberships = 1024;
+		pool_cap.return_cells = 2048;
+		pool_cap.retained_payload_bytes = 512u * 1024u;
+		pool_cap.readback_bytes = 512u * 1024u;
+		const auto att_ref = e.accept(pool_cap);
+		REQUIRE(att_ref.handle_serial != 0);
+
+		ProductionAttachment *att = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			RenderingDevice *rd = nullptr;
+			REQUIRE(e.registry->production_attachment_locked(att_ref, true, att, rd) == OK);
+		}
+		REQUIRE(att != nullptr);
+
+		// 1. Reserve a small pinned steady-state request r_live at index 0 (keeps children >= 1 forever).
+		auto small_cap = capacity(4);
+		small_cap.requests = 1;
+		small_cap.suboperations = 2;
+		small_cap.resources = 2;
+		small_cap.resource_uses = 4;
+		small_cap.readbacks = 1;
+		small_cap.graph_memberships = 2;
+		small_cap.native_memberships = 4;
+		small_cap.return_cells = 4;
+		small_cap.retained_payload_bytes = 256;
+		small_cap.readback_bytes = 256;
+
+		const GDExtensionProductionActionV2 actions[2] = {
+			{ 0, 10, 0, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 0, 1, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX },
+			{ 1, 11, 0, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 1, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+		};
+		const GDExtensionProductionResourceV1 resources[2] = {
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 0, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 64, 0 },
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 64, 0 },
+		};
+		const GDExtensionProductionUseV1 uses[2] = {
+			{ 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 64, 0 },
+			{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 64, 0 },
+		};
+
+		Request *r_live = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			const GDExtensionProductionOperationV1 op_live{ production_dto_abi<GDExtensionProductionOperationV1>(), 20701, 1, 10, 12 };
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op_live, small_cap, { nullptr, actions }, 2, resources, 2, uses, 2, {}, 0, r_live, 2) == OK);
+		}
+		REQUIRE(r_live != nullptr);
+		memset(att->payload + r_live->payload_offset, 0x3C, small_cap.retained_payload_bytes);
+		memset(att->readback_bytes + r_live->readback_offset, 0x5E, small_cap.readback_bytes);
+		r_live->actions[0].prepared = true;
+
+		// 2. Reserve a large cold-compile burst request r_burst above r_live, pushing all HWMs high, then release r_burst.
+		auto burst_cap = pool_cap;
+		burst_cap.requests = 1;
+		burst_cap.suboperations = 240;
+		burst_cap.resources = 240;
+		burst_cap.resource_uses = 1900;
+		burst_cap.readbacks = 240;
+		burst_cap.graph_memberships = 240;
+		burst_cap.native_memberships = 900;
+		burst_cap.return_cells = 1900;
+		burst_cap.retained_payload_bytes = 384u * 1024u;
+		burst_cap.readback_bytes = 384u * 1024u;
+
+		Request *r_burst = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			const GDExtensionProductionOperationV1 op_burst{ production_dto_abi<GDExtensionProductionOperationV1>(), 20702, 1, 10, 12 };
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op_burst, burst_cap, { nullptr, actions }, 2, resources, 2, uses, 2, {}, 0, r_burst, 2) == OK);
+		}
+		REQUIRE(r_burst != nullptr);
+		memset(att->payload + r_burst->payload_offset, 0xAA, burst_cap.retained_payload_bytes);
+		memset(att->readback_bytes + r_burst->readback_offset, 0xBB, burst_cap.readback_bytes);
+		const uint32_t peak_uses_hwm = att->uses_hwm;
+		const uint64_t peak_payload_hwm = att->payload_reclaim_hwm;
+		CHECK(peak_uses_hwm == small_cap.resource_uses + burst_cap.resource_uses);
+
+		const GDExtensionProductionRequestRefV1 burst_ref{ Enrollment::INSTANCE, r_burst->serial };
+		REQUIRE(e.registry->production_cancel(burst_ref).native_error == OK);
+		REQUIRE(e.registry->production_release(burst_ref).native_error == OK);
+		CHECK(att->children == 1);
+		CHECK(att->arena_reclaimed_bytes_total == 0);
+
+		// 3. First 30-frame window saw r_burst, so it must NOT reclaim yet (prevents steady-state thrash).
+		for (uint32_t f = 0; f < ProductionAttachment::ARENA_TAIL_RECLAIM_FRAMES; ++f) {
+			e.registry->production_observe_completed_frames_rt(e.rd);
+		}
+		CHECK(att->children == 1);
+		CHECK(att->uses_hwm == peak_uses_hwm);
+		CHECK(att->arena_reclaimed_bytes_total == 0);
+
+		// 4. Second 30-frame window sees only r_live (<= 50% of HWM) while children stays 1 -> reclaims unused tail pages!
+		for (uint32_t f = 0; f < ProductionAttachment::ARENA_TAIL_RECLAIM_FRAMES; ++f) {
+			e.registry->production_observe_completed_frames_rt(e.rd);
+		}
+		CHECK(att->children == 1);
+#if defined(__APPLE__) || defined(__linux__)
+		CHECK(att->arena_reclaimed_bytes_total > 512u * 1024u);
+		CHECK(att->uses_hwm == small_cap.resource_uses);
+		CHECK(att->actions_hwm == small_cap.suboperations);
+		CHECK(att->payload_reclaim_hwm < peak_payload_hwm);
+#endif
+		// Live request data and state must be 100% intact.
+		CHECK(r_live->actions[0].prepared);
+		for (uint64_t i = 0; i < small_cap.retained_payload_bytes; ++i) {
+			CHECK(att->payload[r_live->payload_offset + i] == 0x3C);
+		}
+		for (uint64_t i = 0; i < small_cap.readback_bytes; ++i) {
+			CHECK(att->readback_bytes[r_live->readback_offset + i] == 0x5E);
+		}
+
+		// 5. Re-expanding past shrunk HWMs must cleanly placement-new construct fresh cells.
+		Request *r_again = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			const GDExtensionProductionOperationV1 op_again{ production_dto_abi<GDExtensionProductionOperationV1>(), 20703, 1, 10, 12 };
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op_again, burst_cap, { nullptr, actions }, 2, resources, 2, uses, 2, {}, 0, r_again, 2) == OK);
+		}
+		REQUIRE(r_again != nullptr);
+		CHECK_FALSE(r_again->actions[0].prepared);
+		CHECK(r_again->actions[0].request == r_again);
+
+		const GDExtensionProductionRequestRefV1 again_ref{ Enrollment::INSTANCE, r_again->serial };
+		const GDExtensionProductionRequestRefV1 live_ref{ Enrollment::INSTANCE, r_live->serial };
+		REQUIRE(e.registry->production_cancel(again_ref).native_error == OK);
+		REQUIRE(e.registry->production_release(again_ref).native_error == OK);
+		REQUIRE(e.registry->production_cancel(live_ref).native_error == OK);
+		REQUIRE(e.registry->production_release(live_ref).native_error == OK);
+		REQUIRE(e.registry->production_close(att_ref).native_error == OK);
+	}
 };
 TEST_CASE("[ProductionNativeObserve][PreparedNativeRecordV2] cancel rejects transferred native wait before consume without erasing actual prefix") {
 	Access::native_record_wait_rejection(false);
@@ -9432,4 +9637,12 @@ TEST_CASE("[RenderingDeviceGraph][BUG-199B] compute pass coalescing merges intra
 
 TEST_CASE("[ProductionNativeObserve][BUG-199B] try_complete_pending_production_frame_maintenance drains signaled disposal inline without dropping draw") {
 	TestProductionNativeObserve::Access::bug199b_inline_production_maintenance_drain_avoids_draw_drop();
+}
+
+TEST_CASE("[ProductionNativeObserve][BUG-202] qualification_service breaks before _qualification_maintenance when storage is blocked on CPU dependents") {
+	TestProductionNativeObserve::Access::bug202_qualification_service_skips_maintenance_on_cpu_dependent_reason4();
+}
+
+TEST_CASE("[ProductionNativeObserve][BUG-207] active continuous-churn high-water tail pod-page reclaim frees burst pages without touching live requests") {
+	TestProductionNativeObserve::Access::bug207_active_churn_tail_pod_page_reclaim_preserves_live_requests();
 }

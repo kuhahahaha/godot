@@ -58,33 +58,48 @@
 
 namespace GDExtensionDeviceExit {
 namespace {
-size_t reclaim_arena_pod_pages(void *p_base, size_t p_byte_len) {
+bool compute_aligned_pod_page_range(void *p_base, size_t p_byte_len, uintptr_t &r_aligned_start, size_t &r_aligned_len) {
+	r_aligned_start = 0;
+	r_aligned_len = 0;
 	if (!p_base || p_byte_len == 0) {
-		return 0;
+		return false;
 	}
 #if (defined(__APPLE__) && defined(MADV_FREE_REUSABLE)) || (defined(__linux__) && defined(MADV_DONTNEED))
 	const long raw_page = sysconf(_SC_PAGESIZE);
 	if (raw_page <= 0) {
-		return 0;
+		return false;
 	}
 	const uintptr_t page_size = uintptr_t(raw_page);
 	const uintptr_t start = reinterpret_cast<uintptr_t>(p_base);
 	if (UINTPTR_MAX - start < p_byte_len) {
-		return 0;
+		return false;
 	}
 	const uintptr_t end = start + p_byte_len;
 	const uintptr_t rem = start % page_size;
 	const uintptr_t aligned_start = rem == 0 ? start : (start <= UINTPTR_MAX - (page_size - rem) ? start + (page_size - rem) : end);
 	const uintptr_t aligned_end = end - (end % page_size);
 	if (aligned_end <= aligned_start) {
+		return false;
+	}
+	r_aligned_start = aligned_start;
+	r_aligned_len = size_t(aligned_end - aligned_start);
+	return true;
+#else
+	return false;
+#endif
+}
+size_t reclaim_arena_pod_pages(void *p_base, size_t p_byte_len) {
+	uintptr_t aligned_start = 0;
+	size_t aligned_len = 0;
+	if (!compute_aligned_pod_page_range(p_base, p_byte_len, aligned_start, aligned_len)) {
 		return 0;
 	}
-	const size_t aligned_len = size_t(aligned_end - aligned_start);
 #if defined(__APPLE__) && defined(MADV_FREE_REUSABLE)
 	constexpr int advice = MADV_FREE_REUSABLE;
-#else
+#elif defined(__linux__) && defined(MADV_DONTNEED)
 	constexpr int advice = MADV_DONTNEED;
 #endif
+#if (defined(__APPLE__) && defined(MADV_FREE_REUSABLE)) || (defined(__linux__) && defined(MADV_DONTNEED))
 	if (madvise(reinterpret_cast<void *>(aligned_start), aligned_len, advice) == 0) {
 		return aligned_len;
 	}
@@ -1496,6 +1511,21 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 			a.natives_reclaim_hwm = MAX(a.natives_reclaim_hwm, uint64_t(natives_offset) + c.native_memberships);
 		}
 	}
+	a.tail_reclaim.note_reservation(
+			c.suboperations ? uint32_t((ac - a.actions) + c.suboperations) : 0u,
+			c.resources ? uint32_t((rc - a.resources) + c.resources) : 0u,
+			c.resource_uses ? uint32_t((uc - a.uses) + c.resource_uses) : 0u,
+			c.readbacks ? uint32_t((bc - a.readbacks) + c.readbacks) : 0u,
+			c.graph_memberships ? uint32_t((gc - a.graphs) + c.graph_memberships) : 0u,
+			c.return_cells ? uint32_t((tc - a.returns) + c.return_cells) : 0u,
+			r->command_count ? uint32_t((cc - a.commands) + r->command_count) : 0u,
+			r->frame_count ? uint32_t((fc - a.frames) + r->frame_count) : 0u,
+			c.retained_payload_bytes ? (payload + c.retained_payload_bytes) : 0u,
+			c.readback_bytes ? (readback + c.readback_bytes) : 0u,
+			c.readback_bytes ? readback : UINT64_MAX,
+			c.native_memberships ? (uint64_t(natives_offset) + c.native_memberships) : 0u,
+			c.native_memberships ? uint64_t(natives_offset) : UINT64_MAX,
+			is_native_output);
 	auto claim = [&](auto *cells, uint32_t count) { for(uint32_t i=0;i<count;++i){cells[i].request=r;
 } };
 	claim(ac, c.suboperations);
@@ -1516,6 +1546,7 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 			++a.material_qualifications_constructed_total;
 			const uint32_t mq_end = uint32_t((ac - a.actions) + i + 1);
 			a.mq_reclaim_hwm = MAX(a.mq_reclaim_hwm, mq_end);
+			a.tail_reclaim.mq_peak = MAX(a.tail_reclaim.mq_peak, mq_end);
 		}
 	}
 	for (uint32_t i = 0; i < resource_count; ++i) {
@@ -2948,6 +2979,9 @@ void Registry::production_observe_completed_frames_rt(RenderingDevice &p_rd) {
 		attachment->idle_reclaim_frames = 0;
 		if (attachment->closing) {
 			continue;
+		}
+		if (++attachment->tail_reclaim.frames >= ProductionAttachment::ARENA_TAIL_RECLAIM_FRAMES) {
+			attachment->reclaim_unused_tail_pod_pages();
 		}
 		const uint64_t attachment_serial = attachment->serial;
 		const uint32_t req_cap = attachment->quote.capacity.requests;
@@ -4860,6 +4894,234 @@ void ProductionAttachment::reclaim_pod_pages() {
 	readback_reclaim_top_lwm = UINT64_MAX;
 	natives_reclaim_top_lwm = UINT64_MAX;
 	idle_reclaim_frames = 0;
+	tail_reclaim.reset();
+}
+void ProductionAttachment::reclaim_unused_tail_pod_pages() {
+	if (!requests) {
+		tail_reclaim.reset();
+		return;
+	}
+	uint32_t actions_peak = tail_reclaim.actions_peak;
+	uint32_t resources_peak = tail_reclaim.resources_peak;
+	uint32_t uses_peak = tail_reclaim.uses_peak;
+	uint32_t readbacks_peak = tail_reclaim.readbacks_peak;
+	uint32_t graphs_peak = tail_reclaim.graphs_peak;
+	uint32_t returns_peak = tail_reclaim.returns_peak;
+	uint32_t commands_peak = tail_reclaim.commands_peak;
+	uint32_t frames_peak = tail_reclaim.frames_peak;
+	uint32_t live_actions_end = 0;
+	uint64_t payload_peak = MAX(scene_prefix_bytes, tail_reclaim.payload_peak);
+	const uint64_t rb_total = quote.capacity.readback_bytes;
+	const uint64_t rb_low_end = MIN(readback_reclaim_hwm, rb_total);
+	const uint64_t rb_high_begin = readback_reclaim_top_lwm < rb_total ? readback_reclaim_top_lwm : rb_total;
+	uint64_t rb_low_used = tail_reclaim.readback_low_peak;
+	uint64_t rb_high_used = tail_reclaim.readback_top_valley;
+	const uint64_t nat_total = uint64_t(quote.capacity.native_memberships);
+	const uint64_t nat_low_end = MIN(natives_reclaim_hwm, nat_total);
+	const uint64_t nat_high_begin = natives_reclaim_top_lwm < nat_total ? natives_reclaim_top_lwm : nat_total;
+	uint64_t nat_low_used = tail_reclaim.natives_low_peak;
+	uint64_t nat_high_used = tail_reclaim.natives_top_valley;
+
+	// Fold every currently live request's exact slice bounds so no live cell or byte can ever be touched.
+	for (uint32_t i = 0; i < quote.capacity.requests; ++i) {
+		const auto &q = requests[i];
+		if (!q.serial) {
+			continue;
+		}
+		if (actions && q.actions && q.capacity.suboperations) {
+			const uint32_t end = uint32_t((q.actions - actions) + q.capacity.suboperations);
+			actions_peak = MAX(actions_peak, end);
+			live_actions_end = MAX(live_actions_end, end);
+		}
+		if (resources && q.resources && q.capacity.resources) {
+			resources_peak = MAX(resources_peak, uint32_t((q.resources - resources) + q.capacity.resources));
+		}
+		if (uses && q.uses && q.capacity.resource_uses) {
+			uses_peak = MAX(uses_peak, uint32_t((q.uses - uses) + q.capacity.resource_uses));
+		}
+		if (readbacks && q.readbacks && q.capacity.readbacks) {
+			readbacks_peak = MAX(readbacks_peak, uint32_t((q.readbacks - readbacks) + q.capacity.readbacks));
+		}
+		if (graphs && q.graphs && q.capacity.graph_memberships) {
+			graphs_peak = MAX(graphs_peak, uint32_t((q.graphs - graphs) + q.capacity.graph_memberships));
+		}
+		if (returns && q.returns && q.capacity.return_cells) {
+			returns_peak = MAX(returns_peak, uint32_t((q.returns - returns) + q.capacity.return_cells));
+		}
+		if (commands && q.commands && q.command_count) {
+			commands_peak = MAX(commands_peak, uint32_t((q.commands - commands) + q.command_count));
+		}
+		if (frames && q.frames && q.frame_count) {
+			frames_peak = MAX(frames_peak, uint32_t((q.frames - frames) + q.frame_count));
+		}
+		if (q.capacity.retained_payload_bytes) {
+			payload_peak = MAX(payload_peak, q.payload_offset + q.capacity.retained_payload_bytes);
+		}
+		if (q.capacity.readback_bytes) {
+			const uint64_t s = q.readback_offset;
+			const uint64_t e = s + q.capacity.readback_bytes;
+			if (s < rb_low_end) {
+				rb_low_used = MAX(rb_low_used, MIN(e, rb_low_end));
+			}
+			if (e > rb_high_begin) {
+				rb_high_used = MIN(rb_high_used, MAX(s, rb_high_begin));
+			}
+		}
+		if (q.capacity.native_memberships) {
+			const uint64_t s = uint64_t(q.natives_offset);
+			const uint64_t e = s + q.capacity.native_memberships;
+			if (s < nat_low_end) {
+				nat_low_used = MAX(nat_low_used, MIN(e, nat_low_end));
+			}
+			if (e > nat_high_begin) {
+				nat_high_used = MIN(nat_high_used, MAX(s, nat_high_begin));
+			}
+		}
+	}
+
+	uint64_t advised = 0;
+	auto reclaim_hwm_tail = [&advised](auto *cells, uint32_t &hwm, uint32_t &free_cursor, uint64_t cap, uint32_t keep_end) {
+		using T = std::remove_pointer_t<decltype(cells)>;
+		if (!cells || hwm == 0) {
+			return;
+		}
+		const uint32_t cur_end = uint32_t(MIN(uint64_t(hwm), cap));
+		const uint32_t new_end = MIN(keep_end, cur_end);
+		if (new_end >= cur_end || uint64_t(new_end) * 2u > uint64_t(cur_end)) {
+			return;
+		}
+		uintptr_t aligned_start = 0;
+		size_t aligned_len = 0;
+		if (!compute_aligned_pod_page_range(cells + new_end, size_t(cur_end - new_end) * sizeof(T), aligned_start, aligned_len)) {
+			return;
+		}
+		for (uint32_t i = new_end; i < cur_end; ++i) {
+			cells[i].~T();
+		}
+		advised += reclaim_arena_pod_pages(cells + new_end, size_t(cur_end - new_end) * sizeof(T));
+		hwm = new_end;
+		if (free_cursor > hwm) {
+			free_cursor = hwm;
+		}
+	};
+
+	reclaim_hwm_tail(actions, actions_hwm, actions_free_cursor, quote.capacity.suboperations, actions_peak);
+	reclaim_hwm_tail(resources, resources_hwm, resources_free_cursor, quote.capacity.resources, resources_peak);
+	reclaim_hwm_tail(uses, uses_hwm, uses_free_cursor, quote.capacity.resource_uses, uses_peak);
+	reclaim_hwm_tail(readbacks, readbacks_hwm, readbacks_free_cursor, quote.capacity.readbacks, readbacks_peak);
+	reclaim_hwm_tail(graphs, graphs_hwm, graphs_free_cursor, quote.capacity.graph_memberships, graphs_peak);
+	reclaim_hwm_tail(returns, returns_hwm, returns_free_cursor, quote.capacity.return_cells, returns_peak);
+	reclaim_hwm_tail(commands, commands_hwm, commands_free_cursor, quote.graph_slots, commands_peak);
+	reclaim_hwm_tail(frames, frames_hwm, frames_free_cursor, quote.graph_frames, frames_peak);
+
+	if (payload && payload_reclaim_hwm > scene_prefix_bytes) {
+		const uint64_t cur_end = MIN(payload_reclaim_hwm, quote.capacity.retained_payload_bytes);
+		const uint64_t keep_end = MAX(scene_prefix_bytes, MIN(payload_peak, cur_end));
+		const uint64_t active_span = keep_end - scene_prefix_bytes;
+		const uint64_t hwm_span = cur_end > scene_prefix_bytes ? (cur_end - scene_prefix_bytes) : 0u;
+		if (keep_end < cur_end && active_span * 2u <= hwm_span) {
+			uintptr_t aligned_start = 0;
+			size_t aligned_len = 0;
+			if (compute_aligned_pod_page_range(payload + keep_end, size_t(cur_end - keep_end), aligned_start, aligned_len)) {
+				const size_t reclaimed = reclaim_arena_pod_pages(payload + keep_end, size_t(cur_end - keep_end));
+				if (reclaimed > 0) {
+					advised += reclaimed;
+					const uint64_t new_hwm = uint64_t(aligned_start - reinterpret_cast<uintptr_t>(payload));
+					payload_reclaim_hwm = MIN(cur_end, new_hwm);
+				}
+			}
+		}
+	}
+
+	if (readback_bytes && rb_total > 0) {
+		if (rb_low_end > 0 && rb_low_used < rb_low_end && rb_low_used * 2u <= rb_low_end && tail_reclaim.readback_top_valley >= rb_low_end) {
+			uintptr_t aligned_start = 0;
+			size_t aligned_len = 0;
+			if (compute_aligned_pod_page_range(readback_bytes + rb_low_used, size_t(rb_low_end - rb_low_used), aligned_start, aligned_len)) {
+				const size_t reclaimed = reclaim_arena_pod_pages(readback_bytes + rb_low_used, size_t(rb_low_end - rb_low_used));
+				if (reclaimed > 0) {
+					advised += reclaimed;
+					const uint64_t new_hwm = uint64_t(aligned_start - reinterpret_cast<uintptr_t>(readback_bytes));
+					readback_reclaim_hwm = MIN(rb_low_end, new_hwm);
+				}
+			}
+		}
+		if (rb_high_begin < rb_total) {
+			const uint64_t keep_begin = MIN(rb_high_used, rb_total);
+			const uint64_t hwm_span = rb_total - rb_high_begin;
+			const uint64_t active_span = rb_total - keep_begin;
+			if (keep_begin > rb_high_begin && active_span * 2u <= hwm_span && tail_reclaim.readback_low_peak <= rb_high_begin) {
+				uintptr_t aligned_start = 0;
+				size_t aligned_len = 0;
+				if (compute_aligned_pod_page_range(readback_bytes + rb_high_begin, size_t(keep_begin - rb_high_begin), aligned_start, aligned_len)) {
+					const size_t reclaimed = reclaim_arena_pod_pages(readback_bytes + rb_high_begin, size_t(keep_begin - rb_high_begin));
+					if (reclaimed > 0) {
+						advised += reclaimed;
+						const uint64_t new_lwm = uint64_t((aligned_start + aligned_len) - reinterpret_cast<uintptr_t>(readback_bytes));
+						readback_reclaim_top_lwm = (keep_begin >= rb_total && new_lwm >= rb_total) ? UINT64_MAX : MAX(rb_high_begin, MIN(new_lwm, keep_begin));
+					}
+				}
+			}
+		}
+	}
+
+	if (natives && nat_total > 0) {
+		constexpr size_t elem_size = sizeof(ProductionNativeCell);
+		if (nat_low_end > 0 && nat_low_used < nat_low_end && nat_low_used * 2u <= nat_low_end && tail_reclaim.natives_top_valley >= nat_low_end) {
+			uintptr_t aligned_start = 0;
+			size_t aligned_len = 0;
+			if (compute_aligned_pod_page_range(natives + nat_low_used, size_t(nat_low_end - nat_low_used) * elem_size, aligned_start, aligned_len)) {
+				const size_t reclaimed = reclaim_arena_pod_pages(natives + nat_low_used, size_t(nat_low_end - nat_low_used) * elem_size);
+				if (reclaimed > 0) {
+					advised += reclaimed;
+					const uint64_t byte_off = uint64_t(aligned_start - reinterpret_cast<uintptr_t>(natives));
+					const uint64_t new_hwm = (byte_off + elem_size - 1u) / elem_size;
+					natives_reclaim_hwm = MIN(nat_low_end, new_hwm);
+				}
+			}
+		}
+		if (nat_high_begin < nat_total) {
+			const uint64_t keep_begin = MIN(nat_high_used, nat_total);
+			const uint64_t hwm_span = nat_total - nat_high_begin;
+			const uint64_t active_span = nat_total - keep_begin;
+			if (keep_begin > nat_high_begin && active_span * 2u <= hwm_span && tail_reclaim.natives_low_peak <= nat_high_begin) {
+				uintptr_t aligned_start = 0;
+				size_t aligned_len = 0;
+				if (compute_aligned_pod_page_range(natives + nat_high_begin, size_t(keep_begin - nat_high_begin) * elem_size, aligned_start, aligned_len)) {
+					const size_t reclaimed = reclaim_arena_pod_pages(natives + nat_high_begin, size_t(keep_begin - nat_high_begin) * elem_size);
+					if (reclaimed > 0) {
+						advised += reclaimed;
+						const uint64_t byte_end = uint64_t((aligned_start + aligned_len) - reinterpret_cast<uintptr_t>(natives));
+						const uint64_t new_lwm = byte_end / elem_size;
+						natives_reclaim_top_lwm = (keep_begin >= nat_total && new_lwm >= nat_total) ? UINT64_MAX : MAX(nat_high_begin, MIN(new_lwm, keep_begin));
+					}
+				}
+			}
+		}
+	}
+
+	if (material_qualifications && mq_reclaim_hwm > 0) {
+		const uint32_t cur_end = MIN(mq_reclaim_hwm, quote.capacity.suboperations);
+		const uint32_t mq_keep = material_qualifications_live == 0 ? tail_reclaim.mq_peak : MAX(tail_reclaim.mq_peak, live_actions_end);
+		const uint32_t new_end = MIN(mq_keep, cur_end);
+		if (new_end < cur_end && uint64_t(new_end) * 2u <= uint64_t(cur_end)) {
+			constexpr size_t elem_size = sizeof(MaterialQualificationState);
+			uintptr_t aligned_start = 0;
+			size_t aligned_len = 0;
+			if (compute_aligned_pod_page_range(material_qualifications + new_end, size_t(cur_end - new_end) * elem_size, aligned_start, aligned_len)) {
+				const size_t reclaimed = reclaim_arena_pod_pages(material_qualifications + new_end, size_t(cur_end - new_end) * elem_size);
+				if (reclaimed > 0) {
+					advised += reclaimed;
+					const uint64_t byte_off = uint64_t(aligned_start - reinterpret_cast<uintptr_t>(material_qualifications));
+					const uint32_t tracked_end = uint32_t(MIN(uint64_t(cur_end), (byte_off + elem_size - 1u) / elem_size));
+					mq_reclaim_hwm = new_end == 0 && byte_off == 0 ? 0u : tracked_end;
+				}
+			}
+		}
+	}
+
+	arena_reclaimed_bytes_total += advised;
+	tail_reclaim.reset();
 }
 GDExtensionDeviceSessionResultV1 Registry::production_installation_observe(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionServiceBudgetV1 *budget, GDExtensionProductionInstallationReportV1 *out) {
 	if (!aligned(budget) || !production_dto_valid(*budget) || budget->reserved || !aligned(out)) {

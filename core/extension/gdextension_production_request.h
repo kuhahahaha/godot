@@ -772,6 +772,7 @@ struct ProductionControlCell {
 	bool scene_waiting = false;
 };
 class ProductionRequest {
+	friend class ProductionAttachment;
 	friend class ProductionOutputPreparationScope;
 	friend class Registry;
 	friend class ::RendererRD::ExternalOutputOwner;
@@ -1064,8 +1065,42 @@ class ProductionAttachment {
 	uint64_t readback_reclaim_top_lwm = UINT64_MAX, natives_reclaim_top_lwm = UINT64_MAX;
 	uint32_t mq_reclaim_hwm = 0;
 	static constexpr uint32_t ARENA_IDLE_RECLAIM_FRAMES = 120u;
+	static constexpr uint32_t ARENA_TAIL_RECLAIM_FRAMES = 30u;
 	uint32_t idle_reclaim_frames = 0;
 	uint64_t arena_reclaimed_bytes_total = 0;
+	struct TailReclaimWindow {
+		uint32_t actions_peak = 0, resources_peak = 0, uses_peak = 0, readbacks_peak = 0;
+		uint32_t graphs_peak = 0, returns_peak = 0, commands_peak = 0, frames_peak = 0;
+		uint32_t mq_peak = 0;
+		uint64_t payload_peak = 0, readback_low_peak = 0, natives_low_peak = 0;
+		uint64_t readback_top_valley = UINT64_MAX, natives_top_valley = UINT64_MAX;
+		uint32_t frames = 0;
+		void reset() {
+			*this = TailReclaimWindow{};
+		}
+		void note_reservation(uint32_t p_actions_end, uint32_t p_resources_end, uint32_t p_uses_end, uint32_t p_readbacks_end,
+				uint32_t p_graphs_end, uint32_t p_returns_end, uint32_t p_commands_end, uint32_t p_frames_end,
+				uint64_t p_payload_end, uint64_t p_readback_end, uint64_t p_readback_start,
+				uint64_t p_natives_end, uint64_t p_natives_start, bool p_top_down) {
+			actions_peak = MAX(actions_peak, p_actions_end);
+			resources_peak = MAX(resources_peak, p_resources_end);
+			uses_peak = MAX(uses_peak, p_uses_end);
+			readbacks_peak = MAX(readbacks_peak, p_readbacks_end);
+			graphs_peak = MAX(graphs_peak, p_graphs_end);
+			returns_peak = MAX(returns_peak, p_returns_end);
+			commands_peak = MAX(commands_peak, p_commands_end);
+			frames_peak = MAX(frames_peak, p_frames_end);
+			payload_peak = MAX(payload_peak, p_payload_end);
+			if (p_top_down) {
+				readback_top_valley = MIN(readback_top_valley, p_readback_start);
+				natives_top_valley = MIN(natives_top_valley, p_natives_start);
+			} else {
+				readback_low_peak = MAX(readback_low_peak, p_readback_end);
+				natives_low_peak = MAX(natives_low_peak, p_natives_end);
+			}
+		}
+	};
+	TailReclaimWindow tail_reclaim;
 	bool has_reclaimable_arena_pages() const {
 		return (actions && actions_hwm > 0) ||
 				(resources && resources_hwm > 0) ||
@@ -1081,6 +1116,7 @@ class ProductionAttachment {
 				(material_qualifications && material_qualifications_live == 0 && mq_reclaim_hwm > 0);
 	}
 	void reclaim_pod_pages();
+	void reclaim_unused_tail_pod_pages();
 	// Attachment-scoped persistent UniformSet cache for long-lived retained storage bindings (BUG-195D-1).
 	static constexpr uint32_t PERSISTENT_SET_MAX_LIVE = 4096u;
 	HashMap<PersistentSetKey, PersistentSetEntry *, PersistentSetKeyHasher> persistent_set_lookup;

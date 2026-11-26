@@ -148,7 +148,8 @@ protected:
 	static constexpr uint64_t ARCHIVE_MAX_DISK_BYTES = 64ull * 1024ull * 1024ull;
 	static constexpr uint32_t COMPUTE_ARCHIVE_MAX_PIPELINES = 128;
 	static constexpr uint64_t COMPUTE_ARCHIVE_MAX_DISK_BYTES = 16ull * 1024ull * 1024ull;
-	static constexpr uint32_t COMPUTE_ARCHIVE_FLUSH_IDLE_FRAMES = 60;
+	static constexpr uint32_t COMPUTE_ARCHIVE_FLUSH_IDLE_FRAMES = 8;
+	static constexpr uint32_t COMPUTE_ARCHIVE_WARMUP_MAX_FRAMES = 30;
 
 	Mutex archive_mutex;
 	std::shared_mutex archive_serialize_mutex;

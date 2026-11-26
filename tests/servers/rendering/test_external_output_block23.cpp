@@ -1529,6 +1529,104 @@ TEST_CASE("[ExternalOutput][Metal][BUG-195D-2] PARTICLE_LIGHT_64 single-encoder 
 	lane.release_light_gpu_bridge(&rd);
 	rd.free_rid(omni_buf);
 }
+
+TEST_CASE("[ExternalOutput][Metal][BUG-207] compute_archive releases after 8 idle / 30 active frames and compute_pipeline_create does not double-archive into render archive") {
+	REQUIRE(RenderingDevice::get_singleton() == nullptr);
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+
+	// Part A: Verify compute_archive idle (8 frames) and active ceiling (30 frames) release.
+	{
+		RenderingDeviceDriver *driver_base = context.driver_create();
+		REQUIRE(driver_base != nullptr);
+		auto *metal_driver = static_cast<RenderingDeviceDriverMetal *>(driver_base);
+		REQUIRE(metal_driver->initialize(0, 2) == OK);
+
+		REQUIRE(metal_driver->pipeline_cache_create(Vector<uint8_t>()));
+		CHECK(metal_driver->is_compute_archive_active());
+		for (uint32_t f = 1; f < 8u; ++f) {
+			metal_driver->test_step_compute_archive_frame(false);
+			CHECK(metal_driver->is_compute_archive_active());
+		}
+		metal_driver->test_step_compute_archive_frame(false);
+		CHECK_FALSE(metal_driver->is_compute_archive_active());
+
+		// Reopen and verify active ceiling releases at 30 frames under continuous compute churn.
+		REQUIRE(metal_driver->pipeline_cache_create(Vector<uint8_t>()));
+		CHECK(metal_driver->is_compute_archive_active());
+		for (uint32_t f = 1; f < 30u; ++f) {
+			metal_driver->test_step_compute_archive_frame(true);
+			CHECK(metal_driver->is_compute_archive_active());
+		}
+		metal_driver->test_step_compute_archive_frame(true);
+		CHECK_FALSE(metal_driver->is_compute_archive_active());
+
+		metal_driver->pipeline_cache_free();
+		context.driver_free(driver_base);
+	}
+
+	// Part B: Verify compute_pipeline_create adds to compute_archive and does NOT double-archive
+	// into the main render archive even when both archives are active.
+	{
+		RenderingDevice rd;
+		REQUIRE(rd.initialize(&context) == OK);
+		struct FinalizeGuard {
+			RenderingDevice &rd;
+			~FinalizeGuard() { rd.finalize(); }
+		} guard{ rd };
+
+		auto *metal_driver = static_cast<RenderingDeviceDriverMetal *>(rd.get_device_driver());
+		REQUIRE(metal_driver != nullptr);
+		REQUIRE(metal_driver->pipeline_cache_create(Vector<uint8_t>()));
+		REQUIRE(metal_driver->is_pipeline_archive_active());
+		REQUIRE(metal_driver->is_compute_archive_active());
+		// Seed 1 render addition so any double-archived compute pipeline would increase query_size above baseline.
+		REQUIRE(metal_driver->test_record_pipeline_archive_addition(false));
+		const size_t render_archive_size_before = metal_driver->pipeline_cache_query_size();
+		CHECK(render_archive_size_before == 2048u);
+
+		const char *kCompA = R"(#version 450
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout(set = 0, binding = 0, std430) buffer B { uint x[]; };
+void main() { x[0] += 2071u; }
+)";
+		const char *kCompB = R"(#version 450
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout(set = 0, binding = 0, std430) buffer B { uint x[]; };
+void main() { x[0] += 2072u; }
+)";
+		auto create_compute_pso = [&](const char *p_src, const char *p_name, RID &r_shader, RID &r_pipe) {
+			String err;
+			RD::ShaderStageSPIRVData cs;
+			cs.shader_stage = RD::SHADER_STAGE_COMPUTE;
+			cs.spirv = rd.shader_compile_spirv_from_source(RD::SHADER_STAGE_COMPUTE, String::utf8(p_src), RD::SHADER_LANGUAGE_GLSL, &err, false);
+			REQUIRE(err.is_empty());
+			Vector<RD::ShaderStageSPIRVData> stages;
+			stages.push_back(cs);
+			const Vector<uint8_t> bc = rd.shader_compile_binary_from_spirv(stages, String(p_name));
+			REQUIRE(!bc.is_empty());
+			r_shader = rd.shader_create_from_bytecode(bc);
+			REQUIRE(r_shader.is_valid());
+			r_pipe = rd.compute_pipeline_create(r_shader);
+			REQUIRE(r_pipe.is_valid());
+		};
+
+		const uint64_t comp_adds_before = RenderingDeviceDriverMetal::get_total_compute_archive_additions();
+		RID s1, p1, s2, p2;
+		create_compute_pso(kCompA, "bug207_comp_a", s1, p1);
+		create_compute_pso(kCompB, "bug207_comp_b", s2, p2);
+		CHECK(RenderingDeviceDriverMetal::get_total_compute_archive_additions() == comp_adds_before + 2u);
+		// Main render archive must NOT receive either compute pipeline.
+		CHECK(metal_driver->pipeline_cache_query_size() == render_archive_size_before);
+
+		rd.free_rid(p1);
+		rd.free_rid(s1);
+		rd.free_rid(p2);
+		rd.free_rid(s2);
+		rd.submit();
+		rd.sync();
+	}
+}
 #endif
 
 } // namespace TestExternalOutputBlock23
