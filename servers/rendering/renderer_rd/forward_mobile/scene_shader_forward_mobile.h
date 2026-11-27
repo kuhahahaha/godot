@@ -447,6 +447,7 @@ public:
 	}
 
 	SceneForwardMobileShaderRD shader;
+	static constexpr uint32_t EXTERNAL_COLOR_FLAG_UBERSHADER = 1u;
 	static constexpr uint32_t INDEXED144_VARIANT_OFFSET = SHADER_VERSION_MAX * 4;
 	static constexpr uint32_t INSTANCE192_VARIANT_OFFSET = INDEXED144_VARIANT_OFFSET * 2;
 	Vector<int> ordinary_shader_groups;

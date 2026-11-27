@@ -795,29 +795,30 @@ TEST_CASE("[ExternalOutput][Metal][BUG-82][BUG-83][BUG-86] binary archive bounds
 	auto *metal_driver = static_cast<RenderingDeviceDriverMetal *>(driver_base);
 	REQUIRE(metal_driver->initialize(0, 2) == OK);
 
-	// BUG-82 + BUG-86: Binary archive MUST release under continuous per-frame PSO churn
-	// at ARCHIVE_WARMUP_MAX_FRAMES (90), release after ARCHIVE_WARMUP_IDLE_FRAMES (30)
-	// when idle, and cap additions at ARCHIVE_WARMUP_MAX_PIPELINES (64) / compute (16).
+	// BUG-82 + BUG-86 + BUG-230: Binary archive MUST release under continuous per-frame PSO churn
+	// at ARCHIVE_WARMUP_MAX_FRAMES (12), release after ARCHIVE_WARMUP_IDLE_FRAMES (4)
+	// when idle (with p_frames_drawn >= ARCHIVE_WARMUP_MIN_FRAMES = 4), and cap additions at
+	// ARCHIVE_WARMUP_MAX_PIPELINES (32) / compute (16).
 	REQUIRE(metal_driver->pipeline_cache_create(Vector<uint8_t>()));
 	CHECK(metal_driver->is_pipeline_archive_active());
-	for (uint32_t f = 1; f < 90; ++f) {
+	for (uint32_t f = 1; f < 12; ++f) {
 		metal_driver->test_step_pipeline_archive_frame(f, true);
 		CHECK(metal_driver->is_pipeline_archive_active());
 	}
-	metal_driver->test_step_pipeline_archive_frame(90, true);
+	metal_driver->test_step_pipeline_archive_frame(12, true);
 	CHECK_FALSE(metal_driver->is_pipeline_archive_active());
 
-	// Reopen and verify idle release after 30 idle frames (with p_frames_drawn >= 30).
+	// Reopen and verify idle release after 4 idle frames (with p_frames_drawn >= 4).
 	REQUIRE(metal_driver->pipeline_cache_create(Vector<uint8_t>()));
 	CHECK(metal_driver->is_pipeline_archive_active());
-	for (uint32_t f = 1; f < 30; ++f) {
+	for (uint32_t f = 1; f < 4; ++f) {
 		metal_driver->test_step_pipeline_archive_frame(f, false);
 		CHECK(metal_driver->is_pipeline_archive_active());
 	}
-	metal_driver->test_step_pipeline_archive_frame(30, false);
+	metal_driver->test_step_pipeline_archive_frame(4, false);
 	CHECK_FALSE(metal_driver->is_pipeline_archive_active());
 
-	// Reopen and verify compute additions cap at 16 and total additions cap at 64,
+	// Reopen and verify compute additions cap at 16 and total additions cap at 32,
 	// triggering immediate archive release on the very next frame!
 	REQUIRE(metal_driver->pipeline_cache_create(Vector<uint8_t>()));
 	CHECK(metal_driver->is_pipeline_archive_active());
@@ -825,7 +826,7 @@ TEST_CASE("[ExternalOutput][Metal][BUG-82][BUG-83][BUG-86] binary archive bounds
 		CHECK(metal_driver->test_record_pipeline_archive_addition(true));
 	}
 	CHECK_FALSE(metal_driver->test_record_pipeline_archive_addition(true)); // Compute cap reached!
-	for (uint32_t i = 16; i < 64; ++i) {
+	for (uint32_t i = 16; i < 32; ++i) {
 		CHECK(metal_driver->test_record_pipeline_archive_addition(false));
 	}
 	CHECK_FALSE(metal_driver->test_record_pipeline_archive_addition(false)); // Total cap reached!
@@ -1538,12 +1539,12 @@ TEST_CASE("[ExternalOutput][Metal][BUG-195D-2] PARTICLE_LIGHT_64 single-encoder 
 	rd.free_rid(omni_buf);
 }
 
-TEST_CASE("[ExternalOutput][Metal][BUG-207] compute_archive releases after 8 idle / 30 active frames and compute_pipeline_create does not double-archive into render archive") {
+TEST_CASE("[ExternalOutput][Metal][BUG-207][BUG-230] compute_archive releases after 4 idle / 12 active frames and compute_pipeline_create does not double-archive into render archive") {
 	REQUIRE(RenderingDevice::get_singleton() == nullptr);
 	RenderingContextDriverMetal context;
 	REQUIRE(context.initialize() == OK);
 
-	// Part A: Verify compute_archive idle (8 frames) and active ceiling (30 frames) release.
+	// Part A: Verify compute_archive idle (4 frames) and active ceiling (12 frames) release.
 	{
 		RenderingDeviceDriver *driver_base = context.driver_create();
 		REQUIRE(driver_base != nullptr);
@@ -1552,17 +1553,17 @@ TEST_CASE("[ExternalOutput][Metal][BUG-207] compute_archive releases after 8 idl
 
 		REQUIRE(metal_driver->pipeline_cache_create(Vector<uint8_t>()));
 		CHECK(metal_driver->is_compute_archive_active());
-		for (uint32_t f = 1; f < 8u; ++f) {
+		for (uint32_t f = 1; f < 4u; ++f) {
 			metal_driver->test_step_compute_archive_frame(false);
 			CHECK(metal_driver->is_compute_archive_active());
 		}
 		metal_driver->test_step_compute_archive_frame(false);
 		CHECK_FALSE(metal_driver->is_compute_archive_active());
 
-		// Reopen and verify active ceiling releases at 30 frames under continuous compute churn.
+		// Reopen and verify active ceiling releases at 12 frames under continuous compute churn.
 		REQUIRE(metal_driver->pipeline_cache_create(Vector<uint8_t>()));
 		CHECK(metal_driver->is_compute_archive_active());
-		for (uint32_t f = 1; f < 30u; ++f) {
+		for (uint32_t f = 1; f < 12u; ++f) {
 			metal_driver->test_step_compute_archive_frame(true);
 			CHECK(metal_driver->is_compute_archive_active());
 		}
@@ -1622,10 +1623,19 @@ void main() { x[0] += 2072u; }
 		const uint64_t comp_adds_before = RenderingDeviceDriverMetal::get_total_compute_archive_additions();
 		RID s1, p1, s2, p2;
 		create_compute_pso(kCompA, "bug207_comp_a", s1, p1);
+		// BUG-230: compute_pipeline_create managed by compute_archive must NOT touch or keep alive
+		// the main render archive — frame 1 consumes the seeded render addition activity, then
+		// 4 subsequent idle frames (frames 2..5) must release the main render archive cleanly.
+		for (uint32_t f = 1; f <= 4u; ++f) {
+			metal_driver->test_step_pipeline_archive_frame(f, false);
+			CHECK(metal_driver->is_pipeline_archive_active());
+		}
 		create_compute_pso(kCompB, "bug207_comp_b", s2, p2);
 		CHECK(RenderingDeviceDriverMetal::get_total_compute_archive_additions() == comp_adds_before + 2u);
-		// Main render archive must NOT receive either compute pipeline.
+		// Main render archive must NOT receive either compute pipeline or have its idle counter reset.
 		CHECK(metal_driver->pipeline_cache_query_size() == render_archive_size_before);
+		metal_driver->test_step_pipeline_archive_frame(5u, false);
+		CHECK_FALSE(metal_driver->is_pipeline_archive_active());
 
 		rd.free_rid(p1);
 		rd.free_rid(s1);
@@ -2026,5 +2036,43 @@ TEST_CASE("[ExternalOutput][BUG-215] device_session_qualification_compile_comput
 	CHECK(bad_out.container_ptr == nullptr);
 }
 #endif
+
+TEST_CASE("[ExternalOutput][Block23][BUG-227] Forward Mobile external pipeline key enables ubershader and canonicalizes specialization under EXTERNAL_COLOR_FLAG_UBERSHADER") {
+	using Scene = RendererSceneRenderImplementation::SceneShaderForwardMobile;
+	using Shader = Scene::ShaderData;
+	Shader shader(Shader::NativeValuePlanTestTag{});
+	shader.cull_mode = RSE::CULL_MODE_BACK;
+
+	RendererRD::ExternalPacketPipelineRequest req;
+	req.backend = RendererRD::ExternalPacketPipelineRequest::Backend::MOBILE;
+	req.pass = RendererRD::ExternalPacketPass::OPAQUE;
+	req.version = Scene::SHADER_VERSION_COLOR_PASS;
+	req.color_flags = Scene::EXTERNAL_COLOR_FLAG_UBERSHADER;
+	req.specialization[0] = 0x1234u;
+	req.specialization[1] = 0x5678u;
+	req.specialization[2] = 0x3f800000u;
+
+	Shader::PipelineKey key_uber = {};
+	REQUIRE(shader.get_external_pipeline_key(req, RSE::PRIMITIVE_TRIANGLES, true, false, false, key_uber) == OK);
+	CHECK(key_uber.ubershader);
+	CHECK(key_uber.instance192);
+	CHECK(key_uber.shader_specialization.packed_0 == 0u);
+	CHECK(key_uber.shader_specialization.packed_1 == 0u);
+	CHECK(key_uber.shader_specialization.packed_2 == 0.0f);
+	CHECK(key_uber.cull_mode == RD::POLYGON_CULL_BACK);
+
+	// Unknown color_flags bits are still rejected.
+	req.color_flags = Scene::EXTERNAL_COLOR_FLAG_UBERSHADER | 2u;
+	CHECK(shader.get_external_pipeline_key(req, RSE::PRIMITIVE_TRIANGLES, true, false, false, key_uber) == ERR_INVALID_PARAMETER);
+
+	// color_flags == 0 preserves exact non-ubershader specialization contract.
+	req.color_flags = 0u;
+	Shader::PipelineKey key_spec = {};
+	REQUIRE(shader.get_external_pipeline_key(req, RSE::PRIMITIVE_TRIANGLES, true, false, false, key_spec) == OK);
+	CHECK_FALSE(key_spec.ubershader);
+	CHECK(key_spec.shader_specialization.packed_0 == 0x1234u);
+	CHECK(key_spec.shader_specialization.packed_1 == 0x5678u);
+	CHECK(key_spec.shader_specialization.packed_2 == 1.0f);
+}
 
 } // namespace TestExternalOutputBlock23

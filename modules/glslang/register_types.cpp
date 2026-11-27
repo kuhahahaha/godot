@@ -38,8 +38,15 @@
 #include "core/os/os.h"
 #endif
 
+#ifdef __APPLE__
+#include <malloc/malloc.h>
+
+#include <atomic>
+#endif
+
 GODOT_GCC_WARNING_PUSH_AND_IGNORE("-Wshadow")
 
+#include <glslang/Include/PoolAlloc.h>
 #include <glslang/Public/ResourceLimits.h>
 #include <glslang/Public/ShaderLang.h>
 #include <glslang/SPIRV/GlslangToSpv.h>
@@ -47,6 +54,33 @@ GODOT_GCC_WARNING_PUSH_AND_IGNORE("-Wshadow")
 GODOT_GCC_WARNING_POP
 
 Vector<uint8_t> compile_glslang_shader(RenderingDeviceCommons::ShaderStage p_stage, const String &p_source_code, RenderingDeviceCommons::ShaderLanguageVersion p_language_version, RenderingDeviceCommons::ShaderSpirvVersion p_spirv_version, String *r_error) {
+#ifdef __APPLE__
+	// BUG-230: Declared before local_pool so AST/symbol pages are freed first, then
+	// macOS libmalloc magazines are periodically relieved during bulk cold compiles.
+	struct AppleGlslangReliefGuard {
+		~AppleGlslangReliefGuard() {
+			static std::atomic<uint32_t> compile_count{ 0 };
+			if (((compile_count.fetch_add(1u, std::memory_order_relaxed) + 1u) & 15u) == 0u) {
+				::malloc_zone_pressure_relief(nullptr, 0);
+			}
+		}
+	} apple_glslang_relief_guard;
+#endif
+	// BUG-230: Bind a stack-local TPoolAllocator for this compilation and restore
+	// the previous thread-local allocator before local_pool destructs so AST/symbol
+	// pages are freed immediately on return instead of accumulating per thread.
+	glslang::TPoolAllocator local_pool;
+	struct GlslangPoolRestoreGuard {
+		glslang::TPoolAllocator *previous;
+		explicit GlslangPoolRestoreGuard(glslang::TPoolAllocator *p_next) :
+				previous(&glslang::GetThreadPoolAllocator()) {
+			glslang::SetThreadPoolAllocator(p_next);
+		}
+		~GlslangPoolRestoreGuard() {
+			glslang::SetThreadPoolAllocator(previous);
+		}
+	} pool_restore_guard(&local_pool);
+
 	Vector<uint8_t> ret;
 	EShLanguage stages[RenderingDeviceCommons::SHADER_STAGE_MAX] = {
 		EShLangVertex,

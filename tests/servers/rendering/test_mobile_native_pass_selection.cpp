@@ -28,10 +28,15 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
+#include "core/io/dir_access.h"
+#include "core/os/os.h"
+#include "modules/modules_enabled.gen.h"
 #include "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_data_rd.h"
 #include "tests/test_macros.h"
+
+#include <cstdio>
 
 TEST_FORCE_LINK(test_mobile_native_pass_selection)
 
@@ -440,6 +445,225 @@ public:
 		return OK;
 	}
 
+	static Error wave_g_draw_external_multi(
+			const RendererRD::ExternalSurfaceSelection *p_sels,
+			uint32_t p_surface_count,
+			const RenderDataRD *p_render_data,
+			RID p_material,
+			RD::FramebufferFormatID p_fb_format,
+			RID p_fb,
+			bool p_use_ubershader,
+			bool p_skip_prepare,
+			Error *r_prep_errors,
+			Error *r_draw_errors,
+			String &r_step) {
+		using namespace RendererRD;
+		auto *mob = RenderForwardMobile::get_singleton();
+		auto *ps = ParticlesStorage::get_singleton();
+		auto *mats = MaterialStorage::get_singleton();
+		auto *rd = RD::get_singleton();
+		if (!mob || !ps || !mats || !rd || !p_sels || p_surface_count == 0) {
+			r_step = "mobile_multi_singletons";
+			return ERR_UNAVAILABLE;
+		}
+		for (uint32_t s = 0; s < p_surface_count; ++s) {
+			if (r_prep_errors) {
+				r_prep_errors[s] = ERR_UNCONFIGURED;
+			}
+			if (r_draw_errors) {
+				r_draw_errors[s] = ERR_UNCONFIGURED;
+			}
+		}
+		Error err = mob->ensure_native_material_recipe_sources_ready();
+		if (err != OK) {
+			r_step = "mobile_multi_ensure_recipe_sources";
+			return err;
+		}
+		mats->_update_queued_materials();
+		auto *mat_data = static_cast<SceneShaderForwardMobile::MaterialData *>(mats->material_get_data(p_material, MaterialStorage::SHADER_TYPE_3D));
+		if (!mat_data || !mat_data->shader_data) {
+			r_step = "mobile_multi_material_data";
+			return ERR_UNAVAILABLE;
+		}
+		const RID shader_var = mat_data->shader_data->get_shader_variant(SceneShaderForwardMobile::SHADER_VERSION_COLOR_PASS, p_use_ubershader, false, true);
+		if (shader_var.is_null() || !mat_data->shader_data->is_valid()) {
+			r_step = "mobile_multi_get_shader_variant";
+			return ERR_UNAVAILABLE;
+		}
+		err = mats->material_settle_native_uploads(p_material);
+		if (err != OK) {
+			r_step = "mobile_multi_settle_material_uploads";
+			return err;
+		}
+
+		SceneShaderForwardMobile::ShaderSpecialization spec = {};
+		spec.omni_lights = SceneShaderForwardMobile::shader_count_for(0);
+		spec.spot_lights = SceneShaderForwardMobile::shader_count_for(0);
+		spec.area_lights = SceneShaderForwardMobile::shader_count_for(0);
+		spec.reflection_probes = SceneShaderForwardMobile::shader_count_for(0);
+		spec.directional_lights = SceneShaderForwardMobile::shader_count_for(0);
+		spec.decals = false;
+		spec.disable_fog = true;
+		spec.luminance_multiplier = 1.0f;
+
+		ExternalPacketPipelineRequest pipe_req;
+		pipe_req.backend = ExternalPacketPipelineRequest::Backend::MOBILE;
+		pipe_req.pass = ExternalPacketPass::OPAQUE;
+		pipe_req.version = SceneShaderForwardMobile::SHADER_VERSION_COLOR_PASS;
+		pipe_req.framebuffer_format = p_fb_format;
+		pipe_req.view_count = 1;
+		if (p_use_ubershader) {
+			pipe_req.color_flags = SceneShaderForwardMobile::EXTERNAL_COLOR_FLAG_UBERSHADER;
+			pipe_req.specialization[0] = 0;
+			pipe_req.specialization[1] = 0;
+			pipe_req.specialization[2] = 0;
+		} else {
+			pipe_req.color_flags = 0;
+			pipe_req.specialization[0] = spec.packed_0;
+			pipe_req.specialization[1] = spec.packed_1;
+			memcpy(&pipe_req.specialization[2], &spec.packed_2, sizeof(pipe_req.specialization[2]));
+		}
+
+		Error set_err = OK;
+		mob->_update_render_base_uniform_set(&set_err, nullptr);
+		if (set_err != OK) {
+			r_step = "mobile_multi_base_uniform_set";
+			return set_err;
+		}
+		const RID base_set = mob->render_base_uniform_set;
+		const auto &samplers = mats->samplers_rd_get_default();
+		Vector<RD::Uniform> pass_uniforms;
+		(void)mob->_setup_render_pass_uniform_set(RenderForwardMobile::RENDER_LIST_OPAQUE, nullptr, false, RID(), samplers, false, 0u, &set_err, &pass_uniforms);
+		if (set_err != OK) {
+			r_step = "mobile_multi_pass_uniform_sources";
+			return set_err;
+		}
+		{
+			static uint64_t s_uploaded_frame[2] = { UINT64_MAX, UINT64_MAX };
+			static RID s_uploaded_rid[2];
+			const uint64_t cur_frame = rd->get_frames_drawn();
+			Vector<uint8_t> fixed_scene, fixed_instance, fixed_impl, fixed_cluster, fixed_push;
+			if (RenderSceneDataRD::build_native_material_fixed_scene_data(fixed_scene) == OK &&
+					mob->build_native_material_fixed_pass_data(fixed_instance, fixed_impl, fixed_cluster, fixed_push) == OK) {
+				for (const RD::Uniform &u : pass_uniforms) {
+					if (u.get_id_count() == 1 && u.get_id(0).is_valid() && u.binding < 2) {
+						const RID buf_rid = u.get_id(0);
+						if (s_uploaded_frame[u.binding] == cur_frame && s_uploaded_rid[u.binding] == buf_rid) {
+							continue;
+						}
+						if (u.binding == 0 && !fixed_scene.is_empty()) {
+							(void)rd->buffer_update(buf_rid, 0, fixed_scene.size(), fixed_scene.ptr());
+							s_uploaded_frame[0] = cur_frame;
+							s_uploaded_rid[0] = buf_rid;
+						} else if (u.binding == 1 && !fixed_instance.is_empty()) {
+							(void)rd->buffer_update(buf_rid, 0, fixed_instance.size(), fixed_instance.ptr());
+							s_uploaded_frame[1] = cur_frame;
+							s_uploaded_rid[1] = buf_rid;
+						}
+					}
+				}
+			}
+		}
+		const RID pass_set = mob->_setup_render_pass_uniform_set(RenderForwardMobile::RENDER_LIST_OPAQUE, nullptr, false, RID(), samplers, false, 0u, &set_err, nullptr);
+		if (set_err != OK) {
+			r_step = "mobile_multi_pass_uniform_set";
+			return set_err;
+		}
+
+		const bool trace_bug227 = OS::get_singleton() && OS::get_singleton()->get_environment("ANGE_TEST_STAGED_MOBILE_PIPELINE_PHASE") == "1";
+		if (!p_skip_prepare) {
+			for (uint32_t s = 0; s < p_surface_count; ++s) {
+				ExternalPacketViewLease view;
+				Error perr = ps->particles_external_view_acquire(p_sels[s], p_render_data, view);
+				if (perr == OK) {
+					const ExternalPipelinePreparation *prep_row = nullptr;
+					perr = mob->external_pipeline_prepare_for_view(p_sels[s], view, pipe_req, prep_row, true);
+					const Error vr = view.release_checked();
+					if (perr == OK && vr != OK) {
+						perr = vr;
+					}
+				}
+				if (r_prep_errors) {
+					r_prep_errors[s] = perr;
+				}
+				if (trace_bug227) {
+					std::fprintf(stdout, "BUG227_PREP surface=%u err=%d\n", s, int(perr));
+					std::fflush(stdout);
+				}
+			}
+		} else {
+			for (uint32_t s = 0; s < p_surface_count; ++s) {
+				if (r_prep_errors) {
+					r_prep_errors[s] = OK;
+				}
+			}
+		}
+
+		TestProductionRequest::wave_g_settle_transfer_workers(rd);
+
+		RenderForwardMobile::SceneState::PushConstant push_constant{};
+		const RD::PolygonCullMode external_cull_mode = mat_data->shader_data->get_cull_mode_from_cull_variant(SceneShaderForwardMobile::ShaderData::CULL_VARIANT_NORMAL);
+		struct PushCtx {
+			RenderForwardMobile::SceneState::PushConstant *push;
+			const SceneShaderForwardMobile::ShaderSpecialization *spec;
+			RD::PolygonCullMode cull_mode;
+		} push_ctx = { &push_constant, &spec, external_cull_mode };
+
+		Vector<Color> clear_colors;
+		clear_colors.push_back(Color(0, 0, 0, 1));
+		RD::DrawListID draw_list = rd->draw_list_begin(p_fb, RD::DRAW_CLEAR_ALL, clear_colors, 0.0f, 0);
+		if (base_set.is_valid()) {
+			rd->draw_list_bind_uniform_set(draw_list, base_set, 0);
+		}
+		if (pass_set.is_valid()) {
+			rd->draw_list_bind_uniform_set(draw_list, pass_set, 1);
+		}
+		Error first_draw_err = OK;
+		for (uint32_t s = 0; s < p_surface_count; ++s) {
+			const Error derr = ps->particles_external_draw(
+					p_sels[s],
+					p_render_data,
+					draw_list,
+					pipe_req,
+					+[](void *r, const ExternalSurfaceSelection &sel, const ExternalPacketViewLease &v, const ExternalPacketPipelineRequest &req, const ExternalPipelinePreparation *&o) {
+						return static_cast<RenderForwardMobile *>(r)->external_pipeline_prepare_for_view(sel, v, req, o);
+					},
+					mob,
+					+[](void *ctx, const ExternalPacketBinding &binding, const void *&out_push, uint32_t &out_bytes) {
+						auto &pc = *static_cast<PushCtx *>(ctx);
+						out_push = pc.push;
+						if (binding.uses_ubershader()) {
+							pc.push->ubershader.specialization = *pc.spec;
+							pc.push->ubershader.constants = {};
+							pc.push->ubershader.constants.cull_mode = pc.cull_mode;
+							out_bytes = sizeof(RenderForwardMobile::SceneState::PushConstant);
+						} else {
+							out_bytes = sizeof(RenderForwardMobile::SceneState::PushConstant) - sizeof(RenderForwardMobile::SceneState::PushConstantUbershader);
+						}
+						return OK;
+					},
+					&push_ctx,
+					ParticlesStorage::ExternalDrawPreparation::PREPARED_ONLY);
+			if (r_draw_errors) {
+				r_draw_errors[s] = derr;
+			}
+			if (trace_bug227) {
+				std::fprintf(stdout, "BUG227_DRAW surface=%u err=%d skip_prepare=%u\n", s, int(derr), unsigned(p_skip_prepare));
+				std::fflush(stdout);
+			}
+			if (first_draw_err == OK && derr != OK) {
+				first_draw_err = derr;
+			}
+		}
+		rd->draw_list_end();
+		if (first_draw_err != OK) {
+			r_step = "mobile_multi_particles_external_draw";
+			return first_draw_err;
+		}
+		r_step = "ok";
+		return OK;
+	}
+
 	static void external_indexed144_mirror_reverse_cull() {
 		using Renderer = RenderForwardMobile;
 		Renderer::GeometryInstanceForwardMobile owner;
@@ -494,6 +718,22 @@ Error wave_g_mobile_draw_external(
 	return RendererSceneRenderImplementation::TestMobileNativePassSelection::wave_g_draw_external(
 			p_sel, p_render_data, p_material, p_profile, p_has_capacity, p_fb_format, p_fb, r_step, p_check_motion_shader);
 }
+
+Error wave_g_mobile_draw_external_multi(
+		const RendererRD::ExternalSurfaceSelection *p_sels,
+		uint32_t p_surface_count,
+		const RenderDataRD *p_render_data,
+		RID p_material,
+		RD::FramebufferFormatID p_fb_format,
+		RID p_fb,
+		bool p_use_ubershader,
+		bool p_skip_prepare,
+		Error *r_prep_errors,
+		Error *r_draw_errors,
+		String &r_step) {
+	return RendererSceneRenderImplementation::TestMobileNativePassSelection::wave_g_draw_external_multi(
+			p_sels, p_surface_count, p_render_data, p_material, p_fb_format, p_fb, p_use_ubershader, p_skip_prepare, r_prep_errors, r_draw_errors, r_step);
+}
 } // namespace TestProductionRequest
 
 TEST_CASE("[B4][MobileNativePassSelection] native depth and motion versions preserve original view rules") {
@@ -519,3 +759,45 @@ TEST_CASE("[B4][MobileNativePassSelection][MobileNativeSurfacePipeline] actual s
 TEST_CASE("[ExternalOutput][MobileNativePassSelection] BUG-84 INDEXED_144 preserves hardware face culling on mirrored host scale") {
 	RendererSceneRenderImplementation::TestMobileNativePassSelection::external_indexed144_mirror_reverse_cull();
 }
+
+#if defined(MACOS_ENABLED) && defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+TEST_CASE("[ExternalOutput][Mobile][BUG-227] 4-mesh INSTANCE_192 prepares and draws all 4 surfaces") {
+	if (OS::get_singleton()->get_environment("GODOT_SKIP_LIVE_METAL_SUBPROCESS") == "1") {
+		return;
+	}
+	const String exe = OS::get_singleton()->get_executable_path();
+	REQUIRE(!exe.is_empty());
+	const String repo_root = exe.get_base_dir().path_join("..").simplify_path();
+	const String fixture_dir = repo_root.path_join("tests/servers/rendering/fixtures/external_native_output_e2e");
+	REQUIRE(DirAccess::dir_exists_absolute(fixture_dir));
+
+	OS::get_singleton()->set_environment("ANGE_MACOS_BACKGROUND_RENDER", "1");
+	OS::get_singleton()->set_environment("ANGE_BUG227_ONLY", "1");
+
+	List<String> args;
+	args.push_back("--display-driver");
+	args.push_back("macos");
+	args.push_back("--rendering-driver");
+	args.push_back("metal");
+	args.push_back("--rendering-method");
+	args.push_back("mobile");
+	args.push_back("--render-thread");
+	args.push_back("safe");
+	args.push_back("--audio-driver");
+	args.push_back("Dummy");
+	args.push_back("--path");
+	args.push_back(fixture_dir);
+	args.push_back("--script");
+	args.push_back("res://run.gd");
+
+	String pipe_out;
+	int exit_code = -1;
+	const Error err = OS::get_singleton()->execute(exe, args, &pipe_out, &exit_code, true);
+	OS::get_singleton()->unset_environment("ANGE_BUG227_ONLY");
+	MESSAGE(pipe_out);
+	CHECK(err == OK);
+	CHECK(exit_code == 0);
+	CHECK(pipe_out.contains("WAVE_G_NATIVE_OUTPUT_PASS"));
+	CHECK(pipe_out.contains("frames_drawn=0"));
+}
+#endif

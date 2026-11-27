@@ -1525,7 +1525,7 @@ void MDCommandBuffer::render_draw_indexed_indirect(RDD::BufferID p_indirect_buff
 	NS::UInteger indirect_offset = p_offset;
 
 	for (uint32_t i = 0; i < p_draw_count; i++) {
-		enc->drawIndexedPrimitives(render.pipeline->raster_state.render_primitive, render.index_type, render.index_buffer, 0, indirect_buffer->buffer.get(), indirect_offset);
+		enc->drawIndexedPrimitives(render.pipeline->raster_state.render_primitive, render.index_type, render.index_buffer, render.index_offset, indirect_buffer->buffer.get(), indirect_offset);
 		indirect_offset += p_stride;
 	}
 }

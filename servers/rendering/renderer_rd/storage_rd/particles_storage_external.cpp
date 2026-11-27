@@ -57,6 +57,84 @@ const ParticlesDecalBridgeRD *ParticlesStorage::get_decal_bridge_rd() const {
 	return ts ? ts->get_decal_bridge_rd() : nullptr;
 }
 
+// Built inline inside ParticlesStorage member functions so the lambdas retain
+// ParticlesStorage's friend access to ExternalOutputOwner and ExternalOutputStorage.
+#define BUILD_EXTERNAL_DECAL_SLOT_REGISTRATION(p_owner_key, p_owner, p_slot_index) \
+	([&]() -> ParticlesDecalBridgeRD::ExternalDecalSlotRegistration { \
+		using _BdrStorage = ExternalOutputStorage; \
+		const uint64_t _bdr_owner_key = (p_owner_key); \
+		const ExternalOutputOwner &_bdr_owner = (p_owner); \
+		const uint32_t _bdr_slot_index = (p_slot_index); \
+		const ExternalOutputOwner::Slot &_bdr_slot = _bdr_owner.slots[_bdr_slot_index]; \
+		ParticlesDecalBridgeRD::ExternalDecalSlotRegistration _bdr_reg; \
+		_bdr_reg.owner_key = _bdr_owner_key; \
+		_bdr_reg.owner_ptr = &_bdr_owner; \
+		_bdr_reg.is_slot_live_fn = [](const ExternalOutputOwner *_bdr_o, uint64_t _bdr_gen, uint32_t _bdr_s, uint64_t _bdr_lease) -> bool { \
+			if (!_bdr_o || !_bdr_o->admits_work() || _bdr_o->generation != _bdr_gen || _bdr_s >= _bdr_o->slot_count) { \
+				return false; \
+			} \
+			const auto &_bdr_live_slot = _bdr_o->slots[_bdr_s]; \
+			if (_bdr_live_slot.publication_closed || _bdr_live_slot.pass_uses_closed || _bdr_live_slot.lease_serial != _bdr_lease || \
+					_bdr_live_slot.storage == nullptr || \
+					(_bdr_live_slot.state != ExternalOutputOwner::LeaseState::ADOPTED && \
+							_bdr_live_slot.state != ExternalOutputOwner::LeaseState::SEALED_RECORDED)) { \
+				return false; \
+			} \
+			if (_bdr_live_slot.scene_cull_bound) { \
+				RendererSceneCull *_bdr_scene = static_cast<RendererSceneCull *>(RSG::scene); \
+				RendererSceneCull::NativeParticleSceneFacts _bdr_actual; \
+				const Error _bdr_facts_err = _bdr_scene ? _bdr_scene->instance_get_committed_particle_scene_facts(_bdr_live_slot.scene_cull_instance, _bdr_live_slot.scene_cull_particles, _bdr_actual) : ERR_UNAVAILABLE; \
+				if (_bdr_facts_err == OK) { \
+					if (_bdr_actual.scenario != _bdr_live_slot.scene_cull_scenario) { \
+						return false; \
+					} \
+				} else if (_bdr_facts_err != ERR_BUSY) { \
+					return false; \
+				} \
+				const RendererViewport::Viewport *_bdr_vp = (RSG::viewport && _bdr_live_slot.scene_cull_viewport.is_valid()) \
+						? RSG::viewport->viewport_owner.get_or_null(_bdr_live_slot.scene_cull_viewport) \
+						: nullptr; \
+				if (!_bdr_vp || _bdr_vp->scenario != _bdr_live_slot.scene_cull_scenario) { \
+					return false; \
+				} \
+			} \
+			return true; \
+		}; \
+		_bdr_reg.is_slot_visible_fn = [](const ExternalOutputOwner *_bdr_o, uint64_t _bdr_gen, uint32_t _bdr_s, uint64_t _bdr_lease) -> bool { \
+			if (!_bdr_o || _bdr_o->generation != _bdr_gen || _bdr_s >= _bdr_o->slot_count) { \
+				return false; \
+			} \
+			const auto &_bdr_live_slot = _bdr_o->slots[_bdr_s]; \
+			if (_bdr_live_slot.lease_serial != _bdr_lease) { \
+				return false; \
+			} \
+			if (_bdr_live_slot.scene_cull_bound) { \
+				RendererSceneCull *_bdr_scene = static_cast<RendererSceneCull *>(RSG::scene); \
+				if (!_bdr_scene || !_bdr_scene->instance_is_visible(_bdr_live_slot.scene_cull_instance)) { \
+					return false; \
+				} \
+			} \
+			return true; \
+		}; \
+		_bdr_reg.generation = _bdr_owner.generation; \
+		_bdr_reg.slot_index = _bdr_slot_index; \
+		_bdr_reg.lease_serial = _bdr_slot.lease_serial; \
+		_bdr_reg.scenario_rid = _bdr_slot.scene_cull_bound ? _bdr_slot.scene_cull_scenario : RID(); \
+		_bdr_reg.viewport_rid = _bdr_slot.scene_cull_bound ? _bdr_slot.scene_cull_viewport : RID(); \
+		const bool _bdr_valid_cull_bounds = _bdr_slot.scene_cull_bound && _bdr_slot.scene_cull_world.is_finite() && \
+				_bdr_slot.scene_cull_world.get_end().is_finite() && _bdr_slot.scene_cull_world.has_volume(); \
+		_bdr_reg.world_bounds = _bdr_valid_cull_bounds ? _bdr_slot.scene_cull_world : _bdr_owner.config.bounds; \
+		_bdr_reg.records_rid = _bdr_slot.storage ? _bdr_slot.storage->resources[_BdrStorage::CURRENT_RECORDS].rid : RID(); \
+		_bdr_reg.meta_rid = _bdr_slot.storage ? _bdr_slot.storage->resources[_BdrStorage::OUTPUT_META].rid : RID(); \
+		_bdr_reg.harvest_uniform_set = _bdr_slot.guard_uniform_sets[0]; \
+		for (uint32_t _bdr_ti = 0; _bdr_ti < ParticlesDecalBridgeRD::TEXTURE_SLOT_COUNT; ++_bdr_ti) { \
+			_bdr_reg.textures[_bdr_ti] = _bdr_owner.decal_textures[_bdr_ti]; \
+		} \
+		_bdr_reg.capacity = _bdr_owner.config.capacity; \
+		_bdr_reg.present_seq = _bdr_slot.request.common.present_seq; \
+		return _bdr_reg; \
+	}())
+
 Error ExternalOutputOwner::validate_decal128_selection(const ExternalOutputConfig &p_config, uint32_t &r_surface_count) {
 	if (p_config.profile != ExternalOutputConfig::PARTICLE_DECAL_128 ||
 			p_config.capacity > ParticlesDecalBridgeRD::MAX_PARTICLE_DECALS ||
@@ -1058,6 +1136,30 @@ Error ParticlesStorage::_external_cancel_body(RID p_particles, const uint8_t *p_
 			if (err == OK) {
 				if (ParticlesDecalBridgeRD *decal_bridge = get_decal_bridge_rd()) {
 					decal_bridge->unregister_external_decal_slot(p_particles.get_id(), owner.generation, i);
+					if (owner.config.profile == ExternalOutputConfig::PARTICLE_DECAL_128 &&
+							owner.state == ExternalOutputOwner::GenerationState::ACTIVE) {
+						uint32_t fallback_slot = UINT32_MAX;
+						uint64_t fallback_seq = 0;
+						uint64_t fallback_lease = 0;
+						for (uint32_t s = 0; s < owner.slot_count; ++s) {
+							const ExternalOutputOwner::Slot &cand = owner.slots[s];
+							if ((cand.state != ExternalOutputOwner::LeaseState::ADOPTED &&
+										cand.state != ExternalOutputOwner::LeaseState::SEALED_RECORDED) ||
+									cand.publication_closed || cand.pass_uses_closed || !cand.storage) {
+								continue;
+							}
+							if (fallback_slot == UINT32_MAX || cand.request.common.present_seq > fallback_seq ||
+									(cand.request.common.present_seq == fallback_seq && cand.lease_serial > fallback_lease)) {
+								fallback_slot = s;
+								fallback_seq = cand.request.common.present_seq;
+								fallback_lease = cand.lease_serial;
+							}
+						}
+						if (fallback_slot != UINT32_MAX) {
+							decal_bridge->register_sealed_external_decal_slot(
+									BUILD_EXTERNAL_DECAL_SLOT_REGISTRATION(p_particles.get_id(), owner, fallback_slot));
+						}
+					}
 				}
 			}
 			return err;
@@ -2426,8 +2528,8 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_v1(const GDExtensi
 						p_input->particles_rid, owner.generation, p_input->slot_index, slot.lease_serial, p_input->next_present_seq, updated_bounds);
 			}
 		} else if (ParticlesDecalBridgeRD *decal_bridge = get_decal_bridge_rd()) {
-			decal_bridge->update_external_decal_slot_present_seq(
-					p_input->particles_rid, owner.generation, p_input->slot_index, slot.lease_serial, p_input->next_present_seq, updated_bounds);
+			decal_bridge->upsert_external_decal_slot(
+					BUILD_EXTERNAL_DECAL_SLOT_REGISTRATION(p_input->particles_rid, owner, p_input->slot_index));
 		}
 		slot.fast_refresh_active = true;
 		return int32_t(OK);
@@ -3187,10 +3289,10 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 		}
 	};
 
-	ParticlesDecalBridgeRD::ExternalDecalSlotPresentSeqUpdate inline_decal_updates[INLINE_BATCH_CAPACITY];
-	LocalVector<ParticlesDecalBridgeRD::ExternalDecalSlotPresentSeqUpdate> overflow_decal_updates;
+	ParticlesDecalBridgeRD::ExternalDecalSlotRegistration inline_decal_updates[INLINE_BATCH_CAPACITY];
+	LocalVector<ParticlesDecalBridgeRD::ExternalDecalSlotRegistration> overflow_decal_updates;
 	uint32_t decal_update_count = 0;
-	auto push_decal_update = [&](const ParticlesDecalBridgeRD::ExternalDecalSlotPresentSeqUpdate &p_upd) {
+	auto push_decal_update = [&](const ParticlesDecalBridgeRD::ExternalDecalSlotRegistration &p_upd) {
 		if (decal_update_count < INLINE_BATCH_CAPACITY) {
 			inline_decal_updates[decal_update_count++] = p_upd;
 		} else {
@@ -3300,17 +3402,7 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 					push_light_update(upd);
 				}
 			} else {
-				ParticlesDecalBridgeRD::ExternalDecalSlotPresentSeqUpdate upd;
-				upd.owner_key = in.particles_rid;
-				upd.generation = owner.generation;
-				upd.slot_index = in.slot_index;
-				upd.lease_serial = slot.lease_serial;
-				upd.next_present_seq = in.next_present_seq;
-				if (valid_bounds) {
-					upd.world_bounds = slot.scene_cull_world;
-					upd.has_world_bounds = true;
-				}
-				push_decal_update(upd);
+				push_decal_update(BUILD_EXTERNAL_DECAL_SLOT_REGISTRATION(in.particles_rid, owner, in.slot_index));
 			}
 			slot.fast_refresh_active = true;
 			set_item_result(idx, OK);
@@ -3900,9 +3992,9 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 	if (decal_update_count > 0) {
 		if (ParticlesDecalBridgeRD *decal_bridge = get_decal_bridge_rd()) {
 			if (decal_update_count <= INLINE_BATCH_CAPACITY) {
-				decal_bridge->update_external_decal_slots_present_seq_batch(inline_decal_updates, decal_update_count);
+				decal_bridge->upsert_external_decal_slots_batch(inline_decal_updates, decal_update_count);
 			} else {
-				LocalVector<ParticlesDecalBridgeRD::ExternalDecalSlotPresentSeqUpdate> combined;
+				LocalVector<ParticlesDecalBridgeRD::ExternalDecalSlotRegistration> combined;
 				combined.reserve(decal_update_count);
 				for (uint32_t i = 0; i < INLINE_BATCH_CAPACITY; ++i) {
 					combined.push_back(inline_decal_updates[i]);
@@ -3910,7 +4002,7 @@ int32_t ParticlesStorage::particles_external_end_fast_refresh_batch_v1(
 				for (uint32_t i = 0; i < overflow_decal_updates.size(); ++i) {
 					combined.push_back(overflow_decal_updates[i]);
 				}
-				decal_bridge->update_external_decal_slots_present_seq_batch(combined.ptr(), combined.size());
+				decal_bridge->upsert_external_decal_slots_batch(combined.ptr(), combined.size());
 			}
 		}
 	}

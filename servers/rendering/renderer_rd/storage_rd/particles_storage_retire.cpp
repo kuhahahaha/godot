@@ -35,6 +35,7 @@
 #include <cstdlib>
 #include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_decal_bridge_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_mesh_light_sort_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 
@@ -48,11 +49,13 @@ Error ParticlesStorage::_external_storage_prepare_owned_prefix(GDExtensionProduc
 	if (!owner.device || owner.device != RenderingDevice::get_singleton() || slot_index >= owner.slot_count ||
 			(owner.config.profile != ExternalOutputConfig::INSTANCE_192 &&
 					owner.config.profile != ExternalOutputConfig::INDEXED_144 &&
-					owner.config.profile != ExternalOutputConfig::PARTICLE_LIGHT_64)) {
+					owner.config.profile != ExternalOutputConfig::PARTICLE_LIGHT_64 &&
+					owner.config.profile != ExternalOutputConfig::PARTICLE_DECAL_128)) {
 		return ERR_UNCONFIGURED;
 	}
 	auto &slot = owner.slots[slot_index];
-	const bool expects_surfaces = owner.config.profile != ExternalOutputConfig::PARTICLE_LIGHT_64;
+	const bool expects_surfaces = owner.config.profile != ExternalOutputConfig::PARTICLE_LIGHT_64 &&
+			owner.config.profile != ExternalOutputConfig::PARTICLE_DECAL_128;
 	if (slot.state != ExternalOutputOwner::LeaseState::RESERVED || !slot.original_registry || !slot.storage || &slot.storage->device != owner.device ||
 			slot.publication_closed || slot.pass_uses_closed || (expects_surfaces ? (!slot.surface_count || !slot.surfaces) : (slot.surface_count != 0 || slot.surfaces != nullptr)) ||
 			!_production_output_owner_matches(GDExtensionDeviceExit::ProductionOutputOwnerKind::SLOT, particle_rid, owner.generation, slot_index, slot.lease_serial, slot.original_pin, *owner.device, slot.original_request)) {
@@ -69,6 +72,61 @@ Error ParticlesStorage::_external_storage_prepare_owned_prefix(GDExtensionProduc
 		error = slot.storage->allocate_indexed144_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity, owner.config.motion == ExternalOutputConfig::REQUIRED, slot.surface_count);
 	} else if (owner.config.profile == ExternalOutputConfig::PARTICLE_LIGHT_64) {
 		error = slot.storage->allocate_light64_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity);
+	} else if (owner.config.profile == ExternalOutputConfig::PARTICLE_DECAL_128) {
+		using Storage = ExternalOutputStorage;
+		Storage &st = *slot.storage;
+		if (st.attempted || st.retirement_requested || slot.owned_group) {
+			error = ERR_ALREADY_IN_USE;
+		} else if (owner.config.capacity > ParticlesDecalBridgeRD::MAX_PARTICLE_DECALS) {
+			error = ERR_INVALID_PARAMETER;
+		} else {
+			uint32_t role_bytes[Storage::RESOURCE_COUNT] = {};
+			error = ExternalOutputConfig::checked_buffer_bytes(owner.config.capacity, 128, UINT32_MAX, role_bytes[Storage::CURRENT_RECORDS]);
+			if (error == OK) {
+				role_bytes[Storage::OUTPUT_META] = 32;
+				role_bytes[Storage::GUARD_STATUS] = 32;
+				uint64_t planned_total = 0;
+				uint32_t res_count = 0;
+				for (uint32_t i = 0; i < Storage::RESOURCE_COUNT; ++i) {
+					planned_total += role_bytes[i];
+					res_count += role_bytes[i] != 0;
+				}
+				error = st.device._production_output_owned_reserve(context, slot.original_pin, res_count, slot.owned_group);
+				if (error == OK) {
+					for (uint32_t i = 0; i < Storage::RESOURCE_COUNT; ++i) {
+						st.resources[i].bytes = role_bytes[i];
+					}
+					st.total_bytes = planned_total;
+					st.attempted = true;
+					uint32_t res_ordinal = 0;
+					for (uint32_t i = 0; i < Storage::RESOURCE_COUNT; ++i) {
+						if (!st.resources[i].bytes) {
+							continue;
+						}
+						st.creation_error = st.device._production_output_owned_storage_create(
+								context, slot.original_pin, slot.owned_group, res_ordinal++, st.resources[i].bytes,
+								BitField<RenderingDevice::StorageBufferUsage>(), st.resources[i].rid, st.resources[i].witness);
+						if (st.creation_error != OK) {
+							if (st.creation_error == ERR_BUSY && res_ordinal == 1 && st.resources[i].rid.is_null()) {
+								if (st.device._production_output_owned_rollback(context, slot.original_pin, slot.owned_group) == OK) {
+									for (uint32_t j = 0; j < Storage::RESOURCE_COUNT; ++j) {
+										st.resources[j].bytes = 0;
+									}
+									st.total_bytes = 0;
+									st.attempted = false;
+									st.creation_error = OK;
+									error = ERR_BUSY;
+									break;
+								}
+							}
+							st.device._production_output_owned_cancel_unbound(slot.original_pin, slot.owned_group);
+							error = st.creation_error;
+							break;
+						}
+					}
+				}
+			}
+		}
 	} else {
 		error = slot.storage->allocate_instance192_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity, slot.surface_count, slot.allocate_previous_records);
 	}
@@ -761,6 +819,9 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		slot.release_fast_refresh_resources(owner.device);
 		if (storage->mesh_light_sort_rd) {
 			storage->mesh_light_sort_rd->unregister_external_light_slot(p_particles.get_id(), p_generation, p_slot);
+		}
+		if (ParticlesDecalBridgeRD *decal_bridge = storage->get_decal_bridge_rd()) {
+			decal_bridge->unregister_external_decal_slot(p_particles.get_id(), p_generation, p_slot);
 		}
 	}
 	auto spend = [&]() {

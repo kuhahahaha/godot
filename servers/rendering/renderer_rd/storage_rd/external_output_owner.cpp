@@ -94,6 +94,9 @@ Error ExternalOutputOwner::validate_native_selection(const ExternalOutputConfig 
 		surface_count = 0;
 		return OK;
 	}
+	if (config.profile == ExternalOutputConfig::PARTICLE_DECAL_128) {
+		return validate_decal128_selection(config, surface_count);
+	}
 	if (config.surfaces.size() > ExternalOutputConfig::MAX_MESH_RIDS ||
 			config.surface_materials.is_empty() || config.surface_materials.size() > ExternalOutputConfig::MAX_FLATTENED_SURFACES) {
 		return ERR_INVALID_PARAMETER;
@@ -453,6 +456,9 @@ Error ExternalOutputOwner::plan_metadata_layout(uint32_t p_views, uint32_t p_rea
 }
 
 Error ExternalOutputOwner::plan_generation_selection_layout(const ExternalOutputConfig &config, uint32_t views, uint32_t reads, uint32_t surface_consumers, MetadataLayout &out) {
+	if (config.profile == ExternalOutputConfig::PARTICLE_DECAL_128) {
+		return plan_decal128_selection_layout(config, views, reads, surface_consumers, out);
+	}
 	if (config.profile != ExternalOutputConfig::INSTANCE_192 &&
 			config.profile != ExternalOutputConfig::INDEXED_144 &&
 			config.profile != ExternalOutputConfig::PARTICLE_LIGHT_64) {
@@ -498,6 +504,9 @@ Error ExternalOutputOwner::install_metadata_directory(GDExtensionDeviceExit::Pro
 	}
 	uint32_t mesh_selections = 0, material_selections = 0;
 	if (p_generation_selection) {
+		if (config.profile == ExternalOutputConfig::PARTICLE_DECAL_128) {
+			return install_decal128_metadata_directory(context, request, registry, lease, p_views, p_reads, p_surfaces);
+		}
 		if ((config.profile != ExternalOutputConfig::INSTANCE_192 &&
 					config.profile != ExternalOutputConfig::INDEXED_144 &&
 					config.profile != ExternalOutputConfig::PARTICLE_LIGHT_64) ||
@@ -2429,6 +2438,9 @@ void ExternalOutputOwner::surface_move(ExternalSurfaceSelection &p_to, ExternalS
 
 namespace RendererRD {
 Error ExternalOutputOwner::acquire_generation_selection(GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 request) {
+	if (config.profile == ExternalOutputConfig::PARTICLE_DECAL_128) {
+		return acquire_decal128_selection(context, request);
+	}
 	if (generation_selection_attempted || state != GenerationState::CONFIGURED || has_live_slots()) {
 		return ERR_ALREADY_IN_USE;
 	}

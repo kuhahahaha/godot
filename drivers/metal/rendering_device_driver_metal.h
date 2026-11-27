@@ -140,18 +140,18 @@ protected:
 		RELEASE_AFTER_WARMUP,
 		PERSIST,
 	};
-	static constexpr uint32_t ARCHIVE_WARMUP_IDLE_FRAMES = 30;
-	static constexpr uint32_t ARCHIVE_WARMUP_MIN_FRAMES = 30;
-	static constexpr uint32_t ARCHIVE_WARMUP_MAX_FRAMES = 90;
-	static constexpr uint32_t ARCHIVE_WARMUP_MAX_PIPELINES = 64;
+	static constexpr uint32_t ARCHIVE_WARMUP_IDLE_FRAMES = 4;
+	static constexpr uint32_t ARCHIVE_WARMUP_MIN_FRAMES = 4;
+	static constexpr uint32_t ARCHIVE_WARMUP_MAX_FRAMES = 12;
+	static constexpr uint32_t ARCHIVE_WARMUP_MAX_PIPELINES = 32;
 	static constexpr uint32_t ARCHIVE_WARMUP_MAX_COMPUTE_PIPELINES = 16;
 	static constexpr uint64_t ARCHIVE_MAX_BYTES_DEFAULT = 64ull * 1024ull * 1024ull;
 	static constexpr uint64_t ARCHIVE_MAX_DISK_BYTES = ARCHIVE_MAX_BYTES_DEFAULT;
 	static constexpr uint32_t ARCHIVE_MAX_ENTRIES = 4096;
-	static constexpr uint32_t COMPUTE_ARCHIVE_MAX_PIPELINES = 128;
+	static constexpr uint32_t COMPUTE_ARCHIVE_MAX_PIPELINES = 32;
 	static constexpr uint64_t COMPUTE_ARCHIVE_MAX_DISK_BYTES = 16ull * 1024ull * 1024ull;
-	static constexpr uint32_t COMPUTE_ARCHIVE_FLUSH_IDLE_FRAMES = 8;
-	static constexpr uint32_t COMPUTE_ARCHIVE_WARMUP_MAX_FRAMES = 30;
+	static constexpr uint32_t COMPUTE_ARCHIVE_FLUSH_IDLE_FRAMES = 4;
+	static constexpr uint32_t COMPUTE_ARCHIVE_WARMUP_MAX_FRAMES = 12;
 
 	Mutex archive_mutex;
 	std::shared_mutex archive_serialize_mutex;
@@ -162,6 +162,7 @@ protected:
 	uint32_t archive_added_pipelines = 0;
 	uint32_t archive_added_compute_pipelines = 0;
 	bool archive_dirty = false;
+	bool archive_loaded_from_disk = false;
 	bool archive_activity_this_frame = false;
 	uint32_t archive_idle_frames = 0;
 	uint32_t archive_warmup_idle_frames = ARCHIVE_WARMUP_IDLE_FRAMES;
@@ -170,6 +171,7 @@ protected:
 	uint32_t archive_open_frames = 0;
 	std::atomic<uint64_t> archive_serialize_calls{ 0 };
 	PipelineCacheMode pipeline_cache_mode = PipelineCacheMode::RELEASE_AFTER_WARMUP;
+	Mutex archive_task_mutex;
 	WorkerThreadPool::TaskID archive_release_task = WorkerThreadPool::INVALID_TASK_ID;
 	// DEV: When true, attempting to create a pipeline will fail if it cannot use the archive.
 	bool archive_fail_on_miss = false;
@@ -668,6 +670,10 @@ private:
 	void _serialize_compute_archive_to_path(MTL::BinaryArchive *p_archive, const String &p_cache_path);
 	void _wait_archive_release_task();
 	void _wait_compute_archive_flush_task();
+	void _dispatch_pipeline_archive_release(NS::SharedPtr<MTL::BinaryArchive> p_archive, bool p_serialize, uint32_t p_archive_count = 0);
+	void _dispatch_compute_archive_release(NS::SharedPtr<MTL::BinaryArchive> p_archive, bool p_serialize);
+	void _release_pipeline_archive_if_capped();
+	void _release_compute_archive_if_capped();
 	void _maybe_release_pipeline_archive(uint32_t p_frames_drawn);
 	void _maybe_flush_compute_archive();
 	static void _release_archive_task_func(void *p_userdata);

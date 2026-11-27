@@ -709,9 +709,79 @@ void ParticlesDecalBridgeRD::register_sealed_external_decal_slot(const ExternalD
 	}
 	MutexLock lock(active_decals_mutex);
 	ExternalOwnerDecalState &st = external_owner_decals[p_slot.owner_key];
-	if (!st.has_pending_rd_slot || p_slot.generation != st.pending_slot.generation || p_slot.present_seq >= st.pending_slot.present_seq) {
+	bool existing_live = st.has_pending_rd_slot;
+	if (existing_live && st.pending_slot.owner_ptr != nullptr && st.pending_slot.is_slot_live_fn != nullptr) {
+		existing_live = st.pending_slot.is_slot_live_fn(
+				st.pending_slot.owner_ptr,
+				st.pending_slot.generation,
+				st.pending_slot.slot_index,
+				st.pending_slot.lease_serial);
+	}
+	if (!existing_live || p_slot.generation != st.pending_slot.generation || p_slot.present_seq >= st.pending_slot.present_seq) {
 		st.pending_slot = p_slot;
 		st.has_pending_rd_slot = true;
+	}
+}
+
+void ParticlesDecalBridgeRD::upsert_external_decal_slot(const ExternalDecalSlotRegistration &p_slot) {
+	if (p_slot.owner_key == 0 || p_slot.capacity > MAX_PARTICLE_DECALS || p_slot.present_seq == 0) {
+		return;
+	}
+	MutexLock lock(active_decals_mutex);
+	ExternalOwnerDecalState &st = external_owner_decals[p_slot.owner_key];
+	if (st.has_pending_rd_slot &&
+			st.pending_slot.generation == p_slot.generation &&
+			st.pending_slot.slot_index == p_slot.slot_index &&
+			st.pending_slot.lease_serial == p_slot.lease_serial) {
+		st.pending_slot.present_seq = p_slot.present_seq;
+		if (p_slot.world_bounds.is_finite() && p_slot.world_bounds.get_end().is_finite() && p_slot.world_bounds.has_volume()) {
+			st.pending_slot.world_bounds = p_slot.world_bounds;
+		}
+		if (p_slot.harvest_uniform_set.is_valid()) {
+			st.pending_slot.harvest_uniform_set = p_slot.harvest_uniform_set;
+		}
+		for (uint32_t ti = 0; ti < TEXTURE_SLOT_COUNT; ++ti) {
+			if (p_slot.textures[ti].is_valid()) {
+				st.pending_slot.textures[ti] = p_slot.textures[ti];
+			}
+		}
+		return;
+	}
+	st.pending_slot = p_slot;
+	st.has_pending_rd_slot = true;
+}
+
+void ParticlesDecalBridgeRD::upsert_external_decal_slots_batch(const ExternalDecalSlotRegistration *p_slots, uint32_t p_count) {
+	if (!p_slots || p_count == 0) {
+		return;
+	}
+	MutexLock lock(active_decals_mutex);
+	for (uint32_t i = 0; i < p_count; ++i) {
+		const ExternalDecalSlotRegistration &slot = p_slots[i];
+		if (slot.owner_key == 0 || slot.capacity > MAX_PARTICLE_DECALS || slot.present_seq == 0) {
+			continue;
+		}
+		ExternalOwnerDecalState &st = external_owner_decals[slot.owner_key];
+		if (st.has_pending_rd_slot &&
+				st.pending_slot.generation == slot.generation &&
+				st.pending_slot.slot_index == slot.slot_index &&
+				st.pending_slot.lease_serial == slot.lease_serial) {
+			st.pending_slot.present_seq = slot.present_seq;
+			if (slot.world_bounds.is_finite() && slot.world_bounds.get_end().is_finite() && slot.world_bounds.has_volume()) {
+				st.pending_slot.world_bounds = slot.world_bounds;
+			}
+			if (slot.harvest_uniform_set.is_valid()) {
+				st.pending_slot.harvest_uniform_set = slot.harvest_uniform_set;
+			}
+			for (uint32_t ti = 0; ti < TEXTURE_SLOT_COUNT; ++ti) {
+				if (slot.textures[ti].is_valid()) {
+					st.pending_slot.textures[ti] = slot.textures[ti];
+				}
+			}
+		} else {
+			st.pending_slot = slot;
+			st.has_pending_rd_slot = true;
+		}
 	}
 }
 
@@ -1103,10 +1173,8 @@ uint32_t ParticlesDecalBridgeRD::dispatch_registered_external_decals_gpu(
 	for (uint32_t i = 0; i < matched_slots.size() && valid_slots.size() < MAX_DISPATCH_EMITTERS; ++i) {
 		const ExternalDecalSlotRegistration &reg = matched_slots[i];
 		RID uset;
-		if (reg.harvest_uniform_set.is_valid()) {
-			if (p_rd->uniform_set_is_valid(reg.harvest_uniform_set)) {
-				uset = reg.harvest_uniform_set;
-			}
+		if (reg.harvest_uniform_set.is_valid() && p_rd->uniform_set_is_valid(reg.harvest_uniform_set)) {
+			uset = reg.harvest_uniform_set;
 		} else {
 			RD::Uniform u[3];
 			u[0].uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
@@ -1257,10 +1325,28 @@ uint32_t ParticlesDecalBridgeRD::dispatch_registered_external_decals_gpu(
 		active_cluster_context.pending_gpu_decal_count = reserved_decals;
 	}
 	if (partitioned_mode) {
-		for (uint32_t i = 0; i < valid_slots.size(); ++i) {
-			const ValidHarvestSlot &vs = valid_slots[i];
+		if (valid_slots.size() == 1u) {
+			const ValidHarvestSlot &vs = valid_slots[0];
 			if (vs.reg.world_bounds.size != Vector3()) {
 				r_mobile_bounds_out.push_back({ vs.reg.world_bounds, p_base_decal_index + vs.emitter_offset, vs.reg.capacity });
+			}
+		} else {
+			// Round-robin rank interleaving across partitioned emitters ensures that
+			// Forward Mobile's per-instance MAX_RDL_CULL (8) decal slots never starve
+			// secondary emitters when geometry AABBs intersect multiple decal zones.
+			uint32_t max_emitter_cap = 0u;
+			for (uint32_t i = 0; i < valid_slots.size(); ++i) {
+				if (valid_slots[i].reg.world_bounds.size != Vector3()) {
+					max_emitter_cap = MAX(max_emitter_cap, valid_slots[i].reg.capacity);
+				}
+			}
+			for (uint32_t rank = 0; rank < max_emitter_cap; ++rank) {
+				for (uint32_t i = 0; i < valid_slots.size(); ++i) {
+					const ValidHarvestSlot &vs = valid_slots[i];
+					if (rank < vs.reg.capacity && vs.reg.world_bounds.size != Vector3()) {
+						r_mobile_bounds_out.push_back({ vs.reg.world_bounds, p_base_decal_index + vs.emitter_offset + rank, 1u });
+					}
+				}
 			}
 		}
 	} else {
