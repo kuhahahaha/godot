@@ -92,6 +92,42 @@ Error RendererRD::ExternalLinkedOwnerTest::wave_g_owner_capacity_and_prev_omitte
 	return OK;
 }
 
+Error RendererRD::ExternalLinkedOwnerTest::bug227_inspect_slot(ParticlesStorage &p_ps, RenderingDevice &p_rd, RID p_particles, uint32_t p_slot, Vector<uint32_t> &r_protected_cmds, uint32_t &r_slot_state, bool &r_fast_refresh_active, uint32_t &r_prep_ready_mask) {
+	r_protected_cmds.clear();
+	r_slot_state = 0;
+	r_fast_refresh_active = false;
+	r_prep_ready_mask = 0;
+	const auto *p = p_ps.particles_owner.get_or_null(p_particles);
+	if (!p || !p->external || p_slot >= p->external->slot_count) {
+		return ERR_DOES_NOT_EXIST;
+	}
+	const auto &owner = *p->external;
+	const auto &slot = owner.slots[p_slot];
+	r_slot_state = uint32_t(slot.state);
+	r_fast_refresh_active = slot.fast_refresh_active;
+	for (uint32_t i = 0; i < owner.preparation_capacity; ++i) {
+		const auto &row = owner.preparation_rows[i];
+		if (row.owner == &owner && row.owner_slot == p_slot &&
+				row.tuple_state == ExternalPipelinePreparation::TupleState::READY &&
+				row.finish_complete && row.finish_error == OK && row.backend_error == OK &&
+				row.pipeline_sealed && row.tuple_surface < 32u) {
+			r_prep_ready_mask |= (1u << row.tuple_surface);
+		}
+	}
+	if (slot.storage) {
+		const auto &cmd_res = slot.storage->resources[ExternalOutputStorage::PROTECTED_COMMANDS];
+		if (cmd_res.rid.is_valid() && cmd_res.bytes >= 20u) {
+			const Vector<uint8_t> raw = p_rd.buffer_get_data(cmd_res.rid, 0, cmd_res.bytes);
+			if (raw.size() >= int(cmd_res.bytes)) {
+				const uint32_t word_count = cmd_res.bytes / 4u;
+				r_protected_cmds.resize(word_count);
+				memcpy(r_protected_cmds.ptrw(), raw.ptr(), word_count * 4u);
+			}
+		}
+	}
+	return OK;
+}
+
 void RendererRD::ExternalLinkedOwnerTest::check_generated_slot_camera_selection(
 		const Ref<RendererViewport::Viewport::CameraCapture> &p_selected,
 		const Ref<RendererViewport::Viewport::CameraCapture> &p_wrong_view) {
@@ -420,6 +456,18 @@ Error wave_g_mobile_draw_external(
 		RID p_fb,
 		String &r_step,
 		bool p_check_motion_shader = false);
+Error wave_g_mobile_draw_external_multi(
+		const RendererRD::ExternalSurfaceSelection *p_sels,
+		uint32_t p_surface_count,
+		const RenderDataRD *p_render_data,
+		RID p_material,
+		RD::FramebufferFormatID p_fb_format,
+		RID p_fb,
+		bool p_use_ubershader,
+		bool p_skip_prepare,
+		Error *r_prep_errors,
+		Error *r_draw_errors,
+		String &r_step);
 Error wave_g_clustered_draw_external(
 		const RendererRD::ExternalSurfaceSelection &p_sel,
 		const RenderDataRD *p_render_data,

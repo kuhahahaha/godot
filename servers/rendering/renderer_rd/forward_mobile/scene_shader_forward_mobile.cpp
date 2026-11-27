@@ -373,15 +373,18 @@ Error SceneShaderForwardMobile::ShaderData::get_external_pipeline_key(const Rend
 	key.wireframe = request.wireframe;
 	key.instance192 = p_instance192;
 	key.indexed144 = p_indexed144;
-	// Select the exact specialized pipeline; readiness must be established
-	// before deriving geometry or creating the owned pipeline.
-	key.ubershader = false;
-	key.shader_specialization.packed_0 = request.specialization[0];
-	key.shader_specialization.packed_1 = request.specialization[1];
-
-	if (request.color_flags != 0) {
+	if (request.color_flags & ~SceneShaderForwardMobile::EXTERNAL_COLOR_FLAG_UBERSHADER) {
 		return ERR_INVALID_PARAMETER;
 	}
+	const bool use_ubershader = (request.color_flags & SceneShaderForwardMobile::EXTERNAL_COLOR_FLAG_UBERSHADER) != 0;
+	key.ubershader = use_ubershader;
+	if (use_ubershader) {
+		key.shader_specialization = {};
+	} else {
+		key.shader_specialization.packed_0 = request.specialization[0];
+		key.shader_specialization.packed_1 = request.specialization[1];
+	}
+
 	const bool color = request.pass == ExternalPacketPass::OPAQUE || request.pass == ExternalPacketPass::TRANSPARENT || request.pass == ExternalPacketPass::PROBE;
 	if (color) {
 		if (!SceneShaderForwardMobile::ShaderData::external_color_version_supported(key.version, p_transparent)) {
@@ -394,8 +397,10 @@ Error SceneShaderForwardMobile::ShaderData::get_external_pipeline_key(const Rend
 	} else if (key.version != SceneShaderForwardMobile::SHADER_VERSION_SHADOW_PASS && key.version != SceneShaderForwardMobile::SHADER_VERSION_SHADOW_PASS_DP) {
 		return ERR_INVALID_PARAMETER;
 	}
-	static_assert(sizeof(key.shader_specialization.packed_2) == sizeof(request.specialization[2]));
-	memcpy(&key.shader_specialization.packed_2, &request.specialization[2], sizeof(request.specialization[2]));
+	if (!use_ubershader) {
+		static_assert(sizeof(key.shader_specialization.packed_2) == sizeof(request.specialization[2]));
+		memcpy(&key.shader_specialization.packed_2, &request.specialization[2], sizeof(request.specialization[2]));
+	}
 	key.render_pass = request.subpass;
 	const auto cull = request.pass == ExternalPacketPass::SHADOW && request.double_sided_shadow ? SceneShaderForwardMobile::ShaderData::CULL_VARIANT_DOUBLE_SIDED : (request.reverse_cull ? SceneShaderForwardMobile::ShaderData::CULL_VARIANT_REVERSED : SceneShaderForwardMobile::ShaderData::CULL_VARIANT_NORMAL);
 	key.cull_mode = get_cull_mode_from_cull_variant(cull);
@@ -486,7 +491,7 @@ SceneShaderForwardMobile::ShaderData::NativePipelineValueState SceneShaderForwar
 	}
 
 	RD::PipelineRasterizationState raster_state;
-	raster_state.cull_mode = p_pipeline_key.instance192 ? RD::POLYGON_CULL_DISABLED : p_pipeline_key.cull_mode;
+	raster_state.cull_mode = (p_pipeline_key.instance192 || p_pipeline_key.ubershader) ? RD::POLYGON_CULL_DISABLED : p_pipeline_key.cull_mode;
 	raster_state.wireframe = wireframe || p_pipeline_key.wireframe;
 
 	RD::PipelineMultisampleState multisample_state;
@@ -607,12 +612,12 @@ Error SceneShaderForwardMobile::ShaderData::get_external_pipeline_value_plan(con
 	uint64_t mask = 0;
 	Error observed = OK;
 	if (p_recipe_static_set1) {
-		if (key.version != SHADER_VERSION_COLOR_PASS || p_indexed144 || !p_instance192) {
+		if (key.version != SHADER_VERSION_COLOR_PASS || key.ubershader || p_indexed144 || !p_instance192) {
 			return ERR_UNAVAILABLE;
 		}
 		observed = get_native_recipe_shader_variant_if_ready(ready, mask);
 	} else {
-		observed = get_native_shader_if_ready(key.version, false, p_indexed144, p_instance192, ready, mask);
+		observed = get_native_shader_if_ready(key.version, key.ubershader, p_indexed144, p_instance192, ready, mask);
 	}
 	if (observed != OK) {
 		return observed;
@@ -830,27 +835,19 @@ Error SceneShaderForwardMobile::ShaderData::get_native_shader_if_ready(ShaderVer
 	if (p_shader_version < 0 || p_shader_version >= SHADER_VERSION_MAX || (p_indexed144 && p_instance192)) {
 		return ERR_INVALID_PARAMETER;
 	}
-	if (p_instance192) {
-		if (p_ubershader) {
-			return ERR_INVALID_PARAMETER;
-		}
-		if (!instance192_shader_supported()) {
-			return ERR_UNAVAILABLE;
-		}
+	if (p_instance192 && !instance192_shader_supported()) {
+		return ERR_UNAVAILABLE;
 	}
 	MutexLock lock(SceneShaderForwardMobile::singleton_mutex);
 	if (!SceneShaderForwardMobile::singleton || version.is_null()) {
 		return ERR_UNAVAILABLE;
 	}
 	const uint32_t fp16_idx = SceneShaderForwardMobile::singleton->use_fp16 ? 1u : 0u;
-	uint32_t shader_index = 0;
+	uint32_t shader_index = p_shader_version + (fp16_idx ? SHADER_VERSION_MAX * 2 : 0) + (p_ubershader ? SHADER_VERSION_MAX : 0);
 	if (p_instance192) {
-		shader_index = INSTANCE192_VARIANT_OFFSET + p_shader_version + fp16_idx * SHADER_VERSION_MAX;
-	} else {
-		shader_index = p_shader_version + (fp16_idx ? SHADER_VERSION_MAX * 2 : 0) + (p_ubershader ? SHADER_VERSION_MAX : 0);
-		if (p_indexed144) {
-			shader_index += INDEXED144_VARIANT_OFFSET;
-		}
+		shader_index += INSTANCE192_VARIANT_OFFSET;
+	} else if (p_indexed144) {
+		shader_index += INDEXED144_VARIANT_OFFSET;
 	}
 	return SceneShaderForwardMobile::singleton->shader.version_get_native_shader_if_ready(version, shader_index, r_shader, r_input_mask);
 }
@@ -889,18 +886,17 @@ RID SceneShaderForwardMobile::ShaderData::warm_native_recipe_shader_variant() co
 RID SceneShaderForwardMobile::ShaderData::get_shader_variant(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144, bool p_instance192) const {
 	ERR_FAIL_COND_V(p_shader_version < 0 || p_shader_version >= SHADER_VERSION_MAX, RID());
 	ERR_FAIL_COND_V(p_indexed144 && p_instance192, RID());
-	ERR_FAIL_COND_V(p_instance192 && (p_ubershader || !instance192_shader_supported()), RID());
+	ERR_FAIL_COND_V(p_instance192 && !instance192_shader_supported(), RID());
 	if (version.is_valid()) {
 		MutexLock lock(SceneShaderForwardMobile::singleton_mutex);
 		ERR_FAIL_NULL_V(SceneShaderForwardMobile::singleton, RID());
 		const uint32_t fp16_idx = SceneShaderForwardMobile::singleton->use_fp16 ? 1u : 0u;
-		if (p_instance192) {
-			const uint32_t instance_slot = p_shader_version + fp16_idx * SHADER_VERSION_MAX;
-			ERR_FAIL_COND_V(int64_t(instance_slot) >= SceneShaderForwardMobile::singleton->instance192_shader_groups.size(), RID());
-			SceneShaderForwardMobile::singleton->shader.version_enable_group(version, SceneShaderForwardMobile::singleton->instance192_shader_groups[instance_slot]);
-			return SceneShaderForwardMobile::singleton->shader.version_get_shader(version, INSTANCE192_VARIANT_OFFSET + instance_slot);
-		}
 		uint32_t shader_index = p_shader_version + (fp16_idx ? SHADER_VERSION_MAX * 2 : 0) + (p_ubershader ? SHADER_VERSION_MAX : 0);
+		if (p_instance192) {
+			ERR_FAIL_COND_V(int64_t(shader_index) >= SceneShaderForwardMobile::singleton->instance192_shader_groups.size(), RID());
+			SceneShaderForwardMobile::singleton->shader.version_enable_group(version, SceneShaderForwardMobile::singleton->instance192_shader_groups[shader_index]);
+			return SceneShaderForwardMobile::singleton->shader.version_get_shader(version, INSTANCE192_VARIANT_OFFSET + shader_index);
+		}
 		if (p_indexed144) {
 			ERR_FAIL_COND_V(int64_t(shader_index) >= SceneShaderForwardMobile::singleton->indexed144_shader_groups.size(), RID());
 			SceneShaderForwardMobile::singleton->shader.version_enable_group(version, SceneShaderForwardMobile::singleton->indexed144_shader_groups[shader_index]);
@@ -1081,16 +1077,13 @@ void SceneShaderForwardMobile::init(const String p_defines) {
 		}
 
 		DEV_ASSERT(uint32_t(shader_versions.size()) == INSTANCE192_VARIANT_OFFSET);
-		// ExternalOutput INSTANCE_192 always disables ubershader; register only non-ubershader
-		// variants, each in its own 1-variant on-demand group.
-		for (uint32_t fp16_idx = 0; fp16_idx < 2; ++fp16_idx) {
-			const uint32_t fp_base = fp16_idx ? SHADER_VERSION_MAX * 2 : 0;
-			for (uint32_t version_idx = 0; version_idx < SHADER_VERSION_MAX; ++version_idx) {
-				const ShaderRD::VariantDefine ordinary = shader_versions[fp_base + version_idx];
-				const int instance_group = next_lazy_group++;
-				instance192_shader_groups.push_back(instance_group);
-				shader_versions.push_back(ShaderRD::VariantDefine(instance_group, String::utf8(ordinary.text.get_data()) + "\n#define USE_INSTANCE192_OUTPUT\n", false));
-			}
+		// Register both non-ubershader and ubershader variants for ExternalOutput INSTANCE_192,
+		// each in its own 1-variant on-demand group (matching ordinary/indexed144 layout).
+		for (uint32_t i = 0; i < ordinary_variant_count; ++i) {
+			const ShaderRD::VariantDefine ordinary = shader_versions[i];
+			const int instance_group = next_lazy_group++;
+			instance192_shader_groups.push_back(instance_group);
+			shader_versions.push_back(ShaderRD::VariantDefine(instance_group, String::utf8(ordinary.text.get_data()) + "\n#define USE_INSTANCE192_OUTPUT\n", false));
 		}
 
 		// Native material qualification requires static set 1 (use_dynamic_buffers = false),

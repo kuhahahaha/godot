@@ -3065,21 +3065,22 @@ bool RenderForwardMobile::_select_native_surface_pipeline(const RenderListParame
 
 RendererRD::ExternalPacketPipelineRequest RenderForwardMobile::_external_pipeline_request(const RenderListParameters &p_params,
 		const GeometryInstanceSurfaceDataCache &p_surface, const NativeSurfacePipelineSelection &p_selection) {
-	const auto &pipeline_specialization = p_selection.base_key.shader_specialization;
 	RendererRD::ExternalPacketPipelineRequest external_request;
 	external_request.backend = RendererRD::ExternalPacketPipelineRequest::Backend::MOBILE;
 	external_request.framebuffer_format = p_selection.base_key.framebuffer_format_id;
 	external_request.version = p_selection.base_key.version;
-	external_request.color_flags = 0;
+	// BUG-227: Use Forward Mobile's native ubershader for external particle pipelines so dynamic
+	// omni/spot/area lights, decals, and fog map to one stable pipeline tuple per
+	// (surface, pass_mode, variant) while live specialization flows via push constants at draw time.
+	external_request.color_flags = SceneShaderForwardMobile::EXTERNAL_COLOR_FLAG_UBERSHADER;
 	external_request.subpass = p_selection.base_key.render_pass;
 	external_request.view_count = p_params.view_count;
 	external_request.wireframe = p_params.force_wireframe;
 	external_request.reverse_cull = p_params.reverse_cull;
 	external_request.double_sided_shadow = (p_surface.flags & GeometryInstanceSurfaceDataCache::FLAG_USES_DOUBLE_SIDED_SHADOWS) != 0;
-	external_request.specialization[0] = pipeline_specialization.packed_0;
-	external_request.specialization[1] = pipeline_specialization.packed_1;
-	static_assert(sizeof(external_request.specialization[2]) == sizeof(pipeline_specialization.packed_2));
-	memcpy(&external_request.specialization[2], &pipeline_specialization.packed_2, sizeof(external_request.specialization[2]));
+	external_request.specialization[0] = 0;
+	external_request.specialization[1] = 0;
+	external_request.specialization[2] = 0;
 	switch (p_params.native_pass.pass_mode) {
 		case PASS_MODE_COLOR:
 			external_request.pass = RendererRD::ExternalPacketPass::OPAQUE;
@@ -3105,6 +3106,63 @@ void RenderForwardMobile::_prepare_external_color(const RenderListParameters &p_
 	const uint32_t pass = transparent ? RendererRD::ExternalOutputConfig::PASS_TRANSPARENT : RendererRD::ExternalOutputConfig::PASS_OPAQUE;
 	const uint32_t surface_flag = transparent ? GeometryInstanceSurfaceDataCache::FLAG_PASS_ALPHA : GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE;
 	auto *particles_storage = RendererRD::ParticlesStorage::get_singleton();
+
+	// BUG-227 Phase 1: Warm all external shader variants across every surface in the render list
+	// BEFORE committing any pipeline preparation row so cold multi-surface emitters (Surfaces 0..N)
+	// never stall mid-slot on shader compilation and strand Surfaces 1..N behind a stage deadline.
+	bool has_external = false;
+	for (int i = 0; i < p_params.element_count; i++) {
+		const auto &element = *p_params.elements[i];
+		const auto &surface = element.external_surface;
+		if (element.external_surface_index == UINT32_MAX || surface.is_empty() ||
+				!(surface.get_pass_mask() & pass) || !(element.flags & surface_flag)) {
+			continue;
+		}
+		has_external = true;
+		NativeSurfacePipelineSelection selected;
+		if (!_select_native_surface_pipeline(p_params, i, {}, selected) || !selected.mesh_surface || !selected.shader) {
+			continue;
+		}
+		const auto request = _external_pipeline_request(p_params, element, selected);
+		const bool use_ubershader = (request.color_flags & SceneShaderForwardMobile::EXTERNAL_COLOR_FLAG_UBERSHADER) != 0;
+		const bool indexed144 = surface.get_profile() == RendererRD::ExternalOutputConfig::INDEXED_144;
+		const bool instance192 = surface.get_profile() == RendererRD::ExternalOutputConfig::INSTANCE_192;
+		if (!indexed144 && !(instance192 && selected.shader->instance192_shader_supported())) {
+			continue;
+		}
+		const auto version = selected.base_key.version;
+		RID native_shader;
+		uint64_t input_mask = 0;
+		Error ready = selected.shader->get_native_shader_if_ready(version, use_ubershader, indexed144, instance192, native_shader, input_mask);
+		if (ready == OK) {
+			continue;
+		}
+		if (ready == ERR_UNAVAILABLE || ready == ERR_BUSY) {
+			RendererRD::ExternalPacketViewLease view;
+			if (particles_storage->particles_external_view_acquire(surface, p_params.external_prepared_render_data, view) != OK) {
+				continue;
+			}
+			if (particles_storage->particles_external_view_can_prepare_shader(view)) {
+				// Enable the real renderer's exact precision group before the paid
+				// preparation begins. Its backend still observes shader readiness.
+				const RID variant = selected.shader->get_shader_variant(version, use_ubershader, indexed144, instance192);
+				if (variant.is_valid()) {
+					ready = selected.shader->get_native_shader_if_ready(version, use_ubershader, indexed144, instance192, native_shader, input_mask);
+					if (ready == ERR_BUSY) {
+						selected.shader->is_valid(); // Join any other outstanding groups of this version.
+					}
+				}
+			}
+			ERR_FAIL_COND(view.release_checked() != OK);
+		}
+	}
+
+	if (!has_external) {
+		return;
+	}
+
+	// BUG-227 Phase 2: All eligible shader variants are now warm; prepare pipeline rows back-to-back
+	// for every surface so multi-surface slots commit together without mid-slot shader stalls.
 	for (int i = 0; i < p_params.element_count; i++) {
 		const auto &element = *p_params.elements[i];
 		const auto &surface = element.external_surface;
@@ -3117,34 +3175,18 @@ void RenderForwardMobile::_prepare_external_color(const RenderListParameters &p_
 			continue;
 		}
 		const auto request = _external_pipeline_request(p_params, element, selected);
-		RendererRD::ExternalPacketViewLease view;
-		if (particles_storage->particles_external_view_acquire(surface, p_params.external_prepared_render_data, view) != OK) {
-			continue;
-		}
-		const bool indexed144 = view.get_profile() == RendererRD::ExternalOutputConfig::INDEXED_144;
-		const bool instance192 = view.get_profile() == RendererRD::ExternalOutputConfig::INSTANCE_192;
-		bool shader_ready = true;
+		const bool use_ubershader = (request.color_flags & SceneShaderForwardMobile::EXTERNAL_COLOR_FLAG_UBERSHADER) != 0;
+		const bool indexed144 = surface.get_profile() == RendererRD::ExternalOutputConfig::INDEXED_144;
+		const bool instance192 = surface.get_profile() == RendererRD::ExternalOutputConfig::INSTANCE_192;
 		if (indexed144 || (instance192 && selected.shader->instance192_shader_supported())) {
-			const auto version = selected.base_key.version;
 			RID native_shader;
 			uint64_t input_mask = 0;
-			Error ready = selected.shader->get_native_shader_if_ready(version, false, indexed144, instance192, native_shader, input_mask);
-			if ((ready == ERR_UNAVAILABLE || ready == ERR_BUSY) && particles_storage->particles_external_view_can_prepare_shader(view)) {
-				// Enable the real renderer's exact precision group before the paid
-				// preparation begins. Its backend still observes shader readiness.
-				const RID variant = selected.shader->get_shader_variant(version, false, indexed144, instance192);
-				if (variant.is_valid()) {
-					ready = selected.shader->get_native_shader_if_ready(version, false, indexed144, instance192, native_shader, input_mask);
-					if (ready == ERR_BUSY) {
-						selected.shader->is_valid(); // Join any other outstanding groups of this version.
-						ready = selected.shader->get_native_shader_if_ready(version, false, indexed144, instance192, native_shader, input_mask);
-					}
-				}
+			if (selected.shader->get_native_shader_if_ready(selected.base_key.version, use_ubershader, indexed144, instance192, native_shader, input_mask) != OK) {
+				continue;
 			}
-			shader_ready = (ready == OK);
 		}
-		if (!shader_ready) {
-			ERR_FAIL_COND(view.release_checked() != OK);
+		RendererRD::ExternalPacketViewLease view;
+		if (particles_storage->particles_external_view_acquire(surface, p_params.external_prepared_render_data, view) != OK) {
 			continue;
 		}
 		const RendererRD::ExternalPipelinePreparation *preparation = nullptr;
@@ -3257,10 +3299,13 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 				continue;
 			}
 			const auto external_request = _external_pipeline_request(*p_params, *surf, selected);
+			const auto external_cull_variant = (external_request.pass == RendererRD::ExternalPacketPass::SHADOW && external_request.double_sided_shadow) ? SceneShaderForwardMobile::ShaderData::CULL_VARIANT_DOUBLE_SIDED : (external_request.reverse_cull ? SceneShaderForwardMobile::ShaderData::CULL_VARIANT_REVERSED : SceneShaderForwardMobile::ShaderData::CULL_VARIANT_NORMAL);
+			const RD::PolygonCullMode external_cull_mode = selected.shader->get_cull_mode_from_cull_variant(external_cull_variant);
 			struct ExternalPushContext {
 				SceneState::PushConstant *push;
 				const SceneShaderForwardMobile::ShaderSpecialization *specialization;
-			} push_context = { &push_constant, &pipeline_specialization };
+				RD::PolygonCullMode cull_mode;
+			} push_context = { &push_constant, &pipeline_specialization, external_cull_mode };
 			push_constant.multimesh_motion_vectors_current_offset = 0;
 			push_constant.multimesh_motion_vectors_previous_offset = 0;
 			using ExternalDrawPreparation = RendererRD::ParticlesStorage::ExternalDrawPreparation;
@@ -3276,7 +3321,7 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 						if (binding.uses_ubershader()) {
 							selected_push.push->ubershader.specialization = *selected_push.specialization;
 							selected_push.push->ubershader.constants = {};
-							selected_push.push->ubershader.constants.cull_mode = binding.get_cull_mode();
+							selected_push.push->ubershader.constants.cull_mode = selected_push.cull_mode;
 							out_bytes = sizeof(SceneState::PushConstant);
 						} else {
 							out_bytes = sizeof(SceneState::PushConstant) - sizeof(SceneState::PushConstantUbershader);
@@ -4743,7 +4788,7 @@ Error RenderForwardMobile::external_pipeline_prepare(const RendererRD::ExternalS
 	}
 	RID native_shader;
 	uint64_t input_mask = 0;
-	Error error = shader->get_native_shader_if_ready(key.version, false, indexed144, instance192, native_shader, input_mask);
+	Error error = shader->get_native_shader_if_ready(key.version, key.ubershader, indexed144, instance192, native_shader, input_mask);
 	if (error != OK) {
 		return fail("shader_readiness", error);
 	}
@@ -4802,7 +4847,7 @@ Error RenderForwardMobile::external_pipeline_prepare(const RendererRD::ExternalS
 	}
 	r_preparation.selected_geometry = 0;
 	r_preparation.classification = classification;
-	r_preparation.ubershader = false;
+	r_preparation.ubershader = key.ubershader;
 	r_preparation.cull_mode = key.cull_mode;
 	return fail("complete", OK);
 }

@@ -128,6 +128,7 @@ public:
 	// Retains original slot/read observations even if raster verification fails.
 	static Error staged_color_snapshot(ParticlesStorage &, RID, uint32_t, const Ref<RendererViewport::Viewport::CameraCapture> &, Dictionary &, RID &, uint32_t &, uint32_t &);
 	static Error wave_g_owner_capacity_and_prev_omitted(ParticlesStorage &, RID, uint32_t &r_capacity, bool &r_prev_omitted);
+	static Error bug227_inspect_slot(ParticlesStorage &p_ps, RenderingDevice &p_rd, RID p_particles, uint32_t p_slot, Vector<uint32_t> &r_protected_cmds, uint32_t &r_slot_state, bool &r_fast_refresh_active, uint32_t &r_prep_ready_mask);
 	static void check_generated_slot_camera_selection(const Ref<RendererViewport::Viewport::CameraCapture> &, const Ref<RendererViewport::Viewport::CameraCapture> &);
 	static Error wave_g_install_indexed144_surface_hold(ParticlesStorage &, MeshStorage &, RID p_particles, uint32_t p_slot_index, RID p_ext_mesh, uint32_t p_surf_idx);
 	static void wave_g_release_indexed144_surface_hold(ParticlesStorage &, MeshStorage &, RID p_particles, uint32_t p_slot_index);

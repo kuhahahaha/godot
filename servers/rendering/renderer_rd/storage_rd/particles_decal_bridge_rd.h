@@ -203,6 +203,8 @@ public:
 			LocalVector<ParticleDecalRecord128> &r_selected);
 
 	void register_sealed_external_decal_slot(const ExternalDecalSlotRegistration &p_slot);
+	void upsert_external_decal_slot(const ExternalDecalSlotRegistration &p_slot);
+	void upsert_external_decal_slots_batch(const ExternalDecalSlotRegistration *p_slots, uint32_t p_count);
 	bool update_external_decal_slot_present_seq(
 			uint64_t p_owner_key,
 			uint64_t p_generation,

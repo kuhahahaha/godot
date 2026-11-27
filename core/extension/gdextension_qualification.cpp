@@ -37,6 +37,12 @@
 #include "servers/rendering/rendering_server_default.h"
 #include "servers/rendering/rendering_shader_container.h"
 
+#ifdef __APPLE__
+#include <malloc/malloc.h>
+
+#include <atomic>
+#endif
+
 namespace GDExtensionDeviceExit {
 namespace {
 template <typename Bridge>
@@ -1952,6 +1958,23 @@ static constexpr uint64_t kCompileComputeMaxOutputBytesV1 = 67108864ull;
 static int32_t compile_compute_glsl_v1(
 		const GDExtensionCompileComputeGlslInputV1 *p_input,
 		GDExtensionCompileComputeGlslOutputV1 *p_output) {
+#ifdef __APPLE__
+	// BUG-230: Periodically relieve macOS libmalloc magazines after local compile
+	// buffers (GLSL source, SPIR-V, SPIRV-Cross MSL container) have destructed so
+	// bulk cold compute compilation does not retain hundreds of MB at post-startup.
+	struct AppleCompileHeapReliefGuard {
+		bool did_compile = false;
+		~AppleCompileHeapReliefGuard() {
+			if (!did_compile) {
+				return;
+			}
+			static std::atomic<uint32_t> compile_count{ 0 };
+			if (((compile_count.fetch_add(1u, std::memory_order_relaxed) + 1u) & 7u) == 0u) {
+				::malloc_zone_pressure_relief(nullptr, 0);
+			}
+		}
+	} apple_relief_guard;
+#endif
 	if (!aligned(p_output) || p_output->abi_version != 1u || p_output->struct_size != sizeof(*p_output)) {
 		return int32_t(ERR_INVALID_PARAMETER);
 	}
@@ -1998,6 +2021,9 @@ static int32_t compile_compute_glsl_v1(
 			RenderingDevice::SHADER_LANGUAGE_GLSL,
 			&compile_error,
 			false);
+#ifdef __APPLE__
+	apple_relief_guard.did_compile = true;
+#endif
 
 	if (!compile_error.is_empty()) {
 		const CharString err_utf8 = compile_error.utf8();

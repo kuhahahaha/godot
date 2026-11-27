@@ -5358,6 +5358,915 @@ void main() {
 		return arm_err == OK && f0_ok && f1_ok;
 	}
 
+	bool run_bug227_4mesh_instance192_suite(const GDExtensionStorageBackingV1 &p_source, uint32_t p_source_slot) {
+		using namespace GDExtensionDeviceExit;
+		constexpr uint32_t kSurfCount = 4u;
+		constexpr uint32_t kCap = 4u;
+		constexpr uint32_t kReadCap = 24u;
+		constexpr uint32_t kReadGraphCap = 128u;
+
+		// Create 4 distinct meshes with distinct index counts (3, 6, 9, 12) covering [-0.35, +0.35]^2 at z=0.
+		RID meshes[kSurfCount];
+		const uint32_t expected_index_counts[kSurfCount] = { 3u, 6u, 9u, 12u };
+		for (uint32_t m = 0; m < kSurfCount; ++m) {
+			meshes[m] = server->mesh_create();
+			Array arr;
+			arr.resize(RSE::ARRAY_MAX);
+			PackedVector3Array vtx;
+			PackedInt32Array idx;
+			// Build a 4-corner quad with (m + 1) triangles covering the quad center so every quadrant center pixel is hit.
+			vtx.push_back(Vector3(-0.35f, -0.35f, 0.0f));
+			vtx.push_back(Vector3(0.35f, -0.35f, 0.0f));
+			vtx.push_back(Vector3(0.35f, 0.35f, 0.0f));
+			vtx.push_back(Vector3(-0.35f, 0.35f, 0.0f));
+			vtx.push_back(Vector3(0.0f, 0.0f, 0.0f));
+			if (m == 0) {
+				// 1 big triangle covering center (0,0)
+				vtx.set(0, Vector3(-0.45f, -0.45f, 0.0f));
+				vtx.set(1, Vector3(0.45f, -0.45f, 0.0f));
+				vtx.set(2, Vector3(0.0f, 0.45f, 0.0f));
+				idx.push_back(0);
+				idx.push_back(1);
+				idx.push_back(2);
+			} else if (m == 1) {
+				// 2 triangles = quad
+				idx.push_back(0);
+				idx.push_back(1);
+				idx.push_back(2);
+				idx.push_back(0);
+				idx.push_back(2);
+				idx.push_back(3);
+			} else if (m == 2) {
+				// 3 triangles fanning around center
+				idx.push_back(0);
+				idx.push_back(1);
+				idx.push_back(2);
+				idx.push_back(0);
+				idx.push_back(2);
+				idx.push_back(3);
+				idx.push_back(0);
+				idx.push_back(1);
+				idx.push_back(3);
+			} else {
+				// 4 triangles around center
+				idx.push_back(4);
+				idx.push_back(0);
+				idx.push_back(1);
+				idx.push_back(4);
+				idx.push_back(1);
+				idx.push_back(2);
+				idx.push_back(4);
+				idx.push_back(2);
+				idx.push_back(3);
+				idx.push_back(4);
+				idx.push_back(3);
+				idx.push_back(0);
+			}
+			arr[RSE::ARRAY_VERTEX] = vtx;
+			PackedVector3Array nrm;
+			PackedVector2Array uv;
+			for (int vi = 0; vi < vtx.size(); ++vi) {
+				nrm.push_back(Vector3(0.0f, 0.0f, 1.0f));
+				uv.push_back(Vector2(0.5f, 0.5f));
+			}
+			arr[RSE::ARRAY_NORMAL] = nrm;
+			arr[RSE::ARRAY_TEX_UV] = uv;
+			arr[RSE::ARRAY_INDEX] = idx;
+			server->mesh_add_surface_from_arrays(meshes[m], RSE::PRIMITIVE_TRIANGLES, arr);
+		}
+		RID shader_rid = server->shader_create_from_code(
+				"shader_type spatial; render_mode unshaded, cull_disabled; "
+				"uniform vec4 tint = vec4(1.0, 1.0, 1.0, 1.0); "
+				"uniform sampler2D albedo_tex : source_color, hint_default_white; "
+				"void fragment() { ALBEDO = COLOR.rgb * tint.rgb * texture(albedo_tex, UV).rgb; }");
+		RID mat_rid = server->material_create();
+		server->material_set_shader(mat_rid, shader_rid);
+		server->material_set_param(mat_rid, StringName("tint"), Color(1.0f, 1.0f, 1.0f, 1.0f));
+
+		// Settle transfer workers for ALL 4 meshes + material on RT!
+		struct SettleArgs {
+			RID meshes[kSurfCount];
+			RID mat;
+			RenderingDevice *rd = nullptr;
+		} settle_args;
+		for (uint32_t m = 0; m < kSurfCount; ++m) {
+			settle_args.meshes[m] = meshes[m];
+		}
+		settle_args.mat = mat_rid;
+		settle_args.rd = device;
+		server->call_on_render_thread(callable_mp_static((+[](uint64_t p_addr) {
+			auto *a = reinterpret_cast<SettleArgs *>(uintptr_t(p_addr));
+			auto *ms = RendererRD::MeshStorage::get_singleton();
+			auto *mats = RendererRD::MaterialStorage::get_singleton();
+			if (a->rd) {
+				for (uint32_t f = 0; f < 4; ++f) {
+					a->rd->_submit_transfer_workers();
+					a->rd->_wait_for_transfer_workers();
+					a->rd->swap_buffers(false);
+				}
+			}
+			if (ms && a->rd) {
+				const auto *const_ms = ms;
+				for (uint32_t m = 0; m < kSurfCount; ++m) {
+					if (auto *mesh = ms->mesh_owner.get_or_null(a->meshes[m])) {
+						if (mesh->surface_count > 0 && mesh->surfaces[0]) {
+							if (auto *vbo = a->rd->vertex_buffer_owner.get_or_null(mesh->surfaces[0]->vertex_buffer)) {
+								a->rd->_check_transfer_worker_buffer(vbo);
+							}
+							if (auto *ibo = a->rd->index_buffer_owner.get_or_null(mesh->surfaces[0]->index_buffer)) {
+								a->rd->_check_transfer_worker_buffer(ibo);
+							}
+							if (auto *iao = a->rd->index_array_owner.get_or_null(mesh->surfaces[0]->index_array)) {
+								a->rd->_check_transfer_worker_index_array(iao);
+							}
+						}
+					}
+					(void)const_ms->mesh_get_surface(a->meshes[m], 0);
+					RendererRD::MeshStorage::NativeSelectionLease sel;
+					RendererRD::MeshStorage::NativeSurfaceHold hold;
+					if (ms->mesh_selection_acquire(a->meshes[m], sel) == OK) {
+						if (ms->mesh_surface_source_hold_acquire(a->meshes[m], 0, hold) == OK) {
+							(void)ms->mesh_surface_hold_release(hold);
+						}
+						(void)ms->mesh_selection_release(sel);
+					}
+				}
+			}
+			if (mats) {
+				mats->_update_queued_materials();
+				mats->material_prepare_native_qualification(a->mat);
+			}
+		})).bind(uint64_t(uintptr_t(&settle_args))));
+		server->sync();
+
+		auto read_quadrant_pixels = [&](uint32_t r_nonzero_per_quad[4], uint32_t r_rgb_sample[4][3]) -> bool {
+			Vector<uint8_t> bytes;
+			server->call_on_render_thread(callable_mp_static((+[](uint64_t p_rd_addr, RID p_tex, uint64_t p_out_addr) {
+				auto *p_rd = reinterpret_cast<RenderingDevice *>(uintptr_t(p_rd_addr));
+				auto *out_vec = reinterpret_cast<Vector<uint8_t> *>(uintptr_t(p_out_addr));
+				if (p_rd && p_tex.is_valid()) {
+					p_rd->_submit_transfer_workers();
+					p_rd->_wait_for_transfer_workers();
+					*out_vec = p_rd->texture_get_data(p_tex, 0);
+				}
+			})).bind(uint64_t(uintptr_t(device)), shared_color_tex, uint64_t(uintptr_t(&bytes))));
+			server->sync();
+			if (bytes.size() != 32 * 32 * 4) {
+				return false;
+			}
+			for (uint32_t q = 0; q < 4; ++q) {
+				r_nonzero_per_quad[q] = 0;
+				r_rgb_sample[q][0] = r_rgb_sample[q][1] = r_rgb_sample[q][2] = 0;
+			}
+			// Q0: x in [0,15], y in [0,15]; Q1: x in [16,31], y in [0,15]; Q2: x in [0,15], y in [16,31]; Q3: x in [16,31], y in [16,31]
+			for (uint32_t y = 0; y < 32; ++y) {
+				for (uint32_t x = 0; x < 32; ++x) {
+					const uint8_t *px = bytes.ptr() + (y * 32 + x) * 4;
+					if (px[0] > 16 || px[1] > 16 || px[2] > 16) {
+						const uint32_t q = (x >= 16 ? 1u : 0u) + (y >= 16 ? 2u : 0u);
+						++r_nonzero_per_quad[q];
+						if (r_rgb_sample[q][0] == 0 && r_rgb_sample[q][1] == 0 && r_rgb_sample[q][2] == 0) {
+							r_rgb_sample[q][0] = px[0];
+							r_rgb_sample[q][1] = px[1];
+							r_rgb_sample[q][2] = px[2];
+						}
+					}
+				}
+			}
+			return true;
+		};
+
+		auto run_case = [&](const String &p_label, const uint32_t p_mesh_indices[kCap], const uint32_t p_expected_cnt[kSurfCount], const uint32_t p_expected_first[kSurfCount]) {
+			// 1. Create 4-mesh INSTANCE_192 owner matching ANGE OutputAdmissionPolicy{4, 128, 24, 32, 32, 4, 4}.
+			OutputOwnerSession sess;
+			{
+				uint64_t mesh_ids[kSurfCount];
+				uint64_t mat_ids[kSurfCount];
+				for (uint32_t s = 0; s < kSurfCount; ++s) {
+					mesh_ids[s] = meshes[s].get_id();
+					mat_ids[s] = mat_rid.get_id();
+				}
+				GDExtensionOutputCreateInputV3 create_in = {};
+				create_in.abi = { 3, sizeof(create_in), 0 };
+				auto &cfg = create_in.config;
+				cfg.abi = production_dto_abi<GDExtensionOutputCreateInputV1>();
+				cfg.profile = 1u; // INSTANCE_192
+				cfg.capacity = kCap;
+				cfg.max_inflight = 4u;
+				cfg.max_views = 4u;
+				cfg.space = 2u; // WORLD
+				cfg.motion = 0u; // DISABLED
+				cfg.pass_mask = uint32_t(RendererRD::ExternalOutputConfig::PASS_OPAQUE);
+				cfg.surfaces = { mesh_ids, kSurfCount, 0 };
+				cfg.surface_materials = { mat_ids, kSurfCount, 0 };
+				for (uint32_t a = 0; a < 3; ++a) {
+					cfg.bounds.position[a] = -4.0;
+					cfg.bounds.size[a] = 8.0;
+				}
+				cfg.producer_tag.bytes[0] = 0x27;
+				cfg.device_tag.bytes[0] = 2;
+				cfg.layout_digest.bytes[0] = 3;
+				cfg.mapping_digest.bytes[0] = 4;
+				cfg.numeric_profile_digest.bytes[0] = 5;
+
+				GDExtensionOutputMetadataQueryInputV1 query = {};
+				query.abi = production_dto_abi<GDExtensionOutputMetadataQueryInputV1>();
+				query.config = cfg;
+				query.limits = { production_dto_abi<GDExtensionOutputMetadataLimitsV1>(), 16u, 32u, 32u, 0u };
+				GDExtensionOutputMetadataQueryResultV1 mquote = {};
+				ports.metadata_query(&query, &mquote);
+				record_check(p_label + ".metadata_query", mquote.status.error == OK && mquote.requirements.flattened_surface_count == kSurfCount);
+				if (mquote.status.error != OK) {
+					diagnostics[p_label + ".mquote_err"] = mquote.status.error;
+					return;
+				}
+				create_in.requirements = mquote.requirements;
+				create_in.metadata_resource_slot = 0;
+
+				const GDExtensionProductionResourceV1 meta_res = {
+					GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, mquote.requirements.required_metadata_bytes, 0
+				};
+				GDExtensionProductionCapacityV1 cap = {};
+				cap.abi = production_dto_abi<GDExtensionProductionCapacityV1>();
+				cap.requests = 1;
+				cap.suboperations = 0;
+				cap.resources = 1;
+				cap.resource_uses = 128;
+				cap.graph_memberships = 16;
+				cap.return_cells = 4;
+				{
+					MutexLock reg_lock(enrollment.registry.mutex);
+					MutexLock rd_lock(device->_thread_safe_);
+					const Error be = enrollment.registry.production_membership_bound_locked(*device, cap.graph_memberships, device->transfer_worker_pool_max_size, cap.native_memberships);
+					if (be != OK) {
+						record_check(p_label + ".create_bound", false);
+						return;
+					}
+				}
+				const GDExtensionProductionOperationV1 op = { production_dto_abi<GDExtensionProductionOperationV1>(), ++next_nonce, 1, 10, 11 };
+				Error cerr = Error(ports.reserve_v2(enrollment.attachment, &op, &cap, nullptr, 0, &meta_res, 1, nullptr, 0, nullptr, 0, &sess.create_req).native_error);
+				if (cerr != OK) {
+					record_check(p_label + ".create_reserve", false);
+					return;
+				}
+				active_create_in = create_in;
+				active_create_out = {};
+				GDExtensionProductionRecordReportV2 rec = {};
+				cerr = run_record_sync(sess.create_req, ActiveRecordKind::CREATE_OUTPUT, rec);
+				if (cerr != OK || active_create_out.status.error != OK) {
+					diagnostics[p_label + ".create_err"] = int(cerr != OK ? cerr : Error(active_create_out.status.error));
+					record_check(p_label + ".create_v3", false);
+					release_request_cleanly(sess.create_req);
+					return;
+				}
+				sess.created = active_create_out;
+				record_check(p_label + ".create_v3", true);
+
+				server->call_on_render_thread(callable_mp_static((+[](uint64_t p_sess_addr) {
+					auto *p_sess = reinterpret_cast<OutputOwnerSession *>(uintptr_t(p_sess_addr));
+					auto *scene = static_cast<RendererSceneCull *>(RSG::scene);
+					p_sess->scenario = scene->scenario_allocate();
+					scene->scenario_initialize(p_sess->scenario);
+					p_sess->instance = scene->instance_allocate();
+					scene->instance_initialize(p_sess->instance);
+					scene->instance_set_base(p_sess->instance, RID::from_uint64(p_sess->created.particles));
+					scene->instance_set_scenario(p_sess->instance, p_sess->scenario);
+					scene->instance_set_transform(p_sess->instance, Transform3D());
+					scene->instance_set_custom_aabb(p_sess->instance, AABB(Vector3(-4, -4, -4), Vector3(8, 8, 8)));
+					scene->update_dirty_instances();
+
+					p_sess->viewport = RSG::viewport->viewport_allocate();
+					RSG::viewport->viewport_initialize(p_sess->viewport);
+					RSG::viewport->viewport_set_size(p_sess->viewport, 32, 32);
+					RSG::viewport->viewport_set_scenario(p_sess->viewport, p_sess->scenario);
+					p_sess->camera = scene->camera_allocate();
+					scene->camera_initialize(p_sess->camera);
+					scene->camera_set_orthogonal(p_sess->camera, 2.0f, 1.0f, 3.0f);
+					scene->camera_set_transform(p_sess->camera, Transform3D());
+					RSG::viewport->viewport_attach_camera(p_sess->viewport, p_sess->camera);
+					p_sess->camera_buffers = Ref<RenderSceneBuffers>(memnew(CameraTestBuffers));
+					if (auto *vp = RSG::viewport->viewport_owner.get_or_null(p_sess->viewport)) {
+						vp->render_buffers = p_sess->camera_buffers;
+					}
+				})).bind(uint64_t(uintptr_t(&sess))));
+				server->sync();
+			}
+
+			const uint64_t gen = sess.created.generation;
+			// Build 4 Instance192 records placed in the 4 screen quadrants at z = -2.0 (ortho [-1, 1]^2, z in [-3, -1]).
+			const float pos[kCap][3] = {
+				{ -0.5f, -0.5f, -2.0f },
+				{ +0.5f, -0.5f, -2.0f },
+				{ -0.5f, +0.5f, -2.0f },
+				{ +0.5f, +0.5f, -2.0f },
+			};
+			const float col[kCap][4] = {
+				{ 1.0f, 0.0f, 0.0f, 1.0f },
+				{ 0.0f, 1.0f, 0.0f, 1.0f },
+				{ 0.0f, 0.0f, 1.0f, 1.0f },
+				{ 1.0f, 1.0f, 0.0f, 1.0f },
+			};
+			Vector<uint8_t> curr_bytes;
+			curr_bytes.resize(kCap * 192u);
+			for (uint32_t i = 0; i < kCap; ++i) {
+				uint32_t *w = reinterpret_cast<uint32_t *>(curr_bytes.ptrw() + i * 192u);
+				wave_g_fill_instance192_record(w, pos[i][0], pos[i][1], pos[i][2], i + 1u);
+				w[36] = wave_g_f2u(col[i][0]);
+				w[37] = wave_g_f2u(col[i][1]);
+				w[38] = wave_g_f2u(col[i][2]);
+				w[39] = wave_g_f2u(col[i][3]);
+				w[46] = 1u | (p_mesh_indices[i] << RendererRD::ParticlesExternalGuard::INSTANCE192_MESH_INDEX_SHIFT);
+			}
+			const uint32_t meta_words[8] = { kCap, 0, 0, 0, kCap, 1u, 1u, 0u };
+			Vector<uint8_t> meta_bytes;
+			meta_bytes.resize(32);
+			memcpy(meta_bytes.ptrw(), meta_words, 32);
+
+			Vector<GDExtensionProductionResourceV1> res_vec;
+			res_vec.push_back({ GDEXTENSION_PRODUCTION_STORAGE_V1, p_source_slot, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 32, 0 });
+			res_vec.push_back({ GDEXTENSION_PRODUCTION_STORAGE_V1, 1u, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, uint64_t(curr_bytes.size()), 0 });
+			res_vec.push_back({ GDEXTENSION_PRODUCTION_STORAGE_V1, 7u, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, 32u, 0 });
+			res_vec.push_back({ GDEXTENSION_PRODUCTION_STORAGE_V1, 1u, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, gen, 32u, 0 }); // guard readback alias
+
+			Vector<GDExtensionProductionUseV1> use_vec;
+			use_vec.push_back({ 0, GDEXTENSION_PRODUCTION_READ_V1, 0, 32, 0 });
+			use_vec.push_back({ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 0, uint64_t(curr_bytes.size()), 0 });
+			use_vec.push_back({ 2, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 32u, 0 });
+			use_vec.push_back({ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 0, uint64_t(curr_bytes.size()), 0 });
+			use_vec.push_back({ 2, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 32u, 0 });
+			use_vec.push_back({ 3, GDEXTENSION_PRODUCTION_READ_V1, 0, 32u, 0 });
+
+			Vector<GDExtensionProductionActionV2> act_vec;
+			act_vec.push_back({ 0, 10, 1, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, 3, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX });
+			act_vec.push_back({ 1, 10, 2, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 3, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX });
+			act_vec.push_back({ 2, 10, 3, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 4, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX });
+			act_vec.push_back({ 3, 10, 20, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX });
+			act_vec.push_back({ 4, 10, 21, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX });
+			act_vec.push_back({ 5, 10, 22, 0, GDEXTENSION_PRODUCTION_READBACK_V1, UINT32_MAX, 5, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, 0 });
+
+			Vector<GDExtensionProductionUploadV2> upload_dtos;
+			upload_dtos.push_back({ production_dto_abi<GDExtensionProductionUploadV2>(), 1, 10, 2, 0, 1, 0, 0, uint64_t(curr_bytes.size()) });
+			upload_dtos.push_back({ production_dto_abi<GDExtensionProductionUploadV2>(), 2, 10, 3, 0, 2, 0, 0, 32u });
+
+			const GDExtensionProductionReadbackSourceV1 rb_src = { 3, GDEXTENSION_PRODUCTION_READBACK_NATIVE_OUTPUT_GUARD_V1, 5, 0, 32, { 3 }, {} };
+			const GDExtensionProductionOutputDemandInputV1 demand_in = {
+				production_dto_abi<GDExtensionProductionOutputDemandInputV1>(),
+				sess.create_req, sess.created.particles, gen,
+				0, 10, 3, 10, 4, 10, 1, 20, 21,
+				kReadCap, kReadGraphCap, 2, 0
+			};
+			GDExtensionProductionOutputGuardDemandV1 guard_demand = {};
+			GDExtensionProductionMetadataQuoteV1 req_quote = {};
+			Error err = Error(ports.req_quote_v2(
+					enrollment.attachment,
+					act_vec.ptr(), uint32_t(act_vec.size()),
+					res_vec.ptr(), uint32_t(res_vec.size()),
+					use_vec.ptr(), uint32_t(use_vec.size()),
+					upload_dtos.ptr(), uint32_t(upload_dtos.size()),
+					&rb_src, 1, 5, uint64_t(curr_bytes.size()) + 32u,
+					&demand_in, 1, &guard_demand, 1, &req_quote).native_error);
+			record_check(p_label + ".req_quote_v2", err == OK);
+			if (err != OK) {
+				diagnostics[p_label + ".quote_err"] = int(err);
+				teardown_owner_session(sess);
+				return;
+			}
+
+			PacketRecordPlan pkt;
+			pkt.acquire_ordinal = 0;
+			pkt.upload_ordinals.push_back(1);
+			pkt.upload_ordinals.push_back(2);
+			pkt.finalize_ordinal = 3;
+			pkt.seal_ordinal = 4;
+			pkt.readback_ordinals.push_back(5);
+
+			const GDExtensionProductionOperationV1 op = { production_dto_abi<GDExtensionProductionOperationV1>(), ++next_nonce, 1, 10, 25 };
+			err = Error(ports.reserve_readbacks(
+					enrollment.attachment, &op, &req_quote.capacity,
+					act_vec.ptr(), uint32_t(act_vec.size()),
+					res_vec.ptr(), uint32_t(res_vec.size()),
+					use_vec.ptr(), uint32_t(use_vec.size()),
+					&rb_src, 1, &pkt.req).native_error);
+			record_check(p_label + ".reserve_readbacks", err == OK);
+			if (err != OK) {
+				teardown_owner_session(sess);
+				return;
+			}
+
+			err = Error(ports.import_storage(pkt.req, 0, &p_source).native_error);
+			if (err == OK) {
+				err = Error(ports.prepare_upload_v2(pkt.req, &upload_dtos[0], curr_bytes.ptr(), curr_bytes.size()).native_error);
+			}
+			if (err == OK) {
+				err = Error(ports.prepare_upload_v2(pkt.req, &upload_dtos[1], meta_bytes.ptr(), meta_bytes.size()).native_error);
+			}
+			if (err == OK) {
+				err = Error(ports.prepare_readback_v2(pkt.req, 5, 0).native_error);
+			}
+			record_check(p_label + ".prepare_uploads", err == OK);
+
+			GDExtensionProductionCameraSampleV1 cam_sample = {};
+			err = prepare_host_and_capture_camera(sess, pkt.req, 0, 0x71, cam_sample);
+			record_check(p_label + ".camera_capture", err == OK && cam_sample.present_seq == 1);
+			if (err != OK) {
+				release_request_cleanly(pkt.req);
+				teardown_owner_session(sess);
+				return;
+			}
+
+			pkt.acquire_input.abi = production_dto_abi<GDExtensionOutputAcquireInputV1>();
+			pkt.acquire_input.particles = sess.created.particles;
+			pkt.acquire_input.view_epoch = cam_sample.camera.view_epoch;
+			pkt.acquire_input.pass_mask = uint32_t(RendererRD::ExternalOutputConfig::PASS_OPAQUE);
+			pkt.acquire_input.layout_digest.bytes[0] = 3;
+			pkt.acquire_input.mapping_digest.bytes[0] = 4;
+			pkt.acquire_input.common.generation = gen;
+			pkt.acquire_input.common.present_seq = cam_sample.present_seq;
+			pkt.acquire_input.common.output_tag.bytes[0] = 0x51;
+			pkt.acquire_input.common.view_tag.bytes[0] = 0x61;
+			memset(pkt.acquire_input.common.current_host_token.bytes, 0x71, 32);
+			for (uint32_t a = 0; a < 3; ++a) {
+				pkt.acquire_input.common.bounds.position[a] = -4.0;
+				pkt.acquire_input.common.bounds.size[a] = 8.0;
+			}
+			pkt.acquire_input.common.history_reset = 1;
+			pkt.acquire_input.common.current_camera = cam_sample.camera;
+
+			GDExtensionProductionOutputPrepareV3 prep_v3 = {};
+			prep_v3.abi = { 3, sizeof(prep_v3), 0 };
+			prep_v3.action_ordinal = 0;
+			prep_v3.canonical_suboperation = 10;
+			prep_v3.source_recipe_substep = 1;
+			prep_v3.source_resource_slot = 0;
+			prep_v3.source_use_index = 0;
+			prep_v3.first_source_use = 0;
+			prep_v3.source_use_count = 1;
+			prep_v3.read_capacity = kReadCap;
+			prep_v3.read_graph_capacity = kReadGraphCap;
+			prep_v3.source_generation = 1;
+			prep_v3.input = pkt.acquire_input;
+			for (uint32_t r = 0; r < 8; ++r) {
+				prep_v3.roles[r] = { 0, UINT32_MAX, UINT32_MAX, 0, 0, 0 };
+			}
+			prep_v3.roles[0] = { 1u, 1u, 1u, 0, gen, uint64_t(curr_bytes.size()) };
+			prep_v3.roles[1] = { 7u, 2u, 2u, 0, gen, 32u };
+
+			GDExtensionProductionOutputPlanV1 plan_v1 = {};
+			plan_v1.abi = production_dto_abi<GDExtensionProductionOutputPlanV1>();
+			plan_v1.acquire.abi = production_dto_abi<GDExtensionProductionOutputPrepareV1>();
+			plan_v1.acquire.action_ordinal = 0;
+			plan_v1.acquire.canonical_suboperation = 10;
+			plan_v1.acquire.source_recipe_substep = 1;
+			plan_v1.acquire.source_resource_slot = 0;
+			plan_v1.acquire.source_use_index = 0;
+			plan_v1.acquire.first_source_use = 0;
+			plan_v1.acquire.source_use_count = 1;
+			plan_v1.acquire.read_capacity = kReadCap;
+			plan_v1.acquire.read_graph_capacity = kReadGraphCap;
+			plan_v1.acquire.source_generation = 1;
+			plan_v1.acquire.input = pkt.acquire_input;
+			plan_v1.finalize_action_ordinal = 3;
+			plan_v1.seal_action_ordinal = 4;
+			plan_v1.finalize_canonical_suboperation = 10;
+			plan_v1.seal_canonical_suboperation = 10;
+			plan_v1.finalize_source_recipe_substep = 20;
+			plan_v1.seal_source_recipe_substep = 21;
+			plan_v1.source_space = 2;
+			for (uint32_t s = 0; s < 5; ++s) {
+				plan_v1.reads[s] = { 0, 0, 1, s == 0 ? 0u : 1u };
+			}
+			plan_v1.guard_work_limit = guard_demand.guard_work;
+			plan_v1.guard_dispatch_limit = guard_demand.guard_dispatches;
+			plan_v1.guard_graph_limit = guard_demand.guard_graphs;
+			plan_v1.guard_native_limit = guard_demand.guard_native_memberships;
+			plan_v1.guard_owned_resource_limit = guard_demand.guard_owned_resources;
+
+			const Error pv3_err = Error(ports.prepare_output_v3(pkt.req, &prep_v3).native_error);
+			const Error pl1_err = Error(ports.prepare_plan_v1(pkt.req, &plan_v1).native_error);
+			record_check(p_label + ".prepare_v3_and_plan_v1", pv3_err == OK && pl1_err == OK);
+			if (pv3_err != OK || pl1_err != OK) {
+				release_request_cleanly(pkt.req);
+				teardown_owner_session(sess);
+				return;
+			}
+
+			// Execute Acquire + Upload + Finalize + Seal in cull scope, then prepare & draw ALL 4 surfaces on initial sealed frame!
+			active_req = pkt.req;
+			active_kind = ActiveRecordKind::EXECUTE_PACKET;
+			active_packet = &pkt;
+			uint64_t ctrl = 0;
+			err = Error(ports.record_schedule(pkt.req, &ctrl));
+			record_check(p_label + ".record_schedule", err == OK);
+			if (err != OK) {
+				active_packet = nullptr;
+				active_kind = ActiveRecordKind::NONE;
+				release_request_cleanly(pkt.req);
+				teardown_owner_session(sess);
+				return;
+			}
+			server->sync();
+
+			struct MultiDrawRtArgs {
+				LiveMetalWaveGNativeOutputHarness *self = nullptr;
+				OutputOwnerSession *sess = nullptr;
+				PacketRecordPlan *pkt = nullptr;
+				uint64_t ctrl = 0;
+				GDExtensionProductionCameraSampleV1 sample = {};
+				RID mat;
+				Error scope_err = OK;
+				Error consume_err = OK;
+				Error prep_errs[kSurfCount] = { ERR_UNCONFIGURED, ERR_UNCONFIGURED, ERR_UNCONFIGURED, ERR_UNCONFIGURED };
+				Error draw_errs[kSurfCount] = { ERR_UNCONFIGURED, ERR_UNCONFIGURED, ERR_UNCONFIGURED, ERR_UNCONFIGURED };
+				Error overall_draw_err = ERR_UNCONFIGURED;
+				String draw_step;
+				uint32_t surface_count_reported = 0;
+			} rt_args;
+			rt_args.self = this;
+			rt_args.sess = &sess;
+			rt_args.pkt = &pkt;
+			rt_args.ctrl = ctrl;
+			rt_args.sample = cam_sample;
+			rt_args.mat = mat_rid;
+
+			server->call_on_render_thread(callable_mp_static((+[](uint64_t p_addr) {
+				auto *a = reinterpret_cast<MultiDrawRtArgs *>(uintptr_t(p_addr));
+				auto *scene = static_cast<RendererSceneCull *>(RSG::scene);
+				auto *ps = RendererRD::ParticlesStorage::get_singleton();
+				if (!scene || !RSG::viewport || !a->self->device || !ps) {
+					a->scope_err = ERR_UNAVAILABLE;
+					return;
+				}
+				const RendererViewport::Viewport::CameraSourceToken tok = {
+					a->sample.camera.view_id, a->sample.camera.view_epoch, a->sample.camera.capture_ordinal
+				};
+				Ref<RendererViewport::Viewport::CameraCapture> capture;
+				if (!RSG::viewport->viewport_get_camera_capture_ref(a->sess->viewport, tok, capture) || capture.is_null()) {
+					a->scope_err = ERR_UNAVAILABLE;
+					return;
+				}
+				RendererSceneCull::NativeOutputCullScope cull_scope(*scene, capture);
+				GDExtensionDeviceExit::Registry::get_singleton().scene_phase_dispatch_for_phase(
+						*a->self->device, GDExtensionDeviceExit::SCENE_PHASE_BEFORE_PARTICLES, a->sess->viewport);
+				a->self->active_packet = nullptr;
+				a->self->active_kind = ActiveRecordKind::NONE;
+
+				GDExtensionProductionRecordReportV2 receipt = {};
+				Error cerr = Error(a->self->ports.record_consume_v2(a->pkt->req, a->ctrl, &receipt).native_error);
+				if (cerr != OK || receipt.result.native_error != OK) {
+					a->consume_err = cerr != OK ? cerr : Error(receipt.result.native_error);
+					return;
+				}
+				if (receipt.flags & GDEXTENSION_PRODUCTION_RECORD_HAS_SEGMENT_V1) {
+					GDExtensionDeviceExit::CallbackScope owner_entry(a->self->enrollment.reference);
+					if (owner_entry.get_error() != OK) {
+						a->consume_err = owner_entry.get_error();
+						return;
+					}
+					cerr = Error(a->self->ports.ack_segment(a->pkt->req, receipt.segment.segment, receipt.segment.segment_revision).native_error);
+					if (cerr != OK) {
+						a->consume_err = cerr;
+						return;
+					}
+				}
+				if (a->pkt->acquire_out.status.error != OK || a->pkt->upload_error != OK ||
+						a->pkt->finalize_out.status.error != OK || a->pkt->seal_out.status.error != OK) {
+					return;
+				}
+				const RID particles_rid = RID::from_uint64(a->sess->created.particles);
+				a->surface_count_reported = ps->particles_external_surface_count(particles_rid);
+
+				RendererSceneRender::CameraData cam_data;
+				if (!RSG::viewport->viewport_get_camera_capture(a->sess->viewport, tok, cam_data)) {
+					a->draw_step = "viewport_get_camera_capture";
+					a->overall_draw_err = ERR_UNAVAILABLE;
+					return;
+				}
+				RenderDataRD render_data;
+				render_data.set_camera_source(tok.view_id, tok.view_epoch, tok.capture_ordinal);
+				render_data.set_previous_camera_source(tok.view_id, tok.view_epoch, tok.capture_ordinal);
+				if (!render_data.retain_native_camera_source(*RSG::viewport, cam_data, a->sess->camera_buffers)) {
+					a->draw_step = "retain_native_camera_source";
+					a->overall_draw_err = ERR_UNAUTHORIZED;
+					return;
+				}
+
+				RendererRD::ExternalSurfaceSelection sels[kSurfCount];
+				for (uint32_t s = 0; s < kSurfCount; ++s) {
+					const Error se = ps->particles_external_surface_acquire(particles_rid, s, sels[s]);
+					if (se != OK) {
+						for (uint32_t p = 0; p < s; ++p) {
+							(void)ps->particles_external_surface_release(sels[p]);
+						}
+						a->draw_step = "surface_acquire_" + itos(s);
+						a->overall_draw_err = se;
+						return;
+					}
+				}
+				a->overall_draw_err = TestProductionRequest::wave_g_mobile_draw_external_multi(
+						sels, kSurfCount, &render_data, a->mat, a->self->shared_fb_format, a->self->shared_fb,
+						true, false, a->prep_errs, a->draw_errs, a->draw_step);
+				for (uint32_t s = 0; s < kSurfCount; ++s) {
+					(void)ps->particles_external_surface_release(sels[s]);
+				}
+			})).bind(uint64_t(uintptr_t(&rt_args))));
+			server->sync();
+
+			const bool rec_ok = rt_args.scope_err == OK && rt_args.consume_err == OK &&
+					pkt.acquire_out.status.error == OK && pkt.upload_error == OK &&
+					pkt.finalize_out.status.error == OK && pkt.seal_out.status.error == OK;
+			record_check(p_label + ".seal_ok", rec_ok && rt_args.surface_count_reported == kSurfCount);
+
+			for (uint32_t s = 0; s < kSurfCount; ++s) {
+				record_check(p_label + ".prep_surf_" + itos(s), rt_args.prep_errs[s] == OK);
+				record_check(p_label + ".draw_surf_" + itos(s), rt_args.draw_errs[s] == OK);
+			}
+			{
+				Dictionary d;
+				d["step"] = rt_args.draw_step;
+				d["overall_err"] = int(rt_args.overall_draw_err);
+				Array pe, de;
+				for (uint32_t s = 0; s < kSurfCount; ++s) {
+					pe.push_back(int(rt_args.prep_errs[s]));
+					de.push_back(int(rt_args.draw_errs[s]));
+				}
+				d["prep_errs"] = pe;
+				d["draw_errs"] = de;
+				diagnostics[p_label + ".sealed_draw"] = d;
+			}
+
+			// Advance RD frame, pump OBSERVE to complete GUARD_STATUS readback & adopt slot!
+			rt_advance_rd_frame();
+			uint32_t guard_words[8] = { 0xffffffffu, 0, 0, 0, 0, 0, 0, 0 };
+			bool rb_ok = false;
+			for (uint32_t turn = 0; turn < 256 && rec_ok; ++turn) {
+				GDExtensionProductionObserveResultV3 obs = {};
+				if (pump_observe_once(pkt.req, obs) != OK) {
+					break;
+				}
+				if (obs.report.ready_readbacks >= 1 && obs.report.known_obligations > 0 &&
+						obs.report.complete_obligations == obs.report.known_obligations && obs.report.possible_obligations == 0) {
+					uint64_t copied = 0;
+					if (ports.copy_v1(pkt.req, obs.report.revision, 0, guard_words, sizeof(guard_words), &copied).native_error == OK && copied == 32) {
+						rb_ok = true;
+						break;
+					}
+				}
+				rt_advance_rd_frame();
+				OS::get_singleton()->delay_usec(300);
+			}
+			record_check(p_label + ".guard_status_ok", rb_ok && guard_words[0] == 0u && guard_words[1] == kCap && guard_words[4] == 1u);
+
+			// Read back PROTECTED_COMMANDS[0..19] and slot state on RT!
+			struct InspectArgs {
+				RenderingDevice *rd = nullptr;
+				RID particles;
+				Vector<uint32_t> cmds;
+				uint32_t slot_state = 0;
+				bool fast_refresh = false;
+				uint32_t prep_ready_mask = 0;
+			} insp;
+			insp.rd = device;
+			insp.particles = RID::from_uint64(sess.created.particles);
+			server->call_on_render_thread(callable_mp_static((+[](uint64_t p_addr) {
+				auto *a = reinterpret_cast<InspectArgs *>(uintptr_t(p_addr));
+				if (auto *ps = RendererRD::ParticlesStorage::get_singleton()) {
+					(void)RendererRD::ExternalLinkedOwnerTest::bug227_inspect_slot(*ps, *a->rd, a->particles, 0u, a->cmds, a->slot_state, a->fast_refresh, a->prep_ready_mask);
+				}
+			})).bind(uint64_t(uintptr_t(&insp))));
+			server->sync();
+
+			bool cmds_match = insp.cmds.size() >= int(kSurfCount * 5u);
+			for (uint32_t s = 0; s < kSurfCount && cmds_match; ++s) {
+				const uint32_t idx_cnt = insp.cmds[s * 5u + 0u];
+				const uint32_t inst_cnt = insp.cmds[s * 5u + 1u];
+				const uint32_t first_inst = insp.cmds[s * 5u + 4u];
+				if (p_expected_cnt[s] == 0u) {
+					cmds_match &= (idx_cnt == 0u && inst_cnt == 0u && first_inst == 0u);
+				} else {
+					cmds_match &= (idx_cnt == expected_index_counts[s] && inst_cnt == p_expected_cnt[s] && first_inst == p_expected_first[s]);
+				}
+			}
+			record_check(p_label + ".protected_commands_exact", cmds_match);
+			record_check(p_label + ".prep_ready_all4", insp.prep_ready_mask == 0xFu);
+			{
+				Array cw;
+				for (int i = 0; i < insp.cmds.size(); ++i) {
+					cw.push_back(insp.cmds[i]);
+				}
+				Dictionary d;
+				d["slot_state"] = insp.slot_state;
+				d["fast_refresh"] = insp.fast_refresh;
+				d["prep_ready_mask"] = insp.prep_ready_mask;
+				d["cmds"] = cw;
+				diagnostics[p_label + ".sealed_inspect"] = d;
+			}
+
+			// Verify GPU rendered pixels in ALL 4 quadrants for initial sealed frame!
+			uint32_t q_nz[4] = {};
+			uint32_t q_rgb[4][3] = {};
+			const bool px_read = read_quadrant_pixels(q_nz, q_rgb);
+			for (uint32_t q = 0; q < 4; ++q) {
+				record_check(p_label + ".sealed_quad_" + itos(q) + "_rendered", px_read && q_nz[q] > 0u);
+			}
+			{
+				Array qa;
+				for (uint32_t q = 0; q < 4; ++q) {
+					Dictionary qd;
+					qd["nz"] = q_nz[q];
+					qd["r"] = q_rgb[q][0];
+					qd["g"] = q_rgb[q][1];
+					qd["b"] = q_rgb[q][2];
+					qa.push_back(qd);
+				}
+				diagnostics[p_label + ".sealed_pixels"] = qa;
+			}
+
+			// Now test ADOPTED + fast_refresh_active replay frame (begin_fast_refresh -> update meta seq=2 -> end_fast_refresh -> draw all 4 surfaces -> inspect pixels)!
+			struct ReplayRtArgs {
+				LiveMetalWaveGNativeOutputHarness *self = nullptr;
+				OutputOwnerSession *sess = nullptr;
+				GDExtensionProductionCameraSampleV1 sample = {};
+				RID mat;
+				RID source_buf;
+				int32_t begin_rc = -1;
+				int32_t end_rc = -1;
+				uint32_t fr_slot = UINT32_MAX;
+				Error prep_errs[kSurfCount] = { ERR_UNCONFIGURED, ERR_UNCONFIGURED, ERR_UNCONFIGURED, ERR_UNCONFIGURED };
+				Error draw_errs[kSurfCount] = { ERR_UNCONFIGURED, ERR_UNCONFIGURED, ERR_UNCONFIGURED, ERR_UNCONFIGURED };
+				Error overall_draw_err = ERR_UNCONFIGURED;
+				String draw_step;
+				uint32_t slot_state_before = 0;
+			} replay_args;
+			replay_args.self = this;
+			replay_args.sess = &sess;
+			replay_args.sample = cam_sample;
+			replay_args.mat = mat_rid;
+			replay_args.source_buf = RID::from_uint64(p_source.rid);
+
+			server->call_on_render_thread(callable_mp_static((+[](uint64_t p_addr) {
+				auto *a = reinterpret_cast<ReplayRtArgs *>(uintptr_t(p_addr));
+				auto *ps = RendererRD::ParticlesStorage::get_singleton();
+				auto *rd = a->self->device;
+				if (!ps || !rd || !RSG::viewport) {
+					return;
+				}
+				const RID particles_rid = RID::from_uint64(a->sess->created.particles);
+				{
+					Vector<uint32_t> tmp_cmds;
+					bool tmp_fr = false;
+					uint32_t tmp_mask = 0;
+					(void)RendererRD::ExternalLinkedOwnerTest::bug227_inspect_slot(*ps, *rd, particles_rid, 0u, tmp_cmds, a->slot_state_before, tmp_fr, tmp_mask);
+				}
+				GDExtensionFastRefreshBeginInputV1 fr_in = {};
+				fr_in.abi_version = 1;
+				fr_in.struct_size = sizeof(fr_in);
+				fr_in.particles_rid = a->sess->created.particles;
+				fr_in.next_present_seq = 2;
+				GDExtensionFastRefreshTargetsV1 fr_targets = {};
+				a->begin_rc = ps->particles_external_begin_fast_refresh_v1(&fr_in, &fr_targets);
+				if (a->begin_rc == int32_t(OK)) {
+					a->fr_slot = fr_targets.slot_index;
+					const uint32_t meta2[8] = { kCap, 0, 0, 0, kCap, 1u, 2u, 0u };
+					(void)rd->buffer_update(RID::from_uint64(fr_targets.output_meta_rid), 0, sizeof(meta2), meta2);
+
+					GDExtensionFastRefreshEndInputV1 fr_end = {};
+					fr_end.abi_version = 1;
+					fr_end.struct_size = sizeof(fr_end);
+					fr_end.slot_index = fr_targets.slot_index;
+					fr_end.parity_bank = 0;
+					fr_end.particles_rid = a->sess->created.particles;
+					fr_end.lease_serial = fr_targets.lease_serial;
+					fr_end.next_present_seq = 2;
+					fr_end.source_count_rid = a->source_buf.get_id();
+					fr_end.source_count_word_offset = 0;
+					for (uint32_t g = 0; g < 4; ++g) {
+						fr_end.source_gate_rids[g] = a->source_buf.get_id();
+						fr_end.source_gate_word_offsets[g] = 1u;
+					}
+					int32_t batch_err = int32_t(ERR_UNCONFIGURED);
+					const int32_t batch_rc = ps->particles_external_end_fast_refresh_batch_v1(1u, &fr_end, GDEXTENSION_FAST_REFRESH_END_FLAG_TRUSTED_TIER2, &batch_err);
+					a->end_rc = batch_rc == int32_t(OK) ? batch_err : batch_rc;
+				}
+				if (a->begin_rc != int32_t(OK) || a->end_rc != int32_t(OK)) {
+					return;
+				}
+				// Capture Frame 2 camera (present_seq = 2) on the viewport so particles_external_view_acquire
+				// takes the real cross-capture ADOPTED + fast_refresh_active replay path!
+				RendererSceneRender::CameraData cam_data2;
+				Projection proj2;
+				proj2.set_orthogonal(-2.0f, 2.0f, -2.0f, 2.0f, 0.1f, 20.0f);
+				cam_data2.set_camera(Transform3D(Basis(), Vector3(0, 0, 5)), proj2, true, false, Vector2(), 0, 1);
+				cam_data2.source_viewport = a->sess->viewport;
+				const auto tok2 = RSG::viewport->viewport_begin_camera_capture(a->sess->viewport, cam_data2, a->sess->camera, a->sess->camera_buffers);
+				if (!tok2.is_valid()) {
+					a->draw_step = "replay_begin_cam2";
+					a->overall_draw_err = ERR_UNAVAILABLE;
+					return;
+				}
+				(void)RSG::viewport->viewport_stage_camera_data(a->sess->viewport, &cam_data2, tok2);
+				RenderDataRD render_data;
+				render_data.set_camera_source(tok2.view_id, tok2.view_epoch, tok2.capture_ordinal);
+				render_data.set_previous_camera_source(a->sample.camera.view_id, a->sample.camera.view_epoch, a->sample.camera.capture_ordinal);
+				if (!render_data.retain_native_camera_source(*RSG::viewport, cam_data2, a->sess->camera_buffers)) {
+					a->draw_step = "replay_retain_cam2";
+					a->overall_draw_err = ERR_UNAUTHORIZED;
+					return;
+				}
+				RendererRD::ExternalSurfaceSelection sels[kSurfCount];
+				for (uint32_t s = 0; s < kSurfCount; ++s) {
+					const Error se = ps->particles_external_surface_acquire(particles_rid, s, sels[s]);
+					if (se != OK) {
+						for (uint32_t p = 0; p < s; ++p) {
+							(void)ps->particles_external_surface_release(sels[p]);
+						}
+						a->draw_step = "replay_surface_acquire_" + itos(s);
+						a->overall_draw_err = se;
+						return;
+					}
+				}
+				a->overall_draw_err = TestProductionRequest::wave_g_mobile_draw_external_multi(
+						sels, kSurfCount, &render_data, a->mat, a->self->shared_fb_format, a->self->shared_fb,
+						true, true, a->prep_errs, a->draw_errs, a->draw_step);
+				for (uint32_t s = 0; s < kSurfCount; ++s) {
+					(void)ps->particles_external_surface_release(sels[s]);
+				}
+			})).bind(uint64_t(uintptr_t(&replay_args))));
+			server->sync();
+			rt_advance_rd_frame();
+
+			record_check(p_label + ".fast_refresh_begin_end", replay_args.begin_rc == int32_t(OK) && replay_args.end_rc == int32_t(OK));
+			for (uint32_t s = 0; s < kSurfCount; ++s) {
+				record_check(p_label + ".replay_draw_surf_" + itos(s), replay_args.draw_errs[s] == OK);
+			}
+			uint32_t rq_nz[4] = {};
+			uint32_t rq_rgb[4][3] = {};
+			const bool rpx_read = read_quadrant_pixels(rq_nz, rq_rgb);
+			for (uint32_t q = 0; q < 4; ++q) {
+				record_check(p_label + ".replay_quad_" + itos(q) + "_rendered", rpx_read && rq_nz[q] > 0u);
+			}
+			{
+				Dictionary d;
+				d["slot_state_before"] = replay_args.slot_state_before;
+				d["begin_rc"] = replay_args.begin_rc;
+				d["end_rc"] = replay_args.end_rc;
+				d["step"] = replay_args.draw_step;
+				d["overall_err"] = int(replay_args.overall_draw_err);
+				Array de, qa;
+				for (uint32_t s = 0; s < kSurfCount; ++s) {
+					de.push_back(int(replay_args.draw_errs[s]));
+				}
+				for (uint32_t q = 0; q < 4; ++q) {
+					Dictionary qd;
+					qd["nz"] = rq_nz[q];
+					qd["r"] = rq_rgb[q][0];
+					qd["g"] = rq_rgb[q][1];
+					qd["b"] = rq_rgb[q][2];
+					qa.push_back(qd);
+				}
+				d["draw_errs"] = de;
+				d["pixels"] = qa;
+				diagnostics[p_label + ".replay"] = d;
+			}
+
+			if (replay_args.fr_slot != UINT32_MAX) {
+				server->call_on_render_thread(callable_mp_static((+[](uint64_t p_part, uint32_t p_slot) {
+					if (auto *ps = RendererRD::ParticlesStorage::get_singleton()) {
+						(void)ps->particles_external_release_fast_refresh_v1(p_part, p_slot);
+					}
+				})).bind(sess.created.particles, replay_args.fr_slot));
+				server->sync();
+			}
+
+			const Error rel_err = cancel_slot_and_release_request(p_label, pkt.req, sess.created.particles, pkt.acquire_out.lease_token);
+			const Error tear_err = teardown_owner_session(sess);
+			record_check(p_label + ".clean_retirement", rel_err == OK && tear_err == OK);
+		};
+
+		// Case A: 4 mixed particles (mesh_index = 0, 1, 2, 3 -> first = {0,1,2,3}, cnt = {1,1,1,1}).
+		{
+			const uint32_t mesh_idx[kCap] = { 0u, 1u, 2u, 3u };
+			const uint32_t exp_cnt[kSurfCount] = { 1u, 1u, 1u, 1u };
+			const uint32_t exp_first[kSurfCount] = { 0u, 1u, 2u, 3u };
+			run_case("bug227_4mesh_mixed", mesh_idx, exp_cnt, exp_first);
+		}
+
+		// Case B: Exact Probe 1 — ALL 4 particles have mesh_index = 2 (cnt = {0,0,4,0}, first = {0,0,0,0}).
+		{
+			const uint32_t mesh_idx[kCap] = { 2u, 2u, 2u, 2u };
+			const uint32_t exp_cnt[kSurfCount] = { 0u, 0u, 4u, 0u };
+			const uint32_t exp_first[kSurfCount] = { 0u, 0u, 0u, 0u };
+			run_case("bug227_4mesh_all_mesh2", mesh_idx, exp_cnt, exp_first);
+		}
+
+		server->free_rid(mat_rid);
+		server->free_rid(shader_rid);
+		for (uint32_t m = 0; m < kSurfCount; ++m) {
+			server->free_rid(meshes[m]);
+		}
+		server->sync();
+		return failures.is_empty();
+	}
+
 	Dictionary run_all() {
 		using namespace GDExtensionDeviceExit;
 		Dictionary out;
@@ -5493,6 +6402,8 @@ void main() {
 		})).bind(mesh_rid, material_rid, uint64_t(uintptr_t(device)), uint64_t(uintptr_t(this))));
 		server->sync();
 
+		const bool bug227_only = OS::get_singleton()->get_environment("ANGE_BUG227_ONLY") == "1";
+
 		// Initialize owner enrollment + large attachment pool + QualificationOpen + Normal Callable + Camera Relay.
 		OrdinalPlan pool = {};
 		pool.attachment_requests = 16;
@@ -5500,8 +6411,8 @@ void main() {
 		pool.capacity.requests = 16;
 		pool.capacity.suboperations = 64;
 		pool.capacity.resources = 64;
-		pool.capacity.resource_uses = 2048;
-		pool.capacity.graph_memberships = 1024;
+		pool.capacity.resource_uses = bug227_only ? 16384u : 2048u;
+		pool.capacity.graph_memberships = bug227_only ? 4096u : 1024u;
 		pool.capacity.return_cells = 64;
 		pool.capacity.retained_payload_bytes = 65536;
 		pool.capacity.readbacks = 16;
@@ -5560,28 +6471,32 @@ void main() {
 				retire_qualified_source_buffer(src_cap2, src_cap2_origin);
 			}
 			if (s2_err == OK && s4_err == OK) {
-				// 1. NATIVE-001 + NATIVE-002: INSTANCE_192 (capacity=2, motion=DISABLED, previous=0) — Order A (PrepareV3 -> PlanV1) + Live Metal Color Draw!
-				run_single_frame_profile("instance192_no_motion_v3_then_plan", 1u, 2u, 0u, false, true, mesh_rid, material_rid, src_cap2, 0u);
+				if (bug227_only) {
+					run_bug227_4mesh_instance192_suite(src_cap4, 1u);
+				} else {
+					// 1. NATIVE-001 + NATIVE-002: INSTANCE_192 (capacity=2, motion=DISABLED, previous=0) — Order A (PrepareV3 -> PlanV1) + Live Metal Color Draw!
+					run_single_frame_profile("instance192_no_motion_v3_then_plan", 1u, 2u, 0u, false, true, mesh_rid, material_rid, src_cap2, 0u);
 
-				// 2. NATIVE-001 + NATIVE-002: INSTANCE_192 (capacity=2, motion=DISABLED, previous=0) — Order B (PlanV1 -> PrepareV3) + Live Metal Color Draw!
-				run_single_frame_profile("instance192_no_motion_plan_then_v3", 1u, 2u, 0u, true, true, mesh_rid, material_rid, src_cap2, 0u);
+					// 2. NATIVE-001 + NATIVE-002: INSTANCE_192 (capacity=2, motion=DISABLED, previous=0) — Order B (PlanV1 -> PrepareV3) + Live Metal Color Draw!
+					run_single_frame_profile("instance192_no_motion_plan_then_v3", 1u, 2u, 0u, true, true, mesh_rid, material_rid, src_cap2, 0u);
 
-				// 3. NATIVE-002: PARTICLE_LIGHT_64 (capacity=4) — Both call orders!
-				run_single_frame_profile("light64_v3_then_plan", 4u, 4u, 0u, false, false, RID(), RID(), src_cap4, 1u);
-				run_single_frame_profile("light64_plan_then_v3", 4u, 4u, 0u, true, false, RID(), RID(), src_cap4, 1u);
+					// 3. NATIVE-002: PARTICLE_LIGHT_64 (capacity=4) — Both call orders!
+					run_single_frame_profile("light64_v3_then_plan", 4u, 4u, 0u, false, false, RID(), RID(), src_cap4, 1u);
+					run_single_frame_profile("light64_plan_then_v3", 4u, 4u, 0u, true, false, RID(), RID(), src_cap4, 1u);
 
-				// 4. NATIVE-002: INDEXED_144 (capacity=2, motion=DISABLED) — End-to-End + Live Metal Color Draw!
-				run_single_frame_profile("indexed144_no_motion_end_to_end", 2u, 2u, 0u, false, true, RID(), material_rid, src_cap2, 0u);
+					// 4. NATIVE-002: INDEXED_144 (capacity=2, motion=DISABLED) — End-to-End + Live Metal Color Draw!
+					run_single_frame_profile("indexed144_no_motion_end_to_end", 2u, 2u, 0u, false, true, RID(), material_rid, src_cap2, 0u);
 
-				// 5. NATIVE-002 + NATIVE-S01: INDEXED_144 Two-Frame Non-Reset Motion History End-to-End on Live Metal!
-				run_indexed144_two_frame_motion_history("indexed144_two_frame_motion_history", material_rid, src_cap2);
+					// 5. NATIVE-002 + NATIVE-S01: INDEXED_144 Two-Frame Non-Reset Motion History End-to-End on Live Metal!
+					run_indexed144_two_frame_motion_history("indexed144_two_frame_motion_history", material_rid, src_cap2);
 
-				// 6. Role 9 (GDEXTENSION_OUTPUT_ROLE_AUX_PARAMS_V1 = 9): 4-role PrepareV3/AcquireV2, WithoutPrevious fallback, Guard NaN/subnormal, Color+Motion draw, & 32B zero sentinel!
-				run_role9_aux_params_suite(src_cap4, 1u);
+					// 6. Role 9 (GDEXTENSION_OUTPUT_ROLE_AUX_PARAMS_V1 = 9): 4-role PrepareV3/AcquireV2, WithoutPrevious fallback, Guard NaN/subnormal, Color+Motion draw, & 32B zero sentinel!
+					run_role9_aux_params_suite(src_cap4, 1u);
 
-				// 7. SceneDepthSnapshotMeta256 v2 pre-transparent capture (MSAA_DISABLED + opaque-only Frame 0 + Frame 1 alpha exclusion) & VIEWPORT_MSAA_4X depth resolve!
-				run_scene_depth_v2_viewport_e2e("scene_depth_v2_pre_transparent", false, src_cap2);
-				run_scene_depth_v2_viewport_e2e("scene_depth_v2_msaa_4x", true, src_cap2);
+					// 7. SceneDepthSnapshotMeta256 v2 pre-transparent capture (MSAA_DISABLED + opaque-only Frame 0 + Frame 1 alpha exclusion) & VIEWPORT_MSAA_4X depth resolve!
+					run_scene_depth_v2_viewport_e2e("scene_depth_v2_pre_transparent", false, src_cap2);
+					run_scene_depth_v2_viewport_e2e("scene_depth_v2_msaa_4x", true, src_cap2);
+				}
 
 				record_check("retire_src_cap4", retire_qualified_source_buffer(src_cap4, src_cap4_origin) == OK);
 				record_check("retire_src_cap2", retire_qualified_source_buffer(src_cap2, src_cap2_origin) == OK);

@@ -5383,10 +5383,14 @@ void Registry::production_output_seal(ProductionPhysicalContextRef context, GDEx
 				if (live_slot.scene_cull_bound) {
 					RendererSceneCull *scene = static_cast<RendererSceneCull *>(RSG::scene);
 					RendererSceneCull::NativeParticleSceneFacts actual;
-					if (!scene || scene->instance_get_committed_particle_scene_facts(live_slot.scene_cull_instance, live_slot.scene_cull_particles, actual) != OK) {
-						return false;
-					}
-					if (actual.scenario != live_slot.scene_cull_scenario) {
+					const Error facts_err = scene
+							? scene->instance_get_committed_particle_scene_facts(live_slot.scene_cull_instance, live_slot.scene_cull_particles, actual)
+							: ERR_UNAVAILABLE;
+					if (facts_err == OK) {
+						if (actual.scenario != live_slot.scene_cull_scenario) {
+							return false;
+						}
+					} else if (facts_err != ERR_BUSY) {
 						return false;
 					}
 					const RendererViewport::Viewport *vp = (RSG::viewport && live_slot.scene_cull_viewport.is_valid())
@@ -5448,10 +5452,14 @@ void Registry::production_output_seal(ProductionPhysicalContextRef context, GDEx
 				if (live_slot.scene_cull_bound) {
 					RendererSceneCull *scene = static_cast<RendererSceneCull *>(RSG::scene);
 					RendererSceneCull::NativeParticleSceneFacts actual;
-					if (!scene || scene->instance_get_committed_particle_scene_facts(live_slot.scene_cull_instance, live_slot.scene_cull_particles, actual) != OK) {
-						return false;
-					}
-					if (actual.scenario != live_slot.scene_cull_scenario) {
+					const Error facts_err = scene
+							? scene->instance_get_committed_particle_scene_facts(live_slot.scene_cull_instance, live_slot.scene_cull_particles, actual)
+							: ERR_UNAVAILABLE;
+					if (facts_err == OK) {
+						if (actual.scenario != live_slot.scene_cull_scenario) {
+							return false;
+						}
+					} else if (facts_err != ERR_BUSY) {
 						return false;
 					}
 					const RendererViewport::Viewport *vp = (RSG::viewport && live_slot.scene_cull_viewport.is_valid())

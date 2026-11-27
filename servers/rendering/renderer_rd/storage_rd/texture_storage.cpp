@@ -3835,9 +3835,16 @@ void TextureStorage::update_decal_atlas() {
 		int idx = 0;
 
 		for (const KeyValue<RID, DecalAtlas::Texture> &E : decal_atlas.textures) {
-			DecalAtlas::SortItem &si = itemsv.write[idx];
-
 			Texture *src_tex = get_texture(E.key);
+			if (!src_tex || src_tex->rd_texture.is_null() || src_tex->width <= 0 || src_tex->height <= 0) {
+				DecalAtlas::Texture *t = decal_atlas.textures.getptr(E.key);
+				if (t) {
+					t->uv_rect = Rect2();
+				}
+				continue;
+			}
+
+			DecalAtlas::SortItem &si = itemsv.write[idx];
 
 			si.size.width = (src_tex->width / border) + 1;
 			si.size.height = (src_tex->height / border) + 1;
@@ -3850,6 +3857,7 @@ void TextureStorage::update_decal_atlas() {
 			si.texture = E.key;
 			idx++;
 		}
+		itemsv.resize(idx);
 
 		//sort items by size
 		itemsv.sort();
@@ -3860,70 +3868,75 @@ void TextureStorage::update_decal_atlas() {
 
 		int atlas_height = 0;
 
-		while (true) {
-			Vector<int> v_offsetsv;
-			v_offsetsv.resize(base_size);
+		if (item_count > 0) {
+			while (true) {
+				Vector<int> v_offsetsv;
+				v_offsetsv.resize(base_size);
 
-			int *v_offsets = v_offsetsv.ptrw();
-			memset(v_offsets, 0, sizeof(int) * base_size);
+				int *v_offsets = v_offsetsv.ptrw();
+				memset(v_offsets, 0, sizeof(int) * base_size);
 
-			// Take border into account for minimum height.
-			int max_height = 2;
+				// Take border into account for minimum height.
+				int max_height = 2;
 
-			for (int i = 0; i < item_count; i++) {
-				//best fit
-				DecalAtlas::SortItem &si = items[i];
-				int best_idx = -1; // ideal x position
-				int best_height = 0x7FFFFFFF; // ideal y position
-				for (uint32_t j = 0; j <= base_size - si.size.width; j++) {
-					int height = 0;
-					for (int k = 0; k < si.size.width; k++) {
-						int h = v_offsets[k + j];
-						if (h > height) {
-							height = h;
-							if (height > best_height) {
-								break; //already bad
+				for (int i = 0; i < item_count; i++) {
+					//best fit
+					DecalAtlas::SortItem &si = items[i];
+					int best_idx = -1; // ideal x position
+					int best_height = 0x7FFFFFFF; // ideal y position
+					for (uint32_t j = 0; j <= base_size - si.size.width; j++) {
+						int height = 0;
+						for (int k = 0; k < si.size.width; k++) {
+							int h = v_offsets[k + j];
+							if (h > height) {
+								height = h;
+								if (height > best_height) {
+									break; //already bad
+								}
 							}
+						}
+
+						if (height < best_height) {
+							best_height = height;
+							best_idx = j;
 						}
 					}
 
-					if (height < best_height) {
-						best_height = height;
-						best_idx = j;
+					//update
+					for (int k = 0; k < si.size.width; k++) {
+						v_offsets[k + best_idx] = best_height + si.size.height;
+					}
+
+					si.pos.x = best_idx;
+					si.pos.y = best_height;
+
+					if (si.pos.y + si.size.height > max_height) {
+						max_height = si.pos.y + si.size.height;
 					}
 				}
 
-				//update
-				for (int k = 0; k < si.size.width; k++) {
-					v_offsets[k + best_idx] = best_height + si.size.height;
+				if ((uint32_t)max_height <= base_size * 2) {
+					atlas_height = max_height;
+					break; //good ratio, break;
 				}
 
-				si.pos.x = best_idx;
-				si.pos.y = best_height;
-
-				if (si.pos.y + si.size.height > max_height) {
-					max_height = si.pos.y + si.size.height;
-				}
+				base_size *= 2;
 			}
 
-			if ((uint32_t)max_height <= base_size * 2) {
-				atlas_height = max_height;
-				break; //good ratio, break;
+			decal_atlas.size.width = base_size * border;
+			decal_atlas.size.height = Math::nearest_power_of_2_templated(atlas_height * border);
+
+			for (int i = 0; i < item_count; i++) {
+				DecalAtlas::Texture *t = decal_atlas.textures.getptr(items[i].texture);
+				t->uv_rect.position = items[i].pos * border + Vector2i(border / 2, border / 2);
+				t->uv_rect.size = items[i].pixel_size;
+
+				t->uv_rect.position /= Size2(decal_atlas.size);
+				t->uv_rect.size /= Size2(decal_atlas.size);
 			}
-
-			base_size *= 2;
-		}
-
-		decal_atlas.size.width = base_size * border;
-		decal_atlas.size.height = Math::nearest_power_of_2_templated(atlas_height * border);
-
-		for (int i = 0; i < item_count; i++) {
-			DecalAtlas::Texture *t = decal_atlas.textures.getptr(items[i].texture);
-			t->uv_rect.position = items[i].pos * border + Vector2i(border / 2, border / 2);
-			t->uv_rect.size = items[i].pixel_size;
-
-			t->uv_rect.position /= Size2(decal_atlas.size);
-			t->uv_rect.size /= Size2(decal_atlas.size);
+		} else {
+			decal_atlas.size.width = border;
+			decal_atlas.size.height = border;
 		}
 	} else {
 		//use border as size, so it at least has enough mipmaps
@@ -3937,13 +3950,16 @@ void TextureStorage::update_decal_atlas() {
 	tformat.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
 	tformat.width = decal_atlas.size.width;
 	tformat.height = decal_atlas.size.height;
-	tformat.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT | RD::TEXTURE_USAGE_STORAGE_BIT;
+	// Decal atlas is written via color-attachment framebuffer blits and sampled via texture2D;
+	// omitting TEXTURE_USAGE_STORAGE_BIT keeps R8G8B8A8_SRGB shared texture views valid on Metal.
+	tformat.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT;
 	tformat.texture_type = RD::TEXTURE_TYPE_2D;
 	tformat.mipmaps = decal_atlas.mipmaps;
 	tformat.shareable_formats.push_back(RD::DATA_FORMAT_R8G8B8A8_UNORM);
 	tformat.shareable_formats.push_back(RD::DATA_FORMAT_R8G8B8A8_SRGB);
 
 	decal_atlas.texture = RD::get_singleton()->texture_create(tformat, RD::TextureView());
+	ERR_FAIL_COND(decal_atlas.texture.is_null());
 	RD::get_singleton()->texture_clear(decal_atlas.texture, Color(0, 0, 0, 0), 0, decal_atlas.mipmaps, 0, 1);
 
 	{
@@ -3967,6 +3983,9 @@ void TextureStorage::update_decal_atlas() {
 			RD::TextureView rd_view;
 			rd_view.format_override = RD::DATA_FORMAT_R8G8B8A8_SRGB;
 			decal_atlas.texture_srgb = RD::get_singleton()->texture_create_shared(rd_view, decal_atlas.texture);
+			if (decal_atlas.texture_srgb.is_null()) {
+				decal_atlas.texture_srgb = decal_atlas.texture;
+			}
 		}
 	}
 
@@ -3986,6 +4005,9 @@ void TextureStorage::update_decal_atlas() {
 				for (const KeyValue<RID, DecalAtlas::Texture> &E : decal_atlas.textures) {
 					DecalAtlas::Texture *t = decal_atlas.textures.getptr(E.key);
 					Texture *src_tex = get_texture(E.key);
+					if (!t || !src_tex || src_tex->rd_texture.is_null() || t->uv_rect.size.x <= 0.0f || t->uv_rect.size.y <= 0.0f) {
+						continue;
+					}
 
 					copy_effects->copy_to_atlas_fb(src_tex->rd_texture, mm.fb, t->uv_rect, draw_list, false, t->panorama_to_dp_users > 0);
 				}
@@ -4000,6 +4022,10 @@ void TextureStorage::update_decal_atlas() {
 		} else {
 			RD::get_singleton()->texture_clear(mm.texture, clear_color, 0, 1, 0, 1);
 		}
+	}
+
+	if (RendererSceneRenderRD *scene_render = RendererSceneRenderRD::get_singleton()) {
+		scene_render->base_uniforms_changed();
 	}
 }
 
@@ -4116,6 +4142,9 @@ void TextureStorage::update_decal_buffer(const PagedArray<RID> &p_decals, const 
 
 	ForwardIDStorage *forward_id_storage = ForwardIDStorage::get_singleton();
 	frame_particle_decals.clear();
+	if (decal_atlas.dirty) {
+		update_decal_atlas();
+	}
 
 	Transform3D uv_xform;
 	uv_xform.basis.scale(Vector3(2.0, 1.0, 2.0));
