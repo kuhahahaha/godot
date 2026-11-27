@@ -766,7 +766,15 @@ Error Main::prepare_extensions_for_natural_close(GDExtensionDeviceExit::CloseRou
 	if (!manager) { return OK; }
 	for (;;) {
 		const Error prepared = manager->prepare_exit(p_route);
-		if (prepared != ERR_BUSY) { return prepared; }
+		if (prepared != ERR_BUSY) {
+			// Flush any call_on_render_thread CallableCustom work queued during
+			// the final frame or final prepare_exit pass before preflight_exit()
+			// scans GDExtension CleanupAction holders.
+			if (prepared == OK && RenderingServer::get_singleton()) {
+				RenderingServer::get_singleton()->sync();
+			}
+			return prepared;
+		}
 		// sync drains CPU commands, including original production control work.
 		// It does not submit a new frame or assert GPU completion. Original owner
 		// OBSERVE/maintenance remains responsible for its actual native returns.
