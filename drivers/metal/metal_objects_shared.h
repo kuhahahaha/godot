@@ -136,7 +136,7 @@ public:
 	static constexpr uint32_t DEFAULT_BUFFER_SIZE = 512 * 1024;
 	static constexpr uint32_t MIN_BLOCK_SIZE = 16;
 	static constexpr uint32_t ALIGNMENT = 16;
-	static constexpr uint32_t IDLE_RESET_SHRINK_THRESHOLD = 8;
+	static constexpr uint32_t IDLE_RESET_SHRINK_THRESHOLD = 4;
 
 	struct Allocation {
 		void *ptr = nullptr;

@@ -28,6 +28,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
+#include "core/config/project_settings.h"
 #include "core/extension/gdextension.h"
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "core/extension/gdextension_production_request.h"
@@ -42,6 +43,7 @@
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_globals.h"
 #include "servers/rendering/rendering_shader_container.h"
+#include "tests/servers/rendering/test_external_output_custody_bridge.h"
 #include "tests/test_macros.h"
 
 #include <atomic>
@@ -795,38 +797,38 @@ TEST_CASE("[ExternalOutput][Metal][BUG-82][BUG-83][BUG-86] binary archive bounds
 	auto *metal_driver = static_cast<RenderingDeviceDriverMetal *>(driver_base);
 	REQUIRE(metal_driver->initialize(0, 2) == OK);
 
-	// BUG-82 + BUG-86 + BUG-230: Binary archive MUST release under continuous per-frame PSO churn
-	// at ARCHIVE_WARMUP_MAX_FRAMES (12), release after ARCHIVE_WARMUP_IDLE_FRAMES (4)
-	// when idle (with p_frames_drawn >= ARCHIVE_WARMUP_MIN_FRAMES = 4), and cap additions at
-	// ARCHIVE_WARMUP_MAX_PIPELINES (32) / compute (16).
+	// BUG-82 + BUG-86 + BUG-230 + BUG-231: Binary archive MUST release under continuous per-frame PSO churn
+	// at ARCHIVE_WARMUP_MAX_FRAMES (6), release after ARCHIVE_WARMUP_IDLE_FRAMES (2)
+	// when idle (with p_frames_drawn >= ARCHIVE_WARMUP_MIN_FRAMES = 2), and cap additions at
+	// ARCHIVE_WARMUP_MAX_PIPELINES (8) / compute (4).
 	REQUIRE(metal_driver->pipeline_cache_create(Vector<uint8_t>()));
 	CHECK(metal_driver->is_pipeline_archive_active());
-	for (uint32_t f = 1; f < 12; ++f) {
+	for (uint32_t f = 1; f < 6; ++f) {
 		metal_driver->test_step_pipeline_archive_frame(f, true);
 		CHECK(metal_driver->is_pipeline_archive_active());
 	}
-	metal_driver->test_step_pipeline_archive_frame(12, true);
+	metal_driver->test_step_pipeline_archive_frame(6, true);
 	CHECK_FALSE(metal_driver->is_pipeline_archive_active());
 
-	// Reopen and verify idle release after 4 idle frames (with p_frames_drawn >= 4).
+	// Reopen and verify idle release after 2 idle frames (with p_frames_drawn >= 2).
 	REQUIRE(metal_driver->pipeline_cache_create(Vector<uint8_t>()));
 	CHECK(metal_driver->is_pipeline_archive_active());
-	for (uint32_t f = 1; f < 4; ++f) {
+	for (uint32_t f = 1; f < 2; ++f) {
 		metal_driver->test_step_pipeline_archive_frame(f, false);
 		CHECK(metal_driver->is_pipeline_archive_active());
 	}
-	metal_driver->test_step_pipeline_archive_frame(4, false);
+	metal_driver->test_step_pipeline_archive_frame(2, false);
 	CHECK_FALSE(metal_driver->is_pipeline_archive_active());
 
-	// Reopen and verify compute additions cap at 16 and total additions cap at 32,
+	// Reopen and verify compute additions cap at 4 and total additions cap at 8,
 	// triggering immediate archive release on the very next frame!
 	REQUIRE(metal_driver->pipeline_cache_create(Vector<uint8_t>()));
 	CHECK(metal_driver->is_pipeline_archive_active());
-	for (uint32_t i = 0; i < 16; ++i) {
+	for (uint32_t i = 0; i < 4; ++i) {
 		CHECK(metal_driver->test_record_pipeline_archive_addition(true));
 	}
 	CHECK_FALSE(metal_driver->test_record_pipeline_archive_addition(true)); // Compute cap reached!
-	for (uint32_t i = 16; i < 32; ++i) {
+	for (uint32_t i = 4; i < 8; ++i) {
 		CHECK(metal_driver->test_record_pipeline_archive_addition(false));
 	}
 	CHECK_FALSE(metal_driver->test_record_pipeline_archive_addition(false)); // Total cap reached!
@@ -1077,7 +1079,7 @@ void main() { v[0] += K; }
 	rd.shader_destroy_modules(sh_spec);
 	CHECK(RenderingDeviceDriverMetal::get_total_compute_libraries_released() == released_before + 2u);
 
-	// MetalHeapAllocator non-local preferred block sizing: SMALL (<=64 KiB)=2 MiB, REGULAR (>64 KiB): POOL_PRIVATE=16 MiB, POOL_SHARED=8 MiB.
+	// MetalHeapAllocator non-local preferred block sizing: SMALL (<=64 KiB)=2 MiB, REGULAR (>64 KiB): POOL_PRIVATE=8 MiB, POOL_SHARED=8 MiB.
 	{
 		MetalHeapAllocator heap_alloc(mtl_device);
 		MetalBuffer priv_small = heap_alloc.new_buffer(4096u, MTL::ResourceStorageModePrivate);
@@ -1092,13 +1094,17 @@ void main() { v[0] += K; }
 		heap_alloc.get_stats(stats);
 		CHECK(stats.pools[MetalHeapAllocator::POOL_PRIVATE_SMALL].reserved_bytes == 2ull * 1024u * 1024u);
 		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED_SMALL].reserved_bytes == 2ull * 1024u * 1024u);
-		CHECK(stats.pools[MetalHeapAllocator::POOL_PRIVATE].reserved_bytes == 16ull * 1024u * 1024u);
+		CHECK(stats.pools[MetalHeapAllocator::POOL_PRIVATE].reserved_bytes == 8ull * 1024u * 1024u);
 		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].reserved_bytes == 8ull * 1024u * 1024u);
-		// Allocations > preferred block size still succeed cleanly via dedicated heap.
+		// Allocations > half preferred block size (4 MiB) and > preferred block size (8 MiB) route cleanly via dedicated heap.
+		MetalBuffer priv_med = heap_alloc.new_buffer(6u * 1024u * 1024u, MTL::ResourceStorageModePrivate);
+		REQUIRE(priv_med.buffer.get() != nullptr);
+		CHECK(priv_med.allocation.kind == MetalAllocation::Kind::DEDICATED);
 		MetalBuffer priv_big = heap_alloc.new_buffer(20u * 1024u * 1024u, MTL::ResourceStorageModePrivate);
 		REQUIRE(priv_big.buffer.get() != nullptr);
 		CHECK(priv_big.allocation.kind == MetalAllocation::Kind::DEDICATED);
 		heap_alloc.free_buffer(priv_big);
+		heap_alloc.free_buffer(priv_med);
 		heap_alloc.free_buffer(shared_reg);
 		heap_alloc.free_buffer(priv_reg);
 		heap_alloc.free_buffer(shared_small);
@@ -1537,12 +1543,12 @@ TEST_CASE("[ExternalOutput][Metal][BUG-195D-2] PARTICLE_LIGHT_64 single-encoder 
 	rd.free_rid(omni_buf);
 }
 
-TEST_CASE("[ExternalOutput][Metal][BUG-207][BUG-230] compute_archive releases after 4 idle / 12 active frames and compute_pipeline_create does not double-archive into render archive") {
+TEST_CASE("[ExternalOutput][Metal][BUG-207][BUG-230][BUG-231] compute_archive releases after 2 idle / 6 active frames and compute_pipeline_create does not double-archive into render archive") {
 	REQUIRE(RenderingDevice::get_singleton() == nullptr);
 	RenderingContextDriverMetal context;
 	REQUIRE(context.initialize() == OK);
 
-	// Part A: Verify compute_archive idle (4 frames) and active ceiling (12 frames) release.
+	// Part A: Verify compute_archive idle (2 frames) and active ceiling (6 frames) release.
 	{
 		RenderingDeviceDriver *driver_base = context.driver_create();
 		REQUIRE(driver_base != nullptr);
@@ -1551,17 +1557,17 @@ TEST_CASE("[ExternalOutput][Metal][BUG-207][BUG-230] compute_archive releases af
 
 		REQUIRE(metal_driver->pipeline_cache_create(Vector<uint8_t>()));
 		CHECK(metal_driver->is_compute_archive_active());
-		for (uint32_t f = 1; f < 4u; ++f) {
+		for (uint32_t f = 1; f < 2u; ++f) {
 			metal_driver->test_step_compute_archive_frame(false);
 			CHECK(metal_driver->is_compute_archive_active());
 		}
 		metal_driver->test_step_compute_archive_frame(false);
 		CHECK_FALSE(metal_driver->is_compute_archive_active());
 
-		// Reopen and verify active ceiling releases at 12 frames under continuous compute churn.
+		// Reopen and verify active ceiling releases at 6 frames under continuous compute churn.
 		REQUIRE(metal_driver->pipeline_cache_create(Vector<uint8_t>()));
 		CHECK(metal_driver->is_compute_archive_active());
-		for (uint32_t f = 1; f < 12u; ++f) {
+		for (uint32_t f = 1; f < 6u; ++f) {
 			metal_driver->test_step_compute_archive_frame(true);
 			CHECK(metal_driver->is_compute_archive_active());
 		}
@@ -1621,10 +1627,10 @@ void main() { x[0] += 2072u; }
 		const uint64_t comp_adds_before = RenderingDeviceDriverMetal::get_total_compute_archive_additions();
 		RID s1, p1, s2, p2;
 		create_compute_pso(kCompA, "bug207_comp_a", s1, p1);
-		// BUG-230: compute_pipeline_create managed by compute_archive must NOT touch or keep alive
+		// BUG-230 + BUG-231: compute_pipeline_create managed by compute_archive must NOT touch or keep alive
 		// the main render archive — frame 1 consumes the seeded render addition activity, then
-		// 4 subsequent idle frames (frames 2..5) must release the main render archive cleanly.
-		for (uint32_t f = 1; f <= 4u; ++f) {
+		// 2 subsequent idle frames (frames 2..3) must release the main render archive cleanly.
+		for (uint32_t f = 1; f <= 2u; ++f) {
 			metal_driver->test_step_pipeline_archive_frame(f, false);
 			CHECK(metal_driver->is_pipeline_archive_active());
 		}
@@ -1632,7 +1638,7 @@ void main() { x[0] += 2072u; }
 		CHECK(RenderingDeviceDriverMetal::get_total_compute_archive_additions() == comp_adds_before + 2u);
 		// Main render archive must NOT receive either compute pipeline or have its idle counter reset.
 		CHECK(metal_driver->pipeline_cache_query_size() == render_archive_size_before);
-		metal_driver->test_step_pipeline_archive_frame(5u, false);
+		metal_driver->test_step_pipeline_archive_frame(3u, false);
 		CHECK_FALSE(metal_driver->is_pipeline_archive_active());
 
 		rd.free_rid(p1);
@@ -2033,6 +2039,105 @@ TEST_CASE("[ExternalOutput][BUG-215] device_session_qualification_compile_comput
 	CHECK(bad_out.spirv_ptr == nullptr);
 	CHECK(bad_out.container_ptr == nullptr);
 }
+
+TEST_CASE("[ExternalOutput][Metal][BUG-234][BUG-241A][BUG-243A] MetalHeapAllocator and MDRingBuffer trim_idle thresholds reclaim stale buffers, empty heaps, and excess ring segments") {
+	CHECK(MetalHeapAllocator::EMPTY_BLOCK_IDLE_EPOCHS == 10u);
+	CHECK(MetalHeapAllocator::RECYCLE_IDLE_EPOCHS == 8u);
+	CHECK(MDRingBuffer::IDLE_RESET_SHRINK_THRESHOLD == 4u);
+
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriver *driver_base = context.driver_create();
+	REQUIRE(driver_base != nullptr);
+	auto *metal_driver = static_cast<RenderingDeviceDriverMetal *>(driver_base);
+	REQUIRE(metal_driver->initialize(0, 2) == OK);
+
+	{
+		MetalHeapAllocator heap_alloc(metal_driver->get_device());
+		const MTL::ResourceOptions shared_opts = MTL::ResourceStorageModeShared;
+
+		MetalBuffer buf = heap_alloc.new_buffer(128u * 1024u, shared_opts);
+		REQUIRE(buf.buffer.get() != nullptr);
+		CHECK(buf.allocation.kind == MetalAllocation::Kind::POOL);
+
+		MetalAllocatorStats stats = {};
+		heap_alloc.get_stats(stats);
+		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].block_count == 1u);
+		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].allocation_count == 1u);
+		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].reserved_bytes == 8ull * 1024u * 1024u);
+
+		heap_alloc.free_buffer(buf);
+		for (uint64_t i = 1; i < MetalHeapAllocator::RECYCLE_IDLE_EPOCHS; ++i) {
+			heap_alloc.trim_idle();
+			heap_alloc.get_stats(stats);
+			CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].allocation_count == 1u);
+			CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].block_count == 1u);
+		}
+		heap_alloc.trim_idle();
+		heap_alloc.get_stats(stats);
+		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].allocation_count == 0u);
+		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].block_count == 1u);
+
+		for (uint64_t i = 1; i < MetalHeapAllocator::EMPTY_BLOCK_IDLE_EPOCHS; ++i) {
+			heap_alloc.trim_idle();
+			heap_alloc.get_stats(stats);
+			CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].block_count == 1u);
+		}
+		heap_alloc.trim_idle();
+		heap_alloc.get_stats(stats);
+		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].block_count == 0u);
+		CHECK(stats.pools[MetalHeapAllocator::POOL_SHARED].reserved_bytes == 0u);
+
+		MDRingBuffer ring(&heap_alloc, 4096u);
+		CHECK(ring.allocate(3072u).is_valid());
+		CHECK(ring.allocate(3072u).is_valid());
+		CHECK(ring.allocate(3072u).is_valid());
+		CHECK(ring.get_segment_count() == 3u);
+
+		// First reset sees all 3 segments used, then 3 idle resets retain segments, 4th shrinks to 1.
+		ring.reset();
+		CHECK(ring.get_segment_count() == 3u);
+		for (uint32_t i = 1; i < MDRingBuffer::IDLE_RESET_SHRINK_THRESHOLD; ++i) {
+			ring.reset();
+			CHECK(ring.get_segment_count() == 3u);
+		}
+		ring.reset();
+		CHECK(ring.get_segment_count() == 1u);
+	}
+
+	context.driver_free(driver_base);
+}
+
+TEST_CASE("[ExternalOutput][Metal][BUG-241C] macOS Metal UMA defaults frame_queue_size to 2 and double-buffers dynamic persistent buffers cleanly") {
+	CHECK(uint32_t(GLOBAL_GET("rendering/rendering_device/vsync/frame_queue_size")) == 2u);
+
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriver *driver_base = context.driver_create();
+	REQUIRE(driver_base != nullptr);
+	auto *metal_driver = static_cast<RenderingDeviceDriverMetal *>(driver_base);
+	REQUIRE(metal_driver->initialize(0, 2) == OK);
+	CHECK(metal_driver->frame_count() == 2u);
+
+	// Dynamic persistent buffers allocate 2 * aligned_size (not 3x) under frame_count == 2
+	// and cycle cleanly through frame indices 0 -> 1 -> 0.
+	const RDD::BufferID dyn_buf = metal_driver->buffer_create(
+			64u,
+			RDD::BUFFER_USAGE_UNIFORM_BIT | RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT,
+			RDD::MEMORY_ALLOCATION_TYPE_GPU,
+			1u);
+	REQUIRE(dyn_buf.id != 0);
+	uint8_t *p0 = metal_driver->buffer_persistent_map_advance(dyn_buf, 2u);
+	uint8_t *p1 = metal_driver->buffer_persistent_map_advance(dyn_buf, 3u);
+	uint8_t *p2 = metal_driver->buffer_persistent_map_advance(dyn_buf, 4u);
+	REQUIRE(p0 != nullptr);
+	REQUIRE(p1 != nullptr);
+	REQUIRE(p2 != nullptr);
+	CHECK(p1 != p0);
+	CHECK(p2 == p0);
+	metal_driver->buffer_free(dyn_buf);
+	context.driver_free(driver_base);
+}
 #endif
 
 TEST_CASE("[ExternalOutput][Block23][BUG-227] Forward Mobile external pipeline key enables ubershader and canonicalizes specialization under EXTERNAL_COLOR_FLAG_UBERSHADER") {
@@ -2071,6 +2176,10 @@ TEST_CASE("[ExternalOutput][Block23][BUG-227] Forward Mobile external pipeline k
 	CHECK(key_spec.shader_specialization.packed_0 == 0x1234u);
 	CHECK(key_spec.shader_specialization.packed_1 == 0x5678u);
 	CHECK(key_spec.shader_specialization.packed_2 == 1.0f);
+}
+
+TEST_CASE("[ExternalOutput][Block23][BUG-241B] plan_instance192 with motion disabled allocates 0 bytes for PREVIOUS_RECORDS and preserves sources[1] = sources[0] aliasing") {
+	RendererRD::ExternalLinkedOwnerTest::bug241b_plan_instance192_and_transforms_sources_no_motion();
 }
 
 } // namespace TestExternalOutputBlock23

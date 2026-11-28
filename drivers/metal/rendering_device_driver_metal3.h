@@ -82,6 +82,8 @@ class API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0)) RenderingDeviceDriverMet
 	Error _execute_and_present_common(CommandQueueID, VectorView<SemaphoreID>, VectorView<CommandBufferID>, VectorView<SemaphoreID>, FenceID, VectorView<SwapChainID>, bool);
 	Error _execute_and_present_barriers(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<CommandBufferID> p_cmd_buffers, VectorView<SemaphoreID> p_cmd_semaphores, FenceID p_cmd_fence, VectorView<SwapChainID> p_swap_chains);
 	Error _execute_and_present(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<CommandBufferID> p_cmd_buffers, VectorView<SemaphoreID> p_cmd_semaphores, FenceID p_cmd_fence, VectorView<SwapChainID> p_swap_chains);
+	bool _qualification_incremental_fact_bound_impl(uint64_t p_graphs, uint32_t p_current, bool p_include_pending, uint32_t &r_main, uint32_t &r_copy) const;
+	uint32_t _qualification_native_call_bound_for_profile_impl(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames, bool p_include_pending) const;
 
 protected:
 	Error _create_device() override;
@@ -92,11 +94,14 @@ protected:
 
 public:
 	bool native_issue_bound(NativeIssueKind p_kind, uint32_t p_commands, uint32_t &r_bound) const override;
- bool qualification_incremental_accounting_supported() const override { return true; }
- bool qualification_incremental_fact_bound(uint64_t p_graphs, uint32_t p_current, uint32_t &r_main, uint32_t &r_copy) const override;
- Error qualification_worker_source_quote(CommandBufferID p_command, QueueCallReport &r_prefix, uint32_t &r_future) const override;
+	bool qualification_incremental_accounting_supported() const override { return true; }
+	uint64_t qualification_pending_completion_record_count() const override;
+	bool qualification_incremental_fact_bound(uint64_t p_graphs, uint32_t p_current, uint32_t &r_main, uint32_t &r_copy) const override;
+	bool qualification_incremental_fact_bound_idle(uint64_t p_graphs, uint32_t &r_main, uint32_t &r_copy) const override;
+	Error qualification_worker_source_quote(CommandBufferID p_command, QueueCallReport &r_prefix, uint32_t &r_future) const override;
 	uint32_t qualification_native_call_bound(uint32_t p_slots) const override;
 	uint32_t qualification_native_call_bound_for_profile(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames) const override;
+	uint32_t qualification_native_call_bound_for_profile_idle(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames) const override;
 	Error initialize(uint32_t p_device_index, uint32_t p_frame_count) override;
 
 	FenceID fence_create() override;

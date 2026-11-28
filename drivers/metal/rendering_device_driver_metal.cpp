@@ -2371,39 +2371,51 @@ void RenderingDeviceDriverMetal::_serialize_archive_to_path(MTL::BinaryArchive *
 	if (!p_archive || p_cache_path.is_empty()) {
 		return;
 	}
+	MutexLock disk_flush_lock(archive_disk_flush_mutex);
 	std::unique_lock<std::shared_mutex> serialize_lock(archive_serialize_mutex);
 	++archive_serialize_calls;
-	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
-	DirAccess::make_dir_recursive_absolute(p_cache_path.get_base_dir());
-	String tmp_path = p_cache_path + ".tmp";
-	CharString tmp_utf8 = tmp_path.utf8();
-	NS::String *ns_tmp = NS::String::string(tmp_utf8.get_data(), NS::UTF8StringEncoding);
-	NS::URL *target = NS::URL::fileURLWithPath(ns_tmp);
-	NS::Error *error = nullptr;
-	if (p_archive->serializeToURL(target, &error)) {
-		DirAccess::rename_absolute(tmp_path, p_cache_path);
-	} else if (error != nullptr) {
-		print_verbose(String("Metal binary archive serialize skipped: ") + error->localizedDescription()->utf8String());
+	{
+		NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+		DirAccess::make_dir_recursive_absolute(p_cache_path.get_base_dir());
+		String tmp_path = p_cache_path + ".tmp";
+		CharString tmp_utf8 = tmp_path.utf8();
+		NS::String *ns_tmp = NS::String::string(tmp_utf8.get_data(), NS::UTF8StringEncoding);
+		NS::URL *target = NS::URL::fileURLWithPath(ns_tmp);
+		NS::Error *error = nullptr;
+		if (p_archive->serializeToURL(target, &error)) {
+			DirAccess::rename_absolute(tmp_path, p_cache_path);
+		} else if (error != nullptr) {
+			print_verbose(String("Metal binary archive serialize skipped: ") + error->localizedDescription()->utf8String());
+		}
 	}
+#if defined(MACOS_ENABLED)
+	::malloc_zone_pressure_relief(nullptr, 0);
+#endif
 }
 
 void RenderingDeviceDriverMetal::_serialize_compute_archive_to_path(MTL::BinaryArchive *p_archive, const String &p_cache_path) {
 	if (!p_archive || p_cache_path.is_empty()) {
 		return;
 	}
+	MutexLock disk_flush_lock(archive_disk_flush_mutex);
 	std::unique_lock<std::shared_mutex> serialize_lock(compute_archive_serialize_mutex);
-	NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
-	DirAccess::make_dir_recursive_absolute(p_cache_path.get_base_dir());
-	String tmp_path = p_cache_path + ".tmp";
-	CharString tmp_utf8 = tmp_path.utf8();
-	NS::String *ns_tmp = NS::String::string(tmp_utf8.get_data(), NS::UTF8StringEncoding);
-	NS::URL *target = NS::URL::fileURLWithPath(ns_tmp);
-	NS::Error *error = nullptr;
-	if (p_archive->serializeToURL(target, &error)) {
-		DirAccess::rename_absolute(tmp_path, p_cache_path);
-	} else if (error != nullptr) {
-		print_verbose(String("Metal compute binary archive serialize skipped: ") + error->localizedDescription()->utf8String());
+	{
+		NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+		DirAccess::make_dir_recursive_absolute(p_cache_path.get_base_dir());
+		String tmp_path = p_cache_path + ".tmp";
+		CharString tmp_utf8 = tmp_path.utf8();
+		NS::String *ns_tmp = NS::String::string(tmp_utf8.get_data(), NS::UTF8StringEncoding);
+		NS::URL *target = NS::URL::fileURLWithPath(ns_tmp);
+		NS::Error *error = nullptr;
+		if (p_archive->serializeToURL(target, &error)) {
+			DirAccess::rename_absolute(tmp_path, p_cache_path);
+		} else if (error != nullptr) {
+			print_verbose(String("Metal compute binary archive serialize skipped: ") + error->localizedDescription()->utf8String());
+		}
 	}
+#if defined(MACOS_ENABLED)
+	::malloc_zone_pressure_relief(nullptr, 0);
+#endif
 }
 
 void RenderingDeviceDriverMetal::_flush_compute_archive_task_func(void *p_userdata) {
@@ -2418,10 +2430,8 @@ void RenderingDeviceDriverMetal::_flush_compute_archive_task_func(void *p_userda
 			job->archive.reset();
 		}
 	}
-#ifdef __APPLE__
-	if (did_serialize) {
-		::malloc_zone_pressure_relief(nullptr, 0);
-	}
+#if defined(MACOS_ENABLED)
+	::malloc_zone_pressure_relief(nullptr, 0);
 #endif
 	memdelete(job);
 }
@@ -2465,10 +2475,8 @@ void RenderingDeviceDriverMetal::_dispatch_compute_archive_release(NS::SharedPtr
 		NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 		p_archive.reset();
 	}
-#ifdef __APPLE__
-	if (want_serialize) {
-		::malloc_zone_pressure_relief(nullptr, 0);
-	}
+#if defined(MACOS_ENABLED)
+	::malloc_zone_pressure_relief(nullptr, 0);
 #endif
 }
 
@@ -2697,10 +2705,8 @@ void RenderingDeviceDriverMetal::_release_archive_task_func(void *p_userdata) {
 			job->archive.reset();
 		}
 	}
-#ifdef __APPLE__
-	if (did_serialize) {
-		::malloc_zone_pressure_relief(nullptr, 0);
-	}
+#if defined(MACOS_ENABLED)
+	::malloc_zone_pressure_relief(nullptr, 0);
 #endif
 	memdelete(job);
 }
@@ -2744,10 +2750,8 @@ void RenderingDeviceDriverMetal::_dispatch_pipeline_archive_release(NS::SharedPt
 		NS::SharedPtr<NS::AutoreleasePool> pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
 		p_archive.reset();
 	}
-#ifdef __APPLE__
-	if (want_serialize) {
-		::malloc_zone_pressure_relief(nullptr, 0);
-	}
+#if defined(MACOS_ENABLED)
+	::malloc_zone_pressure_relief(nullptr, 0);
 #endif
 }
 

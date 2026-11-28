@@ -123,7 +123,7 @@ uint64_t MetalHeapAllocator::_preferred_block_size(uint32_t p_pool) const {
 	}
 	switch (p_pool) {
 		case POOL_PRIVATE:
-			return 16ull * 1024 * 1024;
+			return 8ull * 1024 * 1024;
 		case POOL_SHARED:
 		case POOL_SHARED_WC:
 			return 8ull * 1024 * 1024;
@@ -158,7 +158,7 @@ uint64_t MetalHeapAllocator::_max_recycled_bytes(uint32_t p_pool) const {
 	}
 	switch (p_pool) {
 		case POOL_PRIVATE:
-			return 16ull * 1024 * 1024;
+			return 8ull * 1024 * 1024;
 		case POOL_SHARED:
 		case POOL_SHARED_WC:
 			return 8ull * 1024 * 1024;
@@ -730,10 +730,14 @@ void MetalHeapAllocator::trim_idle() {
 		}
 	}
 
-	evicted_heaps.clear();
-	for (MetalBuffer &old : evicted_buffers) {
-		old.buffer.reset();
-		_free_allocation(old.allocation);
+	const bool released_resources = !evicted_heaps.is_empty() || !evicted_buffers.is_empty();
+	if (released_resources) {
+		NS::SharedPtr<NS::AutoreleasePool> autorelease_pool = NS::TransferPtr(NS::AutoreleasePool::alloc()->init());
+		evicted_heaps.clear();
+		for (MetalBuffer &old : evicted_buffers) {
+			old.buffer.reset();
+			_free_allocation(old.allocation);
+		}
 	}
 }
 

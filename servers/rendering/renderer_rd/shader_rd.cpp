@@ -42,6 +42,9 @@
 #if defined(__APPLE__)
 #include <malloc/malloc.h>
 #endif
+#if defined(MACOS_ENABLED)
+#include <atomic>
+#endif
 
 #define ENABLE_SHADER_CACHE 1
 
@@ -438,6 +441,15 @@ void ShaderRD::_compile_variant(uint32_t p_variant, CompileData p_data) {
 		}
 #endif
 	}
+#if defined(MACOS_ENABLED)
+	variant_stages.clear();
+	variant_stage_sources.clear();
+	shader_data.clear();
+	static std::atomic<uint32_t> cold_variant_compile_count{ 0 };
+	if (((cold_variant_compile_count.fetch_add(1u, std::memory_order_relaxed) + 1u) & 3u) == 0u) {
+		malloc_zone_pressure_relief(nullptr, 0);
+	}
+#endif
 }
 
 Vector<String> ShaderRD::version_build_variant_stage_sources(RID p_version, int p_variant) {
@@ -771,7 +783,16 @@ void ShaderRD::_compile_version_start(Version *p_version, int p_group) {
 	compile_data.version = p_version;
 	compile_data.group = p_group;
 
-	WorkerThreadPool::GroupID group_task = WorkerThreadPool::get_singleton()->add_template_group_task(this, &ShaderRD::_compile_variant, compile_data, group_to_variant_map[p_group].size(), -1, true, SNAME("ShaderCompilation"));
+	const int variant_count = group_to_variant_map[p_group].size();
+#if defined(MACOS_ENABLED)
+	// BUG-231: Cap concurrent cold shader-variant compilation tasks on unified-memory
+	// macOS hosts so glslang + SPIRV-Cross CompilerMSL do not fan out across all cores
+	// and accumulate N parallel libmalloc magazines during startup.
+	const int compile_tasks = variant_count > 1 ? MIN(2, variant_count) : -1;
+#else
+	const int compile_tasks = -1;
+#endif
+	WorkerThreadPool::GroupID group_task = WorkerThreadPool::get_singleton()->add_template_group_task(this, &ShaderRD::_compile_variant, compile_data, variant_count, compile_tasks, true, SNAME("ShaderCompilation"));
 	p_version->group_compilation_tasks.write[p_group] = group_task;
 }
 

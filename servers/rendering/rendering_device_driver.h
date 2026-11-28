@@ -643,7 +643,11 @@ public:
 	// Internal original-owner accounting profile. Unsupported drivers retain
 	// their existing conservative qualification admission, without a fallback.
 	virtual bool qualification_incremental_accounting_supported() const { return false; }
+	virtual uint64_t qualification_pending_completion_record_count() const { return 0; }
 	virtual bool qualification_incremental_fact_bound(uint64_t p_graphs, uint32_t p_current, uint32_t &r_main, uint32_t &r_copy) const { return false; }
+	virtual bool qualification_incremental_fact_bound_idle(uint64_t p_graphs, uint32_t &r_main, uint32_t &r_copy) const {
+		return qualification_incremental_fact_bound(p_graphs, 0, r_main, r_copy);
+	}
 	virtual Error qualification_worker_source_quote(CommandBufferID p_command, QueueCallReport &r_prefix, uint32_t &r_future) const { return ERR_UNAVAILABLE; }
 	virtual uint32_t qualification_native_call_bound(uint32_t p_slots) const { return 0; }
 	// Original RD profile: main slots may wait and signal; transfer-worker
@@ -653,6 +657,9 @@ public:
 			return 0;
 		}
 		return qualification_native_call_bound(p_main_slots + p_worker_slots);
+	}
+	virtual uint32_t qualification_native_call_bound_for_profile_idle(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames) const {
+		return qualification_native_call_bound_for_profile(p_main_slots, p_worker_slots, p_frames);
 	}
 
 	virtual bool native_call_observation_supported() const { return false; }

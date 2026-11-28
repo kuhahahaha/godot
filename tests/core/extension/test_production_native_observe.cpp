@@ -5757,7 +5757,7 @@ struct Access {
 		CHECK(e.rd.download_staging_buffers.current < e.rd.download_staging_buffers.blocks.size());
 		CHECK(e.driver.buffer_frees == frees_before + 12);
 
-		// 4. Advance idle frames to trigger idle TransferWorker staging trim (> 8 frames),
+		// 4. Advance idle frames to trigger idle TransferWorker staging trim,
 		//    while submitted TransferWorker keeps its buffer intact.
 		for (int step = 0; step < 10; ++step) {
 			e.rd._trim_idle_staging_buffers();
@@ -5768,6 +5768,30 @@ struct Access {
 		CHECK(w_busy->staging_buffer.id != 0);
 		CHECK(w_busy->staging_buffer_size_allocated == 8u * 1024u * 1024u);
 		CHECK(e.driver.buffer_frees == frees_before + 13);
+
+		// 5. BUG-234: Active upload simulation (upload_staging_buffers.used == true) MUST still
+		//    reclaim stale non-current blocks past safe_age while preserving current and in-flight blocks.
+		for (int i = 0; i < 6; ++i) {
+			REQUIRE(e.rd._insert_staging_block(e.rd.upload_staging_buffers) == OK);
+		}
+		REQUIRE(e.rd.upload_staging_buffers.blocks.size() == 8);
+		e.rd.frames_drawn = 40;
+		e.rd.upload_staging_buffers.used = true;
+		e.rd.upload_staging_buffers.current = 0;
+		e.rd.upload_staging_buffers.blocks.write[0].frame_used = 40;
+		e.rd.upload_staging_buffers.blocks.write[1].frame_used = 39;
+		e.rd.upload_staging_buffers.blocks.write[2].frame_used = 35;
+		for (int i = 3; i < 8; ++i) {
+			e.rd.upload_staging_buffers.blocks.write[i].frame_used = 10;
+		}
+		const uint32_t frees_before_active_trim = e.driver.buffer_frees;
+		e.rd._trim_idle_staging_buffers();
+		CHECK(e.rd.upload_staging_buffers.blocks.size() == 3);
+		CHECK(e.rd.upload_staging_buffers.current == 0);
+		CHECK(e.rd.upload_staging_buffers.blocks[0].frame_used == 40);
+		CHECK(e.rd.upload_staging_buffers.blocks[1].frame_used == 39);
+		CHECK(e.rd.upload_staging_buffers.blocks[2].frame_used == 35);
+		CHECK(e.driver.buffer_frees == frees_before_active_trim + 5);
 
 		e.driver.buffer_free(w_busy->staging_buffer);
 		w_busy->staging_buffer = RDD::BufferID();
@@ -9285,6 +9309,347 @@ struct Access {
 		REQUIRE(e.registry->production_release(live_ref).native_error == OK);
 		REQUIRE(e.registry->production_close(att_ref).native_error == OK);
 	}
+
+	static void bug237_transient_pressure_returns_busy_and_preserves_intrinsic_range_errors() {
+		using namespace GDExtensionDeviceExit;
+		struct Metal3PressureDriver : QuoteDriver {
+			uint64_t pending_records = 0;
+			bool native_issue_bound(NativeIssueKind p_kind, uint32_t p_commands, uint32_t &r_bound) const override {
+				if (p_kind == NativeIssueKind::PREPARE_SEGMENT) {
+					r_bound = 1;
+					return true;
+				}
+				const uint32_t extra = p_kind == NativeIssueKind::MAIN_SLOT ? 2 : 1;
+				if (p_commands > UINT32_MAX - extra) {
+					return false;
+				}
+				r_bound = p_commands ? p_commands + extra : 0;
+				return true;
+			}
+			bool qualification_incremental_accounting_supported() const override { return true; }
+			uint64_t qualification_pending_completion_record_count() const override { return pending_records; }
+			bool qualification_incremental_fact_bound(uint64_t p_graphs, uint32_t p_current, uint32_t &r_main, uint32_t &r_copy) const override {
+				if (p_graphs > 4096) {
+					return false;
+				}
+				const uint64_t bound = uint64_t(p_current) * 3 + 3 * (p_graphs + 1) + pending_records;
+				const uint64_t copy_bound = 2 * (p_graphs + 1);
+				if (bound + copy_bound > 4096) {
+					return false;
+				}
+				r_main = uint32_t(bound);
+				r_copy = uint32_t(copy_bound);
+				return true;
+			}
+			bool qualification_incremental_fact_bound_idle(uint64_t p_graphs, uint32_t &r_main, uint32_t &r_copy) const override {
+				if (p_graphs > 4096) {
+					return false;
+				}
+				const uint64_t bound = 3 * (p_graphs + 1);
+				const uint64_t copy_bound = 2 * (p_graphs + 1);
+				if (bound + copy_bound > 4096) {
+					return false;
+				}
+				r_main = uint32_t(bound);
+				r_copy = uint32_t(copy_bound);
+				return true;
+			}
+			uint32_t qualification_native_call_bound_for_profile(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames) const override {
+				if (!p_frames || p_frames > p_main_slots || p_worker_slots > UINT32_MAX - p_main_slots) {
+					return 0;
+				}
+				const uint64_t count = uint64_t(p_main_slots) * 3 + uint64_t(p_worker_slots) * 2 + p_frames + pending_records;
+				return count > 4096 ? 0 : uint32_t(count);
+			}
+			uint32_t qualification_native_call_bound_for_profile_idle(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames) const override {
+				if (!p_frames || p_frames > p_main_slots || p_worker_slots > UINT32_MAX - p_main_slots) {
+					return 0;
+				}
+				const uint64_t count = uint64_t(p_main_slots) * 3 + uint64_t(p_worker_slots) * 2 + p_frames;
+				return count > 4096 ? 0 : uint32_t(count);
+			}
+		};
+
+		Enrollment e;
+		Metal3PressureDriver pressure_driver;
+		e.rd.driver = &pressure_driver;
+		struct RestoreDriver {
+			RenderingDevice &rd;
+			RenderingDeviceDriver *orig;
+			~RestoreDriver() { rd.driver = orig; }
+		} restore{ e.rd, &e.driver };
+
+		// 1. qualification_native_capacity: transient current_commands / pending_records -> ERR_BUSY; intrinsic overflow -> ERR_PARAMETER_RANGE_ERROR.
+		CHECK(qualification_native_capacity(pressure_driver, 0, 500, 0) == OK);
+		CHECK(qualification_native_capacity(pressure_driver, 400, 500, 0) == ERR_BUSY);
+		CHECK(qualification_native_capacity(pressure_driver, 1000, 500, 0) == ERR_BUSY);
+		pressure_driver.pending_records = 1200;
+		CHECK(qualification_native_capacity(pressure_driver, 0, 500, 0) == ERR_BUSY);
+		pressure_driver.pending_records = 0;
+
+		// Max intrinsic Metal3 graph bound is 681 (681 + 2046 + 1364 + 5 == 4096); 682 is intrinsically oversized.
+		CHECK(qualification_native_capacity(pressure_driver, 0, 681, 0) == OK);
+		CHECK(qualification_native_capacity(pressure_driver, 1, 681, 0) == ERR_BUSY);
+		pressure_driver.pending_records = 1;
+		CHECK(qualification_native_capacity(pressure_driver, 0, 681, 0) == ERR_BUSY);
+		pressure_driver.pending_records = 0;
+		CHECK(qualification_native_capacity(pressure_driver, 0, 682, 0) == ERR_PARAMETER_RANGE_ERROR);
+		pressure_driver.pending_records = 20;
+		CHECK(qualification_native_capacity(pressure_driver, 10, 682, 0) == ERR_PARAMETER_RANGE_ERROR);
+		pressure_driver.pending_records = 0;
+
+		// 2. qualification_typed_upload_capacity / qualification_reserve_fact_plan under transient pressure vs intrinsic overflow.
+		QualificationTicket ticket;
+		ticket.preparation.expected_result_bytes = 32; // bound = 4 + 1 + rows
+		pressure_driver.pending_records = 1200;
+		CHECK(e.registry->qualification_typed_upload_capacity(&ticket, &e.rd, 495) == ERR_BUSY);
+		CHECK(ticket.credits.capacity == 0);
+		pressure_driver.pending_records = 0;
+		CHECK(e.registry->qualification_typed_upload_capacity(&ticket, &e.rd, 495) == OK);
+		CHECK(ticket.credits.capacity == QualificationTicket::FACT_CAPACITY);
+		pressure_driver.pending_records = 1100;
+		CHECK(e.registry->qualification_typed_upload_capacity(&ticket, &e.rd, 495) == ERR_BUSY);
+		pressure_driver.pending_records = 20;
+		CHECK(e.registry->qualification_typed_upload_capacity(&ticket, &e.rd, 677) == ERR_PARAMETER_RANGE_ERROR);
+		pressure_driver.pending_records = 0;
+
+		// 3. production_membership_bound_locked: pending overflow -> ERR_BUSY; intrinsic worker overflow -> ERR_UNAVAILABLE.
+		uint32_t bound = 0;
+		CHECK(e.registry->production_membership_bound_locked(e.rd, 1, 0, bound) == OK);
+		CHECK(bound == 5u);
+		pressure_driver.pending_records = 4095;
+		CHECK(e.registry->production_membership_bound_locked(e.rd, 1, 0, bound) == ERR_BUSY);
+		pressure_driver.pending_records = 10;
+		CHECK(e.registry->production_membership_bound_locked(e.rd, 1, 3000, bound) == ERR_UNAVAILABLE);
+		pressure_driver.pending_records = 0;
+
+		// 4. production_device_quote_locked: transient pending drift -> ERR_BUSY; intrinsically undersized native_memberships -> ERR_PARAMETER_RANGE_ERROR.
+		GDExtensionProductionCapacityV1 tight_cap = {};
+		tight_cap.abi = production_dto_abi<GDExtensionProductionCapacityV1>();
+		tight_cap.requests = 1;
+		tight_cap.suboperations = 1;
+		tight_cap.resources = 2;
+		tight_cap.resource_uses = 2;
+		tight_cap.readbacks = 0;
+		tight_cap.graph_memberships = 1;
+		tight_cap.native_memberships = 5;
+		tight_cap.return_cells = 2;
+		tight_cap.retained_payload_bytes = 64;
+		tight_cap.readback_bytes = 0;
+
+		GDExtensionProductionMetadataQuoteV1 dev_quote = {};
+		CHECK(e.registry->production_device_quote_locked(e.rd, tight_cap, dev_quote, 0) == OK);
+		pressure_driver.pending_records = 1;
+		CHECK(e.registry->production_device_quote_locked(e.rd, tight_cap, dev_quote, 0) == ERR_BUSY);
+		pressure_driver.pending_records = 0;
+		GDExtensionProductionCapacityV1 undersized_cap = tight_cap;
+		undersized_cap.native_memberships = 4;
+		CHECK(e.registry->production_device_quote_locked(e.rd, undersized_cap, dev_quote, 0) == ERR_PARAMETER_RANGE_ERROR);
+
+		// 5. production_request_requirements & production_reserve_metadata_rows_locked under transient pending & command-prefix pressure.
+		const auto att_ref = e.accept(tight_cap);
+		REQUIRE(att_ref.handle_serial != 0);
+		ProductionAttachment *att = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			RenderingDevice *rd = nullptr;
+			REQUIRE(e.registry->production_attachment_locked(att_ref, true, att, rd) == OK);
+		}
+		REQUIRE(att != nullptr);
+
+		const GDExtensionProductionActionV2 actions[1] = {
+			{ 0, 10, 0, 0, GDEXTENSION_PRODUCTION_DISPATCH_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+		};
+		const GDExtensionProductionResourceV1 resources[2] = {
+			{ GDEXTENSION_PRODUCTION_UNIT_V1, 0, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 0, 0 },
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 64, 0 },
+		};
+		const GDExtensionProductionUseV1 uses[1] = {
+			{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 64, 0 },
+		};
+
+		// T1: quote requirements on idle frame.
+		GDExtensionProductionMetadataQuoteV1 req_quote = {};
+		REQUIRE(e.registry->production_request_requirements(att_ref, actions, 1, resources, 2, uses, 1, nullptr, 0, nullptr, 0, 0, 0, &req_quote).native_error == OK);
+		CHECK(req_quote.capacity.native_memberships == 5u);
+
+		// Baseline reserve at idle pending/prefix succeeds cleanly before testing transient pressure.
+		Request *baseline_req = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			const GDExtensionProductionOperationV1 op{ production_dto_abi<GDExtensionProductionOperationV1>(), 23700, 1, 10, 11 };
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op, req_quote.capacity, { nullptr, actions }, 1, resources, 2, uses, 1, {}, 0, baseline_req, 2) == OK);
+		}
+		REQUIRE(baseline_req != nullptr);
+		const GDExtensionProductionRequestRefV1 baseline_ref{ Enrollment::INSTANCE, baseline_req->serial };
+		REQUIRE(e.registry->production_cancel(baseline_ref).native_error == OK);
+		REQUIRE(e.registry->production_release(baseline_ref).native_error == OK);
+
+		// Transient pending_records spike past pool native_memberships returns ERR_BUSY from requirements.
+		pressure_driver.pending_records = 1;
+		CHECK(e.registry->production_request_requirements(att_ref, actions, 1, resources, 2, uses, 1, nullptr, 0, nullptr, 0, 0, 0, &req_quote).native_error == ERR_BUSY);
+
+		// T2: pending_records drift (+1) between T1 requirements and reserve returns ERR_BUSY.
+		Request *req_ptr = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			const GDExtensionProductionOperationV1 op{ production_dto_abi<GDExtensionProductionOperationV1>(), 23701, 1, 10, 11 };
+			CHECK(e.registry->production_reserve_metadata_rows_locked(*att, op, req_quote.capacity, { nullptr, actions }, 1, resources, 2, uses, 1, {}, 0, req_ptr, 2) == ERR_BUSY);
+		}
+		CHECK(req_ptr == nullptr);
+
+		// Transient mid-frame RD command prefix growth pushes request_quote.graph_slots > att->quote.graph_slots -> ERR_BUSY.
+		pressure_driver.pending_records = 0;
+		e.rd.draw_graph.add_capture_timestamp(RDD::QueryPoolID(1), 0);
+		CHECK(e.rd.draw_graph.qualification_command_count() == 2u);
+		{
+			MutexLock lock(e.registry->mutex);
+			const GDExtensionProductionOperationV1 op{ production_dto_abi<GDExtensionProductionOperationV1>(), 23702, 1, 10, 11 };
+			CHECK(e.registry->production_reserve_metadata_rows_locked(*att, op, req_quote.capacity, { nullptr, actions }, 1, resources, 2, uses, 1, {}, 0, req_ptr, 2) == ERR_BUSY);
+		}
+		CHECK(req_ptr == nullptr);
+
+		// Intrinsically undersized request still returns ERR_PARAMETER_RANGE_ERROR.
+		{
+			MutexLock lock(e.registry->mutex);
+			const GDExtensionProductionOperationV1 op{ production_dto_abi<GDExtensionProductionOperationV1>(), 23703, 1, 10, 11 };
+			CHECK(e.registry->production_reserve_metadata_rows_locked(*att, op, undersized_cap, { nullptr, actions }, 1, resources, 2, uses, 1, {}, 0, req_ptr, 2) == ERR_PARAMETER_RANGE_ERROR);
+		}
+		CHECK(req_ptr == nullptr);
+
+		REQUIRE(e.registry->production_close(att_ref).native_error == OK);
+	}
+
+	static void bug241b_production_output_demand_no_motion() {
+		Enrollment e;
+		e.rd.is_main_instance = true;
+		e.rd.render_thread_id = Thread::get_caller_id();
+		e.rd.upload_staging_buffers.block_size = 256u * 1024u;
+		e.rd.transfer_worker_pool_max_size = 2u;
+
+		GDExtensionProductionCapacityV1 cap = {};
+		cap.abi = GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionCapacityV1>();
+		cap.requests = 1;
+		cap.suboperations = 1;
+		cap.resources = 2;
+		cap.resource_uses = 4;
+		cap.graph_memberships = 1;
+		cap.native_memberships = 64;
+		cap.return_cells = 2;
+		cap.retained_payload_bytes = 64;
+
+		const auto att_ref = e.accept(cap);
+		REQUIRE(att_ref.handle_serial != 0);
+		GDExtensionDeviceExit::ProductionAttachment *att = nullptr;
+		GDExtensionDeviceExit::ProductionRequest *gen_req = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			RenderingDevice *rd = nullptr;
+			REQUIRE(e.registry->production_attachment_locked(att_ref, true, att, rd) == OK);
+			const GDExtensionProductionActionV2 actions[1] = {
+				{ 0, 10, 0, 0, GDEXTENSION_PRODUCTION_DISPATCH_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+			};
+			const GDExtensionProductionResourceV1 resources[2] = {
+				{ GDEXTENSION_PRODUCTION_UNIT_V1, 0, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 0, 0 },
+				{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 64, 0 },
+			};
+			const GDExtensionProductionUseV1 uses[1] = {
+				{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 64, 0 },
+			};
+			const GDExtensionProductionOperationV1 op{ GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionOperationV1>(), 24101, 1, 10, 11 };
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*att, op, cap, { nullptr, actions }, 1, resources, 2, uses, 1, {}, 0, gen_req, 2) == OK);
+		}
+		REQUIRE(att != nullptr);
+		REQUIRE(gen_req != nullptr);
+
+		GDExtensionDeviceExit::ProductionOutputPin gen_pin;
+		uint32_t pin_cell = UINT32_MAX;
+		{
+			MutexLock lock(e.registry->mutex);
+			gen_req->frozen = true;
+			gen_req->control.state = GDExtensionDeviceExit::ProductionControlState::EXECUTING;
+			gen_req->control.input.kind = GDExtensionDeviceExit::ProductionControlKind::RECORD;
+			gen_req->actions[0].prepared = true;
+			gen_req->actions[0].output_source_prepared = true;
+			REQUIRE(e.registry->production_output_action_pin_locked(*gen_req, gen_req->actions[0], e.rd, gen_pin) == OK);
+			for (uint32_t i = 0; i < gen_req->capacity.resource_uses; ++i) {
+				if (gen_req->uses[i].output_consumer == &gen_pin) {
+					pin_cell = i;
+					break;
+				}
+			}
+		}
+		REQUIRE(pin_cell < gen_req->capacity.resource_uses);
+
+		auto &row = gen_req->uses[pin_cell];
+		row.output_owner_kind = GDExtensionDeviceExit::ProductionOutputOwnerKind::GENERATION;
+		row.output_particles = RID::from_uint64(0x241B99u);
+		row.output_generation = 9u;
+		row.output_next = UINT32_MAX;
+		row.output_demand_ready = true;
+		row.output_demand_live.store(true, std::memory_order_release);
+		row.output_demand = {
+			1024u, // capacity
+			2u, // surfaces
+			2u, // view_capacity
+			4u, // read_capacity
+			2u, // surface_capacity
+			uint32_t(RendererRD::ExternalOutputConfig::INSTANCE_192),
+			1u, // motion_required = 1
+		};
+		gen_req->output_owner_head = pin_cell;
+
+		GDExtensionProductionOutputDemandInputV1 input = {};
+		input.abi = GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionOutputDemandInputV1>();
+		input.particles = 0x241B99u;
+		input.generation = 9u;
+		input.source_space = 1u;
+		input.read_capacity = 2u;
+		input.read_graph_capacity = 4u;
+
+		GDExtensionProductionOutputGuardDemandV1 demand_motion_on = {};
+		GDExtensionProductionOutputGuardDemandV1 demand_motion_off = {};
+		GDExtensionProductionOutputGuardDemandV1 demand_no_motion_roles_2 = {};
+		GDExtensionProductionOutputGuardDemandV1 demand_no_motion_roles_3 = {};
+		GDExtensionProductionOutputGuardDemandV1 demand_no_motion_roles_4 = {};
+
+		{
+			MutexLock lock(e.registry->mutex);
+			REQUIRE(e.registry->production_output_demand_locked(*att, e.rd, input, demand_motion_on, UINT64_MAX, false, 0u) == OK);
+
+			row.output_demand.motion_required = 0u;
+			REQUIRE(e.registry->production_output_demand_locked(*att, e.rd, input, demand_motion_off, UINT64_MAX, false, 0u) == OK);
+			REQUIRE(e.registry->production_output_demand_locked(*att, e.rd, input, demand_no_motion_roles_2, UINT64_MAX, false, 2u) == OK);
+			REQUIRE(e.registry->production_output_demand_locked(*att, e.rd, input, demand_no_motion_roles_3, UINT64_MAX, false, 3u) == OK);
+			REQUIRE(e.registry->production_output_demand_locked(*att, e.rd, input, demand_no_motion_roles_4, UINT64_MAX, true, 4u) == OK);
+
+			gen_req->output_owner_head = UINT32_MAX;
+			row.output_demand_live.store(false, std::memory_order_release);
+			row.output_demand_ready = false;
+			row.output_owner_kind = GDExtensionDeviceExit::ProductionOutputOwnerKind::NONE;
+			row.output_particles = RID();
+			row.output_generation = 0u;
+			REQUIRE(e.registry->production_output_unpin_locked(gen_pin) == OK);
+			gen_req->actions[0].output_state = GDExtensionDeviceExit::ProductionActionCell::OutputState::UNBOUND;
+			gen_req->actions[0].output_root = 0u;
+			gen_req->actions[0].prepared = false;
+			gen_req->actions[0].output_source_prepared = false;
+			gen_req->control = {};
+			gen_req->frozen = false;
+		}
+
+		// With motion_required == 0, PREVIOUS_RECORDS is omitted -> 1 fewer owned output use cell!
+		CHECK(demand_motion_off.required_output_use_cells + 1u == demand_motion_on.required_output_use_cells);
+		CHECK(demand_no_motion_roles_2.required_output_use_cells == demand_motion_off.required_output_use_cells);
+		// {1, 7, 9} (no previous + aux) or legacy {1, 2, 7} requires +1 cell; legacy {1, 2, 7, 9} requires +2 cells.
+		CHECK(demand_no_motion_roles_3.required_output_use_cells == demand_motion_off.required_output_use_cells + 1u);
+		CHECK(demand_no_motion_roles_4.required_output_use_cells == demand_motion_off.required_output_use_cells + 2u);
+
+		const GDExtensionProductionRequestRefV1 req_ref{ Enrollment::INSTANCE, gen_req->serial };
+		REQUIRE(e.registry->production_cancel(req_ref).native_error == OK);
+		REQUIRE(e.registry->production_release(req_ref).native_error == OK);
+		REQUIRE(e.registry->production_close(att_ref).native_error == OK);
+	}
 };
 TEST_CASE("[ProductionNativeObserve][PreparedNativeRecordV2] cancel rejects transferred native wait before consume without erasing actual prefix") {
 	Access::native_record_wait_rejection(false);
@@ -9645,4 +10010,12 @@ TEST_CASE("[ProductionNativeObserve][BUG-202] qualification_service breaks befor
 
 TEST_CASE("[ProductionNativeObserve][BUG-207] active continuous-churn high-water tail pod-page reclaim frees burst pages without touching live requests") {
 	TestProductionNativeObserve::Access::bug207_active_churn_tail_pod_page_reclaim_preserves_live_requests();
+}
+
+TEST_CASE("[ProductionNativeObserve][BUG-237] transient command and pending completion record pressure returns ERR_BUSY while intrinsic overflow preserves ERR_PARAMETER_RANGE_ERROR") {
+	TestProductionNativeObserve::Access::bug237_transient_pressure_returns_busy_and_preserves_intrinsic_range_errors();
+}
+
+TEST_CASE("[ProductionNativeObserve][BUG-241B] production_output_demand_locked omits PREVIOUS_RECORDS when motion_required == 0 while preserving aux and legacy role counts") {
+	TestProductionNativeObserve::Access::bug241b_production_output_demand_no_motion();
 }

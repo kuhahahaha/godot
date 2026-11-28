@@ -237,6 +237,7 @@ public:
 	bool history_cleared() const;
 	bool released() const;
 	static void bug155a_cross_capture_sealed_replay();
+	static void bug241b_plan_instance192_and_transforms_sources_no_motion();
 	static void bug162_cross_capture_selection_and_rollback(
 			GDExtensionDeviceExit::Registry &p_registry, RenderingDevice &p_rd,
 			GDExtensionDeviceExit::ProductionOutputPin &p_slot0_pin, GDExtensionProductionRequestRefV1 p_slot0_ref,

@@ -245,15 +245,40 @@ bool RenderingDeviceDriverMetal::native_issue_bound(NativeIssueKind p_kind, uint
 	return true;
 }
 
-bool RenderingDeviceDriverMetal::qualification_incremental_fact_bound(uint64_t graphs,uint32_t current,uint32_t &main,uint32_t &copy) const {
- // One original main slot (at most wait+work+signal) and both nonblocking
- // prepare-segment calls per continuation. The extra frame is the initial
- // membership/failure frame. Screen split slots are admitted before recording.
- if(graphs>4096)return false;
- uint64_t bound=uint64_t(current)*3+3*(graphs+1);
- const uint64_t copy_bound=2*(graphs+1);
- for(const auto *command:command_buffers)bound+=command->pending_completion_records.size();
- if(bound+copy_bound>4096)return false;main=uint32_t(bound);copy=uint32_t(copy_bound);return true;
+uint64_t RenderingDeviceDriverMetal::qualification_pending_completion_record_count() const {
+	uint64_t pending = 0;
+	for (const auto *command : command_buffers) {
+		pending += command->pending_completion_records.size();
+	}
+	return pending;
+}
+
+bool RenderingDeviceDriverMetal::_qualification_incremental_fact_bound_impl(uint64_t p_graphs, uint32_t p_current, bool p_include_pending, uint32_t &r_main, uint32_t &r_copy) const {
+	// One original main slot (at most wait+work+signal) and both nonblocking
+	// prepare-segment calls per continuation. The extra frame is the initial
+	// membership/failure frame. Screen split slots are admitted before recording.
+	if (p_graphs > 4096) {
+		return false;
+	}
+	uint64_t bound = uint64_t(p_current) * 3 + 3 * (p_graphs + 1);
+	const uint64_t copy_bound = 2 * (p_graphs + 1);
+	if (p_include_pending) {
+		bound += qualification_pending_completion_record_count();
+	}
+	if (bound + copy_bound > 4096) {
+		return false;
+	}
+	r_main = uint32_t(bound);
+	r_copy = uint32_t(copy_bound);
+	return true;
+}
+
+bool RenderingDeviceDriverMetal::qualification_incremental_fact_bound(uint64_t graphs, uint32_t current, uint32_t &main, uint32_t &copy) const {
+	return _qualification_incremental_fact_bound_impl(graphs, current, true, main, copy);
+}
+
+bool RenderingDeviceDriverMetal::qualification_incremental_fact_bound_idle(uint64_t graphs, uint32_t &main, uint32_t &copy) const {
+	return _qualification_incremental_fact_bound_impl(graphs, 0, false, main, copy);
 }
 Error RenderingDeviceDriverMetal::qualification_worker_source_quote(CommandBufferID command,QueueCallReport &prefix,uint32_t &future) const {
  prefix={};future=2; // worker has no waits: work and optional signal only.
@@ -273,13 +298,10 @@ uint32_t RenderingDeviceDriverMetal::qualification_native_call_bound(uint32_t sl
 	// Each actual Metal3 queue slot can commit its command plus the barrier-mode
 	// wait and signal commands. Include every already committed wrapper source;
 	// future unexpected expansion remains a retained failure, never truncation.
-	uint64_t count = uint64_t(slots) * 3 + 1;
-	for (const auto *command : command_buffers) {
-		count += command->pending_completion_records.size();
-	}
+	const uint64_t count = uint64_t(slots) * 3 + 1 + qualification_pending_completion_record_count();
 	return count > 4096 ? 0 : uint32_t(count);
 }
-uint32_t RenderingDeviceDriverMetal::qualification_native_call_bound_for_profile(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames) const {
+uint32_t RenderingDeviceDriverMetal::_qualification_native_call_bound_for_profile_impl(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames, bool p_include_pending) const {
 	if (!p_frames || p_frames > p_main_slots || p_worker_slots > UINT32_MAX - p_main_slots) {
 		return 0;
 	}
@@ -288,15 +310,20 @@ uint32_t RenderingDeviceDriverMetal::qualification_native_call_bound_for_profile
 	// retain all three. Also reserve a hidden copy-queue source for every frame,
 	// and all already committed wrapper sources. No worker or prefix is omitted.
 	uint64_t count = uint64_t(p_main_slots) * 3 + uint64_t(p_worker_slots) * 2 + p_frames;
-	for (const auto *command : command_buffers) {
-		count += command->pending_completion_records.size();
-	}
+	const uint64_t pending = p_include_pending ? qualification_pending_completion_record_count() : 0;
+	count += pending;
 #ifdef TESTS_ENABLED
-	if (OS::get_singleton()->has_environment("GODOT_QUALIFICATION_CAPACITY_TRACE")) {
-		print_line(vformat("QCAP backend=MTL3 sync_mode=%d main_slots=%d worker_slots=%d frames=%d pending=%d raw_profile_bound=%d", int(sync_mode), p_main_slots, p_worker_slots, p_frames, count - uint64_t(p_main_slots) * 3 - uint64_t(p_worker_slots) * 2 - p_frames, count));
+	if (p_include_pending && OS::get_singleton()->has_environment("GODOT_QUALIFICATION_CAPACITY_TRACE")) {
+		print_line(vformat("QCAP backend=MTL3 sync_mode=%d main_slots=%d worker_slots=%d frames=%d pending=%d raw_profile_bound=%d", int(sync_mode), p_main_slots, p_worker_slots, p_frames, pending, count));
 	}
 #endif
 	return count > 4096 ? 0 : uint32_t(count);
+}
+uint32_t RenderingDeviceDriverMetal::qualification_native_call_bound_for_profile(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames) const {
+	return _qualification_native_call_bound_for_profile_impl(p_main_slots, p_worker_slots, p_frames, true);
+}
+uint32_t RenderingDeviceDriverMetal::qualification_native_call_bound_for_profile_idle(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames) const {
+	return _qualification_native_call_bound_for_profile_impl(p_main_slots, p_worker_slots, p_frames, false);
 }
 Error RenderingDeviceDriverMetal::_execute_and_present_common(CommandQueueID queue, VectorView<SemaphoreID> waits, VectorView<CommandBufferID> commands, VectorView<SemaphoreID> signals, FenceID fence_id, VectorView<SwapChainID> swaps, bool barriers) {
 	QueueCallReport report;

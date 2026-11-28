@@ -2715,3 +2715,98 @@ TEST_CASE("[B4][ReadReceiptLayout] original read graph and transfer bookkeeping 
 TEST_CASE("[SceneTree][ExternalOutput][BUG-155A] cross-capture SEALED_RECORDED replay does not silently bypass replayed_across_capture and passes validate_scene_cull") {
 	RendererRD::ExternalLinkedOwnerTest::bug155a_cross_capture_sealed_replay();
 }
+
+namespace {
+struct Bug241bSourceVerifier {
+	const RendererRD::ExternalPipelinePreparation &prep;
+	uint32_t expected_bytes;
+	template <typename T>
+	Error check(Error (RendererRD::ExternalPipelinePreparation::*fn)(T (&)[3], uint32_t &, RID) const) const {
+		T sources[3] = {};
+		uint32_t count = 0u;
+		const Error err = (prep.*fn)(sources, count, RID());
+		if (err == OK) {
+			CHECK(count == 2u);
+			CHECK(sources[0].buffer == RID::from_uint64(0x241B01u));
+			CHECK(sources[0].byte_size == expected_bytes);
+			CHECK(sources[0].owned_ordinal == 0u);
+			CHECK(sources[1].buffer == sources[0].buffer);
+			CHECK(sources[1].byte_size == sources[0].byte_size);
+			CHECK(sources[1].owned_group == sources[0].owned_group);
+			CHECK(sources[1].owned_ordinal == sources[0].owned_ordinal);
+		}
+		return err;
+	}
+};
+} // namespace
+
+void RendererRD::ExternalLinkedOwnerTest::bug241b_plan_instance192_and_transforms_sources_no_motion() {
+	using Storage = RendererRD::ExternalOutputStorage;
+	using Config = RendererRD::ExternalOutputConfig;
+	constexpr uint32_t kCap = 1024u;
+	constexpr uint32_t kSurfaces = 2u;
+
+	Storage::Instance192Layout with_motion = {};
+	Storage::Instance192Layout no_motion = {};
+	Storage::Instance192Layout with_motion_aux = {};
+	Storage::Instance192Layout no_motion_aux = {};
+	REQUIRE(Storage::plan_instance192(kCap, kSurfaces, with_motion, true, false) == OK);
+	REQUIRE(Storage::plan_instance192(kCap, kSurfaces, no_motion, false, false) == OK);
+	REQUIRE(Storage::plan_instance192(kCap, kSurfaces, with_motion_aux, true, true) == OK);
+	REQUIRE(Storage::plan_instance192(kCap, kSurfaces, no_motion_aux, false, true) == OK);
+
+	CHECK(with_motion.bytes[Storage::CURRENT_RECORDS] == kCap * 192u);
+	CHECK(with_motion.bytes[Storage::PREVIOUS_RECORDS] == kCap * 192u);
+	CHECK(no_motion.bytes[Storage::CURRENT_RECORDS] == kCap * 192u);
+	CHECK(no_motion.bytes[Storage::PREVIOUS_RECORDS] == 0u);
+	CHECK(no_motion.bytes[Storage::INSTANCE_AUX_PARAMS] == 0u);
+	CHECK(no_motion.resource_count + 1u == with_motion.resource_count);
+	CHECK(no_motion.total_bytes + uint64_t(kCap) * 192ull == with_motion.total_bytes);
+
+	CHECK(no_motion_aux.bytes[Storage::PREVIOUS_RECORDS] == 0u);
+	CHECK(no_motion_aux.bytes[Storage::INSTANCE_AUX_PARAMS] == kCap * 32u);
+	CHECK(no_motion_aux.resource_count + 1u == with_motion_aux.resource_count);
+	CHECK(no_motion_aux.total_bytes + uint64_t(kCap) * 192ull == with_motion_aux.total_bytes);
+
+	// Verify ExternalPipelinePreparation::_transforms_sources cleanly aliases sources[1] = sources[0]
+	// when motion == DISABLED and PREVIOUS_RECORDS is unallocated (bytes == 0, rid null).
+	RenderingDevice rd;
+	Storage storage(rd);
+	storage.resources[Storage::CURRENT_RECORDS].rid = RID::from_uint64(0x241B01u);
+	storage.resources[Storage::CURRENT_RECORDS].bytes = kCap * 192u;
+	storage.resources[Storage::PREVIOUS_RECORDS].rid = RID();
+	storage.resources[Storage::PREVIOUS_RECORDS].bytes = 0u;
+	storage.resources[Storage::OUTPUT_META].rid = RID::from_uint64(0x241B02u);
+	storage.resources[Storage::OUTPUT_META].bytes = 32u;
+
+	Config cfg;
+	cfg.profile = Config::INSTANCE_192;
+	cfg.motion = Config::DISABLED;
+	cfg.capacity = kCap;
+	cfg.max_views = 1u;
+	cfg.max_inflight = 1u;
+	RendererRD::ExternalOutputOwner owner(cfg, 1u);
+	owner.slot_count = 1u;
+	owner.slots[0].storage = &storage;
+	owner.slots[0].owned_group = 77u;
+	owner.slots[0].allocate_previous_records = false;
+	owner.slots[0].request.common.history_reset = 0u;
+
+	RendererRD::ExternalPipelinePreparation prep;
+	prep.owner = &owner;
+	prep.owner_slot = 0u;
+
+	Bug241bSourceVerifier verifier{ prep, kCap * 192u };
+
+	for (RendererRD::ExternalPacketPass pass : { RendererRD::ExternalPacketPass::OPAQUE, RendererRD::ExternalPacketPass::TRANSPARENT, RendererRD::ExternalPacketPass::DEPTH }) {
+		prep.selection.pass = pass;
+		REQUIRE(verifier.check(&RendererRD::ExternalPipelinePreparation::_transforms_sources) == OK);
+	}
+
+	// MOTION pass must still refuse when PREVIOUS_RECORDS is unallocated.
+	prep.selection.pass = RendererRD::ExternalPacketPass::MOTION;
+	CHECK(verifier.check(&RendererRD::ExternalPipelinePreparation::_transforms_sources) == ERR_UNAVAILABLE);
+
+	owner.slots[0].storage = nullptr;
+	owner.state = RendererRD::ExternalOutputOwner::GenerationState::RELEASED;
+}

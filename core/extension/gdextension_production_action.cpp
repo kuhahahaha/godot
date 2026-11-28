@@ -702,7 +702,21 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 		return observed;
 	}
 	if (request.native_count > request.capacity.native_memberships || memberships > request.capacity.native_memberships - request.native_count) {
-		observed.error = (!rd.screen_swap_chains.is_empty() && request.native_count <= request.capacity.native_memberships) ? ERR_BUSY : ERR_PARAMETER_RANGE_ERROR;
+		if (request.native_count <= request.capacity.native_memberships) {
+			if (!rd.screen_swap_chains.is_empty()) {
+				observed.error = ERR_BUSY;
+				return observed;
+			}
+			if (rd.driver && rd.driver->qualification_pending_completion_record_count() > 0) {
+				uint32_t idle_memberships = 0;
+				if (production_membership_bound_idle_locked(rd, uncaptured_graphs, request.native_workers_bound, idle_memberships) == OK &&
+						idle_memberships <= request.capacity.native_memberships - request.native_count) {
+					observed.error = ERR_BUSY;
+					return observed;
+				}
+			}
+		}
+		observed.error = ERR_PARAMETER_RANGE_ERROR;
 		return observed;
 	}
 	auto &action = request.actions[index];

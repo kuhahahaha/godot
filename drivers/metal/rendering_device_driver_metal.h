@@ -140,18 +140,22 @@ protected:
 		RELEASE_AFTER_WARMUP,
 		PERSIST,
 	};
-	static constexpr uint32_t ARCHIVE_WARMUP_IDLE_FRAMES = 4;
-	static constexpr uint32_t ARCHIVE_WARMUP_MIN_FRAMES = 4;
-	static constexpr uint32_t ARCHIVE_WARMUP_MAX_FRAMES = 12;
-	static constexpr uint32_t ARCHIVE_WARMUP_MAX_PIPELINES = 32;
-	static constexpr uint32_t ARCHIVE_WARMUP_MAX_COMPUTE_PIPELINES = 16;
+	static constexpr uint32_t ARCHIVE_WARMUP_IDLE_FRAMES = 2;
+	static constexpr uint32_t ARCHIVE_WARMUP_MIN_FRAMES = 2;
+	static constexpr uint32_t ARCHIVE_WARMUP_MAX_FRAMES = 6;
+	static constexpr uint32_t ARCHIVE_WARMUP_MAX_PIPELINES = 8;
+	static constexpr uint32_t ARCHIVE_WARMUP_MAX_COMPUTE_PIPELINES = 4;
 	static constexpr uint64_t ARCHIVE_MAX_DISK_BYTES = 64ull * 1024ull * 1024ull;
-	static constexpr uint32_t COMPUTE_ARCHIVE_MAX_PIPELINES = 32;
+	static constexpr uint32_t COMPUTE_ARCHIVE_MAX_PIPELINES = 8;
 	static constexpr uint64_t COMPUTE_ARCHIVE_MAX_DISK_BYTES = 16ull * 1024ull * 1024ull;
-	static constexpr uint32_t COMPUTE_ARCHIVE_FLUSH_IDLE_FRAMES = 4;
-	static constexpr uint32_t COMPUTE_ARCHIVE_WARMUP_MAX_FRAMES = 12;
+	static constexpr uint32_t COMPUTE_ARCHIVE_FLUSH_IDLE_FRAMES = 2;
+	static constexpr uint32_t COMPUTE_ARCHIVE_WARMUP_MAX_FRAMES = 6;
 
 	Mutex archive_mutex;
+	// Serializes disk serializeToURL() flushes across both render and compute archives
+	// so two archive serialization buffers never overlap in host RAM simultaneously (BUG-231).
+	// Strict lock order: archive_disk_flush_mutex -> archive_serialize_mutex -> compute_archive_serialize_mutex -> *_mutex.
+	Mutex archive_disk_flush_mutex;
 	std::shared_mutex archive_serialize_mutex;
 	NS::SharedPtr<MTL::BinaryArchive> archive;
 	std::atomic<bool> archive_active{ false };

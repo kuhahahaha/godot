@@ -283,6 +283,26 @@ Error Registry::production_layout(const GDExtensionProductionCapacityV1 &c, GDEx
 	out = { production_dto_abi<GDExtensionProductionMetadataQuoteV1>(), c, bytes, alignof(std::max_align_t), commands, frames, uint64_t(c.return_cells) + 1 }; // One accepted metadata entry credit.
 	return OK;
 }
+Error Registry::production_membership_bound_idle_locked(RenderingDevice &rd, uint32_t graphs, uint32_t workers, uint32_t &out) const {
+	out = 0;
+	if (!graphs) {
+		return OK;
+	}
+	if (!rd.driver) {
+		return ERR_UNAVAILABLE;
+	}
+	uint32_t post_graph = 0;
+	const uint32_t per_graph = rd.driver->qualification_native_call_bound_for_profile_idle(1, workers, 1);
+	if (!per_graph || !rd.driver->native_issue_bound(RDD::NativeIssueKind::PREPARE_SEGMENT, 0, post_graph)) {
+		return ERR_UNAVAILABLE;
+	}
+	const uint64_t per_edge = uint64_t(per_graph) + post_graph;
+	if (graphs && per_edge > UINT32_MAX / graphs) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	out = uint32_t(uint64_t(graphs) * per_edge);
+	return OK;
+}
 Error Registry::production_membership_bound_locked(RenderingDevice &rd, uint32_t graphs, uint32_t workers, uint32_t &out) const {
 	out = 0;
 	if (!graphs) {
@@ -295,13 +315,26 @@ Error Registry::production_membership_bound_locked(RenderingDevice &rd, uint32_t
 	// its canonical action. The profile includes already committed wrapper
 	// records and the pre-graph hidden source. Reserve the second post-graph
 	// prepare source explicitly, preserving the original qualification profile.
-	const uint32_t per_graph = rd.driver->qualification_native_call_bound_for_profile(1, workers, 1);
 	uint32_t post_graph = 0;
-	if (!per_graph || !rd.driver->native_issue_bound(RDD::NativeIssueKind::PREPARE_SEGMENT, 0, post_graph)) {
+	if (!rd.driver->native_issue_bound(RDD::NativeIssueKind::PREPARE_SEGMENT, 0, post_graph)) {
+		return ERR_UNAVAILABLE;
+	}
+	const uint32_t per_graph = rd.driver->qualification_native_call_bound_for_profile(1, workers, 1);
+	if (!per_graph) {
+		uint32_t idle_memberships = 0;
+		if (rd.driver->qualification_pending_completion_record_count() > 0 &&
+				production_membership_bound_idle_locked(rd, graphs, workers, idle_memberships) == OK) {
+			return ERR_BUSY;
+		}
 		return ERR_UNAVAILABLE;
 	}
 	const uint64_t per_edge = uint64_t(per_graph) + post_graph;
 	if (graphs && per_edge > UINT32_MAX / graphs) {
+		uint32_t idle_memberships = 0;
+		if (rd.driver->qualification_pending_completion_record_count() > 0 &&
+				production_membership_bound_idle_locked(rd, graphs, workers, idle_memberships) == OK) {
+			return ERR_BUSY;
+		}
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
 	out = uint32_t(uint64_t(graphs) * per_edge);
@@ -319,14 +352,28 @@ Error Registry::production_device_quote_locked(RenderingDevice &rd, const GDExte
 	GDExtensionProductionMetadataQuoteV1 quote = {};
 	Error e = production_layout(capacity, quote, current, rd.transfer_worker_pool_max_size);
 	if (e != OK) {
+		if (e == ERR_PARAMETER_RANGE_ERROR && current > 0) {
+			GDExtensionProductionMetadataQuoteV1 idle_quote = {};
+			if (production_layout(capacity, idle_quote, 0, rd.transfer_worker_pool_max_size) == OK) {
+				return ERR_BUSY;
+			}
+		}
 		return e;
 	}
+	const uint32_t effective_workers = MIN(worker_bound == UINT32_MAX ? capacity.resources : worker_bound, rd.transfer_worker_pool_max_size);
 	uint32_t memberships = 0;
-	e = production_membership_bound_locked(rd, capacity.graph_memberships, MIN(worker_bound == UINT32_MAX ? capacity.resources : worker_bound, rd.transfer_worker_pool_max_size), memberships);
+	e = production_membership_bound_locked(rd, capacity.graph_memberships, effective_workers, memberships);
 	if (e != OK) {
 		return e;
 	}
 	if (memberships > capacity.native_memberships) {
+		if (rd.driver->qualification_pending_completion_record_count() > 0) {
+			uint32_t idle_memberships = 0;
+			if (production_membership_bound_idle_locked(rd, capacity.graph_memberships, effective_workers, idle_memberships) == OK &&
+					idle_memberships <= capacity.native_memberships) {
+				return ERR_BUSY;
+			}
+		}
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
 	out = quote;
@@ -457,7 +504,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_request_requirements_inter
 				}
 			}
 		}
-		error = production_output_demand_locked(*attachment, *rd, input, projected.write[i], avail_use_cells, acquire_alias_uses >= 4u);
+		error = production_output_demand_locked(*attachment, *rd, input, projected.write[i], avail_use_cells, acquire_alias_uses >= 4u, acquire_alias_uses);
 		if (error != OK) {
 			return result(error);
 		}
@@ -557,10 +604,21 @@ GDExtensionDeviceSessionResultV1 Registry::production_request_requirements_inter
 	if (error != OK) {
 		return result(error);
 	}
+	const uint32_t current_commands = rd->draw_graph.qualification_command_count();
 	GDExtensionProductionMetadataQuoteV1 quote = {};
 	// Use the existing command arena layout (max workers), matching reserve.
-	error = production_layout(capacity, quote, rd->draw_graph.qualification_command_count(), rd->transfer_worker_pool_max_size);
+	error = production_layout(capacity, quote, current_commands, rd->transfer_worker_pool_max_size);
 	if (error != OK || !capacity_fits(capacity, pool)) {
+		const bool has_transient = current_commands > 0 || (rd->driver && rd->driver->qualification_pending_completion_record_count() > 0);
+		if (has_transient && (error == OK || error == ERR_PARAMETER_RANGE_ERROR)) {
+			GDExtensionProductionCapacityV1 idle_capacity = capacity;
+			GDExtensionProductionMetadataQuoteV1 idle_quote = {};
+			if (production_membership_bound_idle_locked(*rd, idle_capacity.graph_memberships, worker_bound, idle_capacity.native_memberships) == OK &&
+					capacity_fits(idle_capacity, pool) &&
+					production_layout(idle_capacity, idle_quote, 0, rd->transfer_worker_pool_max_size) == OK) {
+				return result(ERR_BUSY);
+			}
+		}
 		return result(error == OK ? ERR_PARAMETER_RANGE_ERROR : error);
 	}
 	for (uint32_t i = 0; i < output_count; ++i) {
@@ -1236,6 +1294,13 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 			return e;
 		}
 		if (memberships > c.native_memberships) {
+			if (rd->driver && rd->driver->qualification_pending_completion_record_count() > 0) {
+				uint32_t idle_memberships = 0;
+				if (production_membership_bound_idle_locked(*rd, c.graph_memberships, worker_bound, idle_memberships) == OK &&
+						idle_memberships <= c.native_memberships) {
+					return ERR_BUSY;
+				}
+			}
 			return ERR_PARAMETER_RANGE_ERROR;
 		}
 	}
@@ -1360,6 +1425,12 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 		// Declared cell counts already fit the accepted pool. A changed RD
 		// prefix can still make this request's derived capture slice too large.
 		if (request_quote.graph_slots > a.quote.graph_slots || request_quote.graph_frames > a.quote.graph_frames) {
+			GDExtensionProductionMetadataQuoteV1 idle_quote = {};
+			if (production_layout(c, idle_quote, 0, rd->transfer_worker_pool_max_size) == OK &&
+					idle_quote.graph_slots <= a.quote.graph_slots &&
+					idle_quote.graph_frames <= a.quote.graph_frames) {
+				return ERR_BUSY;
+			}
 			return ERR_PARAMETER_RANGE_ERROR;
 		}
 		return ERR_BUSY;

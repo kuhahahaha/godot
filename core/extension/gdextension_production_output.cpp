@@ -1692,7 +1692,7 @@ static uint32_t resolve_preparation_resource_capacity(uint32_t p_graph_cap, uint
 }
 
 // Registry and this exact RD are held. No admission/selection or ownership is created.
-Error Registry::production_output_demand_locked(ProductionAttachment &attachment, RenderingDevice &rd, const GDExtensionProductionOutputDemandInputV1 &input, GDExtensionProductionOutputGuardDemandV1 &out, uint64_t available_use_cells, bool aux_params_enabled) {
+Error Registry::production_output_demand_locked(ProductionAttachment &attachment, RenderingDevice &rd, const GDExtensionProductionOutputDemandInputV1 &input, GDExtensionProductionOutputGuardDemandV1 &out, uint64_t available_use_cells, bool aux_params_enabled, uint32_t acquire_alias_uses) {
 	if (!production_dto_valid(input) || input.reserved || !input.particles || !input.generation || (input.source_space != 1 && input.source_space != 2) || ((!input.read_capacity) != (!input.read_graph_capacity))) {
 		return ERR_INVALID_PARAMETER;
 	}
@@ -1765,8 +1765,10 @@ Error Registry::production_output_demand_locked(ProductionAttachment &attachment
 			return error;
 		}
 	} else {
+		const bool plan_previous = (facts.motion_required != 0) || (acquire_alias_uses >= 4u);
+		const bool plan_aux = (acquire_alias_uses == 0u) ? aux_params_enabled : (facts.motion_required != 0 ? (acquire_alias_uses >= 4u) : (acquire_alias_uses >= 3u));
 		RendererRD::ExternalOutputStorage::Instance192Layout layout;
-		error = RendererRD::ExternalOutputStorage::plan_instance192(facts.capacity, surfaces, layout, true, aux_params_enabled);
+		error = RendererRD::ExternalOutputStorage::plan_instance192(facts.capacity, surfaces, layout, plan_previous, plan_aux);
 		if (error != OK) {
 			return error;
 		}
@@ -1935,6 +1937,13 @@ Error Registry::production_schedule_locked(ProductionRequest &request, Rendering
 		return error;
 	}
 	if (suffix > request.capacity.graph_memberships || native > request.capacity.native_memberships) {
+		if (suffix <= request.capacity.graph_memberships && rd.driver && rd.driver->qualification_pending_completion_record_count() > 0) {
+			uint32_t idle_native = 0;
+			if (production_membership_bound_idle_locked(rd, suffix, request.native_workers_bound, idle_native) == OK &&
+					idle_native <= request.capacity.native_memberships) {
+				return ERR_BUSY;
+			}
+		}
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
 	if (publish) {

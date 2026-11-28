@@ -2290,8 +2290,10 @@ Error Registry::production_prepared_record_body(ProductionRequest &request, Rend
 			emitted.acquire.request_serial = acquire_v2.request_serial;
 			emitted.acquire.action_ordinal = acquire_v2.action_ordinal;
 			emitted.acquire.writable_count = MIN(acquire_v2.writable_count, 3u);
-			for (uint32_t i = 0; i < emitted.acquire.writable_count; ++i) {
-				emitted.acquire.writables[i] = acquire_v2.writables[i];
+			for (uint32_t i = 0; i < 3u; ++i) {
+				if (i < emitted.acquire.writable_count) {
+					emitted.acquire.writables[i] = acquire_v2.writables[i];
+				}
 				emitted.acquire.resource_slots[i] = acquire_v2.resource_slots[i];
 				emitted.acquire.use_indices[i] = acquire_v2.use_indices[i];
 			}

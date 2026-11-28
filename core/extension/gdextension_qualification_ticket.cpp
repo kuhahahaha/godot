@@ -90,33 +90,81 @@ void add_graph(QualificationTicket *ticket, const RDG::RecordHandle &handle, uin
 }
 } //namespace
 namespace {
-Error qualification_reserve_fact_plan(QualificationTicket *ticket,RDD &driver,uint32_t current,uint64_t graphs) {
- uint32_t main=0,copy=0;
- if(!driver.qualification_incremental_accounting_supported())return OK;
- if(!driver.qualification_incremental_fact_bound(graphs,current,main,copy) || graphs>QualificationTicket::FACT_CAPACITY)return ERR_PARAMETER_RANGE_ERROR;
- if(!ticket->credits.capacity){
-  const Error error=ticket->credits.initialize(QualificationTicket::FACT_CAPACITY,graphs,main,5,copy);
-  if(error!=OK)return error;
- }else{
-  if(graphs<ticket->credit_graph_plan)graphs=ticket->credit_graph_plan;
-  if(main<ticket->credit_main_plan)main=ticket->credit_main_plan;
-  if(copy<ticket->credit_copy_plan)copy=ticket->credit_copy_plan;
-  const Error error=ticket->credits.grow_plan(graphs-ticket->credit_graph_plan,main-ticket->credit_main_plan,copy-ticket->credit_copy_plan);
-  if(error!=OK)return error;
- }
- ticket->credit_graph_plan=uint32_t(graphs);ticket->credit_main_plan=main;ticket->credit_copy_plan=copy;
- ticket->admitted_native_serials.reserve(QualificationTicket::FACT_CAPACITY);
- ticket->worker_credits.reserve(QualificationTicket::FACT_CAPACITY);
- return OK;
+Error qualification_reserve_fact_plan(QualificationTicket *ticket, RDD &driver, uint32_t current, uint64_t graphs) {
+	uint32_t main = 0, copy = 0;
+	if (!driver.qualification_incremental_accounting_supported()) {
+		return OK;
+	}
+	const uint64_t capacity = QualificationTicket::FACT_CAPACITY;
+	const bool has_transient = current > 0 || driver.qualification_pending_completion_record_count() > 0;
+	auto idle_fits = [&]() -> bool {
+		if (!has_transient || graphs > capacity) {
+			return false;
+		}
+		uint32_t idle_main = 0, idle_copy = 0;
+		if (!driver.qualification_incremental_fact_bound_idle(graphs, idle_main, idle_copy)) {
+			return false;
+		}
+		if (!ticket->credits.capacity) {
+			return graphs + uint64_t(idle_main) + idle_copy + 5 <= capacity;
+		}
+		const uint64_t g = MAX(graphs, uint64_t(ticket->credit_graph_plan));
+		const uint64_t m = MAX(uint64_t(idle_main), uint64_t(ticket->credit_main_plan));
+		const uint64_t c = MAX(uint64_t(idle_copy), uint64_t(ticket->credit_copy_plan));
+		const uint64_t add = (g - ticket->credit_graph_plan) + (m - ticket->credit_main_plan) + (c - ticket->credit_copy_plan);
+		const uint64_t occupied = ticket->credits.occupied();
+		return occupied <= ticket->credits.capacity && add <= ticket->credits.capacity - occupied;
+	};
+	if (graphs > capacity || !driver.qualification_incremental_fact_bound(graphs, current, main, copy)) {
+		return idle_fits() ? ERR_BUSY : ERR_PARAMETER_RANGE_ERROR;
+	}
+	if (!ticket->credits.capacity) {
+		const Error error = ticket->credits.initialize(QualificationTicket::FACT_CAPACITY, graphs, main, 5, copy);
+		if (error != OK) {
+			return (error == ERR_PARAMETER_RANGE_ERROR && idle_fits()) ? ERR_BUSY : error;
+		}
+	} else {
+		if (graphs < ticket->credit_graph_plan) {
+			graphs = ticket->credit_graph_plan;
+		}
+		if (main < ticket->credit_main_plan) {
+			main = ticket->credit_main_plan;
+		}
+		if (copy < ticket->credit_copy_plan) {
+			copy = ticket->credit_copy_plan;
+		}
+		const Error error = ticket->credits.grow_plan(graphs - ticket->credit_graph_plan, main - ticket->credit_main_plan, copy - ticket->credit_copy_plan);
+		if (error != OK) {
+			return (error == ERR_PARAMETER_RANGE_ERROR && idle_fits()) ? ERR_BUSY : error;
+		}
+	}
+	ticket->credit_graph_plan = uint32_t(graphs);
+	ticket->credit_main_plan = main;
+	ticket->credit_copy_plan = copy;
+	ticket->admitted_native_serials.reserve(QualificationTicket::FACT_CAPACITY);
+	ticket->worker_credits.reserve(QualificationTicket::FACT_CAPACITY);
+	return OK;
 }
 }
 Error qualification_native_capacity(RenderingDeviceDriver &driver, uint32_t current_commands, uint64_t graph_bound, uint32_t workers) {
 	const uint64_t capacity = QualificationTicket::FACT_CAPACITY;
- uint32_t main=0,copy=0;
- if(driver.qualification_incremental_accounting_supported()) {
-  if(!driver.qualification_incremental_fact_bound(graph_bound,current_commands,main,copy) || graph_bound+uint64_t(main)+copy+5>capacity)return ERR_PARAMETER_RANGE_ERROR;
-  return OK;
- }
+	uint32_t main = 0, copy = 0;
+	if (driver.qualification_incremental_accounting_supported()) {
+		if (graph_bound <= capacity &&
+				driver.qualification_incremental_fact_bound(graph_bound, current_commands, main, copy) &&
+				graph_bound + uint64_t(main) + copy + 5 <= capacity) {
+			return OK;
+		}
+		if ((current_commands > 0 || driver.qualification_pending_completion_record_count() > 0) &&
+				graph_bound <= capacity) {
+			uint32_t idle_main = 0, idle_copy = 0;
+			if (driver.qualification_incremental_fact_bound_idle(graph_bound, idle_main, idle_copy) &&
+					graph_bound + uint64_t(idle_main) + idle_copy + 5 <= capacity) {
+				return ERR_BUSY;
+			}
+		}
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
 	if (graph_bound > capacity) {
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
@@ -616,8 +664,8 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record(GDExtensionQuali
 		rd_unlock.arm(&rd->_thread_safe_);
 		error = qualification_record_preflight(bridge, rd, *request, resources);
 		if (error != OK) {
-			return result(error, error == ERR_UNAVAILABLE ? 18 : error == ERR_PARAMETER_RANGE_ERROR ? 19
-																									: 2);
+			return result(error, error == ERR_UNAVAILABLE ? 18 : (error == ERR_PARAMETER_RANGE_ERROR || error == ERR_BUSY) ? 19
+																														  : 2);
 		}
 		uint32_t slot = 0;
 		for (; slot < QualificationBridge::TICKET_CAPACITY && bridge->tickets[slot]; ++slot) {
@@ -1438,8 +1486,8 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared(GDExten
 		LocalVector<RID> resources;
 		error = qualification_record_preflight(bridge, rd, *request, resources);
 		if (error != OK) {
-			return result(error, error == ERR_UNAVAILABLE ? 18 : error == ERR_PARAMETER_RANGE_ERROR ? 19
-																									: 2);
+			return result(error, error == ERR_UNAVAILABLE ? 18 : (error == ERR_PARAMETER_RANGE_ERROR || error == ERR_BUSY) ? 19
+																														  : 2);
 		}
 		if (rd->_recording_error() != OK || rd->draw_list.active || rd->compute_list.active || rd->raytracing_list.active || rd->frame_wait_draining || rd->draw_graph.has_driver_callbacks()) {
 			return result(ERR_BUSY, 19);
@@ -1702,8 +1750,8 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_common(
 		LocalVector<RID> resources;
 		error = qualification_record_preflight(bridge, rd, legacy, resources, request->capture_set1, request->body_set1, true, depth_target);
 		if (error != OK) {
-			return result(error, error == ERR_UNAVAILABLE ? 18 : error == ERR_PARAMETER_RANGE_ERROR ? 19
-																									: 2);
+			return result(error, error == ERR_UNAVAILABLE ? 18 : (error == ERR_PARAMETER_RANGE_ERROR || error == ERR_BUSY) ? 19
+																														  : 2);
 		}
 		if (depth) {
 			const auto &raster = *depth_raster->raster;

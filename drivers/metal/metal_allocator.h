@@ -154,7 +154,7 @@ public:
 /// Placement-heap suballocator for barriers mode. Six pools keyed by storage
 /// mode (+ CPU cache mode for the write-combined pool) and size class:
 /// allocations <= 64 KiB route to dedicated 2 MiB small-object sub-pools so
-/// tiny long-lived buffers never pin 8-16 MiB transient heaps; resources larger
+/// tiny long-lived buffers never pin 8 MiB transient heaps; resources larger
 /// than half a pool's preferred block size get a dedicated single-resource heap.
 class API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0)) MetalHeapAllocator final : public MetalAllocator {
 public:
@@ -170,13 +170,13 @@ public:
 
 	/// Allocations up to this size (in bytes) route to the small-object sub-pools
 	/// (2 MiB blocks on main device, 1 MiB on local device) instead of regular
-	/// 8-16 MiB blocks.
+	/// 8 MiB blocks.
 	static constexpr uint64_t SMALL_ALLOC_THRESHOLD = 64ull * 1024;
 	/// Number of idle trim epochs before stale recycled buffers are evicted.
-	static constexpr uint64_t RECYCLE_IDLE_EPOCHS = 24;
+	static constexpr uint64_t RECYCLE_IDLE_EPOCHS = 8;
 	/// Number of idle trim epochs before empty regular blocks are released and
 	/// empty small blocks are marked MTL::PurgeableStateEmpty.
-	static constexpr uint64_t EMPTY_BLOCK_IDLE_EPOCHS = 12;
+	static constexpr uint64_t EMPTY_BLOCK_IDLE_EPOCHS = 10;
 
 	/// The smallest allocation the allocator works in, in bytes. OffsetAllocator
 	/// hands out ranges in whole units, so every offset is a multiple of 256,

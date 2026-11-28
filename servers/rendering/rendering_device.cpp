@@ -1173,13 +1173,34 @@ Error RenderingDevice::_insert_staging_block(StagingBuffers &p_staging_buffers) 
 	return OK;
 }
 
-void RenderingDevice::_trim_idle_staging_buffers() {
-	if (!driver || frames.is_empty() || native_disposal_active || frame_wait_draining) {
+#ifdef MACOS_ENABLED
+namespace {
+void _maybe_relieve_macos_malloc_pressure(uint64_t p_min_interval_usec) {
+	static std::atomic<uint64_t> last_relief_usec{ 0 };
+	OS *os = OS::get_singleton();
+	if (!os) {
 		return;
 	}
-	constexpr uint64_t STAGING_IDLE_FRAMES = 8;
+	const uint64_t now_usec = os->get_ticks_usec();
+	uint64_t prev_usec = last_relief_usec.load(std::memory_order_relaxed);
+	if (prev_usec != 0 && now_usec >= prev_usec && (now_usec - prev_usec) < p_min_interval_usec) {
+		return;
+	}
+	if (last_relief_usec.compare_exchange_strong(prev_usec, now_usec, std::memory_order_acq_rel)) {
+		malloc_zone_pressure_relief(nullptr, 0);
+	}
+}
+} // namespace
+#endif
+
+void RenderingDevice::_trim_idle_staging_buffers() {
+	if (!driver || frames.is_empty() || native_disposal_active || frame_wait_draining || frames_drawn == 0) {
+		return;
+	}
+	constexpr uint64_t STAGING_IDLE_FRAMES = 4;
 	constexpr uint64_t STAGING_FLOOR_BYTES = 8u * 1024u * 1024u;
 	constexpr uint32_t TRANSFER_WORKER_TRIM_BYTES = 4u * 1024u * 1024u;
+	uint32_t freed_buffers = 0;
 
 	auto trim_pool = [&](StagingBuffers &p_staging) {
 		if (p_staging.blocks.size() <= 1 || p_staging.block_size == 0) {
@@ -1196,12 +1217,13 @@ void RenderingDevice::_trim_idle_staging_buffers() {
 				continue;
 			}
 			const StagingBufferBlock &block = p_staging.blocks[i];
-			if (block.frame_used != 0 && (block.frame_used >= frames_drawn || frames_drawn - block.frame_used < safe_age)) {
+			if (block.frame_used >= frames_drawn || frames_drawn - block.frame_used < safe_age) {
 				continue;
 			}
 			if (block.driver_id) {
 				driver->buffer_unmap(block.driver_id);
 				driver->buffer_free(block.driver_id);
+				++freed_buffers;
 			}
 			p_staging.blocks.remove_at(i);
 			if (i < p_staging.current) {
@@ -1213,9 +1235,9 @@ void RenderingDevice::_trim_idle_staging_buffers() {
 		}
 	};
 
-	if (!upload_staging_buffers.used) {
-		trim_pool(upload_staging_buffers);
-	}
+	// BUG-234: Reclaim stale non-current upload staging blocks past safe_age
+	// even while upload_staging_buffers.used is true during active simulation.
+	trim_pool(upload_staging_buffers);
 
 	if (!download_staging_buffers.used) {
 		bool any_download_pending = false;
@@ -1255,10 +1277,17 @@ void RenderingDevice::_trim_idle_staging_buffers() {
 					worker->staging_buffer_size_allocated = 0;
 					worker->max_transfer_size = 0;
 					worker->idle_frames = 0;
+					++freed_buffers;
 				}
 			}
 		}
 	}
+
+#ifdef MACOS_ENABLED
+	if (freed_buffers > 0) {
+		_maybe_relieve_macos_malloc_pressure(1500000ull);
+	}
+#endif
 }
 
 Error RenderingDevice::_staging_buffer_allocate(StagingBuffers &p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, uint32_t &r_alloc_offset, uint32_t &r_alloc_size, StagingRequiredAction &r_required_action, bool p_can_segment) {
@@ -15701,7 +15730,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 	}
 #ifdef MACOS_ENABLED
 	if (pending_total >= 32u) {
-		malloc_zone_pressure_relief(nullptr, 0);
+		_maybe_relieve_macos_malloc_pressure(1500000ull);
 	}
 #endif
 }
@@ -15828,8 +15857,20 @@ Error RenderingDevice::_begin_frame(bool p_presented, bool p_nonblocking) {
 	_free_pending_resources(frame);
 
 	// Advance staging buffers if used.
+	// BUG-234: Prefer reusing the lowest-index completed upload block so burst-allocated
+	// tail blocks are not kept artificially warm by round-robin traversal during active frames.
 	if (upload_staging_buffers.used) {
-		upload_staging_buffers.current = (upload_staging_buffers.current + 1) % upload_staging_buffers.blocks.size();
+		int next_block = (upload_staging_buffers.current + 1) % upload_staging_buffers.blocks.size();
+		if (frames_drawn >= frames.size()) {
+			const uint64_t completed_frame = frames_drawn - frames.size();
+			for (int i = 0; i < upload_staging_buffers.blocks.size(); ++i) {
+				if (upload_staging_buffers.blocks[i].frame_used <= completed_frame) {
+					next_block = i;
+					break;
+				}
+			}
+		}
+		upload_staging_buffers.current = next_block;
 		upload_staging_buffers.used = false;
 	}
 
